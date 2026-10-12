@@ -1470,6 +1470,12 @@ TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(
    half-pixel rim is the option's. */
 TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }
 TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }
+/* A hovered or selected region and its name. Upstream fills it with its
+   highlight token (a warm yellow at 80%) and writes the name in its primary
+   ink; here a third of the accent in the surface and the skin's own text
+   colour, so the region stands out in any skin. */
+TyAdvChartGeoArea:hover { background: mix(var(--accent), var(--surface), 65%); border-color: var(--border); }
+TyAdvChartGeoLabel:hover { color: var(--on-surface); font-size: var(--font-size-base); }
 /* A decal's symbols, where the decal names no colour of its own -- the aria
    decals that tell the series apart without their colours. Upstream draws
    them black at 20%; here the skin's ink at 20%, so a dark skin's decals

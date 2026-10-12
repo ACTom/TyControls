@@ -1503,6 +1503,12 @@ begin
     '   half-pixel rim is the option''s. */' + LineEnding +
     'TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }' + LineEnding +
     'TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A hovered or selected region and its name. Upstream fills it with its' + LineEnding +
+    '   highlight token (a warm yellow at 80%) and writes the name in its primary' + LineEnding +
+    '   ink; here a third of the accent in the surface and the skin''s own text' + LineEnding +
+    '   colour, so the region stands out in any skin. */' + LineEnding +
+    'TyAdvChartGeoArea:hover { background: mix(var(--accent), var(--surface), 65%); border-color: var(--border); }' + LineEnding +
+    'TyAdvChartGeoLabel:hover { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
     '/* A decal''s symbols, where the decal names no colour of its own -- the aria' + LineEnding +
     '   decals that tell the series apart without their colours. Upstream draws' + LineEnding +
     '   them black at 20%; here the skin''s ink at 20%, so a dark skin''s decals' + LineEnding +

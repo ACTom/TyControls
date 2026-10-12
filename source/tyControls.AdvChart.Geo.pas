@@ -32,9 +32,23 @@ unit tyControls.AdvChart.Geo;
   label sits at the region's centre, placed as percentages of the path's
   stroked box the way resetLabelForRegion places it.
 
-  NOT HERE YET (spec section 185): hit tests, states and selection (GE2),
-  roam gestures and the geoRoam action (GE3), the map series and series on a
-  geo (GE4), SVG maps and projection streams.
+  THE REGIONS AS THINGS A POINTER REACHES [Batch 148, D14 GE2]. Every
+  value a region's style or label reads goes up GeoModel.getRegionModel's
+  chain -- the region option (its regions entry with the feature's
+  echartsStyle merged in where the entry is silent), the geo's option over
+  GeoModel's defaults, the root option -- a null or an undefined climbing,
+  as Model.getShallow climbs. The emphasis, select and blur styles and
+  labels are read that way into each compound path's state objects, and
+  the flags util/states.ts keeps on a region group (hoverState,
+  __highByOuter, selected) are kept here per group and turned into state
+  lists by States.pas, the series' own machine: the default proxy's colour
+  lift, the z2 lifts and their creep, the blur's tenth. The picture is
+  worked out once per geo and kept (the paths, the state objects); a list
+  build only reads the current values.
+
+  NOT HERE YET (spec sections 185 and 187): roam gestures and the geoRoam
+  action (GE3), the map series and series on a geo (GE4), SVG maps and
+  projection streams.
 
   PURE but for fpjson: no painter, no LCL. }
 interface
@@ -45,7 +59,7 @@ uses
   tyControls.AdvChart.Layout, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Color, tyControls.AdvChart.Graph,
-  tyControls.AdvChart.GeoFix;
+  tyControls.AdvChart.States, tyControls.AdvChart.GeoFix;
 
 const
   TyGeoCoordSysName = 'geo';
@@ -166,6 +180,177 @@ type
     LimitMin, LimitMax: Double;
   end;
 
+  { ==== the picture ==== }
+
+  { The theme's ink for what the option leaves out. [Batch 148] The
+    emphasis and select tokens too: upstream's highlight fill and primary
+    label colour. }
+  TTyGeoInk = record
+    AreaFill: TTyChartColor;
+    Border: TTyChartColor;
+    LabelColour: TTyChartColor;
+    LabelFontName: string;
+    LabelFontSizeLogical: Integer;
+    LabelFontWeight: Integer;
+    HighlightFill: TTyChartColor;
+    LabelHighlight: TTyChartColor;
+  end;
+
+  { [Batch 148] which of GeoModel's token defaults a colour is: the skin's
+    ink here }
+  TTyGeoToken = (gtkNone, gtkArea, gtkBorder, gtkLabel, gtkHighlight,
+    gtkLabelHighlight);
+
+  { Where a style value came from: nowhere (not painted), the theme, the
+    option (Raw holds what was written). }
+  TTyGeoInkSource = (gisNone, gisTheme, gisOption);
+
+  TTyGeoPaint = record
+    FillSrc: TTyGeoInkSource;
+    FillRaw: string;
+    Fill: TTyChartColor;
+    FillGradient: TTyChartGradient;
+    StrokeSrc: TTyGeoInkSource;
+    StrokeRaw: string;
+    Stroke: TTyChartColor;
+    { the stroke as JavaScript's `||` sees it: 'none' and an unreadable
+      colour are truthy, so a line keeps them }
+    StrokeTruthy: Boolean;
+    LineWidthLogical: Double;
+    HasOpacity: Boolean;
+    Opacity: Double;
+    Dash: TTyOptDash;
+    DashLogical: TTyDoubleArray;
+    DashRaw: string;
+    { [Batch 148] A STATE'S STYLE IS SPARSE: which keys it sets (the
+      opacity's is HasOpacity), the token a default colour is, and an
+      emphasis fill written 'inherit' (the proxy's own word). The normal
+      style sets the keys it has too. }
+    FillHas, StrokeHas, WidthHas, DashHas: Boolean;
+    FillToken, StrokeToken: TTyGeoToken;
+    FillInherit: Boolean;
+  end;
+
+  { [Batch 148] one state's label (setLabelStyle's state object and
+    createTextConfig's state textConfig): what it sets }
+  TTyGeoLabelState = record
+    { the state's show, where it differs from the normal one: its ignore }
+    HasIgnore, Ignore: Boolean;
+    { the state's text: getFormattedLabel(name, state), else the normal }
+    Text: string;
+    HasColour, ColourNone: Boolean;
+    Colour: TTyChartColor;
+    ColourToken: TTyGeoToken;
+    ColourRaw: string;
+    HasFontSize: Boolean;
+    FontSizeLogical: Integer;
+    HasFontWeight: Boolean;
+    FontWeight: Integer;
+    HasFontFamily: Boolean;
+    FontFamily: string;
+    HasOpacity: Boolean;
+    Opacity: Double;
+    { textConfig.offset (logical px) and rotation (radians) }
+    HasOffset: Boolean;
+    OffX, OffY: Double;
+    HasRotate: Boolean;
+    RotationRad: Double;
+  end;
+
+  TTyGeoLabel = record
+    Shown: Boolean;
+    Text: string;
+    HasColour: Boolean;
+    Colour: TTyChartColor;
+    ColourRaw: string;
+    HasFontSize: Boolean;
+    FontSizeLogical: Integer;
+    HasFontWeight: Boolean;
+    FontWeight: Integer;
+    HasFontFamily: Boolean;
+    FontFamily: string;
+    { labelXY (the centre through the raw matrix), the two percentages of
+      textConfig.position, the stored layoutRect, and where the text is
+      anchored once the group's transform has moved the rect }
+    HasPos: Boolean;
+    XY: TTyGeoPt;
+    PctX, PctY: Double;
+    Layout: TTyXYWH;
+    AnchorX, AnchorY: Double;
+    { [Batch 148] the text exists (some state shows it: setLabelStyle's
+      needsCreateText), the token the normal colour is, the normal style's
+      opacity, textConfig's offset (logical px) and rotation, the text's own
+      silent, and the three states }
+    Exists: Boolean;
+    ColourToken: TTyGeoToken;
+    HasOpacity: Boolean;
+    Opacity: Double;
+    HasOffset: Boolean;
+    OffX, OffY: Double;
+    HasRotate: Boolean;
+    RotationRad: Double;
+    Silent: Boolean;
+    States: array[TTyStName] of TTyGeoLabelState;
+  end;
+
+  { One compound path. Subs and Drawn are local -- before the roam -- in
+    device px; Rect is the path box grown by the stroke as the label reads
+    it (the polygon style, before a line's fix). }
+  TTyGeoDrawPath = record
+    IsLine: Boolean;
+    Subs: TTyGeoRingArray;
+    Drawn: TTyPathCmdArray;
+    Paint: TTyGeoPaint;
+    Rect: TTyXYWH;
+    { getBoundingRect once drawn: the line's fixed style, the stroke over
+      the transform's line scale (strokeNoScale) }
+    BoxRect: TTyXYWH;
+    Lbl: TTyGeoLabel;
+    { [Batch 148] the emphasis, select and blur styles (a line's fixed as
+      its normal one is) }
+    StatePaint: array[TTyStName] of TTyGeoPaint;
+  end;
+  TTyGeoDrawPathArray = array of TTyGeoDrawPath;
+
+  TTyGeoDrawGroup = record
+    Name: string;
+    HasSilent: Boolean;
+    Silent: Boolean;
+    Paths: TTyGeoDrawPathArray;
+    { [Batch 148] the region model's option as an event's params.region
+      (an empty object for a name the model map does not hold), its emphasis focus
+      'self' and emphasis.disabled }
+    RegionJson: string;
+    FocusSelf: Boolean;
+    EmphasisDisabled: Boolean;
+  end;
+  TTyGeoDrawGroupArray = array of TTyGeoDrawGroup;
+
+  TTyGeoDraw = record
+    Groups: TTyGeoDrawGroupArray;
+    HasClip: Boolean;
+    Clip: TTyXYWH;
+    { the transform group's matrix and whether it has one }
+    HasTrans: Boolean;
+    Trans: TTyMat2D;
+    { PathProxy's _ux / _uy }
+    UX, UY: Double;
+  end;
+
+  { [Batch 148] ONE REGION GROUP'S FLAGS, as util/states.ts keeps them on
+    the group and on every path under it -- traverseUpdateState moves them
+    together, so one set says all: hoverState (0 normal, 1 blur, 2
+    emphasis), __highByOuter (the group is the dispatcher an action holds)
+    and selected; and per compound path its states record, the path the
+    host and its text the label. }
+  TTyGeoGroupSt = record
+    Hover: Integer;
+    Hbo: Cardinal;
+    Selected: Boolean;
+    Items: array of TTyStItem;
+  end;
+  TTyGeoGroupStArray = array of TTyGeoGroupSt;
+
   { A Transformable's props, as View keeps its three: no origin, no anchor. }
   TTyGeoTrans = record
     X, Y, ScaleX, ScaleY, Rotation, SkewX, SkewY: Double;
@@ -194,6 +379,27 @@ type
     FHasCentre: Boolean;
     FHasLimit: Boolean;
     FLimitMin, FLimitMax: Double;
+    { [Batch 148] the root option's keys a region model's chain reaches
+      (itemStyle, label, emphasis, select, blur), a copy }
+    FRoot: TJSONObject;
+    { the region options, merged with their echartsStyle, by name (owned) }
+    FOptNames: TTyStringArray;
+    FOpts: array of TJSONObject;
+    { the groups: one per distinct region name, MapDraw's order }
+    FGroupNames: TTyStringArray;
+    FGroupsOk: Boolean;
+    { the picture, worked out once for an ink and a PPI }
+    FDraw: TTyGeoDraw;
+    FDrawOk: Boolean;
+    FDrawPPI: Integer;
+    FDrawInk: TTyGeoInk;
+    { the flags and the state records }
+    FSt: TTyGeoGroupStArray;
+    FItemsOk: Boolean;
+    FIsBlured: Boolean;
+    FGen: Integer;
+    procedure EnsureGroups;
+    procedure InitItems;
     procedure UpdateTransform;
     procedure SetBoundingRect(AX, AY, AW, AH: Double);
     procedure SetViewRect(AX, AY, AW, AH: Double);
@@ -250,98 +456,57 @@ type
     property MtOverallInv: TTyMat2D read FMtOverallInv;
     property RoamTrans: TTyGeoTrans read FRoam;
     property Zoom: Double read FZoom;
-  end;
-
-  { ==== the picture ==== }
-
-  { The theme's ink for what the option leaves out. }
-  TTyGeoInk = record
-    AreaFill: TTyChartColor;
-    Border: TTyChartColor;
-    LabelColour: TTyChartColor;
-    LabelFontName: string;
-    LabelFontSizeLogical: Integer;
-    LabelFontWeight: Integer;
-  end;
-
-  { Where a style value came from: nowhere (not painted), the theme, the
-    option (Raw holds what was written). }
-  TTyGeoInkSource = (gisNone, gisTheme, gisOption);
-
-  TTyGeoPaint = record
-    FillSrc: TTyGeoInkSource;
-    FillRaw: string;
-    Fill: TTyChartColor;
-    FillGradient: TTyChartGradient;
-    StrokeSrc: TTyGeoInkSource;
-    StrokeRaw: string;
-    Stroke: TTyChartColor;
-    { the stroke as JavaScript's `||` sees it: 'none' and an unreadable
-      colour are truthy, so a line keeps them }
-    StrokeTruthy: Boolean;
-    LineWidthLogical: Double;
-    HasOpacity: Boolean;
-    Opacity: Double;
-    Dash: TTyOptDash;
-    DashLogical: TTyDoubleArray;
-    DashRaw: string;
-  end;
-
-  TTyGeoLabel = record
-    Shown: Boolean;
-    Text: string;
-    HasColour: Boolean;
-    Colour: TTyChartColor;
-    ColourRaw: string;
-    HasFontSize: Boolean;
-    FontSizeLogical: Integer;
-    HasFontWeight: Boolean;
-    FontWeight: Integer;
-    HasFontFamily: Boolean;
-    FontFamily: string;
-    { labelXY (the centre through the raw matrix), the two percentages of
-      textConfig.position, the stored layoutRect, and where the text is
-      anchored once the group's transform has moved the rect }
-    HasPos: Boolean;
-    XY: TTyGeoPt;
-    PctX, PctY: Double;
-    Layout: TTyXYWH;
-    AnchorX, AnchorY: Double;
-  end;
-
-  { One compound path. Subs and Drawn are local -- before the roam -- in
-    device px; Rect is the path box grown by the stroke as the label reads
-    it (the polygon style, before a line's fix). }
-  TTyGeoDrawPath = record
-    IsLine: Boolean;
-    Subs: TTyGeoRingArray;
-    Drawn: TTyPathCmdArray;
-    Paint: TTyGeoPaint;
-    Rect: TTyXYWH;
-    { getBoundingRect once drawn: the line's fixed style, the stroke over
-      the transform's line scale (strokeNoScale) }
-    BoxRect: TTyXYWH;
-    Lbl: TTyGeoLabel;
-  end;
-  TTyGeoDrawPathArray = array of TTyGeoDrawPath;
-
-  TTyGeoDrawGroup = record
-    Name: string;
-    HasSilent: Boolean;
-    Silent: Boolean;
-    Paths: TTyGeoDrawPathArray;
-  end;
-  TTyGeoDrawGroupArray = array of TTyGeoDrawGroup;
-
-  TTyGeoDraw = record
-    Groups: TTyGeoDrawGroupArray;
-    HasClip: Boolean;
-    Clip: TTyXYWH;
-    { the transform group's matrix and whether it has one }
-    HasTrans: Boolean;
-    Trans: TTyMat2D;
-    { PathProxy's _ux / _uy }
-    UX, UY: Double;
+    { ==== the regions as things a pointer reaches [Batch 148] ==== }
+    { getShallow up the region model's chain for the region option ARegion
+      (nil: none): the option's value, or nil with AToken set where the
+      value is one of GeoModel's token defaults }
+    function Chain(ARegion: TJSONObject; const APath: array of string;
+      out AToken: TTyGeoToken): TJSONData;
+    { the region option of a region (by its index in Source.Regions): the
+      regions entry for its name -- or a fresh entry of the name -- with the feature's
+      echartsStyle merged in where it is silent; nil for an empty name }
+    function RegionOpt(ARegionIndex: Integer): TJSONObject;
+    { the picture for an ink and a PPI, worked out once and kept }
+    function Draw(const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
+    { the groups, one per distinct region name }
+    function GroupCount: Integer;
+    function GroupName(AGroup: Integer): string;
+    function GroupIndexOf(const AName: string): Integer;
+    { the region option of a group's name (nil: none) }
+    function GroupOpt(AGroup: Integer): TJSONObject;
+    { an event's params.region: the region model's option as JSON text,
+      an empty object where it has none }
+    function GroupRegionJson(AGroup: Integer): string;
+    { emphasis.focus is 'self' (never for a disabled group); emphasis.disabled
+      (no highDownDispatcher) }
+    function GroupFocusSelf(AGroup: Integer): Boolean;
+    function GroupEmphasisDisabled(AGroup: Integer): Boolean;
+    { ---- the flags (util/states.ts) ---- }
+    { enterEmphasisWhenMouseOver / leaveEmphasisWhenMouseOut: nothing while
+      an action holds the group }
+    function HoverEnter(AGroup: Integer): Boolean;
+    function HoverLeave(AGroup: Integer): Boolean;
+    { enterEmphasis / leaveEmphasis with a highlight digit }
+    function EnterEmphasisBy(AGroup, ADigit: Integer): Boolean;
+    function LeaveEmphasisBy(AGroup, ADigit: Integer): Boolean;
+    { blurComponent: every group into blur, held or not }
+    function BlurAll: Boolean;
+    { allLeaveBlur's walk over the component: blur back to normal }
+    function LeaveBlurAll: Boolean;
+    { enterSelect / leaveSelect }
+    function SetSelected(AGroup: Integer; ASelected: Boolean): Boolean;
+    function GroupFlags(AGroup: Integer): TTyGeoGroupSt;
+    { applyElementStates over every path and its text: True when a list
+      changed }
+    function ApplyStates(const AInk: TTyGeoInk; APPI: Integer): Boolean;
+    { a path's states record (the host the path, the label its text) }
+    function PathItem(AGroup, APath: Integer): TTyStItem;
+    { getComponentStates(geo).isBlured: blurComponent reached it }
+    property IsBlured: Boolean read FIsBlured write FIsBlured;
+    { the render that made it (the control's count) }
+    property Gen: Integer read FGen write FGen;
+    { the picture the last Draw worked out (empty before one) }
+    property LastDraw: TTyGeoDraw read FDraw;
   end;
 
 { ---- the registry ---- }
@@ -388,6 +553,9 @@ function TyGeoDecompose(const M: TTyMat2D): TTyGeoTrans;
 function TyGeoLocalTransform(const T: TTyGeoTrans): TTyMat2D;
 function TyGeoApply(const M: TTyMat2D; AX, AY: Double): TTyGeoPt;
 
+{ [Batch 148] JSON.stringify of an option value }
+function TyGeoJsJson(AData: TJSONData): string;
+
 { MapDraw._buildGeoJSON's picture, as data }
 function TyGeoDrawOf(AGeo: TTyGeo; const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
 { ...and as elements, into AList }
@@ -400,7 +568,8 @@ uses
   tyControls.AdvChart.Data,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Convert,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Handlers,
-  tyControls.AdvChart.Labels;
+  tyControls.AdvChart.Labels, tyControls.AdvChart.OptionMerge,
+  tyControls.AdvChart.Scale;
 
 const
   { Math.PI as a Double: every use is one Double operation upstream makes }
@@ -1809,7 +1978,12 @@ begin
   d := node.Find('map');
   if d = nil then Result.MapName := ''
   else Result.MapName := TyJsonJsString(Climb(node, root, 'map'));
-  Result.Silent := Truthy(Climb(node, root, 'silent'));
+  { silent: false by default (merged in, so an absent key never reaches the
+    root); a written null asks the root [Batch 148] }
+  d := node.Find('silent');
+  if d = nil then Result.Silent := False
+  else if d.JSONType = jtNull then Result.Silent := Truthy(Climb(nil, root, 'silent'))
+  else Result.Silent := Truthy(d);
   { getShallow('clip', true): its own }
   Result.Clip := Truthy(node.Find('clip'));
   d := Climb(node, root, 'z');
@@ -1916,8 +2090,12 @@ end;
 
 { ==================== the geo ==================== }
 
+const
+  cRootStyleKeys: array[0..4] of string = ('itemStyle', 'label', 'emphasis',
+    'select', 'blur');
+
 constructor TTyGeo.Create(AOption: TTyChartOption; AIndex: Integer);
-var d: TJSONData; root: TJSONObject;
+var d: TJSONData; root: TJSONObject; k: Integer;
 begin
   inherited Create;
   FIndex := AIndex;
@@ -1933,6 +2111,14 @@ begin
     d := Climb(FNode, root, 'nameMap');
     if d is TJSONObject then FNameMap := TJSONObject(d.Clone);
   end;
+  { [Batch 148] the root keys a region model's chain reaches }
+  FRoot := TJSONObject.Create;
+  if (AOption <> nil) and (AOption.Root is TJSONObject) then
+    for k := 0 to High(cRootStyleKeys) do
+    begin
+      d := TJSONObject(AOption.Root).Find(cRootStyleKeys[k]);
+      if d <> nil then FRoot.Add(cRootStyleKeys[k], d.Clone);
+    end;
   FMtRaw := MatIdentity;
   FMtRawInv := MatIdentity;
   FMtOverall := MatIdentity;
@@ -1942,7 +2128,10 @@ begin
 end;
 
 destructor TTyGeo.Destroy;
+var i: Integer;
 begin
+  for i := 0 to High(FOpts) do FOpts[i].Free;
+  FRoot.Free;
   FSource.Free;
   FNode.Free;
   FNameMap.Free;
@@ -2194,6 +2383,16 @@ var
 
 begin
   FValid := False;
+  { [Batch 148] what was worked out of the last map goes with it }
+  for i := 0 to High(FOpts) do FOpts[i].Free;
+  FOpts := nil;
+  FOptNames := nil;
+  FGroupNames := nil;
+  FGroupsOk := False;
+  FDrawOk := False;
+  FItemsOk := False;
+  FSt := nil;
+  FIsBlured := False;
   FreeAndNil(FSource);
   FHasData := False;
   FHasView := False;
@@ -2450,18 +2649,6 @@ end;
 
 { ==================== the picture ==================== }
 
-type
-  { One option level's value of a key: absent, a written null, or a value. }
-  TKeyState = (ksAbsent, ksNull, ksValue);
-
-function KeyOf(ANode: TJSONData; const AKey: string; out AValue: TJSONData): TKeyState;
-begin
-  AValue := Own(ANode, AKey);
-  if AValue = nil then Exit(ksAbsent);
-  if AValue.JSONType = jtNull then Exit(ksNull);
-  Result := ksValue;
-end;
-
 { The region option the map draws a region with: getFilledRegions'
   bookkeeping -- the LAST entry of `regions` with the name wins; a name
   without one gets a fresh entry per region, the last of them wins. AStyle
@@ -2516,21 +2703,202 @@ begin
     AStyle := TJSONObject(Own(props, 'echartsStyle'));
 end;
 
-{ A key of a sub-object (`itemStyle.color`) down the chain region option ->
-  its echartsStyle -> the geo's option; AGeoState says how the geo's own
-  level held it (for the defaults a written null keeps out). }
-function ChainOf(ARegion, AStyle, AGeo: TJSONData; const ASub, AKey: string;
-  out AGeoState: TKeyState): TJSONData;
-var d: TJSONData;
+{ ==================== the region model's chain [Batch 148] ====================
+
+  GeoModel.getRegionModel(name) is a Model of the region option whose parent
+  is the geo model, whose parent is the global model. Model.getShallow and
+  Model.get read a path through objects only (an array or a string on the
+  way is a null) and climb past null and undefined. The geo model's option
+  is the written one with GeoModel.defaultOption merged in where it is
+  silent (zrUtil.merge: an object over an object merges, anything written
+  wins) and init's itemStyle.color. The region option is the regions entry
+  with the feature's echartsStyle merged the same way. }
+
+const
+  { a default that is one of GeoModel's tokens (the skin's ink here) }
+  cTok = #1'geo-token:';
+  cStateWord: array[TTyStName] of string = ('select', 'emphasis', 'blur');
+
+var
+  GGeoDefaults: TJSONObject = nil;
+
+{ GeoModel.defaultOption as far as a region's style and label read it }
+function GeoDefaults: TJSONObject;
+begin
+  if GGeoDefaults = nil then
+    GGeoDefaults := TJSONObject.Create([
+      'label', TJSONObject.Create(['show', False, 'color', cTok + 'label']),
+      'itemStyle', TJSONObject.Create(['borderWidth', 0.5,
+        'borderColor', cTok + 'border', 'color', cTok + 'area']),
+      'emphasis', TJSONObject.Create([
+        'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
+        'itemStyle', TJSONObject.Create(['color', cTok + 'highlight'])]),
+      'select', TJSONObject.Create([
+        'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
+        'itemStyle', TJSONObject.Create(['color', cTok + 'highlight'])])]);
+  Result := GGeoDefaults;
+end;
+
+function TokenOf(AData: TJSONData): TTyGeoToken;
+var s: string;
+begin
+  Result := gtkNone;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  s := AData.AsString;
+  if Copy(s, 1, Length(cTok)) <> cTok then Exit;
+  Delete(s, 1, Length(cTok));
+  if s = 'area' then Result := gtkArea
+  else if s = 'border' then Result := gtkBorder
+  else if s = 'label' then Result := gtkLabel
+  else if s = 'highlight' then Result := gtkHighlight
+  else if s = 'labelHighlight' then Result := gtkLabelHighlight;
+end;
+
+function InkOf(AToken: TTyGeoToken; const AInk: TTyGeoInk): TTyChartColor;
+begin
+  case AToken of
+    gtkArea: Result := AInk.AreaFill;
+    gtkBorder: Result := AInk.Border;
+    gtkLabel: Result := AInk.LabelColour;
+    gtkHighlight: Result := AInk.HighlightFill;
+    gtkLabelHighlight: Result := AInk.LabelHighlight;
+  else
+    Result := 0;
+  end;
+end;
+
+{ Model._doGet: the path through objects; nil where it breaks, is missing
+  or ends in a null }
+function PathGet(ANode: TJSONData; const APath: array of string): TJSONData;
+var i: Integer;
+begin
+  Result := ANode;
+  for i := 0 to High(APath) do
+  begin
+    if not (Result is TJSONObject) then Exit(nil);
+    Result := TJSONObject(Result).Find(APath[i]);
+    if Result = nil then Exit;
+  end;
+  if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+end;
+
+{ the geo's option merged over the defaults, read at a path }
+function GeoMergedGet(AGeoNode: TJSONObject; const APath: array of string): TJSONData;
+var
+  u, d, uv, dv: TJSONData;
+  i: Integer;
+  live: Boolean;
 begin
   Result := nil;
-  AGeoState := ksAbsent;
-  if KeyOf(Own(ARegion, ASub), AKey, d) = ksValue then Exit(d);
-  { echartsStyle fills only what the region option leaves out }
-  if (KeyOf(Own(ARegion, ASub), AKey, d) = ksAbsent)
-    and (KeyOf(Own(AStyle, ASub), AKey, d) = ksValue) then Exit(d);
-  AGeoState := KeyOf(Own(AGeo, ASub), AKey, d);
-  if AGeoState = ksValue then Result := d;
+  u := AGeoNode;
+  live := u <> nil;
+  d := GeoDefaults;
+  for i := 0 to High(APath) do
+  begin
+    dv := nil;
+    if d is TJSONObject then dv := TJSONObject(d).Find(APath[i]);
+    if live and (TJSONObject(u).IndexOfName(APath[i]) >= 0) then
+    begin
+      uv := TJSONObject(u).Find(APath[i]);
+      if i = High(APath) then
+      begin
+        if uv.JSONType = jtNull then Exit(nil);
+        Exit(uv);
+      end;
+      if uv is TJSONObject then
+      begin
+        u := uv;
+        if not (dv is TJSONObject) then dv := nil;
+        d := dv;
+        Continue;
+      end;
+      { init's `option.itemStyle = option.itemStyle || (an empty object)`: a falsy
+        itemStyle is a fresh object that takes the colour default only }
+      if (i = 0) and (APath[0] = 'itemStyle') and not Truthy(uv)
+        and (High(APath) = 1) and (APath[1] = 'color') and (dv is TJSONObject) then
+        Exit(TJSONObject(dv).Find('color'));
+      Exit(nil);
+    end;
+    { the geo leaves it out: the default's }
+    live := False;
+    d := dv;
+    if d = nil then Exit(nil);
+  end;
+  Result := d;
+end;
+
+{ zrUtil.merge(target, source) without overwrite: what the target leaves
+  out, an object into an object deep }
+procedure MergeAbsent(ATarget, ASource: TJSONObject);
+var
+  i: Integer;
+  key: string;
+  t: TJSONData;
+begin
+  for i := 0 to ASource.Count - 1 do
+  begin
+    key := ASource.Names[i];
+    if ATarget.IndexOfName(key) >= 0 then
+    begin
+      t := ATarget.Find(key);
+      if (t is TJSONObject) and (ASource.Items[i] is TJSONObject) then
+        MergeAbsent(TJSONObject(t), TJSONObject(ASource.Items[i]));
+    end
+    else
+      ATarget.Add(key, ASource.Items[i].Clone);
+  end;
+end;
+
+{ JSON.stringify of an option value }
+function JsJsonText(AData: TJSONData): string;
+var i: Integer;
+begin
+  if AData = nil then Exit('null');
+  case AData.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber:
+      if IsNan(AData.AsFloat) or IsInfinite(AData.AsFloat) then Result := 'null'
+      else Result := TyJsNumberToString(AData.AsFloat);
+    jtString: Result := TyJsonQuote(AData.AsString);
+    jtArray:
+      begin
+        Result := '[';
+        for i := 0 to AData.Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          Result := Result + JsJsonText(TJSONArray(AData).Items[i]);
+        end;
+        Result := Result + ']';
+      end;
+  else
+    begin
+      Result := '{';
+      for i := 0 to AData.Count - 1 do
+      begin
+        if i > 0 then Result := Result + ',';
+        Result := Result + TyJsonQuote(TJSONObject(AData).Names[i]) + ':'
+          + JsJsonText(TJSONObject(AData).Items[i]);
+      end;
+      Result := Result + '}';
+    end;
+  end;
+end;
+
+function TTyGeo.Chain(ARegion: TJSONObject; const APath: array of string;
+  out AToken: TTyGeoToken): TJSONData;
+begin
+  AToken := gtkNone;
+  Result := PathGet(ARegion, APath);
+  if Result <> nil then Exit;
+  Result := GeoMergedGet(FNode, APath);
+  if Result <> nil then
+  begin
+    AToken := TokenOf(Result);
+    if AToken <> gtkNone then Result := nil;
+    Exit;
+  end;
+  Result := PathGet(FRoot, APath);
 end;
 
 function ColourOf(AData: TJSONData; out AColour: TTyChartColor;
@@ -2562,78 +2930,95 @@ begin
   else Result := AData.AsJSON;
 end;
 
-{ applyOptionStyleForRegion's normal style }
-function PaintOf(ARegion, AStyle, AGeo: TJSONData; const AInk: TTyGeoInk): TTyGeoPaint;
+{ applyOptionStyleForRegion's style for one state (AState < 0: the normal
+  one; else Ord of the state): getFixedItemStyle -- areaColor over color --
+  up the region model's chain, and a line's state through fixLineStyle
+  (the normal one is fixed where the picture is made, after its label's
+  rect). [Batch 148: GE1's normal reader, with the chain to the root.] }
+function PaintFor(AGeo: TTyGeo; ARegion: TJSONObject; AState: Integer;
+  const AInk: TTyGeoInk; AIsLine: Boolean): TTyGeoPaint;
 var
   d: TJSONData;
-  st: TKeyState;
+  tok: TTyGeoToken;
   none: Boolean;
   c: TTyChartColor;
   g: TTyChartGradient;
   tmp: TJSONObject;
   os: TTyOptStyle;
+
+  function Get(const AKey: string): TJSONData;
+  begin
+    if AState < 0 then Result := AGeo.Chain(ARegion, ['itemStyle', AKey], tok)
+    else Result := AGeo.Chain(ARegion,
+      [cStateWord[TTyStName(AState)], 'itemStyle', AKey], tok);
+  end;
+
 begin
   Result := Default(TTyGeoPaint);
   Result.Opacity := 1;
-  { fill: areaColor over color; color is the theme's unless the geo wrote
-    `color` at all }
-  d := ChainOf(ARegion, AStyle, AGeo, 'itemStyle', 'areaColor', st);
-  if d = nil then
-  begin
-    d := ChainOf(ARegion, AStyle, AGeo, 'itemStyle', 'color', st);
-    if (d = nil) and (st = ksAbsent) then Result.FillSrc := gisTheme;
-  end;
+  { fill: areaColor over color (the colour a token default) }
+  d := Get('areaColor');
+  if d = nil then d := Get('color');
   if d <> nil then
   begin
+    Result.FillHas := True;
     Result.FillRaw := RawText(d);
-    if ColourOf(d, c, g, none) then
+    if (AState = Ord(stnEmphasis)) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
+      Result.FillInherit := True
+    else if ColourOf(d, c, g, none) and not none then
     begin
-      if none then Result.FillSrc := gisNone
-      else
-      begin
-        Result.FillSrc := gisOption;
-        Result.Fill := c;
-        Result.FillGradient := g;
-      end;
-    end
-    else
-      Result.FillSrc := gisNone;
+      Result.FillSrc := gisOption;
+      Result.Fill := c;
+      Result.FillGradient := g;
+    end;
+  end
+  else if tok <> gtkNone then
+  begin
+    Result.FillHas := True;
+    Result.FillSrc := gisTheme;
+    Result.FillToken := tok;
+    Result.Fill := InkOf(tok, AInk);
   end;
-  if Result.FillSrc = gisTheme then Result.Fill := AInk.AreaFill;
-  { stroke: borderColor, the theme's unless the geo wrote it }
-  d := ChainOf(ARegion, AStyle, AGeo, 'itemStyle', 'borderColor', st);
+  { stroke: borderColor }
+  d := Get('borderColor');
   if d <> nil then
   begin
+    Result.StrokeHas := True;
     Result.StrokeRaw := RawText(d);
     Result.StrokeTruthy := Truthy(d);
     if ColourOf(d, c, g, none) and not none then
     begin
       Result.StrokeSrc := gisOption;
       Result.Stroke := c;
-    end
-    else
-      Result.StrokeSrc := gisNone;
+    end;
   end
-  else if st = ksAbsent then
+  else if tok <> gtkNone then
   begin
+    Result.StrokeHas := True;
     Result.StrokeSrc := gisTheme;
-    Result.Stroke := AInk.Border;
+    Result.StrokeToken := tok;
+    Result.Stroke := InkOf(tok, AInk);
     Result.StrokeTruthy := True;
   end;
-  { borderWidth: 0.5 unless the geo wrote it }
-  d := ChainOf(ARegion, AStyle, AGeo, 'itemStyle', 'borderWidth', st);
-  if d <> nil then Result.LineWidthLogical := TyJsonToNumber(d)
-  else if st = ksAbsent then Result.LineWidthLogical := 0.5
-  else Result.LineWidthLogical := NaN;
-  d := ChainOf(ARegion, AStyle, AGeo, 'itemStyle', 'opacity', st);
+  { borderWidth: 0.5 by default; nothing at all is zrender's own 1 }
+  d := Get('borderWidth');
+  if d <> nil then
+  begin
+    Result.WidthHas := True;
+    Result.LineWidthLogical := TyJsonToNumber(d);
+  end
+  else if AState < 0 then
+    Result.LineWidthLogical := 1;
+  d := Get('opacity');
   if d <> nil then
   begin
     Result.HasOpacity := True;
     Result.Opacity := TyJsonToNumber(d);
   end;
-  d := ChainOf(ARegion, AStyle, AGeo, 'itemStyle', 'borderType', st);
+  d := Get('borderType');
   if d <> nil then
   begin
+    Result.DashHas := True;
     Result.DashRaw := RawText(d);
     { read through the style reader: a one-key itemStyle }
     tmp := TJSONObject.Create(['itemStyle', TJSONObject.Create(['borderType', d.Clone])]);
@@ -2644,6 +3029,31 @@ begin
     finally
       tmp.Free;
     end;
+  end;
+  { fixLineStyle on a line's state object: `stroke = stroke || fill` -- an
+    undefined set, which the merge carries -- and `fill = null` }
+  if AIsLine and (AState >= 0) then
+  begin
+    if not (Result.StrokeHas and Result.StrokeTruthy) then
+    begin
+      Result.StrokeHas := True;
+      Result.StrokeSrc := gisNone;
+      Result.StrokeTruthy := False;
+      Result.StrokeRaw := '';
+      Result.StrokeToken := gtkNone;
+      if Result.FillHas and (Result.FillSrc <> gisNone) then
+      begin
+        Result.StrokeSrc := Result.FillSrc;
+        Result.StrokeRaw := Result.FillRaw;
+        Result.Stroke := Result.Fill;
+        Result.StrokeToken := Result.FillToken;
+        Result.StrokeTruthy := True;
+      end;
+    end;
+    Result.FillHas := True;
+    Result.FillSrc := gisNone;
+    Result.FillInherit := False;
+    Result.FillToken := gtkNone;
   end;
 end;
 
@@ -2757,52 +3167,80 @@ begin
   Result := NewRect(minX, minY, maxX - minX, maxY - minY);
 end;
 
-function LabelOf(AGeo: TTyGeo; ARegion, AStyle: TJSONData; const AName: string;
+{ resetLabelForRegion's setLabelStyle: the normal text style and textConfig
+  and the three states' -- getLabelStatesModels(regionModel) up the chain,
+  the texts getFormattedLabel's (a state's from emphasis.label.formatter,
+  whatever the state, else the normal text). [Batch 148: GE1's normal
+  reader, with the chain to the root, and the states.] }
+function LabelFor(AGeo: TTyGeo; ARegion: TJSONObject; const AName: string;
   const AInk: TTyGeoInk): TTyGeoLabel;
 var
   d: TJSONData;
-  st: TKeyState;
-  fmt: TTyChartFormatter;
-  params: TTyChartParams;
+  tok: TTyGeoToken;
   g: TTyChartGradient;
-  none: Boolean;
+  none, stShow: Boolean;
+  s: TTyStName;
+  st: TTyGeoLabelState;
+  c: TTyChartColor;
+
+  { getFormattedLabel(name, status): a '@' handler is a function given
+    the name and the status; a string replaces its first a-placeholder; anything else is
+    undefined }
+  function Formatted(const AStatus: string; out AText: string): Boolean;
+  var
+    f: TJSONData;
+    fmt: TTyChartFormatter;
+    params: TTyChartParams;
+    t: TTyGeoToken;
+  begin
+    Result := False;
+    AText := '';
+    if AStatus = 'normal' then f := AGeo.Chain(ARegion, ['label', 'formatter'], t)
+    else f := AGeo.Chain(ARegion, ['emphasis', 'label', 'formatter'], t);
+    if (f = nil) or (f.JSONType <> jtString) then Exit;
+    if (f.AsString <> '') and (f.AsString[1] = '@') then
+    begin
+      if not TyChartFindFormatter(Copy(f.AsString, 2, MaxInt), fmt) then Exit;
+      SetLength(params, 1);
+      params[0] := Default(TTyChartCallbackParams);
+      params[0].ComponentType := 'geo';
+      params[0].ComponentIndex := AGeo.Index;
+      params[0].SeriesIndex := -1;
+      params[0].DataIndex := -1;
+      params[0].RawDataIndex := -1;
+      params[0].Name := AName;
+      params[0].Status := AStatus;
+      AText := fmt(params);
+      Exit(True);
+    end;
+    AText := TyJsReplaceFirst(f.AsString, '{a}', AName);
+    Result := True;
+  end;
+
+  function Get(const AState, AKey: string): TJSONData;
+  begin
+    if AState = '' then Result := AGeo.Chain(ARegion, ['label', AKey], tok)
+    else Result := AGeo.Chain(ARegion, [AState, 'label', AKey], tok);
+  end;
+
 begin
   Result := Default(TTyGeoLabel);
-  d := ChainOf(ARegion, AStyle, AGeo.Node, 'label', 'show', st);
-  Result.Shown := Truthy(d);
-  { getFormattedLabel(name, 'normal'), else the name }
-  Result.Text := AName;
-  d := ChainOf(ARegion, AStyle, AGeo.Node, 'label', 'formatter', st);
-  if (d <> nil) and (d.JSONType = jtString) then
-  begin
-    if (d.AsString <> '') and (d.AsString[1] = '@') then
-    begin
-      if TyChartFindFormatter(Copy(d.AsString, 2, MaxInt), fmt) then
-      begin
-        SetLength(params, 1);
-        params[0] := Default(TTyChartCallbackParams);
-        params[0].ComponentType := 'geo';
-        params[0].ComponentIndex := AGeo.Index;
-        params[0].SeriesIndex := -1;
-        params[0].DataIndex := -1;
-        params[0].RawDataIndex := -1;
-        params[0].Name := AName;
-        params[0].Status := 'normal';
-        Result.Text := fmt(params);
-      end;
-    end
-    else
-      Result.Text := TyJsReplaceFirst(d.AsString, '{a}', AName);
-  end;
-  d := ChainOf(ARegion, AStyle, AGeo.Node, 'label', 'color', st);
+  Result.Shown := Truthy(Get('', 'show'));
+  Result.Exists := Result.Shown;
+  if not Formatted('normal', Result.Text) then Result.Text := AName;
+  d := Get('', 'color');
   if (d <> nil) and ColourOf(d, Result.Colour, g, none) and not none then
   begin
     Result.HasColour := True;
     Result.ColourRaw := RawText(d);
   end
   else
-    Result.Colour := AInk.LabelColour;
-  d := ChainOf(ARegion, AStyle, AGeo.Node, 'label', 'fontSize', st);
+  begin
+    Result.ColourToken := tok;
+    if tok <> gtkNone then Result.Colour := InkOf(tok, AInk)
+    else Result.Colour := AInk.LabelColour;
+  end;
+  d := Get('', 'fontSize');
   if d <> nil then
   begin
     Result.HasFontSize := True;
@@ -2810,7 +3248,7 @@ begin
   end
   else
     Result.FontSizeLogical := AInk.LabelFontSizeLogical;
-  d := ChainOf(ARegion, AStyle, AGeo.Node, 'label', 'fontWeight', st);
+  d := Get('', 'fontWeight');
   if d <> nil then
   begin
     Result.HasFontWeight := True;
@@ -2818,7 +3256,7 @@ begin
   end
   else
     Result.FontWeight := AInk.LabelFontWeight;
-  d := ChainOf(ARegion, AStyle, AGeo.Node, 'label', 'fontFamily', st);
+  d := Get('', 'fontFamily');
   if (d <> nil) and (d.JSONType = jtString) then
   begin
     Result.HasFontFamily := True;
@@ -2826,6 +3264,99 @@ begin
   end
   else
     Result.FontFamily := AInk.LabelFontName;
+  d := Get('', 'opacity');
+  if d <> nil then
+  begin
+    Result.HasOpacity := True;
+    Result.Opacity := TyJsonToNumber(d);
+  end;
+  { createTextConfig: offset as written, rotate in degrees }
+  d := Get('', 'offset');
+  if d <> nil then
+  begin
+    Result.HasOffset := True;
+    Result.OffX := TyJsonToNumber(Item(d, 0));
+    Result.OffY := TyJsonToNumber(Item(d, 1));
+  end;
+  d := Get('', 'rotate');
+  if d <> nil then
+  begin
+    Result.HasRotate := True;
+    Result.RotationRad := TyJsonToNumber(d) * cJsPi / 180;
+  end;
+  Result.Silent := Truthy(Get('', 'silent'));
+  for s := Low(TTyStName) to High(TTyStName) do
+  begin
+    st := Default(TTyGeoLabelState);
+    { retrieve2(state show, normal show): the state's ignore only where it
+      differs }
+    d := Get(cStateWord[s], 'show');
+    if d <> nil then stShow := Truthy(d) else stShow := Result.Shown;
+    if stShow then Result.Exists := True;
+    if stShow <> Result.Shown then
+    begin
+      st.HasIgnore := True;
+      st.Ignore := not stShow;
+    end;
+    if not Formatted(cStateWord[s], st.Text) then st.Text := Result.Text;
+    { setTokenTextStyle in a state: only what the state's model says, no
+      global text style; 'inherit' and 'auto' are no colour here }
+    d := Get(cStateWord[s], 'color');
+    if d <> nil then
+    begin
+      if not ((d.JSONType = jtString) and ((d.AsString = 'inherit') or (d.AsString = 'auto'))) then
+      begin
+        st.HasColour := True;
+        st.ColourRaw := RawText(d);
+        if ColourOf(d, c, g, none) and not none then st.Colour := c
+        else st.ColourNone := True;
+      end;
+    end
+    else if tok <> gtkNone then
+    begin
+      st.HasColour := True;
+      st.ColourToken := tok;
+      st.Colour := InkOf(tok, AInk);
+    end;
+    d := Get(cStateWord[s], 'fontSize');
+    if d <> nil then
+    begin
+      st.HasFontSize := True;
+      st.FontSizeLogical := TyOptFontSize(d, AInk.LabelFontSizeLogical);
+    end;
+    d := Get(cStateWord[s], 'fontWeight');
+    if d <> nil then
+    begin
+      st.HasFontWeight := True;
+      st.FontWeight := TyFontWeightOf(d, AInk.LabelFontWeight);
+    end;
+    d := Get(cStateWord[s], 'fontFamily');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      st.HasFontFamily := True;
+      st.FontFamily := d.AsString;
+    end;
+    d := Get(cStateWord[s], 'opacity');
+    if d <> nil then
+    begin
+      st.HasOpacity := True;
+      st.Opacity := TyJsonToNumber(d);
+    end;
+    d := Get(cStateWord[s], 'offset');
+    if d <> nil then
+    begin
+      st.HasOffset := True;
+      st.OffX := TyJsonToNumber(Item(d, 0));
+      st.OffY := TyJsonToNumber(Item(d, 1));
+    end;
+    d := Get(cStateWord[s], 'rotate');
+    if d <> nil then
+    begin
+      st.HasRotate := True;
+      st.RotationRad := TyJsonToNumber(d) * cJsPi / 180;
+    end;
+    Result.States[s] := st;
+  end;
 end;
 
 function TyGeoDrawOf(AGeo: TTyGeo; const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
@@ -2835,7 +3366,7 @@ var
   regions: TTyGeoRegionArray;
   i, gi, k, s: Integer;
   region: TTyGeoRegion;
-  ropt, rstyle: TJSONObject;
+  ropt: TJSONObject;
   polys, lines: TTyGeoRingArray;
   centre: TTyGeoPt;
   hasCentre: Boolean;
@@ -2843,6 +3374,7 @@ var
   gs: Double;
   d: TJSONData;
   mask: TFpuMask;
+  tok: TTyGeoToken;
 
   function GroupOf(const AName: string): Integer;
   var j: Integer;
@@ -2853,12 +3385,21 @@ var
     SetLength(dr.Groups, j + 1);
     dr.Groups[j] := Default(TTyGeoDrawGroup);
     dr.Groups[j].Name := AName;
-    { `regionModel.get('silent', true)`: the region option's own }
-    if KeyOf(ropt, 'silent', d) = ksValue then
+    { `regionModel.get('silent', true)`: the region option's own (with its
+      echartsStyle) }
+    d := PathGet(ropt, ['silent']);
+    if d <> nil then
     begin
       dr.Groups[j].HasSilent := True;
       dr.Groups[j].Silent := Truthy(d);
     end;
+    { [Batch 148] resetEventTriggerForRegion's region, and
+      resetStateTriggerForRegion's emphasis model }
+    if ropt <> nil then dr.Groups[j].RegionJson := JsJsonText(ropt)
+    else dr.Groups[j].RegionJson := '{}';
+    d := AGeo.Chain(ropt, ['emphasis', 'focus'], tok);
+    dr.Groups[j].FocusSelf := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'self');
+    dr.Groups[j].EmphasisDisabled := Truthy(AGeo.Chain(ropt, ['emphasis', 'disabled'], tok));
     Result := j;
   end;
 
@@ -2894,12 +3435,16 @@ var
     j, q, np: Integer;
     lw, ls: Double;
     tr: TTyXYWH;
+    sn: TTyStName;
   begin
     if Length(ASubs) = 0 then Exit;
     p := Default(TTyGeoDrawPath);
     p.IsLine := AIsLine;
     p.Subs := ASubs;
-    p.Paint := PaintOf(ropt, rstyle, AGeo.Node, AInk);
+    p.Paint := PaintFor(AGeo, ropt, -1, AInk, False);
+    { [Batch 148] the three states' styles }
+    for sn := Low(TTyStName) to High(TTyStName) do
+      p.StatePaint[sn] := PaintFor(AGeo, ropt, Ord(sn), AInk, AIsLine);
     { what the first brush hands the context }
     px := Default(TProxy);
     px.UX := dr.UX;
@@ -2928,7 +3473,7 @@ var
       p.Rect.Y := p.Rect.Y - lw / 2;
     end;
     { the label }
-    p.Lbl := LabelOf(AGeo, ropt, rstyle, region.Name, AInk);
+    p.Lbl := LabelFor(AGeo, ropt, region.Name, AInk);
     if hasCentre then
     begin
       p.Lbl.HasPos := True;
@@ -3014,7 +3559,7 @@ begin
     for i := 0 to High(regions) do
     begin
       region := regions[i];
-      RegionOptionOf(AGeo, i, ropt, rstyle);
+      ropt := AGeo.RegionOpt(i);
       gi := GroupOf(region.Name);
       polys := nil;
       lines := nil;
@@ -3043,20 +3588,382 @@ begin
   Result := dr;
 end;
 
+{ ==================== the regions' states [Batch 148] ==================== }
+
+function TTyGeo.RegionOpt(ARegionIndex: Integer): TJSONObject;
+var
+  nm: string;
+  i, n: Integer;
+  entry, style: TJSONObject;
+begin
+  Result := nil;
+  if (FSource = nil) or (ARegionIndex < 0) or (ARegionIndex > High(FSource.Regions)) then Exit;
+  nm := FSource.Regions[ARegionIndex].Name;
+  { optionModelMap keeps a truthy name only: getRegionModel('') is a model
+    of nothing }
+  if nm = '' then Exit;
+  for i := 0 to High(FOptNames) do
+    if FOptNames[i] = nm then Exit(FOpts[i]);
+  RegionOptionOf(Self, ARegionIndex, entry, style);
+  if entry <> nil then Result := TJSONObject(entry.Clone)
+  else Result := TJSONObject.Create(['name', nm]);
+  if style <> nil then MergeAbsent(Result, style);
+  n := Length(FOptNames);
+  SetLength(FOptNames, n + 1);
+  SetLength(FOpts, n + 1);
+  FOptNames[n] := nm;
+  FOpts[n] := Result;
+end;
+
+procedure TTyGeo.EnsureGroups;
+var
+  i, k: Integer;
+  nm: string;
+  found: Boolean;
+begin
+  if FGroupsOk then Exit;
+  FGroupsOk := True;
+  FGroupNames := nil;
+  FSt := nil;
+  { what MapDraw draws: nothing for an invalid or hidden geo }
+  if (FSource = nil) or not FValid or not FSpec.Show then Exit;
+  for i := 0 to High(FSource.Regions) do
+  begin
+    nm := FSource.Regions[i].Name;
+    found := False;
+    for k := 0 to High(FGroupNames) do
+      if FGroupNames[k] = nm then
+      begin
+        found := True;
+        Break;
+      end;
+    if found then Continue;
+    SetLength(FGroupNames, Length(FGroupNames) + 1);
+    FGroupNames[High(FGroupNames)] := nm;
+  end;
+  SetLength(FSt, Length(FGroupNames));
+  for k := 0 to High(FSt) do FSt[k] := Default(TTyGeoGroupSt);
+end;
+
+function TTyGeo.GroupCount: Integer;
+begin
+  EnsureGroups;
+  Result := Length(FGroupNames);
+end;
+
+function TTyGeo.GroupName(AGroup: Integer): string;
+begin
+  EnsureGroups;
+  if (AGroup >= 0) and (AGroup <= High(FGroupNames)) then Result := FGroupNames[AGroup]
+  else Result := '';
+end;
+
+function TTyGeo.GroupIndexOf(const AName: string): Integer;
+var i: Integer;
+begin
+  EnsureGroups;
+  for i := 0 to High(FGroupNames) do
+    if FGroupNames[i] = AName then Exit(i);
+  Result := -1;
+end;
+
+function TTyGeo.GroupOpt(AGroup: Integer): TJSONObject;
+var i: Integer; nm: string;
+begin
+  Result := nil;
+  nm := GroupName(AGroup);
+  if (nm = '') or (FSource = nil) then Exit;
+  for i := 0 to High(FSource.Regions) do
+    if FSource.Regions[i].Name = nm then Exit(RegionOpt(i));
+end;
+
+function TTyGeo.GroupRegionJson(AGroup: Integer): string;
+var opt: TJSONObject;
+begin
+  opt := GroupOpt(AGroup);
+  if opt <> nil then Result := JsJsonText(opt) else Result := '{}';
+end;
+
+function TyGeoJsJson(AData: TJSONData): string;
+begin
+  Result := JsJsonText(AData);
+end;
+
+function TTyGeo.GroupFocusSelf(AGroup: Integer): Boolean;
+var d: TJSONData; tok: TTyGeoToken;
+begin
+  { enableHoverFocus runs only where the emphasis is not disabled: a
+    disabled group's ecData has no focus }
+  if GroupEmphasisDisabled(AGroup) then Exit(False);
+  d := Chain(GroupOpt(AGroup), ['emphasis', 'focus'], tok);
+  Result := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'self');
+end;
+
+function TTyGeo.GroupEmphasisDisabled(AGroup: Integer): Boolean;
+var tok: TTyGeoToken;
+begin
+  Result := Truthy(Chain(GroupOpt(AGroup), ['emphasis', 'disabled'], tok));
+end;
+
+function GeoDigitBit(ADigit: Integer): Cardinal;
+begin
+  { JavaScript's 1 << n takes n mod 32 }
+  Result := Cardinal(1) shl (ADigit and 31);
+end;
+
+function TTyGeo.HoverEnter(AGroup: Integer): Boolean;
+begin
+  Result := False;
+  EnsureGroups;
+  if (AGroup < 0) or (AGroup > High(FSt)) or (FSt[AGroup].Hbo <> 0) then Exit;
+  Result := FSt[AGroup].Hover <> TyStHoverEmphasis;
+  FSt[AGroup].Hover := TyStHoverEmphasis;
+end;
+
+function TTyGeo.HoverLeave(AGroup: Integer): Boolean;
+begin
+  Result := False;
+  EnsureGroups;
+  if (AGroup < 0) or (AGroup > High(FSt)) or (FSt[AGroup].Hbo <> 0) then Exit;
+  if FSt[AGroup].Hover <> TyStHoverEmphasis then Exit;
+  FSt[AGroup].Hover := TyStHoverNormal;
+  Result := True;
+end;
+
+function TTyGeo.EnterEmphasisBy(AGroup, ADigit: Integer): Boolean;
+begin
+  Result := False;
+  EnsureGroups;
+  if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  FSt[AGroup].Hbo := FSt[AGroup].Hbo or GeoDigitBit(ADigit);
+  Result := FSt[AGroup].Hover <> TyStHoverEmphasis;
+  FSt[AGroup].Hover := TyStHoverEmphasis;
+end;
+
+function TTyGeo.LeaveEmphasisBy(AGroup, ADigit: Integer): Boolean;
+begin
+  Result := False;
+  EnsureGroups;
+  if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  FSt[AGroup].Hbo := FSt[AGroup].Hbo and not GeoDigitBit(ADigit);
+  { only when every bit is gone }
+  if (FSt[AGroup].Hbo <> 0) or (FSt[AGroup].Hover <> TyStHoverEmphasis) then Exit;
+  FSt[AGroup].Hover := TyStHoverNormal;
+  Result := True;
+end;
+
+function TTyGeo.BlurAll: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  EnsureGroups;
+  for i := 0 to High(FSt) do
+    if FSt[i].Hover <> TyStHoverBlur then
+    begin
+      FSt[i].Hover := TyStHoverBlur;
+      Result := True;
+    end;
+  FIsBlured := True;
+end;
+
+function TTyGeo.LeaveBlurAll: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  EnsureGroups;
+  for i := 0 to High(FSt) do
+    if FSt[i].Hover = TyStHoverBlur then
+    begin
+      FSt[i].Hover := TyStHoverNormal;
+      Result := True;
+    end;
+end;
+
+function TTyGeo.SetSelected(AGroup: Integer; ASelected: Boolean): Boolean;
+begin
+  Result := False;
+  EnsureGroups;
+  if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  Result := FSt[AGroup].Selected <> ASelected;
+  FSt[AGroup].Selected := ASelected;
+end;
+
+function TTyGeo.GroupFlags(AGroup: Integer): TTyGeoGroupSt;
+begin
+  EnsureGroups;
+  if (AGroup >= 0) and (AGroup <= High(FSt)) then Result := FSt[AGroup]
+  else Result := Default(TTyGeoGroupSt);
+end;
+
+function SameInk(const A, B: TTyGeoInk): Boolean;
+begin
+  Result := (A.AreaFill = B.AreaFill) and (A.Border = B.Border)
+    and (A.LabelColour = B.LabelColour) and (A.LabelFontName = B.LabelFontName)
+    and (A.LabelFontSizeLogical = B.LabelFontSizeLogical)
+    and (A.LabelFontWeight = B.LabelFontWeight)
+    and (A.HighlightFill = B.HighlightFill) and (A.LabelHighlight = B.LabelHighlight);
+end;
+
+function TTyGeo.Draw(const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
+begin
+  if not (FDrawOk and (FDrawPPI = APPI) and SameInk(FDrawInk, AInk)) then
+  begin
+    FDraw := TyGeoDrawOf(Self, AInk, APPI);
+    FDrawOk := True;
+    FDrawPPI := APPI;
+    FDrawInk := AInk;
+    { the state records are made of the picture: again, the flags kept }
+    FItemsOk := False;
+  end;
+  Result := FDraw;
+end;
+
+procedure StPaintColour(var AObj: TTyStObject; AKey: TTyStKey;
+  ASrc: TTyGeoInkSource; AColour: TTyChartColor);
+begin
+  if ASrc = gisNone then TyStSetNone(AObj, AKey)
+  else TyStSetColor(AObj, AKey, AColour);
+end;
+
+{ applyOptionStyleForRegion's states as States.pas holds them: the path
+  with echarts' default state proxy (setDefaultStateProxy -- whatever
+  emphasis.disabled says), all three state objects there; its text the
+  same, its rest z2 the host's plus two (updateZ) }
+procedure TTyGeo.InitItems;
+var
+  g, k: Integer;
+  s: TTyStName;
+  p: TTyGeoDrawPath;
+  it: TTyStItem;
+  o: TTyStObject;
+  sp: TTyGeoPaint;
+  ls: TTyGeoLabelState;
+begin
+  FItemsOk := True;
+  EnsureGroups;
+  for g := 0 to High(FSt) do
+  begin
+    if g > High(FDraw.Groups) then
+    begin
+      FSt[g].Items := nil;
+      Continue;
+    end;
+    SetLength(FSt[g].Items, Length(FDraw.Groups[g].Paths));
+    for k := 0 to High(FDraw.Groups[g].Paths) do
+    begin
+      p := FDraw.Groups[g].Paths[k];
+      it := Default(TTyStItem);
+      it.Host.Exists := True;
+      it.Host.IsPath := True;
+      it.Host.Proxy := True;
+      for s := Low(TTyStName) to High(TTyStName) do it.Host.HasState[s] := True;
+      o := TyStNoObject;
+      StPaintColour(o, stkFill, p.Paint.FillSrc, p.Paint.Fill);
+      StPaintColour(o, stkStroke, p.Paint.StrokeSrc, p.Paint.Stroke);
+      TyStSetNum(o, stkLineWidth, p.Paint.LineWidthLogical);
+      if p.Paint.HasOpacity then TyStSetNum(o, stkOpacity, p.Paint.Opacity)
+      else TyStSetNum(o, stkOpacity, 1);
+      TyStSetNum(o, stkZ2, 0);
+      TyStSetNum(o, stkIgnore, 0);
+      it.Host.Rest := o;
+      it.Host.Cur := o;
+      for s := Low(TTyStName) to High(TTyStName) do
+      begin
+        sp := p.StatePaint[s];
+        o := TyStNoObject;
+        if sp.FillInherit then o.FillInherit := True
+        else if sp.FillHas then StPaintColour(o, stkFill, sp.FillSrc, sp.Fill);
+        if sp.StrokeHas then StPaintColour(o, stkStroke, sp.StrokeSrc, sp.Stroke);
+        if sp.WidthHas then TyStSetNum(o, stkLineWidth, sp.LineWidthLogical);
+        if sp.HasOpacity then TyStSetNum(o, stkOpacity, sp.Opacity);
+        it.Host.Decl[s] := o;
+      end;
+      if p.Lbl.Exists then
+      begin
+        it.Label_.Exists := True;
+        it.Label_.Proxy := True;
+        for s := Low(TTyStName) to High(TTyStName) do it.Label_.HasState[s] := True;
+        o := TyStNoObject;
+        TyStSetColor(o, stkFill, p.Lbl.Colour);
+        if p.Lbl.HasOpacity then TyStSetNum(o, stkOpacity, p.Lbl.Opacity)
+        else TyStSetNum(o, stkOpacity, 1);
+        TyStSetNum(o, stkZ2, 2);
+        TyStSetNum(o, stkIgnore, Ord(not p.Lbl.Shown));
+        it.Label_.Rest := o;
+        it.Label_.Cur := o;
+        for s := Low(TTyStName) to High(TTyStName) do
+        begin
+          ls := p.Lbl.States[s];
+          o := TyStNoObject;
+          if ls.HasColour then
+          begin
+            if ls.ColourNone then TyStSetNone(o, stkFill)
+            else TyStSetColor(o, stkFill, ls.Colour);
+          end;
+          if ls.HasOpacity then TyStSetNum(o, stkOpacity, ls.Opacity);
+          if ls.HasIgnore then TyStSetNum(o, stkIgnore, Ord(ls.Ignore));
+          it.Label_.Decl[s] := o;
+        end;
+      end;
+      FSt[g].Items[k] := it;
+    end;
+  end;
+end;
+
+function TTyGeo.ApplyStates(const AInk: TTyGeoInk; APPI: Integer): Boolean;
+var g, k: Integer;
+begin
+  Result := False;
+  Draw(AInk, APPI);
+  if not FItemsOk then InitItems;
+  for g := 0 to High(FSt) do
+    for k := 0 to High(FSt[g].Items) do
+    begin
+      { the group's flags are its paths' (traverseUpdateState) }
+      FSt[g].Items[k].Host.HoverState := FSt[g].Hover;
+      FSt[g].Items[k].Host.Selected := FSt[g].Selected;
+      if TyStApplyItem(FSt[g].Items[k]) then Result := True;
+    end;
+end;
+
+function TTyGeo.PathItem(AGroup, APath: Integer): TTyStItem;
+begin
+  Result := Default(TTyStItem);
+  if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  if (APath < 0) or (APath > High(FSt[AGroup].Items)) then Exit;
+  Result := FSt[AGroup].Items[APath];
+end;
+
+{ ==================== the elements ==================== }
+
+{ the picture as elements: every compound path that draws anything, its
+  text straight after it (zrender's storage order: a text follows its
+  host), with the current state values -- and the full path Path.contain
+  walks, the clip the hit test respects, the datum a pointer names }
 function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList): Integer;
 var
   dr: TTyGeoDraw;
-  g, k, j, n: Integer;
+  g, k, j, n, q: Integer;
   p: TTyGeoDrawPath;
+  it: TTyStItem;
+  c: TTyStObject;
   el: TTyChartElement;
   shape: TTyChartShape;
   pts: TTyPointFArray;
-  q: TTyGeoPt;
-  w, h: Double;
+  pq: TTyGeoPt;
+  w, h, scale, lw, offX, offY, rot, ax, ay, cs, sn, ox, oy, m4, m5, t4: Double;
+  hasOff: Boolean;
+  minX, minY, maxX, maxY: Double;
   box: TTyRectF;
-  cmds: TTyPathCmdArray;
+  cmds, hit: TTyPathCmdArray;
   mask: TFpuMask;
+  silentGroup, any: Boolean;
+  s: TTyStName;
+  dash: TTyOptDash;
+  dashLogical: TTyDoubleArray;
+  txt, fam: string;
+  fsz, fwt: Integer;
 
   function Tx(AX, AY: Double): TTyGeoPt;
   begin
@@ -3068,93 +3975,239 @@ var
     end;
   end;
 
+  procedure AddCmd(AKind: TTyPathCmdKind; AX, AY: Double);
+  begin
+    if n >= Length(hit) then SetLength(hit, n * 2 + 16);
+    hit[n] := Default(TTyPathCmd);
+    hit[n].Kind := AKind;
+    hit[n].X := AX;
+    hit[n].Y := AY;
+    Inc(n);
+  end;
+
 begin
   Result := 0;
   if (AGeo = nil) or (AList = nil) then Exit;
-  dr := TyGeoDrawOf(AGeo, AInk, APPI);
+  dr := AGeo.Draw(AInk, APPI);
+  { a render applies the states its elements are in (updateStates) }
+  AGeo.ApplyStates(AInk, APPI);
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
   mask := MaskFpu;
   try
     for g := 0 to High(dr.Groups) do
+    begin
+      { the map's group, then the region's: silent all the way down }
+      silentGroup := AGeo.Spec.Silent or (dr.Groups[g].HasSilent and dr.Groups[g].Silent);
       for k := 0 to High(dr.Groups[g].Paths) do
       begin
         p := dr.Groups[g].Paths[k];
-        if Length(p.Drawn) = 0 then Continue;
-        { the drawn path through the group's transform }
-        SetLength(cmds, Length(p.Drawn));
-        SetLength(pts, 0);
-        n := 0;
-        for j := 0 to High(p.Drawn) do
+        it := AGeo.PathItem(g, k);
+        if Length(p.Drawn) > 0 then
         begin
-          cmds[j] := p.Drawn[j];
-          q := Tx(p.Drawn[j].X, p.Drawn[j].Y);
-          cmds[j].X := q.X;
-          cmds[j].Y := q.Y;
-          if p.Drawn[j].Kind <> pckClose then
+          c := it.Host.Cur;
+          { the drawn path through the group's transform }
+          SetLength(cmds, Length(p.Drawn));
+          SetLength(pts, 0);
+          q := 0;
+          for j := 0 to High(p.Drawn) do
           begin
-            SetLength(pts, n + 1);
-            pts[n] := TyPointF(q.X, q.Y);
-            Inc(n);
+            cmds[j] := p.Drawn[j];
+            pq := Tx(p.Drawn[j].X, p.Drawn[j].Y);
+            cmds[j].X := pq.X;
+            cmds[j].Y := pq.Y;
+            if p.Drawn[j].Kind <> pckClose then
+            begin
+              SetLength(pts, q + 1);
+              pts[q] := TyPointF(pq.X, pq.Y);
+              Inc(q);
+            end;
           end;
+          if p.IsLine then shape := TyShapePolyline(pts)
+          else shape := TyShapePolygon(pts);
+          shape.Cmds := cmds;
+          el := TyChartElement(shape);
+          { the current values (States.pas): a gradient while no state sets
+            the fill }
+          el.Style.HasFill := TyStHasColour(c, stkFill);
+          el.Style.FillColor := c.Color[stkFill];
+          if el.Style.HasFill and not it.Host.Merged.Has[stkFill] then
+            el.Style.FillGradient := p.Paint.FillGradient;
+          lw := 0;
+          if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
+          begin
+            el.Style.StrokeColor := c.Color[stkStroke];
+            { strokeNoScale: the width does not follow the zoom }
+            el.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+            { the dash: the normal one, a state's over it in list order }
+            dash := p.Paint.Dash;
+            dashLogical := p.Paint.DashLogical;
+            for s := Low(TTyStName) to High(TTyStName) do
+              if (s in it.Host.States) and p.StatePaint[s].DashHas then
+              begin
+                dash := p.StatePaint[s].Dash;
+                dashLogical := p.StatePaint[s].DashLogical;
+              end;
+            el.Style.DashLogical := TyDashPattern(dash, dashLogical, c.Num[stkLineWidth]);
+            { Path.contain's stroke: the width, at least
+              strokeContainThreshold where there is no fill }
+            lw := c.Num[stkLineWidth] * scale;
+            if not el.Style.HasFill then lw := JsMax(lw, TyGeoStrokeContain * scale);
+          end;
+          el.Style.Alpha := c.Num[stkOpacity];
+          el.Z := AGeo.Spec.Z;
+          el.Z2 := Round(c.Num[stkZ2]);
+          el.Silent := silentGroup;
+          el.Datum := TyChartComponentDatum(ctkGeo, AGeo.Index, g);
+          if dr.HasClip then
+          begin
+            el.HasClip := True;
+            el.ClipRect := TyRectOfXYWH(dr.Clip);
+          end;
+          el.ClipHits := True;
+          { the hit: every point of every sub-path (Path.contain walks the
+            path data, not the drawn folds), inside the stroked box }
+          n := 0;
+          hit := nil;
+          any := False;
+          minX := MaxDouble; minY := MaxDouble;
+          maxX := -MaxDouble; maxY := -MaxDouble;
+          for j := 0 to High(p.Subs) do
+          begin
+            if Length(p.Subs[j]) < 2 then Continue;
+            for q := 0 to High(p.Subs[j]) do
+            begin
+              pq := Tx(p.Subs[j][q].X, p.Subs[j][q].Y);
+              if q = 0 then AddCmd(pckMove, pq.X, pq.Y) else AddCmd(pckLine, pq.X, pq.Y);
+              minX := JsMin(minX, pq.X);
+              minY := JsMin(minY, pq.Y);
+              maxX := JsMax(maxX, pq.X);
+              maxY := JsMax(maxY, pq.Y);
+              any := True;
+            end;
+            if not p.IsLine then AddCmd(pckClose, hit[n - Length(p.Subs[j])].X,
+              hit[n - Length(p.Subs[j])].Y);
+          end;
+          SetLength(hit, n);
+          el.PathHit.Active := any;
+          el.PathHit.Cmds := hit;
+          el.PathHit.Fill := el.Style.HasFill;
+          el.PathHit.StrokePx := lw;
+          if any then
+            el.PathHit.Box := TyRectF(minX - lw / 2, minY - lw / 2,
+              maxX + lw / 2, maxY + lw / 2);
+          AList.Add(el);
+          Inc(Result);
         end;
-        if p.IsLine then shape := TyShapePolyline(pts)
-        else shape := TyShapePolygon(pts);
-        shape.Cmds := cmds;
-        el := TyChartElement(shape);
-        el.Style.HasFill := PaintHasFill(p.Paint);
-        el.Style.FillColor := p.Paint.Fill;
-        el.Style.FillGradient := p.Paint.FillGradient;
-        if PaintHasStroke(p.Paint) then
+        { THE TEXT, straight after its host: z2 2 over a region at rest }
+        if not (p.Lbl.Exists and p.Lbl.HasPos) then Continue;
+        if IsNan(p.Lbl.AnchorX) or IsNan(p.Lbl.AnchorY) then Continue;
+        if AMeasurer = nil then Continue;
+        c := it.Label_.Cur;
+        { the normal text style and textConfig, each state of the list over
+          them in order }
+        txt := p.Lbl.Text;
+        fsz := p.Lbl.FontSizeLogical;
+        fwt := p.Lbl.FontWeight;
+        fam := p.Lbl.FontFamily;
+        offX := 0;
+        offY := 0;
+        rot := 0;
+        hasOff := p.Lbl.HasOffset;
+        if p.Lbl.HasOffset then
         begin
-          el.Style.StrokeColor := p.Paint.Stroke;
-          { strokeNoScale: the width does not follow the zoom }
-          el.Style.StrokeWidthLogical := p.Paint.LineWidthLogical;
-          el.Style.DashLogical := TyDashPattern(p.Paint.Dash, p.Paint.DashLogical,
-            p.Paint.LineWidthLogical);
+          offX := p.Lbl.OffX;
+          offY := p.Lbl.OffY;
         end;
-        if p.Paint.HasOpacity then el.Style.Alpha := p.Paint.Opacity;
+        if p.Lbl.HasRotate then rot := p.Lbl.RotationRad;
+        for s := Low(TTyStName) to High(TTyStName) do
+        begin
+          if not (s in it.Label_.States) then Continue;
+          txt := p.Lbl.States[s].Text;
+          if p.Lbl.States[s].HasFontSize then fsz := p.Lbl.States[s].FontSizeLogical;
+          if p.Lbl.States[s].HasFontWeight then fwt := p.Lbl.States[s].FontWeight;
+          if p.Lbl.States[s].HasFontFamily then fam := p.Lbl.States[s].FontFamily;
+          if p.Lbl.States[s].HasOffset then
+          begin
+            hasOff := True;
+            offX := p.Lbl.States[s].OffX;
+            offY := p.Lbl.States[s].OffY;
+          end;
+          if p.Lbl.States[s].HasRotate then rot := p.Lbl.States[s].RotationRad;
+        end;
+        { updateInnerText: innerTransformable at the position plus the
+          offset, its origin minus the offset, turned by the rotation --
+          and where getLocalTransform puts the text's own (0, 0), in its
+          arithmetic }
+        offX := offX * scale;
+        offY := offY * scale;
+        if hasOff then
+        begin
+          ax := p.Lbl.AnchorX + offX;
+          ay := p.Lbl.AnchorY + offY;
+          ox := -offX;
+          oy := -offY;
+        end
+        else
+        begin
+          ax := p.Lbl.AnchorX;
+          ay := p.Lbl.AnchorY;
+          ox := 0;
+          oy := 0;
+        end;
+        if (ox <> 0) or (oy <> 0) then
+        begin
+          m4 := -ox;
+          m5 := -oy;
+        end
+        else
+        begin
+          m4 := 0;
+          m5 := 0;
+        end;
+        if rot <> 0 then
+        begin
+          sn := TyJsSin(rot);
+          cs := TyJsCos(rot);
+          t4 := cs * m4 + sn * m5;
+          m5 := cs * m5 - sn * m4;
+          m4 := t4;
+        end;
+        ax := m4 + (ox + ax);
+        ay := m5 + (oy + ay);
+        w := 0;
+        h := 0;
+        if txt <> '' then AMeasurer.MeasureLine(txt, fam, fsz, fwt, w, h);
+        box := TyAnchorBox(ax, ay, w, h, tahCentre, tavMiddle);
+        el := TyChartElement(TyShapeRect(box));
+        el.Caption.Text := txt;
+        el.Caption.FontName := fam;
+        el.Caption.FontSizeLogical := fsz;
+        el.Caption.FontWeight := fwt;
+        if TyStHasColour(c, stkFill) then el.Caption.Colour := c.Color[stkFill]
+        else el.Caption.Colour := 0;
+        el.Caption.X := ax;
+        el.Caption.Y := ay;
+        el.Caption.AnchorH := tahCentre;
+        el.Caption.AnchorV := tavMiddle;
+        el.Caption.RotationRad := rot;
+        el.Caption.Truncate := False;
+        el.Style.Alpha := c.Num[stkOpacity];
         el.Z := AGeo.Spec.Z;
-        el.Z2 := 0;
-        { GE2 hit-tests and highlights a region; until then it is ink }
-        el.Silent := True;
+        el.Z2 := Round(c.Num[stkZ2]);
+        el.Ignore := (c.Num[stkIgnore] <> 0) or (txt = '') or (w <= 0) or (h <= 0);
+        { a text is silent on its own or under a silent host }
+        el.Silent := p.Lbl.Silent or silentGroup;
+        el.Datum := TyChartComponentDatum(ctkGeo, AGeo.Index, g);
         if dr.HasClip then
         begin
           el.HasClip := True;
           el.ClipRect := TyRectOfXYWH(dr.Clip);
         end;
+        el.ClipHits := True;
         AList.Add(el);
         Inc(Result);
       end;
-    { THE LABELS, at z2 2 over every region (label.z2 = max z2 + 2) }
-    for g := 0 to High(dr.Groups) do
-      for k := 0 to High(dr.Groups[g].Paths) do
-      begin
-        p := dr.Groups[g].Paths[k];
-        if not (p.Lbl.Shown and p.Lbl.HasPos) or (p.Lbl.Text = '') then Continue;
-        if IsNan(p.Lbl.AnchorX) or IsNan(p.Lbl.AnchorY) then Continue;
-        if AMeasurer = nil then Continue;
-        w := 0;
-        h := 0;
-        AMeasurer.MeasureLine(p.Lbl.Text, p.Lbl.FontFamily, p.Lbl.FontSizeLogical,
-          p.Lbl.FontWeight, w, h);
-        if (w <= 0) or (h <= 0) then Continue;
-        box := TyAnchorBox(p.Lbl.AnchorX, p.Lbl.AnchorY, w, h, tahCentre, tavMiddle);
-        el := TyChartElement(TyShapeRect(box));
-        el.Caption.Text := p.Lbl.Text;
-        el.Caption.FontName := p.Lbl.FontFamily;
-        el.Caption.FontSizeLogical := p.Lbl.FontSizeLogical;
-        el.Caption.FontWeight := p.Lbl.FontWeight;
-        el.Caption.Colour := p.Lbl.Colour;
-        el.Caption.X := p.Lbl.AnchorX;
-        el.Caption.Y := p.Lbl.AnchorY;
-        el.Caption.AnchorH := tahCentre;
-        el.Caption.AnchorV := tavMiddle;
-        el.Caption.Truncate := False;
-        el.Z := AGeo.Spec.Z;
-        el.Z2 := 2;
-        el.Silent := True;
-        AList.Add(el);
-        Inc(Result);
-      end;
+    end;
   finally
     UnmaskFpu(mask);
   end;
@@ -3162,4 +4215,5 @@ end;
 
 finalization
   TyChartClearMaps;
+  FreeAndNil(GGeoDefaults);
 end.

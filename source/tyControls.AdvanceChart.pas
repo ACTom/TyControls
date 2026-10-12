@@ -591,6 +591,13 @@ type
     { THE GEOS, one per geo component, laid out on the canvas: the
       coordinate system and the map it draws [Batch 146] }
     FGeos: array of TTyGeo;
+    { [Batch 148] each geo model's option.selectedMap -- nil until
+      optionUpdated would have made it, the model's for as long as the
+      model lives; the render count a region found under the pointer is
+      told by; the geos' flags changed since the last frame }
+    FGeoSel: array of TJSONObject;
+    FGeoGen: Integer;
+    FGeoDirty: Boolean;
     { THE TREES, laid out per slot -- an empty record where the slot is no
       tree. [Batch 73] }
     FTrees: array of TTyTreeSolved;
@@ -2006,6 +2013,25 @@ type
     procedure SolveGeos(APPI: Integer);
     procedure FreeGeos;
     function GeoInk: TTyGeoInk;
+    { [Batch 148] the regions as things a pointer and an action reach }
+    procedure FreeGeoSel;
+    function GeoSelMap(AIndex: Integer): TJSONObject;
+    function GeoIsSelected(AIndex: Integer; const AName: string): Boolean;
+    procedure GeoSyncSelected(AIndex: Integer);
+    function GeoMatch(APayload: TJSONObject): TTyIntegerArray;
+    function GeoOfTarget(const ATarget: TTyChartEventTarget): TTyGeo;
+    function GeoFinderFirst(APayload: TJSONObject): Boolean;
+    procedure DoGeoSelectAction(APayload: TJSONObject; const AType: string);
+    procedure DoGeoHighDown(APayload: TJSONObject);
+    procedure GeoHoverOver(const ATarget: TTyChartEventTarget);
+    procedure GeoHoverOut(const ATarget: TTyChartEventTarget);
+    procedure GeoRegionClick(const ATarget: TTyChartEventTarget);
+    function GeoApplyChanged: Boolean;
+    function IsGeoDatum(const ADatum: TTyChartDatumRef): Boolean;
+    function GeoTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+    function GeoTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    function GeoTipText(const ADatum: TTyChartDatumRef;
+      const ASpec: TTyTooltipSpec): string;
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
@@ -3389,6 +3415,9 @@ type
       control and gone at the next layout. [Batch 146] }
     function GeoCount: Integer;
     function GeoLayout(AIndex: Integer): TTyGeo;
+    { [Batch 148] whether geo AIndex's model holds region AName selected
+      (GeoModel.isSelected over option.selectedMap) }
+    function GeoSelected(AIndex: Integer; const AName: string): Boolean;
     { Polar component AIndex as the last render laid it out -- its centre,
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
@@ -3731,6 +3760,7 @@ end;
 { defined with the actions below; the dataZoom action needs them first }
 function VmJsJson(AData: TJSONData): string; forward;
 function CopyWithType(APayload: TJSONObject; const AType: string): string; forward;
+function JsTruthy(AData: TJSONData): Boolean; forward;
 function BatchItemsOf(APayload: TJSONObject): TJSONArray; forward;
 function BatchEventHead(APayload: TJSONObject; const AType: string): string; forward;
 
@@ -3815,6 +3845,7 @@ begin
     axis the build owns, so every store goes first. }
   DropBuild;
   FreeAndNil(FPaintList);
+  FreeGeoSel;
   FreeAndNil(FIndex);
   FreeAndNil(FAxisMemory);
   FSources := nil;
@@ -4152,6 +4183,8 @@ begin
     the view and the row do: upstream diffs the new data against the old
     and keeps its hoverState and __highByOuter bits [Batch 96] }
   FSel := nil;
+  { new geo models: optionUpdated makes their selectedMap again [Batch 148] }
+  FreeGeoSel;
   { AND WHAT THE POINTER IS OVER IS A REMOVED ELEMENT: the next move finds a
     new one there -- an out to the old, an over to the new, as zrender's
     hover meets elements a notMerge setOption replaced. Its identity is
@@ -4591,7 +4624,7 @@ var
   si, s, n, i: Integer;
   fate: TTyMergeFate;
   live: Boolean;
-  opt: TJSONObject;
+  opt, sm: TJSONObject;
 begin
   { ---- by series: a model that survived keeps what upstream keeps on it ---- }
   si := TyMergeSlotsIndex(AReport, 'series');
@@ -4716,6 +4749,38 @@ begin
   { THE LEGEND IS VISITED (it depends on the series): optionUpdated
     resolves single mode again; `selected` itself is in the tree, merged }
   if TyMergeSlotsIndex(AReport, 'legend') >= 0 then FLegendLoaded := False;
+  { ---- by geo [Batch 148]: option.selectedMap is the model's -- a model
+    that went takes it; a merge that writes an object merges it in
+    (zrUtil.merge with overwrite), a falsy one has optionUpdated make it
+    again ---- }
+  si := TyMergeSlotsIndex(AReport, 'geo');
+  if si >= 0 then
+    for s := 0 to High(AReport.Slots[si].Fate) do
+    begin
+      if s > High(FGeoSel) then Break;
+      fate := AReport.Slots[si].Fate[s];
+      if not (fate in [mfKept, mfMerged]) then
+      begin
+        FreeAndNil(FGeoSel[s]);
+        Continue;
+      end;
+      opt := AReport.Slots[si].NewOpt[s];
+      if (fate <> mfMerged) or (opt = nil) or (FGeoSel[s] = nil)
+        or (opt.IndexOfName('selectedMap') < 0) then Continue;
+      if opt.Find('selectedMap') is TJSONObject then
+      begin
+        sm := TJSONObject(opt.Find('selectedMap'));
+        for i := 0 to sm.Count - 1 do
+        begin
+          if FGeoSel[s].IndexOfName(sm.Names[i]) >= 0 then FGeoSel[s].Delete(sm.Names[i]);
+          FGeoSel[s].Add(sm.Names[i], sm.Items[i].Clone);
+        end;
+      end
+      else if not JsTruthy(opt.Find('selectedMap')) then
+        FreeAndNil(FGeoSel[s])
+      else
+        FGeoSel[s].Clear;
+    end;
 end;
 
 function TTyAdvanceChart.DiagnosticCount: Integer;
@@ -10356,10 +10421,16 @@ begin
   if FOption <> nil then n := FOption.ComponentCount('geo');
   if n = 0 then Exit;
   SetLength(FGeos, n);
+  { [Batch 148] a render makes new region elements: a hover found on the
+    last ones is stale }
+  Inc(FGeoGen);
   for i := 0 to n - 1 do
   begin
     FGeos[i] := TTyGeo.Create(FOption, i);
     FGeos[i].Resize(FLastRect, APPI);
+    FGeos[i].Gen := FGeoGen;
+    { GeoView.render's updateSelectStatus }
+    GeoSyncSelected(i);
   end;
 end;
 
@@ -10381,6 +10452,446 @@ begin
   Result.LabelFontName := st.FontName;
   Result.LabelFontSizeLogical := ResolveFontSize(st);
   Result.LabelFontWeight := st.FontWeight;
+  { [Batch 148] emphasis and select: upstream's highlight and primary }
+  st := model.ResolveStyle('TyAdvChartGeoArea', '', [tysHover]);
+  Result.HighlightFill := TTyChartColor(st.Background.Color);
+  st := model.ResolveStyle('TyAdvChartGeoLabel', '', [tysHover]);
+  Result.LabelHighlight := TTyChartColor(st.TextColor);
+end;
+
+{ ==================== the geo regions' interaction [Batch 148] ====================
+
+  GeoView and MapDraw's handlers over the pure TTyGeo: the region group is
+  the highDownDispatcher of its paths and texts (toggleHoverEmphasis), its
+  hover is handleGlobalMouseOverForHighDown with the component's own
+  dispatchers -- a 'self' focus blurs the whole component first -- its out
+  allLeaveBlur and the leave; a click dispatches geoToggleSelect, whatever
+  selectedMode says (GeoModel.select asks it); the select actions run
+  GeoModel.select / unSelect / toggleSelected on every geo their query
+  names and update the select flags (updateSelectStatus); highlight and
+  downplay with a geo finder go to findComponentHighDownDispatchers. The
+  flags are applied in the frame, as the series' are (StApplyChanged). }
+
+procedure TTyAdvanceChart.FreeGeoSel;
+var i: Integer;
+begin
+  for i := 0 to High(FGeoSel) do FreeAndNil(FGeoSel[i]);
+  FGeoSel := nil;
+end;
+
+{ GeoModel.optionUpdated: `if (!option.selectedMap) option.selectedMap =
+  selectedMap` -- the regions (entries with their echartsStyle) whose name
+  is truthy and that say `selected` -- made once, the model's after }
+function TTyAdvanceChart.GeoSelMap(AIndex: Integer): TJSONObject;
+var
+  node, d, regions, nm: TJSONData;
+  i, n: Integer;
+  geo: TTyGeo;
+  opt: TJSONObject;
+begin
+  Result := nil;
+  if (AIndex < 0) or (FOption = nil) or (AIndex >= FOption.ComponentCount('geo')) then Exit;
+  n := Length(FGeoSel);
+  if AIndex >= n then
+  begin
+    SetLength(FGeoSel, AIndex + 1);
+    for i := n to AIndex do FGeoSel[i] := nil;
+  end;
+  if FGeoSel[AIndex] <> nil then Exit(FGeoSel[AIndex]);
+  Result := TJSONObject.Create;
+  FGeoSel[AIndex] := Result;
+  node := FOption.ComponentAt('geo', AIndex);
+  if not (node is TJSONObject) then Exit;
+  d := TJSONObject(node).Find('selectedMap');
+  if JsTruthy(d) then
+  begin
+    { a written selectedMap (a truthy one that is no object selects nothing) }
+    if d is TJSONObject then
+      for i := 0 to d.Count - 1 do
+        Result.Add(TJSONObject(d).Names[i], TJSONObject(d).Items[i].Clone);
+    Exit;
+  end;
+  regions := TJSONObject(node).Find('regions');
+  if regions is TJSONArray then
+    for i := 0 to regions.Count - 1 do
+    begin
+      if not (regions.Items[i] is TJSONObject) then Continue;
+      nm := TJSONObject(regions.Items[i]).Find('name');
+      if not JsTruthy(nm) then Continue;
+      if JsTruthy(TJSONObject(regions.Items[i]).Find('selected')) then
+        Result.Booleans[TyJsonJsString(nm)] := True;
+    end;
+  { a fresh entry's `selected` comes from its echartsStyle }
+  if AIndex <= High(FGeos) then
+  begin
+    geo := FGeos[AIndex];
+    if geo <> nil then
+      for i := 0 to geo.GroupCount - 1 do
+      begin
+        opt := geo.GroupOpt(i);
+        if (opt <> nil) and JsTruthy(opt.Find('selected')) then
+          Result.Booleans[geo.GroupName(i)] := True;
+      end;
+  end;
+end;
+
+function TTyAdvanceChart.GeoIsSelected(AIndex: Integer; const AName: string): Boolean;
+var m: TJSONObject;
+begin
+  m := GeoSelMap(AIndex);
+  Result := (m <> nil) and JsTruthy(m.Find(AName));
+end;
+
+function TTyAdvanceChart.GeoSelected(AIndex: Integer; const AName: string): Boolean;
+begin
+  Result := GeoIsSelected(AIndex, AName);
+end;
+
+{ updateSelectStatus: enterSelect / leaveSelect on every region group }
+procedure TTyAdvanceChart.GeoSyncSelected(AIndex: Integer);
+var g: Integer; geo: TTyGeo;
+begin
+  if (AIndex < 0) or (AIndex > High(FGeos)) or (FGeos[AIndex] = nil) then Exit;
+  geo := FGeos[AIndex];
+  for g := 0 to geo.GroupCount - 1 do
+    if geo.SetSelected(g, GeoIsSelected(AIndex, geo.GroupName(g))) then FGeoDirty := True;
+end;
+
+{ eachComponent of mainType 'geo' with the payload as the query: the geos the payload's
+  geoIndex / geoId / geoName names, every geo when it names none }
+function TTyAdvanceChart.GeoMatch(APayload: TJSONObject): TTyIntegerArray;
+var
+  pf: TTyParsedFinder;
+  i, n: Integer;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  pf := TyParseFinder(APayload, FOption.Keys);
+  for i := 0 to High(pf.Types) do
+    if pf.Types[i].MainType = 'geo' then Exit(pf.Types[i].Models);
+  n := FOption.ComponentCount('geo');
+  SetLength(Result, n);
+  for i := 0 to n - 1 do Result[i] := i;
+end;
+
+{ preParseFinder: the first key of the payload that is <mainType>Index /
+  Id / Name names the highlight's main type }
+function TTyAdvanceChart.GeoFinderFirst(APayload: TJSONObject): Boolean;
+var pf: TTyParsedFinder;
+begin
+  Result := False;
+  if FOption = nil then Exit;
+  pf := TyParseFinder(APayload, FOption.Keys);
+  Result := (Length(pf.Types) > 0) and (pf.Types[0].MainType = 'geo');
+end;
+
+{ the geo a target was found on, when its render is still the current one }
+function TTyAdvanceChart.GeoOfTarget(const ATarget: TTyChartEventTarget): TTyGeo;
+begin
+  Result := nil;
+  if ATarget.HdKind <> 14 then Exit;
+  if (ATarget.HdSeries < 0) or (ATarget.HdSeries > High(FGeos)) then Exit;
+  if (FGeos[ATarget.HdSeries] = nil) or (FGeos[ATarget.HdSeries].Gen <> ATarget.HdGen) then Exit;
+  Result := FGeos[ATarget.HdSeries];
+end;
+
+function TTyAdvanceChart.IsGeoDatum(const ADatum: TTyChartDatumRef): Boolean;
+begin
+  Result := (ADatum.Kind = ctkGeo) and (ADatum.ComponentIndex >= 0)
+    and (ADatum.ComponentIndex <= High(FGeos)) and (FGeos[ADatum.ComponentIndex] <> nil)
+    and (ADatum.DataIndex >= 0)
+    and (ADatum.DataIndex < FGeos[ADatum.ComponentIndex].GroupCount);
+end;
+
+{ handleGlobalMouseOverForHighDown: a group whose emphasis is disabled is
+  no dispatcher at all; else a 'self' focus blurs the component, and the
+  group enters emphasis unless an action holds it }
+procedure TTyAdvanceChart.GeoHoverOver(const ATarget: TTyChartEventTarget);
+var geo: TTyGeo; g: Integer;
+begin
+  geo := GeoOfTarget(ATarget);
+  if geo = nil then Exit;
+  g := ATarget.HdRow;
+  if geo.GroupEmphasisDisabled(g) then Exit;
+  if geo.GroupFocusSelf(g) and geo.BlurAll then FGeoDirty := True;
+  if geo.HoverEnter(g) then FGeoDirty := True;
+  if FGeoDirty then InvalidateFrame;
+end;
+
+{ handleGlobalMouseOutForHighDown: allLeaveBlur, then the group leaves
+  emphasis unless an action holds it }
+procedure TTyAdvanceChart.GeoHoverOut(const ATarget: TTyChartEventTarget);
+var geo: TTyGeo; g: Integer;
+begin
+  geo := GeoOfTarget(ATarget);
+  if geo = nil then Exit;
+  g := ATarget.HdRow;
+  if geo.GroupEmphasisDisabled(g) then Exit;
+  StAllLeaveBlur;
+  if geo.HoverLeave(g) then FGeoDirty := True;
+  if FGeoDirty or FStDirty then InvalidateFrame;
+end;
+
+{ GeoView._handleRegionClick: geoToggleSelect for the clicked region's
+  name, by the geo's id }
+procedure TTyAdvanceChart.GeoRegionClick(const ATarget: TTyChartEventTarget);
+var geo: TTyGeo; p: TJSONObject;
+begin
+  geo := GeoOfTarget(ATarget);
+  if geo = nil then Exit;
+  p := TJSONObject.Create(['type', 'geoToggleSelect',
+    'geoIndex', ATarget.HdSeries, 'name', ATarget.HdName]);
+  { DispatchActionObject owns and frees it }
+  DispatchActionObject(p);
+end;
+
+{ makeAction (geo/install.ts): the method on every geo the query names,
+  `selected` over every region of each -- one object across the geos --
+  and allSelected per geo; the event: selected, allSelected, name, type }
+procedure TTyAdvanceChart.DoGeoSelectAction(APayload: TJSONObject; const AType: string);
+var
+  geos: TTyIntegerArray;
+  i, k, gi, j: Integer;
+  nameD, mode: TJSONData;
+  nm, evType, all, names, json: string;
+  keys: TTyStringArray;
+  vals: TTyBoolArray;
+  keyOrder: TTyIntegerArray;
+  node: TJSONData;
+  m: TJSONObject;
+  geo: TTyGeo;
+  found: Boolean;
+
+  procedure DoSelect(AIndex: Integer);
+  begin
+    node := FOption.ComponentAt('geo', AIndex);
+    mode := nil;
+    if node is TJSONObject then mode := TJSONObject(node).Find('selectedMode');
+    { `if (!selectedMode) return`; anything but 'multiple' starts afresh }
+    if not JsTruthy(mode) then Exit;
+    m := GeoSelMap(AIndex);
+    if m = nil then Exit;
+    if not ((mode.JSONType = jtString) and (mode.AsString = 'multiple')) then m.Clear;
+    m.Booleans[nm] := True;
+  end;
+
+  procedure DoUnSelect(AIndex: Integer);
+  begin
+    m := GeoSelMap(AIndex);
+    if m <> nil then m.Booleans[nm] := False;
+  end;
+
+  procedure SetSel(const AKey: string; AValue: Boolean);
+  var q: Integer;
+  begin
+    for q := 0 to High(keys) do
+      if keys[q] = AKey then
+      begin
+        vals[q] := AValue;
+        Exit;
+      end;
+    SetLength(keys, Length(keys) + 1);
+    SetLength(vals, Length(vals) + 1);
+    keys[High(keys)] := AKey;
+    vals[High(vals)] := AValue;
+  end;
+
+  { JavaScript's own key order: array indices ascending, then the rest in
+    insertion order }
+  procedure SortKeys;
+  var q, r, t: Integer;
+  begin
+    SetLength(keyOrder, Length(keys));
+    for q := 0 to High(keys) do keyOrder[q] := q;
+    for q := 1 to High(keyOrder) do
+    begin
+      t := keyOrder[q];
+      r := q - 1;
+      while (r >= 0) and TyJsIsIndexKey(keys[t])
+        and (not TyJsIsIndexKey(keys[keyOrder[r]])
+          or (StrToInt64(keys[keyOrder[r]]) > StrToInt64(keys[t]))) do
+      begin
+        keyOrder[r + 1] := keyOrder[r];
+        Dec(r);
+      end;
+      keyOrder[r + 1] := t;
+    end;
+  end;
+
+begin
+  if AType = 'geoToggleSelect' then evType := 'geoselectchanged'
+  else if AType = 'geoSelect' then evType := 'geoselected'
+  else evType := 'geounselected';
+  nameD := APayload.Find('name');
+  nm := TyJsonJsString(nameD);
+  geos := GeoMatch(APayload);
+  keys := nil;
+  vals := nil;
+  all := '';
+  for i := 0 to High(geos) do
+  begin
+    gi := geos[i];
+    if AType = 'geoToggleSelect' then
+    begin
+      if GeoIsSelected(gi, nm) then DoUnSelect(gi) else DoSelect(gi);
+    end
+    else if AType = 'geoSelect' then DoSelect(gi)
+    else DoUnSelect(gi);
+    geo := nil;
+    if gi <= High(FGeos) then geo := FGeos[gi];
+    if (geo <> nil) and (geo.Source <> nil) then
+      for k := 0 to High(geo.Source.Regions) do
+        SetSel(geo.Source.Regions[k].Name, GeoIsSelected(gi, geo.Source.Regions[k].Name));
+    SortKeys;
+    names := '';
+    found := False;
+    for k := 0 to High(keyOrder) do
+    begin
+      j := keyOrder[k];
+      if not vals[j] then Continue;
+      if found then names := names + ',';
+      names := names + TyJsonQuote(keys[j]);
+      found := True;
+    end;
+    if all <> '' then all := all + ',';
+    all := all + '{"geoIndex":' + IntToStr(gi) + ',"name":[' + names + ']}';
+    { updateSelectStatus }
+    GeoSyncSelected(gi);
+  end;
+  SortKeys;
+  json := '{"selected":{';
+  for k := 0 to High(keyOrder) do
+  begin
+    j := keyOrder[k];
+    if k > 0 then json := json + ',';
+    json := json + TyJsonQuote(keys[j]) + ':';
+    if vals[j] then json := json + 'true' else json := json + 'false';
+  end;
+  json := json + '},"allSelected":[' + all + ']';
+  if nameD <> nil then json := json + ',"name":' + TyGeoJsJson(nameD);
+  json := json + ',"type":"' + evType + '"}';
+  if FGeoDirty then InvalidateFrame;
+  EmitPayloadEvent(evType, json);
+end;
+
+{ highlight / downplay on a geo: allLeaveBlur; per geo the dispatchers of
+  the payload's name (a string naming a region group; none for no name),
+  a highlight's 'self' focus blurring the component unless notBlur, then
+  enterEmphasis / leaveEmphasis with bit 0 (a component's highlight takes
+  no highlightKey); the event a copy of the payload }
+procedure TTyAdvanceChart.DoGeoHighDown(APayload: TJSONObject);
+var
+  geos: TTyIntegerArray;
+  i, g: Integer;
+  geo: TTyGeo;
+  nameD: TJSONData;
+  isHigh: Boolean;
+  t: string;
+  ev: TJSONObject;
+begin
+  t := APayload.Strings['type'];
+  isHigh := t = 'highlight';
+  StAllLeaveBlur;
+  nameD := APayload.Find('name');
+  geos := GeoMatch(APayload);
+  for i := 0 to High(geos) do
+  begin
+    if (geos[i] < 0) or (geos[i] > High(FGeos)) then Continue;
+    geo := FGeos[geos[i]];
+    if (geo = nil) or (nameD = nil) or (nameD.JSONType = jtNull) then Continue;
+    if nameD.JSONType = jtString then g := geo.GroupIndexOf(nameD.AsString) else g := -1;
+    if g < 0 then Continue;
+    if isHigh and geo.GroupFocusSelf(g) and not JsTruthy(APayload.Find('notBlur')) then
+      if geo.BlurAll then FGeoDirty := True;
+    if isHigh then
+    begin
+      if geo.EnterEmphasisBy(g, 0) then FGeoDirty := True;
+    end
+    else if geo.LeaveEmphasisBy(g, 0) then FGeoDirty := True;
+  end;
+  if FGeoDirty or FStDirty then InvalidateFrame;
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Strings['type'] := t;
+    EmitPayloadEvent(t, ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
+{ the frame's applyChangedStates over the geos' elements }
+function TTyAdvanceChart.GeoApplyChanged: Boolean;
+var i, ppi: Integer; ink: TTyGeoInk;
+begin
+  Result := False;
+  if not FGeoDirty then Exit;
+  FGeoDirty := False;
+  if Length(FGeos) = 0 then Exit;
+  ink := GeoInk;
+  ppi := FPaintListPPI;
+  if ppi <= 0 then ppi := FLastPPI;
+  for i := 0 to High(FGeos) do
+    if (FGeos[i] <> nil) and FGeos[i].ApplyStates(ink, ppi) then Result := True;
+end;
+
+function TTyAdvanceChart.GeoTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+var geo: TTyGeo; opt: TJSONObject; tip: TJSONData;
+begin
+  geo := FGeos[ADatum.ComponentIndex];
+  opt := geo.GroupOpt(ADatum.DataIndex);
+  tip := nil;
+  if opt <> nil then tip := opt.Find('tooltip');
+  Result := TyTooltipSpecOfGeo(FOption, ADatum.ComponentIndex, tip,
+    geo.GroupName(ADatum.DataIndex));
+end;
+
+{ setTooltipConfig's formatterParams: componentType, name, geoIndex }
+function TTyAdvanceChart.GeoTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+begin
+  Result := TyChartBlankParams;
+  Result.ComponentType := 'geo';
+  Result.ComponentIndex := ADatum.ComponentIndex;
+  Result.Name := FGeos[ADatum.ComponentIndex].GroupName(ADatum.DataIndex);
+end;
+
+{ encodeHTML }
+function GeoEncodeHtml(const AText: string): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(AText) do
+    case AText[i] of
+      '&': Result := Result + '&amp;';
+      '<': Result := Result + '&lt;';
+      '>': Result := Result + '&gt;';
+      '"': Result := Result + '&quot;';
+      '''': Result := Result + '&#39;';
+    else
+      Result := Result + AText[i];
+    end;
+end;
+
+{ _showTooltipContent's text: a handler called with the params, a template
+  through formatTpl -- $vars ['name']: the first a-placeholder becomes a0,
+  the first a0 the name, encoded -- or the content (the name) where no formatter
+  is in force }
+function TTyAdvanceChart.GeoTipText(const ADatum: TTyChartDatumRef;
+  const ASpec: TTyTooltipSpec): string;
+var
+  nm, tpl: string;
+  params: TTyChartParams;
+begin
+  nm := FGeos[ADatum.ComponentIndex].GroupName(ADatum.DataIndex);
+  if not ASpec.HasFormatter then Exit(nm);
+  if TyChartIsHandlerRef(ASpec.Formatter) then
+  begin
+    SetLength(params, 1);
+    params[0] := GeoTipParams(ADatum);
+    TyChartResolveText(ASpec.Formatter, params, Result);
+    Exit;
+  end;
+  tpl := TyJsReplaceFirst(ASpec.Formatter, '{a}', '{a0}');
+  Result := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(nm));
 end;
 
 procedure TTyAdvanceChart.SolveCalendars(APPI: Integer);
@@ -20678,6 +21189,8 @@ var
 begin
   { A MARKER'S CASCADE IS ITS OWN [Batch 100]: its data item, the marker,
     the global -- never the host series' }
+  { [Batch 148] a geo region's: the component item's cascade }
+  if IsGeoDatum(ADatum) then Exit(GeoTipSpec(ADatum));
   if TipIsMarker(ADatum) then
   begin
     opt := -1;
@@ -21693,7 +22206,7 @@ end;
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
-    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic');
+    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic', 'geo');
 var
   i, k, g, a, q, idx, slot, nth: Integer;
   lay: TTyTitleLayout;
@@ -21712,6 +22225,7 @@ var
   nm, mainT: string;
   gel: TTyGfxEl;
   piece: TTyBrushPiece;
+  geo: TTyGeo;
 
   function Inside(const AR: TTyRectF): Boolean;
   begin
@@ -21998,6 +22512,29 @@ begin
             end;
           end;
         end;
+      ctkGeo:
+        begin
+          { [Batch 148] a region group's eventData (resetEventTriggerForRegion)
+            -- a path's or its text's -- and the group the dispatcher of its
+            hover and its click }
+          if (d.ComponentIndex < 0) or (d.ComponentIndex > High(FGeos))
+            or (FGeos[d.ComponentIndex] = nil) then Exit;
+          geo := FGeos[d.ComponentIndex];
+          Result.HdKind := 14;
+          Result.HdSeries := d.ComponentIndex;
+          Result.HdRow := d.DataIndex;
+          Result.HdGen := geo.Gen;
+          Result.HdName := geo.GroupName(d.DataIndex);
+          Result.HasData := True;
+          Result.Params.ComponentType := 'geo';
+          Result.Params.ComponentIndex := d.ComponentIndex;
+          Result.Params.Name := Result.HdName;
+          Result.Params.Region := geo.GroupRegionJson(d.DataIndex);
+          Result.Model.Valid := True;
+          Result.Model.MainType := 'geo';
+          Result.Model.Index := d.ComponentIndex;
+          Result.Model.Id := FOption.ComponentId('geo', d.ComponentIndex);
+        end;
       ctkLegendSelector, ctkLegendPager:
         begin
           { [Batch 98] no ECData: an identity and a handler, no event }
@@ -22154,6 +22691,9 @@ begin
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 10)
     and ((FTlView = nil) or (FEvHover.HdGen <> FTlView.Gen)) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { and a geo region a render replaced [Batch 148] }
+  if (FEvHover.Id <> 0) and (FEvHover.HdKind = 14) and (GeoOfTarget(FEvHover) = nil) then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   t := EventTargetAt(AX, AY);
   if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
@@ -22253,6 +22793,8 @@ begin
   { a break area's group, a break label's text: expandAxisBreak [Batch 132] }
   else if t.HdKind = 12 then BreakAreaClickAt(t.HdSeries, t.HdRow)
   else if t.HdKind = 13 then BreakExpandClick(t.HdSeries, t.HdRow)
+  { [Batch 148] the geo's map group: GeoView._handleRegionClick }
+  else if t.HdKind = 14 then GeoRegionClick(t)
   else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
@@ -23616,6 +24158,8 @@ function TTyAdvanceChart.StApplyChanged: Boolean;
 var s, raw: Integer;
 begin
   Result := False;
+  { the geos' flags too [Batch 148] }
+  if GeoApplyChanged then Result := True;
   if not FStDirty then Exit;
   FStDirty := False;
   for s := 0 to High(FSt) do
@@ -24593,6 +25137,17 @@ begin
     end;
     FSt[s].IsBlured := False;
   end;
+  { [Batch 148] and every geo blurComponent reached }
+  for s := 0 to High(FGeos) do
+    if (FGeos[s] <> nil) and FGeos[s].IsBlured then
+    begin
+      if FGeos[s].LeaveBlurAll then
+      begin
+        FGeoDirty := True;
+        FStDirty := True;
+      end;
+      FGeos[s].IsBlured := False;
+    end;
 end;
 
 function TTyAdvanceChart.StDispatcher(const ATarget: TTyChartEventTarget;
@@ -24654,6 +25209,12 @@ end;
 procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
 var item: PTyStItem; part, s, poly: Integer;
 begin
+  { [Batch 148] a geo region's group }
+  if ATarget.HdKind = 14 then
+  begin
+    GeoHoverOut(ATarget);
+    Exit;
+  end;
   { [Batch 116] a visualMap's thumb is a highDownDispatcher of no series:
     allLeaveBlur, and it leaves emphasis; nothing else of it has states }
   if ATarget.HdKind = 7 then
@@ -24706,6 +25267,12 @@ end;
   then it enters emphasis unless an action holds it }
 procedure TTyAdvanceChart.StHoverOver(const ATarget: TTyChartEventTarget);
 begin
+  { [Batch 148] a geo region's group }
+  if ATarget.HdKind = 14 then
+  begin
+    GeoHoverOver(ATarget);
+    Exit;
+  end;
   { [Batch 116] a thumb enters emphasis (no series to blur) }
   if ATarget.HdKind = 7 then
   begin
@@ -27852,7 +28419,16 @@ begin
     end
     else if (t = 'highlight') or (t = 'downplay') then
     begin
-      DoHighDownAction(p);
+      { [Batch 148] a finder naming a geo first: the component's own
+        highlight (findComponentHighDownDispatchers) }
+      if GeoFinderFirst(p) then DoGeoHighDown(p)
+      else DoHighDownAction(p);
+      Result := True;
+    end
+    { the geo's select actions [Batch 148] }
+    else if (t = 'geoToggleSelect') or (t = 'geoSelect') or (t = 'geoUnSelect') then
+    begin
+      DoGeoSelectAction(p, t);
       Result := True;
     end
     else if (t = 'legendToggleSelect') or (t = 'legendSelect')
@@ -31012,7 +31588,7 @@ end;
 
 function TTyAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
 begin
-  Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum);
+  Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum) or IsGeoDatum(ADatum);
 end;
 
 function TTyAdvanceChart.TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
@@ -31174,8 +31750,9 @@ begin
     begin
       spec := TipSpecOf(snap);
       { the cascade's trigger must be 'item' -- a marker's default 'item'
-        is not in its option, so under a global 'axis' it fails too }
-      if spec.Trigger = tttItem then
+        is not in its option, so under a global 'axis' it fails too; a
+        component's item asks none (_showComponentItemTooltip) [Batch 148] }
+      if (spec.Trigger = tttItem) or IsGeoDatum(FTipDatum) then
       begin
         TipTryShow(snap, spec);
         Exit;
@@ -31323,7 +31900,7 @@ end;
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
-    'markArea', 'legend', 'legend', 'legend', 'graphic');
+    'markArea', 'legend', 'legend', 'legend', 'graphic', 'geo');
 var block: TTyTooltipBlock;
 begin
   Result := '';
@@ -31340,7 +31917,11 @@ begin
     end;
     Exit;
   end;
-  if TipIsMarker(FTipSnap.Datum) then
+  { [Batch 148] a geo region: 'geo:<geoIndex>:<name>' }
+  if IsGeoDatum(FTipSnap.Datum) then
+    Result := 'geo:' + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
+      + FGeos[FTipSnap.Datum.ComponentIndex].GroupName(FTipSnap.Datum.DataIndex)
+  else if TipIsMarker(FTipSnap.Datum) then
     Result := cMk[FTipSnap.Datum.Kind] + ':'
       + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + IntToStr(FTipSnap.Datum.DataIndex)
@@ -31819,7 +32400,7 @@ begin
   { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's SHAPE --
     if a coordinate system reported axes, the axis path runs and the item
     trigger is never consulted. }
-  if not onAxis and (spec.Trigger <> tttItem) then Exit;
+  if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum) then Exit;
   ink := TooltipInk(spec);
 
   st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
@@ -31832,7 +32413,18 @@ begin
 
   block := nil;
   try
-    if spec.HasFormatter then
+    if (not onAxis) and IsGeoDatum(snap.Datum) then
+    begin
+      { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
+        with the component's params, else the content (the name) }
+      tipText := GeoTipText(snap.Datum, spec);
+      FTipFormatterText := tipText;
+      if tipText = '' then Exit;
+      block := TTyTooltipBlock.CreateSection('', True);
+      block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+        '', True));
+    end
+    else if spec.HasFormatter then
     begin
       { A FORMATTER REPLACES THE CONTENT, it does not decorate it. Upstream
         builds the default markup first and then throws it away, so a
@@ -31941,6 +32533,8 @@ begin
     if spec.PositionHandler <> '' then
     begin
       if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
+      else if IsGeoDatum(snap.Datum) then
+        pin.Params := TyChartOneParams(GeoTipParams(snap.Datum))
       else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
     end;
     at := TyTooltipPlace(spec, pin);
@@ -31984,7 +32578,7 @@ begin
       fallback for an AXIS tooltip, and an item tooltip takes the datum's own
       colour. A written borderColor still wins over both. }
     if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
-    else if not onAxis and (DatumColour(snap.Datum) <> 0) then
+    else if not onAxis and not IsGeoDatum(snap.Datum) and (DatumColour(snap.Datum) <> 0) then
       borderCol := TTyColor(DatumColour(snap.Datum))
     else
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box

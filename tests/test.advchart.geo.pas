@@ -991,7 +991,9 @@ begin
     AssertTrue('rimmed', el.Style.StrokeWidthLogical > 0);
     AssertEquals('half a pixel', 0.5, el.Style.StrokeWidthLogical);
     AssertEquals('z2 0', 0, el.Z2);
-    AssertTrue('not hit until GE2', el.Silent);
+    { [Batch 148: silent until GE2; a region is hit by its own path now] }
+    AssertFalse('hit since GE2', el.Silent);
+    AssertTrue('by upstream''s Path.contain', el.PathHit.Active);
     AssertTrue('a closed path', Length(el.Shape.Cmds) >= 5);
     light := el.Style.FillColor;
   end;
@@ -1037,10 +1039,12 @@ begin
   end;
   AssertEquals('both names', 'A,B,', texts);
   AssertTrue('every label paints after every region', firstLabel > lastRegion);
-  { label.show off: none }
+  { label.show off: none drawn [Batch 148: the text is there, ignored --
+    emphasis.label.show is true by default, so a hover shows it] }
   NewChart('{"animation": false, "geo": {"map": "sq"}}');
   for i := 0 to FChart.List.Count - 1 do
-    AssertEquals('no label', '', FChart.List.Element(i).Caption.Text);
+    if not FChart.List.Element(i).Ignore then
+      AssertEquals('no label', '', FChart.List.Element(i).Caption.Text);
 end;
 
 procedure TAdvChartGeoTest.TestTheRoamMovesThePictureNotThePoints;

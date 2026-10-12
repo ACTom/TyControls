@@ -299,6 +299,17 @@ function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
   `trigger: 'axis'` the marker shows no box of its own. }
 function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
   const AKind: string; AItem: Integer): TTyTooltipSpec;
+{ [Batch 148] A GEO REGION'S CASCADE (setTooltipConfig and
+  TooltipView._showComponentItemTooltip): the region's tooltip --
+  regionModel.get('tooltip'), so the region option's, else the geo's; a
+  string is a formatter -- then the geo component's own, then
+  a level whose formatter is the content -- the region's name (defaults()
+  keeps it whatever the option says), then the global component. The
+  name's level is always there, so the global formatter is never reached;
+  no trigger is asked of a component's item. ARegionTip: the region
+  option's `tooltip` (nil: none). }
+function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
+  ARegionTip: TJSONData; const AName: string): TTyTooltipSpec;
 
 { ---- content ---- }
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
@@ -994,6 +1005,62 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(TJSONObject(comp), Result, seen);
+end;
+
+function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
+  ARegionTip: TJSONData; const AName: string): TTyTooltipSpec;
+var
+  seen: TTyStringArray;
+  geoNode, item, gt: TJSONData;
+  comp: TJSONObject;
+
+  function InSeen(const AKey: string): Boolean;
+  var i: Integer;
+  begin
+    for i := 0 to High(seen) do
+      if seen[i] = AKey then Exit(True);
+    Result := False;
+  end;
+
+  procedure Level(AData: TJSONData);
+  begin
+    if AData = nil then Exit;
+    if AData.JSONType = jtString then
+    begin
+      if InSeen('formatter') then Exit;
+      Result.Formatter := AData.AsString;
+      Result.HasFormatter := AData.AsString <> '';
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end
+    else if AData is TJSONObject then
+      MergeTooltipNode(TJSONObject(AData), Result, seen);
+  end;
+
+begin
+  Result := TyTooltipSpecDefault;
+  seen := nil;
+  if AOption = nil then Exit;
+  geoNode := AOption.ComponentAt('geo', AGeoIndex);
+  gt := nil;
+  if geoNode is TJSONObject then gt := TJSONObject(geoNode).Find('tooltip');
+  if (gt <> nil) and (gt.JSONType = jtNull) then gt := nil;
+  item := ARegionTip;
+  if (item <> nil) and (item.JSONType = jtNull) then item := nil;
+  if item = nil then item := gt;
+  Level(item);
+  Level(gt);
+  { the content's own level: its formatter }
+  if not InSeen('formatter') then
+  begin
+    Result.Formatter := AName;
+    Result.HasFormatter := AName <> '';
+    SetLength(seen, Length(seen) + 1);
+    seen[High(seen)] := 'formatter';
+  end;
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(comp, Result, seen);
 end;
 
 { ============================ placement ============================ }

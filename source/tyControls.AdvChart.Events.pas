@@ -138,7 +138,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..33] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..36] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -165,7 +165,9 @@ const
     'axisbreakchanged',
     { the parallel axis expansion, registered with no event name: its own
       type lowercased [Batch 140] }
-    'parallelaxisexpand');
+    'parallelaxisexpand',
+    { the geo's select actions [Batch 148] }
+    'geoselectchanged', 'geoselected', 'geounselected');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;

@@ -171,7 +171,11 @@ type
     { [Batch 122] a graphic component's element: ComponentIndex the
       component, DataIndex the element's serial in the view's last build;
       it has ECData's eventData, not a data index }
-    ctkGraphic);
+    ctkGraphic,
+    { [Batch 148] a geo component's region: ComponentIndex the geo,
+      DataIndex its region group (one per distinct name, MapDraw's order)
+      -- a path or its text; the eventData of the group }
+    ctkGeo);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -739,6 +743,15 @@ type
       group joins the zrender root first). The list's renderer skips it;
       the control paints it before the axes. Hit and ordered as any other. }
     GfxUnder: Boolean;
+    { [Batch 148] UPSTREAM'S OWN Path.contain, where the element asks for
+      it (a geo region): the full path, not the shape's points -- see
+      TTyPathHit. The shape test is not consulted then. }
+    PathHit: TTyPathHit;
+    { [Batch 148] THE CLIP CUTS THE HIT TOO, as zrender's isHover asks
+      every clip path up the element's parents -- for an element that
+      says so (a geo region and its text). Everything else keeps the
+      rule above: the hit test ignores the clip. }
+    ClipHits: Boolean;
   end;
 
   TTyPaintList = class
@@ -807,6 +820,10 @@ function TyChartEdgeDatum(ASeries, ARow: Integer): TTyChartDatumRef;
 function TyChartComponentDatum(AKind: TTyChartTargetKind; AComponent,
   AIndex: Integer): TTyChartDatumRef;
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
+{ [Batch 148] one element at a point, as the list's hit test asks it: its
+  clip first where it asks (ClipHits), then upstream's Path.contain where it
+  carries one (PathHit), else the shape with ASlopPx }
+function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
@@ -1137,6 +1154,19 @@ begin
   Result := FOrder[AIndex];
 end;
 
+{ [Batch 148] one element at a point: its clip first where it asks
+  (isHover's clip paths), then upstream's own Path.contain where it carries
+  one, else the shape with its slop }
+function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+begin
+  if AEl.ClipHits and AEl.HasClip
+    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
+      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
+    Exit(False);
+  if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
+  else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
+end;
+
 function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
   APad: Boolean): Integer;
 var
@@ -1155,7 +1185,7 @@ begin
     slop := FItems[idx].HitSlopLogical;
     if APad then slop := slop + FItems[idx].HitPadLogical;
     if APPI > 0 then slop := slop * APPI / 96;
-    if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
+    if TyElementContains(FItems[idx], AX, AY, slop) then
       Exit(idx);
   end;
 end;
@@ -1173,7 +1203,7 @@ begin
     if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     slop := FItems[idx].HitSlopLogical + FItems[idx].HitPadLogical;
     if APPI > 0 then slop := slop * APPI / 96;
-    if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
+    if TyElementContains(FItems[idx], AX, AY, slop) then
       Exit(idx);
   end;
 end;

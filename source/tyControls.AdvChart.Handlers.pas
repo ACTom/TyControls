@@ -112,6 +112,10 @@ type
     { A GRAPHIC ELEMENT'S `info` [Batch 122], as JSON text ('' where the
       element has none): what its ECData's eventData carries into an event }
     Info: string;
+    { A GEO REGION'S eventData.region [Batch 148]: its region option as
+      JSON text (an empty object where the model map holds none); '' everywhere else.
+      A geo event's geoIndex is its ComponentIndex. }
+    Region: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 
