@@ -1020,7 +1020,7 @@ normal 不是谁「进入」的状态，是两个槽都空。
   「`TyResolveParentBg` 拿得到父背景色」。**孤儿控件两条都不满足**——这正是下面那条假绿暴露出来的。
 - 文字全部走 `APainter.MeasureText` / `DrawText`。空字体名由 `TyEffectiveFontName` 兜底、小号字的
   超采样由 painter 按平台开——控件一行都不用写，也就一行都不会写错。
-- **一个 `CM_` / `WM_` 重写都没有。** 所以「重写了不调 `inherited`、把 LCL 那层吞掉」这个坑不可能发生，
+- **[第 142 批：脏矩形的窗口路径也没加：`InvalidateFrame` 经 `QueueAsyncCall` 排一次 flush、`LCLIntf.InvalidateRect` 只失效变了的矩形，见 §181。]** **一个 `CM_` / `WM_` 重写都没有。** 所以「重写了不调 `inherited`、把 LCL 那层吞掉」这个坑不可能发生，
   而且它是**靠没有代码证明的**，比靠一条测试证明硬。
 
 ### 护栏替我做了分类，而且推翻了我的第一次分类
@@ -6628,7 +6628,7 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 - 其他系列的 blur 和 focus 仍没有做:它们照旧用叠加的 emphasis,`self` / `series` 也不会让别的柱子、扇区变暗。graph 和非 graph 系列之间的互相 blur(笛卡尔上 graph 连带柱子)不做。
 - **[第 114 批：边标签画了，跟着边的 blur 走，见 §149。]** highlight / downplay 动作、悬停图例联动高亮、`emphasis.label`(`label.show: false` 时悬停显示标签)、边标签、状态动画:不做。
 - **[第 114 批：逐边的宽度、类型、透明度、颜色与两端符号读了，见 §149。]** 节点的 `itemStyle.opacity`、逐边的 `lineStyle`(除曲度外)仍不读,属于 normal 状态的欠账。
-- 边的命中容差是 4 个逻辑像素,不是 zrender 的描边阈值。
+- **[第 142 批：粗指针下照旧——只有符号的四像素拆成笔宽与垫，见 §181。]** 边的命中容差是 4 个逻辑像素,不是 zrender 的描边阈值。
 - 坐标轴触发(`trigger: 'axis'`)时 graph 元素不再做叠加高亮。
 
 ### 变异测试
@@ -8286,7 +8286,7 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 ### 已知偏差
 
 - 被悬停节点的**外侧标签**不随放大的符号移动(上游按放大后的包围盒重新放);被悬停节点提亮后的填充是主题色,不比较。
-- 端口节点的命中半径 7.5(与关系图一致),上游 4.5;依赖精确命中几何的两个点击步骤按名跳过。
+- **[第 142 批：粗指针下照旧，见 §181。]** 端口节点的命中半径 7.5(与关系图一致),上游 4.5;依赖精确命中几何的两个点击步骤按名跳过。
 - `roamTrigger: 'selfRect'` 用节点中心的包围盒近似上游的元素包围盒。
 - 其他系列被 `blurScope` 波及的模糊没有做(基准只有单棵树)。
 
@@ -8625,8 +8625,8 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 
 - **一个图表一个 `TTyAnimation`**。时钟 `AnimNow`：NaN 用机器时钟（`TyAnimClockMs`，以 epoch 为基的整毫秒），数字是测试注入的——照 `DataZoomNow` 的样子。
 - **同步的第一步**：选项落地后第一次构建绘制列表时布防（创建代理、开动画），紧接着 `Update(now, True)`——上游 setOption 末尾的 flush。同一次绘制已经画出 from 值。挪到下一个 tick，所有时间线都会错开最多 16 ms。
-- **16 ms 的 `TTimer`**：有 clip 时开，每一跳 `AnimTick(now)`（推进 + `InvalidateFrame`），clip 清空时停。测试直接调 `AnimTick`；注入了时钟就不开定时器。
-- **分层**：动起来的系列属于**动态层**。动画进行中，静态层只画外框和坐标轴（列表照样构建，命中测试要用它），系列、图例等列表元素和标题在动态层逐帧画；最后一个 clip 结束时丢掉静态层，下一帧把静态的系列（静止值）画回静态层，动态层又空了。`HasDynamicContent` 多一个「在动」。一帧的代价是一次 blit 加动态层的那张 BGRA 位图（Q7 量过约 13 ms 的底价）加系列本身；标题跟着进动态层，是为了仍盖在系列上面。
+- **[第 142 批：`UseDirtyRect` 开着且有窗口时，`InvalidateFrame` 不再失效整个窗口，而是排一次异步 flush、只失效变了的矩形，见 §181。]** **16 ms 的 `TTimer`**：有 clip 时开，每一跳 `AnimTick(now)`（推进 + `InvalidateFrame`），clip 清空时停。测试直接调 `AnimTick`；注入了时钟就不开定时器。
+- **[第 142 批：`UseDirtyRect` 开着时两层照旧，静态层在状态变化时按矩形局部重画，动态层保留一张透明位图、按墨块清与合成，不再每帧分配控件大小的位图，见 §181。]** **分层**：动起来的系列属于**动态层**。动画进行中，静态层只画外框和坐标轴（列表照样构建，命中测试要用它），系列、图例等列表元素和标题在动态层逐帧画；最后一个 clip 结束时丢掉静态层，下一帧把静态的系列（静止值）画回静态层，动态层又空了。`HasDynamicContent` 多一个「在动」。一帧的代价是一次 blit 加动态层的那张 BGRA 位图（Q7 量过约 13 ms 的底价）加系列本身；标题跟着进动态层，是为了仍盖在系列上面。
 - **什么时候不动**：任何重新布局（尺寸、主题、PPI、dataZoom 同步、树的漫游）都直接到终值——上游 resize 派发 `{duration: 0}`；新的选项再布防一次。AN2 里每次布防都按「首次渲染」处理（同一系列的更新动画是 AN3 的）。
 
 ### 绑定：代理
@@ -8901,7 +8901,7 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - **谁有过渡**（`updateStates`，`echarts.ts:2697-2747`）：每次渲染之后，凡有 emphasis 状态对象的元素，系列 `isAnimationEnabled()` 时设 `stateTransition = {duration, delay, easing}`——读系列的 `stateAnimation` 子模型，没写的键落到根上的 `stateAnimation`，再落到全局默认（300、`cubicOut`，没有 delay）；`duration` 不大于 0 就是 null。同一份配置给它的标签和引导线。渲染开头的 `clearStates` 先把它们都置 null、无过渡地回到常态并记下 prevStates；渲染之后先无过渡地套回 prevStates，**再**设过渡、再按标志套列表——所以整体更新里状态的变化是带过渡的，而且它的 clip 被 setOption 末尾的同步 flush 一起步进。`animation: false`、超过阈值的系列根本没有 stateTransition。
 - **一帧的顺序**：悬停、动作只记标志；下一帧 `Animation.update` 先步进所有 clip，再在 `frame` 事件里 `applyChangedStates`——过渡的动画器在这一帧建出来，**下一帧**才第一次步进（起点是那一帧的时刻）。
 - **zrender 的 `useStates`**（`Element.ts:952-1150`）：同一列表什么都不做；离开常态时先 `saveCurrentToNormalState`——只存状态设了的根键（变换与 ignore）、整份 style、整份 shape（各一次），**然后**对每个不循环、不是别的状态过渡（常态的过渡算）的动画器 `saveTo`：把未结束轨道的**终值**写进常态，所以入场或更新进行中被悬停，常态记下的是终值而不是插值。`canTransition = !noAnimation && !__inHover && duration > 0`。有过渡时：变换键（x、y、scale、rotation……）、`getAnimationStyleProps` 列出的样式键（Path：fill、stroke、lineWidth、opacity、阴影……；Text 只有 opacity 和阴影）、shape 的原始键 `animateTo` 过去，动画器带 `__fromStateTransition = 列表名`（回常态是 `'__zr_normal__'`）；样式不在可动列表里的键、当前值或目标值为 null 的键直接赋值（选中边框色从无到有就是这样）；目标样式是常态样式叠上状态样式，常态里没有、原型有默认值的键取默认值（柱子的线宽从默认 1 补间到选中的 2）。没有过渡时直接设值，并对正在跑的动画器 `__changeFinalValue`——它们改去状态（或常态）的值，不停、不跳。补间从**当前值**出发，同名键上旧的轨道先 `stopTracks`；颜色按 rgba 插值，写回 `rgba(r,g,b,a)`、rgb 向下取整。
-- **悬停层**：只有 canvas 渲染器、元素数超过 `hoverLayerThreshold`（默认 3000）时 emphasis 才进悬停层；进出悬停层都没有过渡（`__inHover`），而且只改样式。
+- **[第 142 批：`useDirtyRect` 做了（`UseDirtyRect`，缺省关），悬停层仍不建模，见 §181。]** **悬停层**：只有 canvas 渲染器、元素数超过 `hoverLayerThreshold`（默认 3000）时 emphasis 才进悬停层；进出悬停层都没有过渡（`__inHover`），而且只改样式。
 - **过渡的 style、shape 是新对象**（`Displayable.ts:556`、`Path.ts:565`）：`stopTracks` 对还没步进的轨道把 from 值写回去，写进的是**旧**对象——元素已经换了新的。所以首次渲染就选中的饼（`pie-select-initial`）：标签的淡入刚建出来（setToFinal 把不透明度留在 1），select 的过渡一来就停掉它，标签既不淡入也没有样式过渡。端口的属性袋只有一份，`StopTracksDetached` 先停轨道、再把值放回去，模拟这一点（第一轮回放在这个用例上差 32 处，就是它）。
 - **LabelManager 的旧布局**：整体更新时，若 prevStates 里有 select，标签的旧位置是选中状态下的位置（`oldLayoutSelect`），有 emphasis 时再被 `oldLayoutEmphasis` 覆盖（`LabelManager.ts:565-576`）。
 
@@ -11081,7 +11081,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 做法
 
-- **新单元 `tyControls.AdvChart.Large`**（纯）：`TTyLargeKind`、`TTyLargeGeom`（点、柱的下标与基维与柱宽、符号的大小与种类与 boost 与 4 px 下限、软裁剪、K 线的 sign 与笔的命中宽、组的裁剪、预先算好的包围盒）；`TyLargeIsOn`（`large` 的 JS 真值，阈值按 JS 比较：字符串当数、null 当 0）、`TyLargeF32`（`Math.fround`，溢出到无穷）、`TyLargeSetBox`（三种包围盒，`Math.min / max` 的 NaN 规则）、`TyLargeBarScan`、`TyLargeSymbolScan`、`TyLargeStrokeHit`（`containStroke` 逐段）、`TyLargeContains`（包围盒、扫描或笔、再问裁剪）、`TyLargeIndexAt`、`TyLargeBounds`。
+- **[第 142 批：large 批是 `ignoreCoarsePointer`，粗指针的候选里没有它，见 §181。]** **新单元 `tyControls.AdvChart.Large`**（纯）：`TTyLargeKind`、`TTyLargeGeom`（点、柱的下标与基维与柱宽、符号的大小与种类与 boost 与 4 px 下限、软裁剪、K 线的 sign 与笔的命中宽、组的裁剪、预先算好的包围盒）；`TyLargeIsOn`（`large` 的 JS 真值，阈值按 JS 比较：字符串当数、null 当 0）、`TyLargeF32`（`Math.fround`，溢出到无穷）、`TyLargeSetBox`（三种包围盒，`Math.min / max` 的 NaN 规则）、`TyLargeBarScan`、`TyLargeSymbolScan`、`TyLargeStrokeHit`（`containStroke` 逐段）、`TyLargeContains`（包围盒、扫描或笔、再问裁剪）、`TyLargeIndexAt`、`TyLargeBounds`。
 - **`Shape`**：新种类 `cskLarge` 与字段 `Large`；`TyShapeBounds`、`TyShapeContains` 交给上面。画列表的命中照旧走 `TyShapeContains`，不另开路径。
 - **`Marks`**：`TTySeriesVisual.Large`（`TySeriesVisual` 置 `lgkNone`）；`TyBuildSeriesMarks` 在直角坐标上按它分派到 `BuildLargeBars`（含背景、堆叠、`barMinHeight`）、`BuildLargeSymbols`（含 jitter 的两次取整）、`BuildLargeCandles`（三条路径）；元素的 datum 是 `(系列, −1)`，有裁剪的挂 `TyWhiskerClipRect`。
 - **`BarLayout`**：`TySolveBarLayout` 多一个重载，收每个槽位是否 large，large 的 `barMinWidth` 缺省 0.5。
@@ -13442,3 +13442,100 @@ custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit
 - 测试：`test.advchart.animupdate.pas`（`TestManyNamedRowsUpdateInLinearTime`）、`test.advchart.connectlink.pas`（`PointerValueOf`、`SkinAreas`、`resize` 步骤、`TestALegendBatchUpdatesOnce`）、`test.advchart.brushselect.pas`（`SameJsonTree`，逐键比区域）、`test.advchart.universaltransition3.pas`（`action` 步骤）、`test.advchart.thumbnailaxisexpand.pas`（不再跳过 resize 的 brushselected）、`test.advchart.visualmapchannels.pas`（`C7f`、`C7g`）。
 - 基准脚本与基准：`visualmap-channels.js`（23 → 25 例，守卫 30 → 31）、`keyframe-animation.js`（`#label` 记不透明度与动画器）、`universal-transition.js`（`batches` 7 → 10 行，图表 34 → 36 例）、`universal-transition3.js`（动作步骤，26 → 28 例）、`connect-link-batch.js`（link 6 → 10、batch 5 → 7、导出 6 → 7，守卫 34 → 35，`resize` 步骤，`conn-timeline` 不再丢 brushSelect）、`brush-select.js`（`areasFull`）。已有用例除了按修补本该变的（`kf-custom` 的文字、`conn-timeline` 的事件），一个字节没变。
 - `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`；本 spec 的 §126、§162、§163、§165（两处）、§175、§177、§178、§179（四处）在原处标注。
+
+## 181. Tier 3 第一百四十二批：粗指针命中与脏矩形重绘（D9，2026-10-12）
+
+路线图 D9：粗指针命中回退 + 脏矩形。§32 与 Q7 定案（`2026-09-05-advancechart-q7-repaint-model.md`）把脏矩形放到了 Tier 3：分层缓存做了，一帧的底价压到一次 blit，剩下的账是动态层那张控件大小的 BGRA 位图——每帧分配、填充、合成，约 13 ms，与动态层里有多少东西无关。粗指针端口一直没有：手指离四像素的散点符号十个像素，就什么都点不到；端口为鼠标自己加的四像素垫（`cHitSlopSymbolLogical`）是另一回事。这一批对着 zrender 6.1 的 `Handler.ts`（`findHover` 的 pointerSize 回退、`setHoverTarget`、`isHover`）、`zrender.ts`（init 里 `useCoarsePointer` / `pointerSize` 的解析）、`core/env.ts`（`touchEventsSupported`）、echarts 的 `core/echarts.ts`（init opts 透传、`defaultCoarsePointer`）与几处 `ignoreCoarsePointer`（`BarView`、`CandlestickView`、`LargeLineDraw`、`LargeSymbolDraw`），以及 `canvas/Layer.ts`（`createRepaintRects`、`maxRepaintRectCount`、`__firstTimePaint`、`__prevIdx`、`clear` 的按矩形清除）、`canvas/Painter.ts`（`_doPaintList`、`_paintPerCursor`、`_paintPerCursorInRect` 的逐矩形裁剪与 `setPrevPaintRect`）、`canvas/graphic.ts`（`brush` 对 `__dirty` 与 `__isRendered` 的记账）、`graphic/Displayable.ts`（`getPaintRect`、`shouldBePainted`、`dirtyRectTolerance`、`TSpan` 的 10）、`graphic/Path.ts`（`getBoundingRect` 的描边增量与 `strokeContainThreshold`）、`core/BoundingRect.ts`（`intersect`、`union`、`isZero`、`isFinite`）逐行核过，在真 dist 上跑基准。§32 的「脏矩形不做」由这一批落地；§23、§124、§129、§152、§80、§116 在原处标注。
+
+### 上游的做法
+
+- **粗指针**：`findHover` 先照常从显示列表顶层往下找（`setHoverTarget`）；**只有没有 target 而且 `_pointerSize` 为真**时才回退。候选是显示列表里从顶往下、没有 `ignore`、没有 `ignoreCoarsePointer`（父节点有也不算）、包围盒（`getBoundingRect` 经变换）与「指针方块」（以指针为中心、边长 pointerSize）**相交**的元素——相交按 `BoundingRect.intersect`，碰边就算，静默的元素也是候选（但永远当不了 target）。然后按环取样：`r = 0, 4, 8, …` 只要 `r < pointerSize / 2`；每圈 `theta` 从 0 开始 `+= PI / 12`，只要 `theta < 2 PI`——**累加 24 次后仍小于 2 PI，所以一圈 25 个点，r = 0 那圈把同一个点问 25 遍**；每个样点上 `setHoverTarget(candidates, …)` 从数组**末尾**往前走，而候选数组是顶层在前，所以**底层的候选先被问到**——指针离两个叠在一起的符号都有点远时，命中的是下面那个，直接命中时是上面那个。第一个有 target 的样点结束搜索。
+- **init**：`useCoarsePointer` 缺省是 `'auto'`（echarts 的 `defaultCoarsePointer`，`__ECHARTS__DEFAULT__COARSE_POINTER` 可改缺省）；`'auto'` 或 null 取 `env.touchEventsSupported`（浏览器的 `'ontouchstart' in window`，IE 与旧 Edge 除外，node 里是 false），布尔值照用。打开时 `pointerSize = retrieve2(opts.pointerSize, 44)`；Handler 拿它做真值判断，所以 0（以及 NaN）等于关；负数时没有一圈满足 `r < 负数`，也就没有样点。大数据量的柱、K 线、lines、散点批都设了 `ignoreCoarsePointer`。
+- **getPaintRect**：盒子（路径的包围盒，描边时按线宽加宽，没有填充时按 `max(lineWidth, strokeContainThreshold 5)`；经变换），有阴影时宽高加 `2 blur + |offset|`、x/y 取 `min(x, x + offset - blur)`（先改宽高、再用旧 x），然后只要不为零：`floor(x - tolerance)`、`floor(y - tolerance)`、`ceil(width + 1 + 2 tolerance)`、`ceil(height + 1 + 2 tolerance)`。tolerance 平常是 0，`TSpan` 是 10。
+- **createRepaintRects**：层的第一次绘制答 null（全画）。之后对本帧列表（这一层的区间）每个元素：上一帧画过、而且脏了或这一帧不画——旧矩形进池；这一帧要画、而且脏了或上一帧没画——新矩形进池。再对上一帧的列表：这一帧不画或已不在 storage、但上一帧画过的——旧矩形进池。只有有限且不为零的矩形进池。池的规则：第一个矩形开池；之后并进**第一个**与它相交的池矩形；池里够了 `maxRepaintRectCount`（5）个就算「满」，满了以后与谁都不相交的矩形并进「并起来面积增加最少」的那个（并列取前一个）——**而且满了以后即便已经并进了相交的那个，循环后还会再并进一次 best**（best 是循环走到那里为止算出的，第一个就相交时是 0）；不满时另起一个。最后一遍循环把相交的池矩形两两合并到不再相交，零面积的丢掉。
+- **记账**：有矩形时每个矩形 `clip` 一次，列表里当前绘制矩形与它相交的元素都 `brush`，并 `setPrevPaintRect(当前矩形)`；`brush` 把画了的标成 `__isRendered`、清 `__dirty`，该画却不该画的标成没画。**全画（第一帧）时不记 `prevPaintRect`**——于是只在全画帧里画过的元素之后挪动，只会加新矩形，旧位置的像素留在画布上（基准的 `move-after-full`，fixture 里记着上游的这个答案）。没有元素脏、层也不脏的一帧根本不调 `createRepaintRects`。
+
+### port 以前
+
+- 没有粗指针。符号的命中目标比上游大四个逻辑像素（`cHitSlopSymbolLogical`，§33 起），是端口给鼠标的宽容，不分鼠标和手指。
+- 窗口的每一帧：静态层要么整张 blit，要么（状态一变）整张重画——悬停一根柱子的强调要重画所有轴标签；动态层每帧新建控件大小的 BGRA 位图、填充、画、整张混合。`InvalidateFrame` 失效整个窗口。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.DirtyRect`**（纯，只为墨迹扫描用到 BGRABitmap；已登记 `tycontrols.lpk` 与 `tycontrols.pas`）：
+  - `BoundingRect` 的 `TyZrRectIntersect`（碰边算、NaN 按 JS 的比较不报错）、`TyZrRectUnion`（逐字转写，含 `isFinite` 两支）、`TyZrRectIsZero`、`TyZrRectIsFinite`；`TyZrPaintRect`（getPaintRect）。
+  - 合并池 `TTyRepaintPool` 与 `TyRepaintPoolInit` / `Add` / `Finish`，`TyCreateRepaintRects(列表, 上一帧列表)`——`TTyRepaintItem` 是 createRepaintRects 读的那几样（该不该画、画过没有、脏不脏、在不在 storage、当前矩形、上一个矩形），满池后的二次合并照抄。
+  - 粗指针：`TTyChartCoarsePointer = (ccpAuto, ccpOff, ccpOn)`、`TyTouchPlatform`、`TyCoarsePointerSize`、`TyCoarseSamples`（样点序列，`theta` 用双精度常数 `Math.PI` 逐次累加、三角函数用 `TyJsCos` / `TyJsSin`，与 V8 逐位）、`TyElementCoarseBox`（`TyShapeBounds` 经旋转路径的包围盒再按 `TyGrowByStroke` 加描边）、`TyCoarseHitTest`（候选从顶往下收：不静默、不忽略、不是渐进隐藏、不是 large 批；样点上从底往上问）。
+  - 脏矩形：`TyDeepSame` / `TyElementsSame`——两份元素记录**按 RTTI 逐字段**比（FPC 3.2 的记录 RTTI 列出全部字段与偏移；字符串、动态数组按内容，数按字节，所以 NaN 等于 NaN、-0 不等于 0；不认识的类型答不同）。这就是端口的 REDRAW_BIT：上游的元素被改时自己置脏，端口的元素是每帧重建的记录，只能比出来；比错只会是多画，不会漏画。`TyElementPaintRect`：端口元素的绘制矩形——形状包围盒（旋转路径取旋转后的包围盒）、描边按 `TyGrowByStroke`、**非矩形非椭圆的描边再加斜接的余量**（miterLimit 10，最多十个半笔宽）、有标签时并上标签框（不旋转时是形状矩形加光晕的半径加一，旋转时是以锚点为心、形状宽加高为半边长的方块）并取 10 的文字容差、四周再加一像素的抗锯齿，最后过 `TyZrPaintRect`；large 批与富文本标签没有界（答 False）。`TTyDirtySnap` / `TyDirtySnapshot` / `TyDirtyDiff`：两次快照逐元素比，长度不同、变了的元素没有界、变了的元素在坐标轴下面（`GfxUnder`，属于底图）都答「全画」；否则交给 `TyCreateRepaintRects`。`TyInkTiles`：位图里有墨（alpha 非零）的 32 px 块。`TyZrRectToPixels`。
+- **`tyControls.AdvChart.Paint` / `Marks`**：`TTyChartElement.HitPadLogical`——端口自己的宽容，鼠标命中时加在 `HitSlopLogical` 上；`HitTestElement` 多一个 `APad`（缺省 True）。符号的四像素拆成两半（`SymbolHitSlop`）：笔的半宽是上游的（有填充是线宽一半，没填充是 `max(线宽, 5)` 的一半，封顶 4），其余是垫；两半之和仍是四像素，鼠标的命中一点没变。
+- **控件**：
+  - 三个 published 属性，就是上游三个 init opts：`CoarsePointer`（缺省 `ccpAuto`）、`PointerSize`（缺省 44）、`UseDirtyRect`（缺省 False，上游也是关）。缺省都不进流，今天的行为不变；控件不拆 TTyCustomXxx。**「touch」怎么判**：编译时定——Android、iOS 的构建是触屏平台，所有桌面 widgetset（win32、gtk2/3、qt5/6、cocoa）都是鼠标平台，带触屏的笔记本也一样：LCL 在桌面上把触摸合成成鼠标消息交给控件，控件分不出来，所以 `'auto'` 在桌面上就是关。
+  - **粗指针**：`ListHitAt` 是显示列表那一段的命中——关着时照旧（带垫）；开着时先直接命中**不带垫**（答上游 `Path.contain` 的答案），没有再走 `TyCoarseHitTest`。`HitTestAt` 与 `EventTargetAt` 都走它，所以提示框、悬停的状态、九种鼠标事件、dataZoom 的「指针下有没有数据」一起受益。指针尺寸与环距是逻辑像素，按 PPI 缩放（和垫一样，是手指的物理大小；图表的 option 几何在这条路上不随 PPI 缩放，符号在 192 PPI 下仍是 4 px，见偏差）。
+  - **脏矩形，两层都保留，各自变便宜，不变样**：
+    - 静态层：全画（`DrStaticFull`）改为画在一张保留的 BGRA（`FDrWork`）上，画完坐标轴、在第一个系列之前把底图拷进 `FDrBase`，画完后对当时的列表（静止时的 `FPaintList` 或代理帧）拍快照。之后**只有状态变化**（`StApplyChanged`：悬停的强调与淡出、选中）时尝试局部重画（`DrStaticPartial`）：列表照全画时那样构建与准备（`GfxBuild`、`PaintSeries` 的准备模式 `FDrMode = 1`：建表、`AnimAfterBuild`、`StAnimSync`、`AnimFlushArmed`，不画），与快照比出矩形；每个矩形先拷回底图，再把位图的裁剪框设成所有矩形的外框，按绘制顺序**一遍**画与任一矩形相交的元素（没有界的元素照画），然后画静态层在系列之上的东西（断轴区、平行坐标轴、标题），最后只把这些矩形混合进缓存（与 `EndPaint` 同一种混合）。为什么一遍而不是逐矩形：见「量出来的」。准备之后系列进了动态层（状态过渡开始了）、静态层不再是一张表（渐进的增量图层、持续动画）、或比较答「全画」，都回退全画，而且**回退不再重建一次列表**（`FDrPrepDone`，`PaintSeries` 跳过建表与那两步准备）。其余丢静态层的事（重排、roam 一步、图例选择器的悬停、动画离开静态层……）照旧全画。
+    - 动态层：保留一张透明位图（`FDrDyn`），每帧先把上一帧有墨的块清成透明，再照常画（没东西画时一个 painter 都不开），再扫出这一帧的墨块。上一帧与这一帧的块都进合并池——一个移动的提示框，这一帧的代价是提示框的面积，不再是控件的面积；Q7 量的那 13 ms 底价没了。
+    - 合成（`DrComposite`）：全画时整张 blit 再整张混合动态层；否则只在池给出的矩形里拷静态层、混合动态层（只在那里有墨时）。
+    - 窗口（`DrPaintWindow`、`DrFlushAsync`）：`InvalidateFrame` 在有句柄时改为**排一次异步 flush**（`Application.QueueAsyncCall`，同一帧多次请求只排一次），flush 准备这一帧（含 `TbFrame`，并把 `FAnimWindow` 置上），然后只 `LCLIntf.InvalidateRect` 那些矩形；随后的绘制只合成它拿到的裁剪区。没人 flush 过的绘制（`Invalidate`、窗口被遮后露出、flush 后又来了新请求）自己准备一帧；准备出来的矩形超出裁剪区的部分再失效一次，那次绘制只合成。**没有加任何 `CM_` / `WM_` 重写。**`Paint` 的 `TbFrame` 在脏矩形模式下挪进准备里（只合成的绘制不算一帧）。
+    - 所有丢静态缓存的地方经 `StaticDrop` 一处，它同时作废快照。
+- **bench**：`tools/advchart-bench` 加 `BenchDirty`——提示框开着，每帧指针移到下一根柱（sweep：强调变 + 提示框移）、在一根柱里来回 1 px（drift：只有提示框动）、什么都不变（idle），`UseDirtyRect` 关与开各量一遍，画布保留上一帧，和窗口一样。
+
+### 基准
+
+`tools/advchart-oracle/coarse-dirty.js`（新；真 dist，node；两次生成逐字节一致，`process.exit()`）→ `tests/fixtures/advchart-coarse-dirty.json`（约 225 KB）：
+
+- **样点 10 组**：一个 SVG、SSR 的 zrender，一个远处的 2 × 2 矩形——它的包围盒刚好碰到指针方块的角，是候选、但没有样点能碰到它——包住它的 `contain` 记下 Handler 问过的每个点：pointerSize 44（两个指针位置）、45、30、20、9、8、4、1、10.5，每组记每圈个数与每个样点（逐位）；脚本里再按上面的规则转写一遍，必须逐点相同。
+- **粗指针 10 例 102 个探点**：真图表（`useCoarsePointer` / `pointerSize` 照 init 传），每个探点一张新图（悬停的状态不能挪动下一个探点下的符号）：4 px 散点（直接命中、7/10/20 px 外、23 px 外是候选但够不到、40 px 外不是候选、两点之间、斜上方）在 44、20、9、0、关、`'auto'` 下；1 px 无符号的折线（线上、6/12/20/30 px、端点外）；2 px 宽的柱（柱间正中与左右一像素、柱顶上方、柱旁 18 px、轴下够不到）在 44 与 30 下；两个系列叠在同一点（直接是上面那个，5/12 px 外是下面那个）。每个探点记命中的系列与原始下标（折线的 polyline 只有系列，下标是 null）与鼠标会命中什么。
+- **脏矩形 18 例 48 帧**：fake canvas（2d 上下文吞掉一切调用，什么也不画，记账是真的）上的 canvas painter、`useDirtyRect: true`，真的 `Rect` / `Circle`，帧是 `refreshImmediately()`，帧之间用元素自己的 API 改（`setStyle`、`setShape`、`attr`、`remove`、`add`）。每帧之前记显示列表与上一帧列表里每个元素的 `shouldBePainted`、`__isRendered`、`__dirty & 1`、在不在 storage、`getBoundingRect`、`getPaintRect`、`getPrevPaintRect`，包住层的 `createRepaintRects` 记它的回答（null、没调用、或矩形）。用例：改色再改回（第一次没有旧矩形）、全画之后挪动（上游的残影）、挪两次、两个重叠的合成一个、只碰边的合并、4/5/6/12 个互不相交的小块（池满与二次合并）、删除、新增、`ignore` 开关、`opacity` 0、描边/无填充描边/阴影/零宽、小数圆心的圆、合并后才相交的链、z2 变化、什么都没变。
+- **27 条守卫**全部成立：一圈 25 个、44/45/8/9 的圈数、r = 0 那圈重复、`'auto'` 与关时没有 pointerSize、0 保留但为假、缺省 44、10 px 外只有回退能找到、23 px 外够不到、叠点直接是上面回退是下面（12 px 与 5 px 两处）、1 px 折线 12 px 外由回退找到、第一帧全画、无变化不调用、全画后挪动只有新矩形、挪两次两个、重叠合并、碰边合并、4→4、5→5、6→5、12→不超过 5、链式合并。
+
+### 测试
+
+`test.advchart.coarsedirty`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartCoarseDirtyOracleTest`，4 个；量字器是 zrender 的 SSR 表）：样点逐位（10 组）；粗指针每个探点（关着时比不带垫的直接命中，见偏差）与 handler 的 pointerSize；每帧每个元素的包围盒与绘制矩形——从用例的定义一路套上每帧的改动，经 `TyGrowByStroke`、`TyZrPaintRect` 逐位；每帧的矩形——把 fixture 记的元素状态喂给 `TyCreateRepaintRects`，个数与每个矩形逐位，null 帧只出现在第一帧，「没调用」的帧没有脏元素、转写也答空。
+- **手写**（`TAdvChartCoarseDirtyTest`，17 个）：init 的缺省与 `TyCoarsePointerSize` 的表；样点按 PPI 放大；垫只在粗指针下去掉（4 px 符号 5 px 外：鼠标靠垫直接命中、列表不带垫不中、手指由环找到；9 px 外鼠标不中手指中；23 px 外都不中；192 PPI 下 17 设备 px 中、46 不中）；large 批不是候选；粗指针的命中到达鼠标事件（手指 12 px 外有 mouseover，鼠标没有）；**对拍**——两张同选项的图，A 走脏矩形、画在一直保留的画布上，B 走原路径、每帧先把画布填成一个图表不会用的颜色，每帧逐像素比：提示框跟着悬停扫过五根柱、柱缝、轴上、离开（21 帧）；十字指示器加 axis 触发扫过折线与柱（15 帧）；散点放大强调与饼的悬停、`focus: 'series'` 的淡出、图例悬停、标题压在柱上时柱的强调（38 帧）；camAlways 的入场动画逐 tick 并在中途与静止后悬停（26 帧，并断言动画确实动了、tick 走的是脏路径）；关系图的 roam（9 帧，roam 一步是全画）；192 PPI 下的悬停（13 帧）——每组还断言局部帧的个数，免得对拍在全画上空转；悬停一根柱子：不是全画、只有一个矩形、面积小于图的八分之一、把柱子的绘制矩形整个包住，离开时同一个矩形，什么都没变的一帧零个矩形；换 option、换尺寸、换 PPI、关了再开都是全画；`TyDirtyDiff` / `TyElementsSame` 的规则（动态数组里的一个点、字符串、NaN、-0、长度、坐标轴下面的元素、无界的元素、富文本）；绘制矩形的算术（描边的矩形、192 PPI、斜接、标签的容差、large 批无界）；墨块（alpha 1 也算、贴边截断、次序）；**窗口**：有句柄时两次 `InvalidateFrame` 只 flush 一次、flush 出来的是那根柱子的一个矩形——这一个要初始化过的 widgetset，单独跑时设 `TY_COARSEDIRTY_WINDOW=1`；在本测试里初始化会让之后所有套件的文字改走真字体（仓库记忆里的那个坑），所以没初始化时它报 Ignored，不去初始化。
+
+首跑：粗指针基准 111 次比较只差 3 个——`scatter-0`、`scatter-off`、`scatter-auto` 的两点之间那一探：回退关着时端口的鼠标靠四像素垫直接命中，上游什么都没有。这正是垫，改成关着时比不带垫的直接命中（垫是端口的老偏差，原样保留）。手写那组两处是测试自己的：192 PPI 下以为符号也会放大（不会，见偏差），改为从列表取符号中心；窗口测试先撞上句柄创建前 `Resize` 留下的 `FDirty`（局部重画要求没有待做的重排，这一帧正确地回退了全画），先让窗口全画一帧再悬停。对拍首跑全部逐像素相同。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartCoarseDirtyOracleTest` 4、`TAdvChartCoarseDirtyTest` 17（窗口那一个在单独设 `TY_COARSEDIRTY_WINDOW=1` 时通过，平时 Ignored）、`TAdvanceChartTest` 60、`TTyCustomClassesGuardTest` 11，以及命中与悬停（`TAdvChartHitTest` 12、`TAdvChartPaintTest` 15、`TAdvChartMarksTest` 36、`TAdvChartSymbolTest` 9、`TAdvChartRenderTest` 11、`TAdvChartEmphasisRuleTest` 8、`TAdvChartEmphasisDrawTest` 6、`TAdvChartMouseEventsOracleTest` 3、`TAdvChartFocusBlurTest` 11、`TAdvChartSelectOracleTest` 11、`TAdvChartGraphFocusTest` 12、`TAdvChartGraphFocusOracleTest` 1、`TAdvChartGraphRoamTest` 5、`TAdvChartGraphRoamOracleTest` 1、`TAdvChartBrushCoverTest` 6、`TAdvChartBrushCoverOracleTest` 5、`TAdvChartLargeModeTest` 8、`TAdvChartLargeModeOracleTest` 1）、提示框与指示器（`TAdvChartTooltipRuleTest` 19、`TAdvChartTooltipDrawTest` 15、`TAdvChartTooltipFinishTest` 10、`TAdvChartAxisPointerRuleTest` 10、`TAdvChartAxisTriggerTest` 16）、`RenderCached` 与动画帧（`TAdvChartAnimStateEngineTest` 11、`TAdvChartAnimStateTest` 5、`TAdvChartAnimEnterTest` 13、`TAdvChartAnimUpdateTest` 7、`TAdvChartExportLoadingTest` 15、`TAdvChartLinesTest` 8、`TAdvChartLinesOracleTest` 5、`TAdvChartProgressiveTest` 8、`TAdvChartProgressiveOracleTest` 1、`TAdvChartRealtimeSortTest` 5、`TAdvChartGraphicTest` 12）。变异候选列在会话草稿 `s181.md.candidates.md`（31 个，其中 #17、#18 可能存活，#28–#31 预计存活或平时够不到）。
+
+### 量出来的
+
+`tools/advchart-bench`（900 × 700 与 300 × 200，无头 `RenderCached`，画布保留上一帧，每项 40 帧取平均；`UseDirtyRect` 关 → 开）：
+
+| 场景 | 900 × 700，60 点 bar+line | 900 × 700，600 点 | 300 × 200，600 点 |
+|---|---:|---:|---:|
+| sweep：每帧换一根柱（强调 + 提示框） | 162.9 → **35.2** ms | 657.0 → **379.3** ms | 60.9 → 48.1 ms |
+| drift：在一根柱上来回 1 px | 19.6 → **7.4** ms | 645.7 → **179.7** ms | 8.2 → 8.2 ms |
+| idle：提示框停着，什么都不动 | 13.3 → **9.0** ms | 21.1 → **8.6** ms | 12.1 → 7.8 ms |
+| 每帧重合成的像素（脏路径） | 86 150 / 8 192 / 8 192 | 38 403 / 9 262 / 8 192 | 15 496 / 8 192 / 8 192（共 60 000） |
+
+三次取最小（另一棵树同时在跑全量，单次的数字抖得很厉害；同一次运行的前半段里 60 点一帧整张静态层 188 ms，Q7 当时是 54 ms——这一年多加的功能都在里面，也有机器负载）。读法：
+
+- **60 点**：悬停换柱从「整张静态层重画」变成「两三个矩形」，4.6 倍；提示框移动、停着都只付提示框的面积，动态层那张控件大小的位图没了（Q7 的 13 ms 底价）。
+- **600 点**：省下的是像素，账单的大头不是像素——Q7 当年的话又应验一次。600 点的柱只有一像素多宽，drift 的 1 px 来回其实每帧都在换柱、都是静态层的变化；局部重画里最贵的是**那条 600 点的折线**：它的绘制矩形盖住整个绘图区，任何矩形都和它相交，于是每帧都要再描一遍（实测一次约 180 ms，裁剪框多小都一样——BGRA 描一条长折线的代价在生成轮廓，不在扫描行）。所以局部重画是一遍画完、裁剪框取所有矩形的外框（不像 zrender 逐矩形 clip 各画一遍：那样这条折线一帧要描三四遍，量下来比全画还慢）。准备（建表 + 状态 + 代理）约 19 ms/帧，两条路都要付。
+- **300 × 200**：像素本来就少，打平或略好。
+
+### 推迟与偏差
+
+- **粗指针只回退显示列表那一段**：端口单独做命中的那些——刷选框、断轴区、标题、工具栏、时间线、visualMap、dataZoom 的手柄——仍只直接命中；上游它们也是显示列表里的元素，是候选。候选里不收静默元素（上游收，但永远当不了 target，`topTarget` 的回退不建模）。
+- **鼠标的垫**：回退关着（桌面缺省）时符号仍有四像素的垫，直接命中比上游大——老偏差，原样保留；回退开着时直接命中与样点都不带垫，答的是上游的。关系图的边与节点、树的节点、雷达的线还是旧的一个容差（不拆垫），粗指针下照旧。折线的 polyline 命中时端口照旧给最近的一行，上游只给系列。
+- **`'auto'`** 在所有桌面 widgetset 上是关，带触屏的笔记本上的浏览器里上游是开（见上）。`__ECHARTS__DEFAULT__COARSE_POINTER` 没有对应物。
+- **PPI**：指针尺寸与环距是逻辑像素、按 PPI 缩放；而图表的 option 几何（符号大小、网格边距）在这条路上不随 PPI 缩放，所以 192 PPI 下指针相对符号是上游的两倍大。`PointerSize` 是整数，上游可以是小数。
+- **脏矩形不是上游的矩形**：池与合并是上游的、逐位，元素的盒子是端口的——它要包住端口渲染器画下的每一个像素：斜接的尖角、标签的光晕、一像素的抗锯齿，都比 zrender 的路径盒子宽；所以同一个悬停，端口的矩形比上游的大一两圈，不能拿来逐位比（基准比的是元素层的转写，不是整张图）。
+- **端口记全画帧的旧矩形**，上游不记（见上，`move-after-full`）：端口不会留下残影，上游会。
+- **局部重画只接状态变化**。动画帧（系列在动态层里）、roam、选择器悬停、关系图的悬停（§80，在静态层原地重样式，经 `DropStatic`）都还是整层重画——动态层那一半照样变便宜，但静态层不分块。动画中动态层整个重画（只是不再分配位图），不按元素比。
+- **动态层按墨块，不按元素**：上一帧与这一帧有墨的 32 px 块都重合成；提示框不动、只是重画了一遍的帧也算一次（代价是它的面积）。
+- **没有界的元素**（large 批、富文本标签）一变就整层重画；没变的照画（不管压没压在矩形下）。
+- **局部重画一遍画完，裁剪框是所有矩形的外框**，zrender 是逐矩形 clip、各画一遍：矩形里的像素相同（对拍证明），区别只在代价（见上）。
+- **窗口的绘制合成整个裁剪框**（不是逐个失效矩形；两个相距很远的矩形会合成它们的包围盒）——为了被遮挡后露出的区域也正确。
+- `useDirtyRect` 缺省关，与上游相同；端口没有 hover 层（§32），也没有 `zlevel` 分层的公开旋钮。
+
+### 落地
+
+- `source/tyControls.AdvChart.DirtyRect.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Paint.pas`：`TTyChartElement.HitPadLogical`；`HitTestElement` 的 `APad`；`TopElementAt` 带垫。
+- `source/tyControls.AdvChart.Marks.pas`：`SymbolHitSlop`（两处符号）。
+- `source/tyControls.AdvanceChart.pas`：`CoarsePointer` / `PointerSize` / `UseDirtyRect`；`CoarseSize`、`ListHitAt`（`HitTestAt`、`EventTargetAt`）；`FDr*` 与 `DrPrepare`、`DrComposite`、`DrPaintWindow`、`DrFlushAsync`、`DrCanPartial`、`DrStaticPartial`、`DrStaticFull`、`DrDynamic`、`DrCaptureBase`、`StaticDrop`、`SetUseDirtyRect`、`LastRepaintFull` / `LastRepaintRects`；`PaintStatic` 截底图；`PaintSeries` 的准备模式、`FDrStaticList`、`FDrPrepDone`；`RenderCached`、`Paint`、`Invalidate`、`InvalidateFrame` 的脏矩形分支；`Forms`、`LCLIntf` 进实现段的 uses。
+- `tools/advchart-oracle/coarse-dirty.js`、`tests/fixtures/advchart-coarse-dirty.json`、`tests/test.advchart.coarsedirty.pas`（新，注册在 `tytests.lpr`）；`tools/advchart-bench/advchart_bench.lpr` 的 `BenchDirty`。
+- §23、§124、§129、§152、§80、§116 在原处标注（§32 是散文段，不是条目，没有标注；它的「脏矩形不做」由本节落地）。
