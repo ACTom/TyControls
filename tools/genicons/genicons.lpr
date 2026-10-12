@@ -97,6 +97,9 @@ procedure GAdvancedComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Fil
 procedure GCheckComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); RRect(b,5.5,9.5,9,13,0.6,Ink); PolyL(b,[PointF(6,11.2),PointF(6.9,12.1),PointF(8.4,10.3)],Acc,1.3); PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3); end;
 { TTyValueListEditor: a 2-column name/value grid — a divider + key tiles left, value lines right }
 procedure GValueListEditor(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); Line(b,10,5,10,19,Faint,1); FillRRect(b,5,7,8.5,8.8,0.3,Acc); Line(b,11.5,7.9,18,7.9,Faint,1.1); FillRRect(b,5,11,8.5,12.8,0.3,Faint); Line(b,11.5,11.9,16,11.9,Faint,1.1); FillRRect(b,5,15,8.5,16.8,0.3,Faint); Line(b,11.5,15.9,17,15.9,Faint,1.1); end;
+{ TTyPropertyGrid: a name/value grid whose first row is an expanded group (an accent chevron),
+  with a colour swatch among the values -- an object's properties, typed }
+procedure GPropertyGrid(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,10,4,10,20,Faint,1); FillPolyG(b,[PointF(4.8,6.8),PointF(8,6.8),PointF(6.4,8.8)],Acc); Line(b,11.5,7.8,18,7.8,Faint,1.1); FillRRect(b,6.5,11.1,9,12.7,0.3,Faint); FillRRect(b,11.5,10.8,14.6,13,0.5,Acc); Line(b,15.8,11.9,18.5,11.9,Faint,1.1); FillRRect(b,6.5,15.3,9,16.9,0.3,Faint); Line(b,11.5,16.1,17,16.1,Faint,1.1); end;
 { TTyCalculator: a calculator body — a display band over a grid of button dots (right col = ops) }
 procedure GCalculator(b: TBGRABitmap); begin RRect(b,5,3,19,21,2,Ink); FillRRect(b,6.5,4.5,17.5,8,0.6,Faint); FillCirc(b,8,11,0.9,Ink); FillCirc(b,10.5,11,0.9,Ink); FillCirc(b,13,11,0.9,Ink); FillCirc(b,15.5,11,0.9,Acc); FillCirc(b,8,14,0.9,Ink); FillCirc(b,10.5,14,0.9,Ink); FillCirc(b,13,14,0.9,Ink); FillCirc(b,15.5,14,0.9,Acc); FillCirc(b,8,17,0.9,Ink); FillCirc(b,10.5,17,0.9,Ink); FillCirc(b,13,17,0.9,Ink); FillCirc(b,15.5,17,0.9,Acc); end;
 { TTyCalcEdit: a numeric edit with a trailing 2x2 keypad (calculator) button }
@@ -1009,7 +1012,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..193] of TGlyph = (
+  Glyphs: array[0..194] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1032,6 +1035,7 @@ const
     (Name:'TTyAdvancedComboBox';Draw:@GAdvancedComboBox),
     (Name:'TTyCheckComboBox';   Draw:@GCheckComboBox),
     (Name:'TTyValueListEditor'; Draw:@GValueListEditor),
+    (Name:'TTyPropertyGrid'; Draw:@GPropertyGrid),
     (Name:'TTyCalculator';      Draw:@GCalculator),
     (Name:'TTyCalcEdit';        Draw:@GCalcEdit),
     (Name:'TTyCalcCurrencyEdit';Draw:@GCalcCurrencyEdit),
