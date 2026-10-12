@@ -272,6 +272,14 @@ type
     RowFills: TTyRowFillArray;
     { the series' fill as an image [Batch 105] }
     FillPattern: TTyChartPattern;
+    { THE DECALS [Batch 131]: the series' (its style's), and by RAW row a
+      row's own where RowDecalSet says the row has one -- an item decal, or
+      the aria palette's for a series coloured by data. A row without one
+      takes the series' (getItemVisual's fallback). Drawn on a bar, a polar
+      bar and a line's area; upstream's symbols drop theirs. }
+    Decal: TTyChartDecal;
+    RowDecals: TTyChartDecalArray;
+    RowDecalSet: TTyBoolArray;
     { A LINE'S PEN AND AREA when a visualMap gave it a visualMeta on x or y:
       one colour or a global gradient in device px, instead of the series
       colour. The two flags say which of them take it -- an authored
@@ -989,6 +997,20 @@ begin
   if vr.LiftZSet and not IsNan(vr.LiftZ) then ALift := vr.LiftZ;
 end;
 
+{ THE DECAL A VIEW ROW IS DRAWN WITH [Batch 131]: its own, else the
+  series' }
+function RowDecal(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTyChartDecal;
+var raw: Integer;
+begin
+  Result := AVisual.Decal;
+  if (AVisual.RowDecalSet = nil) or (AStore = nil) then Exit;
+  raw := AStore.GetRawIndex(ARow);
+  if (raw >= 0) and (raw <= High(AVisual.RowDecalSet))
+    and (raw <= High(AVisual.RowDecals)) and AVisual.RowDecalSet[raw] then
+    Result := AVisual.RowDecals[raw];
+end;
+
 { HOW FAR OUTSIDE A MARK STILL COUNTS, in LOGICAL px -- the hit test scales it
   by PPI, the shapes are already device px.
 
@@ -1379,6 +1401,7 @@ begin
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
+    el.Style.Decal := RowDecal(AVisual, AStore, i);
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }
@@ -1982,6 +2005,8 @@ var
         { A visualMap's gradient, unless the area named its own colour. }
         if AVisual.VisualLineArea then ApplyVisualLine(v, True);
         el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
+        { the area polygon takes the series' style decal (LineView) }
+        el.Style.Decal := AVisual.Decal;
         AttachPath(el.Shape, areaRuns, (spec.Smooth > 0) or (spec.StackedOnSmooth > 0));
         { The area's opacity REPLACES the series' -- it is a key on its own
           block, not a second multiplier on the item's. }
@@ -3418,6 +3443,7 @@ begin
     rv := RowVisual(AVisual, AStore, i);
     el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
       ABinding.SeriesIndex, i);
+    el.Style.Decal := RowDecal(AVisual, AStore, i);
     zero := TyPolarZero(s);
     if zero then
     begin

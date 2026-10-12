@@ -834,6 +834,50 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartariaalldata
+msgid "The data is as follows: "
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariadatawithname
+msgid "the data for {name} is {value}"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariamultipleprefix
+msgid ". It consists of {seriesCount} series count."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariamultiplewithname
+msgid " The {seriesId} series is a {seriesType} representing {seriesName}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariamultiplewithoutname
+msgid " The {seriesId} series is a {seriesType}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariapartialdata
+msgid "The first {displayCnt} items are: "
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariaseparators
+msgid "||, |. "
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariasinglewithname
+msgid " with type {seriesType} named {seriesName}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariasinglewithoutname
+msgid " with type {seriesType}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariawithouttitle
+msgid "This is a chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariawithtitle
+msgid "This is a chart about \"{title}\""
+msgstr ""
+
 #: tycontrols.strconsts.rstychartaxistypeunknown
 #, object-pascal-format
 msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
@@ -981,6 +1025,102 @@ msgstr ""
 
 #: tycontrols.strconsts.rstycharttoolboxzoomback
 msgid "Zoom Reset"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypebar
+msgid "Bar chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeboxplot
+msgid "Boxplot"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypecandlestick
+msgid "Candlestick"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypechart
+msgid "Chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypecustom
+msgid "Custom chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeeffectscatter
+msgid "Ripple scatter plot"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypefunnel
+msgid "Funnel chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypegauge
+msgid "Gauge"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypegraph
+msgid "Relationship graph"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeheatmap
+msgid "Heat map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypek
+msgid "K line chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeline
+msgid "Line chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypelines
+msgid "Line graph"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypemap
+msgid "Map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeparallel
+msgid "Parallel coordinate map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypepictorialbar
+msgid "Pictorial bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypepie
+msgid "Pie chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttyperadar
+msgid "Radar chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypesankey
+msgid "Sankey diagram"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypescatter
+msgid "Scatter plot"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypesunburst
+msgid "Sunburst"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypethemeriver
+msgid "Theme River Map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypetree
+msgid "Tree"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypetreemap
+msgid "Treemap"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartxaxisnogrid

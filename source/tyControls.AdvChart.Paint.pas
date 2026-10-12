@@ -95,6 +95,33 @@ type
   end;
   TTyChartObjFillArray = array of TTyChartObjFill;
 
+  { A DECAL [Batch 131]: the pattern upstream GENERATES from a decal object
+    (util/decal.ts createOrUpdatePatternFromDecal) and paints over a filled
+    shape as a second fill -- the aria decals, and any itemStyle.decal.
+    Held NORMALISED: the defaults filled (rect, symbolSize 1, keepAspect,
+    the skin's colour, no background, dash 5 by 5, rotation 0, tiles of at
+    most 512), the dash arrays ceiled and their odd lengths doubled, the
+    symbols a list of rows. AdvChart.Decal makes one and lays its tile out;
+    the renderer draws the tile and repeats it, turned by Rotation, in the
+    canvas' space. }
+  TTyChartDecal = record
+    Present: Boolean;
+    { a row of symbol names per symbol row }
+    Symbols: array of TTyStringArray;
+    SymbolSize: Double;
+    KeepAspect: Boolean;
+    Color: TTyChartColor;
+    HasBackground: Boolean;
+    Background: TTyChartColor;
+    { the x dashes, one array per line; the y dashes }
+    DashX: array of TTyDoubleArray;
+    DashY: TTyDoubleArray;
+    { radians, the pattern's own: zrender turns the repeat, not the symbols }
+    Rotation: Double;
+    MaxTileW, MaxTileH: Double;
+  end;
+  TTyChartDecalArray = array of TTyChartDecal;
+
   TTyChartElementStyle = record
     HasFill: Boolean;
     FillColor: TTyChartColor;
@@ -111,6 +138,10 @@ type
     { AN IMAGE INSTEAD OF THE FILL COLOUR [Batch 105]. FillColor holds what
       upstream's convertToColorString makes of it -- transparent. }
     FillPattern: TTyChartPattern;
+    { A DECAL OVER THE FILL [Batch 131]: zrender's decal element -- the same
+      path filled with the generated pattern, then its stroke again, drawn
+      right after the element. Only where the element has a fill. }
+    Decal: TTyChartDecal;
     { THE BOX A LOCAL GRADIENT NORMALISES AGAINST, when the builder knows it
       better than the shape does: upstream's el.getBoundingRect() is the PATH's
       box grown by the stroke, and a sector's path box is its arc's extent

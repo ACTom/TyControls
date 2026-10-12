@@ -175,6 +175,9 @@ type
     function ComponentAt(const AMainType: string; AIndex: Integer): TJSONData;
 
     property Root: TJSONData read FRoot;
+    { THE PIECE THE LAST MERGE MERGED IN (its base option), nil after a
+      set: what the aria preprocessor reads per setOption [Batch 131] }
+    property MergedPiece: TJSONData read FMerged;
     property Text: string read FText;
     property Error: TTyOptionError read FError;
   end;

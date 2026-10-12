@@ -937,6 +937,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Brush"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Decal.pas"/>
+        <UnitName Value="tyControls.AdvChart.Decal"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Aria.pas"/>
+        <UnitName Value="tyControls.AdvChart.Aria"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Polar.pas"/>
         <UnitName Value="tyControls.AdvChart.Polar"/>
       </Item>

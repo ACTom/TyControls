@@ -11653,3 +11653,94 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvChart.Events.pas`：五个事件名。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/parallel-brush.js`、`tests/fixtures/advchart-parallel-brush.json`、`tests/test.advchart.parallelbrush.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.mouseevents.pas`（`cPubTypes` 加 `brushselected`、不认的类型换一个名字）。
+
+## 167. Tier 2 第一百三十一批：decal 图案与 aria 描述（C22，2026-10-13）
+
+路线图 C22：decal + aria——图案生成（LCM 平铺、旋转、6 种内置）、aria.decal 自动分配、visualMap decal 通道、aria 描述文字。在这之前端口里 `decal` 只出现在 visualMap 的通道名单上，`aria` 一个字都没有：`aria.decal.show` 不读，`itemStyle.decal` 不画，图表也说不出自己是什么——D11 要把描述交给 UIA / MSAA，手里没有东西可交。这一批对着 6.1 的 `util/decal.ts`（`createOrUpdatePatternFromDecal` 的缺省、`normalizeDashArrayX` / `Y`、`normalizeSymbolArray`、`getLineBlockLengthX` / `Y`、`getPatternSize`、`brushDecal`）、`visual/decal.ts`、`visual/aria.ts`（`setDecal`、`setLabel`、`replace`、`getTitle`）、`component/aria/preprocessor.ts`、`model/Global.ts` 的 `initBase`（aria 的开启检测）、`model/globalDefault.ts` 的六个 decal、`model/mixin/palette.ts`（`getDecalFromPalette`、`getFromPalette`）、`visual/style.ts`（`seriesStyleTask`、`dataStyleTask` 的 decal 两行）、`visual/helper.ts`（`setItemVisualFromData`）、`visual/VisualMapping.ts` 的 decal 处理器、`component/legend/LegendView.ts` 的 `getLegendStyle`、`chart/helper/enableAriaDecalForTree.ts`、`i18n/langEN.ts` 与 `langZH.ts` 的 aria 段和 `series.typeNames`，以及 zrender 的 `Path.update`（decal 元素）、`Storage`（decal 元素紧跟本体入列）、`svg/graphic.ts` 的 `setPattern` / `brushSVGPath`、`SVGPainter.renderOneToVNode` 逐行核过，**以 dist 为准**在真 dist 上跑基准。§49、§50、§88、§90 的相关处在原处标注。
+
+### 上游的做法
+
+- **decal 是生成的图案**（`createOrUpdatePatternFromDecal`）：先 `defaults(decalObject, …)`——**缺的键和写成 null 的键**才补：`symbol: 'rect'`、`symbolSize: 1`、`symbolKeepAspect: true`、`color: 'rgba(0, 0, 0, 0.2)'`、`backgroundColor: null`（`'none'` 也改成 null）、`dashArrayX: 5`、`dashArrayY: 5`、`rotation: 0`、`maxTileWidth` / `maxTileHeight` 512，补在 decal 对象自己身上。归一化：`dashArrayX` 假值或空数组是 `[[0, 0]]`，一个数 n 是 `[[⌈n⌉, ⌈n⌉]]`，全是数的数组包一层，否则逐项——数是 `[v, v]`、数组逐个 `Math.ceil`、**奇数长度接上自己一遍**；`dashArrayY` 同理成一维；`symbol` 是字符串、字符串数组（一行）或混合（每项一行）。块长是一行之和（奇数长度乘 2，归一化之后其实总是偶数）。
+- **平铺块的大小**（`getPatternSize`）：宽是各行 x 块长的**最小公倍数**（`a·b / gcd`，gcd 用 JS 的 `%` 递归）乘各符号行长度的最小公倍数；高是 y 块长 × x 行数 × 符号行数；再 `max(1, min(·, maxTile))`。**画**（`brushDecal`）：y 从 **−y 块长**开始到高度为止，**偶数号的 y 段**画一行：这一行的 x 线按行轮换，x 从 0 走到**宽度的两倍**，偶数号的 x 段放一个符号——盒子是 `(x + dx·(1 − s)/2, y + dy·(1 − s)/2, dx·s, dy·s)`，符号名按 `xId1Total / 2` 在这一符号行里轮换、符号行按 `yIdTotal / 2` 轮换；一行 x 之和不大于 0 就跳过这一行，y 之和不大于 0 什么都不画。符号经 `createSymbol(类型, x, y, w, h, color, keepAspect)`——和图例图标一样是**真盒子**里的符号（圆的半径是短边的一半）。
+- **画布与 SVG**：画布渲染器的平铺块是宽高乘 dpr 的 canvas（先清空、有底色就先铺），符号的坐标也乘 dpr，图案 `scaleX = scaleY = 1 / dpr`、`rotation` 是 decal 的；`backgroundColor` 只在画布上画。SVG 渲染器把每个符号经 `renderOneToVNode` 变成 `<pattern>` 里的路径，宽高是 `svgWidth` / `svgHeight`，`patternTransform` 是旋转。
+- **decal 元素**（zrender `Path.update`）：样式里有 decal 的路径带一个**同形状的第二个路径**，样式抄本体的、`fill` 换成图案（**本体没有 fill 就没有**）、去掉阴影，紧跟本体画——于是描边画两遍，一遍在图案下，一遍在上面。
+- **谁拿到 decal**：`seriesStyleTask` 把系列样式路径（`visualStyleAccessPath`，绝大多数是 itemStyle，折线也是）的 `decal` 作为系列的 decal 视觉，`dataStyleTask` 把视图里一行自己的作为行的；`decalVisual`（7000）给每个**没被图例过滤**的系列做图案：每个有行视觉的行用自己的 decal，没有就经 `getItemVisual` 的回退拿系列的。**写成字符串**（`'none'`）的 decal 在这两个任务里被设 `dirty = true`——严格模式下对原始值设属性抛 TypeError，setOption 整个抛出。图形：柱（直角、极坐标）、饼、漏斗、折线的面积（系列样式的 decal）、雷达面积、桑基、旭日、矩形树图等用样式的都画；**符号把 decal 清掉**（`Symbol.ts`：缩放会作用到 decal 上）。
+- **aria.decal**（`setDecal`，6000）：`aria.enabled` 且 `aria.decal.show` 为真时，`eachSeries`（图例关掉的不在内）里——有 `enableAriaDecal` 的（treemap、sunburst）自己按一层节点取，**不碰系列作用域**；按系列着色的系列用**模型名**向**全图一个作用域**要 `getDecalFromPalette`；按数据着色的（饼等）每个**原始行**用 `名字 || 原始下标` 向**这一类型共享、每次更新新建**的作用域要，视图外的行也要（占格）但不写。调色板是 `aria.decal.decals`（`normalizeToArray`：一个对象是一项，作者写了就整个替换 globalDefault 的六个），`getFromPalette` 没有分层：名字备忘、`palette[idx]`、`idx = (idx + 1) % len`。合并：`extend(extend({}, 调色板的), 写了的)`，逐键，写了的盖住调色板的。**系列作用域活得和 GlobalModel 一样长**：合并式 setOption 保留它（改名的系列接着往下取，老名字还拿老的），notMerge 新建 GlobalModel，作用域重来。调色板为空时取到 undefined，合并之后对 undefined 设 `dirty` 抛出。
+- **六个内置**（globalDefault）：斜纹（`[1, 0]` × `[2, 5]`，转 π/6）、圆点（`[[8, 8], [0, 8, 8, 0]]` × `[6, 0]`，0.8）、反斜纹（`[1, 0]` × `[4, 3]`，转 −π/4）、方格（`[[6, 6], [0, 6, 6, 0]]` × `[6, 0]`）、十字（`[[1, 0], [1, 6]]` × `[1, 0, 6, 0]`，转 π/4）、三角（`[[9, 9], [0, 9, 9, 0]]` × `[7, 2]`，0.75），颜色都是 `rgba(0, 0, 0, 0.2)`。
+- **aria 的开关**：preprocessor 把 `aria.show != null` 抄成 `enabled`，把顶层的 `description`、`general`、`series`、`data` 搬到 `aria.label` 下（整个替换）；`initBase`（第一次与 notMerge）里写了 aria 对象而 `enabled == null` 的就打开。**这个检测只在 initBase**：合并进来的 aria 不会自己打开，合并里写的 `enabled` / `show` 才算。
+- **visualMap 的 decal 通道**：`VisualMapping` 有 decal 处理器（类目是 `doMapCategory`，`linear` / `piecewise` 是 null），但 `setItemVisualFromData` 不认 `decal` 这个键——**类目型什么都不写**（只有一句 dev 警告 "Unknown visual type decal"），**分段（pieces）与连续型调 null 的映射函数，setOption 抛 TypeError**。6.1 里这个通道是坏的。
+- **图例**：`getLegendStyle` 里图标的 decal 是图例数据项（经父模型到 `legend.itemStyle`）的 `itemStyle.decal`，没写或 `'inherit'` 用系列样式的（饼的图例是那一项的）；`'none'` 经 `createOrUpdatePatternFromDecal` 得 null；没选中时颜色变灰、**decal 留着**。被图例关掉的系列没有图案，图标也就没有 decal（除非图例自己写了）。
+- **描述**（`setLabel`）：要 `api.getZr().dom`——**SSR 没有 dom，什么都不写**（源码 TODO）。有 dom 时：`label.enabled` 假就什么都不写（连 `role` 也不写）；写 `role="img"`；`label.description` 为真就整个是它；没有系列就到此为止。否则：有标题（`option.title` 的第一个的 `text`，真值）用 `general.withTitle` 换 `{title}`，否则 `withoutTitle`；接 `series.single` / `multiple` 的 `prefix`（换 `{seriesCount}`，**所有系列模型的个数**，图例关掉的也算）；`eachSeries`（关掉的不在内）里下标（组件下标）小于 `min(系列数, series.maxCount || 10)` 的，按 `seriesModel.get('name')` 真假取 `withName` / `withoutName`，依次换 `{seriesId}`（组件下标，从 0 起）、`{seriesName}`、`{seriesType}`（`series.typeNames[subType] || chart`）——**系列名里含 `{seriesType}` 也被换掉**；行数大于 `data.maxCount || 10` 时接 `partialData`（换 `{displayCnt}`）否则 `allData`；前 maxCount 行每行 `data.getName(i)` 真则 `withName` 否则 `withoutName`，`{value}` 是 `data.getValues(i)`——**所有维**：类目轴上的序号、`[x, y, value]` 的第三维（短的行是 NaN）、堆叠的 `stackResult` / `stackedOver` 两列，NaN 印成 `NaN`——用 **data.separator.middle** 连（值之间和行之间是同一个），末尾 `data.separator.end`；系列之间用 `series.multiple.separator`。`excludeDimensionId` 按维下标（严格相等）去掉。`replace` 是每个键一个全局 RegExp（花括号里允许空白），值是**替换串**：`$&`、`$$`、`` $` ``、`$'` 照 `String.replace` 的意思。模板先把 locale 的 aria 深合并到 `aria.label` 下（作者写了的键留着）。EN：withTitle `This is a chart about "{title}"`、series.single.prefix 空、multiple.separator 两个都空、data.separator `', '` 与 `'. '`；ZH：系列间 `'；'`、末尾 `'。'`、值间 `'，'`、数据末尾空。
+
+### port 以前
+
+- 没有 decal：`itemStyle.decal`、`aria.decal` 都不读，visualMap 的 decal 在通道名单里、注释写着「不画」。没有 aria：没有开关、没有描述，D11 无从接起。
+
+### 做法
+
+- **`tyControls.AdvChart.Paint`**：`TTyChartDecal`（归一化之后的 decal：符号行、symbolSize、keepAspect、颜色、底色、x 线、y 段、rotation、两个上限）；元素样式加 `Decal`。
+- **`tyControls.AdvChart.Decal`**（新）：`TTyDecalRaw`（decal 对象逐键的节点，合并在归一化之前）、`TyDecalRawOf`、`TyDecalIsPrimitive`、`TyDecalMerge`（extend）、`TyDecalResolve`（defaults 与归一化；JS 的 `Math.ceil`、ToNumber；没写颜色是皮肤的，写了解析不了是画布初始的 `#000`）、`TyDecalTile`（getPatternSize 与 brushDecal 逐行转写：gcd 展开成循环、`Math.min/max` 与比较按 NaN 的 JS 语义，符号上限 100 万）、`TyDecalCacheKey`、`TyDecalBuiltins`（六个，π 用 `Double` 常量算）、`TyDecalPaletteOf` / `Count` / `Item`（normalizeToArray）、`TyDecalFromPalette`（getFromPalette，名字备忘、不取模、undefined 是 −1）、`TyDecalTruthy`；常量 `TyDecalSkin`。
+- **`tyControls.AdvChart.Render`**：`TyDecalTileImage`（平铺块的位图：宽高乘缩放**截断**——canvas 的 width 是整数——清空、铺底色、每个符号经 `TyBuildSymbolInBox` 在 `TTyPainter`（`BeginPaintOn(nil, …)`）里填；`line` 描边、`empty*` 白底加描边；按缓存键缓存，满 64 清空）、`TyDecalMatrix`（`rotation` 与 `1 / dpr` 经 `TyPatternMatrix` 再乘回设备，96 PPI 下就是纯旋转）；`TyRenderElement` 拆出 `PaintPen`，本体画完后 `PaintDecal`：有填充才画，重描路径、`FillPathPattern(平铺块, 'repeat', …)`、再描一遍边——zrender decal 元素的次序。
+- **`tyControls.AdvChart.Marks`**：`TTySeriesVisual.Decal` / `RowDecals` / `RowDecalSet`（按原始行）、`RowDecal`；直角柱、极坐标柱按行，折线面积用系列的。
+- **`tyControls.AdvChart.Pie` / `Funnel`**：`Decals`（饼按扇区、漏斗按原始行）。
+- **`tyControls.AdvChart.Legend`**：`TTyLegendSource.Decal`、`TTyLegendItem.Decal`，填充的图标带上（没选中也带）。
+- **`tyControls.AdvChart.Aria`**（新）：`TTyAriaLocale`（模板）、`TTyAriaFacts` / `Series` / `Row`（控件收集的事实，值已印成 JS 的串）、`TyAriaDefaultLocale`（resourcestring；四个分隔符合在一个串里，见下）、`TyAriaTypeName`、`TyAriaLabelKey`（顶层位置优先，preprocessor 的搬家）、`TyAriaLocaleOf`（作者的模板，非串的照 `String()`）、`TyAriaReplace`（逐键、花括号内空白、替换串的四种 `$`）、`TyAriaLabel`（setLabel 的拼法）。
+- **控件**：
+  - 状态：`FDecalScope`（系列作用域，ApplyNotMerge 清空、合并保留）、`FSeriesDecals` / `FRowDecals` / `FRowDecalSet`（按绑定槽）、`FAriaEnabled`。
+  - `AriaTakeEnabled`：notMerge / 第一次按 initBase（aria 对象、`show` 优先、`enabled == null` 为开），合并按这一次合并进来的那一片（`show != null` 优先，写了 `enabled` 才改）；`TTyChartOption.MergedPiece` 公开这一片。
+  - `SolveDecals`（`Rebuild` 末尾、`SolveDatumPalette` 之后）：系列样式路径的 decal、视图里各行自己的；aria 开且 `decal.show` 真时，非 treemap / sunburst、没被图例关掉的系列：按系列着色的用模型名向系列作用域要、合并到系列的下面；按数据着色的逐原始行用名字或下标向这一类型的作用域要，视图里的行合并到「行自己的或系列的」下面；最后被图例关掉的系列一律没有。字符串 decal 当作没写。
+  - `ApplyVisualMaps` 把 decal 带给构造者；`PieVisual` / `FunnelVisual` 填 `Decals`；`LegendSources`（多一个图例下标）给图标 decal，`LegendDecalOf` 读图例数据项与 `legend.itemStyle` 的 decal（`'inherit'` 与假值是系列的，`'none'` 与别的原始值是没有）。
+  - 公开：`DecalOfSeries`、`DecalOfRow`（测试与宿主读解出来的 decal），**`AriaDescription: string`**（只读属性，给 D11）：aria 关、`label.enabled` 假、没有系列时是空串；`label.description` 真就是它；否则按上面的拼法，事实来自最近一次布局（`ConvertReady` 先补上过期的布局）——值是 store 的非端口列、再是 `RawWidth` 内没有列读的位置（按浮点解析，短的行 NaN）、最后堆叠的两列。
+- **i18n**：`tyControls.StrConsts` 加 11 个 aria 模板与 24 个类型名（EN 即 langEN），`.pot` 按标识符排序插入，zh_CN `.po` 取 langZH 的措辞，`tools/themebuilder/languages/tycontrols.zh_CN.po` 逐字节复制。`series.single.prefix` 与 `data.withoutName` 两种语言一样（空串、`{value}`），是常量；**四个分隔符**有的在一种语言里是空串（EN 系列间空、ZH 数据末尾空），空的 resourcestring 进不了目录，于是合成一个 `rsTyChartAriaSeparators`，`|` 隔开：EN `||, |. `，ZH `；|。|，|`。
+- **主题键**（`themes/light.tycss`，重跑 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartDecal { color: alpha(var(--on-surface), 0.2); }`——上游是黑色 20%，这里是皮肤墨色 20%，深色皮肤上是浅的。
+- **visualMap**：通道照旧不施加 decal，注释改成上游的实情。
+- 新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### 基准
+
+`tools/advchart-oracle/decal-aria.js`（真 dist，node 下 SSR / SVG，600 × 400，每个选项 `animation: false`；挂 `painter.renderOneToVNode`，把每个 decal 符号的 vnode 记回它的 SymbolClz；每次 setOption 前在 zr 上放一个假 dom（`setAttribute` / `getAttribute`）并清空，记这一次写下的 `role` 与 `aria-label`；抛出的更新记 `error` 并换一个新图表接着下一步；最后 `process.exit()`）→ `tests/fixtures/advchart-decal-aria.json`（约 526 KB）：**39 个平铺块、19 个场景、61 步**。
+
+- **平铺块**：六个内置、空对象、circle / triangle / diamond / pin / arrow / roundRect / none、symbolSize 0 与 1.5、符号一行 / 多行 / 混合、dash 为数 / 小数（ceil）/ 奇数长度 / 嵌套 / 混合 / 空 / 0 / y 全零 / 一行为零 / 一行奇数、maxTileWidth / Height 截断、大的 LCM、两种旋转、颜色与底色、`'none'` 底色、keepAspect false、全写 null。每例记写下的 decal、补完缺省之后的 decal（数按位）、平铺块的 `svgWidth` / `svgHeight` / rotation / scale / repeat 与每个符号的类型、x、y、宽、高（按位）、填充。
+- **场景**：`aria-six`（七条柱、两条同名）、`aria-mixed`（柱、带面积的折线、散点、两个饼、漏斗、按数据着色的柱；写了的 decal 合并在调色板的上面）、`legend-filter`（关掉的不取，合并打开后接着取）、`scope`（合并改名、改回、notMerge）、`own-list`（作者的列表、单个对象、空列表——抛出）、`no-aria`（系列的、行自己的、饼的系列 decal、面积）、`aria-off`（只写 aria、enabled false、`show` true / false、`decal.show: 1`）、`merge-enable`、`sunburst`、`legend-icons`（系列的、图例自己的、inherit、none、饼的逐项、关掉的一项）、`errors`（字符串 decal 两处）、`visualmap`（类目、pieces、连续、类目加 aria）；描述 `label-single`、`label-multiple`（堆叠、横向、散点三维、时间轴）、`label-types`（饼、漏斗、仪表盘、雷达、行自己的名字）、`label-maxcount`、`label-filter`（图例、饼的一项、dataZoom 过滤）、`label-custom`（description 两处、enabled false、作者的模板在 label 下与顶层、excludeDimensionId、`$&` / `$$` / `` $` `` 与名字里的 `{seriesType}`）、`label-none`。每一步记这次更新的不同图案（补完的 decal 加平铺块）、每个系列模型（类型、名字、过滤、系列 decal、每个视图行的原始下标与 decal、元素的 decal 元素实际用的图案、折线面积的）、图例每项的 decal、aria 的 role 与 label、描述的事实（系列数、标题、每个系列的下标 / 类型 / 名字 / 每行的名字与值）。
+- 自检：T1 由补完的 decal 经 JS 转写重算每个平铺块（96 个，宽高与每个符号逐位）；L1 由事实经转写重算默认模板的描述（37 个）。10 条守卫（dash 不 ceil、奇数不加倍、宽不乘符号重复、高不乘符号行、行从 0 起、列只到一倍宽、seriesId 从 1 起、partial 用 `>=`、值间不带空格、模型名当名字）都改变了点名的用例；10 个锚点（七条柱六个不同图案第七个回到第一个、同名共用、字符串 decal 抛出、类目 visualMap 不写、pieces 抛出、description 就是 label、enabled false 什么都不写、没有系列只有 role、合并写进的 aria 不开、改名的系列接着取而老名字还拿老的）成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.decalaria`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartDecalAriaOracleTest`，3 个）：
+  - 平铺块：每例把写下的 decal 交给 `TyDecalRawOf` + `TyDecalResolve`，归一化之后的每个字段与上游补完的那个（同样经端口归一化，写了 `rgba(0, 0, 0, 0.2)` 之外的颜色逐个解析）逐位比，再用 `TyDecalTile` 比宽高、旋转与每个符号——**5 778 项**。
+  - decal：每步照样 setOption（合并或 notMerge），无头渲染；每个系列（treemap、sunburst 除外）比 `DecalOfSeries`、每个视图行比 `DecalOfRow`（原始下标来自基准）、柱 / 扇区 / 漏斗带的元素比 `Style.Decal`（`-` 的不比）、折线面积元素、图例布局项的 `Decal`——都比补完的 decal 和平铺块；上游抛出的步骤要求端口哪里都没有 decal——**14 010 项**。
+  - 描述：除 `sunburst` 外每步比 `AriaDescription` 与上游写下的 `aria-label`（没写是空串）——**55 项**（`TY_DECALARIA_COUNTS=1` 时打印三个数）。
+- **手写**（`TAdvChartDecalAriaTest`，9 个）：平铺块位图（16 × 12，圆在 (12, 3) 与 (4, 9)、别处透明，底色铺满，零高 dash 仍是一块空的）；柱上的 decal 真的画出来（4 × 4 黑方块每 8 px，画布空间，红与黑各占应有的份额；不写就只有红）；旋转（π/2 的矩阵；竖条纹转成横的、落在 y mod 8 ∈ [0, 2)——转反了会落在 [6, 8)）；极坐标柱按行带 decal；平铺块随设备缩放（2 倍 20 px、矩阵是单位阵，1.25 倍截断成 12）；图例两个图标带不同的 decal（图标元素上也在）；没写颜色是皮肤键的、写了的是作者的且保留调色板的形状；locale 的四个分隔符与一句话；替换串（空白、`$&`、`$$`、`` $` ``、`$'`、值里的后续键、不闭合的花括号）。
+
+首跑的不对：实现两处——`Show` 与 `TControl.Show` 同名，局部变量改名；`for … in` 拿到的是 `TJSONEnum`。描述一处——散点 `[x, y, value]` 上游有三维，端口 store 只有两列：值改成 store 的列、`RawWidth` 内没有列读的位置、堆叠两列三段。测试三处——平铺块用例自己写了 `rgba(0, 0, 0, 0.2)`，不能当成皮肤的；图例图标元素没有 datum（命中矩形有），按 `SeriesIndex < 0` 数；平铺块测试最初的圆心点错了（行从 −块长起，第一段是第二条线）。基准两处——图例自己的 decal 对象没配上（从图例数据项的模型取回来）；抛出的那一步之后整个场景就停了，visualMap 的后两步丢了（改成换新图表继续）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartDecalAriaOracleTest` 3、`TAdvChartDecalAriaTest` 9、`TI18NTest` 8、`TCssCatalogTest` 14、`TBuiltinThemeTest` 13、`TBuiltinSyncTest` 2、`TBuiltinThemesTest` 8、`TBuiltinSkinsSyncTest` 2、`TTbMainFormTests` 84、`TAdvChartPaletteFillTest` 6、`TAdvChartLegendTest` 43、`TAdvChartLegendActTest` 8、`TAdvChartPieTest` 24、`TAdvChartFunnelRuleTest` 18、`TAdvChartFunnelDrawTest` 5、`TAdvChartRenderTest` 11、`TAdvChartPaintTest` 15、`TAdvChartMarksTest` 36、`TAdvChartOptionMergeTest` 15、`TAdvChartExportLoadingTest` 15、`TAdvChartVisualMapOracleTest` 8、`TAdvChartVisualMapChannelsOracleTest` 4、`TAdvChartVisualMapPiecewiseOracleTest` 7。全量套件与变异轮留到里程碑（C14–C22）末尾；变异候选单列（24 条，一条已知等价）。
+
+### 推迟与偏差
+
+- **颜色**：没写颜色的 decal（六个内置与作者没写的）用皮肤键 `TyAdvChartDecal`（墨色 20%），上游是黑色 20%。写了的颜色照解析。
+- **上游抛出的地方端口不抛**：`itemStyle.decal` 写成字符串（`'none'` 等）、`aria.decal.decals: []`、图例 decal 写成 `'none'` 与 `'inherit'` 之外的字符串（WeakMap 键）、visualMap 的 pieces / 连续型带 decal——端口都是「没有 decal」，其余照常。
+- **visualMap 的 decal 通道**：与上游一样不施加（类目型逐位一致；另两种上游抛出）。
+- **画 decal 的图形**：直角与极坐标柱、饼、漏斗、折线面积、填充的图例图标。雷达面积、桑基、旭日、矩形树图（`enableAriaDecalForTree` 没移植，它们也不占系列作用域——这一点与上游一致）、K 线、箱线图、热力图、象形柱、自定义、大数据量模式的批量柱与分块路径、系列自己画图标的图例项（折线的）不画。
+- **平铺块的光栅化**：BGRA 抗锯齿，与浏览器画布近似；`emptyCircle` 之类白底加 1 px 描边、`path://` 经 `TyBuildSymbolInBox` 的盒子适配、`image://` 什么都不画，基准没有比这几种。缓存满 64 清空。
+- **NaN 的 dash**：上游 gcd 无限递归抛 RangeError，端口给 NaN（不画）；符号多于 100 万个截断。
+- **描述只在需要时算**：上游的 `aria-label` 写在 dom 上，后来的更新不写（`label.enabled` 改成 false、系列全删）时**旧的留着**；`AriaDescription` 只答「这一次会写什么」，那种情况是空串。`role="img"` 不公开。第一次渲染之前没有布局，事实不全。
+- **描述的值**：store 的列、`RawWidth` 内没有列读的位置（浮点解析；上游猜成 ordinal 的位置这里是 NaN）、堆叠两列；树形（旭日、矩形树图、树）、关系图、桑基的行是端口的 store，不是上游的树 / 图数据（旭日带虚拟根，基准里不比）。`encode` 打乱位置次序时多出来的位置排在 store 的列之后。
+- **模板**：作者写成非字符串的模板按 `String()`；路径中间写成非对象（上游得到 `undefined` 再拼成 `"undefined"`、`join(undefined)` 是逗号）这里退回 locale 的。`maxCount` 非数字的真值按 ToNumber 比较、按原样印。
+- **aria 的开关**：只看 setOption 本身（notMerge 的根、合并的那一片），media 合并进来的 aria 不看。
+- **系列名**：decal 的名字备忘与调色板一样用 `SeriesNameOf`（只认字符串的 `name`），数字名字落到缺省名上。
+
+### 落地
+
+- `source/tyControls.AdvChart.Decal.pas`、`source/tyControls.AdvChart.Aria.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.Paint.pas`：`TTyChartDecal`、元素样式的 `Decal`。
+- `source/tyControls.AdvChart.Render.pas`：`TyDecalTileImage`、`TyDecalMatrix`、`PaintPen` / `PaintDecal`。
+- `source/tyControls.AdvChart.Marks.pas`、`Pie.pas`、`Funnel.pas`、`Legend.pas`：见上。
+- `source/tyControls.AdvChart.Option.pas`：`MergedPiece`。
+- `source/tyControls.AdvChart.VisualMap.pas`：decal 通道的注释。
+- `source/tyControls.AdvanceChart.pas`：`FDecalScope` / `FSeriesDecals` / `FRowDecals` / `FRowDecalSet` / `FAriaEnabled`；`SolveDecals`、`RowDecalOf`、`LegendDecalOf`、`AriaTakeEnabled`、`GetAriaDescription`；`DecalOfSeries`、`DecalOfRow`、`AriaDescription`；`Rebuild`、`ApplyNotMerge`、`DoMerge`、`ApplyVisualMaps`、`PieVisual`、`FunnelVisual`、`LegendSources`（多一个图例下标）、`Relayout` 的调用处。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`（逐字节复制）。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
+- `tools/advchart-oracle/decal-aria.js`、`tests/fixtures/advchart-decal-aria.json`、`tests/test.advchart.decalaria.pas`（新，注册在 `tytests.lpr`）。

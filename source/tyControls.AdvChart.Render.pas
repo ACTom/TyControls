@@ -40,6 +40,18 @@ function TyElementGradientBox(const AElement: TTyChartElement;
   cache. [Batch 105] }
 function TyPatternImage(const ASource: string): TBGRABitmap;
 
+{ A DECAL'S TILE at AScale device px per CSS px [Batch 131]: the bitmap
+  createOrUpdatePatternFromDecal draws on its canvas -- the tile's size
+  times the scale (truncated, as a canvas' width is), cleared, its
+  background when it has one, every symbol filled in the decal's colour.
+  nil when the tile has no pixel. Owned by the cache. }
+function TyDecalTileImage(const ADecal: TTyChartDecal; AScale: Double): TBGRABitmap;
+
+{ the pattern matrix a decal's tile is repeated through, DEVICE px: the
+  pattern's rotation and its 1 / dpr scale, carried to the device }
+procedure TyDecalMatrix(const ADecal: TTyChartDecal; AScale: Double;
+  out AM: TTyDoubleArray);
+
 { Draw the whole list in paint order. }
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
 
@@ -55,10 +67,119 @@ procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
 
 implementation
 
-uses base64, BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Symbol;
+uses base64, BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Decal;
 
 var
   GPatternCache: TStringList = nil;
+  GDecalCache: TStringList = nil;
+
+function TyDecalTileImage(const ADecal: TTyChartDecal; AScale: Double): TBGRABitmap;
+var
+  key: string;
+  k, i, w, h: Integer;
+  tile: TTyDecalTile;
+  bmp: TBGRABitmap;
+  P: TTyPainter;
+  spec: TTySymbolSpec;
+  sh: TTyChartShape;
+  empty: Boolean;
+  path: string;
+  fw, fh: Double;
+begin
+  Result := nil;
+  if not ADecal.Present then Exit;
+  if GDecalCache = nil then
+  begin
+    GDecalCache := TStringList.Create;
+    GDecalCache.OwnsObjects := True;
+    GDecalCache.Sorted := True;
+    GDecalCache.CaseSensitive := True;
+  end;
+  key := TyDecalCacheKey(ADecal, AScale);
+  if GDecalCache.Find(key, k) then Exit(TBGRABitmap(GDecalCache.Objects[k]));
+  tile := TyDecalTile(ADecal);
+  { canvas.width = pSize.width * dpr: an unsigned long, the fraction cut }
+  fw := tile.W * AScale;
+  fh := tile.H * AScale;
+  w := 0;
+  h := 0;
+  if (not IsNan(fw)) and (fw >= 1) and (fw < 32768) then w := Trunc(fw);
+  if (not IsNan(fh)) and (fh >= 1) and (fh < 32768) then h := Trunc(fh);
+  bmp := nil;
+  if (w > 0) and (h > 0) then
+  begin
+    bmp := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+    if ADecal.HasBackground then
+      bmp.FillRect(0, 0, w, h, TyColorToBGRA(TTyColor(ADecal.Background)), dmSet);
+    P := TTyPainter.Create;
+    try
+      { no canvas: EndPaint leaves the bitmap where it is }
+      P.BeginPaintOn(nil, Rect(0, 0, w, h), 96, bmp);
+      for i := 0 to High(tile.Symbols) do
+      begin
+        { createSymbol at (x, y, w, h) times dpr, in the decal's colour }
+        spec := TySymbolDefault('');
+        spec.Kind := TySymbolKindOf(tile.Symbols[i].Kind, empty, path);
+        spec.Empty := empty;
+        spec.PathData := path;
+        spec.KeepAspect := ADecal.KeepAspect;
+        spec.RotateDeg := 0;
+        spec.OffsetX := 0;
+        spec.OffsetY := 0;
+        sh := TyBuildSymbolInBox(spec, TyRectF(tile.Symbols[i].X * AScale,
+          tile.Symbols[i].Y * AScale,
+          (tile.Symbols[i].X + tile.Symbols[i].W) * AScale,
+          (tile.Symbols[i].Y + tile.Symbols[i].H) * AScale));
+        if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Continue;
+        P.BeginPath;
+        TyTraceShape(P, sh);
+        if spec.Kind = tsyLine then
+          { the one symbol setColor strokes }
+          P.StrokePath(TTyColor(ADecal.Color), 1)
+        else if empty then
+        begin
+          { an empty symbol: white inside, the colour around it }
+          P.FillPath(TTyColor($FFFFFFFF));
+          P.StrokePath(TTyColor(ADecal.Color), 1);
+        end
+        else
+          P.FillPath(TTyColor(ADecal.Color));
+      end;
+      P.EndPaint;
+    finally
+      P.Free;
+    end;
+  end;
+  if GDecalCache.Count >= 64 then GDecalCache.Clear;
+  GDecalCache.AddObject(key, bmp);
+  Result := bmp;
+end;
+
+procedure TyDecalMatrix(const ADecal: TTyChartDecal; AScale: Double;
+  out AM: TTyDoubleArray);
+var
+  pat: TTyChartPattern;
+  i: Integer;
+begin
+  { pattern.rotation = decal.rotation; scaleX = scaleY = 1 / dpr; the
+    canvas then carries it to the device by dpr }
+  pat := Default(TTyChartPattern);
+  pat.Present := True;
+  pat.Rotation := ADecal.Rotation;
+  if AScale > 0 then
+  begin
+    pat.ScaleX := 1 / AScale;
+    pat.ScaleY := 1 / AScale;
+  end
+  else
+  begin
+    pat.ScaleX := 1;
+    pat.ScaleY := 1;
+  end;
+  TyPatternMatrix(pat, AM);
+  for i := 0 to 5 do AM[i] := AM[i] * AScale;
+end;
 
 function TyPatternImage(const ASource: string): TBGRABitmap;
 var
@@ -811,6 +932,8 @@ var
   img: TBGRABitmap;
   pm: TTyDoubleArray;
 
+  procedure PaintPen; forward;
+
   { the fill and the pen of the path just traced }
   procedure PaintTraced;
   var gi: Integer;
@@ -855,6 +978,13 @@ var
       else
         P.FillPath(TTyColor(AElement.Style.FillColor), rule);
     end;
+    PaintPen;
+  end;
+
+  { the pen of the path just traced }
+  procedure PaintPen;
+  var gi: Integer;
+  begin
     if AElement.Style.StrokeWidthLogical > 0 then
     begin
       if AElement.Style.StrokeGradient.Kind <> cgkNone then
@@ -875,6 +1005,26 @@ var
         P.StrokePath(TTyColor(AElement.Style.StrokeColor),
                      AElement.Style.StrokeWidthLogical);
     end;
+  end;
+
+  { ZRENDER'S DECAL ELEMENT [Batch 131]: a second path the same shape, its
+    style the element's own with the fill swapped for the decal's pattern
+    and no shadow, drawn right after the element -- so the pen goes on
+    twice, once under the decal and once over it. Only where the element
+    fills: `fill = style.fill ? style.decal : null`. }
+  procedure PaintDecal;
+  var tile: TBGRABitmap;
+  begin
+    if not (AElement.Style.Decal.Present and AElement.Style.HasFill) then Exit;
+    tile := TyDecalTileImage(AElement.Style.Decal, P.PPI / 96);
+    P.BeginPath;
+    TyTraceShape(P, AElement.Shape);
+    if tile <> nil then
+    begin
+      TyDecalMatrix(AElement.Style.Decal, P.PPI / 96, pm);
+      P.FillPathPattern(tile, 'repeat', pm, rule);
+    end;
+    PaintPen;
   end;
 
   { the canvas draws in the bitmap's own pixels: no transform in force }
@@ -1206,6 +1356,7 @@ begin
       P.BeginPath;
       TyTraceShape(P, AElement.Shape);
       PaintTraced;
+      PaintDecal;
     end;
   finally
     { Restore even if a trace raised: the canvas state is shared, and leaking a
@@ -1235,5 +1386,6 @@ end;
 
 finalization
   FreeAndNil(GPatternCache);
+  FreeAndNil(GDecalCache);
 
 end.

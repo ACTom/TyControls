@@ -178,6 +178,10 @@ type
     { and the same as an object -- a gradient or a pattern -- which the icon
       is painted with, as upstream's is [Batch 105] }
     Obj: TTyChartObjFill;
+    { THE DECAL the icon wears [Batch 131]: the legend's own itemStyle.decal,
+      or with none (or 'inherit') the series' style decal -- the datum's for
+      a legend of slices }
+    Decal: TTyChartDecal;
     { The `legendIcon` visual: the series' own symbol where it has one, and ''
       where it has none. A bar and a pie have none, which is the whole reason
       the default legend icon is a rounded rectangle. A line's is 'emptyCircle'
@@ -292,6 +296,7 @@ type
     OwnIcon: Boolean;
     Colour: TTyChartColor;
     Obj: TTyChartObjFill;
+    Decal: TTyChartDecal;
     LineColour: TTyChartColor;
     LineWidthLogical: Double;
     { The box createSymbol is handed: itemWidth x itemHeight, scaled. }
@@ -2436,6 +2441,7 @@ begin
     ResolveIcon(ASpec, AEntries[i], src, it.Icon, it.OwnIcon);
     it.Colour := src.Colour;
     it.Obj := src.Obj;
+    it.Decal := src.Decal;
     it.LineColour := src.LineColour;
     it.HasOpacity := src.HasOpacity;
     it.Opacity := src.Opacity;
@@ -2706,6 +2712,9 @@ var
         Result.Style.FillGradient := it.Obj.Gradient;
         Result.Style.FillPattern := it.Obj.Pattern;
       end;
+      { the decal stays on an unselected icon: getLegendStyle greys the
+        colours and leaves itemStyle.decal [Batch 131] }
+      Result.Style.Decal := it.Decal;
       { THE PEN [Batch 93]: the series' stroke while selected,
         inactiveBorderColor while not -- the width resolved by the layout }
       if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then

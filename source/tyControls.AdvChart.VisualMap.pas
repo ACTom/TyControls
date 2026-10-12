@@ -2303,7 +2303,12 @@ begin
       ARow.LiftZ := PairAt(m.Nums, 0);
       ARow.LiftZSet := True;
     end;
-    { decal is not drawn }
+    { NO DECAL, AS UPSTREAM [Batch 131]: VisualMapping has a decal
+      handler, but setItemVisualFromData knows no `decal` key -- a
+      categories map writes nothing ("Unknown visual type decal"), and the
+      pieces and continuous maps have no piecewise / linear mapper for it,
+      so upstream's setOption throws there; the port writes nothing in
+      every case }
   end;
 end;
 

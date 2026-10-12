@@ -42,7 +42,7 @@ uses
   tyControls.AdvChart.Stack, tyControls.AdvChart.Sampling, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
-  tyControls.AdvChart.VisualMapView,
+  tyControls.AdvChart.VisualMapView, tyControls.AdvChart.Decal,
   tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
   tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.ZrPath,
   tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
@@ -833,6 +833,17 @@ type
       that kind. }
     FDatumPicks: array of array of TTyPalettePick;
     FDatumAsked: array of array of Boolean;
+    { DECALS [Batch 131]. The series scope of the aria decal palette lives as
+      long as upstream's GlobalModel: a merge keeps it (a renamed series picks
+      on), a notMerge makes a new one. Per binding slot: the series' decal,
+      and per RAW row a row's own where FRowDecalSet says so. }
+    FDecalScope: TTyDecalScope;
+    FSeriesDecals: TTyChartDecalArray;
+    FRowDecals: array of TTyChartDecalArray;
+    FRowDecalSet: array of TTyBoolArray;
+    { aria.enabled as the setOptions left it: initBase turns an aria object
+      on, the preprocessor copies the legacy `show` [Batch 131] }
+    FAriaEnabled: Boolean;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -1416,6 +1427,17 @@ type
     function PickColor(const APick: TTyPalettePick): TTyColor;
     { dataColorPaletteTask, after the filters [Batch 105] }
     procedure SolveDatumPalette;
+    { the decal visuals: the style's, the item's, the aria palette's
+      [Batch 131] }
+    procedure SolveDecals;
+    { the decal a slot's raw row is drawn with: its own, else the series' }
+    function RowDecalOf(ASlot, ARaw: Integer): TTyChartDecal;
+    { a legend item's decal: the legend's itemStyle.decal over the series' }
+    function LegendDecalOf(ALegend: Integer; const AName: string;
+      const ASeries: TTyChartDecal): TTyChartDecal;
+    { the aria preprocessor and initBase on a setOption's root [Batch 131] }
+    procedure AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
+    function GetAriaDescription: string;
     { the JSON item of a series' own `data` at a raw row, nil when the data
       came from elsewhere or the item is no object }
     function RawItemNode(ASlot, ARaw: Integer): TJSONObject;
@@ -1602,7 +1624,7 @@ type
       the legend makes of it is the legend's business. }
     function SeriesSymbolWord(ASlot: Integer): string;
     { What the chart can say about each of a legend's names. }
-    function LegendSources(const AEntries: TTyLegendEntryArray):
+    function LegendSources(const AEntries: TTyLegendEntryArray; ALegend: Integer):
       TTyLegendSourceArray;
     { Specs, entries and selection. Runs in Rebuild. }
     procedure SolveLegendData;
@@ -2343,6 +2365,20 @@ type
       palette's, in upstream's stage order. }
     function PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
     function PaletteDatumColour(ASeriesIndex, ARawIndex: Integer): TTyChartColor;
+    { THE DECALS AS THE LAST BUILD SOLVED THEM [Batch 131]: the series'
+      style decal, and the one its raw row ARawIndex is drawn with (its own,
+      else the series'); Present False for none. }
+    function DecalOfSeries(ASeriesIndex: Integer): TTyChartDecal;
+    function DecalOfRow(ASeriesIndex, ARawIndex: Integer): TTyChartDecal;
+    { THE CHART'S DESCRIPTION [Batch 131]: the aria-label upstream writes on
+      the chart's element -- aria.label.description when one is written,
+      else the sentence built from the title, the series and their data in
+      the locale's words (the port's resourcestrings) with the author's
+      aria.label templates over them. '' when aria is off (no `aria` object
+      in the option, or enabled false), when aria.label.enabled is false,
+      and when the chart has no series. Read off the last layout; for the
+      platform's accessibility layer. }
+    property AriaDescription: string read GetAriaDescription;
     { THE COMPONENT AIndex AS THE LAST RENDER LAID IT OUT: Valid is False
       when it is hidden, piecewise, or nothing has rendered. }
     function VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
@@ -2802,7 +2838,7 @@ uses
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
-  tyControls.AdvChart.ToolboxDlg;
+  tyControls.AdvChart.ToolboxDlg, tyControls.AdvChart.Aria;
 
 { ==================== construction ==================== }
 
@@ -3069,6 +3105,10 @@ begin
   { the media are asked at the control's size [Batch 107] }
   MediaViewSize;
   FOption.SetOptionText(AValue, AReplace, @NotMergePass);
+  { A NEW GlobalModel: a new decal scope, and aria on where the option
+    wrote an aria object [Batch 131] }
+  FDecalScope := Default(TTyDecalScope);
+  AriaTakeEnabled(FOption.Root, True);
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
@@ -3213,6 +3253,9 @@ begin
     reported to MergePass [Batch 107] }
   if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, @MergePass, rep) then
     Exit(False);
+  { the preprocessor runs on the piece: a `show` or an `enabled` it wrote
+    [Batch 131] }
+  AriaTakeEnabled(FOption.MergedPiece, False);
   FOptionText := FOption.OptionJson;
   { AN UPDATE: the series keep their views where their ids and types do }
   FAnimPending := True;
@@ -4091,6 +4134,9 @@ begin
     took out reads the series' colorFromPalette, a row still in reads its
     own. [Batch 105] }
   SolveDatumPalette;
+  { AND THE DECALS: the aria visual (6000) and the decal visual (7000)
+    come after every other visual stage [Batch 131] }
+  SolveDecals;
 end;
 
 { dataColorPaletteTask [Batch 105]. eachSeries -- the series the legend kept
@@ -5921,6 +5967,13 @@ begin
   { the per-datum palette and the datums' object colours ride along with the
     visual rows: every caller that asks for these asks for those [Batch 105] }
   AVisual.RowFills := SeriesRowFills(ASlot);
+  { and the decals, which ride with them [Batch 131] }
+  if (ASlot >= 0) and (ASlot <= High(FSeriesDecals)) then
+  begin
+    AVisual.Decal := FSeriesDecals[ASlot];
+    AVisual.RowDecals := FRowDecals[ASlot];
+    AVisual.RowDecalSet := FRowDecalSet[ASlot];
+  end;
   if (ASlot < 0) or (ASlot > High(FVisualRows)) then Exit;
   AVisual.VisualRows := FVisualRows[ASlot];
   if APPI <= 0 then Exit;
@@ -7621,6 +7674,375 @@ begin
   slot := SlotOfSeries(ASeriesIndex);
   if (slot < 0) or (slot > High(FMarkPointPics)) then Exit;
   Result := FMarkPointPics[slot];
+end;
+
+function TTyAdvanceChart.DecalOfSeries(ASeriesIndex: Integer): TTyChartDecal;
+var slot: Integer;
+begin
+  Result := Default(TTyChartDecal);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSeriesDecals)) then Result := FSeriesDecals[slot];
+end;
+
+function TTyAdvanceChart.DecalOfRow(ASeriesIndex, ARawIndex: Integer): TTyChartDecal;
+begin
+  Result := RowDecalOf(SlotOfSeries(ASeriesIndex), ARawIndex);
+end;
+
+function TTyAdvanceChart.RowDecalOf(ASlot, ARaw: Integer): TTyChartDecal;
+begin
+  Result := Default(TTyChartDecal);
+  if (ASlot < 0) or (ASlot > High(FSeriesDecals)) then Exit;
+  Result := FSeriesDecals[ASlot];
+  if (ARaw >= 0) and (ARaw <= High(FRowDecalSet[ASlot]))
+    and FRowDecalSet[ASlot][ARaw] then
+    Result := FRowDecals[ASlot][ARaw];
+end;
+
+procedure TTyAdvanceChart.AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
+var
+  aria, d: TJSONData;
+begin
+  aria := nil;
+  if ARoot is TJSONObject then aria := TJSONObject(ARoot).Find('aria');
+  if not (aria is TJSONObject) then
+  begin
+    { initBase finds no object to turn on; a merge without one leaves it }
+    if AInit then FAriaEnabled := False;
+    Exit;
+  end;
+  { the preprocessor: `aria.show != null` becomes aria.enabled }
+  d := TJSONObject(aria).Find('show');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    FAriaEnabled := TyDecalTruthy(d);
+    Exit;
+  end;
+  d := TJSONObject(aria).Find('enabled');
+  if AInit then
+    { initBase: an aria object whose enabled is null is on }
+    FAriaEnabled := (d = nil) or (d.JSONType = jtNull) or TyDecalTruthy(d)
+  else if d <> nil then
+    { a merge writes what it was given, null included }
+    FAriaEnabled := TyDecalTruthy(d);
+end;
+
+{ The aria visual's setDecal and the decal visual [Batch 131]:
+
+  seriesStyleTask takes the series' style decal (itemStyle.decal, or the
+  type's style path) as the series' `decal` visual and dataStyleTask a view
+  row's own. With aria on and aria.decal.show truthy, every series the
+  legend kept -- not a treemap or a sunburst, which decide their own --
+  asks the decal palette: by its model NAME over the chart's scope when it
+  is coloured by series, else every RAW row by its name (or its index) over
+  a scope its TYPE shares with the others of the type, new each update; the
+  palette's decal goes under the written one key by key. decalVisual then
+  skips the series the legend filtered. A decal written as a string throws
+  upstream (`dirty` set on a primitive): here it is none. }
+procedure TTyAdvanceChart.SolveDecals;
+type
+  TTypeScope = record
+    Key: string;
+    Scope: TTyDecalScope;
+  end;
+var
+  scopes: array of TTypeScope;
+  aria, pal, d: TJSONData;
+  palN, si, slot, n, k, rawN, pick, t: Integer;
+  useDecal: Boolean;
+  skin: TTyChartColor;
+  node, item: TJSONObject;
+  typ, path, nm: string;
+  seriesRaw, palRaw: TTyDecalRaw;
+  rows: array of TTyDecalRaw;
+  rowSet: TTyBoolArray;
+  st: TTyDataStore;
+  dataScope: TTyDecalScope;
+
+  function OwnDecal(ANode: TJSONData): TTyDecalRaw;
+  begin
+    Result := Default(TTyDecalRaw);
+    if not (ANode is TJSONObject) then Exit;
+    ANode := TJSONObject(ANode).Find(path);
+    { `rawItem[stylePath]` truthy, its decal truthy and no primitive }
+    if not (ANode is TJSONObject) then Exit;
+    ANode := TJSONObject(ANode).Find('decal');
+    if TyDecalTruthy(ANode) and not TyDecalIsPrimitive(ANode) then
+      Result := TyDecalRawOf(ANode);
+  end;
+
+begin
+  n := Length(FBindings);
+  FSeriesDecals := nil;
+  FRowDecals := nil;
+  FRowDecalSet := nil;
+  SetLength(FSeriesDecals, n);
+  SetLength(FRowDecals, n);
+  SetLength(FRowDecalSet, n);
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).TextColor);
+  aria := TJSONObject(FOption.Root).Find('aria');
+  useDecal := FAriaEnabled and (aria is TJSONObject);
+  if useDecal then
+  begin
+    d := TJSONObject(aria).Find('decal');
+    useDecal := (d is TJSONObject) and TyDecalTruthy(TJSONObject(d).Find('show'));
+  end;
+  pal := TyDecalPaletteOf(aria);
+  palN := TyDecalPaletteCount(pal);
+  scopes := nil;
+  for si := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    slot := SlotOfSeries(si);
+    if (slot < 0) or (slot > High(FBindings)) then Continue;
+    if not (FOption.ComponentAt('series', si) is TJSONObject) then Continue;
+    node := TJSONObject(FOption.ComponentAt('series', si));
+    typ := FBindings[slot].SeriesType;
+    path := TyStyleAccessPath(typ);
+    seriesRaw := OwnDecal(node);
+    st := nil;
+    if slot <= High(FStores) then st := FStores[slot];
+    rows := nil;
+    rowSet := nil;
+    rawN := 0;
+    if st <> nil then rawN := st.RawCount;
+    SetLength(rows, rawN);
+    SetLength(rowSet, rawN);
+    { dataStyleTask: the view's rows only }
+    for k := 0 to rawN - 1 do
+      if st.IndexOfRawIndex(k) >= 0 then
+      begin
+        item := RawItemNode(slot, k);
+        if item = nil then Continue;
+        rows[k] := OwnDecal(item);
+        rowSet[k] := rows[k].Present;
+      end;
+    if useDecal and not FBindings[slot].Hidden and (typ <> TySunburstSeriesTypeName)
+      and (typ <> TyTreemapSeriesTypeName) then
+    begin
+      if TyChartColorByOf(FOption, si, typ) = 'series' then
+      begin
+        nm := SeriesNameOf(si);
+        if nm = '' then nm := TyChartSeriesDefaultName(si);
+        pick := TyDecalFromPalette(FDecalScope, palN, nm);
+        palRaw := TyDecalRawOf(TyDecalPaletteItem(pal, pick));
+        seriesRaw := TyDecalMerge(palRaw, seriesRaw);
+      end
+      else
+      begin
+        { one scope per series type, new every update }
+        t := -1;
+        for k := 0 to High(scopes) do
+          if scopes[k].Key = typ then t := k;
+        if t < 0 then
+        begin
+          SetLength(scopes, Length(scopes) + 1);
+          t := High(scopes);
+          scopes[t].Key := typ;
+          scopes[t].Scope := Default(TTyDecalScope);
+        end;
+        dataScope := scopes[t].Scope;
+        for k := 0 to rawN - 1 do
+        begin
+          nm := st.GetNameByRaw(k);
+          if nm = '' then nm := IntToStr(k);
+          pick := TyDecalFromPalette(dataScope, palN, nm);
+          { a row out of the view asks and keeps nothing }
+          if st.IndexOfRawIndex(k) < 0 then Continue;
+          palRaw := TyDecalRawOf(TyDecalPaletteItem(pal, pick));
+          if rowSet[k] then rows[k] := TyDecalMerge(palRaw, rows[k])
+          else rows[k] := TyDecalMerge(palRaw, seriesRaw);
+          rowSet[k] := rows[k].Present;
+        end;
+        scopes[t].Scope := dataScope;
+      end;
+    end;
+    { decalVisual: nothing for a series the legend filtered }
+    if FBindings[slot].Hidden then Continue;
+    FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin);
+    SetLength(FRowDecals[slot], rawN);
+    SetLength(FRowDecalSet[slot], rawN);
+    for k := 0 to rawN - 1 do
+      if rowSet[k] then
+      begin
+        FRowDecalSet[slot][k] := True;
+        FRowDecals[slot][k] := TyDecalResolve(rows[k], skin);
+      end;
+  end;
+end;
+
+function TTyAdvanceChart.LegendDecalOf(ALegend: Integer; const AName: string;
+  const ASeries: TTyChartDecal): TTyChartDecal;
+var
+  lg, d, own: TJSONData;
+  i: Integer;
+  skin: TTyChartColor;
+begin
+  Result := ASeries;
+  if FOption = nil then Exit;
+  lg := FOption.ComponentAt('legend', ALegend);
+  if not (lg is TJSONObject) then Exit;
+  { legendItemModel.getModel('itemStyle').getShallow('decal'): the data
+    item's own, else the legend's }
+  own := nil;
+  d := TJSONObject(lg).Find('data');
+  if d is TJSONArray then
+    for i := 0 to d.Count - 1 do
+      if (TJSONArray(d).Items[i] is TJSONObject)
+        and (TJSONObject(TJSONArray(d).Items[i]).Get('name', '') = AName) then
+      begin
+        own := TJSONObject(TJSONArray(d).Items[i]).Find('itemStyle');
+        if own is TJSONObject then own := TJSONObject(own).Find('decal')
+        else own := nil;
+        Break;
+      end;
+  if (own = nil) or (own.JSONType = jtNull) then
+  begin
+    own := TJSONObject(lg).Find('itemStyle');
+    if own is TJSONObject then own := TJSONObject(own).Find('decal')
+    else own := nil;
+  end;
+  { falsy or 'inherit': the series' }
+  if not TyDecalTruthy(own) then Exit;
+  if (own.JSONType = jtString) and (own.AsString = 'inherit') then Exit;
+  { 'none' is no pattern; any other primitive is none here (upstream throws
+    on a WeakMap key) }
+  if not ((own is TJSONObject) or (own is TJSONArray)) then
+    Exit(Default(TTyChartDecal));
+  skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).TextColor);
+  Result := TyDecalResolve(TyDecalRawOf(own), skin);
+end;
+
+function TTyAdvanceChart.GetAriaDescription: string;
+var
+  aria, d, rd, ex: TJSONData;
+  facts: TTyAriaFacts;
+  loc: TTyAriaLocale;
+  si, slot, n, i, k, dim, pos: Integer;
+  node: TJSONObject;
+  st: TTyDataStore;
+  vals: TTyStringArray;
+  excl, read: Boolean;
+  cell: TTyDataValue;
+
+  { the value list's next entry, unless excludeDimensionId names it }
+  procedure Push(const AText: string);
+  var j: Integer;
+  begin
+    excl := False;
+    if ex is TJSONArray then
+      for j := 0 to ex.Count - 1 do
+      begin
+        rd := TJSONArray(ex).Items[j];
+        if (rd.JSONType = jtNumber) and (rd.AsFloat = k) then excl := True;
+      end;
+    Inc(k);
+    if excl then Exit;
+    SetLength(vals, Length(vals) + 1);
+    vals[High(vals)] := AText;
+  end;
+
+begin
+  Result := '';
+  if (FOption = nil) or not (FOption.Root is TJSONObject) or not FAriaEnabled then Exit;
+  ConvertReady;
+  aria := TJSONObject(FOption.Root).Find('aria');
+  if not (aria is TJSONObject) then Exit;
+  { label.enabled: the default option's true under the author's }
+  d := TyAriaLabelKey(TJSONObject(aria), ['enabled']);
+  if (d <> nil) and not TyDecalTruthy(d) then Exit;
+  { the author's description is the whole label }
+  d := TyAriaLabelKey(TJSONObject(aria), ['description']);
+  if TyDecalTruthy(d) then Exit(TyJsonJsString(d));
+  facts := Default(TTyAriaFacts);
+  for si := 0 to FOption.ComponentCount('series') - 1 do
+    if FOption.ComponentAt('series', si) is TJSONObject then Inc(facts.SeriesCount);
+  if facts.SeriesCount < 1 then Exit;
+  { getTitle: the first title's text, when truthy }
+  d := FOption.ComponentAt('title', 0);
+  if d is TJSONObject then
+  begin
+    d := TJSONObject(d).Find('text');
+    if TyDecalTruthy(d) then
+    begin
+      facts.HasTitle := True;
+      facts.Title := TyJsonJsString(d);
+    end;
+  end;
+  { maxCount || 10 }
+  facts.MaxData := 10;
+  facts.MaxDataText := '10';
+  d := TyAriaLabelKey(TJSONObject(aria), ['data', 'maxCount']);
+  if TyDecalTruthy(d) then
+  begin
+    facts.MaxData := TyJsonToNumber(d);
+    facts.MaxDataText := TyJsonJsString(d);
+  end;
+  facts.MaxSeries := 10;
+  d := TyAriaLabelKey(TJSONObject(aria), ['series', 'maxCount']);
+  if TyDecalTruthy(d) then facts.MaxSeries := TyJsonToNumber(d);
+  ex := TyAriaLabelKey(TJSONObject(aria), ['data', 'excludeDimensionId']);
+  for si := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    if not (FOption.ComponentAt('series', si) is TJSONObject) then Continue;
+    node := TJSONObject(FOption.ComponentAt('series', si));
+    slot := SlotOfSeries(si);
+    { eachSeries: the legend's filtered series are not met }
+    if (slot >= 0) and (slot <= High(FBindings)) and FBindings[slot].Hidden then Continue;
+    n := Length(facts.Series);
+    SetLength(facts.Series, n + 1);
+    facts.Series[n].Index := si;
+    d := node.Find('type');
+    if (d <> nil) and (d.JSONType = jtString) then
+      facts.Series[n].TypeName := TyAriaTypeName(d.AsString)
+    else
+      facts.Series[n].TypeName := TyAriaTypeName('');
+    { seriesModel.get('name') }
+    d := node.Find('name');
+    facts.Series[n].HasName := TyDecalTruthy(d);
+    if facts.Series[n].HasName then facts.Series[n].Name := TyJsonJsString(d);
+    st := nil;
+    if (slot >= 0) and (slot <= High(FStores)) then st := FStores[slot];
+    if st = nil then Continue;
+    SetLength(facts.Series[n].Rows, st.Count);
+    for i := 0 to st.Count - 1 do
+    begin
+      facts.Series[n].Rows[i].Name := st.GetItemName(i);
+      { data.getValues(i): every dimension upstream's data has -- the
+        store's own columns, then the item's positions no column reads (a
+        scatter's third `value`, NaN where the item is short), then the
+        stack's two calculated ones -- less the excluded ones }
+      vals := nil;
+      k := 0;
+      for dim := 0 to st.DimCount - 1 do
+        if Copy(st.DimName(dim), 1, 5) <> '__ty_' then
+          Push(TyJsNumberToString(st.Get(dim, i)));
+      for pos := 0 to st.RawWidth - 1 do
+      begin
+        read := False;
+        for dim := 0 to st.DimCount - 1 do
+          if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) = pos) then
+            read := True;
+        if read then Continue;
+        { a position no column reads is a float dimension upstream; one it
+          guessed ordinal is not modelled here (NaN) }
+        if TTyDataStore.RawCell(st.RawItemByRaw(st.GetRawIndex(i)), pos, cell)
+          and (st.RawPosType(pos) <> ddtOrdinal) then
+          Push(TyJsNumberToString(TyParseDataValue(cell, ddtFloat)))
+        else
+          Push('NaN');
+      end;
+      for dim := 0 to st.DimCount - 1 do
+        if (Copy(st.DimName(dim), 1, 16) = '__ty_stackresult')
+          or (Copy(st.DimName(dim), 1, 16) = '__ty_stackedover') then
+          Push(TyJsNumberToString(st.Get(dim, i)));
+      facts.Series[n].Rows[i].Values := vals;
+    end;
+  end;
+  loc := TyAriaLocaleOf(TJSONObject(aria), TyAriaDefaultLocale);
+  Result := TyAriaLabel(loc, facts);
 end;
 
 function TTyAdvanceChart.PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
@@ -12047,6 +12469,10 @@ begin
   SetLength(Result.Objs, Length(Result.Fills));
   for k := 0 to High(Result.Objs) do
     Result.Objs[k] := DatumObjectFill(ASlot, k);
+  { the decals by raw row [Batch 131] }
+  SetLength(Result.Decals, Length(Result.Fills));
+  for k := 0 to High(Result.Decals) do
+    Result.Decals[k] := RowDecalOf(ASlot, k);
   { THE BAND'S OUTLINE IS THE CHART'S OWN GROUND, which is what separates two
     adjacent bands of nearly the same colour. Upstream writes neutral00 -- its
     white -- and on a dark skin that is a white grid over a dark funnel; the
@@ -12160,6 +12586,11 @@ begin
   for k := 0 to n - 1 do
     if k <= High(FPies[ASlot].Sectors) then
       Result.Objs[k] := DatumObjectFill(ASlot, FPies[ASlot].Sectors[k].RawIndex);
+  { the decals, per sector by its raw row [Batch 131] }
+  SetLength(Result.Decals, n);
+  for k := 0 to n - 1 do
+    if k <= High(FPies[ASlot].Sectors) then
+      Result.Decals[k] := RowDecalOf(ASlot, FPies[ASlot].Sectors[k].RawIndex);
   { AND THE BORDER the series wrote: PieSeries' itemStyle is borderWidth 1
     with no colour, so nothing is stroked until a colour is written [Batch
     105: it was never read] }
@@ -12452,8 +12883,8 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
 end;
 
-function TTyAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray):
-  TTyLegendSourceArray;
+function TTyAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray;
+  ALegend: Integer): TTyLegendSourceArray;
 var
   i, j, k, si: Integer;
   found: Boolean;
@@ -12486,6 +12917,15 @@ begin
       Result[i].DefaultIcon := TyLegendDefaultIcon(FBindings[j].SeriesType,
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+      { the series' style decal under the legend's own [Batch 131]; an icon
+        the series draws itself (a line's) takes none here }
+      if not Result[i].OwnIcon then
+      begin
+        if j <= High(FSeriesDecals) then
+          Result[i].Decal := LegendDecalOf(ALegend, AEntries[i].Name, FSeriesDecals[j])
+        else
+          Result[i].Decal := LegendDecalOf(ALegend, AEntries[i].Name, Default(TTyChartDecal));
+      end;
       Result[i].LineColour := Result[i].Colour;
       { THE SAME 2 THE LINE ITSELF FALLS BACK TO in BuildLine, which is also
         what `lineStyle.width: 'auto'` resolves to upstream. When series line
@@ -12579,6 +13019,9 @@ begin
           else
             Result[i].Colour := TTyChartColor(SeriesColor(k));
           Result[i].Obj := DatumObjectFill(j, k);
+          { the datum's decal -- a slice the legend filtered reads the
+            series' -- under the legend's own [Batch 131] }
+          Result[i].Decal := LegendDecalOf(ALegend, AEntries[i].Name, RowDecalOf(j, k));
           { A TRANSPARENT DATUM IS SHOWN AT A FIFTH, as the category chip
             above is -- but the swatch still carries the datum's own opacity,
             so a slice a visualMap put out of range (colour and opacity both
@@ -13477,7 +13920,7 @@ begin
     { a block is measured as the block it is drawn as [Batch 86]; the
       selector and the pager measure their own [Batch 98] }
     FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
-      FLegendFlags[i], LegendSources(FLegendEntries[i]), FLastRect,
+      FLegendFlags[i], LegendSources(FLegendEntries[i], i), FLastRect,
       TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI,
       LegendDeco(i, AMeasurer));
   end;
