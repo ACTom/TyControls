@@ -205,6 +205,11 @@ type
     { per dataset: 0 not looked at, 1 being resolved, 2 resolved }
     FState: array of Byte;
     FOwned: TFPList;
+    { THE Math.random the transforms draw from [Batch 134]: FRandom when
+      nobody lent one, reseeded with TyJitterSeed on every reset }
+    FRandom: LongWord;
+    FRandomPtr: PLongWord;
+    function GetRandomState: PLongWord;
     procedure Reset(AOption: TTyChartOption);
     procedure Resolve(AIndex: Integer);
     function UpstreamsOf(ANode: TJSONObject): TTyIntegerArray;
@@ -229,6 +234,12 @@ type
     function ErrorOf(AIndex: Integer): string;
     { How many datasets the cache was last reset for. }
     function DatasetCount: Integer;
+    { THE STATE THE TRANSFORMS DRAW FROM [Batch 134] -- ecStat's k-means
+      calls Math.random. Lend the chart's (the control does, so a
+      clustering draws where upstream's setOption would); nil, the default,
+      is the cache's own, seeded with TyJitterSeed whenever the cache starts
+      afresh. Clear leaves a lent state lent. }
+    property RandomState: PLongWord read GetRandomState write FRandomPtr;
   end;
 
   { ONE NAMED DIMENSION as createSource leaves it (normalizeDimensionsOption):
@@ -411,7 +422,8 @@ function TyEncodeCursorFor(var AList: TTyEncodeCursorArray;
 implementation
 
 uses tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.DataTransform, tyControls.StrConsts;
+  tyControls.AdvChart.DataTransform, tyControls.AdvChart.Jitter,
+  tyControls.StrConsts;
 
 const
   { Source.ts:351 -- `10 is an experience number, avoid long loop.` }
@@ -746,6 +758,7 @@ constructor TTyDatasetCache.Create;
 begin
   inherited Create;
   FOwned := TFPList.Create;
+  FRandom := TyJitterSeed;
 end;
 
 destructor TTyDatasetCache.Destroy;
@@ -772,6 +785,7 @@ var n: Integer;
 begin
   Clear;
   FOption := AOption;
+  FRandom := TyJitterSeed;
   n := TyDatasetCount(AOption);
   SetLength(FResults, n);
   SetLength(FUps, n);
@@ -844,6 +858,11 @@ end;
 function TTyDatasetCache.DatasetCount: Integer;
 begin
   Result := Length(FResults);
+end;
+
+function TTyDatasetCache.GetRandomState: PLongWord;
+begin
+  if FRandomPtr <> nil then Result := FRandomPtr else Result := @FRandom;
 end;
 
 { queryDatasetUpstreamDatasetModels through queryReferringComponents with
@@ -1058,7 +1077,7 @@ begin
     end;
     if TyDatasetTruthy(tr) then
     begin
-      if not TyApplyDataTransform(tr, upSrcs, FOwned, outs, err) then
+      if not TyApplyDataTransform(tr, upSrcs, FOwned, outs, err, GetRandomState) then
       begin
         Fail(err);
         Exit;

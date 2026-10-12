@@ -484,6 +484,15 @@ type
       as long as FSources borrow from it, cleared when the stores are built
       again [Batch 108] }
     FDatasetCache: TTyDatasetCache;
+    { THE TRANSFORMS' Math.random [Batch 134]: ecStat's k-means draws from
+      the chart's stream where upstream's setOption runs the transform --
+      once, before the render draws anything. The cache is rebuilt every
+      build, so every build runs the transforms again from FTransformSeed
+      (the same clusters on a resize); only the first build after an
+      option that brought datasets in moves the chart's stream on. }
+    FTransformSeed: LongWord;
+    FTransformSeedTaken: Boolean;
+    FTransformRandom: LongWord;
     { THE SCATTER JITTER'S PASS: the random state and every category axis'
       placed points, started again by every BuildSeriesList [Batch 110] }
     FJitter: TTyJitterPass;
@@ -3217,7 +3226,9 @@ uses
   tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
   tyControls.AdvChart.ToolboxDlg, tyControls.AdvChart.Aria,
-  tyControls.AdvChart.AxisBreak;
+  tyControls.AdvChart.AxisBreak,
+  { ecStat's three transforms, registered by its initialization [Batch 134] }
+  tyControls.AdvChart.StatTransform;
 
 { ==================== construction ==================== }
 
@@ -3527,6 +3538,9 @@ begin
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
+  { new dataset models: their transforms run again, drawing from where the
+    chart's stream stands now [Batch 134] }
+  FTransformSeedTaken := False;
   { new parallelAxis models: no active intervals [Batch 128]; new views,
     new controllers [Batch 130] }
   FParIntervals := nil;
@@ -3680,6 +3694,11 @@ begin
   { the preprocessor runs on the piece: a `show` or an `enabled` it wrote
     [Batch 131] }
   AriaTakeEnabled(FOption.MergedPiece, False);
+  { A PIECE THAT CARRIES `dataset` marks every dataset dirty: their
+    transforms run again from where the chart's stream stands [Batch 134] }
+  if (FOption.MergedPiece is TJSONObject)
+    and (TJSONObject(FOption.MergedPiece).Find('dataset') <> nil) then
+    FTransformSeedTaken := False;
   FOptionText := FOption.OptionJson;
   { AN UPDATE: the series keep their views where their ids and types do }
   FAnimPending := True;
@@ -4270,6 +4289,11 @@ begin
   SetLength(FEncodes, Length(FBindings));
   if FDatasetCache = nil then FDatasetCache := TTyDatasetCache.Create
   else FDatasetCache.Clear;
+  { the transforms draw from the state their option's first build found
+    [Batch 134] }
+  if not FTransformSeedTaken then FTransformSeed := FAxisMemory.RandomState^;
+  FTransformRandom := FTransformSeed;
+  FDatasetCache.RandomState := @FTransformRandom;
   cursors := nil;
   for i := 0 to High(FBindings) do
   begin
@@ -4549,6 +4573,13 @@ begin
     ResolveTextDims(enc, st, FSources[i]);
     HeatmapTipDims(i, enc, st);
     Continue;
+  end;
+  { THE FIRST BUILD OF AN OPTION hands the chart's stream on past what its
+    transforms drew; a later one leaves it where it is [Batch 134] }
+  if not FTransformSeedTaken then
+  begin
+    FAxisMemory.RandomState^ := FTransformRandom;
+    FTransformSeedTaken := True;
   end;
   { A DATASET WHOSE TRANSFORM FAILED has no table, and the series reading it
     draw nothing -- said here, once per dataset a series reached. Upstream

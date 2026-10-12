@@ -606,6 +606,25 @@ resourcestring
   rsTyDsSortParser = '"%s" is not a parser';
   rsTyDsSortFormat = 'the sort reads only a table of arrays or of objects';
   rsTyDsBoxplotRows = 'the boxplot reads only a table of arrays';
+  // --- AdvanceChart: ecStat's dataset transforms [Batch 134] ---
+  // More reasons for rsTyChartDatasetNoTable: what 'ecStat:regression',
+  // 'ecStat:histogram' and 'ecStat:clustering' refuse.
+  rsTyStatRegMethod = '"%s" is not a regression method';
+  rsTyStatPolyOrder = 'the polynomial order must be a whole number from -1 to %d';
+  rsTyStatBinMethod = '"%s" is not a binning method';
+  rsTyStatBinLayout = 'the bins cannot be laid out over these values';
+  rsTyStatBinPrecision = 'the bins are finer than 20 decimal places';
+  rsTyStatTooManyBins = 'more than %d bins';
+  rsTyStatClusterCount = '"clusterCount" must be a number of 2 or more';
+  rsTyStatClusterIndex = '"outputClusterIndexDimension" is required, as a number';
+  rsTyStatNewDim = 'a new dimension must be an index or { name, index }';
+  rsTyStatIndexNotNumber = 'the index of a new dimension must be written as a number';
+  rsTyStatTooManyClusters = 'more than %d clusters';
+  rsTyStatNoSplit = 'no cluster could be split';
+  rsTyStatUnassigned = 'a point belongs to no cluster';
+  rsTyStatNoConverge = 'k-means did not settle';
+  rsTyStatDimHole = 'a dimension of the result is left undefined';
+  rsTyStatIndexTooFar = 'a new dimension''s index is past %d';
 
   // --- AdvanceChart: the option editor's own vocabulary ---
   // Shown in the design-time editor's status line and its completion popup.

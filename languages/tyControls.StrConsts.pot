@@ -1081,6 +1081,76 @@ msgstr ""
 msgid "the boxplot reads only a table of arrays"
 msgstr ""
 
+#: tycontrols.strconsts.rstystatregmethod
+#, object-pascal-format
+msgid "\"%s\" is not a regression method"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatpolyorder
+#, object-pascal-format
+msgid "the polynomial order must be a whole number from -1 to %d"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatbinmethod
+#, object-pascal-format
+msgid "\"%s\" is not a binning method"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatbinlayout
+msgid "the bins cannot be laid out over these values"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatbinprecision
+msgid "the bins are finer than 20 decimal places"
+msgstr ""
+
+#: tycontrols.strconsts.rstystattoomanybins
+#, object-pascal-format
+msgid "more than %d bins"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatclustercount
+msgid "\"clusterCount\" must be a number of 2 or more"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatclusterindex
+msgid "\"outputClusterIndexDimension\" is required, as a number"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatnewdim
+msgid "a new dimension must be an index or { name, index }"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatindexnotnumber
+msgid "the index of a new dimension must be written as a number"
+msgstr ""
+
+#: tycontrols.strconsts.rstystattoomanyclusters
+#, object-pascal-format
+msgid "more than %d clusters"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatnosplit
+msgid "no cluster could be split"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatunassigned
+msgid "a point belongs to no cluster"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatnoconverge
+msgid "k-means did not settle"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatdimhole
+msgid "a dimension of the result is left undefined"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatindextoofar
+#, object-pascal-format
+msgid "a new dimension's index is past %d"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartseriesbadtype
 #, object-pascal-format
 msgid "series[%d]: \"%s\" is not a series type"

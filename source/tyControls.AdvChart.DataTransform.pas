@@ -114,6 +114,10 @@ type
     Upstreams: TTyExternalSourceArray;
     { the transform's `config`, borrowed; nil when it wrote none }
     Config: TJSONData;
+    { THE CHART'S Math.random [Batch 134]: the xorshift32 state a transform
+      that draws (ecStat's k-means) advances with TyJitterRandom. Never
+      nil inside a transform. }
+    Random: PLongWord;
   end;
 
   { One result: a table (a list of arrays or of objects) and, when the
@@ -146,10 +150,13 @@ procedure TyAddTransformResult(var AResults: TTyTransformResultArray;
 
 { applyDataTransform: ATransform (one transform, or a list of them piped)
   over the upstream results AUps. The result nodes are added to AOwner.
-  False with the reason in AError where upstream throws. }
+  False with the reason in AError where upstream throws. ARandom is the
+  Math.random state the transforms draw from [Batch 134]; nil gives them
+  one of their own, seeded with TyJitterSeed for this call. }
 function TyApplyDataTransform(ATransform: TJSONData;
   const AUps: TTySourceRefArray; AOwner: TFPList;
-  out AResults: TTySourceRefArray; out AError: string): Boolean;
+  out AResults: TTySourceRefArray; out AError: string;
+  ARandom: PLongWord = nil): Boolean;
 
 { ---- the value rules (dataValueHelper.ts) ---- }
 
@@ -177,7 +184,8 @@ procedure TyJsArraySort(var AItems: TTyIntegerArray; ACompare: TTyJsCompare);
 implementation
 
 uses
-  tyControls.AdvChart.Data, tyControls.AdvChart.Scale, tyControls.StrConsts;
+  tyControls.AdvChart.Data, tyControls.AdvChart.Scale, tyControls.AdvChart.Jitter,
+  tyControls.StrConsts;
 
 { ==================== JavaScript values ==================== }
 
@@ -1225,7 +1233,8 @@ end;
 
 { applySingleDataTransform }
 function ApplySingle(AOpt: TJSONData; const AUps: TTySourceRefArray;
-  AOwner: TFPList; out AOut: TTySourceRefArray; out AError: string): Boolean;
+  AOwner: TFPList; ARandom: PLongWord; out AOut: TTySourceRefArray;
+  out AError: string): Boolean;
 var
   func: TTyDataTransformFunc;
   builtIn: Boolean;
@@ -1275,6 +1284,7 @@ begin
       params.Upstreams := ext;
       params.Config := nil;
       if AOpt is TJSONObject then params.Config := TJSONObject(AOpt).Find('config');
+      params.Random := ARandom;
       func(params, res);
       SetLength(AOut, Length(res));
       for k := 0 to High(res) do
@@ -1339,13 +1349,17 @@ end;
 
 function TyApplyDataTransform(ATransform: TJSONData;
   const AUps: TTySourceRefArray; AOwner: TFPList;
-  out AResults: TTySourceRefArray; out AError: string): Boolean;
+  out AResults: TTySourceRefArray; out AError: string;
+  ARandom: PLongWord): Boolean;
 var
   steps: array of TJSONData;
   ups, outs: TTySourceRefArray;
   i: Integer;
   mask: TFPUExceptionMask;
+  ownRandom: LongWord;
 begin
+  ownRandom := TyJitterSeed;
+  if ARandom = nil then ARandom := @ownRandom;
   Result := False;
   AResults := nil;
   AError := '';
@@ -1372,7 +1386,7 @@ begin
     ups := AUps;
     for i := 0 to High(steps) do
     begin
-      if not ApplySingle(steps[i], ups, AOwner, outs, AError) then Exit;
+      if not ApplySingle(steps[i], ups, AOwner, ARandom, outs, AError) then Exit;
       { a step before the last hands on one result at least -- a missing
         one is undefined, which the next step cannot read }
       if (i < High(steps)) and (Length(outs) = 0) then SetLength(outs, 1);
