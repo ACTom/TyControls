@@ -25,6 +25,10 @@ msgstr "格式化会从解析后的结构重新生成 option，注释和原有�
 msgid "Nothing to report."
 msgstr "没有发现问题。"
 
+#: tycontrols.design.advchart.editor.rsoptedseries
+msgid "Series && data..."
+msgstr "系列与数据..."
+
 #: tycontrols.design.advchart.editor.rsoptedtitle
 msgid "Chart option (ECharts)"
 msgstr "图表 option（ECharts）"

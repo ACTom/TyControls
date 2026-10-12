@@ -1263,9 +1263,9 @@ Builder 里本来就有一个 `NumText` 跟绘制端一字不差，改一行就�
 
 现在的规则：
 
-- `TTyChartOption.SetOptionText` 失败 → **释放树**（`FreeAndNil(FRoot)`），`Error` 说明原因。
+- **[第 143 批：解析那一步单独导出为 `TyOptionParseRaw`（嵌套守卫、转义预解码、宽松读取，不跑预处理），`ParseText` 改为调它、错误文字不变，见 §182。]** `TTyChartOption.SetOptionText` 失败 → **释放树**（`FreeAndNil(FRoot)`），`Error` 说明原因。
   下游访问器本来就全部 nil 安全（`Find` / `ComponentCount` / `ComponentAt` 都先判 `FRoot = nil`）。
-- 控件仍然**读回你写进去的文本**（第 24 节那个 round-trip 修复照旧）——
+- **[第 143 批：结构化的系列与数据对话框把这一条推进了文本内部——写回只改动过的那几个值，不改就逐字节原样；会丢注释或要整段重写时确定先问一句，选否对话框留着、改动不丢（option 对话框本身照旧不拦），见 §182。]** 控件仍然**读回你写进去的文本**（第 24 节那个 round-trip 修复照旧）——
   这两件事方向相反是对的：**文本归宿主，树归解析器**，`OptionError` 是它们之间的桥。
 - 「确定」按钮**不拦**（也是用户拍板）：编辑器是编辑器，不是关卡。粘一段带 `function` 的
   ECharts 配置能先存下来慢慢改。
@@ -1621,7 +1621,7 @@ Tier 1：23 个 series 渲染器、dataZoom、brush、legend、tooltip、动画�
 ### 还是没做的
 
 - 第 3 项的 **GTK / Qt 真机**：用户明确押后，先把 Windows 做完。
-- 第 6 项第 10 步的**真机 IDE**：注册的三处（面板、组件编辑器、属性编辑器）
+- **[第 143 批：组件编辑器多了第二个动词「Chart series and data...」，option 对话框多了「Series && data...」按钮，真机清单见 §182。]** 第 6 项第 10 步的**真机 IDE**：注册的三处（面板、组件编辑器、属性编辑器）
   代码上都在，对话框本身由 `tools/advchart-probe` 在真桌面上驱动（25 项检查），
   但「在 IDE 里装上这个包、从 Object Inspector 点开」仍然只有装了包的人能做。
 
@@ -13539,6 +13539,98 @@ custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit
 - `source/tyControls.AdvanceChart.pas`：`CoarsePointer` / `PointerSize` / `UseDirtyRect`；`CoarseSize`、`ListHitAt`（`HitTestAt`、`EventTargetAt`）；`FDr*` 与 `DrPrepare`、`DrComposite`、`DrPaintWindow`、`DrFlushAsync`、`DrCanPartial`、`DrStaticPartial`、`DrStaticFull`、`DrDynamic`、`DrCaptureBase`、`StaticDrop`、`SetUseDirtyRect`、`LastRepaintFull` / `LastRepaintRects`；`PaintStatic` 截底图；`PaintSeries` 的准备模式、`FDrStaticList`、`FDrPrepDone`；`RenderCached`、`Paint`、`Invalidate`、`InvalidateFrame` 的脏矩形分支；`Forms`、`LCLIntf` 进实现段的 uses。
 - `tools/advchart-oracle/coarse-dirty.js`、`tests/fixtures/advchart-coarse-dirty.json`、`tests/test.advchart.coarsedirty.pas`（新，注册在 `tytests.lpr`）；`tools/advchart-bench/advchart_bench.lpr` 的 `BenchDirty`。
 - §23、§124、§129、§152、§80、§116 在原处标注（§32 是散文段，不是条目，没有标注；它的「脏矩形不做」由本节落地）。
+
+## 182. Tier 3 第一百四十三批：设计期的系列与数据编辑对话框（D10，2026-10-12）
+
+路线图 D10：设计期的系列/数据结构化编辑对话框。Tier 0 第 6 项给 `Option` 做的是一个**文本**编辑器（SynEdit + 目录补全 + 诊断，§15、§26–§28），它让 2 455 个节点的 option 树「有帮助地写」；但设计期最常做的几件事——加一个系列、换个类型、改名、开标签、把七个数改成八个、给类目轴加一个类目——在文本里都是找位置、数逗号的活。这一批在它旁边加一个**结构化**对话框：系列是列表，每个系列都有的那几个键是字段，数据是表格，旁边一张实时预览；写回时**只改动过的那几处文本**，用户自己写的其它键、键的顺序、注释、引号写法原样留着。没有上游可对照（ECharts 没有设计期），对照的是仓库自己的先例：`designtime/tyControls.Design.AdvChart.Editor.pas`（§28 的「壳」）与 `designtime/tyControls.Design.Css.Editor.pas`，以及 §25 用户拍板的「确定不拦」。§25、§30 在原处标注。
+
+### 先看了什么，照着做了什么
+
+- **两个既有编辑器都是代码搭的 `TForm`、原生 LCL 控件**（`CreateNew` + `TSynEdit` / `TTreeView` / `TListBox` / `TButton`，没有 `.lfm`），消息框走 `TyMessageDlg`。理由写在它们的头注释里：「不用裸 LCL 控件」管的是库自己画的运行时界面，这是 IDE 对话框。新对话框完全照抄：代码搭、`TStringGrid`（LCL 的 `Grids`）做表格、`TListBox` 做系列列表、`TScrollBox` 里放字段；**预览用库自己的 `TTyAdvanceChart`**。底部条照 [[lcl-code-created-align-order]] 用 `Top` 排序（问题列表 / 红字提示 / 按钮）。
+- **「壳不做判断」是 §28 的规矩**，而且有守卫（`TheChartOptionEditorStaysAShell`）。所以一切判断进 `source/`，对话框只把模型放进框里；新对话框配一条同样的守卫（见下）。
+- **设计期字符串的语言文件**：每个设计期单元一份 `.pot` + `zh_CN.po`（`languages/tyControls.Design.AdvChart.Editor.pot` 那样），由包的 `<i18n>` 带进 IDE。模型的话（列标题、提示句、错误）在 `source/`，进库的 `StrConsts`（`rsTyOptDiag*` 的先例），`tools/themebuilder/languages/tycontrols.zh_CN.po` 仍是 `languages/tycontrols.strconsts.zh_CN.po` 的逐字节副本。
+
+### 做法
+
+- **`tyControls.AdvChart.Option`**：`TyOptionParseRaw`——`SetOptionText` 用的那一步解析单独导出：嵌套守卫（`TyJsonNestingExceeds`）、`\u` 预解码、fcl-json 宽松模式（注释、尾逗号），**之后什么都不跑**：没有画刷预处理、没有 media、没有合并、图例的 `selected` 也不补。结构化编辑器要拿「文本里写的那棵树」做底，预处理动过的树在用户什么都没改之前就和文本对不上。`TTyChartOption.ParseText` 改为调它，错误的文字与位置一字不差。
+- **新单元 `tyControls.AdvChart.TextPatch`**（纯：SysUtils、Classes、fcl-json，外加 `Scale` 的 `TyJsNumberToString`，浮点按 JS 的写法印；已登记 `tycontrols.lpk`）——把一棵改过的树**补丁式**写回它来的那段文本：
+  - **地图**：第二个容错扫描器走一遍文本，记下每个值的起止、每个成员的键位置、每个逗号的位置、每段注释的起点（词法规则与 fcl-json 的 scanner 对齐：两种引号、反斜杠转义、`//` 到行尾、`/* */`、标识符键）。只在读取器已经接受的文本上跑，跑完**再对着解析出的树核一遍**：种类、个数、键名逐个相同（键名按 JSON 转义解码，含代理对）。对不上就丢掉地图（`Mapped = False`），写回退化成整段重写、所有注释都算丢——先保证对，能证明安全的地方再保真。
+  - **值**：新旧相同（`TyOptJsonSame`：数按值，`1` 与 `1.0` 相同；对象不看键序；数组看序）就原样保留那段文本，里面的注释一起留。
+  - **对象**：活下来的成员原地不动，值变了的只换值；删掉的成员连同它的分隔一起切掉——后面还有成员或自带尾逗号时切「前一个逗号之后到自己的逗号之后」（自己逗号后面同一行的 `//` 注释算它的，一起走；前一个成员逗号后面的行尾注释算前一个的，留下）；切到末尾又没有尾逗号时，前一个幸存者的逗号也去掉——除非后面要追加新成员。单行容器删第一项时从第一个记号切到下一个记号（`{ a: 1, b: 2 }` 删 a 得 `{ b: 2 }`，不留括号后的那格空）。新成员追加在最后一个幸存者之后，按这个对象自己的版式：多行时换行、缩进对齐第一个成员；单行时 `, `；幸存者有逗号（或尾逗号）就接在逗号（和它的行尾注释）之后，没有就补一个。
+  - **数组**：先剥掉相同的头和尾（文本连分隔原样）。中段：**知道身份时**（调用方用 `SetArrayHint` 给出「新第 i 个原来是第几个」）按身份配对；不知道时只把「中段别处出现的、完全相同的旧元素」认成挪过去的。没有挪动时**按位置**：两边都有的槽原地补丁（表格里改一个格子只换一个记号），多出来的是纯追加、少了的是纯切除；有挪动时中段重写：每个新元素用它自己旧文本（相同则原样、不同则从它自己的旧文本补丁），新的才新写，旧元素之间的分隔与注释是代价，计数。
+  - **新写的文本**按文档自己的风格（`TTyOptTextStyle`，读出来的）：字符串的引号（第一个字符串值的引号，没有则看第一个带引号的键，都没有用 `'`）、键裸写还是加引号（看第一个键；不是标识符的键名照样加引号）、缩进单位（根的第一个成员相对根缩进了多少）、换行（第一个换行是 CRLF、LF 还是单 CR）、冒号后的空格。容器放得下 80 列就写一行（`{ a: 1 }`、`[1, 2]`），否则多行；原值跨行的整值替换仍跨行；标量数组按宽度折行，不是一行一个。空文本没有可读的风格时用编辑器自己补全插入的写法：裸键、单引号、两格。
+  - **`Lost`**：这次写回丢了几段注释——只可能丢在「新写」的地方：被整值替换的值里面、被重写的数组中段的元素之间。删掉的成员或元素里面的注释不算丢（删了东西，关于它的话也就没了）。
+  - **不变式**：输出用 option 自己的读取器读回来，就是交进来的那棵树（`TyOptJsonSame`）。
+- **新单元 `tyControls.AdvChart.SeriesEdit`**（纯；已登记 `tycontrols.lpk`）——对话框的全部模型：
+  - `TTySeriesEditModel.Load`：`TyOptionParseRaw` 读进来；读不了（或不是对象）答 False 带读取器的原话与行列；空文本是空 option（第一次编辑整段写出，没有版式可保）。之后克隆一份工作树，地图建在原文上。
+  - **系列列表**：`SeriesCount`、`SeriesNode`（空位答 nil）、`SeriesCaption`（`下标: 类型 "名称"`；没有类型、空位各有一句）、`AddSeries`（`{ type, data: [] }`；**option 里有 dataset 而且现有系列都没有自己的 data 时不带 `data`**——空的 data 会盖过 dataset、新系列什么都不画）、`DeleteSeries`、`MoveSeries`、`SetSeriesType`。裸写的单个 `series: { … }` 当一个元素的列表编辑，字段改在原处；列表形状一变（加、删、挪）就成数组。模型记着每个系列原来是第几个（`FOrigin`），写回时作为身份交给补丁器——改了名**又**挪了位置的系列从它自己的文本补丁，注释跟着走。
+  - **字段**：固定的十六个——`name`、`coordinateSystem`、`xAxisIndex`、`yAxisIndex`、`polarIndex`、`radarIndex`、`singleAxisIndex`、`parallelIndex`、`calendarIndex`、`geoIndex`、`datasetIndex`、`stack`、`smooth`、`label.show`、`itemStyle.color`、`encode`——**哪些出现由目录决定**（`TyOptFind('series-<type>.<path>')`）：折线有 `smooth`、柱没有，饼没有坐标轴下标；目录不认识的类型给全部（类型写错了不该连名字都改不了）。五种编辑方式：文本、整数、三态布尔（没写 / true / false）、颜色（字符串，或以 `{`、`[` 开头时按字面量读——渐变）、字面量（`encode` 的对象，经 `TyOptParseLiteral`：把它包成一个成员交给同一个读取器，嵌套守卫与错误文字都是读取器的）。清空就是删键；删掉一个嵌套键后父对象空了也删——**除非原文里它本来就是空对象**（用户写的 `label: {}` 不归我们删）。**显示出来的文本原样写回不改任何东西**：数字的 name `2015` 不会变成字符串 `'2015'`，`smooth: 0.5` 显示为勾上、不碰它就还是 0.5。写不进去的值（整数写了 `abc`、字面量读不了）答 False 带一句话，option 不动。
+  - **表格 `TTyEditTable`**：一份列表显示成字符串网格，记着它从哪份快照建出来、每个格子的原文。`Apply` 每次都从快照和格子**重新算**，所以是幂等的（对话框每敲一个键应用一次）；没动过的格子保留它原来的 JSON（数据集表头里的字符串 `'2015'` 还是字符串，`120` 还是那个整数）。改过的格子按「原来是字符串就还是字符串」、否则推断：空是 null，`true` / `false` / `null`，JSON 数字语法是数（**前导零不算**：`007` 是编号不是七），以 `[` 或 `{` 开头且读得通是字面量，其余是字符串（`'-'` 照样是 ECharts 的空值记号）。
+  - **系列的数据**：每项的维数取最大（标量 1、数组按长、`{ value }` 按 value）；有 `name` 的项多一列名称；维数不超过 1、绑定的坐标轴是类目轴（按 Builder 的 `TyResolveAxisType`：显式类型，或者写了 `data`）而且轴上有 `data` 时，第一列是**类目**（先找 x 轴，再找 y 轴——横向柱），行数取数据与类目里长的那个。**一行就是一个类目**：删一行同时删掉这个类目，以及同一根轴上每个一维系列在这一格上的值——否则后面每个系列都会错位一格；加一行是在末尾同时加类目和值。项是对象时只改 `value` 和 `name`，其它键（`itemStyle`、`label`……）原样留；标量项填了名称就变成 `{ name, value }`。多维数据可以加列、删列（最后一列不能删）；类目表不能加列（一个类目一个值，加一列就成了成对数据）。写回时空着的新格子不写，不会给每一行补 null。没有 `data` 的系列（读 dataset 的）给一张空表和一句说明，不加行就不会凭空多出 `data: []`。数据是树（项带 `children`）或不是数组时，表格不可编辑并说为什么。
+  - **数据集**：`source` 是数组的数组时，每列一维（标题取 `dimensions`，没有就是 `维 n`），表头行按 `sourceHeader`（写了就照写的，没写时首行全是字符串而且下面还有行就算表头，近似上游的猜测）——表头格子始终是字符串；是对象的数组时列就是键（不能加列：键得有名字）。由 transform 或 `fromDatasetIndex` 得来的数据集、按列存的 `source` 都不可编辑并说明。
+  - **写回**：`Text`（没改就是原文本身）、`Lost`、`RewritesWhole`（映射失败的整段重写）、`NeedsConfirm`、`Changed`、`Diagnose`——**校验就是 option 编辑器的那一套**：`TyOptDiagnose(Text)`，嵌套上限、目录检查、构建诊断一个不少。
+- **新单元 `designtime/tyControls.Design.AdvChart.SeriesDialog`**（已登记 `tycontrols_dt.lpk`）：`TTyChartSeriesDialog` 与 `TyEditChartSeries(var AText)`。左边系列列表（加：类型下拉取自目录 `TySeriesTypes`；删、上移、下移），右上类型下拉与字段（布尔是三态勾选框，灰 = 没写），右下三页：**数据**（表格 + 说明 + 加行 / 删行 / 加列 / 删列）、**数据集**（选第几个 dataset；没有 dataset 时这一页不显示）、**预览**（`TTyAdvanceChart`，只在这一页可见时才喂 option——大 option 每次停顿都重读一遍不值）。改动在 400 ms 的定时器上算一次写回文本，刷新底部的诊断列表与红字（「写回会丢掉 n 条注释」/「写回会整段重写」）。字段在离开时（`OnEditingDone`）写回，表格每敲一键写回；按确定时先把还在编辑的字段提交。**确定**：`NeedsConfirm` 时先问一句（丢几条注释，或整段重写），**选否对话框留着，改动不丢**；文本读不了时打不开对话框，弹一句读取器的原话。
+- **两个入口**：option 对话框底部多一个「Series && data...」按钮——把编辑器里**恰好是文档**的那段（`TextBetweenPoints` 从头到尾，不带 `Text` 的结尾换行）交给结构化对话框，确定后同样用 `TextBetweenPoints` 写回：**一次可撤销的修改**，Ctrl+Z 就回去，文本照样能接着手改；组件编辑器多一个动词（右键菜单第二项「Chart series and data...」），直接对 `chart.Option`。双击仍是第一个动词（option 对话框）。
+- **守卫**：`TheSeriesDialogStaysAShell` 读对话框的源文件，非注释行里出现 `fpjson`、`TJSON`、`jsonparser`、`TyOptionParseRaw`、`TTyOptTextPatcher`、`TyOptJsonLiteral`、`TyOptDiagnose` 任何一个就红——对话框需要什么，加在 `SeriesEdit` 里、让测试看得见。
+
+### 往返的定义（决定并记下）
+
+**对话框拥有的不是一段文本，而是整份文本里它改过的那些值。** 不改就写回 = 原文**逐字节**相同（不是「等价的 JSON」）：映射上了的文本在任何层级都是「新旧相同就原样」，而映射不上时 `Patch` 也先比整树，没改照样交回原文。改了的地方之外逐字节相同；改了的地方按文档自己的风格写。所以这一批**不规范化**——Format 按钮才规范化，而且它先问（§28）。
+
+### 测试
+
+`test.advchart.serieseditor`（新，注册在 `tytests.lpr`；测试构建经 `../source` 引模型，对话框本身不在测试构建里）：
+
+- **补丁**（`TAdvChartTextPatchTest`，12 个）：不改就逐字节交回（注释、尾逗号、CRLF、`\'` 与 `\u` 转义、根前后的注释）；改一个标量只换一个记号；删第一 / 中间 / 最后一个成员、删到末尾、全删、尾逗号留着；追加按版式（多行、单行、尾逗号之后、加引号的文档、空对象新写、全换、**末尾切掉一个又追加一个时幸存者的逗号留着**）；行尾 `//` 注释跟着自己的成员走，追加落在注释之后；数组原位、追加、前插、切中间、切最后、紧凑的保持紧凑、一行一个的保持一行一个；挪动的元素原样带着自己里面的注释、元素之间的注释算丢；整值替换里的两段注释都算丢；风格从文档读（CRLF + 四格 + 引号键 + 双引号、非标识符键名、新写的嵌套值、冒号不带空格）；映射失败整段重写、注释全算丢、没改仍是原文；`TyOptJsonSame` 的三条；**对画廊里 120 KB 以下的每个 option 做固定种子的随机改动**（删键、加标量键、加对象键、换值、数组删 / 插 / 换 / 挪，每个文件 4 次、一半是两连改），每次读回都等于改后的树、没有注释可丢，最后不改仍是原长。
+- **模型**（`TAdvChartSeriesEditTest`，19 个）：读不了与不是对象（错误、行号）、空文本是空 option 且第一次编辑整段写出；列表的加删挪（挪动是两段原文互换、挪回去就是原文、删第一个只切掉它那一行、删后再加）；裸写的系列先原地改、加一个才成数组；**改名又挪位的系列带着自己的 `/* mine */` 走，什么都没丢**；字段跟目录走（折线、柱、饼、不认识的类型）；改名只换名字、开标签加 `label: { show: true }`、关掉后连 `label` 一起回到原文、用户自己的空 `label` 留着、`smooth: false` 与 `encode` 的追加；坏值不动 option（整数、半截字面量、两个值、半截数组）；**显示的文本原样写回不改任何东西**（数字名、0.5 的 smooth、写了的 0 下标、渐变色）；类目表（列、标题、说明、改一个值只换一个记号、改类目、加一行同时加类目和值、不能加列）；**删一行是删一个类目**（两个系列的值一起少一格）；成对数据（改格子、加空列什么都不写、填一格才写、删列、最后一列不能删、**没碰任何格子只删一列也会写**）；对象项留着表格不显示的键（改值、给标量起名变成对象、清掉名字）；格子的类型规则（9 条）；数据集（表头判断、表头格子仍是字符串、原来是字符串的格子仍是字符串、数字推断、追加一行；读 dataset 的系列给空表且不多出 `data`、新系列也不带 `data`；对象行的数据集：列是键、不能加列、改与删行）；表格显示不了的五种情况各有一句话；应用两次等于一次；追加保住数组里的注释、整值替换掉渐变丢一条并要求确认；诊断看的是改过的文本（`yAxisIndex: 3` 报构建问题）；`TheSeriesDialogStaysAShell`。
+- **画廊往返**（`TAdvChartSeriesEditGalleryTest`，2 个，245 个 option）：每个都能读；读进来写回逐字节相同；**每个系列的表格不改就应用、每个字段把显示的文本（或三态）原样写回、每个数据集表格不改就应用之后，仍逐字节相同、`Changed` 为假**（断言应用过的表格 > 300、写回的字段 > 2 000）；然后第一个系列改名（改动区不超过名字本身加 40 字节）、第一行第一个数字格改成 424242（改动区不超过 30 字节，断言改过的格子 > 100）、加一个系列、把第一个挪到最后、删第一个、全删——每一步读回都等于模型的树，画廊没有注释可丢、不要求确认。
+
+首跑：补丁 12 个全过，模型 17 个通过、守卫那一个因为对话框文件还没写而读不到文件报错（写完对话框后通过）；画廊第二个测试在「这个格子是不是数」上用了 NaN 比较，开着浮点异常的测试进程里直接抛 `EInvalidOp`——测试自己的错，改成 `TryStrToFloat`。之后按变异候选回头补了三处（末尾切掉又追加、没碰格子只删列、改名又挪位），都是首跑就过、但没有它们对应的变异杀不掉的用例。
+
+另外用一个探针（会话草稿 `d10_probe`，私有 `--pcp` 编，**从不显示窗口**）把对话框本身建起来、对 245 个画廊 option 加四个手写的（空、带注释、读不了、树）各 `Open` 一次、经事件往表格里写一格：没有异常，打开即写回的文本与原文相同，能改的都改出了不同的文本。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartTextPatchTest` 12、`TAdvChartSeriesEditTest` 19、`TAdvChartSeriesEditGalleryTest` 2、`TAdvChartOptionTest` 31（`ParseText` 改调 `TyOptionParseRaw`）、`TAdvChartDiagnoseTest` 23、`TI18NTest` 8（三份新目录条目）、`TReleaseManifestTest` 17（新单元进了 `.lpk`、设计期单元会被发布、option 编辑器仍是壳）、`TDesignEditorsTest` 8。设计期包：Lazarus 4.4（私有 `--pcp`，`--skip-dependencies -B`，tycontrols / tycontrols_db / tycontrols_dt）与 Lazarus 3.0（`D:\lazarus30`）都编过，新单元零警告。变异候选列在会话草稿 `s182.md.candidates.md`（30 个，#27–#30 预计存活）。
+
+### 真机 IDE 清单（只有装了包的人能做）
+
+1. 重装 tycontrols_dt 后重启 Lazarus，拖一个 `TTyAdvanceChart`，在 Object Inspector 里点 `Option` 的 `...`：option 对话框底部按钮条从左到右应是 **Validate / Format / Series && data... ……OK / Cancel**，第三个按钮的标题里 `&&` 显示成一个 `&`（中文界面显示「系列与数据...」）。
+2. 在图表上点右键：组件编辑器的菜单应有两项——「Chart option (ECharts)...」与「Chart series and data...」；**双击图表仍打开第一项**。
+3. 结构化对话框的布局：左边系列列表（下面一行类型下拉 + Add，再一行 Delete / Up / Down），右上类型与字段（两列），右下 Data / Dataset / Preview 三页，底部从上到下 **问题列表 / 红字 / 按钮条**；系列列表不应被右上的字段区盖住。拉大、缩小窗口，表格与预览跟着伸缩。
+4. 打开一个画廊里的柱状图（如 `bar-simple.json` 的内容），在 Data 页把第二个值改成 250、点 OK：回到 option 对话框里**只有那一个数变了**，缩进、键序都没动；按 **Ctrl+Z 一次**整段回到改之前。
+5. 写一段带注释的 option（例如在某个系列的 `itemStyle.color` 里放一个带 `/* … */` 的渐变对象），在对话框里把这个颜色改成 `red`，点 OK：应**先弹一句「会丢掉 1 条注释」的确认**；选否对话框不关、改动还在；选是才写回。改的若是别处（没碰带注释的值），不应有任何确认。
+6. 类目轴：在类目列里删一行，切到另一个同轴的系列，它的数据应同样少了那一格；加一行后类目与值都在末尾。
+7. 字段：给折线勾上 `smooth`、给柱状图看不到 `smooth`；`label.show` 三态（灰 = 没写）点三下回到原样时，option 文本应回到原文（`label` 不残留）；在 `xAxisIndex` 里写 `abc` 离开，下方红字说不是整数，option 不变；`encode` 写 `{ x: 0, y: 1 }`。
+8. **CJK**：系列名写中文、类目写中文，在表格与字段里编辑后写回，文本里中文完好、光标与选区在 option 对话框里不错位。
+9. Preview 页：切过去时图表画出当前的改动；继续改数据再切回来，预览跟上；带 `dataset` 的 option，Dataset 页能改表头（仍是字符串）和数值。
+10. 写一段读不了的文本（少个括号）点「Series && data...」：应弹一句读取器的原话、不打开对话框，option 对话框里的文本原样。
+11. 大 option（例如 `area-simple.json`，两万行数据）：对话框能在几秒内打开，滚动表格、改一个格子不卡顿到不能用（定时器之后才算写回文本）。
+12. 中文 IDE：对话框所有按钮、页签、提示句是中文（设计期目录 `tycontrols.design.advchart.seriesdialog.zh_CN.po`），列标题与说明句（来自库目录）也是中文。
+GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、CJK 在三个 widgetset 上是三套代码。
+
+### 推迟与偏差
+
+- **不是所有键都有字段**：只有路线图点名的那几个（加上其它坐标系的下标、`coordinateSystem`、`datasetIndex`）；其余仍在文本里写，目录补全照旧在 option 对话框里。`smooth` 是三态布尔，写了数（0.5）的显示为勾上，不碰就不变；要改数得在文本里改。
+- **`encode`、渐变色按字面量写**，不是逐维度的下拉。
+- **树形数据（项带 `children`）、按列存的 `source`、由 transform 得来的数据集不进表格**，说明一句、在文本里改。关系图的 `links` / `edges`、桑基图的 `links` 不进表格（只编辑 `data`）。
+- **类目列只给一维数据**：成对数据挂在类目轴上时不显示类目列（类目在数据自己的 x 维里）；删行时只删同轴的一维系列的那一格，成对数据的系列不动。只认笛卡尔坐标系的 x / y 轴；极坐标的角度轴、雷达指示器、单轴的类目不进表格。
+- **表格只能在末尾加行**，不能中间插入；挪行不做。
+- **数据集表头靠猜**：没写 `sourceHeader` 时「首行全是字符串、下面还有行」就当表头，只影响显示（行标签）和「表头格子保持字符串」，不影响写回的形状。
+- **裸写的 `series: { … }`**：列表一变形状就成数组；之后即使又只剩一个也不变回对象（整值重写这个 `series`，里面的注释计入 `Lost`）。
+- **不知道身份的数组**（系列列表以外，包括表格写回的数据数组）按「位置 + 相同的旧元素算挪动」配对：表格删了中间一行又改了下一行时，按位置补丁、结果正确，但被删那行里的注释可能挪到下一行身上——身份只交给了系列列表。中段长度乘积超过 4 096 时不找挪动，只按位置。
+- **映射失败只在读取器与扫描器对同一段文本有分歧时发生**（理论上的转义写法差异）；这时整段重写、所有注释计入 `Lost`、确定前问。正常能解析的文本（画廊 245 个、补丁测试里的各种写法）都映射得上。
+- **整段写出（空文本、映射失败）用的风格**是编辑器补全的写法（裸键、单引号、两格），不是 JSON。
+- **预览是真控件**：每次切到预览或停顿后重设 `Option` 会重播入场动画；没有关动画的开关。
+- **校验只显示**，不拦确定：和 §25 的「确定不拦」一致；唯一会拦一下的是「写回会丢注释 / 会整段重写」，那是问，不是拒。
+
+### 落地
+
+- `source/tyControls.AdvChart.TextPatch.pas`、`source/tyControls.AdvChart.SeriesEdit.pas`（新，已登记 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.Option.pas`：`TyOptionParseRaw`；`TTyChartOption.ParseText` 改调它。
+- `source/tyControls.StrConsts.pas`：`rsTySerEd*` 20 条；`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`（逐字节副本）。
+- `designtime/tyControls.Design.AdvChart.SeriesDialog.pas`（新，已登记 `tycontrols_dt.lpk`）；`languages/tyControls.Design.AdvChart.SeriesDialog.pot`、`languages/tycontrols.design.advchart.seriesdialog.zh_CN.po`（新，22 条）。
+- `designtime/tyControls.Design.AdvChart.Editor.pas`：「Series && data...」按钮（`SeriesClick`，`TextBetweenPoints` 进出、一次可撤销）、组件编辑器的第二个动词；`rsOptEdSeries` 进它的 `.pot` 与 `zh_CN.po`。
+- `tests/test.advchart.serieseditor.pas`（新，注册在 `tytests.lpr`）。
+- §25、§30 在原处标注。
 
 ## 183. Tier 3 第一百四十四批：键盘导航与无障碍（D11，2026-10-12）
 
