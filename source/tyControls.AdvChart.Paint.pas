@@ -651,6 +651,9 @@ type
       array form's two numbers and whether each is a fraction, and how far
       the host's stroke grew the rect, all device px. }
     HostPlus1: Integer;
+    { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
+      element itself) [Batch 137] }
+    UtPiece: Integer;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;

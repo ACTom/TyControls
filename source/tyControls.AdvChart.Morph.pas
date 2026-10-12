@@ -7,6 +7,11 @@ unit tyControls.AdvChart.Morph;
   tool/dividePath.ts (getDividingGrids, the rect / sector / polygon dividers,
   split's polygon fallback), and echarts' animation/morphTransitionHelper.ts
   prepareMorphBatches. [Batch 136, D5 UT1]
+  What combining and separating read besides [Batch 137, D5 UT2]:
+  core/PathProxy.ts getBoundingRect with core/bbox.ts (fromLine, fromCubic,
+  fromQuadratic, fromArc), Path.getBoundingRect's stroke, Transformable's
+  setLocalTransform and the transform an element with no parent then
+  computes, and sortPaths' order (its hilbert keys, a stable sort).
 
   THE DATA IS PATHPROXY'S. Every path here is the flat array a PathProxy holds
   -- a command code (M 1, L 2, C 3, Q 4, A 5, Z 6, R 7) and its arguments --
@@ -30,7 +35,9 @@ unit tyControls.AdvChart.Morph;
       curve, not of the whole one;
     - prepareMorphBatches overwrites batch 0's list with half of another
       batch's when it wraps round (`off = 0` after `moveFrom` was taken);
-    - divideSector adds |sweep| to the start angle whatever the direction.
+    - divideSector adds |sweep| to the start angle whatever the direction;
+    - cubicExtrema finds a double root and does not count it (the bounding
+      rect of such a curve is its end points').
 
   DEVIATIONS (where upstream throws or never returns): a polygon count below
   one (an empty polygon in the area split) divides into nothing; the adaptive
@@ -112,6 +119,23 @@ function TyMorphPathData(const AData: TTyMorphData; AT: Double): TTyDoubleArray;
 function TyMorphDataCmds(const AData: TTyDoubleArray): TTyPathCmdArray;
 { sortPaths' key }
 function TyMorphHilbert(AX, AY, AMinX, AMinY, AMaxX, AMaxY: Double): Double;
+
+{ ---- what combining and separating read [Batch 137, D5 UT2] ---- }
+{ PathProxy.getBoundingRect over PathProxy data (bbox.ts' fromLine /
+  fromCubic / fromQuadratic / fromArc, the double root of cubicExtrema not
+  counted, as upstream) }
+function TyPathDataRect(const AData: array of Double): TTyXYWH;
+{ Path.getBoundingRect's stroke: grown by the line width -- at least the
+  hover threshold 5 where nothing fills -- over getLineScale under
+  strokeNoScale }
+function TyPathStrokeRect(const ARect: TTyXYWH; AHasStroke, AHasFill: Boolean;
+  ALineWidth: Double; ANoScale, AHasM: Boolean; const AM: TTyMat2D): TTyXYWH;
+{ setLocalTransform(AM) and the transform an element with no parent then
+  computes (updateTransform): AOutHas False for none }
+procedure TyMorphRecompose(const AM: TTyMat2D; out AOutHas: Boolean; out AOut: TTyMat2D);
+{ sortPaths: the paths' order by their centres on the hilbert curve (the
+  sort is stable) }
+function TyMorphSortOrder(const ACX, ACY: array of Double): TTyIntegerArray;
 
 { ---- dividePath.ts ---- }
 { getDividingGrids: the column count of each row }
@@ -1721,6 +1745,451 @@ begin
       Result[off].Many := Copy(moveFrom, 0, mid);
       Inc(off);
     end;
+  end;
+end;
+
+{ ==================== bbox.ts, PathProxy.ts, Path.ts, Transformable.ts [Batch 137, D5 UT2] ==================== }
+
+const
+  cBoxEps: Double = 1e-8;
+  cArcEps: Double = 1e-4;
+  cTfEps: Double = 5e-5;
+  cScaleEps: Double = 1e-10;
+  cHalfPi: Double = Pi / 2;
+  cTwoPi: Double = Pi * 2;
+
+{ Math.min / Math.max of three, left to right }
+function JsMin3(A, B, C: Double): Double;
+begin
+  Result := JsMin(JsMin(A, B), C);
+end;
+
+function JsMax3(A, B, C: Double): Double;
+begin
+  Result := JsMax(JsMax(A, B), C);
+end;
+
+function CubicAtB(P0, P1, P2, P3, T: Double): Double;
+var onet: Double;
+begin
+  onet := 1 - T;
+  Result := onet * onet * (onet * P0 + 3 * T * P1) + T * T * (T * P3 + 3 * onet * P2);
+end;
+
+{ cubicExtrema -- a double root is found and NOT counted, as upstream }
+function CubicExtremaB(P0, P1, P2, P3: Double; out E0, E1: Double): Integer;
+var a, b, c, disc, ds, t1, t2: Double;
+begin
+  Result := 0;
+  E0 := NaN;
+  E1 := NaN;
+  b := 6 * P2 - 12 * P1 + 6 * P0;
+  a := 9 * P1 + 3 * P3 - 3 * P0 - 9 * P2;
+  c := 3 * P1 - 3 * P0;
+  if (a > -cBoxEps) and (a < cBoxEps) then
+  begin
+    if (b > cBoxEps) or (b < -cBoxEps) then
+    begin
+      t1 := -c / b;
+      if (t1 >= 0) and (t1 <= 1) then
+      begin
+        E0 := t1;
+        Result := 1;
+      end;
+    end;
+  end
+  else
+  begin
+    disc := b * b - 4 * a * c;
+    if (disc > -cBoxEps) and (disc < cBoxEps) then
+      E0 := -b / (2 * a)
+    else if disc > 0 then
+    begin
+      ds := Sqrt(disc);
+      t1 := (-b + ds) / (2 * a);
+      t2 := (-b - ds) / (2 * a);
+      if (t1 >= 0) and (t1 <= 1) then
+      begin
+        E0 := t1;
+        Result := 1;
+      end;
+      if (t2 >= 0) and (t2 <= 1) then
+      begin
+        if Result = 0 then E0 := t2 else E1 := t2;
+        Inc(Result);
+      end;
+    end;
+  end;
+end;
+
+procedure FromCubicB(X0, Y0, X1, Y1, X2, Y2, X3, Y3: Double; out MinX, MinY, MaxX, MaxY: Double);
+var
+  n, i: Integer;
+  e: array[0..1] of Double;
+  v: Double;
+begin
+  n := CubicExtremaB(X0, X1, X2, X3, e[0], e[1]);
+  MinX := Infinity;
+  MinY := Infinity;
+  MaxX := NegInfinity;
+  MaxY := NegInfinity;
+  for i := 0 to n - 1 do
+  begin
+    v := CubicAtB(X0, X1, X2, X3, e[i]);
+    MinX := JsMin(v, MinX);
+    MaxX := JsMax(v, MaxX);
+  end;
+  n := CubicExtremaB(Y0, Y1, Y2, Y3, e[0], e[1]);
+  for i := 0 to n - 1 do
+  begin
+    v := CubicAtB(Y0, Y1, Y2, Y3, e[i]);
+    MinY := JsMin(v, MinY);
+    MaxY := JsMax(v, MaxY);
+  end;
+  MinX := JsMin(X0, MinX);
+  MaxX := JsMax(X0, MaxX);
+  MinX := JsMin(X3, MinX);
+  MaxX := JsMax(X3, MaxX);
+  MinY := JsMin(Y0, MinY);
+  MaxY := JsMax(Y0, MaxY);
+  MinY := JsMin(Y3, MinY);
+  MaxY := JsMax(Y3, MaxY);
+end;
+
+function QuadExtremumB(P0, P1, P2: Double): Double;
+var d: Double;
+begin
+  d := P0 + P2 - 2 * P1;
+  if JsEq(d, 0) then Result := 0.5 else Result := (P0 - P1) / d;
+end;
+
+function QuadAtB(P0, P1, P2, T: Double): Double;
+var onet: Double;
+begin
+  onet := 1 - T;
+  Result := onet * (onet * P0 + 2 * T * P1) + T * T * P2;
+end;
+
+procedure FromQuadB(X0, Y0, X1, Y1, X2, Y2: Double; out MinX, MinY, MaxX, MaxY: Double);
+var tx, ty, x, y: Double;
+begin
+  tx := JsMax(JsMin(QuadExtremumB(X0, X1, X2), 1), 0);
+  ty := JsMax(JsMin(QuadExtremumB(Y0, Y1, Y2), 1), 0);
+  x := QuadAtB(X0, X1, X2, tx);
+  y := QuadAtB(Y0, Y1, Y2, ty);
+  MinX := JsMin3(X0, X2, x);
+  MinY := JsMin3(Y0, Y2, y);
+  MaxX := JsMax3(X0, X2, x);
+  MaxY := JsMax3(Y0, Y2, y);
+end;
+
+procedure FromArcB(X, Y, RX, RY, AStart, AEnd: Double; AAnti: Boolean;
+  out MinX, MinY, MaxX, MaxY: Double);
+var diff, sx, sy, ex, ey, angle, t: Double;
+begin
+  diff := Abs(AStart - AEnd);
+  if JsLess(TyJsFMod(diff, cTwoPi), cArcEps) and JsLess(cArcEps, diff) then
+  begin
+    { a circle }
+    MinX := X - RX;
+    MinY := Y - RY;
+    MaxX := X + RX;
+    MaxY := Y + RY;
+    Exit;
+  end;
+  sx := TyJsCos(AStart) * RX + X;
+  sy := TyJsSin(AStart) * RY + Y;
+  ex := TyJsCos(AEnd) * RX + X;
+  ey := TyJsSin(AEnd) * RY + Y;
+  MinX := JsMin(sx, ex);
+  MinY := JsMin(sy, ey);
+  MaxX := JsMax(sx, ex);
+  MaxY := JsMax(sy, ey);
+  { to [0, 2 pi] }
+  AStart := TyJsFMod(AStart, cTwoPi);
+  if AStart < 0 then AStart := AStart + cTwoPi;
+  AEnd := TyJsFMod(AEnd, cTwoPi);
+  if AEnd < 0 then AEnd := AEnd + cTwoPi;
+  if (AStart > AEnd) and not AAnti then AEnd := AEnd + cTwoPi
+  else if (AStart < AEnd) and AAnti then AStart := AStart + cTwoPi;
+  if AAnti then
+  begin
+    t := AEnd;
+    AEnd := AStart;
+    AStart := t;
+  end;
+  angle := 0;
+  while angle < AEnd do
+  begin
+    if angle > AStart then
+    begin
+      sx := TyJsCos(angle) * RX + X;
+      sy := TyJsSin(angle) * RY + Y;
+      MinX := JsMin(MinX, sx);
+      MinY := JsMin(MinY, sy);
+      MaxX := JsMax(MaxX, sx);
+      MaxY := JsMax(MaxY, sy);
+    end;
+    angle := angle + cHalfPi;
+  end;
+end;
+
+function TyPathDataRect(const AData: array of Double): TTyXYWH;
+var
+  mnX, mnY, mxX, mxY, m2x, m2y, x2x, x2y, xi, yi, x0, y0: Double;
+  cx, cy, rx, ry, sa, ea, w, h: Double;
+  i, cmd, n: Integer;
+  isFirst, anti: Boolean;
+  mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    mnX := MaxDouble; mnY := MaxDouble; m2x := MaxDouble; m2y := MaxDouble;
+    mxX := -MaxDouble; mxY := -MaxDouble; x2x := -MaxDouble; x2y := -MaxDouble;
+    xi := 0; yi := 0; x0 := 0; y0 := 0;
+    n := Length(AData);
+    i := 0;
+    while i < n do
+    begin
+      cmd := Round(AData[i]);
+      Inc(i);
+      isFirst := i = 1;
+      if isFirst then
+      begin
+        xi := At(AData, i);
+        yi := At(AData, i + 1);
+        x0 := xi;
+        y0 := yi;
+      end;
+      case cmd of
+        TyZrCodeM:
+          begin
+            xi := At(AData, i); x0 := xi;
+            yi := At(AData, i + 1); y0 := yi;
+            Inc(i, 2);
+            m2x := x0; m2y := y0;
+            x2x := x0; x2y := y0;
+          end;
+        TyZrCodeL:
+          begin
+            { fromLine }
+            m2x := JsMin(xi, At(AData, i));
+            m2y := JsMin(yi, At(AData, i + 1));
+            x2x := JsMax(xi, At(AData, i));
+            x2y := JsMax(yi, At(AData, i + 1));
+            xi := At(AData, i);
+            yi := At(AData, i + 1);
+            Inc(i, 2);
+          end;
+        TyZrCodeC:
+          begin
+            FromCubicB(xi, yi, At(AData, i), At(AData, i + 1), At(AData, i + 2), At(AData, i + 3),
+              At(AData, i + 4), At(AData, i + 5), m2x, m2y, x2x, x2y);
+            xi := At(AData, i + 4);
+            yi := At(AData, i + 5);
+            Inc(i, 6);
+          end;
+        TyZrCodeQ:
+          begin
+            FromQuadB(xi, yi, At(AData, i), At(AData, i + 1), At(AData, i + 2), At(AData, i + 3),
+              m2x, m2y, x2x, x2y);
+            xi := At(AData, i + 2);
+            yi := At(AData, i + 3);
+            Inc(i, 4);
+          end;
+        TyZrCodeA:
+          begin
+            cx := At(AData, i);
+            cy := At(AData, i + 1);
+            rx := At(AData, i + 2);
+            ry := At(AData, i + 3);
+            sa := At(AData, i + 4);
+            ea := At(AData, i + 5) + sa;
+            { the rotation, then !anticlockwise as stored }
+            anti := not ((not IsNan(At(AData, i + 7))) and (At(AData, i + 7) <> 0));
+            Inc(i, 8);
+            if isFirst then
+            begin
+              x0 := TyJsCos(sa) * rx + cx;
+              y0 := TyJsSin(sa) * ry + cy;
+            end;
+            FromArcB(cx, cy, rx, ry, sa, ea, anti, m2x, m2y, x2x, x2y);
+            xi := TyJsCos(ea) * rx + cx;
+            yi := TyJsSin(ea) * ry + cy;
+          end;
+        TyZrCodeR:
+          begin
+            xi := At(AData, i); x0 := xi;
+            yi := At(AData, i + 1); y0 := yi;
+            w := At(AData, i + 2);
+            h := At(AData, i + 3);
+            Inc(i, 4);
+            m2x := JsMin(x0, x0 + w);
+            m2y := JsMin(y0, y0 + h);
+            x2x := JsMax(x0, x0 + w);
+            x2y := JsMax(y0, y0 + h);
+          end;
+        TyZrCodeZ:
+          begin
+            xi := x0;
+            yi := y0;
+          end;
+      end;
+      { the union (vec2.min / vec2.max) }
+      mnX := JsMin(mnX, m2x);
+      mnY := JsMin(mnY, m2y);
+      mxX := JsMax(mxX, x2x);
+      mxY := JsMax(mxY, x2y);
+    end;
+    { no data }
+    if i = 0 then
+    begin
+      mnX := 0; mnY := 0; mxX := 0; mxY := 0;
+    end;
+    Result.X := mnX;
+    Result.Y := mnY;
+    Result.W := mxX - mnX;
+    Result.H := mxY - mnY;
+    { new BoundingRect: a negative size turned over }
+    if Result.W < 0 then
+    begin
+      Result.X := Result.X + Result.W;
+      Result.W := -Result.W;
+    end;
+    if Result.H < 0 then
+    begin
+      Result.Y := Result.Y + Result.H;
+      Result.H := -Result.H;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyPathStrokeRect(const ARect: TTyXYWH; AHasStroke, AHasFill: Boolean;
+  ALineWidth: Double; ANoScale, AHasM: Boolean; const AM: TTyMat2D): TTyXYWH;
+var
+  lineScale, w: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := ARect;
+  if not AHasStroke then Exit;
+  mask := MaskFP;
+  try
+    lineScale := 1;
+    { getLineScale: the transform's, unless its diagonal is one }
+    if ANoScale and AHasM and (Abs(AM[0] - 1) > cScaleEps) and (Abs(AM[3] - 1) > cScaleEps) then
+      lineScale := Sqrt(Abs(AM[0] * AM[3] - AM[2] * AM[1]));
+    w := ALineWidth;
+    { the hover threshold where nothing fills (strokeContainThreshold 5) }
+    if not AHasFill then w := JsMax(w, 5);
+    if lineScale > cScaleEps then
+    begin
+      Result.W := Result.W + w / lineScale;
+      Result.H := Result.H + w / lineScale;
+      Result.X := Result.X - w / lineScale / 2;
+      Result.Y := Result.Y - w / lineScale / 2;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyMorphRecompose(const AM: TTyMat2D; out AOutHas: Boolean; out AOut: TTyMat2D);
+var
+  sx, sy, rot, shearX, rotF, x, y, skX, skY, st, ct: Double;
+  aa, ac, atx, ab, ad, aty: Double;
+  k: Integer;
+  mask: TFPUExceptionMask;
+
+  function NotAround0(V: Double): Boolean;
+  begin
+    Result := (V > cTfEps) or (V < -cTfEps);
+  end;
+
+begin
+  for k := 0 to 5 do AOut[k] := 0;
+  mask := MaskFP;
+  try
+    { setLocalTransform }
+    sx := AM[0] * AM[0] + AM[1] * AM[1];
+    sy := AM[2] * AM[2] + AM[3] * AM[3];
+    rot := TyJsAtan2(AM[1], AM[0]);
+    shearX := cHalfPi + rot - TyJsAtan2(AM[3], AM[2]);
+    sy := Sqrt(sy) * TyJsCos(shearX);
+    sx := Sqrt(sx);
+    rotF := -rot;
+    x := AM[4];
+    y := AM[5];
+    { updateTransform with no parent: getLocalTransform, or nothing }
+    AOutHas := NotAround0(rotF) or NotAround0(x) or NotAround0(y) or NotAround0(sx - 1)
+      or NotAround0(sy - 1) or NotAround0(shearX);
+    if not AOutHas then Exit;
+    if (not IsNan(shearX)) and (shearX <> 0) then skX := TyJsTan(shearX) else skX := 0;
+    skY := 0;
+    AOut[4] := 0;
+    AOut[5] := 0;
+    AOut[0] := sx;
+    AOut[3] := sy;
+    AOut[1] := skY * sx;
+    AOut[2] := skX * sy;
+    if (not IsNan(rotF)) and (rotF <> 0) then
+    begin
+      { matrix.rotate about [0, 0] }
+      aa := AOut[0]; ac := AOut[2]; atx := AOut[4];
+      ab := AOut[1]; ad := AOut[3]; aty := AOut[5];
+      st := TyJsSin(rotF);
+      ct := TyJsCos(rotF);
+      AOut[0] := aa * ct + ab * st;
+      AOut[1] := -aa * st + ab * ct;
+      AOut[2] := ac * ct + ad * st;
+      AOut[3] := -ac * st + ct * ad;
+      AOut[4] := ct * (atx - 0) + st * (aty - 0) + 0;
+      AOut[5] := ct * (aty - 0) - st * (atx - 0) + 0;
+    end;
+    AOut[4] := AOut[4] + (0 + x);
+    AOut[5] := AOut[5] + (0 + y);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyMorphSortOrder(const ACX, ACY: array of Double): TTyIntegerArray;
+var
+  n, i, j, t: Integer;
+  xMin, yMin, xMax, yMax: Double;
+  z: TTyDoubleArray;
+  mask: TFPUExceptionMask;
+begin
+  n := Length(ACX);
+  SetLength(Result, n);
+  for i := 0 to n - 1 do Result[i] := i;
+  mask := MaskFP;
+  try
+    xMin := Infinity; yMin := Infinity; xMax := NegInfinity; yMax := NegInfinity;
+    for i := 0 to n - 1 do
+    begin
+      xMin := JsMin(ACX[i], xMin);
+      yMin := JsMin(ACY[i], yMin);
+      xMax := JsMax(ACX[i], xMax);
+      yMax := JsMax(ACY[i], yMax);
+    end;
+    SetLength(z, n);
+    for i := 0 to n - 1 do z[i] := TyMorphHilbert(ACX[i], ACY[i], xMin, yMin, xMax, yMax);
+    { sort((a, b) => a.z - b.z): stable }
+    for i := 1 to n - 1 do
+    begin
+      t := Result[i];
+      j := i - 1;
+      while (j >= 0) and (z[Result[j]] - z[t] > 0) do
+      begin
+        Result[j + 1] := Result[j];
+        Dec(j);
+      end;
+      Result[j + 1] := t;
+    end;
+  finally
+    UnmaskFP(mask);
   end;
 end;
 
