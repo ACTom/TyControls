@@ -4550,6 +4550,12 @@ begin
     HeatmapTipDims(i, enc, st);
     Continue;
   end;
+  { A DATASET WHOSE TRANSFORM FAILED has no table, and the series reading it
+    draw nothing -- said here, once per dataset a series reached. Upstream
+    throws out of setOption and draws nothing at all. [Batch 133] }
+  for i := 0 to FDatasetCache.DatasetCount - 1 do
+    if FDatasetCache.ErrorOf(i) <> '' then
+      FBuild.Note(Format(rsTyChartDatasetNoTable, [i, FDatasetCache.ErrorOf(i)]));
   { AFTER THE STORES AND BEFORE EVERYTHING THAT COUNTS. A pie legend names
     DATA ITEMS, so the names have to be in the store before the legend can
     list them; and the filter the legend implies has to be in place before

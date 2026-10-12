@@ -1049,6 +1049,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Dataset"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.DataTransform.pas"/>
+        <UnitName Value="tyControls.AdvChart.DataTransform"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Color.pas"/>
         <UnitName Value="tyControls.AdvChart.Color"/>
       </Item>

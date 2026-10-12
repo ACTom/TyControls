@@ -10111,7 +10111,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **箱线图的宽**（`boxplotLayout.calculateBase`）：一根基轴上所有（未被图例关掉的）箱线图系列共享带宽：可用宽 `band × 0.8 − 2`，间隔 `可用宽 / n × 0.3`，每个宽 `(可用宽 − 间隔 × (n − 1)) / n`，偏移从 `宽 / 2 − 可用宽 / 2` 起每个加 `(间隔 + 宽)`；每个系列的宽再夹在自己的 `boxWidth` 里（缺省 `[7, 50]`，不是数组时上下限相同，`parsePercent(…, band) || 0`），**先下限后上限**。
 - **箱线图的点**（14 个）：Q1 端与 Q3 端各两点围成箱子，两根须（最小到 Q1、最大到 Q3），三根横线（最小、最大、中位）；基轴坐标加偏移，**不做 subPixelOptimize**。`BoxPath` 先闭合箱子，再逐段画须和横线。入场从中位数的像素长出，`animationDuration` 缺省 800；更新时留下的从原处补间、新来的入场、走掉的当即消失。
 - **样式**：`visualDrawType: 'stroke'`——`itemStyle.color`（缺省 `tokens.color.neutral00`，浅色主题是 `#fff`）是填充，`itemStyle.borderColor` 缺省是色板色，`borderWidth` 缺省 1，数据项的 `itemStyle` 叠在上面。emphasis 缺省 `borderWidth 2` 加阴影（模糊 5、偏移 1/1、`rgba(0,0,0,0.2)`），默认抬亮（白色抬亮还是白），z2 从 100 到 110。
-- **transform**：数据集有真值的 `transform` 或 `fromTransformResult` 时没有自己的 `source`：上游数据集是 `fromDatasetIndex`，否则 `fromDatasetId`，都没写就是 0；取它的第 `fromTransformResult || 0` 个结果（写了却没有就抛错）。有 transform 就逐级管道（空数组抛错），没有就原样克隆那个结果。`'boxplot'` 要求上游是数组行、按列排（否则抛错），`getRawData()` 是**整个** `data`（表头行也算进去）。结果 0 是 `['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']` 命名的箱子表，结果 1 是不命名的离群点表 `[name, value]`，两个都没有表头行。
+- **[第 133 批：上游一个都找不到时当根数据集读自己的 `source`（不是没有表）；`fromDatasetIndex` 可以是数组或下标串、`fromDatasetId` 可以是数组；`fromTransformResult` 超出上游自己的结果时回落到上游的上游的同号结果；副本（cloneSourceShallow）没有原始 meta——系列读它重新猜表头、丢掉维度名，对它做 transform 时结果 0 继承维度会抛。见 §170。]** **transform**：数据集有真值的 `transform` 或 `fromTransformResult` 时没有自己的 `source`：上游数据集是 `fromDatasetIndex`，否则 `fromDatasetId`，都没写就是 0；取它的第 `fromTransformResult || 0` 个结果（写了却没有就抛错）。有 transform 就逐级管道（空数组抛错），没有就原样克隆那个结果。`'boxplot'` 要求上游是数组行、按列排（否则抛错），`getRawData()` 是**整个** `data`（表头行也算进去）。结果 0 是 `['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']` 命名的箱子表，结果 1 是不命名的离群点表 `[name, value]`，两个都没有表头行。
 - **prepareBoxplotData**：每行 `slice` 后用 `a - b` 排序；`quantile` 是 `H = (n − 1)p + 1`，取 `floor(H)` 处的值，`H` 有小数部分时往下一个插值，越界读 `undefined`（于是空行全是 NaN）；`boundIQR` 缺省 1.5，`'none'` 和数字 0 用最小最大值，否则 `boundIQR × (Q3 − Q1)` 外扩后再和最小最大值夹（`'1'` 这种串被乘法转成数）；`itemNameFormatter` 是串时只替换**第一个** `{value}`，否则名字是行号；样本落在 `[low, high]` 外的进离群点表。
 - **tooltip 维**：类型声明的 `defaultTooltip`（K 线 open…highest、箱线图 min…max）只在**没人给这一维起名**时生效（`createDimensions` 只在 `resultItem.name == null` 时套类型的维度定义）。数据集表头、`dataset.dimensions`、系列 `dimensions`、transform 的结果给了名字，这些子行就没了，tooltip 跟标签走——最后一个适合当标签的坐标维（transform 出来的箱子只显示 High）。
 
@@ -10119,7 +10119,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 - **新单元 `tyControls.AdvChart.WhiskerBox`**（纯）：`TTyWhiskerLayout`（解出的 K 线宽、箱宽与偏移、`clip`，以及控件填的箱线图填充 / 描边 / 线宽）、`TyWhiskerParsePercent`、`TyCandleWidthOf`、`TyBoxWidthBounds`、`TyBoxplotBase`、`TyWhiskerBand`（类目轴取 `BandWidth`，否则 `TyBandFromMinGap` 配 `TyLiPosMinGap` 与映射范围，至少 1）、`TyCandleEndsOf` / `TyBoxEndsOf`（`Cart.DataToPoint`、实体两侧与脊线 `TySubPixelOptimize`、开盘价 / 中位数基线）、`TyWhiskerClipOf` / `TyWhiskerClipRect`、`TySolveWhiskerLayouts`（K 线逐系列、箱线图逐轴，跳过隐藏系列）。
 - **`Series`**：`TySeriesWhiskerBaseIsX`，绑定时 K 线和箱线图按它选基轴（索引、统计、containShape 跟着走）。
-- **`Dataset`**：`TTyDatasetCache`——每个数据集的结果是一个 `TySourceOf` 本来就会读的节点（`source` / `dimensions` / `sourceHeader` / `seriesLayoutBy`）：根数据集借自己的节点，transform 的结果是缓存造的节点（随缓存释放），`fromTransformResult` 的克隆就是上游的节点；解析中的标记挡住自引用和环。`TySourceOf` 多一个缓存参数，遇到计算出来的数据集就读缓存给的节点（系列自己的 `seriesLayoutBy` / `sourceHeader` / `dimensions` 照旧优先）。注册表只有 `'boxplot'`（`ApplyOne`），D2 的 filter / sort 加在同一处。`TyQuantile`、`TyPrepareBoxplotData` 公开。
+- **[第 133 批：注册表搬到 `tyControls.AdvChart.DataTransform`（`TyRegisterDataTransform`，filter / sort / boxplot 内置），`ApplyOne` / `ApplyPipe` 删掉，boxplot 也走通用的 applySingleDataTransform（结果节点不变）；结果记成 `TTySourceRef`（节点 + 是否副本），失败的数据集记理由（`ErrorOf`）。见 §170。]** **`Dataset`**：`TTyDatasetCache`——每个数据集的结果是一个 `TySourceOf` 本来就会读的节点（`source` / `dimensions` / `sourceHeader` / `seriesLayoutBy`）：根数据集借自己的节点，transform 的结果是缓存造的节点（随缓存释放），`fromTransformResult` 的克隆就是上游的节点；解析中的标记挡住自引用和环。`TySourceOf` 多一个缓存参数，遇到计算出来的数据集就读缓存给的节点（系列自己的 `seriesLayoutBy` / `sourceHeader` / `dimensions` 照旧优先）。注册表只有 `'boxplot'`（`ApplyOne`），D2 的 filter / sort 加在同一处。`TyQuantile`、`TyPrepareBoxplotData` 公开。
 - **`Marks`**：`TTySeriesVisual.Whisker`。`BuildCandlestick` 重写落位：宽取解出的（没解时退回半个带宽），八个点来自 `TyCandleEndsOf`，实体是四点的包围盒、影线是两段，入场的数存对齐后的；sign 0 取 `color0`、上一行收盘是 NaN 时为跌；`hasValue` 要五个数都在；部分出界挂裁剪、全部出界不画；影线与实体的命中带半个线宽；去掉零高实体补的一个像素。新 `BuildBoxplot`：每行一个带 `Cmds` 的多边形（`TyBoxplotShape`：命中多边形是箱子，路径是箱子加五段），数据项 `itemStyle` 的 color / borderColor / borderWidth / opacity 叠上去，入场与更新的数（14 点、中位数基线、方向）放在 `Anim.Pts` / `G`，命中带半个线宽，裁剪同 K 线。渲染器表加 `boxplot`；没解时（纯单元调用）用单系列的缺省布局。
 - **`Shape`**：`TyBoxplotShape`；多边形带 `Cmds` 时命中检测再看路径里的直线段（须和横线）。
 - **控件**：`FWhiskers` 在柱布局之后解；`BoxplotStyle` 填填充（`itemStyle.color`，缺省是主题的图表底色——上游的 `neutral00`，不写死 `#fff`）、描边（`borderColor`，缺省系列色）、线宽；`FDatasetCache` 每次建 store 时清空并传给 `TySourceOf`；`MultiValueDims` 只在类目基轴且 `encode` 没写基轴时前插行号，否则基值是元素第一个；`ResolveTextDims` 被命名的维不进类型的 tooltip 维。
@@ -10142,7 +10142,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **表**：每个数据集的每个结果过 `TTyDatasetCache`：维度名、结果 0 的 `StartIndex`、逐格（数字逐位，NaN 只认 NaN——JS 里只有一个 NaN）。
 - **tooltip**：指针放到基准的点上，比显示的是哪一项、各行（axis 触发走 `AxisTooltipContent`）。
 - **高亮**：`DispatchAction` 之后比线宽、不透明度、z2 的抬升、写了的填充逐位，没写的比「动没动」。
-- 手写 5 个：`TyQuantile` 的插值与边界；不是数的样本从不算离群点（这里对 NaN 做有序比较会抛异常）、不是数组的行什么都不做；没注册的 transform、空管道、上游不存在、对象行、根数据集只有一个结果、没缓存时计算出来的数据集无效；互相引用的两个数据集都没有表也不死循环；K 线宽的规则。
+- **[第 133 批：「没注册的 transform」那条改了两处——filter 现在有表；找不到上游的那个当根数据集，没有 source 所以读不出表。见 §170。]** 手写 5 个：`TyQuantile` 的插值与边界；不是数的样本从不算离群点（这里对 NaN 做有序比较会抛异常）、不是数组的行什么都不做；没注册的 transform、空管道、上游不存在、对象行、根数据集只有一个结果、没缓存时计算出来的数据集无效；互相引用的两个数据集都没有表也不死循环；K 线宽的规则。
 
 另外：`test.advchart.animenter` 的 K 线横向坐标不再按权重比，全部逐位（例外取消）；`animenter` / `animupdate` / `animstate` 的映射认 `boxplot` / `boxplotBoxPath`；`test.advchart.containshape` 重新比较原先推迟的「值基轴上的 K 线」用例；`test.advchart.candlestick` 的两个像素测试改读影线那一列（零高实体的线落在两行之间，半透明，方向要从影线读）。
 
@@ -10181,7 +10181,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **K 线逐项颜色**：数据项自己的 `itemStyle`（以及 `borderColorDoji` 只写在某一项上）不读；`borderColorDoji` 只认系列上的。
 - **[第 117 批：已做——三条按 sign 描的路径、没有数据的命中、纵向布局的零长线，见 §152。]** **K 线 large 模式**：600 个以上时上游走 large 路径（C8），端口仍逐项画。
 - **新来的 K 线**在更新中仍是直接到终值（AN3 的旧行为，没有基准）；新来的箱子按上游入场。
-- **transform**：只有 `'boxplot'`；filter、sort（D2）以及任何没注册的类型、空管道、上游不是数组行或按行排、`fromTransformResult` 指向不存在的结果——上游抛错让整个 setOption 失败，端口只是这个数据集没有表、读它的系列什么都不画，也没有诊断。样本不是数时按 JS 的 `ToNumber` 转（数组、对象当 NaN），含 NaN 时的排序用稳定插入排序，不保证与 V8 的 TimSort 在不一致比较下的结果相同；`useExtreme` 时上游把原始样本（可能是串）放进表，端口放转过的数。`itemNameFormatter` 写成函数不支持（当成非串，名字是行号）。
+- **[第 133 批：filter、sort 与注册表已做；出错仍是这个数据集（和读它的）没有表，但控件现在给诊断 `dataset[%d] has no table: %s`；找不到上游的数据集当根数据集。见 §170。]** **transform**：只有 `'boxplot'`；filter、sort（D2）以及任何没注册的类型、空管道、上游不是数组行或按行排、`fromTransformResult` 指向不存在的结果——上游抛错让整个 setOption 失败，端口只是这个数据集没有表、读它的系列什么都不画，也没有诊断。样本不是数时按 JS 的 `ToNumber` 转（数组、对象当 NaN），含 NaN 时的排序用稳定插入排序，不保证与 V8 的 TimSort 在不一致比较下的结果相同；`useExtreme` 时上游把原始样本（可能是串）放进表，端口放转过的数。`itemNameFormatter` 写成函数不支持（当成非串，名字是行号）。
 - **箱线图的 visualMap** 与逐数据取色不接；图例图标沿用原有规则，没有按上游（白填充、系列色描边）建模。
 - **`encode` 写了基轴时的系列自带数据**只是不前插行号，`encode` 的其余映射走原有的 `SeriesDataEncode`。
 
@@ -12470,3 +12470,97 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 - `source/tyControls.AdvanceChart.pas`：`PaintBreakAreas`、`BreakAreaAt`、`BreakAxisOf`、`BreakAreaClickAt`、`BreakExpandClick`、`DoAxisBreakAction`；`Relayout`、`PaintAxis`、`PaintStatic`、`EventTargetAt`、`EventUp`、`DispatchActionObject` 的调用处。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/axis-breaks.js`、`tests/fixtures/advchart-axis-breaks.json`、`tests/test.advchart.axisbreaks.pas`（新，注册在 `tytests.lpr`）、`tests/test.advchart.scale.break.pas`（改接口）。
+
+## 170. Tier 3 第一百三十三批：dataset transform（D2，2026-10-12）
+
+路线图 D2：dataset transform——注册表、filter 条件语言（不含 `reg`）、sort、管道、多输出。在这之前端口的 transform 只有 C1 顺手做的那一个：`'boxplot'` 写死在 `TTyDatasetCache.ApplyOne` 里（§143），`filter` 与 `sort` 一概「没有表」，§143 的推迟里还记着「filter、sort（D2）」；数据集串联只认数字的 `fromDatasetIndex`，找不到上游就没有表，`fromTransformResult` 超出上游自己的结果就没有表，出错时什么都不说。这一批对着 6.1 的 `data/helper/transform.ts`（`registerExternalTransform`、`applyDataTransform`、`applySingleDataTransform`、`createExternalSource`、`getDimensionInfo`、`cloneRawData`）、`component/transform/filterTransform.ts`、`sortTransform.ts`、`util/conditionalExpression.ts`（`parseOption`、`parseAndOrOption`、`parseNotOption`、`parseRelationalOption`、`isObjectNotArray`）、`data/helper/dataValueHelper.ts`（`parseDataValue`、`getRawValueParser`、`FilterOrderComparator`、`FilterEqualityComparator`、`SortOrderComparator`、`createFilterComparator`）、`data/helper/sourceManager.ts`（`_createSource`、`_applyTransform`、`getSource`、`_getSourceMetaRawOption`）、`data/helper/sourceHelper.ts` 的 `queryDatasetUpstreamDatasetModels`、`model/Global.ts` 的 `queryComponents`、`data/Source.ts`（`createSource`、`determineSourceDimensions`、`normalizeDimensionsOption`、`cloneSourceShallow`、`objectRowsCollectDimensions`）、`data/helper/dataProvider.ts` 的三张取值表、`component/dataset/install.ts`，以及 V8 的 `Array.prototype.sort`（`third_party/v8/builtins/array-sort.tq`）逐行核过，**以 dist 为准**在真 dist 上跑基准。§143 的相关处在原处标注。
+
+### 上游的做法
+
+- **注册表**：`registerTransform` 要 `ns:name` 形式（`split(':')` 恰好两段，否则抛）；`echarts` 命名空间的是内置的，按裸名登记（`'filter'`，不是 `'echarts:filter'`），别的按全名；同名后登记的覆盖先登记的。transform 组件装 `filter` 与 `sort`，箱线图系列装 `boxplot`。只有内置的能调 `getRawDataItem` / `getRawData`，外来的调了抛 `not supported`。
+- **外部源**（`createExternalSource`）：上游表 `seriesLayoutBy` 不是 `column` 就抛；维度是 `dimensionsDefine`（有的话，名字重复就抛——注意名字已经过 `normalizeDimensionsOption` 去重：第二个 `a` 是 `a-1`，但 `['a', 'a', 'a-1']` 会撞出两个 `a-1`）或 `dimensionsDetectedCount` 个无名维度；取值表按格式查，不认识的格式（没有 `source` 的数据集）在 dev 构建里断言失败抛错。`count` 是数组行减表头行数（不小于 0）、对象行的行数、按列表的第一个维度那一列的长度（一个维度都没有时读 undefined 的属性抛 TypeError）。`retrieveValueFromItem` 在数组行 / 按列表里取 `item[dimIndex]`，在对象行里取 `item[dimName]`（无名维度取 `'undefined'` 键），行是 null 时是 undefined。按列表的「行」是每个维度那一列的第 i 格拼成的新数组。
+- **`getDimensionInfo(dim)`**：null 没有；数字直接当下标（`dimensions[dim]`，`1.5`、负数、NaN 都没有）；字符串若读得出数（`!isNaN(dim)`）而且不是某个维度的名字，当属性键用——只有规范的数组下标串（`'2'`，不是 `'02'`、`' 2'`、`'2.0'`）找得到；否则按名字找。所以名为 `'1'` 的维度，`dimension: '1'` 找到它，`dimension: 1` 找到下标 1。
+- **管道**（`applyDataTransform`）：`normalizeToArray`；空列表抛；每一步的结果是下一步的上游列表，**中间步至少补成一个**（`length = max(length, 1)`，补的是 undefined，下一步读它抛 TypeError）。每一步：没有上游抛；transform 不是对象（数组也算对象）抛；`type` 找不到抛（`"undefined"`）；对每个上游建外部源；调 transform；结果规范成数组。
+- **结果**：每个结果必须是对象、`data` 为真、格式是数组行或对象行，否则抛。**第一个结果没有 `dimensions`（按真值）时继承上游**：上游的前 `startIndex` 行（表头）拼在结果前面，`sourceHeader` 就是那个数，`dimensions` 是上游的**原始** `metaRawOption.dimensions`——上游是 `fromTransformResult` 的副本时它没有 `metaRawOption`，读 `.dimensions` 抛 TypeError。其余的结果 `sourceHeader: 0`、`dimensions` 是结果自己给的。全部 `seriesLayoutBy: 'column'`。
+- **filter**：`parseConditionalExpression(config)`：`true` / `false` 是常量；不是「对象且不像数组」（`isArrayLike` 看 `length` 是不是数——条件对象里写了数字 `length` 也算数组）抛；`and` 为真 → 必须是非空数组；`or` 同理；`not` 为真 → 必须是对象（`not: true` 也抛）；否则是关系条件：**先** `prepareGetValue`（没有 `dimension` 键抛、找不到维度抛），再逐个键：跳过 `parser` 与 `dimension`，别名 `value`→eq、`<`→lt、`<=`→lte、`>`→gt、`>=`→gte、`=`→eq、`!=` / `<>`→ne，条件值先过 parser；`eq` / `ne` 建相等比较，`lt` / `lte` / `gt` / `gte` 要求（过 parser 之后的）值 `typeof` 是 number（NaN 也行）否则抛，`reg` 建正则，别的抛；一个运算符都没有也抛。`parser` 名字不认识时**什么都不做**（不抛）。求值：取格子、过 parser、逐个比较（与）。`and: 0` 不是 and，`and` 成了一个运算符名，抛。
+- **比较**：序比较——格子是 number 就直接比，否则 `numericToNumber`（数字串的数，`' 30 '` 是 30，`'7px'`、`'-'`、`''`、`'0x10'` 是 NaN），条件值也过 `numericToNumber`（-0 成 0），NaN 一律假。相等——先 `===`（数组、对象只等于自己，所以永远不等）；不等且 `typeof` 不同、其中一边是 number 时再比两边的 `numericToNumber`。`eq: '2012'` 碰到 2012 为真，`eq: 2013` 碰到 `'2013'` 为真，`eq: true` 什么都碰不到，`eq: null` 只碰到 null。
+- **parser**：`number` 是 `parseFloat(String(v))`（`'7px'` 是 7、`'0x10'` 是 0、null 是 NaN）；`time` 是 `+parseDate(v)`——字符串过 TIME_REG（没写时区是本地时间），null / undefined 是 NaN，别的是 `new Date(Math.round(+v))`（TimeClip：超过 8.64e15 是 NaN，-0 成 0）；`trim` 只修剪字符串。
+- **sort**：`normalizeToArray(config)`，空的抛；每个键依次查：`dimension` 为 null 抛、`order` 不是 `'asc'` / `'desc'` 抛、`incomparable` 为真却不是 `'min'` / `'max'` 抛、维度找不到抛、`parser` 为真却不认识抛（filter 不抛，sort 抛）；全部查完再查上游格式（只认数组行与对象行，按列表在这里抛）。然后取全部行、`Array.prototype.sort`，比较器逐键 `SortOrderComparator`：两边先变成数（number 原样、别的 `numericToNumber`），不是数的当 incomparable（缺省 asc 是 +∞、desc 是 −∞——**只在 `incomparable` 是 null 时**取这个缺省，`''` 或 0 就是 +∞）；两边都不是数时，两个字符串按 UTF-16 码元比，一边是字符串的那边当 0、另一边保持 incomparable；`<` 给 `resultLT`（asc −1、desc 1）。**这个比较器不一致**：数字 ±Infinity（由 `'Infinity'` 之类的串读出）既等于 incomparable 的字符串、又等于 null，而字符串小于 null——结果取决于排序算法本身。
+- **V8 的排序**：TimSort。`minRun` 由长度算（≥ 64 时右移并记住移出去的 1）；`CountAndMakeRun`（严格递减的段就地翻转）、不够 minRun 用二分插入补齐；入栈、`MergeCollapse`（带 2015 年修过的不变式检查）、最后 `MergeForceCollapse`；`MergeAt` 先 `GallopRight` / `GallopLeft` 剪掉两头已就位的，再按短的一边 `MergeLow` / `MergeHigh`，计数到 `minGallop`（初始 7）转入 galloping，离开时加一作罚。
+- **串联**（`SourceManager`）：没有真值的 `transform` 和 `fromTransformResult` 的是根数据集（`fromTransformResult: 0` 单独写也是根）；否则上游是 `queryReferringComponents` 的结果——`fromDatasetIndex` 不为 null 时按下标（可以是数组、可以是下标串），否则 `fromDatasetId`（字符串与数字按文字比，可以是数组），都没写是第 0 个。**一个都找不到时 `hasUpstream` 为假，数据集当根数据集读自己的 `source`**。写了 `fromTransformResult`（不为 null）而上游不止一个抛；取上游的 `getSource(fromTransformResult || 0)`，写了却取不到抛；有 transform 就跑管道，否则 `cloneSourceShallow`（副本：表、表头数、维度定义都留着，`metaRawOption` 没了）。`getSource(k)` 在自己没有第 k 个结果时**回落到第一个上游的第 k 个**，一直往上。读自己的数据集无限递归，栈溢出（RangeError）。
+- **系列读结果**：`seriesLayoutBy` / `sourceHeader` / `dimensions` 是系列的、没有就上游 `metaRawOption` 的；副本没有 `metaRawOption`，于是 `seriesLayoutBy`（null）≠ undefined，**系列按自己的三样（往往什么都没写）重建源**——表头重新猜、维度名丢掉。
+- **出错**：上面的每一处 throw 都让 `setOption` 失败（有系列读到它时；没有系列读的数据集不准备源，不抛）。`transform` 写成数字、字符串、`true` 时更早：`disableTransformOptionMerge` 给它打 primitive 标记，`setOption` 直接 TypeError。系列读一个没有 `source` 的根数据集也抛（`Invalide sourceFormat: unknown`）。`print` 只在 dev 打日志。
+
+### port 以前
+
+- `ApplyOne` 只认 `'boxplot'`；filter、sort、外来的 transform 都是「没有表」；没有注册表。
+- `UpstreamOf` 只认数字下标（数组、下标串当没写）；找不到上游没有表；`fromTransformResult` 取不到不回落；副本与原结果同一个节点、同一套 meta，系列读副本照用原结果的 `sourceHeader`。
+- `TySourceOf` 的 `sourceHeader` 写成 `'auto'` 以外的字符串当 0（上游按真值是 1）。
+- 失败一声不吭。
+
+### 做法
+
+- **`tyControls.AdvChart.DataTransform`**（新）：
+  - `ETyTransformError`；`TTyExternalSource`（`SourceFormat`、`BuiltIn`、`Count`、`RawItem`、`RawData`、`CloneRawData`、`ValueOfItem`、`RetrieveValue`、`DimensionOf`、`DimCount` / `Dim`；构造时查按行排、维度名重复、格式；按列表的行是做出来的、随源释放）；`TTyTransformParams`（`Upstream`、`Upstreams`、`Config`）、`TTyTransformResult`（`Data`、`Dimensions`）、`TTyDataTransformFunc`。
+  - **注册一个 transform 是一步**：`TyRegisterDataTransform('ns:name', @Proc)`；过程读 `AParams`，用 `TyAddTransformResult` 交结果，配置不对就 `raise ETyTransformError`——数据集于是没有表，消息就是诊断。D3 的 `ecStat:regression` / `clustering` / `histogram` 照这个接。`TyFindDataTransform`。
+  - `TyApplyDataTransform`（applyDataTransform + applySingleDataTransform：管道、中间步补位、结果检查、第一个结果的继承——副本上游报错——、结果节点进 owner 列表），整段屏蔽浮点陷阱，`Exception` 一律变成理由。
+  - 值的规则：`TTyJsValue`（undefined / null / 布尔 / 数 / 串 / 数组 / 对象）、`TyJsValueOf`、`TyJsNumericOf`（numericToNumber，数组按文字）、`TyRawParserByName`、`TyApplyRawParser`（time 用 `TyParseDateMs`、`TyJsRound` 与 TimeClip）、`TyCompareJsStrings`（UTF-16 码元）、`TySortOrderCompare`。
+  - **`TyJsArraySort`**：V8 TimSort 逐行转写（`ComputeMinRunLength`、`CountAndMakeRun`、`BinaryInsertionSort`、`GallopLeft` / `GallopRight`、`MergeLow` / `MergeHigh` 含 galloping 与 `minGallop` 的罚、`MergeAt`、`MergeCollapse` / `MergeForceCollapse`），在下标数组上跑，比较器是方法指针——不一致的比较器也给出 V8 的次序。
+  - filter：条件树 `TTyCond`（常量 / and / or / not / 关系），`ParseCond` 的检查次序照上游（维度先于运算符）；sort：键先全部检查再查格式，parser 是纯函数，每格只解析一次。boxplot 改走通用路径（`RawData` + `TyPrepareBoxplotData`，结果节点与以前相同）。三个都在 `initialization` 里以 `echarts:` 登记。
+- **`tyControls.AdvChart.Dataset`**：
+  - `TTySourceRef`（节点 + 是否副本）；`TTyDatasetCache` 的结果改成它，加 `FUps`、`FErrors`；`UpstreamsOf`（下标 / 下标数组 / 下标串、id / id 数组，按组件次序）；`SourceAt`（getSource 的回落）；`Resolve` 照 `_createSource` / `_applyTransform`：找不到上游当根、`fromTransformResult` 的真值与下标串、上游不止一个、环、上游失败、取不到结果各有理由；副本记 `IsClone`。新公开 `ResultIsClone`、`SeriesNode`（系列读的那个：带回落）、`ResultCount`、`ErrorOf`、`DatasetCount`。`ApplyOne` / `ApplyPipe` / `Own` 删掉。
+  - `TyJsTextOf`（`String()`）、`TyNormalizeDims`（normalizeDimensionsOption：名字变串、显示名缺省是名字、重名加 `-1`、`-2`，计数只记原名）、`TTySourceFields` / `TySourceFieldsOf`（createSource 对一个节点算出的格式、方向、表头数、维度定义、探测到的维度数——外部源和测试都读它；表头名是第一行每一格的 `String()`，对象行的维度是第一个真值行的键）。
+  - `TySourceOf`：计算出来的数据集走 `SeriesNode`；**系列读副本时只用系列自己的 meta**；`sourceHeader` 按真值（`'auto'` 与 null 才猜）。
+- **控件**：建 store 之后，对缓存里每个有理由的数据集记一条诊断 `dataset[%d] has no table: %s`——只有系列碰到过的数据集才会被解析，没人读的不说。
+- **字符串**：`rsTyChartDatasetNoTable` 加 32 条理由（`rsTyDs…`），进 `tyControls.StrConsts`、`.pot` 与 zh_CN（`tools/themebuilder/languages/tycontrols.zh_CN.po` 逐字节同步）。没有新的主题键，也没有新的 JSON 入口（transform 读的是已经解析过的选项树）。
+- 新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### 基准
+
+`tools/advchart-oracle/dataset-transform.js`（真 dist，node 下 SSR / SVG，600 × 400，`TZ=UTC`，`Math.random` 为 0，每个选项 `animation: false`，最后 `process.exit()`）→ `tests/fixtures/advchart-dataset-transform.json`（约 790 KB）：**128 个用例**。脚本自己用 `echarts.registerTransform` 登记三个测试用的 transform——`test:scale`（经 `retrieveValue` 把每个数乘 k，不给维度：结果 0 继承表头）、`test:pairs`（两个结果：命名的 `[name, value]` 与一张「两个词一行、计数一行」的无名表）、`test:raw`（调 `getRawDataItem`，外来的不许）；Pascal 那边登记同样的三个。
+
+- **filter**（39 个）：gt / gte / lt / lte、一个条件两个运算符、eq 的四种类型不匹配（数对数字串、串对数、null、true）、eq 数字串（`' 30 '`、`'1e2'`，`'0x10'` 不等于 16）、ne 留下 null、`!=` / `<>` / `value` / `=` 别名、维度按名字 / 按下标 / 按 `'2'`、名为 `'1'` 的维度、and / or / not 嵌套与 not 套 and、整个条件 true / false、`and: [true]` 与 `or: [false, …]`、trim（两边都修剪）、number（`'7px'` 是 7、eq `'7em'`）、不认识的 parser、time（带时区的串、数字、布尔、`'abc'`、null、`.5` 毫秒、数字条件值的取整）、对象行、对象行加声明的维度、无表头加声明的维度（含 `{name, type}`）、`sourceHeader: false` / `2` / `'yes'`、重名维度 `a-1`、按列表、null 行、空表；`reg`（偏差，见下）。
+- **sort**（19 个）：asc / desc（null 在尾）、两个键、数字串与词（incomparable 缺省、`'min'`、desc 加 `'max'`）、全是词、词加 null 加大写、number / trim / time parser、对象行；**不一致比较器**的混合列（数、数字串、词含 é 与 emoji、null、布尔、`'Infinity'` / `'-Infinity'`、带空格的数）20、60、300 行与 300 行两个键；200 行少数几个值（稳定）、500 行两段递增（galloping 归并）、开头严格递减的段（翻转）。
+- **管道**（5 个）：filter → sort、sort → filter → sort、boxplot → filter（按 boxplot 给的名字 `Q2`，结果 1 被丢掉）、filter → boxplot（两个结果）、一个元素的列表。
+- **串联**（10 个）：按下标串三级、按 id、数字 id 对字符串、下标与 id 都写（下标赢）、下标数组（filter 读第一个）、找不到上游（读自己的 source）、缺省第 0 个、`test:scale` 两种、`test:pairs` 加它结果 1 的副本与对结果 0 的 sort。
+- **多输出**（5 个）：boxplot 的两个结果、结果 1 的副本、对结果 1 的 filter；结果 1 的回落（filter 之后的数据集要第 1 个，拿到 boxplot 的离群点）；`fromTransformResult: 0` 加 transform；`fromTransformResult: 0` 单独写（根）；sort 结果 0 的副本。
+- **出错**（36 个，35 个上游抛）：不认识的类型、`echarts:filter` 全名、空列表、数字 transform（setOption 就抛）、列表里套列表、条件没有维度 / 维度不存在 / 维度 null / 没有运算符 / 不认识的运算符 / lt 一个串、`and: []` / `and: {}` / `not: true` / 没有 config / config 是列表 / 带数字 `length` / `and: 0`、sort 的空 config / 没有 config / 没有维度 / 没有 order / incomparable `'mid'` / 不认识的 parser / 维度不存在 / 按列表、上游按行排、重名撞车、读自己、根数据集要结果 1、对副本做 filter、上游没有 source、对象行做 boxplot、外来的要原始行、下游跟着失败；外加不抛的一个（time parser 与读不出的日期：NaN 也是数，什么都不过）。
+- **系列**（14 个）：filter 上的柱（标签）、sort 上的折线（含 null 断开）、对象行 filter 上的散点、管道上的饼（`{b}`）、两个系列读同一张表的两个 transform（类目按到达次序）、带表头的缺省 encode、按行读 filter 结果（继承的表头让它读得了）、结果 1 的副本上的散点、副本重新猜表头（一根柱）、`datasetId`、继承声明的维度按名字 encode、对象行 sort 上的饼；上游拒绝的两个：transform 抛错、读一个没有 source 的根数据集。
+- 每个数据集按次序 `prepareSource()`，记抛出的消息或 `_sourceList` 的每个结果：格式、是否副本（没有 `metaRawOption`）、`startIndex`、维度名、`dimensionsDetectedCount`、逐格的行；有系列的另记网格矩形、类目轴的类目、每个系列的项（柱的布局矩形、折线与散点 `dataToPoint` 的点、饼的 cx / cy / r0 / r / 起止角）和标签文字。
+- 86 条守卫（gt 50 留下哪五行、表头行在前、`'2'` 是下标 2、名为 `'1'` 的维度、嵌套、false 只剩表头、trim 两边、parser 的 `'7px'`、时区、对象行、声明维度继承、`sourceHeader: 2`、`a-1`、按列表、null 行、`reg` 上游留六行、asc / desc 的 null 在尾、词的码元序、稳定、两段归并、管道、串联四种、副本标记、回落、35 个出错用例都在对的数据集上抛、读自己是 RangeError、下游跟着抛、类目到达次序、饼排过序、副本只剩一根柱）全部成立；两次生成逐字节一致；没有 `\u0000`。另在脚本外核过：s-mix-60 / 300 / 300-multi 的 V8 结果与普通稳定插入排序**不同**——这几个用例确实在考算法本身。
+
+### 测试
+
+`test.advchart.datasettransform`（新，注册在 `tytests.lpr`；`TY_DATASETTRANSFORM_COUNTS=1` 时打印计数）：
+
+- **表**（`TestEveryTableIsUpstreamsTable`）：非出错用例的每个数据集，`TTyDatasetCache` 的结果数、每个结果经 `TySourceFieldsOf` 的格式、副本标记、`startIndex`、探测维度数、维度名，和逐格的行（数逐位、串原样、布尔、对象行的键序）——206 个结果、12 900 格、19 767 项比较。
+- **出错**（`TestEveryThrowLeavesNoTable`）：上游抛的数据集这里没有结果且有理由，没抛的照样逐格比——2 501 项。
+- **画面**（`TestSeriesOverTransformsDrawAsUpstream`）：控件自己画（zrender 宽度表量字），比网格矩形、类目、柱（按网格裁过）、散点、折线（单精度，两点以上的段）、饼的扇形六个数、标签文字与个数——319 项、70 个图元、50 个标签。
+- **手写**（4 个）：`reg` 没有表、理由是 `rsTyDsCondReg`（上游留六行）；抛错的 transform 在诊断里说 `dataset[1] has no table: no transform is registered as "nope"`、系列什么都不画，没有系列读的失败数据集不说；注册表的命名规矩（没有 `:`、两个 `:`、`nil`、内置裸名、外来全名、覆盖）；`TyJsArraySort` 对 200 组一致比较器（0–700 个、少数或很多不同的键、长的升 / 降段）与普通稳定插入排序逐位相同。
+- `test.advchart.candleboxplot` 的 `TestATransformNobodyRegisteredHasNoTable` 改了两条：filter 现在有表；找不到上游的那个当根数据集（没有 source，`TySourceOf` 读不出表）。
+
+首跑：表、出错、手写全过；画面两处是测试自己的——散点与折线里上游 NaN 的点（null 销量）端口不画、单独一个点的段不画线，改成跳过 NaN、只比两点以上的段。补了两个用例：`sourceHeader: 'yes'`、副本重新猜表头（原想做「声明维度的结果 0 的副本」，才发现 `fromTransformResult: 0` 单独写是根数据集，副本只可能是结果 1 以上——那个用例留作「读没有 source 的根数据集」）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartDatasetTransformTest` 7、`TAdvChartCandleBoxplotTest` 9、`TAdvChartDatasetTest` 22、`TAdvChartOptionMergeTest` 15。全量与变异留到 D1–D4 里程碑末；候选见 `s170.md.candidates.md`（22 个）。
+
+### 推迟与偏差
+
+- **`reg`**：路线图划掉的。端口遇到 `reg` 运算符整条条件拒绝（数据集没有表，理由 `rsTyDsCondReg`），上游按正则匹配（6.1 的 `RegExpEvaluator.evaluate` 写成 `isString(typeof lVal)`，恒真，数也按 `test(lVal)` 匹配）。
+- **出错不抛**：上游任何一处 throw 让整个 `setOption` 失败、画面不变；端口只有这个数据集与读它的数据集没有表，读它们的系列什么都不画，别的照画，并给诊断 `dataset[%d] has no table: %s`。理由是端口自己的话，不是上游的消息原文。读自己的数据集上游栈溢出，端口说「它读的是自己」。
+- **非对象的 transform**（数字、字符串、`true`）：上游在 `setOption` 里就 TypeError；端口同上，理由「有一个 transform 不是对象」。
+- **读没有 source 的根数据集**（包括 `fromTransformResult: 0` 单独写、找不到上游又没有自己 `source` 的）：上游抛 `Invalide sourceFormat: unknown`，端口什么都不画、没有诊断（以前就是这样，这一批没动）。
+- **time parser 的无时区字符串**：与 §87 一样按本机**当前**时差换算；基准都带时区。
+- **条件对象的键序**：JavaScript 的 `keys` 把整数样子的键排在前面，端口按选项的次序——只影响同一条件里两个错误先报哪个（比较之间是与，次序不影响结果）。
+- **表里是字符串的「行」**（数组行的表里某一行是 `'abc'`）：上游 `'abc'[1]` 是 `'b'`，端口当 undefined。
+- **系列读的维度名不去重**：transform 看到的维度经 `normalizeDimensionsOption`（第二个 `a` 是 `a-1`），`TySourceOf` 给系列的仍是写的名字（以前就是）；`encode: 'a-1'` 这类写法在系列上找不到。
+- **`print`**：不做（§6 的不做清单里本来就有 `transform.print`）。
+- sort 的 parser 每格只算一次（上游每次比较都算）——parser 是纯函数，结果相同。
+
+### 落地
+
+- `source/tyControls.AdvChart.DataTransform.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.Dataset.pas`：`TTySourceRef`、缓存重写（`UpstreamsOf`、`SourceAt`、`Resolve`、`SeriesNode` 等）、`TyJsTextOf`、`TyNormalizeDims`、`TySourceFieldsOf`、`TySourceOf` 的副本与 `sourceHeader` 真值。
+- `source/tyControls.AdvanceChart.pas`：失败数据集的诊断。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`：33 条字符串。
+- `tycontrols.lpk`、`tycontrols.pas`（忽略的）。
+- `tools/advchart-oracle/dataset-transform.js`、`tests/fixtures/advchart-dataset-transform.json`、`tests/test.advchart.datasettransform.pas`（新，注册在 `tytests.lpr`）、`tests/test.advchart.candleboxplot.pas`（两条断言）。
