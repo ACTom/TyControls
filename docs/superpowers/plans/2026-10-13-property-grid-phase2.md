@@ -20,12 +20,12 @@
 
 ## 核实记录（执行前补）
 
-| # | 待核的事实 | 影响 |
-|---|---|---|
-| V1 | 第一期节点「按路径从根现找」的实现，以及 `PropertyAt`、`ExpandedProperties`、`Refresh` 在结构变化时自动重建的逻辑 | 多根要改哪几处 |
-| V2 | `TCollection.Add` / `Delete` / `TCollectionItem.Index :=` 在 `TTyGridColumns` 等本库集合上会不会触发宿主的重排、通知（`Update`、`Notify`），有没有集合不允许用户增删（比如由宿主自动生成的列） | 增删要不要问宿主 |
-| V3 | 本库的右键菜单（`TTyPopupMenu`）在控件里怎么挂、测试里怎么点菜单项；ValueListEditor 有没有现成的右键菜单，会不会冲突 | D2 的菜单 |
-| V4 | ValueListEditor 能不能有不可编辑、不带值的「分组标题行」；没有的话，用 `ReadOnly` + 加粗 + 空值的行能不能做到，样式怎么区分 | D3 |
+| # | 待核的事实 | 影响 | 核实结果（2026-10-12，实现 agent 读源码） |
+|---|---|---|---|
+| V1 | 第一期节点「按路径从根现找」的实现，以及 `PropertyAt`、`ExpandedProperties`、`Refresh` 在结构变化时自动重建的逻辑 | 多根要改哪几处 | 节点不存实例，`HolderOf` 在父节点为 nil 时返回唯一的 `FRoot`，其余经 `ValueObject`（父节点的属性值，集合项按下标）一路往上找。读写全走这两个：`ReadText`、`WriteOn` / `WriteText`、`StoreFont`、`WriteStrings`、`ChangeOf`、`PropertyOf`（`PropertyAt` 只是转一手）、`ComponentNames`（候选根取 `FRoot`）、`StructureChanged`（逐个对象节点比 `FBuiltClass` / `FBuiltCount`）。另一个隐含的单根假设：节点只存**一个** `PPropInfo`（取自第一个对象的类），而 `GetOrdProp` 等是按 `PropInfo` 的 getter 偏移读的，换一个类（`TTyButton` 和 `TTyEdit` 的 `Caption`）必须按名字另找 `PropInfo`。`ExpandedProperties` 只按 `Path` 记（`HarvestExpanded` / `ApplyExpanded` 只读行，不碰对象），`RebuildRows` 按路径保留当前行，与根的个数无关，不用改。→ 多根改成「第 k 个根」版本的 `HolderIn` / `ValueObjectIn` / `PropInfoIn`，原函数等于 k = 0。 |
+| V2 | `TCollection.Add` / `Delete` / `TCollectionItem.Index :=` 在 `TTyGridColumns` 等本库集合上会不会触发宿主的重排、通知（`Update`、`Notify`），有没有集合不允许用户增删（比如由宿主自动生成的列） | 增删要不要问宿主 | FPC 3.2.2：`Add` → 项的构造里 `Notify(cnAdded)`；`Delete` → `Notify(cnDeleting)` 再释放；`Index :=`（`SetIndex`，virtual）只 `FItems.Move` + `Changed(True)` → `Update(nil)`，**不发 `Notify`**。表格的列是 `TTyStringGrid.Header.Columns`（`TTyColumns`，不是 `TTyGridColumns`）：它覆盖 `Notify`，增删时维护「显示位置 → 下标」表并 `DoChange` → 表格 `HeaderChanged`（列几何缓存作废、重画）；**不覆盖 `Update`**，所以 `Index :=` 之后表格不知道，列几何缓存（`BuildColumnCache` 按下标累加宽度）是旧的，直到别的事让它作废。另外字符串表格的单元格按**列下标**存，集合层面的删、移不搬单元格（表格自己的 `DeleteColumn` / `MoveColumn` 才搬或改显示位置），所以经集合删一列，后面的列会显示被删那列的数据；移一列，表头动、数据不动。本库没有「不允许用户增删」的集合标记，也没有宿主钩子。→ 属性表格只用 `TCollection` 自己的接口（和 Lazarus 对象查看器的集合编辑器一样），宿主要连带搬数据的，在 `OnCollectionChanging` 里拒绝并调宿主自己的方法；为此事件要带上目标下标（见 D2 的改动）。`TTyColumns` 的 `Index :=` 不通知宿主，属于列模型的问题，本计划不改，报告主控。 |
+| V3 | 本库的右键菜单（`TTyPopupMenu`）在控件里怎么挂、测试里怎么点菜单项；ValueListEditor 有没有现成的右键菜单，会不会冲突 | D2 的菜单 | 现成做法是 `TTyEdit` / `TTyMemo`：覆盖 `DoContextPopup`，先 `inherited`（发 `OnContextPopup`，可置 `Handled`），应用自己设了 `PopupMenu` 就让给它，否则懒建一个无主的 `TTyPopupMenu`（`TTyTextEditMenu`），每次弹出前刷新各项的 `Enabled`，`PopUp(屏幕坐标)`，`Handled := True`；`(-1,-1)` 是菜单键。测试点菜单项走 `TTyPopupMenu.ActivateRowForTest(i)`：按渲染器的行（不可见的项跳过、分隔线占一行）找到项，禁用的不触发，否则 `Item.Click`。值列表编辑器没有自己的右键菜单，只继承了 `PopupMenu` / `OnContextPopup`；内嵌的行内编辑器是 `TTyEdit`，右键在它上面弹的是文字菜单，是另一个控件，不冲突。值列表编辑器的 `Insert` / `Ctrl+Delete` 只在 `KeyOptions` 含 `keyAdd` / `keyDelete` 时处理，属性表格的 `KeyOptions` 恒为 `[]`，不冲突；`Ctrl+↑/↓` 列表框按普通 ↑/↓ 移选择（不看 Ctrl），属性表格要在 `inherited` 之前拦下。右键按下列表框不选行（只处理左键），菜单要自己把当前行挪到右键的那一行。 |
+| V4 | ValueListEditor 能不能有不可编辑、不带值的「分组标题行」；没有的话，用 `ReadOnly` + 加粗 + 空值的行能不能做到，样式怎么区分 | D3 | 没有标题行的概念。`TTyValueRow` 有 `ReadOnly`、`EditorKind = vekReadOnly`、`DisplayKey` / `DisplayValue`、`Bold`、`TextColor`，但 `Bold` 和 `TextColor` 只作用于**值**列；键列一律用行样式的字重和 `TyValueListEditorKey` 的颜色画，分隔线每行都画，值格画 `EffectiveValue`。所以 `ReadOnly` + 空值 + 有子行能做出「不可编辑、可展开收起、没有值」的行，但和普通的只读对象行（如 `Constraints` 只是值为 `(TSizeConstraints)`）看不出区别：键不能加粗，分隔线去不掉。要区分得在值列表编辑器里加一个只加不改的 protected 钩子（比如按行决定键的字重 / 是否画分隔线，或者行上一个「标题」标志），留给 Task 3 定。 |
 
 ## 设计
 
@@ -42,6 +42,7 @@
 - 集合行与项行有右键菜单：「添加」「删除」「上移」「下移」。另有键盘：在集合行或项行上按 Insert 添加（加在当前项后面，在集合行上就加在末尾），Ctrl+Delete 删除当前项，Ctrl+↑ / Ctrl+↓ 移动当前项。
 - 同样的事也有公开方法：`AddCollectionItem(const APath: string): TCollectionItem`、`DeleteCollectionItem(const APath: string)`、`MoveCollectionItem(const APath: string; ADelta: Integer)`，路径和 `ExpandedProperties` 一样用点号。
 - 事件：`OnCollectionChanging(Sender; ACollection: TCollection; AAction: TTyCollectionAction; AIndex: Integer; var AAllow: Boolean)`，`AAction` 是 `caAdd` / `caDelete` / `caMove`，拒绝就不动；`OnCollectionChanged` 在做完之后发。
+  - **改（执行时，V2）**：两个事件都在 `AIndex` 后面加一个 `ANewIndex: Integer`。`caAdd`：两个都是新项将要（已经）占的下标；`caDelete`：`AIndex` 是被删的项，`ANewIndex` 为 -1；`caMove`：从 `AIndex` 移到 `ANewIndex`。理由：只给一个下标，移动时应用不知道往哪移；而 V2 查出字符串表格的单元格按列下标存，集合层面移列不搬数据，应用要在 `OnCollectionChanging` 里拒绝、改调宿主自己的 `MoveColumn(from, to)`，两个下标缺一不可。
 - 删除不弹确认框：集合项删了，宿主多半有撤销或者重新加的办法；需要确认的应用用 `OnCollectionChanging` 自己问。
 - 做完之后行重建，展开状态保留，当前行落在新加 / 被移动的那一项上；删了就落在原位置的下一项（没有就上一项，再没有就集合行）。
 - 菜单文字走 resourcestring，补 zh_CN。
