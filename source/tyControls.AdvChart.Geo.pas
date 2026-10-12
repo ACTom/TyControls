@@ -46,9 +46,20 @@ unit tyControls.AdvChart.Geo;
   worked out once per geo and kept (the paths, the state objects); a list
   build only reads the current values.
 
-  NOT HERE YET (spec sections 185 and 187): roam gestures and the geoRoam
-  action (GE3), the map series and series on a geo (GE4), SVG maps and
-  projection streams.
+  THE ROAM [Batch 150, D14 GE3]: the geoRoam action's arithmetic is
+  View.ts' ownRoamModelCoordSysUpdateInAction -- the overall transform from
+  the transform group's (the roam) times the raw, the payload's pan and zoom
+  applied to it, the roam taken back out through the raw inverse and the
+  centre and zoom written back into the option (a half last written as a
+  percentage stays one), then the view worked out again from them. Every
+  step goes through the same decompose and compose as the view itself. The
+  picture is not rebuilt: what hangs on the roam -- the group's matrix, the
+  unit small segments fold under, the drawn paths, the labels' anchors, the
+  drawn boxes -- is worked out again on the kept picture, the state records
+  untouched.
+
+  NOT HERE YET (spec sections 185, 187 and 189): the map series and series
+  on a geo (GE4), SVG maps and projection streams.
 
   PURE but for fpjson: no painter, no LCL. }
 interface
@@ -178,6 +189,11 @@ type
     Zoom: Double;
     HasLimit: Boolean;
     LimitMin, LimitMax: Double;
+    { [Batch 150] `roam`: `retrieve2(get('roam'), false)` -- GeoModel has
+      no default, so an absent or null one climbs to the root, and nothing
+      there is off; `roamTrigger` 'global' (climbing too) }
+    Roam: TTyGraphRoamMode;
+    RoamGlobal: Boolean;
   end;
 
   { ==== the picture ==== }
@@ -398,6 +414,10 @@ type
     FItemsOk: Boolean;
     FIsBlured: Boolean;
     FGen: Integer;
+    { [Batch 150] the roam steps taken, and the one the picture's roam
+      parts were last worked out for }
+    FRoamGen: Integer;
+    FDrawRoamGen: Integer;
     procedure EnsureGroups;
     procedure InitItems;
     procedure UpdateTransform;
@@ -440,6 +460,24 @@ type
       5e-5 of the identity) }
     function RoamMatrix: TTyMat2D;
     function HasRoamTransform: Boolean;
+    { ==== the roam [Batch 150] ==== }
+    { the centre and zoom a geoRoam wrote back into the model's option:
+      they stand for the option's own on the next layout (call before
+      Resize) }
+    procedure SetRoamOption(const ACentre: TTyGraphCentre; AZoom: Double);
+    { ownRoamModelCoordSysUpdateInAction for one payload: a pan (both
+      deltas) and / or a zoom about a point, the centre and zoom it writes
+      back (ACentre, AZoom), and the view worked out again from them. False
+      (nothing done) without a laid-out view. }
+    function RoamBy(AHasPan: Boolean; ADX, ADY: Double; AHasZoom: Boolean;
+      AScale, AOriginX, AOriginY: Double; out ACentre: TTyGraphCentre;
+      out AZoom: Double): Boolean;
+    { RoamController._checkPointer's area for this geo: roamTrigger
+      'global' or containPoint, and inside the clip rect when it clips }
+    function RoamPointerIn(AX, AY: Double): Boolean;
+    property RoamGen: Integer read FRoamGen;
+    { the picture and its state records are there (a list was built) }
+    function ItemsReady: Boolean;
     property Index: Integer read FIndex;
     property Spec: TTyGeoSpec read FSpec;
     property Node: TJSONObject read FNode;
@@ -560,7 +598,8 @@ function TyGeoJsJson(AData: TJSONData): string;
 function TyGeoDrawOf(AGeo: TTyGeo; const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
 { ...and as elements, into AList }
 function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList): Integer;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
+  AApplyStates: Boolean = True): Integer;
 
 implementation
 
@@ -1926,6 +1965,25 @@ end;
 const
   cBoxKey: array[0..5] of string = ('width', 'left', 'right', 'height', 'top', 'bottom');
 
+{ RoamController.enable's controlType: `true` both (a one is not true),
+  'move' / 'pan' the drag, 'scale' / 'zoom' the wheel, anything else
+  neither [Batch 150] }
+function RoamModeOf(AValue: TJSONData): TTyGraphRoamMode;
+var s: string;
+begin
+  Result := grmOff;
+  if AValue = nil then Exit;
+  case AValue.JSONType of
+    jtBoolean: if AValue.AsBoolean then Result := grmBoth;
+    jtString:
+      begin
+        s := AValue.AsString;
+        if (s = 'move') or (s = 'pan') then Result := grmPan
+        else if (s = 'scale') or (s = 'zoom') then Result := grmZoom;
+      end;
+  end;
+end;
+
 function TyGeoSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyGeoSpec;
 var
   node, root: TJSONObject;
@@ -2086,6 +2144,13 @@ begin
   Result.HasLimit := gs.HasLimit;
   Result.LimitMin := gs.LimitMin;
   Result.LimitMax := gs.LimitMax;
+  { [Batch 150] roam: the geo's own unless null or absent, then the root's;
+    roamTypeDefault false (updateRoamControllerSimply), so nothing at all
+    is off -- the graph's null-is-true does not apply }
+  d := node.Find('roam');
+  if (d = nil) or (d.JSONType = jtNull) then d := Climb(nil, root, 'roam');
+  Result.Roam := RoamModeOf(d);
+  Result.RoamGlobal := gs.RoamGlobal;
 end;
 
 { ==================== the geo ==================== }
@@ -2201,6 +2266,122 @@ begin
   FOverall := TyGeoDecompose(m);
   FMtOverall := TyGeoLocalTransform(FOverall);
   if TyGeoMatInvert(FMtOverall, inv) then FMtOverallInv := inv;
+end;
+
+procedure TTyGeo.SetRoamOption(const ACentre: TTyGraphCentre; AZoom: Double);
+begin
+  FSpec.Centre := ACentre;
+  FSpec.Zoom := AZoom;
+end;
+
+{ View.ts: viewCoordSysSyncBack, applyRoamPayloadToOverallTrans,
+  calcRoamTransFromOverallTrans, syncBackToRoamOptionFromRoamTrans,
+  invertBackToCenterOption -- then viewCoordSysSetRoamOptionFromModel }
+function TTyGeo.RoamBy(AHasPan: Boolean; ADX, ADY: Double; AHasZoom: Boolean;
+  AScale, AOriginX, AOriginY: Double; out ACentre: TTyGraphCentre;
+  out AZoom: Double): Boolean;
+const
+  { typed: the comparison is against the Double upstream writes }
+  cZoomEps: Double = 1e-6;
+var
+  t1, t2: TTyGeoTrans;
+  oldZ, newZ, k, z, vcx, vcy, cx, cy: Double;
+  c: TTyGeoPt;
+  mask: TFpuMask;
+
+  { invertToPercentPerCenterDim: a half last written as a percentage
+    string goes back as one (of the data rect, offset by its corner) when
+    the rect has a size that way; anything else as the number }
+  procedure Half(APct: Boolean; AV, AOff, AW: Double; out APos: TTyGraphPos;
+    out AIsPct: Boolean);
+  begin
+    AIsPct := FSpec.Centre.Has and APct and not JsFalsy(AW);
+    if AIsPct then
+    begin
+      APos.Kind := gpkPct;
+      APos.V := (AV - AOff) / AW * 100;
+    end
+    else
+    begin
+      APos.Kind := gpkPx;
+      APos.V := AV;
+    end;
+  end;
+
+begin
+  Result := False;
+  ACentre := FSpec.Centre;
+  AZoom := FSpec.Zoom;
+  if not (FValid and FHasData and FHasView) then Exit;
+  mask := MaskFpu;
+  try
+    { the transform group holds a copy of the roam: the overall from it
+      (calcOverallTransFromSyncBackEl), then the roam back out of it }
+    t1 := TyGeoDecompose(TyGeoMatMul(TyGeoLocalTransform(FRoam), TyGeoLocalTransform(FRaw)));
+    t2 := TyGeoDecompose(TyGeoMatMul(TyGeoLocalTransform(t1), FMtRawInv));
+    { the payload, on the overall: dx and dy in pixels }
+    if AHasPan then
+    begin
+      t1.X := t1.X + ADX;
+      t1.Y := t1.Y + ADY;
+    end;
+    if AHasZoom then
+    begin
+      oldZ := t2.ScaleX;
+      newZ := oldZ * AScale;
+      if FHasLimit then newZ := JsMax(JsMin(FLimitMax, newZ), FLimitMin);
+      k := newZ / oldZ;
+      { keep the point under the pointer }
+      t1.X := t1.X - (AOriginX - t1.X) * (k - 1);
+      t1.Y := t1.Y - (AOriginY - t1.Y) * (k - 1);
+      t1.ScaleX := t1.ScaleX * k;
+      t1.ScaleY := t1.ScaleY * k;
+    end;
+    t1 := TyGeoDecompose(TyGeoMatMul(TyGeoLocalTransform(t1), FMtRawInv));
+    { the inverse of setting the roam from the option }
+    vcx := FView.X + FView.W / 2;
+    vcy := FView.Y + FView.H / 2;
+    z := t1.ScaleX;
+    if Abs(z) > cZoomEps then
+    begin
+      cx := (vcx - t1.X) / z;
+      cy := (vcy - t1.Y) / z;
+    end
+    else
+    begin
+      cx := vcx;
+      cy := vcy;
+    end;
+    c := TyGeoApply(FMtRawInv, cx, cy);
+    ACentre := Default(TTyGraphCentre);
+    ACentre.Has := True;
+    Half(FSpec.Centre.PctX, c.X, FData.X, FData.W, ACentre.X, ACentre.PctX);
+    Half(FSpec.Centre.PctY, c.Y, FData.Y, FData.H, ACentre.Y, ACentre.PctY);
+    AZoom := z;
+    { written back, then read again (the zoom clamped on the way in) }
+    FSpec.Centre := ACentre;
+    FSpec.Zoom := AZoom;
+    ApplyRoamOptions;
+    Inc(FRoamGen);
+    Result := True;
+  finally
+    UnmaskFpu(mask);
+  end;
+end;
+
+function TTyGeo.ItemsReady: Boolean;
+begin
+  Result := FDrawOk and FItemsOk;
+end;
+
+function TTyGeo.RoamPointerIn(AX, AY: Double): Boolean;
+begin
+  Result := False;
+  if not (FValid and FHasData and FHasView) then Exit;
+  { roamTrigger 'global', else isInSelf: containPoint }
+  Result := FSpec.RoamGlobal or ContainPoint(TyPointF(AX, AY));
+  { isInClip: the view rect, its edges in }
+  if Result and FSpec.Clip then Result := RectContain(FView, AX, AY);
 end;
 
 procedure TTyGeo.ApplyRoamOptions;
@@ -3167,6 +3348,116 @@ begin
   Result := NewRect(minX, minY, maxX - minX, maxY - minY);
 end;
 
+{ ---- what hangs on the roam [Batch 150: factored out of TyGeoDrawOf, the
+  same arithmetic, so a roam can work it out again on a kept picture] ---- }
+
+{ the transform group's matrix (none within 5e-5 of the identity) and
+  PathProxy.setScale's unit under its global scale }
+procedure DrawRoamUnits(AGeo: TTyGeo; var ADraw: TTyGeoDraw);
+var gm: TTyMat2D; gs: Double;
+begin
+  ADraw.HasTrans := AGeo.HasRoamTransform;
+  if ADraw.HasTrans then ADraw.Trans := AGeo.RoamMatrix
+  else ADraw.Trans := MatIdentity;
+  { getGlobalScale: the transform's, or one; PathProxy.setScale: the
+    threshold over it, `|| 0` }
+  if ADraw.HasTrans then
+  begin
+    gm := ADraw.Trans;
+    gs := Sqrt(gm[0] * gm[0] + gm[1] * gm[1]);
+    if gm[0] < 0 then gs := -gs;
+    ADraw.UX := Abs(TyGeoSegmentIgnore / 1 / gs);
+    if JsFalsy(ADraw.UX) then ADraw.UX := 0;
+    gs := Sqrt(gm[2] * gm[2] + gm[3] * gm[3]);
+    if gm[3] < 0 then gs := -gs;
+    ADraw.UY := Abs(TyGeoSegmentIgnore / 1 / gs);
+    if JsFalsy(ADraw.UY) then ADraw.UY := 0;
+  end
+  else
+  begin
+    ADraw.UX := TyGeoSegmentIgnore;
+    ADraw.UY := TyGeoSegmentIgnore;
+  end;
+end;
+
+{ what a brush hands the context: every sub-path of two points or more,
+  the small segments folded under the unit (a later frame's rebuildPath
+  folds the stored data the same way at the scale it has then) }
+function FoldSubs(const ASubs: TTyGeoRingArray; AIsLine: Boolean;
+  AUX, AUY: Double): TTyPathCmdArray;
+var px: TProxy; j, q, np: Integer;
+begin
+  px := Default(TProxy);
+  px.UX := AUX;
+  px.UY := AUY;
+  for j := 0 to High(ASubs) do
+  begin
+    np := Length(ASubs[j]);
+    if np < 2 then Continue;
+    PxMove(px, ASubs[j][0].X, ASubs[j][0].Y);
+    for q := 1 to np - 1 do PxLine(px, ASubs[j][q].X, ASubs[j][q].Y);
+    if not AIsLine then PxClose(px);
+  end;
+  SetLength(px.Cmds, px.N);
+  Result := px.Cmds;
+end;
+
+{ updateInnerText: the layout rect through the element's transform, then
+  the percentages of it }
+procedure PlaceLabel(var P: TTyGeoDrawPath; const ADraw: TTyGeoDraw);
+var tr: TTyXYWH;
+begin
+  if not P.Lbl.HasPos then Exit;
+  if ADraw.HasTrans then tr := RectApply(P.Lbl.Layout, ADraw.Trans) else tr := P.Lbl.Layout;
+  P.Lbl.AnchorX := tr.X + P.Lbl.PctX / 100 * tr.W;
+  P.Lbl.AnchorY := tr.Y + P.Lbl.PctY / 100 * tr.H;
+end;
+
+{ the rect once drawn: the line's fixed style, the stroke over the
+  transform's line scale (strokeNoScale) }
+procedure DrawnBox(var P: TTyGeoDrawPath; const ADraw: TTyGeoDraw; AScale: Double);
+var lw, ls: Double;
+begin
+  P.BoxRect := PathBox(P.Subs);
+  if PaintHasStroke(P.Paint) and (Length(P.Drawn) > 0) then
+  begin
+    ls := 1;
+    if ADraw.HasTrans and (Abs(ADraw.Trans[0] - 1) > 1e-10) and (Abs(ADraw.Trans[3] - 1) > 1e-10) then
+      ls := Sqrt(Abs(ADraw.Trans[0] * ADraw.Trans[3] - ADraw.Trans[2] * ADraw.Trans[1]));
+    lw := P.Paint.LineWidthLogical * AScale;
+    if not PaintHasFill(P.Paint) then lw := JsMax(lw, TyGeoStrokeContain * AScale);
+    if ls > 1e-10 then
+    begin
+      P.BoxRect.W := P.BoxRect.W + lw / ls;
+      P.BoxRect.H := P.BoxRect.H + lw / ls;
+      P.BoxRect.X := P.BoxRect.X - lw / ls / 2;
+      P.BoxRect.Y := P.BoxRect.Y - lw / ls / 2;
+    end;
+  end;
+end;
+
+{ __updateOnOwnRoam on a kept picture: the group's matrix, the unit, every
+  path's drawn commands, its label's anchor and its drawn box again }
+procedure TyGeoDrawReroam(AGeo: TTyGeo; var ADraw: TTyGeoDraw; APPI: Integer);
+var g, k: Integer; scale: Double; mask: TFpuMask;
+begin
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  mask := MaskFpu;
+  try
+    DrawRoamUnits(AGeo, ADraw);
+    for g := 0 to High(ADraw.Groups) do
+      for k := 0 to High(ADraw.Groups[g].Paths) do
+      begin
+        ADraw.Groups[g].Paths[k].Drawn := FoldSubs(ADraw.Groups[g].Paths[k].Subs,
+          ADraw.Groups[g].Paths[k].IsLine, ADraw.UX, ADraw.UY);
+        PlaceLabel(ADraw.Groups[g].Paths[k], ADraw);
+        DrawnBox(ADraw.Groups[g].Paths[k], ADraw, scale);
+      end;
+  finally
+    UnmaskFpu(mask);
+  end;
+end;
+
 { resetLabelForRegion's setLabelStyle: the normal text style and textConfig
   and the three states' -- getLabelStatesModels(regionModel) up the chain,
   the texts getFormattedLabel's (a state's from emphasis.label.formatter,
@@ -3370,8 +3661,7 @@ var
   polys, lines: TTyGeoRingArray;
   centre: TTyGeoPt;
   hasCentre: Boolean;
-  rawM, gm: TTyMat2D;
-  gs: Double;
+  rawM: TTyMat2D;
   d: TJSONData;
   mask: TFpuMask;
   tok: TTyGeoToken;
@@ -3431,10 +3721,7 @@ var
   procedure AddPath(const ASubs: TTyGeoRingArray; AIsLine: Boolean);
   var
     p: TTyGeoDrawPath;
-    px: TProxy;
-    j, q, np: Integer;
-    lw, ls: Double;
-    tr: TTyXYWH;
+    lw: Double;
     sn: TTyStName;
   begin
     if Length(ASubs) = 0 then Exit;
@@ -3446,19 +3733,7 @@ var
     for sn := Low(TTyStName) to High(TTyStName) do
       p.StatePaint[sn] := PaintFor(AGeo, ropt, Ord(sn), AInk, AIsLine);
     { what the first brush hands the context }
-    px := Default(TProxy);
-    px.UX := dr.UX;
-    px.UY := dr.UY;
-    for j := 0 to High(ASubs) do
-    begin
-      np := Length(ASubs[j]);
-      if np < 2 then Continue;
-      PxMove(px, ASubs[j][0].X, ASubs[j][0].Y);
-      for q := 1 to np - 1 do PxLine(px, ASubs[j][q].X, ASubs[j][q].Y);
-      if not AIsLine then PxClose(px);
-    end;
-    SetLength(px.Cmds, px.N);
-    p.Drawn := px.Cmds;
+    p.Drawn := FoldSubs(ASubs, AIsLine, dr.UX, dr.UY);
     { the rect the label is placed in: the path box grown by the stroke of
       the polygon style (before a line's fix), at a line scale of 1 -- the
       element has no transform yet }
@@ -3481,11 +3756,7 @@ var
       p.Lbl.PctX := (centre.X - p.Rect.X) / p.Rect.W * 100;
       p.Lbl.PctY := (centre.Y - p.Rect.Y) / p.Rect.H * 100;
       p.Lbl.Layout := p.Rect;
-      { updateInnerText: the layout rect through the element's transform,
-        then the percentages of it }
-      if dr.HasTrans then tr := RectApply(p.Rect, dr.Trans) else tr := p.Rect;
-      p.Lbl.AnchorX := tr.X + p.Lbl.PctX / 100 * tr.W;
-      p.Lbl.AnchorY := tr.Y + p.Lbl.PctY / 100 * tr.H;
+      PlaceLabel(p, dr);
     end;
     { fixLineStyle: `stroke = stroke || fill`, and no fill }
     if AIsLine then
@@ -3500,22 +3771,7 @@ var
       p.Paint.FillSrc := gisNone;
     end;
     { the rect once drawn }
-    p.BoxRect := PathBox(ASubs);
-    if PaintHasStroke(p.Paint) and (Length(p.Drawn) > 0) then
-    begin
-      ls := 1;
-      if dr.HasTrans and (Abs(dr.Trans[0] - 1) > 1e-10) and (Abs(dr.Trans[3] - 1) > 1e-10) then
-        ls := Sqrt(Abs(dr.Trans[0] * dr.Trans[3] - dr.Trans[2] * dr.Trans[1]));
-      lw := p.Paint.LineWidthLogical * scale;
-      if not PaintHasFill(p.Paint) then lw := JsMax(lw, TyGeoStrokeContain * scale);
-      if ls > 1e-10 then
-      begin
-        p.BoxRect.W := p.BoxRect.W + lw / ls;
-        p.BoxRect.H := p.BoxRect.H + lw / ls;
-        p.BoxRect.X := p.BoxRect.X - lw / ls / 2;
-        p.BoxRect.Y := p.BoxRect.Y - lw / ls / 2;
-      end;
-    end;
+    DrawnBox(p, dr, scale);
     SetLength(dr.Groups[gi].Paths, Length(dr.Groups[gi].Paths) + 1);
     dr.Groups[gi].Paths[High(dr.Groups[gi].Paths)] := p;
   end;
@@ -3528,28 +3784,7 @@ begin
   mask := MaskFpu;
   try
     rawM := AGeo.MtRaw;
-    dr.HasTrans := AGeo.HasRoamTransform;
-    if dr.HasTrans then dr.Trans := AGeo.RoamMatrix
-    else dr.Trans := MatIdentity;
-    { getGlobalScale: the transform's, or one; PathProxy.setScale: the
-      threshold over it, `|| 0` }
-    if dr.HasTrans then
-    begin
-      gm := dr.Trans;
-      gs := Sqrt(gm[0] * gm[0] + gm[1] * gm[1]);
-      if gm[0] < 0 then gs := -gs;
-      dr.UX := Abs(TyGeoSegmentIgnore / 1 / gs);
-      if JsFalsy(dr.UX) then dr.UX := 0;
-      gs := Sqrt(gm[2] * gm[2] + gm[3] * gm[3]);
-      if gm[3] < 0 then gs := -gs;
-      dr.UY := Abs(TyGeoSegmentIgnore / 1 / gs);
-      if JsFalsy(dr.UY) then dr.UY := 0;
-    end
-    else
-    begin
-      dr.UX := TyGeoSegmentIgnore;
-      dr.UY := TyGeoSegmentIgnore;
-    end;
+    DrawRoamUnits(AGeo, dr);
     if AGeo.Spec.Clip then
     begin
       dr.HasClip := True;
@@ -3812,8 +4047,16 @@ begin
     FDrawOk := True;
     FDrawPPI := APPI;
     FDrawInk := AInk;
+    FDrawRoamGen := FRoamGen;
     { the state records are made of the picture: again, the flags kept }
     FItemsOk := False;
+  end
+  else if FDrawRoamGen <> FRoamGen then
+  begin
+    { [Batch 150] a roam moved the transform group: the same elements,
+      their states untouched -- only what hangs on the roam again }
+    TyGeoDrawReroam(Self, FDraw, APPI);
+    FDrawRoamGen := FRoamGen;
   end;
   Result := FDraw;
 end;
@@ -3941,7 +4184,8 @@ end;
   host), with the current state values -- and the full path Path.contain
   walks, the clip the hit test respects, the datum a pointer names }
 function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList): Integer;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
+  AApplyStates: Boolean): Integer;
 var
   dr: TTyGeoDraw;
   g, k, j, n, q: Integer;
@@ -3989,8 +4233,10 @@ begin
   Result := 0;
   if (AGeo = nil) or (AList = nil) then Exit;
   dr := AGeo.Draw(AInk, APPI);
-  { a render applies the states its elements are in (updateStates) }
-  AGeo.ApplyStates(AInk, APPI);
+  { a render applies the states its elements are in (updateStates); a
+    roam's patch of a standing list does not -- that waits for the frame
+    [Batch 150] }
+  if AApplyStates then AGeo.ApplyStates(AInk, APPI);
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   mask := MaskFpu;
   try

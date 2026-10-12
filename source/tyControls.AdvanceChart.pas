@@ -598,6 +598,11 @@ type
     FGeoSel: array of TJSONObject;
     FGeoGen: Integer;
     FGeoDirty: Boolean;
+    { [Batch 150] the centre and zoom a geoRoam wrote back into each geo
+      model's option (Valid after the first), the model's for as long as it
+      lives; and how many geos the last geoRoam moved }
+    FGeoRoam: array of TTyGraphRoamState;
+    FGeoRoamHits: Integer;
     { THE TREES, laid out per slot -- an empty record where the slot is no
       tree. [Batch 73] }
     FTrees: array of TTyTreeSolved;
@@ -699,6 +704,9 @@ type
       the pointer was last. }
     FRoamSeries: Integer;
     FRoamX, FRoamY: Integer;
+    { [Batch 150] the geo a left press armed (its RoamController), or -1 --
+      FRoamSeries is -1 then; the pointer's last place is FRoamX / FRoamY }
+    FRoamGeo: Integer;
     { A NODE DRAG on a graph on a view [Batch 114]: zrender's Draggable holds
       the node from the press to the release, and every move between is one
       'drag' (TyGraphDragStep). Slot -1: none. }
@@ -2032,6 +2040,21 @@ type
     function GeoTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
     function GeoTipText(const ADatum: TTyChartDatumRef;
       const ASpec: TTyTooltipSpec): string;
+    { [Batch 150] roam on the geos: the geo whose RoamController a gesture
+      at (AX, AY) reaches first (-1: none); onIrrelevantElement for it;
+      the geo or the series a gesture goes to (geos are added before series:
+      a geo wins a tie); the geoRoam action; a gesture's payload; the drag's
+      step (zrender's zr-level mousemove); a merge over a written-back roam }
+    function GeoRoamPick(AX, AY: Integer; AZoom: Boolean): Integer;
+    function GeoIrrelevant(AGeo, AX, AY: Integer): Boolean;
+    function RoamTargetAt(AX, AY: Integer; AZoom: Boolean; out AGeo: Integer): Integer;
+    function DoGeoRoamAction(APayload: TJSONObject): Boolean;
+    procedure GeoGesture(AGeo: Integer; AHasPan: Boolean; ADX, ADY: Double;
+      AHasZoom: Boolean; AScale, AOriginX, AOriginY: Double);
+    procedure GeoRoamMove(AX, AY: Integer);
+    procedure GeoPatchList(AGeo: Integer);
+    procedure MergeGeoRoam(var AState: TTyGraphRoamState; AIndex: Integer;
+      ANew: TJSONObject);
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
@@ -2814,6 +2837,9 @@ type
       -- highest zlevel, then z, then the lowest series index -- whose roam
       allows it and whose area holds the point. -1 when none does. }
     function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+    { the same, with the winner's z and zlevel (0 when none) [Batch 150] }
+    function RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
+      out AZ, AZLevel: Integer): Integer;
     function IsTreeSeries(ASeriesIndex: Integer): Boolean;
     function IsSankeySeries(ASeriesIndex: Integer): Boolean;
     function IsTreemapSeries(ASeriesIndex: Integer): Boolean;
@@ -3418,6 +3444,19 @@ type
     { [Batch 148] whether geo AIndex's model holds region AName selected
       (GeoModel.isSelected over option.selectedMap) }
     function GeoSelected(AIndex: Integer; const AName: string): Boolean;
+    { [Batch 150] upstream's geoRoam action on geo AIndex (-1: every geo,
+      componentType 'geo' with no query): a pan by (ADX, ADY) pixels, or a
+      zoom by AScale about (AOriginX, AOriginY). The same path as
+      DispatchAction of a geoRoam payload, its georoam event after; not
+      gated by `roam`. False when no geo moved -- none laid out, or a zoom
+      that is not a positive finite number. }
+    function GeoRoam(AIndex: Integer; ADX, ADY: Double): Boolean;
+    function GeoZoom(AIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
+    { the centre and zoom as geo AIndex's model option says them: the
+      option's own until a roam, what the roam wrote back after it (the zoom
+      not clamped; GeoLayout(..).Zoom is the one the view uses) }
+    function GeoRoamState(AIndex: Integer; out ACentre: TTyGraphCentre;
+      out AZoom: Double): Boolean;
     { Polar component AIndex as the last render laid it out -- its centre,
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
@@ -3793,6 +3832,7 @@ begin
   AccessibleRole := larChart;
   AccessibleName := rsTyChartAccessibleName;
   FRoamSeries := -1;
+  FRoamGeo := -1;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
   FCrumbPressSeries := -1;
@@ -4185,6 +4225,9 @@ begin
   FSel := nil;
   { new geo models: optionUpdated makes their selectedMap again [Batch 148] }
   FreeGeoSel;
+  { and hold no written-back roam; a drag ends [Batch 150] }
+  FGeoRoam := nil;
+  FRoamGeo := -1;
   { AND WHAT THE POINTER IS OVER IS A REMOVED ELEMENT: the next move finds a
     new one there -- an out to the old, an over to the new, as zrender's
     hover meets elements a notMerge setOption replaced. Its identity is
@@ -4732,6 +4775,7 @@ begin
   { ---- what a re-render rebuilds anyway, reset as a notMerge resets it ---- }
   FPressArmed := False;
   FRoamSeries := -1;
+  FRoamGeo := -1;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
   FDzState := nil;
@@ -4780,6 +4824,17 @@ begin
         FreeAndNil(FGeoSel[s])
       else
         FGeoSel[s].Clear;
+    end;
+  { [Batch 150] the centre and zoom a roam wrote into the model's option:
+    a model that went takes them; a merge that writes one of them
+    overwrites that one }
+  if si >= 0 then
+    for s := 0 to High(AReport.Slots[si].Fate) do
+    begin
+      if s > High(FGeoRoam) then Break;
+      fate := AReport.Slots[si].Fate[s];
+      if not (fate in [mfKept, mfMerged]) then FGeoRoam[s] := Default(TTyGraphRoamState)
+      else if fate = mfMerged then MergeGeoRoam(FGeoRoam[s], s, AReport.Slots[si].NewOpt[s]);
     end;
 end;
 
@@ -10427,6 +10482,9 @@ begin
   for i := 0 to n - 1 do
   begin
     FGeos[i] := TTyGeo.Create(FOption, i);
+    { [Batch 150] the model's option holds what a roam wrote back }
+    if (i <= High(FGeoRoam)) and FGeoRoam[i].Valid then
+      FGeos[i].SetRoamOption(FGeoRoam[i].Centre, FGeoRoam[i].Zoom);
     FGeos[i].Resize(FLastRect, APPI);
     FGeos[i].Gen := FGeoGen;
     { GeoView.render's updateSelectStatus }
@@ -10471,6 +10529,355 @@ end;
   names and update the select flags (updateSelectStatus); highlight and
   downplay with a geo finder go to findComponentHighDownDispatchers. The
   flags are applied in the frame, as the series' are (StApplyChanged). }
+
+{ ==================== roam on the geos [Batch 150] ====================
+
+  MapDraw's RoamController (updateRoamControllerSimply: roam false by
+  default, roamTrigger, isInSelf containPoint, isInClip the view rect when
+  it clips) and the geoRoam action (component/geo/install.ts). A press
+  arms the first controller -- by zlevel, then z, a tie to the one added
+  first, and a geo's is added before any series' -- that holds it and is
+  not under an irrelevant element; every move then pans by the delta from
+  the last point, wherever the pointer is; the wheel zooms by 1.1, 1.2 or
+  1.4 about the pointer. Each is a geoRoam action: the view is synced back
+  and worked out again, the picture is not rebuilt (__updateOnOwnRoam),
+  and the static layer is drawn again in full. }
+
+{ onIrrelevantElement: the topmost element under the pointer, a silent one
+  too, belongs to another component with a coordinate system that stands
+  above the geo -- its zlevel, then its z, higher }
+function TTyAdvanceChart.GeoIrrelevant(AGeo, AX, AY: Integer): Boolean;
+var
+  idx, oi, si, slot, oz, ozl, diff: Integer;
+  el: TTyChartElement;
+  hasCoord: Boolean;
+begin
+  Result := False;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  if (AGeo < 0) or (AGeo > High(FGeos)) or (FGeos[AGeo] = nil) then Exit;
+  idx := FPaintList.TopElementAt(AX, AY, FPaintListPPI);
+  if idx < 0 then Exit;
+  el := FPaintList.Element(idx);
+  if el.Datum.Kind = ctkGeo then
+  begin
+    { another geo: its own coordinate system, its own model }
+    oi := el.Datum.ComponentIndex;
+    if (oi = AGeo) or (oi < 0) or (oi > High(FGeos)) or (FGeos[oi] = nil) then Exit;
+    oz := FGeos[oi].Spec.Z;
+    ozl := FGeos[oi].Spec.ZLevel;
+  end
+  else if (el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0) then
+  begin
+    { a series on a coordinate system (none here is the geo's: GE4) }
+    si := el.Datum.SeriesIndex;
+    slot := SlotOfSeries(si);
+    if (slot < 0) or (slot > High(FBindings)) then Exit;
+    hasCoord := (FBindings[slot].Cart <> nil) or (FBindings[slot].Polar <> nil)
+      or (FBindings[slot].CalendarIndex >= 0)
+      or (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+      or (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+      or (FBindings[slot].SeriesType = 'radar');
+    if not hasCoord then Exit;
+    if FBindings[slot].SeriesType = 'line' then oz := SeriesIntIn(si, 'z', 3)
+    else oz := SeriesIntIn(si, 'z', 2);
+    ozl := SeriesIntIn(si, 'zlevel', 0);
+  end
+  else
+    Exit;
+  { equal is relevant }
+  diff := ozl - FGeos[AGeo].Spec.ZLevel;
+  if diff = 0 then diff := oz - FGeos[AGeo].Spec.Z;
+  Result := diff > 0;
+end;
+
+function TTyAdvanceChart.GeoRoamPick(AX, AY: Integer; AZoom: Boolean): Integer;
+var
+  i: Integer;
+  g: TTyGeo;
+  ok: Boolean;
+begin
+  Result := -1;
+  if csDesigning in ComponentState then Exit;
+  for i := 0 to High(FGeos) do
+  begin
+    g := FGeos[i];
+    { a geo that draws nothing has no MapDraw, so no controller }
+    if (g = nil) or not g.Valid or not g.Spec.Show then Continue;
+    if AZoom then ok := g.Spec.Roam in [grmZoom, grmBoth]
+    else ok := g.Spec.Roam in [grmPan, grmBoth];
+    if not ok then Continue;
+    if not g.RoamPointerIn(AX, AY) then Continue;
+    if GeoIrrelevant(i, AX, AY) then Continue;
+    { HIGHER zlevel, THEN HIGHER z; a tie to the first (z2 -Infinity on
+      both sides makes the comparison NaN: the one added later goes after) }
+    if (Result < 0) or (g.Spec.ZLevel > FGeos[Result].Spec.ZLevel)
+      or ((g.Spec.ZLevel = FGeos[Result].Spec.ZLevel) and (g.Spec.Z > FGeos[Result].Spec.Z)) then
+      Result := i;
+  end;
+end;
+
+function TTyAdvanceChart.RoamTargetAt(AX, AY: Integer; AZoom: Boolean;
+  out AGeo: Integer): Integer;
+var gi, sz, szl: Integer;
+begin
+  AGeo := -1;
+  Result := RoamSeriesAtZ(AX, AY, AZoom, sz, szl);
+  gi := GeoRoamPick(AX, AY, AZoom);
+  if gi < 0 then Exit;
+  { the components render before the series: on a tie the geo's listener
+    is the earlier one }
+  if (Result < 0) or (FGeos[gi].Spec.ZLevel > szl)
+    or ((FGeos[gi].Spec.ZLevel = szl) and (FGeos[gi].Spec.Z >= sz)) then
+  begin
+    AGeo := gi;
+    Result := -1;
+  end;
+end;
+
+{ updateRoamControllerSimply's dispatchAction: the type 'geoRoam', the
+  pan's dx and dy or the zoom's zoom, originX and originY,
+  payloadDisableAnimation's animation, componentType 'geo'
+  (geoBackwardCompat) and the geo's id }
+procedure TTyAdvanceChart.GeoGesture(AGeo: Integer; AHasPan: Boolean; ADX, ADY: Double;
+  AHasZoom: Boolean; AScale, AOriginX, AOriginY: Double);
+var p, anim: TJSONObject;
+begin
+  if (FOption = nil) or (AGeo < 0) or (AGeo >= FOption.ComponentCount('geo')) then Exit;
+  p := TJSONObject.Create;
+  p.Add('type', 'geoRoam');
+  if AHasPan then
+  begin
+    p.Add('dx', ADX);
+    p.Add('dy', ADY);
+  end;
+  if AHasZoom then
+  begin
+    p.Add('zoom', AScale);
+    p.Add('originX', AOriginX);
+    p.Add('originY', AOriginY);
+  end;
+  anim := TJSONObject.Create;
+  anim.Add('duration', 0);
+  p.Add('animation', anim);
+  p.Add('componentType', 'geo');
+  p.Add('geoId', FOption.ComponentId('geo', AGeo));
+  { api.dispatchAction: the payload is the dispatch's (freed there) }
+  DispatchActionObject(p);
+end;
+
+{ RoamController._mousemoveHandler while a left press holds it: nothing
+  while globalPan is taken (the last point stays where it was), else the
+  delta from the last point }
+procedure TTyAdvanceChart.GeoRoamMove(AX, AY: Integer);
+var dx, dy: Double;
+begin
+  if FRoamGeo < 0 then Exit;
+  if PanTaken then Exit;
+  dx := AX - FRoamX;
+  dy := AY - FRoamY;
+  FRoamX := AX;
+  FRoamY := AY;
+  GeoGesture(FRoamGeo, True, dx, dy, False, 0, 0, 0);
+end;
+
+{ the geoRoam action: the main type is the payload's componentType, else
+  'geo' where a geo key is written, else the map series' (GE4: none here);
+  each queried geo is synced back and laid out again from what that wrote
+  (ownRoamModelCoordSysUpdateInAction), and its view moves without a
+  rebuild (ownRoamViewUpdateDirectlyInAction, which also gives the
+  payload its animation); the event is the payload as it then stands,
+  'georoam' }
+function TTyAdvanceChart.DoGeoRoamAction(APayload: TJSONObject): Boolean;
+var
+  ct, d: TJSONData;
+  mainType: string;
+  geos: TTyIntegerArray;
+  k, gi, n: Integer;
+  hasPan, hasZoom, reached, ok: Boolean;
+  dx, dy, z, ox, oy, zw: Double;
+  c: TTyGraphCentre;
+  ev, anim: TJSONObject;
+
+  function Written(const AKey: string): Boolean;
+  var x: TJSONData;
+  begin
+    x := APayload.Find(AKey);
+    Result := (x <> nil) and (x.JSONType <> jtNull);
+  end;
+
+  function Num(const AKey: string; out AV: Double): Boolean;
+  var x: TJSONData;
+  begin
+    x := APayload.Find(AKey);
+    Result := (x <> nil) and (x.JSONType = jtNumber);
+    if Result then AV := x.AsFloat else AV := NaN;
+  end;
+
+begin
+  Result := True;
+  FGeoRoamHits := 0;
+  reached := False;
+  ct := APayload.Find('componentType');
+  if JsTruthy(ct) then mainType := TyJsonJsString(ct)
+  else if Written('geoId') or Written('geoName') or Written('geoIndex') then mainType := 'geo'
+  else mainType := 'series';
+  if (mainType = 'geo') and (FOption <> nil) then
+  begin
+    hasPan := Num('dx', dx) and Num('dy', dy);
+    hasZoom := Num('zoom', z);
+    Num('originX', ox);
+    Num('originY', oy);
+    { NOT TAKEN: a zoom that is not a positive finite number, or about a
+      point that is not finite (upstream turns the view NaN or mirrors it) }
+    ok := not (hasZoom and (IsNan(z) or IsInfinite(z) or (z <= 0)
+      or IsNan(ox) or IsInfinite(ox) or IsNan(oy) or IsInfinite(oy)));
+    geos := GeoMatch(APayload);
+    n := FOption.ComponentCount('geo');
+    for k := 0 to High(geos) do
+    begin
+      gi := geos[k];
+      if (gi < 0) or (gi >= n) then Continue;
+      reached := True;
+      if not ok or (gi > High(FGeos)) or (FGeos[gi] = nil) then Continue;
+      if not FGeos[gi].RoamBy(hasPan, dx, dy, hasZoom, z, ox, oy, c, zw) then Continue;
+      if Length(FGeoRoam) <= gi then SetLength(FGeoRoam, gi + 1);
+      FGeoRoam[gi].Valid := True;
+      FGeoRoam[gi].Centre := c;
+      FGeoRoam[gi].Zoom := zw;
+      Inc(FGeoRoamHits);
+    end;
+  end;
+  if FGeoRoamHits > 0 then
+  begin
+    { A NEW PICTURE, NOT A NEW LAYOUT: the geos keep their elements and
+      their states. The standing list takes each moved geo's elements again
+      in place -- the next pointer event finds what is under it now, as
+      zrender's finds the moved elements -- and the static layer is drawn
+      again in full (the dirty-rect path does not take a roam) }
+    for k := 0 to High(geos) do
+      if (geos[k] >= 0) and (geos[k] <= High(FGeos)) and (FGeos[geos[k]] <> nil) then
+        GeoPatchList(geos[k]);
+    StaticDrop;
+    FProgReuse := False;
+    inherited Invalidate;
+  end;
+  { the event: the payload, its animation where a geo was reached (in
+    place when the gesture wrote one), its type the event's }
+  ev := TJSONObject(APayload.Clone);
+  try
+    if reached then
+    begin
+      anim := TJSONObject.Create;
+      anim.Add('duration', 0);
+      d := ev.Find('animation');
+      if d <> nil then ev.Elements['animation'] := anim
+      else ev.Add('animation', anim);
+    end;
+    ev.Strings['type'] := 'georoam';
+    EmitPayloadEvent('georoam', TyGeoJsJson(ev), ev);
+  finally
+    ev.Free;
+  end;
+end;
+
+{ the geo's elements of the standing list built again on its kept picture
+  (no states applied: the frame does that) and put back where they stand;
+  a list that cannot take them is dropped }
+procedure TTyAdvanceChart.GeoPatchList(AGeo: Integer);
+var
+  tmp: TTyPaintList;
+  idx: TTyIntegerArray;
+  i, n: Integer;
+  el: TTyChartElement;
+begin
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  if (AGeo < 0) or (AGeo > High(FGeos)) or (FGeos[AGeo] = nil)
+    or not FGeos[AGeo].ItemsReady then
+  begin
+    DropStatic;
+    Exit;
+  end;
+  idx := nil;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    el := FPaintList.Element(i);
+    if (el.Datum.Kind = ctkGeo) and (el.Datum.ComponentIndex = AGeo) then
+    begin
+      SetLength(idx, Length(idx) + 1);
+      idx[High(idx)] := i;
+    end;
+  end;
+  tmp := TTyPaintList.Create;
+  try
+    n := TyBuildGeo(FGeos[AGeo], GeoInk, NewTextMeasurer(FPaintListPPI),
+      FPaintListPPI, tmp, False);
+    if n <> Length(idx) then
+    begin
+      DropStatic;
+      Exit;
+    end;
+    for i := 0 to n - 1 do FPaintList.SetElement(idx[i], tmp.Element(i));
+  finally
+    tmp.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.MergeGeoRoam(var AState: TTyGraphRoamState; AIndex: Integer;
+  ANew: TJSONObject);
+var spec: TTyGeoSpec;
+begin
+  { upstream's roam wrote centre and zoom into the geo's option; a merge
+    writing one of them overwrites that one and keeps the other }
+  if (not AState.Valid) or (ANew = nil) then Exit;
+  if (ANew.Find('center') = nil) and (ANew.Find('zoom') = nil) then Exit;
+  spec := TyGeoSpecOf(FOption, AIndex);
+  if ANew.Find('center') <> nil then AState.Centre := spec.Centre;
+  if ANew.Find('zoom') <> nil then AState.Zoom := spec.Zoom;
+end;
+
+function TTyAdvanceChart.GeoRoam(AIndex: Integer; ADX, ADY: Double): Boolean;
+var p: TJSONObject;
+begin
+  p := TJSONObject.Create;
+  p.Add('type', 'geoRoam');
+  if AIndex >= 0 then p.Add('geoIndex', AIndex) else p.Add('componentType', 'geo');
+  p.Add('dx', ADX);
+  p.Add('dy', ADY);
+  DispatchActionObject(p);
+  Result := FGeoRoamHits > 0;
+end;
+
+function TTyAdvanceChart.GeoZoom(AIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
+var p: TJSONObject;
+begin
+  p := TJSONObject.Create;
+  p.Add('type', 'geoRoam');
+  if AIndex >= 0 then p.Add('geoIndex', AIndex) else p.Add('componentType', 'geo');
+  p.Add('zoom', AScale);
+  p.Add('originX', AOriginX);
+  p.Add('originY', AOriginY);
+  DispatchActionObject(p);
+  Result := FGeoRoamHits > 0;
+end;
+
+function TTyAdvanceChart.GeoRoamState(AIndex: Integer; out ACentre: TTyGraphCentre;
+  out AZoom: Double): Boolean;
+var spec: TTyGeoSpec;
+begin
+  ACentre := Default(TTyGraphCentre);
+  AZoom := 1;
+  Result := (FOption <> nil) and (AIndex >= 0) and (AIndex < FOption.ComponentCount('geo'));
+  if not Result then Exit;
+  if (AIndex <= High(FGeoRoam)) and FGeoRoam[AIndex].Valid then
+  begin
+    ACentre := FGeoRoam[AIndex].Centre;
+    AZoom := FGeoRoam[AIndex].Zoom;
+    Exit;
+  end;
+  spec := TyGeoSpecOf(FOption, AIndex);
+  ACentre := spec.Centre;
+  AZoom := spec.Zoom;
+end;
 
 procedure TTyAdvanceChart.FreeGeoSel;
 var i: Integer;
@@ -11080,12 +11487,21 @@ begin
 end;
 
 function TTyAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+var z, zl: Integer;
+begin
+  Result := RoamSeriesAtZ(AX, AY, AZoom, z, zl);
+end;
+
+function TTyAdvanceChart.RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
+  out AZ, AZLevel: Integer): Integer;
 var
   i, best: Integer;
   sp, bs: TTyGraphSpec;
   ok: Boolean;
 begin
   Result := -1;
+  AZ := 0;
+  AZLevel := 0;
   best := -1;
   bs := Default(TTyGraphSpec);
   for i := 0 to High(FGraphs) do
@@ -11176,7 +11592,12 @@ begin
       bs := sp;
     end;
   end;
-  if best >= 0 then Result := FBindings[best].SeriesIndex;
+  if best >= 0 then
+  begin
+    Result := FBindings[best].SeriesIndex;
+    AZ := bs.Z;
+    AZLevel := bs.ZLevel;
+  end;
 end;
 
 function TTyAdvanceChart.IsTreeSeries(ASeriesIndex: Integer): Boolean;
@@ -11487,6 +11908,7 @@ begin
   { A MIDDLE OR RIGHT PRESS NEITHER ARMS NOR DISARMS. }
   if Button <> mbLeft then Exit;
   FRoamSeries := -1;
+  FRoamGeo := -1;
   { THE THUMBNAIL'S RoamController, the first roam listener (z 10): a press
     in its content rect arms it; the graph's own controller arms beside it,
     and the thumbnail consumes the moves [Batch 140] }
@@ -11556,7 +11978,9 @@ begin
   end;
   if (FDzDrag.Kind = dtkSlider) or (FDzPanGrid >= 0)
     or ((FDzDownTarget.Kind = dtkSlider) and (FDzDownTarget.Role = dzrClickPanel)) then Exit;
-  FRoamSeries := RoamSeriesAt(X, Y, False);
+  { the graphs' and [Batch 150] the geos' RoamControllers: the first that
+    holds the press arms }
+  FRoamSeries := RoamTargetAt(X, Y, False, FRoamGeo);
   FRoamX := X;
   FRoamY := Y;
 end;
@@ -11573,6 +11997,7 @@ begin
   if Button = mbLeft then
   begin
     FRoamSeries := -1;
+    FRoamGeo := -1;
     { dragend [Batch 114] }
     GraphDragEnd;
     FSankeyDragSlot := -1;
@@ -11650,6 +12075,7 @@ begin
     a mouseup where the pointer was last would end it -- its commit and all;
     the widgetset's own mouseup, when it follows, finds nothing to end. }
   FRoamSeries := -1;
+  FRoamGeo := -1;
   FThumbDrag := -1;
   GraphDragEnd;
   FSankeyDragSlot := -1;
@@ -11672,7 +12098,7 @@ function TTyAdvanceChart.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   s: Double;
-  si: Integer;
+  si, gi: Integer;
 begin
   { THE HOST'S HANDLER FIRST, and one that takes the wheel keeps it. }
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
@@ -11686,7 +12112,14 @@ begin
     TyDzZrDelta(WheelDelta)) then Exit(True);
   s := TyGraphWheelScale(WheelDelta);
   if s = 0 then Exit;
-  si := RoamSeriesAt(MousePos.X, MousePos.Y, True);
+  si := RoamTargetAt(MousePos.X, MousePos.Y, True, gi);
+  { [Batch 150] a geo's RoamController took it: a geoRoam zoom about the
+    pointer, the wheel consumed }
+  if gi >= 0 then
+  begin
+    GeoGesture(gi, False, 0, 0, True, s, MousePos.X, MousePos.Y);
+    Exit(True);
+  end;
   if si < 0 then Exit;
   if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
   else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
@@ -19207,6 +19640,11 @@ begin
   { nothing is large until the loop below says so [Batch 117] }
   SetLength(FLargeKinds, Length(FBindings));
   for i := 0 to High(FLargeKinds) do FLargeKinds[i] := lgkNone;
+  { [Batch 150] WHAT THE COMPONENTS BUILT COUNTS before the early exit: a
+    map, a radar or a calendar with no series at all is drawn -- the answer
+    used to be the graphic elements alone, and PaintSeries paints nothing
+    for a nought, so a geo-only chart was blank }
+  Result := drawn + gfxCount;
   if Length(FBindings) = 0 then Exit;
   begin
     for i := 0 to High(FBindings) do
@@ -22713,6 +23151,11 @@ begin
   VmElementEvent('mousemove', t, AX, AY);
   cancel := GfxElementEvent('mousemove', t, AX, AY);
   VmDragMove(AX, AY);
+  { [Batch 150] zrender's zr-level mousemove: a geo's RoamController pans
+    here -- after the out, before echarts' own mousemove (registered
+    zrEventfulCallAtLast) and before the over, both of which name what was
+    found under the pointer before the picture moved }
+  if not cancel then GeoRoamMove(AX, AY);
   if t.HasData and not cancel then EmitChartEvent('mousemove', t, AX, AY);
   if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
@@ -28453,6 +28896,9 @@ begin
     else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam') then
       { [Batch 114] }
       Result := DoViewAction(t, p)
+    { the geo's roam [Batch 150] }
+    else if t = 'geoRoam' then
+      Result := DoGeoRoamAction(p)
     { the toolbox's actions [Batch 125] }
     else if t = 'restore' then
     begin

@@ -6508,7 +6508,7 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 - **[第 140 批：缩略图的 RoamController（z 10）排在 graph 之前：内容框里的拖动与滚轮归它、消费掉，graph 不动；按在边框上仍归 graph，见 §178。]** **手势**就是一串动作:
   - 左键按下(不在可拖动节点上、在区域内)武装;每次移动发 `{dx, dy}`,相对上一次位置,指针出了画布也照样平移;左键抬起解除,中键和右键的按下、抬起都不算。
   - 滚轮 `d = delta/120`,`|d| > 3` 取 1.4、`> 1` 取 1.2、否则 1.1,反方向取倒数;绕指针缩放;没有 graph 接的滚轮不消费。
-  - 多个 graph 重叠时,zlevel 高的先,再 z 高的,再系列序号小的。
+  - **[第 150 批：上游注释说「全相等时后加入的优先」，实际两边的 z2 都是 -Infinity，相减得 NaN，后加入的排在相等者之后——先加入的赢；组件先于系列渲染，所以同 zlevel、同 z 时 geo 先于 graph，见 §189]** 多个 graph 重叠时,zlevel 高的先,再 z 高的,再系列序号小的。
 - **手势区域**是数据矩形经 overall 变换后的矩形,闭区间;缩小以后区域跟着缩小。
 - **补偿缩放** `ns = ((z-1)*(ratio || 1) + 1) / osx`:符号的半宽是 `fl(osx*ns) * (w/2)`,两个轴分别算;裁边在数据空间里按 `symbolSize * ns/2` 做;环形布局的份额也乘 `ns`。**只在渲染和带缩放的动作时重算**,平移后保持旧值(差一个 ulp,上游如此)。
 - **什么留得下**:resize 和 merge 保留中心和缩放(环形在下一次布局时用新的 `ns` 重排);notMerge 清掉;一次 roam 不重新布局、不重跑力导向。
@@ -13262,7 +13262,7 @@ D5 的第三批，也是最后一批：方向嗅探与多层钻取。UT2（§175
 
 ### 推迟与偏差
 
-- **只有 graph**：6.1 的缩略图只认 graph，geo（D14）上游也没有缩略图。缩略图的盒子放在 calendar / matrix 上（`ComponentOnCalendar` / `ComponentOnMatrix`）没做，按画布布局。
+- **[第 150 批：geo 的 roam 做了，缩略图仍不接 geo；端口里缩略图的控制器总排在 geo 前面、不按 z 比，见 §189]** **只有 graph**：6.1 的缩略图只认 graph，geo（D14）上游也没有缩略图。缩略图的盒子放在 calendar / matrix 上（`ComponentOnCalendar` / `ComponentOnMatrix`）没做，按画布布局。
 - **指向非 graph 的 `seriesIndex` / `seriesId`**：上游开发版在 `getTarget` 里读 null 的 `subType` 抛 TypeError（`setOption` 抛出）；端口当作没有目标，不画。
 - **盒子的合并**：初始化时照 `mergeLayoutParam`；之后的合并只深合并（§130 那一条），合并改盒子键的写法与上游可能不同。
 - **副本**：`path://` 符号端口按 shape 的矩形重新铺（上游新建的路径类不读 shape，图标画在单位盒里）；`image://` 符号不进副本；节点被端口按尺寸不画（尺寸 0 或非数）时副本里也没有它（上游有一个零大小的）。副本的填色是端口画出来的颜色——缺省调色板与边的颜色来自皮肤，与上游的令牌不同（测试只比作者写的颜色）。环形布局的坐标同 §79 差到十亿分之一。
@@ -13524,7 +13524,7 @@ custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit
 - **PPI**：指针尺寸与环距是逻辑像素、按 PPI 缩放；而图表的 option 几何（符号大小、网格边距）在这条路上不随 PPI 缩放，所以 192 PPI 下指针相对符号是上游的两倍大。`PointerSize` 是整数，上游可以是小数。
 - **脏矩形不是上游的矩形**：池与合并是上游的、逐位，元素的盒子是端口的——它要包住端口渲染器画下的每一个像素：斜接的尖角、标签的光晕、一像素的抗锯齿，都比 zrender 的路径盒子宽；所以同一个悬停，端口的矩形比上游的大一两圈，不能拿来逐位比（基准比的是元素层的转写，不是整张图）。
 - **端口记全画帧的旧矩形**，上游不记（见上，`move-after-full`）：端口不会留下残影，上游会。
-- **局部重画只接状态变化**。动画帧（系列在动态层里）、roam、选择器悬停、关系图的悬停（§80，在静态层原地重样式，经 `DropStatic`）都还是整层重画——动态层那一半照样变便宜，但静态层不分块。动画中动态层整个重画（只是不再分配位图），不按元素比。
+- **[第 150 批：geo 的 roam 一步同样整层重画（`StaticDrop`），悬停仍走局部，对拍见 §189]** **局部重画只接状态变化**。动画帧（系列在动态层里）、roam、选择器悬停、关系图的悬停（§80，在静态层原地重样式，经 `DropStatic`）都还是整层重画——动态层那一半照样变便宜，但静态层不分块。动画中动态层整个重画（只是不再分配位图），不按元素比。
 - **动态层按墨块，不按元素**：上一帧与这一帧有墨的 32 px 块都重合成；提示框不动、只是重画了一遍的帧也算一次（代价是它的面积）。
 - **没有界的元素**（large 批、富文本标签）一变就整层重画；没变的照画（不管压没压在矩形下）。
 - **局部重画一遍画完，裁剪框是所有矩形的外框**，zrender 是逐矩形 clip、各画一遍：矩形里的像素相同（对拍证明），区别只在代价（见上）。
@@ -13748,7 +13748,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 
 - **GE1（本批）**：`registerMap` / `getMap`（端口 API）、GeoJSON 解析（Polygon / MultiPolygon / LineString / MultiLineString、洞、`cp`、`properties[nameProperty]`、过滤、压缩格式 `UTF8Encoding` / `UTF8Scale`）、`specialAreas`、`'china'` 的三张修正表、`nameMap` / `nameProperty`、区域的包围盒与中心、geo 坐标系（盒子布局、`layoutCenter` + `layoutSize`、`boundingCoords`、`aspectScale`、`preserveAspect`、投影句柄、选项里的 `center` / `zoom` / `scaleLimit`）、`dataToPoint` / `pointToData` / `containPoint`、`convertToPixel` / `convertFromPixel` / `containPixel` 的 geo finder、geo 组件按缺省样式（主题令牌）画区域与常态标签、`regions` 的常态样式、`echartsStyle`、`show` / `clip`。
 - **[第 148 批：已做，见 §187；`focus` 对组件只认 `'self'`，`blurScope` 组件不用]** **GE2**：区域的命中（`Region.contain` 与 `contain/polygon` 的绕数）、`emphasis` / `blur` / `select` 三态（`highlight` 令牌、标签 `emphasis.label.show` 缺省为真）、`selectedMode` 与 `selectedMap`、`regions[].selected`、`geoToggleSelect` / `geoSelect` / `geoUnSelect` 动作与 `geoselectchanged` 等事件、区域的 `tooltip`、`silent`、鼠标事件里的 `componentType: 'geo'` 与 `region`、`focus` / `blurScope`；画区域的路径缓存（这批每次建表都重算）。
-- **GE3**：geo 上的 roam（复用 §79 / §114 的 View 与 RoamController：拖动、滚轮、`roamTrigger`、`scaleLimit` 在手势里的钳制）、`geoRoam` 动作与事件、`center` 写回（百分比按数据矩形）、`__updateOnOwnRoam` 的只改变换不重建、缩略图（6.1 只认 graph，不做——见 §178）。
+- **[第 150 批：已做，见 §189；缩略图照旧不做（6.1 的缩略图只认 graph）]** **GE3**：geo 上的 roam（复用 §79 / §114 的 View 与 RoamController：拖动、滚轮、`roamTrigger`、`scaleLimit` 在手势里的钳制）、`geoRoam` 动作与事件、`center` 写回（百分比按数据矩形）、`__updateOnOwnRoam` 的只改变换不重建、缩略图（6.1 只认 graph，不做——见 §178）。
 - **GE4**：`map` 系列（自带 geo 或 `geoIndex`、同一张图上的多个 map 系列合成一组、`mapValueCalculation`、`showLegendSymbol` 与 `mapSymbolLayout`、`geoCoord`、visualMap 着色、`isDataNaN` 时的标签）；geo 上的 scatter / effectScatter / lines（接 `TTyLinesProject`）/ heatmap / pie / custom（`api.coord`）；`seriesIndex` finder 落到 geo、刷选的 `geoIndex`。
 
 SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它要一个 SVG 解析器和一棵可命中的图形树，是另一件事；端口注册时拒绝它。投影的 `stream`（d3 风格）也不做。
@@ -13784,7 +13784,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
   - **坐标系**（`TTyGeo`，实现 `ITyCoordSys`，数据是 `[lng, lat]`）：`Resize(画布, PPI)` 载入地图、定投影、设数据矩形、`boundingCoords`（采样，左边是对角线）、布局视图（`layoutCenter` 路径或 `getLayoutRect` 带 aspect 的版本加 `applyPreserveAspect`；数字按 PPI / 96 缩放，和日历一样）、roam 选项。**View 照 View.ts 的做法用完整的 2 × 3 矩阵**：`TyGeoDecompose`（setLocalTransform：`atan2` / `cos` / `tan` 用 `TyJsAtan2` / `TyJsCos` / `TyJsTan`，与 V8 逐位）、`TyGeoLocalTransform`（getLocalTransform，含旋转的分支）、`TyGeoMatMul`、`TyGeoMatInvert`（行列式为 0 或 NaN 时保留旧的）、`calculateTransform` 按 identity → translate → scale → translate 逐步做（`0 * sy` 这样的项照算，NaN 不会丢）。更新按上游的次序跑两遍（视图矩形就位时一遍、roam 选项设好后一遍），所以一个 NaN 中心留下的是第一遍的逆矩阵。`PointOf` / `PointOfName` / `DataOf`（先 unproject）/ `ToPixelJson` / `FromPixelJson`（JS 的取元素与 ToNumber）、`ContainPoint`（数据矩形经 overall 的 `BoundingRect.applyTransform`，含非轴对齐的分支）、`RoamMatrix` 与 `HasRoamTransform`（zrender 的 `needLocalTransform`：离单位变换都不到 5e-5 时组上**根本没有变换**）。
   - **画面数据**（`TyGeoDrawOf`）：组、每条复合路径的子路径（raw 之后、roam 之前）、`Drawn`（首帧画给 canvas 的命令：`TProxy` 照 PathProxy 的 `moveTo` / `lineTo` / `closePath` 与待画点逐行转写，单位是 `|1 / 全局缩放|`，设备像素）、样式来源（主题 / 选项原文 / 不画）、标签时的盒子 `Rect` 与画完后的盒子 `BoxRect`、标签（显示与否、文字、颜色、字号、位置百分比、`layoutRect`、锚点）。`regions` 的取法照 `getFilledRegions` 的账：同名取最后一个条目；没有条目的名字每个区域新建一个、最后一个算数；`echartsStyle` 只补条目没写的键。
   - **[第 148 批：不再静默——命中走上游的 `Path.contain`（全部点、绕数、描边、裁剪），文字总建、不显示时 ignore，状态值来自 States.pas；见 §187]** **元素**（`TyBuildGeo`）：每条有命令的路径一个元素——`cskPolygon` / `cskPolyline`，`Cmds` 是画出的命令经 roam 矩阵（组没有变换时原样），非零填充（洞靠外环与内环的反向；同向的洞会被填上，和 canvas 一样）、描边宽度不随 zoom（`strokeNoScale`）、虚线经 `TyDashPattern`、`opacity`、`clip` 时裁到视图矩形，z 是组件的 z、z2 0，**静默**（命中与状态是 GE2）；常态显示的标签在所有区域之后（z2 2），以锚点居中，字体与颜色取选项、否则主题。
-- **控件**：`FGeos`、`SolveGeos`（日历之后、饼之前）、`FreeGeos`、`GeoInk`（新令牌 `TyAdvChartGeoArea` 的底色与边色、`TyAdvChartGeoLabel` 的字色与字体）、`GeoCount` / `GeoLayout(i)`（测试与宿主看布局）；建表时在日历之后、所有系列之前加 geo 的元素（组件的组先于系列加入）；`ConvertDispatch` 在 grid 之后、图的 view 之前问 finder 指的 geo（`ConvertOnGeo`：区域名或坐标对，像素反算；答不出的值落到下一个坐标系）；`ContainPixelData` 认 `geo` finder。控件不拆 TTyCustomXxx，没有新的 published 属性。
+- **[第 150 批：没有任何系列时这里建的元素从来没画出来——`BuildSeriesList` 在「没有系列」处提前返回，答数只算 graphic 元素，`PaintSeries` 见零就不画；已修，日历与雷达同样，见 §189]** **控件**：`FGeos`、`SolveGeos`（日历之后、饼之前）、`FreeGeos`、`GeoInk`（新令牌 `TyAdvChartGeoArea` 的底色与边色、`TyAdvChartGeoLabel` 的字色与字体）、`GeoCount` / `GeoLayout(i)`（测试与宿主看布局）；建表时在日历之后、所有系列之前加 geo 的元素（组件的组先于系列加入）；`ConvertDispatch` 在 grid 之后、图的 view 之前问 finder 指的 geo（`ConvertOnGeo`：区域名或坐标对，像素反算；答不出的值落到下一个坐标系）；`ContainPixelData` 认 `geo` finder。控件不拆 TTyCustomXxx，没有新的 published 属性。
 - **主题**：`themes/light.tycss` 加两个键——`TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }`（表面里一成强调色，深色皮肤的地图是深的）与 `TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }`；重跑三个生成脚本，`DefaultTheme.pas` 与 `Css.Catalog.pas` 只有新增，`BuiltinThemeData.pas` 不变。边宽 0.5 是选项的缺省值（它进标签位置的算术，逐位），不进主题。
 - **i18n**：没有新的用户可见字符串。`GeoFix` 里有上游的六个中文区域名字面量（`'南海诸岛'`、`'广东'`、`'香港'`、`'澳门'`、`'天津'`、`'台湾'`），只拿来和宿主数据里的名字比，不显示；这个分支上没有 `TI18NTest.TestNoUnitHoldsChineseTextInAStringLiteral`，合回 main 时要在 `tests/test.i18n.pas` 的豁免表里给 `tyControls.AdvChart.GeoFix.pas` 加这六个（出处：`src/coord/geo/fix/nanhai.ts`、`textCoord.ts`、`diaoyuIsland.ts`），写法照 `AdvChartCalendarData`（`'''南海诸岛'''` 这样带引号）。
 
@@ -13812,7 +13812,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 
 - **[第 148 批：都做了，见 §187]** **命中、状态、选中、提示框、事件**是 GE2：这批区域元素全是静默的，悬停不到；`emphasis.label.show` 缺省为真的标签（上游常态 ignore 的那些）不建元素；`regions` 只读常态的 itemStyle 与 label、`silent`（记在组上，GE2 用）。
 - **[第 148 批：画面按墨与 PPI 缓存在 `TTyGeo` 里，建表只读当前状态值]** **画面每次建表都重算**（解析是缓存的，路径不是）；大地图上悬停重建会慢，GE2 加路径缓存。
-- **首帧之后**上游从 PathProxy 的 Float32Array 重放路径（`toStatic` 之后），坐标是单精度——端口始终画首帧那一份（双精度），差别在十万分之一像素量级。`culling` 不做（画在画布外的东西本来就看不见；标签另算，和上游一样不剔）。
+- **[第 150 批：roam 之后上游每帧都是重放，按当时的全局缩放折叠小线段；端口按新缩放重算折叠，点仍是双精度，基准比较前把端口的值舍入成单精度，见 §189]** **首帧之后**上游从 PathProxy 的 Float32Array 重放路径（`toStatic` 之后），坐标是单精度——端口始终画首帧那一份（双精度），差别在十万分之一像素量级。`culling` 不做（画在画布外的东西本来就看不见；标签另算，和上游一样不剔）。
 - **抛异常的地方不抛**：没注册的地图、压缩文件里的 null 几何、缺 `encodeOffsets` 的环、没有 `coordinates` 的几何、带投影却一个区域都没有的地图、`boundingCoords` 采样时投影答 null——上游 `setOption` 抛异常，端口这个 geo 无效（或那个采样点跳过），什么都不画，其他组件照常。
 - **畸形坐标**：不是数组的点按 NaN、不是数组的环按空环（上游会按字符串的字符去取）；`encodeOffsets` 里的字符串按 ToNumber（上游会做字符串拼接）。数据里的数字以外，`properties` 的名字按 JS 的 `String()`。
 - **`echartsStyle`**：同名的多个区域都带 `echartsStyle` 时上游逐个不覆盖地合并，端口只取第一个带样式的区域那一份。
@@ -13917,3 +13917,91 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - `themes/light.tycss`：两个 `:hover` 键；`source/tyControls.DefaultTheme.pas` 重新生成。
 - `tools/advchart-oracle/geo-interact.js`、`tests/fixtures/advchart-geo-interact.json`、`tests/test.advchart.geointeract.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.geo.pas` 两处断言。
 - §183、§185 在原处标注。
+
+## 189. Tier 3 第一百五十批：geo（三）（D14 GE3，2026-10-13）
+
+路线图 D14 的第三批，范围照 §185 的 GE1–GE4 表：geo 上的 roam。GE1 读进了 `center` / `zoom` / `scaleLimit`，初始的视图照它们摆，可是拖不动、滚轮不缩放，`geoRoam` 动作派发了没人接，`ChartOn` 不认 `georoam`（连接表里倒是早就有这一项）。这一批对着 6.1 的 `component/helper/RoamController.ts`（`enable` 的 controlType、`_checkPointer`、三个鼠标处理器与滚轮、`_checkTriggerMoveZoom`、`eventConsumed`、`addRoamZrListener` 的排序、`isAvailableBehavior`）、`component/helper/roamHelper.ts`（`updateRoamControllerSimply`：缺省 roam、`roamTrigger`、`isInSelf` / `isInClip`、派发的载荷与 `geoBackwardCompat`）、`component/helper/cursorHelper.ts` 的 `onIrrelevantElement`、`util/graphic.ts` 的 `retrieveZInfo` 与 `payloadDisableAnimation`、`coord/View.ts`（`ownRoamModelCoordSysUpdateInAction`、`viewCoordSysSyncBack`、`calcOverallTransFromSyncBackEl`、`calcRoamTransFromOverallTrans`、`applyRoamPayloadToOverallTrans`、`getZoomFromRoamTrans`、`syncBackToRoamOptionFromRoamTrans`、`invertBackToCenterOption` / `invertToPercentPerCenterDim`、`viewCoordSysSetRoamOptionFromModel`、`clampByZoomLimit`、`applyViewCoordSysTransToElement`）、`util/number.ts` 的 `isPositionSizeOptionPercent`、`component/geo/install.ts` 的 `geoRoam` 动作（主类型的判定、`makeQueryConditionKindA`、`update: 'updateTransform'`）、`component/geo/GeoView.ts` 与 `component/helper/MapDraw.ts` 的 `__updateOnOwnRoam` 和 `draw` 里的控制器、`core/echarts.ts`（`updateTransform` 不重画组件、`doDispatchAction` 的事件对象、`registerAction` 把事件名转小写、`_initEvents` 的 `zrEventfulCallAtLast`），以及 zrender 的 `Handler`（`mousemove` 先找悬停再派发、`click` 的同一元素与四像素）、`Eventful` 的 callAtLast、`PathProxy`（`setScale`、`toStatic` 的 Float32Array、`rebuildPath` 的小线段折叠）、`Storage._updateAndAddDisplayable`（组变脏时子元素一起更新、文字随宿主重新定位）逐行核过，在真 dist 上跑基准。顺带修了一个 GE1 起就在的缺陷：没有任何系列的图里，geo 从来没画出来（见「port 以前」）。§79、§178、§181、§185 的相关条目在原处标注。
+
+### 上游的做法
+
+- **开不开**：`roam` 取 `retrieve2(model.get('roam'), false)`。GeoModel 的缺省里**没有** `roam`，所以没写（或写 null）就爬到根选项的 `roam`；根上也没有是 false。`enable` 里「null 当 true」那一句对 geo 永远走不到——这一点和关系图不同（§79：图的 null 是全开）。`true` 是拖动加滚轮，`'move'` / `'pan'` 只拖动，`'scale'` / `'zoom'` 只滚轮，其余（`1`、`'foo'`）都不开。`roamTrigger` 同样 `get`、同样爬根，`'global'` 时到处都接。`show: false` 的 geo 没有 MapDraw，`remove` 把控制器 disable 了，手势一概不接。
+- **指针在不在区域里**（`_checkPointer`）：先问 `onIrrelevantElement`——指针下最上面的元素（静默的也算，裁剪挡掉的不算）属于另一个有坐标系的组件、那个坐标系的模型不是这个 geo、而且它的 zlevel（再 z）更高，就不接；坐标系模型就是这个 geo、没有坐标系的组件（饼）、tooltip / axisPointer / brush 都不算无关。然后 `'global'` 或者 `containPoint`（数据矩形经 overall 变换、四边闭），再在 `clip` 时要求落在视图矩形里（`isInClip`，同样四边闭——`'global'` 也过不了这一关）。
+- **多个控制器的先后**：每个控制器按 `(zlevel, z, z2)` 降序插进一张 zr 级的监听表。源码注释说「全相等时后加入的优先」，实际 z2 两边都是 `-Infinity`，相减得 NaN，`NaN <= 0` 为假，后加入的排在相等者**之后**——先加入的赢。每次渲染都 `disable` 再重新加入；组件在系列之前渲染，所以同 zlevel、同 z 时 geo 先于 graph，geo 0 先于 geo 1；geoRoam 走 `updateTransform`，组件不重画，geo 的位置不变。
+- **拖动**：左键按下（中键、右键的按下与抬起都不算；目标一路往上有 `draggable` 的不算）时每个过了 `_checkPointer` 的控制器都武装；每次移动，globalPan 被占着就什么都不做（连上一点都不更新），否则从上一点算 `dx, dy`、更新上一点、标记已消费——排在前面的、武装了的那一个动，其余的见「已消费」就跳过。指针出了画布照样平移。左键抬起解除。
+- **滚轮**：zrender 的 `wheelDelta` 是 LCL 的 `WheelDelta / 120`，绝对值大于 3 取 1.4、大于 1 取 1.2、否则 1.1，向下取倒数；第一个过了 `_checkPointer`（以指针为原点）的控制器接、消费；没人接就不消费（页面照常滚动）。
+- **派发的载荷**：`{type: 'geoRoam', dx, dy}` 或 `{type: 'geoRoam', zoom, originX, originY}`，再加 `animation: {duration: 0}`（`payloadDisableAnimation`）、`componentType: 'geo'`（`geoBackwardCompat`）、`geoId`（模型 id，自动的是 `'\0series\0' + 序号 + '\0' + 0`），键就是这个次序。
+- **事件的次序**：zrender 的 `mousemove` 先在**移动之前**的画面上找悬停，派 `mouseout`，再派 `mousemove`——zr 级的监听里 RoamController 是普通的，echarts 自己的鼠标事件挂的是 `zrEventfulCallAtLast`，所以 `georoam` 在图表的 `mousemove` **之前**；然后才是 `mouseover`（目标仍是移动前找到的那个）。拖动中的悬停因此会跟着指针在旧画面上的位置换来换去，短拖在一个区域里时悬停、提示框都留着。
+- **动作**（`geoRoam`）：主类型是 `payload.componentType`（真值），否则 `geoId` / `geoName` / `geoIndex` 有一个不为 null 就是 `'geo'`，否则是 series——也就是 map 系列（GE4），这一批里什么都不动，但事件照发。geo 按 `makeQueryConditionKindA` 找：index 优先于 id、id 优先于 name，都没写是全部。对每个找到的 geo：
+  - `viewCoordSysSyncBack`：变换组（`applyViewCoordSysTransToElement` 给它的是 roam 的一份拷贝）的 roam 乘 raw，`decomposeTransform` 成 overall（`calcOverallTransFromSyncBackEl`）；overall 乘 raw 的逆、再分解，得到 roam（`calcRoamTransFromOverallTrans`）。
+  - 载荷作用在 overall 上：`dx` 与 `dy` **都**不为 null 才平移；`zoom` 不为 null 时旧缩放取 roam 的 `scaleX`，新缩放 `clampByZoomLimit(旧 * zoom)`，`k = 新 / 旧`，`x -= (originX - x) * (k - 1)`（y 同理），`scaleX`、`scaleY` 乘 k。
+  - 再从 overall 分解出 roam，`zoom = roam.scaleX`（**不 clamp**，比 clamp 过的值可能差末位），`|zoom| > 1e-6` 时中心是 `(视图中心 - roam 的平移) / zoom`，再乘 raw 的逆回到数据空间；上次写的 `center`（`getShallow`，可能爬自根）为假时整个写成数，否则逐维：上次那一维是以 `%` 结尾的字符串、数据矩形那一边不为 0，写成 `(c - 数据矩形的起点) / 宽 * 100 + '%'`，否则写成数。`center` 与 `zoom` 直接写进模型的 option——之后的 merge、resize 都从这里读；然后 `viewCoordSysSetRoamOptionFromModel` 重新读一遍（zoom 在这里才 clamp）。连 `{dx: 5}` 这样不平移的动作也要走一遍这个往返，中心会差几个末位。
+  - `ownRoamViewUpdateDirectlyInAction` 给载荷补 `animation`（所以事件里有这个键，**只**在找到了 geo 时），再 `__updateOnOwnRoam`：变换组换成新的 roam，**不重建**区域元素。
+  - 事件是载荷的拷贝、`type` 原位改成 `'georoam'`。之后是 `updated`。
+- **画面跟着动**：区域的路径数据是 raw 空间的，组挂 roam 变换。第一帧以后 canvas 不再走直接模式，而是 `rebuildPath` 重放存下的数据（超过 11 个数就是 Float32Array），按**当时**的全局缩放把不到一个像素的小线段折叠掉——放大以后画出来的点更多（基准里 360 边的圆：缩放 1 画 234 条命令，1.4 倍 346 条，1.96 倍起 362 条全画）。标签是宿主的 textContent、不是本地的：每帧按 `layoutRect` 经宿主的全局变换重新定位，字号不变；描边 `strokeNoScale`，线宽不变。命中走同样的变换。
+- **点击**：zrender 的 click 要求按下与抬起是同一个元素、距离不超过 4 像素。三像素的短拖既平移（一个 georoam）又是一次点击（`geoToggleSelect`）；六像素的拖动只平移。
+- **缩略图**：6.1 的缩略图只认 graph，geo 没有（§178）。光标：控制器在空白处设 `grab`、拖动时 `grabbing`——端口全库不改光标。
+
+### port 以前
+
+- GE1 / GE2：`center` / `zoom` / `scaleLimit` 照读，初始视图对；没有手势，`geoRoam` 不认，`ChartOn` 拒绝 `georoam`；`TTyGeo` 的画面缓存只认墨与 PPI，roam 变了也不会重算。
+- **没有系列时 geo 不画**：`BuildSeriesList` 先把雷达、日历、geo 的元素加进列表，再在「一个系列都没有」处提前返回——返回值只算了 graphic 元素，`PaintSeries` 见到 0 就不画，于是只有 geo（或只有日历、只有雷达）的图是一张白图。GE1 / GE2 的测试只看列表里的元素与状态，从来没看过像素，这个一直没被发现；这一批的 D9 对拍测试第一次把它照出来（两条路径都是白的，对拍空转）。日历那条 `TestACalendarWithNoSeriesIsDrawn` 同样只看列表。
+
+### 做法
+
+- **Geo**（`tyControls.AdvChart.Geo`）：
+  - `TTyGeoSpec` 多 `Roam`（`TTyGraphRoamMode`）与 `RoamGlobal`：`roam` 自己的、null 或没写就爬根，`RoamModeOf` 照 controlType 的规则；`roamTrigger` 用图的读法。
+  - `TTyGeo.SetRoamOption`（下一次布局前，把写回的中心与缩放放进 spec）、`RoamBy`（上面那一整套往返：每一步都用 GE1 的 `TyGeoDecompose` / `TyGeoLocalTransform` / `TyGeoMatMul`，与视图自己的矩阵同一条路；写回的中心是 `TTyGraphCentre`，逐维记住是不是百分比；然后 `ApplyRoamOptions`）、`RoamPointerIn`（`'global'` 或 `ContainPoint`，`clip` 时再要视图矩形）、`RoamGen`、`ItemsReady`。
+  - **画面不重建**：`TyGeoDrawOf` 里依赖 roam 的部分拆成 `DrawRoamUnits`（组的矩阵与 `_ux` / `_uy`）、`FoldSubs`（折叠）、`PlaceLabel`（锚点）、`DrawnBox`（画完后的盒子），算术不变（GE1 的基准照旧逐位通过）；`Draw` 见 `RoamGen` 变了就只调 `TyGeoDrawReroam` 在留着的画面上重算这几样——子路径数组、样式、状态记录都不动，悬停与选中原样留着。
+  - `TyBuildGeo` 多一个 `AApplyStates`（缺省真）：roam 补丁建元素时不应用状态，状态等帧里应用（上游也是帧里）。
+- **控件**：
+  - `FGeoRoam`（每个 geo 模型写回的中心与缩放，`Valid` 之后胜过选项自己的）：`SolveGeos` 在 `Resize` 之前 `SetRoamOption`；`MergeKeepStates` 里模型没了就丢，合并写了 `center` 或 `zoom` 的只盖那一个（`MergeGeoRoam`，与图的 `MergeRoamOverride` 同理）；notMerge 清空。
+  - 手势：`RoamTargetAt` 把 `RoamSeriesAt`（改成带出赢家 z / zlevel 的 `RoamSeriesAtZ`）和 `GeoRoamPick` 放在一起比——geo 之间按 zlevel、z 降序，平手取序号小的；geo 对系列，zlevel 与 z 都相等时 geo 赢（先加入）。`GeoRoamPick` 跳过无效的、`show: false` 的、`roam` 不许的、指针不在区域里的、`GeoIrrelevant` 的（列表的 `TopElementAt`，静默的也算：另一个 geo 的元素，或者一个有坐标系的系列——笛卡尔、极坐标、日历、关系图、树、雷达——的元素，zlevel 再 z 更高）。`MouseDown` 左键记下 `FRoamGeo` 与位置；`MouseUp` 左键、`CaptureChanged`、合并、notMerge 解除。
+  - **拖动的一步在 `EventMove` 里**：mouseout 之后、图表的 `mousemove` 之前（`GeoRoamMove`：globalPan 占着就整步不做，否则从上一点算差）——悬停与提示框用的都是这一步之前的列表，与上游在旧画面上找悬停一致。
+  - `DoMouseWheel`：缩略图、内部 dataZoom 之后，`RoamTargetAt` 给了 geo 就发一个以指针为原点的缩放，返回已消费。
+  - `GeoGesture` 照上游的键序造载荷（`dx` / `dy` 是数，`geoId` 是 `FOption.ComponentId`），交给 `DispatchActionObject`——和手写的 `DispatchAction` 是同一条路，连接图（`'georoam'` 早在 `TyConnectActionOf` 的表里）也照常广播。
+  - `DoGeoRoamAction`：主类型照上游判定；`GeoMatch` 找 geo；`dx` 与 `dy` 都是数才平移，`zoom` 是数才缩放；每个找到的 geo 记一次「到达」，`RoamBy` 成功的写进 `FGeoRoam`。动了的 geo 由 `GeoPatchList` 在**现有列表**里原位换掉自己的元素（同样的个数与次序，`SetElement`；换不了就整张丢掉），下一次指针事件在动过的画面上命中——不等下一次画；静态层整张丢（`StaticDrop`），所以脏矩形那条路对 roam 一步是整张重画。事件：载荷拷贝，「到达」时 `animation` 原位改写或追加，`type` 原位改成 `'georoam'`，按 JSON.stringify 的写法（`TyGeoJsJson`）发出。`DispatchAction` 照旧在后面发 `updated`。
+  - 公开 `GeoRoam(geo, dx, dy)`、`GeoZoom(geo, scale, ox, oy)`（-1 是 `componentType: 'geo'`、全部 geo；走 `DispatchActionObject`，答有没有 geo 动了）、`GeoRoamState(geo, out 中心, out 缩放)`（选项现在怎么说：roam 之前是选项自己的，之后是写回的，缩放不 clamp）。
+  - **顺带修的缺陷**：`BuildSeriesList` 在没有系列的提前返回之前就把组件建的元素算进答数（`Result := drawn + gfxCount`），只有 geo、只有日历、只有雷达的图从此画得出来。
+  - `Events.pas` 的动作事件表加 `georoam`。控件不拆 TTyCustomXxx，没有新的 published 属性；没有新的主题键；没有新的用户可见字符串。
+- **D9**：roam 一步走 `StaticDrop`，下一帧整张重画；悬停仍走局部。对拍测试（见下）逐像素证明两条路径画的一样。
+
+### 基准
+
+`tools/advchart-oracle/geo-roam.js`（新；真 dist，node SSR，geo-interact.js 的做法：`chart._ssr = false`、`env.node` 关、`getDom` 打桩、受控时钟；每个用例重新注册地图；选项都写 `animation: false`，提示框 `hideDelay: 0` 与 `position: [5, 5]`；指针走 zrender 自己的 Handler，每个事件之后刷新显示列表，每步之后 `chart._onframe()`；点位可以按区域中心或坐标对经 `dataToPoint` 现算、取整后写进夹具；两次生成逐字节一致；`process.exit()`）→ `tests/fixtures/advchart-geo-roam.json`（约 2.1 MB）：
+
+- **地图** `ge3`：A、B、C 三个方块，D 带反向绕的洞，E 一条竖线，R 一个 360 条边的圆（六位小数，文本与数逐位一致）——静止时大半的边不到一个像素，放大后逐渐画全。
+- **15 个用例、101 个状态**：拖动（一步一个事件、出画布、长拖不是点击、之后的悬停）；滚轮（120 / 240 / 480 / 反向 / 地图外不接）；`scaleLimit`（初始 zoom 3 钳到 2、上下限）；`'scale'` / `'zoom'` 只滚轮；`'move'` / `'pan'` 只拖动、右键不武装；不开（不写、写 null）；根上的 `roam: true`（geo 写 false 的不开）；手写的 geoRoam（geoIndex 平移、绕点缩放、`componentType` 不带查询、什么键都没有的 map 系列、geoName、缺 dy、geoIndex 数组）；两个并排的 geo 只动指针下的那个；两个叠着的 geo（z 高的先、平手取前一个、上面那个 `roam: false` 的元素让下面的不接、上面那个在指针处没有元素时下面的照接）；状态穿过 roam（悬停留着、提示框留着、点选、滚轮后选中留着、三像素短拖是点击、六像素不是、`focus: 'self'` 的失焦）；`clip` 加 zoom 与 `roamTrigger: 'global'` 的第二个 geo；`layoutCenter` / `layoutSize`、`boundingCoords` 加 `preserveAspect: 'cover'`、百分比中心的写回；合并（不写、写 zoom、写 center、resize、notMerge）；标签显示时的放大与拖动。
+- **每个状态记**：鼠标事件（类型、componentType、名字）与 `georoam` / `geoselectchanged` 的 JSON 原文、显示中的提示框、几个探针点的命中、每个 geo 的 roam 变换与变换组（四个数）、overall 矩阵与它的逆、模型 option 里的 `center`（逐维：数 / 百分比 / 关键字……）与 `zoom`、每个组的悬停与选中、每条路径的状态表与 z2 和**画出的命令**（这个状态里新建的路径是首帧直接模式、双精度；之前就在的是 `rebuildPath` 重放、记下是不是 Float32Array）、每个标签的 ignore、文字、字号与 `getLocalTransform` 的平移。
+- **49 条守卫**全部成立，其中：一步一个事件且出画布照算、手势载荷的键序 `type,dx,dy,animation,componentType,geoId`、长拖不是点击、悬停在旧画面上找所以长拖里会换、`mouseout, georoam, mousemove` 的次序、写回的中心是数、1.1 / 1.2 / 1.4 与倒数、地图外的滚轮不接、初始 zoom 钳到上限、写回的缩放是钳过的、四个 roam 词、右键不武装、不开、根上的 roam 够得着、手写动作只动指定的 geo、`componentType` 动全部、没有 geo 键时什么都不动但事件照发且没有 `animation`、缺 dy 只剩往返的末位漂移、并排只动一个、z 高的先、平手取前一个、无关元素挡住、没有元素时不挡、拖动里悬停留着、提示框留着、短拖既平移又是点击、六像素不是点击、滚轮后选中留着、clip 内外、`'global'` 接住别处与角落、百分比那一维仍是百分比、合并保留与改写、resize 保留、notMerge 重来、标签字号不变而位置跟着动、roam 之后是 Float32 重放、放大后圆画出更多的边。
+- **生成器自检**：每个只含手势与动作的用例，把记下的 georoam 事件当动作派发到一张新图上，每一步之后的 overall 矩阵与手势那张逐位相同。
+
+### 测试
+
+`test.advchart.georoam`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartGeoRoamOracleTest`，2 个）：每个用例用控件自己的指针路径（`MouseMove`、`MouseDown` / `MouseUp`、`DoMouseWheel`、`MouseLeave`）与 `DispatchAction` / `SetOption` / `SetBounds` 走同样的步，每步之后画一次，逐步比：事件逐条（动作事件按 JSON 原文逐字比，连 `geoId` 里的 `\u0000`）、提示框、探针命中、roam 变换与变换组、overall 矩阵与逆矩阵、选项的中心（种类与值）与缩放、每个组的悬停与选中、每条路径的状态表与 z2、每条画出的命令（上游是 Float32 重放的，把端口的双精度先舍入成单精度再比）、标签的 ignore / 文字 / 写了的字号 / 锚点——134 816 次比较；端口自己的手势当动作重放到另一张图上，每步的 overall 矩阵逐位相同（630 次）。
+- **手写**（`TAdvChartGeoRoamTest`，9 个）：API 的平移、缩放、选项状态与事件原文、找不到 geo 时事件照发；零、负、NaN、无穷的缩放与不是有限数的原点被拒，视图不动；roam 保留画面（同一个 `TTyGeo`、同一个子路径数组、悬停仍是 emphasis、标签锚点跟着移了 25）；画之前列表已经跟上（按住 A 拖 200 像素，不画，命中测试在新位置找到 A、旧位置不再是 A）；丢了捕获结束拖动；宿主的 `OnMouseWheel` 先、地图外的滚轮不消费；**D9 对拍**（两张同选项的图，一张走脏矩形，每帧逐像素比：悬停、五步拖动、松开、滚轮、再悬停；断言 roam 帧都是整张、悬停帧有局部的）；只有 geo 的图画出了地图（A 的中心不是白的）；`show: false` 的 geo 不接手势、动作照动。
+
+首跑：基准重放与自检一次全过。生成器那边改过几处守卫，都是我对上游的预期错了：长拖里悬停会换（悬停在旧画面上找）；`georoam` 排在图表的 `mousemove` 之前（`zrEventfulCallAtLast`）；缺 dy 的动作仍让中心漂几个末位（往返）；`clip` 的视图矩形在两边都写了尺寸时不套比例、地图铺满，`'global'` 在视图矩形内无从体现，改成不裁剪的第二个 geo。手写那组的 D9 对拍第一次跑就红了——两边在地图中心都是白的：只有 geo 的图根本没画（「port 以前」第二条），修好之后对拍才真的在比地图。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartGeoRoamOracleTest` 2、`TAdvChartGeoRoamTest` 9、`TAdvChartGeoOracleTest` 5、`TAdvChartGeoTest` 9、`TAdvChartGeoInteractOracleTest` 2、`TAdvChartGeoInteractTest` 5、`TAdvanceChartTest` 60、`TAdvChartRadarRuleTest` 30、`TAdvChartRadarDrawTest` 9、`TAdvChartCalendarOracleTest` 4、`TAdvChartCalendarChartTest` 1、`TAdvChartHeatmapCalendarOracleTest` 2、`TAdvChartSeriesCalendarOracleTest` 3、`TAdvChartCoarseDirtyOracleTest` 4、`TAdvChartCoarseDirtyTest` 17（1 个照旧 Ignored）、`TAdvChartGraphRoamOracleTest` 1、`TAdvChartGraphRoamTest` 5、`TAdvChartTreeInteractOracleTest` 5、`TAdvChartGraphSankeyInteractOracleTest` 1、`TAdvChartGraphSankeyInteractTest` 11、`TAdvChartSunburstTreemapInteractOracleTest` 1、`TAdvChartSunburstTreemapInteractTest` 6、`TAdvChartThumbnailAxisExpandOracleTest` 10、`TAdvChartThumbnailAxisExpandTest` 5、`TAdvChartMouseEventsOracleTest` 3、`TAdvChartConnectLinkOracleTest` 5、`TAdvChartConnectLinkTest` 9、`TAdvChartHandlerWiringOracleTest` 9、`TAdvChartHandlersTest` 20、`TAdvChartDataZoomInteractOracleTest` 8、`TAdvChartHitTest` 12、`TAdvChartBrushSelectOracleTest` 5、`TAdvChartBrushSelectTest` 8、`TAdvChartTimelineOracleTest` 7、`TAdvChartTimelineTest` 8、`TTyCustomClassesGuardTest` 11。变异候选列在会话草稿 `s189.md.candidates.md`（26 个，其中 #17、#26 预计存活，#3、#5 可能存活）。
+
+### 推迟与偏差
+
+- **Float32 的重放**：上游 roam 之后每帧从 Float32Array 重放路径，端口始终用双精度的点重新折叠（GE1 的偏差延续到 roam）；折叠的取舍用的是双精度的差，正落在单位上的线段可能答得不同，基准里没有遇到。
+- **拒绝的载荷**：缩放不是正的有限数、缩放的原点不是有限数——上游会把视图变成 NaN 或镜像（§79 关系图同样拒绝）；`dx` / `dy` / `zoom` 不是数的当没写（上游会做字符串拼接或隐式转换）。拒绝时这个 geo 仍算「到达」，事件照发、带 `animation`。
+- **map 系列的 geoRoam**（没有 geo 键、`componentType` 不是 geo）是 GE4 的事：这一批什么都不动，事件照发。
+- **写回不进选项文本**：中心与缩放存在 `FGeoRoam`（和关系图的 `FGraphRoam` 一样），`OptionJson` 看不到；`GeoRoamState` 答选项此刻怎么说。
+- **控制器的先后只在 geo 与系列之间按 z 比**：缩略图的控制器（z 10）与内部 dataZoom 的滚轮在端口里总排在 geo 前面，不管 geo 的 z；brush 占着 globalPan 时端口在按下时就不武装（上游按下照武装、每次移动再看）。合并或 notMerge 在拖动中途结束拖动（上游的控制器挂在 MapDraw 上，`_dragging` 留着）。
+- **悬停在拖动之间**：端口每一步 roam 都把动过的 geo 的元素原位换进现有列表（不应用状态），下一次指针事件在动过的画面上命中——与基准里每个事件后刷新显示列表的模型一致；浏览器里两次 mousemove 之间不一定有一帧，上游那时的命中用的是旧变换。列表还没建（没画过）时什么都不换，等下一次画。
+- **`updateTransform` 重画系列**：上游 geoRoam 之后所有系列重画一遍（组件不重画）；这一批没有 geo 上的系列，端口只把静态层整张重画，其余系列的悬停状态不重置——没有用例覆盖，GE4 接上 geo 上的系列时再核。
+- **roam 动画**：带动画时 setOption 改了 `center` / `zoom`，上游的变换组按 `updateProps` 过渡；端口直接到终值（基准都写了 `animation: false`）。触屏的 pinch 不做（端口没有触屏手势）；光标不变（`grab` / `grabbing`，全库都没有）。
+- **缩略图**：6.1 只认 graph，geo 不接，端口一样不接。
+
+### 落地
+
+- `source/tyControls.AdvChart.Geo.pas`：`TTyGeoSpec.Roam` / `RoamGlobal` 与 `RoamModeOf`；`TTyGeo.SetRoamOption`、`RoamBy`、`RoamPointerIn`、`ItemsReady`、`RoamGen`；`DrawRoamUnits`、`FoldSubs`、`PlaceLabel`、`DrawnBox`、`TyGeoDrawReroam`（`TyGeoDrawOf` 改用它们）；`Draw` 的 roam 分支；`TyBuildGeo` 的 `AApplyStates`。
+- `source/tyControls.AdvanceChart.pas`：`FRoamGeo`、`FGeoRoam`、`FGeoRoamHits`；`GeoRoamPick`、`GeoIrrelevant`、`RoamTargetAt`、`RoamSeriesAtZ`、`DoGeoRoamAction`、`GeoGesture`、`GeoRoamMove`、`GeoPatchList`、`MergeGeoRoam`；公开的 `GeoRoam`、`GeoZoom`、`GeoRoamState`；`MouseDown` / `MouseUp` / `CaptureChanged` / `DoMouseWheel` / `EventMove` / `SolveGeos` / `MergeKeepStates` / notMerge / 构造的接线；`DispatchActionObject` 的 `geoRoam` 分支；`BuildSeriesList` 提前返回前的答数。
+- `source/tyControls.AdvChart.Events.pas`：动作事件表加 `georoam`。
+- `tools/advchart-oracle/geo-roam.js`、`tests/fixtures/advchart-geo-roam.json`、`tests/test.advchart.georoam.pas`（新，注册在 `tytests.lpr`）。
+- 在原处标注：§79、§178、§181、§185。
