@@ -1558,6 +1558,9 @@ type
       any field of a subclass has been set up -- an override returns a class and touches
       nothing else. }
     function ColumnClass: TTyGridColumnClass; virtual;
+    { The collection class the header is built with -- a TTyColumns descendant with typed
+      accessors of its own (a data-aware grid's Columns). Same rules as ColumnClass. }
+    function ColumnsClass: TTyColumnsClass; virtual;
     procedure Resize; override;
     { An open in-place editor follows its cell after the layout moved: a scroll, a column
       or row size, the control's own size. Called where those settle (UpdateScrollBars,
@@ -4208,7 +4211,7 @@ begin
     的点击取焦点是拿 TabStop 当闸门的。放到基类,两个派生网格一起对。 }
   TabStop := True;
   { 让表头造网格自己的列类。 }
-  FHeader := TTyHeader.Create(ColumnClass);
+  FHeader := TTyHeader.Create(ColumnClass, ColumnsClass);
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;
   FDefaultRowHeight := 22;              { fallback; unused while FDefaultRowHeightExplicit=False }
@@ -4603,6 +4606,11 @@ end;
 function TTyCustomGrid.ColumnClass: TTyGridColumnClass;
 begin
   Result := TTyGridColumn;
+end;
+
+function TTyCustomGrid.ColumnsClass: TTyColumnsClass;
+begin
+  Result := TTyColumns;
 end;
 
 procedure TTyCustomGrid.HScrollChange(Sender: TObject);

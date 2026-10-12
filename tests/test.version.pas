@@ -20,7 +20,7 @@ uses
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
-  tyControls.DB.DateTime, tyControls.DB.Navigator,
+  tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -491,6 +491,9 @@ initialization
     checked against, so it is registered plainly here -- form files read in the tests and the
     custom-class guards resolve it by name. }
   RegisterClasses([TTyGradientTrackBar]);
+  { The data-aware grid (#34 phase 2) the same way, until its palette entry (DB grid plan
+    Task 6) puts it in Design.pas. }
+  RegisterClasses([TTyDBGrid]);
   RegisterTest(TVersionTest);
 
 finalization

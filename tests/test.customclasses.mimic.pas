@@ -26,34 +26,35 @@ uses
   tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
   tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DB.Choices,
-  tyControls.DB.DateTime, tyControls.DB.Edits, tyControls.DB.Image, tyControls.DB.Lists,
-  tyControls.DB.Navigator, tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs,
-  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress,
-  tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
-  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
-  tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
-  tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
-  tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.Hint,
-  tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide, tyControls.Image,
-  tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter,
-  tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView,
-  tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter,
-  tyControls.MultiTrackBar, tyControls.NativeStyler, tyControls.Notification,
-  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
-  tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
-  tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup,
-  tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
-  tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
-  tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
-  tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
-  tyControls.ShellListView, tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline,
-  tyControls.SpinEdit, tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar,
-  tyControls.Steps, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
-  tyControls.ToggleSwitch, tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel,
-  tyControls.ToolWindows, tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer,
-  tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit,
-  tyControls.UpDown, tyControls.ValueListEditor;
+  tyControls.DB.DateTime, tyControls.DB.Edits, tyControls.DB.Grid, tyControls.DB.Image,
+  tyControls.DB.Lists, tyControls.DB.Navigator, tyControls.DateTimePicker, tyControls.Dial,
+  tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
+  tyControls.Dialogs.Progress, tyControls.Divider, tyControls.DropButtons, tyControls.Edit,
+  tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
+  tyControls.FontComboBox, tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form,
+  tyControls.FormSurface, tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial,
+  tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid,
+  tyControls.GridPanel, tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl,
+  tyControls.Hint, tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide,
+  tyControls.Image, tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker,
+  tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
+  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
+  tyControls.Menu, tyControls.Meter, tyControls.MultiTrackBar, tyControls.NativeStyler,
+  tyControls.Notification, tyControls.NumericEdit, tyControls.OfficeComboBox,
+  tyControls.OfficeListBox, tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel,
+  tyControls.Panel, tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar,
+  tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon,
+  tyControls.RibbonAppMenu, tyControls.RibbonBackstage, tyControls.RibbonGallery,
+  tyControls.RibbonQuickAccess, tyControls.ScrollBar, tyControls.ScrollBox,
+  tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel,
+  tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
+  tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit, tyControls.Splitter,
+  tyControls.StarShape, tyControls.StatusBar, tyControls.Steps, tyControls.TabSet,
+  tyControls.TabSheet, tyControls.Tag, tyControls.Terminal, tyControls.ToggleSwitch,
+  tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.ToolWindows,
+  tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect,
+  tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown,
+  tyControls.ValueListEditor;
 
 type
   TGenAboutDialog = class(TTyCustomAboutDialog)
@@ -2911,6 +2912,83 @@ type
     property EditorEnabled;
     property DataField;
     property DataSource;
+  end;
+
+  TGenDBGrid = class(TTyCustomDBGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Align;
+    property Anchors;
+    property DataSource;
+    property Columns;
+    property Options;
+    property OptionsExtra;
+    property ReadOnly;
+    property DefaultRowHeight;
+    property DefaultColWidth;
+    property AutoFillColumns;
+    property ScrollBars;
+    property ScrollBarAutoHide;
+    property FixedCols;
+    property AlternateRows;
+    property GridLineWidth;
+    property OnGetCellStyle;
+    property OnGetCellBorder;
+    property OnGetHeaderStyle;
+    property OnColumnSizing;
+    property OnEndColumnSize;
+    property OnColumnMove;
+    property OnClickCell;
+    property OnDblClickCell;
+    property OnRightClickCell;
+    property OnHeaderClick;
+    property OnHeaderRightClick;
+    property OnTopLeftChanged;
   end;
 
   TGenDBImage = class(TTyCustomDBImage)
@@ -11299,7 +11377,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..181, 0..1] of TClass = (
+  CGenMimics: array[0..182, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -11345,6 +11423,7 @@ const
     (TGenDBDateTimePicker, TTyDBDateTimePicker),
     (TGenDBEdit, TTyDBEdit),
     (TGenDBFloatSpinEdit, TTyDBFloatSpinEdit),
+    (TGenDBGrid, TTyDBGrid),
     (TGenDBImage, TTyDBImage),
     (TGenDBListBox, TTyDBListBox),
     (TGenDBLookupComboBox, TTyDBLookupComboBox),
