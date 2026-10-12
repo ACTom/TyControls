@@ -71,6 +71,14 @@ type
   TTyFilterPropertyEvent = procedure(Sender: TObject; AInstance: TPersistent;
     const APropName: string; var AShow: Boolean) of object;
 
+  { The names a component-reference row offers. AList arrives holding '(none)' and the
+    type-compatible components the inspected component's Owner owns, each name with its component
+    in Objects[]; add, remove or reorder entries (a component from another form, say: add its name
+    WITH the component in Objects[], or it cannot be resolved). The current value is listed
+    afterwards if the list lost it. }
+  TTyGetComponentNamesEvent = procedure(Sender: TObject; AInstance: TPersistent;
+    APropInfo: PPropInfo; AList: TStrings) of object;
+
   { The object -> rows mapping. }
   TTyPropertyRows = class
   private
@@ -82,6 +90,7 @@ type
     FOrder: TTyPropertyOrder;
     FMaxDepth: Integer;
     FOnFilterProperty: TTyFilterPropertyEvent;
+    FOnGetComponentNames: TTyGetComponentNamesEvent;
     procedure SetHiddenProperties(AValue: TStringList);
     function NewNode(AParent: TTyPropertyNode; APropInfo: PPropInfo; AKind: TTyPropertyNodeKind;
       AIndex: Integer): TTyPropertyNode;
@@ -89,9 +98,13 @@ type
     function KindOf(APropInfo: PPropInfo; AInstance: TObject): TTyPropertyNodeKind;
     procedure AddProperties(AEditor: TTyCustomValueListEditor; AParentRow: TTyValueRow;
       AParentNode: TTyPropertyNode; AInstance: TObject; ADepth: Integer);
+    procedure AddChildren(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode);
     procedure FillRow(ANode: TTyPropertyNode);
     function HolderOf(ANode: TTyPropertyNode): TObject;
     function ValueObject(ANode: TTyPropertyNode): TObject;
+    function FontOwnerOf(ANode: TTyPropertyNode): TTyPropertyNode;
+    procedure StoreFont(AFontNode: TTyPropertyNode; AFont: TFont);
+    function FindComponentByName(ANode: TTyPropertyNode; const AName: string): TComponent;
     procedure WriteOn(ANode: TTyPropertyNode; AHolder: TObject; const AText: string);
   public
     constructor Create(ASender: TObject);
@@ -109,6 +122,16 @@ type
       EPropertyError, or whatever the setter raises) and writes nothing when it cannot; on
       success AText becomes what the object now reads back. }
     procedure WriteText(ANode: TTyPropertyNode; var AText: string);
+    { A TFont property, written back whole: through its setter when it has one, else by Assign
+      into the font it holds. }
+    procedure WriteFont(ANode: TTyPropertyNode; AFont: TFont);
+    { A TStrings property, likewise. }
+    procedure WriteStrings(ANode: TTyPropertyNode; AStrings: TStrings);
+    { What an object-valued node holds now: the sub-object, the font, the list, the collection,
+      the referenced component, or for a collection item the item. }
+    function ObjectOf(ANode: TTyPropertyNode): TObject;
+    { The names a component-reference node offers, '(none)' first; Objects[] holds each component. }
+    procedure ComponentNames(ANode: TTyPropertyNode; AList: TStrings);
     { Re-read every row's value from the object, except AExcept (the row being committed). }
     procedure RefreshValues(AExcept: TTyValueRow = nil);
     property Root: TPersistent read FRoot;
@@ -118,6 +141,8 @@ type
     { How many objects deep the rows go (a sub-object of a sub-object... ); stops a cycle. }
     property MaxDepth: Integer read FMaxDepth write FMaxDepth;
     property OnFilterProperty: TTyFilterPropertyEvent read FOnFilterProperty write FOnFilterProperty;
+    property OnGetComponentNames: TTyGetComponentNamesEvent read FOnGetComponentNames
+      write FOnGetComponentNames;
   end;
 
   { The control. Phase 1 skeleton: SelectedObject + the write path; the published surface,
@@ -126,11 +151,18 @@ type
   private
     FRows: TTyPropertyRows;
     FSelectedObject: TPersistent;
+    FOnEditRowApp: TTyValueEditEvent;
     procedure SetSelectedObject(AValue: TPersistent);
     function FlatRowAt(AFlat: Integer): TTyValueRow;
+    procedure InternalEditRow(Sender: TObject; ARow: TTyValueRow);
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { The TStrings editor: show AStrings, let the user change it, True when confirmed. The
+      default is the library's multi-line text dialog; a descendant (or a test) supplies its own. }
+    function ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean; virtual;
+    { What the '…' of a TStrings row runs: the dialog above, then the write. }
+    procedure EditStringsRow(ARow: TTyValueRow);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -138,6 +170,10 @@ type
     procedure Rebuild;
     property SelectedObject: TPersistent read FSelectedObject write SetSelectedObject;
     property PropertyRows: TTyPropertyRows read FRows;
+    { The '…' of a dialog row. When assigned it takes every dialog row, TStrings included;
+      unassigned, a TStrings row opens the built-in editor (EditStringsRow). The rows are re-read
+      from the object afterwards, so a handler writes the PROPERTY (see SetRowValue), not the row. }
+    property OnEditRow: TTyValueEditEvent read FOnEditRowApp write FOnEditRowApp;
   end;
 
 const
@@ -152,7 +188,7 @@ function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 implementation
 
 uses
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.Dialogs;
 
 function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 begin
@@ -266,6 +302,52 @@ begin
   if m.Code = nil then Exit;
   if m.Data <> nil then Result := TObject(m.Data).MethodName(m.Code);
   if Result = '' then Result := '(' + HexStr(m.Code) + ')';
+end;
+
+{ The element type of a set, and the ordinal range it spans. }
+procedure SetRange(ASetType: PTypeInfo; out AComp: PTypeInfo; out ALo, AHi: Integer);
+var td: PTypeData;
+begin
+  AComp := GetTypeData(ASetType)^.CompType;
+  td := GetTypeData(AComp);
+  ALo := td^.MinValue;
+  AHi := td^.MaxValue;
+end;
+
+{ An element's name: the enumeration's name for it, or the number for a set of an integer range. }
+function ElementName(AComp: PTypeInfo; AOrd: Integer): string;
+begin
+  if AComp^.Kind = tkEnumeration then Result := GetEnumName(AComp, AOrd)
+  else Result := IntToStr(AOrd);
+end;
+
+{ '[a,b]' -- built here rather than with SetToString, which cannot name an integer range. }
+function SetText(ASetType: PTypeInfo; AValue: Int64): string;
+var comp: PTypeInfo; lo, hi, i: Integer;
+begin
+  SetRange(ASetType, comp, lo, hi);
+  Result := '';
+  for i := lo to hi do
+    if (AValue and (Int64(1) shl i)) <> 0 then
+    begin
+      if Result <> '' then Result := Result + ',';
+      Result := Result + ElementName(comp, i);
+    end;
+  Result := '[' + Result + ']';
+end;
+
+function FontText(AFont: TFont): string;
+begin
+  { The 'Name, Size' summary the value list editor composes for a font row with children. }
+  Result := Format('%s, %d', [AFont.Name, AFont.Size]);
+end;
+
+function ComponentText(AComponent: TObject): string;
+begin
+  if AComponent = nil then Result := rsTyPropGridNone
+  else if (AComponent is TComponent) and (TComponent(AComponent).Name <> '') then
+    Result := TComponent(AComponent).Name
+  else Result := '(' + AComponent.ClassName + ')';
 end;
 
 function SimpleText(AInstance: TObject; APropInfo: PPropInfo): string;
@@ -391,7 +473,7 @@ function TTyPropertyNode.Name: string;
 begin
   case FKind of
     pnkCollectionItem: Result := '[' + IntToStr(FIndex) + ']';
-    pnkSetElement: Result := GetEnumName(GetTypeData(FPropInfo^.PropType)^.CompType, FIndex);
+    pnkSetElement: Result := ElementName(GetTypeData(FPropInfo^.PropType)^.CompType, FIndex);
   else
     Result := FPropInfo^.Name;
   end;
@@ -409,6 +491,7 @@ begin
   if FKind = pnkCollectionItem then Exit(nil);
   Result := FOwner.HolderOf(Self);
 end;
+
 
 { ---- TTyPropertyRows ---- }
 
@@ -504,10 +587,40 @@ begin
     Result := GetObjectProp(h, ANode.FPropInfo);
 end;
 
+function TTyPropertyRows.ObjectOf(ANode: TTyPropertyNode): TObject;
+begin
+  Result := ValueObject(ANode);
+end;
+
+{ How a property is shown. A class property is told apart by its DECLARED class, except that a
+  component which is a csSubComponent of its holder (a TTyButton's sub-parts, say) is a part of
+  the object -- expanded like any sub-object -- and not a reference to pick from a list. }
 function TTyPropertyRows.KindOf(APropInfo: PPropInfo; AInstance: TObject): TTyPropertyNodeKind;
+var cls: TClass; obj: TObject;
 begin
   case APropInfo^.PropType^.Kind of
     tkMethod: Result := pnkMethod;
+    tkSet:    Result := pnkSet;
+    tkClass:
+      begin
+        cls := GetTypeData(APropInfo^.PropType)^.ClassType;
+        try
+          obj := GetObjectProp(AInstance, APropInfo);
+        except
+          obj := nil;
+        end;
+        if cls.InheritsFrom(TComponent) then
+        begin
+          if (obj is TComponent) and (csSubComponent in TComponent(obj).ComponentStyle) then
+            Result := pnkObject
+          else
+            Result := pnkComponent;
+        end
+        else if cls.InheritsFrom(TFont) then Result := pnkFont
+        else if cls.InheritsFrom(TStrings) then Result := pnkStrings
+        else if cls.InheritsFrom(TCollection) then Result := pnkCollection
+        else Result := pnkObject;
+      end;
   else
     Result := pnkValue;
   end;
@@ -518,8 +631,8 @@ end;
 function TTyPropertyRows.Accept(AInstance: TObject; APropInfo: PPropInfo;
   AParent: TTyPropertyNode): Boolean;
 const
-  Showable = [tkInteger, tkChar, tkEnumeration, tkFloat, tkMethod, tkSString, tkLString,
-    tkAString, tkWString, tkWChar, tkBool, tkInt64, tkQWord, tkUString];
+  Showable = [tkInteger, tkChar, tkEnumeration, tkFloat, tkSet, tkMethod, tkSString, tkLString,
+    tkAString, tkWString, tkClass, tkWChar, tkBool, tkInt64, tkQWord, tkUString];
 var
   path: string;
 begin
@@ -527,6 +640,12 @@ begin
   if APropInfo^.GetProc = nil then Exit;
   if not (APropInfo^.PropType^.Kind in Showable) then Exit;
   if not (APropInfo^.PropType^.Kind in FTypeFilter) then Exit;
+  { A set wider than 32 elements does not fit the Int64 TypInfo hands sets through (it would be
+    truncated, silently), and a class property only means something when it is a TPersistent. }
+  if (APropInfo^.PropType^.Kind = tkSet)
+    and (GetTypeData(APropInfo^.PropType)^.SetSize > SizeOf(Longint)) then Exit;
+  if (APropInfo^.PropType^.Kind = tkClass)
+    and not GetTypeData(APropInfo^.PropType)^.ClassType.InheritsFrom(TPersistent) then Exit;
   if AParent <> nil then path := AParent.Path + '.' + APropInfo^.Name else path := APropInfo^.Name;
   if (FHiddenProperties.IndexOf(APropInfo^.Name) >= 0)
     or (FHiddenProperties.IndexOf(path) >= 0) then Exit;
@@ -572,9 +691,78 @@ begin
       nd.FRow := row;
       row.Data := nd;
       FillRow(nd);
+      AddChildren(AEditor, nd);
     end;
   finally
     list.Free;
+  end;
+end;
+
+{ The rows below a node: a set's elements; a sub-object's, a font's or a collection item's own
+  properties; a collection's items. Collapsed, as the Object Inspector shows them. Objects go
+  MaxDepth levels deep and no further -- the guard against a cycle (A.Other = B, B.Other = A)
+  and against a getter that makes a new object every time it is asked. }
+procedure TTyPropertyRows.AddChildren(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode);
+var
+  comp: PTypeInfo;
+  lo, hi, i: Integer;
+  el, item: TTyPropertyNode;
+  obj: TObject;
+  coll: TCollection;
+  r: TTyValueRow;
+begin
+  case ANode.FKind of
+    pnkSet:
+      begin
+        SetRange(ANode.FPropInfo^.PropType, comp, lo, hi);
+        for i := lo to hi do
+        begin
+          el := NewNode(ANode, ANode.FPropInfo, pnkSetElement, i);
+          r := ANode.FRow.AddChild(ElementName(comp, i), '');
+          el.FRow := r;
+          r.Data := el;
+          FillRow(el);
+        end;
+        ANode.FRow.Expanded := False;
+      end;
+    pnkObject, pnkFont:
+      begin
+        if ANode.FDepth >= FMaxDepth then Exit;
+        try
+          obj := ValueObject(ANode);
+        except
+          obj := nil;   // a getter that raises shows its error on the row; nothing to expand
+        end;
+        if obj = nil then Exit;
+        AddProperties(AEditor, ANode.FRow, ANode, obj, ANode.FDepth + 1);
+        ANode.FRow.Expanded := False;
+      end;
+    pnkCollection:
+      begin
+        if ANode.FDepth >= FMaxDepth then Exit;
+        try
+          obj := ValueObject(ANode);
+        except
+          obj := nil;
+        end;
+        if not (obj is TCollection) then Exit;
+        coll := TCollection(obj);
+        for i := 0 to coll.Count - 1 do
+        begin
+          item := NewNode(ANode, nil, pnkCollectionItem, i);
+          item.FDepth := ANode.FDepth + 1;
+          r := ANode.FRow.AddChild('[' + IntToStr(i) + ']', '');
+          item.FRow := r;
+          r.Data := item;
+          FillRow(item);
+          if item.FDepth < FMaxDepth then
+          begin
+            AddProperties(AEditor, r, item, coll.Items[i], item.FDepth + 1);
+            r.Expanded := False;
+          end;
+        end;
+        ANode.FRow.Expanded := False;
+      end;
   end;
 end;
 
@@ -586,12 +774,36 @@ var
   td: PTypeData;
   i: Integer;
   opts: string;
+  names: TStringList;
 begin
   row := ANode.FRow;
+  if ANode.FKind = pnkCollectionItem then
+  begin
+    row.ReadOnly := True;
+    row.Value := ReadText(ANode);
+    Exit;
+  end;
   pt := ANode.FPropInfo^.PropType;
   case ANode.FKind of
     pnkMethod:
       row.EditorKind := vekReadOnly;
+    pnkSetElement:
+      row.EditorKind := vekBoolean;
+    pnkFont:
+      row.EditorKind := vekFont;
+    pnkStrings:
+      row.EditorKind := vekDialog;
+    pnkComponent:
+      begin
+        row.EditorKind := vekEnum;
+        names := TStringList.Create;
+        try
+          ComponentNames(ANode, names);
+          row.EnumValues := names.Text;
+        finally
+          names.Free;
+        end;
+      end;
     pnkValue:
       case pt^.Kind of
         tkInteger:
@@ -620,21 +832,57 @@ begin
         row.EditorKind := vekText;
       end;
   end;
-  row.ReadOnly := (ANode.FKind = pnkMethod) or (ANode.FPropInfo^.SetProc = nil);
+  case ANode.FKind of
+    { Shown, not edited: a set is edited through its elements, a sub-object and a collection
+      through their own rows. }
+    pnkMethod, pnkSet, pnkObject, pnkCollection:
+      row.ReadOnly := True;
+    { Written whole into the object they hold when there is no setter. }
+    pnkFont, pnkStrings:
+      row.ReadOnly := False;
+  else
+    row.ReadOnly := ANode.FPropInfo^.SetProc = nil;
+  end;
   row.Value := ReadText(ANode);
 end;
 
 function TTyPropertyRows.ReadText(ANode: TTyPropertyNode): string;
-var h: TObject;
+var h, obj: TObject;
 begin
   Result := '';
   if ANode = nil then Exit;
   try
+    if ANode.FKind = pnkCollectionItem then
+    begin
+      obj := ValueObject(ANode);
+      if obj is TCollectionItem then Result := TCollectionItem(obj).DisplayName;
+      Exit;
+    end;
     h := HolderOf(ANode);
     if h = nil then Exit;
     case ANode.FKind of
       pnkValue:  Result := SimpleText(h, ANode.FPropInfo);
       pnkMethod: Result := MethodText(h, ANode.FPropInfo);
+      pnkSet:    Result := SetText(ANode.FPropInfo^.PropType, GetOrdProp(h, ANode.FPropInfo));
+      pnkSetElement:
+        Result := BoolText((GetOrdProp(h, ANode.FPropInfo) and (Int64(1) shl ANode.FIndex)) <> 0);
+      pnkComponent:
+        Result := ComponentText(GetObjectProp(h, ANode.FPropInfo));
+      pnkFont:
+        begin
+          obj := GetObjectProp(h, ANode.FPropInfo);
+          if obj is TFont then Result := FontText(TFont(obj));
+        end;
+      pnkCollection:
+        begin
+          obj := GetObjectProp(h, ANode.FPropInfo);
+          if obj is TCollection then Result := Format(rsTyPropGridItems, [TCollection(obj).Count]);
+        end;
+      pnkObject, pnkStrings:
+        begin
+          obj := GetObjectProp(h, ANode.FPropInfo);
+          if obj <> nil then Result := '(' + obj.ClassName + ')';
+        end;
     end;
   except
     on E: Exception do Result := '(' + E.Message + ')';   // a getter that raises is shown, not fatal
@@ -642,31 +890,225 @@ begin
 end;
 
 procedure TTyPropertyRows.WriteOn(ANode: TTyPropertyNode; AHolder: TObject; const AText: string);
+var
+  cur, bit: Int64;
+  t, nm: string;
+  sz: Integer;
+  comp: TComponent;
+  fnt: TFont;
 begin
   if AHolder = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
-  if (ANode.FPropInfo = nil) or (ANode.FPropInfo^.SetProc = nil) then
+  if ANode.FPropInfo = nil then
+    raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
+  if ANode.FKind = pnkFont then
+  begin
+    { Typed (or SetRowValue'd) 'Name, Size': the font's other attributes stay as they are. }
+    fnt := TFont.Create;
+    try
+      if GetObjectProp(AHolder, ANode.FPropInfo) is TFont then
+      begin
+        fnt.PixelsPerInch := TFont(GetObjectProp(AHolder, ANode.FPropInfo)).PixelsPerInch;
+        fnt.Assign(TFont(GetObjectProp(AHolder, ANode.FPropInfo)));
+      end;
+      if TyParseFontDescriptor(AText, nm, sz) then
+        SetOrdProp(fnt, 'Size', sz);
+      if nm <> '' then fnt.Name := nm;
+      StoreFont(ANode, fnt);
+    finally
+      fnt.Free;
+    end;
+    Exit;
+  end;
+  if ANode.FPropInfo^.SetProc = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   case ANode.FKind of
     pnkValue: WriteSimple(AHolder, ANode.FPropInfo, AText);
+    pnkSetElement:
+      begin
+        t := Trim(AText);
+        cur := GetOrdProp(AHolder, ANode.FPropInfo);
+        bit := Int64(1) shl ANode.FIndex;
+        if SameText(t, 'True') then cur := cur or bit
+        else if SameText(t, 'False') then cur := cur and not bit
+        else raise InvalidValue(AText, ANode.Name);
+        SetOrdProp(AHolder, ANode.FPropInfo, cur);
+      end;
+    pnkComponent:
+      begin
+        if SameText(Trim(AText), rsTyPropGridNone) or (Trim(AText) = '') then comp := nil
+        else
+        begin
+          comp := FindComponentByName(ANode, Trim(AText));
+          if comp = nil then
+            raise EPropertyError.CreateFmt(rsTyPropGridNoComponent, [AText]);
+        end;
+        SetObjectProp(AHolder, ANode.FPropInfo, comp);
+      end;
   else
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   end;
 end;
 
-procedure TTyPropertyRows.WriteText(ANode: TTyPropertyNode; var AText: string);
+{ The font a node belongs to when it is one of a font's own rows (Size, Name, Style's elements):
+  those are written into a copy, and the copy stored whole. }
+function TTyPropertyRows.FontOwnerOf(ANode: TTyPropertyNode): TTyPropertyNode;
+var p: TTyPropertyNode;
 begin
-  WriteOn(ANode, HolderOf(ANode), AText);
+  Result := nil;
+  p := ANode.FParent;
+  if (p <> nil) and (p.FKind = pnkSet) then p := p.FParent;
+  if (p <> nil) and (p.FKind = pnkFont) then Result := p;
+end;
+
+procedure TTyPropertyRows.StoreFont(AFontNode: TTyPropertyNode; AFont: TFont);
+var h, cur: TObject;
+begin
+  h := HolderOf(AFontNode);
+  if h = nil then
+    raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [FontText(AFont), AFontNode.Name]);
+  if AFontNode.FPropInfo^.SetProc <> nil then
+    SetObjectProp(h, AFontNode.FPropInfo, AFont)   // a TFont setter assigns: LCL's convention
+  else
+  begin
+    cur := GetObjectProp(h, AFontNode.FPropInfo);
+    if not (cur is TFont) then
+      raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [FontText(AFont), AFontNode.Name]);
+    TFont(cur).Assign(AFont);
+  end;
+end;
+
+procedure TTyPropertyRows.WriteFont(ANode: TTyPropertyNode; AFont: TFont);
+begin
+  StoreFont(ANode, AFont);
+end;
+
+procedure TTyPropertyRows.WriteStrings(ANode: TTyPropertyNode; AStrings: TStrings);
+var h, cur: TObject;
+begin
+  h := HolderOf(ANode);
+  if h = nil then
+    raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AStrings.Text, ANode.Name]);
+  if ANode.FPropInfo^.SetProc <> nil then
+    SetObjectProp(h, ANode.FPropInfo, AStrings)
+  else
+  begin
+    cur := GetObjectProp(h, ANode.FPropInfo);
+    if not (cur is TStrings) then
+      raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AStrings.Text, ANode.Name]);
+    TStrings(cur).Assign(AStrings);
+  end;
+end;
+
+{ The component the inspected component's Owner calls AName -- or one OnGetComponentNames put on
+  the list -- provided it fits the property's class. }
+function TTyPropertyRows.FindComponentByName(ANode: TTyPropertyNode; const AName: string): TComponent;
+var names: TStringList; i: Integer; cls: TClass;
+begin
+  Result := nil;
+  cls := GetTypeData(ANode.FPropInfo^.PropType)^.ClassType;
+  names := TStringList.Create;
+  try
+    ComponentNames(ANode, names);
+    for i := 1 to names.Count - 1 do   // 0 is '(none)'
+      if SameText(names[i], AName) and (names.Objects[i] is TComponent)
+        and names.Objects[i].InheritsFrom(cls) then
+        Exit(TComponent(names.Objects[i]));
+  finally
+    names.Free;
+  end;
+end;
+
+function CompareNames(List: TStringList; A, B: Integer): Integer;
+begin
+  Result := CompareText(List[A], List[B]);
+end;
+
+procedure TTyPropertyRows.ComponentNames(ANode: TTyPropertyNode; AList: TStrings);
+var
+  owner: TComponent;
+  cls: TClass;
+  i: Integer;
+  found: TStringList;
+  h, cur: TObject;
+begin
+  AList.Clear;
+  cls := GetTypeData(ANode.FPropInfo^.PropType)^.ClassType;
+  owner := nil;
+  if FRoot is TComponent then owner := TComponent(FRoot).Owner;
+  found := TStringList.Create;
+  try
+    if owner <> nil then
+      for i := 0 to owner.ComponentCount - 1 do
+        if (owner.Components[i].Name <> '') and owner.Components[i].InheritsFrom(cls) then
+          found.AddObject(owner.Components[i].Name, owner.Components[i]);
+    found.CustomSort(@CompareNames);
+    AList.Add(rsTyPropGridNone);
+    AList.AddStrings(found);
+  finally
+    found.Free;
+  end;
+  h := HolderOf(ANode);
+  cur := nil;
+  if h <> nil then
+    try
+      cur := GetObjectProp(h, ANode.FPropInfo);
+    except
+      cur := nil;
+    end;
+  if Assigned(FOnGetComponentNames) and (h is TPersistent) then
+    FOnGetComponentNames(FSender, TPersistent(h), ANode.FPropInfo, AList);
+  { The current value is always on the list, wherever it came from: a list that cannot show what
+    the property holds would read as if it held something else. }
+  if (cur <> nil) and (AList.IndexOfObject(cur) < 0) then
+    AList.AddObject(ComponentText(cur), cur);
+end;
+
+procedure TTyPropertyRows.WriteText(ANode: TTyPropertyNode; var AText: string);
+var fontNode: TTyPropertyNode; cur: TObject; tmp: TFont;
+begin
+  fontNode := FontOwnerOf(ANode);
+  if fontNode <> nil then
+  begin
+    cur := ValueObject(fontNode);
+    if not (cur is TFont) then
+      raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
+    tmp := TFont.Create;
+    try
+      tmp.PixelsPerInch := TFont(cur).PixelsPerInch;   // so Height copies across unscaled
+      tmp.Assign(TFont(cur));
+      WriteOn(ANode, tmp, AText);
+      StoreFont(fontNode, tmp);
+    finally
+      tmp.Free;
+    end;
+  end
+  else
+    WriteOn(ANode, HolderOf(ANode), AText);
   AText := ReadText(ANode);
 end;
 
 procedure TTyPropertyRows.RefreshValues(AExcept: TTyValueRow);
-var i: Integer; n: TTyPropertyNode;
+var i: Integer; n: TTyPropertyNode; names: TStringList;
 begin
   for i := 0 to FNodes.Count - 1 do
   begin
     n := TTyPropertyNode(FNodes[i]);
     if (n.FRow <> nil) and (n.FRow <> AExcept) then n.FRow.Value := ReadText(n);
+    if (n.FRow <> nil) and (n.FKind = pnkComponent) then
+    begin
+      names := TStringList.Create;
+      try
+        try
+          ComponentNames(n, names);
+          n.FRow.EnumValues := names.Text;
+        except
+          // keep the old list: a broken chain shows on the value already
+        end;
+      finally
+        names.Free;
+      end;
+    end;
   end;
 end;
 
@@ -685,6 +1127,9 @@ constructor TTyCustomPropertyGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FRows := TTyPropertyRows.Create(Self);
+  { The editor's own OnEditRow is the grid's: the application's handler lives in the field the
+    redeclared OnEditRow reads, and InternalEditRow decides between it and the TStrings editor. }
+  TTyCustomValueListEditor(Self).OnEditRow := @InternalEditRow;
 end;
 
 destructor TTyCustomPropertyGrid.Destroy;
@@ -742,12 +1187,62 @@ begin
   if FRows = nil then Exit(inherited CanCommitValue(ARow, AText));   // being destroyed
   nd := FRows.NodeOf(ARow);
   if nd = nil then Exit(inherited CanCommitValue(ARow, AText));
-  FRows.WriteText(nd, AText);   // raises -> nothing written, the row keeps its value
+  if (CommitFont <> nil) and (nd.Kind = pnkFont) then
+  begin
+    FRows.WriteFont(nd, CommitFont);   // the font dialog's pick, whole
+    AText := FRows.ReadText(nd);
+  end
+  else
+    FRows.WriteText(nd, AText);   // raises -> nothing written, the row keeps its value
   { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
     being committed is left for the editor, which compares AText with its old value. }
   FRows.RefreshValues(ARow);
   Invalidate;
   Result := True;
+end;
+
+procedure TTyCustomPropertyGrid.InternalEditRow(Sender: TObject; ARow: TTyValueRow);
+var nd: TTyPropertyNode;
+begin
+  if Assigned(FOnEditRowApp) then
+  begin
+    FOnEditRowApp(Self, ARow);
+    if FRows <> nil then FRows.RefreshValues(nil);   // the row shows the object, whatever was done
+    Invalidate;
+    Exit;
+  end;
+  nd := FRows.NodeOf(ARow);
+  if (nd <> nil) and (nd.Kind = pnkStrings) then EditStringsRow(ARow);
+end;
+
+function TTyCustomPropertyGrid.ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean;
+var s: string;
+begin
+  s := AStrings.Text;
+  if (s <> '') and (Copy(s, Length(s) - Length(LineEnding) + 1, MaxInt) = LineEnding) then
+    SetLength(s, Length(s) - Length(LineEnding));   // no empty line under the last entry
+  Result := TyTextQuery(ATitle, rsTyPropGridStringsPrompt, s);
+  if Result then AStrings.Text := s;
+end;
+
+procedure TTyCustomPropertyGrid.EditStringsRow(ARow: TTyValueRow);
+var nd: TTyPropertyNode; cur: TObject; tmp: TStringList;
+begin
+  nd := FRows.NodeOf(ARow);
+  if (nd = nil) or (nd.Kind <> pnkStrings) or ReadOnly or ARow.ReadOnly then Exit;
+  cur := FRows.ObjectOf(nd);
+  tmp := TStringList.Create;
+  try
+    if cur is TStrings then tmp.Assign(TStrings(cur));
+    if ExecuteStringsDialog(Format(rsTyPropGridStringsTitle, [nd.Path]), tmp) then
+    begin
+      FRows.WriteStrings(nd, tmp);
+      FRows.RefreshValues(nil);
+      Invalidate;
+    end;
+  finally
+    tmp.Free;
+  end;
 end;
 
 { Space flips a boolean row -- the list itself does nothing with Space in single selection. }

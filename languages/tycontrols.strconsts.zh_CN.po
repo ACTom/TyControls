@@ -580,10 +580,33 @@ msgstr ""
 msgid "'%s' is not a valid value for %s"
 msgstr "“%s”不是 %s 的有效值"
 
+#: tycontrols.strconsts.rstypropgriditems
+#, object-pascal-format
+msgid "(%d items)"
+msgstr "（%d 项）"
+
+#: tycontrols.strconsts.rstypropgridnocomponent
+#, object-pascal-format
+msgid "There is no component named '%s' to choose"
+msgstr "没有可选的组件叫“%s”"
+
+#: tycontrols.strconsts.rstypropgridnone
+msgid "(none)"
+msgstr "（无）"
+
 #: tycontrols.strconsts.rstypropgridoutofrange
 #, object-pascal-format
 msgid "%s must be between %s and %s"
 msgstr "%s 必须在 %s 到 %s 之间"
+
+#: tycontrols.strconsts.rstypropgridstringsprompt
+msgid "One entry per line:"
+msgstr "每行一项："
+
+#: tycontrols.strconsts.rstypropgridstringstitle
+#, object-pascal-format
+msgid "Edit %s"
+msgstr "编辑 %s"
 
 #: tycontrols.strconsts.rstysurfacepurpose
 msgid "TTyForm content host — click for details"

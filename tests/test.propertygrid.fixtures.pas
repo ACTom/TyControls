@@ -80,6 +80,93 @@ type
     procedure Ping(Sender: TObject);
   end;
 
+  TPGFlag = (pfA, pfB, pfC, pfD);
+  TPGFlags = set of TPGFlag;
+  TPGSmall = 0..7;
+  TPGNums = set of TPGSmall;
+
+  TPGInner = class(TPersistent)
+  private
+    FLevel: Integer;
+    FNote: string;
+  published
+    property Level: Integer read FLevel write FLevel;
+    property Note: string read FNote write FNote;
+  end;
+
+  TPGItem = class(TCollectionItem)
+  private
+    FCaption: string;
+    FSize: Integer;
+  protected
+    function GetDisplayName: string; override;
+  published
+    property Caption: string read FCaption write FCaption;
+    property Size: Integer read FSize write FSize;
+  end;
+
+  { Sets (enum and integer-range, with and without a setter), a sub-object with no setter, a
+    collection, two TStrings (with and without a setter). }
+  TPGHolder = class(TPersistent)
+  private
+    FFlags: TPGFlags;
+    FFixedFlags: TPGFlags;
+    FNums: TPGNums;
+    FInner: TPGInner;
+    FItems: TOwnedCollection;
+    FLines: TStringList;
+    FNotes: TStringList;
+    function GetLines: TStrings;
+    function GetNotes: TStrings;
+    procedure SetLines(AValue: TStrings);
+  public
+    LinesSets: Integer;
+    constructor Create;
+    destructor Destroy; override;
+  published
+    property Flags: TPGFlags read FFlags write FFlags;
+    property FixedFlags: TPGFlags read FFixedFlags;
+    property Nums: TPGNums read FNums write FNums;
+    property Inner: TPGInner read FInner;
+    property Items: TOwnedCollection read FItems;
+    property Lines: TStrings read GetLines write SetLines;
+    property Notes: TStrings read GetNotes;
+  end;
+
+  { A cycle: A.Other = B and B.Other = A. Every read of Other is counted, and a runaway expansion
+    is cut off by the getter itself (it raises past LinkReadLimit) so a grid WITHOUT a depth limit
+    fails the test instead of overflowing the stack. }
+  TPGLink = class(TPersistent)
+  private
+    FOther: TPGLink;
+    FTag: Integer;
+    function GetOther: TPGLink;
+  public
+    procedure Link(AOther: TPGLink);
+  published
+    property Tag: Integer read FTag write FTag;
+    property Other: TPGLink read GetOther;
+  end;
+
+  TPGSub = class(TComponent)
+  private
+    FLevel: Integer;
+  published
+    property Level: Integer read FLevel write FLevel;
+  end;
+
+  { Sub is a csSubComponent (a part of the host); Ref is a reference to another component. }
+  TPGHostComp = class(TComponent)
+  private
+    FSub: TPGSub;
+    FRef: TComponent;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Sub: TPGSub read FSub;
+    property Ref: TComponent read FRef write FRef;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -93,10 +180,16 @@ type
   protected
     function ExecuteFontDialog(AFont: TFont): Boolean; override;
     function ExecuteColorDialog(var AColor: TColor): Boolean; override;
+    function ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean; override;
   public
     FontAnswer: TFont;        // nil = the dialog is cancelled
     ColorAnswer: TColor;
     FontDialogs: Integer;
+    StringsAnswer: string;    // what the "strings dialog" leaves in the list
+    StringsAccept: Boolean;   // False = cancelled
+    StringsDialogs: Integer;
+    StringsTitle: string;
+    StringsSeen: string;      // the list as the dialog was handed it
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { The row at a dotted key path ('Font.Size', 'Items.[0].Caption'). Fails the test if missing. }
@@ -118,6 +211,10 @@ type
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
 procedure NeedWidgetSet;
+var
+  LinkReads: Integer = 0;
+const
+  LinkReadLimit = 400;
 { A shown host form for a control under test (a click focuses, and focusing on a hidden form raises). }
 function NewHostForm: TForm;
 
@@ -182,6 +279,74 @@ procedure TPGHandlers.Ping(Sender: TObject);
 begin
 end;
 
+function TPGItem.GetDisplayName: string;
+begin
+  Result := FCaption;
+end;
+
+constructor TPGHolder.Create;
+var it: TPGItem;
+begin
+  inherited Create;
+  FFlags := [pfA, pfC];
+  FFixedFlags := [pfB];
+  FNums := [1, 3];
+  FInner := TPGInner.Create;
+  FInner.Level := 5;
+  FItems := TOwnedCollection.Create(Self, TPGItem);
+  it := TPGItem(FItems.Add); it.Caption := 'first'; it.Size := 10;
+  it := TPGItem(FItems.Add); it.Caption := 'second'; it.Size := 20;
+  FLines := TStringList.Create;
+  FLines.Text := 'one' + LineEnding + 'two';
+  FNotes := TStringList.Create;
+  FNotes.Text := 'note';
+end;
+
+destructor TPGHolder.Destroy;
+begin
+  FNotes.Free;
+  FLines.Free;
+  FItems.Free;
+  FInner.Free;
+  inherited Destroy;
+end;
+
+function TPGHolder.GetLines: TStrings;
+begin
+  Result := FLines;
+end;
+
+function TPGHolder.GetNotes: TStrings;
+begin
+  Result := FNotes;
+end;
+
+procedure TPGHolder.SetLines(AValue: TStrings);
+begin
+  Inc(LinesSets);
+  FLines.Assign(AValue);
+end;
+
+function TPGLink.GetOther: TPGLink;
+begin
+  Inc(LinkReads);
+  if LinkReads > LinkReadLimit then raise Exception.Create('runaway expansion');
+  Result := FOther;
+end;
+
+procedure TPGLink.Link(AOther: TPGLink);
+begin
+  FOther := AOther;
+end;
+
+constructor TPGHostComp.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FSub := TPGSub.Create(Self);
+  FSub.Name := 'Sub';
+  FSub.SetSubComponent(True);
+end;
+
 { ---- TPGEditAccess ---- }
 
 procedure TPGEditAccess.TypeText(const AText: string);
@@ -236,6 +401,15 @@ function TPGGrid.ExecuteColorDialog(var AColor: TColor): Boolean;
 begin
   AColor := ColorAnswer;
   Result := True;
+end;
+
+function TPGGrid.ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean;
+begin
+  Inc(StringsDialogs);
+  StringsTitle := ATitle;
+  StringsSeen := AStrings.Text;
+  Result := StringsAccept;
+  if Result then AStrings.Text := StringsAnswer;
 end;
 
 function TPGGrid.HasRow(const APath: string): Boolean;

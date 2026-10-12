@@ -13,7 +13,7 @@ uses
   test.base.drawframe, test.formgradientbg, test.button, test.skinfit, test.englishfit, test.utf8, test.designeditors, test.focus.tabstop, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.colorcombobox, test.colorlistbox, test.fontcombobox, test.fontlistbox, test.fontfamilies, test.fontsizecombobox, test.checklistbox,
   test.mrucombobox, test.comboboxex, test.officelistbox, test.officecombobox, test.colorgrid, test.lcolorpicker,
   test.hscolorpicker, test.advancedlistbox, test.advancedcombobox, test.checkcombobox, test.valuelisteditor, test.valuelisteditor.hooks,
-  test.propertygrid.fixtures, test.propertygrid,
+  test.propertygrid.fixtures, test.propertygrid, test.propertygrid.objects,
   test.calculator, test.calcedit,
   test.bevel, test.divider, test.paintpanel, test.sizebox,
   test.radiogroup, test.checkgroup, test.toolgrouppanel,
