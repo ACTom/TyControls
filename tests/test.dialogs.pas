@@ -489,8 +489,8 @@ begin
   d := TyBuildTextDialog('Notes', 'Enter notes:', 'line1' + LineEnding + 'line2', m);
   try
     AssertTrue('memo created', m <> nil);
-    // TTyMemo.Text uses TStrings.Text semantics: always appends a trailing LineEnding.
-    AssertEquals('memo seeded', 'line1' + LineEnding + 'line2' + LineEnding, m.Text);
+    // The memo holds exactly the default it was given -- no break added after it (#58).
+    AssertEquals('memo seeded', 'line1' + LineEnding + 'line2', m.Text);
     AssertTrue('resizable', d.Resizable);
     AssertEquals('two buttons', 2, TyDialogButtonCount(d));
   finally d.Free; end;

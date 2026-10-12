@@ -27,8 +27,8 @@ uses tyControls.Memo;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Lines` | `TStrings` | 空 | 文本模型，一条 `TStrings` 行对应一条逻辑行。读取返回内部列表；写入通过 `SetLines` 进行 `Assign`，随后夹紧光标与滚动窗口并刷新滚动条。 |
-| `Text` | `string` | `''` | **（API parity 新增）** 整段文本的扁平视图：读取拼接所有逻辑行（含换行）；写入重设全部行并收起光标。便于像单行控件一样整体存取。 |
+| `Lines` | `TStrings` | 空 | 文本模型，一条 `TStrings` 行对应一条逻辑行。读取返回内部列表；写入通过 `SetLines` 进行 `Assign`，随后夹紧光标与滚动窗口并刷新滚动条。它的文本形式与 `Text` 相同（见下面「文本原样进出」），`Lines.Text`、`LoadFromFile`、`SaveToFile` 都不会自己加或减末尾换行。 |
+| `Text` | `string` | `''` | **（API parity 新增）** 整段文本：读出来的就是写进去、敲进去或载入进来的原样（见下面「文本原样进出」）；写入重设全部行并收起光标。 |
 | `ReadOnly` | `Boolean` | `False` | 为 `True` 时拦截用户编辑（打字/回车/退格/删除/词级删除/粘贴），保留导航、选区、复制、全选；`Lines :=` 程序化写入仍可用；`CutToClipboard` 退化为 `CopyToClipboard`。 |
 | `MaxLength` | `Integer` | `0`（无限） | 按**全模型内容码点数**（所有逻辑行 `UTF8Length` 之和，**换行不计**）封顶；`0` 表示无限制；打字满则拒插；粘贴时截断到余量；回车/退格/删除/合并不受限。 |
 | `WantTabs` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 Tab 键插入制表符（字面量）；为 `False` 时 Tab 用于焦点导航。 |
@@ -76,8 +76,14 @@ uses tyControls.Memo;
 | `SetCaret(ALine, ACol)` | — | **（API parity 新增可达性）** 同上，按行/列设置光标。 |
 | `AddHandlerOnChange` / `RemoveHandlerOnChange` | — | **（API parity 新增）** 多播 `OnChange`，与 `TTyEdit` 同义。 |
 
-> `SelectAll` 之后 `SelLength` 是 `UTF8Length(Text)` **减去** `TStrings.Text` 在最后一行之后补的那个
-> 尾随换行符——那个位置不是一个光标能落脚的地方（LCL 自己的 `TCustomEdit.SelectAll` 把它算进去了）。
+> `SelectAll` 之后 `SelLength` 就是 `UTF8Length(Text)`，与 LCL 的 `TCustomEdit.SelectAll` 相同。
+
+> **文本原样进出（3.0.2 起，#58）。** Memo 里的文本就是写进去、敲进去或载入进来的原样，一个字节都不加不减：
+> - 行与行之间用换行**连接**，而不是每行**以换行结尾**：n 个换行就是 n + 1 行；末尾的换行就是最后一个空行（按回车后光标所在的那行）。`Text := 'abc'` 读回 `'abc'`，`Text := 'abc'#13#10` 读回 `'abc'#13#10`，并且有两行（第二行为空）。
+> - 换行风格取自设进来或载入的文本（LF、CRLF 或 CR，以第一个换行为准），之后的输出都用它；文本里一个换行都没有时，沿用原来的风格。
+> - `Lines.LoadFromFile` 载入、马上 `Lines.SaveToFile` 存回去，文件逐字节相同：末尾有没有换行、LF 还是 CRLF、UTF-8 BOM 都原样保留。
+> - 与 3.0.1 的区别：`Lines.Text` 与 `SaveToFile` 不再自动以换行结尾；设一段以换行结尾的文本，`Lines` 里会多出那个末尾空行，之后 `Lines.Add` 会加在它后面。
+> - 一段文本里混用了几种换行时，只保留第一种；其余的在输出时按它统一。
 
 ### public 方法（API parity 新增）
 

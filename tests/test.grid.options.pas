@@ -121,6 +121,7 @@ type
     procedure TestAGestureOnTheGridLeavesTheEditFirst;
     procedure TestUpDownTheEditorLeavesMoveTheCell;
     procedure TestPageKeysPageByTheRowsOnScreen;
+    procedure TestAMemoCellCommittedUnchangedIsNotAnEdit;
     procedure TestAnArrowTheFilterBoxLeavesStaysThere;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
@@ -1385,6 +1386,32 @@ begin
   FGrid.Row := 0;
   FGrid.PressKey(VK_NEXT, []);
   AssertEquals('one full row on screen: PageDown still moves a row', 1, FGrid.Row);
+end;
+
+{ #58. The memo editor read its text back with a line break added, so opening a memo cell and
+  committing it untouched wrote "the value + a break" into the cell: the grid was marked
+  modified and the undo stack grew by a step nobody took. Both shapes of value -- with and
+  without a final break of its own. }
+procedure TGridOptionsTest.TestAMemoCellCommittedUnchangedIsNotAnEdit;
+const
+  cValues: array[0..1] of string = ('line one'#13#10'line two', 'ends with a break'#13#10);
+var
+  i, undo0: Integer;
+begin
+  Build(2, 4, 160);
+  FGrid.DefaultEditorKind := gekMemo;
+  for i := 0 to High(cValues) do
+  begin
+    FGrid.Cells[0, 1] := cValues[i];
+    FGrid.Modified := False;
+    undo0 := FGrid.UndoCount;
+    AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+    AssertEquals('setup: the memo editor', 'TTyMemo', FGrid.EditorControl.ClassName);
+    FGrid.EndEdit(True);
+    AssertEquals(Format('value %d: the cell is as it was', [i]), cValues[i], FGrid.Cells[0, 1]);
+    AssertFalse(Format('value %d: the grid is not modified', [i]), FGrid.Modified);
+    AssertEquals(Format('value %d: no undo step', [i]), undo0, FGrid.UndoCount);
+  end;
 end;
 
 procedure TGridOptionsTest.GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
