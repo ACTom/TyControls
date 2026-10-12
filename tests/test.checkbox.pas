@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, StdCtrls, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox,
-  tyControls.ToolBar, test.captionfit;
+  tyControls.ToolBar, tyControls.Painter, tyControls.Accel, test.captionfit;
 type
   TTyCheckBoxAccess = class(TTyCheckBox)
   public
@@ -19,6 +19,10 @@ type
     procedure CallPreferred(out AW, AH: Integer);
     { Expose the protected caption measurement the size floor is derived from. }
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
+    { The measurement as it was before it went through the memo: a fresh canvas, the
+      caption measured as ONE string, the 'Ag' line box, the renderer's width when larger.
+      The oracle TCheckBoxMeasureMemoTest compares MeasureCaption against. }
+    procedure DirectMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TTyRadioAccess = class(TTyRadioButton)
@@ -26,6 +30,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure CallPreferred(out AW, AH: Integer);
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
+    procedure DirectMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TCheckBoxFontAccess = class(TTyCheckBox)
@@ -114,7 +119,74 @@ type
     procedure TestRadioMinimumHeightFitsTheCaption;
     procedure TestRadioMinimumSurvivesAHeightPinningParent;
   end;
+
+  { Every Invalidate re-measures a check box or radio button (that is how a theme switch
+    reaches its size floor), so a form re-measures each of them twenty-odd times between
+    the first streamed property and the first paint. The measurement used to build a fresh
+    TBitmap -- a DIB section, a DC and a font -- every time (about 280 times for the eight
+    check boxes and three radio buttons of the containers example), around the caption
+    memo the button and the label already went through. These pin that a repeat
+    measurement is served from the memo, and that going through the memo changed no
+    measured size. }
+  TCheckBoxMeasureMemoTest = class(TTestCase)
+  private
+    FSavedEnabled: Boolean;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestRepeatedCheckBoxMeasureNeverReachesTheFontEngine;
+    procedure TestRepeatedRadioMeasureNeverReachesTheFontEngine;
+    procedure TestCheckBoxMeasureMatchesTheDirectMeasure;
+    procedure TestRadioMeasureMatchesTheDirectMeasure;
+    procedure TestMeasureMatchesTheDirectMeasureWhereTheRendererIsWider;
+  end;
 implementation
+
+var
+  { How many DirectCaptionMeasure calls the renderer's width won: the cases that tell a
+    measurement keeping the renderer max from one that dropped it. }
+  GDirectRendererWins: Integer;
+
+{ The pre-memo body of MeasureCaption, shared by both access classes (the two controls
+  measured with identical code). }
+procedure DirectCaptionMeasure(const ACaption, AFontName: string;
+  AFontSize, AWeight, APPI: Integer; out AW, AH: Integer);
+var
+  Meas: TBitmap;
+  disp: string;
+  mp, rw: Integer;
+begin
+  TyParseMnemonic(ACaption, disp, mp);
+  Meas := TBitmap.Create;
+  try
+    Meas.SetSize(1, 1);
+    TyConfigureMeasureFont(Meas.Canvas, AFontName, AFontSize, AWeight, APPI);
+    AW := Meas.Canvas.TextWidth(disp);
+    rw := TyMeasureRenderedTextWidth(disp, AFontName, AFontSize, AWeight, APPI);
+    if rw > AW then Inc(GDirectRendererWins);
+    if rw > AW then AW := rw;
+    AH := Meas.Canvas.TextHeight('Ag');
+    if AW < 0 then AW := 0;
+    if AH < 1 then AH := 1;
+  finally
+    Meas.Free;
+  end;
+end;
+
+procedure TTyCheckBoxAccess.DirectMeasure(APPI: Integer; out AW, AH: Integer);
+var S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  DirectCaptionMeasure(Caption, S.FontName, ResolveFontSize(S), S.FontWeight, APPI, AW, AH);
+end;
+
+procedure TTyRadioAccess.DirectMeasure(APPI: Integer; out AW, AH: Integer);
+var S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  DirectCaptionMeasure(Caption, S.FontName, ResolveFontSize(S), S.FontWeight, APPI, AW, AH);
+end;
 
 procedure TTyCheckBoxAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -1468,9 +1540,247 @@ begin
   end;
 end;
 
+{ TCheckBoxMeasureMemoTest }
+
+const
+  { Break-free captions take the memo; the one with an authored break keeps the direct
+    measure (the control draws a single line, which the block measure is not) and is here
+    so that path is pinned too. '' still measures one line tall; '&&' is a literal '&'. }
+  MEMO_CAPTIONS: array[0..5] of string = (
+    'Remember me', 'Remember &me', '', '记住我', 'A && B', 'Two'#13#10'Lines');
+  MEMO_PPIS: array[0..2] of Integer = (96, 144, 240);
+  MEMO_OVERRIDES: array[0..2] of string = (
+    '', 'font-family: Times New Roman; font-weight: 700', 'font-size: 20px');
+
+procedure TCheckBoxMeasureMemoTest.SetUp;
+begin
+  FSavedEnabled := TyTextMeasureCacheEnabled;
+  TyTextMeasureCacheEnabled := True;
+  TyInvalidateTextMeasureCache;
+  TyResetTextMeasureCacheStats;
+end;
+
+procedure TCheckBoxMeasureMemoTest.TearDown;
+begin
+  TyTextMeasureCacheEnabled := FSavedEnabled;
+  TyInvalidateTextMeasureCache;
+end;
+
+procedure TCheckBoxMeasureMemoTest.TestRepeatedCheckBoxMeasureNeverReachesTheFontEngine;
+{ After the first measurement, each repeat is exactly two memo lookups (the canvas block
+  and the renderer width), both hits. The pre-memo body did the canvas half itself, so it
+  showed ONE hit per call and no miss: misses alone cannot tell the two apart, the hit
+  count can. }
+var
+  F: TForm;
+  C: TTyCheckBoxAccess;
+  w0, h0, w, h, i: Integer;
+  hits, misses: Int64;
+  entries: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F);
+    C.Parent := F;
+    C.Caption := 'Remember &me';
+    C.CallMeasure(96, w0, h0);
+    TyResetTextMeasureCacheStats;
+    for i := 1 to 10 do
+      C.CallMeasure(96, w, h);
+    TyTextMeasureCacheStats(hits, misses, entries);
+    AssertEquals('a repeat measurement must not reach the font engine', 0, misses);
+    AssertEquals('both halves of every repeat come from the memo', 20, hits);
+    AssertEquals('same width every time', w0, w);
+    AssertEquals('same height every time', h0, h);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxMeasureMemoTest.TestRepeatedRadioMeasureNeverReachesTheFontEngine;
+{ The radio button's twin of the test above -- it carried its own copy of the body. }
+var
+  F: TForm;
+  R: TTyRadioAccess;
+  w0, h0, w, h, i: Integer;
+  hits, misses: Int64;
+  entries: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    R := TTyRadioAccess.Create(F);
+    R.Parent := F;
+    R.Caption := 'Medium &size';
+    R.CallMeasure(96, w0, h0);
+    TyResetTextMeasureCacheStats;
+    for i := 1 to 10 do
+      R.CallMeasure(96, w, h);
+    TyTextMeasureCacheStats(hits, misses, entries);
+    AssertEquals('a repeat measurement must not reach the font engine', 0, misses);
+    AssertEquals('both halves of every repeat come from the memo', 20, hits);
+    AssertEquals('same width every time', w0, w);
+    AssertEquals('same height every time', h0, h);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxMeasureMemoTest.TestCheckBoxMeasureMatchesTheDirectMeasure;
+{ Three readings per configuration against the direct measure: memo off, the memo's miss,
+  and the memo's hit -- the hit is the only one a wrong cache entry could corrupt. }
+var
+  F: TForm;
+  C: TTyCheckBoxAccess;
+  ci, ki, oi, ew, eh, w, h: Integer;
+  tag: string;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F);
+    C.Parent := F;
+    for oi := Low(MEMO_OVERRIDES) to High(MEMO_OVERRIDES) do
+      for ci := Low(MEMO_CAPTIONS) to High(MEMO_CAPTIONS) do
+        for ki := Low(MEMO_PPIS) to High(MEMO_PPIS) do
+        begin
+          C.StyleOverride := MEMO_OVERRIDES[oi];
+          C.Caption := MEMO_CAPTIONS[ci];
+          tag := Format('[%s] %s @%d', [MEMO_OVERRIDES[oi], MEMO_CAPTIONS[ci], MEMO_PPIS[ki]]);
+          C.DirectMeasure(MEMO_PPIS[ki], ew, eh);
+
+          TyTextMeasureCacheEnabled := False;
+          C.CallMeasure(MEMO_PPIS[ki], w, h);
+          AssertEquals(tag + ': width, memo off', ew, w);
+          AssertEquals(tag + ': height, memo off', eh, h);
+
+          TyTextMeasureCacheEnabled := True;
+          TyInvalidateTextMeasureCache;
+          C.CallMeasure(MEMO_PPIS[ki], w, h);
+          AssertEquals(tag + ': width, memo miss', ew, w);
+          AssertEquals(tag + ': height, memo miss', eh, h);
+          C.CallMeasure(MEMO_PPIS[ki], w, h);
+          AssertEquals(tag + ': width, memo hit', ew, w);
+          AssertEquals(tag + ': height, memo hit', eh, h);
+        end;
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxMeasureMemoTest.TestRadioMeasureMatchesTheDirectMeasure;
+var
+  F: TForm;
+  R: TTyRadioAccess;
+  ci, ki, oi, ew, eh, w, h: Integer;
+  tag: string;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    R := TTyRadioAccess.Create(F);
+    R.Parent := F;
+    for oi := Low(MEMO_OVERRIDES) to High(MEMO_OVERRIDES) do
+      for ci := Low(MEMO_CAPTIONS) to High(MEMO_CAPTIONS) do
+        for ki := Low(MEMO_PPIS) to High(MEMO_PPIS) do
+        begin
+          R.StyleOverride := MEMO_OVERRIDES[oi];
+          R.Caption := MEMO_CAPTIONS[ci];
+          tag := Format('[%s] %s @%d', [MEMO_OVERRIDES[oi], MEMO_CAPTIONS[ci], MEMO_PPIS[ki]]);
+          R.DirectMeasure(MEMO_PPIS[ki], ew, eh);
+
+          TyTextMeasureCacheEnabled := False;
+          R.CallMeasure(MEMO_PPIS[ki], w, h);
+          AssertEquals(tag + ': width, memo off', ew, w);
+          AssertEquals(tag + ': height, memo off', eh, h);
+
+          TyTextMeasureCacheEnabled := True;
+          TyInvalidateTextMeasureCache;
+          R.CallMeasure(MEMO_PPIS[ki], w, h);
+          AssertEquals(tag + ': width, memo miss', ew, w);
+          AssertEquals(tag + ': height, memo miss', eh, h);
+          R.CallMeasure(MEMO_PPIS[ki], w, h);
+          AssertEquals(tag + ': width, memo hit', ew, w);
+          AssertEquals(tag + ': height, memo hit', eh, h);
+        end;
+  finally
+    F.Free;
+  end;
+end;
+
+const
+  { The faces, sizes and short Latin captions test.captionfit sweeps: where the canvas and
+    the renderer round apart, so the renderer's width is the one the measurement must keep.
+    Under the runner's empty fallback font the two never disagree. }
+  WIDER_FONTS: array[0..3] of string = ('Arial', 'Tahoma', 'Segoe UI', 'Microsoft YaHei UI');
+  WIDER_CAPTIONS: array[0..9] of string = (
+    'Try it in the preview', '&New', 'Open', 'Reset', 'Accent', 'Density', 'Remember me',
+    'Show hidden files', 'Whole words only', 'Read only');
+  WIDER_PPIS: array[0..1] of Integer = (96, 144);
+
+procedure TCheckBoxMeasureMemoTest.TestMeasureMatchesTheDirectMeasureWhereTheRendererIsWider;
+{ The captions above at the fonts captionfit probes, on both controls, against the direct
+  measure (which keeps the renderer's width when it is larger). The direct measure counts
+  the configurations the renderer won; with none, nothing here could tell a measurement
+  that dropped the renderer max from one that kept it, and the test fails saying so. }
+var
+  F: TForm;
+  C: TTyCheckBoxAccess;
+  R: TTyRadioAccess;
+  fi, sz, wt, ci, ki, ctl, ew, eh, w, h: Integer;
+  tag: string;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F);
+    C.Parent := F;
+    R := TTyRadioAccess.Create(F);
+    R.Parent := F;
+    GDirectRendererWins := 0;
+    for fi := Low(WIDER_FONTS) to High(WIDER_FONTS) do
+      for sz := 9 to 13 do
+        for wt := 0 to 1 do
+          for ci := Low(WIDER_CAPTIONS) to High(WIDER_CAPTIONS) do
+            for ki := Low(WIDER_PPIS) to High(WIDER_PPIS) do
+              for ctl := 0 to 1 do
+              begin
+                tag := Format('%s %s %dpx weight %d "%s" @%d', [
+                  BoolToStr(ctl = 0, 'check box', 'radio'), WIDER_FONTS[fi], sz,
+                  400 + 300 * wt, WIDER_CAPTIONS[ci], WIDER_PPIS[ki]]);
+                if ctl = 0 then
+                begin
+                  C.StyleOverride := Format('font-family: %s; font-size: %dpx; font-weight: %d',
+                    [WIDER_FONTS[fi], sz, 400 + 300 * wt]);
+                  C.Caption := WIDER_CAPTIONS[ci];
+                  C.DirectMeasure(WIDER_PPIS[ki], ew, eh);
+                end
+                else
+                begin
+                  R.StyleOverride := Format('font-family: %s; font-size: %dpx; font-weight: %d',
+                    [WIDER_FONTS[fi], sz, 400 + 300 * wt]);
+                  R.Caption := WIDER_CAPTIONS[ci];
+                  R.DirectMeasure(WIDER_PPIS[ki], ew, eh);
+                end;
+
+                TyTextMeasureCacheEnabled := True;
+                TyInvalidateTextMeasureCache;
+                if ctl = 0 then C.CallMeasure(WIDER_PPIS[ki], w, h)
+                else R.CallMeasure(WIDER_PPIS[ki], w, h);
+                AssertEquals(tag + ': width, memo miss', ew, w);
+                AssertEquals(tag + ': height, memo miss', eh, h);
+                if ctl = 0 then C.CallMeasure(WIDER_PPIS[ki], w, h)
+                else R.CallMeasure(WIDER_PPIS[ki], w, h);
+                AssertEquals(tag + ': width, memo hit', ew, w);
+                AssertEquals(tag + ': height, memo hit', eh, h);
+              end;
+    AssertTrue('precondition: the renderer measures some caption wider than the canvas ' +
+      'in at least one of the probed fonts', GDirectRendererWins > 0);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TCheckBoxTest);
   RegisterTest(TCheckBoxTriStateTest);
   RegisterTest(TCheckBoxAutoSizeTest);
   RegisterTest(TCheckBoxSizeFloorTest);
+  RegisterTest(TCheckBoxMeasureMemoTest);
 end.
