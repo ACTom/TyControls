@@ -29,10 +29,27 @@ unit tyControls.AdvChart.Custom;
   `context` object, the series' id, name and index, `dataIndex` (the item in
   the data as written) and `dataIndexInside` (in the data as shown, after a
   dataZoom or a legend filter), `dataInsideLength`, `actionType` (the type
-  of the action whose update this is; '' for a setOption), `coordSys`
-  (type 'cartesian2d' and the grid's rect: x, y, width, height), `encode`
-  (coordinate dimension name -> the data dimension indices) and
-  `itemPayload`.
+  of the action whose update this is; '' for a setOption), `coordSys` (the
+  coordinate system's prepareCustom, below), `encode` (coordinate dimension
+  name -> the data dimension indices) and `itemPayload`.
+
+  THE COORDINATE SYSTEMS [Batch 124, C15], each upstream's prepareCustom:
+    cartesian2d   coordSys the grid's rect; Coord([x, y]) a point; Size per
+                  axis (a category axis' band); BarLayout on a category base
+                  axis
+    polar         coordSys cx, cy, r, r0; Coord([radius, angle]) answers
+                  four numbers: x, y, the radius in px and the angle in
+                  radians; Size([dr, da] [, item]) px along the radius and
+                  RADIANS around (a category angle axis' band)
+    calendar      coordSys the rect, cellWidth / cellHeight and the range;
+                  Coord([date]) a day's centre (NaN outside the range);
+                  Layout([date]) its cell and content rect; no Size
+    singleAxis    coordSys the axis' rect; Coord([v]) a point (the value as
+                  JavaScript's +v); Size([d], [v]) ONE number
+    'none'        no coordSys (Type_ ''), no Coord, no Size: the dimensions x
+                  and y are whatever the author makes of them
+  An api method a system has no counterpart of answers an empty array (or a
+  Layout with Valid False) where upstream has no such function.
 
   THE API (TTyCustomApi) is upstream's, a method per function:
     Value(dim[, dataIndexInside])       the parsed value (an ordinal's index on
@@ -80,22 +97,67 @@ unit tyControls.AdvChart.Custom;
   new element, and a group's children merge by index (a null child is
   ignored, a shorter list removes the rest), by name, or not at all.
 
+  THE TRANSITIONS [Batch 124, C15] are applyUpdateTransition's with the
+  series as the animatable model: a new element runs from its `enterFrom`
+  (the root's, the style's, the shape's) on the series' enter timing, an
+  updated one from its old values of what `transition` names -- by default
+  ['x', 'y'], 'all' every transform prop, the words 'shape' and 'style', the
+  shape's and the style's own lists -- on the update timing; `enterAnimation`
+  / `updateAnimation` override the timing. A removed element goes at once.
+  One with a `leaveTo` stops the render: upstream's applyLeaveTransition
+  reads an option CustomView never stores and throws there (6.1).
+
   PURE: SysUtils, Classes, Math, fpjson and the AdvChart units. }
 interface
 uses
   SysUtils, Classes, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.GfxEl,
-  tyControls.AdvChart.Graphic;
+  tyControls.AdvChart.Graphic, tyControls.AdvChart.Anim,
+  tyControls.AdvChart.AnimOpt;
 
 const
   { the series type this unit draws }
   TyCustomSeriesType = 'custom';
 
+  { what applyLeaveTransition throws on an element with a leaveTo (6.1) }
+  TyCustomLeaveThrow = 'Cannot read properties of undefined (reading ''updateAnimation'')';
+
 type
+  { a calendar range end as getDateInfo writes it: the year, month and day
+    as text ('2017', '02', '01'), the row within the week, the instant, and
+    formatedDate [Batch 124] }
+  TTyCustomCalDate = record
+    Y, M, D: string;
+    Day, Time: Double;
+    FormatedDate: string;
+  end;
+
+  { params.coordSys: the prepareCustom of the series' coordinate system;
+    Type_ says which fields mean anything [Batch 124] }
   TTyCustomCoordSys = record
-    { 'cartesian2d'; '' when the series is on no coordinate system }
+    { 'cartesian2d', 'polar', 'calendar', 'singleAxis'; '' -- upstream's
+      undefined -- on no coordinate system ('none') }
     Type_: string;
+    { cartesian2d, calendar, singleAxis: the rect }
     X, Y, Width, Height: Double;
+    { polar: the centre and the radius extent, the lesser first }
+    Cx, Cy, R, R0: Double;
+    { calendar: the cell size, and rangeInfo's start, end, weeks and
+      dayCount }
+    CellWidth, CellHeight: Double;
+    RangeStart, RangeEnd: TTyCustomCalDate;
+    Weeks, DayCount: Double;
+  end;
+
+  TTyCustomRect = record
+    X, Y, Width, Height: Double;
+  end;
+
+  { api.layout on a calendar: the day's cell and its content rect (the cell
+    less half the border); Valid False where upstream has no api.layout }
+  TTyCustomLayout = record
+    Valid: Boolean;
+    Rect, ContentRect: TTyCustomRect;
   end;
 
   TTyCustomParams = record
@@ -119,7 +181,7 @@ type
   end;
   TTyCustomBarLayout = array of TTyCustomBarLayoutItem;
 
-  { one cell of a Coord argument: a number or a text }
+  { one cell of a Coord / Layout argument: a number or a text }
   TTyCustomCellKind = (cckNone, cckNumber, cckText);
   TTyCustomCell = record
     Kind: TTyCustomCellKind;
@@ -135,6 +197,7 @@ type
     { a dimension name to its index (getDimensionIndex); -1 none }
     function DimIndexOf(const AName: string): Integer; virtual; abstract;
     function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; virtual; abstract;
+    function DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout; virtual; abstract;
   public
     function Value(ADim: Integer; ADataIndexInside: Integer = -1): Double; overload; virtual; abstract;
     function Value(const ADim: string; ADataIndexInside: Integer = -1): Double; overload;
@@ -142,8 +205,16 @@ type
     function ValueText(const ADim: string; ADataIndexInside: Integer = -1): string; overload;
     function OrdinalRawValue(ADim: Integer; ADataIndexInside: Integer = -1): string; overload; virtual; abstract;
     function OrdinalRawValue(const ADim: string; ADataIndexInside: Integer = -1): string; overload;
+    { the point; on a polar [x, y, radius, angle in radians]; nothing on no
+      coordinate system }
     function Coord(const AData: array of const): TTyDoubleArray;
+    { a calendar day's cell [Batch 124] }
+    function Layout(const AData: array of const): TTyCustomLayout;
+    { no data item: upstream's undefined -- [0, 0] on a cartesian and a
+      polar, NaN on a single axis }
     function Size(const ADataSize: array of Double): TTyDoubleArray; overload;
+    { per dimension; ONE number on a single axis, nothing on a calendar or no
+      coordinate system }
     function Size(const ADataSize, ADataItem: array of Double): TTyDoubleArray; overload; virtual; abstract;
     function Style(AExtra: TJSONObject = nil; ADataIndexInside: Integer = -1): TJSONObject; virtual; abstract;
     function StyleEmphasis(AExtra: TJSONObject = nil; ADataIndexInside: Integer = -1): TJSONObject; virtual; abstract;
@@ -205,6 +276,18 @@ type
     view frees it), nil for nothing. }
   TTyCustomCallFn = function(AIndexInside: Integer): TJSONData of object;
 
+  { the animation a render runs under [Batch 124] }
+  TTyCustomAnim = record
+    { hasAnimation: the series' isAnimationEnabled, and the chart's own
+      switch }
+    Enabled: Boolean;
+    { the series: getAnimationConfig's timing (an update payload's
+      included) }
+    Model: TTyAnimModel;
+    { the driver every element's animators join (nil: none) }
+    Driver: TTyAnimation;
+  end;
+
   { One series' view: its group of item roots, the last data's ids and
     elements (CustomView's _data), what render leaves behind. }
   TTyCustomView = class
@@ -218,12 +301,20 @@ type
     FZ, FZLevel: Double;
     FError: string;
     FAbort: Boolean;
+    FAnim: TTyCustomAnim;
+    { the dataIndexInside of the item being updated: getAnimationConfig's
+      dataIndex }
+    FIdx: Integer;
     function CreateEl(AOpt: TJSONObject): TTyGfxEl;
     procedure Discard(AEl: TTyGfxEl);
+    { applyLeaveTransition: gone at once, or -- a leaveTo -- upstream's throw }
+    procedure Leave(AEl: TTyGfxEl);
     procedure AddTo(AGroup, AEl: TTyGfxEl);
     function NeedRecreate(AEl: TTyGfxEl; AOpt: TJSONObject): Boolean;
-    procedure UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject);
-    procedure UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject);
+    function ElementCfg(AType: TTyAnimType; AOpt: TJSONObject): TTyAnimCfg;
+    procedure ApplyTransition(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
+    procedure UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject; AIsInit: Boolean);
+    procedure UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
     procedure UpdateStates(AEl: TTyGfxEl; AOpt: TJSONObject);
     procedure UpdateZ(AEl: TTyGfxEl; AOpt: TJSONObject);
     procedure MergeChildren(AEl: TTyGfxEl; AOpt: TJSONObject);
@@ -237,9 +328,14 @@ type
     destructor Destroy; override;
     { CustomView.render: AIds the data's ids (getId) and ARaws its raw
       indices, by dataIndexInside; ACall renderItem's answer for one; AZ /
-      AZLevel the series' z and zlevel (updateZ) }
+      AZLevel the series' z and zlevel (updateZ); AAnim the transitions'
+      [Batch 124] }
     procedure Render(const AIds: TTyStringArray; const ARaws: TTyIntegerArray;
-      ACall: TTyCustomCallFn; AZ, AZLevel: Double);
+      ACall: TTyCustomCallFn; AZ, AZLevel: Double); overload;
+    procedure Render(const AIds: TTyStringArray; const ARaws: TTyIntegerArray;
+      ACall: TTyCustomCallFn; AZ, AZLevel: Double; const AAnim: TTyCustomAnim); overload;
+    { every transition at its last frame (an animation switched off) }
+    procedure Snap;
     { ChartView.remove (a series the legend switched off): the group
       emptied, the data and its elements kept for the next render }
     procedure RemoveAll;
@@ -249,6 +345,8 @@ type
     function ElOf(AIndexInside: Integer): TTyGfxEl;
     { the raw index of an attached root; -1 for anything else }
     function RawOfRoot(AEl: TTyGfxEl): Integer;
+    { the root drawn for the item of raw index ARaw; nil none [Batch 124] }
+    function ElOfRaw(ARaw: Integer): TTyGfxEl;
     { the dataIndexInside of an attached root; -1 for anything else }
     function InsideOfRoot(AEl: TTyGfxEl): Integer;
     property Root: TTyGfxEl read FRoot;
@@ -349,81 +447,89 @@ begin
   Result := OrdinalRawValue(d, ADataIndexInside);
 end;
 
-function TTyCustomApi.Coord(const AData: array of const): TTyDoubleArray;
-var
-  cells: TTyCustomCellArray;
-  i: Integer;
+{ the cells of an `array of const`: a number, a text, a boolean as 0 / 1 }
+function CellsOf(const AData: array of const): TTyCustomCellArray;
+var i: Integer;
 begin
-  cells := nil;
-  SetLength(cells, Length(AData));
+  Result := nil;
+  SetLength(Result, Length(AData));
   for i := 0 to High(AData) do
   begin
-    cells[i] := Default(TTyCustomCell);
+    Result[i] := Default(TTyCustomCell);
     case AData[i].VType of
       vtInteger:
         begin
-          cells[i].Kind := cckNumber;
-          cells[i].Num := AData[i].VInteger;
+          Result[i].Kind := cckNumber;
+          Result[i].Num := AData[i].VInteger;
         end;
       vtInt64:
         begin
-          cells[i].Kind := cckNumber;
-          cells[i].Num := AData[i].VInt64^;
+          Result[i].Kind := cckNumber;
+          Result[i].Num := AData[i].VInt64^;
         end;
       vtQWord:
         begin
-          cells[i].Kind := cckNumber;
-          cells[i].Num := AData[i].VQWord^;
+          Result[i].Kind := cckNumber;
+          Result[i].Num := AData[i].VQWord^;
         end;
       vtExtended:
         begin
-          cells[i].Kind := cckNumber;
-          cells[i].Num := AData[i].VExtended^;
+          Result[i].Kind := cckNumber;
+          Result[i].Num := AData[i].VExtended^;
         end;
       vtCurrency:
         begin
-          cells[i].Kind := cckNumber;
-          cells[i].Num := AData[i].VCurrency^;
+          Result[i].Kind := cckNumber;
+          Result[i].Num := AData[i].VCurrency^;
         end;
       vtString:
         begin
-          cells[i].Kind := cckText;
-          cells[i].Text := AData[i].VString^;
+          Result[i].Kind := cckText;
+          Result[i].Text := AData[i].VString^;
         end;
       vtAnsiString:
         begin
-          cells[i].Kind := cckText;
-          cells[i].Text := AnsiString(AData[i].VAnsiString);
+          Result[i].Kind := cckText;
+          Result[i].Text := AnsiString(AData[i].VAnsiString);
         end;
       vtUnicodeString:
         begin
-          cells[i].Kind := cckText;
-          cells[i].Text := UTF8Encode(UnicodeString(AData[i].VUnicodeString));
+          Result[i].Kind := cckText;
+          Result[i].Text := UTF8Encode(UnicodeString(AData[i].VUnicodeString));
         end;
       vtWideString:
         begin
-          cells[i].Kind := cckText;
-          cells[i].Text := UTF8Encode(WideString(AData[i].VWideString));
+          Result[i].Kind := cckText;
+          Result[i].Text := UTF8Encode(WideString(AData[i].VWideString));
         end;
       vtChar:
         begin
-          cells[i].Kind := cckText;
-          cells[i].Text := AData[i].VChar;
+          Result[i].Kind := cckText;
+          Result[i].Text := AData[i].VChar;
         end;
       vtBoolean:
         begin
-          cells[i].Kind := cckNumber;
-          if AData[i].VBoolean then cells[i].Num := 1 else cells[i].Num := 0;
+          Result[i].Kind := cckNumber;
+          if AData[i].VBoolean then Result[i].Num := 1 else Result[i].Num := 0;
         end;
     end;
   end;
-  Result := DoCoord(cells);
+end;
+
+function TTyCustomApi.Coord(const AData: array of const): TTyDoubleArray;
+begin
+  Result := DoCoord(CellsOf(AData));
+end;
+
+function TTyCustomApi.Layout(const AData: array of const): TTyCustomLayout;
+begin
+  Result := DoLayout(CellsOf(AData));
 end;
 
 function TTyCustomApi.Size(const ADataSize: array of Double): TTyDoubleArray;
 begin
-  { dataItem || [0, 0] }
-  Result := Size(ADataSize, [0, 0]);
+  { no dataItem: each system reads its undefined its own way }
+  Result := Size(ADataSize, []);
 end;
 
 function TTyCustomApi.VisualText(const AType: string; ADataIndexInside: Integer): string;
@@ -774,6 +880,22 @@ begin
   FGone.Add(AEl);
 end;
 
+{ applyLeaveTransition: without a leaveTo the element is removed at once;
+  with one upstream reads customInnerStore(el).option -- which CustomView
+  never sets -- for the `updateAnimation` of the config and throws, so the
+  render stops here [Batch 124] }
+procedure TTyCustomView.Leave(AEl: TTyGfxEl);
+begin
+  if AEl = nil then Exit;
+  if AEl.HasLeaveTo then
+  begin
+    FError := TyCustomLeaveThrow;
+    FAbort := True;
+    Exit;
+  end;
+  Discard(AEl);
+end;
+
 { Group.add: a child already there stays where it is }
 procedure TTyCustomView.AddTo(AGroup, AEl: TTyGfxEl);
 begin
@@ -802,6 +924,8 @@ begin
   info := TTyCustomElInfo.Create;
   Result.Custom := info;
   info.GType := tp;
+  { its animators join the chart's driver [Batch 124] }
+  Result.Animation := FAnim.Driver;
   Result.Name := TyGfxIdOf(AOpt.Find('name'), has);
   info.HasName := has;
   if tp = 'image' then
@@ -831,9 +955,85 @@ begin
   end;
 end;
 
-{ updateElNormal: setTextConfig, the text's ec4 fill / stroke, then
-  applyUpdateTransition with clearStyle -- every prop at once }
-procedure TTyCustomView.UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject);
+{ getElementAnimationConfig: getAnimationConfig over the series (or an
+  empty object: no duration when the series does not animate), setToFinal and the scope
+  only when that duration is above 0, then the option's enterAnimation /
+  updateAnimation over it [Batch 124] }
+function TTyCustomView.ElementCfg(AType: TTyAnimType; AOpt: TJSONObject): TTyAnimCfg;
+var
+  timing: TTyAnimTiming;
+  ext: TJSONObject;
+  d: TJSONData;
+  word: string;
+begin
+  Result := Default(TTyAnimCfg);
+  if AType = atEnter then word := 'enter' else word := 'update';
+  Result.HasDuration := False;
+  Result.Delay := NaN;
+  if TyAnimGetConfig(AType, FAnim.Model, TyAnimCallAt(FIdx), timing) then
+  begin
+    Result.Duration := timing.Duration;
+    Result.HasDuration := True;
+    Result.Delay := timing.Delay;
+    Result.Easing := timing.Easing;
+    if Result.Duration > 0 then
+    begin
+      Result.SetToFinal := True;
+      Result.Scope := word;
+    end;
+  end;
+  ext := ObjOf(AOpt, word + 'Animation');
+  if ext <> nil then
+  begin
+    d := ext.Find('duration');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      Result.Duration := d.AsFloat;
+      Result.HasDuration := True;
+    end;
+    d := ext.Find('easing');
+    if (d <> nil) and (d.JSONType = jtString) then Result.Easing := d.AsString;
+    d := ext.Find('delay');
+    if (d <> nil) and (d.JSONType = jtNumber) then Result.Delay := d.AsFloat;
+  end;
+  { the animator's `delay || 0` }
+  if IsNan(Result.Delay) then Result.Delay := 0;
+end;
+
+{ applyUpdateTransition with clearStyle: the from props of an update, the
+  final props at once (the style replaced), then the enter or the update
+  animation, and the leaveTo kept [Batch 124] }
+procedure TTyCustomView.ApplyTransition(AEl: TTyGfxEl; AOpt: TJSONObject;
+  AIsInit: Boolean);
+var
+  from_, enter: TTyAnimProps;
+  cfg: TTyAnimCfg;
+begin
+  from_ := nil;
+  if not AIsInit and FAnim.Enabled then TyGfxTransitionFrom(AEl, AOpt, from_);
+  TyGfxApplyDirect(AEl, AOpt, True);
+  if FAnim.Enabled and (AEl.Animation <> nil) then
+  begin
+    if AIsInit then
+    begin
+      enter := nil;
+      TyGfxEnterFrom(AOpt, enter);
+      cfg := ElementCfg(atEnter, AOpt);
+      if cfg.HasDuration and (cfg.Duration > 0) then AEl.AnimateFrom(enter, cfg);
+    end
+    else
+    begin
+      cfg := ElementCfg(atUpdate, AOpt);
+      if cfg.HasDuration and (cfg.Duration > 0) then AEl.AnimateFrom(from_, cfg);
+    end;
+  end;
+  TyGfxUpdateLeaveTo(AEl, AOpt);
+end;
+
+{ updateElNormal: setTextConfig, the default transition, the text's ec4
+  fill / stroke, then applyUpdateTransition with clearStyle }
+procedure TTyCustomView.UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject;
+  AIsInit: Boolean);
 var st: TJSONObject;
 begin
   if ATxCfg <> nil then
@@ -841,19 +1041,24 @@ begin
     if AEl.TextConfig = nil then AEl.TextConfig := TJSONObject.Create;
     TyGfxExtend(AEl.TextConfig, ATxCfg);
   end;
+  { DEFAULT_TRANSITION, written into the option as upstream writes it: an
+    element whose option names none moves its x and y }
+  if JNull(AOpt.Find('transition')) then
+    PutKey(AOpt, 'transition', TJSONArray.Create(['x', 'y']));
   st := ObjOf(AOpt, 'style');
   if (st <> nil) and (AEl.Kind = gkText) then
   begin
     if st.IndexOfName('textFill') >= 0 then PutKey(st, 'fill', st.Find('textFill').Clone);
     if st.IndexOfName('textStroke') >= 0 then PutKey(st, 'stroke', st.Find('textStroke').Clone);
   end;
-  TyGfxApplyDirect(AEl, AOpt, True);
+  ApplyTransition(AEl, AOpt, AIsInit);
 end;
 
 { processTxInfo for the normal state and doCreateOrUpdateAttachedTx: the
   textConfig and the textContent option -- written, or made from an ec4
   style -- and the textContent updated from it }
-procedure TTyCustomView.UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject);
+procedure TTyCustomView.UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject;
+  AIsInit: Boolean);
 var
   styleOpt, txCfg, txCon, convCfg, convCon, ownCfg, ownCon: TJSONObject;
   d: TJSONData;
@@ -898,12 +1103,14 @@ begin
         info := TTyCustomElInfo.Create;
         info.GType := 'text';
         tc.Custom := info;
+        tc.Animation := FAnim.Driver;
         d := txCon.Find('name');
         if not JNull(d) then tc.Name := StrOf(d);
         tc.Host := AEl;
         AEl.TextContent := tc;
       end;
-      UpdateNormal(tc, txCon, nil);
+      { the host's isInit, whether the content is new or not }
+      UpdateNormal(tc, txCon, nil, AIsInit);
     end;
     { setTextConfig after the content, as updateElNormal runs it }
     if txCfg <> nil then
@@ -1029,7 +1236,8 @@ begin
             DoCreateOrUpdate(child, TJSONObject(kids.Items[cmds[i].NewIdx]), AEl);
           end;
         ddkRemove:
-          Discard(oldKids[cmds[i].OldIdx]);
+          { processRemove: applyLeaveTransition }
+          Leave(oldKids[cmds[i].OldIdx]);
       end;
     end;
     Exit;
@@ -1056,7 +1264,12 @@ begin
       child.Ignore := True;
     Inc(idx);
   end;
-  for i := High(AEl.Children) downto idx do Discard(AEl.Children[i]);
+  { removeChildFromGroup: applyLeaveTransition, the last first }
+  for i := High(AEl.Children) downto idx do
+  begin
+    Leave(AEl.Children[i]);
+    if FAbort then Exit;
+  end;
 end;
 
 function TTyCustomView.DoCreateOrUpdate(AExists: TTyGfxEl; AOpt: TJSONObject;
@@ -1066,6 +1279,7 @@ var
   oldEl, el: TTyGfxEl;
   d: TJSONData;
   info: TTyCustomElInfo;
+  isInit: Boolean;
 begin
   Result := nil;
   replaceAt := -1;
@@ -1077,6 +1291,8 @@ begin
       if AGroup.Children[i] = AExists then replaceAt := i;
     AExists := nil;
   end;
+  { isInit: a new element (or one made again) enters }
+  isInit := AExists = nil;
   el := AExists;
   if el = nil then
   begin
@@ -1110,8 +1326,8 @@ begin
   end;
   info := InfoOf(el);
   if (info <> nil) and Truthy(AOpt.Find('tooltipDisabled')) then info.TooltipDisabled := True;
-  UpdateAttachedTx(el, AOpt);
-  UpdateNormal(el, AOpt, nil);
+  UpdateAttachedTx(el, AOpt, isInit);
+  UpdateNormal(el, AOpt, nil, isInit);
   { info: replaced only when the option says it }
   d := AOpt.Find('info');
   if (d <> nil) and (AOpt.IndexOfName('info') >= 0) then
@@ -1166,6 +1382,17 @@ end;
 
 procedure TTyCustomView.Render(const AIds: TTyStringArray;
   const ARaws: TTyIntegerArray; ACall: TTyCustomCallFn; AZ, AZLevel: Double);
+var none: TTyCustomAnim;
+begin
+  none := Default(TTyCustomAnim);
+  none.Enabled := False;
+  none.Model := TyAnimNoModel;
+  Render(AIds, ARaws, ACall, AZ, AZLevel, none);
+end;
+
+procedure TTyCustomView.Render(const AIds: TTyStringArray;
+  const ARaws: TTyIntegerArray; ACall: TTyCustomCallFn; AZ, AZLevel: Double;
+  const AAnim: TTyCustomAnim);
 var
   oldIds: TTyStringArray;
   newEls: TTyGfxElArray;
@@ -1179,6 +1406,8 @@ begin
   FAbort := False;
   FZ := AZ;
   FZLevel := AZLevel;
+  FAnim := AAnim;
+  FIdx := 0;
   if not FHasData then
   begin
     { a first render: whatever there was goes }
@@ -1197,6 +1426,7 @@ begin
       ddkAdd, ddkUpdate:
         begin
           if cmds[i].Kind = ddkUpdate then old := FEls[cmds[i].OldIdx] else old := nil;
+          FIdx := cmds[i].NewIdx;
           opt := ACall(cmds[i].NewIdx);
           try
             el := CreateOrUpdateItem(old, opt);
@@ -1206,8 +1436,9 @@ begin
           newEls[cmds[i].NewIdx] := el;
         end;
       ddkRemove:
+        { applyLeaveTransition }
         if (cmds[i].OldIdx <= High(FEls)) and (FEls[cmds[i].OldIdx] <> nil) then
-          Discard(FEls[cmds[i].OldIdx]);
+          Leave(FEls[cmds[i].OldIdx]);
     end;
     if FAbort then Break;
   end;
@@ -1236,6 +1467,22 @@ begin
   end;
 end;
 
+procedure TTyCustomView.Snap;
+
+  procedure Walk(AEl: TTyGfxEl);
+  var k: Integer;
+  begin
+    AEl.StopAnimation('', True);
+    if AEl.TextContent <> nil then AEl.TextContent.StopAnimation('', True);
+    for k := 0 to High(AEl.Children) do Walk(AEl.Children[k]);
+  end;
+
+var i: Integer;
+begin
+  Walk(FRoot);
+  for i := 0 to FDetached.Count - 1 do Walk(TTyGfxEl(FDetached[i]));
+end;
+
 procedure TTyCustomView.RemoveAll;
 var el: TTyGfxEl;
 begin
@@ -1260,6 +1507,15 @@ begin
   if (AEl = nil) or (AEl.Parent <> FRoot) then Exit;
   for i := 0 to High(FEls) do
     if FEls[i] = AEl then Exit(i);
+end;
+
+function TTyCustomView.ElOfRaw(ARaw: Integer): TTyGfxEl;
+var i: Integer;
+begin
+  Result := nil;
+  if ARaw < 0 then Exit;
+  for i := 0 to Min(High(FRaws), High(FEls)) do
+    if FRaws[i] = ARaw then Exit(FEls[i]);
 end;
 
 function TTyCustomView.RawOfRoot(AEl: TTyGfxEl): Integer;

@@ -52,11 +52,17 @@ type
   end;
 
   { The renderItems of custom-series.js, transcribed; each api call is
-    written down as the oracle's recorder writes it. }
+    written down as the oracle's recorder writes it. The helpers are a
+    descendant's too (custom-series2's mirror) [Batch 124]. }
   TCuMirror = class
-  private
+  protected
     FCur: TJSONObject;
     FApi: TJSONArray;
+    { a calendar's instants as the oracle writes them: the port reads a date
+      on the local wall clock, the oracle runs at UTC -- this is the local
+      midnight of the range's start less its UTC midnight (0 at UTC)
+      [Batch 124] }
+    FShift: Double;
     procedure Log(const AFn: string; AArgs: TJSONArray; ARet: TJSONData);
     procedure Open(const AName: string; const AParams: TTyCustomParams);
     function Done(ARet: TJSONData): TJSONData;
@@ -92,8 +98,11 @@ type
     function Hover(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
   end;
 
-  TAdvChartCustomSeriesOracleTest = class(TTestCase)
-  private
+  { THE REPLAY every custom-series fixture shares: the comparisons, the
+    readers, a case run [Batch 124: out of the C14 oracle test, for the
+    second fixture's] }
+  TCuOracleBase = class(TTestCase)
+  protected
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TCuProbe;
@@ -101,6 +110,9 @@ type
     FRoot: TJSONData;
     FBad, FCompared, FCalls, FEls, FSteps: Integer;
     FReport, FWhere: string;
+    { the fixture's file name; the mirror, its handlers registered }
+    function FixtureName: string; virtual; abstract;
+    function NewMirror: TCuMirror; virtual; abstract;
     procedure Bad(const AWhat: string);
     procedure Same(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure SameStr(const AWhat, AGot, AWant: string);
@@ -133,11 +145,16 @@ type
     procedure CheckLegend(AWant: TJSONData);
     procedure CheckPointer(AState: TJSONObject);
     procedure CheckState(AState: TJSONObject; APointer: Boolean);
-    procedure RunCase(ACase: TJSONObject);
+    procedure RunCase(ACase: TJSONObject); virtual;
     procedure RunGroup(const AGroup: string; AMin: Integer);
-  protected
     procedure SetUp; override;
     procedure TearDown; override;
+  end;
+
+  TAdvChartCustomSeriesOracleTest = class(TCuOracleBase)
+  protected
+    function FixtureName: string; override;
+    function NewMirror: TCuMirror; override;
   published
     procedure TestTheShapesAreUpstreams;
     procedure TestTheMergesAreUpstreams;
@@ -176,9 +193,23 @@ type
     procedure TestTheElementsArePainted;
     procedure TestAnUnknownTypeStopsTheRender;
     procedure TestTheInfoRidesTheEvent;
-    procedure TestAPolarCustomSaysItIsNotDrawn;
+    procedure TestAGeoCustomSaysItIsNotDrawn;
     procedure TestItPaintsWithTheAnimationOn;
   end;
+
+{ ---- the fixture helpers, a second fixture's too [Batch 124] ---- }
+function FixturePath(const AName: string): string;
+function FromHex(const AHex: string): Double;
+function HexOf(A: Double): string;
+function Txt(A: Double): string;
+function IsNull(AData: TJSONData): Boolean;
+function IsHex(AData: TJSONData): Boolean;
+{ the oracle's recorded value: every number as its hex }
+function Rv(A: TJSONData): TJSONData;
+function RvNum(A: Double): TJSONData;
+function RvNums(const A: array of Double): TJSONArray;
+function Num(A: Double): TJSONFloatNumber;
+function Pts(const A: array of Double): TJSONArray;
 
 implementation
 
@@ -200,6 +231,8 @@ end;
 function HexOf(A: Double): string;
 var q: QWord;
 begin
+  { the oracle's NaN, whatever bits this one carries [Batch 124] }
+  if IsNan(A) then Exit('7ff8000000000000');
   Move(A, q, SizeOf(q));
   Result := LowerCase(IntToHex(q, 16));
 end;
@@ -368,19 +401,61 @@ begin
   FApi.Add(TJSONObject.Create(['fn', AFn, 'args', AArgs, 'ret', ARet]));
 end;
 
+{ a calendar date record as getDateInfo writes it, its Date an empty object }
+function CalDateRec(const ADate: TTyCustomCalDate; AShift: Double): TJSONObject;
+begin
+  Result := TJSONObject.Create(['y', ADate.Y, 'm', ADate.M, 'd', ADate.D,
+    'day', RvNum(ADate.Day), 'time', RvNum(ADate.Time - AShift),
+    'formatedDate', ADate.FormatedDate, 'date', TJSONObject.Create]);
+end;
+
 procedure TCuMirror.Open(const AName: string; const AParams: TTyCustomParams);
-var p, cs: TJSONObject;
+var
+  p, cs: TJSONObject;
+  csData: TJSONData;
+  y, m, d: Integer;
 begin
   FreeAndNil(FCur);
-  cs := TJSONObject.Create(['type', AParams.CoordSys.Type_,
-    'x', RvNum(AParams.CoordSys.X), 'y', RvNum(AParams.CoordSys.Y),
-    'width', RvNum(AParams.CoordSys.Width), 'height', RvNum(AParams.CoordSys.Height)]);
+  { coordSys as each prepareCustom writes it [Batch 124]; none is null }
+  cs := nil;
+  if AParams.CoordSys.Type_ = '' then
+    csData := TJSONNull.Create
+  else if AParams.CoordSys.Type_ = 'polar' then
+  begin
+    cs := TJSONObject.Create(['type', AParams.CoordSys.Type_,
+      'cx', RvNum(AParams.CoordSys.Cx), 'cy', RvNum(AParams.CoordSys.Cy),
+      'r', RvNum(AParams.CoordSys.R), 'r0', RvNum(AParams.CoordSys.R0)]);
+    csData := cs;
+  end
+  else
+  begin
+    cs := TJSONObject.Create(['type', AParams.CoordSys.Type_,
+      'x', RvNum(AParams.CoordSys.X), 'y', RvNum(AParams.CoordSys.Y),
+      'width', RvNum(AParams.CoordSys.Width), 'height', RvNum(AParams.CoordSys.Height)]);
+    csData := cs;
+    if AParams.CoordSys.Type_ = 'calendar' then
+    begin
+      { the zone's shift: the start's local midnight less its UTC one }
+      y := StrToIntDef(AParams.CoordSys.RangeStart.Y, 1970);
+      m := StrToIntDef(AParams.CoordSys.RangeStart.M, 1);
+      d := StrToIntDef(AParams.CoordSys.RangeStart.D, 1);
+      FShift := AParams.CoordSys.RangeStart.Time
+        - (EncodeDate(y, m, d) - UnixDateDelta) * 86400000.0;
+      cs.Add('cellWidth', RvNum(AParams.CoordSys.CellWidth));
+      cs.Add('cellHeight', RvNum(AParams.CoordSys.CellHeight));
+      cs.Add('rangeInfo', TJSONObject.Create([
+        'start', CalDateRec(AParams.CoordSys.RangeStart, FShift),
+        'end', CalDateRec(AParams.CoordSys.RangeEnd, FShift),
+        'weeks', RvNum(AParams.CoordSys.Weeks),
+        'dayCount', RvNum(AParams.CoordSys.DayCount)]));
+    end;
+  end;
   p := TJSONObject.Create(['dataIndex', AParams.DataIndex,
     'dataIndexInside', AParams.DataIndexInside,
     'dataInsideLength', AParams.DataInsideLength,
     'seriesId', StringReplace(AParams.SeriesId, #0, '~', [rfReplaceAll]),
     'seriesName', StringReplace(AParams.SeriesName, #0, '~', [rfReplaceAll]),
-    'seriesIndex', AParams.SeriesIndex, 'coordSys', cs,
+    'seriesIndex', AParams.SeriesIndex, 'coordSys', csData,
     'encode', AParams.Encode.Clone, 'itemPayload', AParams.ItemPayload.Clone,
     'context', Rv(AParams.Context)]);
   if AParams.ActionType = '' then p.Add('actionType', TJSONNull.Create)
@@ -880,7 +955,7 @@ end;
 
 { ==================== the oracle test ==================== }
 
-procedure TAdvChartCustomSeriesOracleTest.SetUp;
+procedure TCuOracleBase.SetUp;
 var sl: TStringList;
 begin
   inherited SetUp;
@@ -889,28 +964,17 @@ begin
   FCtl.Mode := 'light';
   FCtl.ThemeName := 'default';
   AssertTrue('the fixture is where the suite expects it',
-    FileExists(FixturePath('advchart-custom-series.json')));
+    FileExists(FixturePath(FixtureName)));
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(FixturePath('advchart-custom-series.json'));
+    sl.LoadFromFile(FixturePath(FixtureName));
     FRoot := GetJSON(sl.Text);
   finally
     sl.Free;
   end;
   FChart := nil;
-  FMirror := TCuMirror.Create;
   TyChartClearRenderItems;
-  TyChartRegisterRenderItem('gantt', @FMirror.Gantt);
-  TyChartRegisterRenderItem('errorbar', @FMirror.ErrorBar);
-  TyChartRegisterRenderItem('hexagon', @FMirror.Hexagon);
-  TyChartRegisterRenderItem('texts', @FMirror.Texts);
-  TyChartRegisterRenderItem('groups', @FMirror.Groups);
-  TyChartRegisterRenderItem('bar0', @FMirror.Bar0);
-  TyChartRegisterRenderItem('bar1', @FMirror.Bar1);
-  TyChartRegisterRenderItem('square', @FMirror.Square);
-  TyChartRegisterRenderItem('dot', @FMirror.Dot);
-  TyChartRegisterRenderItem('span', @FMirror.Span);
-  TyChartRegisterRenderItem('hover', @FMirror.Hover);
+  FMirror := NewMirror;
   FBad := 0;
   FCompared := 0;
   FCalls := 0;
@@ -919,7 +983,28 @@ begin
   FReport := '';
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.TearDown;
+function TAdvChartCustomSeriesOracleTest.FixtureName: string;
+begin
+  Result := 'advchart-custom-series.json';
+end;
+
+function TAdvChartCustomSeriesOracleTest.NewMirror: TCuMirror;
+begin
+  Result := TCuMirror.Create;
+  TyChartRegisterRenderItem('gantt', @Result.Gantt);
+  TyChartRegisterRenderItem('errorbar', @Result.ErrorBar);
+  TyChartRegisterRenderItem('hexagon', @Result.Hexagon);
+  TyChartRegisterRenderItem('texts', @Result.Texts);
+  TyChartRegisterRenderItem('groups', @Result.Groups);
+  TyChartRegisterRenderItem('bar0', @Result.Bar0);
+  TyChartRegisterRenderItem('bar1', @Result.Bar1);
+  TyChartRegisterRenderItem('square', @Result.Square);
+  TyChartRegisterRenderItem('dot', @Result.Dot);
+  TyChartRegisterRenderItem('span', @Result.Span);
+  TyChartRegisterRenderItem('hover', @Result.Hover);
+end;
+
+procedure TCuOracleBase.TearDown;
 begin
   if FChart <> nil then FChart.Measurer := nil;
   FreeAndNil(FChart);
@@ -931,14 +1016,14 @@ begin
   inherited TearDown;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.Bad(const AWhat: string);
+procedure TCuOracleBase.Bad(const AWhat: string);
 begin
   Inc(FBad);
   if Length(FReport) < 16000 then
     FReport := FReport + LineEnding + FWhere + ': ' + AWhat;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.Same(const AWhat: string; AGot: Double;
+procedure TCuOracleBase.Same(const AWhat: string; AGot: Double;
   AWant: TJSONData);
 var want: Double;
 begin
@@ -954,28 +1039,28 @@ begin
     Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(want)]));
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.SameStr(const AWhat, AGot, AWant: string);
+procedure TCuOracleBase.SameStr(const AWhat, AGot, AWant: string);
 begin
   Inc(FCompared);
   if AGot <> AWant then
     Bad(Format('%s "%s", upstream "%s"', [AWhat, AGot, AWant]));
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.SameBool(const AWhat: string; AGot, AWant: Boolean);
+procedure TCuOracleBase.SameBool(const AWhat: string; AGot, AWant: Boolean);
 begin
   Inc(FCompared);
   if AGot <> AWant then
     Bad(Format('%s %s, upstream %s', [AWhat, BoolToStr(AGot, True), BoolToStr(AWant, True)]));
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.SameInt(const AWhat: string; AGot, AWant: Integer);
+procedure TCuOracleBase.SameInt(const AWhat: string; AGot, AWant: Integer);
 begin
   Inc(FCompared);
   if AGot <> AWant then
     Bad(Format('%s %d, upstream %d', [AWhat, AGot, AWant]));
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.SameColour(const AWhat: string; AHas: Boolean;
+procedure TCuOracleBase.SameColour(const AWhat: string; AHas: Boolean;
   AGot: TTyChartColor; AWant: TJSONData);
 var want: TTyChartColor;
 begin
@@ -992,7 +1077,7 @@ begin
 end;
 
 { a packed colour against echarts.color.parse's [r, g, b, a] }
-procedure TAdvChartCustomSeriesOracleTest.SameRgba(const AWhat: string; AHas: Boolean;
+procedure TCuOracleBase.SameRgba(const AWhat: string; AHas: Boolean;
   AGot: TTyChartColor; AWant: TJSONData);
 var r, g, b: Integer; a: Double;
 begin
@@ -1016,7 +1101,7 @@ begin
     Bad(Format('%s [%d,%d,%d,%s], upstream %s', [AWhat, r, g, b, Txt(a), AWant.AsJSON]));
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.SameValue(const AWhat: string;
+procedure TCuOracleBase.SameValue(const AWhat: string;
   const AGot: TTyAnimValue; AWant: TJSONData);
 var
   i, k, n: Integer;
@@ -1079,7 +1164,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.SameMatrix(const AWhat: string; AHas: Boolean;
+procedure TCuOracleBase.SameMatrix(const AWhat: string; AHas: Boolean;
   const AGot: TTyMat2D; AWant: TJSONData);
 var
   k: Integer;
@@ -1103,7 +1188,7 @@ end;
 
 { two recorded values: an object's keys in any order, everything else as
   written }
-procedure TAdvChartCustomSeriesOracleTest.SameJson(const AWhat: string; AGot, AWant: TJSONData);
+procedure TCuOracleBase.SameJson(const AWhat: string; AGot, AWant: TJSONData);
 var
   i, k: Integer;
   nm: string;
@@ -1163,14 +1248,14 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.Finish(const AWhat: string; AMin: Integer);
+procedure TCuOracleBase.Finish(const AWhat: string; AMin: Integer);
 begin
   AssertEquals(Format('%s: %d of %d comparisons differ:%s',
     [AWhat, FBad, FCompared, FReport]), 0, FBad);
   AssertTrue(Format('%s: only %d compared', [AWhat, FCompared]), FCompared >= AMin);
 end;
 
-function TAdvChartCustomSeriesOracleTest.Cases(const AGroup: string): TJSONArray;
+function TCuOracleBase.Cases(const AGroup: string): TJSONArray;
 var
   all: TJSONArray;
   i: Integer;
@@ -1181,7 +1266,7 @@ begin
     if all.Objects[i].Strings['group'] = AGroup then Result.Add(all.Objects[i].Clone);
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.NewChart(AW, AH: Integer);
+procedure TCuOracleBase.NewChart(AW, AH: Integer);
 var m: TJSONObject;
 begin
   if FChart <> nil then FChart.Measurer := nil;
@@ -1196,7 +1281,7 @@ begin
   FChart.SetBounds(0, 0, AW, AH);
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.RenderNow;
+procedure TCuOracleBase.RenderNow;
 var bmp: TBGRABitmap;
 begin
   bmp := TBGRABitmap.Create(FChart.Width, FChart.Height, BGRA(255, 255, 255, 255));
@@ -1209,7 +1294,7 @@ end;
 
 { 's<series>:<raw>' for an item's root, '/k' per child, '#label' for a
   textContent }
-function TAdvChartCustomSeriesOracleTest.KeyOf(AEl: TTyGfxEl): string;
+function TCuOracleBase.KeyOf(AEl: TTyGfxEl): string;
 var
   el, p: TTyGfxEl;
   s, k, raw: Integer;
@@ -1245,7 +1330,7 @@ begin
 end;
 
 { every element of every custom view, depth first, by key }
-function TAdvChartCustomSeriesOracleTest.Keyed: TStringList;
+function TCuOracleBase.Keyed: TStringList;
 var
   s, i: Integer;
   view: TTyCustomView;
@@ -1270,7 +1355,7 @@ begin
 end;
 
 { the paint list entries of an item's paths, in list order }
-function TAdvChartCustomSeriesOracleTest.PathsOfItem(ASeries, ARaw: Integer): TTyIntegerArray;
+function TCuOracleBase.PathsOfItem(ASeries, ARaw: Integer): TTyIntegerArray;
 var
   k: Integer;
   e: TTyChartElement;
@@ -1288,7 +1373,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckPieces(const AWhat: string;
+procedure TCuOracleBase.CheckPieces(const AWhat: string;
   const APieces: TTyRtPieceArray; AWant: TJSONArray);
 var
   i: Integer;
@@ -1342,7 +1427,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckTextStyle(const AWhat: string;
+procedure TCuOracleBase.CheckTextStyle(const AWhat: string;
   AEl: TTyGfxEl; AWant: TJSONObject);
 var
   font: string;
@@ -1370,7 +1455,7 @@ begin
     SameBool(AWhat + ' no align', v.Kind <> avkString, IsNull(AWant.Find('align')));
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckEl(AEl: TTyGfxEl; AWant: TJSONObject);
+procedure TCuOracleBase.CheckEl(AEl: TTyGfxEl; AWant: TJSONObject);
 const
   cT: array[0..6] of string = ('x', 'y', 'rotation', 'scaleX', 'scaleY',
     'originX', 'originY');
@@ -1492,7 +1577,7 @@ begin
     SameBool('no textContent', tc = nil, True);
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckCalls(AWant: TJSONArray);
+procedure TCuOracleBase.CheckCalls(AWant: TJSONArray);
 var
   i: Integer;
   was: string;
@@ -1509,7 +1594,7 @@ begin
   FMirror.Calls.Clear;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckEls(AWant: TJSONArray);
+procedure TCuOracleBase.CheckEls(AWant: TJSONArray);
 var
   got: TStringList;
   i: Integer;
@@ -1533,7 +1618,7 @@ begin
 end;
 
 { the custom displayables in paint order, runs merged }
-procedure TAdvChartCustomSeriesOracleTest.CheckOrder(AWant: TJSONArray);
+procedure TCuOracleBase.CheckOrder(AWant: TJSONArray);
 var
   list: TTyPaintList;
   i: Integer;
@@ -1559,7 +1644,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckClips(AWant: TJSONArray);
+procedure TCuOracleBase.CheckClips(AWant: TJSONArray);
 var
   i: Integer;
   w: TJSONObject;
@@ -1581,7 +1666,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckSt(AWant: TJSONArray);
+procedure TCuOracleBase.CheckSt(AWant: TJSONArray);
 var
   i, k, s, raw, part, idx, n, inside: Integer;
   w: TJSONObject;
@@ -1666,7 +1751,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckLegend(AWant: TJSONData);
+procedure TCuOracleBase.CheckLegend(AWant: TJSONData);
 var
   lay: TTyLegendLayout;
   j, k: Integer;
@@ -1769,7 +1854,7 @@ begin
       + ' ' + Q(ARows.Objects[i], 'value') + '}';
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckPointer(AState: TJSONObject);
+procedure TCuOracleBase.CheckPointer(AState: TJSONObject);
 var
   hv, tip: TJSONObject;
   d: TTyChartDatumRef;
@@ -1797,7 +1882,7 @@ begin
   end;
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.CheckState(AState: TJSONObject; APointer: Boolean);
+procedure TCuOracleBase.CheckState(AState: TJSONObject; APointer: Boolean);
 begin
   CheckCalls(AState.Arrays['calls']);
   if AState.Find('els') is TJSONArray then CheckEls(AState.Arrays['els']);
@@ -1808,7 +1893,7 @@ begin
   if APointer then CheckPointer(AState);
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.RunCase(ACase: TJSONObject);
+procedure TCuOracleBase.RunCase(ACase: TJSONObject);
 var
   steps, states: TJSONArray;
   step: TJSONObject;
@@ -1861,7 +1946,7 @@ begin
   FreeAndNil(FChart);
 end;
 
-procedure TAdvChartCustomSeriesOracleTest.RunGroup(const AGroup: string; AMin: Integer);
+procedure TCuOracleBase.RunGroup(const AGroup: string; AMin: Integer);
 var
   arr: TJSONArray;
   i: Integer;
@@ -2146,14 +2231,16 @@ begin
     + AEvent.Params.Info);
 end;
 
-procedure TAdvChartCustomSeriesTest.TestAPolarCustomSaysItIsNotDrawn;
+{ [Batch 124: a polar is drawn now -- a geo is the system this port has
+  none of] }
+procedure TAdvChartCustomSeriesTest.TestAGeoCustomSaysItIsNotDrawn;
 begin
   TyChartRegisterRenderItem('Plain', @Plain);
-  Show('{"animation":false,"polar":{},"angleAxis":{},"radiusAxis":{},'
-    + '"series":[{"type":"custom","coordinateSystem":"polar","renderItem":"@Plain",'
+  Show('{"animation":false,'
+    + '"series":[{"type":"custom","coordinateSystem":"geo","renderItem":"@Plain",'
     + '"data":[[1,2]]}]}');
   AssertEquals('not asked', 0, FCount);
-  AssertTrue('the note names the system: ' + Diag, Pos('polar', Diag) > 0);
+  AssertTrue('the note names the system: ' + Diag, Pos('geo', Diag) > 0);
 end;
 
 procedure TAdvChartCustomSeriesTest.TestTheInfoRidesTheEvent;
@@ -2174,8 +2261,9 @@ var
   p: TBGRAPixel;
   el: TTyGfxEl;
 begin
-  { the update transitions are C15's: with the animation on the elements
-    are drawn where renderItem put them, at once }
+  { with the animation on, an element with no enterFrom enters as it is:
+    drawn where renderItem put it, at once [Batch 124: the transitions are
+    there now, and an empty enterFrom animates nothing] }
   TyChartRegisterRenderItem('Plain', @Plain);
   FreeAndNil(FChart);
   FChart := TCuProbe.Create(FForm);

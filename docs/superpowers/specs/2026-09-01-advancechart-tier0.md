@@ -7970,7 +7970,7 @@ M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画
 
 ### 热力图/日历系列小结
 
-H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历上的热力图、散点、涟漪散点、关系图、饼图,都按上游逐位对上;画廊的 10 个日历文件除 custom-calendar-icon(renderItem 是函数)外都画出来了。**[第 123 批：renderItem 能写成具名句柄了，见 §159；日历上的 custom 是 C15 的事。]**
+H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历上的热力图、散点、涟漪散点、关系图、饼图,都按上游逐位对上;画廊的 10 个日历文件除 custom-calendar-icon(renderItem 是函数)外都画出来了。**[第 123 批：renderItem 能写成具名句柄了，见 §159；日历上的 custom 是 C15 的事。]** **[第 124 批：日历上的 custom 能画了——`api.coord` 落到日子中心、`api.layout` 给格子与内容矩形，见 §161。]**
 
 ## 107. Tier 1 第七十三批:树图——层级、正交布局、节点、曲边、标签(T1,2026-09-30)
 
@@ -11620,7 +11620,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
   - **params**：`TTyCustomParams` 一个字段对一个上游参数：`Context`（这一轮共用的 TJSONObject，图表持有，句柄可以写）、`SeriesId / SeriesName / SeriesIndex`、`DataIndex / DataIndexInside / DataInsideLength`、`ActionType`（上游的 null 是 `''`）、`CoordSys`（`Type_ / X / Y / Width / Height`，css px）、`Encode`、`ItemPayload`（只读）。
   - **api**：抽象类 `TTyCustomApi`，一个方法对一个上游函数：`Value(dim[, dataIndexInside])`（Double；文字值是 NaN，原文看 `ValueText`）、`ValueText`（JavaScript 的 String()）、`OrdinalRawValue`、`Coord([x, y])`（`array of const`，数字或类目名）、`Size([dx, dy] [, [x, y]])`、`Style([extra])`、`StyleEmphasis([extra])`、`Visual(type)`（TJSONData，undefined 是 nil）与 `VisualText`、`BarLayout(opt)`（`TTyCustomBarLayout`，undefined 是空数组）、`CurrentSeriesIndices`、`Font(opt)`、`GetWidth / GetHeight / GetDevicePixelRatio`。维可以是下标或名字（重载），每个读数据项的方法都有可选的 dataIndexInside（−1 是当前项）。返回的 TJSONData 归调用方，放进树里就归树。坐标一律 css px：控件在设备像素上布局，api 除以 PPI/96，画的时候再乘回去。
   - **返回值**：一棵元素选项树，形状就是 graphic 组件的（C13 的十三种里除 compoundPath / path 外都认），外加 custom 的 `info`、`emphasis / blur / select`、`styleEmphasis`、`$mergeChildren`、根上的 `focus / blurScope / emphasisDisabled`；nil、JSON null、false 是这一项什么都不画。树归图表，用完就放。**入口检查**：树先过 `TyJsonNestingExceeds`，太深就不要、并记一条诊断。
-  - C15 往上加坐标系时只改 api 的实现（`DoCoord`、`Size`、`BarLayout` 按绑定分支）和 `CoordSys`，句柄的形状不变。
+  - C15 往上加坐标系时只改 api 的实现（`DoCoord`、`Size`、`BarLayout` 按绑定分支）和 `CoordSys`，句柄的形状不变。**[第 124 批：做了；另加 `Layout`（日历），`TTyCustomCoordSys` 多了极坐标与日历的字段，一个参数的 `Size` 改成「没有 dataItem」（单轴上是 NaN），见 §161。]**
 - **视图（`TTyCustomView`）**：每个系列一个，按「系列模型 id + 类型」认（notMerge 换模型 id 不变时沿用，同上游的视图复用）。`Render(ids, raws, call, z, zlevel)` 是 `CustomView.render`：没有旧数据先清组，`TyDataDiff`（AnimView 现成的一对一 DataDiffer）给出次序，每个 add / update 调 call（renderItem）、`CreateOrUpdateItem`，remove 把元素丢掉；`DoCreateOrUpdate` / `NeedRecreate` / `UpdateAttachedTx` / `UpdateNormal` / `UpdateStates` / `UpdateZ` / `MergeChildren` 一一对着上游的同名函数。`RemoveAll` 是图例关掉时的 `remove()`：根从组上摘下、仍归视图、数据留着。元素的去留：挂在组上的归组；摘下但旧数据还引用的归 `FDetached`；真正不要的进 `FGone`，下一次建绘制列表之前释放（同 graphic 的 GoneList）。抛错的地方（未知类型、compoundPath、path）照上游停在那里，`Error` 记下那句话，这一轮的数据不认（下一轮从头来）。每个元素的 `TTyGfxEl.Custom`（新字段，随元素释放）挂一个 `TTyCustomElInfo`：类型词、有没有写名字、三个状态的 style 与 z2、根的 focus 等。
 - **`AdvChart.Graphic`**：`ApplyUpdateTransition` 里「直接设终值」那段抽成 `TyGfxApplyDirect(el, opt, clearStyle)`，graphic 照旧（clearStyle 假），custom 传真；ec4 的两个函数公开为 `TyGfxIsEC4` / `TyGfxConvertEC4`，后者加 `AIsNormal`（非 normal 不缺省 `'inside'`）。
 - **`AdvChart.States`**：`TTyStElement.LiftOne`——emphasis、select 的 z2 只加 1（零值仍是原来的 10 / 9）。**`AdvChart.Marks`**：`custom` 进「别处画」的名单。**资源串**两条：`rsTyChartCustomNoRenderItem`（名字没登记）、`rsTyChartCustomRenderItemFailed`（句柄抛异常、树太深），中文条目与 `.pot` 同步，主题编辑器的 po 是逐字节拷贝。
@@ -11661,12 +11661,12 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 
 ### 推迟与偏差
 
-- **坐标系**：只做直角坐标。极坐标、日历、单轴是 C15；`coordinateSystem: 'none'`、geo、matrix 以后；这些上面的 custom 不画、诊断说坐标系还没做。
-- **过渡动画**（C15）：更新直接到终值，`transition` / `enterFrom` / `leaveTo` / `enterAnimation` 等都不读；`keyframeAnimation`、`during`、`morph`、universal transition 不做。动画开着时元素画在 renderItem 放的地方。
-- **元素**：`path`（SVG pathData）、`compoundPath` 没有元素类，同上游抛错一样停在那里；元素上的 `clipPath`、`tooltipDisabled`（记下没接）、`autoBatch` 不做；`emphasisDisabled`、根上的 `focus / blurScope` 记下没接——项的焦点与淡出按系列的 `emphasis.focus` 走。
+- **坐标系**：只做直角坐标。极坐标、日历、单轴是 C15；`coordinateSystem: 'none'`、geo、matrix 以后；这些上面的 custom 不画、诊断说坐标系还没做。**[第 124 批：极坐标、日历、单轴、'none' 都画了；geo（D14）、matrix（D12）照旧，雷达这类没有 prepareCustom 的仍记诊断，见 §161。]**
+- **过渡动画**（C15）：更新直接到终值，`transition` / `enterFrom` / `leaveTo` / `enterAnimation` 等都不读；`keyframeAnimation`、`during`、`morph`、universal transition 不做。动画开着时元素画在 renderItem 放的地方。**[第 124 批：enter / update 的过渡做了（系列是动画模型，默认 `['x', 'y']`）；被移除的元素带 leaveTo 时 6.1 上游会抛错，端口照样停下，没有 leaveTo 的立刻拿掉，见 §161。]**
+- **元素**：`path`（SVG pathData）、`compoundPath` 没有元素类，同上游抛错一样停在那里；元素上的 `clipPath`、`tooltipDisabled`（记下没接）、`autoBatch` 不做；`emphasisDisabled`、根上的 `focus / blurScope` 记下没接——项的焦点与淡出按系列的 `emphasis.focus` 走。**[第 124 批：`tooltipDisabled` 与根上的 `focus / blurScope / emphasisDisabled` 接上了，项的焦点只看根的选项（上游如此，系列的 `emphasis.focus` 对 custom 不起作用）；`clipPath`、`autoBatch` 仍不做，见 §161。]**
 - **状态**：只有路径元素有状态，状态样式只认 fill、stroke、lineWidth、opacity 与 z2；文字、图片、textContent 的状态（文字的 emphasis 样式、标签的 z2 提升）不做；ec4 写法的 emphasis 不转。
 - **clip**：命中不看裁剪（同端口的其他裁剪）。
-- **api**：`style` 的 label 文字是缺省标签（label 维的值空格连起来），`formatter` 不读，label 的富文本与 `borderType` 的虚线不转；`visual` 只认 color 与 borderColor（其余七个上游在 custom 上也是 undefined），颜色写了就原样、调色板色写成 `'#rrggbb'`（不透明时）或 `rgba()`，visualMap 改过的颜色看不到；`value` 读超出数据宽度的维是 NaN；`getZr` 没有；`getDevicePixelRatio` 是 PPI / 96。
+- **api**：`style` 的 label 文字是缺省标签（label 维的值空格连起来），`formatter` 不读，label 的富文本与 `borderType` 的虚线不转；`visual` 只认 color 与 borderColor（其余七个上游在 custom 上也是 undefined），颜色写了就原样、调色板色写成 `'#rrggbb'`（不透明时）或 `rgba()`，visualMap 改过的颜色看不到 **[第 124 批：看得到了——块写的原样、插值的 `rgba()`；visualMap 映射了 symbol / symbolSize / liftZ 时 `visual` 也有值，`api.style` 的透明度带 visualMap 的，见 §161]**；`value` 读超出数据宽度的维是 NaN；`getZr` 没有；`getDevicePixelRatio` 是 PPI / 96。
 - **渐进 / 增量渲染**：没有；大数据量的 custom 也一次画完。
 - **renderItem 抛异常**：上游异常冒出整次更新，端口记诊断、这一项什么都不画、其余照常。
 - **`info` 进事件**是 JSON 文本，格式同 graphic（fpjson 的 `AsJSON`）。
@@ -11775,6 +11775,92 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 - `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/toolbox.js`、`tests/fixtures/advchart-toolbox.json`、`tests/test.advchart.toolbox.pas`（新，注册在 `tytests.lpr`）。
+
+## 161. Tier 2 第一百二十四批：custom 系列（二）（C15，2026-10-13）
+
+路线图 C15：custom CU2——极坐标 / 日历 / singleAxis 上的 custom、过渡动画。C14 只画直角坐标上的 custom，更新一律直接到终值，根上的 `focus / blurScope / emphasisDisabled` 与元素的 `tooltipDisabled` 记下没接，`api.visual` 看不到 visualMap。这一批对着 6.1 的 `coord/polar/prepareCustom.ts`、`coord/calendar/prepareCustom.ts`（连同 `Calendar.ts` 的 `getDateInfo`、`dataToPoint`、`dataToLayout`、`_getRangeInfo`）、`coord/single/prepareCustom.ts`（`Single.dataToPoint`）、`chart/helper/createSeriesData.ts`（`getCoordSysDimDefs` 的兜底 `['x', 'y']`）、`CustomView.ts`（`makeRenderItem` 在没有坐标系时的 `prepareResult = {}`、`updateElNormal` 的 `DEFAULT_TRANSITION`、`doCreateOrUpdateEl` 的 isInit 与 `tooltipDisabled`、`createOrUpdateItem` 的 `toggleHoverEmphasis`、`render` 的 remove 回调、`removeChildFromGroup`、`processRemove`）、`animation/customGraphicTransition.ts`（`applyUpdateTransition` 整段、`getElementAnimationConfig`、`applyLeaveTransition`、`updateLeaveTo`、三个 `prepare*TransitionFrom`、`isNonStyleTransitionEnabled`）、`animation/basicTransition.ts`（`getAnimationConfig`）、`util/states.ts`（`toggleHoverEmphasis`、`enableHoverFocus`、`disableHoverEmphasis`）、`component/tooltip/TooltipView.ts`（`_tryShow` 里 `findEventDispatcher` 的 `tooltipDisabled`）、`component/visualMap/visualEncoding.ts` 与 `visual/helper.ts`（颜色进视觉 style 的 fill、透明度进 opacity、symbol / symbolSize / liftZ 是项视觉），以及 zrender 的 `isArrayLike`（串不算）逐行核过，在真 dist 上跑基准。§106 与 §159 的相关处在原处标注。
+
+### 上游的做法
+
+- **坐标系**：`prepareCustoms` 一张表——cartesian2d、polar、calendar、single、geo、matrix。`coordinateSystem: 'none'` 时系列没有坐标系，`prepareResult` 是 `{}`：`params.coordSys` 是 undefined，api 上没有 `coord`、`size`（调用就是 TypeError），数据维是 `getCoordSysDimDefs` 的兜底 x、y，`encode` 是 `{x: [0], y: [1]}`。
+  - **极坐标**：`coordSys` 是 `{type: 'polar', cx, cy, r, r0}`（半径轴的 extent，小的在前）；`coord(data)` 是 `radiusAxis.dataToRadius(data[0])` 与 `angleAxis.dataToAngle(data[1])`（`dataToCoord` 里先 `scale.parse`），过 `coordToPoint`，再把半径和 `angle * Math.PI / 180` 推进去——四个数；`size(dataSize, dataItem)` 逐 Radius、Angle：类目轴是 `calcBandWidth(axis).w`，否则 `|dataToCoord(v − s/2) − dataToCoord(v + s/2)|`，Angle 的再乘 `Math.PI / 180`，`dataItem || [0, 0]`。`encode` 是 `{radius, angle}`。
+  - **日历**：`coordSys` 是 `{type: 'calendar', x, y, width, height, cellWidth, cellHeight, rangeInfo: {start, end, weeks, dayCount}}`，`start` / `end` 是 `getDateInfo` 的 `{y, m, d（文字，补零）, day, time, formatedDate, date}`；`coord(data, clamp)` 是 `dataToPoint`——数组取第一个、`parseDate`、clamp 缺省为真，范围外 `[NaN, NaN]`；`layout(data, clamp)` 是 `dataToLayout`：`{rect, contentRect}`，contentRect 是 rect 四边各缩边宽的一半（`expandOrShrinkRect`）；没有 `size`。`encode` 是 `{time, value}`。
+  - **单轴**：`coordSys` 是 `{type: 'singleAxis', x, y, width, height}`；`coord(val)` 是 `dataToPoint`——数组取第一个、`+val`、`axis.dataToCoord`，另一维是矩形的中线；`size(dataSize, dataItem)` 答**一个数**：两个参数都可以是数组（取第一个），`dataItem` 不给就是 NaN。`encode` 是 `{single}`。
+  - `barLayout` 只在 cartesian2d 上有答案，别处是 undefined（'none' 上读 `coordSys.type` 是 TypeError）。没有 prepareCustom 的坐标系（雷达、关系图的 view）开发版断言、生产版调 undefined。
+- **过渡**：`updateElNormal` 对每个元素（textContent、clipPath 也一样）先把 `transition == null` 写成 `['x', 'y']`（改的是选项本身），再 `applyUpdateTransition(el, option, 系列, {dataIndex, isInit, clearStyle: true})`。isInit 是「这次新建的元素」——新项，或类型变了重建的；textContent 用宿主的 isInit。不是 isInit 且系列开着动画时，先按 transition 记旧值：`'all'` 是十一个变换键，列表（或一个词）各取所列；`'shape'` / `'style'` 这两个词，以及 shape、style 自己的 `transition`，规则与 graphic 一样——shape 的键要过 `isNonStyleTransitionEnabled`（数组总是，否则 `isFinite`，串不算数组）。然后直接设终值（style 整个替换），isInit 时把根、style、shape、extra 的 `enterFrom` 合在一起按 enter 的时间 `animateFrom`，否则按 update 的时间从旧值 `animateFrom`；最后 `updateLeaveTo` 记下 leaveTo。时间是 `getElementAnimationConfig`：`getAnimationConfig(type, 系列, dataIndex)`——系列开着动画才有（`isAnimationEnabled`：`animation` 为真且数据量不超过 `animationThreshold`），`animationDuration / Easing / Delay` 或三个 `*Update`，更新的 payload 优先，函数按 dataIndex 调；时长大于 0 才加 `setToFinal` 与 scope；然后选项的 `enterAnimation` / `updateAnimation` 盖上去（盖完不补 setToFinal）。系列没开动画时什么都不动。
+- **离开**：`render` 的 remove 回调、按下标合并时多出来的旧孩子（`removeChildFromGroup`）、按名字合并的 `processRemove` 都是 `applyLeaveTransition(el, customInnerStore(el).option, 系列)`——**6.1 的 CustomView 从来不写 `customInnerStore(el).option`**。元素没有 leaveTo 就直接从组里拿掉；有 leaveTo 时 `getElementAnimationConfig` 读 `undefined.updateAnimation`，抛 TypeError「Cannot read properties of undefined (reading 'updateAnimation')」，整个 render 停在那里：前面的项已经更新，`_data` 还是旧的，下一次更新又从同一处抛。动画关着也一样（`updateLeaveTo` 总在记）。renderItem 返回空时是 `group.remove`，不走 leave；`leaveAnimation` 从来不读。
+- **焦点**：`createOrUpdateItem` 对每个项的根 `toggleHoverEmphasis(el, option.focus, option.blurScope, option.emphasisDisabled)`：焦点只来自根的选项（系列的 `emphasis.focus` 对 custom 不起作用）；`emphasisDisabled` 让根不再是 hover 分发者，悬停什么都不发生。
+- **提示框**：元素选项的 `tooltipDisabled` 为真时元素记下（从不清掉）；TooltipView 从命中的元素往上找（textContent 走宿主），路上任何一个有 `tooltipDisabled` 就隐藏。
+- **视觉**：`visual('color')` 是视觉 style 的 fill——visualMap 的颜色盖在项与系列的颜色上（continuous 的插值是 `'rgba(r,g,b,a)'` 文字，piecewise 块或类目写的颜色原样）；`api.style` 的 opacity 也是视觉 style 的（visualMap 的 opacity 映射）；`symbol` / `symbolSize` / `liftZ` 是项视觉，visualMap 映射了才有（piecewise 里没写 symbol 的块是缺省的 `'circle'`）。
+
+### port 以前
+
+- 只画直角坐标；极坐标、日历、单轴、'none' 上的 custom 不画，诊断说坐标系还没做；'none' 上的 store 没有维、一行数据都不读。
+- 更新直接到终值，leaveTo 当成直接移除；根的 focus / blurScope / emphasisDisabled、tooltipDisabled 记下没接，项的焦点按系列的 `emphasis.focus` 走；`visual` 只认颜色与边框色，看不到 visualMap。
+
+### 做法
+
+- **公开 API（`AdvChart.Custom`，接口注释同步）**：
+  - `TTyCustomCoordSys` 加字段：极坐标 `Cx / Cy / R / R0`，日历 `CellWidth / CellHeight / RangeStart / RangeEnd`（`TTyCustomCalDate`：`Y / M / D` 文字、`Day`、`Time`、`FormatedDate`）/ `Weeks / DayCount`；`Type_` 多了 `'polar'`、`'calendar'`、`'singleAxis'`，'none' 是 `''`。
+  - api：`Coord` 在极坐标上答四个数；新方法 `Layout(data)`（`TTyCustomLayout`：`Valid`、`Rect`、`ContentRect`，各是 x / y / width / height）；`Size` 在单轴上答一个数，日历与 'none' 上答空；一个参数的 `Size` 现在是「没有 dataItem」（直角与极坐标当 `[0, 0]`、单轴是 NaN），不再写死 `[0, 0]`。上游没有的函数答空数组或 `Valid = False`。
+  - `TTyCustomView.Render` 多一个 `TTyCustomAnim`（`Enabled`、`Model`——AnimOpt 的系列模型、`Driver`），原来的签名照旧（没有动画）；`Snap`（动画关掉时停在终帧）；`ElOfRaw`；常量 `TyCustomLeaveThrow`。
+- **视图**：`UpdateNormal` 写默认 transition，`ApplyTransition` 是 `applyUpdateTransition`（clearStyle 真）：`TyGfxTransitionFrom`、`TyGfxApplyDirect`、`TyGfxEnterFrom`、`TyGfxUpdateLeaveTo` 加 `ElementCfg`（`TyAnimGetConfig` 加 enterAnimation / updateAnimation，delay `|| 0`）；isInit 一路传到 textContent；每个元素（含 textContent）的 `Animation` 是图表给的驱动。`Leave`：没有 leaveTo 直接丢；有就照上游的抛错停下，`Error` 是 V8 那句话，这一轮的数据不认（下一轮从头来，同 C14 的抛错）。
+- **`AdvChart.Graphic`**：`ApplyUpdateTransition` 里记旧值、合 enterFrom、记 leaveTo 的三段抽成公开的 `TyGfxTransitionFrom`、`TyGfxEnterFrom`、`TyGfxUpdateLeaveTo`，graphic 自己改用它们；`IsArrayLike` 改成 zrender 的（串不是数组），shape 键的过渡判定是 `isNonStyleTransitionEnabled`——以前任何串都会过渡。
+- **`AdvChart.VisualMap`**：`TTyVisualRow.ColorText`——块或类目写的颜色原文；插值与改透明度、色相、饱和度、亮度得来的是空（读 `TyVisualCss`）。
+- **`AdvChart.Calendar`**：`DateLayoutXYWH`——`dataToLayout` 的 rect 与 contentRect 直接给 x / y / 宽 / 高，不经边相减（相减会在末位上差）。
+- **控件**：
+  - store：'none' 上的 custom（`CustomOnNone`）建 x、y 两个浮点维，按普通系列的路子读 `data`。
+  - `SolveCustom`：按绑定分出直角 / 极坐标 / 单轴 / 日历 / none（`TTyCuSys`），各自的 `coordSys` 与 `encode` 的坐标维名；雷达这类没有 prepareCustom 的仍记「坐标系还没做」；clip 只在直角坐标上；动画模型是 `TyAnimSeriesModel`（带更新的 payload），`Enabled` = `AnimAllowed` 且 `isAnimationEnabled`；驱动是独立的 `FCuAnim`，渲染完在 `AnimClock` 上 flush（同 graphic 的 §157）；`AnimTickBody` 每帧推它并 `DropStatic`，`AnimArmTimer` 看 `CuLive`，`AnimDropAll` 让每个视图 `Snap`。
+  - api（`TTyChartCustomApi`）：`DoCoord / DoLayout / Size / BarLayout` 按 `Sys` 分支，浮点陷阱屏蔽；`Visual` 多 symbol / symbolSize / liftZ（visualMap 行）；`MakeStyle` 的 opacity 先看 visualMap 行；`CustomVisualFill` 先看 visualMap 行（`ColorText`，否则 `TyVisualCss`，颜色是 undefined 就没有）。
+  - 状态：`StItemFocus` 对 custom 读根元素记下的 `Focus / BlurScope`（没写就没有焦点）；`StDispatcher` 对 `emphasisDisabled` 的根不当分发者。
+  - 提示框：`TipPointerMoved` 命中的 custom 元素、它的宿主或祖先有 `tooltipDisabled` 就隐藏（`CustomTipDisabled`）。
+
+### 基准
+
+`tools/advchart-oracle/custom-series2.js`（新；C14 的 harness 原样搬来——时钟、随机数、宽度表、记录器、元素读法、指针、提示框的行；动画用例照 graphic.js 采样：setOption 那一刻起 `NOW = start + t`、`zr.animation.update()`、刷显示列表，采完再画一遍读静止的元素；元素的 path 先 `getBoundingRect` 让脏 shape 重建——SVG 画家把 circle / ellipse 直接写成元素、从不重建 `el.path`，不这样动画后读到的是旧 path；shape 里的 `transition / enterFrom / leaveTo` 不记）→ `tests/fixtures/advchart-custom-series2.json`：**11 个用例、28 个状态、19 步（2 步只等时钟）、60 次 renderItem 调用、315 次 api 调用、66 条静止的元素记录、66 次采样（294 条元素快照）、11 次悬停、6 次提示框、2 次抛错、76 条守卫**。
+
+- **坐标系** 4 个：极坐标上的扇形（四个数的 coord、带 dataItem 的 size——数值半径轴上是像素、类目角度轴的带是弧度、barLayout 是 undefined，悬停一次）；日历的日子（coordSys 的格子与 rangeInfo、裸日期的 coord、`layout` 的 rect 与 contentRect、范围外的日子是 NaN 且什么都不画）；单轴上的点（裸值的 coord 与 size，size 答一个数）；'none'（没有 coordSys、x / y 两维、值就是像素，悬停一次）。
+- **视觉** 1 个：continuous 的 visualMap 映射颜色、symbolSize、opacity（`api.style` 带上 opacity，`api.visual('opacity')` 仍是 undefined），piecewise 的块写的颜色原样、一块写的 symbol 与其他块缺省的 circle。
+- **过渡** 2 个：enter（根的 enterFrom 与 style 的 enterFrom 配 800 ms linear、delay 100 的 enterAnimation；shape 的 enterFrom 走系列的 1000 ms cubicInOut 与 animationDelay 40；组整个缩放进来），update（两次 merge：默认的 `['x', 'y']`——shape 直接跳；`'all'`——变换、shape、可动画的 style 都过渡；逐项的列表——根只有 x、shape 的 r、style 的 fill，lineWidth 直接跳；`['shape', 'style']` 两个词配 300 ms linear 的 updateAnimation；系列的 `animationDurationUpdate: 700`、`quadraticOut`；新项原样出现；第二次 merge 拿掉四项，立刻没了）。
+- **离开** 2 个：被移除的项带 leaveTo——上游抛错（前两项已经更新、组里还是三个根），动画关着也一样。
+- **悬停** 2 个：焦点（两个 grid：`focus: 'self'` 缺省范围——本系列与同 grid 的系列淡出、另一个 grid 的不动；`focus: 'series'` 加 `blurScope: 'global'`——别的系列全淡出、另一个 grid 的也是；没写焦点的只是自己高亮；`emphasisDisabled` 的什么都不发生；离开）；tooltipDisabled（根上的、组里一个孩子上的——它的兄弟照样显示、组上的——孩子也隐藏）。
+
+每个状态比的与 C14 一样（调用的 params 与 api 逐次、元素记录、显示次序、clip、路径的状态、图例、指针与提示框）；动画状态另比每次采样里每个元素的七个变换键、style 的 opacity / fill / stroke / lineWidth、shape 的每个键；抛错的状态比调用、那句话与组里的根数。
+
+自检同 C14（R1、R2、指针步不调 renderItem、两次生成逐字节一致、没有 `\u0000`、能读回），另有五十多条区分事实：极坐标 coordSys 与 encode、coord 四个数、类目带是 π/2、barLayout undefined、扇形、命中；日历的格宽与 dayCount 与 formatedDate、layout 的两个矩形、范围外 NaN 且不画、encode 是 time / value；单轴的 coordSys 与 size 是一个数；none 没有 coordSys、x / y、命中；visual 的 rgba 文字、symbolSize 8 与 24、opacity 进 style 不进 visual、块的颜色原文、symbol 与缺省 circle；enter 的起点、透明、delay 按住、linear、shape 从 0 长大、系列 delay、组从 0 缩放；update 的默认过渡动 x、跳 shape、`'all'` 动 shape 与 fill、`['x']` 跳 y、`['r']`、`['fill']` 不动 lineWidth、300 ms 在 300 停、700 ms 在 700 停、新项原样、移除立刻；离开两条抛错、前两项已调、三个根；焦点四条（加另一个 grid 不动）；提示框五条。
+
+日历用例上游在 TZ=UTC 下跑；端口和上游一样按本地墙钟读日期串，所以格子落在同一天，只有时刻差一个时区——镜像把它记下的时刻减去「范围起点的本地午夜减 UTC 午夜」（`TCuMirror.FShift`），在 UTC 机器上是 0。
+
+### 测试
+
+`test.advchart.customseries2`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartCustomSeries2OracleTest`，5 个）：坐标系、视觉、过渡、离开、焦点与提示框。每个 renderItem 是 Pascal 抄写（`TCu2Mirror`，派生自 C14 的 `TCuMirror`），api 调用逐句、按 JavaScript 的次序；动画用例 `camAlways`、时钟钉在基准的 T0，每个采样点 `AnimNow` + `AnimTick` 后读元素，采完画一遍比静止的记录。全部逐位比较。
+- **手写**（`TAdvChartCustomSeries2Test`，5 个）：动画关掉时过渡停在终帧、驱动清空；过渡在图表自己的时钟上走完（半途在中间、过了终点停住、renderItem 只调一次）；雷达上的 custom 说坐标系还没做；leaveTo 抛错之后下一轮从头来（端口与上游不同：上游会一直抛）；各坐标系上 api 在上游没有那个函数时答空（none：coord、size、layout、barLayout 全空；日历：点与 layout、没有 size；极坐标：四个数与 size，没有 layout 与 barLayout；单轴：点与一个数）。
+
+另：`test.advchart.customseries` 把重放的 harness 抽成 `TCuOracleBase`（C14 的 `TAdvChartCustomSeriesOracleTest` 改为派生自它，用例不变），`TCuMirror` 的辅助方法改成 protected、`Open` 按坐标系写 coordSys，fixture 辅助函数公开；NaN 一律记成 `7ff8000000000000`（x86 的 NaN 带符号位）；「极坐标上的 custom 不画」换成 geo。
+
+首跑：坐标系一组 6 处不同——日历范围外的 NaN 在端口是带符号位的 NaN，十六进制不同（记录统一成上游的写法后对上）；过渡一组 9 处——上游动画后读的 path 是旧的（基准没在静止时画，加一次画；circle 还要靠 `getBoundingRect` 重建，SVG 画家从不重建它）。之后全部逐位对上。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartCustomSeries2OracleTest`（5）、`TAdvChartCustomSeries2Test`（5）、`TAdvChartCustomSeriesOracleTest`（5）、`TAdvChartCustomSeriesTest`（10）、`TAdvChartGraphicTest`（12）、`TAdvChartVisualMapOracleTest`（8）、`TAdvChartVisualMapChannelsOracleTest`（4）、`TAdvChartVisualMapPiecewiseOracleTest`（7）、`TAdvChartVisualMapInteractOracleTest`（1）、`TAdvChartVisualMapInteractTest`（6）、`TAdvChartVisualMapViewOracleTest`（2）、`TAdvChartVisualMapPiecewiseViewOracleTest`（3）、`TAdvChartCalendarOracleTest`（4）、`TAdvChartCalendarChartTest`（1）、`TAdvChartHeatmapCalendarOracleTest`（2）、`TAdvChartSeriesCalendarOracleTest`（3）、`TAdvChartFocusBlurTest`（11）、`TAdvChartSelectOracleTest`（11）、`TAdvChartEmphasisRuleTest`（8）、`TAdvChartEmphasisDrawTest`（6）、`TAdvChartTooltipFinishTest`（10）、`TAdvChartMouseEventsOracleTest`（3）、`TAdvChartHitTest`（12）、`TAdvChartAnimStateEngineTest`（11）、`TAdvChartAnimStateTest`（5）、`TAdvChartAnimEngineTest`（25）、`TAdvChartPolarSeriesTest`（13）、`TAdvChartSingleRiverTest`（13）、`TAdvChartLinesOracleTest`（5）、`TAdvChartLinesTest`（8）、`TAdvChartMarksTest`（36）、`TAdvChartDiagnoseTest`（23）、`TAdvanceChartTest`（60）。全量与变异轮留到里程碑（C14–C22）末尾；变异候选列在会话草稿 `s161.md.candidates.md`。
+
+### 推迟与偏差
+
+- **leaveTo 的抛错**：照上游停在那里，但下一轮从头来（同 C14 对抛错的处理）；上游的 `_data` 停在旧数据上，之后每次去掉同一项都会再抛。抛错的这一轮端口不画这个系列（同 C14），上游的组里元素还在——前面的项已更新，后面的还是旧的。
+- **过渡**：`keyframeAnimation`（D6）、morph 与 universal transition（D5）、`during`（函数）不做；`leaveAnimation` 上游也不读。被图例关掉的系列的元素摘下后动画照走（上游摘下时动画器离开 zr，挂回去再接着走）。悬停的状态过渡（`stateAnimation`）不做，状态照旧立刻切。
+- **坐标系**：geo（D14）、matrix（D12）照旧不画；极坐标上的 `clip: true`（上游是扇形裁剪）不裁；日历的 `api.coord(data, clamp)` 的第二个参数不收（总是 clamp）。
+- **元素**：`clipPath`、`autoBatch` 仍不做。
+- **api**：`visual('visualMeta')` 不答（上游是 visualMap 的 visualMeta 列表，没有 visualMap 时是空数组）；`decal`、`legendIcon`、`symbolKeepAspect` 仍是 nil；'none' 上调 `BarLayout` 答空（上游是 TypeError）；一个参数的 `Size` 是「没有 dataItem」，传一个空数组也当成没有（上游空数组是真值，读出 NaN）。
+- **渐进 / 增量渲染**（C9 的 custom）：仍没有；大数据量的 custom 一次画完。
+- **graphic 的顺带修正**：shape 里不是数字的串不再按 transition 过渡（`isArrayLike` 不收串）；graphic 的基准里没有这样的用例，行为在既有用例上不变。
+
+### 落地
+
+- `source/tyControls.AdvChart.Custom.pas`：坐标系的字段与 `TTyCustomCalDate`、`TTyCustomRect`、`TTyCustomLayout`、`Layout` / `DoLayout`、`Size` 的「没有 dataItem」、`TTyCustomAnim`、`ElementCfg`、`ApplyTransition`、`Leave`、`Snap`、`ElOfRaw`、`TyCustomLeaveThrow`、头注释。
+- `source/tyControls.AdvChart.Graphic.pas`：`TyGfxTransitionFrom`、`TyGfxEnterFrom`、`TyGfxUpdateLeaveTo`、`IsArrayLike` 与 `NonStyleTransition`。`source/tyControls.AdvChart.VisualMap.pas`：`TTyVisualRow.ColorText`。`source/tyControls.AdvChart.Calendar.pas`：`DateLayoutXYWH`。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部（`FCuAnim`、`CuLive`、`CustomOnNone`、`CustomRootInfo`、`CustomVisualRow`、`CustomTipDisabled`、`TTyCuSys`、`SolveCustom`、api 的四个分支、`CustomVisualFill`、`StItemFocus`、`StDispatcher`、`TipPointerMoved`、store 的 'none'、时钟三处）。
+- `tools/advchart-oracle/custom-series2.js`、`tests/fixtures/advchart-custom-series2.json`、`tests/test.advchart.customseries2.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.customseries.pas`（harness 抽成基类、`Open`、NaN、geo）。
+- §106、§159 在原处标注。没有新单元、新资源串、新主题键或新度量。
 
 ## 162. Tier 2 第一百二十六批：刷选（一）（C17，2026-10-12）
 

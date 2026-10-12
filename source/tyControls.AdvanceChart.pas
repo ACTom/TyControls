@@ -582,6 +582,8 @@ type
     FCustomParams: TTyCustomParams;
     FCustomApi: TObject;
     FCustomMissing: string;
+    { the custom elements' transitions' own driver [Batch 124] }
+    FCuAnim: TTyAnimation;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -1634,6 +1636,15 @@ type
     function CustomBuild(ASlot: Integer; AList: TTyPaintList; APPI: Integer): Integer;
     function CustomVisualFill(ASlot, ARow: Integer): TJSONData;
     procedure StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
+    { [Batch 124] the custom transitions' driver has clips; a custom series
+      on no coordinate system; an item's root info (nil none); a visualMap's
+      row for a custom item; whether a paint element sits under an element
+      with tooltipDisabled }
+    function CuLive: Boolean;
+    function CustomOnNone(ASlot: Integer): Boolean;
+    function CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
+    function CustomVisualRow(ASlot, ARow: Integer; out AVisual: TTyVisualRow): Boolean;
+    function CustomTipDisabled(AElement: Integer): Boolean;
     { [Batch 121] }
     procedure SolveLines(APPI: Integer);
     function LinesProject(const AX, AY: TTyLinesValue; AClamp: Boolean): TTyPointF;
@@ -3038,6 +3049,7 @@ begin
   FGfxView := TTyGfxView.Create;
   FGfxView.Animation := FGfxAnim;
   FGfxUnder := TTyPaintList.Create;
+  FCuAnim := TTyAnimation.Create;
   FGfxW := NaN;
   FGfxH := NaN;
   FTbStatus := TStringList.Create;
@@ -3099,6 +3111,8 @@ begin
   FCustomPaintEls := nil;
   FreeAndNil(FGfxModel);
   FreeAndNil(FGfxAnim);
+  { after the custom views, whose elements' animators it drives [Batch 124] }
+  FreeAndNil(FCuAnim);
   FreeAndNil(FGfxUnder);
   inherited Destroy;
 end;
@@ -4025,7 +4039,7 @@ begin
       Continue;
     end;
     if (not FBindings[i].HasAxes) and (FBindings[i].Polar = nil)
-      and (FBindings[i].Single = nil) then
+      and (FBindings[i].Single = nil) and not CustomOnNone(i) then
     begin
       { A SERIES OFF EVERY COORDINATE SYSTEM HAS DATA TOO, and until now
         only a pie got any: the columns below are the coordinate system's
@@ -4153,6 +4167,19 @@ begin
     { ON A SINGLE AXIS: its one column, the single dimension [Batch 118] }
     else if FBindings[i].Single <> nil then
       dims := TySeriesCoordSysDims(TTySingle(FBindings[i].Single), 0)
+    { A CUSTOM SERIES ON NO COORDINATE SYSTEM ('none'): getCoordSysDimDefs'
+      last resort, the dimensions x and y, as floats; the rest of a row the
+      store keeps by position [Batch 124] }
+    else if FBindings[i].Cart = nil then
+    begin
+      SetLength(dims, 2);
+      dims[0] := Default(TTySeriesDim);
+      dims[0].Name := 'x';
+      dims[0].Kind := ddtFloat;
+      dims[1] := Default(TTySeriesDim);
+      dims[1].Name := 'y';
+      dims[1].Kind := ddtFloat;
+    end
     else
       dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
     { A SERIES WHOSE TYPE DECLARES MORE THAN A PAIR gets those columns
@@ -21600,6 +21627,8 @@ var
   w: string;
   slot, i, p: Integer;
   anc: TTyIntegerArray;
+  info: TTyCustomElInfo;
+  txt: TJSONString;
 
   procedure Add(AIndex: Integer);
   begin
@@ -21612,6 +21641,37 @@ begin
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
+  { A CUSTOM ITEM'S focus and blurScope are its root option's
+    (toggleHoverEmphasis(el, elOption.focus, elOption.blurScope)), never the
+    series' emphasis: none written is no focus [Batch 124] }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyCustomSeriesType) then
+  begin
+    Result := Default(TTyStFocus);
+    AScope := TyStScopeOf(nil);
+    info := nil;
+    if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FCustomViews))
+      and (FCustomViews[ASeriesIndex] <> nil)
+      and (FCustomViews[ASeriesIndex].ElOfRaw(ARaw) <> nil)
+      and (FCustomViews[ASeriesIndex].ElOfRaw(ARaw).Custom is TTyCustomElInfo) then
+      info := TTyCustomElInfo(FCustomViews[ASeriesIndex].ElOfRaw(ARaw).Custom);
+    if (info = nil) or (info.Focus = '') then Exit;
+    txt := TJSONString.Create(info.Focus);
+    try
+      Result := TyStFocusOf(txt);
+    finally
+      txt.Free;
+    end;
+    if info.BlurScope <> '' then
+    begin
+      txt := TJSONString.Create(info.BlurScope);
+      try
+        AScope := TyStScopeOf(txt);
+      finally
+        txt.Free;
+      end;
+    end;
+    Exit;
+  end;
   { A SANKEY'S WORDS ARE TWO INDEX SETS (SankeyView: adjacency and
     trajectory become getAdjacentDataIndices / getTrajectoryDataIndices)
     [Batch 114] }
@@ -21831,7 +21891,9 @@ end;
 
 function TTyAdvanceChart.StDispatcher(const ATarget: TTyChartEventTarget;
   out AItem: PTyStItem; out APart: Integer): Boolean;
-var s, idx, k: Integer;
+var
+  s, idx, k: Integer;
+  info: TTyCustomElInfo;
 begin
   Result := False;
   AItem := nil;
@@ -21853,6 +21915,13 @@ begin
     AItem := StItemAt(s, ATarget.HdRow);
     { emphasis.disabled: not a highDownDispatcher at all }
     if (AItem = nil) or not AItem^.Host.Proxy then Exit;
+    { a custom item whose root option says emphasisDisabled
+      (disableHoverEmphasis: no dispatcher) [Batch 124] }
+    if (s >= 0) and (s <= High(FSt)) and (FSt[s].Kind = sskCustom) then
+    begin
+      info := CustomRootInfo(s, ATarget.HdRow);
+      if (info <> nil) and info.EmphasisDisabled then Exit;
+    end;
     APart := 0;
     Exit(True);
   end;
@@ -27282,7 +27351,9 @@ begin
       TipTryShow(snap, g);
       Exit;
     end;
-    if TipTargetValid(FTipDatum) then
+    { a custom element under one with tooltipDisabled: no dispatcher, the
+      tooltip hides (TooltipView's findEventDispatcher) [Batch 124] }
+    if TipTargetValid(FTipDatum) and not CustomTipDisabled(FTipElement) then
     begin
       spec := TipSpecOf(snap);
       { the cascade's trigger must be 'item' -- a marker's default 'item'
@@ -28342,10 +28413,14 @@ begin
 end;
 
 procedure TTyAdvanceChart.AnimDropAll;
+var i: Integer;
 begin
   if FAnimSet <> nil then FAnimSet.Clear;
   { the graphic elements at their last frames [Batch 122] }
   if FGfxView <> nil then FGfxView.Snap;
+  { and the custom series' [Batch 124] }
+  for i := 0 to High(FCustomViews) do
+    if FCustomViews[i] <> nil then FCustomViews[i].Snap;
   AxisAnimDrop;
   { a treemap's drill-down snaps with the rest [Batch 115] }
   TmAnimDropAll;
@@ -29005,7 +29080,8 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive)
+  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
+    or CuLive)
     and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
@@ -29080,6 +29156,15 @@ begin
     DropStatic;
     InvalidateFrame;
     if not GfxLive and not FAnimLive then AnimArmTimer;
+  end;
+  { the custom elements' transitions: frames of the static layer
+    [Batch 124] }
+  if CuLive then
+  begin
+    FCuAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not CuLive and not FAnimLive then AnimArmTimer;
   end;
   { the visualMap indicator's slide: a frame of the static layer [Batch 116] }
   if VmLive_ then
@@ -30100,11 +30185,76 @@ begin
   if Result then ARect := FCustomClip[slot];
 end;
 
+function TTyAdvanceChart.CuLive: Boolean;
+begin
+  Result := (FCuAnim <> nil) and (FCuAnim.ClipCount > 0);
+end;
+
+{ `coordinateSystem: 'none'` (or ''): resolved on nothing, its dimensions
+  getCoordSysDimDefs' x and y }
+function TTyAdvanceChart.CustomOnNone(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FBindings))
+    and (FBindings[ASlot].SeriesType = TyCustomSeriesType)
+    and FBindings[ASlot].Resolved and (FBindings[ASlot].Cart = nil)
+    and (FBindings[ASlot].Polar = nil) and (FBindings[ASlot].Single = nil)
+    and (FBindings[ASlot].CalendarIndex < 0) and (FBindings[ASlot].RadarIndex < 0)
+    and ((FBindings[ASlot].CoordSysName = 'none') or (FBindings[ASlot].CoordSysName = ''));
+end;
+
+function TTyAdvanceChart.CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
+var
+  view: TTyCustomView;
+  el: TTyGfxEl;
+begin
+  Result := nil;
+  view := CustomView(ASeriesIndex);
+  if view = nil then Exit;
+  el := view.ElOf(AInside);
+  if (el <> nil) and (el.Custom is TTyCustomElInfo) then
+    Result := TTyCustomElInfo(el.Custom);
+end;
+
+{ the visualMap's row of a custom item (its dataIndexInside); False none }
+function TTyAdvanceChart.CustomVisualRow(ASlot, ARow: Integer;
+  out AVisual: TTyVisualRow): Boolean;
+var raw: Integer;
+begin
+  AVisual := Default(TTyVisualRow);
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FStores))
+    or (FStores[ASlot] = nil) or (ARow < 0) or (ARow >= FStores[ASlot].Count) then Exit;
+  raw := FStores[ASlot].GetRawIndex(ARow);
+  if (ASlot > High(FVisualRows)) or (raw < 0) or (raw > High(FVisualRows[ASlot])) then Exit;
+  AVisual := FVisualRows[ASlot][raw];
+  Result := True;
+end;
+
+{ findEventDispatcher from the element up -- a textContent's host, then the
+  parents: any with tooltipDisabled }
+function TTyAdvanceChart.CustomTipDisabled(AElement: Integer): Boolean;
+var el: TTyGfxEl;
+begin
+  Result := False;
+  el := CustomPaintSource(AElement);
+  while el <> nil do
+  begin
+    if (el.Custom is TTyCustomElInfo) and TTyCustomElInfo(el.Custom).TooltipDisabled then
+      Exit(True);
+    if el.Host <> nil then el := el.Host else el := el.Parent;
+  end;
+end;
+
 { ==================== the custom series [Batch 123] ==================== }
 
 type
+  { the coordinate system a custom series is drawn on [Batch 124]:
+    cusUnknown one with no prepareCustom (nothing is drawn) }
+  TTyCuSys = (cusUnknown, cusNone, cusCart, cusPolar, cusSingle, cusCalendar);
+
   { THE API a renderItem is handed: CustomView.makeRenderItem's closures over
-    the series' data, its visuals and its cartesian (prepareCustom.ts) }
+    the series' data, its visuals and its coordinate system's prepareCustom
+    (cartesian, polar, single, calendar [Batch 124]) }
   TTyChartCustomApi = class(TTyCustomApi)
   private
     function Row(AInside: Integer; out ARow: Integer): Boolean;
@@ -30117,9 +30267,15 @@ type
   protected
     function DimIndexOf(const AName: string): Integer; override;
     function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; override;
+    function DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout; override;
   public
     Chart: TTyAdvanceChart;
     Slot, Series: Integer;
+    { the coordinate system, and its object [Batch 124] }
+    Sys: TTyCuSys;
+    Polar: TTyPolar;
+    Single: TTySingle;
+    Calendar: TTyCalendar;
     Store: TTyDataStore;
     Node: TJSONObject;
     { the dataIndexInside of the running call }
@@ -30350,51 +30506,214 @@ begin
   end;
 end;
 
-{ prepareCustom.ts' coord: coordSys.dataToPoint(data), in css px }
+const
+  cCuPi: Double = Pi;
+
+function CuMask: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+{ +v of a cell: a text's number, nothing NaN }
+function CuNumCell(const ACell: TTyCustomCell): TTyCustomCell;
+begin
+  Result := ACell;
+  if ACell.Kind = cckText then
+  begin
+    Result.Kind := cckNumber;
+    Result.Num := TyJsToNumber(ACell.Text);
+  end
+  else if ACell.Kind = cckNone then
+  begin
+    Result.Kind := cckNumber;
+    Result.Num := NaN;
+  end;
+end;
+
+{ a calendar's parseDate of a cell: a number is epoch ms, a text a date }
+function CuCalMs(ACal: TTyCalendar; const ACell: TTyCustomCell): Double;
+var v: TTyDataValue;
+begin
+  v := Default(TTyDataValue);
+  case ACell.Kind of
+    cckNumber:
+      begin
+        v.Kind := dvkNumber;
+        v.Num := ACell.Num;
+      end;
+    cckText:
+      begin
+        v.Kind := dvkText;
+        v.Text := ACell.Text;
+      end;
+  else
+    v.Kind := dvkNone;
+  end;
+  Result := ACal.ParseDate(v);
+end;
+
+{ the coordinate system's api.coord, in css px: a cartesian's dataToPoint;
+  a polar's dataToRadius and dataToAngle through coordToPoint, the radius
+  and the angle in radians pushed on; a single's dataToPoint(+v); a
+  calendar's dataToPoint (clamped); nothing on no system }
 function TTyChartCustomApi.DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray;
 var
   b: TTySeriesBinding;
   p: TTyPointF;
   cx, cy: TTyCustomCell;
+  rad, ang, t: Double;
+  mask: TFPUExceptionMask;
 begin
   Result := nil;
-  SetLength(Result, 2);
-  Result[0] := NaN;
-  Result[1] := NaN;
-  b := Chart.FBindings[Slot];
-  if b.Cart = nil then Exit;
   cx := Default(TTyCustomCell);
   cy := Default(TTyCustomCell);
   if Length(ACells) > 0 then cx := ACells[0];
   if Length(ACells) > 1 then cy := ACells[1];
-  p := b.Cart.DataToPoint([ParseOn(b.XAxis, cx), ParseOn(b.YAxis, cy)]);
-  Result[0] := p.X / Scale;
-  Result[1] := p.Y / Scale;
+  b := Chart.FBindings[Slot];
+  mask := CuMask;
+  try
+    case Sys of
+      cusCart:
+        begin
+          SetLength(Result, 2);
+          Result[0] := NaN;
+          Result[1] := NaN;
+          if b.Cart = nil then Exit;
+          p := b.Cart.DataToPoint([ParseOn(b.XAxis, cx), ParseOn(b.YAxis, cy)]);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
+      cusPolar:
+        begin
+          rad := Polar.RadiusAxis.DataToCoord(ParseOn(Polar.RadiusAxis, cx));
+          ang := Polar.AngleAxis.DataToCoord(ParseOn(Polar.AngleAxis, cy));
+          p := Polar.CoordToPoint(rad, ang);
+          SetLength(Result, 4);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+          Result[2] := rad / Scale;
+          { angle * Math.PI / 180, in that order }
+          t := ang * cCuPi;
+          Result[3] := t / 180;
+        end;
+      cusSingle:
+        begin
+          p := Single.ValueToPoint(ParseOn(Single.Axis, CuNumCell(cx)));
+          SetLength(Result, 2);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
+      cusCalendar:
+        begin
+          p := Calendar.DatePoint(CuCalMs(Calendar, cx), True);
+          SetLength(Result, 2);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
+    end;
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ a calendar's api.layout: dataToLayout (clamped), in css px }
+function TTyChartCustomApi.DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout;
+var
+  c0: TTyCustomCell;
+  rc, cc: TTyXYWH;
+  mask: TFPUExceptionMask;
+begin
+  Result := Default(TTyCustomLayout);
+  if (Sys <> cusCalendar) or (Calendar = nil) then Exit;
+  c0 := Default(TTyCustomCell);
+  if Length(ACells) > 0 then c0 := ACells[0];
+  mask := CuMask;
+  try
+    Calendar.DateLayoutXYWH(CuCalMs(Calendar, c0), True, rc, cc);
+    Result.Valid := True;
+    Result.Rect.X := rc.X / Scale;
+    Result.Rect.Y := rc.Y / Scale;
+    Result.Rect.Width := rc.W / Scale;
+    Result.Rect.Height := rc.H / Scale;
+    Result.ContentRect.X := cc.X / Scale;
+    Result.ContentRect.Y := cc.Y / Scale;
+    Result.ContentRect.Width := cc.W / Scale;
+    Result.ContentRect.Height := cc.H / Scale;
+  finally
+    ConvertUnmask(mask);
+  end;
 end;
 
 { dataToCoordSize: a category axis' band width, else the span the size
-  covers about the item's value }
+  covers about the item's value -- per axis on a cartesian and a polar
+  (dataItem || [0, 0]; the angle in radians), one number on a single axis
+  (an undefined item NaN), nothing on a calendar or no system }
 function TTyChartCustomApi.Size(const ADataSize, ADataItem: array of Double): TTyDoubleArray;
 var
   b: TTySeriesBinding;
   ax: TTyAxis;
   i: Integer;
-  val, half: Double;
+  val, half, w: Double;
+  item: array[0..1] of Double;
+  mask: TFPUExceptionMask;
 begin
   Result := nil;
-  SetLength(Result, 2);
   b := Chart.FBindings[Slot];
-  for i := 0 to 1 do
-  begin
-    Result[i] := NaN;
-    if i = 0 then ax := b.XAxis else ax := b.YAxis;
-    if ax = nil then Continue;
-    if i <= High(ADataItem) then val := ADataItem[i] else val := NaN;
-    if i <= High(ADataSize) then half := ADataSize[i] / 2 else half := NaN;
-    if ax.AxisType = atCategory then
-      Result[i] := ax.BandWidth / Scale
-    else
-      Result[i] := Abs(ax.DataToLocal(val - half) - ax.DataToLocal(val + half)) / Scale;
+  mask := CuMask;
+  try
+    case Sys of
+      cusCart, cusPolar:
+        begin
+          if Length(ADataItem) = 0 then
+          begin
+            item[0] := 0;
+            item[1] := 0;
+          end
+          else
+          begin
+            item[0] := ADataItem[0];
+            if Length(ADataItem) > 1 then item[1] := ADataItem[1] else item[1] := NaN;
+          end;
+          SetLength(Result, 2);
+          for i := 0 to 1 do
+          begin
+            Result[i] := NaN;
+            if Sys = cusCart then
+            begin
+              if i = 0 then ax := b.XAxis else ax := b.YAxis;
+            end
+            else if i = 0 then ax := Polar.RadiusAxis
+            else ax := Polar.AngleAxis;
+            if ax = nil then Continue;
+            val := item[i];
+            if i <= High(ADataSize) then half := ADataSize[i] / 2 else half := NaN;
+            if ax.AxisType = atCategory then w := ax.BandWidth
+            else w := Abs(ax.DataToLocal(val - half) - ax.DataToLocal(val + half));
+            if (Sys = cusPolar) and (i = 1) then
+            begin
+              { result * Math.PI / 180: degrees are no pixels }
+              w := w * cCuPi;
+              Result[i] := w / 180;
+            end
+            else
+              Result[i] := w / Scale;
+          end;
+        end;
+      cusSingle:
+        begin
+          SetLength(Result, 1);
+          ax := Single.Axis;
+          if Length(ADataItem) > 0 then val := ADataItem[0] else val := NaN;
+          if Length(ADataSize) > 0 then half := ADataSize[0] / 2 else half := NaN;
+          if ax.AxisType = atCategory then
+            Result[0] := ax.BandWidth / Scale
+          else
+            Result[0] := Abs(ax.DataToLocal(val - half) - ax.DataToLocal(val + half)) / Scale;
+        end;
+    end;
+  finally
+    ConvertUnmask(mask);
   end;
 end;
 
@@ -30432,6 +30751,7 @@ var
   hasText: Boolean;
   cells: TTyIntegerArray;
   cell: TTyDataValue;
+  vrow: TTyVisualRow;
 
   function ItemStyleOf(AKey: string): TJSONData;
   begin
@@ -30466,8 +30786,15 @@ begin
     { the visual's fill and opacity over it }
     vis := Chart.CustomVisualFill(Slot, ARow);
     if vis <> nil then CuPut(Result, 'fill', vis.Clone);
-    d := ItemStyleOf('opacity');
-    if d <> nil then CuPut(Result, 'opacity', d.Clone);
+    { the visual style's opacity: the itemStyle's, a visualMap's over it
+      [Batch 124] }
+    if Chart.CustomVisualRow(Slot, ARow, vrow) and vrow.OpacitySet then
+      CuPut(Result, 'opacity', TJSONFloatNumber.Create(vrow.Opacity))
+    else
+    begin
+      d := ItemStyleOf('opacity');
+      if d <> nil then CuPut(Result, 'opacity', d.Clone);
+    end;
   end;
   try
     { createTextStyle(labelModel, null, opt with inheritColor, isNotNormal,
@@ -30620,10 +30947,13 @@ begin
   Result := MakeStyle(AExtra, r, True);
 end;
 
-{ the style visual's fill and stroke; the other visuals a custom series
-  has none of }
+{ the style visual's fill and stroke; the item visuals a visualMap sets --
+  symbol, symbolSize, liftZ [Batch 124]; the rest a custom series has none
+  of }
 function TTyChartCustomApi.Visual(const AType: string; ADataIndexInside: Integer): TJSONData;
-var r: Integer;
+var
+  r: Integer;
+  vr: TTyVisualRow;
 begin
   Result := nil;
   if not Row(ADataIndexInside, r) then r := -1;
@@ -30632,15 +30962,22 @@ begin
   begin
     Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
     if Result <> nil then Result := Result.Clone;
+  end
+  else if Chart.CustomVisualRow(Slot, r, vr) then
+  begin
+    if (AType = 'symbol') and vr.SymbolSet then Result := TJSONString.Create(vr.Symbol)
+    else if (AType = 'symbolSize') and vr.SizeSet then Result := TJSONFloatNumber.Create(vr.Size)
+    else if (AType = 'liftZ') and vr.LiftZSet then Result := TJSONFloatNumber.Create(vr.LiftZ);
   end;
 end;
 
 { computeBarLayoutForCustomSeries on the base axis: a category axis' band,
-  anything else undefined }
+  anything else -- and every other coordinate system -- undefined }
 function TTyChartCustomApi.BarLayout(AOpt: TJSONObject): TTyCustomBarLayout;
 var b: TTySeriesBinding;
 begin
   Result := nil;
+  if Sys <> cusCart then Exit;
   b := Chart.FBindings[Slot];
   if (b.BaseAxis = nil) or (b.BaseAxis.AxisType <> atCategory) then Exit;
   Result := TyCustomBarLayout(b.BaseAxis.BandWidth / Scale, AOpt);
@@ -30711,9 +31048,19 @@ var
   node, item: TJSONObject;
   d: TJSONData;
   raw, si: Integer;
+  vr: TTyVisualRow;
 begin
   Result := nil;
   if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { A VISUALMAP'S COLOUR over the item's and the series' (visualEncoding runs
+    after the style visuals): a piece's as written, a computed one as its
+    rgba() text, an undefined one undefined [Batch 124] }
+  if CustomVisualRow(ASlot, ARow, vr) and vr.ColorSet then
+  begin
+    if vr.ColorText <> '' then Exit(TJSONString.Create(vr.ColorText));
+    if vr.Color.Defined then Exit(TJSONString.Create(TyVisualCss(vr.Color)));
+    Exit;
+  end;
   si := FBindings[ASlot].SeriesIndex;
   d := FOption.ComponentAt('series', si);
   if not (d is TJSONObject) then Exit;
@@ -30846,7 +31193,7 @@ end;
 
 procedure TTyAdvanceChart.SolveCustom(APPI: Integer);
 var
-  i, si, n, p, c: Integer;
+  i, si, n, p, c, k: Integer;
   view: TTyCustomView;
   node: TJSONObject;
   d: TJSONData;
@@ -30854,11 +31201,37 @@ var
   ids: TTyStringArray;
   raws: TTyIntegerArray;
   api: TTyChartCustomApi;
-  scale, z, zl, lw, x, y, cw, ch: Double;
+  scale, z, zl, lw, x, y, cw, ch, r0, r1: Double;
   area: TTyXYWH;
   st: TTyDataStore;
   alive: TTyBoolArray;
   arr: TJSONArray;
+  sys: TTyCuSys;
+  names: array of string;
+  anim: TTyCustomAnim;
+  cal: TTyCalendar;
+  pol: TTyPolar;
+  sgl: TTySingle;
+  isCoord: Boolean;
+
+  { getDateInfo's text fields of a range end }
+  function CalDate(const AInfo: TTyCalDateInfo): TTyCustomCalDate;
+
+    function Two(AN: Integer): string;
+    begin
+      if AN < 10 then Result := '0' + IntToStr(AN) else Result := IntToStr(AN);
+    end;
+
+  begin
+    Result := Default(TTyCustomCalDate);
+    Result.Y := IntToStr(AInfo.Y);
+    Result.M := Two(AInfo.M);
+    Result.D := Two(AInfo.D);
+    Result.Day := AInfo.Day;
+    Result.Time := AInfo.Time;
+    Result.FormatedDate := Result.Y + '-' + Result.M + '-' + Result.D;
+  end;
+
 begin
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   if FOption = nil then n := 0 else n := FOption.ComponentCount('series');
@@ -30892,16 +31265,42 @@ begin
     end;
     st := nil;
     if i <= High(FStores) then st := FStores[i];
+    { THE COORDINATE SYSTEM, the prepareCustom it has [Batch 124]: a
+      cartesian, a polar, a single axis, a calendar -- or none at all }
+    sys := cusUnknown;
+    pol := nil;
+    sgl := nil;
+    cal := nil;
+    if FBindings[i].Cart <> nil then sys := cusCart
+    else if FBindings[i].Polar <> nil then
+    begin
+      sys := cusPolar;
+      pol := TTyPolar(FBindings[i].Polar);
+    end
+    else if FBindings[i].Single <> nil then
+    begin
+      sys := cusSingle;
+      sgl := TTySingle(FBindings[i].Single);
+    end
+    else if (FBindings[i].CalendarIndex >= 0) and (FBindings[i].CalendarIndex <= High(FCalendars))
+      and (FCalendars[FBindings[i].CalendarIndex] <> nil) then
+    begin
+      sys := cusCalendar;
+      cal := FCalendars[FBindings[i].CalendarIndex];
+    end
+    else if CustomOnNone(i) then sys := cusNone;
     { NOT RENDERED: a series the legend switched off has its group emptied
-      (ChartView.remove) and keeps its data; one off every coordinate
-      system this batch draws on is not drawn }
-    if FBindings[i].Hidden or (not FBindings[i].Resolved) or (FBindings[i].Cart = nil)
+      (ChartView.remove) and keeps its data; one on a coordinate system with
+      no prepareCustom is not drawn }
+    if FBindings[i].Hidden or (not FBindings[i].Resolved) or (sys = cusUnknown)
       or (st = nil) then
     begin
       view.RemoveAll;
-      { A COORDINATE SYSTEM THIS BATCH DOES NOT DRAW ON says so: a polar, a
-        calendar, a single axis are C15's, `none` and a geo later }
-      if FBindings[i].Resolved and not FBindings[i].Hidden and (FBindings[i].Cart = nil) then
+      { A COORDINATE SYSTEM WITH NO prepareCustom (a radar, a graph's view):
+        upstream asserts in its development build and calls undefined in its
+        production one; nothing is drawn and the chart says so. A geo and a
+        matrix do not resolve at all (their binding said so). }
+      if FBindings[i].Resolved and not FBindings[i].Hidden and (sys = cusUnknown) then
         FBuild.Note(Format(rsTyChartSeriesCoordSys, [si, FBindings[i].CoordSysName]));
       Continue;
     end;
@@ -30929,6 +31328,10 @@ begin
     api.Node := node;
     api.Current := -1;
     api.Scale := scale;
+    api.Sys := sys;
+    api.Polar := pol;
+    api.Single := sgl;
+    api.Calendar := cal;
     FCustomApi := api;
     FCustomSlot := i;
     FCustomParams := Default(TTyCustomParams);
@@ -30938,12 +31341,76 @@ begin
     FCustomParams.SeriesIndex := si;
     FCustomParams.DataInsideLength := st.Count;
     FCustomParams.ActionType := FCustomAction;
-    area := FBindings[i].Cart.GetArea;
-    FCustomParams.CoordSys.Type_ := 'cartesian2d';
-    FCustomParams.CoordSys.X := area.X / scale;
-    FCustomParams.CoordSys.Y := area.Y / scale;
-    FCustomParams.CoordSys.Width := area.W / scale;
-    FCustomParams.CoordSys.Height := area.H / scale;
+    { coordSys: each system's prepareCustom, in css px }
+    names := nil;
+    case sys of
+      cusCart:
+        begin
+          area := FBindings[i].Cart.GetArea;
+          FCustomParams.CoordSys.Type_ := 'cartesian2d';
+          FCustomParams.CoordSys.X := area.X / scale;
+          FCustomParams.CoordSys.Y := area.Y / scale;
+          FCustomParams.CoordSys.Width := area.W / scale;
+          FCustomParams.CoordSys.Height := area.H / scale;
+          SetLength(names, 2);
+          names[0] := 'x';
+          names[1] := 'y';
+        end;
+      cusPolar:
+        begin
+          { the radius extent, the lesser first }
+          pol.AxisExtent(pol.RadiusAxis, r0, r1);
+          if r0 > r1 then
+          begin
+            x := r0;
+            r0 := r1;
+            r1 := x;
+          end;
+          FCustomParams.CoordSys.Type_ := 'polar';
+          FCustomParams.CoordSys.Cx := pol.CX / scale;
+          FCustomParams.CoordSys.Cy := pol.CY / scale;
+          FCustomParams.CoordSys.R := r1 / scale;
+          FCustomParams.CoordSys.R0 := r0 / scale;
+          SetLength(names, 2);
+          names[0] := TyPolarRadiusDim;
+          names[1] := TyPolarAngleDim;
+        end;
+      cusSingle:
+        begin
+          FCustomParams.CoordSys.Type_ := 'singleAxis';
+          FCustomParams.CoordSys.X := sgl.Rect.X / scale;
+          FCustomParams.CoordSys.Y := sgl.Rect.Y / scale;
+          FCustomParams.CoordSys.Width := sgl.Rect.W / scale;
+          FCustomParams.CoordSys.Height := sgl.Rect.H / scale;
+          SetLength(names, 1);
+          names[0] := TySingleDim;
+        end;
+      cusCalendar:
+        begin
+          FCustomParams.CoordSys.Type_ := 'calendar';
+          FCustomParams.CoordSys.X := cal.Rect.X / scale;
+          FCustomParams.CoordSys.Y := cal.Rect.Y / scale;
+          FCustomParams.CoordSys.Width := cal.Rect.W / scale;
+          FCustomParams.CoordSys.Height := cal.Rect.H / scale;
+          FCustomParams.CoordSys.CellWidth := cal.CellW / scale;
+          FCustomParams.CoordSys.CellHeight := cal.CellH / scale;
+          FCustomParams.CoordSys.RangeStart := CalDate(cal.Range.Start);
+          FCustomParams.CoordSys.RangeEnd := CalDate(cal.Range.Stop);
+          FCustomParams.CoordSys.Weeks := cal.Range.Weeks;
+          FCustomParams.CoordSys.DayCount := cal.Range.AllDay;
+          SetLength(names, 2);
+          names[0] := TyCalendarTimeDim;
+          names[1] := TyCalendarValueDim;
+        end;
+    else
+      begin
+        { 'none': no coordSys, the dimensions getCoordSysDimDefs made }
+        FCustomParams.CoordSys.Type_ := '';
+        SetLength(names, 2);
+        names[0] := 'x';
+        names[1] := 'y';
+      end;
+    end;
     { wrapEncodeDef: every coordinate column's data dimension, by position }
     FCustomParams.Encode := TJSONObject.Create;
     for p := 0 to Max(st.RawWidth, st.DimCount) - 1 do
@@ -30952,7 +31419,10 @@ begin
         if st.RawDimPos(c) <> p then Continue;
         coord := st.DimCoord(c);
         if coord = '' then coord := st.DimName(c);
-        if (coord <> 'x') and (coord <> 'y') then Continue;
+        isCoord := False;
+        for k := 0 to High(names) do
+          if names[k] = coord then isCoord := True;
+        if not isCoord then Continue;
         d := FCustomParams.Encode.Find(coord);
         if not (d is TJSONArray) then
         begin
@@ -30972,8 +31442,17 @@ begin
     if (d <> nil) and (d.JSONType = jtNumber) then z := d.AsFloat else z := 2;
     d := node.Find('zlevel');
     if (d <> nil) and (d.JSONType = jtNumber) then zl := d.AsFloat else zl := 0;
+    { THE TRANSITIONS' MODEL is the series [Batch 124]: isAnimationEnabled
+      (its data count against animationThreshold) under the chart's own
+      switch, getAnimationConfig's timing with the update's payload }
+    anim := Default(TTyCustomAnim);
+    anim.Model := TyAnimSeriesModel(FOption.Root, si, st.Count);
+    anim.Model.Payload := FAnimPayload;
+    anim.Model.HasPayload := FAnimHasPayload;
+    anim.Enabled := AnimAllowed and TyAnimIsEnabled(anim.Model);
+    anim.Driver := FCuAnim;
     try
-      view.Render(ids, raws, @CustomCall, z, zl);
+      view.Render(ids, raws, @CustomCall, z, zl, anim);
     finally
       FreeAndNil(FCustomParams.Context);
       FreeAndNil(FCustomParams.Encode);
@@ -30984,8 +31463,9 @@ begin
     end;
     if view.Error <> '' then FBuild.Note('series[' + IntToStr(si) + ']: ' + view.Error);
     { createGridClipPath: the grid's area widened by lineStyle.width, its
-      width ceiled, a fractional x floored }
-    if CuTruthy(node.Find('clip')) then
+      width ceiled, a fractional x floored -- a cartesian's only (a polar's
+      sector clip is not drawn here) }
+    if (sys = cusCart) and CuTruthy(node.Find('clip')) then
     begin
       d := node.FindPath('lineStyle.width');
       if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then lw := d.AsFloat
@@ -31003,6 +31483,14 @@ begin
       FCustomClipOn[i] := True;
       FCustomClip[i] := TyXYWH(x, y, cw, ch);
     end;
+  end;
+  { THE FLUSH: upstream's setOption ends with a synchronous update that
+    steps every clip the render made, so each starts NOW and this paint
+    shows the from values [Batch 124] }
+  if CuLive then
+  begin
+    FCuAnim.Update(AnimClock, True);
+    AnimArmTimer;
   end;
 end;
 

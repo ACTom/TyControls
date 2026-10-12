@@ -152,6 +152,24 @@ function TyGfxIsEC4(AStyle: TJSONObject; const AType: string;
 procedure TyGfxConvertEC4(AStyle: TJSONObject; const AType: string;
   AIsNormal: Boolean; out AConfig, AContent: TJSONObject);
 
+{ ---- the transitions, shared with the custom series [Batch 124, C15] ---- }
+
+{ applyUpdateTransition's FROM props for an update
+  (prepareTransformTransitionFrom, prepareShapeOrExtraTransitionFrom on the
+  shape, prepareStyleTransitionFrom): the element's values NOW of what the
+  option's transitions name -- `transition` 'all' every transform prop, a
+  list (or one word) its own keys, the words 'shape' and 'style' the
+  option's numeric shape keys and animatable style keys, the shape's and the
+  style's own `transition` their keys -- appended to AFrom. Call it before
+  the final props are set. }
+procedure TyGfxTransitionFrom(AEl: TTyGfxEl; AOpt: TJSONObject; var AFrom: TTyAnimProps);
+{ the root's, the style's and the shape's enterFrom, flattened, appended to
+  AEnter }
+procedure TyGfxEnterFrom(AOpt: TJSONObject; var AEnter: TTyAnimProps);
+{ updateLeaveTo: the root's, the style's and the shape's leaveTo merged into
+  what the element keeps for its leave (HasLeaveTo, LeaveToProps) }
+procedure TyGfxUpdateLeaveTo(AEl: TTyGfxEl; AOpt: TJSONObject);
+
 implementation
 
 uses
@@ -805,7 +823,7 @@ begin
   ApplyLeave(AEl, AOpt);
 end;
 
-procedure UpdateLeaveTo(AEl: TTyGfxEl; AOpt: TJSONObject);
+procedure TyGfxUpdateLeaveTo(AEl: TTyGfxEl; AOpt: TJSONObject);
 var
   sub: TJSONObject;
   k: Integer;
@@ -850,9 +868,31 @@ begin
   Result := False;
 end;
 
+{ zrUtil.isArrayLike: an array -- a string is not one [Batch 124: it was
+  taken for one, so a text shape value always transitioned] }
 function IsArrayLike(A: TJSONData): Boolean;
 begin
-  Result := (A is TJSONArray) or ((A <> nil) and (A.JSONType = jtString));
+  Result := A is TJSONArray;
+end;
+
+{ isNonStyleTransitionEnabled(optVal, elVal): an array-like option value
+  always (the element holds a clone, never the option's own array), else a
+  value JavaScript's isFinite takes -- a finite number, a boolean, a numeric
+  text; null, undefined and an object never }
+function NonStyleTransition(A: TJSONData): Boolean;
+var v: Double;
+begin
+  if IsArrayLike(A) then Exit(True);
+  if JNull(A) then Exit(False);
+  case A.JSONType of
+    jtNumber, jtBoolean, jtString:
+      begin
+        v := JsNumOf(A);
+        Result := not IsNan(v) and not IsInfinite(v);
+      end;
+  else
+    Result := False;
+  end;
 end;
 
 procedure TyGfxApplyDirect(AEl: TTyGfxEl; AOpt: TJSONObject; AClearStyle: Boolean);
@@ -902,17 +942,13 @@ begin
     AEl.Invisible := Truthy(AOpt.Find('invisible'));
 end;
 
-procedure TTyGfxView.ApplyUpdateTransition(AEl: TTyGfxEl; AOpt: TJSONObject;
-  AIsInit: Boolean);
+procedure TyGfxTransitionFrom(AEl: TTyGfxEl; AOpt: TJSONObject; var AFrom: TTyAnimProps);
 var
-  styleOpt, shapeOpt, sub, ef: TJSONObject;
+  styleOpt, shapeOpt: TJSONObject;
   trans, attrTrans, d: TJSONData;
-  from_, enter: TTyAnimProps;
   keys: array of string;
   k, i: Integer;
   key: string;
-  cfg: TTyAnimCfg;
-  v: Double;
 
   procedure AddKeysOf(AT: TJSONData);
   var q: Integer;
@@ -943,78 +979,109 @@ var
   end;
 
 begin
+  if (AEl = nil) or (AOpt = nil) then Exit;
   styleOpt := ObjOf(AOpt, 'style');
   shapeOpt := ObjOf(AOpt, 'shape');
-  from_ := nil;
   trans := AOpt.Find('transition');
-  if not AIsInit and FAnim.Enabled then
+  { the transform keys `transition` names, at their old values }
+  if TransitionAll(trans) then
   begin
-    { the transform keys `transition` names, at their old values }
-    if TransitionAll(trans) then
+    SetLength(keys, Length(cTransformable));
+    for k := 0 to High(cTransformable) do keys[k] := cTransformable[k];
+  end
+  else
+    AddKeysOf(trans);
+  for k := 0 to High(keys) do
+  begin
+    if (keys[k] = 'style') or (keys[k] = 'shape') or (keys[k] = 'extra') then Continue;
+    TyAnimPropPut(AFrom, keys[k], AEl.GetAnimProp(keys[k]));
+  end;
+  { the shape's }
+  if shapeOpt <> nil then
+  begin
+    attrTrans := shapeOpt.Find('transition');
+    if Truthy(attrTrans) then
     begin
-      SetLength(keys, Length(cTransformable));
-      for k := 0 to High(cTransformable) do keys[k] := cTransformable[k];
-    end
-    else
-      AddKeysOf(trans);
-    for k := 0 to High(keys) do
-    begin
-      if (keys[k] = 'style') or (keys[k] = 'shape') or (keys[k] = 'extra') then Continue;
-      TyAnimPropPut(from_, keys[k], AEl.GetAnimProp(keys[k]));
-    end;
-    { the shape's }
-    if shapeOpt <> nil then
-    begin
-      attrTrans := shapeOpt.Find('transition');
-      if Truthy(attrTrans) then
-      begin
-        if TransitionAll(attrTrans) then
-        begin
-          for i := 0 to AEl.Shape.Count - 1 do
-            TyAnimPropPut(from_, 'shape.' + AEl.Shape.Names[i], TyGfxAnimOf(AEl.Shape.Items[i]));
-        end
-        else
-        begin
-          AddKeysOf(attrTrans);
-          for k := 0 to High(keys) do
-            TyAnimPropPut(from_, 'shape.' + keys[k], AEl.GetAnimProp('shape.' + keys[k]));
-        end;
-      end
-      else if TransitionAll(trans) or TransitionHas(trans, 'shape') then
+      if TransitionAll(attrTrans) then
       begin
         for i := 0 to AEl.Shape.Count - 1 do
-        begin
-          key := AEl.Shape.Names[i];
-          d := shapeOpt.Find(key);
-          if (not IsArrayLike(d) and (d <> nil) and not JNull(d)
-              and not IsNan(JsNumOf(d)) and not IsInfinite(JsNumOf(d)))
-            or (IsArrayLike(d)) then
-            TyAnimPropPut(from_, 'shape.' + key, TyGfxAnimOf(AEl.Shape.Items[i]));
-        end;
-      end;
-    end;
-    { the style's }
-    if styleOpt <> nil then
-    begin
-      attrTrans := styleOpt.Find('transition');
-      if Truthy(attrTrans) and not TransitionAll(attrTrans) then
+          TyAnimPropPut(AFrom, 'shape.' + AEl.Shape.Names[i], TyGfxAnimOf(AEl.Shape.Items[i]));
+      end
+      else
       begin
         AddKeysOf(attrTrans);
         for k := 0 to High(keys) do
-          TyAnimPropPut(from_, 'style.' + keys[k], AEl.StyleValue(keys[k]));
-      end
-      else if not AEl.IsGroup and (TransitionAll(trans) or TransitionAll(attrTrans)
-        or TransitionHas(trans, 'style')) then
+          TyAnimPropPut(AFrom, 'shape.' + keys[k], AEl.GetAnimProp('shape.' + keys[k]));
+      end;
+    end
+    else if TransitionAll(trans) or TransitionHas(trans, 'shape') then
+    begin
+      for i := 0 to AEl.Shape.Count - 1 do
       begin
-        for i := 0 to styleOpt.Count - 1 do
-        begin
-          key := styleOpt.Names[i];
-          if StyleAnimates(key) then
-            TyAnimPropPut(from_, 'style.' + key, AEl.StyleValue(key));
-        end;
+        key := AEl.Shape.Names[i];
+        d := shapeOpt.Find(key);
+        if NonStyleTransition(d) then
+          TyAnimPropPut(AFrom, 'shape.' + key, TyGfxAnimOf(AEl.Shape.Items[i]));
       end;
     end;
   end;
+  { the style's }
+  if styleOpt <> nil then
+  begin
+    attrTrans := styleOpt.Find('transition');
+    if Truthy(attrTrans) and not TransitionAll(attrTrans) then
+    begin
+      AddKeysOf(attrTrans);
+      for k := 0 to High(keys) do
+        TyAnimPropPut(AFrom, 'style.' + keys[k], AEl.StyleValue(keys[k]));
+    end
+    else if not AEl.IsGroup and (TransitionAll(trans) or TransitionAll(attrTrans)
+      or TransitionHas(trans, 'style')) then
+    begin
+      for i := 0 to styleOpt.Count - 1 do
+      begin
+        key := styleOpt.Names[i];
+        if StyleAnimates(key) then
+          TyAnimPropPut(AFrom, 'style.' + key, AEl.StyleValue(key));
+      end;
+    end;
+  end;
+end;
+
+procedure TyGfxEnterFrom(AOpt: TJSONObject; var AEnter: TTyAnimProps);
+var
+  sub, ef: TJSONObject;
+  k: Integer;
+begin
+  if AOpt = nil then Exit;
+  for k := 0 to 3 do
+  begin
+    case k of
+      0: sub := AOpt;
+      1: sub := ObjOf(AOpt, 'style');
+      2: sub := ObjOf(AOpt, 'shape');
+    else
+      sub := ObjOf(AOpt, 'extra');
+    end;
+    if sub = nil then Continue;
+    ef := ObjOf(sub, 'enterFrom');
+    if ef = nil then Continue;
+    case k of
+      0: TyGfxPropsOf(ef, '', AEnter);
+      1: TyGfxPropsOf(ef, 'style', AEnter);
+      2: TyGfxPropsOf(ef, 'shape', AEnter);
+    end;
+  end;
+end;
+
+procedure TTyGfxView.ApplyUpdateTransition(AEl: TTyGfxEl; AOpt: TJSONObject;
+  AIsInit: Boolean);
+var
+  from_, enter: TTyAnimProps;
+  cfg: TTyAnimCfg;
+begin
+  from_ := nil;
+  if not AIsInit and FAnim.Enabled then TyGfxTransitionFrom(AEl, AOpt, from_);
   { the final props, directly }
   TyGfxApplyDirect(AEl, AOpt, False);
   if FAnim.Enabled and (AEl.Animation <> nil) then
@@ -1022,24 +1089,7 @@ begin
     if AIsInit then
     begin
       enter := nil;
-      for k := 0 to 3 do
-      begin
-        case k of
-          0: sub := AOpt;
-          1: sub := styleOpt;
-          2: sub := shapeOpt;
-        else
-          sub := ObjOf(AOpt, 'extra');
-        end;
-        if sub = nil then Continue;
-        ef := ObjOf(sub, 'enterFrom');
-        if ef = nil then Continue;
-        case k of
-          0: TyGfxPropsOf(ef, '', enter);
-          1: TyGfxPropsOf(ef, 'style', enter);
-          2: TyGfxPropsOf(ef, 'shape', enter);
-        end;
-      end;
+      TyGfxEnterFrom(AOpt, enter);
       cfg := ElementCfg('enter', AOpt);
       if cfg.Duration > 0 then AEl.AnimateFrom(enter, cfg);
     end
@@ -1049,7 +1099,7 @@ begin
       if cfg.Duration > 0 then AEl.AnimateFrom(from_, cfg);
     end;
   end;
-  UpdateLeaveTo(AEl, AOpt);
+  TyGfxUpdateLeaveTo(AEl, AOpt);
 end;
 
 procedure TTyGfxView.UpdateCommonAttrs(AEl: TTyGfxEl; AOpt: TJSONObject;
@@ -1351,7 +1401,7 @@ begin
           end
           else if action = 'remove' then
           begin
-            UpdateLeaveTo(existing, opt);
+            TyGfxUpdateLeaveTo(existing, opt);
             RemoveEl(existing, opt);
           end;
         finally
