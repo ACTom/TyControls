@@ -2174,9 +2174,6 @@ type
       两条路到达校验,不记住的话宿主的提示框会连弹两次。文本一变就作废。 }
     FRefusedText: string;
     FRefused: Boolean;
-    { #67: the mask editor's text as the edit opened. An edit is checked against the mask,
-      not a stored value. }
-    FMaskOpenText: string;
     FOnCanEditCell:  TTyGridCanEditEvent;
     FOnEditChange:   TTyGridEditChangeEvent;
     FOnCanInsertRow: TTyGridCanRowEvent;
@@ -2375,6 +2372,12 @@ type
     function SelectionBoundsRect: TRect;
     function ArithmeticStep(ACol, AFrom, ATo: Integer;
       out AFirst, AStep: Integer): Boolean;
+    { #67: the open edit is in the mask editor and leaves a required slot empty. }
+    function MaskUnfilled: Boolean;
+    { #67: report the mask's own error for an edit that was just refused because of it. It is
+      raised, so call it only from a key or mouse handler: LCL reports it from there as it
+      reports the mask editor's own -- or from a post the refusal stops (the DB grid). }
+    procedure ReportUnfilledMask;
   private
     FSkipReadOnly: Boolean;
     { 窗体文件里先于列 / 行数读到的 Col / Row,留给 Loaded 落位。见 SetCol。 }
@@ -2433,12 +2436,6 @@ type
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
-    { #67: the open edit is in the mask editor, changed, and leaves a required slot empty. }
-    function MaskUnfilled: Boolean;
-    { #67: report the mask's own error for an edit that was just refused because of it. It is
-      raised, so call it only from a key or mouse handler: LCL reports it from there as it
-      reports the mask editor's own. }
-    procedure ReportUnfilledMask;
     { #52: an arrow one of the grid's own children leaves standing. See the implementation. }
     function ChildKey(var Message: TLMKey): Boolean; override;
     function  EditorTargetRect: TRect;
@@ -16186,7 +16183,6 @@ begin
     FMaskEditor.Controller := Self.Controller;
     FMaskEditor.Mask := EditMaskFor(FCol);
     FMaskEditor.Text := GetEditText(FCol, FRow);
-    FMaskOpenText := FMaskEditor.Text;
     FMaskEditor.BoundsRect := r;
     FMaskEditor.Visible := True;
     if HandleAllocated and FMaskEditor.CanFocus then FMaskEditor.SetFocus;
@@ -16369,14 +16365,15 @@ end;
 
 function TTyCustomStringGrid.MaskUnfilled: Boolean;
 begin
-  { Changed, not merely unfilled: a cell whose stored value does not fill the mask -- it came
-    in from a file -- can be opened and left again untouched, as a mask editor is left
-    without a check when its text is what it was on entry (TTyMaskEdit.DoExit).
+  { Changed or not (#69): a value that does not fill the mask is not written, whether typed
+    now or stored that way -- it came in from a file, or the cell is empty. #67 let an
+    untouched one through, and its commit wrote the mask's display of it back (12 became
+    12_-____). Escape is the way out.
     The mask is asked for first: with none, IsComplete answers False (no slot is filled),
-    and every change would be refused with nothing to report -- ValidateEdit has no mask to
+    and every edit would be refused with nothing to report -- ValidateEdit has no mask to
     report against. The editor shows only while an edit is open, and never beside a host's. }
   Result := FMaskEditor.Visible and (FMaskEditor.Mask <> '')
-    and (FMaskEditor.Text <> FMaskOpenText) and not FMaskEditor.IsComplete;
+    and not FMaskEditor.IsComplete;
 end;
 
 procedure TTyCustomStringGrid.ReportUnfilledMask;

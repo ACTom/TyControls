@@ -94,6 +94,7 @@ type
     procedure TestCheckBoxOfAWordField;
     procedure TestReadOnlyCheckBoxDoesNotToggle;
     procedure TestLookupPicksFromItsDataSetAndWritesTheKey;
+    procedure TestAnUnfilledMaskStopsThePost;
     procedure TestUpDownInAClosedPickListMoveTheRecord;
     procedure TestEditMaskIsTheField;
     { refusals }
@@ -710,6 +711,35 @@ begin
   AssertEquals('Up moved it back', 1, FKinds.RecNo);
   AssertEquals('the row too', 0, FGrid.Row);
   AssertEquals('that value left alone too', '1', ValueIn(FKinds, 'Name', 'Two', 'CityID'));
+end;
+
+{ #69 in a DB grid: a value the mask is not filled with is not saved -- and a post (the
+  navigator's, or code's) does not save the record without it either. It stops, with the
+  mask's own error, the record in edit and the editor open; a filled value then posts. }
+procedure TDBGridEditTest.TestAnUnfilledMaskStopsThePost;
+var
+  raised: Boolean;
+begin
+  DS.FieldByName('Name').EditMask := '>LLLL;1;_';
+  GoToCell('Name');
+  FGrid.PressKey(VK_F2);
+  AssertTrue('the mask editor', FGrid.MaskEditorShown);
+  FGrid.SetMaskEditorText('AB');
+  AssertTrue('editing', DS.State = dsEdit);
+  raised := False;
+  try
+    DS.Post;
+  except
+    on E: Exception do raised := not (E is EAbort);
+  end;
+  AssertTrue('the post was stopped, with the mask''s error', raised);
+  AssertTrue('the record still in edit', DS.State = dsEdit);
+  AssertTrue('the editor still open', FGrid.EditorMode);
+  AssertEquals('the half value not written', FixRowName(1), DS.FieldByName('Name').AsString);
+  FGrid.SetMaskEditorText('ABCD');
+  DS.Post;
+  AssertTrue('a filled value posts', DS.State = dsBrowse);
+  AssertEquals('and is saved', 'ABCD', NameIn(1));
 end;
 
 procedure TDBGridEditTest.TestEditMaskIsTheField;

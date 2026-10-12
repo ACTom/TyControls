@@ -57,6 +57,7 @@ type
     procedure SetEditorText(const AText: string);
     procedure PressKeyInEditor(AKey: Word);
     function MaskOfEditor: string;
+    procedure SetMaskEditorText(const AText: string);
     function EditorMaxLength: Integer;
     function MaskEditorShown: Boolean;
     function PickEditorItems: TStrings;
@@ -251,6 +252,11 @@ var
 begin
   k := AKey;
   if Assigned(InlineEditor.OnKeyDown) then InlineEditor.OnKeyDown(InlineEditor, k, []);
+end;
+
+procedure TDBGridProbe.SetMaskEditorText(const AText: string);
+begin
+  MaskEditor.Text := AText;
 end;
 
 function TDBGridProbe.MaskOfEditor: string;

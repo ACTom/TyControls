@@ -135,7 +135,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 
 ## 6. 主题
 
-每个 DB 控件有自己的 typeKey，并且登记了父键：主题里没写 `TyDBXxx` 规则时，DB 控件和它的基础控件长得一模一样。17 个内置主题都没有写 DB 专用的规则。
+每个 DB 控件有自己的 typeKey，并且登记了父键：主题里没写 `TyDBXxx` 规则时，DB 控件和它的基础控件长得一模一样，只有导航条例外（见本节最后一段）。17 个内置主题都没有写 DB 专用的规则。
 
 | typeKey | 父键 |
 |---|---|
@@ -159,9 +159,11 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 TyDBEdit { background: mix(var(--surface), var(--accent), 6%); }
 ```
 
-只有 `TyDBEdit` 变，`TyEdit` 和其他控件不受影响；没写到的状态（`:hover`、`:focus`、`:disabled`）仍按 `TyEdit` 的规则来。链的合并规则见 [tycss 参考 §4.5](../tycss-reference.md)。这些键不在样式覆盖编辑器的补全列表里（补全只收 `themes/light.tycss` 里出现过的键），手写即可。
+只有 `TyDBEdit` 变，`TyEdit` 和其他控件不受影响；没写到的状态（`:hover`、`:focus`、`:disabled`）仍按 `TyEdit` 的规则来。链的合并规则见 [tycss 参考 §4.5](../tycss-reference.md)。除了 `TyDBNavigator`，这些键都不在样式覆盖编辑器的补全列表里（补全只收 `themes/light.tycss` 里出现过的键），手写即可。
 
 导航条按钮按各自的状态（`:hover`、`:active`、`:disabled`）解析 `TyDBNavigatorButton`，变体跟着导航条的 `StyleClass` 走（`StyleClass = 'ghost'` 时按钮用主题的 ghost 按钮样式）。按钮上的图标依次取：`Images` 里的图；主题令牌 `--glyph-db-first`、`--glyph-db-prior`、`--glyph-db-next`、`--glyph-db-last`、`--glyph-db-insert`、`--glyph-db-delete`、`--glyph-db-edit`、`--glyph-db-post`、`--glyph-db-cancel`、`--glyph-db-refresh` 指定的图标字体字形；都没有时用内置的矢量图形，颜色取按钮的文字色。图标大小是 `--dbnav-glyph-size`，按钮间距是 `--dbnav-gap`。
+
+导航条本身默认不画边框、不铺底色，按钮直接落在父控件的底面上（基础层 `themes/light.tycss` 里的 `TyDBNavigator { background: transparent; border-width: 0; }`，所有内置主题都沿用）；某个导航条想要边框，就在它的 `StyleOverride` 里写 `border-width: 1px;`，颜色沿用工具条的 `border-color`，要换色再加一句 `border-color: …;`。
 
 ---
 

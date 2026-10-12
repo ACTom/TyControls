@@ -83,6 +83,7 @@
 
 - 在当前记录上打开编辑器——直接打字、F2、双击——数据集就进入编辑（`DataLink.Edit`）；数据集不肯（比如数据源的 `AutoEdit` 关着），这一格就当只读，按键被吞掉。
 - 编辑器的初值是 `Field.Text`（`dgDisplayMemoText` 下备注是内容），掩码是字段的 `EditMask`，`OnFieldEditMask` 可以改。字符串字段最多输入字段的 `Size` 个字符。
+- 掩码没填满的值不会写进字段：Enter、方向键、点别的格都会停在原地并给出掩码的提示，只能补全或按 Esc 放弃。数据集 `Post`（导航条的「保存」或代码里调用）也一样会被拦下，抛出掩码的错误，记录保持编辑状态，不会把其他字段先存进去。
 - 离开这一格时写进字段（`Field.Text`），离开这条记录时由数据集自己 `Post`；导航条上点保存时，开着的编辑器里的文字也会先写进去。
 - Esc：编辑器里按，撤销这一格；没有编辑器时按，取消整条记录。
 - Insert 键插入；Ctrl+Del 删除，`dgConfirmDelete` 时先问（主题化的消息框，经 protected virtual `ConfirmDeleteRecord`，子类可以换掉）。
