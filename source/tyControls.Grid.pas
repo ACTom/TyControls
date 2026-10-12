@@ -1584,8 +1584,9 @@ type
     function DisplayRowCount: Integer; virtual;
 
     { How many rows the VIEWPORT currently holds -- a viewport metric, the same thing
-      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). This is
-      the number PageUp/PageDown maths is written against.
+      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). LCL's own
+      PageUp/PageDown do NOT page by it: they count only the rows FULLY on screen -- see
+      PageRowStep (#57).
 
       It is NOT "how many rows survived the filter". That is DisplayRowCount (or its
       alias FilteredRowCount), and it used to be what this name returned on
@@ -1601,6 +1602,13 @@ type
       overlap is dropped when the whole grid fits, exactly as LCL's
       `if GridHeight<=ClientHeight then inc(Result)` does. }
     function VisibleRowCount: Integer;
+    { How many rows PageUp/PageDown move: the rows FULLY on screen, minus one, exactly as
+      LCL's TCustomGrid pages (grids.pas VK_PRIOR/VK_NEXT: FullVisibleGrid.Bottom -
+      FullVisibleGrid.Top). From the top row of a screen, PageDown lands on its last full
+      row, and each page keeps one row of overlap. A partly shown row at either edge does
+      not count, so a page never jumps past what the user could read. At least 1: LCL moves
+      nothing when fewer than two rows fit, which leaves the key dead. (#57) }
+    function PageRowStep: Integer;
 
     { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
       (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
@@ -6516,6 +6524,30 @@ begin
   if Result < 0 then Result := 0;
 end;
 
+function TTyCustomGrid.PageRowStep: Integer;
+var
+  M: TTyGridMetrics;
+  first, last, rowTop, rowH, fixedTop, fixedH, viewTop, viewBottom: Integer;
+  body: TRect;
+begin
+  Result := 1;
+  M := GridMetrics;
+  if not TyGridVisibleRows(M, first, last) then Exit;
+  { The body pane's window in content coordinates, as TyGridVisibleRows reads it: the
+    scroll offset past the fixed rows, as tall as the pane. A row is fully on screen when
+    its whole extent lies inside. }
+  body := TyGridPaneRect(M, gpBody);
+  fixedTop := 0;
+  if M.FixedRows > 0 then TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
+  viewTop := M.ScrollY + fixedTop;
+  viewBottom := viewTop + (body.Bottom - body.Top);
+  TyGridRowExtent(first, M, rowTop, rowH);
+  if rowTop < viewTop then Inc(first);
+  TyGridRowExtent(last, M, rowTop, rowH);
+  if rowTop + rowH > viewBottom then Dec(last);
+  if last - first > Result then Result := last - first;
+end;
+
 function TTyCustomGrid.GetLeftCol: Integer;
 var
   i, l, w, frozen: Integer;
@@ -9813,8 +9845,9 @@ begin
     VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
     VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
     VK_END:   begin MoveCursor(LastVisibleCol, FRow); Key := 0; end;
-    VK_PRIOR: begin MoveCursor(FCol, FRow - 10); Key := 0; end;
-    VK_NEXT:  begin MoveCursor(FCol, FRow + 10); Key := 0; end;
+    { A page, as LCL turns it: the rows fully on screen, minus one (#57). }
+    VK_PRIOR: begin MoveCursor(FCol, FRow - PageRowStep); Key := 0; end;
+    VK_NEXT:  begin MoveCursor(FCol, FRow + PageRowStep); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
     { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
       停在原地会让用户每敲一格都得再按一次方向键。 }
