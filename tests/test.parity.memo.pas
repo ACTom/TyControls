@@ -321,8 +321,10 @@ begin
   LoadLines(['alpha', 'beta', 'gamma delta']);
   FMemo.SelectAll;
   AssertEquals('SelStart after SelectAll', 0, FMemo.SelStart);
-  AssertEquals('SelLength spans Text minus its trailing break',
-    UTF8Length(FMemo.Text) - UTF8Length(LineEnding), FMemo.SelLength);
+  { The native contract exactly: SelectAll IS SelLength := UTF8Length(Text)
+    (customedit.inc:222-228). Text used to end with a break nothing had typed, and this
+    line subtracted it (#58). }
+  AssertEquals('SelLength spans Text', UTF8Length(FMemo.Text), FMemo.SelLength);
   AssertEquals('SelText is the whole document',
     UTF8Copy(FMemo.Text, 1, FMemo.SelLength), FMemo.SelText);
 end;
