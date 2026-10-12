@@ -146,6 +146,12 @@ type
     function NewEditorGrid(AKind: TTyGridEditorKind; const AValue: string): TTyStringGrid;
     { A printable key as the system delivers it: down, the character, up. }
     procedure TypeKey(AChar: Char);
+    { #67: a grid whose one column edits through the mask 000-0000, row 1 holding AValue,
+      the mask editor open on it with the focus. }
+    function StartMaskEdit(const AValue: string; out AGrid: TTyStringGrid): TTyMaskEdit;
+    { Fail unless the trap caught the mask's own "does not fill the mask" error -- the way
+      LCL reports an exception raised in a key or mouse handler -- and clear it. }
+    procedure AssertTheMaskWasReported(const AAfter: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -159,6 +165,10 @@ type
     procedure TestUpDownInAPickListCellMoveTheCursor;
     procedure TestAPickInACellHandsTheFocusBackToTheGrid;
     procedure TestASpinCellKeepsTheNumberTypedIntoIt;
+    procedure TestEscapeOnAnEditedMaskCellRaisesNothing;
+    procedure TestAnUnfilledMaskCellIsRefusedAndReported;
+    procedure TestAnUntouchedMaskCellCanAlwaysBeLeft;
+    procedure TestAMaskCellWithNoMaskTakesAnyText;
   end;
 
 implementation
@@ -1213,6 +1223,191 @@ begin
     AssertEquals('the cell holds it, clamped to the column''s maximum', '100',
       grid.Cells[0, 1]);
     AssertNothingRaised('typing into a spin cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #67. A mask editor checks itself when the focus leaves it, and raises when a required slot
+  is empty (maskedit.md 5.2) -- that is its job, and LCL's TMaskEdit does the same. The grid
+  ended an edit by hiding the editor while it held the focus, so that check ran on every edit
+  that ended: Escape on a cell with a slot emptied raised the error, for a value being thrown
+  away; and a commit raised it and then wrote the unfilled value into the cell anyway. }
+function TTyClickFocusTest.StartMaskEdit(const AValue: string;
+  out AGrid: TTyStringGrid): TTyMaskEdit;
+begin
+  AGrid := NewEditorGrid(gekMask, AValue);
+  (AGrid.Header.Columns[0] as TTyGridColumn).EditMask := '000-0000';
+  AssertTrue('setup: editing the cell', AGrid.BeginEdit(0, 1));
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the cell edits in a mask editor', AGrid.EditorControl is TTyMaskEdit);
+  Result := TTyMaskEdit(AGrid.EditorControl);
+  AssertTrue('setup: which holds the focus', GetFocus = Result.Handle);
+end;
+
+procedure TTyClickFocusTest.AssertTheMaskWasReported(const AAfter: string);
+begin
+  AssertTrue(AAfter + ': the mask''s own error was reported, got "' + FTrapped + '"',
+    Pos('ETyMaskError', FTrapped) = 1);
+  FTrapped := '';
+end;
+
+procedure TTyClickFocusTest.TestEscapeOnAnEditedMaskCellRaisesNothing;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+begin
+  mask := StartMaskEdit('021-1234', grid);
+  try
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+    PressKey(VK_ESCAPE);
+    AssertNothingRaised('Escape on a mask cell with a slot emptied');
+    AssertFalse('Escape ended the edit', grid.Editing);
+    AssertEquals('and left the cell as it was', '021-1234', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after Escape');
+
+    { The mask editor, hidden, still holds the unfilled text it was left with. That is no
+      business of the next edit, in a cell that is not a mask cell. }
+    (grid.Header.Columns[0] as TTyGridColumn).EditorKind := gekText;
+    grid.Row := 2;
+    TypeKey('x');
+    AssertTrue('setup: the text cell is being edited', grid.Editing);
+    PressKey(VK_RETURN);
+    AssertFalse('Enter ended the text edit', grid.Editing);
+    AssertEquals('and wrote it', 'x', grid.Cells[0, 2]);
+    AssertNothingRaised('a text edit after an abandoned mask edit');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A required slot left empty is refused the way OnValidateCell refuses a value: the editor
+  stays, nothing is written, the cursor does not move -- and the mask's own error is
+  reported, as it is when the focus leaves a mask editor anywhere else. }
+procedure TTyClickFocusTest.TestAnUnfilledMaskCellIsRefusedAndReported;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+  r: TRect;
+begin
+  mask := StartMaskEdit('021-1234', grid);
+  try
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+
+    PressKey(VK_RETURN);
+    AssertTheMaskWasReported('Enter');
+    AssertTrue('Enter left the edit open', grid.Editing);
+    AssertEquals('wrote nothing', '021-1234', grid.Cells[0, 1]);
+    AssertTrue('and the editor kept the focus', GetFocus = mask.Handle);
+
+    PressKey(VK_DOWN);
+    AssertTheMaskWasReported('Down');
+    AssertTrue('Down left the edit open', grid.Editing);
+    AssertEquals('and the cursor where it was', 1, grid.Row);
+
+    r := grid.CellRect(0, 2);
+    SendMessage(grid.Handle, LM_LBUTTONDOWN, MK_LBUTTON,
+      MousePos((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+    SendMessage(grid.Handle, LM_LBUTTONUP, 0,
+      MousePos((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+    Forms.Application.ProcessMessages;
+    AssertTheMaskWasReported('a click on another cell');
+    AssertTrue('the click left the edit open', grid.Editing);
+    AssertEquals('and the cursor where it was', 1, grid.Row);
+    AssertEquals('nothing written', '021-1234', grid.Cells[0, 1]);
+    AssertTrue('the editor has the focus again', GetFocus = mask.Handle);
+
+    { Filled, it commits. }
+    TypeKey('9');
+    AssertEquals('setup: the slot filled', '021-1239', mask.Text);
+    PressKey(VK_RETURN);
+    AssertNothingRaised('Enter on a filled mask');
+    AssertFalse('Enter ended the edit', grid.Editing);
+    AssertEquals('and wrote the value', '021-1239', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after Enter');
+
+    { Leaving the grid altogether with a slot empty drops the edit: leaving is the same
+      answer as Escape for a refused edit (TTyStringGrid.DoExit). Nothing is raised on the
+      way -- raised in the middle of LCL's focus change, the error stopped the grid ever
+      hearing that the focus had gone, and the editor stayed open on it. }
+    AssertTrue('setup: editing the cell again', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    mask := TTyMaskEdit(grid.EditorControl);
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+    { A click, through the widgetset, so a raise on the way is caught and reported as LCL
+      reports one rather than thrown into this test. }
+    SendMessage(FPark.Handle, LM_LBUTTONDOWN, MK_LBUTTON, MousePos(4, 4));
+    SendMessage(FPark.Handle, LM_LBUTTONUP, 0, MousePos(4, 4));
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('leaving the grid with a slot empty');
+    AssertFalse('leaving ended the edit', grid.Editing);
+    AssertEquals('without writing', '021-1239', grid.Cells[0, 1]);
+    AssertSame('the focus is where it was sent', TWinControl(FPark),
+      TWinControl(FForm.ActiveControl));
+
+    { Ended from code, an unfilled mask is not written either -- and nothing is raised into
+      the caller. }
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: editing the cell once more', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    mask := TTyMaskEdit(grid.EditorControl);
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+    grid.EndEdit(True);
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('EndEdit(True) on an unfilled mask');
+    AssertFalse('EndEdit ended the edit', grid.Editing);
+    AssertEquals('without writing', '021-1239', grid.Cells[0, 1]);
+  finally
+    grid.Free;
+  end;
+end;
+
+{ Only an edit is checked. A cell whose stored value does not fill the mask -- it came in
+  from a file -- opens and closes again without a word, as an untouched mask editor leaves
+  without one (maskedit.md 5.2: the exit check compares against the text on entry). }
+procedure TTyClickFocusTest.TestAnUntouchedMaskCellCanAlwaysBeLeft;
+var
+  grid: TTyStringGrid;
+begin
+  StartMaskEdit('12', grid);
+  try
+    PressKey(VK_RETURN);
+    AssertNothingRaised('Enter on an untouched mask cell');
+    AssertFalse('Enter ended the edit', grid.Editing);
+    AssertTheGridHasTheFocus(grid, 'after Enter');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A mask column with no EditMask is a plain text cell, and nothing it holds is "unfilled". }
+procedure TTyClickFocusTest.TestAMaskCellWithNoMaskTakesAnyText;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+begin
+  grid := NewEditorGrid(gekMask, 'abc');
+  try
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the cell edits in a mask editor', grid.EditorControl is TTyMaskEdit);
+    mask := TTyMaskEdit(grid.EditorControl);
+    PressKey(VK_END);
+    TypeKey('d');
+    AssertEquals('setup: the text typed', 'abcd', mask.Text);
+    PressKey(VK_RETURN);
+    AssertNothingRaised('Enter on a mask cell with no mask');
+    AssertFalse('Enter ended the edit', grid.Editing);
+    AssertEquals('and wrote the text', 'abcd', grid.Cells[0, 1]);
   finally
     grid.Free;
   end;
