@@ -1500,6 +1500,12 @@ begin
     '   them black at 20%; here the skin''s ink at 20%, so a dark skin''s decals' + LineEnding +
     '   are light. */' + LineEnding +
     'TyAdvChartDecal { color: alpha(var(--on-surface), 0.2); }' + LineEnding +
+    '/* The item the keyboard holds. Upstream has no keyboard, so this is the' + LineEnding +
+    '   library''s own focus ring, drawn around the mark: the skin''s focus ring, at' + LineEnding +
+    '   the width the other controls draw theirs. The offset follows the library''s' + LineEnding +
+    '   ring convention (a positive one insets the ring), so a negative one sets it' + LineEnding +
+    '   off the mark. */' + LineEnding +
+    'TyAdvChartFocusItem { outline: 2px var(--focus-ring); outline-offset: -3px; }' + LineEnding +
     '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
     '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
     '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +

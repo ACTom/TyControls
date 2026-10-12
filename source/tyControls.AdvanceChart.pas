@@ -75,6 +75,8 @@ uses
   tyControls.AdvChart.Connect,
   { the coarse pointer and the dirty rectangles [Batch 142] }
   tyControls.AdvChart.DirtyRect,
+  { the keyboard and the accessible tree [Batch 144] }
+  tyControls.AdvChart.Aria, tyControls.AdvChart.KeyNav, tyControls.Accessible,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -433,7 +435,7 @@ type
     Stepped: Boolean;
   end;
 
-  TTyAdvanceChart = class(TTyCustomControl)
+  TTyAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
     FBuild: TTyChartBuild;
@@ -1052,6 +1054,20 @@ type
     { aria.enabled as the setOptions left it: initBase turns an aria object
       on, the preprocessor copies the legacy `show` [Batch 131] }
     FAriaEnabled: Boolean;
+    { THE KEYBOARD FOCUS ITEM [Batch 144]: its series index and view row
+      (-1 none), and whether the keyboard holds it now -- the ring is
+      drawn, the item is highlighted and its tooltip shown. Leaving the
+      control lets go but keeps the place: the next key takes it up again. }
+    FKbSeries, FKbRow: Integer;
+    FKbActive: Boolean;
+    { THE ACCESSIBLE TREE [Batch 144]: the way out to the platform, the
+      layout generation the tree was built for (-1 never), and each item
+      object with its series index and view row }
+    FAccLink: TTyAccessibleLink;
+    FAccGen: Integer;
+    FAccSyncing: Boolean;
+    FAccItemObjs: array of TLazAccessibleObject;
+    FAccItemSeries, FAccItemRows: TTyIntegerArray;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -1844,6 +1860,43 @@ type
     { the aria preprocessor and initBase on a setOption's root [Batch 131] }
     procedure AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
     function GetAriaDescription: string;
+    { the facts the description is made of, from the last layout: AAria's
+      maxCount and excludeDimensionId (the defaults when it is nil), the
+      first title, every series model counted, the series the legend kept
+      with their rows [Batch 144: split out of GetAriaDescription] }
+    procedure AriaGather(AAria: TJSONObject; out AFacts: TTyAriaFacts);
+    { the accessible description: the aria description when the option
+      writes `aria`, else the sentence the default templates make of the
+      same facts -- a desktop control is always in the accessibility tree,
+      where upstream's canvas is opaque until aria is switched on
+      [Batch 144] }
+    function AccessibleSummary: string;
+    { ==== THE KEYBOARD [Batch 144] ==== }
+    { the series the keyboard walks: those with a store the legend kept, in
+      option order, with their view's row count }
+    function KbSeriesList: TTyKbSeriesArray;
+    { whether (FKbSeries, FKbRow) still names a row of a walked series }
+    function KbValid: Boolean;
+    function KbRawOf(ASeries, ARow: Integer): Integer;
+    { the list the item's element is read from: the frame in motion, the
+      display list at rest (the hit test's choice) }
+    function KbList: TTyPaintList;
+    { the item's own element in the display list -- its state host, else the
+      first unlabelled, hittable element carrying its datum; -1 for none }
+    function KbElementOf(ASeries, ARow: Integer): Integer;
+    { the focus item moves to (ASeries, ARow): downplay the old, highlight
+      the new -- the actions, so their events fire -- then its tooltip }
+    procedure KbGo(ASeries, ARow: Integer);
+    { the keyboard lets go: downplay (ADownplay), hide its tooltip }
+    procedure KbRelease(ADownplay: Boolean);
+    { upstream's showTip for the item, at its element's centre }
+    procedure KbShowTip;
+    procedure KbHideTip;
+    { Enter / Space: the click's select or unselect, when the series has a
+      selectedMode; False when nothing was dispatched }
+    function KbActivate: Boolean;
+    procedure PaintKbRing(APainter: TTyPainter);
+    function AccItemIndexOf(AObj: TLazAccessibleObject): Integer;
     { the JSON item of a series' own `data` at a raw row, nil when the data
       came from elsewhere or the item is no object }
     function RawItemNode(ASlot, ARaw: Integer): TJSONObject;
@@ -2536,6 +2589,17 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure DblClick; override;
+    { THE KEYBOARD [Batch 144]: the arrows, Home / End and the page keys
+      move the focus item (and are always taken, so they never become the
+      form's focus navigation); Enter / Space select it, Escape clears it;
+      Tab is never taken. OnKeyDown runs first and may take the key. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { leaving the control lets the focus item go (downplay, tooltip hidden)
+      and keeps its place }
+    procedure DoExit; override;
+    { the window: its accessibility link is attached to it [Batch 144] }
+    procedure CreateWnd; override;
+    procedure DestroyWnd; override;
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     { the chart's mouse events [Batch 84] }
     function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
@@ -2967,6 +3031,35 @@ type
       and when the chart has no series. Read off the last layout; for the
       platform's accessibility layer. }
     property AriaDescription: string read GetAriaDescription;
+    { ==== THE KEYBOARD AND THE ACCESSIBLE TREE [Batch 144] ====
+      Upstream has no keyboard; this is the port's (see
+      tyControls.AdvChart.KeyNav for the keys). The chart is no tab stop
+      unless the host makes it one (TabStop := True): then a click or Tab
+      gives it focus and the keys walk the data items.
+
+      KeyboardItem: the item the keyboard holds -- series index, view row
+      (DataIndex) and raw row (RawDataIndex) -- or TyChartNoDatum.
+      SetKeyboardItem moves it there by series index and RAW data index, as
+      the keys would (downplay, highlight, tooltip); False when the series
+      is not walked or has no such row. ClearKeyboardItem is Escape. }
+    function KeyboardItem: TTyChartDatumRef;
+    function SetKeyboardItem(ASeriesIndex, ADataIndex: Integer): Boolean;
+    procedure ClearKeyboardItem;
+    { ITyAccessibleHost. The tree under GetAccessibleObject (role larChart,
+      named by the first title or rsTyChartAccessibleName, described by
+      AccessibleSummary): one larListBox per walked series, named with the
+      description's phrase for that series, and under it one larListItem per
+      row (the first cTyAccMaxItems), named with the description's phrase
+      for that row, placed over its element. Rebuilt when the chart has laid
+      out again. }
+    procedure AccessibleSync;
+    function AccessibleFocusedChild: TLazAccessibleObject;
+    function AccessibleSelected(AObj: TLazAccessibleObject): Boolean;
+    function AccessibleTakeFocus(AObj: TLazAccessibleObject): Boolean;
+    { the item object of a series' view row, nil when there is none (after
+      AccessibleSync) }
+    function AccessibleItem(ASeriesIndex, ARow: Integer): TLazAccessibleObject;
+    property AccessibleLink: TTyAccessibleLink read FAccLink;
     { THE COMPONENT AIndex AS THE LAST RENDER LAID IT OUT: Valid is False
       when it is hidden, piecewise, or nothing has rendered. }
     function VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
@@ -3410,7 +3503,14 @@ type
       test.focus.tabstop.pas will force somebody to decide rather than drift.
       [Batch 62: dataZoom landed and did NOT flip it. Upstream's dataZoom is
       pointer-only -- drag, click, brush, wheel -- with no key binding at all,
-      so the reason this line once gave for it no longer holds.] }
+      so the reason this line once gave for it no longer holds.]
+      [Batch 144: the keyboard landed -- the arrows walk the data items, Enter
+      selects, Escape clears -- and it STILL does not flip it, for the reason
+      the first lines give: an existing form must not start pulling focus
+      off its editors because the library changed. The keyboard is the
+      host's to switch on: TabStop := True (in the .lfm or in code) makes a
+      click and Tab give the chart focus, and the keys work whenever it has
+      focus. The declaration and the constructor stay False together.] }
     property TabStop default False;
     property OnClick;
     property OnDblClick;
@@ -3541,7 +3641,7 @@ uses
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
-  tyControls.AdvChart.ToolboxDlg, tyControls.AdvChart.Aria,
+  tyControls.AdvChart.ToolboxDlg,
   tyControls.AdvChart.AxisBreak, tyControls.AdvChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }
   tyControls.AdvChart.StatTransform;
@@ -3640,6 +3740,13 @@ begin
   Width := 320;
   Height := 200;
   TabStop := False;   { see the published declaration }
+  { the keyboard and the accessible tree [Batch 144] }
+  FKbSeries := -1;
+  FKbRow := -1;
+  FAccGen := -1;
+  FAccLink := TTyAccessibleLink.Create(Self);
+  AccessibleRole := larChart;
+  AccessibleName := rsTyChartAccessibleName;
   FRoamSeries := -1;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
@@ -3686,6 +3793,9 @@ var i: Integer;
 begin
   { dispose: no longer an instance [Batch 141] }
   if GTyCharts <> nil then GTyCharts.Remove(Self);
+  { THE PLATFORM LINK FIRST: the window is still there to unhook, and a
+    node a client holds stops reaching this control [Batch 144] }
+  FreeAndNil(FAccLink);
   { Order is a contract, not a habit: a store BORROWS its category list from an
     axis the build owns, so every store goes first. }
   DropBuild;
@@ -9472,9 +9582,31 @@ end;
 
 function TTyAdvanceChart.GetAriaDescription: string;
 var
-  aria, d, rd, ex: TJSONData;
+  aria, d: TJSONData;
   facts: TTyAriaFacts;
   loc: TTyAriaLocale;
+begin
+  Result := '';
+  if (FOption = nil) or not (FOption.Root is TJSONObject) or not FAriaEnabled then Exit;
+  ConvertReady;
+  aria := TJSONObject(FOption.Root).Find('aria');
+  if not (aria is TJSONObject) then Exit;
+  { label.enabled: the default option's true under the author's }
+  d := TyAriaLabelKey(TJSONObject(aria), ['enabled']);
+  if (d <> nil) and not TyDecalTruthy(d) then Exit;
+  { the author's description is the whole label }
+  d := TyAriaLabelKey(TJSONObject(aria), ['description']);
+  if TyDecalTruthy(d) then Exit(TyJsonJsString(d));
+  AriaGather(TJSONObject(aria), facts);
+  if facts.SeriesCount < 1 then Exit;
+  loc := TyAriaLocaleOf(TJSONObject(aria), TyAriaDefaultLocale);
+  Result := TyAriaLabel(loc, facts);
+end;
+
+procedure TTyAdvanceChart.AriaGather(AAria: TJSONObject; out AFacts: TTyAriaFacts);
+var
+  d, rd, ex: TJSONData;
+  facts: TTyAriaFacts;
   si, slot, n, i, k, dim, pos: Integer;
   node: TJSONObject;
   st: TTyDataStore;
@@ -9500,21 +9632,14 @@ var
   end;
 
 begin
-  Result := '';
-  if (FOption = nil) or not (FOption.Root is TJSONObject) or not FAriaEnabled then Exit;
-  ConvertReady;
-  aria := TJSONObject(FOption.Root).Find('aria');
-  if not (aria is TJSONObject) then Exit;
-  { label.enabled: the default option's true under the author's }
-  d := TyAriaLabelKey(TJSONObject(aria), ['enabled']);
-  if (d <> nil) and not TyDecalTruthy(d) then Exit;
-  { the author's description is the whole label }
-  d := TyAriaLabelKey(TJSONObject(aria), ['description']);
-  if TyDecalTruthy(d) then Exit(TyJsonJsString(d));
   facts := Default(TTyAriaFacts);
+  facts.MaxData := 10;
+  facts.MaxDataText := '10';
+  facts.MaxSeries := 10;
+  AFacts := facts;
+  if FOption = nil then Exit;
   for si := 0 to FOption.ComponentCount('series') - 1 do
     if FOption.ComponentAt('series', si) is TJSONObject then Inc(facts.SeriesCount);
-  if facts.SeriesCount < 1 then Exit;
   { getTitle: the first title's text, when truthy }
   d := FOption.ComponentAt('title', 0);
   if d is TJSONObject then
@@ -9527,18 +9652,15 @@ begin
     end;
   end;
   { maxCount || 10 }
-  facts.MaxData := 10;
-  facts.MaxDataText := '10';
-  d := TyAriaLabelKey(TJSONObject(aria), ['data', 'maxCount']);
+  d := TyAriaLabelKey(AAria, ['data', 'maxCount']);
   if TyDecalTruthy(d) then
   begin
     facts.MaxData := TyJsonToNumber(d);
     facts.MaxDataText := TyJsonJsString(d);
   end;
-  facts.MaxSeries := 10;
-  d := TyAriaLabelKey(TJSONObject(aria), ['series', 'maxCount']);
+  d := TyAriaLabelKey(AAria, ['series', 'maxCount']);
   if TyDecalTruthy(d) then facts.MaxSeries := TyJsonToNumber(d);
-  ex := TyAriaLabelKey(TJSONObject(aria), ['data', 'excludeDimensionId']);
+  ex := TyAriaLabelKey(AAria, ['data', 'excludeDimensionId']);
   for si := 0 to FOption.ComponentCount('series') - 1 do
   begin
     if not (FOption.ComponentAt('series', si) is TJSONObject) then Continue;
@@ -9596,8 +9718,22 @@ begin
       facts.Series[n].Rows[i].Values := vals;
     end;
   end;
-  loc := TyAriaLocaleOf(TJSONObject(aria), TyAriaDefaultLocale);
-  Result := TyAriaLabel(loc, facts);
+  AFacts := facts;
+end;
+
+function TTyAdvanceChart.AccessibleSummary: string;
+var
+  facts: TTyAriaFacts;
+begin
+  Result := '';
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  { an option that writes aria says what it wants -- off, a hand-written
+    description, its own templates }
+  if TJSONObject(FOption.Root).Find('aria') <> nil then Exit(GetAriaDescription);
+  ConvertReady;
+  AriaGather(nil, facts);
+  if facts.SeriesCount < 1 then Exit;
+  Result := TyAriaLabel(TyAriaDefaultLocale, facts);
 end;
 
 function TTyAdvanceChart.PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
@@ -33875,6 +34011,8 @@ begin
   else
     PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
   PaintEmphasis(APainter, APPI, FTipHits);
+  { THE KEYBOARD'S RING over the marks and under the box [Batch 144] }
+  PaintKbRing(APainter);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
   PaintTooltip(APainter, ARect, APPI, AMeasurer);
@@ -33893,7 +34031,9 @@ begin
     find out costs more than the pass it would save. }
   Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
     or FAnimLive or FTipShown or FLoadShown
-    or ((not FOptPtrGone) and (Length(OptionPointerHits) > 0));
+    or ((not FOptPtrGone) and (Length(OptionPointerHits) > 0))
+    { the keyboard's ring [Batch 144] }
+    or FKbActive;
 end;
 
 procedure TTyAdvanceChart.DropStatic;
@@ -34018,6 +34158,492 @@ begin
   finally
     FAnimWindow := False;
   end;
+  { THE ACCESSIBLE TREE follows a new layout -- only while somebody reads it:
+    a client has asked for it, or the keyboard is in the chart [Batch 144] }
+  if (FAccGen <> FStGen) and ((FAccLink <> nil) and FAccLink.InUse or Focused) then
+    AccessibleSync;
+end;
+
+{ ==================== the keyboard and the accessible tree [Batch 144] ====================
+
+  UPSTREAM HAS NO KEYBOARD. ECharts' accessibility is the aria description
+  (the canvas' aria-label) and the decals; a page that wants keys writes
+  them itself, with dispatchAction. So this is the port's design, and it is
+  built the way such a page would build it, out of upstream's own actions:
+
+  - The focus item moves over the walked series' view rows
+    (tyControls.AdvChart.KeyNav has the keys). A move DISPATCHES downplay
+    for the old item and highlight for the new one -- type, seriesIndex
+    and the RAW dataIndex, the payload a page would write -- so the
+    emphasis, the blur a focus rule asks for, and the highlight / downplay
+    events are exactly the actions'.
+  - Its tooltip is upstream's showTip for that item: the tooltip and the
+    axis pointer resolved at the element's centre, which is where
+    findPointFromSeries puts the point for a mark with no tooltip position
+    of its own; the tooltip's triggerOn is not asked, as showTip does not
+    ask it.
+  - Enter / Space dispatch what a click on the item dispatches -- select,
+    or unselect when it is selected, isFromClick true -- but only when the
+    series has a selectedMode: a click on a series without one still
+    dispatches (and upstream's events fire with nothing selected), a key
+    does nothing there and leaves Enter to the form.
+  - The ring is the theme's TyAdvChartFocusItem outline around the item's
+    element, in the dynamic layer, while the keyboard holds the item.
+
+  THE TAB STOP IS UNCHANGED: False, as it was declared and constructed. A
+  host that wants the keyboard sets TabStop := True; a click then focuses
+  the chart (TTyCustomControl.MouseDown) and Tab reaches it. }
+
+const
+  { the accessible items a series lists at most: the tree is built on every
+    new layout, and a hundred thousand LCL objects would make every one of
+    them slow. The keyboard walks every row regardless. }
+  cTyAccMaxItems = 1000;
+
+function TTyAdvanceChart.KbSeriesList: TTyKbSeriesArray;
+var
+  si, slot, n: Integer;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  for si := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    slot := SlotOfSeries(si);
+    if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
+      or (FStores[slot] = nil) or FBindings[slot].Hidden then Continue;
+    n := Length(Result);
+    SetLength(Result, n + 1);
+    Result[n].SeriesIndex := si;
+    Result[n].Count := FStores[slot].Count;
+  end;
+end;
+
+function TTyAdvanceChart.KbRawOf(ASeries, ARow: Integer): Integer;
+var slot: Integer;
+begin
+  Result := -1;
+  slot := SlotOfSeries(ASeries);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (ARow < 0) or (ARow >= FStores[slot].Count) then Exit;
+  Result := FStores[slot].GetRawIndex(ARow);
+end;
+
+function TTyAdvanceChart.KbValid: Boolean;
+var slot: Integer;
+begin
+  Result := False;
+  if (FKbSeries < 0) or (FKbRow < 0) then Exit;
+  slot := SlotOfSeries(FKbSeries);
+  if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
+    or (FStores[slot] = nil) or FBindings[slot].Hidden then Exit;
+  Result := FKbRow < FStores[slot].Count;
+end;
+
+function TTyAdvanceChart.KbList: TTyPaintList;
+begin
+  if FAnimLive or (Length(FAnimStBind) > 0) then Result := AnimFrame
+  else Result := FPaintList;
+end;
+
+function TTyAdvanceChart.KbElementOf(ASeries, ARow: Integer): Integer;
+var
+  raw, i, h: Integer;
+  el: TTyChartElement;
+begin
+  Result := -1;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  raw := KbRawOf(ASeries, ARow);
+  if raw < 0 then Exit;
+  { the state machine's host for the row, where the series has one }
+  if (ASeries <= High(FSt)) and (FSt[ASeries].Kind <> sskNone)
+    and (raw <= High(FSt[ASeries].HostIdx)) then
+  begin
+    h := FSt[ASeries].HostIdx[raw];
+    if (h >= 0) and (h < FPaintList.Count) then Exit(h);
+  end;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    el := FPaintList.Element(i);
+    if (el.Datum.SeriesIndex <> ASeries) or (el.Datum.DataIndex <> ARow)
+      or el.Datum.IsEdge or (el.Datum.Kind <> ctkSeries) or el.Ignore
+      or el.ProgHidden or el.IsGuide or (el.Shape.Kind = cskLarge) then Continue;
+    { the mark itself before its label }
+    if (el.Caption.Text = '') and not el.Silent then Exit(i);
+    if Result < 0 then Result := i;
+  end;
+end;
+
+procedure TTyAdvanceChart.KbShowTip;
+var
+  idx, cx, cy: Integer;
+  b: TTyRectF;
+  d: TTyChartDatumRef;
+  g, spec: TTyTooltipSpec;
+  snap: TTyTipSnap;
+begin
+  idx := KbElementOf(FKbSeries, FKbRow);
+  if idx < 0 then
+  begin
+    KbHideTip;
+    Exit;
+  end;
+  b := TyShapeBounds(KbList.Element(idx).Shape);
+  cx := Round((b.Left + b.Right) / 2);
+  cy := Round((b.Top + b.Bottom) / 2);
+  d := FPaintList.Element(idx).Datum;
+  { a run element (a line's stroke) names its series only }
+  if d.DataIndex < 0 then d := TyChartDatum(FKbSeries, FKbRow, KbRawOf(FKbSeries, FKbRow));
+  FTipDatum := d;
+  FTipElement := idx;
+  FTipX := cx;
+  FTipY := cy;
+  FTipHits := ResolveAxisPointers(cx, cy);
+  FTipTrack := True;
+  FOptPtrGone := True;
+  g := TyTooltipSpecOf(FOption, -1, -1);
+  if not g.HasComponent then TipDropDisplay
+  else
+  begin
+    TipAdvance(TipClock);
+    try
+      snap := TipSnapNow;
+      if Length(FTipHits) > 0 then TipTryShow(snap, g)
+      else if TipTargetValid(FTipDatum) and not CustomTipDisabled(FTipElement) then
+      begin
+        spec := TipSpecOf(snap);
+        if spec.Trigger = tttItem then TipTryShow(snap, spec) else TipHide(g);
+      end
+      else TipHide(g);
+    finally
+      TipArmTimer;
+    end;
+  end;
+  PtrAnimSync;
+end;
+
+procedure TTyAdvanceChart.KbHideTip;
+var g: TTyTooltipSpec;
+begin
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  FTipHits := nil;
+  g := TyTooltipSpecOf(FOption, -1, -1);
+  if not g.HasComponent then TipDropDisplay
+  else
+  begin
+    TipAdvance(TipClock);
+    TipHide(g);
+    TipArmTimer;
+  end;
+  PtrAnimSync;
+end;
+
+procedure TTyAdvanceChart.KbGo(ASeries, ARow: Integer);
+var raw: Integer;
+begin
+  raw := KbRawOf(ASeries, ARow);
+  if raw < 0 then Exit;
+  if not (FKbActive and (ASeries = FKbSeries) and (ARow = FKbRow)) then
+  begin
+    if FKbActive and KbValid then
+      DispatchAction(Format('{"type":"downplay","seriesIndex":%d,"dataIndex":%d}',
+        [FKbSeries, KbRawOf(FKbSeries, FKbRow)]));
+    FKbSeries := ASeries;
+    FKbRow := ARow;
+    FKbActive := True;
+    DispatchAction(Format('{"type":"highlight","seriesIndex":%d,"dataIndex":%d}',
+      [ASeries, raw]));
+  end;
+  KbShowTip;
+  if (FAccLink <> nil) and FAccLink.InUse then
+  begin
+    AccessibleSync;
+    FAccLink.NotifyFocus(AccessibleFocusedChild);
+  end;
+  InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.KbRelease(ADownplay: Boolean);
+begin
+  if not FKbActive then Exit;
+  if ADownplay and KbValid then
+    DispatchAction(Format('{"type":"downplay","seriesIndex":%d,"dataIndex":%d}',
+      [FKbSeries, KbRawOf(FKbSeries, FKbRow)]));
+  FKbActive := False;
+  KbHideTip;
+  if (FAccLink <> nil) and FAccLink.InUse and Focused then FAccLink.NotifyFocus(nil);
+  InvalidateFrame;
+end;
+
+function TTyAdvanceChart.KbActivate: Boolean;
+var
+  slot: Integer;
+  t: TTyChartEventTarget;
+begin
+  Result := False;
+  if not (FKbActive and KbValid) then Exit;
+  slot := SlotOfSeries(FKbSeries);
+  SelEnsure(slot);
+  if (FKbSeries > High(FSel)) or not FSelInit[FKbSeries]
+    or (FSel[FKbSeries].Mode = ssmOff) then Exit;
+  t := Default(TTyChartEventTarget);
+  t.HdKind := 1;
+  t.HdSeries := FKbSeries;
+  t.HdRow := FKbRow;
+  t.HdEdge := False;
+  StClickSelect(t);
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.PaintKbRing(APainter: TTyPainter);
+var
+  idx, off: Integer;
+  b: TTyRectF;
+  st: TTyStyleSet;
+  r: TRect;
+begin
+  if not (FKbActive and KbValid) then Exit;
+  idx := KbElementOf(FKbSeries, FKbRow);
+  if idx < 0 then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartFocusItem', '', []);
+  if not ((tpOutline in st.Present) and (st.OutlineWidth > 0)) then Exit;
+  b := TyShapeBounds(KbList.Element(idx).Shape);
+  { the library's ring convention (TTyCustomControl.DrawFrame): the offset
+    insets the ring, so the theme's negative one sets it off the mark }
+  off := APainter.Scale(st.OutlineOffset);
+  r := Rect(Floor(b.Left) + off, Floor(b.Top) + off, Ceil(b.Right) - off, Ceil(b.Bottom) - off);
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  APainter.StrokeBorder(r, TyEffectiveCorners(st), st.OutlineWidth, st.OutlineColor);
+end;
+
+procedure TTyAdvanceChart.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  cmd: TTyKbCommand;
+  list: TTyKbSeriesArray;
+  pos, row, i: Integer;
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = 0) or (csDesigning in ComponentState) then Exit;
+  cmd := TyKbCommandOf(Key, Shift);
+  case cmd of
+    kbcNone: ;
+    kbcActivate:
+      if KbActivate then Key := 0;
+    kbcClear:
+      if FKbActive then
+      begin
+        KbRelease(True);
+        FKbSeries := -1;
+        FKbRow := -1;
+        Key := 0;
+      end;
+  else
+    { A MOVING KEY IS ALWAYS TAKEN, with or without an item to move to:
+      left over, LCL's DoArrowKey would hand the focus to a sibling }
+    Key := 0;
+    { coming back: the first key takes up the item the exit let go }
+    if not FKbActive and KbValid then
+    begin
+      KbGo(FKbSeries, FKbRow);
+      Exit;
+    end;
+    list := KbSeriesList;
+    pos := -1;
+    row := FKbRow;
+    if KbValid then
+      for i := 0 to High(list) do
+        if list[i].SeriesIndex = FKbSeries then pos := i;
+    if TyKbMove(list, cmd, pos, row) then KbGo(list[pos].SeriesIndex, row);
+  end;
+end;
+
+procedure TTyAdvanceChart.DoExit;
+begin
+  KbRelease(True);
+  inherited DoExit;
+end;
+
+procedure TTyAdvanceChart.CreateWnd;
+begin
+  inherited CreateWnd;
+  if FAccLink <> nil then FAccLink.Attach;
+end;
+
+procedure TTyAdvanceChart.DestroyWnd;
+begin
+  if FAccLink <> nil then FAccLink.Detach;
+  inherited DestroyWnd;
+end;
+
+function TTyAdvanceChart.KeyboardItem: TTyChartDatumRef;
+begin
+  if FKbActive and KbValid then
+    Result := TyChartDatum(FKbSeries, FKbRow, KbRawOf(FKbSeries, FKbRow))
+  else
+    Result := TyChartNoDatum;
+end;
+
+function TTyAdvanceChart.SetKeyboardItem(ASeriesIndex, ADataIndex: Integer): Boolean;
+var
+  slot, r: Integer;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
+    or (FStores[slot] = nil) or FBindings[slot].Hidden then Exit;
+  for r := 0 to FStores[slot].Count - 1 do
+    if FStores[slot].GetRawIndex(r) = ADataIndex then
+    begin
+      KbGo(ASeriesIndex, r);
+      Exit(True);
+    end;
+end;
+
+procedure TTyAdvanceChart.ClearKeyboardItem;
+begin
+  KbRelease(True);
+  FKbSeries := -1;
+  FKbRow := -1;
+end;
+
+function TTyAdvanceChart.AccItemIndexOf(AObj: TLazAccessibleObject): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(FAccItemObjs) do
+    if FAccItemObjs[i] = AObj then Exit(i);
+  Result := -1;
+end;
+
+procedure TTyAdvanceChart.AccessibleSync;
+var
+  root: TLazAccessibleObject;
+  aria, d: TJSONData;
+  facts: TTyAriaFacts;
+  loc: TTyAriaLocale;
+  sObjs, iObjs: TTyAccObjectArray;
+  i, j, n, cnt, idx: Integer;
+  b, u: TTyRectF;
+  has: Boolean;
+  nm: string;
+begin
+  if FAccSyncing or (FOption = nil) then Exit;
+  FAccSyncing := True;
+  try
+    { a layout that is due is made first: the tree describes it }
+    ConvertReady;
+    if FAccGen = FStGen then Exit;
+    FAccGen := FStGen;
+    root := GetAccessibleObject;
+    if root = nil then Exit;
+    root.AccessibleRole := larChart;
+    { the name: the first title, as getTitle reads it; else the word }
+    nm := rsTyChartAccessibleName;
+    d := FOption.ComponentAt('title', 0);
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('text');
+      if TyDecalTruthy(d) then nm := TyJsonJsString(d);
+    end;
+    root.AccessibleName := nm;
+    root.AccessibleDescription := AccessibleSummary;
+    root.ClearChildAccessibleObjects;
+    FAccItemObjs := nil;
+    FAccItemSeries := nil;
+    FAccItemRows := nil;
+    { the phrases: the option's aria templates, when it writes aria }
+    aria := nil;
+    if FOption.Root is TJSONObject then aria := TJSONObject(FOption.Root).Find('aria');
+    if not (aria is TJSONObject) then aria := nil;
+    AriaGather(TJSONObject(aria), facts);
+    loc := TyAriaLocaleOf(TJSONObject(aria), TyAriaDefaultLocale);
+    sObjs := TyAccAddChildren(root, Length(facts.Series));
+    for i := 0 to High(sObjs) do
+    begin
+      sObjs[i].AccessibleRole := larListBox;
+      sObjs[i].AccessibleName := Trim(TyAriaSeriesPhrase(loc, facts, i));
+      cnt := Length(facts.Series[i].Rows);
+      if cnt > cTyAccMaxItems then cnt := cTyAccMaxItems;
+      iObjs := TyAccAddChildren(sObjs[i], cnt);
+      has := False;
+      u := TyRectF(0, 0, 0, 0);
+      for j := 0 to High(iObjs) do
+      begin
+        iObjs[j].AccessibleRole := larListItem;
+        iObjs[j].AccessibleName := TyAriaRowPhrase(loc, facts.Series[i].Rows[j]);
+        idx := KbElementOf(facts.Series[i].Index, j);
+        if idx >= 0 then
+        begin
+          b := TyShapeBounds(FPaintList.Element(idx).Shape);
+          iObjs[j].Position := Point(Floor(b.Left), Floor(b.Top));
+          iObjs[j].Size := Types.Size(Ceil(b.Right) - Floor(b.Left), Ceil(b.Bottom) - Floor(b.Top));
+          if not has then u := b
+          else
+          begin
+            u.Left := Math.Min(u.Left, b.Left);
+            u.Top := Math.Min(u.Top, b.Top);
+            u.Right := Math.Max(u.Right, b.Right);
+            u.Bottom := Math.Max(u.Bottom, b.Bottom);
+          end;
+          has := True;
+        end;
+        n := Length(FAccItemObjs);
+        SetLength(FAccItemObjs, n + 1);
+        SetLength(FAccItemSeries, n + 1);
+        SetLength(FAccItemRows, n + 1);
+        FAccItemObjs[n] := iObjs[j];
+        FAccItemSeries[n] := facts.Series[i].Index;
+        FAccItemRows[n] := j;
+      end;
+      if has then
+      begin
+        sObjs[i].Position := Point(Floor(u.Left), Floor(u.Top));
+        sObjs[i].Size := Types.Size(Ceil(u.Right) - Floor(u.Left), Ceil(u.Bottom) - Floor(u.Top));
+      end;
+    end;
+  finally
+    FAccSyncing := False;
+  end;
+  if (FAccLink <> nil) and FAccLink.InUse then FAccLink.NotifyReorder;
+end;
+
+function TTyAdvanceChart.AccessibleItem(ASeriesIndex, ARow: Integer): TLazAccessibleObject;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to High(FAccItemObjs) do
+    if (FAccItemSeries[i] = ASeriesIndex) and (FAccItemRows[i] = ARow) then
+      Exit(FAccItemObjs[i]);
+end;
+
+function TTyAdvanceChart.AccessibleFocusedChild: TLazAccessibleObject;
+begin
+  Result := nil;
+  if FKbActive and KbValid then Result := AccessibleItem(FKbSeries, FKbRow);
+end;
+
+function TTyAdvanceChart.AccessibleSelected(AObj: TLazAccessibleObject): Boolean;
+var
+  i, s, slot: Integer;
+begin
+  Result := False;
+  i := AccItemIndexOf(AObj);
+  if i < 0 then Exit;
+  s := FAccItemSeries[i];
+  slot := SlotOfSeries(s);
+  if slot < 0 then Exit;
+  SelEnsure(slot);
+  if (s > High(FSel)) or not FSelInit[s] then Exit;
+  Result := TySelIsSelected(FSel[s], SelData(slot), FAccItemRows[i]);
+end;
+
+function TTyAdvanceChart.AccessibleTakeFocus(AObj: TLazAccessibleObject): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := AccItemIndexOf(AObj);
+  if i < 0 then Exit;
+  KbGo(FAccItemSeries[i], FAccItemRows[i]);
+  Result := FKbActive;
 end;
 
 { ==================== the coarse pointer and the dirty rectangles [Batch 142] ====================

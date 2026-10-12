@@ -97,6 +97,17 @@ function TyAriaReplace(const AStr: string; const AKeys, AValues: array of string
 { setLabel's sentence; '' when the chart has no series }
 function TyAriaLabel(const ALocale: TTyAriaLocale; const AFacts: TTyAriaFacts): string;
 
+{ THE PIECES OF THAT SENTENCE, for the accessible tree [Batch 144]: the
+  phrase that names series AIndex of AFacts.Series (withName or withoutName
+  of the single or the multiple form, its placeholders replaced -- what the
+  sentence says before the series' data), and the phrase of one row (data
+  withName or withoutName, its values joined by the data separator).
+  TyAriaLabel is assembled from exactly these, so a screen reader walking
+  the items hears the words the description uses. }
+function TyAriaSeriesPhrase(const ALocale: TTyAriaLocale; const AFacts: TTyAriaFacts;
+  AIndex: Integer): string;
+function TyAriaRowPhrase(const ALocale: TTyAriaLocale; const ARow: TTyAriaRow): string;
+
 implementation
 
 uses tyControls.StrConsts, tyControls.AdvChart.Convert;
@@ -290,9 +301,36 @@ begin
     if k <= High(AValues) then Result := ReplaceKey(Result, AKeys[k], AValues[k]);
 end;
 
+function TyAriaSeriesPhrase(const ALocale: TTyAriaLocale; const AFacts: TTyAriaFacts;
+  AIndex: Integer): string;
+begin
+  Result := '';
+  if (AIndex < 0) or (AIndex > High(AFacts.Series)) then Exit;
+  if AFacts.SeriesCount > 1 then
+  begin
+    if AFacts.Series[AIndex].HasName then Result := ALocale.MultiWithName
+    else Result := ALocale.MultiWithoutName;
+  end
+  else if AFacts.Series[AIndex].HasName then Result := ALocale.SingleWithName
+  else Result := ALocale.SingleWithoutName;
+  Result := TyAriaReplace(Result, ['seriesId', 'seriesName', 'seriesType'],
+    [IntToStr(AFacts.Series[AIndex].Index), AFacts.Series[AIndex].Name,
+     AFacts.Series[AIndex].TypeName]);
+end;
+
+function TyAriaRowPhrase(const ALocale: TTyAriaLocale; const ARow: TTyAriaRow): string;
+var v: string;
+begin
+  v := String.Join(ALocale.DataMiddle, ARow.Values);
+  if ARow.Name <> '' then
+    Result := TyAriaReplace(ALocale.DataWithName, ['name', 'value'], [ARow.Name, v])
+  else
+    Result := TyAriaReplace(ALocale.DataWithoutName, ['name', 'value'], [ARow.Name, v]);
+end;
+
 function TyAriaLabel(const ALocale: TTyAriaLocale; const AFacts: TTyAriaFacts): string;
 var
-  s, t, rowText, v: string;
+  s, t, rowText: string;
   labels: TTyStringArray;
   i, j, k, cnt: Integer;
   disp: Double;
@@ -314,16 +352,7 @@ begin
   for i := 0 to High(AFacts.Series) do
   begin
     if not (AFacts.Series[i].Index < disp) then Continue;
-    if AFacts.SeriesCount > 1 then
-    begin
-      if AFacts.Series[i].HasName then t := ALocale.MultiWithName
-      else t := ALocale.MultiWithoutName;
-    end
-    else if AFacts.Series[i].HasName then t := ALocale.SingleWithName
-    else t := ALocale.SingleWithoutName;
-    t := TyAriaReplace(t, ['seriesId', 'seriesName', 'seriesType'],
-      [IntToStr(AFacts.Series[i].Index), AFacts.Series[i].Name,
-       AFacts.Series[i].TypeName]);
+    t := TyAriaSeriesPhrase(ALocale, AFacts, i);
     cnt := Length(AFacts.Series[i].Rows);
     if cnt > AFacts.MaxData then
       t := t + TyAriaReplace(ALocale.PartialData, ['displayCnt'], [AFacts.MaxDataText])
@@ -334,14 +363,8 @@ begin
     for j := 0 to cnt - 1 do
     begin
       if not (j < AFacts.MaxData) then Continue;
-      v := String.Join(ALocale.DataMiddle, AFacts.Series[i].Rows[j].Values);
       if k > 0 then rowText := rowText + ALocale.DataMiddle;
-      if AFacts.Series[i].Rows[j].Name <> '' then
-        rowText := rowText + TyAriaReplace(ALocale.DataWithName, ['name', 'value'],
-          [AFacts.Series[i].Rows[j].Name, v])
-      else
-        rowText := rowText + TyAriaReplace(ALocale.DataWithoutName, ['name', 'value'],
-          [AFacts.Series[i].Rows[j].Name, v]);
+      rowText := rowText + TyAriaRowPhrase(ALocale, AFacts.Series[i].Rows[j]);
       Inc(k);
     end;
     t := t + rowText + ALocale.DataEnd;
