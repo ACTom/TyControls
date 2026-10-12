@@ -585,6 +585,12 @@ begin
     '}' + LineEnding +
     'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
+    '/* A heading row of the value list editor (TTyValueRow.Heading: the property grid''s categories),' + LineEnding +
+    '   hung on TyValueListEditorRow. Only its REST look is read here -- the band, the ink, the' + LineEnding +
+    '   weight; hovered or selected it is drawn as the row''s :hover / :active, so the selection reads' + LineEnding +
+    '   the same on a heading as on any other row in every skin. The band is a wash of the ink, so it' + LineEnding +
+    '   stands out from whatever ground the skin gives the list, light or dark. */' + LineEnding +
+    'TyValueListEditorGroup { background: alpha(var(--on-surface), 0.08); color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +

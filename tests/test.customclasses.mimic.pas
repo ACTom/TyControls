@@ -7707,13 +7707,20 @@ type
     property TypeFilter;
     property HiddenProperties;
     property ExpandedProperties;
+    property ShowCategories;
     property OnFilterProperty;
+    property OnGetPropertyCategory;
     property OnGetComponentNames;
     property OnGetPropertyRow;
+    property OnGetPropertyText;
+    property OnSetPropertyText;
     property OnPropertyChanging;
     property OnPropertyChanged;
     property OnPropertyError;
     property OnEditProperty;
+    property OnCollectionChanging;
+    property OnCollectionChanged;
+    property OnCreateCollectionItem;
   end;
 
   TGenRadioButton = class(TTyCustomRadioButton)

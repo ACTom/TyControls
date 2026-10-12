@@ -14,7 +14,7 @@ unit test.propertygrid.fixtures;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms,
+  Classes, SysUtils, Variants, TypInfo, LCLType, Controls, Graphics, Forms, Menus,
   tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid;
 
 type
@@ -178,6 +178,93 @@ type
     property Mode: TPGKind read FMode write SetMode;
   end;
 
+  TPGInnerB = class(TPersistent)
+  private
+    FLevel: Integer;
+  published
+    property Level: Integer read FLevel write FLevel;
+  end;
+
+  { For several objects at once (phase 2). TPGPart and TPGPartOther share Level, Caption, Active
+    and Note (Note has no setter on TPGPartOther); Kind is a TPGKind on one and an Integer on the
+    other; Special, Guarded, Flags, Inner and Items are TPGPart's alone. Guarded's setter raises
+    when Refuse is set; Inner is a TPGInner unless UseInnerB swapped it for a TPGInnerB. }
+  TPGPart = class(TPersistent)
+  private
+    FLevel: Integer;
+    FCaption: string;
+    FActive: Boolean;
+    FNote: string;
+    FKind: TPGKind;
+    FSpecial: Integer;
+    FGuarded: Integer;
+    FFlags: TPGFlags;
+    FInner: TPersistent;
+    FItems: TOwnedCollection;
+    procedure SetGuarded(AValue: Integer);
+  public
+    Refuse: Boolean;
+    GuardedTries: Integer;
+    constructor Create;
+    destructor Destroy; override;
+    procedure UseInnerB;
+  published
+    property Level: Integer read FLevel write FLevel;
+    property Caption: string read FCaption write FCaption;
+    property Active: Boolean read FActive write FActive;
+    property Note: string read FNote write FNote;
+    property Kind: TPGKind read FKind write FKind;
+    property Special: Integer read FSpecial write FSpecial;
+    property Guarded: Integer read FGuarded write SetGuarded;
+    property Flags: TPGFlags read FFlags write FFlags;
+    property Inner: TPersistent read FInner;
+    property Items: TOwnedCollection read FItems;
+  end;
+
+  TPGPartOther = class(TPersistent)
+  private
+    FLevel: Integer;
+    FCaption: string;
+    FActive: Boolean;
+    FNote: string;
+    FKind: Integer;
+  public
+    procedure SetNoteDirectly(const AValue: string);
+  published
+    property Level: Integer read FLevel write FLevel;
+    property Caption: string read FCaption write FCaption;
+    property Active: Boolean read FActive write FActive;
+    property Note: string read FNote;                          // no setter here
+    property Kind: Integer read FKind write FKind;              // same name, another type
+  end;
+
+  { The kinds the grid does not show itself (D6): an interface, a variant, a class that is not a
+    TPersistent (a record, or a set of more than 32 elements, cannot be published at all on FPC
+    3.2.2). Amount has a setter (counted); Level is an ordinary property beside them. }
+
+  TPGNamed = class(TInterfacedObject)
+  public
+    Name: string;
+  end;
+
+  TPGExotic = class(TPersistent)
+  private
+    FIntf: IInterface;
+    FAmount: Variant;
+    FRaw: TObject;
+    FLevel: Integer;
+    procedure SetAmount(const AValue: Variant);
+  public
+    AmountSets: Integer;
+    Named: TPGNamed;   // what Intf holds (not owned here: the interface counts it)
+    constructor Create(const AName: string);
+  published
+    property Intf: IInterface read FIntf write FIntf;
+    property Amount: Variant read FAmount write SetAmount;
+    property Raw: TObject read FRaw write FRaw;
+    property Level: Integer read FLevel write FLevel;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -192,7 +279,10 @@ type
     function ExecuteFontDialog(AFont: TFont): Boolean; override;
     function ExecuteColorDialog(var AColor: TColor): Boolean; override;
     function ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean; override;
+    { The built-in collection menu is counted, never shown: a test picks its items. }
+    procedure ShowCollectionMenu(AMenu: TPopupMenu; X, Y: Integer); override;
   public
+    MenusShown: Integer;
     FontAnswer: TFont;        // nil = the dialog is cancelled
     ColorAnswer: TColor;
     FontDialogs: Integer;
@@ -224,6 +314,17 @@ type
     function CurrentRow: TTyValueRow;
     { csDesigning on and off, as the form designer sets it. }
     procedure DesignMode(AOn: Boolean);
+    { A right click on ARow's key cell: the press, the release, then the context-menu request
+      the widgetset sends. True when the grid took it (showed its own menu). }
+    function RightClick(ARow: TTyValueRow): Boolean;
+    { The built-in collection menu's item captioned ACaption (fails the test if missing). }
+    function MenuItem(const ACaption: string): TMenuItem;
+    { Choose that item the way a click in the shown menu does (a disabled one does nothing). }
+    procedure PickMenu(const ACaption: string);
+    { The grid painted into ACanvas, as the window would show it. }
+    procedure PaintInto(ACanvas: TCanvas; const ARect: TRect);
+    { The keys of the rows on display, top to bottom, comma-separated. }
+    function ShownKeys: string;
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -370,6 +471,58 @@ begin
   raise Exception.Create('no mode change');
 end;
 
+{ ---- TPGPart ---- }
+
+constructor TPGPart.Create;
+var it: TPGItem;
+begin
+  inherited Create;
+  FInner := TPGInner.Create;
+  FItems := TOwnedCollection.Create(Self, TPGItem);
+  it := TPGItem(FItems.Add);
+  it.Caption := 'only';
+end;
+
+destructor TPGPart.Destroy;
+begin
+  FItems.Free;
+  FInner.Free;
+  inherited Destroy;
+end;
+
+procedure TPGPart.UseInnerB;
+begin
+  FInner.Free;
+  FInner := TPGInnerB.Create;
+end;
+
+procedure TPGPart.SetGuarded(AValue: Integer);
+begin
+  Inc(GuardedTries);
+  if Refuse then raise Exception.Create('guarded');
+  FGuarded := AValue;
+end;
+
+procedure TPGPartOther.SetNoteDirectly(const AValue: string);
+begin
+  FNote := AValue;
+end;
+
+constructor TPGExotic.Create(const AName: string);
+begin
+  inherited Create;
+  Named := TPGNamed.Create;
+  Named.Name := AName;
+  FIntf := Named;
+  FAmount := 12;
+end;
+
+procedure TPGExotic.SetAmount(const AValue: Variant);
+begin
+  Inc(AmountSets);
+  FAmount := AValue;
+end;
+
 { ---- TPGEditAccess ---- }
 
 procedure TPGEditAccess.TypeText(const AText: string);
@@ -498,7 +651,7 @@ var n, res: Integer; p: TTyValueRow; anyOpened: Boolean;
   procedure Walk(R: TTyValueRow);
   var i: Integer;
   begin
-    if res >= 0 then Exit;
+    if (res >= 0) or R.Hidden then Exit;
     if R = ARow then begin res := n; Exit; end;
     Inc(n);
     if R.Expanded then
@@ -617,7 +770,7 @@ var n: Integer; res: TTyValueRow;
   procedure Walk(R: TTyValueRow);
   var i: Integer;
   begin
-    if res <> nil then Exit;
+    if (res <> nil) or R.Hidden then Exit;
     if n = ItemIndex then begin res := R; Exit; end;
     Inc(n);
     if R.Expanded then
@@ -636,6 +789,56 @@ end;
 procedure TPGGrid.DesignMode(AOn: Boolean);
 begin
   SetDesigning(AOn, False);
+end;
+
+procedure TPGGrid.ShowCollectionMenu(AMenu: TPopupMenu; X, Y: Integer);
+begin
+  Inc(MenusShown);
+end;
+
+function TPGGrid.RightClick(ARow: TTyValueRow): Boolean;
+var f, x, y: Integer; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  r := ItemRect(f);
+  x := 40;                         // the key column
+  y := (r.Top + r.Bottom) div 2;
+  MouseDown(mbRight, [], x, y);
+  MouseUp(mbRight, [], x, y);
+  Result := False;
+  DoContextPopup(Point(x, y), Result);
+end;
+
+function TPGGrid.MenuItem(const ACaption: string): TMenuItem;
+var i: Integer;
+begin
+  if CollectionMenu = nil then raise EAssertionFailedError.Create('no collection menu yet');
+  for i := 0 to CollectionMenu.Items.Count - 1 do
+    if CollectionMenu.Items[i].Caption = ACaption then Exit(CollectionMenu.Items[i]);
+  raise EAssertionFailedError.Create('no menu item ' + ACaption);
+end;
+
+procedure TPGGrid.PickMenu(const ACaption: string);
+begin
+  CollectionMenu.ActivateRowForTest(MenuItem(ACaption).MenuIndex);
+end;
+
+procedure TPGGrid.PaintInto(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+function TPGGrid.ShownKeys: string;
+var i: Integer;
+begin
+  { The list box's items are the rows on display (the editor keeps them in step). }
+  Result := '';
+  for i := 0 to Items.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + Items[i];
+  end;
 end;
 
 end.

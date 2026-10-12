@@ -422,7 +422,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
 | [dbcontrols](examples/dbcontrols/) | Data-aware controls: all 21 bound to an in-memory table; navigating, editing, NULLs, lookups, photos |
 | [dbgrid](examples/dbgrid/) | Data grid: a thousand orders, design-time columns (check box, lookup, memo, formatted amount), sorting by title click, deleting a multiselection, a read-only switch |
-| [propertygrid](examples/propertygrid/) | Property grid: click a control to inspect it and edit it in place; a show-events switch and a filter box built on `OnFilterProperty` |
+| [propertygrid](examples/propertygrid/) | Property grid: click a control to inspect it (Ctrl+click for several) and edit it in place; a name filter, categories, writable-only and show-events switches, adding and deleting a string grid's columns |
 | [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY / pipes), ZModem send and receive, skins, colour schemes, a key-code panel |
 
 Thirty-plus single-control examples live under [examples/](examples/).

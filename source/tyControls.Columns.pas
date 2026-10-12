@@ -124,9 +124,10 @@ type
     procedure NotifyOwner;
   protected
     function  GetDisplayName: string; override;
-    { #70. A move through Index -- the IDE's collection editor moves columns this way --
-      went unheard: TCollectionItem.SetIndex calls Changed, which reaches an Update that
-      TTyColumns does not override. See the implementation. }
+    { #70. A move through Index -- the IDE's collection editor moves columns this way, and so
+      does a property grid -- went unheard: TCollectionItem.SetIndex calls Changed, which
+      reaches an Update that TTyColumns does not override, so the host's column geometry
+      went stale. See the implementation. }
     procedure SetIndex(Value: Integer); override;
   public
     constructor Create(ACollection: TCollection); override;

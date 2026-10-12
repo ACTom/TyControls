@@ -44,8 +44,9 @@ TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是*
 | `TyValueListEditorValue` | 值列**默认**文字色(逐行的 `TextColor` 覆盖仍然优先) |
 | `TyValueListEditorDivider` | 键/值分隔线(读 `background`) |
 | `TyValueListEditorExpander` | 展开/收起三角的填充色 |
+| `TyValueListEditorGroup` | 标题行(`TTyValueRow.Heading`)**平时**的底色、文字色、字重;挂在 `TyValueListEditorRow` 下面。悬停、选中时标题行照普通行的 `:hover` / `:active` 画 |
 
-> 后四个是**可选钩子**:`themes/light.tycss` 有意不定义它们,因为它们的后备值**随行状态而变**——
+> `Key`/`Value`/`Divider`/`Expander` 四个是**可选钩子**:`themes/light.tycss` 有意不定义它们,因为它们的后备值**随行状态而变**——
 > 都回落到**当前行**解析出的颜色(分隔线回落到该颜色的 alpha `0x28`)。在基层写一个固定值反而会动像素:
 > 选中行的后备墨色是 `--on-accent`,若在这里写死 `color: var(--on-surface)`,选中行的键名会直接看不清。
 > **要用就连 `:hover` / `:active` 变体一起写。**
@@ -89,7 +90,7 @@ uses tyControls.ValueListEditor;
 | `OnKeyChanged(Sender, ARow)` | **(新增)** 一次改名**已提交**(`ARow.Key` 已是新名)——`keyEdit` 手势或程序化 `Keys[i] :=` 两条路都报,与 `OnValueChanged` 对值的两条路对称。**刻意不复用 `OnValueChanged`**——那个事件的约定是"哪一行的**值**变了",拿它报改名会让它说谎。 |
 | `OnKeyRejected(Sender, ARow, AKey)` | **(新增)** 一次改名被 `keyUnique` **拒绝**(该行仍是旧名),`AKey` 是用户想取的名字。LCL 在控件内部直接弹 `ShowMessage`(`valedit.pas:1614`);控件库不该这么干,所以只把拒绝报出来,要不要提示由应用决定。 |
 
-**`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`;`AddChild(k,v)` / `ChildCount` / `Child[i]` / `Parent` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
+**`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`、`Data`、`Heading`(标题行:键横跨整行、粗体、`TyValueListEditorGroup` 底色,没有分隔线和值,不能编辑,Enter 展开/收起)、`Hidden`(连同子行一起不显示,改完调 `UpdateRows`);`AddChild(k,v)` / `ChildCount` / `Child[i]` / `Parent` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
 
 ---
 
