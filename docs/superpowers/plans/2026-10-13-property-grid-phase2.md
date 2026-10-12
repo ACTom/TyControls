@@ -59,6 +59,11 @@
 - 不在控件里内置搜索框：自绘控件里嵌一个编辑框，牵涉焦点、Tab 顺序、主题，还会让「只要一个表格」的场景多出一块。应用放一个 `TTyEdit`，在 `OnChange` 里设 `FilterText` 就行，示例照这么演示。
 - `FilterText` 和 `OnFilterProperty` 同时生效：先问事件，再按文字过滤。
 
+**D6 可扩展性不丢**（2026-10-13 用户追加，约束全部任务）：内置只管常见情况，没内置的，应用自己能加上——经事件、虚方法、公开方法，永远不必改控件。
+- (a) **不显示的类型**（接口、变体、记录、超过 32 个元素的集合，以及应用想换个方式处理的类，比如把 `TPicture` 当文件名）：加 `OnGetPropertyText(Sender; AInstance: TPersistent; APropInfo: PPropInfo; var AText: string; var AHandled: Boolean)` 和 `OnSetPropertyText(Sender; AInstance: TPersistent; APropInfo: PPropInfo; const AText: string; var AHandled: Boolean)`。`OnFilterProperty` 对**每个** published 属性都问（`TypeFilter`、`HiddenProperties` 先滤，不支持的种类 `AShow` 进来是 False）；不支持的属性在 `AShow := True` 且 `OnGetPropertyText` 处理了（`AHandled`）时列出，没挂 `OnSetPropertyText` 就只读。支持的类型，这两个事件处理了就跳过内置的转换。加上已有的 `OnGetPropertyRow`（编辑器种类、选项）和 `OnEditProperty`（对话框），应用能完整支持一种我们不认识的类型。多选时按对象各发一次。（整数子界的集合第一期已支持，不在此列。）
+- (b) **集合操作**：内置右键菜单只在表格的 `PopupMenu` 没设时出现；应用自己的菜单用公开的 `AddCollectionItem` / `DeleteCollectionItem` / `MoveCollectionItem` 加 `PropertyAt` 做同样的事（执行时补：`PropertyAt` 对集合项的行答 False、也不给路径，所以另加公开的 `SelectedRow`（当前行）和 `RowPath(ARow)`（行的点号路径，格式同 `ExpandedProperties`），应用的菜单才拿得到路径）。`OnCreateCollectionItem(Sender; ACollection: TCollection; var AItem: TCollectionItem)` 让应用自己建项（特定的项类、初值）；留 nil 就用内置的 `Add`。
+- (c) **留给 Task 3**：分类有 `OnGetPropertyCategory`，过滤有 `OnFilterProperty` + `FilterText`。另把「建一行」做成 protected virtual（如 `CreatePropertyRow`），子类能整个接管某种类型的行。
+
 **D5 与第一期的关系**：第一期的发布属性、事件、默认行为一律不变；新属性的默认值让行为和第一期一样（`ShowCategories = False`、`FilterText = ''`、单选）。
 
 ## 任务
