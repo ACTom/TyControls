@@ -1,0 +1,135 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 660
+  Top = 0
+  Width = 1000
+  Caption = 'Data-aware grid example'
+  ClientHeight = 660
+  ClientWidth = 1000
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  TitleHeight = 34
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 660
+    Top = 0
+    Width = 1000
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1000
+      TabOrder = 0
+      Caption = 'Data-aware grid  ·  TyControls'
+      Align = alTop
+      object DarkSwitch: TTyToggleSwitch
+        Left = 652
+        Height = 24
+        Top = 5
+        Width = 74
+        TabOrder = 0
+        TabStop = True
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+        Anchors = [akTop, akRight]
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 734
+        Height = 26
+        Top = 4
+        Width = 120
+        TabOrder = 1
+        ItemIndex = -1
+        OnChange = ThemeComboChange
+        Anchors = [akTop, akRight]
+      end
+    end
+    object Navigator: TTyDBNavigator
+      Left = 16
+      Height = 30
+      Top = 46
+      Width = 300
+      TabOrder = 1
+      DataSource = OrdersSrc
+    end
+    object BtnDeleteSelected: TTyButton
+      Left = 332
+      Height = 30
+      Top = 46
+      Width = 160
+      TabOrder = 2
+      OnClick = BtnDeleteSelectedClick
+      Caption = 'Delete selected'
+    end
+    object CbReadOnly: TTyCheckBox
+      Left = 508
+      Height = 24
+      Top = 49
+      Width = 130
+      TabOrder = 3
+      Caption = 'Read only'
+      OnChange = CbReadOnlyChange
+    end
+    object Grid: TTyDBGrid
+      Left = 16
+      Height = 520
+      Top = 88
+      Width = 968
+      TabOrder = 4
+      OnKeyUp = GridKeyUp
+      OnMouseUp = GridMouseUp
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      DataSource = OrdersSrc
+      Columns = <
+        item
+          FieldName = 'ID'
+          Width = 64
+        end
+        item
+          FieldName = 'Customer'
+          Width = 190
+        end
+        item
+          FieldName = 'City'
+          Width = 120
+        end
+        item
+          FieldName = 'OrderDate'
+          Width = 110
+        end
+        item
+          FieldName = 'Amount'
+          DisplayFormat = '#,##0.00'
+          Width = 110
+        end
+        item
+          FieldName = 'Paid'
+          Width = 64
+        end
+        item
+          FieldName = 'Note'
+          Width = 260
+        end>
+      Options = [dgEditing, dgTitles, dgIndicator, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgMultiselect, dgDisplayMemoText]
+      OnTitleClick = GridTitleClick
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 620
+      Width = 968
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = 'State: closed'
+    end
+  end
+  object OrdersSrc: TDataSource
+    OnStateChange = OrdersSrcStateChange
+    OnDataChange = OrdersSrcDataChange
+    Left = 40
+    Top = 600
+  end
+end

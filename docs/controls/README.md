@@ -153,7 +153,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 
 | 控件 | 说明 |
 |------|------|
-| [数据感知控件](dbcontrols.md) | `tycontrols_db` 包的 21 个控件：`TTyDBEdit`、`TTyDBNavigator`、查找下拉等，绑 `TDataSource` 的字段即用 |
+| [数据感知控件](dbcontrols.md) | `tycontrols_db` 包里绑字段的 21 个控件：`TTyDBEdit`、`TTyDBNavigator`、查找下拉等，绑 `TDataSource` 的字段即用 |
+| [TTyDBGrid](dbgrid.md) | 数据表格：一行一条记录，就地编辑、插入、删除、多选，行为照 LCL `TDBGrid` |
 
 ## 范围与进度
 

@@ -100,7 +100,7 @@ const
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
     parent); an intermediate row (subject <> activator) checks Subject.ClassParent. }
-  CChain: array[0..63, 0..2] of string = (
+  CChain: array[0..64, 0..2] of string = (
     ('TTyDropDownButton', 'TTyCustomButton', 'TTyDropDownButton'),
     ('TTyMenuButton', 'TTyCustomButton', 'TTyMenuButton'),
     ('TTyColorButton', 'TTyCustomButton', 'TTyColorButton'),
@@ -159,6 +159,7 @@ const
     ('TTyRangeTrackBar', 'TTyMultiTrackBarBase', 'TTyRangeTrackBar'),
     ('TTyMultiTrackBar', 'TTyMultiTrackBarBase', 'TTyMultiTrackBar'),
     ('TTyGradientTrackBar', 'TTyCustomMultiTrackBar', 'TTyGradientTrackBar'),
+    ('TTyDBGrid', 'TTyCustomStringGrid', 'TTyDBGrid'),
     { intermediates: activated by their family root }
     ('TTyGlyphButtonBase', 'TTyCustomButton', 'TTyButton'),
     ('TTyShellTreeLink', 'TTyCustomTreeView', 'TTyTreeView'),
@@ -1232,7 +1233,7 @@ initialization
     'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox', 'TTyDBToggleSwitch', 'TTyDBRadioGroup',
     'TTyDBSegmented', 'TTyDBRating', 'TTyDBComboBox', 'TTyDBListBox', 'TTyDBLookupComboBox',
     'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar',
-    'TTyDBNavigator',
+    'TTyDBNavigator', 'TTyDBGrid',
     // multi-thumb track bars (#36)
     'TTyRangeTrackBar', 'TTyMultiTrackBar', 'TTyGradientTrackBar']);
 

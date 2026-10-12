@@ -315,6 +315,12 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  { The collection class a header builds (TTyHeader.Create(AColumnClass, AColumnsClass)): a
+    descendant that adds typed accessors or reacts to items coming and going. It is created
+    through TTyColumns.Create(AOwnerHeader, AItemClass), so it declares no constructor of
+    its own. }
+  TTyColumnsClass = class of TTyColumns;
+
   { ===================================================================
     TTyHeader — header band descriptor (Phase B)
     Owned by TTyTreeView; painted by the tree (not a windowed control).
@@ -346,6 +352,9 @@ type
     constructor Create; overload;
     { See TTyColumns.Create(AOwnerHeader, AItemClass). }
     constructor Create(AColumnClass: TCollectionItemClass); overload;
+    { The same, with a TTyColumns descendant for the collection itself (nil: TTyColumns). }
+    constructor Create(AColumnClass: TCollectionItemClass;
+      AColumnsClass: TTyColumnsClass); overload;
     destructor  Destroy; override;
     procedure Assign(ASource: TPersistent); override;
 
@@ -1282,7 +1291,14 @@ end;
 
 constructor TTyHeader.Create(AColumnClass: TCollectionItemClass);
 begin
+  Create(AColumnClass, TTyColumns);
+end;
+
+constructor TTyHeader.Create(AColumnClass: TCollectionItemClass;
+  AColumnsClass: TTyColumnsClass);
+begin
   inherited Create;
+  if AColumnsClass = nil then AColumnsClass := TTyColumns;
   FHeight        := 22;
   FHeightExplicit := False;
   FMainColumn    := 0;
@@ -1292,7 +1308,7 @@ begin
   FImages        := nil;
   FOptions       := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                      hoHeaderClickAutoSort, hoDrag];
-  FColumns       := TTyColumns.Create(Self, AColumnClass);
+  FColumns       := AColumnsClass.Create(Self, AColumnClass);
   FColumns.OnChange := @ColumnsChanged;
 end;
 
