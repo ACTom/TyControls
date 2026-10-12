@@ -141,6 +141,11 @@ type
     procedure AssertTheGridHasTheFocus(AGrid: TTyStringGrid; const AAfter: string);
     { A key as the system delivers it, to whatever window holds the focus. }
     procedure PressKey(AKey: Word; AChar: Char = #0);
+    { A grid whose one column edits in AKind, row 1 holding AValue, the cursor on that cell
+      and the focus on the grid -- not editing. }
+    function NewEditorGrid(AKind: TTyGridEditorKind; const AValue: string): TTyStringGrid;
+    { A printable key as the system delivers it: down, the character, up. }
+    procedure TypeKey(AChar: Char);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -153,6 +158,7 @@ type
     procedure TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
     procedure TestUpDownInAPickListCellMoveTheCursor;
     procedure TestAPickInACellHandsTheFocusBackToTheGrid;
+    procedure TestASpinCellKeepsTheNumberTypedIntoIt;
   end;
 
 implementation
@@ -1141,6 +1147,72 @@ begin
     AssertSame('the focus is where it was sent', TWinControl(FPark),
       TWinControl(FForm.ActiveControl));
     AssertNothingRaised('picks in a pick list');
+  finally
+    grid.Free;
+  end;
+end;
+
+function TTyClickFocusTest.NewEditorGrid(AKind: TTyGridEditorKind;
+  const AValue: string): TTyStringGrid;
+begin
+  Result := NewScrollingGrid(FForm);
+  (Result.Header.Columns[0] as TTyGridColumn).EditorKind := AKind;
+  Result.Cells[0, 1] := AValue;
+  Result.Col := 0;
+  Result.Row := 1;
+  Result.SetFocus;
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the grid holds the focus', GetFocus = Result.Handle);
+  AssertFalse('setup: and is not editing', Result.Editing);
+end;
+
+procedure TTyClickFocusTest.TypeKey(AChar: Char);
+begin
+  PressKey(Ord(UpCase(AChar)), AChar);
+end;
+
+{ #66. A number typed into a spin cell lived in the spin edit's text until the spin edit
+  committed it -- on Enter, or in its DoExit, which runs only after OnExit. The grid ends the
+  edit in OnExit, and read the spin edit's value there: the number from before the typing. So
+  typing a number into the cell and moving on left the old one. Real keys, a real change of
+  focus. }
+procedure TTyClickFocusTest.TestASpinCellKeepsTheNumberTypedIntoIt;
+var
+  grid: TTyStringGrid;
+  spin: TTySpinEdit;
+begin
+  grid := NewEditorGrid(gekSpin, '42');
+  try
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the cell edits in a spin edit', grid.EditorControl is TTySpinEdit);
+    spin := TTySpinEdit(grid.EditorControl);
+    AssertTrue('setup: which holds the focus', GetFocus = spin.Handle);
+    PressKey(VK_BACK);
+    PressKey(VK_BACK);
+    TypeKey('7');
+    TypeKey('5');
+    AssertEquals('setup: the number typed', '75', spin.Text);
+    FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertFalse('leaving the cell ended the edit', grid.Editing);
+    AssertEquals('and the cell holds the number typed', '75', grid.Cells[0, 1]);
+
+    { Ended from code, the same -- and clamped to the column's range, as the spin edit's own
+      commit clamps it. }
+    AssertTrue('setup: editing the cell again', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    spin := TTySpinEdit(grid.EditorControl);
+    PressKey(VK_BACK);
+    PressKey(VK_BACK);
+    TypeKey('3');
+    TypeKey('0');
+    TypeKey('0');
+    AssertEquals('setup: the number typed', '300', spin.Text);
+    grid.EndEdit(True);
+    AssertEquals('the cell holds it, clamped to the column''s maximum', '100',
+      grid.Cells[0, 1]);
+    AssertNothingRaised('typing into a spin cell');
   finally
     grid.Free;
   end;
