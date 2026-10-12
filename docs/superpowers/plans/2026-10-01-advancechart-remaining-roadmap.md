@@ -1,8 +1,8 @@
 # TTyAdvanceChart 路线图进度审计(Tier 1 / 2 / 3)
 
-- 审计对象:`D:/Projects/ty-advchart`(feat/advancechart-tier2,HEAD `a35ee4b5` 合入 C18–C20/C22;初版审计在 feat/advancechart `68f470c1` T3 树图交互;2026-10-13 更新到第 131 批)
+- 审计对象:`D:/Projects/ty-advchart`(feat/advancechart-tier2,HEAD `72983fa7` 合入 D1–D4;初版审计在 feat/advancechart `68f470c1` T3 树图交互;2026-10-13 更新到第 131 批,2026-10-12 里程碑 D1–D4(§174)更新到第 135 批)
 - 路线图:`docs/superpowers/research/2026-09-01-echarts/10-gap-analysis.md` §5
-- 进度日志:`docs/superpowers/specs/2026-09-01-advancechart-tier0.md` §33–§167
+- 进度日志:`docs/superpowers/specs/2026-09-01-advancechart-tier0.md` §33–§172、§174
 - 核对方法:spec 每节的"实现"和"已知偏差/没做"逐条摘出,再到 `source/tyControls.AdvChart.*.pas` 和 `tyControls.AdvanceChart.pas` 里 grep option 键(排除生成的 `Catalog.pas`)。spec 里只说"押后"的一律不算做完。
 - 渲染器表(`Marks.pas` `cRenderers` 8 种 + `cElsewhere` 14 种)实际能画的 22 种:bar, line, scatter, effectScatter, candlestick, boxplot, pictorialBar, heatmap, pie, funnel, gauge, radar, graph, tree, sunburst, treemap, sankey, themeRiver, chord, lines, custom, parallel。
 - 只注册、没有渲染器的 1 种(`Series.pas` `Reg`):map(等 geo,D14)。
@@ -29,7 +29,7 @@
 | scatter / bubble | DONE | §37;§90 visualMap symbolSize 通道 | 回调形式的 symbolSize 只能走 visualMap 或第三列替身 |
 | 饼图:start/endAngle、clockwise、padAngle、minAngle、roseType、selectedOffset、emphasis.scale、percentPrecision | DONE | §39 布局/minAngle/roseType;§41 扇区圆角;§57 emphasis.scale;§69 最大余数 `{d}`;`Pie.pas:428-458` endAngle/clockwise/padAngle/roseType;§123 选中态与 selectedOffset(标签、引导线一起平移);§129 选中平移与 emphasis 放大的状态过渡 | 扇区命中仍用整环,圆角外一点也算中(§41);常态隐藏、只在状态里显示的标签不建(§123/§144);内侧标签在选中色上不重挑墨色(§123) |
 | 坐标轴解剖:axisLine(+onZero、箭头)、axisTick、minorTick、axisLabel、splitLine(+配色循环)、minorSplitLine、splitArea、name* / nameTruncate | DONE | §48 显隐默认、minorTick/minorSplitLine;§51 onZero/offset;§53/§77 rotate/margin/inside;§68 字符串 formatter;§72 name/nameLocation/nameGap/nameRotate;§74 tick/split 跟标签走;§117 函数 formatter;§118 轴标签与轴名的作者字体、颜色;§121 轴标签与轴名的 rich/盒子;§136 axisLine 箭头、nameTruncate、splitLine/splitArea 颜色列表轮流取(跨渲染保色) | 轴线与箭头颜色走皮肤 `TyAdvChartAxisLine`,不读 `axisLine.lineStyle.color`(§136);splitLine 的 width/type、splitArea 的 opacity 仍是皮肤的(§136);`image://` 箭头不画(§136);截成空串的轴名当没有名字(§136) |
-| 多轴:position、offset、第二 Y 轴、gridIndex、alignTicks | DONE | §51 offset/onZeroAxisIndex;§82 alignTicks(`scaleCalcAlign`);Builder `gridIndex`/`position` | alignTicks 与 inverse、断轴、containShape 的交互没做(§82) |
+| 多轴:position、offset、第二 Y 轴、gridIndex、alignTicks | DONE | §51 offset/onZeroAxisIndex;§82 alignTicks(`scaleCalcAlign`);Builder `gridIndex`/`position` | alignTicks 与 inverse、containShape 的交互没做(§82);写了 `breaks` 的轴照上游不参加 alignTicks(§169) |
 | `axisLabel.interval: 'auto'` + ±1 滞回缓存 | DONE | §73 `calculateCategoryInterval`(采样、×1.3、7px 下限、旋转投影);§136 滞回缓存(只抑制减一、resize 不用,按轴记忆,notMerge 清空) | replaceMerge 删轴不补时记忆留到这个下标再有新轴才清;隐藏的轴不量间隔(§136);量的是主题字体而不是上游的 12px,拥挤类目上可差一档(§145);时间线组件的跨渲染缓存不做(§165) |
 | 时间轴:12 级阶梯、分级 tick、日历边界、级别格式器、24 个格式 token、本地化月/周名 | DONE | §52 `Time.pas` 分级阶梯/日历步进/级别标签;§67 flat extent 与 min/maxInterval;`Time.pas:98` 24 个 token 与默认分级模板;§117 字符串与 `@Name` formatter;§139 上游替换链、按级别对象与级联、`{primary|}` 走富文本、指针标签与轴 tooltip 表头走 getLabel | 改应用语言后不重建就不重标(§52);没有 `locale` 选项,月名走本库三级规则(§139,有意);毫秒级 getLabel 到不了(§139);日历算术钳在公元 1–9999 年(§139) |
 | 图例组件:orient/align/盒子折行、逐项图标、selectedMode + **点击切换**、未选样式、formatter、selector | DONE | §45 绘制与折行;§46 过滤;§65 类别入图例;§86 mergeLayoutParam;`Legend.pas` 读 formatter/icon/orient/align;§117 `@Name` formatter;§128 点击切换、五个图例动作与 legendselectchanged、悬停联动高亮、作者 textStyle/inactiveColor;§131 切换的过渡;§133 selector 按钮与 scroll 翻页(legendScroll、翻页补间);§135 找不到名字的项不画 | `legend.data[i]` 里的 inactiveColor/textStyle 不读(§121/§128);`image://` 翻页图标不画(§133);`emphasis.selectorLabel` 只读颜色(§133);按钮命中是整个盒子(§133) |
@@ -97,7 +97,7 @@
 
 ---
 
-## Tier 3(23 行):DONE 3 · PARTIAL 7 · NOT STARTED 13
+## Tier 3(23 行):DONE 6 · PARTIAL 6 · NOT STARTED 11
 
 | 行 | 状态 | 证据 | 缺什么 |
 |---|---|---|---|
@@ -106,8 +106,8 @@
 | geo 上的热力图 | NOT STARTED | heatmap 注册时列了 geo,没有实现 | 全部 |
 | `matrix` 坐标系 | NOT STARTED | `matrix` 的命中全是仿射矩阵;§101 matrix-stock 没画 | 全部(画廊 12 个) |
 | `coordinateSystemUsage: 'box'` | PARTIAL | §106 pie 摆进日历格子(用 `coord` 或把 center 写成日期);§104–§106 系列落在日历格 | matrix 格子里的宿主;在格子里嵌坐标系或组件(grid/legend…) |
-| 断轴(v6):分段映射、锯齿、刻度剪枝、展开收起动作 | PARTIAL | Tier 0 契约 ②:断轴 mapper 和 `test.advchart.scale.break`;§51/§67/§73/§76 都记"断轴还没接到任何 option" | option 接线、随机锯齿缓存、刻度剪枝、nice 扣除断开区间(§67)、expand/collapse 动作(画廊 5 个) |
-| `realtimeSort` 柱状竞赛 | NOT STARTED | 0 命中 | 全部;前置的动画引擎已在(§122–§134) |
+| 断轴(v6):分段映射、锯齿、刻度剪枝、展开收起动作 | PARTIAL | Tier 0 契约 ②:断轴 mapper 和 `test.advchart.scale.break`;§169 D1 `breaks` 接到 value / time 轴(解析、合并重叠、两种 gap)、随机锯齿与按断开 id 的缓存、刻度剪枝(两种模式)、nice 用扣掉断开的线性跨度、断开区与断开标签、展开 / 收起 / toggle 动作与 `axisbreakchanged`(上游基准 `advchart-axis-breaks.json`) | log 轴与 singleAxis 上的 `breaks`(上游有,端口不接);转了角度的断开标签不按 OBB 移开;断开区不参加过渡动画;formatter 与事件参数里没有 `break`(§169) |
+| `realtimeSort` 柱状竞赛 | DONE | §172 D4 `realtimeSort` 与类目轴的 `categorySortInfo`(刻度 ↔ 序号双向映射)、`rendered` 里的次序检查与 `changeAxisOrder` 动作 / 事件、初次排序与后续排序的两种过渡、竞赛柱裁剪后留着 `ignore`、标签计数接着走(上游基准 `advchart-realtime-sort.json`) | 被覆盖的旧 `rendered` 监听不另算;竞赛轴上的 dataZoom、notMerge / replaceMerge 下的第一帧没有基准;查次序的时机按端口的绘制(§172) |
 | Universal transition + 形状变形 | NOT STARTED | 0 命中 | 全部;前置的动画引擎已在(§122–§134) |
 | `keyframeAnimation` + 过渡小语言 | NOT STARTED | 0 命中 | 全部 |
 | 叠加动画 | DONE | §151 引擎的 additive(`TTyAnimCfg.Additive`、轨道 `AddValue`、`GetAdditiveTrack`),visualMap 连续型指示器在用 | —(上游也只有这一处用它,§122) |
@@ -115,8 +115,8 @@
 | parallel `axisExpandable` 鱼眼 | PARTIAL | §164 静态布局(窗口、折起的轴、藏标签、截名称) | `axisExpandTriggerOn` 的点击/移动、`parallelAxisExpand` 动作、节流(D7) |
 | `axisPointer.link` + mapper | NOT STARTED | §56 把 link 列为押后 | 全部 |
 | 跨控件联动 + 组合导出 | NOT STARTED | — | 全部 |
-| dataset transform 管线(filter DSL、sort、管道、多输出) | PARTIAL | `Dataset.pas` 头注释;§47;§143 数据集串联(fromDatasetIndex/Id、fromTransformResult)、管道、多输出、`'boxplot'` 变换(`TTyDatasetCache`) | **filter DSL、sort**(D2);未注册类型、空管道等上游抛错的写法端口只是没有表、没有诊断(§143) |
-| 统计变换:回归、k-means、直方图 | NOT STARTED | `regression` 0 命中 | 全部 |
+| dataset transform 管线(filter DSL、sort、管道、多输出) | DONE | `Dataset.pas` 头注释;§47;§143 数据集串联(fromDatasetIndex/Id、fromTransformResult)、管道、多输出、`'boxplot'` 变换(`TTyDatasetCache`);§170 D2 transform 注册表、filter 条件语言(and / or / not、六种比较、parser)、sort(V8 TimSort 逐位、incomparable)、维度名去重、上游抛错的写法给诊断 `dataset[%d] has no table`(上游基准 `advchart-dataset-transform.json`) | `reg` 运算符照路线图不做;上游整次 `setOption` 失败处端口只让相关数据集没有表;`print` 不做(§170) |
+| 统计变换:回归、k-means、直方图 | DONE | §171 D3 `ecStat:regression`(linear / exponential / logarithmic / polynomial,公式与 formulaOn)、`ecStat:histogram`(squareRoot / scott / freedmanDiaconis / sturges)、`ecStat:clustering`(二分 k-means,随机数接图表的流)(上游基准 `advchart-stat-transforms.json`) | 不用 `registerTransform` 就有;只认 JSON 的数(ecStat 的 `isNumber` 放过数字串);迭代、阶数、刻度数有上限;toFixed 只到 20 位(§171) |
 | `setOption` 式 option 树 + normal/replace 合并 | DONE | Tier 0 第 4 项:宽松 JSON 树 + 整体替换(notMerge,`Option.pas:17-21`);§79 resize 与重设保留 roam;§130 A10 `MergeOption`/`SetOption` 的 normalMerge(id/name/索引)、完全相同文本的语义、`GetOptionJson`;§132 A11 replaceMerge、索引空洞、选项对象形式与 updated 事件;§142/§160/§165 media、toolbox restore/magicType、timeline 走合并 | 整份的 replaceAll(`resetOption('recreate')`)不单独提供(§132);`GetOptionJson` 是原始合并层(§130);重复 id 的合并整个不生效(§130);未知系列类型照常占位置(§130) |
 | 事件的查询过滤 | DONE | §119 A3 字符串与对象查询(ECEventProcessor 规则)、`ChartOn`/`ChartOff` 去重 | — |
 | 粗指针命中回退 | NOT STARTED | — | 全部 |
@@ -264,10 +264,10 @@
 
 | 批 | 内容 | 天 | 前置 |
 |---|---|---|---|
-| D1 | 断轴:`breaks` 接到已有 mapper、随机锯齿缓存、刻度剪枝、nice 扣除断开区间、展开收起动作 | 3 | — |
-| D2 | dataset transform:注册表、filter DSL(不含 reg)、sort、管道、多输出 | 3 | — |
-| D3 | 统计变换:回归 4 种、k-means、直方图 4 种分箱 | 3 | D2 |
-| D4 | realtimeSort 柱状竞赛 | 2–3 | A8 |
+| D1 | **[PARTIAL,第 132 批 §169;log 轴与 singleAxis 的断开未接]** 断轴:`breaks` 接到已有 mapper、随机锯齿缓存、刻度剪枝、nice 扣除断开区间、展开收起动作 | 3 | — |
+| D2 | **[DONE,第 133 批 §170]** dataset transform:注册表、filter DSL(不含 reg)、sort、管道、多输出 | 3 | — |
+| D3 | **[DONE,第 134 批 §171]** 统计变换:回归 4 种、k-means、直方图 4 种分箱 | 3 | D2 |
+| D4 | **[DONE,第 135 批 §172]** realtimeSort 柱状竞赛 | 2–3 | A8 |
 | D5 | universalTransition(UT1–UT3:dividePath/combine/separate 变形、groupId 方向嗅探) | 3×3 | A8 |
 | D6 | keyframeAnimation + 过渡小语言、叠加动画 | 3 | A8, C13 |
 | D7 | thumbnail 小地图;parallel axisExpandable | 3 | C19 |

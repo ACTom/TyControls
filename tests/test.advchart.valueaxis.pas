@@ -250,6 +250,15 @@ begin
   Move(ABits, Result, SizeOf(Result));
 end;
 
+{ The sign bit, which = cannot see: -0 = 0. }
+function SignBitOf(AValue: Double): Boolean;
+var bits: QWord;
+begin
+  bits := 0;
+  Move(AValue, bits, SizeOf(bits));
+  Result := (bits shr 63) <> 0;
+end;
+
 procedure TAdvChartNiceNumberTest.TestTheNiceLadderIsUpstreams;
 begin
   { nice(v, round): 1, 2, 3, 5 or 10 of a power of ten, at 1.5 / 2.5 / 4 / 7,
@@ -323,6 +332,15 @@ begin
   Eq('eight places', FromBits($41BA1FE32D68F23D),
     TyJsToFixed(FromBits($41BA1FE32D68F23D), 8));
   AssertTrue('not-a-number stays', IsNan(TyJsToFixed(NaN, 2)));
+  { A NOUGHT OF EITHER SIGN reads back +0: toFixed takes the sign from
+    x < 0, which -0 is not, so (-0).toFixed(2) is '0.00'. A negative that
+    rounds to nothing keeps it: (-0.001).toFixed(2) is '-0.00', which
+    reads back -0. [Milestone D1-D4: -0 came back -0.] }
+  AssertFalse('-0 reads back +0', SignBitOf(TyJsToFixed(FromBits($8000000000000000), 2)));
+  AssertFalse('to no places too', SignBitOf(TyJsToFixed(FromBits($8000000000000000), 0)));
+  AssertFalse('+0 stays', SignBitOf(TyJsToFixed(0, 2)));
+  AssertTrue('-0.001 to two places is -0', SignBitOf(TyJsToFixed(-0.001, 2)));
+  Eq('and still nought', 0, TyJsToFixed(-0.001, 2));
 end;
 
 procedure TAdvChartNiceNumberTest.TestPrecisionCountsTheDecimals;

@@ -40349,6 +40349,203 @@
    ]
   },
   {
+   "id": "e-length-and",
+   "group": "error",
+   "note": "an and with a numeric 'length' is array-like too: the and is never read",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "and": [
+         {
+          "dimension": "sales",
+          "gt": 1
+         }
+        ],
+        "length": 1
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Illegal config. Expect a plain object but actually {\"and\":[{\"dimension\":\"sales\",\"gt\":1}],\"length\":1}",
+     "results": []
+    }
+   ]
+  },
+  {
    "id": "e-and-zero",
    "group": "error",
    "note": "and 0 is no and: an operator called and",
@@ -48817,6 +49014,10 @@
   },
   {
    "name": "e-length throws",
+   "ok": true
+  },
+  {
+   "name": "e-length-and throws",
    "ok": true
   },
   {

@@ -580,7 +580,8 @@ function TyJsPow10(AExp: Integer): Double;
 { `+(+x).toFixed(p)`, p clamped to 0..20, rounded on the BINARY value as the
   specification says: (1.005).toFixed(2) is 1.00, because 1.005 is a hair
   under it. Not through FPC's Str, which rounds its own seventeen-digit
-  decimal and answered 1.01. }
+  decimal and answered 1.01. A nought of either sign is +0, as '0.00'
+  reads back; -0.001 to two places is -0, as '-0.00' does. }
 function TyJsToFixed(AValue: Double; APrecision: Integer): Double;
 { The power of ten below AValue, corrected where the logarithm falls short. }
 function TyQuantityExponent(AValue: Double): Integer;
@@ -2053,7 +2054,12 @@ begin
     own toFixed. That covers toFixed's own give-up too -- anything from 1e21
     up comes back as the number itself -- which is why there is no separate
     test for it: every Double that large is whole. }
-  if (e >= 0) or (m = 0) then Exit(AValue);
+  { A NOUGHT OF EITHER SIGN reads back +0: the sign comes from x < 0, which
+    -0 is not, and (-0).toFixed(p) prints none. A negative that rounds to
+    nothing keeps it below -- '-0.00' reads back -0. [Milestone D1-D4:
+    -0 was given back as it came.] }
+  if m = 0 then Exit(0);
+  if e >= 0 then Exit(AValue);
   FixedDigits(x, APrecision, n);
   { BACK TO A DOUBLE, correctly rounded, and never through FPC's Val, which
     is not: read that way, 22 of 276,712 answers came back a unit in the last

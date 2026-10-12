@@ -138,11 +138,12 @@ begin
   Result := TyJsNumberToString(AValue);
 end;
 
-{ +(x).toFixed(p): a nought of either sign prints '0', which reads back +0 }
+{ +(x).toFixed(p). [Milestone D1-D4: this turned every nought into +0,
+  for TyJsToFixed gave -0 back as -0; it answers +0 for it itself now, and
+  -0.001 to two places is -0 here as it is upstream ('-0.00').] }
 function FixedNum(AValue: Double; APrecision: Integer): Double;
 begin
   Result := TyJsToFixed(AValue, APrecision);
-  if Result = 0 then Result := 0;
 end;
 
 function ConfigOf(const AParams: TTyTransformParams): TJSONObject;

@@ -354,6 +354,10 @@ add('value', 'v-negative', 'a break below nought on a range through it',
   barY({ breaks: [{ start: -900, end: -100, gap: '5%' }] }, [-1000, -50, 30, -950, 60]));
 add('value', 'v-hide-overlap', 'hideOverlap: the break labels are kept first',
   barY({ axisLabel: { hideOverlap: true }, splitNumber: 12, breaks: [{ start: 50, end: 900, gap: '1%' }] }));
+// [milestone D1-D4] v-hide-overlap shows every label, so nothing weighs the
+// break labels' lift; crowded ticks make hideOverlap choose
+add('value', 'v-hide-overlap-crowded', 'hideOverlap over crowded labels: the two break labels win over their neighbours',
+  barY({ axisLabel: { hideOverlap: true }, splitNumber: 40, breaks: [{ start: 52, end: 900, gap: '1%' }] }));
 add('value', 'v-formatter', "a string formatter '{value} kg' on the break labels too",
   barY({ axisLabel: { formatter: '{value} kg' }, breaks: [{ start: 50, end: 900, gap: '5%' }] }));
 add('value', 'v-category-ignored', 'breaks on a category axis: ignored (upstream supports none there)',

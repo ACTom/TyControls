@@ -1151,6 +1151,9 @@ type
     FAnimFull: Boolean;
     FAnimPayload: TTyAnimOverride;
     FAnimHasPayload: Boolean;
+    { AN ACTION RENDERED A LAZY setOption still waiting: armed with the
+      action's render, not at the next paint [milestone D1-D4] }
+    FAnimLazyTaken: Boolean;
     { A MERGE setOption waiting for its arming [Batch 99, AN6]: the models it
       maps onto are the old ones, so are their views -- a series kept as a
       full update keeps it, the axes groupTransition, the markers update }
@@ -30826,6 +30829,19 @@ begin
       FAnimPayload := APayload;
       FAnimHasPayload := AHasPayload;
     end;
+    { A LAZY UPDATE STILL WAITING is the action's render: doDispatchAction
+      runs `update` with the action's payload and drops the pending one
+      ("Still dirty"), so a hand-dispatched init sort lays a lazily added
+      bar out at once. Its option's models stay the merge's (or the
+      notMerge's). [Milestone D1-D4: the payload and the changeAxisOrder
+      flag were dropped and the merge armed at the next paint.] }
+    if FLazyPending then
+    begin
+      FAnimPayload := APayload;
+      FAnimHasPayload := AHasPayload;
+      FAnimRtChange := FRtChange;
+      FAnimLazyTaken := True;
+    end;
     Exit;
   end;
   { the same option: its series views are the ones there are now, its axis
@@ -30843,8 +30859,11 @@ begin
 end;
 
 procedure TTyAdvanceChart.AnimFullEnd;
+var lazyTaken: Boolean;
 begin
-  if not (FAnimPending and FAnimFull) then Exit;
+  lazyTaken := FAnimLazyTaken;
+  FAnimLazyTaken := False;
+  if not (FAnimPending and (FAnimFull or lazyTaken)) then Exit;
   { a chart that animates only in its window's paint is armed there }
   if not AnimAllowed then Exit;
   AnimAfterBuild;

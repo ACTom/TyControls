@@ -507,6 +507,10 @@ E('e-not-true', 'not true', two(filt({ not: true })));
 E('e-no-config', 'no config', two({ type: 'filter' }));
 E('e-config-list', 'a list as the condition', two(filt([{ dimension: 0, gt: 1 }])));
 E('e-length', "a condition with a numeric 'length' is array-like", two(filt({ dimension: 'sales', gt: 1, length: 2 })));
+// [milestone D1-D4] e-length throws on its unknown operator 'length' as well;
+// an and is read before any operator, so only the array-like test refuses it
+E('e-length-and', "an and with a numeric 'length' is array-like too: the and is never read",
+  two(filt({ and: [{ dimension: 'sales', gt: 1 }], length: 1 })));
 E('e-and-zero', 'and 0 is no and: an operator called and', two(filt({ dimension: 'sales', and: 0 })));
 E('e-sort-empty', 'sort, config []', two(sort([])));
 E('e-sort-none', 'sort, no config', two({ type: 'sort' }));
@@ -645,7 +649,7 @@ function guards(o) {
   guard('the fallback finds the upstream\'s result 1', JSON.stringify(res('m-fallback', 3).rows) === JSON.stringify(res('m-fallback', 1, 1).rows));
   guard('fromTransformResult 0 alone is a root', res('m-ftr0-alone', 1).rows[0][0] === 's:solo');
   const errs = ['e-unknown', 'e-ns', 'e-empty-pipe', 'e-not-object', 'e-nested', 'e-no-dim', 'e-dim-missing', 'e-dim-null', 'e-no-op',
-    'e-bad-op', 'e-lt-string', 'e-and-empty', 'e-and-object', 'e-not-true', 'e-no-config', 'e-config-list', 'e-length', 'e-and-zero',
+    'e-bad-op', 'e-lt-string', 'e-and-empty', 'e-and-object', 'e-not-true', 'e-no-config', 'e-config-list', 'e-length', 'e-length-and', 'e-and-zero',
     'e-sort-empty', 'e-sort-none', 'e-sort-no-dim', 'e-sort-order', 'e-sort-incomparable', 'e-sort-parser', 'e-sort-dim', 'e-sort-keyed',
     'e-row-layout', 'e-dup', 'e-boxplot-objects', 'e-raw-item'];
   for (const id of errs) guard(id + ' throws', cs(id).optionError || (err(id, 1) && err(id, 0) === null));

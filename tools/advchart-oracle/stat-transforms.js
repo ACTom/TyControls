@@ -477,6 +477,10 @@ for (const m of ['squareRoot', 'scott', 'freedmanDiaconis', 'sturges']) {
   add(HG, 'h-' + m + '-three', m + ', three values', two([[1], [2], [10]], hist({ method: m })));
 }
 add(HG, 'h-sqrt-cap', 'squareRoot past 2500 values: 50 bins at most', two(uniform(2600, 10, 0, 1000), hist({ method: 'squareRoot' })));
+// [milestone D1-D4] over 0..1000 the cap and ceil(sqrt(2600)) = 51 both
+// give a step of 20; over a span of about 160 the 50 gives 5 and 51 gives 2
+add(HG, 'h-sqrt-cap-step', 'squareRoot past 2500 values over a span near 160: the cap of 50 makes the step 5 (51 would make it 2)',
+  two(uniform(2600, 11, 0, 160), hist({ method: 'squareRoot' })));
 add(HG, 'h-equal', 'all values equal, squareRoot', two([[5], [5], [5], [5]], hist({})));
 add(HG, 'h-equal-scott', 'all values equal, scott: no deviation, NaN bins -- the range throws', two([[5], [5], [5]], hist({ method: 'scott' })));
 add(HG, 'h-equal-fd', 'all values equal, freedmanDiaconis: Infinity bins, step 1', two([[5], [5], [5]], hist({ method: 'freedmanDiaconis' })));
@@ -695,6 +699,7 @@ function guards(o) {
   guard('the bins are contiguous', ['h-girth', 'h-scott-normal', 'h-freedmanDiaconis-skewed', 'h-sturges-tiny'].every(id =>
     rows(id, 1).every((r, i, a) => i === 0 || num(r[2]) === num(a[i - 1][3]))));
   guard('squareRoot caps at 50 bins', rows('h-sqrt-cap', 1).length <= 52);
+  guard('the cap decides the step', rows('h-sqrt-cap-step', 1).length <= 40);
   guard('scott over equal values throws', err('h-equal-scott', 1) === 'RangeError');
   guard('scott over two values: one bin, NaN edges, both counted', rows('h-scott-two', 1).length === 1
     && num(rows('h-scott-two', 1)[0][1]) === 2 && isNaN(num(rows('h-scott-two', 1)[0][2])) && str(rows('h-scott-two', 1)[0][4]) === 'NaN - NaN');
