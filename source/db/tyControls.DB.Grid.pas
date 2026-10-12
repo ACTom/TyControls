@@ -1709,7 +1709,17 @@ begin
   if FCommittingForData or not EditorMode then Exit;
   FCommittingForData := True;
   try
-    TryEndEdit(True);
+    { A value the grid refuses -- a mask left unfilled (#69), an OnValidateCell that says
+      no -- is not saved, and neither is the record: the post stops here, the record stays
+      in edit with the editor open, and the user completes the value or leaves with Esc.
+      Posting the rest without it would drop the user's typing without a word. The mask
+      says why with its own error, as LCL's grid does from UpdateData; another refusal has
+      already said its piece, so the post just stops. }
+    if not TryEndEdit(True) then
+    begin
+      if MaskUnfilled then ReportUnfilledMask;
+      Abort;
+    end;
   finally
     FCommittingForData := False;
   end;

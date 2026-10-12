@@ -2372,6 +2372,12 @@ type
     function SelectionBoundsRect: TRect;
     function ArithmeticStep(ACol, AFrom, ATo: Integer;
       out AFirst, AStep: Integer): Boolean;
+    { #67: the open edit is in the mask editor and leaves a required slot empty. }
+    function MaskUnfilled: Boolean;
+    { #67: report the mask's own error for an edit that was just refused because of it. It is
+      raised, so call it only from a key or mouse handler: LCL reports it from there as it
+      reports the mask editor's own -- or from a post the refusal stops (the DB grid). }
+    procedure ReportUnfilledMask;
   private
     FSkipReadOnly: Boolean;
     { 窗体文件里先于列 / 行数读到的 Col / Row,留给 Loaded 落位。见 SetCol。 }
@@ -2430,12 +2436,6 @@ type
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
-    { #67: the open edit is in the mask editor and leaves a required slot empty. }
-    function MaskUnfilled: Boolean;
-    { #67: report the mask's own error for an edit that was just refused because of it. It is
-      raised, so call it only from a key or mouse handler: LCL reports it from there as it
-      reports the mask editor's own. }
-    procedure ReportUnfilledMask;
     { #52: an arrow one of the grid's own children leaves standing. See the implementation. }
     function ChildKey(var Message: TLMKey): Boolean; override;
     function  EditorTargetRect: TRect;
