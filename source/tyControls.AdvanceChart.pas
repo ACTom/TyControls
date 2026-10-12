@@ -30897,7 +30897,8 @@ begin
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
     { its universal transition, read off the old option [Batch 136]: the
-      key, a list's items, its divideShape, its rows' groups [Batch 137] }
+      key, a list's items, its divideShape, its rows' groups [Batch 137]
+      and child groups [Batch 138] }
     if (si <= High(FAnimOldUtKeys)) and (FAnimOldUtKeys[si].Key <> '') then
     begin
       r.UtKeyList := FAnimOldUtKeys[si].List;
@@ -30905,6 +30906,7 @@ begin
       r.UtKeyItems := FAnimOldUtKeys[si].Items;
       r.UtDivide := FAnimOldUtKeys[si].Divide;
       r.UtGroupIds := TyUtRowGroups(FAnimOldUtKeys[si], r.Raws);
+      r.UtChildGroupIds := TyUtRowChildGroups(FAnimOldUtKeys[si], r.Raws);
     end;
     FAnimPrev.Series[si] := r;
   end;
@@ -30944,6 +30946,7 @@ var
   ser, lbl, va, mk: TJSONData;
   v: TTyAnimOptValue;
   viewKeys: TTyStringArray;
+  utk: TTyUtSeriesKeys;
 begin
   Result := nil;
   viewKeys := AnimViewKeys;
@@ -31036,9 +31039,10 @@ begin
     if (si <= High(FAnimFresh)) and FAnimFresh[si] then r.ViewKey := 'n:' + r.ViewKey;
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
-    { the groups of its rows [Batch 137] }
-    r.UtGroupIds := TyUtRowGroups(TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t,
-      FOption.ComponentId('series', si)), r.Raws);
+    { the groups of its rows [Batch 137] and their child groups [Batch 138] }
+    utk := TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t, FOption.ComponentId('series', si));
+    r.UtGroupIds := TyUtRowGroups(utk, r.Raws);
+    r.UtChildGroupIds := TyUtRowChildGroups(utk, r.Raws);
     if t = TyPieSeriesTypeName then
     begin
       v := TyAnimGetShallow(r.Model, 'animationTypeUpdate');

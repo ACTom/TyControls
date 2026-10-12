@@ -76,6 +76,9 @@ type
     { the virtual root's own colour: an itemStyle.color on level 0 or the
       series; else the control's theme colour [Batch 115] }
     HasRootFill: Boolean;
+    { the series' `clockwise`, which every piece's sector shape carries
+      [Batch 138] }
+    Clockwise: Boolean;
   end;
 
   { Everything a theme answers. }
@@ -397,6 +400,7 @@ begin
       or ((d.JSONType <> jtBoolean) and (d.JSONType <> jtNull)
         and not ((d.JSONType = jtNumber) and (d.AsFloat = 0))
         and not ((d.JSONType = jtString) and (d.AsString = '')));
+    Result.Clockwise := cw;
     d := Result.Series.Find('stillShowZeroSum');
     still := (d = nil) or not ((d.JSONType = jtBoolean) and not d.AsBoolean);
     { THE VIEW ROOT: a row past the end is the root, as resetViewRoot keeps
@@ -795,6 +799,9 @@ begin
     el.Anim.G[3] := nd.R;
     el.Anim.G[4] := nd.StartRad;
     el.Anim.G[5] := nd.EndRad;
+    { the sector shape's clockwise, for a universal transition's path
+      [Batch 138] }
+    el.Anim.G[6] := Ord(ASolved.Clockwise);
     d := ChainFind(ASolved, row, 'itemStyle', 'borderColor');
     if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
       el.Style.StrokeColor := c

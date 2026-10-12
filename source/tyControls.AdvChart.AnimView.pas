@@ -423,7 +423,8 @@ type
       gives it, and whether seriesKey was a list (UT2 pairs a list's items
       with single keys); divideShape ('' undefined); the delay handler's
       name ('' none). Per view row: the group getGroupId gives ('' where it
-      is the id) [Batch 137], and the childGroupId (UT3's; nil none) }
+      is the id, else '=' and the group) [Batch 137], and the childGroupId
+      ('' where it is undefined, else '=' and the child) [Batch 138] }
     UtOn: Boolean;
     UtKey: string;
     UtKeyList: Boolean;
@@ -439,9 +440,14 @@ type
   { A SERIES' UNIVERSAL TRANSITION AS ITS OPTION SAYS IT [Batch 137]: what
     the next update reads of an old series -- its transition key (and a
     list's items), its divideShape, and getGroupId's groupId per item of
-    its `data` (String(groupId) where truthy, else the dataGroupId -- its
-    own or the root's -- where truthy, else ''), GroupDefault the
-    dataGroupId alone for rows past `data` }
+    its `data` ('=' and String(groupId) where truthy, else '=' and the
+    dataGroupId -- its own or the root's -- where truthy, else '': the
+    id), GroupDefault for rows past `data`.
+    [Batch 138] An encoded itemGroupId dimension wins over all of them: its
+    value's string per item (getValueByDimension). ChildByRaw: the
+    childGroupId per item -- the encoded itemChildGroupId dimension's
+    string, else '=' and String(childGroupId) where truthy, else ''
+    (undefined); ChildDefault for rows past `data`. }
   TTyUtSeriesKeys = record
     Key: string;
     List: Boolean;
@@ -449,6 +455,8 @@ type
     Divide: string;
     GroupsByRaw: TTyStringArray;
     GroupDefault: string;
+    ChildByRaw: TTyStringArray;
+    ChildDefault: string;
   end;
   TTyUtSeriesKeysArray = array of TTyUtSeriesKeys;
 
@@ -651,6 +659,9 @@ function TyUtSeriesKeysOf(AOwn, ARoot: TJSONData; const ASeriesType,
   AId: string): TTyUtSeriesKeys;
 { the group of each view row (by its raw index); '' where it is the id }
 function TyUtRowGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+{ the childGroupId of each view row (by its raw index); '' where it is
+  undefined [Batch 138] }
+function TyUtRowChildGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
 { a morph and the universal transition's style keys over one element, as
   its proxy has them now (nothing when it has neither) }
 procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
@@ -662,6 +673,8 @@ uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.C
   tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.LabelGuide, tyControls.AdvChart.PolarBar,
   tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelLayout;
+
+function UtHostRole(const AEl: TTyChartElement): string; forward;
 
 { ==================== the proxy ==================== }
 
@@ -3099,6 +3112,11 @@ begin
     for i := 0 to High(APrev.Elements) do
     begin
       el := APrev.Elements[i];
+      { a treemap's item path has no proxy role of its own: the universal
+        transition finds it by its own [Batch 138] }
+      if (el.Anim.Role = carTmRect) and (UtHostRole(el) <> '')
+        and (prevIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'tmRect')) = nil) then
+        prevIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'tmRect'), Pointer(PtrInt(i + 1)));
       role := TyChartAnimRoleKey(el);
       if role = '' then Continue;
       if prevIdx.Find(KeyOf(el.Anim.Series, KeyIndexOf(el), role)) = nil then
@@ -3430,10 +3448,12 @@ begin
   Result.SectorRadii := AEl.Shape.SectorRadii;
 end;
 
-{ a key the proxy holds, as a number; AOr where it holds none }
+{ a key the proxy holds, as a number; AOr where it holds none (or there is
+  no proxy: a sunburst's first render makes none [Batch 138]) }
 function NumOr(P: TTyChartAnimProxy; const AKey: string; AOr: Double): Double;
 var v: TTyAnimValue;
 begin
+  if P = nil then Exit(AOr);
   v := P.GetAnimProp(AKey);
   if v.Kind in [avkNumber, avkBool] then Result := v.Num else Result := AOr;
 end;
@@ -4261,11 +4281,12 @@ end;
 type
   { one flattened data item of a transition's side (flattenDataDiffItems):
     its series (by series index), its view row, getId, and the keys UT2 and
-    UT3 read -- groupId (the id until UT2 reads groupId / dataGroupId) and
-    childGroupId ('' none) }
+    UT3 read -- groupId (always a string: getGroupId falls back on the id)
+    and childGroupId (HasChild False: undefined) [Batch 138] }
   TUtItem = record
     Series, Row: Integer;
     Id, Group, Child: string;
+    HasChild: Boolean;
     { its series' divideShape [Batch 137] }
     Divide: string;
   end;
@@ -4274,6 +4295,10 @@ type
 const
   { DATA_COUNT_THRESHOLD }
   cUtDataLimit = 10000;
+  { TRANSITION_NONE, TRANSITION_P2C, TRANSITION_C2P [Batch 138] }
+  cUtDirNone = 0;
+  cUtDirP2C = 1;
+  cUtDirC2P = 2;
 
 function TyUtEnabled(AOwn: TJSONData): Boolean;
 var u, e: TJSONData;
@@ -4485,11 +4510,171 @@ begin
   end;
 end;
 
+{ getDataItemValue: an object's `value`, anything else itself }
+function UtItemValue(AItem: TJSONData): TJSONData;
+begin
+  Result := AItem;
+  if AItem is TJSONObject then Result := TJSONObject(AItem).Find('value');
+end;
+
+{ THE ENCODED GROUP DIMENSION [Batch 138]: the dimension encode[AVisual]
+  names (its first entry: a name the series' `dimensions` declares, or a
+  position under the dimension count), at APos of the items' values, and
+  how it stores -- AKind 0 ordinal (the value as it is), 1 a number, 2 an
+  Int32. Its type is the declared one, else doGuessOrdinal's over the
+  first five items: the first that tells decides (a number-like value but
+  '': not ordinal; other text but '-': ordinal), an item whose value is no
+  array says not, none telling says not. False: no such dimension. }
+function UtEncodedDim(AOwn: TJSONObject; const AVisual: string; out APos: Integer;
+  out AKind: Integer): Boolean;
+var
+  enc, e, dims, def, data, v, c, tp: TJSONData;
+  i, width: Integer;
+  nm, s: string;
+  told: Boolean;
+begin
+  Result := False;
+  APos := -1;
+  AKind := 1;
+  enc := AOwn.Find('encode');
+  if not (enc is TJSONObject) then Exit;
+  e := TJSONObject(enc).Find(AVisual);
+  if e is TJSONArray then
+  begin
+    if e.Count = 0 then Exit;
+    e := e.Items[0];
+  end;
+  if e = nil then Exit;
+  dims := AOwn.Find('dimensions');
+  if not (dims is TJSONArray) then dims := nil;
+  data := AOwn.Find('data');
+  if not (data is TJSONArray) then data := nil;
+  { the dimension count: the declared ones, else the first item's width }
+  width := 0;
+  if dims <> nil then width := dims.Count;
+  if (data <> nil) and (data.Count > 0) then
+  begin
+    v := UtItemValue(data.Items[0]);
+    if (v is TJSONArray) and (v.Count > width) then width := v.Count;
+  end;
+  case e.JSONType of
+    jtString:
+      begin
+        if dims = nil then Exit;
+        nm := e.AsString;
+        for i := 0 to dims.Count - 1 do
+        begin
+          def := dims.Items[i];
+          if def is TJSONObject then
+          begin
+            c := TJSONObject(def).Find('name');
+            if (c <> nil) and (c.JSONType = jtString) then s := c.AsString else s := '';
+          end
+          else if def.JSONType = jtString then s := def.AsString
+          else s := '';
+          if (s <> '') and (s = nm) then
+          begin
+            APos := i;
+            Break;
+          end;
+        end;
+      end;
+    jtNumber:
+      if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < width) then
+        APos := Trunc(e.AsFloat);
+  end;
+  if (APos < 0) or (APos >= width) then Exit;
+  Result := True;
+  { a declared type }
+  if (dims <> nil) and (APos < dims.Count) and (dims.Items[APos] is TJSONObject) then
+  begin
+    tp := TJSONObject(dims.Items[APos]).Find('type');
+    if (tp <> nil) and (tp.JSONType = jtString) then
+    begin
+      if tp.AsString = 'ordinal' then AKind := 0
+      else if tp.AsString = 'int' then AKind := 2;
+      Exit;
+    end;
+  end;
+  { guessOrdinal }
+  if data = nil then Exit;
+  told := False;
+  for i := 0 to Min(data.Count, 5) - 1 do
+  begin
+    v := UtItemValue(data.Items[i]);
+    if not (v is TJSONArray) then Break;
+    if APos >= v.Count then Continue;
+    c := v.Items[APos];
+    case c.JSONType of
+      jtNumber: told := True;
+      jtBoolean: told := True;
+      jtString:
+        if c.AsString = '' then
+        begin
+          { Number('') is 0, but `val !== ''` fails first: '' is text }
+          AKind := 0;
+          told := True;
+        end
+        else if not IsNan(TyParseNumberText(c.AsString))
+          and not IsInfinite(TyParseNumberText(c.AsString)) then
+          told := True
+        else if c.AsString <> '-' then
+        begin
+          AKind := 0;
+          told := True;
+        end;
+    end;
+    if told then Break;
+  end;
+end;
+
+{ getValueByDimension on item AItem: what the dimension stored, + '' }
+function UtDimString(AItem: TJSONData; APos, AKind: Integer): string;
+var
+  v, c: TJSONData;
+  x: Double;
+begin
+  c := nil;
+  if AItem <> nil then
+  begin
+    v := UtItemValue(AItem);
+    if v is TJSONArray then
+    begin
+      if APos < v.Count then c := v.Items[APos];
+    end
+    else
+      c := v;
+  end;
+  if AKind = 0 then Exit(UtJsString(c));
+  { parseDataValue: null, undefined and '' are NaN, else Number() }
+  x := NaN;
+  if c <> nil then
+    case c.JSONType of
+      jtNumber: x := c.AsFloat;
+      jtBoolean: if c.AsBoolean then x := 1 else x := 0;
+      jtString: x := TyParseNumberText(c.AsString);
+    end;
+  if AKind = 2 then
+  begin
+    { an Int32Array cell }
+    if IsNan(x) or IsInfinite(x) then x := 0
+    else
+    begin
+      { ToInt32: the whole part modulo 2^32, as a signed 32-bit integer }
+      x := Int(x);
+      x := x - JsFloor(x / 4294967296.0) * 4294967296.0;
+      if x >= 2147483648.0 then x := x - 4294967296.0;
+    end;
+  end;
+  Result := TyJsNumberToString(x);
+end;
+
 function TyUtSeriesKeysOf(AOwn, ARoot: TJSONData; const ASeriesType,
   AId: string): TTyUtSeriesKeys;
 var
   dg, data, it, g: TJSONData;
-  i: Integer;
+  i, gPos, gKind, cPos, cKind: Integer;
+  gDim, cDim: Boolean;
 begin
   Result := Default(TTyUtSeriesKeys);
   Result.Key := TyUtTransitionKey(AOwn, ARoot, ASeriesType, AId, Result.List, Result.Items);
@@ -4499,20 +4684,40 @@ begin
   if AOwn is TJSONObject then dg := TJSONObject(AOwn).Find('dataGroupId');
   if ((dg = nil) or (dg.JSONType = jtNull)) and (ARoot is TJSONObject) then
     dg := TJSONObject(ARoot).Find('dataGroupId');
-  if UtTruthy(dg) then Result.GroupDefault := UtJsString(dg);
-  { the raw data item's groupId first }
+  if UtTruthy(dg) then Result.GroupDefault := '=' + UtJsString(dg);
+  { [Batch 138] the encoded dimensions first }
+  gDim := (AOwn is TJSONObject) and UtEncodedDim(TJSONObject(AOwn), 'itemGroupId', gPos, gKind);
+  cDim := (AOwn is TJSONObject) and UtEncodedDim(TJSONObject(AOwn), 'itemChildGroupId', cPos, cKind);
+  if gDim then Result.GroupDefault := '=' + UtDimString(nil, gPos, gKind);
+  if cDim then Result.ChildDefault := '=' + UtDimString(nil, cPos, cKind);
+  { the raw data item's groupId and childGroupId }
   data := nil;
   if AOwn is TJSONObject then data := TJSONObject(AOwn).Find('data');
   if data is TJSONArray then
   begin
     SetLength(Result.GroupsByRaw, data.Count);
+    SetLength(Result.ChildByRaw, data.Count);
     for i := 0 to data.Count - 1 do
     begin
       it := data.Items[i];
-      g := nil;
-      if it is TJSONObject then g := TJSONObject(it).Find('groupId');
-      if UtTruthy(g) then Result.GroupsByRaw[i] := UtJsString(g)
-      else Result.GroupsByRaw[i] := Result.GroupDefault;
+      if gDim then
+        Result.GroupsByRaw[i] := '=' + UtDimString(it, gPos, gKind)
+      else
+      begin
+        g := nil;
+        if it is TJSONObject then g := TJSONObject(it).Find('groupId');
+        if UtTruthy(g) then Result.GroupsByRaw[i] := '=' + UtJsString(g)
+        else Result.GroupsByRaw[i] := Result.GroupDefault;
+      end;
+      if cDim then
+        Result.ChildByRaw[i] := '=' + UtDimString(it, cPos, cKind)
+      else
+      begin
+        g := nil;
+        if it is TJSONObject then g := TJSONObject(it).Find('childGroupId');
+        if UtTruthy(g) then Result.ChildByRaw[i] := '=' + UtJsString(g)
+        else Result.ChildByRaw[i] := '';
+      end;
     end;
   end;
 end;
@@ -4526,6 +4731,17 @@ begin
       Result[r] := AKeys.GroupsByRaw[ARaws[r]]
     else
       Result[r] := AKeys.GroupDefault;
+end;
+
+function TyUtRowChildGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+var r: Integer;
+begin
+  SetLength(Result, Length(ARaws));
+  for r := 0 to High(ARaws) do
+    if (ARaws[r] >= 0) and (ARaws[r] <= High(AKeys.ChildByRaw)) then
+      Result[r] := AKeys.ChildByRaw[ARaws[r]]
+    else
+      Result[r] := AKeys.ChildDefault;
 end;
 
 procedure TTyChartAnimProxy.MorphDone;
@@ -4591,7 +4807,10 @@ end;
 
 { the role a universal transition morphs: a bar's rect, a pie's slice, a
   scatter's symbol path, a line's symbol -- the item graphic elements of the
-  four types UT1 transitions ('' for anything else) }
+  four types UT1 transitions ('' for anything else); [Batch 138] a
+  sunburst's piece (not the virtual root's return circle) and a treemap
+  node's path getPathList takes -- a leaf's content (its background is
+  disableMorphing), a parent's background }
 function UtHostRole(const AEl: TTyChartElement): string;
 begin
   case AEl.Anim.Role of
@@ -4599,6 +4818,13 @@ begin
     carSector: Result := 'sector';
     carSymbol: Result := 'symbol';
     carLineSymbol: Result := 'lineSymbol';
+    carSunPiece:
+      if AEl.Anim.Index > 0 then Result := 'sunPiece' else Result := '';
+    carTmRect:
+      if (AEl.Anim.Sub = 1) or ((AEl.Anim.Sub = 0) and (AEl.Anim.G[4] = 0)) then
+        Result := 'tmRect'
+      else
+        Result := '';
   else
     Result := '';
   end;
@@ -4610,7 +4836,16 @@ begin
   else if AType = 'pie' then Result := 'sector'
   else if AType = 'scatter' then Result := 'symbol'
   else if AType = 'line' then Result := 'lineSymbol'
+  else if AType = 'sunburst' then Result := 'sunPiece'
+  else if AType = 'treemap' then Result := 'tmRect'
   else Result := '';
+end;
+
+{ the proxy a treemap rect's universal transition runs on: its item path's,
+  or a leaf background's fade [Batch 138] }
+function UtTmRole(const AEl: TTyChartElement): string;
+begin
+  if UtHostRole(AEl) <> '' then Result := 'tmRect' else Result := 'utFadeTmBg';
 end;
 
 { a symbol as SymbolDraw builds it, with its path's scale and its group's
@@ -4718,6 +4953,42 @@ begin
         AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
         NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]),
         NumOr(P, 'scaleX', 1), NumOr(P, 'scaleY', 1), AData, AHasM, AM, AHasLocal, ALocal);
+    carSunPiece:
+      begin
+        { [Batch 138] SunburstPiece: a Sector of the layout, its clockwise }
+        s.CX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        s.CY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        s.R0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        s.R := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        s.SA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        s.EA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        s.CW := AEl.Anim.G[6] <> 0;
+        any := False;
+        for k := 0 to 3 do
+          if AEl.Shape.SectorRadii[k] <> 0 then any := True;
+        corners := nil;
+        if any then
+        begin
+          SetLength(corners, 4);
+          for k := 0 to 3 do corners[k] := AEl.Shape.SectorRadii[k];
+        end;
+        AData := TyGuidePathData(TyZrSectorPath(s, corners));
+      end;
+    carTmRect:
+      begin
+        { [Batch 138] a treemap rect's local shape under its node group's
+          computed transform (a translation) }
+        TyZrRect(path, AEl.Anim.G[0], AEl.Anim.G[1], AEl.Anim.G[2], AEl.Anim.G[3]);
+        AData := TyGuidePathData(path);
+        AHasM := AEl.Anim.G[5] <> 0;
+        if AHasM then
+        begin
+          AM[0] := 1;
+          AM[3] := 1;
+          AM[4] := AEl.Anim.G[6];
+          AM[5] := AEl.Anim.G[7];
+        end;
+      end;
   end;
   if (P <> nil) and P.FMorphOn then
   begin
@@ -4900,6 +5171,10 @@ begin
     carLineSymbol:
       Result := TyAnimProps([Num1('scaleX', 1), Num1('scaleY', 1),
         Num1('x', AEl.Anim.G[0]), Num1('y', AEl.Anim.G[1])]);
+    carSunPiece:
+      Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]), Num1('shape.cy', AEl.Anim.G[1]),
+        Num1('shape.r0', AEl.Anim.G[2]), Num1('shape.r', AEl.Anim.G[3]),
+        Num1('shape.startAngle', AEl.Anim.G[4]), Num1('shape.endAngle', AEl.Anim.G[5])]);
   else
     Result := nil;
   end;
@@ -4992,6 +5267,26 @@ begin
         S.SCW := AEl.Anim.G[7] = 0;
       end;
     carSymbol, carLineSymbol: S.Kind := cUtKindSymbol;
+    carSunPiece:
+      begin
+        { [Batch 138] }
+        S.Kind := cUtKindSector;
+        S.SCX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        S.SCY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        S.SR0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        S.SR := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        S.SSA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        S.SEA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        S.SCW := AEl.Anim.G[6] <> 0;
+      end;
+    carTmRect:
+      begin
+        S.Kind := cUtKindRect;
+        S.RX := AEl.Anim.G[0];
+        S.RY := AEl.Anim.G[1];
+        S.RW := AEl.Anim.G[2];
+        S.RH := AEl.Anim.G[3];
+      end;
   end;
   UtSnapStyle(S, AEl.Style.HasFill);
   { a symbol path's style says strokeNoScale }
@@ -5686,7 +5981,7 @@ var
     procedure Flatten(AIsOld: Boolean; const AList_: TTyIntegerArray; var AItems: TUtItemArray);
     var
       x, r, cnt: Integer;
-      keys, groups: TTyStringArray;
+      keys, groups, childs: TTyStringArray;
       divide: string;
     begin
       AItems := nil;
@@ -5696,12 +5991,14 @@ var
         begin
           keys := APrev.Series[AList_[x]].Keys;
           groups := APrev.Series[AList_[x]].UtGroupIds;
+          childs := APrev.Series[AList_[x]].UtChildGroupIds;
           divide := APrev.Series[AList_[x]].UtDivide;
         end
         else
         begin
           keys := ASeries[AList_[x]].Keys;
           groups := ASeries[AList_[x]].UtGroupIds;
+          childs := ASeries[AList_[x]].UtChildGroupIds;
           divide := ASeries[AList_[x]].UtDivide;
         end;
         { universal transition is off past 10k items }
@@ -5713,11 +6010,16 @@ var
           AItems[cnt + r].Series := AList_[x];
           AItems[cnt + r].Row := r;
           AItems[cnt + r].Id := keys[r];
-          { getGroupId: the groupId, else the dataGroupId, else the id
-            (the encoded dimension and childGroupId are UT3's) }
-          if (r <= High(groups)) and (groups[r] <> '') then AItems[cnt + r].Group := groups[r]
-          else AItems[cnt + r].Group := keys[r];
-          AItems[cnt + r].Child := '';
+          { getGroupId: the encoded dimension, the groupId, else the
+            dataGroupId, else the id; the childGroupId: the encoded
+            dimension, the item's, else undefined [Batch 138] }
+          if (r <= High(groups)) and (groups[r] <> '') then
+            AItems[cnt + r].Group := Copy(groups[r], 2, MaxInt)
+          else
+            AItems[cnt + r].Group := keys[r];
+          AItems[cnt + r].HasChild := (r <= High(childs)) and (childs[r] <> '');
+          if AItems[cnt + r].HasChild then AItems[cnt + r].Child := Copy(childs[r], 2, MaxInt)
+          else AItems[cnt + r].Child := '';
           AItems[cnt + r].Divide := divide;
         end;
       end;
@@ -5858,6 +6160,48 @@ var
         for x := 0 to High(news) do FadeIn(news[x], ser0, ANewIdx[0]);
     end;
 
+    { THE DIRECTION [Batch 138]: the first new item whose groupId is an old
+      item's childGroupId says parent -> child, the first whose (truthy)
+      childGroupId is an old item's groupId child -> parent -- asked in
+      that order, item by item; none else. Only truthy ids are kept. }
+    function Direction: Integer;
+    var
+      og, oc: TFPHashList;
+      x: Integer;
+    begin
+      Result := cUtDirNone;
+      og := TFPHashList.Create;
+      oc := TFPHashList.Create;
+      try
+        for x := 0 to High(oldItems) do
+        begin
+          if (oldItems[x].Group <> '') and (og.Find(oldItems[x].Group) = nil) then
+            og.Add(oldItems[x].Group, Pointer(1));
+          if oldItems[x].HasChild and (oldItems[x].Child <> '')
+            and (oc.Find(oldItems[x].Child) = nil) then
+            oc.Add(oldItems[x].Child, Pointer(1));
+        end;
+        for x := 0 to High(newItems) do
+        begin
+          if oc.Find(newItems[x].Group) <> nil then Exit(cUtDirP2C);
+          if newItems[x].HasChild and (newItems[x].Child <> '')
+            and (og.Find(newItems[x].Child) <> nil) then Exit(cUtDirC2P);
+        end;
+      finally
+        og.Free;
+        oc.Free;
+      end;
+    end;
+
+    { createKeyGetter: the id, or by the direction the group or the child
+      (undefined's key is 'undefined') }
+    function ItemKey(const AItem: TUtItem; AUseChild: Boolean): string;
+    begin
+      if not AUseChild then Result := AItem.Group
+      else if AItem.HasChild then Result := AItem.Child
+      else Result := 'undefined';
+    end;
+
     procedure IndexKeys(const AKeys: TTyStringArray; AMap: TFPHashList;
       var AGroups: array of TTyIntegerArray; out AOrder: TTyIntegerArray);
     var
@@ -5891,10 +6235,11 @@ var
     oldOrder, newOrder: TTyIntegerArray;
     g, ng: Integer;
     v: Pointer;
-    ns: Integer;
+    ns, dir: Integer;
   begin
     Flatten(True, AOldList, oldItems);
     Flatten(False, ANewList, newItems);
+    dir := Direction;
     { isAllIdSame }
     useId := Length(oldItems) = Length(newItems);
     if useId then
@@ -5918,14 +6263,17 @@ var
               and SameEl(oldItems[q].Series, oldItems[q].Row, newItems[j].Series, newItems[j].Row) then
               still.Add(KeyOf(oldItems[q].Series, oldItems[q].Row, 'ut'), Pointer(1));
       end;
-      { the keys: getId when every id lines up, else the group (direction
-        none: UT3 sniffs parent -> child) }
+      { the keys: getId when every id lines up, else the group -- the old
+        side's childGroupId drilling down, the new side's drilling up
+        [Batch 138] }
       SetLength(oldKeys, Length(oldItems));
       SetLength(newKeys, Length(newItems));
       for j := 0 to High(oldItems) do
-        if useId then oldKeys[j] := oldItems[j].Id else oldKeys[j] := oldItems[j].Group;
+        if useId then oldKeys[j] := oldItems[j].Id
+        else oldKeys[j] := ItemKey(oldItems[j], dir = cUtDirP2C);
       for j := 0 to High(newItems) do
-        if useId then newKeys[j] := newItems[j].Id else newKeys[j] := newItems[j].Group;
+        if useId then newKeys[j] := newItems[j].Id
+        else newKeys[j] := ItemKey(newItems[j], dir = cUtDirC2P);
       SetLength(oldGroups, Length(oldItems));
       SetLength(newGroups, Length(newItems));
       IndexKeys(oldKeys, oldMap, oldGroups, oldOrder);
@@ -5974,6 +6322,19 @@ var
               if ne.Anim.Role = carLineRun then role := 'utFadeRun' else role := 'utFadeArea';
               if Find(ns, -1, role) <> nil then Continue;
               p := Make(ns, -1, role);
+              p.SetNum('style.opacity', ne.Style.Alpha);
+              p.FUtStyleOn := True;
+              p.FUtPass := FPass;
+              UtAnimate(p, TyAnimProps([Num1('style.opacity', 0)]), timing, True, False, '',
+                @p.UtStyleDone);
+              Continue;
+            end;
+            { a treemap leaf's background (disableMorphing, no animator)
+              [Batch 138] }
+            if (ne.Anim.Role = carTmRect) and (UtHostRole(ne) = '') then
+            begin
+              if Find(ns, ne.Anim.Index, 'utFadeTmBg') <> nil then Continue;
+              p := Make(ns, ne.Anim.Index, 'utFadeTmBg');
               p.SetNum('style.opacity', ne.Style.Alpha);
               p.FUtStyleOn := True;
               p.FUtPass := FPass;
@@ -6123,6 +6484,15 @@ begin
         if UtTypeRole(APrev.Series[bOld[b][k]].SeriesType) = '' then typesOk := False;
       for k := 0 to High(bNew[b]) do
         if UtTypeRole(ASeries[bNew[b][k]].SeriesType) = '' then typesOk := False;
+      { [Batch 138] a treemap or a sunburst only into the other type: the
+        same view keeps its elements (upstream's animateElementStyles, which
+        the port does not model for them) }
+      for k := 0 to High(bOld[b]) do
+        for o := 0 to High(bNew[b]) do
+          if ((APrev.Series[bOld[b][k]].SeriesType = 'treemap')
+            or (APrev.Series[bOld[b][k]].SeriesType = 'sunburst'))
+            and (APrev.Series[bOld[b][k]].SeriesType = ASeries[bNew[b][o]].SeriesType) then
+            typesOk := False;
       if typesOk then TransitionBetween(bOld[b], bNew[b]);
     end;
   finally
@@ -6138,7 +6508,7 @@ var
   el, hostS, hostF: TTyChartElement;
   x0, y0, x1, y1, dx, dy: Double;
   moved: Boolean;
-  g: TTyChartAnimProxy;
+  g, bp: TTyChartAnimProxy;
   extras: array of TTyChartElement;
 begin
   if (ASource = nil) or (ADest = nil) then Exit;
@@ -6149,8 +6519,13 @@ begin
   begin
     el := ASource.Element(i);
     if (i <= High(ABind)) and (ABind[i] <> nil) then TyAnimApply(el, ABind[i]);
-    { A MORPH and a universal transition's style [Batch 136] }
-    if (i <= High(ABind)) and (ABind[i] <> nil) then TyUtApply(el, ABind[i]);
+    { A MORPH and a universal transition's style [Batch 136]; a treemap
+      rect's from the set, its proxy role being none [Batch 138] }
+    bp := nil;
+    if i <= High(ABind) then bp := ABind[i];
+    if (bp = nil) and (ASet <> nil) and (el.Anim.Role = carTmRect) then
+      bp := ASet.Find(el.Anim.Series, el.Anim.Index, UtTmRole(el));
+    if bp <> nil then TyUtApply(el, bp);
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
     begin
       if el.Anim.Role = carLineRun then g := ASet.Find(el.Anim.Series, -1, 'utFadeRun')
@@ -6164,18 +6539,17 @@ begin
     { A COMBINING ELEMENT IS DRAWN AS ITS CHILDREN [Batch 137]: the first in
       its place, the others after the list, silent (insertion indices kept);
       a child has its own style -- the element's states are not its }
-    if (i <= High(ABind)) and (ABind[i] <> nil) and ABind[i].FCombineOn
-      and (Length(ABind[i].FPieces) > 0) then
+    if (bp <> nil) and bp.FCombineOn and (Length(bp.FPieces) > 0) then
     begin
-      for k := 1 to High(ABind[i].FPieces) do
+      for k := 1 to High(bp.FPieces) do
       begin
         if nx >= Length(extras) then SetLength(extras, nx * 2 + 8);
         extras[nx] := el;
-        UtPieceApply(extras[nx], ABind[i].FPieces[k], k);
+        UtPieceApply(extras[nx], bp.FPieces[k], k);
         extras[nx].Silent := True;
         Inc(nx);
       end;
-      UtPieceApply(el, ABind[i].FPieces[0], 0);
+      UtPieceApply(el, bp.FPieces[0], 0);
     end;
     { A LINE'S POINTS IN AN UPDATE [Batch 90] }
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then

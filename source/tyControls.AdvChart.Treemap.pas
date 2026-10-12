@@ -2344,6 +2344,14 @@ var
     el.Anim.G[1] := 0;
     el.Anim.G[2] := nd.W;
     el.Anim.G[3] := nd.H;
+    { A UNIVERSAL TRANSITION'S VIEW [Batch 138]: G[4] 1 where the node is a
+      leaf (its background is disableMorphing: the content is the item's
+      path); G[5..7] its group's computed transform -- whether there is
+      one, and the translation }
+    el.Anim.G[4] := Ord(Length(nd.View) = 0);
+    el.Anim.G[5] := Ord(nd.HasT);
+    el.Anim.G[6] := nd.TX;
+    el.Anim.G[7] := nd.TY;
     { the node takes the pointer -- TyChartElement starts silent [Batch 84] }
     el.Silent := False;
     if z2 > maxZ2 then maxZ2 := z2;
@@ -2386,6 +2394,10 @@ var
       el.Anim.G[1] := bw;
       el.Anim.G[2] := cw;
       el.Anim.G[3] := ch;
+      el.Anim.G[4] := 0;
+      el.Anim.G[5] := Ord(nd.HasT);
+      el.Anim.G[6] := nd.TX;
+      el.Anim.G[7] := nd.TY;
       if z2 > maxZ2 then maxZ2 := z2;
       if nd.HasLabel and (nd.LabelText <> '') then
       begin
