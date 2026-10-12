@@ -29,6 +29,14 @@ unit tyControls.AdvChart.Graphic;
       runs its leaveTo with the UPDATE timing (customGraphicTransition's
       applyLeaveTransition asks for 'update') and is detached when done.
 
+  KEYFRAME ANIMATIONS [Batch 139, D6] (customGraphicKeyframeAnimation.ts):
+  an element's `keyframeAnimation` -- one object or an array of them -- runs
+  after its update; an element updated again first has its keyframe
+  animations stopped and what they saved put back. TyGfxApplyKeyframes and
+  TyGfxStopKeyframes are shared with the custom series. `extra`, the free
+  object beside the shape, is set, transitions, enters and leaves the way
+  the shape does.
+
   What upstream throws on -- a type with no class (`compoundPath`, `path`,
   an unknown word), a parent that is gone -- stops the update where it is,
   as the throw does, and Error says why; nothing is raised.
@@ -156,19 +164,43 @@ procedure TyGfxConvertEC4(AStyle: TJSONObject; const AType: string;
 
 { applyUpdateTransition's FROM props for an update
   (prepareTransformTransitionFrom, prepareShapeOrExtraTransitionFrom on the
-  shape, prepareStyleTransitionFrom): the element's values NOW of what the
-  option's transitions name -- `transition` 'all' every transform prop, a
-  list (or one word) its own keys, the words 'shape' and 'style' the
-  option's numeric shape keys and animatable style keys, the shape's and the
-  style's own `transition` their keys -- appended to AFrom. Call it before
-  the final props are set. }
+  shape and on extra, prepareStyleTransitionFrom): the element's values NOW
+  of what the option's transitions name -- `transition` 'all' every
+  transform prop, a list (or one word) its own keys, the words 'shape',
+  'extra' and 'style' the option's numeric shape / extra keys and
+  animatable style keys, the shape's, extra's and the style's own
+  `transition` their keys -- appended to AFrom. Call it before the final
+  props are set. [Batch 139: extra] }
 procedure TyGfxTransitionFrom(AEl: TTyGfxEl; AOpt: TJSONObject; var AFrom: TTyAnimProps);
-{ the root's, the style's and the shape's enterFrom, flattened, appended to
-  AEnter }
+{ the root's, the style's, the shape's and extra's enterFrom, flattened,
+  appended to AEnter }
 procedure TyGfxEnterFrom(AOpt: TJSONObject; var AEnter: TTyAnimProps);
-{ updateLeaveTo: the root's, the style's and the shape's leaveTo merged into
-  what the element keeps for its leave (HasLeaveTo, LeaveToProps) }
+{ updateLeaveTo: the root's, the style's, the shape's and extra's leaveTo
+  merged into what the element keeps for its leave (HasLeaveTo,
+  LeaveToProps) }
 procedure TyGfxUpdateLeaveTo(AEl: TTyGfxEl; AOpt: TJSONObject);
+
+{ ---- keyframe animations, shared with the custom series [Batch 139, D6] ---- }
+
+{ stopPreviousKeyframeAnimationAndRestore: the element's 'keyframe'
+  animators stopped where they are, then every value a keyframe animation
+  ever saved on it put back (attr) }
+procedure TyGfxStopKeyframes(AEl: TTyGfxEl);
+{ applyKeyframeAnimation: AOpt is the option's `keyframeAnimation` -- an
+  object, or an array of them applied in turn. Nothing when AEnabled is
+  False (the model does not animate, or the element has no driver) or AOpt
+  is falsy. `duration` (null: ADefaultDuration, the model's enter duration)
+  and `keyframes` must be truthy. The keyframes are sorted by `percent`
+  (stably); for '' (the element: every key but percent, easing, shape,
+  style and extra), 'style', 'shape' and 'extra' -- each the element has --
+  one animator, Element.animate(name, loop, allowDiscrete), scoped
+  'keyframe': per keyframe the other animators of the same target stop
+  their tracks on its keys, the element's values of those keys are saved
+  for TyGfxStopKeyframes, and the keyframe goes in at duration x percent
+  with its own easing; then the delay (`|| 0`), the duration and the
+  clip's easing, and it starts. }
+procedure TyGfxApplyKeyframes(AEl: TTyGfxEl; AOpt: TJSONData; AEnabled: Boolean;
+  ADefaultDuration: Double);
 
 implementation
 
@@ -789,6 +821,9 @@ begin
     if (d <> nil) and (d.JSONType = jtString) then Result.Easing := d.AsString;
     d := ext.Find('delay');
     if (d <> nil) and (d.JSONType = jtNumber) then Result.Delay := d.AsFloat;
+    { extend copies every key: `additive` too [Batch 139] }
+    d := ext.Find('additive');
+    if d <> nil then Result.Additive := Truthy(d);
   end;
 end;
 
@@ -897,7 +932,7 @@ end;
 
 procedure TyGfxApplyDirect(AEl: TTyGfxEl; AOpt: TJSONObject; AClearStyle: Boolean);
 var
-  styleOpt, shapeOpt: TJSONObject;
+  styleOpt, shapeOpt, extraOpt: TJSONObject;
   d: TJSONData;
   k: Integer;
 begin
@@ -935,6 +970,14 @@ begin
     TyGfxSetTransformProp(AEl, cTransformable[k], JsNumOf(d));
   end;
   if shapeOpt <> nil then TyGfxSetShape(AEl, shapeOpt);
+  { extra: attr makes it (an empty object) when there is none, then extends it, with clones
+    [Batch 139] }
+  extraOpt := ObjOf(AOpt, 'extra');
+  if extraOpt <> nil then
+  begin
+    if AEl.Extra = nil then AEl.Extra := TJSONObject.Create;
+    TyGfxExtend(AEl.Extra, extraOpt);
+  end;
   { applyMiscProps }
   if AOpt.Find('silent') <> nil then AEl.Silent := Truthy(AOpt.Find('silent'));
   if AOpt.Find('ignore') <> nil then AEl.Ignore := Truthy(AOpt.Find('ignore'));
@@ -967,6 +1010,41 @@ var
     end;
   end;
 
+  { prepareShapeOrExtraTransitionFrom: AAttrOpt the option's object, AOwn
+    the element's (nil: none, nothing) [Batch 139: extra] }
+  procedure ShapeOrExtra(const AMain: string; AAttrOpt, AOwn: TJSONObject);
+  var
+    q: Integer;
+    at: TJSONData;
+    nm: string;
+  begin
+    if (AAttrOpt = nil) or (AOwn = nil) then Exit;
+    at := AAttrOpt.Find('transition');
+    if Truthy(at) then
+    begin
+      if TransitionAll(at) then
+      begin
+        for q := 0 to AOwn.Count - 1 do
+          TyAnimPropPut(AFrom, AMain + '.' + AOwn.Names[q], TyGfxAnimOf(AOwn.Items[q]));
+      end
+      else
+      begin
+        AddKeysOf(at);
+        for q := 0 to High(keys) do
+          TyAnimPropPut(AFrom, AMain + '.' + keys[q], AEl.GetAnimProp(AMain + '.' + keys[q]));
+      end;
+    end
+    else if TransitionAll(trans) or TransitionHas(trans, AMain) then
+    begin
+      for q := 0 to AOwn.Count - 1 do
+      begin
+        nm := AOwn.Names[q];
+        if NonStyleTransition(AAttrOpt.Find(nm)) then
+          TyAnimPropPut(AFrom, AMain + '.' + nm, TyGfxAnimOf(AOwn.Items[q]));
+      end;
+    end;
+  end;
+
   function StyleAnimates(const AKey: string): Boolean;
   begin
     case AEl.Kind of
@@ -996,35 +1074,9 @@ begin
     if (keys[k] = 'style') or (keys[k] = 'shape') or (keys[k] = 'extra') then Continue;
     TyAnimPropPut(AFrom, keys[k], AEl.GetAnimProp(keys[k]));
   end;
-  { the shape's }
-  if shapeOpt <> nil then
-  begin
-    attrTrans := shapeOpt.Find('transition');
-    if Truthy(attrTrans) then
-    begin
-      if TransitionAll(attrTrans) then
-      begin
-        for i := 0 to AEl.Shape.Count - 1 do
-          TyAnimPropPut(AFrom, 'shape.' + AEl.Shape.Names[i], TyGfxAnimOf(AEl.Shape.Items[i]));
-      end
-      else
-      begin
-        AddKeysOf(attrTrans);
-        for k := 0 to High(keys) do
-          TyAnimPropPut(AFrom, 'shape.' + keys[k], AEl.GetAnimProp('shape.' + keys[k]));
-      end;
-    end
-    else if TransitionAll(trans) or TransitionHas(trans, 'shape') then
-    begin
-      for i := 0 to AEl.Shape.Count - 1 do
-      begin
-        key := AEl.Shape.Names[i];
-        d := shapeOpt.Find(key);
-        if NonStyleTransition(d) then
-          TyAnimPropPut(AFrom, 'shape.' + key, TyGfxAnimOf(AEl.Shape.Items[i]));
-      end;
-    end;
-  end;
+  { the shape's, then extra's (prepareShapeOrExtraTransitionFrom) }
+  ShapeOrExtra('shape', shapeOpt, AEl.Shape);
+  ShapeOrExtra('extra', ObjOf(AOpt, 'extra'), AEl.Extra);
   { the style's }
   if styleOpt <> nil then
   begin
@@ -1070,7 +1122,133 @@ begin
       0: TyGfxPropsOf(ef, '', AEnter);
       1: TyGfxPropsOf(ef, 'style', AEnter);
       2: TyGfxPropsOf(ef, 'shape', AEnter);
+    else
+      { [Batch 139] }
+      TyGfxPropsOf(ef, 'extra', AEnter);
     end;
+  end;
+end;
+
+{ ==================== keyframe animations [Batch 139, D6] ==================== }
+
+procedure TyGfxStopKeyframes(AEl: TTyGfxEl);
+begin
+  if AEl = nil then Exit;
+  AEl.StopAnimation('keyframe');
+  if Length(AEl.KfRestore) > 0 then AEl.Attr(AEl.KfRestore);
+end;
+
+procedure TyGfxApplyKeyframes(AEl: TTyGfxEl; AOpt: TJSONData; AEnabled: Boolean;
+  ADefaultDuration: Double);
+const
+  cTargets: array[0..3] of string = ('', 'style', 'shape', 'extra');
+  cExclude: array[0..4] of string = ('percent', 'easing', 'shape', 'style', 'extra');
+var
+  o, kf, vals: TJSONObject;
+  d: TJSONData;
+  kfs: array of TJSONObject;
+  pcts: array of Double;
+  i, j, t, k, n: Integer;
+  duration, delay, p: Double;
+  loop: Boolean;
+  anim, other: TTyAnimator;
+  keys: array of string;
+  values: array of TTyAnimValue;
+  others: array of TTyAnimator;
+  full, target, easing: string;
+begin
+  if (AEl = nil) or not AEnabled or not Truthy(AOpt) then Exit;
+  if AOpt is TJSONArray then
+  begin
+    for i := 0 to AOpt.Count - 1 do
+      TyGfxApplyKeyframes(AEl, AOpt.Items[i], AEnabled, ADefaultDuration);
+    Exit;
+  end;
+  if not (AOpt is TJSONObject) then Exit;
+  o := TJSONObject(AOpt);
+  d := o.Find('duration');
+  { the enter animation's duration when none is written }
+  if JNull(d) then duration := ADefaultDuration else duration := JsNumOf(d);
+  { `!keyframes || !duration` }
+  d := o.Find('keyframes');
+  if not (d is TJSONArray) or (duration = 0) or IsNan(duration) then Exit;
+  { keyframes.sort((a, b) => a.percent - b.percent): stable; an item that
+    is not an object has nothing to animate and is left out }
+  kfs := nil;
+  pcts := nil;
+  for i := 0 to d.Count - 1 do
+  begin
+    if not (d.Items[i] is TJSONObject) then Continue;
+    kf := TJSONObject(d.Items[i]);
+    p := JsNumOf(kf.Find('percent'));
+    n := Length(kfs);
+    SetLength(kfs, n + 1);
+    SetLength(pcts, n + 1);
+    j := n - 1;
+    while (j >= 0) and (pcts[j] - p > 0) do
+    begin
+      kfs[j + 1] := kfs[j];
+      pcts[j + 1] := pcts[j];
+      Dec(j);
+    end;
+    kfs[j + 1] := kf;
+    pcts[j + 1] := p;
+  end;
+  loop := Truthy(o.Find('loop'));
+  for t := 0 to High(cTargets) do
+  begin
+    target := cTargets[t];
+    if not AEl.HasAnimTarget(target) then Continue;
+    anim := nil;
+    for i := 0 to High(kfs) do
+    begin
+      if target = '' then vals := kfs[i] else vals := ObjOf(kfs[i], target);
+      if vals = nil then Continue;
+      keys := nil;
+      values := nil;
+      for k := 0 to vals.Count - 1 do
+      begin
+        if (target = '') and InList(cExclude, vals.Names[k]) then Continue;
+        n := Length(keys);
+        SetLength(keys, n + 1);
+        SetLength(values, n + 1);
+        keys[n] := vals.Names[k];
+        values[n] := TyGfxAnimOf(vals.Items[k]);
+      end;
+      if Length(keys) = 0 then Continue;
+      if anim = nil then
+      begin
+        anim := AEl.Animate(target, loop, True);
+        anim.Scope := 'keyframe';
+      end;
+      { every other animator of the same target stops its tracks on these
+        keys (an Element.animate('') one matches only another such) }
+      others := nil;
+      for k := 0 to AEl.AnimatorCount - 1 do
+      begin
+        other := AEl.AnimatorAt(k);
+        if (other <> anim) and (other.TargetName = anim.TargetName)
+          and (other.NoTargetName = anim.NoTargetName) then
+        begin
+          SetLength(others, Length(others) + 1);
+          others[High(others)] := other;
+        end;
+      end;
+      for k := 0 to High(others) do others[k].StopTracks(keys);
+      { the values before: what TyGfxStopKeyframes puts back }
+      for k := 0 to High(keys) do
+      begin
+        if target = '' then full := keys[k] else full := target + '.' + keys[k];
+        TyAnimPropPut(AEl.KfRestore, full, AEl.GetAnimProp(full));
+      end;
+      easing := StrOf(kfs[i].Find('easing'));
+      anim.WhenWithKeys(duration * pcts[i], keys, values, easing);
+    end;
+    if anim = nil then Continue;
+    { animationOpts.delay || 0 }
+    delay := JsNumOf(o.Find('delay'));
+    if IsNan(delay) then delay := 0;
+    anim.Delay(delay).Duration(duration).Start(StrOf(o.Find('easing')));
   end;
 end;
 
@@ -1378,6 +1556,8 @@ begin
             else
             begin
               el.IsNew := False;
+              { stop and restore before any other attribute [Batch 139] }
+              TyGfxStopKeyframes(el);
               ApplyUpdateTransition(el, cleaned, False);
             end;
             UpdateCommonAttrs(el, opt, AZ, AZLevel);
@@ -1447,6 +1627,9 @@ begin
             d := opt.Find('info');
             if d <> nil then el.Info := d.Clone;
           end;
+          { applyKeyframeAnimation, last [Batch 139] }
+          TyGfxApplyKeyframes(el, opt.Find('keyframeAnimation'),
+            FAnim.Enabled and (el.Animation <> nil), FAnim.Duration);
         end;
       finally
         ownContent.Free;

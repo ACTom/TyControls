@@ -47,8 +47,17 @@ unit tyControls.AdvChart.Anim;
   the track steps its own values. Only visualMap's continuous indicator uses
   it upstream.
 
-  WHAT IS NOT HERE: gradients, per-keyframe easing (ECharts never sets it),
-  pause/resume (ECharts never pauses a series). A numeric STRING is
+  KEYFRAMES [Batch 139, D6]: a keyframe may carry an easing of its own
+  (Track.addKeyframe); the segment that ENDS on it is eased with it, after
+  the clip's easing. A track that finishes finishes the track it adds to
+  (Track.setFinished), so the value stops where the latest animator left it.
+  An animator made by Element.animate('') has NO target name (upstream's
+  undefined, not the '' animateTo gives the element's own animators): an
+  animateTo on the element's keys does not stop it, and it is never one an
+  additive animateTo adds to.
+
+  WHAT IS NOT HERE: gradients, pause/resume (ECharts never pauses a
+  series). A numeric STRING is
   interpolated as its number; upstream classifies it as a number too but then
   concatenates, which no chart relies on.
 
@@ -145,6 +154,9 @@ type
     Raw: TTyAnimValue;
     { additive: Value less the first keyframe's [Batch 116] }
     AddValue: TTyAnimValue;
+    { the keyframe's own easing: the segment ending here is eased with it
+      (ekNone: none) [Batch 139] }
+    Easing: TTyEasing;
   end;
 
   { ---- one property (Animator.ts Track) ---- }
@@ -162,7 +174,9 @@ type
     FAddScratch: TTyAnimValue;
   public
     constructor Create(const APropName: string);
-    procedure AddKeyframe(ATime: Double; const ARaw: TTyAnimValue);
+    { AEasing: the keyframe's own ('' for none) [Batch 139] }
+    procedure AddKeyframe(ATime: Double; const ARaw: TTyAnimValue;
+      const AEasing: string = '');
     { AAdditive: the track to add to, nil for none }
     procedure Prepare(AMaxTime: Double; AAdditive: TTyAnimTrack = nil);
     procedure Step(AAnimator: TTyAnimator; APercent: Double);
@@ -213,6 +227,8 @@ type
     { __fromStateTransition: the state list a transition's animator was made
       for ('' for any other animator) [Batch 94] }
     FFromState: string;
+    { made by Element.animate(''): targetName undefined [Batch 139] }
+    FNoTarget: Boolean;
     { ADDITIVE [Batch 116]: the element's running animators of the same
       nested object when this one was made, and the animators made additive
       to this one (so a freed animator leaves no track pointing at it) }
@@ -241,7 +257,7 @@ type
       value -- a keyframe at 0 when ATime > 0 -- and a key whose current
       value is null makes no track. }
     function WhenWithKeys(ATime: Double; const AKeys: array of string;
-      const AValues: array of TTyAnimValue): TTyAnimator;
+      const AValues: array of TTyAnimValue; const AEasing: string = ''): TTyAnimator;
     function Delay(ATime: Double): TTyAnimator;
     { Run for ADuration whatever the tracks say, even with none; HasDuration
       False is upstream's undefined, which starts as 0. }
@@ -273,6 +289,9 @@ type
     property FromStateTransition: string read FFromState write FFromState;
     property Element: TTyAnimElement read FElement;
     property TargetName: string read FTargetName;
+    { Element.animate('') made it: its targetName is undefined, which no
+      animateTo's '' equals [Batch 139] }
+    property NoTargetName: Boolean read FNoTarget;
     property Scope: string read FScope write FScope;
     property Clip: TTyAnimClip read FClip;
     property MaxTime: Double read FMaxTime;
@@ -778,6 +797,9 @@ end;
 procedure TTyAnimTrack.SetFinished;
 begin
   FFinished := True;
+  { the track added to finishes too: the value stays where the latest
+    animator left it [Batch 139] }
+  if FAdditive <> nil then FAdditive.SetFinished;
 end;
 
 function TTyAnimTrack.KeyframeCount: Integer;
@@ -785,7 +807,8 @@ begin
   Result := Length(FKeyframes);
 end;
 
-procedure TTyAnimTrack.AddKeyframe(ATime: Double; const ARaw: TTyAnimValue);
+procedure TTyAnimTrack.AddKeyframe(ATime: Double; const ARaw: TTyAnimValue;
+  const AEasing: string);
 var
   len: Integer;
   isDiscrete: Boolean;
@@ -834,6 +857,10 @@ begin
   FKeyframes[len].Percent := 0;
   FKeyframes[len].Value := value;
   FKeyframes[len].Raw := TyAnimClone(ARaw);
+  { `if (easing)`: easingFuncs[easing] || createCubicEasingFunc(easing) --
+    an easing that resolves to nothing eases nothing [Batch 139] }
+  if AEasing <> '' then FKeyframes[len].Easing := TyEasingResolve(AEasing)
+  else FKeyframes[len].Easing := TyEasingNone;
 end;
 
 { fillArray: align an earlier keyframe's array with the last one's -- cut a
@@ -993,6 +1020,8 @@ begin
     { Math.min(w, 1) }
     if w > 1 then w := 1;
   end;
+  { the easing of the keyframe the segment ends on [Batch 139] }
+  if next^.Easing.Kind <> ekNone then w := TyEasingApply(next^.Easing, w);
 
   if FDiscrete then
   begin
@@ -1249,7 +1278,7 @@ begin
 end;
 
 function TTyAnimator.WhenWithKeys(ATime: Double; const AKeys: array of string;
-  const AValues: array of TTyAnimValue): TTyAnimator;
+  const AValues: array of TTyAnimValue; const AEasing: string): TTyAnimator;
 var
   i: Integer;
   track, addT: TTyAnimTrack;
@@ -1281,12 +1310,12 @@ begin
         initial := GetValue(AKeys[i]);
       { an invalid value: the track exists, but is never run }
       if initial.Kind = avkNull then Continue;
-      if ATime > 0 then track.AddKeyframe(0, initial);
+      if ATime > 0 then track.AddKeyframe(0, initial, AEasing);
       track.FInKeys := True;
       SetLength(FTrackKeys, Length(FTrackKeys) + 1);
       FTrackKeys[High(FTrackKeys)] := track;
     end;
-    track.AddKeyframe(ATime, AValues[i]);
+    track.AddKeyframe(ATime, AValues[i], AEasing);
   end;
   FMaxTime := JsMax(FMaxTime, ATime);
   Result := Self;
@@ -1555,7 +1584,8 @@ begin
     t := track.FKeyframes[n - 1].Time;
     SetLength(track.FKeyframes, n - 1);
     track.AddKeyframe(t, AValues[i]);
-    track.Prepare(OrZero(FMaxTime));
+    { prepared again with the track it adds to [Batch 139] }
+    track.Prepare(OrZero(FMaxTime), track.FAdditive);
   end;
 end;
 
@@ -1799,6 +1829,8 @@ function TTyAnimElement.Animate(const ATargetName: string; ALoop: Boolean;
   AAllowDiscrete: Boolean): TTyAnimator;
 begin
   Result := TTyAnimator.Create(Self, ATargetName, ALoop, AAllowDiscrete);
+  { `key && (animator.targetName = key)`: no key leaves it undefined }
+  Result.FNoTarget := ATargetName = '';
   AddAnimator(Result);
 end;
 
@@ -2026,7 +2058,9 @@ begin
     while i < FAnimators.Count do
     begin
       a := TTyAnimator(FAnimators[i]);
-      if a.FTargetName = ATopKey then
+      { an animator Element.animate('') made has an undefined targetName,
+        never the element's '' [Batch 139] }
+      if (a.FTargetName = ATopKey) and not a.FNoTarget then
         if a.StopTracks(keys) then
         begin
           idx := FAnimators.IndexOf(a);
@@ -2087,7 +2121,8 @@ begin
     begin
       others := nil;
       for i := 0 to FAnimators.Count - 1 do
-        if TTyAnimator(FAnimators[i]).FTargetName = ATopKey then
+        if (TTyAnimator(FAnimators[i]).FTargetName = ATopKey)
+          and not TTyAnimator(FAnimators[i]).FNoTarget then
         begin
           SetLength(others, Length(others) + 1);
           others[High(others)] := TTyAnimator(FAnimators[i]);
@@ -2391,7 +2426,7 @@ begin
   while i < FAnimators.Count do
   begin
     a := TTyAnimator(FAnimators[i]);
-    if a.FTargetName = ATopKey then
+    if (a.FTargetName = ATopKey) and not a.FNoTarget then
       if a.StopTracks(keys) then
       begin
         idx := FAnimators.IndexOf(a);

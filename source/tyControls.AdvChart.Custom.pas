@@ -106,6 +106,14 @@ unit tyControls.AdvChart.Custom;
   / `updateAnimation` override the timing. A removed element goes at once.
   One with a `leaveTo` stops the render: upstream's applyLeaveTransition
   reads an option CustomView never stores and throws there (6.1).
+  [Batch 139: `extra` transitions, enters and leaves beside the shape;
+  `additive` in enterAnimation / updateAnimation adds to what runs.]
+
+  KEYFRAME ANIMATIONS [Batch 139, D6]: every element (a textContent too)
+  first has its keyframe animations stopped and their values put back, and
+  after its update runs the option's `keyframeAnimation` over the series
+  (Graphic's TyGfxApplyKeyframes; a duration not written is the series'
+  enter duration at data index 0).
 
   PURE: SysUtils, Classes, Math, fpjson and the AdvChart units. }
 interface
@@ -995,6 +1003,9 @@ begin
     if (d <> nil) and (d.JSONType = jtString) then Result.Easing := d.AsString;
     d := ext.Find('delay');
     if (d <> nil) and (d.JSONType = jtNumber) then Result.Delay := d.AsFloat;
+    { extend copies every key: `additive` too [Batch 139] }
+    d := ext.Find('additive');
+    if d <> nil then Result.Additive := Truthy(d);
   end;
   { the animator's `delay || 0` }
   if IsNan(Result.Delay) then Result.Delay := 0;
@@ -1030,12 +1041,18 @@ begin
   TyGfxUpdateLeaveTo(AEl, AOpt);
 end;
 
-{ updateElNormal: setTextConfig, the default transition, the text's ec4
-  fill / stroke, then applyUpdateTransition with clearStyle }
+{ updateElNormal: the keyframe animations stopped and restored, setTextConfig,
+  the default transition, the text's ec4 fill / stroke, applyUpdateTransition
+  with clearStyle, then the option's keyframe animations [Batch 139] }
 procedure TTyCustomView.UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject;
   AIsInit: Boolean);
-var st: TJSONObject;
+var
+  st: TJSONObject;
+  timing: TTyAnimTiming;
+  kfDur: Double;
 begin
+  { stopPreviousKeyframeAnimationAndRestore, before anything else }
+  TyGfxStopKeyframes(AEl);
   if ATxCfg <> nil then
   begin
     if AEl.TextConfig = nil then AEl.TextConfig := TJSONObject.Create;
@@ -1052,6 +1069,15 @@ begin
     if st.IndexOfName('textStroke') >= 0 then PutKey(st, 'stroke', st.Find('textStroke').Clone);
   end;
   ApplyTransition(AEl, AOpt, AIsInit);
+  { applyKeyframeAnimation over the series: a duration not written is the
+    series' enter one at data index 0 }
+  if FAnim.Enabled and (AEl.Animation <> nil) and Truthy(AOpt.Find('keyframeAnimation')) then
+  begin
+    kfDur := 0;
+    if TyAnimGetConfig(atEnter, FAnim.Model, TyAnimCallAt(0), timing) then
+      kfDur := timing.Duration;
+    TyGfxApplyKeyframes(AEl, AOpt.Find('keyframeAnimation'), True, kfDur);
+  end;
 end;
 
 { processTxInfo for the normal state and doCreateOrUpdateAttachedTx: the
