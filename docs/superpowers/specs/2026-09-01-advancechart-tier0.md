@@ -13784,7 +13784,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 
 `tools/advchart-oracle/matrix.js`（新；真 dist，node SSR，xorshift32 随机数，zrender 宽度表量字并逐字核对；画廊里没有 `renderItem` 的 custom 系列给一个什么都不画的——它在 matrix 上是 MX2，比的是下面的 matrix；两次生成逐字节一致，`process.exit()`）→ `tests/fixtures/advchart-matrix.json`（约 2.7 MB）：
 
-- **40 例**：31 个手写——平铺、x 树、两边都是树且深浅不一、`levels` / `levelSize` / 百分比、叶子的 px / 百分比 / 数字字符串 / null、全部指定、超宽叶子被夹、父节点的 size 不读、x 隐藏、两边隐藏、`length`、重名与 null 与数字值、空的 x、四种盒子（居中定宽、right + width 丢掉缺省 left、零边距、小数百分比）、两组样式（维 / 格子 / 正文 / 角落 / 背景 / 外框 / `borderZ2` / 分隔线、奇数边宽与透明度与点线）、标签（维样式、格子覆盖、隐藏、字符串 formatter；position / align / verticalAlign / distance；断行与丢行；高度为负；truncate / none / breakAll / 定宽定高 / padding）、热力图两例（叶子、非叶子、表头定位、小数、未知名字、`'-'`）、散点两例（含 visualMap 的大小与颜色）、收集两例、两个 matrix 按 index 与 id——外加画廊 9 个（simple、correlation-heatmap、correlation-scatter、covariance、mbti、periodic-table、pie、confusion、graph；stock 与两个 mini-bar 用了正文 data / 合并格，归 MX3）。
+- **[第 149 批：stock 与两个 mini-bar 现在由 §188 的基准比 matrix 本身，三个都逐位。]** **40 例**：31 个手写——平铺、x 树、两边都是树且深浅不一、`levels` / `levelSize` / 百分比、叶子的 px / 百分比 / 数字字符串 / null、全部指定、超宽叶子被夹、父节点的 size 不读、x 隐藏、两边隐藏、`length`、重名与 null 与数字值、空的 x、四种盒子（居中定宽、right + width 丢掉缺省 left、零边距、小数百分比）、两组样式（维 / 格子 / 正文 / 角落 / 背景 / 外框 / `borderZ2` / 分隔线、奇数边宽与透明度与点线）、标签（维样式、格子覆盖、隐藏、字符串 formatter；position / align / verticalAlign / distance；断行与丢行；高度为负；truncate / none / breakAll / 定宽定高 / padding）、热力图两例（叶子、非叶子、表头定位、小数、未知名字、`'-'`）、散点两例（含 visualMap 的大小与颜色）、收集两例、两个 matrix 按 index 与 id——外加画廊 9 个（simple、correlation-heatmap、correlation-scatter、covariance、mbti、periodic-table、pie、confusion、graph；stock 与两个 mini-bar 用了正文 data / 合并格，归 MX3）。
 - 41 个 matrix、397 个表头格、2090 个视图元素（295 个有字的标签）、1298 个探点；959 行热力图（958 画出）、334 行散点（332 画出）。
 - **69 条守卫**全部成立：每例的五条转写（R1 表头格的矩形是它单元的跨度、R2 热力图矩形就是 `dataToLayout`、散点是 `dataToPoint`、R3 标签在格子中心、R4 显示列表的次序就是按 z2 的稳定排序、R5 单行标签的行位置照 `parsePlainText`，外加正文格的亚像素形状）与 29 条事实：缺省盒子、叶子在前、浅叶子伸到正文、改名、`length`、null 的层沿用维的 levelSize、全部指定时不贴边、否则贴边、隐藏的 x 不画且层高为 0、right + width 丢掉 left、special z2 125、写的 z2 优先、`borderZ2`、25 / 50 / 52、断行、丢行、负高度保留前几行、`'none'` 不裁、缺省裁、formatter、非叶子的热力图格、表头定位、未知名字不画、`'-'` 照画、收集、两个 matrix、visualMap 定散点大小、画廊画得出。
 
@@ -13802,14 +13802,14 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 ### 推迟与偏差
 
 - **[第 147 批：格子的 silent、`triggerEvent`、tooltip 做了，matrix 系列的 `containPixel` 与 finder 照上游答；`cursor` 不做，见 §186。]** **交互是 MX2**：所有 matrix 元素都是静默的（上游有填充的格子在没写 `silent` 时可被命中），`triggerEvent`、格子的 tooltip、`cursor` 不做；matrix 系列的悬停照常走，提示框内容没有按 matrix 核过；`containPixel` 对 matrix 系列先答 false，finder 指 matrix 答不出（`convertToPixel` 等是 MX2）。
-- **[第 147 批：范围、clamp、`pointToData` 做了，见 §186。]** **一维单值以外的定位是 MX2**：范围、`clamp`、`pointToData`。**正文 / 角落的 data 与合并格是 MX3**：正文与角落格只有父的样式，`dataToLayout` 不按合并格扩张。
-- **[第 147 批：custom、graph 按数据、pie / funnel 按格子也绑上了，见 §186。]** **只有 heatmap、scatter、effectScatter 绑到 matrix**；custom、graph、pie 等仍说坐标系还没做（MX2 / D13）。matrix 系列只读自己的 `data`，`dataset` / `encode` 不接（MX2）。effectScatter 的涟漪没有对上游核过。
+- **[第 149 批：正文 / 角落的 data、合并格与 `dataToLayout` 的扩张做了，见 §188。]** **[第 147 批：范围、clamp、`pointToData` 做了，见 §186。]** **一维单值以外的定位是 MX2**：范围、`clamp`、`pointToData`。**正文 / 角落的 data 与合并格是 MX3**：正文与角落格只有父的样式，`dataToLayout` 不按合并格扩张。
+- **[第 149 批：matrix 系列没有自己的 data 时读 dataset（按 encode），见 §188。]** **[第 147 批：custom、graph 按数据、pie / funnel 按格子也绑上了，见 §186。]** **只有 heatmap、scatter、effectScatter 绑到 matrix**；custom、graph、pie 等仍说坐标系还没做（MX2 / D13）。matrix 系列只读自己的 `data`，`dataset` / `encode` 不接（MX2）。effectScatter 的涟漪没有对上游核过。
 - **[第 147 批：rich 按溢出区排、`rotate` 与偏移的原点做了，见 §186。]** **标签**：rich 文本在格子里不按溢出区排（宽高不给，MX2）；`rotate` 不做；函数 formatter（`@name`）不跑，只做字符串模板。
 - **写了 null 的键**：上游的缺省是 merge 进选项的，写 null 挡住缺省（`label.padding: null` 没有 padding，`x: null` 连 `show` 都没有、整棵树不画）；端口按链读、null 落到缺省。
 - **收集**：端口的类目表按字符串记，`5` 与 `'5'` 是同一个类目（上游是两个）；null 上游会被收成类目 `'null'`，端口当缺口。布尔坐标上游 `Math.round(true)` 是 1，端口是 NaN。
 - **热力图的 y 是 NaN** 时上游造一个画不出来的矩形，端口不造（看起来一样，元素数少一个）。
 - **`length` 不是非负整数**时上游 `Array(length)` 会抛 RangeError，端口当 0；超过 10 万也当 0，正文超过 25 万格不画（上游照建，浏览器先撑不住）。`z2` 写成非数字时端口按缺省。
-- **颜色**：格子 itemStyle 只取纯色（渐变、图案、decal、阴影是 MX3）；缺省墨水是皮肤的（主题规则），上游的 token 由皮肤里同类的中性色代替。
+- **[第 149 批：渐变与图案做了；decal 上游本来就不上格子；阴影仍不画，见 §188。]** **颜色**：格子 itemStyle 只取纯色（渐变、图案、decal、阴影是 MX3）；缺省墨水是皮肤的（主题规则），上游的 token 由皮肤里同类的中性色代替。
 - **PPI**：选项里的 px（盒子、`size`、`levelSize`、标签的 `distance` / `offset`）按 PPI 放大，百分比是 matrix 矩形或画布的，不放大。
 
 ### 落地
@@ -13837,7 +13837,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **换算**：坐标系管理器的次序是普通的那张表（grid、radar、graph 的 view、parallel、polar、singleAxis）再 `nonSeriesBox` 那张（calendar、matrix）。matrix 的 `getCoordSys` 先看 finder 的 matrix 模型，再看系列的 `coordinateSystem`——只有按数据用 matrix 的系列（`decideCoordSysUsageKind` 是 data）才有；格子里的饼没有坐标系。`convertToPixel` 是 `dataToPoint(value, opt)`（值不是数组时是 `[NaN, NaN]`，不是「答不出」）、`convertToLayout` 是 `dataToLayout`、`convertFromPixel` 是 `pointToData`；`containPixel` 认 matrix 模型与 matrix 上的系列（矩形含边），格子里的饼走它自己视图的 `containPoint`。calendar 也有 `convertToLayout`：`dataToLayout` 的格子与内容区（clamp 缺省是 true）。
 - **matrix 上的系列**：`Matrix.create` 对**所有**组件做 `injectCoordSysByOption`。系列缺省 `coordinateSystemUsage` 是 `'data'`，pie、funnel（以及 sankey、tree、treemap）的缺省选项写的是 `'box'`；写了 null 时按系列的缺省 `'data'`，写了别的字是「都不是」。按数据用：heatmap、scatter、effectScatter（MX1）、custom（`prepareCustom`：`coordSys` 是 matrix 矩形，`api.coord` / `api.layout` 就是 `dataToPoint` / `dataToLayout`，第二个参数是 opt）、graph（`createSeriesData` 用 matrix 的维度，x / y 序数；`graphSimpleLayout` 只要 x、y、value 有一个是数就放在 `dataToPoint([x, y, value])`，边照 `simpleLayoutEdge`，曲度的控制点照算）。按盒子用：`createBoxLayoutReference` 用 `coord`（写了且不是 null），饼没有 `coord` 时用 `center` 当坐标（`getCoord2`）；拿到的 `dataToLayout(…).rect` 是参照矩形——饼的盒子与百分比半径在它里面算，圆心来自 `center` 时是这个矩形自己的中心；漏斗的 `getLayoutRect` 在它里面。matrix 的 `dataToLayout` 没有 `contentRect`，所以格子的边线也在饼的参照里。
 - **格子的交互**（`createMatrixCell`）：格子矩形写了 `silent` 就照写的，没写时**没有填充就静默**（只剩边框能被命中，上游特意不要）；写成 `silent: false` 又没有填充时，`Path.contain` 只认描边——宽度至少 `strokeContainThreshold` 5，也就是离边框 2.5 px 以内。标签（`textContent`）写了 `silent` 就照写的，否则 `!(matrix.triggerEvent || matrix.tooltip.show)`，并且 `ignoreHostSilent`：宿主静默不影响它。`triggerEvent` 时格子矩形带 `eventData`：`componentType: 'matrix'`、`componentIndex` / `matrixIndex`、`targetType`（`'x'` / `'y'` / `'body'` / `'corner'`）、`name`（标签画出来的字，没有标签时 undefined）、`value`（格子的 textValue）、`coord`（定位器对）；悬停到标签上时 `findEventDispatcher` 顺着 `__hostTarget` 找到宿主的 `eventData`。
-- **格子的 tooltip**：有 textValue 的格子（表头格；正文 / 角落的 `value` 是 MX3）都 `setTooltipConfig`：`itemName` 是**套过 formatter 的**字（标签显示不显示都一样），`formatterParams` 是 `componentType`、`name`、`matrixIndex`、`xyLocator`，`$vars` 是 `['name', 'xyLocator']`。`TooltipView` 对组件项不看 `trigger`：级联是 `matrix.tooltip`（字符串就是 formatter）、matrix 模型本身、`{formatter: content}`，最后是全局 tooltip——于是只要有 tooltip 组件，一个有填充、没写 `silent` 的表头格不写 `matrix.tooltip` 也会弹出它的名字。字符串 formatter 走 `formatTpl`：`{a}` / `{a0}` 是名字、`{b}` / `{b0}` 是定位器对（`String()` 成 `'x,y'`），各换第一次出现。
+- **[第 149 批：正文 / 角落写了 value 的格子也有 tooltip 与事件的 value，见 §188。]** **格子的 tooltip**：有 textValue 的格子（表头格；正文 / 角落的 `value` 是 MX3）都 `setTooltipConfig`：`itemName` 是**套过 formatter 的**字（标签显示不显示都一样），`formatterParams` 是 `componentType`、`name`、`matrixIndex`、`xyLocator`，`$vars` 是 `['name', 'xyLocator']`。`TooltipView` 对组件项不看 `trigger`：级联是 `matrix.tooltip`（字符串就是 formatter）、matrix 模型本身、`{formatter: content}`，最后是全局 tooltip——于是只要有 tooltip 组件，一个有填充、没写 `silent` 的表头格不写 `matrix.tooltip` 也会弹出它的名字。字符串 formatter 走 `formatTpl`：`{a}` / `{a0}` 是名字、`{b}` / `{b0}` 是定位器对（`String()` 成 `'x,y'`），各换第一次出现。
 - **系列在 matrix 上的悬停与提示框**：热力图的提示框是名字与值（value 是坐标维，`defaultedTooltip` 就是它）；散点的 value 不是坐标维、x / y 是序数，`defaultedLabel` 与 `defaultedTooltip` 都是空的，于是提示框把整条数据 `'a  p  3'` 两个空格连起来。系列的事件名是 x 的类目名（`itemName` 落在第一个序数维上）。
 - **旋转与 rich 的格子标签**：`createTextConfig` 读 `rotate`（度数乘 `Math.PI / 180`）和 `offset`；`updateInnerText` 先把位置放到 `calculateTextPosition` 的点上，旋转，再把偏移加到位置上、把原点设成负的偏移——于是文字绕「未偏移的锚点」转，偏移在转过的坐标里。溢出区是格子经文字局部变换的**逆**变换（`BoundingRect.applyTransform`，转过的就是四个角的包围盒）。rich 文字和纯文字一样拿外宽高：`parseRichText` 的 `topWidth` / `topHeight` 是外宽高减 padding——有了高度，行从格子顶上排起，`lineOverflow: 'truncate'` 照样丢行。裁剪是格子缩半个边宽之后**在文字自己的坐标里**的矩形（逆变换后的包围盒），跟着文字一起转。
 
@@ -13898,13 +13898,13 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 
 ### 推迟与偏差
 
-- **MX3**：正文 / 角落的 `data`（格子的 `value` 与文字、它们的 tooltip）、`mergeCells` 与 `dataToLayout` 的合并格扩张（`ignoreMergeCells`）、格子样式、decal、函数 formatter、画廊的 `matrix-stock` 与两个 `matrix-mini-bar`。
+- **[第 149 批：都做了（decal 上游不上格子），见 §188。]** **MX3**：正文 / 角落的 `data`（格子的 `value` 与文字、它们的 tooltip）、`mergeCells` 与 `dataToLayout` 的合并格扩张（`ignoreMergeCells`）、格子样式、decal、函数 formatter、画廊的 `matrix-stock` 与两个 `matrix-mini-bar`。
 - **D13**：组件（grid、geo、legend、title…）与 sankey / tree / treemap / gauge / sunburst / chord 摆进格子、graph 的 `coordinateSystemUsage: 'box'`（内部视图在格子里）；lines 在 matrix 上（上游按数据用 `dataToPoint`）也没有做，说坐标系还没做。
 - **关系图在 matrix 上**：节点有一个坐标是 NaN 时上游照样算另一个（什么也画不出来），端口整个不放；上游的节点名（数组项没有名字时取 x 的类目）与提示框（x、y 两项连起来）端口没有——端口的关系图存储是它自己的那份，事件名为空、提示框只有值；收集模式的 matrix（没有 `data` 的树）不从关系图收类目。
 - **cursor**：格子的 `cursor` 不做——端口悬停任何元素都不改光标（系列项也一样），留给整个控件统一处理。
 - **格子的 tooltip**：formatter 的值不做 HTML 转义（端口画的是字，不是标记；上游 SSR 的 richText 模式会把 `&` 印成 `&amp;`）；`String.replace` 的 `$&` 一类替换模式不认。函数 formatter（`@name`）走端口的具名处理器，params 是 `componentType`、`componentIndex`、`name`、`Coord`。
 - **命中的形状**：标签按整块文字的包围盒命中（上游按每一行的 TSpan 各自的框）；转过的标签按转过之后的包围盒命中、按包围盒裁剪——直角时与上游相同，其它角度比上游宽。
-- **opt**：只有 matrix 读 `opt.clamp`；`ignoreMergeCells` 与合并格一起是 MX3。
+- **[第 149 批：`ignoreMergeCells` 也读了，见 §188。]** **opt**：只有 matrix 读 `opt.clamp`；`ignoreMergeCells` 与合并格一起是 MX3。
 - **PPI**：换算与 api 的答案在 96 PPI 下逐位；别的 PPI 下矩形先放大再除回（`api` 的答案是 CSS px），不保证最后一位。
 
 ### 落地
@@ -13922,3 +13922,90 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - `tools/advchart-oracle/matrix2.js`、`tests/fixtures/advchart-matrix2.json`、`tests/test.advchart.matrix2.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.matrix.pas`（虚方法、view 组、转角与转过的裁剪、lines 的测试）。
 - 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
 - §145、§146、§159、§161、§184 在原处标注。
+
+## 188. Tier 3 第一百四十九批：matrix 坐标系（三）（D12 MX3，2026-10-13）
+
+路线图 D12 的第三批（MX1 / MX2 / MX3 的切分见 §184）：正文与角落自己的格子、合并格、格子的样式与函数 formatter。MX2 之后正文和角落的格子只有父的样式——`body.data` / `corner.data` 一项都不读，格子里没有字；`mergeCells` 不认，`dataToLayout` 不按合并格扩张，`ignoreMergeCells` 也就无从谈起；格子的 itemStyle 只取纯色；格子标签的 formatter 只认字符串模板；后一次 `setOption` 合并进 matrix 时盒子不写回；画廊的 `matrix-stock`、`matrix-mini-bar-geo`、`matrix-mini-bar-data-collection` 三个文件，前两个缺正文的字与合并格，第三个连两棵树都收集不到（matrix 上的系列不读 dataset）。这一批对着 6.1 的 `coord/matrix/MatrixBodyCorner.ts`（`_ensureCellMap` 的 `fillCellMap`、`ensureBodyOrCornerCell`、`getCell`、`travelExistingCells`、`expandRangeByCellMerge`）、`matrixCoordHelper.ts`（`resolveXYLocatorRangeByCellMerge`、`expandXYLocatorRangeIfIntersect`、`locatorRangeIntersectOneDim`、`fillIdSpanFromLocatorRange`、`cloneXYLocatorRange`、`isXYLocatorRangeInvalidOnDim`、`parseCoordRangeOption`）、`Matrix.ts`（`_resize` 的 `layOutBodyCornerCellMerge`、`layOutRectOneDimBasedOnUnit`、`dataToLayout` 的 `ignoreMergeCells` 与 clamp 的两个例外）、`MatrixModel.ts`（`optionUpdated` 建的 `MatrixBodyCorner`、`MatrixBodyCornerCellOption`、`MatrixLabelFormatterParams`）、`prepareCustom.ts`、`component/matrix/MatrixView.ts`（`createBodyAndCorner`、`createMatrixCell` 的函数 formatter、z2 的 special、`getItemStyle` 不带 decal）、`model/mixin/itemStyle.ts` 的 `ITEM_STYLE_KEY_MAP`、`util/layout.ts` 的 `createBoxLayoutReference`、`model/Component.ts` 的 `mergeOption` 与 `mergeLayoutParam`、`chart/heatmap/HeatmapView.ts` 的 matrix 分支、`data/helper/createDimensions.ts` 与 `sourceHelper.ts`（matrix 系列读 dataset 时的 encode），以及 zrender 的 `Path`（`style.decal` 只认 PatternObject）、`HashMap`（插入次序）逐行核过，在真 dist 上跑基准。§184、§186 的相关处在原处标注。
+
+### 上游的做法
+
+- **格子表**（`MatrixBodyCorner`，正文、角落各一张，**稀疏**——只有 `data` 里某一项碰到的格子才有记录，键是定位器对 `'x|y'`，次序是第一次碰到的次序）。`data` 不是数组就当没有。每一项必须是对象且 `coord` 是数组，否则跳过；`coord` 走 `parseCoordRangeOption`（和 `dataToLayout` 同一套：范围、父格子、负数的层、`[x1, x2, x3]` 取两端），`coordClamp` 真值时按种类夹（正文 `body` = 2、角落 `corner` = 3，所以 `[null, 'q']` 在正文是一整行正文），否则不夹；任一方向是 NaN 就跳过这一项（`['zz', 'p']`、`['a']`、`[null, 0]` 不夹时都什么都不指）。正文的项也可以指到表头的定位器（`[-1, 'South']`）：它进正文的表，但正文的画法只走正文的格子，永远不画。
+- **合并**：`mergeCells` 按真值读（`1` 也合并，`false` 不合并）。所有项按 `data` 的次序排好之后，**每个合并项依次**和它之前、仍是 owner 的合并项求并（`resolveXYLocatorRangeByCellMerge`：一遍遍地扫，直到一遍里谁也没碰到；两个范围在两个方向上都相交——边上相接也算——才算碰到，NaN 不相交），碰到的那些都不再是 owner。并完之后左上角如果不是它自己的左上角，它也不再是 owner，而是把**自己选项的浅拷贝**（`coord` 置 null）带着并集**推到列表末尾**，轮到时再照样并一次——于是「后来的项的样式与 `value` 接管整块合并区」，前面合并项的 itemStyle 丢掉（嵌套时内层的选项接管外层的整块，外层的 itemStyle 连同 special z2 一起没了）；一串相交的合并最后只剩一个 owner。**左上角没挪**时它仍是 owner，范围（`locatorRange`）是并集，但 `id` / `span` 还是自己当初的——上游没有重算：画出来的 spanRect 只盖它自己原来的那几格，并集里多出来的格子照常各画各的，`dataToLayout` 指到那些格子却按 owner 的并集扩张。
+- **把选项写进格子**：按列表次序，每一项先确保左上角的格子在表里；owner 给左上角记 `span`、`locatorRange`、`spanRect`，进 owner 列表；然后它的 span 里每一格的 `option` 都换成这一项的（后来的整个替换，不是逐键合并：`coordClamp` 的整列样式被后面一格的 `value` 项盖掉的那一格就没了底色），owner 的格子再记 `inSpanOf` 指向左上角。
+- **spanRect**：`_resize` 里按 `id` 与 `span` 从单元算（与表头格同一个 `layOutRectOneDimBasedOnUnit`）。**一个从表头的层伸进正文的合并**（`coord: [[-1, 0], 0]`）在这里抛 TypeError：它按起点的符号挑了表头那棵树，再拿正文的定位器去问那棵树的层——`setOption` 整个失败。
+- **`dataToLayout` 的扩张**：先照常 `parseCoordRangeOption`，再除非 `opt.ignoreMergeCells` 是真值：clamp 不严格等于 3 时按正文的合并扩张，不严格等于 2 时按角落的。扩张有两条路：范围恰好是一格、两个方向都不是 NaN、那一格在某个合并里——直接换成那个 owner 的范围；否则和所有 owner 反复求并直到不再变大。于是 `dataToPoint`、热力图（`dataToLayout([x, y]).rect`，没有 opt）、散点、关系图节点、custom 的 `api.coord` / `api.layout`（opt 原样传）、格子里的饼和漏斗（`createBoxLayoutReference` 不带 opt）、`convertToPixel` / `convertToLayout`（带 opt）**缺省都扩张**；`pointToData` 不看合并。
+- **画**（`createBodyAndCorner`）：照旧 y 叶子在外、x 叶子在内（角落是 x 的层在外、y 的层在内）；一格在别人的合并里（`inSpanOf` 不是自己）就不画；有 `span` 的格子画成 spanRect；格子的选项就是 `createMatrixCell` 的 cellOption：itemStyle 在父的之上（自己有 itemStyle 时 z2 是 special 100）、`z2` 先看自己再看父、`silent` 同样、label 在父的 label 之上；`value` 不是 null / undefined 时就是标签的字（`String()`：`42`、`true`、`3.5`），也就有 tooltip、有 eventData 的 `value` 和 `coord`（合并格的 `coord` 是左上角）。
+- **样式**：`getItemStyle` 照 `ITEM_STYLE_KEY_MAP`：颜色可以是渐变或图案对象，阴影四键也在；**decal 不在表里**（注释说选项的 DecalObject 不能直接当 style 的 PatternObject），所以格子写了 `itemStyle.decal` 也画不出 decal。也没有 `emphasis` / `select` / `blur`（视图里写着「Currently do not support other states」）。
+- **函数 formatter**：`formatter(params)`，`params` 是 `componentType: 'matrix'`、`componentIndex`、`name`（套 formatter 之前的字）、`value`（原值，数字就是数字）、`coord`（定位器对的拷贝）、`$vars`；返回 null / undefined 时保留原来的字，否则 `String()`。`formatter: null` 写在格子上时按 `Model.get` 跳过，用父的。
+- **盒子写回**：matrix 是 `layoutMode: 'box'` 的组件，后一次 `setOption` 合并进来时 `mergeLayoutParam` 把新选项碰到的那个方向的三个键整组写回模型（先 `left: 50`，再 `right: 30, width: 300`：left 被丢掉，矩形从 470 起）。
+- **matrix 上的系列读 dataset**：系列没有自己的 `data` 时读 dataset，`encode` 给的列按 x / y / value 的维度解析——x、y 是序数，正在收集的树就从这些列收集类目（`matrix-mini-bar-data-collection` 三个 custom 系列的 `encode.x` 是 1、3、5 列，收出 `amount, file, Q`；`encode.y` 都是 0 列，收出十个日期）。
+
+### port 以前
+
+- `TTyMatrix` 没有格子表；`TyBuildMatrix` 的正文 / 角落格只用父节点画，没有字、没有自己的样式、没有合并。
+- `DataToLayoutRange` 不看合并格；`TyMatrixLayoutJson` 与 custom 的 `CoordRange` / `LayoutRange` 只带 clamp。
+- 格子 itemStyle 的颜色只取纯色；标签的 formatter 只走 `formatTplSimple`，`@名字` 被当成模板原样印出来。
+- `OptionMerge` 的盒子表里没有 matrix：后一次选项里的 `right` + `width` 与前一次的 `left` 并存，`getLayoutRect` 取了 left。
+- 存储给 matrix 系列一律 `FSeriesDataset := -1`，只读系列自己的 `data`。
+
+### 做法
+
+- **`tyControls.AdvChart.Matrix`**：
+  - `TTyMatrixBCCell`（定位器对、格子的选项与它在 `data` 里的序号、是不是合并留下的副本、owner、`InSpanOf`、`Span`、`Loc`、`SpanRect`）与 `TTyMatrixBodyCorner`（开放寻址的散列表，键是定位器对，格子按第一次碰到的次序存——即上游 HashMap 的次序；owner 列表；副本选项归它所有）。
+  - `BuildCellMap`：照 `fillCellMap` 一行行写——解析（`ParseCoordParts` + `RangeOneDim`，`coordClamp` 时正文 `mclBody`、角落 `mclCorner`）、合并的并集循环（`Meets1` / `ExpandIfMeets` 照 `locatorRangeIntersectOneDim` / `expandXYLocatorRangeIfIntersect`，比较前先挡 NaN，Math.min / max 用 `JMin` / `JMax`）、左上角挪了就推副本（`data[src]` 的克隆、`coord` 置 null）、**左上角没挪时保留旧的 span**、按次序写选项与 `InSpanOf`。`ExpandByMerge` 照 `expandRangeByCellMerge`（单格的快路径、对 owner 列表的并集）。`Resize` 在单元与表头格之后重建两张表（收集的树到这时才有叶子）并算每个合并的 spanRect（`LayOutSpans`）；`CellMap(kind)` 给外面看。
+  - `DataToLayoutRange` 多一个 `AIgnoreMerge`（缺省 False，所以 `DataToLayout` / `DataToPoint` / `Locate` 与所有既有调用照上游缺省扩张），clamp 是 `mclCorner` 时跳过正文的合并、`mclBody` 时跳过角落的；`TyMatrixLayoutJson` 同样多一个参数；新的 `TyMatrixIgnoreMergeOfOpt`（`opt && opt.ignoreMergeCells`）。
+  - 画：`AddBodyCorner` 照 `createBodyAndCorner` 的一格——在别人合并里不画、合并画 spanRect、格子的选项进 `AddCell`、`value` 经 `JsStringOf`（`String()` 的写法）成为标签的字与格子记录的 `HasText` / `Value`。`TCellStyle` 带上渐变与图案，`AddRect` 交给元素的 `FillGradient` / `FillPattern`（首色标透明也算有填充）；decal 不读。`AddLabel` 认 `@名字`：`TyChartRunHandler`，params 是 `componentType`、`componentIndex`、`Name`（原字）、`ValueText`（`String()`）、数字值另放 `Values`、`Coord`；别的字符串照旧 `formatTplSimple`。
+  - **敌意选项的上限**：`data` 只读前 25 万项；合并的并集循环总共 5000 万步，超了之后的合并项不再合并（只当样式项）；格子写入总共 100 万格，一项写不下就整项跳过——一个 `coordClamp` 的整片正文不能变出几十亿个格子。
+- **`tyControls.AdvChart.Custom`**：`DoMatrix` / `CoordRange` / `LayoutRange` 多一个 `AIgnoreMergeCells`（缺省 False）。
+- **`tyControls.AdvChart.OptionMerge`**：盒子表加 matrix（缺省四边 `'10%'`，不忽略尺寸）。
+- **`tyControls.AdvanceChart`**：matrix 系列（pie / funnel / graph 除外）没有自己的 `data` 时读 dataset：x / y / value 三列，`TyEncodeOf`、写了 encode 就补齐未认领的列、没写就用共享的列游标（和轴上的系列同一条路），`TyFillStoreFromSource` 经树的类目表解析与收集；`ConvertOnMatrix` 与 `ConvertToLayoutData` 把 opt 的 `ignoreMergeCells` 传下去；custom 的 `DoMatrix` 同样。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
+
+### 基准
+
+`tools/advchart-oracle/matrix3.js`（新；真 dist，node SSR 而 TooltipView 照跑——与 `matrix2.js` 同一套：`chart._ssr = false`、`env.node` 关、`getDom` 答一个空对象，setTimeout 换成按时排的队列；xorshift32；zrender 宽度表量字并逐字核对；格子标签的 `formatter: '@名字'` 与 custom 的 `renderItem: '@名字'` 都是这里的 JS 函数；`matrix-mini-bar-geo` 要的地图在浏览器里是取来的，这里注册一张每个地区一个方块的替身——geo 是 D13 的，比的是 matrix；两次生成逐字节一致，`process.exit()`）→ `tests/fixtures/advchart-matrix3.json`（约 2.1 MB）：
+
+- **22 例**，五组：
+  - **view**（10 个手写 + 画廊 3 个，13 个 matrix）：平铺表头上的正文 data（字符串 / 数字 / 布尔的 `value`、自己的 itemStyle、自己的 label、写了 `z2`、`coordClamp` 的整列、后来的项整个盖掉一格、不合并的范围、什么都不指的四种项、`['a']`；角落的一格）、两边是树时的正文 data（父格子铺开样式、表头定位器上的正文项、夹住的最后一行、不夹的 null 什么都不指）与角落 data（夹住的一行、跨进 x 表头的范围）、基本合并（2 × 2 带底色、竖的、1 × 1、横的带 `insideLeft`、`mergeCells: 1` 与 `false`、角落合并）、相交的合并（并集、早的放弃、左上角挪了的副本接管、合并里的样式项被副本盖掉、三段连锁）、旧 span（横、竖各一）、嵌套（内层接管外层、大的在小的之后）、表头定位器上的合并（正文表里有、不画、`dataToLayout` 照样扩张；角落横、竖的合并；整列合并）、两边隐藏（stock 的布局，模板 formatter）、标签（模板、x 维 / 正文 / 一格上的函数 formatter、合并格断行、合并格旋转、角落的数值）、样式（线性与径向渐变、decal、阴影、透明度、虚线边框、`silent`、正文的 `z2` 与一格的 `z2`）；画廊 `matrix-stock`、`matrix-mini-bar-geo`、`matrix-mini-bar-data-collection`。记录同 `matrix.js` / `matrix2.js`（树、视图元素、探点），另记两张格子表（每一格的定位器对、选项是 `data` 的第几项、是不是副本、owner、`inSpanOf`、`span`、`locatorRange`、spanRect；owner 列表的次序），填充是对象时记它的种类、坐标与色标，`decal` 记有没有。
+  - **algebra**（3 个 matrix：相交、表头上、旧 span）：每个定位器对与十几个范围 × 十种 opt（无、`ignoreMergeCells` 的 true / false / `0` / `'yes'`、clamp 1 / 2 / 3 / true、clamp 与 `ignoreMergeCells` 同写），共 1740 次 `dataToLayout` / `dataToPoint`。
+  - **series**：合并格里的热力图与散点、custom（每行四次 api：缺省的 `layout`、`ignoreMergeCells` 的 `layout`、`coord`、clamp 2 的范围）、`coord` 落在合并格里的饼与 `center` 落在合并格里的饼、8 次换算（`convertToLayout` 有无 `ignoreMergeCells`、clamp 3、范围，`convertToPixel` 有无 opt、`convertFromPixel`）。
+  - **pointer**：7 步——带底色的合并格中心与右下角（都命中左上角那一格）、合并格的标签、没有底色的数值格的标签、函数 formatter 的格子、角落的值、空处；`triggerEvent` 与 `matrix.tooltip.show` 都开。
+  - **merge**：4 组先后两三次的 `setOption`（left 之后 right + width、top 之后 bottom + height、width 之后 left、right 之后 left 再 width），记最后的盒子与矩形。
+- 13 个 matrix、141 个表头格、389 个视图元素（178 个有字的标签）、1069 个探点、184 个格子表记录、29 个合并。
+- **79 条守卫**全部成立：每例的转写（R1 正文 / 角落格的形状是它的单元或 spanRect 的亚像素、R2 spanRect 是 id 与 span 的单元、R3 每个探点与 algebra 的矩形是定位器范围两端的单元、R4 显示次序就是按 z2 的稳定排序）与 57 条事实：数值、布尔的字、special z2、写的 z2、整列、整格替换、无效项、不合并的范围、角落、父格子铺开、表头定位器、不夹的 null、角落的夹；合并画一次且是 spanRect、1 × 1、真值 `1`、角落合并、并集与放弃、副本接管、样式被盖、连锁只剩一个 owner、**旧 span**（owner 保留自己的 span、并集外的格子单独画、探点按并集扩张）、嵌套时 special z2 也丢、表头定位器上的合并不画却扩张、角落合并、**跨进正文的合并让 `_resize` 抛错**、隐藏表头的五块；模板、x 维 / 一格的函数 formatter、`formatter: null` 用父的、合并格断行、渐变、decal 不上格子、正文与格子的 z2；缺省扩张、`ignoreMergeCells` 与它的真值读法、范围碰到合并就长大、clamp 3 不扩正文、clamp 2 不扩角落；合并格里的热力图、custom 的两种答案、`convertToLayout` 的两种答案；合并格任何地方都命中左上角、正文的值进 tooltip、事件带格子的 value；盒子的写回两条；画廊三条（五块合并、地区名、两棵树收到 3 列 10 行）。
+
+### 测试
+
+`test.advchart.matrix3`（新，注册在 `tytests.lpr`）：
+
+- **`TAdvChartMatrix3ViewTest`**（6 个，继承 `TAdvChartMatrixOracleTest`：§184 的三组检查换成这个基准的 view 组，为此 MX1 的测试类把字段与检查从 private 挪到 protected）：树与布局、探点（1069 个，合并格的扩张在这里比）、画面逐位；另有 `TestTheCellMapsAsUpstream`（两张表每一格、owner 列表逐位，184 条记录）、`TestTheObjectFillsAsUpstream`（渐变的种类、坐标、色标，decal 有没有）、`TestTheGalleryThroughTheControlAsUpstream`（三个画廊文件走控件：控件建的 matrix 的树、探点、画面、格子表——收集的那一个只能这样比）。函数 formatter 的 `@mx3Fmt` / `@mx3Val` 是 Pascal 转写，在 SetUp 里注册。
+- **`TAdvChartMatrix3AlgebraTest`**（4 个）：1740 次 `TyMatrixLayoutJson`（clamp 与 `ignoreMergeCells` 都从 opt 读）逐位；`ignoreMergeCells` 的字面值；跨进正文的合并不抛、画出来、`dataToLayout` 照样扩张、`ignoreMergeCells` 不扩张；敌意的选项（3000 × 3000 的正文上一个整片 `coordClamp` 合并加两万个单格合并）：整片那一项写不进去、两万格都在、合并到上限后停下、查询照答。
+- **`TAdvChartMatrix3ChartTest`**（4 个；量字器是 SSR 表）：合并格里的热力图矩形与散点中心、custom 每个 api 答案逐位（Pascal 转写的 `mx3Cell`）与画出的根数、饼的圆心与内外半径逐位；8 次换算逐位；指针 7 步的命中、事件串与提示框；4 组盒子写回的矩形逐位。
+- `test.advchart.matrix`：`TAdvChartMatrixOracleTest` 的字段与检查改成 protected。
+
+首跑：新套件**一次逐位通过**（只有 series 的计数下限写高了，改成实际的 23）。基准本身改过三处——两条守卫是用例自己写错了（数值格被后面的整列样式盖掉、`loud` 被后面的合并盖掉，都是上游正确的「后来的项整格替换」），一处是合并跨进正文时上游抛错，改成不跨的用例、另加一条守卫记下这件事。为确认比较真的在比，临时改坏基准的 12 处（格子表的选项序号、一个 spanRect、owner 列表的次序、一个 algebra 定位器、一个渐变色标、一个合并格探点、一个 custom 答案、一个 `ignoreMergeCells` 换算、盒子写回的矩形、一个事件的 value、角落标签的字、收集来的一个类目），三组里十个测试各自如期变红，再还原（逐字节核对）。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartMatrix3AlgebraTest` 4、`TAdvChartMatrix3ViewTest` 6、`TAdvChartMatrix3ChartTest` 4、`TAdvChartMatrixOracleTest` 3、`TAdvChartMatrixChartTest` 8、`TAdvChartMatrix2AlgebraTest` 3、`TAdvChartMatrix2ViewTest` 3、`TAdvChartMatrix2ChartTest` 7，以及改动波及的 `TAdvChartCustomSeriesOracleTest` 5、`TAdvChartCustomSeriesTest` 10、`TAdvChartCustomSeries2OracleTest` 5、`TAdvChartCustomSeries2Test` 5、`TAdvChartBoxMergeOracleTest` 5、`TAdvChartOptionMergeTest` 15、`TAdvChartConvertJitterTest` 10、`TAdvChartTimelineOracleTest` 7、`TAdvChartTimelineTest` 8、`TAdvChartHostileOptionTest` 1、`TAdvanceChartTest` 60、`TAdvChartGalleryTest` 1。变异候选列在 `s188.md.candidates.md`（24 条，另记 3 处可能存活）。
+
+### 推迟与偏差
+
+- **跨进正文的合并**：上游 `_resize` 抛 TypeError，整个 `setOption` 失败；端口两端各从自己的树取单元，画出这一块，不抛。
+- **格子的阴影**：上游 `getItemStyle` 带阴影四键，格子会有阴影；端口的形状元素没有阴影，不画。
+- **事件的 value**：上游是原值（数字 `9` 是数字），端口给 `String()`（`ValueText`）。函数 formatter 的 `value` 同样以 `ValueText` 给出，数字另放在 `Values[0]`。
+- **函数 formatter 返回 null** 时上游保留原字；端口的具名处理器总是返回字符串，没有「不改」这一说。`'@名字'` 形式的字符串按端口的约定是处理器，不是模板（上游会把它当模板原样印）。
+- **matrix 系列读 dataset**：写了 `encode` 的（画廊那一种）核过；没写 `encode` 时端口用与轴上系列相同的共享列游标，没有对上游核过。读 dataset 的 custom 系列在 matrix 上画什么没有比（画廊的 `renderItem` 是函数，JSON 里没有）。
+- **格子表的上限**：`data` 前 25 万项、并集 5000 万步、写入 100 万格——超了的部分端口不做（上游照做，浏览器先撑不住）；正文 / 角落格本身的 25 万格上限（§184）照旧。
+- **图案填充**：图片图案对象会交给元素的 `FillPattern`，没有对上游核过。
+- **副本选项**：上游是浅拷贝（与原项共享 itemStyle 等子对象），端口克隆原项再把 `coord` 置 null；读出来的值相同。
+- **cursor**：仍不做（见 §186）。
+- **D13**：`matrix-stock` 的 grid / title 与 `matrix-mini-bar-geo` 的 grid / geo 用 `coordinateSystem: 'matrix'` + `coord` 摆进格子，仍是 D13；这两个画廊文件现在 matrix 本身（正文的字、五块合并）与上游逐位相同，格子里的组件仍在画布上。
+
+### 落地
+
+- `source/tyControls.AdvChart.Matrix.pas`：`TTyMatrixBCCell`、`TTyMatrixBodyCorner`；`BuildCellMap`、`EnsureCellMaps`、`ExpandByMerge`、`LayOutSpans`、`CellMap`；`DataToLayoutRange` / `TyMatrixLayoutJson` 的 `AIgnoreMerge`、`TyMatrixIgnoreMergeOfOpt`；`JsStringOf`；视图的 `AddBodyCorner`、渐变与图案、具名 formatter；三个上限。
+- `source/tyControls.AdvChart.Custom.pas`：`DoMatrix` / `CoordRange` / `LayoutRange` 的 `ignoreMergeCells`。
+- `source/tyControls.AdvChart.OptionMerge.pas`：盒子表里的 matrix。
+- `source/tyControls.AdvanceChart.pas`：matrix 系列读 dataset；换算与 custom 传 `ignoreMergeCells`。
+- `tools/advchart-oracle/matrix3.js`、`tests/fixtures/advchart-matrix3.json`、`tests/test.advchart.matrix3.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.matrix.pas`（protected）。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
+- §184、§186 在原处标注。

@@ -37,7 +37,8 @@ unit tyControls.AdvChart.OptionMerge;
     tree; a later option that writes one merges into it -- the node made
     then, empty, as the model's raw option was.
   - mergeLayoutParam for the box-layout models the port lays out (grid,
-    title, legend, visualMap, the tree / sankey / treemap series): the three
+    title, legend, visualMap, the tree / sankey / treemap series, the
+    timeline, the matrix [Batch 149]): the three
     keys of a direction the new option touches are WRITTEN, null where
     upstream leaves undefined, so the reader's init merge gives back exactly
     what upstream holds.
@@ -746,6 +747,14 @@ begin
     Def(2, TJSONIntegerNumber.Create(20));
     Def(4, TJSONIntegerNumber.Create(50));
     Def(5, TJSONIntegerNumber.Create(50));
+  end
+  else if AMainType = 'matrix' then
+  begin
+    { MatrixModel's box, layoutMode 'box', 10% all round [Batch 149] }
+    Def(1, TJSONString.Create('10%'));
+    Def(2, TJSONString.Create('10%'));
+    Def(4, TJSONString.Create('10%'));
+    Def(5, TJSONString.Create('10%'));
   end
   else if AMainType = 'timeline' then
   begin

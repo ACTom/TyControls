@@ -5007,7 +5007,6 @@ begin
         and (FBindings[i].SeriesType <> TyFunnelSeriesTypeName)
         and (FBindings[i].SeriesType <> TyGraphSeriesTypeName) then
       begin
-        FSeriesDataset[i] := -1;
         SetLength(dims, 3);
         for j := 0 to 2 do dims[j] := Default(TTySeriesDim);
         dims[0].Name := TyMatrixXDim;
@@ -5019,7 +5018,31 @@ begin
         for j := 0 to 2 do st.AddDimension(dims[j].Name, dims[j].Kind);
         st.UseOrdinalMeta(0, FMatrices[FBindings[i].MatrixIndex].Dims[0].Meta);
         st.UseOrdinalMeta(1, FMatrices[FBindings[i].MatrixIndex].Dims[1].Meta);
-        TyFillSeriesStore(FOption, i, dims, st);
+        { WITH NO DATA OF ITS OWN, ITS DATASET [Batch 149]: the columns its
+          encode names (the rest from the next free ones), x and y parsed --
+          and a collecting tree collecting -- by the trees' category lists,
+          the way a series on axes reads a table }
+        ds := FSeriesDataset[i];
+        if ds >= 0 then
+        begin
+          SetLength(coord, Length(dims));
+          for k := 0 to High(dims) do
+          begin
+            coord[k].Name := dims[k].Name;
+            coord[k].Ordinal := dims[k].Kind = ddtOrdinal;
+          end;
+          enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex, FSources[i], coord);
+          if not enc.Given then
+          begin
+            cur := TyEncodeCursorFor(cursors, ds, FSources[i].LayoutBy);
+            enc := TyDefaultEncodeAxis(cursors[cur], coord);
+          end;
+          if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
+          FEncodes[i] := enc;
+          TyFillStoreFromSource(FSources[i], enc, dims, st);
+        end
+        else
+          TyFillSeriesStore(FOption, i, dims, st);
         { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is
           no coordinate dimension, x and y are ordinal: defaultedTooltip is
           empty), so it shows every element of the item [Batch 147] }
@@ -27778,7 +27801,7 @@ begin
     end;
     { dataToPoint: the centre of dataToLayout; never nothing, [NaN, NaN]
       at worst }
-    TyMatrixLayoutJson(AMatrix, AValue, clamp, r, loc);
+    TyMatrixLayoutJson(AMatrix, AValue, clamp, r, loc, TyMatrixIgnoreMergeOfOpt(AOpt));
     Result := TyConvertXY(r.X + r.W / 2, r.Y + r.H / 2);
   finally
     ConvertUnmask(mask);
@@ -27838,7 +27861,8 @@ begin
     target := FinderMatrix(pf);
     if (target >= 0) and (target <= High(FMatrices)) and (FMatrices[target] <> nil) then
     begin
-      TyMatrixLayoutJson(FMatrices[target], AValue, TyMatrixClampOfOpt(AOpt), rc, loc);
+      TyMatrixLayoutJson(FMatrices[target], AValue, TyMatrixClampOfOpt(AOpt), rc, loc,
+        TyMatrixIgnoreMergeOfOpt(AOpt));
       Result.Valid := True;
       Result.Rect := rc;
       Result.HasLocatorRange := True;
@@ -36249,7 +36273,7 @@ type
     function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; override;
     function DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout; override;
     function DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
-      out ALayout: TTyCustomLayout): TTyDoubleArray; override;
+      AIgnoreMerge: Boolean; out ALayout: TTyCustomLayout): TTyDoubleArray; override;
   public
     Chart: TTyAdvanceChart;
     Slot, Series: Integer;
@@ -36600,7 +36624,7 @@ begin
         end;
       { a matrix cell's centre: one value per direction [Batch 147] }
       cusMatrix:
-        Result := DoMatrix(Copy(ACells, 0, 1), CuSecond(ACells), 0, lay);
+        Result := DoMatrix(Copy(ACells, 0, 1), CuSecond(ACells), 0, False, lay);
     end;
   finally
     ConvertUnmask(mask);
@@ -36619,9 +36643,10 @@ end;
 
 { a matrix's dataToLayout of the parts [Batch 147]: a text a header cell's
   name (the tree's category list), a number an ordinal or a level, nothing
-  NaN; the clamp; css px }
+  NaN; the clamp; the merged cells unless ignoreMergeCells [Batch 149]; css
+  px }
 function TTyChartCustomApi.DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
-  out ALayout: TTyCustomLayout): TTyDoubleArray;
+  AIgnoreMerge: Boolean; out ALayout: TTyCustomLayout): TTyDoubleArray;
 var
   parts: array[0..1] of TTyDoubleArray;
   r: TTyXYWH;
@@ -36660,7 +36685,7 @@ begin
   end;
   mask := CuMask;
   try
-    Matrix.DataToLayoutRange(parts[0], parts[1], cl, r, loc);
+    Matrix.DataToLayoutRange(parts[0], parts[1], cl, r, loc, AIgnoreMerge);
     ALayout.Valid := True;
     ALayout.Rect.X := r.X / Scale;
     ALayout.Rect.Y := r.Y / Scale;
@@ -36690,7 +36715,7 @@ begin
   { a matrix cell's [Batch 147] }
   if Sys = cusMatrix then
   begin
-    DoMatrix(Copy(ACells, 0, 1), CuSecond(ACells), 0, Result);
+    DoMatrix(Copy(ACells, 0, 1), CuSecond(ACells), 0, False, Result);
     Exit;
   end;
   if (Sys <> cusCalendar) or (Calendar = nil) then Exit;

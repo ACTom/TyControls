@@ -33,8 +33,16 @@ unit tyControls.AdvChart.Matrix;
   x3]` read as its two ends), CLAMPING (none / all / body / corner, a value
   that names nothing then covering the whole row or column), pointToData --
   and the cells' interaction (silent, triggerEvent, cursor, the tooltip),
-  rotated labels and rich labels laid out in the overflow area. Merged
-  cells and the body and corner `data` are part three.
+  rotated labels and rich labels laid out in the overflow area.
+
+  PART THREE (D12 MX3, batch 149): the body's and the corner's own cells
+  (MatrixBodyCorner) -- `body.data` / `corner.data` items, each located by
+  its `coord` (a range, `coordClamp` keeping it to the body or the corner),
+  a later item taking a cell whole, a cell's `value` its label -- and
+  MERGED CELLS: an item with `mergeCells` unites with every earlier merge
+  it meets, a merge whose top-left moved handing a copy of its option the
+  union, dataToLayout expanding into a merge unless `ignoreMergeCells`;
+  a cell's gradient fill and a label's named formatter.
 
   PURE: SysUtils, Math, fpjson and the AdvChart units. No painter, no LCL. }
 interface
@@ -145,11 +153,11 @@ type
 
   { WHAT A DRAWN CELL ANSWERS THE POINTER WITH [Batch 147]: createMatrixCell's
     eventData and setTooltipConfig. Target 'x' / 'y' / 'body' / 'corner'; Loc
-    the locator pair; HasText the cell has a textValue (a header cell; a body
-    or corner cell's `value` is part three), Value it as String(), TipName
-    the text after the label's formatter (the tooltip's itemName), HasName /
-    Name the label's text as drawn (eventData.name: none when the label is
-    not shown). }
+    the locator pair (a merged cell's top-left); HasText the cell has a
+    textValue (a header cell, or a body or corner cell whose item wrote a
+    `value` [Batch 149]), Value it as String(), TipName the text after the
+    label's formatter (the tooltip's itemName), HasName / Name the label's
+    text as drawn (eventData.name: none when the label is not shown). }
   TTyMatrixCellInfo = record
     Target: string;
     Loc: array[0..1] of Integer;
@@ -159,6 +167,55 @@ type
     Name: string;
   end;
 
+  { A BODY OR CORNER CELL THE OPTION NAMED (MatrixBodyCornerCell) [Batch
+    149], at its locator pair X, Y. Option the item that covers it last, or
+    a copy the map owns (a merge whose top-left moved: Copied, its coord
+    nulled); Src that item's index in `data`, -1 for none. A MERGE's
+    top-left cell is its Owner: Span its width and height in cells, Loc the
+    locator range it stands for -- wider than Span when the merge grew and
+    its top-left stayed, as upstream keeps it --, SpanRect where it is
+    drawn. InSpanOf: the owner of a merged cell (the owner itself), -1. }
+  TTyMatrixBCCell = record
+    X, Y: Integer;
+    Option: TJSONObject;
+    Src: Integer;
+    Copied: Boolean;
+    Owner: Boolean;
+    InSpanOf: Integer;
+    HasSpan: Boolean;
+    Span: array[0..1] of Integer;
+    Loc: TTyMatrixLocRange;
+    SpanRect: TTyXYWH;
+  end;
+
+  { THE SPARSE CELL MAP of a body or a corner (MatrixBodyCorner) [Batch 149]:
+    only the cells an item reached, in the order they were first reached
+    (upstream's HashMap order); the merges' owners in the order they were
+    settled (its _cellMergeOwnerList). }
+  TTyMatrixBodyCorner = class
+  private
+    FCells: array of TTyMatrixBCCell;
+    FCount: Integer;
+    FSlots: array of Integer;
+    FOwners: array of Integer;
+    FOwnerN: Integer;
+    FCopies: array of TJSONObject;
+    procedure Grow;
+    function Ensure(AX, AY: Integer): Integer;
+    procedure AddOwner(ACell: Integer);
+    function Keep(AObj: TJSONObject): TJSONObject;
+    procedure Clear;
+  public
+    destructor Destroy; override;
+    { the cell at a locator pair, -1 where no item reached }
+    function Find(AX, AY: Integer): Integer;
+    function Count: Integer;
+    function Cell(AIndex: Integer): TTyMatrixBCCell;
+    function OwnerCount: Integer;
+    { the AIndex-th merge's top-left cell, an index into the map }
+    function Owner(AIndex: Integer): Integer;
+  end;
+
   { One matrix component. Built from the option before the series' stores
     (they borrow its category lists), laid out on the canvas with Resize. }
   TTyMatrix = class(TTyNonRefCountedObject, ITyCoordSys)
@@ -166,6 +223,10 @@ type
     FNode: TJSONObject;
     FIndex: Integer;
     FDims: array[0..1] of TTyMatrixDim;
+    { the body's (0) and the corner's (1) cell maps, built on first use
+      after the trees have their leaves [Batch 149] }
+    FBC: array[0..1] of TTyMatrixBodyCorner;
+    FBCReady: Boolean;
     FBox: TTyRawBox;
     FRect: TTyXYWH;
     FScale: Double;
@@ -186,6 +247,14 @@ type
       body, 1 the corner or the header, 2 outside) and the coordinate, clamped }
     procedure PointArea(ADimIdx: Integer; const APoint: TTyPointF; AClamp: TTyMatrixClamp;
       out AArea: Integer; var ACoord: Double);
+    { MatrixBodyCorner._ensureCellMap's fillCellMap for AKind (0 the body,
+      1 the corner) [Batch 149] }
+    procedure BuildCellMap(AKind: Integer);
+    procedure EnsureCellMaps;
+    procedure LayOutSpans;
+    { expandRangeByCellMerge: a single cell in a merge is that merge's
+      range; anything else grows by every merge it meets, again until none }
+    procedure ExpandByMerge(AKind: Integer; var ALoc: TTyMatrixLocRange);
   public
     constructor Create(AOption: TTyChartOption; AIndex: Integer);
     destructor Destroy; override;
@@ -207,10 +276,13 @@ type
     procedure RangeOneDim(ADimIdx: Integer; const AParts: array of Double;
       AClamp: TTyMatrixClamp; out ALo, AHi: Double);
     { DATATOLAYOUT IN FULL: each direction's parts (one for a single value,
-      the array's elements for a range) to the locator range, then the rect
-      from the units at its two ends; NaN on a direction that names nothing }
+      the array's elements for a range) to the locator range, grown to the
+      merged cells it meets unless AIgnoreMerge (`ignoreMergeCells`; the
+      body's merges are skipped under the corner clamp, the corner's under
+      the body clamp) [Batch 149], then the rect from the units at its two
+      ends; NaN on a direction that names nothing }
     procedure DataToLayoutRange(const AX, AY: array of Double; AClamp: TTyMatrixClamp;
-      out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+      out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange; AIgnoreMerge: Boolean = False);
     { dataToPoint: the centre of that rect }
     function DataToPointRange(const AX, AY: array of Double; AClamp: TTyMatrixClamp): TTyPointF;
     { POINTTODATA: per direction the leaf's locator (the body), the level's
@@ -255,6 +327,8 @@ type
     function TriggerEvent: Boolean;
     { matrix.tooltip as written (nil when not an object) }
     function TooltipNode: TJSONObject;
+    { the body's (0) or the corner's (1) cell map [Batch 149] }
+    function CellMap(AKind: Integer): TTyMatrixBodyCorner;
   end;
 
   { Resolved ink: the control asks the theme, this unit never does.
@@ -276,16 +350,21 @@ function TyMatrixSizeOf(AData: TJSONData; ABase: Double): Double;
 function TyMatrixClampOf(AData: TJSONData): TTyMatrixClamp;
 { `opt && opt.clamp`: an opt object's clamp, none for anything else }
 function TyMatrixClampOfOpt(AOpt: TJSONData): TTyMatrixClamp;
+{ `opt && opt.ignoreMergeCells`, truthy [Batch 149] }
+function TyMatrixIgnoreMergeOfOpt(AOpt: TJSONData): Boolean;
 { dataToLayout of a coord as JSON writes it [Batch 147]: anything but an
   array names nothing (NaN everywhere, a clamp notwithstanding); an array's
   element 0 is x and 1 is y, each one value or a range (an element that is
-  not there is one part that names nothing) }
+  not there is one part that names nothing); merged cells expand it unless
+  AIgnoreMerge [Batch 149] }
 procedure TyMatrixLayoutJson(AMatrix: TTyMatrix; AData: TJSONData; AClamp: TTyMatrixClamp;
-  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange; AIgnoreMerge: Boolean = False);
 { The picture of one matrix (MatrixView.render), into AList at the matrix's
   z: the header cells (x, then y), the body cells, the corner cells, the
   background, the outer border, the two dividers. A cell label is its own
-  element right after its cell, clipped to the cell inside its border. }
+  element right after its cell, clipped to the cell inside its border. A
+  body or corner cell in another's merge is not drawn; a merge is drawn as
+  its spanRect [Batch 149]. }
 function TyBuildMatrix(AMatrix: TTyMatrix; const AInk: TTyMatrixInk;
   const AGlobal: TTyRtGlobal; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AList: TTyPaintList): Integer;
@@ -294,7 +373,8 @@ implementation
 
 uses Classes, tyControls.AdvChart.Scale, tyControls.AdvChart.Calendar,
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.GfxEl,
-  tyControls.AdvChart.AnimAxis, tyControls.AdvChart.JsMath;
+  tyControls.AdvChart.AnimAxis, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.Handlers;
 
 { ==================== small readers ==================== }
 
@@ -344,6 +424,32 @@ begin
   else Result := '';
 end;
 
+{ String(v) of an option value, as JavaScript prints it: an array's
+  elements joined by commas (null and undefined empty), an object
+  '[object Object]' [Batch 149] }
+function JsStringOf(A: TJSONData): string;
+var i: Integer;
+begin
+  if A = nil then Exit('undefined');
+  case A.JSONType of
+    jtNull: Result := 'null';
+    jtString: Result := A.AsString;
+    jtBoolean: if A.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := TyJsNumberToString(A.AsFloat);
+    jtArray:
+      begin
+        Result := '';
+        for i := 0 to A.Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          if not JNull(A.Items[i]) then Result := Result + JsStringOf(A.Items[i]);
+        end;
+      end;
+  else
+    Result := '[object Object]';
+  end;
+end;
+
 function NumberOr(A: TJSONData; ADefault: Double): Double;
 begin
   if (A <> nil) and (A.JSONType = jtNumber) then Result := A.AsFloat
@@ -386,6 +492,11 @@ begin
   else Result := mclNone;
 end;
 
+function TyMatrixIgnoreMergeOfOpt(AOpt: TJSONData): Boolean;
+begin
+  Result := (AOpt is TJSONObject) and Truthy(TJSONObject(AOpt).Find('ignoreMergeCells'));
+end;
+
 { -0 by its sign bit }
 function NegZero(A: Double): Boolean; inline;
 begin
@@ -415,6 +526,26 @@ begin
   if A <= B then Result := A else Result := B;
 end;
 
+{ locatorRangeIntersectOneDim: the two ranges meet; a NaN meets nothing }
+function Meets1(A0, A1, B0, B1: Double): Boolean; inline;
+begin
+  Result := not (IsNan(A0) or IsNan(A1) or IsNan(B0) or IsNan(B1))
+    and (A1 >= B0) and (A0 <= B1);
+end;
+
+{ expandXYLocatorRangeIfIntersect: ALoc grown to cover AOther when the two
+  meet on both directions }
+function ExpandIfMeets(var ALoc: TTyMatrixLocRange; const AOther: TTyMatrixLocRange): Boolean;
+begin
+  Result := Meets1(ALoc[0][0], ALoc[0][1], AOther[0][0], AOther[0][1])
+    and Meets1(ALoc[1][0], ALoc[1][1], AOther[1][0], AOther[1][1]);
+  if not Result then Exit;
+  ALoc[0][0] := JMin(ALoc[0][0], AOther[0][0]);
+  ALoc[0][1] := JMax(ALoc[0][1], AOther[0][1]);
+  ALoc[1][0] := JMin(ALoc[1][0], AOther[1][0]);
+  ALoc[1][1] := JMax(ALoc[1][1], AOther[1][1]);
+end;
+
 { confineSize: Math.max(Math.min(n, limit), 0) -- NaN stays NaN, -0 is 0 }
 function Confine(AN, ALimit: Double): Double;
 begin
@@ -432,6 +563,12 @@ const
     hundred million rectangles. }
   cMaxLength = 100000;
   cMaxBodyCells = 250000;
+  { THE CELL MAP'S BOUNDS [Batch 149]: the `data` items read, the steps the
+    merges may take uniting (each meets every earlier one), the cells the
+    items may write -- one `coordClamp` item must not fill ten billion }
+  cMaxCellItems = 250000;
+  cMaxMergeWork = 50000000;
+  cMaxCellWrites = 1000000;
 
 constructor TTyMatrixDim.Create(ADimIdx: Integer; ANode: TJSONData);
 var
@@ -775,6 +912,125 @@ begin
   Result := FLevels[AIndex];
 end;
 
+{ ==================== TTyMatrixBodyCorner ==================== }
+
+{$push}{$Q-}{$R-}
+function BCHash(AX, AY: Integer): Cardinal;
+begin
+  Result := (Cardinal(AX) * Cardinal($9E3779B1)) xor (Cardinal(AY) * Cardinal($85EBCA77));
+  Result := Result xor (Result shr 15);
+end;
+{$pop}
+
+destructor TTyMatrixBodyCorner.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+procedure TTyMatrixBodyCorner.Clear;
+var i: Integer;
+begin
+  for i := 0 to High(FCopies) do FCopies[i].Free;
+  FCopies := nil;
+  FCells := nil;
+  FCount := 0;
+  FSlots := nil;
+  FOwners := nil;
+  FOwnerN := 0;
+end;
+
+function TTyMatrixBodyCorner.Find(AX, AY: Integer): Integer;
+var m, s, k: Integer;
+begin
+  Result := -1;
+  m := Length(FSlots);
+  if m = 0 then Exit;
+  s := Integer(BCHash(AX, AY) and Cardinal(m - 1));
+  while True do
+  begin
+    k := FSlots[s];
+    if k = 0 then Exit;
+    if (FCells[k - 1].X = AX) and (FCells[k - 1].Y = AY) then Exit(k - 1);
+    s := (s + 1) and (m - 1);
+  end;
+end;
+
+procedure TTyMatrixBodyCorner.Grow;
+var m, i, s: Integer;
+begin
+  m := Max(16, 2 * Length(FSlots));
+  FSlots := nil;
+  SetLength(FSlots, m);
+  for i := 0 to FCount - 1 do
+  begin
+    s := Integer(BCHash(FCells[i].X, FCells[i].Y) and Cardinal(m - 1));
+    while FSlots[s] <> 0 do s := (s + 1) and (m - 1);
+    FSlots[s] := i + 1;
+  end;
+end;
+
+{ ensureBodyOrCornerCell: the cell at AX, AY, made (no option, no span)
+  when there is none }
+function TTyMatrixBodyCorner.Ensure(AX, AY: Integer): Integer;
+var m, s: Integer;
+begin
+  Result := Find(AX, AY);
+  if Result >= 0 then Exit;
+  if (FCount + 1) * 2 > Length(FSlots) then Grow;
+  if FCount >= Length(FCells) then SetLength(FCells, Max(16, 2 * Length(FCells)));
+  Result := FCount;
+  Inc(FCount);
+  FCells[Result] := Default(TTyMatrixBCCell);
+  FCells[Result].X := AX;
+  FCells[Result].Y := AY;
+  FCells[Result].Src := -1;
+  FCells[Result].InSpanOf := -1;
+  FCells[Result].Loc[0][0] := NaN;
+  FCells[Result].Loc[0][1] := NaN;
+  FCells[Result].Loc[1][0] := NaN;
+  FCells[Result].Loc[1][1] := NaN;
+  FCells[Result].SpanRect := TyXYWH(NaN, NaN, NaN, NaN);
+  m := Length(FSlots);
+  s := Integer(BCHash(AX, AY) and Cardinal(m - 1));
+  while FSlots[s] <> 0 do s := (s + 1) and (m - 1);
+  FSlots[s] := Result + 1;
+end;
+
+procedure TTyMatrixBodyCorner.AddOwner(ACell: Integer);
+begin
+  if FOwnerN >= Length(FOwners) then SetLength(FOwners, Max(8, 2 * Length(FOwners)));
+  FOwners[FOwnerN] := ACell;
+  Inc(FOwnerN);
+end;
+
+function TTyMatrixBodyCorner.Keep(AObj: TJSONObject): TJSONObject;
+begin
+  SetLength(FCopies, Length(FCopies) + 1);
+  FCopies[High(FCopies)] := AObj;
+  Result := AObj;
+end;
+
+function TTyMatrixBodyCorner.Count: Integer;
+begin
+  Result := FCount;
+end;
+
+function TTyMatrixBodyCorner.Cell(AIndex: Integer): TTyMatrixBCCell;
+begin
+  Result := FCells[AIndex];
+end;
+
+function TTyMatrixBodyCorner.OwnerCount: Integer;
+begin
+  Result := FOwnerN;
+end;
+
+function TTyMatrixBodyCorner.Owner(AIndex: Integer): Integer;
+begin
+  Result := FOwners[AIndex];
+end;
+
 { ==================== TTyMatrix ==================== }
 
 const
@@ -796,6 +1052,9 @@ begin
   end;
   FDims[0] := TTyMatrixDim.Create(0, ObjIn(FNode, 'x'));
   FDims[1] := TTyMatrixDim.Create(1, ObjIn(FNode, 'y'));
+  FBC[0] := TTyMatrixBodyCorner.Create;
+  FBC[1] := TTyMatrixBodyCorner.Create;
+  FBCReady := False;
   FZ := -50;
   if FNode <> nil then FZ := Trunc(NumberOr(FNode.Find('z'), -50));
   { THE BOX: the defaults (10% all round) merged under the option, then
@@ -830,6 +1089,8 @@ end;
 
 destructor TTyMatrix.Destroy;
 begin
+  FBC[0].Free;
+  FBC[1].Free;
   FDims[0].Free;
   FDims[1].Free;
   inherited Destroy;
@@ -871,7 +1132,257 @@ begin
   LayOutUnits(1);
   LayOutRest(0);
   LayOutRest(1);
+  { layOutBodyCornerCellMerge: the maps afresh (a collecting tree has its
+    leaves by now), then every merge's spanRect from its id and span
+    [Batch 149] }
+  FBCReady := False;
+  EnsureCellMaps;
+  LayOutSpans;
   FValid := True;
+end;
+
+{ layOutBodyCornerCellMerge. A merge running from a header level into the
+  body has its two ends in different trees: upstream's
+  layOutRectOneDimBasedOnUnit asks the header tree for the body locator and
+  throws (the whole setOption fails); the port takes each end from its own
+  tree and draws the span. }
+procedure TTyMatrix.LayOutSpans;
+var k, c: Integer;
+begin
+  for k := 0 to 1 do
+    for c := 0 to FBC[k].FCount - 1 do
+      if FBC[k].FCells[c].HasSpan then
+      begin
+        RectOneDim(FBC[k].FCells[c].SpanRect, 0, FBC[k].FCells[c].X, FBC[k].FCells[c].Span[0]);
+        RectOneDim(FBC[k].FCells[c].SpanRect, 1, FBC[k].FCells[c].Y, FBC[k].FCells[c].Span[1]);
+      end;
+end;
+
+procedure TTyMatrix.EnsureCellMaps;
+begin
+  if FBCReady then Exit;
+  FBCReady := True;
+  BuildCellMap(0);
+  BuildCellMap(1);
+end;
+
+function TTyMatrix.CellMap(AKind: Integer): TTyMatrixBodyCorner;
+begin
+  EnsureCellMaps;
+  Result := FBC[AKind];
+end;
+
+{ fillCellMap: every item an object with an array `coord` that locates on
+  both directions (coordClamp: clamped to the body, or to the corner);
+  then, in order, every MERGE united with each earlier merge it meets until
+  it meets no more (resolveXYLocatorRangeByCellMerge) -- those give up, and
+  when the union's top-left is not the merge's own, the merge gives up too
+  and a shallow copy of its option (coord nulled) is pushed at the end with
+  the union, to be settled in its turn; a merge whose top-left stayed keeps
+  the union as its range and its OWN span. Then every item, in order,
+  writes its option into each cell of its span (a later one wins) and a
+  merge makes its top-left the owner of them all. }
+procedure TTyMatrix.BuildCellMap(AKind: Integer);
+type
+  TParsed = record
+    Id, Span: array[0..1] of Integer;
+    Loc: TTyMatrixLocRange;
+    Src: Integer;
+    Copied, Owner: Boolean;
+  end;
+var
+  bc: TTyMatrixBodyCorner;
+  data, d, coord: TJSONData;
+  list: array of TParsed;
+  marks: array of Boolean;
+  n, i, k, q, tl, c, xx, yy, items: Integer;
+  clamp: TTyMatrixClamp;
+  loc: TTyMatrixLocRange;
+  parts: array[0..1] of TTyDoubleArray;
+  work, writes, area: Int64;
+  grew: Boolean;
+  opt: TJSONObject;
+  p: TParsed;
+
+  procedure Push(const AP: TParsed);
+  begin
+    if n >= Length(list) then SetLength(list, Max(16, 2 * Length(list)));
+    list[n] := AP;
+    Inc(n);
+  end;
+
+  { fillIdSpanFromLocatorRange }
+  procedure IdSpan(var AP: TParsed);
+  begin
+    AP.Id[0] := Trunc(AP.Loc[0][0]);
+    AP.Id[1] := Trunc(AP.Loc[1][0]);
+    AP.Span[0] := Trunc(AP.Loc[0][1]) - AP.Id[0] + 1;
+    AP.Span[1] := Trunc(AP.Loc[1][1]) - AP.Id[1] + 1;
+  end;
+
+  { the option a copied entry holds: data[ASrc] with its coord nulled }
+  function CopyOf(ASrc: Integer): TJSONObject;
+  var j: Integer;
+  begin
+    Result := TJSONObject(data.Items[ASrc].Clone);
+    j := Result.IndexOfName('coord');
+    if j >= 0 then Result.Delete(j);
+    Result.Add('coord', TJSONNull.Create);
+    bc.Keep(Result);
+  end;
+
+begin
+  bc := FBC[AKind];
+  bc.Clear;
+  data := nil;
+  if AKind = 0 then d := ObjIn(FNode, 'body') else d := ObjIn(FNode, 'corner');
+  if d <> nil then data := TJSONObject(d).Find('data');
+  if not (data is TJSONArray) then Exit;
+  if AKind = 0 then clamp := mclBody else clamp := mclCorner;
+  list := nil;
+  n := 0;
+  items := Min(data.Count, cMaxCellItems);
+  for i := 0 to items - 1 do
+  begin
+    d := data.Items[i];
+    if not (d is TJSONObject) then Continue;
+    coord := TJSONObject(d).Find('coord');
+    if not (coord is TJSONArray) then Continue;
+    { parseCoordRangeOption: element 0 x, 1 y; one that is not there is a
+      part that names nothing }
+    for k := 0 to 1 do
+      if k < coord.Count then parts[k] := ParseCoordParts(k, coord.Items[k])
+      else
+      begin
+        parts[k] := nil;
+        SetLength(parts[k], 1);
+        parts[k][0] := NaN;
+      end;
+    if Truthy(TJSONObject(d).Find('coordClamp')) then
+    begin
+      RangeOneDim(0, parts[0], clamp, loc[0][0], loc[0][1]);
+      RangeOneDim(1, parts[1], clamp, loc[1][0], loc[1][1]);
+    end
+    else
+    begin
+      RangeOneDim(0, parts[0], mclNone, loc[0][0], loc[0][1]);
+      RangeOneDim(1, parts[1], mclNone, loc[1][0], loc[1][1]);
+    end;
+    if IsNan(loc[0][0]) or IsNan(loc[0][1]) or IsNan(loc[1][0]) or IsNan(loc[1][1]) then Continue;
+    p := Default(TParsed);
+    p.Loc := loc;
+    IdSpan(p);
+    p.Src := i;
+    p.Copied := False;
+    p.Owner := Truthy(TJSONObject(d).Find('mergeCells'));
+    Push(p);
+  end;
+  { THE MERGES UNITED, in order; a copy pushed meanwhile is settled in its
+    turn }
+  marks := nil;
+  work := 0;
+  i := 0;
+  while i < n do
+  begin
+    if list[i].Owner and (work > cMaxMergeWork) then list[i].Owner := False;
+    if list[i].Owner then
+    begin
+      if Length(marks) < i then SetLength(marks, Max(i, 2 * Length(marks)));
+      loc := list[i].Loc;
+      for q := 0 to i - 1 do marks[q] := False;
+      repeat
+        grew := False;
+        for q := 0 to i - 1 do
+        begin
+          Inc(work);
+          if not marks[q] and list[q].Owner and ExpandIfMeets(loc, list[q].Loc) then
+          begin
+            marks[q] := True;
+            grew := True;
+          end;
+        end;
+      until not grew;
+      list[i].Loc := loc;
+      for q := 0 to i - 1 do
+        if marks[q] then list[q].Owner := False;
+      if (loc[0][0] <> list[i].Id[0]) or (loc[1][0] <> list[i].Id[1]) then
+      begin
+        { the union's top-left is another cell: the last option takes it }
+        list[i].Owner := False;
+        p := Default(TParsed);
+        p.Loc := loc;
+        IdSpan(p);
+        p.Src := list[i].Src;
+        p.Copied := True;
+        p.Owner := True;
+        Push(p);
+      end;
+    end;
+    Inc(i);
+  end;
+  { THE OPTIONS TO THE CELLS, in order }
+  writes := 0;
+  for i := 0 to n - 1 do
+  begin
+    area := Int64(list[i].Span[0]) * list[i].Span[1];
+    if writes + area > cMaxCellWrites then Continue;
+    Inc(writes, area);
+    if list[i].Copied then opt := CopyOf(list[i].Src)
+    else opt := TJSONObject(data.Items[list[i].Src]);
+    tl := bc.Ensure(list[i].Id[0], list[i].Id[1]);
+    if list[i].Owner then
+    begin
+      bc.FCells[tl].Owner := True;
+      bc.FCells[tl].HasSpan := True;
+      bc.FCells[tl].Span[0] := list[i].Span[0];
+      bc.FCells[tl].Span[1] := list[i].Span[1];
+      bc.FCells[tl].Loc := list[i].Loc;
+      bc.FCells[tl].SpanRect := TyXYWH(NaN, NaN, NaN, NaN);
+      bc.AddOwner(tl);
+    end;
+    for yy := 0 to list[i].Span[1] - 1 do
+      for xx := 0 to list[i].Span[0] - 1 do
+      begin
+        c := bc.Ensure(list[i].Id[0] + xx, list[i].Id[1] + yy);
+        bc.FCells[c].Option := opt;
+        bc.FCells[c].Src := list[i].Src;
+        bc.FCells[c].Copied := list[i].Copied;
+        if list[i].Owner then bc.FCells[c].InSpanOf := tl;
+      end;
+  end;
+end;
+
+procedure TTyMatrix.ExpandByMerge(AKind: Integer; var ALoc: TTyMatrixLocRange);
+var
+  bc: TTyMatrixBodyCorner;
+  c, q: Integer;
+  marks: array of Boolean;
+  grew: Boolean;
+begin
+  bc := FBC[AKind];
+  if bc.FOwnerN = 0 then Exit;
+  { one cell: a cell is in one merge at most, so its owner's range }
+  if not (IsNan(ALoc[0][0]) or IsNan(ALoc[0][1]) or IsNan(ALoc[1][0]) or IsNan(ALoc[1][1]))
+    and (ALoc[0][0] = ALoc[0][1]) and (ALoc[1][0] = ALoc[1][1]) then
+  begin
+    c := bc.Find(Trunc(ALoc[0][0]), Trunc(ALoc[1][0]));
+    if (c >= 0) and (bc.FCells[c].InSpanOf >= 0) then
+    begin
+      ALoc := bc.FCells[bc.FCells[c].InSpanOf].Loc;
+      Exit;
+    end;
+  end;
+  marks := nil;
+  SetLength(marks, bc.FOwnerN);
+  repeat
+    grew := False;
+    for q := 0 to bc.FOwnerN - 1 do
+      if not marks[q] and ExpandIfMeets(ALoc, bc.FCells[bc.FOwners[q]].Loc) then
+      begin
+        marks[q] := True;
+        grew := True;
+      end;
+  until not grew;
 end;
 
 { layOutUnitsOnDimension }
@@ -1102,7 +1613,7 @@ begin
 end;
 
 procedure TTyMatrix.DataToLayoutRange(const AX, AY: array of Double; AClamp: TTyMatrixClamp;
-  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange; AIgnoreMerge: Boolean);
 
   { xyLocatorRangeToRectOneDim: the units at the two ends (a locator is a
     leaf's ordinal, or the other tree's level) }
@@ -1124,6 +1635,14 @@ procedure TTyMatrix.DataToLayoutRange(const AX, AY: array of Double; AClamp: TTy
 begin
   RangeOneDim(0, AX, AClamp, ALoc[0][0], ALoc[0][1]);
   RangeOneDim(1, AY, AClamp, ALoc[1][0], ALoc[1][1]);
+  { expandRangeByCellMerge: the body's merges unless clamped to the corner
+    (exactly 3), the corner's unless clamped to the body (exactly 2) }
+  if not AIgnoreMerge then
+  begin
+    EnsureCellMaps;
+    if AClamp <> mclCorner then ExpandByMerge(0, ALoc);
+    if AClamp <> mclBody then ExpandByMerge(1, ALoc);
+  end;
   ToRect(0, ARect.X, ARect.W);
   ToRect(1, ARect.Y, ARect.H);
 end;
@@ -1367,7 +1886,7 @@ begin
 end;
 
 procedure TyMatrixLayoutJson(AMatrix: TTyMatrix; AData: TJSONData; AClamp: TTyMatrixClamp;
-  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange; AIgnoreMerge: Boolean);
 var
   parts: array[0..1] of TTyDoubleArray;
   k: Integer;
@@ -1385,7 +1904,7 @@ begin
       SetLength(parts[k], 1);
       parts[k][0] := NaN;
     end;
-  AMatrix.DataToLayoutRange(parts[0], parts[1], AClamp, ARect, ALoc);
+  AMatrix.DataToLayoutRange(parts[0], parts[1], AClamp, ARect, ALoc, AIgnoreMerge);
 end;
 
 function TTyMatrix.CoordSysName: string;
@@ -1477,6 +1996,9 @@ type
     LineWidth: Double;
     Opacity: Double;
     Dash: TTyDoubleArray;
+    { a fill that is an object: a gradient or an image [Batch 149] }
+    Grad: TTyChartGradient;
+    Pat: TTyChartPattern;
   end;
 
 var
@@ -1522,8 +2044,18 @@ begin
   Result := Default(TCellStyle);
   none := True;
   c := 0;
-  if a.Color.Written then c := ColourOf(a.Color, none)
-  else if b.Color.Written then c := ColourOf(b.Color, none);
+  if a.Color.Written then
+  begin
+    c := ColourOf(a.Color, none);
+    Result.Grad := a.Color.Gradient;
+    Result.Pat := a.Color.Pattern;
+  end
+  else if b.Color.Written then
+  begin
+    c := ColourOf(b.Color, none);
+    Result.Grad := b.Color.Gradient;
+    Result.Pat := b.Color.Pattern;
+  end;
   Result.HasFill := not none;
   Result.Fill := c;
   if a.BorderColor.Written then c := ColourOf(a.BorderColor, none)
@@ -1702,8 +2234,11 @@ var
     end;
     el := TyChartElement(TyShapeRect(TyRectF(Result.X, Result.Y,
       Result.X + Result.W, Result.Y + Result.H)));
-    el.Style.HasFill := S.HasFill and ((S.Fill shr 24) <> 0);
+    el.Style.HasFill := S.HasFill and (((S.Fill shr 24) <> 0)
+      or (S.Grad.Kind <> cgkNone) or S.Pat.Present);
     el.Style.FillColor := S.Fill;
+    el.Style.FillGradient := S.Grad;
+    el.Style.FillPattern := S.Pat;
     el.Style.StrokeColor := S.Stroke;
     if ((S.Stroke shr 24) = 0) or IsNan(S.LineWidth) then el.Style.StrokeWidthLogical := 0
     else el.Style.StrokeWidthLogical := S.LineWidth;
@@ -1742,10 +2277,11 @@ var
     calcInnerTextOverflowArea and parsePlainText): placed by its position
     on the drawn shape, its width and height what the overflow area leaves
     inside the padding, clipped to the shape inside its border }
-  procedure AddLabel(const AText: string; ALocX, ALocY: Integer;
+  procedure AddLabel(const AText: string; AValue: TJSONData; ALocX, ALocY: Integer;
     ACellLabel, AParentLabel: TJSONObject; const AShape: TTyXYWH;
     ALineWidth: Double; AZ2, AInfo: Integer);
   var
+    prm: TTyChartCallbackParams;
     chain: array[0..2] of TJSONObject;
     text, fam, alignS, valignS: string;
     d: TJSONData;
@@ -1770,7 +2306,29 @@ var
     chain[2] := GLabelDefaults;
     text := AText;
     d := ChainGet(chain, 'formatter');
-    if (d <> nil) and (d.JSONType = jtString) then
+    if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+    begin
+      { A FUNCTION FORMATTER, the port's named handler [Batch 149]:
+        componentType, componentIndex, name (the text), value (the cell's
+        value: its String() in ValueText, a number also in Values) and the
+        locator pair in Coord }
+      prm := TyChartBlankParams;
+      prm.ComponentType := TyMatrixCoordSysName;
+      prm.ComponentIndex := AMatrix.Index;
+      prm.Name := AText;
+      prm.ValueText := AText;
+      prm.DefaultText := AText;
+      if (AValue <> nil) and (AValue.JSONType = jtNumber) then
+      begin
+        SetLength(prm.Values, 1);
+        prm.Values[0] := AValue.AsFloat;
+      end;
+      SetLength(prm.Coord, 2);
+      prm.Coord[0] := ALocX;
+      prm.Coord[1] := ALocY;
+      text := TyChartRunHandler(d.AsString, TyChartOneParams(prm));
+    end
+    else if (d <> nil) and (d.JSONType = jtString) then
       { formatTplSimple over the params, in their order }
       text := TyCalFormatTpl(d.AsString,
         ['componentType', 'componentIndex', 'name', 'value', 'coord', '$vars'],
@@ -1952,7 +2510,7 @@ var
 
   { createMatrixCell }
   procedure AddCell(ACell, AParent: TJSONObject; const AShape: TTyXYWH;
-    AHasText: Boolean; const AText: string; ANormal, ASpecial: Integer;
+    AHasText: Boolean; const AText: string; AValue: TJSONData; ANormal, ASpecial: Integer;
     AStroke: TTyChartColor; ANoStroke: Boolean; ALocX, ALocY: Integer;
     const ATarget: string);
   var
@@ -1996,14 +2554,46 @@ var
     end;
     sh := AddRect(AShape, s, z2, rectSilent, info, band);
     if AHasText then
-      AddLabel(AText, ALocX, ALocY, ObjIn(ACell, 'label'), ObjIn(AParent, 'label'),
+      AddLabel(AText, AValue, ALocX, ALocY, ObjIn(ACell, 'label'), ObjIn(AParent, 'label'),
         sh, s.LineWidth, z2, info);
+  end;
+
+  { createBodyOrCornerCells, one cell [Batch 149]: not drawn in another's
+    merge; a merge's top-left drawn as its spanRect; its item's option the
+    cell's own, its `value` the label }
+  procedure AddBodyCorner(AKind, AX, AY: Integer; AParent: TJSONObject;
+    AStroke: TTyChartColor; ANoStroke: Boolean; const ATarget: string);
+  var
+    bc: TTyMatrixBodyCorner;
+    c: Integer;
+    sh: TTyXYWH;
+    opt: TJSONObject;
+    v: TJSONData;
+  begin
+    bc := AMatrix.FBC[AKind];
+    c := bc.Find(AX, AY);
+    if (c >= 0) and (bc.FCells[c].InSpanOf >= 0) and (bc.FCells[c].InSpanOf <> c) then Exit;
+    if (c >= 0) and bc.FCells[c].HasSpan then sh := bc.FCells[c].SpanRect
+    else
+    begin
+      AMatrix.UnitAt(0, AX, sh.X, sh.W);
+      AMatrix.UnitAt(1, AY, sh.Y, sh.H);
+    end;
+    opt := nil;
+    if c >= 0 then opt := bc.FCells[c].Option;
+    v := nil;
+    if opt <> nil then v := opt.Find('value');
+    if JNull(v) then
+      AddCell(opt, AParent, sh, False, '', nil, TyMatrixZ2BodyNormal, TyMatrixZ2BodySpecial,
+        AStroke, ANoStroke, AX, AY, ATarget)
+    else
+      AddCell(opt, AParent, sh, True, JsStringOf(v), v, TyMatrixZ2BodyNormal,
+        TyMatrixZ2BodySpecial, AStroke, ANoStroke, AX, AY, ATarget);
   end;
 
 var
   xd, yd, dm: TTyMatrixDim;
   di, i, ix, iy, nx, ny: Integer;
-  sh: TTyXYWH;
   c: TTyMatrixCell;
   bodyNode, cornerNode, tip: TJSONObject;
   bg, border: TCellStyle;
@@ -2034,25 +2624,22 @@ begin
     begin
       c := dm.Cells[i];
       if di = 0 then
-        AddCell(c.Node, dm.Node, c.Rect, True, c.Value, TyMatrixZ2DimNormal,
+        AddCell(c.Node, dm.Node, c.Rect, True, c.Value, nil, TyMatrixZ2DimNormal,
           TyMatrixZ2DimSpecial, AInk.CellBorder, False, c.Id[0], c.Id[1], 'x')
       else
-        AddCell(c.Node, dm.Node, c.Rect, True, c.Value, TyMatrixZ2DimNormal,
+        AddCell(c.Node, dm.Node, c.Rect, True, c.Value, nil, TyMatrixZ2DimNormal,
           TyMatrixZ2DimSpecial, AInk.CellBorder, False, c.Id[0], c.Id[1], 'y');
     end;
   end;
 
-  { ---- the body: the y leaves, the x leaves ---- }
+  { ---- the body: the y leaves, the x leaves; the cells the body's items
+    named carry their options, a merge is drawn once [Batch 149] ---- }
   bodyNode := ObjIn(node, 'body');
+  AMatrix.EnsureCellMaps;
   if Int64(xd.LeafCount) * yd.LeafCount <= cMaxBodyCells then
   for iy := 0 to yd.LeafCount - 1 do
     for ix := 0 to xd.LeafCount - 1 do
-    begin
-      xd.UnitOf(0, ix, sh.X, sh.W);
-      yd.UnitOf(1, iy, sh.Y, sh.H);
-      AddCell(nil, bodyNode, sh, False, '', TyMatrixZ2BodyNormal, TyMatrixZ2BodySpecial,
-        AInk.CellBorder, False, ix, iy, 'body');
-    end;
+      AddBodyCorner(0, ix, iy, bodyNode, AInk.CellBorder, False, 'body');
 
   { ---- the corner, when both trees show: x's levels, y's levels ---- }
   if xd.Show and yd.Show then
@@ -2062,12 +2649,7 @@ begin
     ny := yd.LevelCount;
     for iy := 0 to nx - 1 do
       for ix := 0 to ny - 1 do
-      begin
-        yd.UnitOf(0, ix - ny, sh.X, sh.W);
-        xd.UnitOf(1, iy - nx, sh.Y, sh.H);
-        AddCell(nil, cornerNode, sh, False, '', TyMatrixZ2BodyNormal, TyMatrixZ2BodySpecial,
-          0, True, ix - ny, iy - nx, 'corner');
-      end;
+        AddBodyCorner(1, ix - ny, iy - nx, cornerNode, 0, True, 'corner');
   end;
 
   { ---- the background (no border) and the outer border (no fill) ---- }

@@ -39,7 +39,9 @@ type
   end;
 
   TAdvChartMatrixOracleTest = class(TTestCase)
-  private
+  protected
+    { [Batch 149] protected: part three's suite adds its own checks over
+      the same records }
     FRoot: TJSONData;
     FOpt: TTyChartOption;
     FMeas: ITyTextMeasurer;
@@ -53,7 +55,6 @@ type
     procedure CheckTrees(M: TTyMatrix; AM: TJSONObject);
     procedure CheckProbes(M: TTyMatrix; AM: TJSONObject);
     procedure CheckPicture(M: TTyMatrix; AM: TJSONObject);
-  protected
     { [Batch 147] the fixture, and the least of what a run must have
       compared: part two's view cases replay through the same checks }
     function FixtureFile: string; virtual;
