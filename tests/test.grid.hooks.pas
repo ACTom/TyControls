@@ -1,6 +1,8 @@
 unit test.grid.hooks;
 { The hooks a subclass of the string grid builds on (#34, the data-aware grid):
-  GetEditText / SetEditText, ColumnClass, DoVScroll and CursorMoved.
+  GetEditText / SetEditText, ColumnClass, DoVScroll and CursorMoved; and (TGridHeaderHooksTest)
+  the header gestures a subclass hears about -- HeaderSectionClicked, ColumnSized,
+  ColumnMoved -- and the CanToggleCellCheck veto.
 
   A probe subclass keeps its own values next to the cell store and answers GetEditText
   from them, so every assertion can tell "came through the hook" from "came from the
@@ -68,6 +70,44 @@ type
     function  Calc: TTyCalcEdit;
     function  Picker: TTyDateTimePicker;
     function  Pick: TTyComboBox;
+  end;
+
+  { Logs the header hooks; CanToggleCellCheck answers Allow. }
+  THeaderHookGrid = class(TTyStringGrid)
+  protected
+    procedure HeaderSectionClicked(ACol: Integer); override;
+    procedure ColumnSized(ACol: Integer); override;
+    procedure ColumnMoved(AFromPos, AToPos: Integer); override;
+    function CanToggleCellCheck(ACol, ARow: Integer): Boolean; override;
+  public
+    Log: TStringList;
+    Allow: Boolean;
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    function TitlePoint(ACol: Integer): TPoint;
+    function DividerPoint(ACol: Integer): TPoint;
+    procedure Press(const APt: TPoint);
+    procedure DragTo(const APt: TPoint);
+    procedure Release(const APt: TPoint);
+    function PressKey(AKey: Word): Word;
+  end;
+
+  TGridHeaderHooksTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FGrid: THeaderHookGrid;
+    FChanges, FEdits: Integer;
+    procedure CountChange(Sender: TObject; ACol, ARow: Integer; AChecked: Boolean);
+    procedure CountEdit(Sender: TObject; ACol, ARow: Integer; const AOldText,
+      ANewText: string; var AAccept: Boolean);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestATitleClickReachesHeaderSectionClicked;
+    procedure TestADividerDragReachesColumnSizedOnly;
+    procedure TestAColumnDragReachesColumnMovedOnly;
+    procedure TestCanToggleCellCheckVetoesTheWholeToggle;
   end;
 
   TGridHooksTest = class(TTestCase)
@@ -767,6 +807,178 @@ begin
   AssertEquals('a move to where the cursor already is is not reported', 0, FGrid.Moves.Count);
 end;
 
+{ ---- THeaderHookGrid ---- }
+
+constructor THeaderHookGrid.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Log := TStringList.Create;
+  Allow := True;
+end;
+
+destructor THeaderHookGrid.Destroy;
+begin
+  inherited Destroy;
+  Log.Free;
+end;
+
+procedure THeaderHookGrid.HeaderSectionClicked(ACol: Integer);
+begin
+  inherited HeaderSectionClicked(ACol);
+  Log.Add('clicked ' + IntToStr(ACol));
+end;
+
+procedure THeaderHookGrid.ColumnSized(ACol: Integer);
+begin
+  inherited ColumnSized(ACol);
+  Log.Add('sized ' + IntToStr(ACol));
+end;
+
+procedure THeaderHookGrid.ColumnMoved(AFromPos, AToPos: Integer);
+begin
+  inherited ColumnMoved(AFromPos, AToPos);
+  Log.Add(Format('moved %d %d', [AFromPos, AToPos]));
+end;
+
+function THeaderHookGrid.CanToggleCellCheck(ACol, ARow: Integer): Boolean;
+begin
+  Result := inherited CanToggleCellCheck(ACol, ARow) and Allow;
+  Log.Add('asked ' + Key(ACol, ARow));
+end;
+
+function THeaderHookGrid.TitlePoint(ACol: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := CellRect(ACol, 0);
+  Result := Point((r.Left + r.Right) div 2, HeaderHeightPx div 2);
+end;
+
+function THeaderHookGrid.DividerPoint(ACol: Integer): TPoint;
+begin
+  Result := Point(ColumnResizeEdgeX(ACol), HeaderHeightPx div 2);
+end;
+
+procedure THeaderHookGrid.Press(const APt: TPoint);
+begin
+  MouseDown(mbLeft, [], APt.X, APt.Y);
+end;
+
+procedure THeaderHookGrid.DragTo(const APt: TPoint);
+begin
+  MouseMove([ssLeft], APt.X, APt.Y);
+end;
+
+procedure THeaderHookGrid.Release(const APt: TPoint);
+begin
+  MouseUp(mbLeft, [], APt.X, APt.Y);
+end;
+
+function THeaderHookGrid.PressKey(AKey: Word): Word;
+begin
+  Result := AKey;
+  KeyDown(Result, []);
+end;
+
+{ ---- TGridHeaderHooksTest ---- }
+
+procedure TGridHeaderHooksTest.SetUp;
+var
+  i: Integer;
+  c: TTyColumn;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 700, 500);
+  FGrid := THeaderHookGrid.Create(FForm);
+  FGrid.Parent := FForm;
+  FGrid.Font.PixelsPerInch := 96;
+  FGrid.SetBounds(0, 0, 500, 240);
+  for i := 0 to 3 do
+  begin
+    c := FGrid.Header.Columns.Add as TTyColumn;
+    c.Width := 90;
+    c.Text := 'C' + IntToStr(i);
+  end;
+  FGrid.RowCount := 5;
+  FChanges := 0;
+  FEdits := 0;
+end;
+
+procedure TGridHeaderHooksTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FGrid := nil;
+end;
+
+procedure TGridHeaderHooksTest.CountChange(Sender: TObject; ACol, ARow: Integer;
+  AChecked: Boolean);
+begin
+  Inc(FChanges);
+end;
+
+procedure TGridHeaderHooksTest.CountEdit(Sender: TObject; ACol, ARow: Integer;
+  const AOldText, ANewText: string; var AAccept: Boolean);
+begin
+  Inc(FEdits);
+end;
+
+{ M: the hook not called, or called for a release on another title. }
+procedure TGridHeaderHooksTest.TestATitleClickReachesHeaderSectionClicked;
+begin
+  FGrid.Press(FGrid.TitlePoint(2));
+  AssertEquals('not on the press', 0, FGrid.Log.Count);
+  FGrid.Release(FGrid.TitlePoint(2));
+  AssertEquals('on the release', 'clicked 2', Trim(FGrid.Log.Text));
+  FGrid.Log.Clear;
+  FGrid.Press(FGrid.TitlePoint(2));
+  FGrid.Release(FGrid.TitlePoint(1));
+  AssertEquals('released on another title: nothing', 0, FGrid.Log.Count);
+end;
+
+procedure TGridHeaderHooksTest.TestADividerDragReachesColumnSizedOnly;
+var
+  pt: TPoint;
+begin
+  pt := FGrid.DividerPoint(1);
+  FGrid.Press(pt);
+  FGrid.DragTo(Point(pt.X + 15, pt.Y));
+  AssertEquals('nothing while dragging', 0, FGrid.Log.Count);
+  FGrid.Release(Point(pt.X + 15, pt.Y));
+  AssertEquals('the width', 105, (FGrid.Header.Columns.Items[1] as TTyColumn).Width);
+  AssertEquals('sized, no click', 'sized 1', Trim(FGrid.Log.Text));
+end;
+
+procedure TGridHeaderHooksTest.TestAColumnDragReachesColumnMovedOnly;
+begin
+  FGrid.Press(FGrid.TitlePoint(0));
+  FGrid.DragTo(FGrid.TitlePoint(2));
+  FGrid.Release(FGrid.TitlePoint(2));
+  AssertEquals('moved from position 0 to 2, no click', 'moved 0 2', Trim(FGrid.Log.Text));
+  AssertEquals('it is at 2', 2, (FGrid.Header.Columns.Items[0] as TTyColumn).Position);
+end;
+
+{ M: the veto asked after the write, or not at all. }
+procedure TGridHeaderHooksTest.TestCanToggleCellCheckVetoesTheWholeToggle;
+begin
+  (FGrid.Header.Columns.Items[1] as TTyGridColumn).EditorKind := gekCheckBox;
+  FGrid.Cells[1, 0] := '';
+  FGrid.OnCheckBoxChange := @CountChange;
+  FGrid.OnCellEdited := @CountEdit;
+  FGrid.Col := 1;
+  FGrid.Allow := False;
+  FGrid.PressKey(VK_SPACE);
+  AssertEquals('asked', 'asked 1:0', Trim(FGrid.Log.Text));
+  AssertEquals('vetoed: not written', '', FGrid.Cells[1, 0]);
+  AssertEquals('no OnCellEdited', 0, FEdits);
+  AssertEquals('no OnCheckBoxChange', 0, FChanges);
+  FGrid.Allow := True;
+  FGrid.PressKey(VK_SPACE);
+  AssertEquals('allowed: written', '1', FGrid.Cells[1, 0]);
+  AssertEquals('OnCellEdited', 1, FEdits);
+  AssertEquals('OnCheckBoxChange', 1, FChanges);
+end;
+
 initialization
   RegisterTest(TGridHooksTest);
+  RegisterTest(TGridHeaderHooksTest);
 end.

@@ -1568,6 +1568,17 @@ type
       layout without passing through them is caught on the next frame. The base grid has
       no editor. }
     procedure EditorFollowCell; virtual;
+    { Header gestures that have finished, for a subclass to report in its own terms (a
+      data-aware grid's OnTitleClick, OnColumnSized, OnColumnMoved). The defaults do nothing;
+      the grid's own events are unchanged and fire as before.
+      HeaderSectionClicked: a left press on the body of section ACol (not on a divider) was
+      released on the same section without dragging the column away -- a click on the title.
+      ColumnSized: the user let go of a column's divider after dragging ACol's width.
+      ColumnMoved: the user's drag has just moved a column from display position AFromPos to
+      AToPos (Header.Columns' Position). }
+    procedure HeaderSectionClicked(ACol: Integer); virtual;
+    procedure ColumnSized(ACol: Integer); virtual;
+    procedure ColumnMoved(AFromPos, AToPos: Integer); virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -2333,6 +2344,11 @@ type
       called when nothing moved, nor when OnSelectCell (or a refused edit) kept it where
       it was. The default does nothing. }
     procedure CursorMoved(AOldCol, AOldRow: Integer); virtual;
+    { May the user's toggle of a check box cell go ahead? Asked by ToggleCellChecked after
+      OnCanToggleCheck said yes, before anything is read or written; False drops the toggle
+      whole -- no OnCellEdited, no write, no OnCheckBoxChange. The default says yes. A
+      subclass whose values can refuse a change (a dataset that will not edit) answers it. }
+    function CanToggleCellCheck(ACol, ARow: Integer): Boolean; virtual;
     procedure RecordRowCountUndo(AOldCount: Integer); override;
     procedure OpenUndoGroup; override;
     procedure CloseUndoGroup; override;
@@ -4663,6 +4679,18 @@ begin
 end;
 
 procedure TTyCustomGrid.EditorFollowCell;
+begin
+end;
+
+procedure TTyCustomGrid.HeaderSectionClicked(ACol: Integer);
+begin
+end;
+
+procedure TTyCustomGrid.ColumnSized(ACol: Integer);
+begin
+end;
+
+procedure TTyCustomGrid.ColumnMoved(AFromPos, AToPos: Integer);
 begin
 end;
 
@@ -7127,7 +7155,7 @@ end;
 
 procedure TTyCustomGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  target, delta, newSize: Integer;
+  target, delta, newSize, fromPos: Integer;
   allow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
@@ -7205,10 +7233,12 @@ begin
       if Assigned(FOnColumnMove) then FOnColumnMove(Self, FDragCol, target, allow);
       if allow then
       begin
+        fromPos := TTyColumn(FHeader.Columns.Items[FDragCol]).Position;
         FHeader.Columns.AdjustPosition(TTyColumn(FHeader.Columns.Items[FDragCol]),
           TTyColumn(FHeader.Columns.Items[target]).Position);
         FDragStartX := X;
         Invalidate;
+        ColumnMoved(fromPos, TTyColumn(FHeader.Columns.Items[FDragCol]).Position);
       end;
     end;
   end;
@@ -7216,7 +7246,20 @@ end;
 
 procedure TTyCustomGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
+var
+  clicked, sized: Integer;
+  hit: TTyGridHit;
 begin
+  { What a subclass hears about (HeaderSectionClicked / ColumnSized), worked out before the
+    gesture's state is reset below; told after it, so the grid is at rest again. }
+  clicked := -1;
+  if (Button = mbLeft) and (FPressedHeaderCol >= 0) and not FHeaderDragMoved then
+  begin
+    hit := CellAt(X, Y);
+    if (hit.Part = ghpHeader) and (hit.Col = FPressedHeaderCol) then
+      clicked := FPressedHeaderCol;
+  end;
+  sized := FResizeCol;
   { 拖完了才发"结束"事件 —— 宿主拿它保存列宽偏好,拖动过程中发是噪音。 }
   if (FResizeCol >= 0) and Assigned(FOnEndColumnSize) then
     FOnEndColumnSize(Self, FResizeCol,
@@ -7237,6 +7280,8 @@ begin
     if goHeaderPushedLook in Options then Invalidate;
   end;
   inherited MouseUp(Button, Shift, X, Y);
+  if sized >= 0 then ColumnSized(sized);
+  if clicked >= 0 then HeaderSectionClicked(clicked);
 end;
 
 function TTyCustomGrid.ShowsFilterButton(ACol: Integer): Boolean;
@@ -11656,6 +11701,11 @@ begin
   Result := cbUnchecked;
 end;
 
+function TTyCustomStringGrid.CanToggleCellCheck(ACol, ARow: Integer): Boolean;
+begin
+  Result := True;
+end;
+
 procedure TTyCustomStringGrid.ToggleCellChecked(ACol, ARow: Integer);
 var
   accept: Boolean;
@@ -11667,6 +11717,7 @@ begin
   accept := True;
   if Assigned(FOnCanToggleCheck) then FOnCanToggleCheck(Self, ACol, ARow, accept);
   if not accept then Exit;
+  if not CanToggleCellCheck(ACol, ARow) then Exit;
 
   oldTxt := GetCellText(ACol, ARow);
   { 写回收敛成本列的词汇;列没定义就还是从前那套 '1'/'2'/''。
