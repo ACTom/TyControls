@@ -188,6 +188,10 @@ function TyBoxWord(const A, B: TTyBoxRaw): string;
   in CSS order. }
 function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   const AMargin: array of Double): TTyXYWH;
+{ A box as the shared solver holds it, back in the raw form getLayoutRect
+  reads: auto absent, px a number, a percentage its text with a `%`, centre
+  the word [Batch 147] }
+function TyBoxSpecRaw(const ASpec: TTyBoxSpec): TTyRawBox;
 
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
@@ -1708,6 +1712,34 @@ end;
 function OrZero(AV: Double): Double;
 begin
   if IsNan(AV) or (AV = 0) then Result := 0 else Result := AV;
+end;
+
+function TyBoxSpecRaw(const ASpec: TTyBoxSpec): TTyRawBox;
+var fs: TFormatSettings;
+
+  function Raw(const V: TTyBoxValue): TTyBoxRaw;
+  begin
+    Result := Default(TTyBoxRaw);
+    case V.Kind of
+      buPx: Result := TyBoxRawNum(V.Value);
+      { seventeen digits read back as the same double }
+      buPercent: Result := TyBoxRawStr(FloatToStrF(V.Value, ffGeneral, 17, 0, fs) + '%');
+      buCentre: Result := TyBoxRawStr('center');
+    else
+      Result.Kind := brAbsent;
+    end;
+  end;
+
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  fs.ThousandSeparator := #0;
+  Result.Left := Raw(ASpec.Left);
+  Result.Right := Raw(ASpec.Right);
+  Result.Top := Raw(ASpec.Top);
+  Result.Bottom := Raw(ASpec.Bottom);
+  Result.Width := Raw(ASpec.Width);
+  Result.Height := Raw(ASpec.Height);
 end;
 
 function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;

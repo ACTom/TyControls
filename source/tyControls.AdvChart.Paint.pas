@@ -171,7 +171,12 @@ type
     { [Batch 122] a graphic component's element: ComponentIndex the
       component, DataIndex the element's serial in the view's last build;
       it has ECData's eventData, not a data index }
-    ctkGraphic);
+    ctkGraphic,
+    { [Batch 147] a matrix cell -- its rect or its label: ComponentIndex the
+      matrix, DataIndex the cell's serial in the matrix's last build
+      (TTyMatrix.CellInfo); eventData when the matrix says triggerEvent,
+      a component tooltip when the cell has words }
+    ctkMatrix);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -680,6 +685,12 @@ type
       a mark would be found where upstream finds none. Zero everywhere
       else. [Batch 142] }
     HitPadLogical: Double;
+    { A RECT HIT ON ITS STROKE ONLY, LOGICAL px: zrender's Path.contain of a
+      path with no fill -- the stroke widened to at least
+      strokeContainThreshold (5) -- so the rect answers within half of this
+      of its outline and not inside. 0: the area, as every other element.
+      A matrix cell written `silent: false` with no fill [Batch 147]. }
+    HitStrokeBand: Double;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -1141,7 +1152,8 @@ function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
   APad: Boolean): Integer;
 var
   i, idx: Integer;
-  slop: Double;
+  slop, half: Double;
+  b: TTyRectF;
 begin
   Result := -1;
   EnsureOrder;
@@ -1152,6 +1164,19 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    if (FItems[idx].HitStrokeBand > 0) and (FItems[idx].Shape.Kind = cskRect) then
+    begin
+      { the outline's band: inside the rect grown by half the band, not
+        strictly inside the rect shrunk by it [Batch 147] }
+      half := FItems[idx].HitStrokeBand / 2;
+      if APPI > 0 then half := half * APPI / 96;
+      b := FItems[idx].Shape.Bounds;
+      if (AX >= b.Left - half) and (AX <= b.Right + half) and (AY >= b.Top - half)
+        and (AY <= b.Bottom + half) and not ((AX > b.Left + half) and (AX < b.Right - half)
+        and (AY > b.Top + half) and (AY < b.Bottom - half)) then
+        Exit(idx);
+      Continue;
+    end;
     slop := FItems[idx].HitSlopLogical;
     if APad then slop := slop + FItems[idx].HitPadLogical;
     if APPI > 0 then slop := slop * APPI / 96;

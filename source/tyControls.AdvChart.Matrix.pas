@@ -26,8 +26,15 @@ unit tyControls.AdvChart.Matrix;
   PART ONE: the model, the trees and their layout, the view (cells, the
   background and the border, the dividers, the cell labels with their
   overflow area and clip), and one value per dimension through dataToLayout
-  and dataToPoint. Ranges, clamping, pointToData, merged cells and the body
-  and corner `data` are parts two and three.
+  and dataToPoint.
+
+  PART TWO (D12 MX2, batch 147): the whole positioning algebra -- a RANGE
+  on either direction (`[[a, b], y]`, a parent and a range mixed, `[x1, x2,
+  x3]` read as its two ends), CLAMPING (none / all / body / corner, a value
+  that names nothing then covering the whole row or column), pointToData --
+  and the cells' interaction (silent, triggerEvent, cursor, the tooltip),
+  rotated labels and rich labels laid out in the overflow area. Merged
+  cells and the body and corner `data` are part three.
 
   PURE: SysUtils, Math, fpjson and the AdvChart units. No painter, no LCL. }
 interface
@@ -80,6 +87,14 @@ type
     Node: TJSONObject;
   end;
 
+  { MatrixClampOption: none (0, anything falsy), all (anything truthy but
+    the two below), body (2), corner (3) [Batch 147] }
+  TTyMatrixClamp = (mclNone, mclAll, mclBody, mclCorner);
+
+  { matrixXYLocatorRange: per direction the first and the last locator a
+    coord covers; NaN where it names nothing [Batch 147] }
+  TTyMatrixLocRange = array[0..1, 0..1] of Double;
+
   { One header tree (MatrixDim). }
   TTyMatrixDim = class
   private
@@ -128,6 +143,22 @@ type
     property Collect: Boolean read FCollect;
   end;
 
+  { WHAT A DRAWN CELL ANSWERS THE POINTER WITH [Batch 147]: createMatrixCell's
+    eventData and setTooltipConfig. Target 'x' / 'y' / 'body' / 'corner'; Loc
+    the locator pair; HasText the cell has a textValue (a header cell; a body
+    or corner cell's `value` is part three), Value it as String(), TipName
+    the text after the label's formatter (the tooltip's itemName), HasName /
+    Name the label's text as drawn (eventData.name: none when the label is
+    not shown). }
+  TTyMatrixCellInfo = record
+    Target: string;
+    Loc: array[0..1] of Integer;
+    HasText: Boolean;
+    Value, TipName: string;
+    HasName: Boolean;
+    Name: string;
+  end;
+
   { One matrix component. Built from the option before the series' stores
     (they borrow its category lists), laid out on the canvas with Resize. }
   TTyMatrix = class(TTyNonRefCountedObject, ITyCoordSys)
@@ -140,11 +171,21 @@ type
     FScale: Double;
     FZ: Integer;
     FValid: Boolean;
+    FCellInfos: array of TTyMatrixCellInfo;
+    FCellInfoN: Integer;
     procedure LayOutUnits(ADimIdx: Integer);
     procedure LayOutRest(ADimIdx: Integer);
     procedure RectOneDim(var R: TTyXYWH; ADimIdx, AId, ASpan: Integer);
     function UnitAt(ADimIdx, ALocator: Integer; out AXY, AWH: Double): Boolean;
     function GetDim(AIndex: Integer): TTyMatrixDim;
+    { coordDataToAllCellLevelLayout as locators: the header cell AValue
+      names (its first locator and its span along ADimIdx), else -- a
+      negative number -- the other tree's level at round(AValue) }
+    function CellLayoutOf(ADimIdx: Integer; AValue: Double; out ALoc, ASpan: Integer): Boolean;
+    { pointToDataOneDimPrepareCtx: where APoint lies along ADimIdx (0 the
+      body, 1 the corner or the header, 2 outside) and the coordinate, clamped }
+    procedure PointArea(ADimIdx: Integer; const APoint: TTyPointF; AClamp: TTyMatrixClamp;
+      out AArea: Integer; var ACoord: Double);
   public
     constructor Create(AOption: TTyChartOption; AIndex: Integer);
     destructor Destroy; override;
@@ -157,10 +198,35 @@ type
     function Locate(ADimIdx: Integer; AValue: Double; out AXY, AWH: Double): Boolean;
     { dataToLayout's rect as upstream holds it: x, y, width, height }
     procedure DataToLayoutXYWH(AX, AY: Double; out ARect: TTyXYWH);
+    { parseCoordRangeOptionOnOneDim: the locators AParts covers along
+      ADimIdx -- its first and (two or more) its last part, each a header
+      cell (a parent: its whole span) or a level; a part that names nothing
+      makes both NaN, which a clamp then widens to the whole row or column
+      (body: the leaves only; corner: the levels only) and every clamp
+      confines. No parts at all (an empty array) is nothing. }
+    procedure RangeOneDim(ADimIdx: Integer; const AParts: array of Double;
+      AClamp: TTyMatrixClamp; out ALo, AHi: Double);
+    { DATATOLAYOUT IN FULL: each direction's parts (one for a single value,
+      the array's elements for a range) to the locator range, then the rect
+      from the units at its two ends; NaN on a direction that names nothing }
+    procedure DataToLayoutRange(const AX, AY: array of Double; AClamp: TTyMatrixClamp;
+      out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+    { dataToPoint: the centre of that rect }
+    function DataToPointRange(const AX, AY: array of Double; AClamp: TTyMatrixClamp): TTyPointF;
+    { POINTTODATA: per direction the leaf's locator (the body), the level's
+      negative locator (the corner), or -- the point in one header with the
+      other direction in the body -- the header cell's ORDINAL there and its
+      level's locator across; NaN outside. AClamp first pulls a coordinate
+      outside back to the nearest edge (body / corner: of that area only). }
+    procedure PointToDataClamp(const APoint: TTyPointF; AClamp: TTyMatrixClamp;
+      out AX, AY: Double);
     { A COORD AS AN OPTION WRITES IT, to the number the store would hold: a
       string through the tree's category list (NaN when unknown), a number
       as it is, anything else NaN. For callers holding raw JSON. }
     function ParseCoord(ADimIdx: Integer; AValue: TJSONData): Double;
+    { One direction of a coord as an option writes it: an array's elements
+      each parsed (an empty array is no parts), anything else one part }
+    function ParseCoordParts(ADimIdx: Integer; AValue: TJSONData): TTyDoubleArray;
     { ---- ITyCoordSys: data is [x, y], ordinals or locators ---- }
     function CoordSysName: string;
     function DimCount: Integer;
@@ -168,7 +234,7 @@ type
     function DataToPoint(const AData: array of Double): TTyPointF;
     { Rect and ContentRect alike: a matrix cell has no content inset }
     function DataToLayout(const AData: array of Double): TTyCoordLayout;
-    { part two (MX2): answers False }
+    { pointToData with no clamp: [x, y], either NaN [Batch 147] }
     function PointToData(const APoint: TTyPointF; out AData: TTyDoubleArray): Boolean;
     { the rect contains the point, edges included }
     function ContainPoint(const APoint: TTyPointF): Boolean;
@@ -181,6 +247,14 @@ type
     property Box: TTyRawBox read FBox;
     property Z: Integer read FZ;
     property Valid: Boolean read FValid;
+    { the cells the last TyBuildMatrix drew, by the serial their elements'
+      datum carries (ctkMatrix) [Batch 147] }
+    function CellInfoCount: Integer;
+    function CellInfo(AIndex: Integer): TTyMatrixCellInfo;
+    { matrix.triggerEvent (its own key, false by default) }
+    function TriggerEvent: Boolean;
+    { matrix.tooltip as written (nil when not an object) }
+    function TooltipNode: TJSONObject;
   end;
 
   { Resolved ink: the control asks the theme, this unit never does.
@@ -197,6 +271,17 @@ type
   ABase, another string parseFloat, a number itself, a boolean 0 or 1,
   anything else NaN }
 function TyMatrixSizeOf(AData: TJSONData; ABase: Double): Double;
+{ An option's `clamp` as MatrixClampOption reads it: falsy none, 2 body,
+  3 corner, anything else truthy all [Batch 147] }
+function TyMatrixClampOf(AData: TJSONData): TTyMatrixClamp;
+{ `opt && opt.clamp`: an opt object's clamp, none for anything else }
+function TyMatrixClampOfOpt(AOpt: TJSONData): TTyMatrixClamp;
+{ dataToLayout of a coord as JSON writes it [Batch 147]: anything but an
+  array names nothing (NaN everywhere, a clamp notwithstanding); an array's
+  element 0 is x and 1 is y, each one value or a range (an element that is
+  not there is one part that names nothing) }
+procedure TyMatrixLayoutJson(AMatrix: TTyMatrix; AData: TJSONData; AClamp: TTyMatrixClamp;
+  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
 { The picture of one matrix (MatrixView.render), into AList at the matrix's
   z: the header cells (x, then y), the body cells, the corner cells, the
   background, the outer border, the two dividers. A cell label is its own
@@ -209,7 +294,7 @@ implementation
 
 uses Classes, tyControls.AdvChart.Scale, tyControls.AdvChart.Calendar,
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.GfxEl,
-  tyControls.AdvChart.AnimAxis;
+  tyControls.AdvChart.AnimAxis, tyControls.AdvChart.JsMath;
 
 { ==================== small readers ==================== }
 
@@ -282,6 +367,52 @@ begin
           Result := TyJsParseFloat(AData.AsString);
       end;
   end;
+end;
+
+function TyMatrixClampOf(AData: TJSONData): TTyMatrixClamp;
+begin
+  if not Truthy(AData) then Exit(mclNone);
+  if AData.JSONType = jtNumber then
+  begin
+    if AData.AsFloat = 2 then Exit(mclBody);
+    if AData.AsFloat = 3 then Exit(mclCorner);
+  end;
+  Result := mclAll;
+end;
+
+function TyMatrixClampOfOpt(AOpt: TJSONData): TTyMatrixClamp;
+begin
+  if AOpt is TJSONObject then Result := TyMatrixClampOf(TJSONObject(AOpt).Find('clamp'))
+  else Result := mclNone;
+end;
+
+{ -0 by its sign bit }
+function NegZero(A: Double): Boolean; inline;
+begin
+  Result := (A = 0) and (PInt64(@A)^ < 0);
+end;
+
+{ Math.max / Math.min of two: NaN wins, +0 is above -0 }
+function JMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if (A = 0) and (B = 0) then
+  begin
+    if NegZero(A) then Exit(B);
+    Exit(A);
+  end;
+  if A >= B then Result := A else Result := B;
+end;
+
+function JMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if (A = 0) and (B = 0) then
+  begin
+    if NegZero(A) then Exit(A);
+    Exit(B);
+  end;
+  if A <= B then Result := A else Result := B;
 end;
 
 { confineSize: Math.max(Math.min(n, limit), 0) -- NaN stays NaN, -0 is 0 }
@@ -891,47 +1022,316 @@ begin
   end;
 end;
 
-function TTyMatrix.Locate(ADimIdx: Integer; AValue: Double; out AXY, AWH: Double): Boolean;
+function TTyMatrix.CellLayoutOf(ADimIdx: Integer; AValue: Double; out ALoc, ASpan: Integer): Boolean;
 var
-  d: TTyMatrixDim;
-  ci, locA, locB, lo, hi: Integer;
-  r, xy0, wh0, xy1, wh1: Double;
+  ci: Integer;
+  r, xy, wh: Double;
 begin
-  AXY := NaN;
-  AWH := NaN;
+  ALoc := 0;
+  ASpan := 1;
   Result := False;
-  d := FDims[ADimIdx];
-  { coordDataToAllCellLevelLayout: a header cell by its ordinal, else a
-    negative number is the other tree's level }
-  ci := d.CellIndexOf(AValue);
+  { getCell: a header cell by its ordinal }
+  ci := FDims[ADimIdx].CellIndexOf(AValue);
   if ci >= 0 then
   begin
-    locA := d.FCells[ci].Id[ADimIdx];
-    locB := locA + d.FCells[ci].Span[ADimIdx] - 1;
+    ALoc := FDims[ADimIdx].FCells[ci].Id[ADimIdx];
+    ASpan := FDims[ADimIdx].FCells[ci].Span[ADimIdx];
+    Exit(True);
+  end;
+  { else a negative number is the other tree's level at its rounding }
+  if IsNan(AValue) or IsInfinite(AValue) or not (AValue < 0) then Exit;
+  r := TyJsRound(AValue);
+  if r < -FDims[1 - ADimIdx].LevelCount then Exit;
+  ALoc := Trunc(r);
+  Result := FDims[1 - ADimIdx].UnitOf(ADimIdx, ALoc, xy, wh);
+end;
+
+procedure TTyMatrix.RangeOneDim(ADimIdx: Integer; const AParts: array of Double;
+  AClamp: TTyMatrixClamp; out ALo, AHi: Double);
+var
+  lower, upper: Double;
+  n: Integer;
+
+  { parseCoordRangeOptionOnOneDimOnePart }
+  procedure Part(AValue: Double);
+  var loc, span: Integer;
+  begin
+    if not CellLayoutOf(ADimIdx, AValue, loc, span) then
+    begin
+      ALo := NaN;
+      AHi := NaN;
+      Exit;
+    end;
+    { mathMin(lo, a, b) / mathMax(hi, a, b): a NaN stays }
+    ALo := JMin(JMin(ALo, loc), loc + span - 1);
+    AHi := JMax(JMax(AHi, loc), loc + span - 1);
+  end;
+
+begin
+  ALo := Infinity;
+  AHi := -Infinity;
+  n := Length(AParts);
+  if n >= 1 then
+  begin
+    Part(AParts[0]);
+    { [x1, x2, x3] is the range [x1, x3] }
+    if n > 1 then Part(AParts[n - 1]);
   end
   else
   begin
-    if IsNan(AValue) or not (AValue < 0) or IsInfinite(AValue) then Exit;
-    r := TyJsRound(AValue);
-    if r < -FDims[1 - ADimIdx].LevelCount then Exit;
-    locA := Trunc(r);
-    if not FDims[1 - ADimIdx].UnitOf(ADimIdx, locA, xy0, wh0) then Exit;
-    locB := locA;
+    ALo := NaN;
+    AHi := NaN;
   end;
-  lo := Min(locA, locB);
-  hi := Max(locA, locB);
-  { xyLocatorRangeToRectOneDim: the two ends' units }
-  if not UnitAt(ADimIdx, lo, xy0, wh0) then Exit;
-  if not UnitAt(ADimIdx, hi, xy1, wh1) then Exit;
-  AXY := xy0;
-  AWH := xy1 + wh1 - xy0;
-  Result := True;
+  if AClamp = mclNone then Exit;
+  { the whole row or column, body and corner, then confined: -0 when the
+    other tree has no level, as upstream negates a nought }
+  lower := FDims[1 - ADimIdx].LocatorCount(ADimIdx);
+  lower := -lower;
+  upper := FDims[ADimIdx].LocatorCount(ADimIdx) - 1;
+  if AClamp = mclBody then lower := JMax(0, lower)
+  else if AClamp = mclCorner then upper := JMin(-1, upper);
+  if upper < lower then
+  begin
+    lower := NaN;
+    upper := NaN;
+  end;
+  if IsNan(ALo) then ALo := lower;
+  if IsNan(AHi) then AHi := upper;
+  ALo := JMax(JMin(ALo, upper), lower);
+  AHi := JMax(JMin(AHi, upper), lower);
+end;
+
+procedure TTyMatrix.DataToLayoutRange(const AX, AY: array of Double; AClamp: TTyMatrixClamp;
+  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+
+  { xyLocatorRangeToRectOneDim: the units at the two ends (a locator is a
+    leaf's ordinal, or the other tree's level) }
+  procedure ToRect(ADimIdx: Integer; out AXY, AWH: Double);
+  var
+    l0, l1, s: Integer;
+    xy0, wh0, xy1, wh1: Double;
+  begin
+    AXY := NaN;
+    AWH := NaN;
+    if not CellLayoutOf(ADimIdx, ALoc[ADimIdx][0], l0, s) then Exit;
+    if not CellLayoutOf(ADimIdx, ALoc[ADimIdx][1], l1, s) then Exit;
+    if not UnitAt(ADimIdx, l0, xy0, wh0) then Exit;
+    if not UnitAt(ADimIdx, l1, xy1, wh1) then Exit;
+    AXY := xy0;
+    AWH := xy1 + wh1 - xy0;
+  end;
+
+begin
+  RangeOneDim(0, AX, AClamp, ALoc[0][0], ALoc[0][1]);
+  RangeOneDim(1, AY, AClamp, ALoc[1][0], ALoc[1][1]);
+  ToRect(0, ARect.X, ARect.W);
+  ToRect(1, ARect.Y, ARect.H);
+end;
+
+function TTyMatrix.DataToPointRange(const AX, AY: array of Double;
+  AClamp: TTyMatrixClamp): TTyPointF;
+var
+  r: TTyXYWH;
+  loc: TTyMatrixLocRange;
+begin
+  DataToLayoutRange(AX, AY, AClamp, r, loc);
+  Result := TyPointF(r.X + r.W / 2, r.Y + r.H / 2);
+end;
+
+function TTyMatrix.Locate(ADimIdx: Integer; AValue: Double; out AXY, AWH: Double): Boolean;
+var
+  r: TTyXYWH;
+  loc: TTyMatrixLocRange;
+begin
+  if ADimIdx = 0 then DataToLayoutRange([AValue], [NaN], mclNone, r, loc)
+  else DataToLayoutRange([NaN], [AValue], mclNone, r, loc);
+  if ADimIdx = 0 then
+  begin
+    AXY := r.X;
+    AWH := r.W;
+  end
+  else
+  begin
+    AXY := r.Y;
+    AWH := r.H;
+  end;
+  Result := not IsNan(AXY);
 end;
 
 procedure TTyMatrix.DataToLayoutXYWH(AX, AY: Double; out ARect: TTyXYWH);
+var loc: TTyMatrixLocRange;
 begin
-  Locate(0, AX, ARect.X, ARect.W);
-  Locate(1, AY, ARect.Y, ARect.H);
+  DataToLayoutRange([AX], [AY], mclNone, ARect, loc);
+end;
+
+const
+  cAreaBody = 0;
+  cAreaCorner = 1;
+  cAreaOutside = 2;
+
+procedure TTyMatrix.PointArea(ADimIdx: Integer; const APoint: TTyPointF;
+  AClamp: TTyMatrixClamp; out AArea: Integer; var ACoord: Double);
+var
+  thisDim, otherDim: TTyMatrixDim;
+  hasBodyMax, hasBody0, hasCornerMin, hasCornerM1: Boolean;
+  bmXY, bmWH, b0XY, b0WH, cmXY, cmWH, c1XY, c1WH: Double;
+  pxLoc0, pxMin, pxMax: Double;
+begin
+  thisDim := FDims[ADimIdx];
+  otherDim := FDims[1 - ADimIdx];
+  hasBodyMax := thisDim.UnitOf(ADimIdx, thisDim.LocatorCount(ADimIdx) - 1, bmXY, bmWH);
+  hasBody0 := thisDim.UnitOf(ADimIdx, 0, b0XY, b0WH);
+  hasCornerMin := otherDim.UnitOf(ADimIdx, -otherDim.LocatorCount(ADimIdx), cmXY, cmWH);
+  hasCornerM1 := otherDim.Show and otherDim.UnitOf(ADimIdx, -1, c1XY, c1WH);
+  if ADimIdx = 0 then ACoord := APoint.X else ACoord := APoint.Y;
+  if not hasBody0 and not hasCornerM1 then
+  begin
+    AArea := cAreaOutside;
+    Exit;
+  end;
+  if AClamp = mclBody then
+  begin
+    if hasBody0 then
+    begin
+      AArea := cAreaBody;
+      ACoord := JMin(bmXY + bmWH, JMax(b0XY, ACoord));
+    end
+    else
+      AArea := cAreaOutside;
+    Exit;
+  end;
+  if AClamp = mclCorner then
+  begin
+    if hasCornerM1 then
+    begin
+      AArea := cAreaCorner;
+      ACoord := JMin(c1XY + c1WH, JMax(cmXY, ACoord));
+    end
+    else
+      AArea := cAreaOutside;
+    Exit;
+  end;
+  if hasBody0 then pxLoc0 := b0XY
+  else if hasCornerM1 then pxLoc0 := c1XY + c1WH
+  else pxLoc0 := NaN;
+  if hasCornerMin then pxMin := cmXY else pxMin := pxLoc0;
+  if hasBodyMax then pxMax := bmXY + bmWH else pxMax := pxLoc0;
+  if not IsNan(ACoord) and not IsNan(pxMin) and (ACoord < pxMin) then
+  begin
+    if AClamp = mclNone then
+    begin
+      AArea := cAreaOutside;
+      Exit;
+    end;
+    ACoord := pxMin;
+  end
+  else if not IsNan(ACoord) and not IsNan(pxMax) and (ACoord > pxMax) then
+  begin
+    if AClamp = mclNone then
+    begin
+      AArea := cAreaOutside;
+      Exit;
+    end;
+    ACoord := pxMax;
+  end;
+  if IsNan(ACoord) or IsNan(pxLoc0) then AArea := cAreaOutside
+  else if (pxLoc0 <= ACoord) and not IsNan(pxMax) and (ACoord <= pxMax) then AArea := cAreaBody
+  else if not IsNan(pxMin) and (pxMin <= ACoord) and (ACoord <= pxLoc0) then AArea := cAreaCorner
+  else AArea := cAreaOutside;
+end;
+
+procedure TTyMatrix.PointToDataClamp(const APoint: TTyPointF; AClamp: TTyMatrixClamp;
+  out AX, AY: Double);
+var
+  area: array[0..1] of Integer;
+  pt: array[0..1] of Double;
+  outV: array[0..1] of Double;
+
+  function InRect(ACoord: Double; const R: TTyXYWH; ADimIdx: Integer): Boolean;
+  var a, w: Double;
+  begin
+    if ADimIdx = 0 then
+    begin
+      a := R.X;
+      w := R.W;
+    end
+    else
+    begin
+      a := R.Y;
+      w := R.H;
+    end;
+    Result := not IsNan(ACoord) and not IsNan(a) and not IsNan(w)
+      and (a <= ACoord) and (ACoord <= a + w);
+  end;
+
+  { pointToDataOnlyHeaderFillOut: the header cell under the point, both ways
+    -- a parent can be found this way }
+  procedure OnlyHeader(ADimIdx: Integer);
+  var
+    i: Integer;
+    d: TTyMatrixDim;
+  begin
+    if area[ADimIdx] = cAreaOutside then Exit;
+    d := FDims[ADimIdx];
+    for i := 0 to High(d.FCells) do
+      if InRect(pt[ADimIdx], d.FCells[i].Rect, ADimIdx)
+        and InRect(pt[1 - ADimIdx], d.FCells[i].Rect, 1 - ADimIdx) then
+      begin
+        outV[ADimIdx] := d.FCells[i].Ordinal;
+        outV[1 - ADimIdx] := d.FCells[i].Id[1 - ADimIdx];
+        Exit;
+      end;
+  end;
+
+  { pointToDataBodyCornerFillOut: the leaf or the level the coordinate is in }
+  procedure BodyCorner(ADimIdx: Integer);
+  var
+    d: TTyMatrixDim;
+    i, n: Integer;
+    c: Double;
+  begin
+    if area[ADimIdx] = cAreaOutside then Exit;
+    c := pt[ADimIdx];
+    if IsNan(c) then Exit;
+    if area[ADimIdx] = cAreaCorner then
+    begin
+      d := FDims[1 - ADimIdx];
+      n := Length(d.FLevels);
+      for i := 0 to n - 1 do
+        if not IsNan(d.FLevels[i].XY) and (d.FLevels[i].XY <= c)
+          and (c <= d.FLevels[i].XY + d.FLevels[i].WH) then
+        begin
+          outV[ADimIdx] := i - n;
+          Exit;
+        end;
+    end
+    else
+    begin
+      d := FDims[ADimIdx];
+      for i := 0 to d.FLeaves - 1 do
+        if not IsNan(d.FCells[i].XY) and (d.FCells[i].XY <= c)
+          and (c <= d.FCells[i].XY + d.FCells[i].WH) then
+        begin
+          outV[ADimIdx] := d.FCells[i].Id[ADimIdx];
+          Exit;
+        end;
+    end;
+  end;
+
+begin
+  PointArea(0, APoint, AClamp, area[0], pt[0]);
+  PointArea(1, APoint, AClamp, area[1], pt[1]);
+  outV[0] := NaN;
+  outV[1] := NaN;
+  if (area[1] = cAreaCorner) and (area[0] = cAreaBody) then OnlyHeader(0)
+  else if (area[0] = cAreaCorner) and (area[1] = cAreaBody) then OnlyHeader(1)
+  else
+  begin
+    BodyCorner(0);
+    BodyCorner(1);
+  end;
+  AX := outV[0];
+  AY := outV[1];
 end;
 
 function TTyMatrix.ParseCoord(ADimIdx: Integer; AValue: TJSONData): Double;
@@ -947,6 +1347,45 @@ begin
         if o >= 0 then Result := o;
       end;
   end;
+end;
+
+function TTyMatrix.ParseCoordParts(ADimIdx: Integer; AValue: TJSONData): TTyDoubleArray;
+var i: Integer;
+begin
+  Result := nil;
+  if AValue is TJSONArray then
+  begin
+    SetLength(Result, AValue.Count);
+    for i := 0 to AValue.Count - 1 do
+      Result[i] := ParseCoord(ADimIdx, AValue.Items[i]);
+  end
+  else
+  begin
+    SetLength(Result, 1);
+    Result[0] := ParseCoord(ADimIdx, AValue);
+  end;
+end;
+
+procedure TyMatrixLayoutJson(AMatrix: TTyMatrix; AData: TJSONData; AClamp: TTyMatrixClamp;
+  out ARect: TTyXYWH; out ALoc: TTyMatrixLocRange);
+var
+  parts: array[0..1] of TTyDoubleArray;
+  k: Integer;
+begin
+  ARect := TyXYWH(NaN, NaN, NaN, NaN);
+  ALoc[0][0] := NaN;
+  ALoc[0][1] := NaN;
+  ALoc[1][0] := NaN;
+  ALoc[1][1] := NaN;
+  if (AMatrix = nil) or not (AData is TJSONArray) then Exit;
+  for k := 0 to 1 do
+    if k < AData.Count then parts[k] := AMatrix.ParseCoordParts(k, AData.Items[k])
+    else
+    begin
+      SetLength(parts[k], 1);
+      parts[k][0] := NaN;
+    end;
+  AMatrix.DataToLayoutRange(parts[0], parts[1], AClamp, ARect, ALoc);
 end;
 
 function TTyMatrix.CoordSysName: string;
@@ -985,8 +1424,9 @@ end;
 
 function TTyMatrix.PointToData(const APoint: TTyPointF; out AData: TTyDoubleArray): Boolean;
 begin
-  AData := nil;
-  Result := False;
+  SetLength(AData, 2);
+  PointToDataClamp(APoint, mclNone, AData[0], AData[1]);
+  Result := True;
 end;
 
 function TTyMatrix.ContainPoint(const APoint: TTyPointF): Boolean;
@@ -998,6 +1438,27 @@ end;
 function TTyMatrix.AxisCount: Integer;
 begin
   Result := 0;
+end;
+
+function TTyMatrix.CellInfoCount: Integer;
+begin
+  Result := FCellInfoN;
+end;
+
+function TTyMatrix.CellInfo(AIndex: Integer): TTyMatrixCellInfo;
+begin
+  if (AIndex < 0) or (AIndex >= FCellInfoN) then Exit(Default(TTyMatrixCellInfo));
+  Result := FCellInfos[AIndex];
+end;
+
+function TTyMatrix.TriggerEvent: Boolean;
+begin
+  Result := (FNode <> nil) and Truthy(FNode.Find('triggerEvent'));
+end;
+
+function TTyMatrix.TooltipNode: TJSONObject;
+begin
+  Result := ObjIn(FNode, 'tooltip');
 end;
 
 function TTyMatrix.GetAxis(AIndex: Integer): TTyAxis;
@@ -1162,6 +1623,42 @@ begin
   else Result := rtvNone;
 end;
 
+{ Transformable.getLocalTransform with no scale, skew or anchor, its order
+  of operations exactly (matrix.rotate about [0, 0]) [Batch 147] }
+procedure ZrLocal(AX, AY, AOX, AOY, ARot: Double; out M: TTyMat2D);
+var aa, ac, atx, ab, ad, aty, st, ct: Double;
+begin
+  if (AOX <> 0) or (AOY <> 0) then
+  begin
+    M[4] := -AOX * 1 - 0 * AOY * 1;
+    M[5] := -AOY * 1 - 0 * AOX * 1;
+  end
+  else
+  begin
+    M[4] := 0;
+    M[5] := 0;
+  end;
+  M[0] := 1;
+  M[3] := 1;
+  M[1] := 0;
+  M[2] := 0;
+  if (ARot <> 0) and not IsNan(ARot) then
+  begin
+    aa := M[0]; ac := M[2]; atx := M[4];
+    ab := M[1]; ad := M[3]; aty := M[5];
+    st := TyJsSin(ARot);
+    ct := TyJsCos(ARot);
+    M[0] := aa * ct + ab * st;
+    M[1] := -aa * st + ab * ct;
+    M[2] := ac * ct + ad * st;
+    M[3] := -ac * st + ct * ad;
+    M[4] := ct * (atx - 0) + st * (aty - 0) + 0;
+    M[5] := ct * (aty - 0) - st * (atx - 0) + 0;
+  end;
+  M[4] := M[4] + (AOX + AX);
+  M[5] := M[5] + (AOY + AY);
+end;
+
 function TyBuildMatrix(AMatrix: TTyMatrix; const AInk: TTyMatrixInk;
   const AGlobal: TTyRtGlobal; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AList: TTyPaintList): Integer;
@@ -1169,10 +1666,25 @@ var
   scale: Double;
   z, outerZ2, added: Integer;
   node: TJSONObject;
+  triggerEv, tipShow: Boolean;
+
+  { a new cell's serial in AMatrix's table }
+  function NewInfo(const ATarget: string; ALocX, ALocY: Integer): Integer;
+  begin
+    if AMatrix.FCellInfoN >= Length(AMatrix.FCellInfos) then
+      SetLength(AMatrix.FCellInfos, Max(16, 2 * Length(AMatrix.FCellInfos)));
+    Result := AMatrix.FCellInfoN;
+    Inc(AMatrix.FCellInfoN);
+    AMatrix.FCellInfos[Result] := Default(TTyMatrixCellInfo);
+    AMatrix.FCellInfos[Result].Target := ATarget;
+    AMatrix.FCellInfos[Result].Loc[0] := ALocX;
+    AMatrix.FCellInfos[Result].Loc[1] := ALocY;
+  end;
 
   { createMatrixRect: the edges on the pixel grid of the border's width;
     answers the shape drawn }
-  function AddRect(const AShape: TTyXYWH; const S: TCellStyle; AZ2: Integer): TTyXYWH;
+  function AddRect(const AShape: TTyXYWH; const S: TCellStyle; AZ2: Integer;
+    ASilent: Boolean = True; AInfo: Integer = -1; ABand: Double = 0): TTyXYWH;
   var
     x2, y2, lw: Double;
     el: TTyChartElement;
@@ -1199,7 +1711,9 @@ var
     el.Style.Alpha := S.Opacity;
     el.Z := z;
     el.Z2 := AZ2;
-    el.Silent := True;
+    el.Silent := ASilent;
+    if AInfo >= 0 then el.Datum := TyChartComponentDatum(ctkMatrix, AMatrix.Index, AInfo);
+    el.HitStrokeBand := ABand;
     AList.Add(el);
     Inc(added);
   end;
@@ -1230,14 +1744,18 @@ var
     inside the padding, clipped to the shape inside its border }
   procedure AddLabel(const AText: string; ALocX, ALocY: Integer;
     ACellLabel, AParentLabel: TJSONObject; const AShape: TTyXYWH;
-    ALineWidth: Double; AZ2: Integer);
+    ALineWidth: Double; AZ2, AInfo: Integer);
   var
     chain: array[0..2] of TJSONObject;
     text, fam, alignS, valignS: string;
     d: TJSONData;
     rt: TTyRtBlockStyle;
     size, weight: Integer;
-    tx, ty, dist, ox, oy, ix, iy, iw, ih, baseX, baseY, padH, padV, half: Double;
+    tx, ty, dist, ix, iy, iw, ih, baseX, baseY, padH, padV, half: Double;
+    offX, offY, rot, rotDeg: Double;
+    hasOff: Boolean;
+    m, mi: TTyMat2D;
+    ovr, cl: TTyXYWH;
     align: TTyRtAlign;
     valign: TTyRtVAlign;
     pieces: TTyRtPieceArray;
@@ -1245,11 +1763,11 @@ var
     ah: TTyTextAnchorH;
     av: TTyTextAnchorV;
     clip: TTyXYWH;
+    silent: Boolean;
   begin
     chain[0] := ACellLabel;
     chain[1] := AParentLabel;
     chain[2] := GLabelDefaults;
-    if not Truthy(ChainGet(chain, 'show')) then Exit;
     text := AText;
     d := ChainGet(chain, 'formatter');
     if (d <> nil) and (d.JSONType = jtString) then
@@ -1258,6 +1776,10 @@ var
         ['componentType', 'componentIndex', 'name', 'value', 'coord', '$vars'],
         ['matrix', IntToStr(AMatrix.Index), AText, AText,
          IntToStr(ALocX) + ',' + IntToStr(ALocY), 'name,value,coord']);
+    { setTooltipConfig's itemName is the text after the formatter, shown or
+      not }
+    AMatrix.FCellInfos[AInfo].TipName := text;
+    if not Truthy(ChainGet(chain, 'show')) then Exit;
     rt := TyRtResolve(chain, AGlobal, TyRtResolveOpt(True));
     fam := '';
     d := ChainGet(chain, 'fontFamily');
@@ -1274,39 +1796,57 @@ var
       rt.Style.FillNone := False;
       rt.Style.Fill := AInk.LabelColour;
     end;
-    { calculateTextPosition on the shape, then the offset }
+    { calculateTextPosition on the shape }
     dist := NumberOr(ChainGet(chain, 'distance'), 0) * scale;
     TyGfxTextPosition(ChainGet(chain, 'position'), dist, AShape, tx, ty, alignS, valignS);
+    if IsNan(tx) or IsNan(ty) then Exit;
+    { THE TEXT'S OWN TRANSFORM (Element.updateInnerText): the offset moves it
+      and becomes its origin, negated; createTextConfig's rotation (degrees
+      written) turns it about that origin [Batch 147] }
+    hasOff := False;
+    offX := 0;
+    offY := 0;
     d := ChainGet(chain, 'offset');
     if (d is TJSONArray) and (d.Count >= 2) then
     begin
-      tx := tx + NumberOr(d.Items[0], 0) * scale;
-      ty := ty + NumberOr(d.Items[1], 0) * scale;
+      hasOff := True;
+      offX := NumberOr(d.Items[0], 0);
+      offY := NumberOr(d.Items[1], 0);
     end;
-    if IsNan(tx) or IsNan(ty) then Exit;
+    rot := 0;
+    d := ChainGet(chain, 'rotate');
+    if d <> nil then
+    begin
+      rotDeg := NaN;
+      if d.JSONType = jtNumber then rotDeg := d.AsFloat
+      else if d.JSONType = jtString then rotDeg := TyJsToNumber(d.AsString);
+      rot := rotDeg * (Pi / 180);
+    end;
+    if IsNan(rot) then rot := 0;
+    if hasOff then
+      ZrLocal(tx / scale + offX, ty / scale + offY, -offX, -offY, rot, m)
+    else
+      ZrLocal(tx / scale, ty / scale, 0, 0, rot, m);
     align := rt.Style.Align;
     if align = rtaNone then align := AlignOfWord(alignS);
     if align = rtaNone then align := rtaLeft;
     valign := rt.Style.VAlign;
     if valign = rtvNone then valign := VAlignOfWord(valignS);
     if valign = rtvNone then valign := rtvTop;
-    { THE OVERFLOW AREA: the shape in the text's own frame, met by a box
-      twice its size hung at the base by the alignment; the base moves to
-      the meeting, the meeting is the room }
-    ox := AShape.X + -tx;
-    oy := AShape.Y + -ty;
-    if Abs(scale - 1) > 1e-12 then
-    begin
-      ox := ox / scale;
-      oy := oy / scale;
-    end;
-    Intersect1(ox, ox + AShape.W / scale, AdjX(0, AShape.W / scale * 2, align, False),
-      AdjX(0, AShape.W / scale * 2, align, False) + AShape.W / scale * 2, ix, iw);
-    Intersect1(oy, oy + AShape.H / scale, AdjY(0, AShape.H / scale * 2, valign, False),
-      AdjY(0, AShape.H / scale * 2, valign, False) + AShape.H / scale * 2, iy, ih);
+    { THE OVERFLOW AREA: the shape through the inverse of the text's
+      transform (BoundingRect.applyTransform: a turned shape's bounding box),
+      met by a box twice its size hung at the base by the alignment; the
+      base moves to the meeting, the meeting is the room -- for plain and
+      rich text alike [Batch 147: rotated, and rich] }
+    if not TyMatInvert(m, mi) then Exit;
+    ovr := TyRectApplyMat(TyXYWH(AShape.X / scale, AShape.Y / scale, AShape.W / scale,
+      AShape.H / scale), mi);
+    Intersect1(ovr.X, ovr.X + ovr.W, AdjX(0, ovr.W * 2, align, False),
+      AdjX(0, ovr.W * 2, align, False) + ovr.W * 2, ix, iw);
+    Intersect1(ovr.Y, ovr.Y + ovr.H, AdjY(0, ovr.H * 2, valign, False),
+      AdjY(0, ovr.H * 2, valign, False) + ovr.H * 2, iy, ih);
     baseX := AdjX(ix, iw, align, True);
     baseY := AdjY(iy, ih, valign, True);
-    if not rt.IsRich then
     begin
       padH := 0;
       padV := 0;
@@ -1341,7 +1881,10 @@ var
     pieces := TyRtLayAt(text, rt, TyRtDefaultOf(True, AInk.LabelColour, False, 0, True,
       ah, av), baseX, baseY, scale, AMeasurer);
     if Length(pieces) = 0 then Exit;
-    el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, tx, ty, 0, scale)));
+    { the anchor is the transform's translation: the frame's origin }
+    tx := m[4] * scale;
+    ty := m[5] * scale;
+    el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, tx, ty, rot, scale)));
     el.Caption.Text := text;
     el.Caption.FontName := fam;
     el.Caption.FontSizeLogical := size;
@@ -1351,9 +1894,11 @@ var
     el.Caption.Y := ty;
     el.Caption.AnchorH := ah;
     el.Caption.AnchorV := av;
-    el.Caption.RotationRad := 0;
+    el.Caption.RotationRad := rot;
     el.Caption.RtPieces := pieces;
     el.Caption.RtScale := scale;
+    AMatrix.FCellInfos[AInfo].HasName := True;
+    AMatrix.FCellInfos[AInfo].Name := text;
     { THE CLIP when the words may overflow: the shape inside half its border
       (expandOrShrinkRect, shrinking, never past nought) }
     if Truthy(ChainGet(chain, 'overflow')) and (StrOf(ChainGet(chain, 'overflow')) <> 'none')
@@ -1378,13 +1923,29 @@ var
       end
       else
         clip.Y := clip.Y - -half;
+      { A TURNED TEXT'S CLIP is the cell's box in its own frame, turned back:
+        the port clips to that turned box's bounding box (the same rect at a
+        right angle, looser at any other) }
+      if rot <> 0 then
+      begin
+        cl := TyRectApplyMat(TyXYWH(clip.X / scale, clip.Y / scale, clip.W / scale,
+          clip.H / scale), mi);
+        cl := TyRectApplyMat(cl, m);
+        clip := TyXYWH(cl.X * scale, cl.Y * scale, cl.W * scale, cl.H * scale);
+      end;
       el.HasClip := True;
       el.ClipRect := TyRectF(clip.X, clip.Y, clip.X + clip.W, clip.Y + clip.H);
     end;
     el.Z := z;
     { traverseUpdateZ: a text content is its host's z2 plus two }
     el.Z2 := AZ2 + 2;
-    el.Silent := True;
+    { THE LABEL'S OWN silent: as written, else answering the pointer only
+      for triggerEvent or a shown tooltip; it ignores its host's [Batch 147] }
+    d := ChainGet(chain, 'silent');
+    if d <> nil then silent := Truthy(d)
+    else silent := not (triggerEv or tipShow);
+    el.Silent := silent;
+    el.Datum := TyChartComponentDatum(ctkMatrix, AMatrix.Index, AInfo);
     AList.Add(el);
     Inc(added);
   end;
@@ -1392,13 +1953,19 @@ var
   { createMatrixCell }
   procedure AddCell(ACell, AParent: TJSONObject; const AShape: TTyXYWH;
     AHasText: Boolean; const AText: string; ANormal, ASpecial: Integer;
-    AStroke: TTyChartColor; ANoStroke: Boolean; ALocX, ALocY: Integer);
+    AStroke: TTyChartColor; ANoStroke: Boolean; ALocX, ALocY: Integer;
+    const ATarget: string);
   var
     s: TCellStyle;
-    z2: Integer;
+    z2, info: Integer;
     d: TJSONData;
     sh: TTyXYWH;
+    rectSilent: Boolean;
+    band: Double;
   begin
+    info := NewInfo(ATarget, ALocX, ALocY);
+    AMatrix.FCellInfos[info].HasText := AHasText;
+    AMatrix.FCellInfos[info].Value := AText;
     s := CellStyleOf(ACell, AParent, 'itemStyle', AStroke, ANoStroke);
     { z2: the cell's, its parent's, else special for a cell with its own
       itemStyle }
@@ -1412,10 +1979,25 @@ var
     if (d <> nil) and (d.JSONType = jtNumber) then z2 := Trunc(d.AsFloat)
     else if (ACell <> nil) and Truthy(ACell.Find('itemStyle')) then z2 := ASpecial
     else z2 := ANormal;
-    sh := AddRect(AShape, s, z2);
+    { THE RECT'S silent: the cell's, its parent's, else silent unless it is
+      filled -- with no fill only the outline would answer, which upstream
+      deliberately avoids; written false, it is that outline (zrender's
+      stroke band, at least 5 px) and nothing with no stroke [Batch 147] }
+    d := nil;
+    if ACell <> nil then d := ACell.Find('silent');
+    if JNull(d) and (AParent <> nil) then d := AParent.Find('silent');
+    if not JNull(d) then rectSilent := Truthy(d)
+    else rectSilent := not s.HasFill;
+    band := 0;
+    if not rectSilent and not s.HasFill then
+    begin
+      if ((s.Stroke shr 24) <> 0) and (s.LineWidth > 0) then band := Max(s.LineWidth, 5)
+      else rectSilent := True;
+    end;
+    sh := AddRect(AShape, s, z2, rectSilent, info, band);
     if AHasText then
       AddLabel(AText, ALocX, ALocY, ObjIn(ACell, 'label'), ObjIn(AParent, 'label'),
-        sh, s.LineWidth, z2);
+        sh, s.LineWidth, z2, info);
   end;
 
 var
@@ -1423,7 +2005,7 @@ var
   di, i, ix, iy, nx, ny: Integer;
   sh: TTyXYWH;
   c: TTyMatrixCell;
-  bodyNode, cornerNode: TJSONObject;
+  bodyNode, cornerNode, tip: TJSONObject;
   bg, border: TCellStyle;
   bs: TTyOptStyle;
   none: Boolean;
@@ -1432,10 +2014,14 @@ var
 begin
   Result := 0;
   added := 0;
+  if AMatrix <> nil then AMatrix.FCellInfoN := 0;
   if (AMatrix = nil) or not AMatrix.Valid or (AList = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   z := AMatrix.Z;
   node := AMatrix.Node;
+  triggerEv := AMatrix.TriggerEvent;
+  tip := AMatrix.TooltipNode;
+  tipShow := (tip <> nil) and Truthy(tip.Find('show'));
   xd := AMatrix.Dims[0];
   yd := AMatrix.Dims[1];
 
@@ -1447,8 +2033,12 @@ begin
     for i := 0 to dm.CellCount - 1 do
     begin
       c := dm.Cells[i];
-      AddCell(c.Node, dm.Node, c.Rect, True, c.Value, TyMatrixZ2DimNormal,
-        TyMatrixZ2DimSpecial, AInk.CellBorder, False, c.Id[0], c.Id[1]);
+      if di = 0 then
+        AddCell(c.Node, dm.Node, c.Rect, True, c.Value, TyMatrixZ2DimNormal,
+          TyMatrixZ2DimSpecial, AInk.CellBorder, False, c.Id[0], c.Id[1], 'x')
+      else
+        AddCell(c.Node, dm.Node, c.Rect, True, c.Value, TyMatrixZ2DimNormal,
+          TyMatrixZ2DimSpecial, AInk.CellBorder, False, c.Id[0], c.Id[1], 'y');
     end;
   end;
 
@@ -1461,7 +2051,7 @@ begin
       xd.UnitOf(0, ix, sh.X, sh.W);
       yd.UnitOf(1, iy, sh.Y, sh.H);
       AddCell(nil, bodyNode, sh, False, '', TyMatrixZ2BodyNormal, TyMatrixZ2BodySpecial,
-        AInk.CellBorder, False, ix, iy);
+        AInk.CellBorder, False, ix, iy, 'body');
     end;
 
   { ---- the corner, when both trees show: x's levels, y's levels ---- }
@@ -1476,7 +2066,7 @@ begin
         yd.UnitOf(0, ix - ny, sh.X, sh.W);
         xd.UnitOf(1, iy - nx, sh.Y, sh.H);
         AddCell(nil, cornerNode, sh, False, '', TyMatrixZ2BodyNormal, TyMatrixZ2BodySpecial,
-          0, True, ix - ny, iy - nx);
+          0, True, ix - ny, iy - nx, 'corner');
       end;
   end;
 

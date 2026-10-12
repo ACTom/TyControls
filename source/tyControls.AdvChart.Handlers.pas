@@ -112,6 +112,9 @@ type
     { A GRAPHIC ELEMENT'S `info` [Batch 122], as JSON text ('' where the
       element has none): what its ECData's eventData carries into an event }
     Info: string;
+    { A MATRIX CELL'S locator pair, upstream's `coord` in its eventData and
+      `xyLocator` in its tooltip's params; empty elsewhere [Batch 147] }
+    Coord: TTyDoubleArray;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 

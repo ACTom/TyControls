@@ -2104,6 +2104,9 @@ type
     function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
     procedure RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
     function CalendarPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+    function MatrixGraphPoints(ASeriesIndex: Integer; AMatrix: TTyMatrix): TTyPointFArray;
+    function MatrixBoxLayout(ASlot: Integer; ACentre: Boolean; out ARect: TTyXYWH;
+      out AFromCentre: Boolean): Boolean;
     function CalendarGraphPoints(ASeriesIndex: Integer;
       ACal: TTyCalendar): TTyPointFArray;
     procedure SymbolItems(ASeriesIndex: Integer; const ABase: TTySymbolSpec;
@@ -2211,7 +2214,14 @@ type
       date, the finder parsed against the option's models, each coordinate
       system asked in upstream's order }
     procedure ConvertReady;
-    function ConvertDispatch(AFinder, AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
+    function ConvertDispatch(AFinder, AValue: TJSONData; AFrom: Boolean;
+      AOpt: TJSONData = nil): TTyConvertResult;
+    { Matrix.convertToPixel / convertFromPixel, the opt's clamp [Batch 147] }
+    function ConvertOnMatrix(AMatrix: TTyMatrix; AValue, AOpt: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
+    { the matrix a finder names: its matrix, else its series' when that is
+      on a matrix per item (getCoordSys) [Batch 147] }
+    function FinderMatrix(const AF: TTyParsedFinder): Integer;
     function ConvertOnGrid(AGrid: TTyGridBuild; const AF: TTyParsedFinder;
       AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
     function ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
@@ -2305,6 +2315,11 @@ type
     { a series item, or a markPoint / markLine / markArea item }
     function TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
     function TipIsMarker(const ADatum: TTyChartDatumRef): Boolean;
+    { [Batch 147] a matrix cell with words (it has a tooltip config) }
+    function TipIsMatrix(const ADatum: TTyChartDatumRef): Boolean;
+    function MatrixCellOf(const ADatum: TTyChartDatumRef; out AMatrix: TTyMatrix;
+      out AInfo: TTyMatrixCellInfo): Boolean;
+    function MatrixTipText(const AFormatter: string; const ADatum: TTyChartDatumRef): string;
     { the spec a snapshot is shown under: the global one for an axis
       tooltip, the cascade for an item }
     function TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
@@ -3482,11 +3497,25 @@ type
     function ConvertToPixel(const AFinderJson, AValueJson: string): string; overload;
     function ConvertToPixel(const AFinderJson: string; const AValue: array of Double): TTyConvertResult; overload;
     function ConvertToPixel(const AFinderJson: string; AValue: Double): TTyConvertResult; overload;
-    function ConvertToPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+    function ConvertToPixelData(AFinder, AValue: TJSONData; AOpt: TJSONData = nil): TTyConvertResult;
+    { [Batch 147] the opt: a matrix's `clamp` (0 none, 1 all, 2 body, 3
+      corner, MatrixClampOption) }
+    function ConvertToPixel(const AFinderJson, AValueJson, AOptJson: string): string; overload;
     function ConvertFromPixel(const AFinderJson, APixelJson: string): string; overload;
     function ConvertFromPixel(const AFinderJson: string; AX, AY: Double): TTyConvertResult; overload;
     function ConvertFromPixel(const AFinderJson: string; AValue: Double): TTyConvertResult; overload;
-    function ConvertFromPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+    function ConvertFromPixelData(AFinder, AValue: TJSONData; AOpt: TJSONData = nil): TTyConvertResult;
+    function ConvertFromPixel(const AFinderJson, APixelJson, AOptJson: string): string; overload;
+    { upstream's chart.convertToLayout [Batch 147]: the calendars' (a day's
+      cell and content rect) and the matrices' (the cells a coord covers,
+      ranges and the opt's clamp included, and matrixXYLocatorRange). The
+      JSON form answers an object of "rect" (x, y, width, height) and
+      "contentRect" or "matrixXYLocatorRange" (a coordinate that is not a
+      finite number prints as null), or '' when nothing answered. }
+    function ConvertToLayout(const AFinderJson, AValueJson: string;
+      const AOptJson: string = ''): string;
+    function ConvertToLayoutData(AFinder, AValue: TJSONData;
+      AOpt: TJSONData = nil): TTyConvertLayout;
     { Whether any model the finder names contains the point: a grid or a
       cartesian series by its first cartesian's area (edges included), a
       graph, tree or sankey by its view, a pie by the ring of its first
@@ -4971,7 +5000,12 @@ begin
       { ON A MATRIX [Batch 145]: Matrix.getDimensionsInfo -- x and y are
         ordinal on the header trees' own category lists (a collecting tree
         takes the names as they come), then the value }
-      if (FBindings[i].MatrixIndex >= 0) and (FBindings[i].MatrixIndex <= High(FMatrices)) then
+      { [Batch 147] not a pie or a funnel (their own value column) nor a
+        graph (its nodes the graph's way; the points are MatrixGraphPoints') }
+      if (FBindings[i].MatrixIndex >= 0) and (FBindings[i].MatrixIndex <= High(FMatrices))
+        and (FBindings[i].SeriesType <> TyPieSeriesTypeName)
+        and (FBindings[i].SeriesType <> TyFunnelSeriesTypeName)
+        and (FBindings[i].SeriesType <> TyGraphSeriesTypeName) then
       begin
         FSeriesDataset[i] := -1;
         SetLength(dims, 3);
@@ -4986,6 +5020,11 @@ begin
         st.UseOrdinalMeta(0, FMatrices[FBindings[i].MatrixIndex].Dims[0].Meta);
         st.UseOrdinalMeta(1, FMatrices[FBindings[i].MatrixIndex].Dims[1].Meta);
         TyFillSeriesStore(FOption, i, dims, st);
+        { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is
+          no coordinate dimension, x and y are ordinal: defaultedTooltip is
+          empty), so it shows every element of the item [Batch 147] }
+        if (FBindings[i].SeriesType = 'scatter') or (FBindings[i].SeriesType = 'effectScatter') then
+          st.SetTooltipPositions(nil);
         Continue;
       end;
       if FBindings[i].RadarIndex >= 0 then
@@ -10242,7 +10281,9 @@ end;
 
 procedure TTyAdvanceChart.SolvePies;
 var
-  i, dim: Integer;
+  i, dim, k: Integer;
+  cell: TTyXYWH;
+  fromCentre: Boolean;
 begin
   SetLength(FPies, Length(FBindings));
   SetLength(FPieSpecs, Length(FBindings));
@@ -10263,6 +10304,30 @@ begin
       and (FBindings[i].CalendarIndex <= High(FCalendars)) then
     begin
       FPies[i] := CalendarPieLayout(i, dim);
+      Continue;
+    end;
+    { A PIE IN A MATRIX CELL [Batch 147]: createBoxLayoutReference asks the
+      matrix's dataToLayout for `coord`, else for `center` read as one; the
+      box and a percentage radius are taken against that rect, and the
+      centre is the rect's own centre when the coord came from `center`.
+      A cell of no position draws nothing. }
+    if FBindings[i].MatrixBox and (FBindings[i].MatrixIndex >= 0)
+      and (FBindings[i].MatrixIndex <= High(FMatrices)) then
+    begin
+      MatrixBoxLayout(i, True, cell, fromCentre);
+      FPies[i] := TyPieLayoutOf(FPieSpecs[i], TyRectF(cell.X, cell.Y, cell.X + cell.W,
+        cell.Y + cell.H), FStores[i], dim);
+      if fromCentre then
+      begin
+        FPies[i].CX := cell.X + cell.W / 2;
+        FPies[i].CY := cell.Y + cell.H / 2;
+        for k := 0 to High(FPies[i].Sectors) do
+        begin
+          FPies[i].Sectors[k].CX := FPies[i].CX;
+          FPies[i].Sectors[k].CY := FPies[i].CY;
+        end;
+      end;
+      if IsNan(FPies[i].CX) or IsNan(FPies[i].CY) then FPies[i].Valid := False;
       Continue;
     end;
     FPies[i] := TyPieLayoutOf(FPieSpecs[i], FLastRect, FStores[i], dim);
@@ -10333,6 +10398,8 @@ end;
 procedure TTyAdvanceChart.SolveFunnels;
 var
   i, dim: Integer;
+  cell: TTyXYWH;
+  fromCentre: Boolean;
 begin
   SetLength(FFunnels, Length(FBindings));
   SetLength(FFunnelSpecs, Length(FBindings));
@@ -10348,9 +10415,53 @@ begin
     { FLastRect, not a grid -- a funnel is laid out against the CONTROL and
       its own left/top/right/bottom shrink that, the same rule a pie follows
       and for the same reason. }
+    { A FUNNEL IN A MATRIX CELL: its box against the cell its `coord` names
+      (a funnel reads no `center`) [Batch 147] }
+    if FBindings[i].MatrixBox and (FBindings[i].MatrixIndex >= 0)
+      and (FBindings[i].MatrixIndex <= High(FMatrices)) then
+    begin
+      MatrixBoxLayout(i, False, cell, fromCentre);
+      { getLayoutRect of the series' box in the cell, as upstream holds both }
+      FFunnels[i] := TyFunnelLayoutInView(FFunnelSpecs[i],
+        TyGetLayoutRect(TyBoxSpecRaw(FFunnelSpecs[i].Box), cell.X, cell.Y, cell.W,
+        cell.H, []), FStores[i], dim);
+      if IsNan(cell.X) or IsNan(cell.Y) or IsNan(cell.W) or IsNan(cell.H) then
+        FFunnels[i].Valid := False;
+      Continue;
+    end;
     FFunnels[i] := TyFunnelLayoutOf(FFunnelSpecs[i], FLastRect,
       FStores[i], dim);
   end;
+end;
+
+{ createBoxLayoutReference on a matrix [Batch 147]: getCoordForCoordSysUsageKindBox
+  -- `coord` when written (not null), else (a pie's getCoord2) `center` --
+  and the matrix's dataToLayout of it, no clamp; device px }
+function TTyAdvanceChart.MatrixBoxLayout(ASlot: Integer; ACentre: Boolean;
+  out ARect: TTyXYWH; out AFromCentre: Boolean): Boolean;
+var
+  node, d: TJSONData;
+  loc: TTyMatrixLocRange;
+  m: TTyMatrix;
+begin
+  ARect := TyXYWH(NaN, NaN, NaN, NaN);
+  AFromCentre := False;
+  Result := False;
+  m := FMatrices[FBindings[ASlot].MatrixIndex];
+  if m = nil then Exit;
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  d := nil;
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('coord');
+    if ((d = nil) or (d.JSONType = jtNull)) and ACentre then
+    begin
+      d := TJSONObject(node).Find('center');
+      AFromCentre := True;
+    end;
+  end;
+  TyMatrixLayoutJson(m, d, mclNone, ARect, loc);
+  Result := not IsNan(ARect.X) and not IsNan(ARect.Y);
 end;
 
 procedure TTyAdvanceChart.FreeRadars;
@@ -14903,6 +15014,21 @@ begin
       FGraphCats[i] := solved.Cats;
       Continue;
     end;
+    { A GRAPH ON A MATRIX: each node at dataToPoint of its x and y, under
+      the simple layout's rule for which nodes are placed [Batch 147] }
+    if (FBindings[i].MatrixIndex >= 0) and not FBindings[i].MatrixBox
+      and (FBindings[i].MatrixIndex <= High(FMatrices))
+      and (FMatrices[FBindings[i].MatrixIndex] <> nil) and (store <> nil) then
+    begin
+      solved := TyGraphSolveAtPoints(FOption, si, store,
+        MatrixGraphPoints(si, FMatrices[FBindings[i].MatrixIndex]));
+      FGraphLaidOut[i] := True;
+      FGraphSpecs[i] := solved.Spec;
+      FGraphNodes[i] := solved.Nodes;
+      FGraphEdges[i] := solved.Edges;
+      FGraphCats[i] := solved.Cats;
+      Continue;
+    end;
     { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar, geo --
       and a graph on one resolves and draws nothing rather than being quietly
       given a view it did not ask for. }
@@ -18428,6 +18554,74 @@ begin
   end;
 end;
 
+{ A GRAPH ON A MATRIX [Batch 147]: createSeriesData with the matrix's
+  dimensions -- x and y ordinal on the trees' category lists (a name its
+  ordinal or nothing, a number as it is), the value a number -- and
+  graphSimpleLayout: a node with any of the three a number is placed at
+  dataToPoint([x, y]), the others nowhere. }
+function TTyAdvanceChart.MatrixGraphPoints(ASeriesIndex: Integer;
+  AMatrix: TTyMatrix): TTyPointFArray;
+var
+  node, d, it, arr: TJSONData;
+  k: Integer;
+  x, y, v: Double;
+
+  function Part(AIndex: Integer): TJSONData;
+  begin
+    Result := nil;
+    if (arr is TJSONArray) and (AIndex < arr.Count) then Result := arr.Items[AIndex]
+    else if (AIndex = 0) and (arr <> nil) and not (arr is TJSONArray)
+      and not (arr is TJSONObject) then Result := arr;
+  end;
+
+  function Ord_(ADim: Integer; A: TJSONData): Double;
+  var o: Integer;
+  begin
+    Result := NaN;
+    if A = nil then Exit;
+    case A.JSONType of
+      jtNumber: Result := A.AsFloat;
+      jtString:
+        begin
+          o := AMatrix.Dims[ADim].Meta.GetOrdinal(A.AsString);
+          if o >= 0 then Result := o;
+        end;
+    end;
+  end;
+
+  function Num(A: TJSONData): Double;
+  begin
+    Result := NaN;
+    if A = nil then Exit;
+    case A.JSONType of
+      jtNumber: Result := A.AsFloat;
+      jtString:
+        if (A.AsString <> '') and (A.AsString <> '-') then Result := TyJsToNumber(A.AsString);
+    end;
+  end;
+
+begin
+  Result := nil;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then d := TJSONObject(node).Find('nodes');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  SetLength(Result, d.Count);
+  for k := 0 to d.Count - 1 do
+  begin
+    Result[k] := TyPointF(NaN, NaN);
+    it := d.Items[k];
+    arr := it;
+    if it is TJSONObject then arr := TJSONObject(it).Find('value');
+    x := Ord_(0, Part(0));
+    y := Ord_(1, Part(1));
+    v := Num(Part(2));
+    if IsNan(x) and IsNan(y) and IsNan(v) then Continue;
+    Result[k] := AMatrix.DataToPoint([x, y]);
+  end;
+end;
+
 { Each object data item's own symbol options over the series' spec. }
 procedure TTyAdvanceChart.SymbolItems(ASeriesIndex: Integer;
   const ABase: TTySymbolSpec; out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
@@ -20729,7 +20923,16 @@ var
   kind: TTyMarkerKind;
   blk: TTyMkBlock;
   it, opt: Integer;
+  mx: TTyMatrix;
+  info: TTyMatrixCellInfo;
 begin
+  { A MATRIX CELL'S: the matrix's tooltip, the matrix, its name as the
+    formatter [Batch 147] }
+  if TipIsMatrix(ADatum) then
+  begin
+    MatrixCellOf(ADatum, mx, info);
+    Exit(TyTooltipSpecOfMatrix(FOption, ADatum.ComponentIndex, info.TipName));
+  end;
   { A MARKER'S CASCADE IS ITS OWN [Batch 100]: its data item, the marker,
     the global -- never the host series' }
   if TipIsMarker(ADatum) then
@@ -20975,6 +21178,8 @@ end;
 function TTyAdvanceChart.TooltipParams(
   const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
+  mx: TTyMatrix;
+  info: TTyMatrixCellInfo;
   slot, i, n: Integer;
   cols: TTyIntegerArray;
   st: TTyDataStore;
@@ -20983,6 +21188,19 @@ var
   tvText: string;
 begin
   if TipIsMarker(ADatum) then Exit(MarkerTooltipParams(ADatum));
+  { a matrix cell's formatterParams: componentType, name, matrixIndex and
+    xyLocator [Batch 147] }
+  if MatrixCellOf(ADatum, mx, info) then
+  begin
+    Result := TyChartBlankParams;
+    Result.ComponentType := 'matrix';
+    Result.ComponentIndex := ADatum.ComponentIndex;
+    Result.Name := info.TipName;
+    SetLength(Result.Coord, 2);
+    Result.Coord[0] := info.Loc[0];
+    Result.Coord[1] := info.Loc[1];
+    Exit;
+  end;
   Result := TyChartBlankParams;
   Result.ComponentType := 'series';
   Result.SeriesIndex := ADatum.SeriesIndex;
@@ -21330,6 +21548,8 @@ begin
   { [Batch 100] a marker's own formatTooltip; a sunburst's, a treemap's and
     a sankey's }
   if TipIsMarker(ADatum) then Exit(MarkerTooltipContent(ADatum));
+  { a matrix cell has no content but its formatter's [Batch 147] }
+  if ADatum.Kind = ctkMatrix then Exit;
   if HierTooltipContent(ADatum, DatumColour(ADatum), Result) then Exit;
   { a lines row: LinesSeries.formatTooltip [Batch 121] }
   if LinesTooltip(ADatum, Result) then Exit;
@@ -21747,7 +21967,7 @@ end;
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
-    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic');
+    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix');
 var
   i, k, g, a, q, idx, slot, nth: Integer;
   lay: TTyTitleLayout;
@@ -21766,6 +21986,8 @@ var
   nm, mainT: string;
   gel: TTyGfxEl;
   piece: TTyBrushPiece;
+  mxc: TTyMatrix;
+  mxInfo: TTyMatrixCellInfo;
 
   function Inside(const AR: TTyRectF): Boolean;
   begin
@@ -22051,6 +22273,28 @@ begin
               Result.Model.Id := FOption.ComponentId('graphic', d.ComponentIndex);
             end;
           end;
+        end;
+      ctkMatrix:
+        begin
+          { [Batch 147] A MATRIX CELL, its rect or its label: the cell's
+            eventData when the matrix says triggerEvent -- componentType,
+            matrixIndex, targetType, the label's text as name, the cell's
+            value, its locator pair as coord }
+          if not MatrixCellOf(d, mxc, mxInfo) then Exit;
+          if not mxc.TriggerEvent then Exit;
+          Result.HasData := True;
+          Result.Params.ComponentType := 'matrix';
+          Result.Params.ComponentIndex := d.ComponentIndex;
+          Result.Params.TargetType := mxInfo.Target;
+          if mxInfo.HasName then Result.Params.Name := mxInfo.Name;
+          if mxInfo.HasText then Result.Params.ValueText := mxInfo.Value;
+          SetLength(Result.Params.Coord, 2);
+          Result.Params.Coord[0] := mxInfo.Loc[0];
+          Result.Params.Coord[1] := mxInfo.Loc[1];
+          Result.Model.Valid := True;
+          Result.Model.MainType := 'matrix';
+          Result.Model.Index := d.ComponentIndex;
+          Result.Model.Id := FOption.ComponentId('matrix', d.ComponentIndex);
         end;
       ctkLegendSelector, ctkLegendPager:
         begin
@@ -27225,7 +27469,7 @@ end;
   [Batch 128]), the polars and (were it here) singleAxis, then the
   calendars -- and the first answer that is not null/undefined }
 function TTyAdvanceChart.ConvertDispatch(AFinder, AValue: TJSONData;
-  AFrom: Boolean): TTyConvertResult;
+  AFrom: Boolean; AOpt: TJSONData): TTyConvertResult;
 var
   pf: TTyParsedFinder;
   g, slot, s, c, target: Integer;
@@ -27298,6 +27542,14 @@ begin
       Result := ConvertOnCalendar(FCalendars[c], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
     end;
+    { THE MATRICES, last (registered after the calendar, both non-series
+      box creators) [Batch 147] }
+    target := FinderMatrix(pf);
+    if (target >= 0) and (target <= High(FMatrices)) and (FMatrices[target] <> nil) then
+    begin
+      Result := ConvertOnMatrix(FMatrices[target], AValue, AOpt, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
   except
     on ETyConvertNull do
     begin
@@ -27340,8 +27592,16 @@ begin
   { a parallel's containPoint [Batch 128] }
   if b.Parallel is TTyParallel then
     Exit(TyParallelContainJson(TTyParallel(b.Parallel), APoint));
-  { a matrix series' containPoint is part two [Batch 145] }
-  if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) or (b.MatrixIndex >= 0) then Exit;
+  { A SERIES ON A MATRIX per item: the matrix's containPoint, its rect
+    edges included; a pie or a funnel laid out in a cell has no coordinate
+    system and its view answers [Batch 147] }
+  if (b.MatrixIndex >= 0) and not b.MatrixBox then
+  begin
+    if (b.MatrixIndex <= High(FMatrices)) and (FMatrices[b.MatrixIndex] <> nil) then
+      Exit(FMatrices[b.MatrixIndex].ContainPoint(TyJsonPoint(APoint)));
+    Exit;
+  end;
+  if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) then Exit;
   pt := TyJsonPoint(APoint);
   if IsNan(pt.X) or IsNan(pt.Y) then Exit;
   if (b.SeriesType = TyGraphSeriesTypeName) and (slot <= High(FGraphs))
@@ -27449,6 +27709,14 @@ begin
           g := ParallelOfAxis(pf.Types[t].Models[k]);
           if (g >= 0) and TyParallelContainJson(FParallels[g], APoint) then
             Exit(True);
+        end
+        { Matrix.containPoint: its rect, edges included [Batch 147] }
+        else if mt = TyMatrixCoordSysName then
+        begin
+          g := pf.Types[t].Models[k];
+          if (g >= 0) and (g <= High(FMatrices)) and (FMatrices[g] <> nil)
+            and FMatrices[g].ContainPoint(TyJsonPoint(APoint)) then
+            Exit(True);
         end;
         { a calendar's and a radar's containPoint are not implemented
           upstream (false); an axis has no coordinate system; singleAxis
@@ -27461,14 +27729,131 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+function TTyAdvanceChart.ConvertToPixelData(AFinder, AValue: TJSONData;
+  AOpt: TJSONData): TTyConvertResult;
 begin
-  Result := ConvertDispatch(AFinder, AValue, False);
+  Result := ConvertDispatch(AFinder, AValue, False, AOpt);
 end;
 
-function TTyAdvanceChart.ConvertFromPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+function TTyAdvanceChart.ConvertFromPixelData(AFinder, AValue: TJSONData;
+  AOpt: TJSONData): TTyConvertResult;
 begin
-  Result := ConvertDispatch(AFinder, AValue, True);
+  Result := ConvertDispatch(AFinder, AValue, True, AOpt);
+end;
+
+function TTyAdvanceChart.FinderMatrix(const AF: TTyParsedFinder): Integer;
+var s, slot: Integer;
+begin
+  Result := TyFinderModel(AF, TyMatrixCoordSysName);
+  if Result >= 0 then Exit;
+  s := TyFinderModel(AF, 'series');
+  if s < 0 then Exit;
+  slot := SlotOfSeries(s);
+  if (slot >= 0) and (FBindings[slot].MatrixIndex >= 0) and not FBindings[slot].MatrixBox then
+    Result := FBindings[slot].MatrixIndex;
+end;
+
+function TTyAdvanceChart.ConvertOnMatrix(AMatrix: TTyMatrix; AValue, AOpt: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+var
+  clamp: TTyMatrixClamp;
+  pt: TTyPointF;
+  x, y: Double;
+  r: TTyXYWH;
+  loc: TTyMatrixLocRange;
+  mask: TFPUExceptionMask;
+begin
+  Result := TyConvertNone;
+  clamp := TyMatrixClampOfOpt(AOpt);
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    if AFrom then
+    begin
+      { pointToData: each coordinate on its own -- upstream indexes the
+        pixel, so a null pixel throws }
+      pt := TyJsonPoint(AValue);
+      AMatrix.PointToDataClamp(pt, clamp, x, y);
+      Exit(TyConvertXY(x, y));
+    end;
+    { dataToPoint: the centre of dataToLayout; never nothing, [NaN, NaN]
+      at worst }
+    TyMatrixLayoutJson(AMatrix, AValue, clamp, r, loc);
+    Result := TyConvertXY(r.X + r.W / 2, r.Y + r.H / 2);
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToLayoutData(AFinder, AValue: TJSONData;
+  AOpt: TJSONData): TTyConvertLayout;
+var
+  pf: TTyParsedFinder;
+  s, slot, c, target: Integer;
+  v, own: TJSONData;
+  dv: TTyDataValue;
+  rc, cc: TTyXYWH;
+  loc: TTyMatrixLocRange;
+  mask: TFPUExceptionMask;
+begin
+  Result := Default(TTyConvertLayout);
+  ConvertReady;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  pf := TyParseFinder(AFinder, FOption.Keys);
+  own := nil;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+  try
+    s := TyFinderModel(pf, 'series');
+    { THE CALENDARS: dataToLayout of the value (its first element when an
+      array), clamped to the range -- a day's cell and its content rect }
+    for c := 0 to High(FCalendars) do
+    begin
+      if FCalendars[c] = nil then Continue;
+      target := TyFinderModel(pf, 'calendar');
+      if (target < 0) and (s >= 0) then
+      begin
+        slot := SlotOfSeries(s);
+        if slot >= 0 then target := FBindings[slot].CalendarIndex;
+      end;
+      if target <> c then Continue;
+      v := AValue;
+      if TyJsonIsArray(AValue) then v := TyJsonElement(AValue, 0, own);
+      dv := Default(TTyDataValue);
+      dv.Kind := dvkNone;
+      if not TyJsonNullish(v) then
+      begin
+        if v.JSONType = jtString then dv := TyDataText(v.AsString)
+        else dv := TyDataNum(TyJsonToNumber(v));
+      end;
+      FCalendars[c].DateLayoutXYWH(FCalendars[c].ParseDate(dv), True, rc, cc);
+      Result.Valid := True;
+      Result.Rect := rc;
+      Result.HasContentRect := True;
+      Result.ContentRect := cc;
+      Exit;
+    end;
+    { THE MATRICES: the cells the coord covers }
+    target := FinderMatrix(pf);
+    if (target >= 0) and (target <= High(FMatrices)) and (FMatrices[target] <> nil) then
+    begin
+      TyMatrixLayoutJson(FMatrices[target], AValue, TyMatrixClampOfOpt(AOpt), rc, loc);
+      Result.Valid := True;
+      Result.Rect := rc;
+      Result.HasLocatorRange := True;
+      Result.LocatorRange[0][0] := loc[0][0];
+      Result.LocatorRange[0][1] := loc[0][1];
+      Result.LocatorRange[1][0] := loc[1][0];
+      Result.LocatorRange[1][1] := loc[1][1];
+    end;
+  except
+    on ETyConvertNull do Result := Default(TTyConvertLayout);
+  end;
+  finally
+    own.Free;
+    ConvertUnmask(mask);
+  end;
 end;
 
 { The finder text: JSON, or -- written bare -- a main type's name }
@@ -27531,6 +27916,77 @@ begin
   finally
     f.Free;
     v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToPixel(const AFinderJson, AValueJson,
+  AOptJson: string): string;
+var f, v, o: TJSONData;
+begin
+  Result := '';
+  f := ConvertParse(AFinderJson, True);
+  v := ConvertParse(AValueJson, False);
+  o := ConvertParse(AOptJson, False);
+  try
+    if (f = nil) or (v = nil) then Exit;
+    Result := ConvertResultJson(ConvertToPixelData(f, v, o));
+  finally
+    f.Free;
+    v.Free;
+    o.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertFromPixel(const AFinderJson, APixelJson,
+  AOptJson: string): string;
+var f, v, o: TJSONData;
+begin
+  Result := '';
+  f := ConvertParse(AFinderJson, True);
+  v := ConvertParse(APixelJson, False);
+  o := ConvertParse(AOptJson, False);
+  try
+    if (f = nil) or (v = nil) then Exit;
+    Result := ConvertResultJson(ConvertFromPixelData(f, v, o));
+  finally
+    f.Free;
+    v.Free;
+    o.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToLayout(const AFinderJson, AValueJson: string;
+  const AOptJson: string): string;
+var
+  f, v, o: TJSONData;
+  r: TTyConvertLayout;
+
+  function RectJson(const R_: TTyXYWH): string;
+  begin
+    Result := '{"x":' + ConvertNumJson(R_.X) + ',"y":' + ConvertNumJson(R_.Y)
+      + ',"width":' + ConvertNumJson(R_.W) + ',"height":' + ConvertNumJson(R_.H) + '}';
+  end;
+
+begin
+  Result := '';
+  f := ConvertParse(AFinderJson, True);
+  v := ConvertParse(AValueJson, False);
+  o := ConvertParse(AOptJson, False);
+  try
+    if (f = nil) or (v = nil) then Exit;
+    r := ConvertToLayoutData(f, v, o);
+    if not r.Valid then Exit;
+    Result := '{"rect":' + RectJson(r.Rect);
+    if r.HasContentRect then Result := Result + ',"contentRect":' + RectJson(r.ContentRect);
+    if r.HasLocatorRange then
+      Result := Result + ',"matrixXYLocatorRange":[[' + ConvertNumJson(r.LocatorRange[0][0])
+        + ',' + ConvertNumJson(r.LocatorRange[0][1]) + '],[' + ConvertNumJson(r.LocatorRange[1][0])
+        + ',' + ConvertNumJson(r.LocatorRange[1][1]) + ']]';
+    Result := Result + '}';
+  finally
+    f.Free;
+    v.Free;
+    o.Free;
   end;
 end;
 
@@ -31034,7 +31490,58 @@ end;
 
 function TTyAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
 begin
-  Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum);
+  Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum) or TipIsMatrix(ADatum);
+end;
+
+function TTyAdvanceChart.MatrixCellOf(const ADatum: TTyChartDatumRef;
+  out AMatrix: TTyMatrix; out AInfo: TTyMatrixCellInfo): Boolean;
+begin
+  AMatrix := nil;
+  AInfo := Default(TTyMatrixCellInfo);
+  Result := False;
+  if (ADatum.Kind <> ctkMatrix) or (ADatum.ComponentIndex < 0)
+    or (ADatum.ComponentIndex > High(FMatrices)) then Exit;
+  AMatrix := FMatrices[ADatum.ComponentIndex];
+  if (AMatrix = nil) or (ADatum.DataIndex < 0)
+    or (ADatum.DataIndex >= AMatrix.CellInfoCount) then Exit;
+  AInfo := AMatrix.CellInfo(ADatum.DataIndex);
+  Result := True;
+end;
+
+{ setTooltipConfig is called for a cell with a textValue only }
+function TTyAdvanceChart.TipIsMatrix(const ADatum: TTyChartDatumRef): Boolean;
+var
+  m: TTyMatrix;
+  info: TTyMatrixCellInfo;
+begin
+  Result := MatrixCellOf(ADatum, m, info) and info.HasText;
+end;
+
+{ formatTpl over a component item's params: $vars ['name', 'xyLocator'], so
+  the placeholders a / a0 are the cell's name and b / b0 its locator pair as
+  String() prints it -- each replaced at its first occurrence, as a string
+  pattern is (values are not HTML-encoded: the port draws text, not markup) }
+function TTyAdvanceChart.MatrixTipText(const AFormatter: string;
+  const ADatum: TTyChartDatumRef): string;
+var
+  m: TTyMatrix;
+  info: TTyMatrixCellInfo;
+
+  procedure First(const AFind, AWith: string);
+  var p: Integer;
+  begin
+    p := Pos(AFind, Result);
+    if p > 0 then
+      Result := Copy(Result, 1, p - 1) + AWith + Copy(Result, p + Length(AFind), MaxInt);
+  end;
+
+begin
+  Result := AFormatter;
+  if not MatrixCellOf(ADatum, m, info) then Exit;
+  First('{a}', '{a0}');
+  First('{b}', '{b0}');
+  First('{a0}', info.TipName);
+  First('{b0}', IntToStr(info.Loc[0]) + ',' + IntToStr(info.Loc[1]));
 end;
 
 function TTyAdvanceChart.TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
@@ -31345,7 +31852,7 @@ end;
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
-    'markArea', 'legend', 'legend', 'legend', 'graphic');
+    'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix');
 var block: TTyTooltipBlock;
 begin
   Result := '';
@@ -31362,7 +31869,7 @@ begin
     end;
     Exit;
   end;
-  if TipIsMarker(FTipSnap.Datum) then
+  if TipIsMarker(FTipSnap.Datum) or TipIsMatrix(FTipSnap.Datum) then
     Result := cMk[FTipSnap.Datum.Kind] + ':'
       + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + IntToStr(FTipSnap.Datum.DataIndex)
@@ -31888,7 +32395,10 @@ begin
               TTyTimeScale(snap.Hits[k].Axis.Scale).UTC);
           Break;
         end;
-      if not TyChartResolveText(fmtText, params, tipText) then
+      { a matrix cell's template is formatTpl over its own $vars [Batch 147] }
+      if TipIsMatrix(snap.Datum) and not TyChartIsHandlerRef(fmtText) then
+        tipText := MatrixTipText(fmtText, snap.Datum)
+      else if not TyChartResolveText(fmtText, params, tipText) then
         { A named handler that is not registered says so rather than drawing
           nothing -- TyChartResolveText puts the message in the text. }
         ;
@@ -35719,7 +36229,8 @@ end;
 type
   { the coordinate system a custom series is drawn on [Batch 124]:
     cusUnknown one with no prepareCustom (nothing is drawn) }
-  TTyCuSys = (cusUnknown, cusNone, cusCart, cusPolar, cusSingle, cusCalendar);
+  TTyCuSys = (cusUnknown, cusNone, cusCart, cusPolar, cusSingle, cusCalendar,
+    cusMatrix);
 
   { THE API a renderItem is handed: CustomView.makeRenderItem's closures over
     the series' data, its visuals and its coordinate system's prepareCustom
@@ -35737,6 +36248,8 @@ type
     function DimIndexOf(const AName: string): Integer; override;
     function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; override;
     function DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout; override;
+    function DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
+      out ALayout: TTyCustomLayout): TTyDoubleArray; override;
   public
     Chart: TTyAdvanceChart;
     Slot, Series: Integer;
@@ -35745,6 +36258,8 @@ type
     Polar: TTyPolar;
     Single: TTySingle;
     Calendar: TTyCalendar;
+    { [Batch 147] }
+    Matrix: TTyMatrix;
     Store: TTyDataStore;
     Node: TJSONObject;
     { the dataIndexInside of the running call }
@@ -36026,8 +36541,11 @@ end;
   a polar's dataToRadius and dataToAngle through coordToPoint, the radius
   and the angle in radians pushed on; a single's dataToPoint(+v); a
   calendar's dataToPoint (clamped); nothing on no system }
+function CuSecond(const ACells: TTyCustomCellArray): TTyCustomCellArray; forward;
+
 function TTyChartCustomApi.DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray;
 var
+  lay: TTyCustomLayout;
   b: TTySeriesBinding;
   p: TTyPointF;
   cx, cy: TTyCustomCell;
@@ -36080,7 +36598,82 @@ begin
           Result[0] := p.X / Scale;
           Result[1] := p.Y / Scale;
         end;
+      { a matrix cell's centre: one value per direction [Batch 147] }
+      cusMatrix:
+        Result := DoMatrix(Copy(ACells, 0, 1), CuSecond(ACells), 0, lay);
     end;
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ the second cell as one direction's parts: an absent one is one part that
+  names nothing (upstream's [undefined]) }
+function CuSecond(const ACells: TTyCustomCellArray): TTyCustomCellArray;
+begin
+  Result := nil;
+  SetLength(Result, 1);
+  if Length(ACells) > 1 then Result[0] := ACells[1]
+  else Result[0] := Default(TTyCustomCell);
+end;
+
+{ a matrix's dataToLayout of the parts [Batch 147]: a text a header cell's
+  name (the tree's category list), a number an ordinal or a level, nothing
+  NaN; the clamp; css px }
+function TTyChartCustomApi.DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
+  out ALayout: TTyCustomLayout): TTyDoubleArray;
+var
+  parts: array[0..1] of TTyDoubleArray;
+  r: TTyXYWH;
+  loc: TTyMatrixLocRange;
+  cl: TTyMatrixClamp;
+  k, o: Integer;
+  mask: TFPUExceptionMask;
+
+  function CellOf(ADim: Integer; const C: TTyCustomCell): Double;
+  begin
+    Result := NaN;
+    case C.Kind of
+      cckNumber: Result := C.Num;
+      cckText:
+        begin
+          o := Matrix.Dims[ADim].Meta.GetOrdinal(C.Text);
+          if o >= 0 then Result := o;
+        end;
+    end;
+  end;
+
+begin
+  ALayout := Default(TTyCustomLayout);
+  Result := nil;
+  if (Sys <> cusMatrix) or (Matrix = nil) then Exit;
+  SetLength(parts[0], Length(AX));
+  for k := 0 to High(AX) do parts[0][k] := CellOf(0, AX[k]);
+  SetLength(parts[1], Length(AY));
+  for k := 0 to High(AY) do parts[1][k] := CellOf(1, AY[k]);
+  case AClamp of
+    0: cl := mclNone;
+    2: cl := mclBody;
+    3: cl := mclCorner;
+  else
+    cl := mclAll;
+  end;
+  mask := CuMask;
+  try
+    Matrix.DataToLayoutRange(parts[0], parts[1], cl, r, loc);
+    ALayout.Valid := True;
+    ALayout.Rect.X := r.X / Scale;
+    ALayout.Rect.Y := r.Y / Scale;
+    ALayout.Rect.Width := r.W / Scale;
+    ALayout.Rect.Height := r.H / Scale;
+    ALayout.HasLocatorRange := True;
+    ALayout.LocatorRange[0][0] := loc[0][0];
+    ALayout.LocatorRange[0][1] := loc[0][1];
+    ALayout.LocatorRange[1][0] := loc[1][0];
+    ALayout.LocatorRange[1][1] := loc[1][1];
+    SetLength(Result, 2);
+    Result[0] := ALayout.Rect.X + ALayout.Rect.Width / 2;
+    Result[1] := ALayout.Rect.Y + ALayout.Rect.Height / 2;
   finally
     ConvertUnmask(mask);
   end;
@@ -36094,6 +36687,12 @@ var
   mask: TFPUExceptionMask;
 begin
   Result := Default(TTyCustomLayout);
+  { a matrix cell's [Batch 147] }
+  if Sys = cusMatrix then
+  begin
+    DoMatrix(Copy(ACells, 0, 1), CuSecond(ACells), 0, Result);
+    Exit;
+  end;
   if (Sys <> cusCalendar) or (Calendar = nil) then Exit;
   c0 := Default(TTyCustomCell);
   if Length(ACells) > 0 then c0 := ACells[0];
@@ -36101,6 +36700,7 @@ begin
   try
     Calendar.DateLayoutXYWH(CuCalMs(Calendar, c0), True, rc, cc);
     Result.Valid := True;
+    Result.HasContentRect := True;
     Result.Rect.X := rc.X / Scale;
     Result.Rect.Y := rc.Y / Scale;
     Result.Rect.Width := rc.W / Scale;
@@ -36681,6 +37281,7 @@ var
   cal: TTyCalendar;
   pol: TTyPolar;
   sgl: TTySingle;
+  mtx: TTyMatrix;
   isCoord: Boolean;
 
   { getDateInfo's text fields of a range end }
@@ -36740,6 +37341,7 @@ begin
     pol := nil;
     sgl := nil;
     cal := nil;
+    mtx := nil;
     if FBindings[i].Cart <> nil then sys := cusCart
     else if FBindings[i].Polar <> nil then
     begin
@@ -36756,6 +37358,14 @@ begin
     begin
       sys := cusCalendar;
       cal := FCalendars[FBindings[i].CalendarIndex];
+    end
+    { a matrix: prepareCustom's rect, api.coord / api.layout [Batch 147] }
+    else if (FBindings[i].MatrixIndex >= 0) and not FBindings[i].MatrixBox
+      and (FBindings[i].MatrixIndex <= High(FMatrices))
+      and (FMatrices[FBindings[i].MatrixIndex] <> nil) then
+    begin
+      sys := cusMatrix;
+      mtx := FMatrices[FBindings[i].MatrixIndex];
     end
     else if CustomOnNone(i) then sys := cusNone;
     { NOT RENDERED: a series the legend switched off has its group emptied
@@ -36801,6 +37411,7 @@ begin
     api.Polar := pol;
     api.Single := sgl;
     api.Calendar := cal;
+    api.Matrix := mtx;
     FCustomApi := api;
     FCustomSlot := i;
     FCustomParams := Default(TTyCustomParams);
@@ -36870,6 +37481,20 @@ begin
           SetLength(names, 2);
           names[0] := TyCalendarTimeDim;
           names[1] := TyCalendarValueDim;
+        end;
+      cusMatrix:
+        begin
+          { prepareCustom: the matrix rect; the coordinate dimensions are
+            x, y and value }
+          FCustomParams.CoordSys.Type_ := TyMatrixCoordSysName;
+          FCustomParams.CoordSys.X := mtx.Rect.X / scale;
+          FCustomParams.CoordSys.Y := mtx.Rect.Y / scale;
+          FCustomParams.CoordSys.Width := mtx.Rect.W / scale;
+          FCustomParams.CoordSys.Height := mtx.Rect.H / scale;
+          SetLength(names, 3);
+          names[0] := TyMatrixXDim;
+          names[1] := TyMatrixYDim;
+          names[2] := TyMatrixValueDim;
         end;
     else
       begin

@@ -299,6 +299,13 @@ function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
   `trigger: 'axis'` the marker shows no box of its own. }
 function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
   const AKind: string; AItem: Integer): TTyTooltipSpec;
+{ [Batch 147] A MATRIX CELL'S cascade (TooltipView._showComponentItemTooltip
+  over setTooltipConfig): the matrix's `tooltip` (a string is its
+  formatter), the matrix model itself, `{formatter: AContent}` -- the cell's
+  name, so there is always a formatter --, then the global component. The
+  trigger is not consulted for a component item: always 'item'. }
+function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
+  const AContent: string): TTyTooltipSpec;
 
 { ---- content ---- }
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
@@ -994,6 +1001,47 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(TJSONObject(comp), Result, seen);
+end;
+
+function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
+  const AContent: string): TTyTooltipSpec;
+var
+  seen: TTyStringArray;
+  mx: TJSONData;
+  s: string;
+  comp: TJSONObject;
+begin
+  Result := TyTooltipSpecDefault;
+  seen := nil;
+  if AOption = nil then Exit;
+  mx := AOption.ComponentAt('matrix', AMatrixIndex);
+  if not (mx is TJSONObject) then mx := nil;
+  if mx <> nil then
+  begin
+    { the item's own: matrix.tooltip }
+    if TooltipStringOf(mx, s) then
+    begin
+      Result.Formatter := s;
+      Result.HasFormatter := s <> '';
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end;
+    MergeTooltipNode(TooltipNodeOf(mx), Result, seen);
+    { the component model }
+    MergeTooltipNode(TJSONObject(mx), Result, seen);
+  end;
+  { the last level: the content as the formatter }
+  if not Result.HasFormatter then
+  begin
+    Result.Formatter := AContent;
+    Result.HasFormatter := AContent <> '';
+  end;
+  SetLength(seen, Length(seen) + 1);
+  seen[High(seen)] := 'formatter';
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(comp, Result, seen);
+  Result.Trigger := tttItem;
 end;
 
 { ============================ placement ============================ }

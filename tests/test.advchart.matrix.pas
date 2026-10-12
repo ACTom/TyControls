@@ -53,8 +53,15 @@ type
     procedure CheckTrees(M: TTyMatrix; AM: TJSONObject);
     procedure CheckProbes(M: TTyMatrix; AM: TJSONObject);
     procedure CheckPicture(M: TTyMatrix; AM: TJSONObject);
-    procedure RunPure(AWhat: Integer);
   protected
+    { [Batch 147] the fixture, and the least of what a run must have
+      compared: part two's view cases replay through the same checks }
+    function FixtureFile: string; virtual;
+    function MinCells: Integer; virtual;
+    function MinProbes: Integer; virtual;
+    function MinEls: Integer; virtual;
+    function MinLabels: Integer; virtual;
+    procedure RunPure(AWhat: Integer);
     procedure SetUp; override;
     procedure TearDown; override;
   published
@@ -85,7 +92,7 @@ type
     procedure TestTheGallerySeriesAsUpstream;
     procedure TestEveryMatrixGalleryEntryRenders;
     procedure TestTheMatrixDrawsUnderTheSeries;
-    procedure TestAPieOnAMatrixIsNotBuiltYet;
+    procedure TestALinesSeriesOnAMatrixIsNotBuiltYet;
     procedure TestThePPIScalesThePixels;
     procedure TestHoveringAMatrixSeriesRaisesNothing;
     procedure TestAHugeMatrixIsRefusedNotWalked;
@@ -219,12 +226,37 @@ end;
 
 { ==================== the pure unit ==================== }
 
+function TAdvChartMatrixOracleTest.FixtureFile: string;
+begin
+  Result := FixturePath;
+end;
+
+function TAdvChartMatrixOracleTest.MinCells: Integer;
+begin
+  Result := 380;
+end;
+
+function TAdvChartMatrixOracleTest.MinProbes: Integer;
+begin
+  Result := 1000;
+end;
+
+function TAdvChartMatrixOracleTest.MinEls: Integer;
+begin
+  Result := 2000;
+end;
+
+function TAdvChartMatrixOracleTest.MinLabels: Integer;
+begin
+  Result := 280;
+end;
+
 procedure TAdvChartMatrixOracleTest.SetUp;
 var m: TJSONObject;
 begin
   inherited SetUp;
-  AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
-  FRoot := LoadJson(FixturePath);
+  AssertTrue('the fixture is where the suite expects it', FileExists(FixtureFile));
+  FRoot := LoadJson(FixtureFile);
   m := TJSONObject(FRoot).Objects['measure'];
   FMeas := TZrSsrMeasurer.Create(m.Arrays['ratio'], m.Integers['firstCode']);
   FOpt := TTyChartOption.Create;
@@ -392,6 +424,29 @@ begin
   end;
 end;
 
+{ a rect in a text's own frame through its transform (six hex numbers):
+  the bounding box of its four corners }
+function TurnedBox(AT: TJSONArray; AX, AY, AW, AH: Double): TTyRectF;
+var
+  m: array[0..5] of Double;
+  k: Integer;
+  px, py, gx, gy: Double;
+begin
+  for k := 0 to 5 do m[k] := H(AT.Items[k]);
+  Result := TyRectF(Infinity, Infinity, NegInfinity, NegInfinity);
+  for k := 0 to 3 do
+  begin
+    if k in [0, 3] then px := AX else px := AX + AW;
+    if k in [0, 1] then py := AY else py := AY + AH;
+    gx := m[0] * px + m[2] * py + m[4];
+    gy := m[1] * px + m[3] * py + m[5];
+    if gx < Result.Left then Result.Left := gx;
+    if gy < Result.Top then Result.Top := gy;
+    if gx > Result.Right then Result.Right := gx;
+    if gy > Result.Bottom then Result.Bottom := gy;
+  end;
+end;
+
 procedure TAdvChartMatrixOracleTest.CheckPicture(M: TTyMatrix; AM: TJSONObject);
 var
   list: TTyPaintList;
@@ -405,6 +460,8 @@ var
   c: TTyChartColor;
   texts: array of TTyRtPiece;
   g: TTyRtGlobal;
+  rot: Double;
+  tb: TTyRectF;
 begin
   list := TTyPaintList.Create;
   try
@@ -523,6 +580,13 @@ begin
       ty := H(lb.Arrays['t'].Items[5]);
       SameD(w + ' label x', cap.Caption.X, tx);
       SameD(w + ' label y', cap.Caption.Y, ty);
+      { [Batch 147] a turned label's rotation }
+      rot := 0;
+      if lb.Find('rot') <> nil then
+      begin
+        rot := H(lb.Find('rot'));
+        SameD(w + ' label rotation', cap.Caption.RotationRad, rot);
+      end;
       if cap.Z2 <> lb.Integers['z2'] then
         Miss(Format('%s: label z2 %d, upstream %d', [w, cap.Z2, lb.Integers['z2']]));
       if cap.Caption.Colour <> WantColour(StrIn(lb, 'fill'), True) then
@@ -560,6 +624,18 @@ begin
       begin
         if cap.HasClip then Miss(w + ': a clip here, none upstream');
       end
+      else if rot <> 0 then
+      begin
+        { a turned label's clip is in its own frame upstream: the port's is
+          that rect's bounding box through the transform }
+        cl := lb.Objects['clip'];
+        tb := TurnedBox(lb.Arrays['t'], H(cl.Find('x')), H(cl.Find('y')),
+          H(cl.Find('width')), H(cl.Find('height')));
+        if not cap.HasClip then Miss(w + ': no clip here')
+        else if (Abs(cap.ClipRect.Left - tb.Left) > 1e-6) or (Abs(cap.ClipRect.Top - tb.Top) > 1e-6)
+          or (Abs(cap.ClipRect.Right - tb.Right) > 1e-6) or (Abs(cap.ClipRect.Bottom - tb.Bottom) > 1e-6) then
+          Miss(w + ': the turned clip differs');
+      end
       else
       begin
         cl := lb.Objects['clip'];
@@ -591,6 +667,9 @@ begin
   for c := 0 to cases.Count - 1 do
   begin
     cs := cases.Objects[c];
+    { part two's fixture: only its view cases carry the trees and the
+      picture [Batch 147] }
+    if (cs.Find('group') <> nil) and (cs.Get('group', '') <> 'view') then Continue;
     if not Pure(cs) then Continue;
     FName := cs.Strings['id'];
     opt := OptionOf(cs);
@@ -631,7 +710,7 @@ begin
   RunPure(0);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  AssertTrue(Format('the header cells were compared (%d of %d)', [FCells, FCompared]), FCells >= 380);
+  AssertTrue(Format('the header cells were compared (%d of %d)', [FCells, FCompared]), FCells >= MinCells);
 end;
 
 procedure TAdvChartMatrixOracleTest.TestThePositionsAsUpstream;
@@ -639,7 +718,7 @@ begin
   RunPure(1);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  AssertTrue(Format('the probes were compared (%d of %d)', [FProbes, FCompared]), FProbes >= 1000);
+  AssertTrue(Format('the probes were compared (%d of %d)', [FProbes, FCompared]), FProbes >= MinProbes);
 end;
 
 procedure TAdvChartMatrixOracleTest.TestThePictureAsUpstream;
@@ -648,7 +727,7 @@ begin
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
   AssertTrue(Format('the elements were compared (%d, %d labels, %d comparisons)',
-    [FEls, FLabels, FCompared]), (FEls >= 2000) and (FLabels >= 280));
+    [FEls, FLabels, FCompared]), (FEls >= MinEls) and (FLabels >= MinLabels));
 end;
 
 { ==================== the chart ==================== }
@@ -1000,18 +1079,20 @@ begin
   AssertTrue('the matrix view counts as drawn', cvMatrix in FChart.LastViewsDrawn);
 end;
 
-procedure TAdvChartMatrixChartTest.TestAPieOnAMatrixIsNotBuiltYet;
+{ [Batch 147: a pie in a cell is built now -- part two; a lines series on a
+  matrix is not] }
+procedure TAdvChartMatrixChartTest.TestALinesSeriesOnAMatrixIsNotBuiltYet;
 var
   k: Integer;
   said: Boolean;
 begin
-  LoadOption('{"matrix": {"x": {"data": ["a"]}, "y": {"data": ["p"]}},'
-    + ' "series": {"type": "pie", "coordinateSystem": "matrix", "coord": ["a", "p"],'
-    + ' "data": [1, 2]}}');
+  LoadOption('{"matrix": {"x": {"data": ["a", "b"]}, "y": {"data": ["p"]}},'
+    + ' "series": {"type": "lines", "coordinateSystem": "matrix",'
+    + ' "data": [{"coords": [["a", "p"], ["b", "p"]]}]}}');
   said := False;
   for k := 0 to FChart.DiagnosticCount - 1 do
     if Pos('"matrix"', FChart.Diagnostic(k)) > 0 then said := True;
-  AssertTrue('a pie on a matrix says its coordinate system is not built', said);
+  AssertTrue('a lines series on a matrix says its coordinate system is not built', said);
   AssertNotNull('the matrix itself is', FChart.MatrixLayout(0));
 end;
 

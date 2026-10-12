@@ -10375,7 +10375,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
 - **[第 117 批：已做——jitter 读取整后的点、抖完再取 Float32，见 §152。]** **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
-- **[第 145 批：matrix 坐标系有了，但 finder 指 matrix 时端口仍答不出、matrix 系列的 containPixel 答 false——`convertToPixel` / `convertFromPixel` / `convertToLayout` 与 `containPoint` 是 MX2，见 §184。]** **[第 128 批：parallel 坐标系有了——它没有 convertToPixel / convertFromPixel，任何 finder 都照上游答不出；containPixel 认 parallel、parallelAxis 与平行系列的 finder（containPoint），见 §164。]** **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]** **[第 118 批：singleAxis 坐标系有了——`singleAxisIndex / Id` 与裸的 `'singleAxis'` finder、单轴上的系列都照上游的 `dataToPoint` / `pointToData` 换算（包括类目名是 NaN、纵向的 x 是中线），containPixel 照 `containPoint`（纵向拿 x 比矩形的 y），见 §153。]**
+- **[第 147 批：finder 指 matrix 与 matrix 上按数据用的系列时照上游换算（opt 的 clamp 也读），新加 `ConvertToLayout`（日历与 matrix），containPixel 认 matrix 与它上面的系列，见 §186。]** **[第 145 批：matrix 坐标系有了，但 finder 指 matrix 时端口仍答不出、matrix 系列的 containPixel 答 false——`convertToPixel` / `convertFromPixel` / `convertToLayout` 与 `containPoint` 是 MX2，见 §184。]** **[第 128 批：parallel 坐标系有了——它没有 convertToPixel / convertFromPixel，任何 finder 都照上游答不出；containPixel 认 parallel、parallelAxis 与平行系列的 finder（containPoint），见 §164。]** **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]** **[第 118 批：singleAxis 坐标系有了——`singleAxisIndex / Id` 与裸的 `'singleAxis'` finder、单轴上的系列都照上游的 `dataToPoint` / `pointToData` 换算（包括类目名是 NaN、纵向的 x 是中线），containPixel 照 `containPoint`（纵向拿 x 比矩形的 y），见 §153。]**
 
 - **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。**[第 115 批：有了下钻，读返回圆盘最后的布局，见 §150。]**
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
@@ -10474,7 +10474,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **`center` 不是数组**时上游按串的字符取下标；端口当作没有中心（NaN）。
 - **subPixelOptimize 的线宽**取选项的 `lineStyle.width`（缺省 1，按 PPI 换算），绘制用主题的线宽；主题线宽不是 1 时吸附和描边差半个像素。
 - **角度轴的类目间隔**按 CSS px 量字高（屏幕 PPI 不是 96 时除回去），和上游一致；7 也是 CSS px。
-- **[第 145 批：matrix 坐标系有了（`DataToLayout` 给格子的矩形），box 用法仍在 D13，见 §184。]** **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。**[第 113 批：dataZoom 控制极坐标轴做了（`radiusAxisIndex` / `angleAxisIndex`、自动目标、过滤、slider 的位置）；在 polar 上漫游没有，见 §148。]**
+- **[第 147 批：饼与漏斗按 `coord`（饼还有 `center`）摆进 matrix 的格子了；组件与其余系列进格子仍是 D13，见 §186。]** **[第 145 批：matrix 坐标系有了（`DataToLayout` 给格子的矩形），box 用法仍在 D13，见 §184。]** **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。**[第 113 批：dataZoom 控制极坐标轴做了（`radiusAxisIndex` / `angleAxisIndex`、自动目标、过滤、slider 的位置）；在 polar 上漫游没有，见 §148。]**
 
 ### 落地
 
@@ -11663,7 +11663,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 
 ### 推迟与偏差
 
-- **[第 145 批：matrix 坐标系有了，custom 在它上面仍不画（`prepareCustom` 是 MX2），见 §184。]** **坐标系**：只做直角坐标。极坐标、日历、单轴是 C15；`coordinateSystem: 'none'`、geo、matrix 以后；这些上面的 custom 不画、诊断说坐标系还没做。**[第 124 批：极坐标、日历、单轴、'none' 都画了；geo（D14）、matrix（D12）照旧，雷达这类没有 prepareCustom 的仍记诊断，见 §161。]**
+- **[第 147 批：matrix 上的 custom 画了——`coordSys` 是 matrix 矩形，`api.coord` / `api.layout` 认范围与 clamp（`CoordRange` / `LayoutRange`），见 §186。]** **[第 145 批：matrix 坐标系有了，custom 在它上面仍不画（`prepareCustom` 是 MX2），见 §184。]** **坐标系**：只做直角坐标。极坐标、日历、单轴是 C15；`coordinateSystem: 'none'`、geo、matrix 以后；这些上面的 custom 不画、诊断说坐标系还没做。**[第 124 批：极坐标、日历、单轴、'none' 都画了；geo（D14）、matrix（D12）照旧，雷达这类没有 prepareCustom 的仍记诊断，见 §161。]**
 - **[第 139 批：keyframeAnimation 做了，见 §177。]** **过渡动画**（C15）：更新直接到终值，`transition` / `enterFrom` / `leaveTo` / `enterAnimation` 等都不读；`keyframeAnimation`、`during`、`morph`、universal transition 不做。动画开着时元素画在 renderItem 放的地方。**[第 124 批：enter / update 的过渡做了（系列是动画模型，默认 `['x', 'y']`）；被移除的元素带 leaveTo 时 6.1 上游会抛错，端口照样停下，没有 leaveTo 的立刻拿掉，见 §161。]**
 - **元素**：`path`（SVG pathData）、`compoundPath` 没有元素类，同上游抛错一样停在那里；元素上的 `clipPath`、`tooltipDisabled`（记下没接）、`autoBatch` 不做；`emphasisDisabled`、根上的 `focus / blurScope` 记下没接——项的焦点与淡出按系列的 `emphasis.focus` 走。**[第 124 批：`tooltipDisabled` 与根上的 `focus / blurScope / emphasisDisabled` 接上了，项的焦点只看根的选项（上游如此，系列的 `emphasis.focus` 对 custom 不起作用）；`clipPath`、`autoBatch` 仍不做，见 §161。]**
 - **状态**：只有路径元素有状态，状态样式只认 fill、stroke、lineWidth、opacity 与 z2；文字、图片、textContent 的状态（文字的 emphasis 样式、标签的 z2 提升）不做；ec4 写法的 emphasis 不转。
@@ -11850,7 +11850,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 
 - **leaveTo 的抛错**：照上游停在那里，但下一轮从头来（同 C14 对抛错的处理）；上游的 `_data` 停在旧数据上，之后每次去掉同一项都会再抛。抛错的这一轮端口不画这个系列（同 C14），上游的组里元素还在——前面的项已更新，后面的还是旧的。
 - **[第 139 批：keyframeAnimation 做了，extra 与 `updateAnimation` 的 `additive` 也接上了，见 §177。]** **[第 136 批：universal transition 的变形引擎与柱、饼、散点、折线符号之间的一对一过渡做了；custom 的元素还不参与，批里有 custom 时整批不做，见 §173。]** **过渡**：`keyframeAnimation`（D6）、morph 与 universal transition（D5）、`during`（函数）不做；`leaveAnimation` 上游也不读。被图例关掉的系列的元素摘下后动画照走（上游摘下时动画器离开 zr，挂回去再接着走）。悬停的状态过渡（`stateAnimation`）不做，状态照旧立刻切。
-- **[第 145 批：matrix 坐标系有了，custom 在它上面仍不画、诊断说坐标系还没做（MX2），见 §184。]** **坐标系**：geo（D14）、matrix（D12）照旧不画；极坐标上的 `clip: true`（上游是扇形裁剪）不裁；日历的 `api.coord(data, clamp)` 的第二个参数不收（总是 clamp）。
+- **[第 147 批：matrix 上的 custom 画了，见 §186。]** **[第 145 批：matrix 坐标系有了，custom 在它上面仍不画、诊断说坐标系还没做（MX2），见 §184。]** **坐标系**：geo（D14）、matrix（D12）照旧不画；极坐标上的 `clip: true`（上游是扇形裁剪）不裁；日历的 `api.coord(data, clamp)` 的第二个参数不收（总是 clamp）。
 - **元素**：`clipPath`、`autoBatch` 仍不做。
 - **api**：`visual('visualMeta')` 不答（上游是 visualMap 的 visualMeta 列表，没有 visualMap 时是空数组）；`decal`、`legendIcon`、`symbolKeepAspect` 仍是 nil；'none' 上调 `BarLayout` 答空（上游是 TypeError）；一个参数的 `Size` 是「没有 dataItem」，传一个空数组也当成没有（上游空数组是真值，读出 NaN）。
 - **渐进 / 增量渲染**（C9 的 custom）：仍没有；大数据量的 custom 一次画完。
@@ -13801,10 +13801,10 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 
 ### 推迟与偏差
 
-- **交互是 MX2**：所有 matrix 元素都是静默的（上游有填充的格子在没写 `silent` 时可被命中），`triggerEvent`、格子的 tooltip、`cursor` 不做；matrix 系列的悬停照常走，提示框内容没有按 matrix 核过；`containPixel` 对 matrix 系列先答 false，finder 指 matrix 答不出（`convertToPixel` 等是 MX2）。
-- **一维单值以外的定位是 MX2**：范围、`clamp`、`pointToData`。**正文 / 角落的 data 与合并格是 MX3**：正文与角落格只有父的样式，`dataToLayout` 不按合并格扩张。
-- **只有 heatmap、scatter、effectScatter 绑到 matrix**；custom、graph、pie 等仍说坐标系还没做（MX2 / D13）。matrix 系列只读自己的 `data`，`dataset` / `encode` 不接（MX2）。effectScatter 的涟漪没有对上游核过。
-- **标签**：rich 文本在格子里不按溢出区排（宽高不给，MX2）；`rotate` 不做；函数 formatter（`@name`）不跑，只做字符串模板。
+- **[第 147 批：格子的 silent、`triggerEvent`、tooltip 做了，matrix 系列的 `containPixel` 与 finder 照上游答；`cursor` 不做，见 §186。]** **交互是 MX2**：所有 matrix 元素都是静默的（上游有填充的格子在没写 `silent` 时可被命中），`triggerEvent`、格子的 tooltip、`cursor` 不做；matrix 系列的悬停照常走，提示框内容没有按 matrix 核过；`containPixel` 对 matrix 系列先答 false，finder 指 matrix 答不出（`convertToPixel` 等是 MX2）。
+- **[第 147 批：范围、clamp、`pointToData` 做了，见 §186。]** **一维单值以外的定位是 MX2**：范围、`clamp`、`pointToData`。**正文 / 角落的 data 与合并格是 MX3**：正文与角落格只有父的样式，`dataToLayout` 不按合并格扩张。
+- **[第 147 批：custom、graph 按数据、pie / funnel 按格子也绑上了，见 §186。]** **只有 heatmap、scatter、effectScatter 绑到 matrix**；custom、graph、pie 等仍说坐标系还没做（MX2 / D13）。matrix 系列只读自己的 `data`，`dataset` / `encode` 不接（MX2）。effectScatter 的涟漪没有对上游核过。
+- **[第 147 批：rich 按溢出区排、`rotate` 与偏移的原点做了，见 §186。]** **标签**：rich 文本在格子里不按溢出区排（宽高不给，MX2）；`rotate` 不做；函数 formatter（`@name`）不跑，只做字符串模板。
 - **写了 null 的键**：上游的缺省是 merge 进选项的，写 null 挡住缺省（`label.padding: null` 没有 padding，`x: null` 连 `show` 都没有、整棵树不画）；端口按链读、null 落到缺省。
 - **收集**：端口的类目表按字符串记，`5` 与 `'5'` 是同一个类目（上游是两个）；null 上游会被收成类目 `'null'`，端口当缺口。布尔坐标上游 `Math.round(true)` 是 1，端口是 NaN。
 - **热力图的 y 是 NaN** 时上游造一个画不出来的矩形，端口不造（看起来一样，元素数少一个）。
@@ -13824,3 +13824,101 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - `tools/advchart-oracle/matrix.js`、`tests/fixtures/advchart-matrix.json`、`tests/test.advchart.matrix.pas`（新，注册在 `tytests.lpr`）。
 - 没有新的用户可见字符串（沿用 `rsTyChartSeriesCoordSys`），没有新的主题令牌。
 - §145、§146、§148、§159、§161 在原处标注。
+
+## 186. Tier 3 第一百四十七批：matrix 坐标系（二）（D12 MX2，2026-10-12）
+
+路线图 D12 的第二批（MX1 / MX2 / MX3 的切分见 §184）：一格以外的定位代数、matrix 上的其余系列、交互、旋转与 rich 的格子标签。MX1 之后 matrix 只认一维单值——范围、`clamp`、`pointToData` 都没有，`PointToData` 答 False；finder 指 matrix 时 `convertToPixel` 一类答不出，matrix 系列的 `containPixel` 答 false；custom、graph、pie 放到 matrix 上说「坐标系还没做」；所有 matrix 元素静默，没有 `triggerEvent`、没有格子的 tooltip；rich 标签不按溢出区排，`rotate` 不读。这一批对着 6.1 的 `coord/matrix/Matrix.ts`（`dataToLayout` / `dataToPoint` 的 opt、`pointToData`、`pointToDataOneDimPrepareCtx`、`pointToDataOnlyHeaderFillOut`、`pointToDataBodyCornerFillOut`、`convertToPixel` / `convertToLayout` / `convertFromPixel` / `containPoint` 与 `getCoordSys`）、`matrixCoordHelper.ts`（`MatrixClampOption`、`parseCoordRangeOption` / `parseCoordRangeOptionOnOneDim` / `…OnePart`、`coordDataToAllCellLevelLayout`、`xyLocatorRangeToRectOneDim`、`cellLayoutInfoToDimCell`）、`MatrixDim.ts`（`getCell`、`getUnitLayoutInfo`、`resetLayoutIterator`、层的 `id`）、`prepareCustom.ts`、`component/matrix/MatrixView.ts`（`createMatrixCell` 的 silent、`eventData`、`setTooltipConfig`、`cursor`）、`core/CoordinateSystem.ts`（`decideCoordSysUsageKind`、`injectCoordSysByOption`、`getCoordForCoordSysUsageKindBox`、两张创建表的次序）、`core/echarts.ts`（`doConvertPixel`、`containPixel`、`convertToLayout`）、`util/model.ts` 的 `parseFinder`、`util/layout.ts`（`createBoxLayoutReference`、`getViewRectAndCenterForCircleLayout`、`getLayoutRect`）、`chart/pie/pieLayout.ts`、`chart/funnel/funnelLayout.ts`、`chart/graph/simpleLayout.ts` / `simpleLayoutHelper.ts`、`chart/helper/createGraphFromNodeEdge.ts`、`chart/custom/CustomView.ts` 的 `prepareCustoms`、`coord/calendar/Calendar.ts` 的 `convertToLayout` / `dataToLayout`、`util/graphic.ts` 的 `setTooltipConfig`、`component/tooltip/TooltipView.ts`（`_tryShow` 的 `findEventDispatcher`、`_showComponentItemTooltip`、`_showTooltipContent` 的 `formatTpl`）、`util/format.ts` 的 `formatTpl`、`component/tooltip/seriesFormatTooltip.ts`、`data/helper/dimensionHelper.ts` 的 `summarizeDimensions`、`label/labelStyle.ts` 的 `createTextConfig`（`rotate`、`offset`），以及 zrender 的 `Element.updateInnerText`（偏移成为原点、旋转、`autoOverflowArea` 的逆变换）、`Transformable.getLocalTransform`、`matrix.rotate` / `invert`、`BoundingRect.applyTransform`（转过的矩形取包围盒）、`parseText.ts` 的 `calcInnerTextOverflowArea` / `parseRichText`（`defaultOuterWidth` / `Height`）、`Text._updateRichTexts`、`Handler.isHover`（`ignoreHostSilent`、`clipPath`）、`Path.contain`（没有填充时只认描边、`strokeContainThreshold` 5）逐行核过，在真 dist 上跑基准。§145、§146、§159、§161、§184 的相关处在原处标注。
+
+### 上游的做法
+
+- **范围**：`dataToLayout(data, opt)` 的 `data` 必须是数组（不是数组就全是 NaN，`clamp` 也救不回来）；`data[0]` 管 x、`data[1]` 管 y，各自可以是一个值或一个数组。数组只读**第一项和最后一项**（`[x1, x2, x3]` 就是 `[x1, x3]`），空数组什么都不指；没写的那一维是 `[undefined]`。每一项先找格子：叶子或父格子（父格子覆盖它全部叶子，`[id, id + span − 1]`）、否则负数是对面那棵树的层；找不到的一项让这一维的两端都变 NaN（`Math.min(NaN, …)` 一路传下去，后面那项找到了也救不回来）。两端取 min / max，所以反着写的范围是同一个范围。矩形是两端单元的 `xy` 与 `后端.xy + 后端.wh − 前端.xy`，`matrixXYLocatorRange` 一并给出。
+- **clamp**（`MatrixClampOption`：0 none、1 all、2 body、3 corner；判的是 `!!clamp` 与 `=== 2` / `=== 3`，所以 `true`、`'body'` 这类真值都是 all）：有 clamp 时 NaN 的一端换成整行整列——下界 `−对面树的层数`（没有层时是 `−0`）、上界 `本树叶子数 − 1`，body 把下界抬到 `max(0, 下界)`、corner 把上界压到 `min(−1, 上界)`，上界小于下界时两个都是 NaN；然后两端都夹到这个区间。null 与找不到的名字因此在 clamp 下表示「这一整行」。
+- **pointToData**：每个方向单独判区域——正文的第一个叶子、最后一个叶子、对面树的最外层与贴着正文的那一层（对面树隐藏时没有这一层）定出 `pxMin`、`pxLoc0`、`pxMax`；不 clamp 时越界就是 outside，clamp 时夹到边上；body / corner 只夹到那一区。然后：一个方向在正文、另一个在表头时，按两个坐标找表头格（父格子也找得到），答**它的序号**和它在对面方向的层；否则各自在叶子或层里找，答定位器（正文 `0..`、表头 `−1, −2…`）。边界都含。
+- **换算**：坐标系管理器的次序是普通的那张表（grid、radar、graph 的 view、parallel、polar、singleAxis）再 `nonSeriesBox` 那张（calendar、matrix）。matrix 的 `getCoordSys` 先看 finder 的 matrix 模型，再看系列的 `coordinateSystem`——只有按数据用 matrix 的系列（`decideCoordSysUsageKind` 是 data）才有；格子里的饼没有坐标系。`convertToPixel` 是 `dataToPoint(value, opt)`（值不是数组时是 `[NaN, NaN]`，不是「答不出」）、`convertToLayout` 是 `dataToLayout`、`convertFromPixel` 是 `pointToData`；`containPixel` 认 matrix 模型与 matrix 上的系列（矩形含边），格子里的饼走它自己视图的 `containPoint`。calendar 也有 `convertToLayout`：`dataToLayout` 的格子与内容区（clamp 缺省是 true）。
+- **matrix 上的系列**：`Matrix.create` 对**所有**组件做 `injectCoordSysByOption`。系列缺省 `coordinateSystemUsage` 是 `'data'`，pie、funnel（以及 sankey、tree、treemap）的缺省选项写的是 `'box'`；写了 null 时按系列的缺省 `'data'`，写了别的字是「都不是」。按数据用：heatmap、scatter、effectScatter（MX1）、custom（`prepareCustom`：`coordSys` 是 matrix 矩形，`api.coord` / `api.layout` 就是 `dataToPoint` / `dataToLayout`，第二个参数是 opt）、graph（`createSeriesData` 用 matrix 的维度，x / y 序数；`graphSimpleLayout` 只要 x、y、value 有一个是数就放在 `dataToPoint([x, y, value])`，边照 `simpleLayoutEdge`，曲度的控制点照算）。按盒子用：`createBoxLayoutReference` 用 `coord`（写了且不是 null），饼没有 `coord` 时用 `center` 当坐标（`getCoord2`）；拿到的 `dataToLayout(…).rect` 是参照矩形——饼的盒子与百分比半径在它里面算，圆心来自 `center` 时是这个矩形自己的中心；漏斗的 `getLayoutRect` 在它里面。matrix 的 `dataToLayout` 没有 `contentRect`，所以格子的边线也在饼的参照里。
+- **格子的交互**（`createMatrixCell`）：格子矩形写了 `silent` 就照写的，没写时**没有填充就静默**（只剩边框能被命中，上游特意不要）；写成 `silent: false` 又没有填充时，`Path.contain` 只认描边——宽度至少 `strokeContainThreshold` 5，也就是离边框 2.5 px 以内。标签（`textContent`）写了 `silent` 就照写的，否则 `!(matrix.triggerEvent || matrix.tooltip.show)`，并且 `ignoreHostSilent`：宿主静默不影响它。`triggerEvent` 时格子矩形带 `eventData`：`componentType: 'matrix'`、`componentIndex` / `matrixIndex`、`targetType`（`'x'` / `'y'` / `'body'` / `'corner'`）、`name`（标签画出来的字，没有标签时 undefined）、`value`（格子的 textValue）、`coord`（定位器对）；悬停到标签上时 `findEventDispatcher` 顺着 `__hostTarget` 找到宿主的 `eventData`。
+- **格子的 tooltip**：有 textValue 的格子（表头格；正文 / 角落的 `value` 是 MX3）都 `setTooltipConfig`：`itemName` 是**套过 formatter 的**字（标签显示不显示都一样），`formatterParams` 是 `componentType`、`name`、`matrixIndex`、`xyLocator`，`$vars` 是 `['name', 'xyLocator']`。`TooltipView` 对组件项不看 `trigger`：级联是 `matrix.tooltip`（字符串就是 formatter）、matrix 模型本身、`{formatter: content}`，最后是全局 tooltip——于是只要有 tooltip 组件，一个有填充、没写 `silent` 的表头格不写 `matrix.tooltip` 也会弹出它的名字。字符串 formatter 走 `formatTpl`：`{a}` / `{a0}` 是名字、`{b}` / `{b0}` 是定位器对（`String()` 成 `'x,y'`），各换第一次出现。
+- **系列在 matrix 上的悬停与提示框**：热力图的提示框是名字与值（value 是坐标维，`defaultedTooltip` 就是它）；散点的 value 不是坐标维、x / y 是序数，`defaultedLabel` 与 `defaultedTooltip` 都是空的，于是提示框把整条数据 `'a  p  3'` 两个空格连起来。系列的事件名是 x 的类目名（`itemName` 落在第一个序数维上）。
+- **旋转与 rich 的格子标签**：`createTextConfig` 读 `rotate`（度数乘 `Math.PI / 180`）和 `offset`；`updateInnerText` 先把位置放到 `calculateTextPosition` 的点上，旋转，再把偏移加到位置上、把原点设成负的偏移——于是文字绕「未偏移的锚点」转，偏移在转过的坐标里。溢出区是格子经文字局部变换的**逆**变换（`BoundingRect.applyTransform`，转过的就是四个角的包围盒）。rich 文字和纯文字一样拿外宽高：`parseRichText` 的 `topWidth` / `topHeight` 是外宽高减 padding——有了高度，行从格子顶上排起，`lineOverflow: 'truncate'` 照样丢行。裁剪是格子缩半个边宽之后**在文字自己的坐标里**的矩形（逆变换后的包围盒），跟着文字一起转。
+
+### port 以前
+
+- `TTyMatrix` 只有一维单值的 `Locate`；`PointToData` 答 False；`convertToPixel` 一类的分派里没有 matrix，`containPixel` 对 matrix 系列答 false。
+- 系列绑定只让 heatmap、scatter、effectScatter 上 matrix；custom、graph、pie、funnel 说坐标系还没做。
+- matrix 的元素全是 `Silent`，没有 datum；标签的偏移直接加在锚点上（没有原点），`rotate` 不读，rich 文字不给宽高。
+
+### 做法
+
+- **`tyControls.AdvChart.Matrix`**：
+  - `TTyMatrixClamp` 与 `TyMatrixClampOf` / `TyMatrixClampOfOpt`（`opt && opt.clamp`）；`TTyMatrixLocRange`。
+  - `CellLayoutOf`（`coordDataToAllCellLevelLayout` 给定位器与跨度）、`RangeOneDim`（`parseCoordRangeOptionOnOneDim` 整条：第一项与最后一项、NaN 的传染、clamp 的上下界与 `−0`，`Math.max` / `Math.min` 按 JS 的 NaN 与正负零规则写成 `JMax` / `JMin`）、`DataToLayoutRange` / `DataToPointRange`；MX1 的 `Locate` 与 `DataToLayoutXYWH` 改成走它（逐位不变）。
+  - `PointArea` 与 `PointToDataClamp`（三个函数照搬，比较前先挡 NaN——FPC 的 `<` 碰到 NaN 会报异常）；`ITyCoordSys.PointToData` 答 `[x, y]`。
+  - `ParseCoordParts` 与 `TyMatrixLayoutJson`：JSON 写的坐标——不是数组全 NaN，`data[k]` 不在就是一个什么都不指的部分。
+  - 视图：每个格子在 `TTyMatrix` 里记一条 `TTyMatrixCellInfo`（`targetType`、定位器对、有没有 textValue、值、tooltip 的 `itemName`、标签画出来的字），格子矩形和标签都带 `ctkMatrix` 的 datum（matrix 的序号、这条记录的序号）。矩形的 `Silent` 照上面的规则，没写 `silent`、有填充的可命中；写了 `false` 没有填充的用新的 `HitStrokeBand`（`max(边宽, 5)`）只认边框一圈，连描边都没有的仍静默。标签的 `Silent` 照写的，否则 `not (triggerEvent or tooltip.show)`。
+  - 标签：`ZrLocal`（`getLocalTransform` 的运算顺序，`TyJsSin` / `TyJsCos`）造文字的局部变换（原点是负的偏移、`rotate` 的弧度），`TyMatInvert` + `TyRectApplyMat` 把格子搬进文字坐标求溢出区；纯文字与 rich 都给宽高；锚点是变换的平移（`Caption.X / Y`），`Caption.RotationRad` 是转角；转过的标签的裁剪是逆变换后的包围盒再变回来的包围盒（直角时就是原来的矩形）。
+- **`tyControls.AdvChart.Paint`**：`TTyChartTargetKind` 加 `ctkMatrix`；`TTyChartElement.HitStrokeBand` 与 `HitTestElement` 里的描边带判断。
+- **`tyControls.AdvChart.Handlers`**：`TTyChartCallbackParams.Coord`（格子事件的 `coord`、tooltip 的 `xyLocator`）。
+- **`tyControls.AdvChart.Tooltip`**：`TyTooltipSpecOfMatrix`——`matrix.tooltip`、matrix 本身、名字当 formatter、全局，触发方式恒为 item。
+- **`tyControls.AdvChart.Series`**：`TyMatrixUsageOf`（`decideCoordSysUsageKind`）；按数据用的 heatmap / scatter / effectScatter / custom / graph（以及写了 `'data'` 的 pie / funnel）解析 `MatrixIndex`，按盒子用的 pie / funnel 另记 `MatrixBox`；没有用法的 pie / funnel 照常在画布上；其余类型与不合的用法照旧说坐标系还没做。
+- **`tyControls.AdvChart.Custom`**：`TTyCustomLayout` 加 `HasContentRect`、`HasLocatorRange`、`LocatorRange`；`CoordRange` / `LayoutRange`（每个方向一组部分、clamp）与虚方法 `DoMatrix`——`Coord` / `Layout` 在 matrix 上就是每个方向一个部分。
+- **`tyControls.AdvChart.Funnel`**：`TyFunnelLayoutInView`——在已经解出的 x / y / 宽 / 高里排（宽高不再由右减左得来）。**`tyControls.AdvChart.Layout`**：`TyBoxSpecRaw`（共用求解器的盒子还原成 `getLayoutRect` 读的原始值）。
+- **`tyControls.AdvanceChart`**：
+  - 存储：pie、funnel、graph 不再拿 matrix 的 x / y / value 三列；matrix 上的 scatter / effectScatter 的提示框维设成空（`SetTooltipPositions(nil)`，整条数据）。
+  - custom：`cusMatrix`、`params.coordSys`（`'matrix'` 与矩形）、encode 的 x / y / value，`DoCoord` / `DoLayout` / `DoMatrix`（名字经树的类目表、数字原样、没有就是 NaN）。
+  - graph：`MatrixGraphPoints`（x / y 序数、value 数，三个里有一个是数就 `DataToPoint`），交给已有的 `TyGraphSolveAtPoints`。
+  - `MatrixBoxLayout`（`coord`，饼再看 `center`）；饼的参照是那个格子、圆心来自 `center` 时是格子中心；漏斗用 `TyGetLayoutRect` 在格子里解盒子再 `TyFunnelLayoutInView`；格子没有位置时不画。
+  - 换算：`ConvertDispatch` 带 opt，在日历之后问 matrix（`FinderMatrix` 照 `getCoordSys`）；`ConvertOnMatrix`；新的 `ConvertToLayout`（JSON）/ `ConvertToLayoutData`（`TTyConvertLayout`）：日历的格子与内容区、matrix 的矩形与定位器范围；`ConvertToPixel` / `ConvertFromPixel` 各加一个带 opt 的 JSON 重载；`ContainPixel` 认 `matrix` 模型与 matrix 上按数据用的系列。
+  - 交互：`EventTargetAt` 的 `ctkMatrix`（`triggerEvent` 时的 params 与模型）；tooltip 的 `TipIsMatrix` / `MatrixCellOf` / `MatrixTipText`（`formatTpl` 的两个 `$vars`），`TooltipSpecFor`、`TooltipParams`、`TooltipContent`、`TooltipShownWhich` 认 matrix 的格子。
+- 没有新的用户可见字符串，没有新的主题令牌。
+
+### 基准
+
+`tools/advchart-oracle/matrix2.js`（新；真 dist，node SSR 而 TooltipView 照跑——`chart._ssr = false`、`env.node` 关、`getDom` 答一个空对象，setTimeout 换成按时排的队列；xorshift32；zrender 宽度表量字并逐字核对；custom 的 `renderItem` 都是这里的 JS 函数，套一层记录器，画廊里 custom 的 renderItem 换成通用的 `@mxGal`；两次生成逐字节一致，`process.exit()`）→ `tests/fixtures/advchart-matrix2.json`（约 2.3 MB）：
+
+- **24 例**，五组：
+  - **algebra**（8 个 matrix：两边都是树且小数盒子、x 树、x 隐藏、y 隐藏、两边隐藏、没有列、什么都没有、全部指定尺寸）：每个 matrix 约 37 个坐标（单值、父格子、反着的范围、`[x1, x2, x3]`、空数组、null、不存在的名字、小数、越界、不是数组的数据）× 8 种 clamp（null、0、1、2、3、true、`'x'`、false），共 2392 次 `dataToLayout` / `dataToPoint`；单元边界与中点交叉的点 × 4 种 clamp，共 4032 次 `pointToData`。
+  - **convert**：一张图上一个 grid、一个日历、两个 matrix 与六个系列（matrix 上的热力图 / 散点 / custom、格子里的饼、grid 上的折线、日历上的热力图），40 次调用——`'matrix'`、`matrixIndex`、`matrixId`、不存在的 matrix、matrix 与系列同时写、系列与 matrix 同时写而系列在 grid 上（grid 先答）、格子里的饼（答不出）、带 opt 的 clamp、不是数组的值；`convertToLayout` 也问日历；`containPixel` 含边与不含边。
+  - **series**：custom 的单格与范围（每次 `api.coord` / `api.layout` 的答案 156 个，含 `matrixXYLocatorRange`）、graph（名字、数字、父格子、表头、找不到的名字带值、什么都没有、只有 x / y、曲边）、7 个饼（`center` 当坐标、`coord` 配百分比 center 与环、范围 `coord`、百分比半径、找不到的名字、写了 `'data'` 的在画布上、`coord` 不是数组、`center` 配盒子）、格子里的漏斗，外加画廊的 confusion、periodic-table、pie、graph。共 134 次 renderItem 调用、16 个节点、61 个饼 123 个扇区、3 个漏斗块。
+  - **view**：旋转（维上 90°、格子 45°、−90° 带偏移、只有偏移、y 上 30°）与 rich（断行、truncate、定宽两行、rich 再旋转），记录格式同 matrix.js，标签多记转角、原点与写的偏移。
+  - **pointer**：4 例 21 步——`triggerEvent` 下有填充的正文格、表头标签、没填充的表头格（静默）、格子上面的热力图项、写了 `silent: true` 的标签、写了 `silent: false` 的无填充格（边框一圈命中、里面不命中）、角落格；`matrix.tooltip.show` 的表头标签（父格子、叶子、y）与 `'{a} @ {b}'` formatter；没有 `triggerEvent` 也没有 matrix tooltip 时有填充的表头格经全局 tooltip 弹名字，matrix 上的散点、关系图节点、格子里的饼扇区各自的提示框；全局 `trigger: 'axis'` 下格子照样弹。每步记命中的是什么（格子的矩形还是标签、哪个格子，或系列的哪一项）、`mouseover` / `mouseout` 的 params、提示框（格子的字，系列项的行）。
+- **75 条守卫**全部成立：每例的转写（R1 每个 `dataToLayout` 的矩形就是定位器两端的单元、R2 `dataToPoint` 是它的中心、R3 关系图节点是它那一行的 `dataToPoint`、R5 转过的标签的变换旋转部分照 `getLocalTransform` 重算）与 51 条事实（范围、反向、首尾、NaN 的传染、clamp 的整行与 body / corner、真值字、父格子、不是数组、空数组、`−0`；`pointToData` 的叶子、表头序号、角落、越界；换算的各个 finder 与次序、`[NaN, NaN]`、格子里的饼答不出、`convertToLayout` 的定位器范围与日历的内容区、`containPixel`；custom 的 coordSys 与不画的行；关系图的 NaN 与只有 x / y 的节点、曲边；饼的 center 当坐标、写了 `'data'` 在画布上、找不到的名字没有圆心；漏斗在格子里；画廊的饼；旋转、格子覆盖维、偏移挪原点、rich 断行；事件与命中、静默、提示框的字与 formatter、全局 axis 触发）。
+
+### 测试
+
+`test.advchart.matrix2`（新，注册在 `tytests.lpr`）：
+
+- **`TAdvChartMatrix2AlgebraTest`**（3 个）：从选项建 `TTyMatrix`、800 × 600 布局，`TyMatrixLayoutJson` 逐位对 2392 个矩形、定位器范围与点（约 2.4 万次比较），`PointToDataClamp` 逐位对 4032 个点；clamp 的字面值（null、0、false、`''`、1、true、2、3、`'body'`、4、对象、nil）。
+- **`TAdvChartMatrix2ViewTest`**（3 个，继承 `TAdvChartMatrixOracleTest`：§184 的三组检查换成这个基准的 view 两例）：树与布局、探点、画面——每个元素的形状、z2、墨水，标签的字、锚点、转角、每一行的字与位置逐位，裁剪（转过的按变换后的包围盒、1e-6）。为此 MX1 的测试类把基准路径与计数下限做成虚方法、`RunPure` 跳过不是 view 的组、`CheckPicture` 多比转角与转过的裁剪。
+- **`TAdvChartMatrix2ChartTest`**（7 个；量字器是 SSR 表）：换算的 40 次调用逐位（`ConvertToPixelData` / `ConvertFromPixelData` / `ConvertToLayoutData` / `ContainPixelData`）；custom 的 coordSys 与每个 api 答案逐位（Pascal 转写的三个 renderItem）、画出的根数；关系图节点逐位、曲边的控制点逐位；扇区的圆心与内外半径逐位、漏斗四个角逐位；指针 21 步的命中、事件串与提示框。另有：`ConvertToLayout` 的 JSON（范围、clamp 3 两个方向都夹进表头、NaN 印成 null、grid 答不出）与带 opt 的 `ConvertToPixel` / `ConvertFromPixel`；不在 matrix 上时 `CoordRange` / `LayoutRange` 什么都不答。
+- `test.advchart.matrix`：`TestAPieOnAMatrixIsNotBuiltYet` 换成 `TestALinesSeriesOnAMatrixIsNotBuiltYet`（饼在格子里画了，lines 在 matrix 上仍没有）。
+
+首跑：algebra 两组**一次逐位通过**（只有计数下限写高了）；view 一次通过；整图首跑四处——（1）漏斗的 x 差最后一位：共用求解器拿右减左当宽度，格子的边不是整像素时与 `getLayoutRect` 差一位，改成 `TyGetLayoutRect` 在格子里解、`TyFunnelLayoutInView` 用解出的宽高；（2）matrix 上散点的提示框只给了值，上游是整条数据（见上），改成空的提示框维；（3）关系图有一个坐标是 NaN 的节点，上游把另一个坐标照样算出来，端口整个不放——画面一样，记作偏差；（4）关系图节点的事件名与提示框行，见偏差。另外两处是测试自己的：`ConvertToLayout` 的 JSON 例子把 y 树的层算漏了、clamp 3 只想了 x。为确认比较真的在比，临时改坏基准的七处（一个转角、一个矩形、一个 `pointToData` 答案、一个格子提示框的字、一个 custom 答案、一个事件的 `coord`、一个 rich 行的 y），三组各自如期变红，再还原。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartMatrix2AlgebraTest` 3、`TAdvChartMatrix2ViewTest` 3、`TAdvChartMatrix2ChartTest` 7、`TAdvChartMatrixOracleTest` 3、`TAdvChartMatrixChartTest` 8，以及改动波及的 `TAdvChartCustomSeriesOracleTest` 5、`TAdvChartCustomSeriesTest` 10、`TAdvChartCustomSeries2OracleTest` 5、`TAdvChartCustomSeries2Test` 5、`TAdvChartFunnelRuleTest` 18、`TAdvChartFunnelDrawTest` 5、`TAdvChartPieTest` 24、`TAdvChartTooltipRuleTest` 19、`TAdvChartTooltipDrawTest` 15、`TAdvChartTooltipFinishTest` 10、`TAdvChartConvertJitterTest` 10、`TAdvChartPaintTest` 15、`TAdvChartHitTest` 12、`TAdvChartMouseEventsOracleTest` 3、`TAdvChartSeriesCalendarOracleTest` 3、`TAdvChartSeriesTest` 28、`TAdvChartGraphRuleTest` 33、`TAdvChartGraphDrawTest` 4、`TAdvChartBoxMergeOracleTest` 5、`TAdvChartChordTest` 9、`TAdvChartPolarAxesTest` 12、`TAdvChartPolarSeriesTest` 13、`TAdvChartSingleRiverTest` 13、`TAdvChartParallelOracleTest` 6、`TAdvChartParallelTest` 8、`TAdvChartGraphSankeyInteractOracleTest` 1、`TAdvChartGraphSankeyInteractTest` 11、`TAdvChartSunburstTreemapInteractOracleTest` 1、`TAdvChartSunburstTreemapInteractTest` 6、`TAdvChartCoarseDirtyOracleTest` 4、`TAdvChartCoarseDirtyTest` 17、`TAdvChartHandlerWiringOracleTest` 9、`TAdvChartCalendarOracleTest` 4、`TAdvChartCalendarChartTest` 1、`TAdvChartHeatmapCalendarOracleTest` 2、`TAdvChartKeyboardOracleTest` 3、`TAdvChartKeyboardTest` 20、`TAdvanceChartTest` 60、`TAdvChartExportLoadingTest` 15（`CoarseDirty` 与 `Keyboard` 各有一个原本就忽略的测试）。变异候选列在 `s186.md.candidates.md`（26 条，另记 4 处可能存活）。
+
+### 推迟与偏差
+
+- **MX3**：正文 / 角落的 `data`（格子的 `value` 与文字、它们的 tooltip）、`mergeCells` 与 `dataToLayout` 的合并格扩张（`ignoreMergeCells`）、格子样式、decal、函数 formatter、画廊的 `matrix-stock` 与两个 `matrix-mini-bar`。
+- **D13**：组件（grid、geo、legend、title…）与 sankey / tree / treemap / gauge / sunburst / chord 摆进格子、graph 的 `coordinateSystemUsage: 'box'`（内部视图在格子里）；lines 在 matrix 上（上游按数据用 `dataToPoint`）也没有做，说坐标系还没做。
+- **关系图在 matrix 上**：节点有一个坐标是 NaN 时上游照样算另一个（什么也画不出来），端口整个不放；上游的节点名（数组项没有名字时取 x 的类目）与提示框（x、y 两项连起来）端口没有——端口的关系图存储是它自己的那份，事件名为空、提示框只有值；收集模式的 matrix（没有 `data` 的树）不从关系图收类目。
+- **cursor**：格子的 `cursor` 不做——端口悬停任何元素都不改光标（系列项也一样），留给整个控件统一处理。
+- **格子的 tooltip**：formatter 的值不做 HTML 转义（端口画的是字，不是标记；上游 SSR 的 richText 模式会把 `&` 印成 `&amp;`）；`String.replace` 的 `$&` 一类替换模式不认。函数 formatter（`@name`）走端口的具名处理器，params 是 `componentType`、`componentIndex`、`name`、`Coord`。
+- **命中的形状**：标签按整块文字的包围盒命中（上游按每一行的 TSpan 各自的框）；转过的标签按转过之后的包围盒命中、按包围盒裁剪——直角时与上游相同，其它角度比上游宽。
+- **opt**：只有 matrix 读 `opt.clamp`；`ignoreMergeCells` 与合并格一起是 MX3。
+- **PPI**：换算与 api 的答案在 96 PPI 下逐位；别的 PPI 下矩形先放大再除回（`api` 的答案是 CSS px），不保证最后一位。
+
+### 落地
+
+- `source/tyControls.AdvChart.Matrix.pas`：范围、clamp、`pointToData`、JSON 入口、格子的记录、silent / datum / 描边带、标签的变换与 rich。
+- `source/tyControls.AdvChart.Paint.pas`：`ctkMatrix`、`HitStrokeBand`。
+- `source/tyControls.AdvChart.Handlers.pas`：`Coord`。
+- `source/tyControls.AdvChart.Tooltip.pas`：`TyTooltipSpecOfMatrix`。
+- `source/tyControls.AdvChart.Series.pas`：`TyMatrixUsageOf`、`MatrixBox`、matrix 上的类型表。
+- `source/tyControls.AdvChart.Custom.pas`：`CoordRange` / `LayoutRange` / `DoMatrix`、`TTyCustomLayout` 的三个字段。
+- `source/tyControls.AdvChart.Convert.pas`：`TTyConvertLayout`。
+- `source/tyControls.AdvChart.Funnel.pas`：`TyFunnelLayoutInView`。
+- `source/tyControls.AdvChart.Layout.pas`：`TyBoxSpecRaw`。
+- `source/tyControls.AdvanceChart.pas`：存储、custom、graph、饼与漏斗进格子、换算与 `ConvertToLayout`、`containPixel`、事件、tooltip。
+- `tools/advchart-oracle/matrix2.js`、`tests/fixtures/advchart-matrix2.json`、`tests/test.advchart.matrix2.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.matrix.pas`（虚方法、view 组、转角与转过的裁剪、lines 的测试）。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
+- §145、§146、§159、§161、§184 在原处标注。

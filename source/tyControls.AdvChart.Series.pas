@@ -144,10 +144,17 @@ type
     Parallel: TObject;
     { WHICH MATRIX, or -1 [Batch 145, D12 MX1]: `coordinateSystem: 'matrix'`
       by matrixIndex / matrixId (SINGLE_REFERRING, neither written is the
-      first). Resolved with HasAxes False, like a calendar; only the types
-      part one draws there resolve (a heatmap, a scatter, an
-      effectScatter) -- any other says the coordinate system is not built. }
+      first). Resolved with HasAxes False, like a calendar. [Batch 147] The
+      types upstream 6.1 draws there: per item a heatmap, a scatter, an
+      effectScatter, a custom and a graph (decideCoordSysUsageKind 'data');
+      a pie and a funnel laid out in ONE cell (their default usage 'box':
+      MatrixBox) -- any other, or a usage the type cannot take, says the
+      coordinate system is not built. }
     MatrixIndex: Integer;
+    { the series is laid out in a cell of the matrix (usage 'box'), not
+      placed per item: it has no coordinate system of its own -- a finder
+      naming it converts nothing [Batch 147] }
+    MatrixBox: Boolean;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -608,6 +615,26 @@ begin
 end;
 
 { Each component's `id` of a main type, '' where it has none [Batch 118] }
+{ decideCoordSysUsageKind for a series: 'data' or 'box' as written (a
+  written null is a series' default, 'data'), '' for any other value (no
+  usage at all); unwritten, the type's own default -- 'box' for a pie and a
+  funnel [Batch 147] }
+function TyMatrixUsageOf(ANode: TJSONData; const AType: string): string;
+var d: TJSONData;
+begin
+  d := nil;
+  if ANode is TJSONObject then d := TJSONObject(ANode).Find('coordinateSystemUsage');
+  if d = nil then
+  begin
+    if (AType = 'pie') or (AType = 'funnel') then Exit('box');
+    Exit('data');
+  end;
+  if d.JSONType = jtNull then Exit('data');
+  Result := '';
+  if d.JSONType = jtString then
+    if (d.AsString = 'data') or (d.AsString = 'box') then Result := d.AsString;
+end;
+
 function MainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
 var
   k: Integer;
@@ -699,7 +726,7 @@ var
   node: TJSONObject;
   b: TTySeriesBinding;
   info: TTySeriesTypeInfo;
-  sys: string;
+  sys, usage: string;
 begin
   Result := nil;
   if (AOption = nil) or (ABuild = nil) then Exit;
@@ -810,12 +837,40 @@ begin
       Continue;
     end;
 
-    if (sys = TyMatrixSysName) and ((b.SeriesType = 'heatmap')
-      or (b.SeriesType = 'scatter') or (b.SeriesType = 'effectScatter')) then
+    if sys = TyMatrixSysName then
     begin
       { A MATRIX [Batch 145, D12 MX1]: which one, by matrixIndex or
         matrixId; its two dimensions are the matrix's header trees, not
-        axes }
+        axes. [Batch 147] decideCoordSysUsageKind: the usage written (a
+        written null is a series' 'data'), else the type's default -- 'box'
+        for a pie and a funnel, 'data' for the rest. }
+      usage := TyMatrixUsageOf(node, b.SeriesType);
+      if usage = 'box' then
+      begin
+        if (b.SeriesType <> 'pie') and (b.SeriesType <> 'funnel') then usage := '?';
+      end
+      else if usage = 'data' then
+      begin
+        if (b.SeriesType <> 'heatmap') and (b.SeriesType <> 'scatter')
+          and (b.SeriesType <> 'effectScatter') and (b.SeriesType <> 'custom')
+          and (b.SeriesType <> 'graph') and (b.SeriesType <> 'pie')
+          and (b.SeriesType <> 'funnel') then usage := '?';
+      end;
+      { a pie or a funnel with no usage at all (a word that is neither) is
+        laid out on the canvas: no coordinate system }
+      if (usage = '') and ((b.SeriesType = 'pie') or (b.SeriesType = 'funnel')) then
+      begin
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
+      if (usage = '?') or (usage = '') then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
       b.MatrixIndex := TyResolveComponentRef(node, 'matrixIndex', 'matrixId',
         AOption.ComponentCount(TyMatrixSysName), MainIds(AOption, TyMatrixSysName),
         MainHoles(AOption, TyMatrixSysName));
@@ -825,6 +880,7 @@ begin
         Result[i] := b;
         Continue;
       end;
+      b.MatrixBox := usage = 'box';
       b.Resolved := True;
       b.HasAxes := False;
       Result[i] := b;

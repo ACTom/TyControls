@@ -44,6 +44,12 @@ unit tyControls.AdvChart.Custom;
     calendar      coordSys the rect, cellWidth / cellHeight and the range;
                   Coord([date]) a day's centre (NaN outside the range);
                   Layout([date]) its cell and content rect; no Size
+    matrix        coordSys the matrix rect [Batch 147]; Coord([x, y]) a
+                  cell's centre, Layout([x, y]) its rect and the locator
+                  range (no content rect: a range may span cells); a name
+                  is a header cell's, a number an ordinal or (negative) a
+                  header level; CoordRange / LayoutRange take a range on
+                  either direction and a clamp; no Size
     singleAxis    coordSys the axis' rect; Coord([v]) a point (the value as
                   JavaScript's +v); Size([d], [v]) ONE number
     'none'        no coordSys (Type_ ''), no Coord, no Size: the dimensions x
@@ -162,10 +168,15 @@ type
   end;
 
   { api.layout on a calendar: the day's cell and its content rect (the cell
-    less half the border); Valid False where upstream has no api.layout }
+    less half the border); Valid False where upstream has no api.layout.
+    [Batch 147] On a matrix: the rect and matrixXYLocatorRange, no content
+    rect -- HasContentRect and HasLocatorRange say which are there. }
   TTyCustomLayout = record
     Valid: Boolean;
     Rect, ContentRect: TTyCustomRect;
+    HasContentRect: Boolean;
+    HasLocatorRange: Boolean;
+    LocatorRange: array[0..1, 0..1] of Double;
   end;
 
   TTyCustomParams = record
@@ -206,6 +217,11 @@ type
     function DimIndexOf(const AName: string): Integer; virtual; abstract;
     function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; virtual; abstract;
     function DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout; virtual; abstract;
+    { a matrix's dataToLayout of one range per direction under a clamp
+      (0 none, 1 all, 2 body, 3 corner): the point (the rect's centre) and
+      the layout; nothing where the system is no matrix [Batch 147] }
+    function DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
+      out ALayout: TTyCustomLayout): TTyDoubleArray; virtual;
   public
     function Value(ADim: Integer; ADataIndexInside: Integer = -1): Double; overload; virtual; abstract;
     function Value(const ADim: string; ADataIndexInside: Integer = -1): Double; overload;
@@ -216,8 +232,16 @@ type
     { the point; on a polar [x, y, radius, angle in radians]; nothing on no
       coordinate system }
     function Coord(const AData: array of const): TTyDoubleArray;
-    { a calendar day's cell [Batch 124] }
+    { a calendar day's cell [Batch 124]; a matrix cell's [Batch 147] }
     function Layout(const AData: array of const): TTyCustomLayout;
+    { ON A MATRIX, upstream's api.coord / api.layout with an array on either
+      direction and an opt's clamp [Batch 147]: AX and AY are one
+      direction's parts each -- one value, or a range's elements, read as
+      its first and last (an empty one names nothing) --, AClamp the
+      MatrixClampOption (0 none, 1 all, 2 body, 3 corner). Empty / not
+      Valid on any other system. }
+    function CoordRange(const AX, AY: array of const; AClamp: Integer = 0): TTyDoubleArray;
+    function LayoutRange(const AX, AY: array of const; AClamp: Integer = 0): TTyCustomLayout;
     { no data item: upstream's undefined -- [0, 0] on a cartesian and a
       polar, NaN on a single axis }
     function Size(const ADataSize: array of Double): TTyDoubleArray; overload;
@@ -533,6 +557,24 @@ end;
 function TTyCustomApi.Layout(const AData: array of const): TTyCustomLayout;
 begin
   Result := DoLayout(CellsOf(AData));
+end;
+
+function TTyCustomApi.DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
+  out ALayout: TTyCustomLayout): TTyDoubleArray;
+begin
+  ALayout := Default(TTyCustomLayout);
+  Result := nil;
+end;
+
+function TTyCustomApi.CoordRange(const AX, AY: array of const; AClamp: Integer): TTyDoubleArray;
+var lay: TTyCustomLayout;
+begin
+  Result := DoMatrix(CellsOf(AX), CellsOf(AY), AClamp, lay);
+end;
+
+function TTyCustomApi.LayoutRange(const AX, AY: array of const; AClamp: Integer): TTyCustomLayout;
+begin
+  DoMatrix(CellsOf(AX), CellsOf(AY), AClamp, Result);
 end;
 
 function TTyCustomApi.Size(const ADataSize: array of Double): TTyDoubleArray;
