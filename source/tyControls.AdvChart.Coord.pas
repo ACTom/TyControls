@@ -211,6 +211,11 @@ type
       seven category labels stood at the plot's edge and the last at the
       other, a band's half-width wide of the bars they named.] }
     function NormalizedCoord(AValue: Double): Double;
+    { A TICK'S DATA VALUE, upstream's getTickValueOutermost: a category
+      axis' tick number through its sort (getRawOrdinalNumber), any other
+      axis' tick as it is. A tick's place is the place of THAT value
+      [Batch 135]. }
+    function TickDataValue(ATick: Double): Double;
 
     { Where the TICK MARKS go, in device px.
 
@@ -536,6 +541,14 @@ begin
   Result := (DataToCoord(AValue) - PxStart) / (PxStop - PxStart);
 end;
 
+function TTyAxis.TickDataValue(ATick: Double): Double;
+begin
+  if FScale is TTyOrdinalScale then
+    Result := TTyOrdinalScale(FScale).TickToOrdinal(ATick)
+  else
+    Result := ATick;
+end;
+
 { The Level-0 members of a tick array, in order. }
 function TyMajorTicks(const ATicks: TTyScaleTickArray): TTyScaleTickArray;
 var i, n: Integer;
@@ -573,7 +586,7 @@ begin
     { One per tick, on the anchor the label uses. }
     SetLength(Result, n);
     for i := 0 to n - 1 do
-      Result[i] := DataToCoord(ticks[i].Value);
+      Result[i] := DataToCoord(TickDataValue(ticks[i].Value));
     Exit;
   end;
 
@@ -587,7 +600,7 @@ begin
   if FInverse then dir := -dir;
   SetLength(Result, n + 1);
   for i := 0 to n - 1 do
-    Result[i] := DataToCoord(ticks[i].Value) - dir * bw / 2;
+    Result[i] := DataToCoord(TickDataValue(ticks[i].Value)) - dir * bw / 2;
   Result[n] := Result[n - 1] + dir * bw;
 end;
 

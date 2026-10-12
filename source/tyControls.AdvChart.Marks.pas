@@ -195,6 +195,11 @@ type
       the default for exactly that case is asked of the solver too, so there is
       no second definition of what a lone bar's width is. }
     Bar: TTyBarColumn;
+    { A BAR RACE [Batch 135]: realtimeSort on a category base axis of a
+      cartesian2d (BarView's shouldRealtimeSort). Its bars are clipped
+      whatever `clip` says, and one clipped past the plot is kept -- ignored,
+      laid at the edge it left by -- so it can slide back in. }
+    RealtimeSort: Boolean;
     { A PICTORIAL BAR'S OWN OPTIONS. Here for the same reason the bar column
       is: a mark builder is handed no option node, so anything option-shaped
       has to arrive on this record. }
@@ -1196,7 +1201,7 @@ var
   r, bg, plot: TTyRectF;
   p, loPt: TTyPointF;
   col: TTyBarColumn;
-  baseHoriz, haveCol, stacked: Boolean;
+  baseHoriz, haveCol, stacked, clipped: Boolean;
   shape: TTyChartShape;
   bgEl, el: TTyChartElement;
   rv: TTySeriesVisual;
@@ -1393,7 +1398,12 @@ begin
       paints nothing, and it still carries its label.
       [Revised in batch 36: every bar of no length was dropped, and its label
       with it.] }
-    if col.Clip and ClipBarLayout(ABinding.Cart.GetArea, lx, ly, lw, lh) then
+    { A RACING BAR clipped past the plot is not dropped: BarView keeps the
+      element, `ignore` (neither drawn nor hit), at the edge the clip put it
+      on, and the next order may bring it back from there [Batch 135] }
+    clipped := (col.Clip or AVisual.RealtimeSort)
+      and ClipBarLayout(ABinding.Cart.GetArea, lx, ly, lw, lh);
+    if clipped and not AVisual.RealtimeSort then
       Continue;
     r := LayoutBox(lx, ly, lw, lh);
 
@@ -1401,12 +1411,12 @@ begin
       still hit-testable -- which is what a bar on a value axis used to be. }
     if baseHoriz then
     begin
-      if r.Right - r.Left <= 0 then Continue;
+      if (r.Right - r.Left <= 0) and not clipped then Continue;
       zero := lh = 0;
     end
     else
     begin
-      if r.Bottom - r.Top <= 0 then Continue;
+      if (r.Bottom - r.Top <= 0) and not clipped then Continue;
       zero := lw = 0;
     end;
     if TyHasCorner(col.Radii) then
@@ -1416,6 +1426,7 @@ begin
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
     el.Style.Decal := RowDecal(AVisual, AStore, i);
+    el.Ignore := clipped;
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }

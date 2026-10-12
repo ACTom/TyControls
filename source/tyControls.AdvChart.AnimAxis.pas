@@ -28,7 +28,11 @@ unit tyControls.AdvChart.AnimAxis;
                                        canvas coordinate, then
                                        subPixelOptimizeLine
   The value is the tick's, as JavaScript writes the number: a category
-  axis' ordinal, the band edge past the last category one more.
+  axis' ordinal, the band edge past the last category one more. A LABEL'S is
+  getTickValueOutermost's: on a sorted category axis the RAW ordinal of the
+  category it shows, so a bar race's label keeps its anid as it moves to
+  another tick (a tick mark and a split line keep the tick number, and stay)
+  [Batch 135].
 
   Minor ticks ('minorticks_'), minor split lines ('minor_line_'), split
   areas ('area_') and the axis name ('name') are not modelled: they are
@@ -61,6 +65,9 @@ type
     LineWidth, TickWidth, SplitWidth: Double;
     Horizontal: Boolean;
     Plot: TTyXYWH;
+    { a sorted category axis' ordinals by tick (getRawOrdinalNumber); empty
+      for none [Batch 135] }
+    ByTick: TTyIntegerArray;
   end;
 
 { zrender's subPixelOptimize: a position put on the half pixel (an odd
@@ -78,6 +85,9 @@ function TyAxisAnimElements(const ASpec: TTyAxisLayoutSpec;
 function TyAxisAnimProps(const AEl: TTyAxisAnimEl): TTyAnimProps;
 { a proxy key: the axis' ('xAxis0') and the anid }
 function TyAxisAnimKey(const AAxisKey, AAnid: string): string;
+{ a label's anid: 'label_' + its tick value through ABySort (a sorted
+  category axis' ordinals by tick) [Batch 135] }
+function TyAxisLabelAnid(ATickValue: Double; const AByTick: TTyIntegerArray): string;
 
 implementation
 
@@ -187,7 +197,7 @@ begin
     begin
       if not ASpec.Placements[i].Built then Continue;
       if i > High(ASpec.TickValues) then Continue;
-      k := Push(aakLabel, 'label_' + TyJsNumberToString(ASpec.TickValues[i]), i);
+      k := Push(aakLabel, TyAxisLabelAnid(ASpec.TickValues[i], AIn.ByTick), i);
       els[k].X := ASpec.Placements[i].X;
       els[k].Y := ASpec.Placements[i].Y;
       if ASpec.Placements[i].HasM then els[k].Rotation := ASpec.Placements[i].DecRotation
@@ -218,6 +228,17 @@ begin
     end;
   SetLength(els, n);
   Result := els;
+end;
+
+function TyAxisLabelAnid(ATickValue: Double; const AByTick: TTyIntegerArray): string;
+var v: Double;
+begin
+  v := ATickValue;
+  { getRawOrdinalNumber: the map inside it, the number itself outside }
+  if (Length(AByTick) > 0) and not IsNan(v) and (v >= 0) and (v < Length(AByTick))
+    and (Frac(v) = 0) then
+    v := AByTick[Trunc(v)];
+  Result := 'label_' + TyJsNumberToString(v);
 end;
 
 function TyAxisAnimProps(const AEl: TTyAxisAnimEl): TTyAnimProps;

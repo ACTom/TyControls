@@ -1162,8 +1162,11 @@ begin
       number has to report that bar. }
     cap.Silent := host.Silent;
     cap.Datum := host.Datum;
-    { built for a state only: hidden until the state shows it [Batch 88] }
-    cap.Ignore := not spec.Show;
+    { built for a state only: hidden until the state shows it [Batch 88];
+      a racing bar's label with its ignored bar -- zrender draws no text of
+      an ignored host -- though its count runs on (forceLabelAnimation)
+      [Batch 135] }
+    cap.Ignore := (not spec.Show) or (host.Ignore and (host.Anim.Role = carBar));
     { THE ENTER ANIMATION'S VIEW: a label of this datum, fading in, and --
       unless the mark fixed its own anchor -- hanging off its host as the
       host grows: zrender recomputes a text's place from its host's current
