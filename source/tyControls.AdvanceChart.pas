@@ -2172,6 +2172,11 @@ type
       the chart, the centre the geo's dataToPoint of `coord`, else of
       `center` }
     function GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+    { [Batch 154] createBoxLayoutReference's point mode: the host's
+      dataToPoint (a cartesian's -- the convertToPixel arithmetic -- or a
+      geo's, roam and all) of `coord`, a pie's `center` when it has none;
+      False when there is no such point }
+    function BoxPointOf(ASlot: Integer; out APt: TTyPointF): Boolean;
     { something besides the geo's own picture moves with a roam of AGeo:
       a series on it; any custom series (renderItem runs again) }
     function GeoRoamHasDependents(AGeo: TTyGeo): Boolean;
@@ -2337,10 +2342,23 @@ type
       out ARef: TTyXYWH): Boolean;
     function ComponentBoxRef(const AMain: string; AIndex: Integer;
       out ARef: TTyXYWH): Boolean;
+    { [Batch 154] the same from the canvas' corner: device px with the
+      control's origin taken off (ARefLocal), or CSS px (ARefCss: that over
+      the PPI's scale) -- the frames the component views lay out in }
+    function ComponentRefLocal(const AMain: string; AIndex: Integer;
+      out ARef: TTyXYWH): Boolean;
+    function ComponentRefCss(const AMain: string; AIndex: Integer;
+      out ARef: TTyXYWH): Boolean;
     function SeriesBoxRef(ASlot: Integer; ACentre: Boolean; out ARef: TTyXYWH;
       out AFromCentre: Boolean): Boolean;
+    { [Batch 154] a map series' reference: decideCoordSysUsageKind for a
+      series whose own geo is laid out by it -- `coordinateSystem` 'matrix'
+      or 'calendar' with usage 'box' WRITTEN (a series' default is 'data'),
+      the host there -- and its dataToLayout of `coord` }
+    function MapSeriesBoxRef(ASeriesIndex: Integer; out ARef: TTyXYWH): Boolean;
     { the grids and the polars laid out in their hosts' cells, once the
-      matrices and the calendars are }
+      matrices and the calendars are [Batch 154: and the single axes and
+      the parallels] }
     procedure PlaceBoxedCoordSys;
     function CalendarGraphPoints(ASeriesIndex: Integer;
       ACal: TTyCalendar): TTyPointFArray;
@@ -8204,6 +8222,7 @@ procedure TTyAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;
 var
   k: Integer;
   keep: Boolean;
+  ref: TTyXYWH;
 begin
   for k := 0 to High(FVisualLayouts) do
   begin
@@ -8214,9 +8233,12 @@ begin
     if keep then Continue;
     FVisualLayouts[k] := Default(TTyVisualMapLayout);
     if (k > High(FVisualSpecs)) or (k > High(FVisualViews)) then Break;
+    { positionGroup in createBoxLayoutReference's container: a cell or a
+      day for one in a host [Batch 154] }
+    ComponentRefLocal('visualMap', FVisualSpecs[k].Index, ref);
     FVisualLayouts[k] := TyLayoutVisualMap(FVisualSpecs[k], FVisualViews[k],
       VisualMapContent(FVisualViews[k]), FLastRect.Right - FLastRect.Left,
-      FLastRect.Bottom - FLastRect.Top, APPI / 96, AMeasurer,
+      FLastRect.Bottom - FLastRect.Top, ref, APPI / 96, AMeasurer,
       VisualMapInk(FVisualViews[k]));
     VmBuilt(k);
   end;
@@ -8307,6 +8329,8 @@ begin
   if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
   AIn.CanvasW := (FLastRect.Right - FLastRect.Left) / scale;
   AIn.CanvasH := (FLastRect.Bottom - FLastRect.Top) / scale;
+  { _resetLocation's refContainer: a cell or a day [Batch 154] }
+  AIn.HasRef := ComponentRefCss('dataZoom', AIndex, AIn.Ref);
   AIn.Horizontal := spec.Orient <> 'vertical';
   first := nil;
   for t := 0 to High(spec.Targets) do
@@ -10807,8 +10831,10 @@ begin
       if IsNan(FPies[i].CX) or IsNan(FPies[i].CY) then FPies[i].Valid := False;
       Continue;
     end;
-    { ON A GEO [Batch 152, D14 GE4] }
-    if FBindings[i].GeoIndex >= 0 then
+    { ON A GEO [Batch 152, D14 GE4] -- OR A CARTESIAN [Batch 154]: usage
+      'box' (a pie's default) with a host of only a dataToPoint, the centre
+      its point of the coord; usage 'data' leaves the pie on the canvas }
+    if FBindings[i].BoxPoint then
     begin
       FPies[i] := GeoPieLayout(i, dim);
       Continue;
@@ -10943,6 +10969,26 @@ begin
   if not Result then ARef := CanvasXYWH;
 end;
 
+function TTyAdvanceChart.ComponentRefLocal(const AMain: string; AIndex: Integer;
+  out ARef: TTyXYWH): Boolean;
+begin
+  Result := ComponentBoxRef(AMain, AIndex, ARef);
+  ARef.X := ARef.X - FLastRect.Left;
+  ARef.Y := ARef.Y - FLastRect.Top;
+end;
+
+function TTyAdvanceChart.ComponentRefCss(const AMain: string; AIndex: Integer;
+  out ARef: TTyXYWH): Boolean;
+var s: Double;
+begin
+  Result := ComponentRefLocal(AMain, AIndex, ARef);
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  ARef.X := ARef.X / s;
+  ARef.Y := ARef.Y / s;
+  ARef.W := ARef.W / s;
+  ARef.H := ARef.H / s;
+end;
+
 { A SERIES' REFERENCE: getCoordForCoordSysUsageKindBox -- `coord` when
   written (not null), else (a pie's getCoord2) `center` -- in the host the
   binding found [Batch 147: a pie and a funnel in a matrix cell] }
@@ -10989,6 +11035,38 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.MapSeriesBoxRef(ASeriesIndex: Integer;
+  out ARef: TTyXYWH): Boolean;
+var
+  node, d, coord: TJSONData;
+  sys: string;
+  k: Integer;
+begin
+  ARef := CanvasXYWH;
+  Result := False;
+  if FOption = nil then Exit;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if not (node is TJSONObject) then Exit;
+  d := TJSONObject(node).Find('coordinateSystem');
+  if not ((d <> nil) and (d.JSONType = jtString)) then Exit;
+  sys := d.AsString;
+  if (sys <> TyMatrixSysName) and (sys <> TyCalendarSysName) then Exit;
+  d := TJSONObject(node).Find('coordinateSystemUsage');
+  if not ((d <> nil) and (d.JSONType = jtString) and (d.AsString = 'box')) then Exit;
+  if sys = TyMatrixSysName then
+    k := TyResolveComponentRef(TJSONObject(node), 'matrixIndex', 'matrixId',
+      FOption.ComponentCount(TyMatrixSysName), TyMainIds(FOption, TyMatrixSysName),
+      TyMainHoles(FOption, TyMatrixSysName))
+  else
+    k := TyResolveComponentRef(TJSONObject(node), 'calendarIndex', 'calendarId',
+      FOption.ComponentCount(TyCalendarSysName), TyMainIds(FOption, TyCalendarSysName),
+      TyMainHoles(FOption, TyCalendarSysName));
+  coord := TJSONObject(node).Find('coord');
+  if (coord <> nil) and (coord.JSONType = jtNull) then coord := nil;
+  Result := HostRefAt(sys, k, coord, ARef);
+  if not Result then ARef := CanvasXYWH;
+end;
+
 procedure TTyAdvanceChart.PlaceBoxedCoordSys;
 var
   g, p: Integer;
@@ -11007,6 +11085,14 @@ begin
         ref := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
       TyPolarResize(FOption, FPolars[p], ref);
     end;
+  { the single axes and the parallels, resized in their cells [Batch 154]
+    -- before anything reads their pixel extents }
+  for p := 0 to High(FSingles) do
+    if (FSingles[p] <> nil) and ComponentBoxRef(TySingleCoordSysName, p, ref) then
+      TySingleResizeIn(FOption, FSingles[p], ref);
+  for p := 0 to High(FParallels) do
+    if (FParallels[p] <> nil) and ComponentBoxRef('parallel', p, ref) then
+      TyParallelResizeIn(FOption, FParallels[p], ref);
 end;
 
 procedure TTyAdvanceChart.FreeRadars;
@@ -11038,7 +11124,9 @@ begin
 end;
 
 procedure TTyAdvanceChart.SolveGeos(APPI: Integer);
-var i, n: Integer;
+var
+  i, n: Integer;
+  ref: TTyXYWH;
 begin
   FreeGeos;
   n := 0;
@@ -11053,7 +11141,10 @@ begin
     { [Batch 150] the model's option holds what a roam wrote back }
     if (i <= High(FGeoRoam)) and FGeoRoam[i].Valid then
       FGeos[i].SetRoamOption(FGeoRoam[i].Centre, FGeoRoam[i].Zoom);
-    FGeos[i].Resize(FLastRect, APPI);
+    { resizeGeo in createBoxLayoutReference's container: a matrix cell or a
+      calendar day for a geo in one [Batch 154] }
+    if ComponentBoxRef('geo', i, ref) then FGeos[i].ResizeXYWH(ref, APPI)
+    else FGeos[i].Resize(FLastRect, APPI);
     FGeos[i].Gen := FGeoGen;
     { GeoView.render's updateSelectStatus }
     GeoSyncSelected(i);
@@ -11888,25 +11979,46 @@ begin
   Result := AGeo.PointOf(x, y, APt);
 end;
 
-function TTyAdvanceChart.GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+function TTyAdvanceChart.BoxPointOf(ASlot: Integer; out APt: TTyPointF): Boolean;
 var
   node, d: TJSONData;
-  geo: TTyGeo;
-  p: TTyPointF;
-  k: Integer;
+  cv: TTyConvertResult;
 begin
-  { getLayoutRect(the box, the chart): the radius' reference }
-  Result := TyPieLayoutOf(FPieSpecs[ASlot], FLastRect, FStores[ASlot], ADim);
-  geo := GeoOfSlot(ASlot);
+  APt := TyPointF(NaN, NaN);
+  Result := False;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   d := nil;
   if node is TJSONObject then
   begin
     d := TJSONObject(node).Find('coord');
-    if (d = nil) or (d.JSONType = jtNull) then d := TJSONObject(node).Find('center');
+    if ((d = nil) or (d.JSONType = jtNull))
+      and (FBindings[ASlot].SeriesType = TyPieSeriesTypeName) then
+      d := TJSONObject(node).Find('center');
   end;
-  { the default centre ['50%', '50%'] read as a coordinate is no point }
-  if not GeoPointOfJson(geo, d, p) or IsNan(p.X) or IsNan(p.Y) then
+  if (d <> nil) and (d.JSONType = jtNull) then d := nil;
+  if FBindings[ASlot].BoxCart <> nil then
+  begin
+    if d = nil then Exit;
+    cv := TyCartesianToPixel(FBindings[ASlot].BoxCart, d);
+    if (cv.Kind <> cvkArray) or (Length(cv.Values) < 2) then Exit;
+    APt := TyPointF(cv.Values[0], cv.Values[1]);
+  end
+  else if not GeoPointOfJson(GeoOfSlot(ASlot), d, APt) then
+    Exit;
+  Result := not (IsNan(APt.X) or IsNan(APt.Y));
+end;
+
+function TTyAdvanceChart.GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+var
+  p: TTyPointF;
+  k: Integer;
+begin
+  { getLayoutRect(the box, the chart): the radius' reference }
+  Result := TyPieLayoutOf(FPieSpecs[ASlot], FLastRect, FStores[ASlot], ADim);
+  { the default centre ['50%', '50%'] read as a coordinate is no point
+    [Batch 154: a cartesian's point too] }
+  if not BoxPointOf(ASlot, p) then
   begin
     Result.Valid := False;
     Exit;
@@ -11943,6 +12055,14 @@ begin
   for i := 0 to High(FBindings) do
     if (FBindings[i].SeriesType = TyGraphSeriesTypeName) and (FBindings[i].GeoIndex >= 0) then
       SolveGeoGraph(i);
+  { a chord centred on a geo's point [Batch 154] }
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesType = TyChordSeriesTypeName) and FBindings[i].BoxPoint
+      and (FBindings[i].GeoIndex >= 0) then
+    begin
+      SolveChords(ppi);
+      Break;
+    end;
 end;
 
 function TTyAdvanceChart.GeoGraphPoints(ASeriesIndex: Integer; AGeo: TTyGeo): TTyPointFArray;
@@ -12359,6 +12479,7 @@ end;
 procedure TTyAdvanceChart.SolveMapGeos(APPI: Integer);
 var
   gi, i, g, k, fi, raw, idx: Integer;
+  ref: TTyXYWH;
   nameMap, nm2: TJSONObject;
   node, d: TJSONData;
   geo: TTyGeo;
@@ -12416,7 +12537,12 @@ begin
     for k := 0 to High(FMapRoam) do
       if (FMapRoam[k].Key = FMapGroups[g].Key) and FMapRoam[k].State.Valid then
         geo.SetRoamOption(FMapRoam[k].State.Centre, FMapRoam[k].State.Zoom);
-    geo.Resize(FLastRect, APPI);
+    { resizeGeo(the first declared series): in its cell or its day when it
+      is written with usage 'box' on a matrix or a calendar [Batch 154] }
+    if MapSeriesBoxRef(FBindings[FMapGroups[g].R[0]].SeriesIndex, ref) then
+      geo.ResizeXYWH(ref, APPI)
+    else
+      geo.Resize(FLastRect, APPI);
     geo.Gen := FGeoGen;
     if FMapGroups[g].Main < 0 then Continue;
     { mapSymbolLayout: the offsets of the legend symbols }
@@ -17729,6 +17855,7 @@ var
   base: TTyLabelSpec;
   ref: TTyXYWH;
   fc: Boolean;
+  pt: TTyPointF;
 begin
   FChords := nil;
   FChordInks := nil;
@@ -17756,6 +17883,14 @@ begin
       if not TyXYWHHasSize(ref) then Continue;
       FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, ref,
         APPI, kept);
+    end
+    { usage 'box' on a cartesian or a geo: centred on its point of `coord`,
+      none drawing nothing [Batch 154] }
+    else if FBindings[i].BoxPoint then
+    begin
+      if not BoxPointOf(i, pt) then Continue;
+      FChords[i] := TyChordSolveAt(FOption, FBindings[i].SeriesIndex, FLastRect,
+        pt.X, pt.Y, APPI, kept);
     end
     else
       FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI, kept);
@@ -19608,6 +19743,7 @@ end;
 procedure TTyAdvanceChart.SolveRadars(APPI: Integer);
 var
   i, j, k, n, dim, slot: Integer;
+  ref: TTyXYWH;
   spec: TTyRadarSpec;
   lo, hi, v, dLo, dHi: Double;
   seen, fixLo, fixHi, incl0: Boolean;
@@ -19625,8 +19761,10 @@ begin
     FRadars[i] := TTyRadar.Create(spec);
     { FLastRect, and there is nothing between it and the radar: a radar's
       option carries no left/top/right/bottom at all, so nothing can shrink
-      the canvas under it. }
-    FRadars[i].Resize(FLastRect, APPI);
+      the canvas under it. [Batch 154] Unless it is in a matrix cell or a
+      calendar day: createBoxLayoutReference's container then. }
+    if ComponentBoxRef('radar', i, ref) then FRadars[i].ResizeXYWH(ref, APPI)
+    else FRadars[i].Resize(FLastRect, APPI);
   end;
 
   { ---- which store column feeds which spoke ---- }
@@ -31013,7 +31151,11 @@ begin
   if s < 0 then Exit;
   slot := SlotOfSeries(s);
   if (slot >= 0) and (FBindings[slot].MatrixIndex >= 0) and not FBindings[slot].MatrixBox then
-    Result := FBindings[slot].MatrixIndex;
+    Result := FBindings[slot].MatrixIndex
+  { a canvas type with usage 'data': the matrix is its coordinateSystem all
+    the same [Batch 154] }
+  else if (slot >= 0) and FBindings[slot].HasDataMatrix then
+    Result := FBindings[slot].DataMatrix;
 end;
 
 function TTyAdvanceChart.ConvertOnMatrix(AMatrix: TTyMatrix; AValue, AOpt: TJSONData;
@@ -43110,6 +43252,12 @@ begin
   if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
   { the layout measures in css px }
   meas := NewTextMeasurer(96);
+  { getViewRect in createBoxLayoutReference's container [Batch 154]; a cell
+    of no size far off the canvas (upstream's not-a-number view rect draws
+    nothing, and an axis of no length is no number to compare here) }
+  FTlView.HasRef := ComponentRefCss('timeline', 0, FTlView.Ref);
+  if FTlView.HasRef and not TyXYWHHasSize(FTlView.Ref) then
+    FTlView.Ref := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
   FTlView.Render(node, root, w, h, TlInk, meas, TlAnimCfg,
     FOption.GetBool('useUTC', False));
   { _doPlayStop: the timer cleared, and set again while playing --
@@ -43644,6 +43792,7 @@ var
   ws, hs: TTyDoubleArray;
   ink: TTyTbInk;
   dzOn: Boolean;
+  ref: TTyXYWH;
 begin
   n := TyToolboxCount(FOption);
   { a toolbox that went takes its view (and where it stood) with it }
@@ -43699,7 +43848,10 @@ begin
         hs[i] := th / s;
       end;
     end;
-    FTbLayouts[t] := TyToolboxLayoutOf(FTbSpecs[t], w, h, FTbPrev[t].X,
+    { getLayoutRect and positionElement in createBoxLayoutReference's
+      container: a cell or a day for one in a host [Batch 154] }
+    ComponentRefCss('toolbox', t, ref);
+    FTbLayouts[t] := TyToolboxLayoutOf(FTbSpecs[t], w, h, ref, FTbPrev[t].X,
       FTbPrev[t].Y, ws, hs);
     if FTbLayouts[t].Valid then
       FTbPrev[t] := TyPointF(FTbLayouts[t].GroupX, FTbLayouts[t].GroupY);
@@ -47752,6 +47904,7 @@ var
   node, ser: TJSONObject;
   w, h: Double;
   tm: TTyMat2D;
+  ref: TTyXYWH;
 begin
   FThumbSnapDue := False;
   w := FLastRect.Right - FLastRect.Left;
@@ -47768,7 +47921,10 @@ begin
       and (FThumbs[k].Target >= 0)
       and (FOption.ComponentAt('series', FThumbs[k].Target) is TJSONObject);
     if not FThumbs[k].Enabled then Continue;
-    FThumbs[k].Box := TyThumbBox(node, FLastRect);
+    { getLayoutRect in createBoxLayoutReference's container: the canvas, or
+      a cell or a day [Batch 154] }
+    ComponentBoxRef(TyThumbnailComponent, k, ref);
+    FThumbs[k].Box := TyThumbBox(node, ref);
     FThumbs[k].Content := TyThumbContent(FThumbs[k].Box, FThumbs[k].Model.BorderWidth);
     ser := TJSONObject(FOption.ComponentAt('series', FThumbs[k].Target));
     TyThumbRoamOf(ser.Find('roam'), FThumbs[k].RoamText, FThumbs[k].RoamOn,

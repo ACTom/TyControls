@@ -179,6 +179,28 @@ type
       is drawn on that geo; otherwise -1 and the series has a geo of its own,
       shared by every map series of the same `map` (the control builds it). }
     GeoIndex: Integer;
+    { [Batch 154] A BOX USAGE ON A HOST WITH NO dataToLayout -- a cartesian
+      or a geo (`coordinateSystemUsage: 'box'`, a pie's default):
+      createBoxLayoutReference with enableLayoutOnlyByCenter takes the host's
+      dataToPoint of `coord` (a pie's `center` when it has none) as a pie's
+      or a chord's centre; every other type lays itself out on the canvas.
+      BoxPoint says so. On a cartesian the series has no coordinate system
+      (Cart, XAxis and YAxis stay nil, nothing places, converts or stacks by
+      them): BoxCart is the pair it takes its point from and BoxXAxis /
+      BoxYAxis the axes its coord widens (scaleRawExtentInfoCreateDeal's
+      boxCoordinateSystem branch). On a geo GeoIndex is the host. }
+    BoxPoint: Boolean;
+    BoxCart: TTyCartesian2D;
+    BoxXAxis, BoxYAxis: TTyAxis;
+    { [Batch 154] THE MATRIX INJECTED AS THE COORDINATE SYSTEM OF A SERIES
+      THAT NEVER USES IT, or -1: a treemap, a chord, a gauge or a sunburst
+      with usage 'data' on a matrix lays itself out on the canvas, but
+      upstream's seriesModel.coordinateSystem is the matrix -- a finder
+      naming the series converts through it. (A tree's and a sankey's own
+      view takes its place.) HasDataMatrix says there is one -- the zero
+      record has none. }
+    HasDataMatrix: Boolean;
+    DataMatrix: Integer;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -441,6 +463,10 @@ function TyBoxLayoutType(const AType: string): Boolean;
   asks for: a gauge and a sunburst always (their layouts read the canvas),
   the box types above when the host is missing or their usage is 'data' }
 function TyCanvasOnHostType(const AType: string): Boolean;
+{ [Batch 154] the series whose layout takes a centre from a host with only
+  a dataToPoint (getCircleLayout's enableLayoutOnlyByCenter): a pie and a
+  chord }
+function TyBoxPointType(const AType: string): Boolean;
 { decideCoordSysUsageKind for a component that is no series: 'matrix' or
   'calendar' when its coordinateSystem names one of the two (the
   nonSeriesBox coordinate systems) and its coordinateSystemUsage is 'box',
@@ -700,6 +726,11 @@ begin
   Result := (AType = 'pie') or (AType = 'funnel') or (AType = 'sankey')
     or (AType = 'tree') or (AType = 'treemap') or (AType = 'chord')
     or (AType = 'gauge') or (AType = 'sunburst');
+end;
+
+function TyBoxPointType(const AType: string): Boolean;
+begin
+  Result := (AType = 'pie') or (AType = 'chord');
 end;
 
 function TyComponentBoxSysOf(ANode: TJSONData): string;
@@ -973,6 +1004,15 @@ begin
         or ((usage = 'data') and TyCanvasOnHostType(b.SeriesType)
           and (b.SeriesType <> 'pie') and (b.SeriesType <> 'funnel')) then
       begin
+        { the matrix a finder converts through [Batch 154] }
+        if (usage = 'data') and ((b.SeriesType = 'gauge') or (b.SeriesType = 'sunburst')
+          or (b.SeriesType = 'treemap') or (b.SeriesType = 'chord')) then
+        begin
+          b.DataMatrix := TyResolveComponentRef(node, 'matrixIndex', 'matrixId',
+            AOption.ComponentCount(TyMatrixSysName), MainIds(AOption, TyMatrixSysName),
+            MainHoles(AOption, TyMatrixSysName));
+          b.HasDataMatrix := b.DataMatrix >= 0;
+        end;
         b.Resolved := True;
         b.HasAxes := False;
         Result[i] := b;
@@ -1112,6 +1152,19 @@ begin
       end;
       b.GeoIndex := TyResolveComponentRef(node, 'geoIndex', 'geoId',
         AOption.ComponentCount('geo'), MainIds(AOption, 'geo'), MainHoles(AOption, 'geo'));
+      { [Batch 154] a box usage takes its centre from the geo's dataToPoint
+        (a pie by default, a chord when it says so); a type that lays itself
+        out on the canvas whatever it names has no geo to miss }
+      usage := TyMatrixUsageOf(node, b.SeriesType);
+      b.BoxPoint := (usage = 'box') and TyBoxPointType(b.SeriesType);
+      if (b.GeoIndex < 0) and TyCanvasOnHostType(b.SeriesType) then
+      begin
+        b.BoxPoint := False;
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
       if b.GeoIndex < 0 then
       begin
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
@@ -1159,6 +1212,29 @@ begin
       ABuild.AxisCount('xAxis'), AxisIds(ABuild, 'xAxis'), AxisHoles(ABuild, 'xAxis'));
     yi := TyResolveComponentRef(node, 'yAxisIndex', 'yAxisId',
       ABuild.AxisCount('yAxis'), AxisIds(ABuild, 'yAxis'), AxisHoles(ABuild, 'yAxis'));
+    { [Batch 154] A BOX USAGE ON A CARTESIAN (a pie's default, any other
+      type that writes it and lays itself out in a box or on the canvas):
+      no coordinate system -- the pair is only where a pie's or a chord's
+      centre is taken from, and the axes its coord widens. With no pair the
+      series is on the canvas. }
+    usage := TyMatrixUsageOf(node, b.SeriesType);
+    if (usage = 'box') and TyCanvasOnHostType(b.SeriesType) then
+    begin
+      if (xi >= 0) and (yi >= 0) then
+      begin
+        b.BoxCart := ABuild.CartesianAt(xi, yi);
+        if b.BoxCart <> nil then
+        begin
+          b.BoxXAxis := ABuild.Axis('xAxis', xi);
+          b.BoxYAxis := ABuild.Axis('yAxis', yi);
+          b.BoxPoint := TyBoxPointType(b.SeriesType);
+        end;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
     if (xi < 0) or (yi < 0) then
     begin
       ABuild.Note(Format(rsTyChartSeriesNoAxis, [i]));
@@ -1981,6 +2057,47 @@ begin
   end;
 end;
 
+{ scaleRawExtentInfoCreateDeal's boxCoordinateSystem branch for one
+  binding [Batch 154] }
+procedure BoxCoordUnion(AOption: TTyChartOption; const AB: TTySeriesBinding;
+  AAxis: TTyAxis; var ALo, AHi: Double; var AAny: Boolean);
+var
+  node: TJSONObject;
+  d, item: TJSONData;
+  k: Integer;
+  v: Double;
+begin
+  if AB.BoxCart = nil then Exit;
+  if AB.BoxXAxis = AAxis then k := 0
+  else if AB.BoxYAxis = AAxis then k := 1
+  else Exit;
+  node := ObjAt(AOption, 'series', AB.SeriesIndex);
+  if node = nil then Exit;
+  d := node.Find('coord');
+  if ((d = nil) or (d.JSONType = jtNull)) and (AB.SeriesType = 'pie') then
+    d := node.Find('center');
+  if not (d is TJSONArray) or (k >= d.Count) then Exit;
+  item := d.Items[k];
+  if (item = nil) or (item.JSONType in [jtNull, jtArray]) then Exit;
+  v := NaN;
+  if AAxis.AxisType = atCategory then
+  begin
+    if item.JSONType = jtString then
+    begin
+      k := AAxis.Categories.GetOrdinal(item.AsString);
+      if k >= 0 then v := k;
+    end
+    else if item.JSONType = jtNumber then
+      v := item.AsFloat;
+  end
+  else if item.JSONType = jtNumber then
+    v := item.AsFloat;
+  if IsNan(v) or IsInfinite(v) then Exit;
+  AAny := True;
+  if v < ALo then ALo := v;
+  if v > AHi then AHi := v;
+end;
+
 function TyAxisNoZoomExtent(AOption: TTyChartOption;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
@@ -2057,6 +2174,13 @@ begin
       if dhi > hi then hi := dhi;
     end;
   end;
+  { [Batch 154] A BOX USAGE ON THIS AXIS' CARTESIAN widens it by its coord:
+    `coord` (a pie's `center` when it has none), when it is an array, its
+    element at the axis' dimension (x 0, y 1) -- not null and not an array
+    -- parsed by the scale; a number that is not one adds nothing
+    (unionExtentFromNumber's comparisons) }
+  for si := 0 to High(ABindings) do
+    BoxCoordUnion(AOption, ABindings[si], AAxis, lo, hi, AAny);
   { THE RAW EXTENT, UPSTREAM'S ORDER. No data is not-a-number from here on --
     the data loop left the ends at their infinities -- and min, max,
     boundaryGap, zero, a backwards pair and startValue all happen in

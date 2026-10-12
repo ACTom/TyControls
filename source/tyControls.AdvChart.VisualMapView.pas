@@ -245,6 +245,15 @@ function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
   const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
   ACanvasW, ACanvasH, AScale: Double; const AMeasurer: ITyTextMeasurer;
   const AInk: TTyVisualMapInk): TTyVisualMapLayout;
+{ [Batch 154] the same with positionGroup's container ARef (device px, the
+  canvas' origin nought): createBoxLayoutReference's refContainer -- a
+  matrix cell or a calendar day for a visualMap in one. The item align's
+  'auto' still reads the canvas (helper.ts getItemAlign's ecSize). }
+function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
+  const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
+  ACanvasW, ACanvasH: Double; const ARef: TTyXYWH; AScale: Double;
+  const AMeasurer: ITyTextMeasurer;
+  const AInk: TTyVisualMapInk): TTyVisualMapLayout;
 
 { The elements, at AOriginX/Y on the canvas. SILENT: the component is not a
   datum. Answers how many were added. }
@@ -1451,7 +1460,8 @@ end;
 { PiecewiseView.doRender through positionGroup }
 function LayoutPiecewise(const AModel: TTyVisualMapSpec;
   const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
-  ACanvasW, ACanvasH, AScale: Double; const AMeasurer: ITyTextMeasurer;
+  ACanvasW, ACanvasH: Double; const ARef: TTyXYWH; AScale: Double;
+  const AMeasurer: ITyTextMeasurer;
   const AInk: TTyVisualMapInk): TTyVisualMapLayout;
 var
   L: TTyVisualMapLayout;
@@ -1642,7 +1652,7 @@ begin
   box := AView.Box;
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
-  r := TyGetLayoutRect(box, 0, 0, ACanvasW, ACanvasH, [0, 0, 0, 0]);
+  r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
   L.GroupX := 0 + (r.X - bb.X);
   L.GroupY := 0 + (r.Y - bb.Y);
   L.Valid := True;
@@ -1964,6 +1974,16 @@ function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
   const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
   ACanvasW, ACanvasH, AScale: Double; const AMeasurer: ITyTextMeasurer;
   const AInk: TTyVisualMapInk): TTyVisualMapLayout;
+begin
+  Result := TyLayoutVisualMap(AModel, AView, AContent, ACanvasW, ACanvasH,
+    XYWH(0, 0, ACanvasW, ACanvasH), AScale, AMeasurer, AInk);
+end;
+
+function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
+  const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
+  ACanvasW, ACanvasH: Double; const ARef: TTyXYWH; AScale: Double;
+  const AMeasurer: ITyTextMeasurer;
+  const AInk: TTyVisualMapInk): TTyVisualMapLayout;
 var
   L: TTyVisualMapLayout;
   i0, i1, gap, hs, t, ex, ey, lw, lineScale, outS0, outS1, inS0, inS1: Double;
@@ -2026,8 +2046,8 @@ begin
   L.Scale := AScale;
   Result := L;
   if AModel.SubType = 'piecewise' then
-    Exit(LayoutPiecewise(AModel, AView, AContent, ACanvasW, ACanvasH, AScale,
-      AMeasurer, AInk));
+    Exit(LayoutPiecewise(AModel, AView, AContent, ACanvasW, ACanvasH, ARef,
+      AScale, AMeasurer, AInk));
   if not AView.Show then Exit;
   if AModel.SubType <> 'continuous' then Exit;
   L.Horizontal := AView.Horizontal;
@@ -2142,7 +2162,7 @@ begin
   box := AView.Box;
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
-  r := TyGetLayoutRect(box, 0, 0, ACanvasW, ACanvasH, [0, 0, 0, 0]);
+  r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
   L.GroupX := 0 + (r.X - bb.X);
   L.GroupY := 0 + (r.Y - bb.Y);
   L.Valid := True;

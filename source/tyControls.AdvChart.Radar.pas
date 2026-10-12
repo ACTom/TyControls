@@ -149,6 +149,10 @@ type
       no left/top/right/bottom at all -- its option carries no box -- so this
       is the canvas and nothing shrinks it. }
     procedure Resize(const AViewport: TTyRectF; APPI: Integer);
+    { [Batch 154] Radar.resize in createBoxLayoutReference's container,
+      given as x / y / width / height: a matrix cell or a calendar day (a
+      cell's fractional edges make right-less-left differ from its width) }
+    procedure ResizeXYWH(const ARef: TTyXYWH; APPI: Integer);
     { The value range of one spoke, after the whole min/max chain, set BARE --
       no alignment, rings evenly spaced. }
     procedure SetAxisExtent(AIndex: Integer; ALo, AHi: Double);
@@ -799,16 +803,29 @@ begin
 end;
 
 procedure TTyRadar.Resize(const AViewport: TTyRectF; APPI: Integer);
+begin
+  FValid := False;
+  FRect := AViewport;
+  if not TyRectFIsValid(AViewport) then Exit;
+  ResizeXYWH(TyXYWHOfRect(AViewport), APPI);
+  FRect := AViewport;
+end;
+
+procedure TTyRadar.ResizeXYWH(const ARef: TTyXYWH; APPI: Integer);
 var
   i: Integer;
   base, startRad: Double;
 begin
   FValid := False;
-  FRect := AViewport;
-  if not TyRectFIsValid(AViewport) then Exit;
+  FRect := TyRectOfXYWH(ARef);
   { THREE PERCENTAGES, TWO BASES. The centre's run against the width and the
-    height separately; BOTH radii run against half the shorter side. }
-  TySolveCircle(FSpec.CentreX, FSpec.CentreY, AViewport, FCX, FCY, base);
+    height separately; BOTH radii run against half the shorter side --
+    parsePercent(center[0], width) + x, as upstream adds them. A cell of no
+    position or no size: not-a-number, nothing drawn. }
+  FCX := TyBoxResolve(FSpec.CentreX, ARef.W) + ARef.X;
+  FCY := TyBoxResolve(FSpec.CentreY, ARef.H) + ARef.Y;
+  if IsNan(ARef.W) or IsNan(ARef.H) then base := NaN
+  else base := Min(ARef.W, ARef.H) / 2;
   FR0 := TyBoxResolve(FSpec.R0V, base);
   FR1 := TyBoxResolve(FSpec.R1V, base);
   if FSpec.R0V.Kind = buPx then FR0 := FR0 * APPI / 96;

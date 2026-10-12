@@ -473,7 +473,7 @@ type
     procedure SetBoundingRect(AX, AY, AW, AH: Double);
     procedure SetViewRect(AX, AY, AW, AH: Double);
     procedure ApplyRoamOptions;
-    procedure LayoutView(const AContainer: TTyRectF);
+    procedure LayoutView(const AContainer: TTyXYWH);
   public
     constructor Create(AOption: TTyChartOption; AIndex: Integer);
     { [Batch 152] A map series group's own geo: laid out from ALayoutSeries
@@ -493,6 +493,12 @@ type
     function SetFlags(AGroup, AHover: Integer; AHbo: Cardinal; ASelected: Boolean): Boolean;
     { The map loaded, the view laid out on the container (device px) }
     procedure Resize(const AContainer: TTyRectF; APPI: Integer);
+    { [Batch 154] the same in createBoxLayoutReference's container given as
+      x / y / width / height -- a matrix cell or a calendar day: the box (and
+      layoutCenter / layoutSize) against the cell. A cell of no size is laid
+      out far off the canvas (TyBoxNowhere), out of sight as upstream's
+      not-a-number view. }
+    procedure ResizeXYWH(const ARef: TTyXYWH; APPI: Integer);
     { getRegion / getGeoCoord }
     function RegionByName(const AName: string): TTyGeoRegion;
     function GeoCoord(const AName: string; out APt: TTyGeoPt): Boolean;
@@ -2637,7 +2643,7 @@ begin
   Result := NewRect(ACX + left + 0, ACY + top + 0, w, h);
 end;
 
-procedure TTyGeo.LayoutView(const AContainer: TTyRectF);
+procedure TTyGeo.LayoutView(const AContainer: TTyXYWH);
 var
   cw, ch, aspect, size, c0, c1, actual: Double;
   rect, view: TTyXYWH;
@@ -2652,8 +2658,8 @@ var
   end;
 
 begin
-  cw := AContainer.Right - AContainer.Left;
-  ch := AContainer.Bottom - AContainer.Top;
+  cw := AContainer.W;
+  ch := AContainer.H;
   rect := FData;
   aspect := rect.W / rect.H * FAspectScale;
   useCS := False;
@@ -2662,8 +2668,8 @@ begin
   c1 := NaN;
   if FSpec.HasLayoutCenter and FSpec.HasLayoutSize then
   begin
-    c0 := TyBoxRawResolve(Scaled(FSpec.LayoutCenter[0]), cw) + AContainer.Left;
-    c1 := TyBoxRawResolve(Scaled(FSpec.LayoutCenter[1]), ch) + AContainer.Top;
+    c0 := TyBoxRawResolve(Scaled(FSpec.LayoutCenter[0]), cw) + AContainer.X;
+    c1 := TyBoxRawResolve(Scaled(FSpec.LayoutCenter[1]), ch) + AContainer.Y;
     size := TyBoxRawResolve(Scaled(FSpec.LayoutSize), JsMin(cw, ch));
     useCS := not (IsNan(c0) or IsNan(c1) or IsNan(size));
   end;
@@ -2691,7 +2697,7 @@ begin
     box.Bottom := Scaled(box.Bottom);
     box.Width := Scaled(box.Width);
     box.Height := Scaled(box.Height);
-    view := GeoLayoutRect(box, AContainer.Left, AContainer.Top, cw, ch, True, aspect);
+    view := GeoLayoutRect(box, AContainer.X, AContainer.Y, cw, ch, True, aspect);
     { applyPreserveAspect }
     if FSpec.PreserveAspect <> gpaOff then
     begin
@@ -2726,8 +2732,15 @@ begin
 end;
 
 procedure TTyGeo.Resize(const AContainer: TTyRectF; APPI: Integer);
+begin
+  ResizeXYWH(TyXYWH(AContainer.Left, AContainer.Top,
+    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top), APPI);
+end;
+
+procedure TTyGeo.ResizeXYWH(const ARef: TTyXYWH; APPI: Integer);
 var
   i: Integer;
+  cont: TTyXYWH;
   r, bound: TTyXYWH;
   hasBound: Boolean;
   lt0, lt1, rb0, rb1, x0, y0, x1, y1: Double;
@@ -2837,7 +2850,11 @@ begin
       end;
       SetBoundingRect(lt0, lt1, rb0 - lt0, rb1 - lt1);
     end;
-    LayoutView(AContainer);
+    { a cell of no size: out of sight [Batch 154] }
+    cont := ARef;
+    if not TyXYWHHasSize(cont) then
+      cont := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
+    LayoutView(cont);
     FValid := True;
   finally
     UnmaskFpu(mask);

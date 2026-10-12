@@ -110,6 +110,12 @@ type
     procedure UseStatesOf(AIndex: Integer; ANoAnimation: Boolean);
   public
     Uid: string;
+    { [Batch 154] getViewRect's container when the timeline is in a matrix
+      cell or a calendar day (createBoxLayoutReference's refContainer, css
+      px from the canvas' corner); the canvas when not HasRef. Set before
+      Render. }
+    HasRef: Boolean;
+    Ref: TTyXYWH;
     { view.group, and the two groups a render makes in it }
     Root, MainGroup, LabelGroup: TTyGfxEl;
     { _currentPointer: one element from render to render; owned here while
@@ -1374,7 +1380,8 @@ begin
   end
   else
     for k := 0 to 3 do pad[k] := NaN;
-  viewRect := TyGetLayoutRect(box, 0, 0, AW, AH, pad);
+  if HasRef then viewRect := TyGetLayoutRect(box, Ref.X, Ref.Y, Ref.W, Ref.H, pad)
+  else viewRect := TyGetLayoutRect(box, 0, 0, AW, AH, pad);
   { the label's place }
   d := lbl.Find('position');
   labelPosNum := 0;

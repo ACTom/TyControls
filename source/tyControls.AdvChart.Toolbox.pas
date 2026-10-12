@@ -194,6 +194,12 @@ function TyToolboxIconRect(const ASpec: TTyToolboxSpec; const AIcon: TTyTbIcon;
   default font. }
 function TyToolboxLayoutOf(var ASpec: TTyToolboxSpec; AW, AH, APrevX,
   APrevY: Double; const ATitleW, ATitleH: array of Double): TTyToolboxLayout;
+{ [Batch 154] the same in createBoxLayoutReference's container ARef (CSS px
+  from the canvas' corner) -- a matrix cell or a calendar day; the titles'
+  adjustment still reads the canvas (api.getWidth / getHeight) }
+function TyToolboxLayoutOf(var ASpec: TTyToolboxSpec; AW, AH: Double;
+  const ARef: TTyXYWH; APrevX, APrevY: Double;
+  const ATitleW, ATitleH: array of Double): TTyToolboxLayout;
 { The title of icon AIcon under the pointer. The adjustment lives in the
   emphasis state, and what of it shows depends on when the state was
   entered: APosAdjusted -- the hover entered it (the frame after the
@@ -977,8 +983,9 @@ begin
   Result := (V > 5e-5) or (V < -5e-5);
 end;
 
-function LayoutOfInner(var ASpec: TTyToolboxSpec; AW, AH, APrevX,
-  APrevY: Double; const ATitleW, ATitleH: array of Double): TTyToolboxLayout;
+function LayoutOfInner(var ASpec: TTyToolboxSpec; AW, AH: Double;
+  const ARef: TTyXYWH; APrevX, APrevY: Double;
+  const ATitleW, ATitleH: array of Double): TTyToolboxLayout;
 var
   i, n: Integer;
   x, y, lineMax, moveX, moveY, nextX, nextY, offX, offY, topOff, tw, th: Double;
@@ -991,7 +998,8 @@ begin
   n := Length(ASpec.Icons);
   for i := 0 to n - 1 do
     ASpec.Icons[i].Rect := TyToolboxIconRect(ASpec, ASpec.Icons[i], ASpec.Icons[i].Status);
-  Result.ViewRect := TyGetLayoutRect(ASpec.Box, 0, 0, AW, AH, ASpec.Padding);
+  Result.ViewRect := TyGetLayoutRect(ASpec.Box, ARef.X, ARef.Y, ARef.W, ARef.H,
+    ASpec.Padding);
   { layout.box }
   x := 0;
   y := 0;
@@ -1061,7 +1069,7 @@ begin
   box := ASpec.Box;
   box.Width := TyBoxRawNum(lr.W);
   box.Height := TyBoxRawNum(lr.H);
-  r := TyGetLayoutRect(box, 0, 0, AW, AH, ASpec.Padding);
+  r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, ASpec.Padding);
   Result.GroupX := APrevX + (r.X - lr.X);
   Result.GroupY := APrevY + (r.Y - lr.Y);
   { makeBackground }
@@ -1101,11 +1109,19 @@ end;
 
 function TyToolboxLayoutOf(var ASpec: TTyToolboxSpec; AW, AH, APrevX,
   APrevY: Double; const ATitleW, ATitleH: array of Double): TTyToolboxLayout;
+begin
+  Result := TyToolboxLayoutOf(ASpec, AW, AH, TyXYWH(0, 0, AW, AH), APrevX,
+    APrevY, ATitleW, ATitleH);
+end;
+
+function TyToolboxLayoutOf(var ASpec: TTyToolboxSpec; AW, AH: Double;
+  const ARef: TTyXYWH; APrevX, APrevY: Double;
+  const ATitleW, ATitleH: array of Double): TTyToolboxLayout;
 var fpm: TFPUExceptionMask;
 begin
   fpm := MaskFP;
   try
-    Result := LayoutOfInner(ASpec, AW, AH, APrevX, APrevY, ATitleW, ATitleH);
+    Result := LayoutOfInner(ASpec, AW, AH, ARef, APrevX, APrevY, ATitleW, ATitleH);
   finally
     UnmaskFP(fpm);
   end;

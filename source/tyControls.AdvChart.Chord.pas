@@ -139,6 +139,12 @@ function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ACanvas: TTyRectF; const ARef: TTyXYWH; APPI: Integer;
   const AKept: TTyBoolArray): TTyChordSolved; overload;
+{ [Batch 154] coordinateSystemUsage 'box' on a host with only a dataToPoint
+  (a cartesian, a geo): the centre is (APX, APY), the host's point of
+  `coord`; the view rect -- the radii's reference -- is the canvas' }
+function TyChordSolveAt(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ACanvas: TTyRectF; APX, APY: Double; APPI: Integer;
+  const AKept: TTyBoolArray): TTyChordSolved;
 
 { the item -> series chain of a node / a link for one key of a block ('' the
   item itself): the first that writes it, null falling through }
@@ -376,25 +382,34 @@ end;
 
 function ChordSolveImpl(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ACanvas: TTyRectF; AHasRef: Boolean; const ARef: TTyXYWH; APPI: Integer;
-  const AKept: TTyBoolArray): TTyChordSolved; forward;
+  const AKept: TTyBoolArray; AHasPoint: Boolean; APX, APY: Double): TTyChordSolved; forward;
 
 function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ACanvas: TTyRectF; APPI: Integer; const AKept: TTyBoolArray): TTyChordSolved;
 begin
   Result := ChordSolveImpl(AOption, ASeriesIndex, ACanvas, False,
-    TyXYWH(NaN, NaN, NaN, NaN), APPI, AKept);
+    TyXYWH(NaN, NaN, NaN, NaN), APPI, AKept, False, NaN, NaN);
+end;
+
+function TyChordSolveAt(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ACanvas: TTyRectF; APX, APY: Double; APPI: Integer;
+  const AKept: TTyBoolArray): TTyChordSolved;
+begin
+  Result := ChordSolveImpl(AOption, ASeriesIndex, ACanvas, False,
+    TyXYWH(NaN, NaN, NaN, NaN), APPI, AKept, True, APX, APY);
 end;
 
 function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ACanvas: TTyRectF; const ARef: TTyXYWH; APPI: Integer;
   const AKept: TTyBoolArray): TTyChordSolved;
 begin
-  Result := ChordSolveImpl(AOption, ASeriesIndex, ACanvas, True, ARef, APPI, AKept);
+  Result := ChordSolveImpl(AOption, ASeriesIndex, ACanvas, True, ARef, APPI, AKept,
+    False, NaN, NaN);
 end;
 
 function ChordSolveImpl(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ACanvas: TTyRectF; AHasRef: Boolean; const ARef: TTyXYWH; APPI: Integer;
-  const AKept: TTyBoolArray): TTyChordSolved;
+  const AKept: TTyBoolArray; AHasPoint: Boolean; APX, APY: Double): TTyChordSolved;
 var
   vx: TTyXYWH;
   node, arr, d: TJSONData;
@@ -568,6 +583,12 @@ begin
       Result.CX := TyPieResolve(spec.CentreX, TyRectFWidth(view)) + view.Left;
       Result.CY := TyPieResolve(spec.CentreY, TyRectFHeight(view)) + view.Top;
       size := Math.Min(TyRectFWidth(view), TyRectFHeight(view));
+      { the host's point of the coord [Batch 154] }
+      if AHasPoint then
+      begin
+        Result.CX := APX;
+        Result.CY := APY;
+      end;
     end;
     Result.R0 := TyPieResolve(spec.Radius0, size / 2);
     Result.R := TyPieResolve(spec.Radius1, size / 2);

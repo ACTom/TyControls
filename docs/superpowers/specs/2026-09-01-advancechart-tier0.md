@@ -13749,7 +13749,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **MX1（本批）**：模型（缺省、盒子在 init 时的 `mergeLayoutParam`、x / y 维模型不挂父模型）；两棵表头树（`data` 的遍历与 span、叶子在前的序号、重名与 null 的改名、`length`、没有 data 时从系列收集）；布局（单元：叶子与对面树的层，`size` / `levelSize` / `levels[i].levelSize` 的 px 与百分比、`confineSize`、平分剩余、最后一个单元贴到远端，全部指定且有剩余时不贴；非叶子的 span 矩形）；**单值定位**（一个维上一个值：叶子、非叶子、对面树的负数层定位、四舍五入）经 `DataToLayout` / `DataToPoint`；视图（表头格、正文格、角落格、背景与外框、两条分隔线、z2、亚像素、格子标签的溢出区与裁剪、字符串 formatter）；matrix 上的 heatmap 与 scatter / effectScatter（`matrixIndex` / `matrixId` 绑定，x / y 两列是序数列、借表头树的类目表）。
 - **MX2**：完整的定位代数——范围（`[[a, b], y]`、非叶子与范围混写、`[x1, x2, x3]` 取两端）、`clamp`（`MatrixClampOption` 的 none / all / body / corner 与「null 表示整行整列」）、`pointToData` 与 `convertFromPixel`、`convertToPixel` / `convertToLayout` / `containPixel` 的 finder；matrix 上的其余系列（custom 经 `prepareCustom` 的 `api.coord` / `api.layout`，graph 的 `COORD_SYS_USAGE_KIND_DATA`，pie / funnel 等默认 box 用法摆进一格）；交互（`triggerEvent` 的 eventData、格子的 tooltip、`silent` 的缺省规则、`cursor`），matrix 系列的悬停与提示框，标签的 `rotate`、rich 文本的溢出区。
 - **MX3**：`body.data` / `corner.data`（按 `coord` 定位的格子选项、`coordClamp`、格子里的 `value` 文字、样式的先后、稀疏的格子表）与 `mergeCells`（`resolveXYLocatorRangeByCellMerge` 的并集迭代、`spanRect`、`dataToLayout` 缺省 `ignoreMergeCells: false` 的扩张），正文格的 special z2，标签的函数 formatter，格子的 decal 与渐变，选项合并时 matrix 盒子的写回；画廊的 `matrix-stock` / `matrix-mini-bar-*`（正文文字与合并格）。
-- **[第 151 批：grid、polar、title、legend 进格子做了——容器按 x / y / 宽 / 高给出（`ContainerXYWH`、`TyXYWHContainer`），不是 `TyCoordCellContainer` 的右减左，见 §190；其余组件与 geo 是 BX2。]** **D13** 在这之上：grid / geo / legend / title 等经 `coordinateSystem: 'matrix'` + `coord` 摆进格子，走契约 ① 已有的 `TyCoordCellContainer`（`ITyBoxContainer` 由宿主坐标系的 `DataToLayout` 给出）。
+- **[第 154 批：其余组件（visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel）与 geo 也进格子了，见 §193。]** **[第 151 批：grid、polar、title、legend 进格子做了——容器按 x / y / 宽 / 高给出（`ContainerXYWH`、`TyXYWHContainer`），不是 `TyCoordCellContainer` 的右减左，见 §190；其余组件与 geo 是 BX2。]** **D13** 在这之上：grid / geo / legend / title 等经 `coordinateSystem: 'matrix'` + `coord` 摆进格子，走契约 ① 已有的 `TyCoordCellContainer`（`ITyBoxContainer` 由宿主坐标系的 `DataToLayout` 给出）。
 
 ### 上游的做法
 
@@ -13836,7 +13836,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **GE1（本批）**：`registerMap` / `getMap`（端口 API）、GeoJSON 解析（Polygon / MultiPolygon / LineString / MultiLineString、洞、`cp`、`properties[nameProperty]`、过滤、压缩格式 `UTF8Encoding` / `UTF8Scale`）、`specialAreas`、`'china'` 的三张修正表、`nameMap` / `nameProperty`、区域的包围盒与中心、geo 坐标系（盒子布局、`layoutCenter` + `layoutSize`、`boundingCoords`、`aspectScale`、`preserveAspect`、投影句柄、选项里的 `center` / `zoom` / `scaleLimit`）、`dataToPoint` / `pointToData` / `containPoint`、`convertToPixel` / `convertFromPixel` / `containPixel` 的 geo finder、geo 组件按缺省样式（主题令牌）画区域与常态标签、`regions` 的常态样式、`echartsStyle`、`show` / `clip`。
 - **[第 148 批：已做，见 §187；`focus` 对组件只认 `'self'`，`blurScope` 组件不用]** **GE2**：区域的命中（`Region.contain` 与 `contain/polygon` 的绕数）、`emphasis` / `blur` / `select` 三态（`highlight` 令牌、标签 `emphasis.label.show` 缺省为真）、`selectedMode` 与 `selectedMap`、`regions[].selected`、`geoToggleSelect` / `geoSelect` / `geoUnSelect` 动作与 `geoselectchanged` 等事件、区域的 `tooltip`、`silent`、鼠标事件里的 `componentType: 'geo'` 与 `region`、`focus` / `blurScope`；画区域的路径缓存（这批每次建表都重算）。
 - **[第 150 批：已做，见 §189；缩略图照旧不做（6.1 的缩略图只认 graph）]** **GE3**：geo 上的 roam（复用 §79 / §114 的 View 与 RoamController：拖动、滚轮、`roamTrigger`、`scaleLimit` 在手势里的钳制）、`geoRoam` 动作与事件、`center` 写回（百分比按数据矩形）、`__updateOnOwnRoam` 的只改变换不重建、缩略图（6.1 只认 graph，不做——见 §178）。
-- **[第 152 批：已做，见 §191；`geoCoord` 表、lines 的区域名坐标、map 的 dataset 输入与 `'box'` 用法没做；heatmap 的笔刷是参考光栅]** **GE4**：`map` 系列（自带 geo 或 `geoIndex`、同一张图上的多个 map 系列合成一组、`mapValueCalculation`、`showLegendSymbol` 与 `mapSymbolLayout`、`geoCoord`、visualMap 着色、`isDataNaN` 时的标签）；geo 上的 scatter / effectScatter / lines（接 `TTyLinesProject`）/ heatmap / pie / custom（`api.coord`）；`seriesIndex` finder 落到 geo、刷选的 `geoIndex`。
+- **[第 154 批：`'box'` 用法的 map 做了——组的 geo 由第一个声明的系列排在它的格子或日子里；geo 组件也进格子了，见 §193。]** **[第 152 批：已做，见 §191；`geoCoord` 表、lines 的区域名坐标、map 的 dataset 输入与 `'box'` 用法没做；heatmap 的笔刷是参考光栅]** **GE4**：`map` 系列（自带 geo 或 `geoIndex`、同一张图上的多个 map 系列合成一组、`mapValueCalculation`、`showLegendSymbol` 与 `mapSymbolLayout`、`geoCoord`、visualMap 着色、`isDataNaN` 时的标签）；geo 上的 scatter / effectScatter / lines（接 `TTyLinesProject`）/ heatmap / pie / custom（`api.coord`）；`seriesIndex` finder 落到 geo、刷选的 `geoIndex`。
 
 SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它要一个 SVG 解析器和一棵可命中的图形树，是另一件事；端口注册时拒绝它。投影的 `stream`（d3 风格）也不做。
 
@@ -14178,7 +14178,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **图案填充**：图片图案对象会交给元素的 `FillPattern`，没有对上游核过。
 - **副本选项**：上游是浅拷贝（与原项共享 itemStyle 等子对象），端口克隆原项再把 `coord` 置 null；读出来的值相同。
 - **cursor**：仍不做（见 §186）。
-- **[第 151 批：`matrix-stock` 的五个 grid 与四个 title 进格子了，逐位；`matrix-mini-bar-geo` 的 grid / geo 是 BX2，见 §190。]** **D13**：`matrix-stock` 的 grid / title 与 `matrix-mini-bar-geo` 的 grid / geo 用 `coordinateSystem: 'matrix'` + `coord` 摆进格子，仍是 D13；这两个画廊文件现在 matrix 本身（正文的字、五块合并）与上游逐位相同，格子里的组件仍在画布上。
+- **[第 154 批：`matrix-mini-bar-geo` 的二十个 grid 与十个 geo 也进格子了，逐位，见 §193。]** **[第 151 批：`matrix-stock` 的五个 grid 与四个 title 进格子了，逐位；`matrix-mini-bar-geo` 的 grid / geo 是 BX2，见 §190。]** **D13**：`matrix-stock` 的 grid / title 与 `matrix-mini-bar-geo` 的 grid / geo 用 `coordinateSystem: 'matrix'` + `coord` 摆进格子，仍是 D13；这两个画廊文件现在 matrix 本身（正文的字、五块合并）与上游逐位相同，格子里的组件仍在画布上。
 
 ### 落地
 
@@ -14293,7 +14293,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 于是：
 
 - **BX1（本批）**：机制——`decideCoordSysUsageKind`（系列与组件两套缺省）、宿主按 `matrixIndex` / `matrixId`、`calendarIndex` / `calendarId` 解析（SINGLE_REFERRING，找不到就当没有宿主、留在画布上）、`getCoordForCoordSysUsageKindBox`（`coord`，饼再看 `center`）、宿主 `dataToLayout` 的 `contentRect || rect`；容器按 x / y / 宽 / 高给出；宿主在 grid 之前布局（上游的创建次序）。接线：grid（矩形、外边界、轴名的 margin level 都以格子为参照）、polar、title、legend；系列 pie、funnel（两条旧路收成一条，漏斗也能放进日历）、sankey、tree、treemap（连同面包屑）、graph（内部视图）、chord；gauge 与 sunburst 照上游留在画布上；画廊 `matrix-stock`。
-- **BX2**：其余组件（visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel）；geo 进格子（geo 那一条线合回之后）与画廊 `matrix-mini-bar-geo`；系列以直角坐标 / geo 为宿主的 `dataToPoint` 圆心（`enableLayoutOnlyByCenter`）；交互——格子里的 grid / polar 的命中、轴指示器与提示框、格子里的 graph / tree / sankey / treemap 的漫游与命中、`dataZoom` 在格子里的 grid 上。
+- **[第 154 批：做了，见 §193；八个组件与 geo 在 6.1 里都认 box 用法；交互覆盖了格子里的 grid（指针、tooltip、命中、换算、dataZoom）与 graph、geo 的漫游。]** **BX2**：其余组件（visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel）；geo 进格子（geo 那一条线合回之后）与画廊 `matrix-mini-bar-geo`；系列以直角坐标 / geo 为宿主的 `dataToPoint` 圆心（`enableLayoutOnlyByCenter`）；交互——格子里的 grid / polar 的命中、轴指示器与提示框、格子里的 graph / tree / sankey / treemap 的漫游与命中、`dataZoom` 在格子里的 grid 上。
 
 ### 上游的做法
 
@@ -14356,10 +14356,10 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 
 ### 推迟与偏差
 
-- **BX2**：visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel 进格子；geo 进格子与 `matrix-mini-bar-geo`；直角坐标 / geo 为宿主的饼与 chord 的圆心；格子里的命中、指针、提示框、漫游。
-- **没有位置的格子**：上游的 grid、polar 在 NaN 的矩形上布局，什么都画不出；端口把它们放到画布外很远处一个 100 × 100 的盒子里——看不见，但换算会答出一个画布外的点（上游答 NaN）。sankey、tree、treemap、graph、chord 在宽高是 NaN 的格子里不画（上游 NaN，同样看不见）；legend 在宽高是 NaN 的格子里不画（上游会排出一个 NaN 宽的图例，不比）。
+- **[第 154 批：做了，见 §193。]** **BX2**：visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel 进格子；geo 进格子与 `matrix-mini-bar-geo`；直角坐标 / geo 为宿主的饼与 chord 的圆心；格子里的命中、指针、提示框、漫游。
+- **[第 154 批：timeline、single、parallel、geo 同样放到画布外的盒子里；visualMap、slider、toolbox 照 `|| 0` 排，见 §193。]** **没有位置的格子**：上游的 grid、polar 在 NaN 的矩形上布局，什么都画不出；端口把它们放到画布外很远处一个 100 × 100 的盒子里——看不见，但换算会答出一个画布外的点（上游答 NaN）。sankey、tree、treemap、graph、chord 在宽高是 NaN 的格子里不画（上游 NaN，同样看不见）；legend 在宽高是 NaN 的格子里不画（上游会排出一个 NaN 宽的图例，不比）。
 - **matrix 不存在的 sankey / graph / chord**：上游 `createGraphFromNodeEdge` 向不存在的 matrix 要维度，`setOption` 抛错、整张图不画；端口把 sankey 与 chord 画在画布上，graph 不画（它没有 view 也没有宿主）。
-- **按数据用的 sankey / tree / treemap / chord / gauge / sunburst**：上游把 matrix 记成它们的 `coordinateSystem`（没人用），`convertToPixel` 指它们会经 matrix 答出来；端口把它们解析成没有坐标系，答不出。饼与漏斗写 `'data'` 时仍按 §186 解析到 matrix。
+- **[第 154 批：treemap、chord、gauge、sunburst 现在经 matrix 答 `convertToPixel`；这一条对 sankey 与 tree 本来就说错了——tree 的视图顶替了 matrix、什么都不答，sankey 写 `'data'` 在上游视图里抛错，见 §193。]** **按数据用的 sankey / tree / treemap / chord / gauge / sunburst**：上游把 matrix 记成它们的 `coordinateSystem`（没人用），`convertToPixel` 指它们会经 matrix 答出来；端口把它们解析成没有坐标系，答不出。饼与漏斗写 `'data'` 时仍按 §186 解析到 matrix。
 - **日历上写 `'data'` 的饼**：以前端口仍把它放进那一天（§106 的路不看用法），现在照上游画在画布上；日历上按盒子用的饼不再有 `CalendarIndex`，`convertToPixel` 指它答不出（上游同样没有坐标系）。
 - **`'box'` 的 graph 的节点数据**：上游 `'box'` 的 graph 仍按 matrix 的维度建节点数据（`createGraphFromNodeEdge` 只看 `coordinateSystem`），节点的 `value` 落在哪一维与画布上的 graph 不同；端口的 graph 存储照旧，没有核过，用例的节点没有 `value`。
 - **共用求解器**：`TySolveBox` / `TySolveBoxXYWH` 改读容器自己的宽高，但它的边仍是 `SolveAxis` 的算法（起点加偏移、终点减偏移），与 `getLayoutRect` 的 `width = containerWidth - right - left` 在小数容器上不一定逐位相同；这一批格子里的路都改走 `TyGetLayoutRect`，共用求解器仍只见画布。
@@ -14460,7 +14460,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **visualMap 的 `hoverLink`**：悬停时 `DropStatic` 丢掉整张列表，move 之后不画就点击，命中测试面对空列表——端口原有的行为，基准用例写了 `hoverLink: false` 绕开，没有修。
 - **全量更新后的提示框**：旧选择动作是全量更新，端口把提示框关了；上游靠定时器在下一帧刷新它。基准用例在动作之前先 leave。
 - **没有坐标系的 pie / custom** 在 `convertToPixel` 里经 geo 0 回答的那条路没做。
-- **map 系列的 dataset 输入**不支持（只读 `data`）；`coordinateSystemUsage: 'box'` 的 map 没做。
+- **[第 154 批：`coordinateSystemUsage: 'box'` 的 map 做了，见 §193；dataset 输入仍不支持。]** **map 系列的 dataset 输入**不支持（只读 `data`）；`coordinateSystemUsage: 'box'` 的 map 没做。
 
 ### 落地
 
@@ -14558,3 +14558,102 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - `source/tyControls.AdvChart.Tooltip.pas`：`TyTooltipPlace` 的夹边。
 - `tools/advchart-oracle/tooltip-actions.js`、`tests/fixtures/advchart-tooltip-actions.json`、`tests/test.advchart.tooltipactions.pas`（新，注册在 `tytests.lpr`）。
 - §135、§146、§179、§183 在原处标注；`test.advchart.keyboard.pas`、`test.advchart.polaraxes.pas` 各改一处断言。
+
+## 193. Tier 3 第一百五十四批：box 用法（二）（D13 BX2，2026-10-13）
+
+路线图 D13 的第二批，范围照 §190 的切分：其余组件进格子、geo 进格子与画廊 `matrix-mini-bar-geo`、以直角坐标 / geo 为宿主的圆心、格子里的交互，外加 §190 留下的一条偏差（按数据用的画布类型的换算）与 §191 留下的一条（`'box'` 的 map）。BX1 之后格子里摆得下 grid、polar、title、legend 和七种系列，其余组件一个都不认 `coordinateSystem` 与 `coord`：visualMap、dataZoom slider、toolbox、timeline、thumbnail 照旧排在画布上，radar、singleAxis、parallel、geo 照旧以画布为参照；画廊 `matrix-mini-bar-geo` 的二十个 grid 在格子里，十个 geo 却堆在画布中央；饼写 `coordinateSystem: 'cartesian2d'` 时进了直角坐标的绑定（端口把它当成按数据用的系列，有轴、有 `Cart`），画在画布中心，`coord` 不撑轴；chord 写 `coordinateSystemUsage: 'box'` 放在 geo 上照样画在画布上；map 系列写 `'box'` 也画在画布上。这一批对着 6.1 的 `core/CoordinateSystem.ts`（`injectCoordSysByOption` 对系列不限宿主种类、`decideCoordSysUsageKind`）、`util/layout.ts`（`createBoxLayoutReference` 的点模式 `enableLayoutOnlyByCenter`、`getViewRectAndCenterForCircleLayout`、`positionElement`）、`coord/cartesian/Grid.ts`（`create` 的注入与 `associateSeriesWithAxis`）、`coord/scaleRawExtentInfo.ts`（`scaleRawExtentInfoEnableBoxCoordSysUsage`、`scaleRawExtentInfoCreateDeal` 的 `boxCoordinateSystem` 分支）、`coord/axisStatistics.ts` 的 `associateSeriesWithAxis`、`component/visualMap/VisualMapView.ts` 的 `positionGroup` 与 `helper.ts` 的 `getItemAlign`、`component/dataZoom/SliderZoomView.ts`（`_resetLocation`、`_findCoordRect`）、`component/toolbox/ToolboxView.ts` 的 `render`、`component/timeline/SliderTimelineView.ts` 的 `getViewRect` 与标签方向、`component/thumbnail/ThumbnailView.ts` 的 `render`、`coord/radar/Radar.ts` 的 `resize`、`coord/single/Single.ts` 的 `resize`、`coord/parallel/Parallel.ts` 的 `resize`、`coord/geo/geoCreator.ts`（`resizeGeo`、map 系列组的 geo 由第一个声明的系列布局）、`coord/matrix/Matrix.ts` 与 `coord/calendar/Calendar.ts` 的 `create`（对所有组件注入）与 `convertToPixel` 的 `getCoordSys`、`chart/pie/PieSeries.ts` 的 `getCoord2`、`chart/chord/ChordSeries.ts`（缺省 `coordinateSystem: 'none'`）与 `chordLayout.ts`、`chart/graph/GraphView.ts` 的漫游判定（`coordinateSystem.containPoint`）、`component/helper/roamHelper.ts` 的 `updateRoamControllerSimply` 逐行核过，在真 dist 上跑基准。§184、§185、§188、§190、§191 的相关处在原处标注。
+
+### 上游的做法
+
+- **哪些组件认**：`Matrix.create` / `Calendar.create` 对**所有**组件做注入，组件的缺省用法是 `'box'`，只要宿主是 matrix 或 calendar 就记 `boxCoordinateSystem`；visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel、geo 的布局都问 `createBoxLayoutReference`——这一批的八个组件加 geo 全都认，没有哪个是 6.1 不收的。dataZoom inside 没有布局，不问。
+- **visualMap**（`positionGroup`）：`positionElement(group, boxParams, refContainer)`——组的包围盒按参照排；`itemAlign: 'auto'` 的方向仍按**画布**比（`getItemAlign` 的 `ecSize`）。
+- **dataZoom slider**（`_resetLocation`）：`getLayoutRect(layoutParams, refContainer)`；没写的 `'ph'` 占位里，横向的 `right` 是 `refContainer.width - coordRect.x - coordRect.width`、`top` 是 `refContainer.height - 30 - edgeGap - 移动条`——**参照的宽高减去目标 grid 的全局矩形**，两个坐标系混在一起；放在格子里而目标 grid 在画布上时，slider 的 x 是格子的 x 加 grid 的 x。目标 grid 不在时的缺省矩形（中间五分之三）仍按画布。
+- **toolbox**：`getLayoutRect(boxParams, refContainer, padding)` 定换行的宽，`positionElement` 在参照里摆组；标题的出界调整仍按画布（`api.getWidth()` / `getHeight()`）。
+- **timeline**：`getViewRect` 是 `getLayoutRect(boxParams, refContainer, padding)`；标签在轴哪一侧仍拿视图矩形的中心比画布的一半。
+- **thumbnail**：盒子是 `getLayoutRect` 在参照里（缺省右下各 1、宽高 25%——是格子的 25%），内容区再缩半个边框。
+- **radar**：`cx = parsePercent(center[0], ref.width) + ref.x`，半径对 `min(ref.width, ref.height) / 2`——与 polar 一样的算法。
+- **singleAxis / parallel**：`getLayoutRect(getBoxLayoutParams(), refContainer)`，然后照常调轴。
+- **geo**（`resizeGeo`）：`layoutCenter` / `layoutSize` 写全时，中心是对参照宽高的百分比加参照的 x / y、大小对参照短边；否则 `getLayoutRect`（带 aspect）在参照里再 `applyPreserveAspect`。源码自己注释着「在直角坐标上布局理论可行但没支持」——只有 matrix 与日历。
+- **map 系列**：组自己的 geo 由第一个声明的系列 `resizeGeo`，所以那个系列写 `coordinateSystem: 'matrix' | 'calendar'` 且**明写** `coordinateSystemUsage: 'box'`（系列的缺省是 `'data'`）时，geo 排在它的格子里；`'data'` 是「不适用」，geo 仍在画布上。
+- **系列的点模式**：系列不受 `canBeNonSeriesBoxCoordSys` 限制——任何坐标系都能当系列的盒子宿主。直角坐标与 geo 没有 `dataToLayout`，`createBoxLayoutReference` 只在 `enableLayoutOnlyByCenter`（`getCircleLayout`：饼与 chord）时取宿主的 `dataToPoint(coord)` 当圆心（饼没写 `coord` 时取 `center`，缺省的 `['50%', '50%']` 当坐标是 NaN、画不出），视图矩形——半径的参照——是整张画布；其余类型报错、留在画布上。饼的缺省用法是 `'box'`，chord 要明写；chord 写 `'data'`（缺省）时直角坐标记成它的 `coordinateSystem`，圆心仍是画布的。
+- **coord 撑轴**：`Grid.create` 给每个注入了直角坐标的系列（不论盒子还是数据）调 `associateSeriesWithAxis`；`scaleRawExtentInfoCreateDeal` 遇到有 `boxCoordinateSystem` 的系列，取 `coord`（饼再看 `center`）是数组时在这根轴的维度（x 0、y 1）上那一项——不是 null、不是数组——经 `scale.parse` 并进范围。于是一个饼的圆心能把只有它的值轴撑出来，类目轴上的类目名就是它的序号。
+- **按数据用的画布类型**：treemap、chord、gauge、sunburst 写 `coordinateSystem: 'matrix'` 而用法是 `'data'` 时，matrix 被记成它们的 `coordinateSystem`、布局不用它；`convertToPixel({seriesIndex})` 经 matrix 的 `getCoordSys` 答 `dataToPoint`。tree 的 `'data'` 由它自己的视图坐标系顶替，什么都不答；sankey 写 `'data'` 时它的视图在 `render` 里抛错，整张图不画。
+- **交互**：格子里的 grid 与画布上的 grid 没有两样——`updateAxisPointer` 的点、`findHover`、`convertFromPixel`、`containPixel`、轴 tooltip 的锚点都在格子里的矩形上；graph 的漫游判定是视图 `containPoint`（变换后的视图矩形），geo 是它自己的区域，滚轮在格子外什么都不动。
+
+### port 以前
+
+- visualMap、slider、toolbox、timeline 的布局只收画布的宽高（原点恒为 0）；thumbnail、radar、geo 收 `FLastRect`；single 与 parallel 在 `Rebuild` 里按画布建好就不再动。
+- `TTyRadar.Resize` 与 `TTyGeo.Resize` 的容器是 `TTyRectF`（宽是右减左），matrix 格子的小数边会差最后一位。
+- 饼在直角坐标上走普通的直角坐标绑定：有 `Cart`、`XAxis`、`YAxis`，进轴的系列索引，`coord` 不撑轴，画在画布中心；geo 上的饼不论用法都按 geo 的点画（GE4）；chord 只认格子与日历。
+- matrix 上按数据用的 treemap、chord、gauge、sunburst 解析为画布，`convertToPixel` 指它们答不出（§190 记为偏差）。
+
+### 做法
+
+- **参照**（`tyControls.AdvanceChart`）：`ComponentRefLocal`（`ComponentBoxRef` 减去控件原点：设备像素、画布左上为 0）与 `ComponentRefCss`（再除以 PPI 的比例），给只认画布坐标的视图用；没有宿主时两者就是 (0, 0, 宽, 高)，画布上的布局逐位不变。
+- **visualMap**（`VisualMapView`）：`TyLayoutVisualMap` 加带 `ARef` 的重载，连续与分段两处 `positionGroup` 的 `TyGetLayoutRect` 换成参照；`itemAlign` 的 auto 仍用画布宽高。
+- **slider**（`DataZoomView`）：`TTyDzSliderInput` 多 `HasRef` / `Ref`；`'ph'` 的 right / top 用参照的宽高减 grid 的矩形，`TyGetLayoutRect` 在参照里解；缺省矩形仍按画布。
+- **toolbox**（`Toolbox`）：`TyToolboxLayoutOf` 加带 `ARef` 的重载，视图矩形与组的位置在参照里，标题调整仍按画布。
+- **timeline**（`Timeline`）：`TTyTimelineView` 多 `HasRef` / `Ref`，`Render` 前由控件写入；视图矩形在参照里，标签方向仍按画布。
+- **thumbnail**（`Thumbnail`）：`TyThumbBox` 加 x / y / 宽 / 高的重载，控件一律经 `ComponentBoxRef` 给容器。
+- **radar**（`Radar`）：`TTyRadar.ResizeXYWH`——`TyBoxResolve(center, w) + x`、`min(w, h) / 2`；`Resize(TTyRectF)` 转过去，画布上逐位不变。
+- **single / parallel**：`TySingleResizeIn`（`SingleBoxSpec` 拆出来，`TyGetLayoutRect` 在参照里，再 `_adjustAxis`）、`TyParallelResizeIn`（`ParallelBoxIn` 在参照里，再 `LayoutAxes`）；`PlaceBoxedCoordSys` 在 grid 与 polar 之后调它们——任何东西读轴的像素长度之前。
+- **geo**（`Geo`）：`TTyGeo.ResizeXYWH`，`LayoutView` 的容器改成 x / y / 宽 / 高（`layoutCenter` 的 `+ x`、`GeoLayoutRect` 的原点）；`SolveGeos` 按 `ComponentBoxRef` 选；map 系列组的 geo 由 `MapSeriesBoxRef`（第一个声明的系列：宿主是 matrix / 日历且明写 `'box'`）选。
+- **绑定**（`Series`）：`TTySeriesBinding` 多 `BoxPoint`、`BoxCart`、`BoxXAxis` / `BoxYAxis`、`HasDataMatrix` / `DataMatrix`（零值都是「没有」）。直角坐标上用法是 `'box'` 的画布类型（pie、funnel、sankey、tree、treemap、chord、gauge、sunburst）不再进直角坐标——`Cart`、`XAxis`、`YAxis` 是 nil，不进轴的系列索引、不堆叠、不换算——只记取点的 `BoxCart` 和它撑的两根轴，饼与 chord 再记 `BoxPoint`（`TyBoxPointType`）；找不到轴时留在画布上。geo 上按 `TyMatrixUsageOf` 判 `BoxPoint`，geo 不在时画布类型留在画布上。matrix 上 `'data'` 的 treemap、chord、gauge、sunburst 记下 `DataMatrix`。
+- **撑轴**：`TyAxisNoZoomExtent` 在数据循环之后对每个有 `BoxCart` 的绑定 `BoxCoordUnion`——`coord`（饼再看 `center`）的那一维，数字原样、类目轴上的字符串按 `GetOrdinal`，非数不并。
+- **圆心**：`BoxPointOf`（直角坐标经 `TyCartesianToPixel`——`convertToPixel` 的那套算术，仿射快路照走；geo 经 `GeoPointOfJson`）；`SolvePies` 的 geo 分支改成看 `BoxPoint`（`GeoPieLayout` 的点改由 `BoxPointOf` 取）；`SolveChords` 多一支 `TyChordSolveAt`（`Chord`：画布当视图矩形、圆心是那个点，组的动画原点照旧按画布）；geo 漫游后 `GeoDependentsRelayout` 在有 geo 上的 `'box'` chord 时重解 chord。
+- **换算**：`FinderMatrix` 在系列没有按数据的 matrix 时看 `DataMatrix`。
+- **没有大小的格子**：timeline、single、parallel、geo 放到画布外的 `TyBoxNowhere` 盒子（同 BX1 的 grid 与 polar）；visualMap、slider、toolbox 照 `getLayoutRect` 的 `|| 0` 排（上游如此，结果有限）。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌、没有新的 JSON 入口；控件不拆，没有新的 published 属性。
+
+### 基准
+
+`tools/advchart-oracle/box-usage2.js`（新；真 dist，node SSR，`chart._ssr = false`，`env.node` 关、`getDom` 打桩——漫游控制器才挂上，同 geo-roam.js；xorshift32；zrender 宽度表；地图 `bx2sq`（三个方块）与画廊的替身 `target_map`（每个州一个方块，同 matrix3.js），GeoJSON 原文写进夹具；tooltip 内容的 `getSize` 答 80 × 40，同 tooltip-actions.js；两次生成逐字节一致，`process.exit()`）→ `tests/fixtures/advchart-box-usage2.json`（约 139 KB）：
+
+- **19 例**，矩阵与日历沿用 BX1 的（格子 713 / 4 宽、527 / 7 高；日历 90 × 70 的日格）：
+  - **component**（10）：visualMap 四个（连续的缺省在一格、分段的靠右居中跨两行、日历一天里居中、`matrixIndex` 不在的在画布上）；slider 三个（格子里的缺省占位——目标 grid 在画布上、格子里写四边、日历一天里竖的）；toolbox 三个（缺省右上、竖的居中跨三行、日历里带 padding）；timeline 两例（跨三列写四边、日历一天里的缺省盒子）；thumbnail（缺省盒子在两乘三的格子范围里，graph 在画布上）；radar 三个（缺省、百分比中心与混合半径跨格子、日历）；singleAxis 三个（缺省 5%、写了盒子的类目轴跨两列、日历里竖的）；parallel 两个（跨三列写四边、日历里竖排）；geo 五个（缺省盒子、`layoutCenter` / `layoutSize`、跨格子写四边且 `aspectScale: 1`、日历一天、`matrixIndex` 不在的在画布上）。
+  - **series**（5）：直角坐标上的饼三个（`coord` 加像素半径、`center` 当坐标加百分比半径、第二根 y 轴上的环）与折线，外加类目轴上按类目名的饼；geo 与直角坐标上的 `'box'` chord、geo 上按 `coord` 的饼、`'data'` 的 chord，再一步 geoRoam；map 三个（`'box'` 在一格、`'box'` 在日历一天里带 `layoutCenter` / `layoutSize`、没写用法的在画布上）；matrix 上按数据用的 tree、treemap、chord、gauge、sunburst 与缺省盒子的 sankey 的换算。
+  - **interact**（3）：格子里的两个 grid 带轴 tooltip——三步 `updateAxisPointer`（第一个 grid 里、第二个 grid 里、两个都不在），`findHover` 四点、`convertFromPixel` 两次、`containPixel` 三次；格子里的 grid 带 inside 与画布上的 slider，一步 `dataZoom` 动作；`'box'` 的 graph 与 geo 各在一片格子里带 roam——graphRoam 缩放与平移、geoRoam 缩放与平移、滚轮在 graph 上、在 geo 上、在两者之外，共七步。
+  - **gallery**：`matrix-mini-bar-geo`（二十个 grid、十个 geo）。
+- **记录**：每个状态记 matrix、grid、visualMap 的组、slider 的 `_location` / `_size`、toolbox 的组、timeline 的两个组、thumbnail 的背景与内容区、radar 的中心与半径、single 与 parallel 的矩形（parallel 再记每根轴的位置）、geo 的视图与 `getRoamTransform`；饼与 chord 的扇形、map 的 geo 视图、graph 的视图与节点经 `dataToPoint` 的全局点；每根直角坐标轴的 `scale.getExtent()`；`convertToPixel` / `convertFromPixel` / `containPixel`；`findHover`（只在第一个状态：之后 tooltip 的富文本框在 node 里是可命中的元素，端口的不是）；axisPointer 模型的每根轴（显隐、值、行）；tooltip 的显示、内容、锚点。
+- **50 条守卫**全部成立：每例的转写（R1 每个按盒子用的组件的参照就是宿主对 `coord` 的 `dataToLayout`，R2 single 与 parallel 的矩形就是 `getLayoutRect` 在参照里，R3 宿主不在的 visualMap 与 geo 与去掉 `coordinateSystem` 的同一张图逐项相同），与 31 条事实，其中：slider 的占位是格子的 x 加 grid 的 x（两套坐标混用）、thumbnail 的宽是格子的 25%、radar 的缺省中心在格子中心、single 的缺省盒子从格子缩进 5%、直角坐标上的饼坐在 `convertToPixel` 的点上、饼的坐标把 x 轴撑过 −4 与 10（折线只有 2 到 6；取整后是 −6 到 12，第二根 y 轴只有饼，0 到 100）、百分比半径按画布、类目名的饼坐在它那一档、geo 上的 `'box'` chord 跟着 roam 而 `'data'` 的在画布中心、`'box'` 的 map 在格子里、按数据用的四种答 matrix 的点而 tree 与缺省盒子的 sankey 不答、格子里的指针、命中与 `containPixel`、dataZoom 窗口改了格子里 grid 的像素、轴 tooltip 的锚点就是指针、graph 与 geo 在格子里缩放平移、滚轮各管各的、格子外不动、画廊的二十个 grid 与十个 geo 都在格子里。
+
+### 测试
+
+`test.advchart.boxusage2`（新，注册在 `tytests.lpr`；量字器是 SSR 表）：
+
+- **`TAdvChartBoxUsage2OracleTest`**（6 个）：
+  - 四个逐位重放，按例的组：component、series、interact、gallery。每例画一次，每一步之后（`DispatchAction`；滚轮是 `DoMouseWheel`）再画一次，逐状态比：grid 的矩形、`VisualMapLayout` 的组、`DataZoomSliderLayout` 的位置与长宽、`ToolboxLayout` 的组、`TimelineView` 的两个组、`ThumbnailState` 的盒子与内容区、`RadarLayout`、`SingleLayout` / `ParallelLayout` 的矩形与轴位、`GeoLayout` 的视图与 roam（`RoamTrans`）、饼的扇形（画面元素）、`ChordSolved`、`MapGeoOf` 的视图、`GraphView` 的视图与节点、轴的范围、三种换算、`HitTestAt`、`TipHits` 的值与行、tooltip 的显示 / `_show` / 内容 / `TooltipAnchorF`。四个测试合计 1176 次比较（212 / 218 / 423 / 323）。
+  - `TestTheBindings`：直角坐标上的饼有 `BoxPoint` 与 `BoxCart`、没有 `Cart` 与 `XAxis`、撑两根轴；写 `'box'` 的 chord 同样；`'data'` 的 chord 在直角坐标上、没有点；geo 上 `'data'` 的饼没有点；`'data'` 的 gauge 有 `DataMatrix`、`'box'` 的 sunburst 没有；直角坐标上 `'box'` 的漏斗在画布上、撑轴、没有点；geo 不在的饼在画布上。
+  - `TestACoordNamingNoCellDoesNotRaise`：visualMap、slider、toolbox、timeline、radar、single、parallel、geo、`'box'` 的 map 与 geo 上的饼，`coord` 指不到格子（没有大小），再一张日历越界的日子（有大小、没有位置），各画两次（换一次尺寸）不抛。
+
+首跑：component、series、gallery **一次逐位通过**。interact 不过的一处是 `findHover`：`updateAxisPointer` 之后上游在 (378, 300) 什么都没命中——那里盖着 tooltip 的富文本框，node 里它是个可命中的 Text；端口的盒子不是命中目标（§192 的 enterable 偏差同源），于是基准只在第一个状态记命中。`TestACoordNamingNoCellDoesNotRaise` 起初在 timeline 上报 `EInvalidOp`：没有大小的格子让视图矩形与轴长都是 NaN，比较一碰就报——于是 timeline 也放到画布外的盒子里。同一个测试还撞出一个与这一批无关的旧问题：timeline 的缺省 `axisType` 是 `'time'`，数据写成非日期的字符串时 `DataToCoord` 比较 NaN 报 `EInvalidOp`（画布上的 timeline 一样），用例改写 `axisType: 'category'`，问题记在下面。生成器那边：sankey 写 `'data'` 放在 matrix 上，上游在视图的 `render` 里抛错（§190 以为它会经 matrix 答换算）；缺省盒子的 sankey 没写 `coord` 时视图是 NaN、同样抛错，用例给了 `coord`；画廊的 grid 是二十个不是四十个；slider 的占位守卫起初写成「x 在格子左边」，上游是格子的 x 加 grid 的 60。
+
+为确认比较真的在比，临时改坏基准的 24 处（visualMap 的组、slider 的位置、toolbox 的组、timeline 的组、thumbnail 的内容区、radar 的中心、single 的矩形、parallel 的轴位、geo 的视图、饼的圆心、轴的范围、roam 之后 chord 的圆心、map 的视图、按数据用的换算、指针的值、`convertFromPixel`、滚轮之后 graph 的节点与 geo 的 roam、画廊 geo 的视图、命中、`containPixel`、tooltip 的锚点与内容、dataZoom 之后的换算），每一处都如期变红，再还原（逐字节核对）。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartBoxUsage2OracleTest` 6，以及 改动波及的（一个套件一个进程）`TAdvChartBoxUsageOracleTest` 9、`TAdvChartMatrixOracleTest` 3、`TAdvChartMatrixChartTest` 8、`TAdvChartMatrix2AlgebraTest` 3、`TAdvChartMatrix2ViewTest` 3、`TAdvChartMatrix2ChartTest` 7、`TAdvChartMatrix3ViewTest` 6、`TAdvChartMatrix3AlgebraTest` 4、`TAdvChartMatrix3ChartTest` 4、`TAdvChartCalendarOracleTest` 4、`TAdvChartCalendarChartTest` 1、`TAdvChartSeriesCalendarOracleTest` 3、`TAdvChartHeatmapCalendarOracleTest` 2、`TAdvChartGeoOracleTest` 5、`TAdvChartGeoTest` 9、`TAdvChartGeoInteractOracleTest` 2、`TAdvChartGeoInteractTest` 5、`TAdvChartGeoRoamOracleTest` 2、`TAdvChartGeoRoamTest` 9、`TAdvChartGeoSeriesOracleTest` 1、`TAdvChartGeoSeriesTest` 7、`TAdvChartVisualMapOracleTest` 8、`TAdvChartVisualMapViewOracleTest` 2、`TAdvChartVisualMapPiecewiseOracleTest` 7、`TAdvChartVisualMapPiecewiseViewOracleTest` 3、`TAdvChartVisualMapInteractOracleTest` 1、`TAdvChartVisualMapInteractTest` 6、`TAdvChartVisualMapChannelsOracleTest` 4、`TAdvChartDataZoomSliderOracleTest` 6、`TAdvChartDataZoomWindowOracleTest` 7、`TAdvChartDataZoomInteractOracleTest` 8、`TAdvChartToolboxOracleTest` 5、`TAdvChartToolboxTest` 8、`TAdvChartTimelineOracleTest` 7、`TAdvChartTimelineTest` 8、`TAdvChartThumbnailAxisExpandOracleTest` 10、`TAdvChartThumbnailAxisExpandTest` 5、`TAdvChartRadarRuleTest` 30、`TAdvChartRadarDrawTest` 9、`TAdvChartSingleRiverTest` 13、`TAdvChartParallelOracleTest` 6、`TAdvChartParallelTest` 8、`TAdvChartParallelBrushOracleTest` 7、`TAdvChartParallelBrushTest` 6、`TAdvChartPieTest` 24、`TAdvChartPieLabelTest` 18、`TAdvChartPieAvoidTest` 5、`TAdvChartChordTest` 9、`TAdvChartTooltipActionsOracleTest` 13、`TAdvChartTooltipActionsTest` 7、`TAdvChartConvertJitterTest` 10、`TAdvChartCoordAffineOracleTest` 2、`TAdvChartSeriesTest` 28、`TAdvChartGalleryTest` 1、`TAdvChartHostileOptionTest` 1、`TAdvChartGraphRoamOracleTest` 1、`TAdvChartGraphRoamTest` 5、`TAdvChartKeyboardOracleTest` 3、`TAdvChartKeyboardTest` 20（窗口那一个照旧 Ignored）、`TAdvChartFunnelRuleTest` 18、`TAdvChartFunnelDrawTest` 5、`TAdvChartGaugeRuleTest` 31、`TAdvChartGaugeDrawTest` 8、`TAdvChartSunburstOracleTest` 4、`TAdvChartTreemapOracleTest` 2、`TAdvChartMultiAxisTest` 12、`TAdvChartValueAxisOracleTest` 1、`TAdvChartCategoryMinMaxOracleTest` 4、`TAdvChartGridBoundsOracleTest` 3、`TAdvChartAxisBreaksOracleTest` 8、`TAdvChartSamplingOracleTest` 9、`TAdvanceChartTest` 60。变异候选列在会话草稿 `s193.md.candidates.md`（22 条，另记 3 处可能存活）。
+
+### 画廊
+
+`matrix-mini-bar-geo` 现在整张画得出来：二十个 grid 与十个 geo 都在各自的格子里，逐位（地图在浏览器里是取来的，测试与基准都注册同一张替身）。§188 记下的 D13 那两份画廊文件到此都在格子里了。
+
+### 推迟与偏差
+
+- **没有大小的格子**：timeline、single、parallel、geo 放到画布外的 `TyBoxNowhere` 盒子（同 §190 的 grid 与 polar）——看不见，但换算会答出一个画布外的点，上游是 NaN。
+- **撑轴的边角**：`coord` 是 `Infinity` 时端口不并（上游 `unionExtentFromNumber` 照并）；类目轴上找不到的类目名端口不并，上游的 `OrdinalScale.parse` 在轴没有 `data` 时会把它收进类目。
+- **直角坐标上 `'box'` 的 graph** 不在这条路上（它的视图另有 `injectCoordSysByOption`），照旧按数据用的直角坐标绑定；用例没有覆盖。
+- **geo 上 `'data'` 的饼**：GE4 把它画在 geo 的点上，现在照上游画在画布上；geo 上 `'data'` 的 chord 仍记 `GeoIndex`（`convertToPixel` 经 geo 答，上游如此），布局在画布上。
+- **tooltip 的框当命中目标**：node 里富文本框可命中，端口不是（§192 已记）；基准只在第一个状态比 `findHover`。
+- **漫游与命中**：基准覆盖格子里的 graph 与 geo；格子里的 tree、sankey、treemap 的漫游走的是同一套视图（`ContainTrigger` 看变换后的视图矩形），没有单独的用例；格子里 polar 的指针没有用例。
+- **按数据用的画布类型**：换算经 matrix 答了；`containPixel` 指它们照旧（上游问系列视图的 `containPoint`，gauge 等没有）——没有核。
+- **timeline 的旧问题**：缺省 `axisType: 'time'` 而 `data` 不是日期时 `DataToCoord` 比较 NaN 报 `EInvalidOp`——与格子无关，画布上一样；这一批没有修，留给里程碑。
+- **控件原点不为零**：参照由 `ComponentBoxRef` 减去 `FLastRect` 的左上角得来，测试的原点都是 (0, 0)，非零原点没有用例。
+
+### 落地
+
+- `source/tyControls.AdvanceChart.pas`：`ComponentRefLocal`、`ComponentRefCss`、`MapSeriesBoxRef`、`BoxPointOf`；`PlaceBoxedCoordSys` 加 single 与 parallel；visualMap、slider、toolbox、timeline、thumbnail、radar、geo、map 系列的 geo 的容器；`SolvePies` 的点模式、`SolveChords` 的 `TyChordSolveAt`、`GeoDependentsRelayout` 重解 chord；`FinderMatrix` 看 `DataMatrix`；timeline 没有大小时放到画布外。
+- `source/tyControls.AdvChart.Series.pas`：`BoxPoint` / `BoxCart` / `BoxXAxis` / `BoxYAxis` / `HasDataMatrix` / `DataMatrix`、`TyBoxPointType`、`BoxCoordUnion`；直角坐标、geo、matrix 三处绑定。
+- `source/tyControls.AdvChart.VisualMapView.pas`、`DataZoomView.pas`、`Toolbox.pas`、`Timeline.pas`、`Thumbnail.pas`：参照容器的重载或字段。
+- `source/tyControls.AdvChart.Radar.pas`（`ResizeXYWH`）、`Single.pas`（`TySingleResizeIn`）、`Parallel.pas`（`TyParallelResizeIn`）、`Geo.pas`（`ResizeXYWH`，`LayoutView` 收 x / y / 宽 / 高）、`Chord.pas`（`TyChordSolveAt`）。
+- `tools/advchart-oracle/box-usage2.js`、`tests/fixtures/advchart-box-usage2.json`、`tests/test.advchart.boxusage2.pas`（新，注册在 `tytests.lpr`）。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
+- §184、§185、§188、§190、§191 在原处标注。

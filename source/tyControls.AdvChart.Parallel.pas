@@ -201,6 +201,12 @@ type
   axes' places (resize / _layoutAxes). }
 function TyBuildParallels(AOption: TTyChartOption;
   const AViewport: TTyRectF): TTyParallelArray;
+{ [Batch 154] Parallel.resize again in createBoxLayoutReference's container
+  ARef -- a matrix cell or a calendar day: getLayoutRect of the box there,
+  then the axes laid out on it. A cell of no position or no size: the box
+  far off the canvas (TyBoxNowhere), as a grid's. }
+procedure TyParallelResizeIn(AOption: TTyChartOption; APar: TTyParallel;
+  const ARef: TTyXYWH);
 
 { The store's columns of a parallel series: one per row element up to the
   widest of the data and the highest 'dimN', 'dimN' (typed by its axis,
@@ -534,7 +540,15 @@ end;
 
 { mergeDefaultAndTheme's mergeLayoutParam (layoutMode 'box') over the
   defaults 80 / 60 / 80 / 60, then getLayoutRect on the chart }
+function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH): TTyXYWH; forward;
+
 function ParallelBox(ANode: TJSONObject; const AViewport: TTyRectF): TTyXYWH;
+begin
+  Result := ParallelBoxIn(ANode, TyXYWH(AViewport.Left, AViewport.Top,
+    AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top));
+end;
+
+function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH): TTyXYWH;
 var
   raw, target: TTyCalBoxKeys;
   box: TTyRawBox;
@@ -562,8 +576,7 @@ begin
   box.Height := target[3].V;
   box.Top := target[4].V;
   box.Bottom := target[5].V;
-  Result := TyGetLayoutRect(box, AViewport.Left, AViewport.Top,
-    AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top, []);
+  Result := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
 end;
 
 { `axisModel.get('parallelIndex') || 0`, strictly a number to match }
@@ -860,6 +873,27 @@ begin
       par.FRect := ParallelBox(node, AViewport);
       LayoutAxes(par, node);
     end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyParallelResizeIn(AOption: TTyChartOption; APar: TTyParallel;
+  const ARef: TTyXYWH);
+var
+  node: TJSONObject;
+  mask: TFPUExceptionMask;
+begin
+  if (AOption = nil) or (APar = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt('parallel', APar.Index));
+  if node = nil then Exit;
+  mask := MaskFP;
+  try
+    APar.FRect := ParallelBoxIn(node, ARef);
+    if not TyXYWHIsValid(APar.FRect) then
+      APar.FRect := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize,
+        TyBoxNowhereSize);
+    LayoutAxes(APar, node);
   finally
     UnmaskFP(mask);
   end;

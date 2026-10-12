@@ -133,6 +133,9 @@ function TyThumbModelOf(ANode: TJSONObject): TTyThumbModel;
 { the box: mergeLayoutParam at init over right 1, bottom 1, 25% x 25%, then
   getLayoutRect on the viewport }
 function TyThumbBox(ANode: TJSONObject; const AViewport: TTyRectF): TTyXYWH;
+{ [Batch 154] the same in createBoxLayoutReference's container (a matrix
+  cell or a calendar day; the canvas as x / y / width / height) }
+function TyThumbBox(ANode: TJSONObject; const ARef: TTyXYWH): TTyXYWH;
 { the content rect: the box shrunk by half the rim }
 function TyThumbContent(const ABox: TTyXYWH; ABorderWidth: Double): TTyXYWH;
 { the path an item builds (SymbolClz / ECLinePath.buildPath) }
@@ -331,6 +334,12 @@ begin
 end;
 
 function TyThumbBox(ANode: TJSONObject; const AViewport: TTyRectF): TTyXYWH;
+begin
+  Result := TyThumbBox(ANode, TyXYWH(AViewport.Left, AViewport.Top,
+    AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top));
+end;
+
+function TyThumbBox(ANode: TJSONObject; const ARef: TTyXYWH): TTyXYWH;
 const
   cKey: array[0..5] of string = ('width', 'left', 'right', 'height', 'top', 'bottom');
 var
@@ -354,8 +363,7 @@ begin
   box.Height := target[3].V;
   box.Top := target[4].V;
   box.Bottom := target[5].V;
-  Result := TyGetLayoutRect(box, AViewport.Left, AViewport.Top,
-    AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top, []);
+  Result := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
 end;
 
 function TyThumbContent(const ABox: TTyXYWH; ABorderWidth: Double): TTyXYWH;

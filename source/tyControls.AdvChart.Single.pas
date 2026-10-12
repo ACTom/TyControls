@@ -149,6 +149,13 @@ type
   hole is nil), its axis' type, scale and categories, the rect from the box
   on AViewport and the extent along it (resize). }
 function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF): TTySingleArray;
+{ [Batch 154] Single.resize again in createBoxLayoutReference's container
+  ARef -- a matrix cell or a calendar day: getLayoutRect of the box there
+  (not the shared solver: a cell's edges are fractional), then _adjustAxis.
+  A cell of no position or no size: the box far off the canvas
+  (TyBoxNowhere), as a grid's. }
+procedure TySingleResizeIn(AOption: TTyChartOption; ASingle: TTySingle;
+  const ARef: TTyXYWH);
 
 { THE SERIES ON A SINGLE: every binding that resolved to one takes its axis
   -- XAxis and BaseAxis the single's axis, YAxis and ValueAxis nil -- and
@@ -459,6 +466,41 @@ begin
 end;
 
 { ==================== building ==================== }
+
+{ resize's box params: 5% on every side by default, merged as
+  mergeLayoutParam merges the option's own over them }
+function SingleBoxSpec(ANode: TJSONObject): TTyBoxSpec;
+begin
+  Result := TyBoxSpec;
+  TyMergedBoxDim(ANode, 'left', 'right', 'width', TyBoxPercent(5),
+    TyBoxPercent(5), TyBoxAuto, Result.Left, Result.Right, Result.Width);
+  TyMergedBoxDim(ANode, 'top', 'bottom', 'height', TyBoxPercent(5),
+    TyBoxPercent(5), TyBoxAuto, Result.Top, Result.Bottom, Result.Height);
+end;
+
+{ _adjustAxis: [0, width] along x, [0, height] along y -- by the position's
+  isHorizontal -- the base the rect's left or top }
+procedure SingleAdjustAxis(S: TTySingle);
+begin
+  if S.Horizontal then S.Axis.SetLayoutExtent(S.Rect.X, S.Rect.W, False)
+  else S.Axis.SetLayoutExtent(S.Rect.Y, S.Rect.H, True);
+end;
+
+procedure TySingleResizeIn(AOption: TTyChartOption; ASingle: TTySingle;
+  const ARef: TTyXYWH);
+var
+  node: TJSONObject;
+  box: TTyXYWH;
+begin
+  if (AOption = nil) or (ASingle = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt(TySingleCoordSysName, ASingle.Index));
+  box := TyGetLayoutRect(TyBoxSpecRaw(SingleBoxSpec(node)), ARef.X, ARef.Y,
+    ARef.W, ARef.H, []);
+  if not TyXYWHIsValid(box) then
+    box := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
+  ASingle.Rect := box;
+  SingleAdjustAxis(ASingle);
+end;
 
 function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF): TTySingleArray;
 var
