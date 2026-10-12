@@ -89,6 +89,7 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   axisareaselected, a parallel axis' area select [Batch 130];
   and axisbreakchanged, the axis breaks' expand / collapse / toggle
   [Batch 132];
+  and parallelaxisexpand, a parallel's axis expansion [Batch 140];
   and `updated`, which every
   setOption and dispatch ends with [Batch 97]. }
 function TyChartEventTypeOf(const AName: string): string;
@@ -137,7 +138,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..32] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..33] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -161,7 +162,10 @@ const
       (registerAction lowercases the name) [Batch 130] }
     'brush', 'brushend', 'globalcursortaken', 'brushselected', 'axisareaselected',
     { the axis breaks' actions, refined into one event [Batch 132] }
-    'axisbreakchanged');
+    'axisbreakchanged',
+    { the parallel axis expansion, registered with no event name: its own
+      type lowercased [Batch 140] }
+    'parallelaxisexpand');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;

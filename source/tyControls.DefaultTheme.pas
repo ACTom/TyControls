@@ -1481,6 +1481,15 @@ begin
     '   Upstream fills and rims it in one light blue at 30% opacity (the opacity' + LineEnding +
     '   is the chart''s, not the skin''s); here the accent halfway to the surface. */' + LineEnding +
     'TyAdvChartParallelSelect { background: mix(var(--accent), var(--surface), 50%); border-color: mix(var(--accent), var(--surface), 50%); }' + LineEnding +
+    '/* A thumbnail''s box: the small copy of a graph in its corner. Upstream fills' + LineEnding +
+    '   it with the option''s backgroundColor, else its neutral00 token, and rims' + LineEnding +
+    '   it in its border token; here the skin''s surface and border. An author''s' + LineEnding +
+    '   itemStyle colours win. */' + LineEnding +
+    'TyAdvChartThumbnail { background: var(--surface); border-color: var(--border); }' + LineEnding +
+    '/* The window over the copy, where the canvas looks. Upstream fills it with' + LineEnding +
+    '   neutral30 and rims it with neutral40 (the 0.3 opacity is the option''s);' + LineEnding +
+    '   here the skin''s border, rimmed a step toward the ink. */' + LineEnding +
+    'TyAdvChartThumbnailWindow { background: var(--border); border-color: mix(var(--on-surface), var(--border), 25%); }' + LineEnding +
     '/* An axis break''s area: the zigzag band where a stretch of the axis is cut' + LineEnding +
     '   out, over the series. Upstream fills it white at 60% and rims it in its' + LineEnding +
     '   border grey, dashed; here the skin''s surface at 60% and its border, so a' + LineEnding +

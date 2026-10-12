@@ -961,6 +961,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Parallel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Thumbnail.pas"/>
+        <UnitName Value="tyControls.AdvChart.Thumbnail"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.PolarBar.pas"/>
         <UnitName Value="tyControls.AdvChart.PolarBar"/>
       </Item>

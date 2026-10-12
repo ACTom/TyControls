@@ -25,7 +25,11 @@ unit tyControls.AdvChart.Parallel;
 
   axisExpandable's static arithmetic (_makeLayoutInfo, layoutAxisWithExpand)
   is here too: the collapsed axes, their hidden labels and their cut names.
-  The interaction that slides the window is the roadmap's D7.
+  [Batch 140, D7] And the interaction: _makeLayoutInfo rewrites the option's
+  axisExpandWindow ([1] = [0] + the restricted size) every time it runs --
+  the action's payload array is the option's, so its event shows it --, and
+  getSlidedAxisExpandWindow says where a click or a move takes the window
+  (TyParallelSlide).
 
   THE AXES ARE AxisBuilder AXES, the polar radius' way: a spec from
   TyFillAxisLayoutSpec in a frame of its own (FreeFrame), ticks and labels on
@@ -117,6 +121,16 @@ type
     ExpandWidth, CollapseWidth, ExpandWindow0, ExpandWindow1,
       ExpandWindow0Pos: Double;
     WinInner0, WinInner1: Double;
+    { [Batch 140] what ParallelView reads off the model: axisExpandable as
+      written (checkTrigger asks the option, not the layout), the trigger
+      ('click' by default), axisExpandSlideTriggerArea (a null first entry:
+      no jump; a null other one reads as nought), axisExpandRate (NaN: null,
+      no throttle) and axisExpandDebounce }
+    ExpandOpt: Boolean;
+    TriggerClick, TriggerMove: Boolean;
+    SlideArea: array[0..2] of Double;
+    SlideJump: Boolean;
+    ExpandRate, ExpandDebounce: Double;
     constructor Create(AIndex: Integer);
     destructor Destroy; override;
     function AxisCount: Integer;
@@ -230,9 +244,64 @@ function TyParallelIntervalsOf(AData: TJSONData): TTyParallelIntervalArray;
 { Parallel.containPoint of a JSON point }
 function TyParallelContainJson(APar: TTyParallel; APoint: TJSONData): Boolean;
 
+{ ---- the expansion [Batch 140] ---- }
+
+type
+  TTyParallelSlide = (pslNone, pslSlide, pslJump);
+
+  { PARALLELVIEW BETWEEN POINTER EVENTS: the press a click is judged against
+    (kept when a release lands too far from it -- the handler returns before
+    it clears it) and the throttle createOrUpdate made of
+    _throttledDispatchExpand (util/throttle.ts: fixRate at axisExpandRate,
+    debounceNextCall on a jump; Gen tells a newer throttle's timers from an
+    older one's) }
+  TTyParallelExpandView = record
+    HasDown: Boolean;
+    DownX, DownY: Double;
+    ThrActive: Boolean;
+    ThrRate: Double;
+    LastCall, LastExec: Double;
+    { NaN: none }
+    DebounceNext: Double;
+    Gen: Integer;
+    TimerId: Integer;
+  end;
+
+  { a throttle's pending call: the view, its throttle, when, and the payload
+    it carries (none: the null call that only cancels) }
+  TTyParallelExpandPending = record
+    Id, Par, Gen: Integer;
+    Due: Double;
+    HasArgs: Boolean;
+    W0, W1: Double;
+    Jump: Boolean;
+  end;
+
+  { a parallelAxisExpand a view dispatched: when, which view, the window and
+    the payload's animation as its JSON text: 'absent' for a click, 'null'
+    for a jump, a duration of nought for a slide }
+  TTyParallelExpandAction = record
+    Time: Double;
+    Par: Integer;
+    W0, W1: Double;
+    Animation: string;
+  end;
+
+{ _makeLayoutInfo again, on the option node as it stands: the window, its
+  size, the collapse width, the inner indices -- and the option's own
+  axisExpandWindow rewritten, as upstream rewrites it on every call }
+procedure TyParallelRelayoutInfo(APar: TTyParallel; ANode: TJSONObject);
+{ getSlidedAxisExpandWindow at (AX, AY), the window AW0 / AW1 the layout
+  info gave (slid in place): none off the coordinate system or inside the
+  window's quiet middle, a slide at its edges, a jump beyond them; under a
+  collapse width of nought the window is laid over the pointer }
+function TyParallelSlide(APar: TTyParallel; AX, AY: Double;
+  var AW0, AW1: Double): TTyParallelSlide;
+
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
+  tyControls.AdvChart.DataZoom,
   tyControls.AdvChart.AxisName, tyControls.AdvChart.Calendar, tyControls.AdvChart.Labels,
   tyControls.AdvChart.RichStyle;
 
@@ -534,17 +603,15 @@ begin
   end;
 end;
 
-{ _makeLayoutInfo and _layoutAxes }
-procedure LayoutAxes(P: TTyParallel; ANode: TJSONObject);
+{ _makeLayoutInfo: the bases and lengths, the expansion's window, widths
+  and inner indices -- and the option's axisExpandWindow rewritten
+  ([1] = [0] + the restricted size), as upstream rewrites the model's own
+  array every time it runs [Batch 140] }
+procedure MakeLayoutInfo(P: TTyParallel; ANode: TJSONObject);
 var
-  layoutExtent1, winSize, center, step, pos, avail, collapse: Double;
-  expandCount: Double;
-  win: TJSONData;
-  n, i: Integer;
-  e0, e1: Double;
-  lay: TTyParallelAxisLayout;
-  showLabel: Boolean;
-  truncMax: Double;
+  layoutExtent1, winSize, center, collapse, expandCount, w1: Double;
+  win, d: TJSONData;
+  n, k: Integer;
 begin
   if P.FHorizontal then
   begin
@@ -577,6 +644,13 @@ begin
     winSize := Restrict(NumOr(TJSONArray(win).Items[1], NaN) - P.ExpandWindow0, 0,
       layoutExtent1);
     P.ExpandWindow1 := P.ExpandWindow0 + winSize;
+    { the model's array takes the sum: a number written back where it is
+      one and differs (a not-a-number has no JSON) }
+    w1 := P.ExpandWindow1;
+    d := TJSONArray(win).Items[1];
+    if (TJSONArray(win).Items[0].JSONType = jtNumber) and not (IsNan(w1) or IsInfinite(w1))
+      and not ((d.JSONType = jtNumber) and (d.AsFloat = w1)) then
+      TJSONArray(win).Floats[1] := w1;
   end
   else
   begin
@@ -592,6 +666,60 @@ begin
   P.WinInner0 := JFloor(TyJsToFixed(P.ExpandWindow0 / P.ExpandWidth, 1)) + 1;
   P.WinInner1 := JCeil(TyJsToFixed(P.ExpandWindow1 / P.ExpandWidth, 1)) - 1;
   P.ExpandWindow0Pos := collapse / P.ExpandWidth * P.ExpandWindow0;
+  { what ParallelView reads off the model: the option as written over
+    ParallelModel's defaults }
+  P.ExpandOpt := JsTruthy(FindIn(ANode, 'axisExpandable'));
+  d := FindIn(ANode, 'axisExpandTriggerOn');
+  if d = nil then
+  begin
+    P.TriggerClick := True;
+    P.TriggerMove := False;
+  end
+  else
+  begin
+    P.TriggerClick := (d.JSONType = jtString) and (d.AsString = 'click');
+    P.TriggerMove := (d.JSONType = jtString) and (d.AsString = 'mousemove');
+  end;
+  P.SlideArea[0] := -0.15;
+  P.SlideArea[1] := 0.05;
+  P.SlideArea[2] := 0.4;
+  P.SlideJump := True;
+  d := FindIn(ANode, 'axisExpandSlideTriggerArea');
+  if d is TJSONArray then
+  begin
+    for k := 0 to 2 do
+      if (k < d.Count) and (TJSONArray(d).Items[k].JSONType = jtNumber) then
+        P.SlideArea[k] := TJSONArray(d).Items[k].AsFloat
+      else
+        P.SlideArea[k] := NaN;
+    P.SlideJump := not IsNan(P.SlideArea[0]);
+    { `winSize * null` is nought }
+    for k := 1 to 2 do
+      if IsNan(P.SlideArea[k]) then P.SlideArea[k] := 0;
+  end;
+  d := FindIn(ANode, 'axisExpandRate');
+  if d = nil then P.ExpandRate := 17
+  else if d.JSONType = jtNumber then P.ExpandRate := d.AsFloat
+  else P.ExpandRate := NaN;
+  d := FindIn(ANode, 'axisExpandDebounce');
+  if d = nil then P.ExpandDebounce := 50
+  else if d.JSONType = jtNumber then P.ExpandDebounce := d.AsFloat
+  else P.ExpandDebounce := 0;
+end;
+
+{ _layoutAxes }
+procedure LayoutAxes(P: TTyParallel; ANode: TJSONObject);
+var
+  step, pos, avail, collapse: Double;
+  n, i: Integer;
+  e0, e1: Double;
+  lay: TTyParallelAxisLayout;
+  showLabel: Boolean;
+  truncMax: Double;
+begin
+  MakeLayoutInfo(P, ANode);
+  n := Length(P.FAxes);
+  collapse := P.CollapseWidth;
 
   { every axis' extent: [0, axisLength], swapped when inverse }
   for i := 0 to n - 1 do
@@ -1359,6 +1487,89 @@ begin
   if APar = nil then Exit;
   pt := TyJsonPoint(APoint);
   Result := APar.ContainXY(pt.X, pt.Y);
+end;
+
+{ ==================== the expansion [Batch 140] ==================== }
+
+procedure TyParallelRelayoutInfo(APar: TTyParallel; ANode: TJSONObject);
+var mask: TFPUExceptionMask;
+begin
+  if APar = nil then Exit;
+  mask := MaskFP;
+  try
+    MakeLayoutInfo(APar, ANode);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyParallelSlide(APar: TTyParallel; AX, AY: Double;
+  var AW0, AW1: Double): TTyParallelSlide;
+var
+  ws, ws2, ext1, pc, delta, cw, pos: Double;
+  ends: array[0..1] of Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := pslNone;
+  if APar = nil then Exit;
+  mask := MaskFP;
+  try
+    ws := AW1 - AW0;
+    ext1 := APar.ExpandWidth * (APar.AxisCount - 1);
+    { out of the coordinate system }
+    if not APar.ContainXY(AX, AY) then Exit;
+    { the point in expand coordinates }
+    if APar.Horizontal then pc := AX else pc := AY;
+    pc := pc - APar.LayoutBase - APar.ExpandWindow0Pos;
+    Result := pslSlide;
+    cw := APar.CollapseWidth;
+    { `if (axisCollapseWidth)` }
+    if (cw <> 0) and not IsNan(cw) then
+    begin
+      if APar.SlideJump and (pc < ws * APar.SlideArea[0]) then
+      begin
+        Result := pslJump;
+        delta := pc - ws * APar.SlideArea[2];
+      end
+      else if APar.SlideJump and (pc > ws * (1 - APar.SlideArea[0])) then
+      begin
+        Result := pslJump;
+        delta := pc - ws * (1 - APar.SlideArea[2]);
+      end
+      else
+      begin
+        { the quiet middle of the window does not slide }
+        delta := pc - ws * APar.SlideArea[1];
+        if delta >= 0 then
+        begin
+          delta := pc - ws * (1 - APar.SlideArea[1]);
+          if delta <= 0 then delta := 0;
+        end;
+      end;
+      delta := delta * (APar.ExpandWidth / cw);
+      if (delta <> 0) and not IsNan(delta) then
+      begin
+        ends[0] := AW0;
+        ends[1] := AW1;
+        TyDzSliderMove(delta, ends, 0, ext1, -1, NaN, NaN);
+        AW0 := ends[0];
+        AW1 := ends[1];
+      end
+      else
+        Result := pslNone;
+    end
+    else
+    begin
+      { too narrow to fold: the window laid over the pointer }
+      ws2 := AW1 - AW0;
+      pos := ext1 * pc / ws2;
+      AW0 := JMax(0, pos - ws2 / 2);
+      AW1 := JMin(ext1, AW0 + ws2);
+      AW0 := AW1 - ws2;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
 end;
 
 end.
