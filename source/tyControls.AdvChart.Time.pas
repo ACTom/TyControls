@@ -152,6 +152,26 @@ function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
 function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
   AUTC: Boolean; AMinInterval, AMaxInterval: Double): TTyTimeTickArray;
 
+type
+  { a break of a time axis, as its ticks step over it [Batch 132] }
+  TTyTimeBreakSpan = record
+    VMin, VMax: Double;
+  end;
+  TTyTimeBreakSpanArray = array of TTyTimeBreakSpan;
+
+{ THE SAME ON AN AXIS WITH BREAKS [Batch 132]: the approximate interval
+  (AApprox, out) is ASpan -- the linear span the breaks leave -- over the
+  split number, and so is the count aimed at; a tick that lands inside a
+  break moves on by the whole number of steps that takes it nearest the
+  break's end (calcNiceTickMultiple with createEstimateNiceMultiple's
+  estimate: the step measured from the first of the unit in 1970). }
+function TyTimeTicksSpan(AMinMs, AMaxMs, ASpan: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double;
+  const ABreaks: TTyTimeBreakSpanArray; out AApprox: Double): TTyTimeTickArray;
+
+{ roundTime: AMs floored to AUnit -- the finer fields to their floor [Batch 132] }
+function TyTimeFloor(AMs: Double; AUnit: TTyTimeUnit; AUTC: Boolean): Double;
+
 { How round this timestamp is. }
 function TyTimeUnitOf(AMs: Double; AUTC: Boolean): TTyTimeUnit;
 
@@ -168,6 +188,10 @@ function TyTimeLabel(const ATick: TTyTimeTick; AUTC: Boolean): string;
   (Upstream's millisecond template is out of reach: the interval table has
   no millisecond row, so the bottom unit is never finer than a second.) }
 function TyTimeFullLabel(AMs, AMinMs, AMaxMs: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
+{ ... with the approximate interval from ASpan, the span an axis' breaks
+  leave [Batch 132] }
+function TyTimeFullLabelSpan(AMs, AMinMs, AMaxMs, ASpan: Double; ASplitNumber: Integer;
   AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
 
 // Expand a template: util/time.ts format. The 24 tokens are upstream's,
@@ -571,8 +595,52 @@ end;
 
 function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
   AUTC: Boolean; AMinInterval, AMaxInterval: Double): TTyTimeTickArray;
+var approx: Double;
+begin
+  Result := TyTimeTicksSpan(AMinMs, AMaxMs, NaN, ASplitNumber, AUTC,
+    AMinInterval, AMaxInterval, nil, approx);
+end;
+
+function TyTimeFloor(AMs: Double; AUnit: TTyTimeUnit; AUTC: Boolean): Double;
+begin
+  Result := FloorTo(AMs, AUnit, AUTC);
+end;
+
+{ createEstimateNiceMultiple's step: a Date at 0, the unit's field set to
+  one and then to one plus AInterval -- a month's field counts from
+  nought there, so one is February -- and the difference }
+function EstimateStepMs(AUnit: TTyTimeUnit; AInterval: Integer; AUTC: Boolean): Double;
 var
-  lo, hi, approx, target: Double;
+  p: TTyTimeParts;
+  t1: Double;
+
+  procedure SetField(AValue: Integer);
+  begin
+    case AUnit of
+      ttuYear: p.Year := AValue;
+      ttuMonth: p.Month := AValue + 1;
+      ttuDay: p.Day := AValue;
+      ttuHour: p.Hour := AValue;
+      ttuMinute: p.Minute := AValue;
+      ttuSecond: p.Second := AValue;
+    else
+      p.Milli := AValue;
+    end;
+  end;
+
+begin
+  p := PartsOf(0, AUTC);
+  SetField(1);
+  t1 := MsOf(p, AUTC);
+  SetField(1 + AInterval);
+  Result := MsOf(p, AUTC) - t1;
+end;
+
+function TyTimeTicksSpan(AMinMs, AMaxMs, ASpan: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double;
+  const ABreaks: TTyTimeBreakSpanArray; out AApprox: Double): TTyTimeTickArray;
+var
+  lo, hi, approx, target, span: Double;
   bottomSpan: TTyTimeSpan;
   bottomUnit: TTyTimeUnit;
   bottomStops: Boolean;
@@ -585,9 +653,13 @@ var
   { One run of ticks, from AFrom forward until it reaches ATo. }
   procedure AddSpan(AFrom, ATo: Double; AUnit: TTyTimeUnit; AStep: Integer;
     var AOut: TTyMsArray);
-  var t: Double;
+  var
+    t, est, m: Double;
+    b: Integer;
   begin
     t := AFrom;
+    est := 0;
+    if Length(ABreaks) > 0 then est := EstimateStepMs(AUnit, AStep, AUTC);
     while (t < ATo) and (t <= hi) do
     begin
       SetLength(AOut, Length(AOut) + 1);
@@ -598,6 +670,19 @@ var
         the calendar has more than one way to produce one. }
       if iter > cSafeLimit then Break;
       t := StepBy(t, AUnit, AStep, AUTC);
+      { OVER A BREAK [Batch 132]: the first break the tick is strictly
+        inside moves it on by max(0, round((end - tick) / estimate)) steps }
+      for b := 0 to High(ABreaks) do
+        if (ABreaks[b].VMin < t) and (t < ABreaks[b].VMax) then
+        begin
+          m := JsRoundMs((ABreaks[b].VMax - t) / est);
+          if m > 0 then
+          begin
+            if m * AStep > High(Integer) then m := High(Integer) div AStep;
+            t := StepBy(t, AUnit, Trunc(m) * AStep, AUTC);
+          end;
+          Break;
+        end;
     end;
     { THE CLOSING BOUNDARY, pushed whether or not it is in range: the next
       finer level restarts at each of these, so it needs a span to end on. Out
@@ -618,6 +703,7 @@ var
 
 begin
   Result := nil;
+  AApprox := NaN;
   lo := Min(AMinMs, AMaxMs);
   hi := Max(AMinMs, AMaxMs);
   if IsNan(lo) or IsNan(hi) or IsInfinite(lo) or IsInfinite(hi) then Exit;
@@ -630,13 +716,16 @@ begin
     hi := hi + cOneDay;
   end;
   if ASplitNumber < 1 then ASplitNumber := 6;
-  approx := (hi - lo) / ASplitNumber;
+  { THE LINEAR SPAN: the extent's own, or what the breaks leave of it }
+  if IsNan(ASpan) then span := hi - lo else span := ASpan;
+  approx := span / ASplitNumber;
   { minInterval and maxInterval clamp the approximate interval -- and the
     number of ticks aimed at is the span over it, so they move that too. }
   if (AMinInterval > 0) and (approx < AMinInterval) then approx := AMinInterval;
   if (AMaxInterval > 0) and (approx > AMaxInterval) then approx := AMaxInterval;
+  AApprox := approx;
   if approx <= 0 then Exit;
-  target := (hi - lo) / approx;
+  target := span / approx;
 
   bottomSpan := BottomSpanFor(approx);
   bottomUnit := PrimaryOf(bottomSpan);
@@ -1178,6 +1267,13 @@ end;
 
 function TyTimeFullLabel(AMs, AMinMs, AMaxMs: Double; ASplitNumber: Integer;
   AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
+begin
+  Result := TyTimeFullLabelSpan(AMs, AMinMs, AMaxMs, NaN, ASplitNumber, AUTC,
+    AMinInterval, AMaxInterval);
+end;
+
+function TyTimeFullLabelSpan(AMs, AMinMs, AMaxMs, ASpan: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
 var
   lo, hi, approx: Double;
   u: TTyTimeUnit;
@@ -1194,7 +1290,8 @@ begin
       hi := hi + cOneDay;
     end;
     if ASplitNumber < 1 then ASplitNumber := 6;
-    approx := (hi - lo) / ASplitNumber;
+    if IsNan(ASpan) then approx := (hi - lo) / ASplitNumber
+    else approx := ASpan / ASplitNumber;
     if (AMinInterval > 0) and (approx < AMinInterval) then approx := AMinInterval;
     if (AMaxInterval > 0) and (approx > AMaxInterval) then approx := AMaxInterval;
     u := PrimaryOf(BottomSpanFor(approx));

@@ -18,7 +18,7 @@
 | 5 | **深度优先** | 先把直角坐标做透，再上径向 / 关系族 |
 | 6 | **对标 ECharts 6.1**，不是 6.0、不是 5 | v5 词汇是 v6 的严格子集，粘 v5 配置照样解析。抄公式必须从 **6.1** 源码抄——6.1 重写了轴的数学，且文档滞后于源码 |
 
-**公开口径**：「覆盖 ECharts 6.1 的全部制图与交互能力，减去浏览器投递层、减去 WebGL、减去地图数据生态；matrix / chord / thumbnail / 断轴在路线图上。」
+**[第 132 批：断轴已做（§169）；log 轴的断开与 singleAxis 仍在路线图上。]** **公开口径**：「覆盖 ECharts 6.1 的全部制图与交互能力，减去浏览器投递层、减去 WebGL、减去地图数据生态；matrix / chord / thumbnail / 断轴在路线图上。」
 
 ---
 
@@ -293,7 +293,7 @@ M8 是最要紧的一条：它就是契约 ② 要防的那个失败模式，被
 
 两个契约都**没有**打架，而且比预估便宜：
 
-- **契约 ②** 比预想的省。ECharts 把断轴做成 `ScaleMapper` 的 `transformIn`/`transformOut` 链，
+- **[第 132 批：装饰器换成上游的模型——gap 是数据单位或线性跨度的百分比、在设有效 extent 时算、两份 extent、没有展开状态（展开的断开不解析）；`TTyIntervalScale` 为了 nice 与刻度现在知道断开（上游 `Interval.ts` 本身就知道），契约测试的断言数字没改。见 §169。]** **契约 ②** 比预想的省。ECharts 把断轴做成 `ScaleMapper` 的 `transformIn`/`transformOut` 链，
   **log 轴和断轴因此是同一个机制**。照抄这个形状之后，`TTyBreakScaleMapper` 是一个**装饰器**，
   `TTyIntervalScale` 和两个基础 mapper 一个字都不用改，而且断轴**免费**地和 log 组合
   （`TestBreakOnLogInnerMapper`：一个 decade 塌缩成 5%）。整个断轴支持是 Scale 单元里约 180 行。
@@ -3562,7 +3562,7 @@ TDateTime 从 1899-12-30 起算、之前是负数,**钳在 0 看着像地板,其
   `TyAdvChartAxisLabelPrimary` 代替:效果一样,而且皮肤能改。
 - **[第 104 批：维持，理由仍成立；在 §139 重新核过。上游在浏览器里看 `navigator.language`，中文环境本来也是中文月名，本库的三级规则是同一类做法。]** ECharts 自己的 locale registry。月名走的是本库的三级规则(见上),
   和日历共用——这是有意的偏离。
-- **[第 104 批：`axisPointer` 标签和轴 tooltip 的表头改走 `TimeScale.getLabel`（以前用的是刻度的短模板，表头只写一个 `2`），轴触发下字符串 `tooltip.formatter` 先过时间模板；断轴的 `upperTimeUnit` 仍然没有（断轴没做，字典的跨单位项已经建好）。见 §139。]** 断轴上的 `upperTimeUnit`(断轴本身还没做)、`axisPointer`/`tooltip` 上的时间
+- **[第 132 批：断开端的刻度有了上单位，读字典的跨单位项。见 §169。]** **[第 104 批：`axisPointer` 标签和轴 tooltip 的表头改走 `TimeScale.getLabel`（以前用的是刻度的短模板，表头只写一个 `2`），轴触发下字符串 `tooltip.formatter` 先过时间模板；断轴的 `upperTimeUnit` 仍然没有（断轴没做，字典的跨单位项已经建好）。见 §139。]** 断轴上的 `upperTimeUnit`(断轴本身还没做)、`axisPointer`/`tooltip` 上的时间
   格式(那两行还没到)。
 - `hideOverlap`。**上游默认也不开**,所以「Feb 和 2 挤在一起」是忠实的;
   真要按测量去碰撞归到「标签去碰撞」那一行。
@@ -5233,7 +5233,7 @@ single 模式的图例、没有 data 的类目轴、有名字的节点、带值�
   这只有 splitNumber 不超过 4 时才可能。minInterval、maxInterval 不读。
 - 刻度和范围回到值空间走 V8 的 `Math.pow` 表。取整没动的一端保留它进来时的值——上游的 lookup,
   不只管钉住的端点:10^log10(3) 在这里是 2.9999999999999996;数据从 10.000000000000002 起,首刻度就是它,不是整 10。
-- 只有 log 轴在 log 空间里 nice。断轴的装饰器也做变换,以前被当成 log 轴,步长在压缩后的空间里走,
+- **[第 132 批：断开的轴在值空间里 nice、步长用扣掉断开加上 gap 的线性跨度，断开接到了 `breaks` 选项上。见 §169。]** 只有 log 轴在 log 空间里 nice。断轴的装饰器也做变换,以前被当成 log 轴,步长在压缩后的空间里走,
   刻度出了范围、顺序也乱(0、20、97.89、117.89、137.89、100)。上游在值空间里 nice 断轴(跨度扣掉断开的部分,这个还没做)。
   断轴还没接到任何 option 上,图表碰不到,但单元测试碰得到。
 - 范围里没有小于等于 0 的端点:上游的 `sanitize` 把它挪到数据的最小值(`min: 0` 变成数据最小值)。
@@ -9801,7 +9801,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **年份范围**：端口的日历算术钳在公元 1–9999 年；JS 的日期到 ±275760 年，超出 8.64e15 才无效。
 - **替换值里的 `$`**：JS 的 `replace` 会解释替换串里的 `$&`、`$1`；替换值来自名字表，英文名里没有，端口不模拟。
 - **字典数组里的非字符串真值**（数字、对象）：上游拿它当模板时抛 `TypeError`，端口印它的 `String()`。
-- **断轴**：跨单位的字典项照上游建好，但端口没有断轴，用不到。
+- **[第 132 批：断开端的标签读 `[下单位][上单位]`，用上了。见 §169。]** **断轴**：跨单位的字典项照上游建好，但端口没有断轴，用不到。
 - **`new Date(tick.value)`**：上游给刻度格式化时是截断，给数字格式化时是 `Math.round`；端口一律按后者。只有作者写了小数毫秒的 `min` / `max` 时不整齐的两端会差 1 毫秒。
 - **轴标签事件的 `value`**：上游是 `rawLabel`，时间轴上就是 `getLabel` 的完整日期；端口仍给数值。基准没有覆盖，留给事件那一行。
 - **毫秒精度的 `getLabel`**：端口的间隔表没有毫秒行（§52），`fullLeveledFormatter.millisecond` 到不了。
@@ -11744,3 +11744,93 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`（逐字节复制）。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/decal-aria.js`、`tests/fixtures/advchart-decal-aria.json`、`tests/test.advchart.decalaria.pas`（新，注册在 `tytests.lpr`）。
+
+## 169. Tier 3 第一百三十二批：断轴（D1，2026-10-13）
+
+路线图 D1：断轴——`breaks` 接到已有 mapper、随机锯齿缓存、刻度剪枝、nice 扣除断开区间、展开收起动作。在这之前端口里的断轴只有 Tier 0 spike 留下的那个装饰器（§2 契约 ②、§9）：一段值域塌成「可视跨度的一个分数」、带一个 Expanded 标志，单元测试碰得到，图表碰不到——`breaks` 一个字都不读，§67 还记着「上游在值空间里 nice 断轴（跨度扣掉断开的部分，这个还没做）」，§139 的时间字典里跨单位的项建好了没人读。这一批对着 6.1 的 `scale/break.ts`、`scale/breakImpl.ts`（`BreakScaleMapperImpl` 的 `transformIn` / `transformOut` / `setExtent2`、`updateAxisBreakGapReal`、`pruneTicksByBreak`、`addBreaksToTicks`、`clampBreakByExtent`、`parseAxisBreakOption`、`identifyAxisBreak`、`retrieveAxisBreakPairs`）、`scale/scaleMapper.ts`（`initBreakOrLinearMapper`、线性 mapper 的 `normalize` / `scale` / `setExtent2`、`getScaleLinearSpanEffective`）、`scale/Interval.ts` 的 `getTicks`、`scale/Time.ts`（`getTicks`、`createIntervalTicks`、`createEstimateNiceMultiple`、`calcNiceForTimeScale`）、`scale/minorTicks.ts`、`coord/axisNiceTicks.ts`、`coord/axisHelper.ts`（`createScaleByModel`、`retrieveAxisBreaksOption`）、`coord/axisTickLabelBuilder.ts`、`coord/cartesian/Grid.ts`（`prepareAlignToInCoordSysCreate`）、`coord/cartesian/Cartesian2D.ts`（`canCalculateAffineTransform`）、`coord/axisDefault.ts` 的 `breakArea` / `breakLabelLayout` / `axisLine.breakLine`、`component/axis/axisBreakHelperImpl.ts`（`rectCoordBuildBreakAxis`、`buildAxisBreakLine`、`adjustBreakLabelPair`、`updateModelAxisBreak`）、`component/axis/AxisBuilder.ts`（断轴线、标签的 `adjustBreakLabels`、断开端标签的优先级与点击）、`component/axis/CartesianAxisView.ts`、`component/axis/axisSplitHelper.ts`、`component/axis/axisAction.ts`（三个动作与 `axisbreakchanged`），以及 zrender 的 `BoundingRect.intersect`（方向 MTV）、`matrix.rotate` / `mul`、`subPixelOptimizeLine` 逐行核过，**以 dist 为准**在真 dist 上跑基准。§9、§52、§67、§139 的相关处在原处标注。
+
+### 上游的做法
+
+- **解析**（`parseAxisBreakOption`）：`breaks` 每项要有 `start` 与 `end`（null / undefined 跳过）；`isExpanded` 为真的**整项不解析**——展开就是「没有这个断开」；两端过 scale 的 `parse`（数值轴 `Number()`，`null` 与 `''` 是 NaN；时间轴数字 `Math.round`、字符串 `parseDate`，没写时区是本地时间）；`gap` 是以 `%` 结尾的字符串时取 `parseFloat / 100`，不在 `[0, 1 − 1e-5)` 里就是 0，类型 `tpPrct`；否则过 `parse`，不是非负有限数就是 0，类型 `tpAbs`——**绝对 gap 的单位是数据，不是像素**；没写 gap 是 `tpAbs` 0；两端相等时 gap 强制为 `tpAbs` 0；写反了交换；按 `vmin` 升序（V8 稳定排序），**和前一项（被丢的也算）重叠**的丢掉。断开的身份是选项里 `start + '_\0_' + end` 的字符串拼接（`'50'` 与 `50` 是同一个）。
+- **支持范围**：直角坐标系与 singleAxis 的 value / log / time 轴（`createScaleByModel(…, coordSysSupportAxisBreaks)`）；类目轴、极坐标、平行坐标的 `breaks` 被忽略（只有 dev 报错）。有断开（解析后非空）时才装 break mapper。
+- **映射**（`BreakScaleMapperImpl`）：extent 存两份——原样的（out of break）与线性的（elapsed）。`transformIn`（elapse）：一个值越过一个断开就丢掉它的跨度、加上它的 `gapReal`，落在断开里按比例落在 gap 里；`transformOut` 反过来。`normalize` 是线性 mapper 对 elapse 之后的值做归一化（线性 extent 在 **set 的那一刻**算好）；`scale` 是 `transformOut(n·(e1 − e0) + e0)`。`needTransform()` 写的是 `!this.breaks.length`，又只在有断开时挂上——**恒为 false**。`contain` 看原样的 extent。
+- **gapReal**（`updateAxisBreakGapReal`，每次设 effective extent 先算）：绝对 gap 就是自己；百分比的那些分摊 `prctBrksGapRealSum = gapPrctSum × (跨度 + Σ绝对的 (gap − 跨度) − Σ百分比的跨度) / (1 − Σ百分比)`，其中被 extent 切掉一端的断开按留在里面的比例 `inExtFrac` 计（两端都被切的什么都不计），`max(·, 0)` 后按各自百分比分。于是 `'5%'` 正好是线性跨度的 5%。
+- **nice**：`intervalStub.setExtent(验证过的 extent)` 之后用 `getScaleLinearSpanEffective`（扣掉断开、加上 gap 的线性跨度）定步长，取整仍在值空间。时间轴 `approxInterval = 线性跨度 / splitNumber`（再按 min / maxInterval 夹），`createIntervalTicks` 的目标刻度数也是线性跨度除以它。断开的轴不参与 `alignTicks`（只要写了 `breaks` 键，不论解析结果），也不算仿射变换。
+- **刻度**（`Interval.getTicks` / `Time.getTicks`）：步进时落进某个断开（`vmin < t < vmax`）的刻度按 `calcNiceTickMultiple` 跳过——数值轴 `round((vmax − t) / interval)` 个步长（为 0 时也重新 round 一次），时间轴 `max(0, round((vmax − t) / 估计步长))` 个，估计步长是 1970 年那个单位的字段设成 1 与 1 + 步长之差（月份从 0 数，1 是二月）；然后 `pruneTicksByBreak`：与 extent 相交的断开前后 `interval × 3/4`（时间轴用 approxInterval）**开区间**里的普通刻度去掉，`preserve_extent_bound` 时 extent 的两端留着，`no` 不剪；再 `addBreaksToTicks`：每个与 extent 相交的断开把**被 extent 切过的**两端作为刻度加进去（`vmin` 在前），有断开就稳定排序。三种用法：标签与轴刻度（缺省：剪枝、加断开端）、分割线与分割区域（`breakTicks: 'none'`、`preserve_extent_bound`）、断开区与断轴线（`only_break`）。时间轴断开端的时间属性：level 是普通刻度的最大 level；下单位是两端 `getUnitFromValue` 较细的那个，上单位是断开跨过的最粗单位（两端 `roundTime` 不等的第一个），且不粗于普通刻度里最粗的单位；标签读字典 `[下][上]`。次刻度（`getMinorTicks`）在扩展到 nice 范围的刻度上做，挨着断开端的区间不分，每组再按断开剪一次。
+- **标签**：断开端的标签与普通的一样格式化；`breakLabelLayout.moveOverlap`（缺省 `'auto'`）为 true / `'auto'` 时，每对断开标签（`retrieveAxisBreakPairs`）在 `fixMinMaxLabelShow` 之前用 `labelIntersect` 检查：方向是 `−rotation`（反向轴再加 π）、单向、touchThreshold 0；相交就按 MTV 把两个分开——标签与轴平行时（x 轴）按两者的宽度算分摊系数 k 让空隙尽量停在断开中间，否则各走一半。hideOverlap 时断开标签的优先级是 `z2 + (z2Max − z2Min + 1)`。`triggerEvent` 时断开标签可点，点击派发展开。
+- **断开区**（`rectCoordBuildBreakAxis`，`breakArea.show` 缺省 true）：对每对断开端，两端经 `dataToCoord(·, clamp)` 转成全局坐标、排序、各自 `subPixelOptimize`（线宽 1），从网格一边走到另一边：第一点与最后一点正在边上，其余交替偏移 `zigzagAmplitude`（缺省 4），每步走 `随机数 × (maxSpan − minSpan) + minSpan`（`minSpan = max(2, zigzagMinSpan || 0)`、`maxSpan = max(minSpan, zigzagMaxSpan || 0)`，缺省 4 与 20）——**最后一点之后也取一个随机数**。两条折线 A（`break_a_<id>`）、B（`break_b_<id>`，gapReal 为 0 时没有）与它们之间的多边形（`break_c_<id>`，同样）。样式：折线 `stroke` 是 `itemStyle.borderColor`、宽 `borderWidth`（1）、虚线 `borderType`（`[3, 3]`）、不填充；多边形 `fill` 是 `itemStyle.color`、`opacity`（0.6）；`z` 是 `zigzagZ`（100，`ignoreModelZ`，在系列之上）。**随机数按断开缓存在轴的 view 上**：每次渲染先把所有缓存标成待删、用到的留下、没用到的删掉——**没有任何一对断开端时（全展开、都在 extent 外）直接返回，缓存原样不动**；`breakArea.show` 为 false、轴不显示、scale 是空的时根本不进来。轴 view 的渲染次序是**所有 yAxis 组件（按下标）在所有 xAxis 之前**——随机数按这个次序取。`expandOnClick`（缺省 true）时整组可点（`silent = !expandOnClick`），点击派发 `{type: 'expandAxisBreak', breaks: [{start, end}], <dim>AxisIndex}`。
+- **断轴线**（`axisLine.breakLine`，缺省 true，且 scale 有断开）：轴线按断开端（轴自己坐标系里的 `dataToCoord(·, clamp)`，按起点排序）切成几段，每段两端各和一个 `[x, 5]` 的假刻度一起经轴组矩阵变换、`subPixelOptimizeLine`，再整段优化一次；anid 是 `breakLine_<前一个断开>_\0_<后一个断开>`（没有的一侧是 `\0`）。
+- **动作**（`axisAction.ts`）：`expandAxisBreak` / `collapseAxisBreak` / `toggleAxisBreak`，`update: 'update'`；`parseFinder` 找 x / y / single 轴，按 `start`、`end` 的身份在模型的 `breaks` 选项里找到那一项，把 `isExpanded` 写成布尔（toggle 取反），找不到的跳过。更新之后发**精化事件** `axisbreakchanged`：`{type, breaks: [{<dim>AxisIndex, start, end, isExpanded, old: {isExpanded}}], fromAction, fromActionPayload, escapeConnect: true}`——没找到任何断开也发，`breaks` 是空的。
+- **dataZoom** 不知道断开：窗口在值空间里算，extent 设成窗口后断开被切、gapReal 重算。
+
+### port 以前
+
+- `TTyBreakScaleMapper` 是 spike 的模型（区间、可视跨度的分数、Expanded），没有 gapReal、没有两份 extent；`breaks` 不读；刻度、标签、分割线、轴线、断开区、动作、事件都没有。
+
+### 做法
+
+- **`tyControls.AdvChart.Scale`**：
+  - `TTyAxisBreak` 改成上游的 `ParsedAxisBreak`：`VMin` / `VMax`、`GapKind`（`bgkAbs` / `bgkPrct`）/ `GapVal` / `GapReal`、`Id`（含 NUL 的身份）、`StartJson` / `EndJson`（选项原样，给事件）。
+  - `ITyBreakScaleMapper`（`BreakList`、`BreakCount`、`LinearExtent`、`BreakInside`）；`TTyBreakScaleMapper` 重写：构造时拿断开表，内层 mapper 会变换（log）时按 `parseAxisBreakOptionInwardTransform` 把两端与绝对 gap 带进内层空间；`FExt` / `FLin` 两份 extent；`SetExtent`（有效的 extent 先 `TyUpdateBreakGapReal` 再存，线性的在 set 时算；不是有限且有序的 extent 只记原样、不动 gap 与线性 extent——空轴靠原样的 NaN 判断）；`Elapse` / `Unelapse` 逐运算转写（NaN 原样返回）；`Normalize` / `Denormalize` 照线性 mapper 的式子（`n·(e1 − e0) + e0`）；`NeedTransform` 答 false。
+  - `TTyScale.BreakMapper`（有断开时的装饰器，否则 nil）、`GetTicksOpt`（缺省调 `GetTicks`）、`LinearExtent2` 有断开时读装饰器存的线性 extent。
+  - `TTyScaleTick` 加 `TimeUpper`、`BreakKind`、`BreakIndex`、`BreakVMin` / `BreakVMax`。`TTyTicksOpt`（`tbmInsert` / `tbmNone` / `tbmOnly` × `tpmAuto` / `tpmNo` / `tpmPreserveExtentBound`）、`TyTicksOpt`、`TyDrawnTicksOpt`。
+  - `TyClampBreak`、`TyUpdateBreakGapReal`（JS 的从左到右加减，异常屏蔽）、`TyPruneTicksByBreaks` / `TyPruneValuesByBreaks`、`AddBreakTicks`（稳定排序，时间属性由回调给）。
+  - `TTyIntervalScale`：`NiceifyJs` 有断开时先设验证过的 extent、跨度取线性的；`StubTicks` 步进后按 `BreakInside` 跳（`round((vmax − t) / interval) · interval`，不在断开里也 `+ 0 · interval` 再 round 一次）；`GetTicks` 改成 `GetTicksOpt` 的缺省，没断开（或 log 走法）走原来的 `PlainTicks`，有断开走 `BrokenTicks`（剪枝、断开端、次刻度照 `getMinorTicks`）。
+  - `TTyTimeScale`：`GetTicksOpt`（线性跨度、断开交给 `TyTimeTicksSpan`、剪枝用 `ApproxInterval`、断开端的时间属性 `BreakTimeProps`）、`ApproxInterval`、`GetLabel` 的底层单位也按线性跨度。
+- **`tyControls.AdvChart.Time`**：`TyTimeTicksSpan`（原 `TyTimeTicks` 的主体加上线性跨度、断开表与 `approx` 输出；`AddSpan` 步进后跳断开，估计步长 `EstimateStepMs`）、`TTyTimeBreakSpan`、`TyTimeFloor`（`roundTime`）、`TyTimeFullLabelSpan`；原两个 `TyTimeTicks` 与 `TyTimeFullLabel` 变成它们的包装。
+- **`tyControls.AdvChart.AxisBreak`**（新）：`TyParseAxisBreaks`（parseAxisBreakOption，NaN 比较照 JS、异常屏蔽）、`TyAxisBreaksWritten`、`TyBreakJsText`（`String()`）、`TTyBreakAreaOpt` / `TyBreakAreaOptOf`（两个重载）、`TyBreakMoveOverlap`、`TyAxisBreakLineOn`、`TyBreakZigzag`（addZigzagShapes，随机数从缓存续，不够就用 `TyJitterRandom` 取）、`TyAxisBreakLineSegs`（buildAxisBreakLine）、`TyAdjustBreakLabelPair`（adjustBreakLabelPair：`TyRectIntersectDir` 单向 MTV、`rotate` / `mul` / `BoundingRect.applyTransform` / `Point.transform` 逐运算）。
+- **`tyControls.AdvChart.Layout`**：规格加 `LabelBreakKind` / `LabelBreakIndex`、`BreakMoveOverlap`、`HasBreakLine` / `BreakLineSegs`、`BreakAreas`（`TTyBreakAreaGeom`：身份、断开下标、A、B、有没有 B、两端）；`TTyAxisTextStyle.AxisLineWidthLogical`。`TyLayoutAxisLabels` 在位置算完、候选框做出之前调 `AdjustBreakLabels`，候选的优先级给断开标签加 `z2Max − z2Min + 1`——估算与定稿两次都走这里。
+- **`tyControls.AdvChart.Builder`**：`TyCreateAxis` 对 `xAxis` / `yAxis` 的 value / time 轴解析 `breaks`，非空就把装饰器套在 scale 的 mapper 上；`TyFillAxisLayoutSpec` 给断开端的标签记种类与下标，时间轴断开端读字典 `[TimeUnit, TimeUpper]`；`AxisMarks` 有断开时分割线 / 分割区域用 `(tbmNone, tpmPreserveExtentBound)` 的刻度；`TyLayoutGrids` 末尾 `BreakLine` 算断轴线（线宽是皮肤 `TyAdvChartAxisLine` 的）；`TTyAxisMemory` 加 `BreakIds` / `BreakRands`（随机数缓存，跟轴模型的记忆一样合并保留、notMerge 清掉），`TTyAxisMemoryStore.RandomState`（图表的 xorshift32，`TyJitterSeed` 起，Clear 不重置）；`TyLayoutBreakAreas`：所有 yAxis 组件按下标、再所有 xAxis，按上游的条件建断开区并更新缓存。
+- **`tyControls.AdvChart.Series`**：`alignTicks` 的两处候选排除写了 `breaks` 的轴。**`tyControls.AdvChart.Coord`**：`CanAffine` 排除有断开的轴。**`tyControls.AdvChart.AnimAxis`**：轴线切开时每段是自己的叶子（anid 照上游），过渡动画按段走。**`tyControls.AdvChart.Events`**：`axisbreakchanged` 进动作事件表。
+- **控件**：`Relayout` 在 `TyLayoutGrids` 之后调 `TyLayoutBreakAreas`，文字样式带上轴线宽；`PaintAxis` 有断轴线时画各段；`PaintBreakAreas` 在系列之后（zigzagZ 在系列之上）按 A、B、多边形的次序画，颜色是皮肤的（作者写了 `itemStyle.color` / `borderColor` 就用作者的，作者的填充色带 `opacity`，缺省 0.6）；`EventTargetAt` 在刷子覆盖物之后、标题之前找可点的断开区（多边形非零环绕，或离 A / B 2.5 px 以内——zrender 的 `strokeContainThreshold` 5 的一半），断开标签的命中记成第 11 类；`EventUp` 的点击派发 `expandAxisBreak`；`DispatchActionObject` 接三个动作，`DoAxisBreakAction` 照 `parseFinder`（`Index`：数、数组、`'all'`；否则 `Id`；否则 `Name`）改选项树里那一项的 `isExpanded`、`FullUpdate`、发 `axisbreakchanged`。
+- **主题键**（`themes/light.tycss`，重跑 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }`——上游白色 60%、边框灰，这里是皮肤的表面色 60% 与边框色，深色皮肤上是暗的；虚线是选项的（缺省 `[3, 3]`）。
+- 新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### 基准
+
+`tools/advchart-oracle/axis-breaks.js`（真 dist，node 下 SSR / SVG，600 × 400，`TZ=UTC`，每个选项 `animation: false`，zrender 宽度表量字；`Math.random` 换成端口的 xorshift32，每个图表从 `TyJitterSeed` 起并计数；`ssr: true` 之后 `_ssr = false`；点击走 zrender 自己的 Handler：mousemove / mousedown / mouseup / click；最后 `process.exit()`）→ `tests/fixtures/advchart-axis-breaks.json`（约 470 KB）：**43 个用例、65 次渲染**。
+
+- **数值轴**（29 个）：一个断开 `'5%'` / 绝对 20 / 不写 gap（B 与多边形都没有）、两个（写乱了次序、一个百分比一个绝对）、重叠（丢第二个）、写反了加字符串的 `'50'`、两个百分比分摊、`min` 落在断开里与 `max` 落在断开里（被 extent 切一端）、完全在 extent 外、选项里 `isExpanded: true`、反向轴、`moveOverlap: false`、宽 gap（标签不动）、写了 `interval`、`splitNumber` 加 `minInterval`、显示轴线与轴刻度（切开的轴线、断开端的刻度）、`breakLine: false`、次刻度 / 次分割线 / 分割区域、写了的 breakArea 样式与锯齿参数、`borderType` 数组加 minSpan 大于 maxSpan、`breakArea.show: false`（不取随机数）、横向数值轴、折线穿过断开（一个点在断开里）、两个数值轴都断开的散点（y 先于 x 取随机数）、零以下的断开、`hideOverlap`、字符串 formatter、类目轴上写 `breaks`（忽略）。
+- **时间轴**（4 个，`useUTC: true`）：90 天里断开 40 天、两个周末（gap 0）、跨年断开（标签读 `[day][year]`）、带时区的字符串两端。
+- **dataZoom**（2 个）：数值轴的内置 dataZoom（`filterMode: 'none'`）四步——切到断开、离开断开、切断开的另一头、还原；时间轴两步。
+- **动作**（6 个）：点断开区展开、collapse、两次 toggle；两个断开先点第二个、再一个动作点两个、再收一个；`expandOnClick: false` 点了什么都不发生；`triggerEvent` 点断开标签展开；横向轴展开（事件里是 `xAxisIndex`）；动作点了不存在的断开（事件的 `breaks` 为空）。
+- **缓存**（2 个）：横向轴的图表在高度 400 → 700 → 300 → 700 之间缩放（变长才取新的随机数，变短再变长一个都不取）；两个断开里展开一个再收起（那个的缓存被删、重新取，另一个留着）。
+- 每次渲染记网格矩形、这次取的随机数个数、这一步发的 `axisbreakchanged`（payload 去掉 echarts 内部的键）、点击的点；每根记录的轴：extent、步长（时间轴是 approxInterval）、niceExtent、断开表（两端、gap 类型与值、gapReal）、三种刻度（缺省的带断开端类型与时间属性、不剪的、分割线的）、次刻度、每个标签（文字、元素自己的 x / y、是否显示、断开端类型）、分割线、轴刻度（带 `!ignore`）、轴线或各段、每个断开区（身份、A、B、多边形、z、silent、样式）；系列：柱的布局矩形、折线与散点的 `dataToPoint`（布局里是 Float32Array，这里记双精度）。
+- 自检：每次渲染由断开表与 extent 经转写重算 gapReal（逐位）；由 `rawTicks` 经 `pruneTicksByBreak` 转写重算缺省刻度里的普通刻度与分割线刻度；**每个断开区的 A、B 逐点**由这个图表的随机数序列经 `addZigzagShapes` 转写（缓存按轴、按身份，没有断开对时不动，线性映射与 `subPixelOptimize`）重算——65 次渲染全部相等。4 条守卫（百分比 gap 减半、剪枝范围减半、不缓存、振幅反号）都改变了点名的用例；锚点：`v-one-prct` 取了随机数、`v-area-off` 没取、展开点击发了事件、`expandOnClick: false` 没发、缩放缓存（变长取、变短再变长不取）；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.axisbreaks`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartAxisBreaksOracleTest`，5 个按组，共约 **16 200 项**：数值轴 7 467、时间轴 989、dataZoom 2 028、动作 3 644、缓存 2 085；`TY_AXISBREAKS_COUNTS=1` 时打印）：每个用例一个新图表（随机数从种子重来，与基准每个图表重置 `Math.random` 一致），照样 setOption、无头渲染；点击是指针的 move / down / up，dataZoom 走 `DispatchDataZoom`、别的动作走 `DispatchAction`，缩放改边界。每次渲染比网格矩形、随机数个数（从上一次的状态数 xorshift 步数）、事件（类型、`fromAction`、`breaks` 与 payload 的 JSON）；每根轴比 extent、步长、nice 范围、断开表、三种刻度（缺省的逐个比值、断开端类型、时间属性）、次刻度、每个标签的文字 / x / y / 显示 / 断开端类型、分割线与轴刻度（含隐藏的）的值、轴线各段（anid 与四个坐标）、每个断开区（身份、A、B 逐点、多边形、z、silent、虚线、写了的颜色线宽与不透明度）；系列：柱的元素外框与基准矩形按网格裁过之后比（整个在网格外的不比），散点圆心逐位，折线顶点按单精度比。
+- **手写**（3 个）：断开区真的画在柱子上（同一张图开关 `breakArea.show`，断开带中线上超过 100 个像素不同）；重画、同样选项的合并、变窄的网格都不取新的随机数；类目轴的 `breaks` 不装 mapper、不画断开区、不取随机数。
+- 契约测试 `test.advchart.scale.break`（`TAdvChartBreakTest` 10 个）改成新接口：百分比 gap 仍是轴的那个份额，数都没改；「展开等于没有」改成「没有断开就是内层 mapper」。
+
+首跑的不对：实现两处——log 内层 mapper 在构造时对 0 取对数，NaN 比较在 FPC 里抛（构造不再算线性 extent，`Elapse` / `Unelapse` 对 NaN 原样返回）；`BreakAreaAt` 的局部变量 `ax` 与参数 `AX` 同名、`width` 与 `Width` 属性同名。测试四处——机器是中文 locale，时间轴月名要钉成 `dnTranslation`；上游被隐藏标签的轴刻度是 `ignore` 而不是删掉（基准补记 `!ignore`，测试比隐藏标记）；柱的元素是按网格裁过的，基准是布局矩形（测试按网格裁了再比，`v-min-in-break` 的数据改到 extent 之内）；散点的圆心是双精度不是单精度；dataZoom 不是 `DispatchAction` 认的动作。基准三处——折线 / 散点的布局是 Float32Array、`getItemLayout` 是 null（改记 `dataToPoint`）；`'_\u0000_'` 经 heredoc 写成了真的 NUL 字节；转写的缓存忘了「没有断开对就不动」与 y 先于 x。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartAxisBreaksOracleTest` 8、`TAdvChartBreakTest` 10、`TAdvChartMapperTest` 13、`TAdvChartIntervalScaleTest` 14、`TAdvChartTimeTest` 32、`TAdvChartTimeAxisTest` 17、`TAdvChartValueAxisOracleTest` 1、`TAdvChartScaleAlignOracleTest` 5、`TAdvChartCoordAffineOracleTest` 2、`TAdvChartAxisFinishOracleTest` 11、`TAdvChartMouseEventsOracleTest` 3、`TAdvChartTimeFormatOracleTest` 8、`TAdvChartAxisLabelTest` 14、`TAdvChartLabelThinningOracleTest` 15、`TAdvChartGridBoundsOracleTest` 3、`TAdvChartAnimUpdateTest` 7、`TAdvChartAnimFullUpdateTest` 7、`TCssCatalogTest` 14、`TBuiltinThemeTest` 13、`TBuiltinSyncTest` 2、`TBuiltinThemesTest` 8、`TBuiltinSkinsSyncTest` 2。全量套件与变异轮留到里程碑（D1–D4）末尾；变异候选单列（21 条，另记一条可能等价）。
+
+### 推迟与偏差
+
+- **log 轴的断开**：上游支持（`LogScale` 的 `powStub` / `intervalStub` 两套断开、lookup 表、log 空间里的 nice），端口的装饰器能套在 log mapper 上（契约测试还在），但 `breaks` 只接到 value / time 轴；log 轴上写了 `breaks` 什么都不做（仍不参与 alignTicks）。singleAxis 端口还没有。
+- **转了角度的断开标签**：两个框都与坐标轴对齐时照上游移开；有一个转了角度时上游走 OBB 的 MTV，端口没有，不移。
+- **移开之后的标签框**：上游把已算好的全局矩形平移，端口用平移后的矩阵重算——最后一位上可能差一点，只影响随后的重叠判断，基准里没有差别。
+- **函数 formatter 的 `break` 参数**、轴标签点击事件参数里的 `break: {start, end}`：端口的事件参数里没有这一项。
+- **断开区不参加过渡动画**（上游的 `break_a/b/c` 有 anid、跟着 groupTransition 走）；切开的轴线段参加。
+- **notMerge**：轴记忆清掉，随机数缓存跟着没了（上游的 view 在同 id 的组件上可能留着，没有核）；随机数状态不重置。
+- **悬停光标**：上游断开区的光标是 pointer，端口不设（系列的悬停端口也不设）。
+- **命中**：断开区在刷子覆盖物之下、标题之上；多个轴的断开区重叠时 x 轴的先被找到。
+- **时间轴字符串两端**：与上游一样没写时区按本地时间，基准用了带 `Z` 的串。
+- **绝对 gap**：路线图说「px 与 %」，上游的绝对 gap 是数据单位，照上游。
+
+### 落地
+
+- `source/tyControls.AdvChart.AxisBreak.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.Scale.pas`：断开记录、`ITyBreakScaleMapper`、`TTyBreakScaleMapper` 重写、刻度选项、`TyClampBreak` / `TyUpdateBreakGapReal` / 剪枝 / 断开端、`TTyScale.BreakMapper` / `GetTicksOpt`、区间与时间 scale 的断开路径。
+- `source/tyControls.AdvChart.Time.pas`：`TyTimeTicksSpan`、`TyTimeFloor`、`TyTimeFullLabelSpan`。
+- `source/tyControls.AdvChart.Layout.pas`：规格字段、`AdjustBreakLabels`、断开标签的优先级、轴线宽。
+- `source/tyControls.AdvChart.Builder.pas`：装饰器、断开端标签、分割线刻度、`BreakLine`、随机数缓存、`TyLayoutBreakAreas`。
+- `source/tyControls.AdvChart.Series.pas`、`Coord.pas`、`AnimAxis.pas`、`Events.pas`：见上。
+- `source/tyControls.AdvanceChart.pas`：`PaintBreakAreas`、`BreakAreaAt`、`BreakAxisOf`、`BreakAreaClickAt`、`BreakExpandClick`、`DoAxisBreakAction`；`Relayout`、`PaintAxis`、`PaintStatic`、`EventTargetAt`、`EventUp`、`DispatchActionObject` 的调用处。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
+- `tools/advchart-oracle/axis-breaks.js`、`tests/fixtures/advchart-axis-breaks.json`、`tests/test.advchart.axisbreaks.pas`（新，注册在 `tytests.lpr`）、`tests/test.advchart.scale.break.pas`（改接口）。

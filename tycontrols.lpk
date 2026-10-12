@@ -941,6 +941,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Decal"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.AxisBreak.pas"/>
+        <UnitName Value="tyControls.AdvChart.AxisBreak"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Aria.pas"/>
         <UnitName Value="tyControls.AdvChart.Aria"/>
       </Item>

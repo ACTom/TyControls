@@ -389,7 +389,7 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.AdvChart.AxisBreak;
 
 const
   StatDelim = '|&';
@@ -1582,8 +1582,11 @@ var
 
   function Numeric(A: TTyAxis): Boolean;
   begin
+    { an axis that writes `breaks` neither aligns nor is aligned to
+      (prepareAlignToInCoordSysCreate) [Batch 132] }
     Result := (A <> nil) and (A.Scale is TTyIntervalScale)
-      and not (A.Scale is TTyTimeScale);
+      and not (A.Scale is TTyTimeScale)
+      and not TyAxisBreaksWritten(ObjAt(AOption, A.MainType, A.ComponentIndex));
   end;
 
   function Asks(A: TTyAxis): Boolean;
@@ -2142,8 +2145,10 @@ var
     and so can align or be aligned to. }
   function Numeric(AAxis: TTyAxis): Boolean;
   begin
+    { not an axis that writes `breaks` [Batch 132] }
     Result := (AAxis <> nil) and (AAxis.Scale is TTyIntervalScale)
-      and not (AAxis.Scale is TTyTimeScale);
+      and not (AAxis.Scale is TTyTimeScale)
+      and not TyAxisBreaksWritten(ObjAt(AOption, AAxis.MainType, AAxis.ComponentIndex));
   end;
 
   { `alignTicks` asked for, and no `interval` written. }

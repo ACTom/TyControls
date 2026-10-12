@@ -1465,6 +1465,11 @@ begin
     '   Upstream fills and rims it in one light blue at 30% opacity (the opacity' + LineEnding +
     '   is the chart''s, not the skin''s); here the accent halfway to the surface. */' + LineEnding +
     'TyAdvChartParallelSelect { background: mix(var(--accent), var(--surface), 50%); border-color: mix(var(--accent), var(--surface), 50%); }' + LineEnding +
+    '/* An axis break''s area: the zigzag band where a stretch of the axis is cut' + LineEnding +
+    '   out, over the series. Upstream fills it white at 60% and rims it in its' + LineEnding +
+    '   border grey, dashed; here the skin''s surface at 60% and its border, so a' + LineEnding +
+    '   dark skin''s breaks are dark. The dash is the option''s (3, 3 by default). */' + LineEnding +
+    'TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }' + LineEnding +
     '/* A decal''s symbols, where the decal names no colour of its own -- the aria' + LineEnding +
     '   decals that tell the series apart without their colours. Upstream draws' + LineEnding +
     '   them black at 20%; here the skin''s ink at 20%, so a dark skin''s decals' + LineEnding +
