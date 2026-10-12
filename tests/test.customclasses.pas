@@ -96,11 +96,12 @@ const
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
 
+
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
     parent); an intermediate row (subject <> activator) checks Subject.ClassParent. }
-  CChain: array[0..64, 0..2] of string = (
+  CChain: array[0..65, 0..2] of string = (
     ('TTyDropDownButton', 'TTyCustomButton', 'TTyDropDownButton'),
     ('TTyMenuButton', 'TTyCustomButton', 'TTyMenuButton'),
     ('TTyColorButton', 'TTyCustomButton', 'TTyColorButton'),
@@ -160,6 +161,7 @@ const
     ('TTyMultiTrackBar', 'TTyMultiTrackBarBase', 'TTyMultiTrackBar'),
     ('TTyGradientTrackBar', 'TTyCustomMultiTrackBar', 'TTyGradientTrackBar'),
     ('TTyDBGrid', 'TTyCustomStringGrid', 'TTyDBGrid'),
+    ('TTyPropertyGrid', 'TTyCustomValueListEditor', 'TTyPropertyGrid'),
     { intermediates: activated by their family root }
     ('TTyGlyphButtonBase', 'TTyCustomButton', 'TTyButton'),
     ('TTyShellTreeLink', 'TTyCustomTreeView', 'TTyTreeView'),
@@ -1194,7 +1196,7 @@ initialization
     'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel',
     // T15 list boxes
     'TTyListBox', 'TTyCheckListBox', 'TTyOfficeListBox', 'TTyAdvancedListBox',
-    'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox',
+    'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox', 'TTyPropertyGrid',
     // T16 compound pickers
     'TTyTransfer', 'TTyTreeSelect', 'TTyCascader',
     // T17 trees and list views

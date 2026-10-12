@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。194 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -36,7 +36,7 @@ Lazarus 自绘控件库。194 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **194 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
+- **195 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -80,7 +80,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-194 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+195 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -145,7 +145,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyCheckGroup` | 带标题框的复选组 |
 | `TTySegmented` | 分段控制器 |
 
-### 列表与下拉 · `TyControls Lists`(14)
+### 列表与下拉 · `TyControls Lists`(15)
 
 | 控件 | 说明 |
 |---|---|
@@ -159,7 +159,8 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyAdvancedComboBox` | 每项两行(标题 + 副标题 + 图标)的下拉框 |
 | `TTyAdvancedListBox` | 每项两行的富列表 |
 | `TTyCheckComboBox` | 可多选的下拉框 |
-| `TTyValueListEditor` | 属性表:左键右值,每行可指定编辑器 |
+| `TTyValueListEditor` | 名/值编辑器:左键右值,每行可指定编辑器 |
+| `TTyPropertyGrid` | 属性表格:列出一个对象的 published 属性,改了直接写回 |
 | `TTyTransfer` | 双列表穿梭框 |
 | `TTyTreeSelect` | 树形下拉选择器 |
 | `TTyCascader` | 级联选择器(省 / 市 / 区) |
@@ -421,6 +422,7 @@ CharImage1.GlyphName := 'house';
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
 | [dbcontrols](examples/dbcontrols/) | 数据感知控件:21 个控件绑一张内存表,导航、编辑、空值、查找、照片 |
 | [dbgrid](examples/dbgrid/) | 数据表格:一千条订单,设计期列(勾选、查找、备注、金额格式),标题点击排序,多选删除,只读开关 |
+| [propertygrid](examples/propertygrid/) | 属性表格:点哪个控件就检查哪个,改了直接写回;显示事件开关,用 `OnFilterProperty` 做的过滤框 |
 | [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY / 管道)、ZModem 收发、换肤、配色方案、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。

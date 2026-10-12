@@ -981,6 +981,13 @@
   end
 # TTyProgressDialog
   end
+# TTyPropertyGrid
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
 # TTyRadioButton
     Left = 0
     Height = 22

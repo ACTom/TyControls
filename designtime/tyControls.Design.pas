@@ -27,7 +27,7 @@ uses
   tyControls.OfficeListBox, tyControls.OfficeComboBox,
   tyControls.ColorGrid, tyControls.LColorPicker, tyControls.HSColorPicker,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
-  tyControls.ValueListEditor, tyControls.Calculator, tyControls.CalcEdit,
+  tyControls.ValueListEditor, tyControls.PropertyGrid, tyControls.Calculator, tyControls.CalcEdit,
   tyControls.CalcCurrencyEdit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
@@ -156,7 +156,7 @@ begin
     [TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
      TTyCheckComboBox,
      TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor,
-     TTyTransfer, TTyTreeSelect, TTyCascader]);
+     TTyPropertyGrid, TTyTransfer, TTyTreeSelect, TTyCascader]);
   // Rich pickers: colour / font / filter / shell selectors.
   RegisterComponents('TyControls Pickers',
     [TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,

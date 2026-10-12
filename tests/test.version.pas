@@ -49,6 +49,7 @@ uses
   tyControls.MultiTrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
+  tyControls.PropertyGrid,
   { The property-editor base classes. None of them is ever dropped on a form, so nothing else
     in this uses list drags them in — but InheritsFromAnEditorBase resolves them by name, and
     an unresolvable base would make that check answer False for everything beneath it. }
@@ -442,7 +443,7 @@ initialization
     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox]);
   Reg([
     TTyAdvancedComboBox, TTyCheckComboBox, TTyListBox, TTyCheckListBox, TTyOfficeListBox,
-    TTyAdvancedListBox, TTyValueListEditor, TTyTransfer, TTyTreeSelect, TTyCascader,
+    TTyAdvancedListBox, TTyValueListEditor, TTyPropertyGrid, TTyTransfer, TTyTreeSelect, TTyCascader,
     TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,

@@ -1,0 +1,177 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 680
+  Top = 0
+  Width = 1000
+  Caption = 'Property grid example'
+  ClientHeight = 680
+  ClientWidth = 1000
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  TitleHeight = 34
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 680
+    Top = 0
+    Width = 1000
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1000
+      TabOrder = 0
+      Caption = 'Property grid  ·  TyControls'
+      Align = alTop
+      object DarkSwitch: TTyToggleSwitch
+        Left = 652
+        Height = 24
+        Top = 5
+        Width = 74
+        TabOrder = 0
+        TabStop = True
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+        Anchors = [akTop, akRight]
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 734
+        Height = 26
+        Top = 4
+        Width = 120
+        TabOrder = 1
+        ItemIndex = -1
+        OnChange = ThemeComboChange
+        Anchors = [akTop, akRight]
+      end
+    end
+    object SwEvents: TTyToggleSwitch
+      Left = 16
+      Height = 24
+      Top = 48
+      Width = 150
+      TabOrder = 1
+      TabStop = True
+      Caption = 'Show events'
+      OnChange = SwEventsChange
+    end
+    object LblFilter: TTyLabel
+      Left = 184
+      Height = 22
+      Top = 49
+      Width = 44
+      Caption = 'Filter'
+    end
+    object FilterEdit: TTyEdit
+      Left = 232
+      Height = 28
+      Top = 46
+      Width = 204
+      TabOrder = 2
+      TextHint = 'Part of a property name'
+      OnChange = FilterEditChange
+    end
+    object LblPick: TTyLabel
+      Left = 16
+      Height = 22
+      Top = 92
+      Width = 420
+      Caption = 'Click a control to inspect it:'
+    end
+    object Button1: TTyButton
+      Left = 16
+      Height = 32
+      Top = 122
+      Width = 120
+      TabOrder = 3
+      OnClick = ControlClick
+      Caption = 'Button'
+    end
+    object Edit1: TTyEdit
+      Left = 152
+      Height = 28
+      Top = 124
+      Width = 284
+      TabOrder = 4
+      Text = 'Some text'
+      OnClick = ControlClick
+    end
+    object CheckBox1: TTyCheckBox
+      Left = 16
+      Height = 24
+      Top = 170
+      Width = 200
+      TabOrder = 5
+      OnClick = ControlClick
+      Caption = 'Check box'
+      OnChange = CheckBox1Change
+    end
+    object ProgressBar1: TTyProgressBar
+      Left = 16
+      Height = 20
+      Top = 210
+      Width = 420
+      OnClick = ControlClick
+      Position = 40
+    end
+    object Panel1: TTyPanel
+      Left = 16
+      Height = 64
+      Top = 246
+      Width = 420
+      Caption = 'Panel'
+      TabOrder = 6
+      OnClick = ControlClick
+    end
+    object StringGrid1: TTyStringGrid
+      Left = 16
+      Height = 300
+      Top = 326
+      Width = 420
+      TabOrder = 7
+      OnClick = ControlClick
+      Header.Columns = <
+        item
+          Text = 'Name'
+          Width = 150
+        end
+        item
+          Text = 'City'
+          Width = 120
+        end
+        item
+          Text = 'Score'
+          Width = 80
+          Alignment = taRightJustify
+        end>
+      Anchors = [akTop, akLeft, akBottom]
+    end
+    object Grid: TTyPropertyGrid
+      Left = 456
+      Height = 580
+      Top = 46
+      Width = 528
+      TabOrder = 8
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      KeyColumnWidth = 180
+      SelectedComponent = Button1
+      ExpandedProperties.Strings = (
+        'Font'
+      )
+      OnFilterProperty = GridFilterProperty
+      OnPropertyChanged = GridPropertyChanged
+      OnPropertyError = GridPropertyError
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 640
+      Width = 968
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = 'Inspecting Button1'
+    end
+  end
+end
