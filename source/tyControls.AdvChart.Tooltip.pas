@@ -1237,12 +1237,25 @@ begin
     { not a number: nought (upstream hands NaN to the DOM) }
     if IsNan(x) or IsInfinite(x) then x := 0;
     if IsNan(y) or IsInfinite(y) then y := 0;
-    if ASpec.Confine then
+    if ASpec.Confine and ASpec.ConfineSet then
     begin
       x := Min(x + w, AIn.ViewW) - w;
       y := Min(y + h, AIn.ViewH) - h;
-      x := Max(x, 0);
-      y := Max(y, 0);
+      { a typed nought: Max of a Double and an integer literal is the Single
+        overload, and a fractional point lost its low bits [Batch 153] }
+      x := Max(x, Double(0));
+      y := Max(y, Double(0));
+    end
+    else if ASpec.Confine then
+    begin
+      { THE PORT'S OWN DEFAULT (see the unit header): the same slide, but a
+        box already inside is not touched -- upstream does not confine an
+        unwritten `confine` at all, and min(y + h, view) - h moves a
+        fractional y by an ulp [Batch 153] }
+      if x + w > AIn.ViewW then x := AIn.ViewW - w;
+      if y + h > AIn.ViewH then y := AIn.ViewH - h;
+      if x < 0 then x := 0;
+      if y < 0 then y := 0;
     end;
   finally
     ClearExceptions(False);

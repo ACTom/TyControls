@@ -902,7 +902,10 @@ begin
   AssertEquals('the item''s', 'item:0:1', FChart.TooltipShownWhich);
   idx := FChart.List.IndexOfDatumInk(0, 1);
   b := TyShapeBounds(FChart.List.Element(idx).Shape);
-  { the mouse at the same point shows the same box }
+  { the mouse over the item shows the same item; the keyboard's box is
+    showTip's -- at findPointFromSeries, the bar's dataToPoint: the
+    category's centre and the value's top, not the element's centre
+    [Batch 153] }
   mouse := TKbProbe.Create(FForm);
   try
     mouse.Parent := FForm;
@@ -914,7 +917,7 @@ begin
     mouse.Hover(Round((b.Left + b.Right) / 2), Round((b.Top + b.Bottom) / 2));
     AssertEquals('the mouse there', mouse.TooltipShownWhich, FChart.TooltipShownWhich);
     AssertEquals(mouse.TooltipAnchor.X, FChart.TooltipAnchor.X);
-    AssertEquals(mouse.TooltipAnchor.Y, FChart.TooltipAnchor.Y);
+    AssertEquals('the value''s top', b.Top, FChart.TooltipAnchorF.Y, 1e-9);
   finally
     mouse.Free;
   end;
