@@ -8548,7 +8548,7 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 
 ### 已知偏差
 
-- **[第 116 批：additive 已做，见 §151。]** additive（只有 visualMap 连续型指示器用）、渐变插值、逐关键帧缓动、pause/resume、saveTo 与 `__changeFinalValue`（状态机，AN3）没做。
+- **[第 139 批：逐关键帧缓动做了，见 §177。]** **[第 116 批：additive 已做，见 §151。]** additive（只有 visualMap 连续型指示器用）、渐变插值、逐关键帧缓动、pause/resume、saveTo 与 `__changeFinalValue`（状态机，AN3）没做。
 - 数字字符串按数插值；上游归为数却在加法里拼接字符串。字符串形式的 duration/delay 按 `Number()` 取；上游的字符串 delay 会拼到时钟上、让 clip 停在起点。未注册的句柄名当 NaN：时长句柄缺失即不动画。
 - 只有一个关键帧且类型未知的轨道按离散处理（上游会写出 `'NaN…'` 之类的字符串）。
 - `easingFuncs` 上的原型属性名（`toString` 等）不当缓动。
@@ -11003,7 +11003,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 做法
 
-- **`Anim`**：`TTyAnimCfg.Additive`；`Shallow` 在 additive 时不停旧的、把元素上同名嵌套对象的在跑动画器交给新的（`SetAdditiveTo`，反向记 `FDependents`）；`WhenWithKeys` 的新轨道从 `GetAdditiveTrack` 的最后关键帧起步（颜色按 `rgba2String`）；`TTyAnimTrack.Prepare(maxTime, additive)` 记每帧的差（`AddValue`），`Step` 在那条轨道没结束时把差加到当前值上（数字、颜色——parse 当前字符串、逐通道加、下取整——和数组），结束了就改走自己的值。动画器析构时把指向自己轨道的引用清掉，免得悬空。
+- **[第 139 批：漏了 `Track.setFinished` 连带被叠加的轨道（叠加的先结束时旧的从此不写），补上，见 §177。]** **`Anim`**：`TTyAnimCfg.Additive`；`Shallow` 在 additive 时不停旧的、把元素上同名嵌套对象的在跑动画器交给新的（`SetAdditiveTo`，反向记 `FDependents`）；`WhenWithKeys` 的新轨道从 `GetAdditiveTrack` 的最后关键帧起步（颜色按 `rgba2String`）；`TTyAnimTrack.Prepare(maxTime, additive)` 记每帧的差（`AddValue`），`Step` 在那条轨道没结束时把差加到当前值上（数字、颜色——parse 当前字符串、逐通道加、下取整——和数组），结束了就改走自己的值。动画器析构时把指向自己轨道的引用清掉，免得悬空。
 - **`VisualMapView`**：视图规格多读 `realtime`、`hoverLink`、`hoverLinkDataSize`、`hoverLinkOnHandle`、`indicatorSize` 和点击的单选与否；连续型的「真正的视图」抽成 `TyVmContinuousUpdate`（在范围内的条、颜色、两个手柄和标签；组、背景、两端文字不动），构建和拖动共用；`TyVmIndicatorAt` 是 `_showIndicator` 的几何；命中：`TyVmBarPartAt`（逆矩阵、圆角裁剪、两段多边形的环绕数）、`TyVmThumbContains`（跑道形加笔）、`TyVmTextContains`、`TyVmSymbolContains`（圆、矩形、圆角矩形）；`TyVmGlobalToBar`。新记录 `TTyVmLive`（视图在两次渲染之间的字段和元素状态）、`TTyVmLiveDraw`（标记按此刻显示的画：手柄填充、标签、标签淡化、指示器和它的标签）。分段条目的颜色没有定义时按 zrender 的默认填充是黑色。
 - **控件**：
   - 状态：`FVmLive`、指示器和标签的两个动画包（`TTyAnimBag`，每次构建新建，挂在自己的驱动 `FVmAnim` 上，`AnimTick` 推进、`AnimArmTimer` 认它）、动作写进模型的 `FVmRange0/1`（连续型）和 `FVmSel`（分段型的表，JSON）、Draggable 的拖动（`FVmDragVm / Idx / X / Y`）。`SolveVisualMaps` 把动作写的 range / 表压到规格上（分段型的表照写的读，没写的段不选中）；`SolveVisualMapViews` 对自己发了 selectDataRange 的视图（`Keep`）什么都不做，其余重建并 `VmBuilt`（`_buildView` 那些复位，留下拖动、悬停标志和 hoverLink 的项）。
@@ -11520,7 +11520,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 推迟与偏差
 
-- **clipPath**、元素上的 **tooltip**、**keyframeAnimation**（D6）、`during`、`extra` 不做；`style.legacy` 只认真假。
+- **[第 139 批：keyframeAnimation 与 extra 做了（extra 只在数据上动，`during` 仍不做），见 §177。]** **clipPath**、元素上的 **tooltip**、**keyframeAnimation**（D6）、`during`、`extra` 不做；`style.legacy` 只认真假。
 - **拖动**只平移：上游 `drift` 之后 `decomposeTransform` 把整个矩阵重新分解（转角、缩放的末位可能变），端口只把指针的位移经父矩阵的逆加到 x / y 上；`ondrag*` 句柄与拖动事件不发。
 - `compoundPath`、`path`、未知类型、父节点不在：上游抛错，端口停在那里、`Error` 记下上游那句话，不抛。删除一个不存在的 id 上游也抛错（`transitionInnerStore(undefined)`），端口什么都不做。`notMerge` 清旧元素时上游用每个元素最后一次的选项取离场配置，端口不带元素覆盖。
 - **z 映射成整数**：`zlevel × 100000 + round(z)`、`round(z2)`，小数 z 会并列；zlevel > 0 的元素仍画在标题和提示框下面。**坐标轴前后的分界只看 z**：z ≤ 0（zlevel 0）一律在坐标轴下，上游 z 0 而 z2 大于坐标轴标签 z2 的会在标签上面。
@@ -11663,7 +11663,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 ### 推迟与偏差
 
 - **坐标系**：只做直角坐标。极坐标、日历、单轴是 C15；`coordinateSystem: 'none'`、geo、matrix 以后；这些上面的 custom 不画、诊断说坐标系还没做。**[第 124 批：极坐标、日历、单轴、'none' 都画了；geo（D14）、matrix（D12）照旧，雷达这类没有 prepareCustom 的仍记诊断，见 §161。]**
-- **过渡动画**（C15）：更新直接到终值，`transition` / `enterFrom` / `leaveTo` / `enterAnimation` 等都不读；`keyframeAnimation`、`during`、`morph`、universal transition 不做。动画开着时元素画在 renderItem 放的地方。**[第 124 批：enter / update 的过渡做了（系列是动画模型，默认 `['x', 'y']`）；被移除的元素带 leaveTo 时 6.1 上游会抛错，端口照样停下，没有 leaveTo 的立刻拿掉，见 §161。]**
+- **[第 139 批：keyframeAnimation 做了，见 §177。]** **过渡动画**（C15）：更新直接到终值，`transition` / `enterFrom` / `leaveTo` / `enterAnimation` 等都不读；`keyframeAnimation`、`during`、`morph`、universal transition 不做。动画开着时元素画在 renderItem 放的地方。**[第 124 批：enter / update 的过渡做了（系列是动画模型，默认 `['x', 'y']`）；被移除的元素带 leaveTo 时 6.1 上游会抛错，端口照样停下，没有 leaveTo 的立刻拿掉，见 §161。]**
 - **元素**：`path`（SVG pathData）、`compoundPath` 没有元素类，同上游抛错一样停在那里；元素上的 `clipPath`、`tooltipDisabled`（记下没接）、`autoBatch` 不做；`emphasisDisabled`、根上的 `focus / blurScope` 记下没接——项的焦点与淡出按系列的 `emphasis.focus` 走。**[第 124 批：`tooltipDisabled` 与根上的 `focus / blurScope / emphasisDisabled` 接上了，项的焦点只看根的选项（上游如此，系列的 `emphasis.focus` 对 custom 不起作用）；`clipPath`、`autoBatch` 仍不做，见 §161。]**
 - **状态**：只有路径元素有状态，状态样式只认 fill、stroke、lineWidth、opacity 与 z2；文字、图片、textContent 的状态（文字的 emphasis 样式、标签的 z2 提升）不做；ec4 写法的 emphasis 不转。
 - **clip**：命中不看裁剪（同端口的其他裁剪）。
@@ -11848,7 +11848,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 ### 推迟与偏差
 
 - **leaveTo 的抛错**：照上游停在那里，但下一轮从头来（同 C14 对抛错的处理）；上游的 `_data` 停在旧数据上，之后每次去掉同一项都会再抛。抛错的这一轮端口不画这个系列（同 C14），上游的组里元素还在——前面的项已更新，后面的还是旧的。
-- **[第 136 批：universal transition 的变形引擎与柱、饼、散点、折线符号之间的一对一过渡做了；custom 的元素还不参与，批里有 custom 时整批不做，见 §173。]** **过渡**：`keyframeAnimation`（D6）、morph 与 universal transition（D5）、`during`（函数）不做；`leaveAnimation` 上游也不读。被图例关掉的系列的元素摘下后动画照走（上游摘下时动画器离开 zr，挂回去再接着走）。悬停的状态过渡（`stateAnimation`）不做，状态照旧立刻切。
+- **[第 139 批：keyframeAnimation 做了，extra 与 `updateAnimation` 的 `additive` 也接上了，见 §177。]** **[第 136 批：universal transition 的变形引擎与柱、饼、散点、折线符号之间的一对一过渡做了；custom 的元素还不参与，批里有 custom 时整批不做，见 §173。]** **过渡**：`keyframeAnimation`（D6）、morph 与 universal transition（D5）、`during`（函数）不做；`leaveAnimation` 上游也不读。被图例关掉的系列的元素摘下后动画照走（上游摘下时动画器离开 zr，挂回去再接着走）。悬停的状态过渡（`stateAnimation`）不做，状态照旧立刻切。
 - **坐标系**：geo（D14）、matrix（D12）照旧不画；极坐标上的 `clip: true`（上游是扇形裁剪）不裁；日历的 `api.coord(data, clamp)` 的第二个参数不收（总是 clamp）。
 - **元素**：`clipPath`、`autoBatch` 仍不做。
 - **api**：`visual('visualMeta')` 不答（上游是 visualMap 的 visualMeta 列表，没有 visualMap 时是空数组）；`decal`、`legendIcon`、`symbolKeepAspect` 仍是 nil；'none' 上调 `BarLayout` 答空（上游是 TypeError）；一个参数的 `Size` 是「没有 dataItem」，传一个空数组也当成没有（上游空数组是真值，读出 NaN）。
@@ -13060,3 +13060,78 @@ D5 的第三批，也是最后一批：方向嗅探与多层钻取。UT2（§175
 - `source/tyControls.AdvChart.Treemap.pas`：矩形元素 `G[4..7]`。
 - `source/tyControls.AdvanceChart.pas`：快照与 `AnimSeriesInfo` 填 `UtChildGroupIds`。
 - `tools/advchart-oracle/universal-transition3.js`、`tests/fixtures/advchart-universal-transition3.json`、`tests/test.advchart.universaltransition3.pas`（新，注册在 `tytests.lpr`）。
+
+## 177. Tier 3 第一百三十九批：关键帧动画与过渡小语言（D6，2026-10-12）
+
+路线图 D6：`keyframeAnimation`、过渡小语言、叠加动画。C13（§157）把 graphic 组件的 enter / update / leave 过渡做了，C15（§161）把同一套搬到 custom 系列上，两处都把 `keyframeAnimation` 记成「D6」、把 `extra` 记成「不做」；动画引擎（§122）的已知偏差里还挂着「逐关键帧缓动没做」，C7（§151）给 visualMap 指示器做的 additive 只是选项够不着的引擎能力。画廊里 `graphic-loading`（五根柱子错开 200 ms 循环伸缩）和 `graphic-stroke-animation`（描边文字三秒一圈）因此一帧不动。这一批对着 6.1 的 `animation/customGraphicKeyframeAnimation.ts`（整段：`applyKeyframeAnimation`、`stopPreviousKeyframeAnimationAndRestore`、`getStateToRestore`、`KEYFRAME_EXCLUDE_KEYS`）、`animation/customGraphicTransition.ts`（`ELEMENT_ANIMATABLE_PROPS` 的 `extra`、`prepareShapeOrExtraAllPropsFinal` / `prepareShapeOrExtraTransitionFrom` 的 extra 一支、`getElementAnimationConfig` 的 `extend`、`updateLeaveTo`）、`component/graphic/GraphicView.ts` 与 `chart/custom/CustomView.ts` 的两个调用点（`_updateElements` 里 merge 已有元素时先停再更新、最后挂关键帧；`updateElNormal` 开头先停、结尾挂关键帧），以及 zrender 的 `Animator.ts`（`Track.addKeyframe` 的 easing、`prepare`、`step` 里 `nextFrame.easingFunc`、`Track.setFinished` 连带被叠加的轨道、`whenWithKeys`、`duration()` 的 force、`stopTracks`）、`Clip.ts`（loop 的重启）与 `Element.ts`（`animate` 的 `key && (animator.targetName = key)`、`addAnimator`、`stopAnimation`、`attrKV` 的 extra、`animateToShallow` 的停与叠加名单）逐行核过。**任务单里写的 `$transition` / `$enterFrom` / `$leaveTo` 在 6.1 里没有**：src 与 dist 都搜不到，那是 5.0 测试版的名字；6.1 的写法是 `style.transition`、`shape.transition`、`extra.transition`（C13、C15 已做，这一批补 extra）。以真跑为准：基准用真 dist。§122、§151、§157、§159、§161 的相关处在原处标注。
+
+### 上游的做法
+
+- **入口**：graphic 视图对每个元素，merge 碰到已有元素时先把 `isNew` 置假、`stopPreviousKeyframeAnimationAndRestore`，再 `applyUpdateTransition`；replace、新建不停（新元素没有可停的）；所有动作之后元素还在就 `applyKeyframeAnimation(el, elOption.keyframeAnimation, 组件模型)`——`$action` 是不认识的词时也挂。custom 的 `updateElNormal`（元素本身、textContent、clipPath 各一次）开头先停，结尾挂，动画模型是系列。
+- **停与恢复**：`el.stopAnimation('keyframe')`——作用域是 `'keyframe'` 的动画器原地停下（不跳到末帧），然后 `el.attr(getStateToRestore(el))`。这个「待恢复」对象**跟元素一辈子**，从不清空：每次挂关键帧时把用到的键当时的值写进去（根的键直接写，style / shape / extra 写进同名的子对象），所以每次更新前，凡是曾经被关键帧动过的键都回到最近一次挂关键帧前的值；style 读的是 `el.style[key]`，原型上的缺省值也算（没写过的 opacity 存 1）。
+- **挂关键帧**：系列（或组件）不动画、或选项是假值就什么都不做；数组逐个递归。`duration` 是 null 时取 `getAnimationConfig('enter', 模型, 0).duration`——**进场时长，不读元素的 `enterAnimation`**；`!keyframes || !duration` 就返回。然后按 `ELEMENT_ANIMATABLE_PROPS` 的次序 `''`、`style`、`shape`、`extra` 各来一遍：元素上没有这个对象（组没有 style 与 shape，文字和图片没有 shape，`extra` 写过才有）就跳过；关键帧按 `percent` 原地排序（稳定）；每一帧取 `kf[对象名]`（根取 `kf` 本身，去掉 `percent / easing / shape / style / extra`），没有键就跳过；第一次用到时 `el.animate(对象名, loop, true)`——允许离散，作用域 `'keyframe'`；**元素上其余同 targetName 的动画器把这些键的轨道停掉**（`stopTracks`：已开始、还没走过一帧的轨道先走到 0，即回到它的起点）；把这些键的当前值存进待恢复对象；`whenWithKeys(duration × percent, 帧, 键, 帧的 easing)`。最后 `delay(delay || 0).duration(duration).start(easing)`。
+- **targetName**：`el.animate('')` 不给 targetName 赋值，是 **undefined**；`animateTo` 给元素自己的动画器写的是 `''`。所以根上的关键帧动画器和根上的过渡动画器互不认识：关键帧挂上来时不停过渡的 x 轨道，之后的 `animateTo` 也不停关键帧，`additive` 的名单里也没有它——两个都写 x，后加进时钟的那个（关键帧）每帧最后写，赢。style / shape / extra 上两边的名字相同，照常互停。
+- **轨道**：`addKeyframe(time, value, easing)`——easing 是名字或 `cubic-bezier(...)`，解析不出就没有；`time > 0` 的新轨道先补一个第 0 帧（元素当前值，也带这个 easing，但第 0 帧的 easing 永远不会被读）。`step` 找到所在的两帧后先算 `w`，再用**终点那一帧**的 easing 变换 `w`，整段 clip 的 easing 在这之前已经作用在 percent 上。数组按末帧对齐（长的截、短的补、NaN 取末帧的）；值类型和第一帧不同或不可插值就离散——允许离散时 `w < 1` 取前一帧原值，否则取后一帧，不允许离散时直接写末帧。百分比是 `time / maxTime`，maxTime 被 `duration()` 盖成 duration；loop 的 clip 走到 1 时先按 1 写一帧，再把起点挪到 `globalTime − elapsed % life` 重来，轨道的 `_lastFrP` 回退，下一帧从后往前找区间。
+- **过渡小语言里的 extra**：`extra` 和 shape 一样——终值克隆后经 `attr` 合进 `el.extra`（没有就新建）；更新时 `extra.transition` 是 `'all'` 取 `el.extra` 的全部键，是列表取所列；否则 `transition` 是 `'all'` 或含 `'extra'` 时取 `el.extra` 里「新选项给了有限数」的键；`enterFrom` / `leaveTo` 也认 extra。`transition` 的 from 对象键序是变换、shape、extra、style。`enterAnimation` / `updateAnimation` 是 `extend` 进配置的，什么键都抄——其中 `additive: true` 就让这次过渡叠加到正在跑的同一属性上。
+- **叠加**（引擎，§151 做过）：新动画器不停旧的；新轨道从最近一个旧轨道的末关键帧出发，旧轨道还在跑时每帧写「旧的这一帧 + 自己相对第一帧的差」。§151 漏了一条：**`Track.setFinished` 会把它叠加的那条轨道一起设成完成**——叠加的那次过渡先结束时，旧的从此不再写，值停在叠加的那一帧；旧的先结束时，叠加的轨道从下一帧起写自己的绝对值（会跳一下）。
+- **元素上的动画器列表**：被别的动画器把每条轨道都停掉的动画器只 `_abortedCallback`，不从 `el.animators` 里删（只有 done 才删），之后一直挂着、没有 clip。
+
+### port 以前
+
+- `keyframeAnimation` 进得了选项树，没人读；`extra` 不进元素，`enterFrom` / `leaveTo` / `transition` 里的 extra 都丢掉。
+- 引擎：关键帧没有自己的缓动；`Animate('')` 的动画器与 `animateTo` 的根动画器同名；完成的叠加轨道不连带被叠加的那条；`__changeFinalValue` 重新 prepare 时不带被叠加的轨道。
+- `enterAnimation` / `updateAnimation` 只读 duration、easing、delay。
+
+### 做法
+
+- **`tyControls.AdvChart.Anim`**：`TTyAnimKeyframe.Easing`；`AddKeyframe` 与 `WhenWithKeys` 多一个可选的 easing 名（`TyEasingResolve`，解析不出是 `ekNone`）；`Step` 在 `Math.min(w, 1)` 之后用终点帧的 easing。`TTyAnimTrack.SetFinished` 连带 `FAdditive`。`TTyAnimator.NoTargetName`（`FNoTarget`）——`Animate('')` 置真；`Shallow` 的停轨道与叠加名单、`StopTracksDetached` 都只认 `targetName` 相同**且**不是 undefined 的。这一条对全局生效：涟漪（effectScatter）与 lines 的特效（`Animate('', loop)`）现在也和上游一样不会被根上的 `animateTo` 停掉。`ChangeFinalValue` 重新 prepare 时带上被叠加的轨道。单元头注释补了「KEYFRAMES」一段，删掉「逐关键帧缓动」的「没做」。
+- **`tyControls.AdvChart.GfxEl`**：`TTyGfxEl.Extra`（TJSONObject，写过才有，随元素释放）与 `GetAnimProp` / `SetAnimProp` 的 `'extra.k'`（写的时候没有就新建，即 `attrKV` 的那一句）；`KfRestore`（扁平的 `'x'`、`'style.opacity'`、`'extra.k'`，元素一辈子）；`HasAnimTarget(name)`——`''` 总有，style 除组外都有，shape 只有路径类，extra 写过才有。
+- **`tyControls.AdvChart.Graphic`**：
+  - 新的公开函数 `TyGfxStopKeyframes(el)`（停 `'keyframe'` 作用域、`Attr(KfRestore)`）与 `TyGfxApplyKeyframes(el, opt, enabled, 缺省时长)`（上面「挂关键帧」一条照抄：数组递归、时长缺省、稳定插入排序、四个对象、`Animate(名, loop, True)` 与 `'keyframe'` 作用域、停同名（含 undefined 的区分）动画器的同键轨道、存待恢复的值、`WhenWithKeys(duration × percent, …, 帧的 easing)`、`Delay(delay || 0).Duration(duration).Start(easing)`）。graphic 与 custom 共用。
+  - `TyGfxApplyDirect` 把 `extra` 克隆合进 `Extra`；`TyGfxTransitionFrom` 的 shape 一段抽成 `ShapeOrExtra`，shape 之后接 extra；`TyGfxEnterFrom` 认 extra（`TyGfxUpdateLeaveTo` 本来就循环四个对象，只是以前写不进元素）。
+  - 视图：`ElementCfg` 读 `additive`；`UpdateElements` 在 merge 已有元素时先 `TyGfxStopKeyframes`，每个还在的元素最后 `TyGfxApplyKeyframes(el, opt.keyframeAnimation, 动画开着且元素有驱动, 组件的进场时长)`。
+- **`tyControls.AdvChart.Custom`**：`ElementCfg` 读 `additive`；`UpdateNormal` 开头 `TyGfxStopKeyframes`，结尾在系列动画开着时挂关键帧，缺省时长是 `TyAnimGetConfig(atEnter, 系列, 下标 0)` 的 duration；textContent 也走 `UpdateNormal`，所以它的关键帧一样跑。单元头注释补一段。
+- **控件**：不用改。关键帧的动画器挂在 graphic 自己的驱动（`FGfxAnim`）与 custom 的驱动（`FCuAnim`）上，循环的 clip 永远不结束，`GfxLive` / `CuLive` 让时钟一直走；`camOff`（`AnimDropAll` → 两个视图的 `Snap`）把循环停在末帧。
+- 没有新单元、新主题键、新度量、新资源串；关键帧随选项进来，选项的入口本来就过 `TyJsonNestingExceeds`，没有新的 JSON 入口。
+
+### 基准
+
+`tools/advchart-oracle/keyframe-animation.js`（新；真 dist，node SSR 400 × 300，`chart._ssr = false`，`env.node` 关掉，animation.js 的时钟钩子 T0 = 1700000000000，`setTimeout` 不跑，随机数是端口的 xorshift32，zrender 的宽度表量字；custom 的 `renderItem: '@名'` 换成脚本里的 JS 函数；每个状态从它的 setOption 那一刻起按自己的 `samplesMs` 推钟、`zr.animation.update()`、刷显示列表，下一步在上一状态最后一个采样的时刻做；两次生成逐字节一致，最后 `process.exit()`）→ `tests/fixtures/advchart-keyframe-animation.json`（约 0.5 MB）：**7 个用例、15 个状态、126 个采样、646 条元素快照、11 792 个值、45 条守卫**。快照是十一个变换键、style 的 opacity / fill / stroke / lineWidth / text / fontSize（原型上的也算、非空才记）、shape 与 extra 的每个非空自有键（`transition / enterFrom / leaveTo` 除外）、还有 clip 的动画器个数 `n`。
+
+- **关键帧**（`kf-graphic`，10 个元素，根上 `animationDuration: 600`）：没有 0% 帧（从当前 x 出发）且中间帧带 cubicOut；乱序的三帧（0 / 0.3 bounceOut / 1）配整段 quadraticInOut；style 的颜色与透明度加 shape 的 r、延迟 200；点数变化的 points（3 → 4 → 2）；extra 的数与离散的文字；文字的离散 `text` 与 `fontSize`；不写 duration（取 600）；组（只有根上的 scale 动，style 跳过）；cubic-bezier 的帧缓动；根上两个关键帧动画的数组（第二个停掉第一个的 x）。`kf-off`：`animation: false`，什么都不跑。
+- **循环与恢复**（`kf-loop`）：带延迟的往返、没有 0% 也没有 100% 的 y 与透明度、sinusoidalInOut 下的 shape 与颜色、一整圈的旋转，采样跨过好几次重启；然后在循环中途 merge——新的非循环关键帧从恢复的 x 出发、只改 style 不带关键帧（停下并恢复）、`transition: 'all'` 加一个打在同一 opacity 上的关键帧（更新过渡的 opacity 轨道被停回起点）、`transition: ['x']` 旁边一个根上 x 的循环关键帧（不停过渡，两个都在写）。
+- **叠加**（`kf-additive`）：四个元素 x 0 → 200（1000 ms linear），300 ms 时：叠加 400 ms 到 100（先结束，连带旧轨道结束）、叠加 1200 ms cubicOut 到 50（后结束，旧的结束那一帧起跳回自己的值）、颜色叠加（rgba 通道出现负数）、同样的移动不叠加（旧的被停）。
+- **过渡小语言**（`kf-transition`）：extra 的 `enterFrom` 配 400 ms linear 的 `enterAnimation`；`transition: 'all'` 动 extra；`extra.transition: ['k']`（j 直接跳）；`transition: ['extra']` 配带延迟的 `updateAnimation`；`style.transition: 'all'` 与 `shape.transition: 'all'`；`['shape', 'style']`；然后 remove 时在 remove 选项里给 extra 与 style 的 `leaveTo`、以及没有 leaveTo 的 remove。
+- **custom**（`kf-custom`、`kf-custom-tr`，`coordinateSystem: 'none'`）：rect 的旋转与透明度循环加它 textContent 的填充关键帧；圆的 shape 关键帧带 elasticOut；组缩放一次、孩子一个循环 x、一个不写 duration（取系列的 800）；换数据后每个元素先停、恢复，再走缺省的 `['x', 'y']` 过渡，圆（y 超过 100）不再有关键帧，其余重新开始；extra 的 `enterFrom` 与 `transition: ['x', 'extra']`；`shape.transition` / `style.transition` 为 `'all'` 的圆在 `additive` 的 `updateAnimation` 下相隔 200 ms 更新两次。
+- 守卫（任何一条不过就不写文件、退出 1）：缺 0% 从当前值出发、帧缓动、乱序排好、延迟按住 0% 帧、颜色走 rgba、points 的长度、extra 的数与离散文字、文字的离散、缺省 600、组不动 style、cubic-bezier、数组里第二个停第一个、全部结束（数组那个的首个动画器在 100 ms 时已不在 clip 上）、动画关掉不跑；循环的延迟与重启、没有 0% 从当前值出发、循环一直在、新关键帧从恢复的 x 出发、不带关键帧的更新恢复且不再有动画器、恢复的 r 是过渡起点、关键帧停掉更新过渡的 opacity、根上关键帧旁的过渡（两个动画器）；叠加与不叠加不同、先结束的叠加连带旧的、颜色叠加、不叠加时旧的停；extra 的 enterFrom、`'all'`、`extra.transition`、`'extra'` 与延迟、style 与 shape 的 `'all'`、extra 的 leaveTo、没有 leaveTo 当即消失；custom 的循环、textContent 的关键帧、系列时长、更新前恢复、不再挂就停、extra 的 enterFrom、叠加的 style。全部成立；没有 `\u0000`。
+
+### 测试
+
+`test.advchart.keyframeanimation`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartKeyframeOracleTest`，5 个）：关键帧（`kf-graphic`、`kf-off`）、循环与恢复、叠加、过渡小语言、custom。每个 renderItem 是 Pascal 抄写（`TKfMirror`）；控件 `camAlways`、时钟钉在 T0，每个采样点 `AnimNow` + `AnimTick` 后按键找元素（graphic 按 id，custom 按 `s<系列>:<原始下标>`、`/<孩子>`、`#label`），元素集合两边一样，每个记下的值逐位比（style 经 `StyleValue` 走原型），animators 个数比 `AnimatorCount`，另查端口的 shape / extra 里没有上游没有的非空键。共一万多次比较。
+- **手写**（`TAdvChartKeyframeTest`，5 个）：帧缓动只作用在它结尾的那一段（quadraticIn 一半处是 25，解析不出的名字是线性）；叠加轨道结束时连带旧轨道、值停在原处；`Animate('')` 没有 targetName，根上的 `animateTo` 停不掉它；动画关掉（`camOff`）把循环停在末帧、不剩动画器；循环让 graphic 的时钟一直有 clip。
+
+首跑：五组里两组不对，各 18 处。一是数组里的第二个根关键帧动画停掉第一个的 x 之后，上游的 `el.animators` 里还挂着第一个（没有 clip），端口把它释放了——行为上看不出差别（没有 clip 的动画器 `stopTracks`、`stop`、`saveTo` 都什么也不做），基准改成只数有 clip 的动画器，偏差里记下。二是 custom 的 textContent：上游 `LabelManager` 给新出现的系列标签另挂一个从 0 淡入的动画器（800 ms cubicInOut），端口对 custom 的 textContent 不做——这是 C14 / C15 留下的缺口，不在本批范围，基准不记 `#label` 的 opacity 与动画器个数，偏差里记下。之后全部逐位对上。另做了一次「拔牙」检查（不是变异轮）：同时去掉 `SetFinished` 的连带与 `FNoTarget`，循环组 9 处、叠加组 15 处不对，手写的两条也红；恢复后重编全绿。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartKeyframeOracleTest`（5）、`TAdvChartKeyframeTest`（5）、`TAdvChartGraphicTest`（12）、`TAdvChartCustomSeriesOracleTest`（5）、`TAdvChartCustomSeriesTest`（10）、`TAdvChartCustomSeries2OracleTest`（5）、`TAdvChartCustomSeries2Test`（5）、`TAdvChartAnimEngineTest`（25）、`TAdvChartAnimStateEngineTest`（11）、`TAdvChartAnimStateTest`（5）、`TAdvChartVisualMapInteractOracleTest`（1）、`TAdvChartVisualMapInteractTest`（6）、`TAdvChartLinesOracleTest`（5）、`TAdvChartLinesTest`（8）、`TAdvChartAnimEnterTest`（13）、`TAdvChartAnimUpdateTest`（7）、`TAdvChartAnimLabelsTest`（10）。全量与变异轮留到 D5–D8 里程碑末尾；变异候选列在会话草稿 `s177.md.candidates.md`（21 个，另记 4 个预计存活的）。
+
+### 推迟与偏差
+
+- **`$transition` / `$enterFrom` / `$leaveTo`**：6.1 没有（5.0 测试版的名字），不做；6.1 的写法 `style.transition`、`shape.transition`、`extra.transition` 都认。
+- **`during`**（选项里的函数）：照旧不做，`extra` 因此只在元素的数据上动，不影响画面；基准从 `el.extra` 读它。
+- **clipPath 上的关键帧**：clipPath 本身没做（§157），它的 `keyframeAnimation` 也没有。
+- **被停光的动画器**：上游留在 `el.animators` 里（没有 clip），端口释放；只有 `el.animators.length` 看得出来。
+- **custom 的 textContent 淡入**：上游 `LabelManager.animateLabels` 让新出现的系列标签（custom 的 textContent 也算）从 0 淡入，端口没有（C14 / C15 的缺口，这一批发现，未修）；它的关键帧照常跑。
+- **关键帧数组里不是对象的项**丢掉不排；`percent` 不是数时上游的比较函数给 NaN，V8 的 TimSort 怎么排与端口的插入排序可能不同；`keyframes` 是对象而不是数组时上游抛 TypeError（`sort` 不是函数），端口什么都不做。字符串的 `duration` / `delay` 按 `Number()` 取（上游的字符串 delay 会拼进时钟，同 §122）。
+- **`enterAnimation` / `updateAnimation`** 只读 duration、easing、delay、additive；上游 `extend` 进来的其余键（`setToFinal`、`force`、`scope`、`done` 之类）不读。
+- **画廊**：`graphic-loading` 现在逐根循环；`graphic-stroke-animation` 的 `lineDash`、`lineDashOffset`、`fill` 都在动，但端口不画 `lineDashOffset`、文字的描边不画虚线，所以画出来只看得到填充从透明到黑；`geo-svg-custom-effect`（geo，D14）与 `graphic-wave-animation`（.js，不在画廊）不涉及。
+
+### 落地
+
+- `source/tyControls.AdvChart.Anim.pas`：`TTyAnimKeyframe.Easing`、`AddKeyframe` / `WhenWithKeys` 的 easing、`Step` 的帧缓动、`SetFinished` 的连带、`FNoTarget` / `NoTargetName` 与 `Animate('')`、`Shallow` / `StopTracksDetached` 的 undefined 区分、`ChangeFinalValue` 带被叠加的轨道、单元头注释。
+- `source/tyControls.AdvChart.GfxEl.pas`：`Extra`、`KfRestore`、`HasAnimTarget`、`'extra.k'` 的读写、单元头注释。
+- `source/tyControls.AdvChart.Graphic.pas`：`TyGfxStopKeyframes`、`TyGfxApplyKeyframes`、`TyGfxApplyDirect` / `TyGfxTransitionFrom`（`ShapeOrExtra`）/ `TyGfxEnterFrom` 的 extra、`ElementCfg` 的 additive、`UpdateElements` 的停与挂、单元头注释。
+- `source/tyControls.AdvChart.Custom.pas`：`ElementCfg` 的 additive、`UpdateNormal` 的停与挂、单元头注释。
+- `tools/advchart-oracle/keyframe-animation.js`、`tests/fixtures/advchart-keyframe-animation.json`、`tests/test.advchart.keyframeanimation.pas`（新，注册在 `tytests.lpr`）。
+- §122、§151、§157、§159、§161 在原处标注。没有新单元、新主题键、新度量或新资源串。

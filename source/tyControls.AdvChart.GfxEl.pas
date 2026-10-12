@@ -10,7 +10,8 @@ unit tyControls.AdvChart.GfxEl;
   by every update the way setShape and setStyle extend theirs, read through
   the prototype's defaults where a key was never written), z, zlevel, z2,
   silent, ignore, invisible, cursor, draggable, a textContent with its
-  textConfig. It derives from TTyAnimElement, so a transition animates the
+  textConfig, and `extra` -- the free object an option may animate beside
+  the shape (nil until something writes it) [Batch 139]. It derives from TTyAnimElement, so a transition animates the
   same keys zrender's animators do -- 'x', 'shape.r', 'style.opacity' -- and
   nothing outside the bag holds a second copy of a value.
 
@@ -113,6 +114,14 @@ type
     Custom: TObject;
     { a gkPath's data, in its own frame [Batch 129] }
     PathData: TTyZrPath;
+    { el.extra: owned; nil until an option (or an animation) writes it
+      [Batch 139] }
+    Extra: TJSONObject;
+    { what the keyframe animations saved before they ran
+      (customGraphicKeyframeAnimation's getStateToRestore): flattened ('x',
+      'style.opacity', 'extra.k'), kept for the element's life and put back
+      before every update [Batch 139] }
+    KfRestore: TTyAnimProps;
     constructor Create(AKind: TTyGfxKind; const AType: string);
     destructor Destroy; override;
     function GetAnimProp(const AKey: string): TTyAnimValue; override;
@@ -126,6 +135,9 @@ type
     { the leave transition's done: detached from its parent, kept for the
       view to free }
     procedure LeaveDone;
+    { el[AName] exists: '' the element itself, 'style' anything but a group,
+      'shape' a path, 'extra' once written [Batch 139] }
+    function HasAnimTarget(const AName: string): Boolean;
   end;
 
 { the option's type word }
@@ -551,12 +563,23 @@ begin
   FreeAndNil(Handlers);
   FreeAndNil(Shape);
   FreeAndNil(Style);
+  FreeAndNil(Extra);
   inherited Destroy;
 end;
 
 function TTyGfxEl.IsGroup: Boolean;
 begin
   Result := Kind = gkGroup;
+end;
+
+function TTyGfxEl.HasAnimTarget(const AName: string): Boolean;
+begin
+  if AName = '' then Result := True
+  else if AName = 'style' then Result := Kind <> gkGroup
+  else if AName = 'shape' then Result := Kind in [gkRect, gkCircle, gkEllipse, gkRing,
+    gkSector, gkArc, gkPolygon, gkPolyline, gkLine, gkBezier, gkPath]
+  else if AName = 'extra' then Result := Extra <> nil
+  else Result := False;
 end;
 
 function TTyGfxEl.ZrType: string;
@@ -609,6 +632,13 @@ begin
     inner := Copy(AKey, 7, MaxInt);
     i := Shape.IndexOfName(inner);
     if i >= 0 then Exit(TyGfxAnimOf(Shape.Items[i]));
+    Exit(TyAnimNull);
+  end;
+  if Copy(AKey, 1, 6) = 'extra.' then
+  begin
+    if Extra = nil then Exit(TyAnimNull);
+    i := Extra.IndexOfName(Copy(AKey, 7, MaxInt));
+    if i >= 0 then Exit(TyGfxAnimOf(Extra.Items[i]));
     Exit(TyAnimNull);
   end;
   if AKey = 'x' then Result := TyAnimNum(X)
@@ -667,6 +697,13 @@ begin
   if Copy(AKey, 1, 6) = 'shape.' then
   begin
     PutKey(Shape, Copy(AKey, 7, MaxInt), TyGfxJsonOf(AValue));
+    Exit;
+  end;
+  if Copy(AKey, 1, 6) = 'extra.' then
+  begin
+    { attr's `this.extra = this.extra || an empty object` }
+    if Extra = nil then Extra := TJSONObject.Create;
+    PutKey(Extra, Copy(AKey, 7, MaxInt), TyGfxJsonOf(AValue));
     Exit;
   end;
   case AValue.Kind of
