@@ -499,6 +499,10 @@ resourcestring
   // the save dialog's filter for saveAsImage
   rsTyChartToolboxImageFilter = 'PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*';
 
+  // --- AdvanceChart: the chart's accessible name [Batch 144] ---
+  // What a screen reader calls a chart that has no title.
+  rsTyChartAccessibleName = 'Chart';
+
   // --- AdvanceChart: the chart's description, its aria-label [Batch 131] ---
   // ECharts' own locale (langEN.ts aria and series.typeNames), so an
   // untranslated build says exactly what upstream's EN build says. The words

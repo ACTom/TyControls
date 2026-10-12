@@ -1467,6 +1467,12 @@ TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(
    them black at 20%; here the skin's ink at 20%, so a dark skin's decals
    are light. */
 TyAdvChartDecal { color: alpha(var(--on-surface), 0.2); }
+/* The item the keyboard holds. Upstream has no keyboard, so this is the
+   library's own focus ring, drawn around the mark: the skin's focus ring, at
+   the width the other controls draw theirs. The offset follows the library's
+   ring convention (a positive one insets the ring), so a negative one sets it
+   off the mark. */
+TyAdvChartFocusItem { outline: 2px var(--focus-ring); outline-offset: -3px; }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

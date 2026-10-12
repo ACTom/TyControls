@@ -1031,7 +1031,7 @@ normal 不是谁「进入」的状态，是两个槽都空。
   `gen-icons.ps1`，**两处**；而且 `Glyphs` 是定长数组，加一项不改上界，报的是
   「`)` expected but `,` found」并且指在错误的行上。
 - **`test.version` 的 `Reg()`**：注册了但这条测试够不着，等于版本表里查无此人。
-- **tab-stop 表**：一个窗口化 `TTy` 类必须落在两张表之一，好让 `TabStop` 的默认值是有人写下来的决定。
+- **[第 144 批：`TTyAdvanceChart` 有了键盘，仍留在外壳表、仍是 False——键盘由宿主打开 `TabStop` 得到，表与构造不变，见 §183。]** **tab-stop 表**：一个窗口化 `TTy` 类必须落在两张表之一，好让 `TabStop` 的默认值是有人写下来的决定。
   顺带把 `TTyChart` **两张表都不在也是对的**记在了注释里——它是图形控件，这两张表只收窗口化类。
 
 **而填这张表的第一次尝试是错的，另外两条测试当场证明了。** 我把 `TTyAdvanceChart` 归进「容器与
@@ -7521,7 +7521,7 @@ slider 的拖动、点击、刷选、悬停标签,inside 的滚轮缩放和拖�
 
 ### port 以前
 
-- dataZoom 只有静态画面,指针不起作用;`TabStop` 的注释说 dataZoom 落地时要改成可获得焦点。
+- **[第 144 批：键盘落地时也没有翻，见 §183。]** dataZoom 只有静态画面,指针不起作用;`TabStop` 的注释说 dataZoom 落地时要改成可获得焦点。
 
 ### 做法
 
@@ -7534,7 +7534,7 @@ slider 的拖动、点击、刷选、悬停标签,inside 的滚轮缩放和拖�
   - 光标:手柄是左右/上下调整,移动区是手形、拖动时是移动,刷选面板是十字,其余的可点元素是手形;不是 dataZoom 时还原宿主自己的光标。
   - 只有 slider 状态真的变了才重画视图。
 - 主题键 `TyAdvChartDataZoomHandle:hover`、`TyAdvChartDataZoomMoveHandle:hover`、`TyAdvChartDataZoomBrush`。
-- `TabStop` 保持 False,注释里标明:上游 dataZoom 只有指针交互,没有键盘绑定,原先的理由不成立。
+- **[第 144 批：键盘有了（方向键走数据项、Enter 选中、Esc 清除），这里的理由「上游没有键盘」不再成立；结论仍是不翻——已有窗体不能因为库升级就在点击图表时丢掉编辑框的焦点，键盘由宿主 `TabStop := True` 打开，见 §183。]** `TabStop` 保持 False,注释里标明:上游 dataZoom 只有指针交互,没有键盘绑定,原先的理由不成立。
 
 ### 基准
 
@@ -12363,7 +12363,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 - **画 decal 的图形**：直角与极坐标柱、饼、漏斗、折线面积、填充的图例图标。雷达面积、桑基、旭日、矩形树图（`enableAriaDecalForTree` 没移植，它们也不占系列作用域——这一点与上游一致）、K 线、箱线图、热力图、象形柱、自定义、大数据量模式的批量柱与分块路径、系列自己画图标的图例项（折线的）不画。
 - **平铺块的光栅化**：BGRA 抗锯齿，与浏览器画布近似；`emptyCircle` 之类白底加 1 px 描边、`path://` 经 `TyBuildSymbolInBox` 的盒子适配、`image://` 什么都不画，基准没有比这几种。缓存满 64 清空。
 - **NaN 的 dash**：上游 gcd 无限递归抛 RangeError，端口给 NaN（不画）；符号多于 100 万个截断。
-- **描述只在需要时算**：上游的 `aria-label` 写在 dom 上，后来的更新不写（`label.enabled` 改成 false、系列全删）时**旧的留着**；`AriaDescription` 只答「这一次会写什么」，那种情况是空串。`role="img"` 不公开。第一次渲染之前没有布局，事实不全。
+- **[第 144 批：无障碍树的根描述就是它（选项没写 aria 时用默认模板说同一句话），系列与行的名字是它的短语，Windows 上经 MSAA 交给讲述人与 NVDA，见 §183。]** **描述只在需要时算**：上游的 `aria-label` 写在 dom 上，后来的更新不写（`label.enabled` 改成 false、系列全删）时**旧的留着**；`AriaDescription` 只答「这一次会写什么」，那种情况是空串。`role="img"` 不公开。第一次渲染之前没有布局，事实不全。
 - **描述的值**：store 的列、`RawWidth` 内没有列读的位置（浮点解析；上游猜成 ordinal 的位置这里是 NaN）、堆叠两列；树形（旭日、矩形树图、树）、关系图、桑基的行是端口的 store，不是上游的树 / 图数据（旭日带虚拟根，基准里不比）。`encode` 打乱位置次序时多出来的位置排在 store 的列之后。
 - **模板**：作者写成非字符串的模板按 `String()`；路径中间写成非对象（上游得到 `undefined` 再拼成 `"undefined"`、`join(undefined)` 是逗号）这里退回 locale 的。`maxCount` 非数字的真值按 ToNumber 比较、按原样印。
 - **aria 的开关**：只看 setOption 本身（notMerge 的根、合并的那一片），media 合并进来的 aria 不看。
@@ -13338,7 +13338,7 @@ D5 的第三批，也是最后一批：方向嗅探与多层钻取。UT2（§175
 
 ### 推迟与偏差
 
-- **[里程碑 D5–D8：估过，要一天以上，没在里程碑里做，记进路线图的 D8b，见 §180。]** **tooltip 与指示器不跨图联动**：端口的指针由鼠标直接驱动，不经 `updateAxisPointer` / `showTip` / `hideTip` 三个动作，也就不发这三个事件，连上的组里别的图不跟着显示指示器和 tooltip；`DispatchAction` 不认这三个类型（收到转发也答 False）。这是 connect 最常见的用途，留作后续（要把指针状态做成可由载荷驱动的：`axesInfo` 限定轴与值、`findPointFromSeries` 找点、showTip 定位）。基准的滚轮用例里上游这几个事件（与它们的 `updated`）不记。
+- **[第 144 批：键盘焦点项的提示框走的是控件内部同一条路（在元素中心解析，等同于 showTip 落在那一项），不是 `showTip` 动作；三个动作和它们的事件仍归 D8b，见 §183。]** **[里程碑 D5–D8：估过，要一天以上，没在里程碑里做，记进路线图的 D8b，见 §180。]** **tooltip 与指示器不跨图联动**：端口的指针由鼠标直接驱动，不经 `updateAxisPointer` / `showTip` / `hideTip` 三个动作，也就不发这三个事件，连上的组里别的图不跟着显示指示器和 tooltip；`DispatchAction` 不认这三个类型（收到转发也答 False）。这是 connect 最常见的用途，留作后续（要把指针状态做成可由载荷驱动的：`axesInfo` 限定轴与值、`findPointFromSeries` 找点、showTip 定位）。基准的滚轮用例里上游这几个事件（与它们的 `updated`）不记。
 - **`triggerEmphasis` 不读**：轴触发的高亮照旧是绘制时抬起命中行（§56），不派发带 `notBlur` 的 highlight / downplay 批，也就没有这两个事件；cross 的另一臂在类目轴上时上游会把行收进 seriesDataIndices 并高亮，端口不收（基准避开了这种组合）。
 - **link 的候选轴**：只有 tooltip 轴（每个笛卡尔系的基轴，cross 时另一根；极坐标、单轴同理）；上游还收 `axisPointer.show: true`（或带 handle）的非 tooltip 轴。一个网格里多个笛卡尔系时候选的次序按端口的逐系走，上游是先全部基轴再全部另一根。`link` 的归一在读的时候做、不改选项树，所以一次 merge 写对象、下一次再写对象时端口按对象合并，上游按数组替换。没注册的 mapper 句柄当作没有 mapper（上游调用一个字符串会抛 TypeError）；mapper 返回的字符串类目名表达不了（句柄只返回数）。
 - **[里程碑 D5–D8：两条都修了，基准不再 `dropBrushSelect`、测试不再缩成四个键，见 §180。]** **brushselected 的 `areas`** 只带四个键（见上）；**时间线的两个动作**不发更新带的 brushSelect（见上）。
@@ -13631,3 +13631,109 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - `designtime/tyControls.Design.AdvChart.Editor.pas`：「Series && data...」按钮（`SeriesClick`，`TextBetweenPoints` 进出、一次可撤销）、组件编辑器的第二个动词；`rsOptEdSeries` 进它的 `.pot` 与 `zh_CN.po`。
 - `tests/test.advchart.serieseditor.pas`（新，注册在 `tytests.lpr`）。
 - §25、§30 在原处标注。
+
+## 183. Tier 3 第一百四十四批：键盘导航与无障碍（D11，2026-10-12）
+
+路线图 D11：键盘导航 + UIA/MSAA（接 aria 描述），前置 B1（状态、`DispatchAction`，§123）与 C22（aria 描述，§167）。上游 ECharts 没有键盘：它的无障碍只有两样——画布上的 `aria-label`（§167 移植过来的那句描述）和 decal 图案；一个想要键盘的页面要自己监听按键，再 `dispatchAction` 出 `highlight` / `downplay` / `showTip` / `select`。所以这一批是端口自己的设计，原则是**用上游自己的动作搭出来**：焦点项移动就是页面会派发的那两个动作，选中就是点击会派发的那个动作，提示框就是 `showTip` 落在那一项上。对照的上游源码是 6.1 的 `core/echarts.ts`（`doDispatchAction` 的 highlight / downplay / select 三支、`handleSelect` 的点击派发，§123 已逐行核过）、`component/tooltip/TooltipView.ts`（`manuallyShowTip` 的 `seriesIndex` 分支：先试 `_manuallyAxisShowTip`，再 `findPointFromSeries` 取点、`_tryShow`；`_initGlobalListener` 里 `triggerOn` 只管指针，不管手动的 showTip）、`component/tooltip/helper.ts` 的 `findPointFromSeries`（没有 `getTooltipPosition` 的标记取元素包围盒的中心）、`visual/aria.ts`（§167）。LCL 一侧对着 Lazarus 3.0 的 `lcl/controls.pp`、`include/control.inc`（`TLazAccessibleObject`）、`include/wincontrol.inc`（`CNKeyDown` → `DoKeyDownBeforeInterface` → `KeyDown`、`WMKeyDown` → `DoRemainingKeyDown` → `ChildKey` / `ControlKeyDown` / `DoArrowKey`）、`interfaces/win32/win32callback.inc`（`WM_USER` 以下没有对应 `LM_` 的消息不交给 LCL）和各 widgetset 的 `RegisterLazAccessibleObject`。§96 里「上游 dataZoom 没有键盘，`TabStop` 不翻」的理由由这一批推翻（键盘有了），但结论不变，理由换成下面的兼容性；§96、§23（tab-stop 表那一节）、§167、§179 在原处标注。
+
+### 上游的做法
+
+- **没有键盘，也没有焦点。**画布不是可聚焦元素；`aria.enabled` 开着时 `setLabel` 在容器上写 `role="img"` 和 `aria-label`，屏幕阅读器把整张图当一张有说明的图片读，读不到其中的系列和数据项。
+- **页面自己写键盘时用的动作**：`highlight` / `downplay` 的载荷 `{type, seriesIndex, dataIndex}`，`dataIndex` 是**原始**下标（`indexOfRawIndex` 换成内部下标）；事件是载荷的拷贝；`highlight` 先 `allLeaveBlur`、再按项的 focus 淡化（§125）。
+- **点击的选中**（`handleSelect`）：宿主链上第一个带 dataIndex 的元素，选中了就派发 `unselect`，否则 `select`，载荷 `{type, dataIndexInside, seriesIndex, isFromClick: true}`，**不管 selectedMode**——没有 selectedMode 的系列照样派发，只是 `selectchanged` 里什么都没有（§123）。
+- **showTip**（`manuallyShowTip`）：按 `seriesIndex` + `dataIndex` 时，坐标轴触发先走 `_manuallyAxisShowTip`（在那一项的值上 `updateAxisPointer`），否则 `findPointFromSeries` 拿点（有 `getTooltipPosition` 的系列问它，否则取元素包围盒经变换后的中心），在那一点 `_tryShow`；`triggerOn` 是 `'none'` 也照样显示——`triggerOn` 只决定指针事件是否驱动提示框。
+
+### port 以前
+
+- `TabStop` 声明与构造都是 False（tab-stop 表的外壳一侧，§23 那一节；§96 记过「dataZoom 落地也不翻」）。没有 `KeyDown`，方向键在图表上什么都不做；即便宿主把 `TabStop` 打开，点一下得到焦点，方向键也会被 LCL 的 `DoArrowKey` 拿去把焦点交给兄弟控件（仓库记忆里的那个坑）。
+- `AriaDescription`（§167）算好了，没人交给平台：图表的 `TLazAccessibleObject` 角色是 `larIgnore`、名字空、没有子对象。
+- **LCL 的无障碍 API 在 Lazarus 3.0 里只有 Qt5 / Qt6 接到了平台。**win32、gtk2、gtk3、cocoa 的 `RegisterLazAccessibleObject` 都是注释掉的、答 False（4.x 一样）——Windows 上无论 LCL 对象里写什么，讲述人和 NVDA 看到的都只是一块空白窗格。路线图写的「接 UIA/MSAA」靠 LCL 做不到，要自己接。
+
+### 做法
+
+- **焦点与 `TabStop`——不翻，宿主自己打开**：声明 `default False`、构造 False，两边仍一致（tab-stop 表的护栏、`TTyCustomClassesGuardTest`、fresh-streams 都不动）。理由换了：§23 那一节说「一个不处理键盘却在点击时抢走焦点的控件」是伤害，现在图表处理键盘了，但**已有的窗体不能因为库升级就开始在点击图表时把焦点从编辑框上拿走**（CONTRIBUTING：`.lfm` 的缺省不变）。所以键盘是宿主的选择：`TabStop := True`（对象查看器或代码）之后，点击（`TTyCustomControl.MouseDown`）与 Tab 都能让图表得到焦点，有焦点时按键起作用。没有另加 published 开关——`TabStop` 本身就是那个开关，再加一个只会出现「开了键盘却 Tab 不到」的组合。published 声明上的注释补了这一段。
+- **键位**（新单元 `tyControls.AdvChart.KeyNav`，纯函数，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）：
+  - ←/→：同一系列里上一项 / 下一项，**数据顺序**（视图的行，dataZoom 过滤之后），到头不回绕；↑/↓：上一个 / 下一个有数据的系列（选项里的系列顺序，跳过空系列），行号保持、超出就夹到末行；Home/End：本系列首项 / 末项；PageUp/PageDown：一步是本系列行数的十分之一（向上取整，至少 1），夹在两端。
+  - 没有焦点项时，任何移动键落到第一个有数据的系列的第一项（End 落到它的末项）；原来那一项不存在了（系列被图例关掉、notMerge 之后行没了）也一样从头开始。
+  - Enter / Space：选中（见下）；Esc：清掉焦点项。带 Ctrl、Alt、Shift、Meta 的键都不是图表的。Tab / Shift+Tab 从来不碰，焦点照常离开——不困住焦点。
+  - `TyKbCommandOf`、`TyKbIsMove`、`TyKbPageStep`、`TyKbMove`（从 (系列位置, 行) 出发的移动，答「动没动」）。
+- **控件的键盘**：
+  - `KeyDown` 覆写（库里的惯例，同 `TTyTrackBar`）：先 `inherited`（`OnKeyDown` 先拿到，置 0 就归宿主）；**移动键一律吃掉**（`Key := 0`），有没有项可去都一样——留下来的方向键会走到 `DoRemainingKeyDown` → `ControlKeyDown` → `DoArrowKey`，被拿去 `SelectNext` 给兄弟控件；`CNKeyDown` 在 `DoKeyDownBeforeInterface` 里就调 `KeyDown`，吃掉的键根本到不了那里。Enter / Space 只在真的派发了选中时吃掉，Esc 只在有焦点项时吃掉，其余留给窗体（缺省按钮、取消按钮）。没有加任何 `CM_` / `WM_` 重写，没有 `WantKeys` / `DLGC`。
+  - **移动 = 两个动作**（`KbGo`）：旧项 `DispatchAction('{"type":"downplay","seriesIndex":s,"dataIndex":原始下标}')`，新项同样的 `highlight`——强调、focus 规则的淡化、`highlight` / `downplay` 事件都与页面自己派发一模一样（基准逐步核对，见「测试」）。
+  - **提示框 = showTip 落在那一项**（`KbShowTip`）：那一项的元素（状态机的宿主 `FSt[].HostIdx`，否则显示列表里带它 datum、不是标签、不静默的第一个元素）的包围盒中心当作指针点，`FTipDatum` / `FTipElement` / `FTipX` / `FTipY` 与 `ResolveAxisPointers` 照鼠标那条路填好；显示走 `TipTryShow`（showDelay 照算），坐标轴触发时显示坐标轴提示框——与上游 `_manuallyAxisShowTip` 一样落在那一项的类目上；**不问 `triggerOn`**（showTip 不问）；`trigger: 'none'` 的项不显示。Esc、离开控件时 `KbHideTip`（hideDelay 照算）。指针随后再动，提示框照旧跟鼠标。
+  - **选中 = 点击会派发的那个**（`KbActivate`）：`StClickSelect` 原样复用——选中了就 `unselect`，否则 `select`，`dataIndexInside` + `seriesIndex` + `isFromClick: true`，事件（含旧式的 pie / map 事件）与点击逐个相同；**只在系列有 selectedMode 时**——点击在没有 selectedMode 的系列上也派发（上游如此），按键在那里什么都不做、把 Enter 留给窗体。不发 `click` 鼠标事件。
+  - **离开控件**（`DoExit`）：downplay、藏提示框，但**记住位置**；回来后第一个移动键先把原来那一项接回来（只有一个 `highlight`），之后才移动。Esc 与 `ClearKeyboardItem` 才忘掉位置。
+  - **焦点环**：`PaintKbRing` 在动态层、强调之后、提示框之前，绕元素包围盒画主题键 **`TyAdvChartFocusItem { outline: 2px var(--focus-ring); outline-offset: -3px; }`**（`themes/light.tycss`；重跑 `gen-defaulttheme.ps1`、`gen-tycss-catalog.ps1`、`gen-builtinthemes.ps1`，前两个只有增加，第三个没有变化）。偏移照库里 `TTyCustomControl.DrawFrame` 的约定（正数往里缩），所以负数是离开标记 3 px；圆角取样式的。`HasDynamicContent` 加上「键盘拿着项」，否则窗口路径（`RenderCached`、脏矩形）会把环跳过。
+  - 公开：`KeyboardItem`（系列、视图行、原始行；没有是 `TyChartNoDatum`）、`SetKeyboardItem(系列下标, 原始下标)`（与按键同一条路：downplay、highlight、提示框）、`ClearKeyboardItem`（= Esc）。
+- **无障碍——LCL 的树，加一个 Windows 上自己写的 MSAA 服务端**（新单元 `tyControls.Accessible`，已登记）：
+  - **树的形状**（`AccessibleSync`，`ITyAccessibleHost` 的一部分）：根是图表的 `TLazAccessibleObject`，角色 `larChart`，名字是第一个标题的 `text`（`getTitle` 的读法），没有就是 `rsTyChartAccessibleName`（「Chart」/「图表」）；描述是 **`AccessibleSummary`**：选项写了 `aria` 就是 `AriaDescription` 本身（关掉、手写的 description、作者的模板都照办），**没写 `aria` 也给出同一句话**（默认模板、同样的事实）——上游的画布在 aria 关着时对阅读器不透明，桌面控件却总在无障碍树里，没有描述比有描述更糟。其下每个被走到的系列一个 `larListBox`，名字是描述里那个系列的短语（`TyAriaSeriesPhrase`，单系列 / 多系列、有名 / 无名四种模板，去掉首尾空格）；再下每一行一个 `larListItem`，名字是描述里那一行的短语（`TyAriaRowPhrase`），位置与大小是那一项元素的包围盒（控件客户区坐标），系列的位置是它的项的并集。`TyAriaLabel` 改为由这两个函数拼出来，所以树里的话**就是**描述里的话。
+  - **顺序**：LCL 把子对象放在按 `DataObject` 指针排序的 AVL 树里，`GetChildAccessibleObject(i)` 又只认上一次问过的邻居。`TyAccAddChildren` 一次建好 N 个子对象、各自以自己为 `DataObject`，按地址排好再交回——调用方按顺序填，AVL 的顺序就是阅读顺序；`TyAccChildren` 按这个顺序读回。
+  - **什么时候重建**：树对应一次布局（`FStGen`）；`AccessibleSync` 先 `ConvertReady`，布局没变就什么都不做。窗口的 `Paint` 末尾、只在**有人在读**的时候（MSAA 客户问过，或图表有焦点）补一次；每个系列最多列 1000 项（`cTyAccMaxItems`），键盘不受这个限制。
+  - **Windows 的 MSAA**（`TTyAccessibleLink`，图表拥有一个）：`CreateWnd` 后用 `SetWindowSubclass` 给窗口挂一个子类过程（LCL 自己的窗口过程不动，绘制路径上什么都没加；`DestroyWnd` 前摘掉），`WM_GETOBJECT` 的 `OBJID_CLIENT` 答 `LresultFromObject(IID_IAccessible, …)`。服务端是 `TTyMsaaNode`：每个节点都是完整的 `IAccessible`，**按从根出发的路径寻址**、每次调用先 `AccessibleSync` 再在当前的树上解析——树重建之后，客户手里旧的节点要么落到新树的同一位置，要么答 `RPC_E_DISCONNECTED`；控件释放时锚点断开，所有节点都答断开，不会碰到已释放的对象。实现了名字、描述、值、角色（`TLazAccessibilityRole` → `ROLE_SYSTEM_*` 一张表：图表 CHART、系列 LIST、项 LISTITEM）、状态（根：`TabStop` 且能聚焦时 FOCUSABLE、有焦点时 FOCUSED；项：SELECTABLE、FOCUSABLE、选中模型说选中时 SELECTED、键盘拿着且控件有焦点时 FOCUSED）、位置（屏幕坐标）、子对象与子对象数、父对象（根的父对象是窗口的标准对象 `CreateStdAccessibleObject(OBJID_WINDOW)`）、`accNavigate`（下一个、上一个、第一个、最后一个孩子；方向键的四个当作前后）、`accHitTest`（阅读顺序里最后一个包含该点的项）、`accFocus`、`accSelect` 的 TAKEFOCUS（移动键盘焦点项，与按键同一条路）。接口的每个参数按 C 的 ABI 声明（VARIANT 按值是一个同样大小的记录，出参是裸指针、BSTR 用 `SysAllocStringLen`），不让 FPC 的托管类型跨边界。UI Automation 经它的 MSAA 代理读同一棵树，所以讲述人与 NVDA 读到的一样。
+  - **通知**：键盘移动之后 `NotifyWinEvent(EVENT_OBJECT_FOCUS, hwnd, OBJID_CLIENT, 子 id)`，子 id 是**负的先序号**（−(1 + 先序下标)，根的 `get_accChild` 认这种 id——浏览器为深层后代发事件的惯例）；树重建发 `EVENT_OBJECT_REORDER`。只在有客户问过（`InUse`）时才发，没人读的时候连树都不建。LCL 本身**没有**通知接口（`TWSLazAccessibleObject` 只有设名字、描述、值、角色、位置、大小），所以 Qt 上焦点移动阅读器不会自动跟上。
+  - 其他平台：链接是空的。Qt5 / Qt6 自己读 LCL 的对象（名字、描述、角色、子对象、位置）；gtk2 / gtk3 / cocoa 在 LCL 里没有对应物，阅读器什么都看不到——键盘仍然可用。
+- **i18n**：`rsTyChartAccessibleName`（EN「Chart」，zh_CN「图表」），`.pot` 按标识符插在 aria 那组之前，`tools/themebuilder/languages/tycontrols.zh_CN.po` 逐字节复制。源码里没有中文字面量。
+- `TTyAdvanceChart` 仍然不拆（CNotSplit）；类声明多了一个接口 `ITyAccessibleHost`。只用了 Lazarus 3.0 的 LCL API，没有 `LCL_FULLVERSION` 守卫。
+
+### 基准
+
+没有新的 oracle：上游没有键盘，能对的是键盘用来搭的那几样，已有的两份 fixture 都录着——
+
+- `tests/fixtures/advchart-select-legend.json`（§123 / §125 / §128）：`highlight` / `downplay` 动作的事件与派发后每一项的状态，点击的 `select` / `unselect` / `selectchanged` / 旧式 pie / map 事件。
+- `tests/fixtures/advchart-decal-aria.json`（§167）：每一步上游写下的 `aria-label`。
+
+### 测试
+
+`test.advchart.keyboard`（新，注册在 `tytests.lpr`）：
+
+- **对上游**（`TAdvChartKeyboardOracleTest`，3 个；继承 B1 的重放器 `TAdvChartSelectHarness`）：
+  - **焦点移动就是 highlight 动作**：重放 `highlight-bar`、`highlight-line`、`focus-self-held`、`focus-funnel-self`、`focus-heatmap-scatter`、`focus-sunburst`、`emphasis-disabled`、`legend-reshown-new` 八个用例，其中「载荷只有 type、seriesIndex、dataIndex 的 highlight，且键盘没拿着项」一律换成 `SetKeyboardItem`，「downplay 键盘拿着的那一项」一律换成 Esc（**14 步**走键盘，断言恰好 14），其余照常；每步比事件（类型、次序、载荷每个字段）与每一项的状态（标志、状态列表、画出来的颜色 / 不透明度 / z2 / 几何、标签、折线），与 B1 / B2 的重放同一套比较。
+  - **Enter 就是点击的选中**：`pie-single`、`bar-single`、`bar-off` 的每个点在项上的点击，换成「焦点移到那一项、清日志、Enter」：有 selectedMode 的 6 次，事件与上游点击的事件（去掉 `click` 本身）逐个相同；没有 selectedMode 的 2 次，Enter 不被吃掉、什么都不派发。
+  - **树说的是 aria 的话**：重放 decal-aria 的 `label-*` 场景每一步：根的描述等于上游的 `aria-label`；选项没写 `aria` 的一步（`label-none#2`）上游什么都不写，树的描述等于同一选项加上 `aria: {enabled: true}` 时的描述；描述由事实拼成时，每个系列的短语（`series.maxCount` 之内）和它的前两行的短语都在描述里、按顺序出现。
+- **手写**（`TAdvChartKeyboardTest`，20 个）：移动规则表（跳过空系列、跨系列夹行、不回绕、从无到有、End、命令表、修饰键）；按键走一遍三个系列（柱 4 行、线 3 行、散点 2 行），每步的事件文本逐字（`highlight {"type":"highlight","seriesIndex":0,"dataIndex":0}` 之类）；一页是十分之一（25 行一页 3）；移动键在空图表上也被吃掉、Tab / Shift+Tab / 修饰的方向键 / 没有项时的 Enter 与 Esc 不吃，经 `Perform(CN_KEYDOWN)` 走 LCL 自己的路时方向键答 1、Tab 答 0；`OnKeyDown` 先拿到；Esc 清掉、离开控件记住位置、回来第一个键接回原项、第二次离开不再派发；dataZoom 过滤下载荷是原始下标、`SetKeyboardItem` 按原始下标；图例关掉的系列不走、焦点项随系列消失、notMerge 后从头开始且不 downplay 已不存在的项、空选项；柱与饼两种类型（下键到饼、行夹住、饼的提示框锚在扇区包围盒中心）；selectedMode 'multiple' 的 Enter / Space 是 select 再 unselect、没有 `click` 事件，无 selectedMode 的系列 Enter 不吃；提示框：项触发与鼠标在同一点时显示的东西和锚点相同、Esc 后过 hideDelay 隐去、坐标轴触发是 `axis:c`、`triggerOn: 'none'` 也显示、`trigger: 'none'` 不显示、没有 tooltip 组件就没有；焦点环：主题键在、2 px、偏移 −3，柱子外圈的环像素在键盘拿着时至少有四条边那么多、窗口路径（`RenderCached`）画出同样多、Esc 后为零；`TabStop` 构造 False、RTTI 的 default 0；树：角色、无标题时的名字、没写 aria 时也有描述且写了 `aria: {enabled: true}` 时就是 `AriaDescription`、每个系列一个列表、每行一项、短语逐字、位置与大小是柱子的包围盒、标题当名字、没有新布局不重建、图例关掉一个系列后重建、空图表；1200 行的系列树里只列 1000 项而键盘走到第 1199 行；`AccessibleFocusedChild` / `AccessibleSelected` / `AccessibleTakeFocus`（与按键同样的两个事件）；有序子对象（40 个按填的顺序列出，LCL 自己的按下标遍历也同序，先序号）。Windows 上另有：**MSAA 树**（VARIANT 的大小、子对象数、名字、角色 CHART / LIST / LISTITEM、描述、按 id 取孩子、项的屏幕位置减去根的位置等于 LCL 对象的位置、负的先序 id、`accNavigate`、状态的 SELECTABLE / SELECTED / FOCUSABLE 随 `TabStop`、`accSelect` 移动键盘焦点项、坏 id 答 E_INVALIDARG）；**节点不比控件活得长**（树重建后旧路径答断开、控件释放后根也答断开）；**窗口答 `WM_GETOBJECT`**（真窗口、`ObjectFromLresult` 拿回 `IAccessible` 读名字，焦点移动的通知跑一遍，销毁句柄后摘掉子类）——这一个要初始化过的 widgetset，单独跑时设 `TY_KEYBOARD_WINDOW=1`，平时 Ignored（原因同 §181 的窗口测试）。
+
+首跑的不对，全在测试自己：事件日志记的是 fpjson 的带空格格式（改为单行无空格再比）；`Load` 换选项时没清键盘焦点项，上一张图的 `0:2` 留着，下一次右键到了末尾不动（选项变化后项仍有效就留着——这正是设计；测试的 `Load` 改为先 `ClearKeyboardItem`）；aria 场景里 `series.maxCount: 2` 的那一步，第三、四个系列的短语本来就不在句子里（句子停了、树不停），以及 `label-none#2` 没写 aria（上游不写、树照写），改为按上面的规则比。实现一次编过，三个基准测试改完测试后全部通过。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartKeyboardOracleTest` 3、`TAdvChartKeyboardTest` 20（窗口那一个在单独设 `TY_KEYBOARD_WINDOW=1` 时通过，平时 Ignored）、`TTyCustomClassesGuardTest` 11、`TAdvanceChartTest` 60、`TTyFocusTabStopTest` 7、`TAdvChartDecalAriaOracleTest` 3、`TAdvChartDecalAriaTest` 9、`TI18NTest` 8、`TCssCatalogTest` 14、`TBuiltinThemeTest` 13、`TBuiltinSyncTest` 2、`TBuiltinThemesTest` 8、`TBuiltinSkinsSyncTest` 2、以及用到或碰到的路径：`TTbMainFormTests` 84（`.po` 复制）、`TAdvChartSelectOracleTest` 11 与 `TAdvChartFocusBlurTest` 11（重放器被继承）、`TAdvChartTooltipRuleTest` 19、`TAdvChartTooltipDrawTest` 15、`TAdvChartTooltipFinishTest` 10（提示框路径）、`TAdvChartCoarseDirtyTest` 17（窗口那一个照旧 Ignored）、`TAdvChartCoarseDirtyOracleTest` 4（`HasDynamicContent` 与动态层）、`TAdvChartMouseEventsOracleTest` 3。变异候选列在会话草稿 `s183.md.candidates.md`（30 个，其中 #16、#26、#28 预计存活或平时够不到，#27 只在窗口测试里杀）。
+
+### 推迟与偏差
+
+- **LCL 只在 Qt 上把树交给平台**：Windows 上是这一批自己写的 MSAA 服务端；gtk2 / gtk3 的 ATK、cocoa 的 NSAccessibility 没有接（LCL 没有，自己写 ATK / NSAccessibility 桥超出这一批），那里阅读器读不到图表的内容，键盘可用。Qt 上没有焦点移动的通知（LCL 没有这个接口）。没有原生的 UIA provider（经 MSAA 代理），没有 IAccessible2。
+- **←/→ 是数据顺序**，不是按基轴坐标排序：类目轴上通常就是轴的顺序；数值轴上的散点、`[类目, 值]` 打乱次序写的数据会在屏幕上跳着走。↑/↓ 是选项里的系列顺序，和系列在屏幕上的上下无关；横向柱状图也不对调方向键。都不回绕。
+- **Enter 只在有 selectedMode 时**派发（点击不管 selectedMode 都派发），不发 `click` 事件，`isFromClick` 照点击写 true——下游按它区分来源的代码会把键盘当成点击。
+- **没有自己元素的行**（`showSymbol: false` 的折线、large 批、渐进渲染还没画到的块、值为空的行）：highlight 照派发、树里照有，但没有焦点环、没有提示框，树里的位置是零。提示框的点是元素包围盒中心；上游有 `getTooltipPosition` 的系列（饼等）用它，端口统一用中心。
+- **树的描述在没写 aria 时也有**（上游什么都不写）；`role="img"` 的对应是 `larChart`。每个系列最多 1000 项；树只在有人读（MSAA 客户问过、或图表有焦点）时随布局重建。`AccessibleValue` 没用。
+- **选项变化后焦点项**：仍然有效（系列在、行号在）就留着，notMerge 重建的状态可能已不再强调它，环还画着；无效了就消失、下一个键从头开始，不派发 downplay。
+- **图例、dataZoom、时间线、工具栏、刷选、visualMap、标注、关系图的边**都没有键盘（关系图、桑基走的是节点行）；树、矩形树图、旭日图走的是端口 store 的行（旭日有虚根）。
+- 离开控件后回来，第一个移动键先接回原项而不移动。
+- MSAA：没有 `accSelection`、默认动作、`put_accName` / `put_accValue`；`accHitTest` 取阅读顺序里最后一个包含该点的项；系列的位置是它的项的并集。
+
+### 真机清单（给用户）
+
+前提：在 AdvanceChart 示例里把图表的 `TabStop` 设为 True（对象查看器里改，或在运行时设），编译运行；以下逐项看。
+
+**Windows（讲述人 / NVDA）**
+1. 只用键盘：Tab 进入图表——环出现前图表本身有焦点（讲述人读出图表的名字与描述）；→ 第一项出现 2 px 的强调色环、项被强调、提示框出现；←/→/Home/End/PageUp/PageDown 在系列内移动，↑/↓ 换系列；Tab / Shift+Tab 照常离开，**方向键不会把焦点带到旁边的控件**；Esc 环与提示框消失；离开再回来，第一个键回到原来那一项。
+2. 选中：`selectedMode: 'single'` 的系列上 Enter / Space 选中与取消，样子与点击相同；没有 selectedMode 的系列 Enter 触发窗体的缺省按钮（若有）。
+3. 讲述人（Win+Ctrl+Enter）：Tab 到图表时读出「图表名，图表」与描述（那句 aria 话）；方向键移动时读出每一项（「the data for b is 1, 2」、列表项、第几项）；扫描模式 / 项目导航能进入系列列表与项。
+4. NVDA：Tab 进入后方向键朗读项；NVDA+Tab 报告当前焦点；对象导航（NVDA+数字键盘）能进入图表 → 系列 → 项；鼠标悬停（NVDA 的鼠标跟踪开着时）读出指针下的项。
+5. Inspect.exe（Windows SDK）或 Accessibility Insights：树是「图表 → 列表 × 系列数 → 列表项」，名字、角色、状态（选中后 selected、键盘焦点项 focused）正确，项的矩形压在柱子 / 扇区上（150%、200% 缩放各看一次，多显示器移动后再看）。
+6. 视觉：环在浅色、深色、几个结构皮肤上都看得清（`--focus-ring`）；离标记 3 px；不会被提示框盖住以外的东西遮挡；与鼠标悬停同时存在时不留残影（`UseDirtyRect` 开 / 关各一次）。
+7. 选项变化：键盘拿着项时点图例关掉那个系列、换选项、拖 dataZoom，环与高亮不残留，下一个键正常。
+
+**Linux**
+8. gtk2 / gtk3：第 1、2、6、7 条照做（键盘、环、焦点不外泄）；Orca 预期读不到图表内容（LCL 没有 ATK 桥），记下实际表现。
+9. Qt5 / Qt6（`--ws=qt6` 编译）：同上的键盘；用 Accerciser 看图表下有没有系列与项、名字是否是那句 aria 话、位置是否对；Orca 能否读到描述；预期方向键移动时 Orca 不会自动跟读（LCL 没有通知），记下实际表现。
+
+**macOS**
+10. cocoa：键盘与环照第 1、2、6 条；VoiceOver 预期只看到窗口里的一个区域（LCL 没有 NSAccessibility 桥）。
+
+### 落地
+
+- `source/tyControls.AdvChart.KeyNav.pas`、`source/tyControls.Accessible.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Aria.pas`：`TyAriaSeriesPhrase`、`TyAriaRowPhrase`，`TyAriaLabel` 由它们拼成。
+- `source/tyControls.AdvanceChart.pas`：类声明加 `ITyAccessibleHost`；`FKbSeries` / `FKbRow` / `FKbActive`、`FAccLink` / `FAccGen` / `FAccSyncing` / `FAccItemObjs` / `FAccItemSeries` / `FAccItemRows`；`AriaGather`（从 `GetAriaDescription` 拆出）、`AccessibleSummary`；`KbSeriesList`、`KbValid`、`KbRawOf`、`KbList`、`KbElementOf`、`KbGo`、`KbRelease`、`KbShowTip`、`KbHideTip`、`KbActivate`、`PaintKbRing`、`AccItemIndexOf`；`KeyDown`、`DoExit`、`CreateWnd`、`DestroyWnd` 覆写；公开 `KeyboardItem`、`SetKeyboardItem`、`ClearKeyboardItem`、`AccessibleSync`、`AccessibleFocusedChild`、`AccessibleSelected`、`AccessibleTakeFocus`、`AccessibleItem`、`AccessibleLink`；构造函数（角色、名字、链接）、析构函数（先释放链接）、`HasDynamicContent`、`PaintDynamic`（环）、`Paint`（读者在时补建树）；`TabStop` 声明的注释；Aria 单元挪到接口段的 uses。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`（逐字节复制）：`rsTyChartAccessibleName`。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）：`TyAdvChartFocusItem`。
+- `tests/test.advchart.keyboard.pas`（新，注册在 `tytests.lpr`）。
+- §96、§23（tab-stop 表）、§167、§179 在原处标注。

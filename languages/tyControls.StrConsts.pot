@@ -834,6 +834,10 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartaccessiblename
+msgid "Chart"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartariaalldata
 msgid "The data is as follows: "
 msgstr ""
