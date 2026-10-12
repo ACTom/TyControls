@@ -40,7 +40,21 @@ unit tyControls.DB.Grid;
   CLIENT-SIDE SORTING, FILTERING AND GROUPING are off: they work on the cell store, which this
   grid does not use, and they would reorder a window of the dataset rather than the dataset.
   The display order is always the buffer order; sorting belongs to the dataset. Undo is off too
-  (UndoLimit 0): the values live in the dataset. }
+  (UndoLimit 0): the values live in the dataset.
+
+  MOVING is the dataset's, as in LCL's TDBGrid: every move the user makes becomes a move of the
+  data link and the cursor row only follows the dataset (DataSetScrolled). A row move of the
+  string grid -- an arrow, Enter, Tab wrapping, a click on another row, Row := from code -- is
+  DataLink.MoveBy(the row difference) (MoveCursor); PgUp / PgDn are MoveBy(+-the window's rows)
+  (LCL's VisibleRowCount, no overlap row); Ctrl+Home / Ctrl+End are First / Last; Home / End
+  stay the string grid's (first / last column); one wheel notch is MoveBy(+-1). The vertical
+  bar is the grid's own, scrolled by whole records: for a sequenced dataset (IsSequenced and not
+  Filtered) its range is the records and its position RecNo - 1, and moving it sets RecNo; for
+  any other dataset it is LCL's three-position bar (top, middle, bottom -- BOF, inside, EOF) and
+  moving it moves by its direction: one step MoveBy(+-1), more MoveBy(+-the window's rows). It
+  shows when the records do not all fit in the window (a sequenced dataset), or when the window
+  is full (any other). Horizontal scrolling is the string grid's. A move closes the open
+  editor first. }
 interface
 
 uses
@@ -75,7 +89,12 @@ type
     procedure UpdateData; override;
   public
     constructor Create(AGrid: TTyCustomDBGrid);
+    { TDataLink keeps it protected; the grid moves through it. }
+    function MoveBy(Distance: Integer): Integer; override;
   end;
+
+  { What TTyCustomDBGrid.DataOp does to the dataset. }
+  TTyDBGridDataOp = (dgoMoveBy, dgoRecNo, dgoFirst, dgoLast);
 
   { One column of the data-aware grid: a field by name. Text (the title), Width and Alignment
     follow the field until they are set -- set from code, the Object Inspector or a form file,
@@ -168,6 +187,13 @@ type
     FAddingAutoColumns: Boolean;
     FUpdatingBuffer: Boolean;
     FSyncingRow: Boolean;
+    { The record bar: the grid is pushing values into it (its OnChange is not the user's);
+      UpdateScrollBars is asking whether it wants the bar (ContentHeightPx answers that);
+      the bar's visibility is being laid out again; where the bar was last. }
+    FSettingBar: Boolean;
+    FMeasuringBars: Boolean;
+    FLayingOutBars: Boolean;
+    FBarPosition: Integer;
     function GetDataSource: TDataSource;
     procedure SetDataSource(AValue: TDataSource);
     function GetColumns: TTyDBGridColumns;
@@ -224,6 +250,40 @@ type
       option. A column's footer value comes from OnColumnCalc. }
     procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
       var AAcc: Double; var ACount: Integer; var AStarted: Boolean); override;
+
+    { --- moving (plan Task 3) --- }
+    { IsSequenced and not Filtered: the records can be counted and reached by RecNo. }
+    function DataSetIsSequenced: Boolean;
+    { The window's rows: what PgUp / PgDn and a page of the bar move by (LCL's
+      VisibleRowCount). }
+    function PageRecords: Integer;
+    { The record bar's maximum position, page and position (see the unit comment). }
+    procedure RecordBarParams(out AMax, APage, APosition: Integer);
+    { Do the records call for a bar (the dataset does not fit the window)? }
+    function WantsRecordBar: Boolean;
+    { Give the bar its range and position, and lay the bars out again when it has to come or
+      go. }
+    procedure UpdateRecordBar;
+    { While UpdateScrollBars measures: as tall as the records want (a bar or none), so the
+      string grid places the bar and leaves room for it; otherwise the window's height. }
+    function ContentHeightPx: Integer; override;
+    procedure DoVScroll(APosition: Integer); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { OnKeyDown (and the key handlers) for a key this grid handles itself instead of passing
+      it to the string grid, as LCL's TDBGrid.KeyDown does. }
+    procedure UserKeyDown(var Key: Word; Shift: TShiftState);
+    { Do AOp to the dataset (ADelta: the distance, or the RecNo), the open editor closed
+      first. False when the editor's value was refused (the editor stays) or there is
+      no dataset. }
+    function DataOp(AOp: TTyDBGridDataOp; ADelta: Integer = 0): Boolean;
+    { Close the open editor, writing its text (TryEndEdit). False: refused, still open. }
+    function CommitEditor: Boolean;
+    { Down / Up: one record. }
+    procedure KeyDownRecord;
+    procedure KeyUpRecord;
+
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -236,6 +296,9 @@ type
       header font while there are titles, plus the cells' padding. A field with no
       DisplayWidth, or none at all, gets DefaultColWidth. }
     function DefaultFieldWidth(AField: TField; const ATitle: string): Integer;
+    { A row move is a record move: DataLink.MoveBy(ARow - Row), then the column. The row
+      follows the dataset (DataSetScrolled), never the other way. }
+    procedure MoveCursor(ACol, ARow: Integer); override;
     property DataLink: TTyDBGridDataLink read FDataLink;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property Columns: TTyDBGridColumns read GetColumns write SetColumns stored IsColumnsStored;
@@ -326,7 +389,8 @@ type
 implementation
 
 uses
-  BGRABitmap, tyControls.Painter, tyControls.StyleModel;
+  BGRABitmap, tyControls.Painter, tyControls.StyleModel, tyControls.ScrollBar,
+  tyControls.Grid.Layout;
 
 { ================================================================== TTyDBGridDataLink == }
 
@@ -370,6 +434,11 @@ end;
 procedure TTyDBGridDataLink.UpdateData;
 begin
   if FGrid <> nil then FGrid.LinkUpdateData;
+end;
+
+function TTyDBGridDataLink.MoveBy(Distance: Integer): Integer;
+begin
+  Result := inherited MoveBy(Distance);
 end;
 
 { ==================================================================== TTyDBGridColumn == }
@@ -942,6 +1011,7 @@ begin
   finally
     FUpdatingBuffer := False;
   end;
+  UpdateRecordBar;
 end;
 
 procedure TTyCustomDBGrid.SyncCurrentRow;
@@ -961,7 +1031,15 @@ end;
 
 procedure TTyCustomDBGrid.UpdateScrollBars;
 begin
-  inherited UpdateScrollBars;
+  { The string grid decides whether the vertical bar shows from the content height, which
+    here is the records' answer (ContentHeightPx), so it leaves room for the bar the records
+    want; the range and position are the records' too (UpdateRecordBar). }
+  FMeasuringBars := True;
+  try
+    inherited UpdateScrollBars;
+  finally
+    FMeasuringBars := False;
+  end;
   { The body's height is settled here (a resize, a row height, the header): the buffer
     follows it. }
   UpdateBufferCount;
@@ -980,6 +1058,8 @@ end;
 procedure TTyCustomDBGrid.LinkActiveChanged;
 begin
   if csDestroying in ComponentState then Exit;
+  { The cell under an open editor is gone. }
+  if EditorMode then EndEdit(False);
   { Opened: make the automatic columns, find the fields, size the window. Closed: drop the
     automatic columns, forget the fields, no rows. }
   LayoutChanged;
@@ -988,12 +1068,17 @@ end;
 procedure TTyCustomDBGrid.LinkDataSetChanged;
 begin
   if csDestroying in ComponentState then Exit;
+  { Posted, cancelled, inserted, deleted, refreshed: the record under an open editor may be
+    another one now. }
+  if EditorMode then EndEdit(False);
   LayoutChanged;
 end;
 
 procedure TTyCustomDBGrid.LinkDataSetScrolled(ADistance: Integer);
 begin
   if csDestroying in ComponentState then Exit;
+  { The editor's cell now shows another record. }
+  if EditorMode then EndEdit(False);
   UpdateBufferCount;
   SyncCurrentRow;
   { The window moved under every row (Distance <> 0), or only the current record did. }
@@ -1109,6 +1194,293 @@ end;
 procedure TTyCustomDBGrid.AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
   var AAcc: Double; var ACount: Integer; var AStarted: Boolean);
 begin
+end;
+
+{ ---- moving ------------------------------------------------------------------------- }
+
+function TTyCustomDBGrid.DataSetIsSequenced: Boolean;
+begin
+  { LCL asks both: a filtered dataset may say it is sequenced while its RecNo and
+    RecordCount count records the filter hides. }
+  Result := (FDataLink <> nil) and FDataLink.Active and FDataLink.DataSet.IsSequenced
+    and not FDataLink.DataSet.Filtered;
+end;
+
+function TTyCustomDBGrid.PageRecords: Integer;
+begin
+  Result := FDataLink.BufferCount;
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyCustomDBGrid.RecordBarParams(out AMax, APage, APosition: Integer);
+var
+  ds: TDataSet;
+begin
+  AMax := 0;
+  APage := 0;
+  APosition := 0;
+  if (FDataLink = nil) or not FDataLink.Active then Exit;
+  ds := FDataLink.DataSet;
+  if DataSetIsSequenced then
+  begin
+    { LCL's range is RecordCount + VisibleRowCount - 1 with a page of VisibleRowCount; this
+      bar's Max is the last POSITION, so the same bar is Max = RecordCount - 1. }
+    APage := PageRecords;
+    AMax := ds.RecordCount - 1;
+    if AMax < 0 then AMax := 0;
+    if ds.BOF then
+      APosition := 0
+    else if ds.EOF then
+      APosition := AMax
+    else
+      APosition := ds.RecNo - 1;
+  end
+  else
+  begin
+    { LCL's three positions: at the start, somewhere inside, at the end. }
+    AMax := 4;
+    APage := 2;
+    if ds.EOF then
+      APosition := 4
+    else if ds.BOF then
+      APosition := 0
+    else
+      APosition := 2;
+  end;
+  if APosition > AMax then APosition := AMax;
+  if APosition < 0 then APosition := 0;
+end;
+
+function TTyCustomDBGrid.WantsRecordBar: Boolean;
+begin
+  Result := False;
+  if (FDataLink = nil) or not FDataLink.Active then Exit;
+  { The window's capacity, not BufferCount: this is asked while the bars are being laid out,
+    before the buffer follows the new height. A window that is not full holds every record
+    there is, whatever the dataset can count. }
+  if DataSetIsSequenced then
+    Result := FDataLink.DataSet.RecordCount > RecordCapacity
+  else
+    Result := FDataLink.RecordCount >= RecordCapacity;
+end;
+
+procedure TTyCustomDBGrid.UpdateRecordBar;
+var
+  bar: TTyScrollBar;
+  aMax, aPage, aPos: Integer;
+  want: Boolean;
+begin
+  bar := VScrollBar;
+  if (bar = nil) or (FDataLink = nil) or (csDestroying in ComponentState) then Exit;
+  case VertScrollBarMode of
+    gsbAlways: want := True;
+    gsbNever:  want := False;
+  else
+    want := WantsRecordBar;
+  end;
+  if (bar.Visible <> want) and not FLayingOutBars then
+  begin
+    { The bar comes or goes: the string grid lays both bars out again (and comes back here,
+      with the bar placed). }
+    FLayingOutBars := True;
+    try
+      UpdateScrollBars;
+    finally
+      FLayingOutBars := False;
+    end;
+    Exit;
+  end;
+  if not bar.Visible then Exit;
+  RecordBarParams(aMax, aPage, aPos);
+  FSettingBar := True;
+  try
+    bar.Min := 0;
+    bar.Max := aMax;
+    bar.PageSize := aPage;
+    { Not under the user's hand: a drag keeps the thumb where the mouse put it. }
+    if not bar.Dragging then bar.SetPositionSnapped(aPos);
+  finally
+    FSettingBar := False;
+  end;
+  if not bar.Dragging then FBarPosition := aPos;
+end;
+
+function TTyCustomDBGrid.ContentHeightPx: Integer;
+begin
+  if FMeasuringBars then
+  begin
+    if WantsRecordBar then
+      Result := MaxInt div 4
+    else
+      Result := 0;
+  end
+  else
+    Result := inherited ContentHeightPx;
+end;
+
+procedure TTyCustomDBGrid.DoVScroll(APosition: Integer);
+var
+  delta, recNo: Integer;
+begin
+  if FSettingBar then Exit;
+  if (FDataLink = nil) or not FDataLink.Active then Exit;
+  if APosition = FBarPosition then Exit;
+  delta := APosition - FBarPosition;
+  FBarPosition := APosition;
+  if DataSetIsSequenced then
+  begin
+    { Line, page or thumb, the position is a record: RecNo is position + 1. }
+    recNo := APosition + 1;
+    if recNo > FDataLink.DataSet.RecordCount then recNo := FDataLink.DataSet.RecordCount;
+    if recNo < 1 then recNo := 1;
+    DataOp(dgoRecNo, recNo);
+  end
+  else if delta < -1 then
+    DataOp(dgoMoveBy, -PageRecords)
+  else if delta > 1 then
+    DataOp(dgoMoveBy, PageRecords)
+  else
+    DataOp(dgoMoveBy, delta);
+  { Where the dataset really is (a three-position bar goes back to the middle). }
+  UpdateRecordBar;
+end;
+
+function TTyCustomDBGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  notches: Integer;
+begin
+  if (FDataLink = nil) or not FDataLink.Active then
+    Exit(inherited DoMouseWheel(Shift, WheelDelta, MousePos));
+  { LCL's TControl.DoMouseWheel, which the string grid's override does not call: the
+    application's handlers first. }
+  Result := False;
+  if Assigned(OnMouseWheel) then OnMouseWheel(Self, Shift, WheelDelta, MousePos, Result);
+  if Result then Exit;
+  if WheelDelta < 0 then
+  begin
+    if Assigned(OnMouseWheelDown) then OnMouseWheelDown(Self, Shift, MousePos, Result);
+  end
+  else if Assigned(OnMouseWheelUp) then
+    OnMouseWheelUp(Self, Shift, MousePos, Result);
+  if Result then Exit;
+  { One record per notch, as LCL's TDBGrid moves one per wheel message. }
+  notches := Abs(WheelDelta) div 120;   // WHEEL_DELTA
+  if notches < 1 then notches := 1;
+  if WheelDelta > 0 then
+    DataOp(dgoMoveBy, -notches)
+  else
+    DataOp(dgoMoveBy, notches);
+  Result := True;
+end;
+
+procedure TTyCustomDBGrid.MoveCursor(ACol, ARow: Integer);
+begin
+  if FSyncingRow or (FDataLink = nil) or not FDataLink.Active or (RowCount = 0)
+    or (ARow = Row) then
+  begin
+    inherited MoveCursor(ACol, ARow);
+    Exit;
+  end;
+  { The record moves; the row follows it (DataSetScrolled). Out of the window is fine --
+    the window scrolls. }
+  if not DataOp(dgoMoveBy, ARow - Row) then Exit;
+  if ACol <> Col then inherited MoveCursor(ACol, Row);
+end;
+
+procedure TTyCustomDBGrid.UserKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if Assigned(OnKeyDown) then OnKeyDown(Self, Key, Shift);
+  if Key <> 0 then DoCallKeyEventHandler(chtOnKeyDown, Key, Shift);
+end;
+
+procedure TTyCustomDBGrid.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if (FDataLink = nil) or not FDataLink.Active or not Enabled
+    or not (Key in [VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END])
+    { Home / End without Ctrl are the string grid's: the first and the last column. }
+    or ((Key in [VK_HOME, VK_END]) and not (ssCtrl in Shift)) then
+  begin
+    inherited KeyDown(Key, Shift);
+    Exit;
+  end;
+  UserKeyDown(Key, Shift);
+  if Key = 0 then Exit;
+  case Key of
+    VK_DOWN:
+      begin
+        KeyDownRecord;
+        Key := 0;
+      end;
+    VK_UP:
+      begin
+        KeyUpRecord;
+        Key := 0;
+      end;
+    VK_NEXT:
+      begin
+        DataOp(dgoMoveBy, PageRecords);
+        Key := 0;
+      end;
+    VK_PRIOR:
+      begin
+        DataOp(dgoMoveBy, -PageRecords);
+        Key := 0;
+      end;
+    VK_HOME:
+      begin
+        DataOp(dgoFirst);
+        Key := 0;
+      end;
+    VK_END:
+      begin
+        DataOp(dgoLast);
+        Key := 0;
+      end;
+  end;
+end;
+
+procedure TTyCustomDBGrid.KeyDownRecord;
+begin
+  DataOp(dgoMoveBy, 1);
+end;
+
+procedure TTyCustomDBGrid.KeyUpRecord;
+begin
+  DataOp(dgoMoveBy, -1);
+end;
+
+function TTyCustomDBGrid.CommitEditor: Boolean;
+var
+  w: TWinControl;
+begin
+  Result := True;
+  if not EditorMode then Exit;
+  Result := TryEndEdit(True);
+  if not Result then
+  begin
+    { The string grid's RefocusEditor, which it keeps to itself: a refused value keeps the
+      keyboard in its editor. }
+    w := InplaceEditor;
+    if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
+  end;
+end;
+
+function TTyCustomDBGrid.DataOp(AOp: TTyDBGridDataOp; ADelta: Integer): Boolean;
+var
+  ds: TDataSet;
+begin
+  Result := False;
+  if (FDataLink = nil) or not FDataLink.Active then Exit;
+  if not CommitEditor then Exit;
+  ds := FDataLink.DataSet;
+  case AOp of
+    dgoMoveBy: FDataLink.MoveBy(ADelta);
+    dgoRecNo:  ds.RecNo := ADelta;
+    dgoFirst:  ds.First;
+    dgoLast:   ds.Last;
+  end;
+  Result := True;
 end;
 
 initialization

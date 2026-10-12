@@ -253,6 +253,7 @@ uses
   test.db.datetime,
   test.db.navigator,
   test.db.grid,
+  test.db.grid.nav,
   test.db.typekeys;
 
 type
