@@ -13,7 +13,8 @@ unit test.db.typekeys;
   * the base controls answer the keys those chains end in;
   * in every built-in theme, light and dark, each DB key resolves to exactly the style of its
     base key, at rest, under the pointer, focused and disabled -- no built-in theme has a TyDB
-    rule, which is checked first;
+    rule, which is checked first. One deliberate exception, from the base layer (light.tycss),
+    under every theme: the navigator's strip drops the tool bar's frame and fill, and only those;
   * a theme rule for TyDBEdit changes the DB edit and nothing else. }
 
 interface
@@ -42,6 +43,7 @@ type
     procedure TestTheBaseControlsAnswerTheRootKeys;
     procedure TestNoBuiltInThemeHasADBRule;
     procedure TestEveryBuiltInThemeStylesThemLikeTheirBase;
+    procedure TestTheNavigatorStripHasNoFrameInAnyTheme;
     procedure TestATyDBEditRuleChangesOnlyTheDBEdit;
   end;
 
@@ -278,9 +280,21 @@ begin
       Pos('tydb', LowerCase(TyBuiltinThemeCss(names[i]))));
 end;
 
+{ The navigator's strip takes the tool bar's style with the base layer's TyDBNavigator rule on
+  top: its background and border width are its own (TestTheNavigatorStripHasNoFrameInAnyTheme
+  says what they are), everything else must still be the bar's. }
+procedure KeepTheNavigatorsOwn(const AChild: TTyStyleSet; var AParent: TTyStyleSet);
+begin
+  AParent.Background := AChild.Background;
+  AParent.BorderWidth := AChild.BorderWidth;
+  AParent.Present := AParent.Present - [tpBackground, tpBorderWidth]
+    + AChild.Present * [tpBackground, tpBorderWidth];
+end;
+
 { C9. Each DB key against its parent's key (the base control's for every one but the two
   lookups, whose parent is the DB combo / list box -- and that one's parent is the base): equal
-  to the last field, in every theme and mode, in all four states. }
+  to the last field, in every theme and mode, in all four states. The navigator's strip is
+  compared with its own background and border width set aside (KeepTheNavigatorsOwn). }
 procedure TDBTypeKeysTest.TestEveryBuiltInThemeStylesThemLikeTheirBase;
 var
   c: TTyStyleController;
@@ -288,6 +302,7 @@ var
   miss: TStringList;
   i, m, k, s, compared, differ: Integer;
   parent, a, b: string;
+  ps, cs: TTyStyleSet;
 begin
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
@@ -306,8 +321,11 @@ begin
           parent := ParentOf(CChains[k].Chain);
           for s := 0 to High(CStates) do
           begin
-            a := Dump(c.Model.ResolveStyle(parent, '', CStates[s]));
-            b := Dump(c.Model.ResolveStyle(CChains[k].Key, '', CStates[s]));
+            ps := c.Model.ResolveStyle(parent, '', CStates[s]);
+            cs := c.Model.ResolveStyle(CChains[k].Key, '', CStates[s]);
+            if CChains[k].Key = 'TyDBNavigator' then KeepTheNavigatorsOwn(cs, ps);
+            a := Dump(ps);
+            b := Dump(cs);
             Inc(compared);
             if a <> b then
             begin
@@ -326,6 +344,83 @@ begin
     miss.Free;
     c.Free;
   end;
+end;
+
+{ The navigator's strip draws no frame of its own: in every theme -- no theme at all (the base
+  layer alone), the built-in pack in both modes, and the two theme files that are not compiled
+  in -- at rest, hovered, focused and disabled, plain and as 'ghost', its border width is a
+  declared 0 (so no render-style preset can widen it either) and its background, if it has one,
+  is fully transparent, so the strip shows its parent's surface. }
+procedure TDBTypeKeysTest.TestTheNavigatorStripHasNoFrameInAnyTheme;
+const
+  CClasses: array[0..1] of string = ('', 'ghost');
+  CFiles: array[0..1] of string = ('dark.tycss', 'green.tycss');
+var
+  checked: Integer;
+
+  procedure CheckStrip(c: TTyStyleController; const AWhere: string);
+  var
+    k, s: Integer;
+    st: TTyStyleSet;
+    where: string;
+  begin
+    for k := 0 to High(CClasses) do
+      for s := 0 to High(CStates) do
+      begin
+        where := Format('%s [%s] %s: ', [AWhere, CClasses[k], CStateNames[s]]);
+        st := c.Model.ResolveStyle('TyDBNavigator', CClasses[k], CStates[s]);
+        AssertTrue(where + 'border-width is declared', tpBorderWidth in st.Present);
+        AssertEquals(where + 'border-width', 0, st.BorderWidth);
+        AssertFalse(where + 'no border', TyBorderVisible(st));
+        if tpBackground in st.Present then
+          AssertTrue(where + 'no opaque background',
+            (st.Background.Kind = tfkNone)
+            or ((st.Background.Kind = tfkSolid) and (TyAlphaOf(st.Background.Color) = 0)));
+        Inc(checked);
+      end;
+  end;
+
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, m: Integer;
+  path: string;
+begin
+  checked := 0;
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    CheckStrip(c, 'no theme');
+  finally
+    c.Free;
+  end;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  try
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        CheckStrip(c, names[i] + '/' + c.Mode);
+      end;
+  finally
+    c.Free;
+  end;
+  for i := 0 to High(CFiles) do
+  begin
+    path := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + CFiles[i];
+    AssertTrue(path + ' is there', FileExists(path));
+    c := TTyStyleController.Create(nil);
+    try
+      c.LoadTheme(path);
+      CheckStrip(c, CFiles[i]);
+    finally
+      c.Free;
+    end;
+  end;
+  AssertEquals('(no theme + pack x 2 modes + 2 files) x 2 classes x 4 states',
+    (1 + Length(names) * 2 + Length(CFiles)) * Length(CClasses) * Length(CStates), checked);
 end;
 
 { The other half of the chain's point: a rule for the DB key is for the DB control alone. In

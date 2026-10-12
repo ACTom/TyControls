@@ -945,6 +945,17 @@ begin
     '  border-width: var(--input-border-width);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* The data-aware navigator''s strip takes the tool bar''s look through its type key chain, all' + LineEnding +
+    '   but the band itself: no frame and no fill, so the row of buttons sits on whatever surface it' + LineEnding +
+    '   is placed on. The buttons keep their own look (TyDBNavigatorButton > TyButton). Only the' + LineEnding +
+    '   width goes -- the bar''s border-color still reaches the strip, so a StyleOverride' + LineEnding +
+    '   ''border-width: 1px'' on one navigator brings its frame back. A rule in the base layer, so' + LineEnding +
+    '   every theme that does not name the key (the whole built-in pack) inherits it. */' + LineEnding +
+    'TyDBNavigator {' + LineEnding +
+    '  background: transparent;' + LineEnding +
+    '  border-width: 0;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }' + LineEnding +
