@@ -51,6 +51,9 @@ type
     twins): the element's data index, AHasIndex False where upstream passes
     null or undefined }
   TTyAnimTimingHandler = function(ADataIndex: Integer; AHasIndex: Boolean): Double of object;
+  { universalTransition.delay(index, count): the index of a morphing piece
+    among count [Batch 137] }
+  TTyUtDelayHandler = function(AIndex, ACount: Integer): Double of object;
 
   TTyAnimOptKind = (aokUndefined, aokNull, aokBool, aokNumber, aokString,
     aokHandler, aokObject);
@@ -118,6 +121,11 @@ procedure TyChartRegisterAnimTiming(const AName: string; AHandler: TTyAnimTiming
 procedure TyChartUnregisterAnimTiming(const AName: string);
 function TyChartFindAnimTiming(const AName: string; out AHandler: TTyAnimTimingHandler): Boolean;
 procedure TyChartClearAnimTimings;
+{ universalTransition.delay as '@Name' looks here first, then among the
+  timings (which are handed the index alone) [Batch 137] }
+procedure TyChartRegisterUtDelay(const AName: string; AHandler: TTyUtDelayHandler);
+procedure TyChartUnregisterUtDelay(const AName: string);
+function TyChartFindUtDelay(const AName: string; out AHandler: TTyUtDelayHandler): Boolean;
 
 { ---- models ---- }
 { Series ASeriesIndex of the root option ARoot (a bare `series` object is
@@ -173,8 +181,14 @@ type
     Handler: TTyAnimTimingHandler;
   end;
 
+  TUtDelayEntry = record
+    Name: string;
+    Handler: TTyUtDelayHandler;
+  end;
+
 var
   GTimings: array of TTimingEntry;
+  GUtDelays: array of TUtDelayEntry;
 
 { ==================== registry ==================== }
 
@@ -221,6 +235,47 @@ end;
 procedure TyChartClearAnimTimings;
 begin
   GTimings := nil;
+  GUtDelays := nil;
+end;
+
+function IndexOfUtDelay(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GUtDelays) do
+    if GUtDelays[i].Name = AName then Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterUtDelay(const AName: string; AHandler: TTyUtDelayHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfUtDelay(AName);
+  if i < 0 then
+  begin
+    i := Length(GUtDelays);
+    SetLength(GUtDelays, i + 1);
+    GUtDelays[i].Name := AName;
+  end;
+  GUtDelays[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterUtDelay(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfUtDelay(AName);
+  if i < 0 then Exit;
+  for j := i to High(GUtDelays) - 1 do GUtDelays[j] := GUtDelays[j + 1];
+  SetLength(GUtDelays, Length(GUtDelays) - 1);
+end;
+
+function TyChartFindUtDelay(const AName: string; out AHandler: TTyUtDelayHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfUtDelay(AName);
+  Result := i >= 0;
+  if Result then AHandler := GUtDelays[i].Handler;
 end;
 
 { ==================== values ==================== }

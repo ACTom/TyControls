@@ -8739,7 +8739,7 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 ### 做法
 
 - **上一次渲染的快照**（`TTyChartAnimPrev`）：设 Option 时先记下旧 Option 的系列视图键；新选项布局时（`Relayout` 里，`FAnimPending` 且还没有快照），记下旧绘制列表里所有打了动画标签的元素、旧系列的类型与每行差分键，并把旧的 `TTyChartBuild` **留着不释放**——`'+'` 要用旧坐标系的 `DataToPoint`。代理不再在这次布局里丢掉；布防之后快照和旧 build 一起释放。改尺寸、换主题这类不是新选项的重新布局照旧全部直接到终值。
-- **`TTyChartAnimSet.ArmUpdate`**（`AnimView` 单元）：按视图键和类型配对新旧系列，`TyDataDiff` 做差分，把旧代理**带到新行号**上（`(系列, 行, 角色)` 重新建索引），按上面的规则对它 `TyUpdateProps`/`TyInitProps`；没有旧代理时就地从旧元素的标签值建一个。代理的「静止值」换成新布局。没认领的旧代理直接释放（即刻消失的那些）。
+- **[第 136 批：任何新补间之前先给旧条目元素拍快照（`SnapUniversal`），所有视图布防完再跑 `ArmUniversal`（series:transition），见 §173。]** **`TTyChartAnimSet.ArmUpdate`**（`AnimView` 单元）：按视图键和类型配对新旧系列，`TyDataDiff` 做差分，把旧代理**带到新行号**上（`(系列, 行, 角色)` 重新建索引），按上面的规则对它 `TyUpdateProps`/`TyInitProps`；没有旧代理时就地从旧元素的标签值建一个。代理的「静止值」换成新布局。没认领的旧代理直接释放（即刻消失的那些）。
 - **幽灵**：删除的柱、扇区、漏斗块、散点与折线符号变成幽灵——旧元素的记录加上它的代理，`TyFadeOutElement`/`TyRemoveElement` 让它淡出，done 时标记离开，`AnimTick` 在引擎栈外释放。帧在列表之后追加还在走的幽灵：静默（命中测试打不到）、没有标签（标签当即消失）、不透明度取代理的。
 - **折线**：新代理 `linePoly`（`shape.points`，Float32）与 `lineArea`（`shape.stackedOnPoints`）。构建器给每段线和面挂上整条系列的 layout 点、堆叠底与每行数据值（`TTyChartAnim.Pts/Base/Vals`，第几段 `Sub`）。帧里用当前的点按上游的 `buildPath` 重建整条路径、切段、取本段。保留下来的符号代理加了 `x/y`，由折线代理的 during 每帧写入。
 - **散点**：代理多了组的 `x/y`；**饼**：多了 `shape.angle`。
@@ -8771,7 +8771,7 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 - **[第 135 批：竞赛（realtimeSort）的柱整根裁掉也留着——ignore、停在出去的那条边上，爬回来时从那里补间；不竞赛的仍照这一条，见 §172]** 端口不构建完全被裁掉的柱子，所以「旧的被裁掉、新的露出来」走的是「旧行无元素」那条路：从零长出，上游是从裁到边上的形状补间。
 - 散点更新时样式里的不透明度直接设上；入场的不透明度若还在补间，上游换了 style 对象，旧补间落空，这里补间会接着写。
 - `animationTypeUpdate: 'expansion'` 的饼每次重新扫开，旧扇区当即丢掉（上游不删旧扇区，未核实）。
-- 删除的系列、类型变了的系列即刻消失——与上游 notMerge 一致。
+- **[第 136 批：新系列开了 universalTransition 时，过渡键（缺省是模型 id）相同的旧系列的条目元素是新元素变形的起点，旧视图照样即刻离开；见 §173。]** 删除的系列、类型变了的系列即刻消失——与上游 notMerge 一致。
 
 ### AN3b 要做的（B1 合并之后）
 
@@ -11848,7 +11848,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 ### 推迟与偏差
 
 - **leaveTo 的抛错**：照上游停在那里，但下一轮从头来（同 C14 对抛错的处理）；上游的 `_data` 停在旧数据上，之后每次去掉同一项都会再抛。抛错的这一轮端口不画这个系列（同 C14），上游的组里元素还在——前面的项已更新，后面的还是旧的。
-- **过渡**：`keyframeAnimation`（D6）、morph 与 universal transition（D5）、`during`（函数）不做；`leaveAnimation` 上游也不读。被图例关掉的系列的元素摘下后动画照走（上游摘下时动画器离开 zr，挂回去再接着走）。悬停的状态过渡（`stateAnimation`）不做，状态照旧立刻切。
+- **[第 136 批：universal transition 的变形引擎与柱、饼、散点、折线符号之间的一对一过渡做了；custom 的元素还不参与，批里有 custom 时整批不做，见 §173。]** **过渡**：`keyframeAnimation`（D6）、morph 与 universal transition（D5）、`during`（函数）不做；`leaveAnimation` 上游也不读。被图例关掉的系列的元素摘下后动画照走（上游摘下时动画器离开 zr，挂回去再接着走）。悬停的状态过渡（`stateAnimation`）不做，状态照旧立刻切。
 - **坐标系**：geo（D14）、matrix（D12）照旧不画；极坐标上的 `clip: true`（上游是扇形裁剪）不裁；日历的 `api.coord(data, clamp)` 的第二个参数不收（总是 clamp）。
 - **元素**：`clipPath`、`autoBatch` 仍不做。
 - **api**：`visual('visualMeta')` 不答（上游是 visualMap 的 visualMeta 列表，没有 visualMap 时是空数组）；`decal`、`legendIcon`、`symbolKeepAspect` 仍是 nil；'none' 上调 `BarLayout` 答空（上游是 TypeError）；一个参数的 `Size` 是「没有 dataItem」，传一个空数组也当成没有（上游空数组是真值，读出 NaN）。
@@ -12828,6 +12828,93 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - `source/tyControls.AdvanceChart.pas`：竞赛的状态与队列、`RtApplySortInfos`、`RtRenderPass`、`RtRendered`、`RtFlushQueue`、`DoChangeAxisOrder`、`CategorySortInfoText`，以及 `AnimTick`、`RenderTo`、`Paint`、`FullUpdateWith`、`DispatchActionObject`、`AnimFullBegin`、`AnimAfterBuild`、`AnimSeriesInfo`、`AxisAnimElementsOf`、`PaintAxis` 里的接线。
 - `tools/advchart-oracle/realtime-sort.js`、`tests/fixtures/advchart-realtime-sort.json`、`tests/test.advchart.realtimesort.pas`（新，注册在 `tytests.lpr`）。
 
+## 173. Tier 3 第一百三十六批：universalTransition（一）（D5 UT1，2026-10-12）
+
+路线图 D5：universalTransition，三批（UT1–UT3）。这是第一批：zrender 的路径变形引擎，和一对一的过渡——同一份数据在不同类型的系列之间换来换去（柱 ↔ 饼、柱 ↔ 散点、折线的符号 ↔ 柱），以及开着 `universalTransition` 的同一系列重设样式。在这之前端口对 `universalTransition` 一个字都不读：类型变了的系列按 notMerge 的规矩旧视图当帧消失、新视图从头入场（§126），画廊里柱变饼那种「形状一路长过去」的效果完全没有。上游源码逐个读过：`animation/universalTransition.ts`（收集新旧元素、配批、差分、一对一、淡入）、`animation/morphTransitionHelper.ts`（`applyMorphAnimation`、`prepareMorphBatches`、`clone` 分割器、`getPathList`）、zrender 的 `tool/morphPath.ts`、`tool/dividePath.ts`、`tool/convertPath.ts` 的 `pathToBezierCurves` / `pathToPolygons`、`core/curve.ts` 的 `cubicSubdivide`，以及 `basicTransition.ts` 的 `getAnimationConfig` / `saveOldStyle`、`DataDiffer` 的 `multiple` 模式。**以真跑为准**：基准用真 dist，引擎那部分把 zrender 的函数从打好的包里原样切出来跑。§126、§161 的相关处在原处标注。
+
+### 上游的做法
+
+- **什么时候跑**：`series:transition` 生命周期钩子，在所有系列视图渲染完、标签布局完之后，只在 setOption（`optionChanged`）时跑——图例开关、dataZoom 这种整体更新不跑。每次更新结束都把**所有**系列（数据量 < 1 万的）连同它们的 `SeriesData` 存进全局仓库，下一次 setOption 就从它出发。
+- **开没开**（`isUniversalTransitionEnabled`）：系列自己的 `universalTransition` 是 `true`，或者是对象且 `enabled` 为真值；只看**新**系列——旧系列关着照样当来源。新系列还要 `isAnimationEnabled()`（`animation` 与 `animationThreshold`）。
+- **[第 137 批：列表键的多合一与一拆多两支已做，见 §175]** **配批**（`findTransitionSeriesBatches`）：每个系列的过渡键是 `universalTransition.seriesKey`，假值时是系列的模型 id（`makeIdAndName` 的那个：写了 id 用 id，否则 `'\0' + 名字 + '\0' + 计数`，名字缺省是 `'series\0' + 序号`）；列表的 `seriesKey` 排序后用 `,` 拼起来（与顺序无关）。`getModel('universalTransition').get(k)` 先看系列自己的对象（折线、散点、涟漪散点的类型缺省对象里有 `divideShape: 'clone'`），再看**根选项**的 `universalTransition` 对象——`delay`、`seriesKey` 可以写在根上；系列写的是 `true` 时类型缺省对象进不来，直接落到根。仓库按键建表（Map，数 5 与串 '5' 不同；后存的覆盖先存的），新系列键相同的配成一批 `{旧: [那个旧系列], 新: [这个新系列]}`，同键的新系列后来的覆盖先来的（开发版会警告）。列表键对单键的「一拆多、多合一」是另外两支（UT2）。
+- **[第 138 批：方向嗅探与按方向取键已做，见 §176]** **一批里**（`transitionBetween`）：两边各自摊平成数据项（`flattenDataDiffItems`，超过 1 万项的系列跳过），每项带 `groupId`（编码的 `itemGroupId` 维度、数据项的 `groupId`、系列的 `dataGroupId`，都没有就是 `getId`）与 `childGroupId`。先嗅方向（父→子、子→父、无，UT3），再看**是不是逐个 id 都相同**（`isAllIdSame`：项数相同且第 i 项的 `getId` 两边一样）——是就按 id 差分，否则按 groupId；按 groupId 时先记下新项的元素都有谁（`isElementStillInChart`）。差分是 `DataDiffer` 的 `multiple` 模式：键前加 `_ec_`，按旧键首次出现的次序逐键分派——一对一 `update`、多对一 `updateManyToOne`、一对多 `updateOneToMany`、多对多 `updateManyToMany`（多对多里再按 id 一对一差分一次，回到一对一），没有 add / remove 回调：新增的项留着自己的入场，删掉的项留着自己的离场。
+- **一对一**（`updateOneToOne`）：
+  - 旧元素就是新元素（同一视图复用、或两边都没有）：`animateElementStyles`——视图在这次渲染里 `saveOldStyle` 存下的**旧 style 对象**（柱、饼、符号更新时都存），`animateFrom({style: 旧}, getAnimationConfig('update', 系列, dataIndex))`：更新时序、数据下标，**没有 setToFinal**（马上写回旧值再走向新值）；
+  - 旧元素还被新图表的别的项用着：跳过；
+  - 有新元素：先 `stopAnimation`（它自己的入场 / 更新就此停住——这些都带 setToFinal，元素已经在终值）；有旧元素就把旧元素也停下、摘掉（`removeEl`），记下「有变形」，`applyMorphAnimation(getPathList(旧), getPathList(新), 新的 divideShape, 新系列, 新项在摊平表里的下标)`；没有旧元素（旧值不是数）就 `fadeInElement`：每条路径 `initProps` 从 opacity 0 来——**入场**时序、setToFinal。
+- **applyMorphAnimation**：路径列表是元素下所有不 `disableMorphing`、不 `invisible`、不 `ignore` 的 Path（柱、扇区、散点和折线的符号路径都只有一条）。两边任一为空、更新时长不大于 0 都直接返回。配置是 `extend({setToFinal: true}, getAnimationConfig('update', 系列, 下标))`；`universalTransition.delay(index, count)` 有的话用 `defaults({delay: delay(animateIndex, animateCount)}, 配置)` 盖掉延迟——一对一时是 `delay(0, 1)`。路径条数相同就一对一 `morphPath(旧, 新, 配置)`，再 `to.animateFrom({style: 旧 style}, 同一配置)`；条数不同才走 `prepareMorphBatches` 与合并 / 拆分（内建系列一对一时碰不到，UT2）。
+- **morphPath**（zrender）：`prepareMorphPath`：两条路径各自 `getUpdatedPathProxy()`（PathProxy 的数据，SVG 渲染器从不 `toStatic`，是普通双精度数组），`pathToBezierCurves` 变成三次贝塞尔环（一条直线是控制点落在两端的三次曲线；矩形 R 命令是独立的一环；弧按四分之一圆切段，控制柄长 `tan(Δ/4)·4/3`；二次曲线升阶），`alignBezierCurves` 让两边环数相同（缺的一环用另一边上一环的末点铺满）、每环曲线数相同（`alignSubpath`：短的那边每条曲线细分，**第 k 段在「剩下那截」的 k/n 处切**），两边各自乘上 `getComputedTransform()`（符号是组的位置 × 路径的缩放 / 旋转 / 偏移；没有变换时是 null），目标路径的 `updateTransform` 换成「transform = null」；`findBestMorphingRotation(…, 10, π)`：每环取质心（`centroid`，面积为零时退成首点），**由第一环决定**源环要不要整体反向（两边面积符号不同），`findBestRingOffset` 把源环转到离目标最近的起点（按整条曲线），再在 [−π/2, π/2] 里以 π/10 步进（浮点累加）找让目标转过去最贴近的角度，记下 `rotation = −最佳角`。目标的 `buildPath` 换成：在 `__morphT = t` 时，点按 `x0·(1−t) + x1·t` 插值、质心线性插值、整体转 `rotation·t`，每环 `moveTo` 起点，控制点落在两端的画 `lineTo`、否则 `bezierCurveTo`（不闭合）。`animateTo({__morphT: 1}, defaults({during, done}, 配置))`，setToFinal 让第一步之前就在 1、同步的第一步写回 0；done 时还原 `buildPath` / `updateTransform`、`__morphT = −1`。**被别的动画打断不还原**（只 done 才还原）。
+- **有变形时**：批里每个新系列（开着动画、更新时长大于 0）的视图组里，**没有任何动画器的 Path** 都 `animateFrom({style: {opacity: 0}}, getAnimationConfig('update', 系列, 0))`——折线的 polyline 与面（它们的入场动画在裁剪路径上，自己没有动画器）、新折线里没配上的符号路径（弹出动画在符号组上）。
+- **样式过渡的键**：`animateFrom` 的目标键是旧 style 的**自有**键（`Object.keys`），新 style 那边是带原型缺省的取值（fill `'#000'`、stroke null、lineWidth 1、opacity 1……），值不同才动（串按字面比）。柱默认只有 fill，写了边框才有 stroke / lineWidth、写了不透明度才有 opacity；饼默认有 lineWidth 1（没有 stroke）；散点的符号路径带 itemStyle 的 opacity（缺省 0.8）；折线的空心圆带 fill `'#fff'`、stroke、lineWidth 2。
+
+### port 以前
+
+- 不读 `universalTransition`；类型变了（或 id 变了）的系列旧视图当帧消失，新视图从头入场。
+- 动画代理只知道各角色自己的键（柱的 shape、扇区的 shape、符号的缩放与位置……），没有「换一条路径来画」的手段。
+
+### 做法
+
+- **`tyControls.AdvChart.Morph`**（新，纯函数）：照上面逐个转写，路径一律是 PathProxy 的平铺数组（命令码 M 1、L 2、C 3、Q 4、A 5、Z 6、R 7）：`TyCubicSubdivide`、`TyPathToBezierCurves`、`TyPathToPolygons`（`adpativeBezier`）、`TyAlignSubpath`、`TyAlignBezierCurves`、`TyMorphCentroid`、`TyFindBestRingOffset`、`TyMorphReverse`、`TyFindBestMorphingRotation`、`TyApplyTransformOnBeziers`、`TyPrepareMorph`（prepareMorphPath）、`TyMorphPathData`（替换后的 buildPath 在 t 时的数据）、`TyMorphDataCmds`（转成画家的命令）、`TyMorphHilbert`（sortPaths 的键）；`dividePath` 的 `TyDividingGrids`、`TyDivideRect`、`TyDivideSector`（圆是 0 到 2π 的扇区）、`TyDividePolygons`（split 的多边形兜底：一环一块、或按外包框面积分份再二分，`splitPolygonByLine` 的交点按投影排序用 §170 的 V8 TimSort）、`TyCloneOpacity`；`TyPrepareMorphBatches`（批的轮转平均，连上游那个覆写一起）。三角函数一律走 `JsMath` 的 V8 移植，`Math.round` 是 `TyJsRound`，`Math.ceil/floor` 是 `JsCeil/JsFloor`，`===` 与 `<` 对 NaN 按 JS 的意思写成 `JsEq` / `JsLess`，`Math.min/max` 连 ±0 一起照 JS；每个公开函数关掉浮点异常（0/0、无穷的分数都是 JS 的数）。dividePath 与批这一半 UT1 用不上，先做成纯函数、按上游测掉，留给 UT2。
+- **`tyControls.AdvChart.AnimView`**：
+  - `TTyChartAnimSeries` 加 `UtOn`、`UtKey`（带类型的键：`'s:'` 串、`'n:'` 数、`'b:'` 布尔）、`UtKeyList`、`UtDivide`、`UtDelay`（句柄名），以及留给 UT2 / UT3 的每行 `UtGroupIds`、`UtChildGroupIds`（UT1 不填：等于 id、没有子组）。`TyUtEnabled`、`TyUtGet`（系列 → 类型缺省 → 根）、`TyUtTransitionKey`、`TyUtSeriesInfo` 公开。
+  - 代理加 `FMorph`（`TTyMorphData`）与 `FMorphOn`、`FUtStyleOn` 与 `FUtPass`、`MorphDone` / `UtStyleDone`；`__morphT` 就是代理袋子里的一个键，由引擎补间。
+  - **`SnapUniversal`**：`ArmUpdate` 建好旧元素索引后、任何新的补间之前，把旧渲染里每个条目元素（柱、扇区、散点符号、折线符号）**此刻**画的路径与计算变换、样式的自有键记下来——保留视图里的代理被 `TyUpdateProps` 的 setToFinal 一写就成了新布局，晚了就读不到旧的了（换了符号类型的散点就是这样）。路径由 `UtElementPath` 给：柱是 `Rect.buildPath`（有圆角就是圆角矩形）、扇区是 `TyZrSectorPath`（饼的元素多存了 `G[7]` 方向）、符号是 `createSymbol(type, −1, −1, 2, 2)` 加上路径与组的变换（与 §112 引导线的宿主同一套），代理有正在跑的值就用代理的；正在变形的元素给的是它此刻的变形帧、变换为空。
+  - **`ArmUniversal`**：`ArmUpdate` 里所有视图布防完之后（就是 `series:transition` 的位置）跑；整体更新不跑。配批照上游（同键取最后一个旧系列，批按键覆写）；**UT1 只让柱、饼、散点、折线四种类型的批进来**，别的类型照旧各走各的。`TransitionBetween` 照上游摊平、判 `isAllIdSame`、建 `isElementStillInChart`、按 `multiple` 模式逐键分派——一对一、多对多（再按 id 一对一）走 `OneToOne`；多对一、一对多留给 UT2（期间新元素保留自己的动画）。`OneToOne`：同一元素（新系列保留了旧视图、视图的差分把这两行配在一起、符号没换类型）做 `animateElementStyles`；旧元素还在新图里就跳过；否则停住新元素的代理、设到布局终值，有旧元素就 `TyPrepareMorph(旧快照, 新路径)`、`__morphT` 0 → 1、样式从旧快照 `animateFrom`（都是更新时序、新项下标、setToFinal，`delay` 句柄按下标 0 调），没有就从 opacity 0 入场淡入。有变形时对批里新系列做那一遍淡入：折线的线与面各一个代理（`utFadeRun` / `utFadeArea`），没动画器的条目元素（折线符号看它的路径有没有被变形或样式过渡占着）在自己的代理上从 0 淡入。
+  - **样式键**只建模画家画的四个：fill、stroke、lineWidth、opacity（`UtStyleProps`）。自有键：纯色的 fill、有颜色的 stroke、大于 0 的线宽、不等于 1 的不透明度——散点符号的不透明度总是自有。新元素那边缺的按原型缺省补（fill `#000`、lineWidth 1）。
+  - **画**：`TyAnimBuildFrame` 在角色的 `TyAnimApply` 之后调 `TyUtApply`——变形中的元素形状换成多边形，`Cmds` 是 `TyMorphPathData` 在代理当前 `__morphT` 的命令（点是各命令的终点，供命中测试），样式键在跑的时候盖到元素上；折线的线和面读淡入代理的不透明度。
+  - **过时的样式过渡**：上游的视图每次渲染换一个新的 style 对象，旧的样式动画器还在写被换掉的那个——看不见了。所以每次 `ArmUpdate` 末尾，这一次没有重新起样式过渡的代理一律关掉 `FUtStyleOn`（`FUtPass` 记的是哪一次）。变形不受影响（buildPath 一直被换着，直到 done）。
+- **控件（`TTyAdvanceChart`）**：`AnimUtKeys`，设选项之前（与 `FAnimOldViewKeys` 同一处，merge 的 `FMergeOldUtKeys` 同理）记下旧选项每个系列的过渡键，快照时填进旧系列；`AnimSeriesInfo` 对每个新系列调 `TyUtSeriesInfo`（模型 id 取 `ComponentId`）。
+- **`tyControls.AdvChart.Pie`**：扇区元素的 `G[7]` 记方向（1 是逆时针），变形时按它建路径。
+- 没有新的主题键、没有新字符串、没有新的 JSON 入口。新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### UT1 / UT2 / UT3 的划分
+
+- **UT1（本批）**：变形引擎全部（含 dividePath 与批的纯函数）；配批的「同键」那一支（串、数、布尔、列表拼成的串）；摊平、`isAllIdSame`、`isElementStillInChart`、`multiple` 差分与多对多的再差分；一对一的三种结局（同元素样式、变形、淡入）；有变形时的补淡入；柱 / 饼 / 散点 / 折线符号四种元素。
+- **[第 137 批：已做，见 §175；`bar-drilldown` 的第一层与 `scatter-aggregate-bar` 两个方向都在基准里]** **UT2：合并与拆分**。`updateManyToOne` → `combineMorph`（多条旧路径排序后各自变到新路径的分块上，新路径带 `__isCombineMorphing` 与 `childrenRef`）、`updateOneToMany` → `separateMorph`（旧路径用 `divideShape` 分块：`split` 是 `TyDivideRect / TyDivideSector / TyDividePolygons`，`clone` 是复制并用 `TyCloneOpacity` 摊不透明度；分块数不对时上游 `console.error` 并返回空）、`sortPaths`（外包框中心的 `TyMorphHilbert`，只加平移不乘缩放）、`individualDelay`、正在合并的路径再拆（`isCombineMorphing` 的 `childrenRef`）与路径条数不等的一对一；`groupId`（数据项的）、`dataGroupId`（系列的，旧系列的也要从旧选项记下来）进 `UtGroupIds`；列表 `seriesKey` 对单键的一拆多（`oldDataMapForSplit`）与多合一；画廊的 `scatter-aggregate-bar`、`bar-drilldown` 的第一层。元素收集已经按「旧系列表 / 新系列表 / 摊平项带 group」写好，UT2 只填 `UtGroupIds`、补两个分派分支和配批的两支。
+- **[第 138 批：已做，见 §176；`bar-multi-drilldown` 逐层与 `treemap-sunburst-transition` 两个方向都在基准里，`transition` 参数仍没有]** **UT3：方向嗅探与多层钻取**。`childGroupId`（数据项的、`encode.itemChildGroupId` 维度的）与 `encode.itemGroupId` 维度进 `UtChildGroupIds` / `UtGroupIds`；`transitionBetween` 开头的方向判断（新项的 groupId 在旧项的 childGroupId 里 → 父到子；新项的 childGroupId 在旧项的 groupId 里 → 子到父），键函数按方向取 group 或 childGroup；画廊的 `bar-multi-drilldown`、`treemap-sunburst-transition`（后者还要树图 / 旭日图的元素进 `UtHostRole`）。setOption 的 `transition` 参数（`seriesTransition`、`transitionSeriesFromOpt`）控件没有对应的入口，到时一并定。
+
+### 基准
+
+`tools/advchart-oracle/universal-transition.js`（真 dist；`Date` 换成手拨的钟，T0 = 1700000000000，`chart._ssr = false`、`env.node = false`、播种的 `Math.random`，与 `animation.js` 一套；SVG SSR 400 × 300；最后 `process.exit()`）→ `tests/fixtures/advchart-universal-transition.json`（约 1.63 MB）。
+
+- **引擎**（80 个用例）：从 dist 里原样切出 `cubicSubdivide`、`fromPoints`、`lerp`、`Point`、`convertPath` 到 `morphPath` 那一整段、`hilbert` 与 `sortPaths`、`prepareMorphBatches`，`new Function` 包起来，喂真元素的 PathProxy 数据（矩形、负高的柱、圆角矩形与四角不同的圆角、扇区、环、逆时针扇区、整圆扇区、带圆角的环、圆、多边形、折线、`path://` 的三角形与两环 / 三环、带二次曲线的、以弧开头的 Arc）：`pathToBezierCurves` 17 个；`pathToPolygons` 在比例 1 与 3.5 下 8 个；15 对的对齐与旋转（曲线数不同、环数不同、绕向相反、同一条路径两次）——对齐结果、每环质心、最佳起点、反向后的环、`findBestMorphingRotation` 的全部输出；`applyTransformOnBeziers`；7 对真元素（带变换的圆、转过的圆、圆角矩形、两个环、多边形）`prepareMorphPath` 之后替换的 buildPath 在 t = 0、1e−9、0.1、0.25、1/3、0.5、0.75、0.999、1 的数据；`split` 30 个（矩形 1–12 块、竖长的、负高的、扇区 1–9 块、细扇区、圆、多边形 1–6 块、两环 / 三环的路径、缩放过的多边形）；`getDividingGrids` 6 行（含一边为零、两边为零）；`hilbert` 10 行（含 NaN、退化的范围）；`prepareMorphBatches` 7 行（含轮转覆写）。
+- **图表**（34 个用例）：第一个选项在 T0 跑完（或入场到 `mid` 毫秒），第二个在 T1 以 notMerge 设置（`then`：再过 `at` 毫秒设第三个），在 T1 + 0、1、16、50、100、150、250、300、400、499、500、501、750、1000、1500 毫秒记录新系列的每个条目元素：是否变形、变形帧（新开一个 PathProxy 调替换后的 buildPath 的数据）、有效的 fill / stroke / lineWidth / opacity、变换与 shape 的键（符号组的另记）、动画器数；视图里其余的路径（折线的线与面）记不透明度。所有选项都写出缺省调色板（端口的调色板是皮肤的）。用例：柱 → 饼、饼 → 柱、柱 → 散点、散点 → 柱、折线 → 柱、柱 → 折线、转过的三角散点（`symbolRotate: 30`、`[24, 16]`）→ 饼、环 → 柱、圆角柱 → 饼、横向柱 → 饼、带边框与不透明度的柱 → 带边框的饼、两边 id 都是 `sales`、id 不同（不配批）、id 不同但 `seriesKey` 相同、新系列关着、旧系列关着（照样变形）、`{enabled: false}`、新系列 `animation: false`、名字只对上两个（E、F 入场）、数据项 id 相同而名字不同、旧柱 B 是 null（B 片淡入）、饼的更新时序 800 ms linear 加延迟函数、`universalTransition.delay`、`divideShape: 'split'` 与 `'clone'`（一对一没有可分的，守卫与缺省逐字节相同）、同一柱系列换颜色（同元素的样式过渡）、同一柱系列换颜色并多一根、柱入场到 300 ms 时换饼、柱 → 饼变到 200 ms 时再换回柱、折线 → 散点、同一散点系列换符号（新 Symbol，变形）、换符号同时挪位置变大小、列表 `seriesKey`（顺序不同）、根选项上的 `delay`。
+- 42 条守卫（对齐后两边环数与每环长度相同、矩形对两环 / 三环对两环的造环、细分真的发生、有需要转起点的、有需要转角度的、每帧以 move 开头、分块数与类型；每个该变形的用例恰好 4 个变形、t=0 在变、最后不在变；不该变形的一个都没有；名字对上两个就两个、null 那片从 0 淡入；缺省 500 ms 结束、800 ms 的在 750 时还在变、delay 的在 100 ms 时没动 150 ms 时动了；split / clone / ids 与缺省逐字节相同；同元素不变形、填色在变；折线从 0 淡入；入场中途出发的第一帧与跑完再出发的不同；根上的 delay 与系列上的完全相同；第三个选项从变形中途出发）全部成立；两次生成逐字节一致；没有 `\u0000`（模型 id 里的 `\0` 写成 `<0>`）。
+
+### 测试
+
+- **`test.advchart.morph`**（新，7 个测试，`TY_MORPH_COUNTS=1` 打印计数）：引擎用例逐个把记录的输入喂给 `AdvChart.Morph`，逐位比——贝塞尔 37 项、多边形 16 项、对齐与旋转 254 项、变换 2 项、变形帧 70 项、分块 965 项、网格 / hilbert / 批 23 项。
+- **`test.advchart.universaltransition`**（新，3 个测试，`TY_UT_COUNTS=1` 打印计数）：
+  - `TestEveryTransitionAsUpstream`：34 个用例在真控件上按基准的方式跑（zrender 的 SSR 量字、400 × 300、`camAlways`），每个采样按系列、数据下标、角色找到帧里的元素：在不在；是否在变形，变形的画出的每条命令、每个数逐位等于替换后的 buildPath；fill 与 stroke 按画家的颜色比，不透明度逐位比，有描边时线宽逐位比；不在变形的元素，上游追踪的变换与 shape 键在代理上逐位比；折线的线与面的不透明度逐位比。8 078 项、1 118 个变形帧。
+  - `TestAMorphDrawsOnePathAndEndsOnTheLayout`：柱 → 饼变形中每片是以 move 开头的多边形，跑完回到扇区、不再变形、没有 clip。
+  - `TestNoTransitionWithoutAnUpdate`：第一次渲染不变形。
+- 首跑：引擎 7 个全过；图表只有一处不对——淡入到 0 时把元素做成了无墨（填色也清了），上游 opacity 0 的元素照样有填色、照样能被点到；改成只设不透明度。之后补了第三个选项、同系列换符号、多一根、列表键、根上的 delay 这几个用例；「换符号同时挪位置」一补就红——保留视图里的旧代理已经被这次更新的 setToFinal 写成新布局，旧方块从新位置出发——于是加了 `SnapUniversal`，在任何新补间之前把旧元素记下来。
+- 本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartMorphTest` 7、`TAdvChartUniversalTransitionTest` 3、`TAdvChartAnimEnterTest` 13、`TAdvChartAnimUpdateTest` 7、`TAdvChartAnimFullUpdateTest` 7、`TAdvChartAnimMergeTest` 6、`TAdvChartAnimStateEngineTest` 11、`TAdvChartAnimStateTest` 5、`TAdvChartAnimLabelsTest` 10、`TAdvChartPieTest` 24、`TAdvChartPieAvoidTest` 5。全量与变异留到 D5–D8 里程碑末；候选见 `s173.md.candidates.md`（21 个）。
+
+### 推迟与偏差
+
+- **[第 138 批：旭日图的扇区与树图的矩形也进来了（只在两种类型之间），见 §176]** **只有四种元素**：柱（直角坐标，横竖都行）、饼的扇区、散点的符号、折线的符号。批里有别的类型（custom、漏斗、极坐标柱、涟漪散点、象形柱、树图、旭日图、地图……）整批不做，各走各的动画。
+- **[第 138 批：`childGroupId` 与方向嗅探也已做，见 §176]** **[第 137 批：除 `childGroupId` 与方向嗅探（UT3）外都已做，见 §175]** **合并、拆分、groupId、dataGroupId、childGroupId、方向嗅探、列表键对单键**：UT2 / UT3（见上）。期间多对一、一对多的新元素保留自己的入场。
+- **标签不跟着变形走**：上游的 textContent 每帧按宿主路径的外包框重新定位，变形中的柱的标签跟着变形帧移动；端口的标签照它原来的规则（入场淡入、宿主在终值时不动）。测试用例里饼的标签关着、柱与散点缺省不显示。
+- **样式只建模四个键**：fill、stroke、lineWidth、opacity；`strokeNoScale`、`lineJoin`、`decal` 这类不画的键不建模（上游会为它们多起样式轨道，动画器 / clip 数因此不比）。自有键靠元素样式推断：柱或饼上**明写的** `opacity: 1` 端口看不出来是自有的（上游会从 1 过渡到目标，端口直接用目标）；渐变填充不过渡；颜色串按端口的写法（`#rrggbb`）比，上游 `'#fff'` 与 `'#ffffff'` 这种字面不同、颜色相同的会多起一条轨道，画出来一样。
+- **补淡入**只覆盖折线的线与面、没配上的折线符号，以及条目元素里没有动画器的；柱的背景（`showBackground`）这类路径不淡入。
+- **[第 137 批：`TyChartRegisterUtDelay` 的句柄拿得到 `(index, count)`，只给下标的旧句柄照旧可用，见 §175]** **`delay` 句柄只拿到下标**：上游是 `delay(index, count)`，一对一恒为 `(0, 1)`；端口的句柄签名只有下标（用例里的函数对 count = 1 取值相同）。
+- **图例关掉的旧系列**：上游仓库里也有它（没有元素，对上的新元素会淡入）；端口的快照不收隐藏的系列，对上的新元素照常入场。
+- **[第 137 批：已去掉——用到的旧元素的幽灵当场消失（`DropGhost`），见 §175]** **被配上的离场幽灵**：保留视图里正在淡出的旧元素若被别的新元素配上，上游停下并摘掉它，端口让它淡完。
+- **[第 138 批：UT3 收尾时仍不做，理由与范围见 §176 的偏差]** **setOption 的 `transition` 参数**（`seriesTransition`）没有：控件的 Option 是一段文本，没有地方写。
+- **饼的圆角**：变形按 `Shape.SectorRadii` 以 zrender 的次序建圆角扇区路径，没有用例覆盖。
+- **变形中的命中测试**用多边形的命令终点，不是曲线本身。
+- 引擎的偏差（上游会抛或不返回的地方）：多边形分块里零份额 / NaN 份额的块不再分（上游无穷递归）；`pathToPolygons` 的自适应细分最深 64 层（点不是数时上游递归到栈溢出）；路径以 L / C 开头而当前没有子路径时跳过（上游 TypeError）；`split` 碰到零个多边形且要分多块时给空（上游读 `undefined.length` 抛）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Morph.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.AnimView.pas`：`TTyUtOldSnap`、代理的变形与样式过渡字段、`TTyChartAnimSeries` 的 `Ut*`、`TyUtEnabled` / `TyUtGet` / `TyUtTransitionKey` / `TyUtSeriesInfo` / `TyUtApply`、`TTyChartAnimSet.SnapUniversal` / `ArmUniversal`、`ArmUpdate` 的快照与调用与过时样式的清理、`TyAnimBuildFrame` 的变形与淡入。
+- `source/tyControls.AdvanceChart.pas`：`FAnimOldUtKeys`、`FMergeOldUtKeys`、`AnimUtKeys`，快照与 `AnimSeriesInfo` 填过渡键。
+- `source/tyControls.AdvChart.Pie.pas`：扇区的 `G[7]`。
+- `tycontrols.lpk`、`tycontrols.pas`（忽略的）。
+- `tools/advchart-oracle/universal-transition.js`、`tests/fixtures/advchart-universal-transition.json`、`tests/test.advchart.morph.pas`、`tests/test.advchart.universaltransition.pas`（新，注册在 `tytests.lpr`）。
+
 ## 174. 里程碑 D1–D4 统一验证（2026-10-12）
 
 D1–D4 四批（§169–§172）落地时每批只跑了自己的新套件和直接碰到的套件；D1 与 D2 先合进来（79d03c31），D4 在主线上做，D3 最后合（72983fa7）。这一节在 72983fa7 上做全量、变异和收尾。§173 在另一条线上写，以后合进来，编号留着。
@@ -12892,3 +12979,150 @@ custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit
 - `tests/test.advchart.valueaxis.pas`（−0 的断言）、`tests/test.advchart.realtimesort.pas`（setOption 的 `lazy` 输入）。
 - `tools/advchart-oracle/axis-breaks.js`、`dataset-transform.js`、`stat-transforms.js`、`realtime-sort.js` 与四份基准：重生成后已有用例一个字节没变，只多了新用例（断轴的守卫条目跟着多列出新用例）。用例数：断轴 43 → 44、dataset transform 128 → 129（守卫 86 → 87）、统计变换 164 → 165（守卫 82 → 83）、竞赛 11 → 16（守卫 25 → 30）。
 - `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`；`languages/tyControls.StrConsts.pot`（重排）；本 spec 的 §134、§169、§170、§171、§172 在原处标注。
+
+## 175. Tier 3 第一百三十七批：universalTransition（二）（D5 UT2，2026-10-12）
+
+D5 的第二批：合并与拆分。UT1（§173）把变形引擎和一对一的过渡做完了，`DataDiffer` 的 `multiple` 模式也已经分派到四支，可多对一（`updateManyToOne`）、一对多（`updateOneToMany`）两支一直空着——新元素照旧走自己的入场；分组键也只认 id，`groupId`、`dataGroupId` 一个字都不读；列表 `seriesKey` 只在「两边写的是同一个列表」时配得上。画廊的 `scatter-aggregate-bar`（507 个点聚成两根柱、再散回去）和 `bar-drilldown` 的第一层（一根柱拆成一组柱、再合回去）因此都只是各走各的入场。上游源码逐个读过：`animation/universalTransition.ts`（`getGroupId`、`flattenDataDiffItems`、`findTransitionSeriesBatches` 的三支、`transitionBetween` 的 `updateManyToOne` / `updateOneToMany`、`removeEl`）、`animation/morphTransitionHelper.ts`（`applyMorphAnimation` 的 many / one 方向、`morphOneBatch` 与它的 `forceManyOne`、`pathDividers`、`updateMorphingPathProps`）、zrender 的 `tool/morphPath.ts`（`combineMorph`、`separateMorph`、`sortPaths`、`isCombineMorphing`、`saveAndModifyMethod`）、`tool/dividePath.ts` 的 `split` 与 `clone`、`tool/path.ts` 的 `clonePath`、`Storage._updateAndAddDisplayable` 的 `childrenRef`、`core/PathProxy.ts` 的 `getBoundingRect` 与 `core/bbox.ts`、`graphic/Path.ts` 的 `getBoundingRect`、`core/Transformable.ts` 的 `setLocalTransform` / `updateTransform` / `getLineScale`、`animation/Clip.ts` 的 `step`。**以真跑为准**：基准用真 dist。§173 的相关处在原处标注。
+
+### 上游的做法
+
+- **[第 138 批：编码维度与 `childGroupId` 已读，见 §176]** **分组**（`getGroupId`）：编码的 `itemGroupId` 维度（UT3）→ 原始数据项的 `groupId`（真值时 `+ ''`）→ 系列的 `dataGroupId`（`series.get`：系列自己的，`null` / 缺失时落到**根选项**的同名键——`bar-drilldown` 的根上就写着 `dataGroupId: ''`）→ `getId`。`dataGroupId` 是假值也落到 id。旧系列的 `dataGroupId` 是**存仓库那一刻**读的（`oldDataGroupIds`），旧数据项的 `groupId` 读的是旧数据。
+- **配批的另外两支**（`findTransitionSeriesBatches`）：`oldDataMap` 按过渡键存每个旧系列；旧系列的键是列表时，另把列表里的**每一项**（带类型，Map 键）记进 `oldDataMapForSplit`，指回整个列表的键（同一项出现在两个列表里，后存的覆盖先存的）。新系列：键在 `oldDataMap` 里——同键一批（UT1）；否则新键是列表——**多合一**：按列表（`convertArraySeriesKeyToString` 的 `sort()` 是**原地**排序，所以是排好的次序）逐项取旧系列，`oldDataMap.get(key).data`——某一项没有旧系列时 `undefined.data` 直接抛出 setOption；否则——**一拆多**：在 `oldDataMapForSplit` 里找，找到就把自己追加到以旧列表键为键的那一批（没有就新建，旧系列是那一个）。批按键覆写、键的次序是首次插入的次序。
+- **多对一**（`updateManyToOne(newIndex, oldIndices)`）：旧元素过滤掉没有的、就是新元素本身的（`oldEl !== newEl`）、还在新图里的（`isElementStillInChart`）。有新元素才动：停住新元素；有旧元素就逐个停住并 `removeEl`（摘掉旧元素——正在淡出的旧元素从此不再淡出），`applyMorphAnimation(旧路径表的表, 新路径, 新项的 divideShape, 新系列, newIndex)`；一个旧元素也没有就 `fadeInElement(新元素, 新系列, **新项自己的 dataIndex**)`——一对一给的是摊平下标，这里不是。
+- **一对多**（`updateOneToMany(newIndices, oldIndex)`）：旧元素还在新图里就整个跳过；新元素过滤掉没有的、就是旧元素的；**新系列取 `newIndices[0]` 那一项的**（新元素可以属于不同的系列）。有新元素：逐个停住；有旧元素就停住、摘掉，`applyMorphAnimation(旧路径, 新路径表的表, **旧项的 divideShape**, 那个新系列, newIndices[0])`；没有就逐个 `fadeInElement(…, 那个新系列, newIndices[0])`。
+- **applyMorphAnimation 的方向**：`isMultiple`（第一项是数组）决定 many 在哪边；`prepareMorphBatches(one, many)`——内建四种元素都只有一条路径，one 恒为一条，于是只有一批、批里是所有 many 的路径（按元素次序）。`animateCount` 是 many 的条数。一批里 many 只有一条（过滤后只剩一个旧元素 / 新元素）就走一对一：`delay(animateIndex, animateCount)` 即 `(0, 1)`；**一对一的来源正在合并时**（`isCombineMorphing`）改走 `forceManyOne` 的合并，来源是它的子路径。many 多于一条：`separateAnimationCfg = defaults({dividePath: pathDividers[divideShape], individualDelay}, 配置)`——`split` 对应 `null`、没写对应 `undefined`，都落到缺省的 `split`；`individualDelay` 只在写了 `universalTransition.delay` 时有，是 `delay(idx + animateIndex, animateCount)`。之后对每一对 `k`：`animateOtherProps(from[k], to[k], rawFrom, rawTo, cfg)`，`cfg` 的延迟是 `delay(k, count)`（**不加**更新延迟），没写 `delay` 时就是更新配置本身；`rawFrom` 合并时是**未展开、未排序**的 `batchMany[k]`（下标越界就是 `undefined`），拆分时是旧路径。`updateMorphingPathProps`：`rawFrom` 存在且不是 `from` 时样式取 `extend(extend({}, rawFrom.style), from.style)`，否则 `from.style`，`to.animateFrom` 过去。
+- **divideShape**：`split`（`dividePath.split`）按路径类型分：`rect` 用 shape 的 x / y / width / height（圆角丢掉），`sector` 用 shape（没有 `cornerRadius`；`clockwise` 原样抄过去，`undefined` 就是逆时针），其余（散点符号的类型是 `'symbol'`）用 `getUpdatedPathProxy()` 的数据在计算变换的缩放（`sqrt(max(m0² + m1², m2² + m3²))`）下 `pathToPolygons`，再按多边形分份——**分的是 shape**，所以正在一对一变形的柱或扇区分的是它的布局形状，符号分的是它此刻的变形帧；每块 `copyPathProps`（样式的自有键抄一份）。`clone`（echarts 的）是 `clonePath` 复制 count 份（同一个 buildPath、`copyTransform` 抄本地变换），不透明度改成 `1 - (1 - opacity)^(1 / count)`（`opacity` 是有效值，缺省 1）。分出来的块数不对时 `console.error` 并返回空，什么都不动（新元素已经停住）。
+- **combineMorph**：`addFromPath`——来源里正在合并的换成它的 `childrenRef()`；新路径按 divideShape 分成来源条数那么多块；两边各自 `sortPaths`；每块 `parent = 新路径`、本地变换清成单位，于是它的计算变换就是新路径的；不 `individualDelay` 时立刻 `prepareMorphPath(from[i], to[i])`。新路径挂上 `__isCombineMorphing` 与 `childrenRef`——**Storage 遍历时画它的子路径，不画它自己**。没有 `individualDelay`：新路径 `__morphT` 0 → 1（`setToFinal`），`during` 里把它的 `__morphT` 抄给每个子路径（`Animator.start` 同步跑的第一步就调了 `during`，所以记录的第一帧子路径已经是 0），`done` 时 `restoreToPath`（不再合并、`__morphT = -1`）；有 `individualDelay`：每个子路径各自 `morphPath`，延迟 `(配置.delay || 0) + individualDelay(i, toLen)`，全部 `done` 了宿主才 `restoreToPath`。
+- **separateMorph**：来源正在合并（反悔：合到一半又拆回去）——来源是它的子路径，不够就从头轮着 `clonePath`（一份新的、无父、无变换的路径，画的还是那个子路径此刻的帧），多了就截掉；否则来源按旧项的 divideShape 分块，每块 `setLocalTransform(旧路径的计算变换)`（分解再合成，旋转过的符号不逐位等于原矩阵；计算变换为空时什么都不改——克隆保留抄来的本地变换）。块数不对同样返回空。两边 `sortPaths`，第 i 对 `morphPath`，`individualDelay` 同上。
+- **sortPaths**：每条路径取 `getBoundingRect()` 的中心加上计算变换的平移（**不乘缩放**）；`hilbert` 键（坐标先 `Math.round(32767 * …)`），`sort((a, b) => a.z - b.z)`（稳定）。`Path.getBoundingRect`：`PathProxy.getBoundingRect`（`fromLine` / `fromCubic` / `fromQuadratic` / `fromArc`；`cubicExtrema` 判别式近零时求出了重根却**不计数**），有描边时外扩线宽——没有填充时至少是悬停阈值 5，`strokeNoScale`（符号的样式都写了）时除以 `getLineScale()`。
+- **removeEl** 之后的旧元素不在场景里：拆分 / 合并只在发生的那一刻读它们的路径与样式。
+
+### port 以前
+
+- `UtGroupIds` 没人填，摊平时组就是 id；`dataGroupId`、数据项的 `groupId` 都不读。
+- 多对一、一对多两支空着；列表键只配同一个列表。
+- 正在淡出的旧元素被一对一配上时，端口让它淡完（§173 的偏差）。
+- `universalTransition.delay` 的句柄只拿到下标。
+
+### 做法
+
+- **`tyControls.AdvChart.Morph`** 加四个纯函数：`TyPathDataRect`（`PathProxy.getBoundingRect`，连同 `bbox.ts` 的四个函数与 `cubicExtrema` 不计重根）、`TyPathStrokeRect`（`Path.getBoundingRect` 的描边外扩）、`TyMorphRecompose`（`setLocalTransform` 再 `updateTransform`：分解出旋转、错切、缩放，`needLocalTransform` 判 5e−5，合成走 `getLocalTransform` 与 `matrix.rotate`；三角函数是 `JsMath` 的 V8 移植）、`TyMorphSortOrder`（中心 → `TyMorphHilbert` → 稳定排序）。
+- **`tyControls.AdvChart.AnimOpt`**：`TTyUtDelayHandler = function(AIndex, ACount)` 与它的注册表（`TyChartRegisterUtDelay` / `TyChartFindUtDelay`）；`universalTransition.delay: '@名字'` 先在这里找，找不到再用动画时序的句柄（只给下标，UT1 的写法照旧能用）。
+- **`tyControls.AdvChart.AnimView`**：
+  - `TTyUtSeriesKeys` 与 `TyUtSeriesKeysOf`：一个系列的选项说的过渡键、列表的各项（带类型、`sort()` 之后的次序）、divideShape、按原始下标的组（`groupId` 真值时 `String()`，否则 `dataGroupId`——系列的、再根的——真值时 `String()`，否则空）；`TyUtRowGroups` 按视图行的原始下标取出来，空表示「就是 id」。`TTyChartAnimSeries` 加 `UtKeyItems`，`UtGroupIds` 有了内容。
+  - **配批**：`ArmUniversal` 照上游三支重写——同键、列表多合一、`oldDataMapForSplit` 一拆多；批键首次插入的位置不变。
+  - **摊平**：组是 `UtGroupIds[行]`，空就是 id；每项带它系列的 divideShape。
+  - **`ManyToOne` / `OneToMany`** 照上游过滤、停住、淡入（下标各按各的）；`MorphOne`（一对一，来源正在合并时转 `Combine`）、`Combine`、`Separate` 是 `morphOneBatch` 的三种结局，时序都是 `getAnimationConfig('update', 新系列, 摊平下标)`。
+  - **合并的子路径**：宿主代理加 `FCombineOn` 与它**自己持有**的 `FPieces`（不进集合的索引，宿主释放时一起释放；`ArmUpdate` 搬运宿主时子路径跟着走）。每个子路径代理记着自己的路径（局部）与宿主的计算变换（`FRest`）、`FMorph`、袋子里的 `__morphT` 与四个样式键（始终按袋子画）、自有键的名单（`FPieceOwn`，快照用）。没有 `individualDelay` 时宿主的 `__morphT` 补间带 `during`（`CombineDuring` 抄给每个子路径）与 `done`（`CombineDone`）；有时每个子路径自己补间，`PieceMorphDone` 倒数到零再 `CombineDone`。
+  - **快照**（`SnapUniversal` / `UtSnapEl`）：除了 UT1 的路径、变换、自有样式，还记路径类型与此刻的 shape（柱的 x / y / w / h、扇区的六个数与方向——分块用）、是否在变形、路径自己的本地变换（克隆保留）、有效不透明度（克隆分块用）、描边与填充（外包框用）；正在合并的旧元素，它的每个子路径（此刻的帧，或已经变完的子路径的自身路径加宿主变换）也记进同一个数组，宿主记着从哪一个开始、有几个。
+  - **分块**（`UtDivide`）：`clone` 复制并配不透明度；`split` 按类型——柱 `TyDivideRect` → `R`，扇区 `TyDivideSector` → `TyZrSectorPath`（方向 `!!clockwise`），符号 `TyPathToPolygons` + `TyDividePolygons` → `M L … Z`（少于两点画空）；拆分时变换是 `TyMorphRecompose(旧计算变换)`，计算变换为空时克隆保留本地变换、split 的块没有变换；合并时（排序发生在挂到宿主之前）split 的块没有变换、克隆是宿主的本地变换。
+  - **被摘掉的旧元素**（`DropGhost`）：一对一、多对一、一对多用到旧元素时，它在保留视图里的离场幽灵当场停下、消失——§173 的那条偏差就此去掉（`bar-drilldown` 往下钻时 Animals 那根柱不再一边被克隆一边淡出）。
+  - **画**：`TyAnimBuildFrame` 在状态之后把合并中的元素换成它的子路径：第一个子路径占它的位置（插入下标不变，命中照旧落在这个数据项上），其余追加在列表之后、幽灵之前、`Silent`；子路径的形状是它此刻的变形帧（变完的子路径画终帧，与它自己的路径同形），样式只取子路径袋子里的四个键（宿主的状态、宿主的补淡入都不碰它），帧里有非数时不画。`TTyChartAnim` 加 `UtPiece`（子路径下标 + 1）。
+- **控件（`TTyAdvanceChart`）**：`FAnimOldUtKeys` / `FMergeOldUtKeys` 换成 `TTyUtSeriesKeysArray`，`AnimUtKeys` 在设选项之前（merge 同理）读旧选项的过渡键、列表项、divideShape 与组；快照时按旧行的原始下标填进旧系列；`AnimSeriesInfo` 在行键之后填新系列的组。
+- 没有新的主题键、没有新字符串、没有新的 JSON 入口、没有新单元。
+
+### 基准
+
+`tools/advchart-oracle/universal-transition2.js`（与 §173 的同一套：真 dist、手拨的钟 T0 = 1700000000000、`chart._ssr = false`、`env.node = false`、播种的 `Math.random`、SVG SSR 400 × 300、两次生成逐字节一致、最后 `process.exit()`）→ `tests/fixtures/advchart-universal-transition2.json`（约 2.08 MB）。
+
+- **引擎**（36 项）：16 条真元素路径数据的 `PathProxy.getBoundingRect`（矩形、负高、圆角、扇区、环、逆时针、整圆、带圆角的环、圆、多边形、二次曲线、以弧开头、三种符号、两段三次曲线）；7 个 `Path.getBoundingRect`（只描边的圆、带填充的描边矩形、`strokeNoScale` 在 5 倍与 1 × 7 缩放下、细扇区、细描边扇区、线宽为零）；8 个矩阵的 `setLocalTransform` + `updateTransform`（平移、缩放、只缩放、单位、旋转、负缩放、错切、近零平移——后者合成为空）；5 组 `sortPaths`（田字格、带平移与缩放的圆、四个相同的、一行、只描边的）。
+- **图表**（25 个用例）：一个用例是一串 setOption——第一个在 T0；之后每一个在前一个跑完后（T + 10000）或前一个开始 `after` 毫秒后，默认 notMerge、`merge` 的照画廊用合并——在最后一个的 T 加采样时刻记录：新系列每个条目元素是否变形（`__morphT >= 0` 且不在合并）、变形帧、样式、变换与 shape 键；**合并中**（`__isCombineMorphing`）的再按 `childrenRef()` 的次序记每个子路径的在不在、是否变形、它画的路径、样式；视图里其余路径（折线的线与面、保留视图里离场的柱）记不透明度。样式与快照的键在所有采样上都一样时只写一次。用例：两组柱（系列 a、b）合成 `seriesKey: ['a', 'b']` 的饼与反过来拆开，各自带 `delay`（`(idx, count) => 30 + idx * 40 + count * 10`）、`clone`，合成时饼的更新时序 700 ms linear 加 `idx * 50`；根上的 `dataGroupId` 让四根柱合成一片；两边都写 `dataGroupId` 的多对多；数据项 `groupId` 五个合一根、一个一对一、新组没有旧项（入场）、不分组的项按 id 一对一、旧组没有新项（离场）；柱 g2 是 null 时它的三个点从 0 淡入、g3 一对一、Q 拆给名叫 Q 的点和组是 Q 的点；转 30° 的大三角形用 `split` 拆成小圆（多边形分块、缩放）与用散点类型缺省的 `clone` 拆（不透明度 `1 - 0.2^(1/n)`），小圆合回三角形（`split` 与 `clone` 各一）；折线的空心圆（有描边）按组合成两根柱；画廊 `scatter-aggregate-bar` 两个方向（原数据 507 个点，`delay` 换成确定的 `idx * 7919 % count / count * 400`，采样 0、16、100、250、400、600、900、1500 毫秒，路径写 FNV-1a 摘要）；画廊 `bar-drilldown` 往下钻与钻回来（合并的 setOption、`divideShape: 'clone'`）；合到 200 ms 时拆回去（来源是子路径）、拆到 200 ms 时合回去（来源在变形）、合到 200 ms 时换成同一列表键的一根柱（一对一来自合并中的元素 → `forceManyOne`）、带 `delay` 合到 570 ms（每片一个子路径已经变完、一个还没有）时拆回去、三组柱合到 200 ms 时拆成点（4 个点从 3 个子路径轮着克隆、1 个点再合并、2 个点截掉一个、3 个点正好）。
+- 39 条守卫（每片两个子路径、第 0 帧起就在变、最后不在变、没有自己变形的；`during` 的同步第一步；`delay` 让子路径 1 在 50 ms 时没动 100 ms 时动了；`clone` 的子路径与 `split` 的不同；拆分八根柱都在变；`delay` / `clone` 与缺省不同；根上的组一片四个子路径；多对多两个一对一；分组用例逐项的结局；null 那组从 0 淡入；三角形 `split` 与 `clone` 不同；画廊 260 + 247 个子路径与 507 个变形；往下钻五个、钻回来一个五子路径；各个中途出发的结局与形状）全部成立；没有 `\u0000`。
+
+### 测试
+
+- **`test.advchart.universaltransition2`**（新，4 个测试，`TY_UT_COUNTS=1` 打印计数）：
+  - `TestEngineAsUpstream`：36 项逐位比（外包框、描边外扩、合成矩阵、排序）。
+  - `TestEveryTransitionAsUpstream`：25 个用例在真控件上按基准的方式跑（zrender 的 SSR 量字、400 × 300、`camAlways`、`MergeOption` 对应合并的一步），每个采样：条目元素是否在合并（宿主代理的 `CombineOn`）；合并中逐个子路径——帧里有没有（`UtPiece`）、是否变形（子路径代理的 `__morphT >= 0`）、变形中的路径逐位等于上游（或摘要相同）、填色描边线宽不透明度；宿主自己的不透明度在动时逐位比；不在合并的照 UT1 比；保留视图里离场的柱按次序对端口的幽灵比不透明度，**离场的柱数与上游相同**。42 316 项、3 716 个变形帧、3 770 个子路径帧。
+  - `TestACombineDrawsItsChildrenAndEndsOnTheLayout`：两组柱合成饼，200 ms 时每片是两个子路径（第一个占位、第二个追加且静默）、宿主自己不画，跑完回到扇区、不再合并、没有 clip。
+  - `TestAListKeyWithAMissingItemTransitionsTheRest`：`seriesKey: ['a', 'b']` 而旧图只有 a——上游抛出，端口跳过 b、从 a 一对一变形。
+- 首跑 41 千项里 260 项不对，两处端口的错一处用例的错：子路径 0 占着宿主的位置，却是在宿主的状态之前换上的，宿主的补淡入（有 `delay` 时宿主自己没有动画器）经由状态那一步写到了它身上——改成状态之后再换子路径；测试原先不认保留视图里离场的柱（`bar-drilldown` 往下钻），补映射时一并去掉了 §173 那条偏差——端口里被克隆的 Animals 那根柱还在淡出，上游摘掉了——加 `DropGhost`，并让测试比离场柱的个数；用例里给饼写的 `itemStyle.opacity` 端口的饼根本不画（见偏差），`clone` 的不透明度改由散点（0.8）来测。之后补了三组柱合到一半拆成点的用例（子路径轮着克隆、截掉），一次通过。
+- 本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartUniversalTransition2Test` 4、`TAdvChartUniversalTransitionTest` 3、`TAdvChartMorphTest` 7、`TAdvChartAnimEngineTest` 25、`TAdvChartAnimEnterTest` 13、`TAdvChartAnimUpdateTest` 7、`TAdvChartAnimFullUpdateTest` 7、`TAdvChartAnimMergeTest` 6、`TAdvChartAnimStateEngineTest` 11、`TAdvChartAnimStateTest` 5、`TAdvChartAnimLabelsTest` 10、`TAdvChartRealtimeSortTest` 5、`TAdvChartOptionMergeTest` 15、`TAdvChartPieTest` 24。全量与变异留到 D5–D8 里程碑末；候选见 `s175.md.candidates.md`。
+
+### 推迟与偏差
+
+- **[第 138 批：已做，见 §176]** **UT3**：`childGroupId`、`encode.itemGroupId` / `itemChildGroupId` 维度、方向嗅探、多层钻取；`TUtItem.Child` 与 `UtChildGroupIds` 的位置留着。
+- **列表键里有一项没有旧系列**：上游 `undefined.data` 抛出 setOption；端口跳过那一项，其余照常（有测试钉住）。
+- **饼不画 `itemStyle.opacity`**：端口的饼只认 visualMap 给的不透明度，系列与数据项的 `itemStyle.opacity` 都不画——这是饼本身的缺口，不是过渡的；本批的用例绕开了它，没有修。
+- **画廊的演示不来回切换**：画廊收割时 `setInterval` 被丢掉，演示只画散点那一屏；两个方向由测试用画廊的原数据覆盖。
+- **`delay` 函数**：画廊里是 `Math.random() * 400`，端口没有可调用的函数，基准与测试换成确定的 `idx * 7919 % count / count * 400`；句柄现在拿得到 `(index, count)`（`TyChartRegisterUtDelay`），只给下标的旧句柄照旧可用。
+- **合并中的宿主再被停住**：上游 `stopAnimation` 停掉宿主的 `__morphT` 却不还原，宿主会一直画着冻住的子路径；端口在 `StopNew` 里结束这次合并。来源宿主正在一对一变形时上游的 `buildPath` 还是被替换着的（合并结束后会画 `__morphT = -1` 的帧）；端口开始合并时关掉宿主自己的变形。两者都只在保留视图的同一个元素反复过渡时才碰得到。
+- **离场中的合并宿主**：上游正在淡出的合并宿主画的仍是子路径（子路径的不透明度不随宿主淡）；端口的幽灵画宿主自己。
+- **子路径的样式**：拆块时抄的是宿主布局的样式，宿主身上若还有没跑完的样式过渡，上游抄的是此刻的值。
+- **外包框的缓存**：`Path.getBoundingRect` 缓存 `_rect` / `_rectStroke`，样式变了而形状没脏时上游可能读到旧的描边外扩；端口每次现算。
+- **命中**：合并中只有第一个子路径能被点到（占着宿主的位置），其余静默；上游每个子路径都在显示列表里。
+- **标签**：照 §173，不跟着变形帧走；合并中跟随宿主的标签量的是第一个子路径。
+
+### 落地
+
+- `source/tyControls.AdvChart.Morph.pas`：`TyPathDataRect`、`TyPathStrokeRect`、`TyMorphRecompose`、`TyMorphSortOrder`。
+- `source/tyControls.AdvChart.AnimOpt.pas`：`TTyUtDelayHandler` 与注册表。
+- `source/tyControls.AdvChart.AnimView.pas`：`TTyUtSeriesKeys`、`TyUtSeriesKeysOf`、`TyUtRowGroups`、`TyUtTransitionKey` 的列表项重载、`TTyChartAnimSeries.UtKeyItems`、`TTyUtOldSnap` 的分块与排序字段、代理的合并字段与 `CombineDuring` / `CombineDone` / `PieceMorphDone`、`UtElementPathEx`、`UtSnapEl` / `UtSnapPiece` / `UtCentre` / `UtSortSnaps` / `UtMergeStyle` / `UtDivide` / `UtPieceApply`、重写的 `SnapUniversal` 与 `ArmUniversal`（三支配批、`ManyToOne`、`OneToMany`、`MorphOne`、`Combine`、`Separate`、`DropGhost`）、`TyAnimBuildFrame` 画子路径。
+- `source/tyControls.AdvChart.Paint.pas`：`TTyChartAnim.UtPiece`。
+- `source/tyControls.AdvanceChart.pas`：`FAnimOldUtKeys` / `FMergeOldUtKeys` 的类型、`AnimUtKeys`、快照与 `AnimSeriesInfo` 填组。
+- `tools/advchart-oracle/universal-transition2.js`、`tests/fixtures/advchart-universal-transition2.json`、`tests/test.advchart.universaltransition2.pas`（新，注册在 `tytests.lpr`）。
+
+## 176. Tier 3 第一百三十八批：universalTransition（三）（D5 UT3，2026-10-12）
+
+D5 的第三批，也是最后一批：方向嗅探与多层钻取。UT2（§175）做完了合并与拆分，可分组键只认数据项的 `groupId` 和系列的 `dataGroupId`，`childGroupId` 一个字都不读，`encode.itemGroupId` / `itemChildGroupId` 两个编码维度也不读；`transitionBetween` 开头那段「父→子、子→父」的判断空着，两边一律按 groupId 配。画廊的 `bar-multi-drilldown`（三层柱，往下钻一根拆成一组、往上钻一组合成一根）于是一层也对不上——它的分组全写在编码维度里；画廊外的 `treemap-sunburst-transition`（矩形树图与旭日图来回切）则因为树图、旭日图的元素根本不进变形，各走各的。上游源码逐个读过：`animation/universalTransition.ts`（`getDimension`、`getValueByDimension`、`getGroupId` 的 `isChild` 一支、`flattenDataDiffItems`、`transitionBetween` 开头的方向判断与 `createKeyGetter`）、`data/helper/sourceHelper.ts` 的 `doGuessOrdinal`、`data/helper/createDimensions.ts`（编码名到维度、类型缺省与 `guessOrdinal` 的 `Must`）、`data/helper/dataValueHelper.ts` 的 `parseDataValue`、`data/DataStore.ts` 的各类型存储（`int` 是 `Int32Array`）、`data/DataDiffer.ts` 的 `'_ec_' + key`；树图与旭日图那边 `chart/treemap/TreemapView.ts` 的 `renderNode`（谁是数据项的元素、`disableMorphing`、节点组的嵌套平移）、`chart/sunburst/SunburstView.ts` / `SunburstPiece.ts` / `sunburstLayout.ts`（虚根不是数据项的元素、扇区带 `clockwise`）。**以真跑为准**：基准用真 dist。§173、§175 的相关处在原处标注。
+
+### 上游的做法
+
+- **子组**（`getGroupId(…, isChild = true)`）：编码的 `itemChildGroupId` 维度 → 原始数据项的 `childGroupId`（真值时 `+ ''`）→ **undefined**（不落到 `dataGroupId`、也不落到 id）。`groupId` 一支照 §175，只是最前面多了编码的 `itemGroupId` 维度，有它就只看它。
+- **编码维度**（`getDimension` / `getValueByDimension`）：找 `otherDims[itemGroupId] === 0` 的维度——`encode.itemGroupId` 写的名字要是 `dimensions` 里声明过的、或者是小于维度数的位置，写成列表时取第一个。取值是 `data.get(维度, 下标) + ''`：维度类型是 `ordinal` 的存原值（字符串原样、数 `7` 成 `'7'`、`null` 成 `'null'`、行里没有这一格成 `'undefined'`），否则存 `parseDataValue` 的数（`null`、缺失、`''` 都是 NaN，于是成 `'NaN'`），`int` 存进 `Int32Array`（`1.7` 成 `'1'`、`-0.5` 成 `'0'`）。类型是声明的（`dimensions` 里 `{name, type}`），没声明就 `doGuessOrdinal`：在前五项里找第一个说了算的值——像数的（`isFinite(Number(v))` 且不是 `''`）不是序数、其余文本（含 `''`）除了 `'-'` 是序数、`null` 与 `'-'` 不算数；某一项的值不是数组就直接「不是」；一个说了算的都没有也「不是」。所以 `bar-multi-drilldown` 中间几层的 `childGroupId` 列是序数（`'dogs'`），最底层那几层这一列一格也没写，是浮点列，叶子的子组是 `'NaN'`——是真值。
+- **方向**：旧项里真值的 `groupId` 与真值的 `childGroupId` 各建一张表；**逐个**看新项：新项的 `groupId` 在旧子组表里 → 父→子，停；否则新项的 `childGroupId` 是真值且在旧组表里 → 子→父，停；都没有是「无」。同一个新项先问父→子；两种方向都有时谁先出现谁算。
+- **键**（`createKeyGetter`）：`isAllIdSame` 时照旧按 id；否则旧项在父→子时取 `childGroupId`、新项在子→父时取 `childGroupId`，其余取 `groupId`。键前加 `'_ec_'`，所以 undefined 的子组键是 `'_ec_undefined'`——会和 `groupId` 恰好是字符串 `'undefined'` 的项配上。之后的 `multiple` 差分、多对一、一对多、多对多与 §175 一字不差：往下钻是旧的一根对新的一组（一对多，拆分），往上钻是旧的一组对新的一根（多对一，合并）。
+- **树图与旭日图**：两边同一棵树、同一套 id，`isAllIdSame` 成立，逐项一对一。旭日图的数据项元素是 `SunburstPiece`（一个 `Sector`，形状带 `clockwise`），虚根（下标 0）不是任何数据项的元素；树图里父节点的元素是它的背景矩形，叶子的元素是节点组，组里的背景 `disableMorphing`，`getPathList` 只拿到内容矩形——两种矩形的计算变换都是一路嵌套下来的节点组平移。树图没画的节点（太小、不可见）在旭日图那边淡入；有变形时，树图叶子的背景（没有动画器）在补淡入里从 0 淡入。
+
+### port 以前
+
+- `UtChildGroupIds` 留着位置没人填，`TUtItem.Child` 恒为空；编码的分组维度不读，`bar-multi-drilldown` 的组全落到 id。
+- `TransitionBetween` 的键只有 id 与 group 两种，没有方向。
+- 树图、旭日图的元素不在 `UtHostRole` 里，批里有它们就整批不做。
+
+### 做法
+
+- **`tyControls.AdvChart.AnimView`**：
+  - `TTyUtSeriesKeys` 加 `ChildByRaw` / `ChildDefault`；`GroupsByRaw` 与 `ChildByRaw` 的每一格改成「空是 undefined（组那边就是 id），否则 `'='` 加值」——编码维度能给出空串，要和「没有」分开。`TyUtSeriesKeysOf` 先找编码维度（`UtEncodedDim`：名字对 `dimensions`、或位置；类型按声明、否则照 `doGuessOrdinal` 猜；`int` 单列），有就逐项取 `UtDimString`（序数存原值的 `String()`、数值走 `parseDataValue` 再 `TyJsNumberToString`、`int` 先 ToInt32），没有才读数据项的 `groupId` / `childGroupId`。新函数 `TyUtRowChildGroups` 按视图行的原始下标取子组。
+  - `TUtItem` 加 `HasChild`；`Flatten` 把组与子组摊进去。`TransitionBetween` 开头的 `Direction` 照上游逐项嗅（`cUtDirNone` / `cUtDirP2C` / `cUtDirC2P`），`ItemKey` 按方向取组或子组（undefined 写成 `'undefined'`）。
+  - **树图与旭日图进变形**：`UtHostRole` 认旭日图的扇区（下标 0 的返回圈除外）与树图的「数据项路径」（叶子的内容、父节点的背景；叶子的背景标在 `G[4]`，`disableMorphing`）；`UtTypeRole` 认 `sunburst` / `treemap`。路径由 `UtElementPathEx` 给：扇区按 `G[0..5]` 与 `G[6]` 的方向建 `TyZrSectorPath`（有圆角带圆角），树图矩形是局部的 `G[0..3]` 加上节点组的计算变换（`G[5]` 有没有、`G[6..7]` 平移）；快照的分块类型、`UtFinalProps`（扇区的六个形状键）照此补齐。树图的矩形没有代理角色，`ArmUpdate` 的旧元素索引为它另记一个 `tmRect` 键，`TyAnimBuildFrame` 从集合里按 `tmRect` / `utFadeTmBg` 找它的过渡代理；补淡入加树图叶子背景那一支。旭日图第一次渲染没有代理，`NumOr` 改成对空代理返回缺省值。
+  - **同类型不进**：批里树图到树图、旭日图到旭日图（同一视图复用元素，上游走 `animateElementStyles`）照旧整批不做，见偏差。
+- **`tyControls.AdvChart.Sunburst`**：`TTySunburstSolved.Clockwise`，扇区元素 `G[6]` 记方向。
+- **`tyControls.AdvChart.Treemap`**：矩形元素 `G[4]`（叶子的背景）、`G[5..7]`（节点组的计算变换）。
+- **控件（`TTyAdvanceChart`）**：快照时旧系列填 `UtChildGroupIds`，`AnimSeriesInfo` 给新系列填。
+- 没有新的主题键、没有新字符串、没有新的 JSON 入口（分组仍从已解析的选项里读）、没有新单元。
+
+### 基准
+
+`tools/advchart-oracle/universal-transition3.js`（与 §175 同一套：真 dist、手拨的钟 T0 = 1700000000000、`chart._ssr = false`、`env.node = false`、播种的 `Math.random`、SVG SSR 400 × 300、两次生成逐字节一致、最后 `process.exit()`；树图的数据从 echarts-examples 读，`ECHARTS_EXAMPLES_DATA` 可改）→ `tests/fixtures/advchart-universal-transition3.json`（约 4.0 MB，树图那几个用例的 setOption 各带一份 736 个节点的数据）。
+
+- 记录方式照 §175（一串 setOption，最后一个的 T 加采样时刻：变形与否、变形帧、样式、变换与 shape、合并中的子路径、视图里其余路径的不透明度）；其余路径若在某个数据项的组里（树图叶子的背景），另记它属于哪一项（`owner`）。每个用例还写下两边每个摊平项的 `[groupId, childGroupId]`——从 dist 里原样切出 `getDimension` 到 `flattenDataDiffItems` 那一段来算——以及按上游规则在这些项上嗅出的方向。
+- **用例**（26 个）：画廊 `bar-multi-drilldown` 逐层（合并，照画廊）往下一层、两层，往上一层、两层，从九个叶子（子组列一格没写，是 `'NaN'`）往上，`notMerge` 往下，叶子之间、中间层之间的平移（没有共同的组，不过渡），往下钻到 200 ms 时钻回来、往上钻到 200 ms 时再往下、往下钻到 200 ms 时再往下一层；原始数据项上的 `childGroupId` 柱 → 饼往下（Animals 拆成两片、Fruits 一对一、Cars 离场、Vans 入场）与饼 → 柱往上；匹配不上任何组的 `childGroupId`（方向「无」，按 groupId 配）；新项没有子组、键是 `'undefined'`、正好和组是字符串 `'undefined'` 的旧项配上；两种方向都有、子→父的项在前 / 父→子的项在前 / 同一项两种都有；列表 `seriesKey` 往下（两个旧系列一批）与往上（一拆多那一支）；数值的编码分组列往下与往上；以 `''` 开头的序数组列加声明为 `int` 的子组列；画廊 `treemap-sunburst-transition` 两个方向（采样 0、16、100、250、400、600、900、1500 毫秒，路径写摘要），以及树图 → 旭日图到 300 ms 时再变回树图。
+- 守卫：每个用例的方向（父→子 11 个、子→父 9 个、无 6 个）；往下钻三个变形、往上钻一个三子路径的合并、九个叶子合成一个、`notMerge` 两个变形、平移的两个一个也不变形、各中途出发的结局；柱 ↔ 饼的个数、Vans 不变形；`nomatch` 三个变形；`'undefined'` 的那一对；两种方向各自谁变形；列表键五个变形 / 两个合并；数值列的组、缺失的子组是 `'NaN'`；`''` 开头的列是序数、`int` 列截断；叶子的子组是 `'NaN'`；树图 ↔ 旭日图各超过 600 个变形、中途出发的第一帧和跑完再出发的不同。全部成立；没有 `\u0000`。
+
+### 测试
+
+- **`test.advchart.universaltransition3`**（新，3 个测试，`TY_UT_COUNTS=1` 打印计数）：
+  - `TestGroupsAsUpstream`：23 个用例两边的选项直接喂 `TyUtSeriesKeysOf` / `TyUtRowGroups` / `TyUtRowChildGroups`，逐项比 `[groupId, childGroupId]`（端口说「就是 id」的组拿数据项的名字比），189 项。
+  - `TestEveryTransitionAsUpstream`：26 个用例在真控件上照 §175 的方式跑，逐采样比变形、变形帧（逐位或摘要）、样式、合并的子路径、离场柱的不透明度与个数；树图的数据项按「叶子的内容、父节点的背景」找，叶子的背景按 `owner` 找、比不透明度。113 659 项、15 678 个变形帧、290 个子路径帧。
+  - `TestDrillingDownSeparatesAndUpCombines`：往下钻 200 ms 时三根柱都在变形、跑完不再变形且没有剩下的动画；往上钻 200 ms 时 Animals 合并成三个子路径，Fruits、Cars 既不合并也不变形。
+- 首跑：方向、编码维度、组与子组一次全对；树图与旭日图一跑就是空代理上的访问违例（旭日图第一次渲染没有代理，`NumOr` 读了空指针），改成对空代理返回缺省值后两个方向连同中途出发全部逐位对上。做了两次「拔牙」检查确认测试咬得住（不是变异轮）：把方向固定成「无」，879 / 4754 项不对；树图矩形的平移加 1e−9，9136 项不对。之后补了 `''` 开头的序数列与 `int` 列那个用例，一次通过。
+- 本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartUniversalTransition3Test` 3、`TAdvChartUniversalTransition2Test` 4、`TAdvChartUniversalTransitionTest` 3、`TAdvChartMorphTest` 7、`TAdvChartAnimEngineTest` 25、`TAdvChartAnimEnterTest` 13、`TAdvChartAnimUpdateTest` 7、`TAdvChartAnimFullUpdateTest` 7、`TAdvChartAnimMergeTest` 6、`TAdvChartAnimStateEngineTest` 11、`TAdvChartAnimStateTest` 5、`TAdvChartAnimLabelsTest` 10、`TAdvChartRealtimeSortTest` 5、`TAdvChartOptionMergeTest` 15、`TAdvChartSunburstOracleTest` 4、`TAdvChartTreemapOracleTest` 2、`TAdvChartSunburstTreemapInteractOracleTest` 1、`TAdvChartSunburstTreemapInteractTest` 6。全量与变异留到 D5–D8 里程碑末；候选见 `s176.md.candidates.md`（22 个）。
+
+### 推迟与偏差
+
+- **setOption 的 `transition` 参数**（`seriesTransition`、`transitionSeriesFromOpt`，以及其中 `finder.dimension` 那个 `groupIdDim`）：控件的 Option 是一段文本，没有地方写；照旧没有。
+- **编码维度只读系列自己的 `data`**：用 `dataset` 的系列、`seriesLayoutBy: 'row'`、`time` 类型的分组列（上游先 `parseDate`）不读；分组维度恰好也是类目轴的维度（有 `ordinalMeta`，上游取类目名）时端口取原值。
+- **同类型的树图 / 旭日图批**：上游同一视图复用元素，旭日图走 `animateElementStyles`（从 `saveOldStyle` 存下的旧样式过渡，树图不存旧样式、什么也不做）；端口整批不做，旭日图重设颜色时没有样式过渡。
+- **树图在自己的下钻动画中途被过渡**：快照取的是布局（`G[5..7]` 是静止时的节点组平移），不是动画此刻的位置；中途变成旭日图时出发点会跳一下。
+- **树图的圆角**：端口的树图本来就不画 `borderRadius`，变形的矩形同样没有圆角。
+- **画廊**：`treemap-sunburst-transition` 靠 `$.getJSON` 与 `setInterval`，不在画廊里；`bar-multi-drilldown` 的画廊页只画第一层（点击钻取要事件处理），逐层的过渡由测试覆盖。
+- **标签**：照 §173，不跟着变形帧走；树图的标签照它自己的规则。
+
+### 落地
+
+- `source/tyControls.AdvChart.AnimView.pas`：`TTyUtSeriesKeys.ChildByRaw` / `ChildDefault` 与组的新写法、`UtItemValue`、`UtEncodedDim`、`UtDimString`、`TyUtRowChildGroups`、`TUtItem.HasChild`、`cUtDir*`、`Flatten` 的组与子组、`Direction`、`ItemKey`、`UtHostRole` / `UtTypeRole` / `UtTmRole` 的树图与旭日图、`UtElementPathEx` / `UtSnapEl` / `UtFinalProps` 的两种元素、补淡入的树图背景、同类型树图批的排除、`ArmUpdate` 旧元素索引的 `tmRect` 键、`TyAnimBuildFrame` 的树图代理、`NumOr` 的空代理。
+- `source/tyControls.AdvChart.Sunburst.pas`：`TTySunburstSolved.Clockwise`、扇区元素 `G[6]`。
+- `source/tyControls.AdvChart.Treemap.pas`：矩形元素 `G[4..7]`。
+- `source/tyControls.AdvanceChart.pas`：快照与 `AnimSeriesInfo` 填 `UtChildGroupIds`。
+- `tools/advchart-oracle/universal-transition3.js`、`tests/fixtures/advchart-universal-transition3.json`、`tests/test.advchart.universaltransition3.pas`（新，注册在 `tytests.lpr`）。

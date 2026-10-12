@@ -1057,6 +1057,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.StatTransform"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Morph.pas"/>
+        <UnitName Value="tyControls.AdvChart.Morph"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Color.pas"/>
         <UnitName Value="tyControls.AdvChart.Color"/>
       </Item>
