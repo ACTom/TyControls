@@ -2,7 +2,7 @@ unit test.focus.tabstop;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, LCLType, LMessages,
+  Classes, SysUtils, TypInfo, Controls, Forms, LCLType, LCLIntf, LMessages,
   fpcunit, testregistry,
   test.designregistry,               // the runtime roster the completeness guard reads
   tyControls.Base, tyControls.ScrollBar,
@@ -133,6 +133,14 @@ type
     { Build AClass on the visible form, park focus on FPark, click it, and report where
       focus ended up. Frees the control before returning. }
     function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean): string;
+    { #59: a grid whose one column edits in a pick list (apple, banana, cherry), the cells
+      of rows 1 and 2 holding apple and banana. }
+    function NewPickListGrid: TTyStringGrid;
+    { Open the pick list on row ARow of AGrid and check it holds the focus, system and form. }
+    function StartPickEdit(AGrid: TTyStringGrid; ARow: Integer): TTyComboBox;
+    procedure AssertTheGridHasTheFocus(AGrid: TTyStringGrid; const AAfter: string);
+    { A key as the system delivers it, to whatever window holds the focus. }
+    procedure PressKey(AKey: Word; AChar: Char = #0);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -143,6 +151,8 @@ type
     procedure TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
     procedure TestArrowNavigationNeverLandsOnAControlsOwnBar;
     procedure TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
+    procedure TestUpDownInAPickListCellMoveTheCursor;
+    procedure TestAPickInACellHandsTheFocusBackToTheGrid;
   end;
 
 implementation
@@ -963,6 +973,174 @@ begin
     ClickTheTrack;
     AssertTrue('a click on the bar does not end the edit', grid.Editing);
     AssertSame('and the editor keeps the focus', ed, TWinControl(FForm.ActiveControl));
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #59. A pick list in a cell commits the moment its item changes, and that closed the editor
+  while it held the focus: the focus went to whatever the system picked next -- another
+  control on the form -- and the keys that followed went there. Down was the usual way in: a
+  closed pick list turned it into "the next item", so the cell's value changed as well, under
+  a key the user had pressed to move.
+
+  Real keys and clicks through the widgetset, on the shown form: only a shown form has a focus
+  to lose. }
+function TTyClickFocusTest.NewPickListGrid: TTyStringGrid;
+var
+  col: TTyGridColumn;
+begin
+  Result := NewScrollingGrid(FForm);
+  col := Result.Header.Columns[0] as TTyGridColumn;
+  col.EditorKind := gekPickList;
+  col.PickList.CommaText := 'apple,banana,cherry';
+  Result.Cells[0, 1] := 'apple';
+  Result.Cells[0, 2] := 'banana';
+end;
+
+function TTyClickFocusTest.StartPickEdit(AGrid: TTyStringGrid; ARow: Integer): TTyComboBox;
+begin
+  AssertTrue('setup: editing row ' + IntToStr(ARow), AGrid.BeginEdit(0, ARow));
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the cell edits in a pick list', AGrid.EditorControl is TTyComboBox);
+  Result := TTyComboBox(AGrid.EditorControl);
+  AssertSame('setup: the pick list is the active control', TWinControl(Result),
+    TWinControl(FForm.ActiveControl));
+  AssertTrue('setup: and holds the system focus', GetFocus = Result.Handle);
+end;
+
+procedure TTyClickFocusTest.AssertTheGridHasTheFocus(AGrid: TTyStringGrid;
+  const AAfter: string);
+begin
+  AssertFalse(AAfter + ': the edit is over', AGrid.Editing);
+  AssertSame(AAfter + ': the grid is the active control', TWinControl(AGrid),
+    TWinControl(FForm.ActiveControl));
+  AssertTrue(AAfter + ': and holds the system focus', GetFocus = AGrid.Handle);
+end;
+
+procedure TTyClickFocusTest.PressKey(AKey: Word; AChar: Char);
+var
+  h: HWND;
+begin
+  h := GetFocus;
+  SendMessage(h, LM_KEYDOWN, AKey, 0);
+  if AChar <> #0 then SendMessage(h, LM_CHAR, Ord(AChar), 0);
+  SendMessage(h, LM_KEYUP, AKey, 0);
+  Forms.Application.ProcessMessages;
+end;
+
+{ A closed pick list leaves Up/Down to the grid, as LCL's TPickListCellEditor does and as the
+  text editor has since #52: commit, move a row, the focus back on the grid -- and the value
+  left as it was. (Open, the list has the arrows; Alt+Down opens it.) }
+procedure TTyClickFocusTest.TestUpDownInAPickListCellMoveTheCursor;
+var
+  grid: TTyStringGrid;
+  pick: TTyComboBox;
+begin
+  grid := NewPickListGrid;
+  try
+    StartPickEdit(grid, 1);
+    PressKey(VK_DOWN);
+    AssertEquals('Down did not step the value', 'apple', grid.Cells[0, 1]);
+    AssertEquals('Down moved the cursor a row', 2, grid.Row);
+    AssertTheGridHasTheFocus(grid, 'after Down');
+
+    StartPickEdit(grid, 2);
+    PressKey(VK_UP);
+    AssertEquals('Up did not step the value', 'banana', grid.Cells[0, 2]);
+    AssertEquals('Up moved the cursor back a row', 1, grid.Row);
+    AssertTheGridHasTheFocus(grid, 'after Up');
+
+    { With a modifier the arrow is not navigation: Alt+Down still opens the list. lParam bit
+      29 is the system's "Alt is down", which is where LCL reads it from. }
+    StartPickEdit(grid, 1);
+    SendMessage(GetFocus, LM_SYSKEYDOWN, VK_DOWN, $20000000);
+    SendMessage(GetFocus, LM_SYSKEYUP, VK_DOWN, $20000000);
+    Forms.Application.ProcessMessages;
+    AssertTrue('Alt+Down opened the list', TTyComboBox(grid.EditorControl).DroppedDown);
+    AssertTrue('and the cell is still being edited', grid.Editing);
+    AssertEquals('on the same row', 1, grid.Row);
+    TTyComboBox(grid.EditorControl).CloseUp;
+    Forms.Application.ProcessMessages;
+
+    { An open list has the arrows. The default list takes the keyboard into its own window;
+      a key that reaches the field while it is open -- a list that does not take the
+      activation does that -- steps the item, as the list would, and the cursor stays. }
+    pick := StartPickEdit(grid, 1);
+    pick.DropDown;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the list is open', pick.DroppedDown);
+    SendMessage(pick.Handle, LM_KEYDOWN, VK_DOWN, 0);
+    SendMessage(pick.Handle, LM_KEYUP, VK_DOWN, 0);
+    Forms.Application.ProcessMessages;
+    AssertEquals('the open list stepped the item', 'banana', grid.Cells[0, 1]);
+    AssertEquals('and the cursor stayed on its row', 1, grid.Row);
+    pick.CloseUp;
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('Up/Down in a pick list');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A pick still commits at once -- and hands the focus back to the grid. From the keyboard (the
+  first letter of an item) at once; from the open list, a click on a row, once the list has
+  closed: the click is handled in the list's own window, and pulling the activation away under
+  it is what TTyComboBox.PopupListChange defers its close-up to avoid. }
+procedure TTyClickFocusTest.TestAPickInACellHandsTheFocusBackToTheGrid;
+var
+  grid: TTyStringGrid;
+  pick: TTyComboBox;
+  list: TTyListBox;
+  r: TRect;
+begin
+  grid := NewPickListGrid;
+  try
+    StartPickEdit(grid, 2);
+    PressKey(Ord('C'), 'c');
+    AssertEquals('the first letter picked cherry, and that committed', 'cherry',
+      grid.Cells[0, 2]);
+    AssertTheGridHasTheFocus(grid, 'after a pick by its first letter');
+
+    pick := StartPickEdit(grid, 1);
+    pick.DropDown;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the list is open', pick.DroppedDown);
+    list := pick.PopupList;
+    r := list.ItemRect(2);
+    AssertTrue('setup: cherry''s row is on the list', r.Bottom > r.Top);
+    { Through the widgetset, as a real click comes: the list's own window proc. }
+    SendMessage(list.Handle, LM_LBUTTONDOWN, MK_LBUTTON, MousePos((r.Left + r.Right) div 2,
+      (r.Top + r.Bottom) div 2));
+    SendMessage(list.Handle, LM_LBUTTONUP, 0, MousePos((r.Left + r.Right) div 2,
+      (r.Top + r.Bottom) div 2));
+    AssertTrue('setup: the list is still open while its click is handled', pick.DroppedDown);
+    AssertFalse('the grid does not take the focus under the list''s click',
+      FForm.ActiveControl = grid);
+    Forms.Application.ProcessMessages;   // the deferred close-up
+    Forms.Application.ProcessMessages;
+    AssertFalse('the list closed', pick.DroppedDown);
+    AssertEquals('the clicked row was picked, and that committed', 'cherry', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after a pick from the list');
+
+    { Only a pick hands the focus to the grid. Opened, then left for another control: the
+      focus goes where the user sent it, and the grid does not pull it back when the list
+      closes. }
+    grid.Cells[0, 2] := 'banana';
+    pick := StartPickEdit(grid, 2);
+    pick.DropDown;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the list is open again', pick.DroppedDown);
+    FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    Forms.Application.ProcessMessages;
+    AssertFalse('leaving the cell closed the list', pick.DroppedDown);
+    AssertFalse('and ended the edit', grid.Editing);
+    { The form's own record only: with the list's window active, a test process in the
+      background cannot move the system's activation back to this form. }
+    AssertSame('the focus is where it was sent', TWinControl(FPark),
+      TWinControl(FForm.ActiveControl));
+    AssertNothingRaised('picks in a pick list');
   finally
     grid.Free;
   end;
