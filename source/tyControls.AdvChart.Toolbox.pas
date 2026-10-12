@@ -1240,6 +1240,12 @@ begin
     d := nil;
     if AFeature <> nil then d := AFeature.Find('pixelRatio');
     if Present(d) then o.Add('pixelRatio', d.Clone);
+    { the combined export's background between the charts of a connected
+      group, as written (upstream's default '#fff' is not: the port's
+      export ground is the skin's) [Batch 141] }
+    d := nil;
+    if AFeature <> nil then d := AFeature.Find('connectedBackgroundColor');
+    if Present(d) then o.Add('connectedBackgroundColor', d.Clone);
     Result := TyTbJson(o);
   finally
     o.Free;

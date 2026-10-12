@@ -231,6 +231,23 @@ type
   TTyChartToolboxHandler = procedure(ASender: TObject;
     const AFeature, AIcon: string) of object;
 
+  { ==== axisPointer.link's mapper [Batch 141] ====
+    `axisPointer.link[i].mapper: '@Name'` -- upstream calls it with the
+    source axis' value and the two axes as makeMapperParam builds them, and
+    parses what it answers with the TARGET axis' scale (a category or time
+    axis rounds it). AxisName and AxisId are the models' -- the auto ones
+    ('series' + NUL + index, NUL + name + NUL + n) when the option wrote
+    none. }
+  TTyChartMapperAxis = record
+    AxisDim: string;
+    AxisIndex: Integer;
+    AxisName: string;
+    AxisId: string;
+  end;
+
+  TTyChartAxisPointerMapper = function(AValue: Double;
+    const ASource, ATarget: TTyChartMapperAxis): Double of object;
+
 { ---- the registry ---- }
 { Registering the same name twice REPLACES, so a form reopened at design time
   does not accumulate stale handlers. }
@@ -276,6 +293,15 @@ procedure TyChartUnregisterToolboxHandler(const AName: string);
 function TyChartFindToolboxHandler(const AName: string;
   out AHandler: TTyChartToolboxHandler): Boolean;
 procedure TyChartClearToolboxHandlers;
+
+{ axisPointer.link mappers [Batch 141], by name, '@' left off as for the
+  others; registering a name again replaces it }
+procedure TyChartRegisterAxisPointerMapper(const AName: string;
+  AHandler: TTyChartAxisPointerMapper);
+procedure TyChartUnregisterAxisPointerMapper(const AName: string);
+function TyChartFindAxisPointerMapper(const AName: string;
+  out AHandler: TTyChartAxisPointerMapper): Boolean;
+procedure TyChartClearAxisPointerMappers;
 
 { Building an answer: a number, a text ('50%', 'center'), nothing. }
 function TyChartPosNum(AValue: Double): TTyChartPosValue;
@@ -485,6 +511,64 @@ end;
 procedure TyChartClearToolboxHandlers;
 begin
   GToolboxHandlers := nil;
+end;
+
+type
+  TMapperEntry = record
+    Name: string;
+    Handler: TTyChartAxisPointerMapper;
+  end;
+
+var
+  GMappers: array of TMapperEntry;
+
+function IndexOfMapper(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GMappers) do
+    if SameText(GMappers[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterAxisPointerMapper(const AName: string;
+  AHandler: TTyChartAxisPointerMapper);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfMapper(AName);
+  if i < 0 then
+  begin
+    i := Length(GMappers);
+    SetLength(GMappers, i + 1);
+    GMappers[i].Name := AName;
+  end;
+  GMappers[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterAxisPointerMapper(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfMapper(AName);
+  if i < 0 then Exit;
+  for j := i to High(GMappers) - 1 do
+    GMappers[j] := GMappers[j + 1];
+  SetLength(GMappers, Length(GMappers) - 1);
+end;
+
+function TyChartFindAxisPointerMapper(const AName: string;
+  out AHandler: TTyChartAxisPointerMapper): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfMapper(AName);
+  Result := (i >= 0) and Assigned(GMappers[i].Handler);
+  if Result then AHandler := GMappers[i].Handler;
+end;
+
+procedure TyChartClearAxisPointerMappers;
+begin
+  GMappers := nil;
 end;
 
 type

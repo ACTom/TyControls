@@ -71,6 +71,8 @@ uses
   tyControls.AdvChart.Toolbox, tyControls.AdvChart.Brush,
   tyControls.AdvChart.Timeline,
   tyControls.AdvChart.Parallel,
+  { echarts.connect's revert map and the combined export [Batch 141] }
+  tyControls.AdvChart.Connect,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -154,6 +156,10 @@ type
     Polar: TTyPolar;
     { THE SINGLE AXIS the axis is; nil elsewhere [Batch 118] }
     Single: TTySingle;
+    { PUT THERE BY axisPointer.link [Batch 141]: Value is the source axis'
+      value (through the group's mapper), and the pointer stands on it --
+      processOnAxis' noSnap -- while the tooltip still describes SnapValue }
+    Linked: Boolean;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
 
@@ -687,6 +693,14 @@ type
       what is hovered, what the last press and release were on, and the press
       point a click is judged against (cleared by the click it makes). }
     FEventRegs: array of TTyChartEventReg;
+    { echarts.connect [Batch 141]: chart.group ('' is none), the connect
+      status (-1 never set, 0 pending, 2 updated -- upstream never sets its
+      1) and the chart's number in creation order (its view uids) }
+    FGroup: string;
+    FConnectStatus: Integer;
+    FInstanceNo: Integer;
+    { dispatchAction(payload, silent) publishes nothing [Batch 141] }
+    FEvSilent: Integer;
     FEventNextId: Integer;
     FOnChartEvent: TTyChartEventHandler;
     FEvHover: TTyChartEventTarget;
@@ -1530,7 +1544,11 @@ type
     function DzRoam(AGrid: Integer; const AKind: string; AShift: TShiftState;
       AOldX, AOldY, ANewX, ANewY, AScale, AScroll: Double): Boolean;
     procedure DzRoamDispatch(AGrid: Integer; const AItems: TTyDzActionItemArray);
-    procedure DzDispatch(const AAction: TTyDzAction);
+    { AJson: the payload a dispatched dataZoom action carried (its event,
+      its animation; the caller publishes `updated`); nil for the port's own
+      dispatches, whose payload is built as upstream's views build it
+      [Batch 141] }
+    procedure DzDispatch(const AAction: TTyDzAction; AJson: TJSONObject = nil);
     procedure DzViewUpdate;
     function DzStateKey: string;
     procedure DzSyncLayout(const APayload: TTyAnimOverride; AHasPayload: Boolean);
@@ -1668,6 +1686,35 @@ type
     function BuildParallelBrushes(AList: TTyPaintList): Integer;
     { the dispatch of a payload already parsed (it is freed) }
     function DispatchActionObject(APayload: TJSONObject): Boolean;
+    { ---- echarts.connect and batch actions [Batch 141] ---- }
+    { enableConnect's listener: an event of the revert map, published by a
+      chart of a connected group that is not itself pending, has every other
+      chart of the group dispatch it as an action (escapeConnect stops it).
+      AObj, when given, is the event as an object (its numbers exact). }
+    procedure ConnectBroadcast(const AEventType, APayloadJson: string;
+      AObj: TJSONObject);
+    { a payload with a batch, for the types that take one: the legend's five,
+      select / unselect / toggleSelect, dataZoom and brushSelect; False for
+      any other type }
+    function DoBatchAction(APayload: TJSONObject): Boolean;
+    { legendSelectActionHandler without the update: the event object it
+      returns, its type set, as JSON; AEvent its type }
+    function LegendActionApply(APayload: TJSONObject; const AType: string;
+      out AEvent: string): string;
+    { the select actions' updateDirectly, and their events after it: the
+      action's own (AOwnEvent), selectchanged, the legacy ones }
+    procedure SelApply(APayload: TJSONObject; const AType: string);
+    procedure SelPublish(APayload: TJSONObject; const AOwnEvent: string);
+    { the dataZoom action from a payload: its models by dataZoomIndex /
+      dataZoomId / dataZoomName (none named is every one), setRawRange's
+      window }
+    function DzQuery(APayload: TJSONObject): TTyIntegerArray;
+    procedure DzItemsOf(AItem: TJSONObject; var AAction: TTyDzAction);
+    function DzModelId(AIndex: Integer): string;
+    function DzPayloadOf(const AAction: TTyDzAction): TJSONObject;
+    function DoDataZoomAction(APayload: TJSONObject): Boolean;
+    { the chart's getBoundingClientRect: its ClientOrigin and size, logical }
+    function ConnectedRect: TTyConnectedRect;
     procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
       APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
@@ -2171,6 +2218,11 @@ type
     property LabelLayoutEls: TTyIntegerArray read FLmEls;
     { what zrender's hover holds now, with its dispatcher [Batch 88] }
     property EvHover: TTyChartEventTarget read FEvHover;
+    { the axis pointers the pointer resolved to, linked ones included, in
+      the order the tooltip lists them [Batch 141] }
+    property TipHits: TTyAxisHitArray read FTipHits;
+    { the series index of a hit's binding slot; -1 for none [Batch 141] }
+    function SlotSeriesIndex(ASlot: Integer): Integer;
     { THE LIST AS IT STANDS THIS FRAME: every animated element read from its
       proxy, insertion indices kept. The list itself when nothing is bound.
       [Batch 89] }
@@ -2509,7 +2561,8 @@ type
     function TargetOfElement(AIndex: Integer): TTyChartEventTarget;
     { the series' (or the datum's) border, for its legend icon }
     procedure LegendBorderOf(ASlot, ARaw: Integer; var ASrc: TTyLegendSource);
-    procedure EmitPayloadEvent(const AType, APayloadJson: string);
+    procedure EmitPayloadEvent(const AType, APayloadJson: string;
+      AObj: TJSONObject = nil);
     function HasChartHandler(const AType: string): Boolean;
     function SeriesModelId(ASeriesIndex: Integer): string;
     { THE ROAM GESTURES. A left press inside a graph's roam area arms a drag
@@ -2810,7 +2863,30 @@ type
       legendName, none is every legend) switch legend items, re-render the
       chart at once and publish legendselectchanged, legendselected,
       legendunselected, legendselectall or legendinverseselect. }
-    function DispatchAction(const APayloadJson: string): Boolean;
+    function DispatchAction(const APayloadJson: string): Boolean; overload;
+    { dispatchAction(payload, silent) [Batch 141]: ASilent publishes no
+      event at all -- not the action's, not updated, not the brushselected
+      it causes -- and so sends nothing to a connected group.
+
+      BATCH [Batch 141]: a truthy `batch` runs every item as its own payload
+      over the outer one's keys (where the item has none or null), `batch`
+      null, with ONE update and ONE event {type, escapeConnect, batch:
+      [each item's event]}. Taken for highlight, downplay, select, unselect,
+      toggleSelect, the five legend actions, dataZoom and brushSelect; any
+      other type with a batch answers False. }
+    function DispatchAction(const APayloadJson: string; ASilent: Boolean): Boolean; overload;
+    { THE COMBINED EXPORT, getConnectedDataURL [Batch 141]: in a connected
+      group, every chart of the group (in creation order) rendered with the
+      same options, each image at the chart's offset -- its ClientOrigin, in
+      logical px -- times the ratio (the options' pixelRatio, else this
+      chart's PPI / 96), on a canvas spanning them all;
+      `connectedBackgroundColor` fills it first. Not in a connected group:
+      this chart's own export. }
+    function RenderConnectedToBitmap(const AOptsJson: string = ''): TBGRABitmap;
+    procedure SaveConnectedToStream(AStream: TStream; const AOptsJson: string = '');
+    { the type as SaveToFile takes it: the options', else the extension }
+    procedure SaveConnectedToFile(const AFileName: string; const AOptsJson: string = '');
+    function GetConnectedDataURL(const AOptsJson: string = ''): string;
     { A category axis' categorySortInfo.ordinalNumbers as its model holds
       it (a bar race's changeAxisOrder writes it), as JSON; 'null' for none
       [Batch 135] }
@@ -3261,7 +3337,24 @@ type
     { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
     property AnimationMode: TTyChartAnimationMode read FAnimMode
       write SetAnimMode default camAuto;
+    { chart.group [Batch 141]: the name of the connect group this chart is
+      in, '' (the default) for none. A group does nothing until
+      TyChartConnect connects it. }
+    property Group: string read FGroup write FGroup;
   end;
+
+{ ==== echarts.connect [Batch 141] ====
+  Every TTyAdvanceChart is an instance from its creation to its
+  destruction. A connected group's charts dispatch, as an action, every
+  action event another chart of the group publishes (see ConnectBroadcast).
+  TyChartConnect(AGroup) connects a group by name; the array form gives the
+  charts the last non-empty group among them, else a new 'g_<n>', and
+  connects it; both answer the group. TyChartDisconnect keeps the charts'
+  groups and only stops the broadcast. }
+function TyChartConnect(const AGroup: string): string; overload;
+function TyChartConnect(const ACharts: array of TTyAdvanceChart): string; overload;
+procedure TyChartDisconnect(const AGroup: string);
+function TyChartGroupConnected(const AGroup: string): Boolean;
 
 implementation
 
@@ -3277,6 +3370,79 @@ uses
   tyControls.AdvChart.AxisBreak, tyControls.AdvChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }
   tyControls.AdvChart.StatTransform;
+
+{ ==================== echarts.connect [Batch 141] ==================== }
+
+const
+  cConnectPending = 0;
+  cConnectUpdated = 2;
+
+var
+  { instances: every chart, in creation order }
+  GTyCharts: TFPList = nil;
+  { connectedGroups: a group's name, connected when its object is set }
+  GTyConnected: TStringList = nil;
+  { groupIdBase: +new Date() when first asked, then one up per new group }
+  GTyGroupIdBase: Int64 = -1;
+  GTyChartSeq: Integer = 0;
+
+function TyChartGroupConnected(const AGroup: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if GTyConnected = nil then Exit;
+  i := GTyConnected.IndexOf(AGroup);
+  Result := (i >= 0) and (GTyConnected.Objects[i] <> nil);
+end;
+
+procedure TyChartSetConnected(const AGroup: string; AOn: Boolean);
+var i: Integer;
+begin
+  if GTyConnected = nil then
+  begin
+    GTyConnected := TStringList.Create;
+    GTyConnected.CaseSensitive := True;
+  end;
+  i := GTyConnected.IndexOf(AGroup);
+  if i < 0 then i := GTyConnected.Add(AGroup);
+  if AOn then GTyConnected.Objects[i] := TObject(PtrUInt(1))
+  else GTyConnected.Objects[i] := nil;
+end;
+
+function TyChartConnect(const AGroup: string): string;
+begin
+  TyChartSetConnected(AGroup, True);
+  Result := AGroup;
+end;
+
+function TyChartConnect(const ACharts: array of TTyAdvanceChart): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(ACharts) do
+    if (ACharts[i] <> nil) and (ACharts[i].Group <> '') then Result := ACharts[i].Group;
+  if Result = '' then
+  begin
+    if GTyGroupIdBase < 0 then
+      GTyGroupIdBase := Round((Now - UnixDateDelta) * MSecsPerDay);
+    Result := 'g_' + IntToStr(GTyGroupIdBase);
+    Inc(GTyGroupIdBase);
+  end;
+  for i := 0 to High(ACharts) do
+    if ACharts[i] <> nil then ACharts[i].Group := Result;
+  TyChartSetConnected(Result, True);
+end;
+
+procedure TyChartDisconnect(const AGroup: string);
+begin
+  TyChartSetConnected(AGroup, False);
+end;
+
+{ defined with the actions below; the dataZoom action needs them first }
+function VmJsJson(AData: TJSONData): string; forward;
+function CopyWithType(APayload: TJSONObject; const AType: string): string; forward;
+function BatchItemsOf(APayload: TJSONObject): TJSONArray; forward;
+function BatchEventHead(APayload: TJSONObject; const AType: string): string; forward;
 
 { ==================== construction ==================== }
 
@@ -3325,11 +3491,19 @@ begin
   FBrushTickPrev := NaN;
   FTlNow := NaN;
   FTlDue := NaN;
+  { an instance from now on [Batch 141] }
+  FConnectStatus := -1;
+  Inc(GTyChartSeq);
+  FInstanceNo := GTyChartSeq;
+  if GTyCharts = nil then GTyCharts := TFPList.Create;
+  GTyCharts.Add(Self);
 end;
 
 destructor TTyAdvanceChart.Destroy;
 var i: Integer;
 begin
+  { dispose: no longer an instance [Batch 141] }
+  if GTyCharts <> nil then GTyCharts.Remove(Self);
   { Order is a contract, not a habit: a store BORROWS its category list from an
     axis the build owns, so every store goes first. }
   DropBuild;
@@ -3935,6 +4109,7 @@ var
   regs: array of TTyChartEventReg;
   i: Integer;
 begin
+  if FEvSilent > 0 then Exit;
   if not HasChartHandler('updated') then Exit;
   ev := Default(TTyChartEvent);
   ev.EventType := 'updated';
@@ -5705,6 +5880,10 @@ begin
   FullUpdate;
   FDirty := True;
   Invalidate;
+  { THE NON-REFINED EVENT, which no handler hears but the connect listener:
+    a copy of the payload, the type lowercased [Batch 141] }
+  if FEvSilent = 0 then
+    ConnectBroadcast(LowerCase(t), CopyWithType(APayload, LowerCase(t)), nil);
   EmitPayloadEvent('axisbreakchanged', '{"type":"axisbreakchanged","breaks":['
     + evBreaks + '],"fromAction":"' + StringToJSONString(t)
     + '","fromActionPayload":' + payloadJson + ',"escapeConnect":true}');
@@ -7977,7 +8156,7 @@ end;
 { THE ACTION: setRawRange on the named dataZooms and every one linked to
   them through a shared axis, then one update, the views rendered with the
   payload -- the source slider keeps its view }
-procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction);
+procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction; AJson: TJSONObject);
 var
   savedAction: string;
   n, it, i, j, t, u: Integer;
@@ -7986,6 +8165,10 @@ var
   found: array of Boolean;
   keys: array of string;
   more, linked: Boolean;
+  built, items: TJSONData;
+  an, x: TJSONData;
+  evJson: string;
+  own: Boolean;
 
   procedure Mark(AIdx: Integer);
   var tt: Integer;
@@ -8051,8 +8234,36 @@ begin
     dispatches (`animation: null`) and for the API's }
   pay := TyAnimNoOverride;
   hasPay := False;
+  { A DISPATCHED PAYLOAD'S animation [Batch 141]: an object's duration,
+    easing and delay }
+  if AJson <> nil then
+  begin
+    an := AJson.Find('animation');
+    if an is TJSONObject then
+    begin
+      hasPay := True;
+      x := TJSONObject(an).Find('duration');
+      if (x <> nil) and (x.JSONType = jtNumber) then
+      begin
+        pay.HasDuration := True;
+        pay.Duration := x.AsFloat;
+      end;
+      x := TJSONObject(an).Find('easing');
+      if (x <> nil) and (x.JSONType = jtString) then
+      begin
+        pay.HasEasing := True;
+        pay.Easing := x.AsString;
+      end;
+      x := TJSONObject(an).Find('delay');
+      if (x <> nil) and (x.JSONType = jtNumber) then
+      begin
+        pay.HasDelay := True;
+        pay.Delay := x.AsFloat;
+      end;
+    end;
+  end
   { the toolbox's batch carries no animation of its own [Batch 125] }
-  if (AAction.Batch and not AAction.FromToolbox)
+  else if (AAction.Batch and not AAction.FromToolbox)
     or ((AAction.FromSlider >= 0) and AAction.Realtime) then
   begin
     hasPay := True;
@@ -8080,10 +8291,45 @@ begin
       FDzFrom := -1;
       FCustomAction := savedAction;
     end;
+    { THE ACTION'S EVENT, after its update [Batch 141]: the payload's copy
+      (a batch's items over it), as the dispatcher's payload -- the one it
+      carried, or the one upstream's view would have built }
+    built := nil;
+    own := AJson = nil;
+    try
+      if own then
+      begin
+        built := DzPayloadOf(AAction);
+        AJson := TJSONObject(built);
+      end;
+      if TyJsTruthy(AJson.Find('batch')) then
+      begin
+        items := BatchItemsOf(AJson);
+        try
+          evJson := BatchEventHead(AJson, 'datazoom');
+          for i := 0 to items.Count - 1 do
+          begin
+            TJSONObject(TJSONArray(items).Items[i]).Strings['type'] := 'datazoom';
+            if i > 0 then evJson := evJson + ',';
+            evJson := evJson + VmJsJson(TJSONArray(items).Items[i]);
+          end;
+          evJson := evJson + ']}';
+          EmitPayloadEvent('datazoom', evJson);
+        finally
+          items.Free;
+        end;
+      end
+      else
+        EmitPayloadEvent('datazoom', CopyWithType(AJson, 'datazoom'));
+    finally
+      built.Free;
+    end;
     if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
   finally
     Dec(FBrushActDepth);
   end;
+  { a dispatched payload's flush and updated are its dispatch's }
+  if not own then Exit;
   if FBrushActDepth = 0 then BrushFlush;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   EmitUpdated;
@@ -24295,12 +24541,16 @@ end;
 
 { an action's event: no params, no pointer, the object as JSON; a query
   never filters it (upstream's eventInfo is empty for these) }
-procedure TTyAdvanceChart.EmitPayloadEvent(const AType, APayloadJson: string);
+procedure TTyAdvanceChart.EmitPayloadEvent(const AType, APayloadJson: string;
+  AObj: TJSONObject);
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
   i: Integer;
 begin
+  { a silent dispatch publishes nothing -- and so sends nothing to its
+    group [Batch 141] }
+  if FEvSilent > 0 then Exit;
   ev := Default(TTyChartEvent);
   ev.EventType := AType;
   ev.HasParams := False;
@@ -24311,6 +24561,10 @@ begin
   regs := Copy(FEventRegs);
   for i := 0 to High(regs) do
     if regs[i].EventType = AType then regs[i].Handler(Self, ev);
+  { THE CONNECT LISTENER, registered after the chart's own forwarders
+    (_initEvents runs in the constructor, enableConnect after init): the
+    chart's handlers hear the event first [Batch 141] }
+  ConnectBroadcast(AType, APayloadJson, AObj);
 end;
 
 function JsTruthy(AData: TJSONData): Boolean;
@@ -24326,18 +24580,29 @@ begin
 end;
 
 procedure TTyAdvanceChart.DoSelectAction(APayload: TJSONObject);
-var
-  t, lt, sel, selMap, nm: string;
-  series, inner: TTyIntegerArray;
-  i, k, slot, s, kind: Integer;
-  data: TTySelData;
-  idx: TTyIntegerArray;
-  ev, fromPayload: TJSONObject;
-  d: TJSONData;
-  legacy: array[0..1] of string;
-  post: string;
+var ev: TJSONObject;
 begin
-  t := APayload.Strings['type'];
+  SelApply(APayload, APayload.Strings['type']);
+  { the action's own event: a copy of the payload, the type lowercased }
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Strings['type'] := LowerCase(APayload.Strings['type']);
+    SelPublish(APayload, ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.SelApply(APayload: TJSONObject; const AType: string);
+var
+  t: string;
+  series, inner: TTyIntegerArray;
+  i, slot, s, kind: Integer;
+  data: TTySelData;
+  d: TJSONData;
+begin
+  { the ACTION's type (updateDirectly's method), not the item's }
+  t := AType;
   if t = 'select' then kind := 0 else if t = 'unselect' then kind := 1 else kind := 2;
   { updateDirectly: every series the query names }
   series := MatchSeries(APayload);
@@ -24362,17 +24627,24 @@ begin
     SelSyncFlags(slot);
   end;
   if FStDirty then InvalidateFrame;
+end;
 
+procedure TTyAdvanceChart.SelPublish(APayload: TJSONObject; const AOwnEvent: string);
+var
+  t, lt, sel, selMap, nm: string;
+  inner: TTyIntegerArray;
+  k, slot, s: Integer;
+  idx: TTyIntegerArray;
+  fromPayload: TJSONObject;
+  d: TJSONData;
+  legacy: array[0..1] of string;
+  post: string;
+begin
+  t := APayload.Strings['type'];
   { THE EVENTS. First the action's own, a copy of the payload with the type
-    lowercased; then selectchanged }
+    lowercased (a batch's: see DoBatchAction); then selectchanged }
   lt := LowerCase(t);
-  ev := TJSONObject(APayload.Clone);
-  try
-    ev.Strings['type'] := lt;
-    EmitPayloadEvent(lt, ev.AsJSON);
-  finally
-    ev.Free;
-  end;
+  EmitPayloadEvent(lt, AOwnEvent);
   { getAllSelectedIndices: the shown series with a selection, in order }
   sel := '';
   for slot := 0 to High(FBindings) do
@@ -25969,7 +26241,7 @@ end;
   `batch` null; one event: its type, and the items as its batch }
 procedure TTyAdvanceChart.DoHighDownBatch(APayload: TJSONObject);
 var
-  t, nm: string;
+  t, nm, js: string;
   arr: TJSONArray;
   evs: TJSONArray;
   item, ev: TJSONObject;
@@ -25977,10 +26249,15 @@ var
   x: TJSONData;
 begin
   t := APayload.Strings['type'];
-  arr := TJSONArray(APayload.Find('batch'));
+  { a batch that is no list maps to no item [Batch 141] }
+  if APayload.Find('batch') is TJSONArray then
+    arr := TJSONArray(APayload.Find('batch'))
+  else
+    arr := nil;
   StAllLeaveBlur;
   evs := TJSONArray.Create;
   try
+    if arr <> nil then
     for i := 0 to arr.Count - 1 do
     begin
       if not (arr.Items[i] is TJSONObject) then Continue;
@@ -26003,7 +26280,14 @@ begin
       end;
     end;
     if FStDirty then InvalidateFrame;
-    EmitPayloadEvent(t, '{"type":"' + t + '","batch":' + evs.AsJSON + '}');
+    { the escapeConnect rides on the event [Batch 141] }
+    js := BatchEventHead(APayload, t);
+    for i := 0 to evs.Count - 1 do
+    begin
+      if i > 0 then js := js + ',';
+      js := js + VmJsJson(evs.Items[i]);
+    end;
+    EmitPayloadEvent(t, js + ']}');
   finally
     evs.Free;
   end;
@@ -26838,6 +27122,18 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.DispatchAction(const APayloadJson: string;
+  ASilent: Boolean): Boolean;
+begin
+  if not ASilent then Exit(DispatchAction(APayloadJson));
+  Inc(FEvSilent);
+  try
+    Result := DispatchAction(APayloadJson);
+  finally
+    Dec(FEvSilent);
+  end;
+end;
+
 function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
 var
   d: TJSONData;
@@ -26859,6 +27155,62 @@ begin
     Exit;
   end;
   Result := DispatchActionObject(TJSONObject(d));
+end;
+
+{ extend({}, payload) with its type set: an action's event object, as
+  JSON in JavaScript's key order and number text [Batch 141] }
+function CopyWithType(APayload: TJSONObject; const AType: string): string;
+var o: TJSONObject;
+begin
+  o := TJSONObject(APayload.Clone);
+  try
+    o.Strings['type'] := AType;
+    Result := VmJsJson(o);
+  finally
+    o.Free;
+  end;
+end;
+
+{ doDispatchAction's batch items: map(payload.batch, item => defaults(
+  extend({}, item), payload)), each item's `batch` then null. A batch that is
+  no list maps to none; an item that is no object is an empty one.
+  [Batch 141] }
+function BatchItemsOf(APayload: TJSONObject): TJSONArray;
+var
+  arr, x: TJSONData;
+  item: TJSONObject;
+  i, j: Integer;
+  nm: string;
+begin
+  Result := TJSONArray.Create;
+  arr := APayload.Find('batch');
+  if not (arr is TJSONArray) then Exit;
+  for i := 0 to arr.Count - 1 do
+  begin
+    if TJSONArray(arr).Items[i] is TJSONObject then
+      item := TJSONObject(TJSONArray(arr).Items[i].Clone)
+    else
+      item := TJSONObject.Create;
+    for j := 0 to APayload.Count - 1 do
+    begin
+      nm := APayload.Names[j];
+      x := item.Find(nm);
+      if (x = nil) or (x.JSONType = jtNull) then
+        item.Elements[nm] := APayload.Items[j].Clone;
+    end;
+    item.Elements['batch'] := TJSONNull.Create;
+    Result.Add(item);
+  end;
+end;
+
+{ the batched event's head: {type, escapeConnect, batch: ...}, the
+  escapeConnect only when the payload has one }
+function BatchEventHead(APayload: TJSONObject; const AType: string): string;
+begin
+  Result := '{"type":"' + StringToJSONString(AType) + '"';
+  if APayload.IndexOfName('escapeConnect') >= 0 then
+    Result := Result + ',"escapeConnect":' + VmJsJson(APayload.Find('escapeConnect'));
+  Result := Result + ',"batch":[';
 end;
 
 { the dispatch itself, of a payload parsed or built (a view's own action
@@ -26888,14 +27240,27 @@ begin
       or (t = 'legendScroll') or (t = 'dragNode') or (t = 'restore')
       or (t = 'changeMagicType') or (t = 'changeDataView') then
       FBrushPayload := True;
-    { A BATCH of highlight / downplay [Batch 116]: each item over the
-      payload, one event; any other batch is not taken }
-    if (p.Find('batch') is TJSONArray) and ((t = 'highlight') or (t = 'downplay')) then
+    { A BATCH -- `if (payload.batch)`, a truthy one -- of highlight /
+      downplay [Batch 116]: each item over the payload, one event; of the
+      types DoBatchAction takes [Batch 141]; any other batch is not taken }
+    if JsTruthy(p.Find('batch')) then
     begin
-      DoHighDownBatch(p);
+      if (t = 'highlight') or (t = 'downplay') then
+      begin
+        DoHighDownBatch(p);
+        Result := True;
+      end
+      else Result := DoBatchAction(p);
+    end
+    { the dataZoom action as a payload [Batch 141] }
+    else if t = 'dataZoom' then
+      Result := DoDataZoomAction(p)
+    { brushSelect: no update, its event a copy of the payload [Batch 141] }
+    else if t = 'brushSelect' then
+    begin
+      EmitPayloadEvent('brushselected', CopyWithType(p, 'brushselected'));
       Result := True;
     end
-    else if p.Find('batch') <> nil then Exit
     else if t = 'selectDataRange' then
     begin
       { [Batch 116] }
@@ -27010,6 +27375,586 @@ begin
   { the actions the update's render left pending: a bar race's init sort
     [Batch 135] }
   RtFlushQueue;
+end;
+
+{ ==================== echarts.connect, batch actions [Batch 141] ==================== }
+
+procedure TTyAdvanceChart.ConnectBroadcast(const AEventType, APayloadJson: string;
+  AObj: TJSONObject);
+var
+  act: string;
+  d: TJSONData;
+  ev: TJSONObject;
+  others: array of TTyAdvanceChart;
+  ch: TTyAdvanceChart;
+  i, n, nLine, nCol: Integer;
+begin
+  { connectedGroups[chart.group] and not pending }
+  if (FGroup = '') or (GTyCharts = nil) or not TyChartGroupConnected(FGroup) then Exit;
+  if FConnectStatus = cConnectPending then Exit;
+  act := TyConnectActionOf(AEventType);
+  if act = '' then Exit;
+  if AObj <> nil then
+    ev := TJSONObject(AObj.Clone)
+  else
+  begin
+    if TyJsonNestingExceeds(APayloadJson, TyOptionMaxNesting, nLine, nCol) then Exit;
+    try
+      d := GetJSON(NulSafeJson(APayloadJson));
+      NulRestore(d);
+    except
+      d := nil;
+    end;
+    if not (d is TJSONObject) then
+    begin
+      d.Free;
+      Exit;
+    end;
+    ev := TJSONObject(d);
+  end;
+  try
+    if JsTruthy(ev.Find('escapeConnect')) then Exit;
+    { makeActionFromEvent: the event's copy, its type the action's }
+    ev.Strings['type'] := act;
+    others := nil;
+    for i := 0 to GTyCharts.Count - 1 do
+    begin
+      ch := TTyAdvanceChart(GTyCharts[i]);
+      if (ch = Self) or (ch.FGroup <> FGroup) then Continue;
+      n := Length(others);
+      SetLength(others, n + 1);
+      others[n] := ch;
+    end;
+    { every other chart pending first, so none of them sends its own event
+      of this action on; then each dispatches the action; then all updated }
+    for i := 0 to High(others) do others[i].FConnectStatus := cConnectPending;
+    for i := 0 to High(others) do
+    begin
+      others[i].TbFrame;
+      others[i].DispatchActionObject(TJSONObject(ev.Clone));
+    end;
+    for i := 0 to High(others) do others[i].FConnectStatus := cConnectUpdated;
+  finally
+    ev.Free;
+  end;
+end;
+
+function TTyAdvanceChart.DoBatchAction(APayload: TJSONObject): Boolean;
+var
+  t, lt, ev, js, one: string;
+  items: TJSONArray;
+  i: Integer;
+  o: TJSONObject;
+begin
+  Result := False;
+  t := APayload.Strings['type'];
+  if (t = 'legendToggleSelect') or (t = 'legendSelect') or (t = 'legendUnSelect')
+    or (t = 'legendAllSelect') or (t = 'legendInverseSelect') then
+  begin
+    { each item's action and its own result; ONE update; one event }
+    if t = 'legendToggleSelect' then ev := 'legendselectchanged'
+    else if t = 'legendSelect' then ev := 'legendselected'
+    else if t = 'legendUnSelect' then ev := 'legendunselected'
+    else if t = 'legendAllSelect' then ev := 'legendselectall'
+    else ev := 'legendinverseselect';
+    js := '';
+    items := BatchItemsOf(APayload);
+    try
+      for i := 0 to items.Count - 1 do
+      begin
+        one := LegendActionApply(TJSONObject(items.Items[i]), t, ev);
+        if i > 0 then js := js + ',';
+        js := js + one;
+      end;
+    finally
+      items.Free;
+    end;
+    FullUpdate;
+    EmitPayloadEvent(ev, BatchEventHead(APayload, ev) + js + ']}');
+    Exit(True);
+  end;
+  if (t = 'select') or (t = 'unselect') or (t = 'toggleSelect') then
+  begin
+    lt := LowerCase(t);
+    js := '';
+    items := BatchItemsOf(APayload);
+    try
+      for i := 0 to items.Count - 1 do SelApply(TJSONObject(items.Items[i]), t);
+      { THE REFINE QUIRK: with a refineEvent the action result is not the
+        event, and eventObj -- the first item's copy -- is never reset, so
+        every entry of the batch is that one object }
+      if items.Count > 0 then
+      begin
+        o := TJSONObject(items.Items[0].Clone);
+        try
+          o.Strings['type'] := lt;
+          one := VmJsJson(o);
+        finally
+          o.Free;
+        end;
+        for i := 0 to items.Count - 1 do
+        begin
+          if i > 0 then js := js + ',';
+          js := js + one;
+        end;
+      end;
+    finally
+      items.Free;
+    end;
+    SelPublish(APayload, BatchEventHead(APayload, lt) + js + ']}');
+    Exit(True);
+  end;
+  if t = 'dataZoom' then Exit(DoDataZoomAction(APayload));
+  if t = 'brushSelect' then
+  begin
+    js := BatchEventHead(APayload, 'brushselected');
+    items := BatchItemsOf(APayload);
+    try
+      for i := 0 to items.Count - 1 do
+      begin
+        TJSONObject(items.Items[i]).Strings['type'] := 'brushselected';
+        if i > 0 then js := js + ',';
+        js := js + VmJsJson(items.Items[i]);
+      end;
+    finally
+      items.Free;
+    end;
+    EmitPayloadEvent('brushselected', js + ']}');
+    Exit(True);
+  end;
+end;
+
+function TTyAdvanceChart.DzModelId(AIndex: Integer): string;
+var n: Integer;
+begin
+  Result := '';
+  if (AIndex < 0) or (AIndex > High(FZoomSpecs)) then Exit;
+  n := TyDataZoomCount(FOption);
+  if AIndex < n then Exit(FOption.ComponentId('dataZoom', AIndex));
+  { the toolbox's own: makeInternalComponentId('toolbox-dataZoom_') + the
+    axis' main type and index }
+  if Length(FZoomSpecs[AIndex].Targets) = 0 then Exit;
+  Result := #0'_ec_'#0'toolbox-dataZoom_' + FZoomSpecs[AIndex].Targets[0].Dim
+    + 'Axis' + IntToStr(FZoomSpecs[AIndex].Targets[0].AxisIndex);
+end;
+
+function TTyAdvanceChart.DzQuery(APayload: TJSONObject): TTyIntegerArray;
+var
+  n, k, j: Integer;
+  d: TJSONData;
+
+  procedure Add(AIndex: Integer);
+  var q: Integer;
+  begin
+    for q := 0 to High(Result) do
+      if Result[q] = AIndex then Exit;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := AIndex;
+  end;
+
+  procedure AddIndex(AData: TJSONData);
+  var v: Double;
+  begin
+    if AData.JSONType <> jtNumber then Exit;
+    v := AData.AsFloat;
+    if (v >= 0) and (v < n) and (Frac(v) = 0) then Add(Trunc(v));
+  end;
+
+  { queryByIdOrName: an id or a name as a string (a number is its text) }
+  function Wanted(AData: TJSONData; const AValue: string): Boolean;
+  var q: Integer;
+  begin
+    Result := False;
+    if AData is TJSONArray then
+    begin
+      for q := 0 to AData.Count - 1 do
+        if (TJSONArray(AData).Items[q].JSONType in [jtString, jtNumber])
+          and (TJSONArray(AData).Items[q].AsString = AValue) then Exit(True);
+    end
+    else if AData.JSONType in [jtString, jtNumber] then
+      Result := AData.AsString = AValue;
+  end;
+
+begin
+  Result := nil;
+  n := Length(FZoomSpecs);
+  d := APayload.Find('dataZoomIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    if d is TJSONArray then
+      for k := 0 to d.Count - 1 do AddIndex(TJSONArray(d).Items[k])
+    else
+      AddIndex(d);
+    Exit;
+  end;
+  d := APayload.Find('dataZoomId');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    for j := 0 to n - 1 do
+      if Wanted(d, DzModelId(j)) then Add(j);
+    Exit;
+  end;
+  d := APayload.Find('dataZoomName');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    for j := 0 to n - 1 do
+      if (j < TyDataZoomCount(FOption))
+        and Wanted(d, FOption.ComponentModelName('dataZoom', j)) then Add(j);
+    Exit;
+  end;
+  { no query: every dataZoom }
+  for j := 0 to n - 1 do Add(j);
+end;
+
+procedure TTyAdvanceChart.DzItemsOf(AItem: TJSONObject; var AAction: TTyDzAction);
+var
+  idx: TTyIntegerArray;
+  k, n, host: Integer;
+  s0, s1, v0, v1: TJSONData;
+  isVal: Boolean;
+  lo, hi: Double;
+  z: TTyAxisZoom;
+  w: TTyDzWindow;
+
+  function Given(AData: TJSONData): Boolean;
+  begin
+    Result := (AData <> nil) and (AData.JSONType <> jtNull);
+  end;
+
+  function Num(AData: TJSONData): Double;
+  begin
+    if (AData <> nil) and (AData.JSONType = jtNumber) then Result := AData.AsFloat
+    else Result := NaN;
+  end;
+
+begin
+  idx := DzQuery(AItem);
+  s0 := AItem.Find('start');
+  s1 := AItem.Find('end');
+  v0 := AItem.Find('startValue');
+  v1 := AItem.Find('endValue');
+  { setRawRange: a value end given makes the range a value one }
+  isVal := Given(v0) or Given(v1);
+  for k := 0 to High(idx) do
+  begin
+    if isVal then
+    begin
+      lo := Num(v0);
+      hi := Num(v1);
+    end
+    else
+    begin
+      lo := Num(s0);
+      hi := Num(s1);
+    end;
+    { an end the payload leaves out keeps the window's }
+    if (IsNan(lo) or IsNan(hi)) and (Length(FZoomSpecs[idx[k]].Targets) > 0)
+      and AxisZoom(FZoomSpecs[idx[k]].Targets[0].Dim + 'Axis',
+        FZoomSpecs[idx[k]].Targets[0].AxisIndex, z, w, host) then
+    begin
+      if isVal then
+      begin
+        if IsNan(lo) then lo := w.Value[0];
+        if IsNan(hi) then hi := w.Value[1];
+      end
+      else
+      begin
+        if IsNan(lo) then lo := w.Percent[0];
+        if IsNan(hi) then hi := w.Percent[1];
+      end;
+    end;
+    if IsNan(lo) or IsNan(hi) then Continue;
+    n := Length(AAction.Items);
+    SetLength(AAction.Items, n + 1);
+    AAction.Items[n].DataZoomIndex := idx[k];
+    AAction.Items[n].IsValue := isVal;
+    AAction.Items[n].Start := lo;
+    AAction.Items[n].Stop := hi;
+  end;
+end;
+
+{ the payload the port's own dispatcher stands for, as upstream's builds it:
+  the inside roams' batch {dataZoomId, start, end} with the animation; the
+  toolbox's batch with its `from`; a slider's own {from, dataZoomId,
+  animation, start, end}; the API's {dataZoomIndex, start, end} }
+function TTyAdvanceChart.DzPayloadOf(const AAction: TTyDzAction): TJSONObject;
+var
+  arr: TJSONArray;
+  o, an: TJSONObject;
+  i: Integer;
+
+  function Anim(ADelay: Boolean): TJSONObject;
+  begin
+    Result := TJSONObject.Create;
+    Result.Add('easing', 'cubicOut');
+    Result.Add('duration', 100);
+    if ADelay then Result.Add('delay', 0);
+  end;
+
+begin
+  Result := TJSONObject.Create;
+  Result.Add('type', 'dataZoom');
+  if AAction.Batch then
+  begin
+    if AAction.FromToolbox then
+      Result.Add('from', 'ec_' + IntToStr(FInstanceNo) + '_toolbox_dataZoom')
+    else
+      Result.Add('animation', Anim(False));
+    arr := TJSONArray.Create;
+    for i := 0 to High(AAction.Items) do
+    begin
+      o := TJSONObject.Create;
+      o.Add('dataZoomId', DzModelId(AAction.Items[i].DataZoomIndex));
+      if AAction.Items[i].IsValue then
+      begin
+        o.Add('startValue', TJSONFloat(AAction.Items[i].Start));
+        o.Add('endValue', TJSONFloat(AAction.Items[i].Stop));
+      end
+      else
+      begin
+        o.Add('start', TJSONFloat(AAction.Items[i].Start));
+        o.Add('end', TJSONFloat(AAction.Items[i].Stop));
+      end;
+      arr.Add(o);
+    end;
+    Result.Add('batch', arr);
+    Exit;
+  end;
+  if (AAction.FromSlider >= 0) and (Length(AAction.Items) > 0) then
+  begin
+    Result.Add('from', 'ec_' + IntToStr(FInstanceNo) + '_dataZoom'
+      + IntToStr(AAction.FromSlider));
+    Result.Add('dataZoomId', DzModelId(AAction.Items[0].DataZoomIndex));
+    if AAction.Realtime then
+    begin
+      an := Anim(True);
+      Result.Add('animation', an);
+    end
+    else
+      Result.Add('animation', TJSONNull.Create);
+    Result.Add('start', TJSONFloat(AAction.Items[0].Start));
+    Result.Add('end', TJSONFloat(AAction.Items[0].Stop));
+    Exit;
+  end;
+  if Length(AAction.Items) > 0 then
+  begin
+    Result.Add('dataZoomIndex', AAction.Items[0].DataZoomIndex);
+    Result.Add('start', TJSONFloat(AAction.Items[0].Start));
+    Result.Add('end', TJSONFloat(AAction.Items[0].Stop));
+  end;
+end;
+
+function TTyAdvanceChart.DoDataZoomAction(APayload: TJSONObject): Boolean;
+var
+  a: TTyDzAction;
+  items: TJSONArray;
+  i: Integer;
+begin
+  a := Default(TTyDzAction);
+  a.FromSlider := -1;
+  if TyJsTruthy(APayload.Find('batch')) then
+  begin
+    items := BatchItemsOf(APayload);
+    try
+      for i := 0 to items.Count - 1 do DzItemsOf(TJSONObject(items.Items[i]), a);
+    finally
+      items.Free;
+    end;
+  end
+  else
+    DzItemsOf(APayload, a);
+  DzDispatch(a, APayload);
+  Result := True;
+end;
+
+function TTyAdvanceChart.ConnectedRect: TTyConnectedRect;
+var
+  o: TPoint;
+  s: Double;
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  s := 96 / ppi;
+  { getBoundingClientRect: the place on the screen once there is a window,
+    else the place in the top-level form }
+  o := ClientOrigin;
+  Result.Left := o.X * s;
+  Result.Top := o.Y * s;
+  Result.Width := Width * s;
+  Result.Height := Height * s;
+end;
+
+function TTyAdvanceChart.RenderConnectedToBitmap(const AOptsJson: string): TBGRABitmap;
+var
+  o: TTyChartExportOpts;
+  charts: array of TTyAdvanceChart;
+  rects: TTyConnectedRectArray;
+  bmps: array of TBGRABitmap;
+  lay: TTyConnectedLayout;
+  dpr: Double;
+  i, n, w, h, ppi, nLine, nCol: Integer;
+  root, cb: TJSONData;
+  bg: TTyExportBg;
+  P: TTyPainter;
+  el: TTyChartElement;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  if (FGroup = '') or (GTyCharts = nil) or not TyChartGroupConnected(FGroup) then
+    Exit(RenderExport(o));
+  Result := nil;
+  charts := nil;
+  for i := 0 to GTyCharts.Count - 1 do
+    if TTyAdvanceChart(GTyCharts[i]).FGroup = FGroup then
+    begin
+      n := Length(charts);
+      SetLength(charts, n + 1);
+      charts[n] := TTyAdvanceChart(GTyCharts[i]);
+    end;
+  n := Length(charts);
+  { `opts.pixelRatio || this.getDevicePixelRatio()` }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  if o.PixelRatio > 0 then dpr := o.PixelRatio else dpr := ppi / 96;
+  SetLength(rects, n);
+  SetLength(bmps, n);
+  for i := 0 to n - 1 do bmps[i] := nil;
+  try
+    { each chart's renderToCanvas(clone(opts)), its own background and all }
+    for i := 0 to n - 1 do
+    begin
+      rects[i] := charts[i].ConnectedRect;
+      bmps[i] := charts[i].RenderExport(o);
+    end;
+    lay := TyConnectedLayoutOf(rects, dpr);
+    { the canvas truncates the sizes it is given }
+    if IsNan(lay.Width) or IsNan(lay.Height) or (lay.Width < 1) or (lay.Height < 1)
+      or (lay.Width > TyExportMaxSide) or (lay.Height > TyExportMaxSide) then Exit;
+    w := Trunc(lay.Width);
+    h := Trunc(lay.Height);
+    Result := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+    { the background between the charts: a rect over the whole canvas,
+      filled as zrender fills it -- 'none' is no fill }
+    cb := nil;
+    root := nil;
+    if (Trim(AOptsJson) <> '')
+      and not TyJsonNestingExceeds(AOptsJson, TyOptionMaxNesting, nLine, nCol) then
+    begin
+      try
+        root := GetJSON(AOptsJson);
+      except
+        root := nil;
+      end;
+      if root is TJSONObject then cb := TJSONObject(root).Find('connectedBackgroundColor');
+    end;
+    try
+      if TyJsTruthy(cb) and not ((cb.JSONType = jtString) and (cb.AsString = 'none')) then
+      begin
+        bg := TyExportBackgroundOf(cb);
+        P := TTyPainter.Create;
+        try
+          P.BeginPaintOn(nil, Rect(0, 0, w, h), 96, Result);
+          case bg.Kind of
+            ebkSolid, ebkBlack:
+              begin
+                if bg.Kind = ebkBlack then bg.Color := $FF000000;
+                P.BeginPath;
+                P.RectPath(0, 0, w, h);
+                P.FillPath(TTyColor(bg.Color));
+              end;
+            ebkGradient, ebkPattern:
+              begin
+                el := TyChartElement(TyShapeRect(TyRectF(0, 0, w, h)));
+                el.Style.HasFill := True;
+                el.Style.Alpha := 1;
+                if bg.Kind = ebkGradient then el.Style.FillGradient := bg.Gradient
+                else el.Style.FillPattern := bg.Pattern;
+                TyRenderElement(P, el);
+              end;
+          end;
+          P.EndPaint;
+        finally
+          P.Free;
+        end;
+      end;
+    finally
+      root.Free;
+    end;
+    { each image at its place, on the nearest pixel }
+    for i := 0 to n - 1 do
+      if bmps[i] <> nil then
+        Result.PutImage(Floor(lay.X[i] + 0.5), Floor(lay.Y[i] + 0.5), bmps[i],
+          dmDrawWithTransparency);
+  finally
+    for i := 0 to n - 1 do bmps[i].Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.SaveConnectedToStream(AStream: TStream; const AOptsJson: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  bmp := RenderConnectedToBitmap(AOptsJson);
+  if bmp = nil then Exit;
+  try
+    WriteExport(AStream, bmp, o.ImageType);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.SaveConnectedToFile(const AFileName: string;
+  const AOptsJson: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  fs: TFileStream;
+  ext: string;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  if not o.HasType then
+  begin
+    ext := LowerCase(ExtractFileExt(AFileName));
+    if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+  end;
+  bmp := RenderConnectedToBitmap(AOptsJson);
+  if bmp = nil then Exit;
+  try
+    fs := TFileStream.Create(AFileName, fmCreate);
+    try
+      WriteExport(fs, bmp, o.ImageType);
+    finally
+      fs.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TTyAdvanceChart.GetConnectedDataURL(const AOptsJson: string): string;
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  ms: TMemoryStream;
+  raw: RawByteString;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  bmp := RenderConnectedToBitmap(AOptsJson);
+  if bmp = nil then Exit('data:,');
+  ms := TMemoryStream.Create;
+  try
+    WriteExport(ms, bmp, o.ImageType);
+    SetLength(raw, ms.Size);
+    if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
+  finally
+    ms.Free;
+    bmp.Free;
+  end;
+  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
+  else Result := 'data:image/png;base64,';
+  Result := Result + EncodeStringBase64(raw);
 end;
 
 { echarts.ts:2341-2357: the first element on the chain with a dataIndex --
@@ -27197,6 +28142,17 @@ end;
 
 procedure TTyAdvanceChart.DoLegendAction(APayload: TJSONObject);
 var
+  ev, js: string;
+begin
+  js := LegendActionApply(APayload, APayload.Strings['type'], ev);
+  { the update runs before the event is published }
+  FullUpdate;
+  EmitPayloadEvent(ev, js);
+end;
+
+function TTyAdvanceChart.LegendActionApply(APayload: TJSONObject;
+  const AType: string; out AEvent: string): string;
+var
   t, ev, nm, nameJson, idx: string;
   isAll: Boolean;
   legends: TTyIntegerArray;
@@ -27205,7 +28161,8 @@ var
   keys: TTyLegendNames;
   d: TJSONData;
 begin
-  t := APayload.Strings['type'];
+  { the ACTION's type: a batch item keeps whatever type it came with }
+  t := AType;
   if t = 'legendToggleSelect' then ev := 'legendselectchanged'
   else if t = 'legendSelect' then ev := 'legendselected'
   else if t = 'legendUnSelect' then ev := 'legendunselected'
@@ -27264,8 +28221,9 @@ begin
           TyLegendUnSelectName(FOption, k, FLegendSpecs[k].SelectedMode, keys[i]);
       LegendSelectedMapInto(k, all_);
     end;
-    { the update runs before the event is published }
-    FullUpdate;
+    { the action's return: the event object, its type set [Batch 141:
+      the update and the publishing are the caller's] }
+    AEvent := ev;
     if isAll then
     begin
       idx := '';
@@ -27274,14 +28232,14 @@ begin
         if i > 0 then idx := idx + ',';
         idx := idx + IntToStr(legends[i]);
       end;
-      EmitPayloadEvent(ev, '{"selected":' + JsMapJson(all_) + ',"legendIndex":['
-        + idx + '],"type":"' + ev + '"}');
+      Result := '{"selected":' + JsMapJson(all_) + ',"legendIndex":['
+        + idx + '],"type":"' + ev + '"}';
     end
     else if nameJson <> '' then
-      EmitPayloadEvent(ev, '{"name":' + nameJson + ',"selected":' + JsMapJson(all_)
-        + ',"type":"' + ev + '"}')
+      Result := '{"name":' + nameJson + ',"selected":' + JsMapJson(all_)
+        + ',"type":"' + ev + '"}'
     else
-      EmitPayloadEvent(ev, '{"selected":' + JsMapJson(all_) + ',"type":"' + ev + '"}');
+      Result := '{"selected":' + JsMapJson(all_) + ',"type":"' + ev + '"}';
   finally
     map.Free;
     all_.Free;
@@ -27653,9 +28611,17 @@ begin
   if Result < ext.Start then Result := ext.Start;
 end;
 
+function TTyAdvanceChart.SlotSeriesIndex(ASlot: Integer): Integer;
+begin
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Result := -1
+  else Result := FBindings[ASlot].SeriesIndex;
+end;
+
 function TTyAdvanceChart.PointerValue(const AHit: TTyAxisHit): Double;
 begin
-  if AHit.Spec.Snap then Result := AHit.SnapValue else Result := AHit.Value;
+  { a linked axis never snaps [Batch 141] }
+  if AHit.Spec.Snap and not AHit.Linked then Result := AHit.SnapValue
+  else Result := AHit.Value;
   Result := PointerAt(AHit.Axis, Result);
 end;
 
@@ -27883,6 +28849,18 @@ begin
 end;
 
 function TTyAdvanceChart.ResolveAxisPointers(AX, AY: Integer): TTyAxisHitArray;
+type
+  { an axisInfo of the axisPointer model: every tooltip axis of every
+    coordinate system, whether the point is in it or not [Batch 141] }
+  TLinkCand = record
+    Axis: TTyAxis;
+    Plot: TTyRectF;
+    Cross: Boolean;
+    Polar: TTyPolar;
+    Single: TTySingle;
+    Key: string;
+    Group: Integer;
+  end;
 var
   tipSpec: TTyTooltipSpec;
   wantAxis: string;
@@ -27895,6 +28873,16 @@ var
   wantPolar: string;
   pol: TTyPolar;
   sgl: TTySingle;
+  links: array of TJSONData;
+  cands: array of TLinkCand;
+  lkVal: TTyDoubleArray;
+  lkHas: array of Boolean;
+  t, s, h, n0, at_, j: Integer;
+  v: Double;
+  mapperSpec: string;
+  mapper: TTyChartAxisPointerMapper;
+  hold: TTyAxisHit;
+  appended: Boolean;
 
   function AlreadySeen(AAxis: TTyAxis): Boolean;
   var j: Integer;
@@ -27943,8 +28931,12 @@ var
     Result := Length(layers) > 0;
   end;
 
+  { `appended` says whether a hit went in. ALinked: axisPointer.link's
+    pass, the value given (AGivenValue) and the axis taken whether or not
+    the first pass looked at it [Batch 141] }
   procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
-    APolar: TTyPolar = nil; ASingle: TTySingle = nil);
+    APolar: TTyPolar = nil; ASingle: TTySingle = nil; ALinked: Boolean = False;
+    AGivenValue: Double = 0);
   var
     hit: TTyAxisHit;
     coord, value, snapTo, v, diff, dist, minDist, minDiff, maxDist: Double;
@@ -27952,8 +28944,9 @@ var
     s, r, m: Integer;
     isCat: Boolean;
   begin
+    appended := False;
     if AAxis = nil then Exit;
-    if AlreadySeen(AAxis) then Exit;
+    if not ALinked and AlreadySeen(AAxis) then Exit;
     isCat := AAxis.Scale is TTyOrdinalScale;
     hit := Default(TTyAxisHit);
     hit.Axis := AAxis;
@@ -27961,12 +28954,15 @@ var
     hit.Cross := ACross;
     hit.Polar := APolar;
     hit.Single := ASingle;
+    hit.Linked := ALinked;
     hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
       AAxis.ComponentIndex, isCat, True,
       (tipSpec.Trigger = tttAxis) and not ACross, crossType);
     if hit.Spec.Show = apsNo then Exit;
 
-    if APolar <> nil then
+    if ALinked then
+      value := AGivenValue
+    else if APolar <> nil then
       value := APolar.AxisPointToData(AAxis, AX, AY)
     { SingleAxis.pointToData: the orient's coordinate [Batch 118] }
     else if ASingle <> nil then
@@ -28066,11 +29062,142 @@ var
       and (Length(hit.Slots) = 0) then Exit;
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)] := hit;
+    appended := True;
+  end;
+
+  { modelHelper's checkPropInLink: 'all', a list holding the axis' own value
+    (strictly: a number never matches a string), or that value itself }
+  function InLink(AProp: TJSONData; const AStr: string; ANum: Integer;
+    AIsNum: Boolean): Boolean;
+  var
+    k: Integer;
+    e: TJSONData;
+  begin
+    Result := False;
+    if AProp = nil then Exit;
+    if (AProp.JSONType = jtString) and (AProp.AsString = 'all') then Exit(True);
+    if AProp is TJSONArray then
+    begin
+      for k := 0 to AProp.Count - 1 do
+      begin
+        e := TJSONArray(AProp).Items[k];
+        if AIsNum then
+        begin
+          if (e.JSONType = jtNumber) and (e.AsFloat = ANum) then Exit(True);
+        end
+        else if (e.JSONType = jtString) and (e.AsString = AStr) then Exit(True);
+      end;
+      Exit;
+    end;
+    if AIsNum then Result := (AProp.JSONType = jtNumber) and (AProp.AsFloat = ANum)
+    else Result := (AProp.JSONType = jtString) and (AProp.AsString = AStr);
+  end;
+
+  { getLinkGroupIndex: the first link entry naming the axis by id, index or
+    name (dim + 'AxisId' and so on) }
+  function LinkGroupOf(AAxis: TTyAxis): Integer;
+  var
+    k: Integer;
+    o: TJSONObject;
+    id, nm: string;
+  begin
+    Result := -1;
+    id := FOption.ComponentId(AAxis.MainType, AAxis.ComponentIndex);
+    nm := FOption.ComponentModelName(AAxis.MainType, AAxis.ComponentIndex);
+    for k := 0 to High(links) do
+    begin
+      if not (links[k] is TJSONObject) then Continue;
+      o := TJSONObject(links[k]);
+      if InLink(o.Find(AAxis.Dim + 'AxisId'), id, 0, False)
+        or InLink(o.Find(AAxis.Dim + 'AxisIndex'), '', AAxis.ComponentIndex, True)
+        or InLink(o.Find(AAxis.Dim + 'AxisName'), nm, 0, False) then Exit(k);
+    end;
+  end;
+
+  { saveTooltipAxisInfo: an axis whose pointer is not switched off, once }
+  procedure AddCand(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
+    APolar: TTyPolar; ASingle: TTySingle; const AKey: string);
+  var k: Integer;
+  begin
+    if AAxis = nil then Exit;
+    for k := 0 to High(cands) do
+      if cands[k].Axis = AAxis then Exit;
+    if TyAxisPointerSpecOf(FOption, AAxis.MainType, AAxis.ComponentIndex,
+      AAxis.Scale is TTyOrdinalScale, True,
+      (tipSpec.Trigger = tttAxis) and not ACross, crossType).Show = apsNo then Exit;
+    k := Length(cands);
+    SetLength(cands, k + 1);
+    cands[k].Axis := AAxis;
+    cands[k].Plot := APlot;
+    cands[k].Cross := ACross;
+    cands[k].Polar := APolar;
+    cands[k].Single := ASingle;
+    cands[k].Key := AKey;
+    cands[k].Group := LinkGroupOf(AAxis);
+  end;
+
+  function HitOf(const AHits: TTyAxisHitArray; AAxis: TTyAxis): Integer;
+  var k: Integer;
+  begin
+    for k := 0 to High(AHits) do
+      if AHits[k].Axis = AAxis then Exit(k);
+    Result := -1;
+  end;
+
+  function KeyOf(AAxis: TTyAxis): string;
+  var k: Integer;
+  begin
+    for k := 0 to High(cands) do
+      if cands[k].Axis = AAxis then Exit(cands[k].Key);
+    Result := '';
+  end;
+
+  { showValueMap's value: the snapped one when the axis snaps and the
+    snapped value is on it, else the pointer's own }
+  function SourceValue(const AHit: TTyAxisHit): Double;
+  begin
+    Result := AHit.Value;
+    if AHit.Spec.Snap and not IsNan(AHit.SnapValue)
+      and AHit.Axis.Scale.Contain(AHit.SnapValue) then Result := AHit.SnapValue;
+  end;
+
+  function MapperParam(AAxis: TTyAxis): TTyChartMapperAxis;
+  begin
+    Result.AxisDim := AAxis.Dim;
+    Result.AxisIndex := AAxis.ComponentIndex;
+    Result.AxisName := FOption.ComponentModelName(AAxis.MainType, AAxis.ComponentIndex);
+    Result.AxisId := FOption.ComponentId(AAxis.MainType, AAxis.ComponentIndex);
+  end;
+
+  procedure ReadLinks;
+  var
+    ap, lk: TJSONData;
+    k: Integer;
+  begin
+    links := nil;
+    ap := FOption.ComponentAt('axisPointer', 0);
+    if not (ap is TJSONObject) then Exit;
+    lk := TJSONObject(ap).Find('link');
+    { the preprocessor wraps one that is not a list; null and absent are
+      none }
+    if (lk = nil) or (lk.JSONType = jtNull) then Exit;
+    if lk is TJSONArray then
+    begin
+      SetLength(links, lk.Count);
+      for k := 0 to lk.Count - 1 do links[k] := TJSONArray(lk).Items[k];
+    end
+    else if TyJsTruthy(lk) then
+    begin
+      SetLength(links, 1);
+      links[0] := lk;
+    end;
   end;
 
 begin
   Result := nil;
   seen := nil;
+  cands := nil;
+  links := nil;
   if (FBuild = nil) or (FOption = nil) then Exit;
   tipSpec := TyTooltipSpecOf(FOption, -1, -1);
   if not tipSpec.Show then Exit;
@@ -28131,6 +29258,94 @@ begin
     sgl := FSingles[g];
     if (sgl = nil) or not sgl.ContainXY(AX, AY) then Continue;
     Consider(sgl.Axis, sgl.GetRect, False, nil, sgl);
+  end;
+
+  { ---- axisPointer.link [Batch 141] ----
+    Every tooltip axis of every coordinate system is an axisInfo, the point
+    in it or not, in the order the first pass walks them. An axis the first
+    pass did not show takes, from each shown axis of its link group in turn
+    (the last one wins), that axis' value -- through the group's mapper and
+    the target scale's parse -- and then goes through processOnAxis with no
+    snap. Its hit goes after the hits of its own coordinate system, as
+    dataByCoordSys lists them. }
+  ReadLinks;
+  if Length(links) = 0 then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for c := 0 to gb.CartesianCount - 1 do
+    begin
+      cart := gb.CartesianByIndex(c);
+      if cart = nil then Continue;
+      if wantAxis <> '' then baseAxis := cart.AxisByDim(wantAxis)
+      else baseAxis := cart.GetBaseAxis;
+      AddCand(baseAxis, gb.PlotRect, False, nil, nil, 'g' + IntToStr(g));
+      if crossType and (baseAxis <> nil) then
+        AddCand(cart.GetOtherAxis(baseAxis), gb.PlotRect, True, nil, nil, 'g' + IntToStr(g));
+    end;
+  end;
+  for g := 0 to High(FPolars) do
+  begin
+    pol := FPolars[g];
+    if pol = nil then Continue;
+    if wantPolar <> '' then baseAxis := pol.AxisByDim(wantPolar)
+    else baseAxis := pol.BaseAxis;
+    AddCand(baseAxis, Default(TTyRectF), False, pol, nil, 'p' + IntToStr(g));
+    if crossType and (baseAxis <> nil) then
+      AddCand(pol.OtherAxis(baseAxis), Default(TTyRectF), True, pol, nil, 'p' + IntToStr(g));
+  end;
+  for g := 0 to High(FSingles) do
+  begin
+    sgl := FSingles[g];
+    if sgl = nil then Continue;
+    AddCand(sgl.Axis, sgl.GetRect, False, nil, sgl, 's' + IntToStr(g));
+  end;
+  SetLength(lkVal, Length(cands));
+  SetLength(lkHas, Length(cands));
+  for t := 0 to High(cands) do
+  begin
+    lkHas[t] := False;
+    lkVal[t] := NaN;
+    if (cands[t].Group < 0) or (HitOf(Result, cands[t].Axis) >= 0) then Continue;
+    for s := 0 to High(cands) do
+    begin
+      if (s = t) or (cands[s].Group <> cands[t].Group) then Continue;
+      h := HitOf(Result, cands[s].Axis);
+      if h < 0 then Continue;
+      v := SourceValue(Result[h]);
+      mapperSpec := '';
+      if links[cands[t].Group] is TJSONObject then
+        mapperSpec := TJSONObject(links[cands[t].Group]).Get('mapper', '');
+      { a mapper that is not a registered handler maps nothing (upstream
+        would throw calling it) }
+      if TyChartIsHandlerRef(mapperSpec)
+        and TyChartFindAxisPointerMapper(Copy(mapperSpec, 2, MaxInt), mapper) then
+      begin
+        v := mapper(v, MapperParam(cands[s].Axis), MapperParam(cands[t].Axis));
+        { the target scale's parse: a category or a time axis rounds }
+        if ((cands[t].Axis.Scale is TTyOrdinalScale)
+          or (cands[t].Axis.AxisType = atTime)) and not IsNan(v)
+          and not IsInfinite(v) then v := Floor(v + 0.5);
+      end;
+      lkVal[t] := v;
+      lkHas[t] := True;
+    end;
+  end;
+  for t := 0 to High(cands) do
+  begin
+    if not lkHas[t] then Continue;
+    n0 := Length(Result);
+    Consider(cands[t].Axis, cands[t].Plot, cands[t].Cross,
+      cands[t].Polar, cands[t].Single, True, lkVal[t]);
+    if not appended then Continue;
+    { after the last hit of its own coordinate system, when it has one }
+    at_ := -1;
+    for j := 0 to n0 - 1 do
+      if KeyOf(Result[j].Axis) = cands[t].Key then at_ := j;
+    if (at_ < 0) or (at_ = n0 - 1) then Continue;
+    hold := Result[n0];
+    for j := n0 downto at_ + 2 do Result[j] := Result[j - 1];
+    Result[at_ + 1] := hold;
   end;
 end;
 
@@ -36361,7 +37576,8 @@ begin
     FOnToolboxSaveAsImage(Self, fileName, opts, handled);
   if handled then Exit;
   if not ToolboxAskFileName(fileName, typ) then Exit;
-  SaveToFile(fileName, opts);
+  { getConnectedDataURL: the whole group when it is connected [Batch 141] }
+  SaveConnectedToFile(fileName, opts);
 end;
 
 procedure TTyAdvanceChart.TbDoTakeCursor(APayload: TJSONObject);
@@ -38731,4 +39947,7 @@ begin
   FParBrushLog := nil;
 end;
 
+finalization
+  FreeAndNil(GTyCharts);
+  FreeAndNil(GTyConnected);
 end.
