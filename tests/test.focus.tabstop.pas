@@ -234,7 +234,7 @@ begin
     { value pickers and data controls, each of which handles its own keys }
     TTyCalendar, TTyDateTimePicker, TTyMemo, TTyTrackBar, TTyDial, TTyGearDial,
     { the multi-thumb track bars: the keys move the selected thumb, Tab steps between thumbs }
-    TTyRangeTrackBar, TTyMultiTrackBar,
+    TTyRangeTrackBar, TTyMultiTrackBar, TTyGradientTrackBar,
     { 终端自己吞 Tab,焦点只经鼠标或宿主放行的键离开(spec §9.4) }
     TTyTerminalView,
     TTyRating, TTyPagination, TTyTreeSelect, TTyCascader, TTyRadioButton,

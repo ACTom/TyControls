@@ -100,7 +100,7 @@ const
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
     parent); an intermediate row (subject <> activator) checks Subject.ClassParent. }
-  CChain: array[0..62, 0..2] of string = (
+  CChain: array[0..63, 0..2] of string = (
     ('TTyDropDownButton', 'TTyCustomButton', 'TTyDropDownButton'),
     ('TTyMenuButton', 'TTyCustomButton', 'TTyMenuButton'),
     ('TTyColorButton', 'TTyCustomButton', 'TTyColorButton'),
@@ -158,6 +158,7 @@ const
     ('TTyLucideImageList', 'TTyCustomVirtualImageList', 'TTyLucideImageList'),
     ('TTyRangeTrackBar', 'TTyMultiTrackBarBase', 'TTyRangeTrackBar'),
     ('TTyMultiTrackBar', 'TTyMultiTrackBarBase', 'TTyMultiTrackBar'),
+    ('TTyGradientTrackBar', 'TTyCustomMultiTrackBar', 'TTyGradientTrackBar'),
     { intermediates: activated by their family root }
     ('TTyGlyphButtonBase', 'TTyCustomButton', 'TTyButton'),
     ('TTyShellTreeLink', 'TTyCustomTreeView', 'TTyTreeView'),
@@ -1233,7 +1234,7 @@ initialization
     'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar',
     'TTyDBNavigator',
     // multi-thumb track bars (#36)
-    'TTyRangeTrackBar', 'TTyMultiTrackBar']);
+    'TTyRangeTrackBar', 'TTyMultiTrackBar', 'TTyGradientTrackBar']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',

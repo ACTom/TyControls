@@ -80,14 +80,18 @@ msgid "Animate thumb"
 msgstr "滑块动画"
 
 #: tmainform.lblrange.caption
-msgid "Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):"
-msgstr "两个区间（TTyRangeTrackBar，MinGap = 5，带刻度标签）："
+msgid "Ranges (TTyRangeTrackBar, MinGap = 5, tick labels):"
+msgstr "区间（TTyRangeTrackBar，MinGap = 5，带刻度标签）："
 
 #: tmainform.lblmulti.caption
 msgid "Thresholds (TTyMultiTrackBar, coloured segments):"
 msgstr "阈值（TTyMultiTrackBar，分段着色）："
 
 #: tmainform.lblmultihint.caption
+msgid "A dragged thumb pushes its neighbours along (Pushable)."
+msgstr "拖动的滑块会推着相邻的滑块一起走（Pushable）。"
+
+#: tmainform.lblmultihint2.caption
 msgid "Tab steps through the thumbs; the arrows move the ringed one."
 msgstr "Tab 在滑块之间切换；方向键移动带圆环的那个。"
 
@@ -96,20 +100,32 @@ msgid "One thumb: TTyTrackBar"
 msgstr "单滑块：TTyTrackBar"
 
 #: tmainform.divmulti.caption
-msgid "Several thumbs: TTyRangeTrackBar, TTyMultiTrackBar"
-msgstr "多滑块：TTyRangeTrackBar、TTyMultiTrackBar"
+msgid "Several thumbs: range, multi-value and gradient track bars"
+msgstr "多滑块：区间、多值与渐变滑杆"
 
 #: tmainform.lblrangehint.caption
-msgid "Click the bare track between two ranges to add one there."
-msgstr "点两个区间之间的空白轨道，就在那里加一个区间。"
+msgid "Click the bare track to add a range (AllowUserRanges)."
+msgstr "点空白轨道，就在那里加一个区间（AllowUserRanges）。"
+
+#: tmainform.lblrangehint2.caption
+msgid "Drag a highlight to move its range (DraggableRanges)."
+msgstr "拖动高亮段，整个区间跟着平移（DraggableRanges）。"
+
+#: tmainform.lblrangehint3.caption
+msgid "Drag an end off the track to remove its range."
+msgstr "把区间的一端拖出轨道，松手即删除这个区间。"
 
 #: tmainform.lblstops.caption
-msgid "Gradient stops (TTyMultiTrackBar, OnDrawSegment):"
-msgstr "渐变色标（TTyMultiTrackBar，OnDrawSegment）："
+msgid "Gradient stops (TTyGradientTrackBar, preview from GradientFill):"
+msgstr "渐变色标（TTyGradientTrackBar，下方预览用 GradientFill 画）："
 
 #: tmainform.lblstopshint.caption
-msgid "Click adds a stop, right-click deletes one; the end stops stay put."
-msgstr "点轨道加色标，右键点色标可删除；首尾两个色标固定不动。"
+msgid "Click the track to add a stop; double-click one to change its colour."
+msgstr "点轨道加一个色标；双击色标可改颜色。"
+
+#: tmainform.lblstopshint2.caption
+msgid "Drag a stop off the track to remove it; the end stops stay put."
+msgstr "把色标拖出轨道即可删除；首尾两个色标固定不动。"
 
 #: tmainform.lblmonths.caption
 msgid "Months (labels from OnFormatTickLabel):"
@@ -118,10 +134,6 @@ msgstr "月份（刻度标签由 OnFormatTickLabel 给出）："
 #: tmainform.lblmultistatus.caption
 msgid "Drag a thumb, or click the track."
 msgstr "拖动滑块，或点击轨道。"
-
-#: tmainform.stopsmenudelete.caption
-msgid "Delete stop"
-msgstr "删除色标"
 
 # --- code resourcestrings (msgid=Pascal source) ---
 

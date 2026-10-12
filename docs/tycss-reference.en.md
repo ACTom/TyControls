@@ -956,8 +956,8 @@ States: `:disabled` only (`opacity`).
 | `TyToggleSwitch` | The switch track (`:active` is added while `Checked=True`) | `TTyToggleSwitch` | `:hover` `:active` `:focus` `:disabled` |
 | `TyToggleKnob` | The switch knob (a tier-a colored surface) | `TTyToggleSwitch` | none |
 | `TyTrackBar` | Slider track | `TTyTrackBar` | `:focus` `:disabled` |
-| `TyRangeTrackBar` / `TyMultiTrackBar` | The multi-thumb sliders themselves; parent key `TyTrackBar`, so without rules of their own they look like `TTyTrackBar` | `TTyRangeTrackBar` / `TTyMultiTrackBar` | `:focus` `:disabled` |
-| `TyTrackThumb` | Slider thumb (tier-a). The `:focus` `outline` is drawn **inside** the thumb (`outline-offset` moves it in); the default theme draws a ring in `--on-accent` | `TTyTrackBar`, `TTyRangeTrackBar`, `TTyMultiTrackBar`, `TTyTrackEdit` | `:hover` `:active` `:focus` (the thumb the arrow keys move, while the control has the focus) |
+| `TyRangeTrackBar` / `TyMultiTrackBar` / `TyGradientTrackBar` | The multi-thumb sliders themselves; parent key `TyTrackBar`, so without rules of their own they look like `TTyTrackBar` | `TTyRangeTrackBar` / `TTyMultiTrackBar` / `TTyGradientTrackBar` | `:focus` `:disabled` |
+| `TyTrackThumb` | Slider thumb (tier-a). The `:focus` `outline` is drawn **inside** the thumb (`outline-offset` moves it in); the default theme draws a ring in `--on-accent`. The multi-thumb sliders add two variants after a thumb's own class: `.removing` (a thumb dragged off the track that goes on release; the control multiplies its `opacity` into that thumb's colours, `--disabled-opacity` in the default theme) and `.stop` (a stop of `TTyGradientTrackBar`, filled with its own colour; the default theme gives it a 1px `--on-surface` edge). A theme that writes its own `TyTrackThumb` rules has to write these two as well (§8.1) | `TTyTrackBar`, `TTyRangeTrackBar`, `TTyMultiTrackBar`, `TTyGradientTrackBar`, `TTyTrackEdit` | `:hover` `:active` `:focus` (the thumb the arrow keys move, while the control has the focus) |
 | `TyTrackSelection` | Slider selection range (`SelStart..SelEnd`) and the ranges of `TTyRangeTrackBar`, reads `background` and `border-radius` | `TTyTrackBar`, `TTyRangeTrackBar` | none |
 | `TyTrackSegment` | A stretch of `TTyMultiTrackBar` between two thumbs, resolved with the `StyleClass` of its `Segments` item; reads `background` and `border-radius`. Without a class it is not drawn; the default theme has `.success`, `.warning` and `.danger` variants | `TTyMultiTrackBar` | none |
 | `TyProgressBar` | Progress bar track | `TTyProgressBar` | `:disabled` |
@@ -1388,6 +1388,7 @@ Engine-level limitations (each expanded in the sections above):
     - `--checkbox-size` / `--checkbox-gap` — check box indicator side length / gap to the caption (defaults 16 / 6);
     - `--radio-size` / `--radio-gap` — the same for radio buttons (the dot scales proportionally with the box);
     - `--groupbox-caption-height` — the GroupBox top caption band height (default 16).
+    - `--track-remove-distance` — how far past the control's edge, across the track, a thumb of a multi-thumb slider has to be dragged to go on release (default 24).
     - `--line-height` — the line box height (logical px) of **multi-line** captions. **No built-in constant**: when unset,
       the font's own line box is used, so nothing moves until you add the token; once set, the text block is
       `line count × value`, with the extra height split evenly above and below each line. The control's derived

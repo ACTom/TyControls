@@ -246,6 +246,11 @@ TyTrackThumb:hover  { render-style: bevel3d; background: var(--face-hover); }
 TyTrackThumb:active { render-style: bevel3d; background: var(--face); }
 /* The thumb the keys move: Win9x drew a thin dark focus mark inside the raised face. */
 TyTrackThumb:focus  { render-style: bevel3d; background: var(--face); outline: 1px var(--ink); outline-offset: 3px; }
+/* A thumb dragged off far enough to be removed on release fades (this skin writes its own
+   TyTrackThumb, so the default theme's class does not reach it). A gradient stop needs no
+   rule here: the raised bevel is derived from the stop's own colour, and one of its two sides
+   always stands off it. */
+TyTrackThumb.removing { render-style: bevel3d; background: var(--face); opacity: 0.5; }
 
 /* Tooltip: the pale yellow box with a thin black frame. */
 TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }

@@ -372,6 +372,7 @@ begin
     '  --toolwindow-strip-size: 36px;' + LineEnding +
     '  --toolwindow-tab-area-min: 50px;' + LineEnding +
     '  --toolwindow-tab-pad: 10px;' + LineEnding +
+    '  --track-remove-distance: 24px;' + LineEnding +
     '  --transfer-arrow-margin: 3px;' + LineEnding +
     '  --transfer-arrow-size: 12px;' + LineEnding +
     '  --transfer-button-gap: 6px;' + LineEnding +
@@ -726,6 +727,16 @@ begin
     '   ink that sits on the accent. --focus-ring is the accent itself and would vanish on an' + LineEnding +
     '   accent thumb; on a multi-thumb bar this ring is how Tab shows which thumb it is on. */' + LineEnding +
     'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
+    '/* A thumb of TTyMultiTrackBar dragged off the track far enough to be removed when it is' + LineEnding +
+    '   released (AllowUserThumbs; --track-remove-distance above says how far): faded, as a part' + LineEnding +
+    '   that is about to go. A class, not a state -- the cascade knows a fixed set of states --' + LineEnding +
+    '   added to whatever class the thumb has, so a theme can fade .big and .removing apart. */' + LineEnding +
+    'TyTrackThumb.removing { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* A colour stop of TTyGradientTrackBar is filled with the stop''s own colour, so a white stop' + LineEnding +
+    '   on a light surface, or a black one on a dark surface, would vanish into what is around it.' + LineEnding +
+    '   An edge in the surface''s ink keeps every stop in sight. Like .removing, a class the bar adds' + LineEnding +
+    '   to the stop''s own. */' + LineEnding +
+    'TyTrackThumb.stop { border-width: 1px; border-color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +

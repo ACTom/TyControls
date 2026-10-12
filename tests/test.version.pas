@@ -447,8 +447,9 @@ initialization
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
-    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyProgressBar,
-    TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
+    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar,
+    TTyGradientTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton,
+    TTyToolSeparator, TTyToolBarEx]);
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,
@@ -485,6 +486,11 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent,
     { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
     TTyCustomVirtualImageList]);
+  { The gradient track bar (#36 step 2). It reaches the palette with the design-time
+    registration (plan Task 5); until Design.pas registers it, it is not in the parse Reg() is
+    checked against, so it is registered plainly here -- form files read in the tests and the
+    custom-class guards resolve it by name. }
+  RegisterClasses([TTyGradientTrackBar]);
   RegisterTest(TVersionTest);
 
 finalization

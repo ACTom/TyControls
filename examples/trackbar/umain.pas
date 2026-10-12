@@ -11,17 +11,22 @@ unit umain;
   - LineSize: a bar whose arrow-key / wheel step is 5 instead of 1
   - AnimationsEnabled toggled from code (it is public, not published, so no .lfm can set it)
 
-  Right, several thumbs (TTyRangeTrackBar / TTyMultiTrackBar), each extra built from the bars'
-  events and public geometry, none of it inside the controls:
+  Right, several thumbs (TTyRangeTrackBar / TTyMultiTrackBar / TTyGradientTrackBar), with the
+  bars' own adding, removing and dragging switched on in umain.lfm:
   - Two ranges, MinGap = 5, tick labels; a click on the bare track adds a range there
-    (OnTrackClick)
-  - Gradient stops: each thumb's Color is a stop, the stretches between them painted as
-    gradients (OnDrawSegment), a click on the track adds a stop in the colour mixed from its
-    neighbours, a right-click on a stop offers to delete it (a TTyPopupMenu, OnContextPopup +
-    ThumbAtPoint), the first and last stops are pinned where they are but stay selectable
-    (OnThumbChanging), and a TTyPaintPanel below shows the whole gradient
-  - Three thresholds, the stretches between them coloured by segment class
+    (AllowUserRanges), a range's highlight drags the whole range (DraggableRanges), an end
+    dragged off the track removes its range
+  - Gradient stops (TTyGradientTrackBar): a click on the track adds a stop in the colour the
+    gradient has there, a double-click on a stop changes its colour, a stop dragged off the
+    track goes; the first and last stops are pinned where they are but stay selectable
+    (OnThumbChanging) and cannot be removed (OnThumbRemoving), and a TTyPaintPanel below
+    paints the same gradient from GradientFill
+  - Three thresholds, the stretches between them coloured by segment class; a dragged thumb
+    pushes its neighbours along (Pushable)
   - A range of months: the tick labels 1..12 become month names (OnFormatTickLabel)
+
+  Whatever a handler here does, it runs before the bar's own behaviour and can stop it: a stop
+  refused in OnThumbRemoving stays, a move refused in OnThumbChanging does not happen.
 
   The main form (a TTyForm + TTyTitleBar), the column headings, every track bar and the live theme
   switcher are designed in umain.lfm; the code here is event handlers + theme setup only. }
@@ -31,11 +36,10 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, Forms, Controls, Menus,
+  Classes, SysUtils, Types, Graphics, Forms, Controls,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
   tyControls.BuiltinThemes, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Divider, tyControls.PaintPanel,
-  tyControls.Menu;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Divider, tyControls.PaintPanel;
 
 type
   TMainForm = class(TTyForm)
@@ -67,18 +71,20 @@ type
     LblRange: TTyLabel;
     Range1: TTyRangeTrackBar;
     LblRangeHint: TTyLabel;
+    LblRangeHint2: TTyLabel;
+    LblRangeHint3: TTyLabel;
     LblStops: TTyLabel;
-    Stops: TTyMultiTrackBar;
+    Stops: TTyGradientTrackBar;
     StopsPreview: TTyPaintPanel;
     LblStopsHint: TTyLabel;
+    LblStopsHint2: TTyLabel;
     LblMulti: TTyLabel;
     Multi1: TTyMultiTrackBar;
     LblMultiHint: TTyLabel;
+    LblMultiHint2: TTyLabel;
     LblMonths: TTyLabel;
     Months: TTyRangeTrackBar;
     LblMultiStatus: TTyLabel;
-    StopsMenu: TTyPopupMenu;
-    StopsMenuDelete: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -89,23 +95,14 @@ type
     procedure Track5Change(Sender: TObject);
     procedure AnimSwitchChange(Sender: TObject);
     procedure Range1Change(Sender: TObject);
-    procedure Range1TrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
     procedure StopsChange(Sender: TObject);
-    procedure StopsTrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
-    procedure StopsDrawSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-      const ARect: TRect; var ADefaultDraw: Boolean);
     procedure StopsPreviewPaint(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
     procedure StopsThumbChanging(Sender: TObject; AIndex: Integer; var AValue: Integer;
       var AAllow: Boolean);
-    procedure StopsContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
-    procedure StopsMenuDeleteClick(Sender: TObject);
+    procedure StopsThumbRemoving(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
     procedure Multi1Change(Sender: TObject);
     procedure MonthsChange(Sender: TObject);
     procedure MonthsFormatTickLabel(Sender: TObject; AValue: Integer; var AText: string);
-  private
-    { The stop the context menu was raised over, noted when it pops up: by the time an item is
-      chosen the pointer is somewhere else. }
-    FMenuStop: Integer;
   end;
 
 var
@@ -148,22 +145,6 @@ begin
   end;
   p := Pos(',', rest);
   if p > 1 then Result := Trim(Copy(rest, 1, p - 1));
-end;
-
-function ToTyColor(AColor: TColor): TTyColor;
-var
-  c: TColor;
-begin
-  c := ColorToRGB(AColor);
-  Result := TyRGB(Red(c), Green(c), Blue(c));
-end;
-
-function MixColor(A, B: TColor; T: Double): TColor;
-begin
-  A := ColorToRGB(A);
-  B := ColorToRGB(B);
-  Result := RGBToColor(Round(Red(A) + (Red(B) - Red(A)) * T),
-    Round(Green(A) + (Green(B) - Green(A)) * T), Round(Blue(A) + (Blue(B) - Blue(A)) * T));
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -241,7 +222,8 @@ begin
     LblStatus.Caption := rsAnimOff;
 end;
 
-{ The thumbs run Low0, High0, Low1, High1, ..., and each item reads what its thumbs show. }
+{ The thumbs run Low0, High0, Low1, High1, ..., and each item reads what its thumbs show. A
+  range the user adds, drags or removes fires OnChange as a moved end does. }
 procedure TMainForm.Range1Change(Sender: TObject);
 var
   s: string;
@@ -256,121 +238,18 @@ begin
   LblMultiStatus.Caption := Format(rsRangesFmt, [s]);
 end;
 
-{ A click between two ranges adds a range 10 wide there, kept MinGap clear of its neighbours;
-  a click inside a range is left to the bar (the nearest end comes to the pointer). }
-procedure TMainForm.Range1TrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
-var
-  i, lo, hi, gap: Integer;
-  r: TTyTrackRange;
-begin
-  gap := Range1.MinGap;
-  lo := Range1.Min;
-  hi := Range1.Max;
-  // The ranges are always in order: the free stretch is between the High of the range on the
-  // left and the Low of the range on the right, MinGap in from each.
-  for i := 0 to Range1.Ranges.Count - 1 do
-  begin
-    r := Range1.Ranges[i];
-    if (AValue >= r.Low) and (AValue <= r.High) then Exit;
-    if r.High < AValue then lo := Math.Max(lo, r.High + gap)
-    else hi := Math.Min(hi, r.Low - gap);
-  end;
-  AHandled := True;                       // added or not, no end jumps here
-  lo := Math.Max(lo, AValue - 5);
-  hi := Math.Min(hi, AValue + 5);
-  if (hi <= lo) or (hi - lo < gap) then Exit;     // no room
-  // Held until EndUpdate: a range added at the end would otherwise be stopped by its
-  // neighbour while its ends are set one at a time.
-  Range1.Ranges.BeginUpdate;
-  try
-    r := Range1.Ranges.Add;
-    r.Low := lo;
-    r.High := hi;
-  finally
-    Range1.Ranges.EndUpdate;
-  end;
-end;
-
+{ A stop added, moved, removed or given another colour. }
 procedure TMainForm.StopsChange(Sender: TObject);
 begin
   LblMultiStatus.Caption := Format(rsStopsFmt, [Stops.ThumbCount]);
   StopsPreview.Invalidate;
 end;
 
-{ A click on the bare track adds a stop there, its colour mixed from the stops either side by
-  where it falls between them. }
-procedure TMainForm.StopsTrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
-var
-  i: Integer;
-  c: TColor;
-  t: TTyTrackThumbItem;
-begin
-  i := 0;
-  while (i < Stops.ThumbCount) and (Stops.ThumbValues[i] < AValue) do Inc(i);
-  if Stops.ThumbCount = 0 then c := clGray
-  else if i = 0 then c := Stops.Thumbs[0].Color
-  else if i = Stops.ThumbCount then c := Stops.Thumbs[i - 1].Color
-  else c := MixColor(Stops.Thumbs[i - 1].Color, Stops.Thumbs[i].Color,
-    (AValue - Stops.ThumbValues[i - 1]) / (Stops.ThumbValues[i] - Stops.ThumbValues[i - 1]));
-  Stops.Thumbs.BeginUpdate;
-  try
-    t := Stops.Thumbs.Add;
-    t.Value := AValue;
-    t.Color := c;
-  finally
-    Stops.Thumbs.EndUpdate;
-  end;
-  Stops.SelectedThumb := t.Index;   // EndUpdate put the items in order: item index = thumb index
-  AHandled := True;
-end;
-
-{ Segment I runs from thumb I - 1 to thumb I: painted from the one's colour to the other's.
-  The two end segments (before the first stop, after the last) keep the bare groove. }
-procedure TMainForm.StopsDrawSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-  const ARect: TRect; var ADefaultDraw: Boolean);
-var
-  f: TTyFill;
-begin
-  if (AIndex = 0) or (AIndex >= Stops.ThumbCount) then Exit;
-  f := Default(TTyFill);
-  f.Kind := tfkLinearGradient;
-  f.GradFrom := ToTyColor(Stops.Thumbs[AIndex - 1].Color);
-  f.GradTo := ToTyColor(Stops.Thumbs[AIndex].Color);
-  f.GradAngleDeg := 0;              // left to right, Min to Max
-  APainter.FillBackground(ARect, f, 0);
-  ADefaultDraw := False;
-end;
-
-{ The whole gradient the stops make, each stop at its value's place across the panel. }
+{ The very gradient the bar's track shows, Min at the left. }
 procedure TMainForm.StopsPreviewPaint(Sender: TObject; APainter: TTyPainter;
   const AContent: TRect);
-var
-  f: TTyFill;
-  i, n, span: Integer;
 begin
-  n := Stops.ThumbCount;
-  if n = 0 then Exit;
-  f := Default(TTyFill);
-  if n = 1 then
-  begin
-    f.Kind := tfkSolid;
-    f.Color := ToTyColor(Stops.Thumbs[0].Color);
-  end
-  else
-  begin
-    span := Math.Max(1, Stops.Max - Stops.Min);
-    f.Kind := tfkLinearGradient;
-    SetLength(f.GradStops, n);
-    for i := 0 to n - 1 do
-    begin
-      f.GradStops[i].Color := ToTyColor(Stops.Thumbs[i].Color);
-      f.GradStops[i].Pos := (Stops.ThumbValues[i] - Stops.Min) / span;
-    end;
-    f.GradFrom := f.GradStops[0].Color;
-    f.GradTo := f.GradStops[n - 1].Color;
-    f.GradAngleDeg := 0;
-  end;
-  APainter.FillBackground(AContent, f, 0);
+  APainter.FillBackground(AContent, Stops.GradientFill(0), 0);
 end;
 
 { The first and last stops say where the gradient starts and ends: they stay where they are.
@@ -383,28 +262,11 @@ begin
     AAllow := False;
 end;
 
-{ A right-click on a stop offers to delete it; off every stop there is no menu. The pinned ends
-  cannot go, nor can a stop that would leave fewer than two. }
-procedure TMainForm.StopsContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+{ Nor can they be dragged off or deleted with the Delete key. }
+procedure TMainForm.StopsThumbRemoving(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
 begin
-  if (MousePos.X = -1) and (MousePos.Y = -1) then
-    FMenuStop := Stops.SelectedThumb       // raised from the keyboard: the selected stop
-  else
-    FMenuStop := Stops.ThumbAtPoint(MousePos.X, MousePos.Y);
-  if FMenuStop < 0 then
-  begin
-    Handled := True;
-    Exit;
-  end;
-  StopsMenuDelete.Enabled := (FMenuStop > 0) and (FMenuStop < Stops.ThumbCount - 1)
-    and (Stops.ThumbCount > 2);
-end;
-
-procedure TMainForm.StopsMenuDeleteClick(Sender: TObject);
-begin
-  if (FMenuStop > 0) and (FMenuStop < Stops.ThumbCount - 1) then
-    Stops.Thumbs.Delete(FMenuStop);
-  FMenuStop := -1;
+  if (AIndex = 0) or (AIndex = Stops.ThumbCount - 1) then
+    AAllow := False;
 end;
 
 procedure TMainForm.Multi1Change(Sender: TObject);

@@ -169,8 +169,8 @@ begin
      TTySparkline, TTyRating]);
   // Bars: sliders / progress / scroll / status / tool bars + header.
   RegisterComponents('TyControls Bars',
-    [TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyProgressBar, TTyScrollBar,
-     TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar,
+    [TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyGradientTrackBar, TTyProgressBar,
+     TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar,
      TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
   // Containers & layout.
   RegisterComponents('TyControls Containers',

@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 540
+  Height = 580
   Top = 0
   Width = 1000
   Caption = 'TrackBar example'
-  ClientHeight = 540
+  ClientHeight = 580
   ClientWidth = 1000
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 540
+    Height = 580
     Top = 0
     Width = 1000
     Align = alClient
@@ -217,7 +217,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 44
       Width = 490
-      Caption = 'Several thumbs: TTyRangeTrackBar, TTyMultiTrackBar'
+      Caption = 'Several thumbs: range, multi-value and gradient track bars'
       Alignment = taLeftJustify
     end
     object LblRange: TTyLabel
@@ -225,7 +225,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 76
       Width = 490
-      Caption = 'Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):'
+      Caption = 'Ranges (TTyRangeTrackBar, MinGap = 5, tick labels):'
     end
     object Range1: TTyRangeTrackBar
       Left = 480
@@ -247,29 +247,42 @@ object MainForm: TMainForm
           Low = 60
           High = 85
         end>
-      OnTrackClick = Range1TrackClick
+      AllowUserRanges = True
+      DraggableRanges = True
     end
     object LblRangeHint: TTyLabel
       Left = 480
       Height = 20
       Top = 146
       Width = 490
-      Caption = 'Click the bare track between two ranges to add one there.'
+      Caption = 'Click the bare track to add a range (AllowUserRanges).'
+    end
+    object LblRangeHint2: TTyLabel
+      Left = 480
+      Height = 20
+      Top = 166
+      Width = 490
+      Caption = 'Drag a highlight to move its range (DraggableRanges).'
+    end
+    object LblRangeHint3: TTyLabel
+      Left = 480
+      Height = 20
+      Top = 186
+      Width = 490
+      Caption = 'Drag an end off the track to remove its range.'
     end
     object LblStops: TTyLabel
       Left = 480
       Height = 20
-      Top = 178
+      Top = 218
       Width = 490
-      Caption = 'Gradient stops (TTyMultiTrackBar, OnDrawSegment):'
+      Caption = 'Gradient stops (TTyGradientTrackBar, preview from GradientFill):'
     end
-    object Stops: TTyMultiTrackBar
+    object Stops: TTyGradientTrackBar
       Left = 480
       Height = 24
-      Top = 200
+      Top = 240
       Width = 480
-      OnContextPopup = StopsContextPopup
-      PopupMenu = StopsMenu
       Min = 0
       Max = 100
       TickStyle = ttsNone
@@ -291,35 +304,41 @@ object MainForm: TMainForm
           Value = 100
           Color = 4474095
         end>
-      OnTrackClick = StopsTrackClick
-      OnDrawSegment = StopsDrawSegment
       OnThumbChanging = StopsThumbChanging
+      OnThumbRemoving = StopsThumbRemoving
     end
     object StopsPreview: TTyPaintPanel
       Left = 480
       Height = 32
-      Top = 230
+      Top = 270
       Width = 480
       OnPaintSurface = StopsPreviewPaint
     end
     object LblStopsHint: TTyLabel
       Left = 480
       Height = 20
-      Top = 266
+      Top = 306
       Width = 490
-      Caption = 'Click adds a stop, right-click deletes one; the end stops stay put.'
+      Caption = 'Click the track to add a stop; double-click one to change its colour.'
+    end
+    object LblStopsHint2: TTyLabel
+      Left = 480
+      Height = 20
+      Top = 326
+      Width = 490
+      Caption = 'Drag a stop off the track to remove it; the end stops stay put.'
     end
     object LblMulti: TTyLabel
       Left = 480
       Height = 20
-      Top = 298
+      Top = 358
       Width = 490
       Caption = 'Thresholds (TTyMultiTrackBar, coloured segments):'
     end
     object Multi1: TTyMultiTrackBar
       Left = 480
       Height = 24
-      Top = 320
+      Top = 380
       Width = 480
       Min = 0
       Max = 100
@@ -347,25 +366,33 @@ object MainForm: TMainForm
         item
           StyleClass = 'danger'
         end>
+      Pushable = True
     end
     object LblMultiHint: TTyLabel
       Left = 480
       Height = 20
-      Top = 350
+      Top = 410
+      Width = 490
+      Caption = 'A dragged thumb pushes its neighbours along (Pushable).'
+    end
+    object LblMultiHint2: TTyLabel
+      Left = 480
+      Height = 20
+      Top = 430
       Width = 490
       Caption = 'Tab steps through the thumbs; the arrows move the ringed one.'
     end
     object LblMonths: TTyLabel
       Left = 480
       Height = 20
-      Top = 382
+      Top = 462
       Width = 490
       Caption = 'Months (labels from OnFormatTickLabel):'
     end
     object Months: TTyRangeTrackBar
       Left = 480
       Height = 44
-      Top = 404
+      Top = 484
       Width = 480
       Min = 1
       Max = 12
@@ -381,17 +408,9 @@ object MainForm: TMainForm
     object LblMultiStatus: TTyLabel
       Left = 480
       Height = 20
-      Top = 460
+      Top = 540
       Width = 490
       Caption = 'Drag a thumb, or click the track.'
-    end
-  end
-  object StopsMenu: TTyPopupMenu
-    Left = 920
-    Top = 240
-    object StopsMenuDelete: TMenuItem
-      Caption = 'Delete stop'
-      OnClick = StopsMenuDeleteClick
     end
   end
 end
