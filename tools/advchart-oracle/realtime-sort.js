@@ -218,7 +218,12 @@ function runCase(c) {
       let flushed = false;
       for (const e of [{ at: 0, type: 'setOption', option: c.option }].concat(c.events)) {
         if (e.at !== t) continue;
-        if (e.type === 'setOption') {
+        if (e.type === 'setOption' && e.lazy) {
+          // [milestone D1-D4] lazyUpdate: merged now, rendered on the next
+          // frame -- or by an action dispatched before it
+          chart.setOption(JSON.parse(JSON.stringify(e.option)), { lazyUpdate: true });
+        }
+        else if (e.type === 'setOption') {
           chart.setOption(JSON.parse(JSON.stringify(e.option)), e.notMerge ? true : undefined);
           flushed = true;
         }
@@ -358,6 +363,42 @@ const CASES = [
     sortInfo: { ordinalNumbers: [3, 1, 2, 0, 4] } } },
   { at: 600, type: 'action', payload: { type: 'changeAxisOrder', componentType: 'xAxis', axisId: 0,
     sortInfo: { ordinalNumbers: [4, 0, 2] } } }] },
+  { id: 'action-init-sort-adds', note: '[milestone D1-D4] no race: a lazy merge adds a sixth row, and an init '
+    + 'sort dispatched by hand in the same frame renders it -- the bar the init sort\'s render adds takes its '
+    + 'layout at once (BarView: isInitSort -> attr), the five it updates likewise',
+  option: { color: PAL, xAxis: { type: 'category', data: CATS }, yAxis: { type: 'value', max: 100 },
+    series: [{ type: 'bar', data: [20, 60, 35, 90, 10] }], animationDuration: 200, animationDurationUpdate: 500 },
+  end: 1000,
+  events: [{ at: 300, type: 'setOption', lazy: true, option: { xAxis: { data: CATS.concat(['F']) },
+    series: [{ data: [20, 60, 35, 90, 10, 70] }] } },
+  { at: 300, type: 'action', payload: { type: 'changeAxisOrder', componentType: 'xAxis', axisId: 0, isInitSort: true,
+    sortInfo: { ordinalNumbers: [3, 1, 2, 0, 4] } } }] },
+  { id: 'action-order-in-flight', note: '[milestone D1-D4] the hand-dispatched orders of action-change-order, the '
+    + 'second at 400 while the first one\'s counts (from 0, 200 ms) are still running: they count again from '
+    + 'their interpolated values, not from 0',
+  option: { color: PAL, xAxis: { type: 'category', data: CATS }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', data: [20, 60, 35, 90, 10], label: labelTop }], animationDuration: 200,
+    animationDurationUpdate: 500 },
+  end: 1000,
+  events: [{ at: 300, type: 'action', payload: { type: 'changeAxisOrder', componentType: 'xAxis', axisId: 0,
+    sortInfo: { ordinalNumbers: [3, 1, 2, 0, 4] } } },
+  { at: 400, type: 'action', payload: { type: 'changeAxisOrder', componentType: 'xAxis', axisId: 0,
+    sortInfo: { ordinalNumbers: [4, 0, 2] } } }] },
+  { id: 'race-v-some-kept', note: '[milestone D1-D4] the update at 600 keeps A, B and D: their labels take the '
+    + 'value as prevValue (no count), so the reorders after it do not count them again',
+  option: raceV(), end: 1800,
+  events: [set(600, { series: [{ type: 'bar', data: [20, 60, 70, 90, 95] }] })] },
+  { id: 'race-clip-false', note: '[milestone D1-D4] clip: false on the racing series: it clips anyway '
+    + '(BarView: needsClip = clip || realtimeSort), the two bars past max ignored',
+  option: raceH({ series: [{ realtimeSort: true, name: 'X', type: 'bar', data: [30, 80, 10, 50, 20], label, clip: false }] }),
+  end: 2400,
+  events: [set(100, { series: [{ type: 'bar', data: [30, 80, 95, 50, 85] }] })] },
+  { id: 'race-partial-zero', note: '[milestone D1-D4] race-partial-data with a bar of nought: the category with '
+    + 'no bar is Number.MIN_VALUE, above the nought, so the order has moved; the tick past the rows is a '
+    + 'difference in view, and every rendered frame dispatches the same order again',
+  option: raceV({ xAxis: { type: 'category', data: ['A', 'B', 'C', 'D', 'E', 'F'], animationDurationUpdate: 400 },
+    series: [{ realtimeSort: true, type: 'bar', data: [20, 60, 35, 90, 0], label: labelTop }] }), end: 800,
+  events: [] },
 ];
 
 // ---------- the compact writer of animation.js ----------
@@ -474,7 +515,15 @@ function guards(cases) {
     JSON.stringify(b && b.track && b.track.text && b.track.text.slice(13, 20)));
   }
   if (process.env.NOSETTLE) return out;
-  for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
+  // race-partial-zero never settles: every rendered frame dispatches again
+  for (const c of cases) {
+    if (c.id === 'race-partial-zero') continue;
+    g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
+  }
+  {
+    const c = byId(cases, 'race-partial-zero');
+    g('partial-zero-redispatches', c.events.filter(e => !e.payload.isInitSort).length >= 10, JSON.stringify(c.events.length));
+  }
   return out;
 }
 

@@ -334,7 +334,12 @@ begin
       inp := inputs.Objects[ii];
       if inp.Floats['at'] <> t then Continue;
       s := inp.Strings['type'];
-      if s = 'setOption' then
+      { lazyUpdate: merged now, rendered by the next frame or by an action
+        before it [milestone D1-D4] }
+      if (s = 'setOption') and (inp.Find('lazy') <> nil) and inp.Booleans['lazy'] then
+        AssertTrue(name + ': the lazy merge is taken: ' + FChart.OptionError,
+          FChart.SetOption(inp.Objects['option'].AsJSON, '{"lazyUpdate":true}'))
+      else if s = 'setOption' then
       begin
         AssertTrue(name + ': the merge is taken: ' + FChart.OptionError,
           FChart.SetOption(inp.Objects['option'].AsJSON, ''));

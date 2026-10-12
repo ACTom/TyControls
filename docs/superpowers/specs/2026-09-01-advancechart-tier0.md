@@ -9262,7 +9262,7 @@ A10（§130）让 `MergeOption` 和 `SetOption(json)` 成了一次更新，可�
   - markLine 走 `LineDraw.updateData`：`Line.updateData` 以更新时序、带下标补间线的 `shape.x1/y1/x2/y2`，`percent` 不动；两端符号和标签每帧由 `beforeUpdate` 按线的当前形状重新摆（`merge-markers`：线的 `y1`、两端符号的 `y`、标签的 `y` 逐位同步）；
   - 时序是标注模型的（markLine 默认的 `linear` 只管入场，更新默认 500 ms `cubicInOut`）；markPoint 的标签是符号路径的文字，跟着符号组走。
 - **状态**：复用的元素带着 `hoverState` 和 `__highByOuter`，`updateStates` 先无过渡地套回 prevStates，列表没变就什么都不做；选中在系列模型的 `selectedMap` 里，合并留着它，复用的柱子一直是 `select`（`merge-select`）。brand new 的系列是新视图、新元素，没有悬停（`replace-hover`：重新生成的 id 和被替换的一样，柱子仍然入场、状态为空）。
-- **lazyUpdate**：模型当场合并，更新留到下一帧的 `_onframe`——那一帧先步进所有 clip，再 `prepare` + `update`，再 `zr.flush()`（在同一时刻再步进一次）。所以 lazy 的新补间从**这一帧步进之后**的值出发，而同步的 setOption 从**上一帧**的值出发：`merge-lazy` 与 `merge-interrupt` 在 150 ms 处的柱高不同（守卫 `lazy-after-the-step`）。
+- **[里程碑 D1–D4：lazy 的更新还等着时派发的动作，照上游 `doDispatchAction` 的「Still dirty」带着自己的 payload 渲染并当场布防，不再丢掉 payload、等下一次绘制按合并布防；见 §174。]** **lazyUpdate**：模型当场合并，更新留到下一帧的 `_onframe`——那一帧先步进所有 clip，再 `prepare` + `update`，再 `zr.flush()`（在同一时刻再步进一次）。所以 lazy 的新补间从**这一帧步进之后**的值出发，而同步的 setOption 从**上一帧**的值出发：`merge-lazy` 与 `merge-interrupt` 在 150 ms 处的柱高不同（守卫 `lazy-after-the-step`）。
 
 ### 做法
 
@@ -12502,7 +12502,7 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 
 `tools/advchart-oracle/axis-breaks.js`（真 dist，node 下 SSR / SVG，600 × 400，`TZ=UTC`，每个选项 `animation: false`，zrender 宽度表量字；`Math.random` 换成端口的 xorshift32，每个图表从 `TyJitterSeed` 起并计数；`ssr: true` 之后 `_ssr = false`；点击走 zrender 自己的 Handler：mousemove / mousedown / mouseup / click；最后 `process.exit()`）→ `tests/fixtures/advchart-axis-breaks.json`（约 470 KB）：**43 个用例、65 次渲染**。
 
-- **数值轴**（29 个）：一个断开 `'5%'` / 绝对 20 / 不写 gap（B 与多边形都没有）、两个（写乱了次序、一个百分比一个绝对）、重叠（丢第二个）、写反了加字符串的 `'50'`、两个百分比分摊、`min` 落在断开里与 `max` 落在断开里（被 extent 切一端）、完全在 extent 外、选项里 `isExpanded: true`、反向轴、`moveOverlap: false`、宽 gap（标签不动）、写了 `interval`、`splitNumber` 加 `minInterval`、显示轴线与轴刻度（切开的轴线、断开端的刻度）、`breakLine: false`、次刻度 / 次分割线 / 分割区域、写了的 breakArea 样式与锯齿参数、`borderType` 数组加 minSpan 大于 maxSpan、`breakArea.show: false`（不取随机数）、横向数值轴、折线穿过断开（一个点在断开里）、两个数值轴都断开的散点（y 先于 x 取随机数）、零以下的断开、`hideOverlap`、字符串 formatter、类目轴上写 `breaks`（忽略）。
+- **[里程碑 D1–D4：加 `v-hide-overlap-crowded`（标签挤到 `hideOverlap` 真要取舍），30 个；见 §174。]** **数值轴**（29 个）：一个断开 `'5%'` / 绝对 20 / 不写 gap（B 与多边形都没有）、两个（写乱了次序、一个百分比一个绝对）、重叠（丢第二个）、写反了加字符串的 `'50'`、两个百分比分摊、`min` 落在断开里与 `max` 落在断开里（被 extent 切一端）、完全在 extent 外、选项里 `isExpanded: true`、反向轴、`moveOverlap: false`、宽 gap（标签不动）、写了 `interval`、`splitNumber` 加 `minInterval`、显示轴线与轴刻度（切开的轴线、断开端的刻度）、`breakLine: false`、次刻度 / 次分割线 / 分割区域、写了的 breakArea 样式与锯齿参数、`borderType` 数组加 minSpan 大于 maxSpan、`breakArea.show: false`（不取随机数）、横向数值轴、折线穿过断开（一个点在断开里）、两个数值轴都断开的散点（y 先于 x 取随机数）、零以下的断开、`hideOverlap`、字符串 formatter、类目轴上写 `breaks`（忽略）。
 - **时间轴**（4 个，`useUTC: true`）：90 天里断开 40 天、两个周末（gap 0）、跨年断开（标签读 `[day][year]`）、带时区的字符串两端。
 - **dataZoom**（2 个）：数值轴的内置 dataZoom（`filterMode: 'none'`）四步——切到断开、离开断开、切断开的另一头、还原；时间轴两步。
 - **动作**（6 个）：点断开区展开、collapse、两次 toggle；两个断开先点第二个、再一个动作点两个、再收一个；`expandOnClick: false` 点了什么都不发生；`triggerEvent` 点断开标签展开；横向轴展开（事件里是 `xAxisIndex`）；动作点了不存在的断开（事件的 `breaks` 为空）。
@@ -12600,10 +12600,10 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - **管道**（5 个）：filter → sort、sort → filter → sort、boxplot → filter（按 boxplot 给的名字 `Q2`，结果 1 被丢掉）、filter → boxplot（两个结果）、一个元素的列表。
 - **串联**（10 个）：按下标串三级、按 id、数字 id 对字符串、下标与 id 都写（下标赢）、下标数组（filter 读第一个）、找不到上游（读自己的 source）、缺省第 0 个、`test:scale` 两种、`test:pairs` 加它结果 1 的副本与对结果 0 的 sort。
 - **多输出**（5 个）：boxplot 的两个结果、结果 1 的副本、对结果 1 的 filter；结果 1 的回落（filter 之后的数据集要第 1 个，拿到 boxplot 的离群点）；`fromTransformResult: 0` 加 transform；`fromTransformResult: 0` 单独写（根）；sort 结果 0 的副本。
-- **出错**（36 个，35 个上游抛）：不认识的类型、`echarts:filter` 全名、空列表、数字 transform（setOption 就抛）、列表里套列表、条件没有维度 / 维度不存在 / 维度 null / 没有运算符 / 不认识的运算符 / lt 一个串、`and: []` / `and: {}` / `not: true` / 没有 config / config 是列表 / 带数字 `length` / `and: 0`、sort 的空 config / 没有 config / 没有维度 / 没有 order / incomparable `'mid'` / 不认识的 parser / 维度不存在 / 按列表、上游按行排、重名撞车、读自己、根数据集要结果 1、对副本做 filter、上游没有 source、对象行做 boxplot、外来的要原始行、下游跟着失败；外加不抛的一个（time parser 与读不出的日期：NaN 也是数，什么都不过）。
+- **[里程碑 D1–D4：加 `e-length-and`，37 个、36 个上游抛；见 §174。]** **出错**（36 个，35 个上游抛）：不认识的类型、`echarts:filter` 全名、空列表、数字 transform（setOption 就抛）、列表里套列表、条件没有维度 / 维度不存在 / 维度 null / 没有运算符 / 不认识的运算符 / lt 一个串、`and: []` / `and: {}` / `not: true` / 没有 config / config 是列表 / 带数字 `length` / `and: 0`、sort 的空 config / 没有 config / 没有维度 / 没有 order / incomparable `'mid'` / 不认识的 parser / 维度不存在 / 按列表、上游按行排、重名撞车、读自己、根数据集要结果 1、对副本做 filter、上游没有 source、对象行做 boxplot、外来的要原始行、下游跟着失败；外加不抛的一个（time parser 与读不出的日期：NaN 也是数，什么都不过）。
 - **系列**（14 个）：filter 上的柱（标签）、sort 上的折线（含 null 断开）、对象行 filter 上的散点、管道上的饼（`{b}`）、两个系列读同一张表的两个 transform（类目按到达次序）、带表头的缺省 encode、按行读 filter 结果（继承的表头让它读得了）、结果 1 的副本上的散点、副本重新猜表头（一根柱）、`datasetId`、继承声明的维度按名字 encode、对象行 sort 上的饼；上游拒绝的两个：transform 抛错、读一个没有 source 的根数据集。
 - 每个数据集按次序 `prepareSource()`，记抛出的消息或 `_sourceList` 的每个结果：格式、是否副本（没有 `metaRawOption`）、`startIndex`、维度名、`dimensionsDetectedCount`、逐格的行；有系列的另记网格矩形、类目轴的类目、每个系列的项（柱的布局矩形、折线与散点 `dataToPoint` 的点、饼的 cx / cy / r0 / r / 起止角）和标签文字。
-- 86 条守卫（gt 50 留下哪五行、表头行在前、`'2'` 是下标 2、名为 `'1'` 的维度、嵌套、false 只剩表头、trim 两边、parser 的 `'7px'`、时区、对象行、声明维度继承、`sourceHeader: 2`、`a-1`、按列表、null 行、`reg` 上游留六行、asc / desc 的 null 在尾、词的码元序、稳定、两段归并、管道、串联四种、副本标记、回落、35 个出错用例都在对的数据集上抛、读自己是 RangeError、下游跟着抛、类目到达次序、饼排过序、副本只剩一根柱）全部成立；两次生成逐字节一致；没有 `\u0000`。另在脚本外核过：s-mix-60 / 300 / 300-multi 的 V8 结果与普通稳定插入排序**不同**——这几个用例确实在考算法本身。
+- **[里程碑 D1–D4：87 条。]** 86 条守卫（gt 50 留下哪五行、表头行在前、`'2'` 是下标 2、名为 `'1'` 的维度、嵌套、false 只剩表头、trim 两边、parser 的 `'7px'`、时区、对象行、声明维度继承、`sourceHeader: 2`、`a-1`、按列表、null 行、`reg` 上游留六行、asc / desc 的 null 在尾、词的码元序、稳定、两段归并、管道、串联四种、副本标记、回落、35 个出错用例都在对的数据集上抛、读自己是 RangeError、下游跟着抛、类目到达次序、饼排过序、副本只剩一根柱）全部成立；两次生成逐字节一致；没有 `\u0000`。另在脚本外核过：s-mix-60 / 300 / 300-multi 的 V8 结果与普通稳定插入排序**不同**——这几个用例确实在考算法本身。
 
 ### 测试
 
@@ -12672,7 +12672,7 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 
 - **`tyControls.AdvChart.StatTransform`**（新）：三个过程 `RegressionTransform`、`HistogramTransform`、`ClusteringTransform`，照上面逐个转写：
   - 维度：`ExistingDims`（经 `TTyExternalSource.DimensionOf`，找不到用 §170 的 `rsTyDsNoDimension`）、`NormalizeDims`、`DimItem`（列表外是 −1，即 undefined）；`DataDepth`（size）、`PreprocessRows` / `PreprocessValues`（dataPreprocess，第一行宽度、维度把哪几列算作要查）。
-  - 取格子：`CellNum`（JSON 数，别的一律 NaN）、`SetCell`（写出行尾先补 null，下标 −1 不写）；数字的文字一律 `TyJsNumberToString`，`Math.round` 是 `TyJsRound`，`Math.log` / `Math.pow` 是 `TyJsLog` / `TyJsPow`，`toFixed` 是 `TyJsToFixed` 外面再把 −0 规整成 +0（`FixedNum`——见偏差里的注）。`Math.LN10`、`LN2`、`E`、`−1/3`、`√50`、`√10`、`√2` 按位写死。
+  - **[里程碑 D1–D4：`TyJsToFixed` 自己对 ±0 回 +0，`FixedNum` 不再规整（`-0.001` 两位的 −0 照上游留着）；见 §174。]** 取格子：`CellNum`（JSON 数，别的一律 NaN）、`SetCell`（写出行尾先补 null，下标 −1 不写）；数字的文字一律 `TyJsNumberToString`，`Math.round` 是 `TyJsRound`，`Math.log` / `Math.pow` 是 `TyJsLog` / `TyJsPow`，`toFixed` 是 `TyJsToFixed` 外面再把 −0 规整成 +0（`FixedNum`——见偏差里的注）。`Math.LN10`、`LN2`、`E`、`−1/3`、`√50`、`√10`、`√2` 按位写死。
   - 回归：`FitRegression`（五个方法，累加次序、乘除结合次序照抄）、`Gaussian`（按列的矩阵，主元与交换范围照抄）；点的排序走 `TyJsArraySort`（§170 的 V8 TimSort），比较器 NaN 当 0。维度表：`DimInfoObject`（`{index, name, displayName}`）＋ `[2]` 的空对象；上游少于两个维度时直接 `raise`（上游在 createSource 里抛）。
   - 直方图：`MaxOf` / `MinOf` / `SumOf` / `DeviationOf` / `QuantileOf`、`SortValues`（TimSort）、`BinCount`、`QuantityExponent`、`NiceStep`、`TickRange`、`TickAt`（越界是 NaN，于是空刻度那个 NaN 箱不用特判）、`Bisect`。
   - 聚类：`TNewDims` / `NewDims`（normalizeNewDimensions）、`ElementIndex`（一个下标写进去落在数组元素还是属性上：负数、小数、2³²−1 以上是属性，看不见）；`TKMeans`（`Dist`、`Mean`、`Run`——随机初值用 `TyJitterRandom(AParams.Random^)`）；外层的切分、改号、写簇号与质心列、名字表（中间有洞就 `raise`）。
@@ -12688,7 +12688,7 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 `tools/advchart-oracle/stat-transforms.js`（真 dist 加 `test/lib/ecStat.min.js`，三个都 `echarts.registerTransform`；node 下 SSR / SVG，600 × 400，`TZ=UTC`，每个选项 `animation: false`；`Math.random` 换成端口的 xorshift32，**每张图从 `TyJitterSeed` 起并计数**；最后 `process.exit()`）→ `tests/fixtures/advchart-stat-transforms.json`（约 1.07 MB）：**164 个用例**。
 
 - **回归**（46 个）：画廊的 60 个点（linear 缺省、`start` 加表头、`all`、`none` 继承表头与声明的维度、不认识的 `formulaOn`）、`y = 2x + 1` 三个乱序点、四列按名字（第 2 列被公式盖掉、第 0 列留着）、按下标反过来、一个维度（y 是 undefined：`y = NaNx + NaN`）、三个维度（第三个只查不用）、负斜率负截距（`x + -`）、200 个噪声点；`linearThroughOrigin` 两种；`exponential`（GDP 表、`start`、负数与零、衰减）；`logarithmic`（画廊的人均寿命表，第 3 列是国名、x ≤ 0、四个点 `all`）；`polynomial` 缺省 2 阶、3 阶（画廊）、1、0、5、8 阶（病态）、−1 阶、`order: null`、`y = x² − 3x + 2`；`method: ''`；一个点（linear 与 polynomial）、竖线（x 全等）、全等的点（linear 与 exponential）、x 重复（排序稳定）、null / 词 / 短行 / 长行混着、对象行、空表（维度洞，抛）、只有表头、一个声明的维度（有公式时维度洞抛，`none` 时不抛）；数字串一个（偏差，见下）。
-- **直方图**（50 个）：画廊的两张（第 0 列、`dimensions: [1]`）、没有 config；四种方法各在 100 个均匀、500 个近似正态、300 个偏斜、80 个小整数（刻度上的平局）、60 个千分之一以下（精度 4 位）、40 个正负都有、50 个百万级、三个值上；`squareRoot` 过 2500 个值封顶；全等的值（`squareRoot` 能排、`scott` 与 `freedmanDiaconis` 抛 RangeError）、四分位距为 0（分箱数 ∞、步长 1）、一个值（缺省与 `sturges`）、`scott` 两个值（空刻度、一个 NaN 箱）、没有值（抛）、按名字、单个下标、没给维度时整行都查与只查第 0 列、对象行（抛）、结果 1 的副本。
+- **[里程碑 D1–D4：加 `h-sqrt-cap-step`（上限 50 与 51 个箱步长不同），51 个；守卫 83 条；见 §174。]** **直方图**（50 个）：画廊的两张（第 0 列、`dimensions: [1]`）、没有 config；四种方法各在 100 个均匀、500 个近似正态、300 个偏斜、80 个小整数（刻度上的平局）、60 个千分之一以下（精度 4 位）、40 个正负都有、50 个百万级、三个值上；`squareRoot` 过 2500 个值封顶；全等的值（`squareRoot` 能排、`scott` 与 `freedmanDiaconis` 抛 RangeError）、四分位距为 0（分箱数 ∞、步长 1）、一个值（缺省与 `sturges`）、`scott` 两个值（空刻度、一个 NaN 箱）、没有值（抛）、按名字、单个下标、没给维度时整行都查与只查第 0 列、对象行（抛）、结果 1 的副本。
 - **聚类**（27 个）：画廊的 60 个点切 2 / 3 / 4 / 6 个、三维四团、二维里只用一维、按名字给维度并给簇号列与质心列名字（画廊的 archive 例子）、质心列是下标列表 / 单个下标（什么都不写）/ 比维度少、簇号列在行尾之外（行里留洞，名字表靠四个表头名没有洞）、簇号列盖掉第 0 列、`outputType: 'multiple'`（没用）、`clusterCount: '3'` 与 `2.5`、点比簇少、全相同、两堆重复点切 2 与 3、null 与词混在一起、**null 让第 0 列的范围从 0 起、切法与把它换成词时不同**、表头行、对象行（一个点都没有、零维的质心）、200 个点 8 个簇、一张图里两个聚类（第二个接着第一个抽）、结果 1（质心）的副本。
 - **管道**（9 个）：filter → 对数回归（人均寿命 2015）、回归 → 按 y 降序 sort、`none` 回归 → 按名字 sort、聚类 → 按簇号与 x 两键 sort、聚类 → 只留簇 1、filter → 聚类、sort → 直方图、直方图 → filter（`VCount > 2`）、三个数据集串成 filter / 聚类 / 回归。
 - **出错**（23 个，都在 transform 那一级抛）：未知回归方法、`'toString'`、维度不存在、空行、按列表、`order` 2.5 与 −2、未知分箱方法、`dimensions: []`、直方图维度不存在、`clusterCount` 没写 / 0 / 1 / 1.5 / `'many'`、没有簇号列、簇号列是词 / 没有 `index` 的对象、聚类维度不存在、没有 config、质心列不是维度配置、簇号列在名字表外两格（洞）、下游跟着失败。
@@ -12723,7 +12723,7 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - **出错不抛**：与 §170 相同——只有这个数据集与读它的没有表，理由是端口自己的话。维度表有洞时上游在 `createSource` 里读洞的 `.type` 抛 TypeError，端口在 transform 里就拒绝（`rsTyStatDimHole`），结果相同。
 - **随机数的重跑**：上游在上游数据集版本变了时也重跑下游的 transform；端口以「`notMerge` 或合并的 piece 带 `dataset`」为准。media 单元里写 `dataset` 不算。
 - **`print`**：不做（§170 一样）。
-- 注：`TyJsToFixed(-0, p)` 回 −0，JS 的 `+(-0).toFixed(p)` 是 +0；这一批在自己的 `FixedNum` 里规整了，`tyControls.AdvChart.Scale` 的函数没有动——别的调用点要不要改，另看。
+- **[里程碑 D1–D4：已修——`TyJsToFixed` 对 ±0 回 +0，别的调用点逐个看过、看不出差别；见 §174。]** 注：`TyJsToFixed(-0, p)` 回 −0，JS 的 `+(-0).toFixed(p)` 是 +0；这一批在自己的 `FixedNum` 里规整了，`tyControls.AdvChart.Scale` 的函数没有动——别的调用点要不要改，另看。
 
 ### 落地
 
@@ -12792,8 +12792,9 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - `race-partial-data`：六个类目、五个数据——sortInfo 五个数，scale 把 F 补在后面。
 - `race-interrupt`：两次更新相隔 120 ms——计数从插值、柱子从当前位置接着走。
 - `action-change-order`：不竞赛，手动派发 `changeAxisOrder`——轴换序、柱子按系列的时序更新、标签过渡；还没有 setOption 给计数一个旧值，所以两次换序都让计数从 0 以入场时序（200 ms）重数；第二次只写三个序号。
+- **[里程碑 D1–D4 补的五个，见 §174]** `action-init-sort-adds`：lazy 合并加第六行、同一帧手动派发 init sort——六根柱当场到位；`action-order-in-flight`：第二次换序在第一次的计数还在路上时；`race-v-some-kept`：更新保留三个值，它们换序时不重数；`race-clip-false`：竞赛系列写 `clip: false` 照样裁；`race-partial-zero`：最短的柱是 0，没有柱的类目是 `MIN_VALUE`，每一帧都再派发同样的次序、补间不停。
 
-25 条守卫（init sort 在第一个 setOption 里、`isInitSort`、按值降序、写在 y 轴上；裁掉的两根留着且忽略；补间中途的换序都不是 init；y 轴标签按 anid 移动；init sort 落在入场半路；并列稳定、全等不派发；不改次序没有事件；看不见的换位不派发、爬进来派发；动画关掉时在 setOption 里换序；五个数；手动动作的次序；计数从 0 重数；每个用例最后静止）全部成立；两次生成逐字节一致；没有 `\u0000`。
+**[里程碑 D1–D4：30 条，加四个新用例的静止与「重复派发不少于 10 次」；`race-partial-zero` 不进静止守卫。]** 25 条守卫（init sort 在第一个 setOption 里、`isInitSort`、按值降序、写在 y 轴上；裁掉的两根留着且忽略；补间中途的换序都不是 init；y 轴标签按 anid 移动；init sort 落在入场半路；并列稳定、全等不派发；不改次序没有事件；看不见的换位不派发、爬进来派发；动画关掉时在 setOption 里换序；五个数；手动动作的次序；计数从 0 重数；每个用例最后静止）全部成立；两次生成逐字节一致；没有 `\u0000`。
 
 ### 测试
 
@@ -12826,3 +12827,68 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - `source/tyControls.AdvChart.AnimView.pas`：`RtTween`、`ChangeOrder`、`FValNoPrev`、柱与标签的两条布防路径。
 - `source/tyControls.AdvanceChart.pas`：竞赛的状态与队列、`RtApplySortInfos`、`RtRenderPass`、`RtRendered`、`RtFlushQueue`、`DoChangeAxisOrder`、`CategorySortInfoText`，以及 `AnimTick`、`RenderTo`、`Paint`、`FullUpdateWith`、`DispatchActionObject`、`AnimFullBegin`、`AnimAfterBuild`、`AnimSeriesInfo`、`AxisAnimElementsOf`、`PaintAxis` 里的接线。
 - `tools/advchart-oracle/realtime-sort.js`、`tests/fixtures/advchart-realtime-sort.json`、`tests/test.advchart.realtimesort.pas`（新，注册在 `tytests.lpr`）。
+
+## 174. 里程碑 D1–D4 统一验证（2026-10-12）
+
+D1–D4 四批（§169–§172）落地时每批只跑了自己的新套件和直接碰到的套件；D1 与 D2 先合进来（79d03c31），D4 在主线上做，D3 最后合（72983fa7）。这一节在 72983fa7 上做全量、变异和收尾。§173 在另一条线上写，以后合进来，编号留着。
+
+### 全量
+
+第一次全量（72983fa7 原样；四到五个变异工作树同时在编、在跑）：11326 个用例，0 个错误、0 个失败、1 个忽略（`TSelectPathOptionsTest.TestNoReadOnlyReturn`，Windows 不认目录只读，一直如此），墙钟约 1 小时 23 分。终端的 perf / zmodem / H6 和表格剪贴板这次都没有失败，不需要单跑复核。
+
+最后一次全量（下面的修补与补充用例全部在内；变异工作树已删）：还是 11326 个用例（补的都是已有测试方法里的上游用例和断言，方法数没变），0 个错误、0 个失败、1 个忽略（同上），墙钟约 58 分钟。本里程碑碰到的套件全绿。
+
+custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit`）两次都是 11 个全过——`TTyAdvanceChart` 仍在 `CNotSplit` 里，D1–D4 没有给它加 published 的东西。
+
+### 变异
+
+四批的候选清单（`s169`–`s172.md.candidates.md`，共 86 条）逐条换成精确文本（每条断言命中恰好一次，CRLF 原样），每批前面加一个必杀的哨兵变异，驱动是上次的 `c1422_mut.py` 改了批号（`d14_mut.py`）：每个变异单独打上、重编、只跑本批的套件、按字节还原，最后再编一次。跑在四个临时工作树里（D4 的套件一个变异要四分钟，后半段又分到两个空出来的工作树），补上的用例在第五个工作树里先验证再搬回主树，五个工作树最后都删掉。套件：D1 `AxisBreaksOracle` 加契约 `Break`；D2 `DatasetTransform`、`CandleBoxplot`、`Dataset`；D3 `StatTransforms`；D4 `RealtimeSort`。
+
+清单的行号是写候选时 tmp/an2 的，合并后都挪了，按原文找；几条照字面打会编不过或改了别的东西，改写过：D1-05 的 `gap := AInterval * 3 / 4` 有两处，取刻度剪枝那一处（带注释的）；D1-08 的 `span := lin.Stop - lin.Start` 有五处，取 `NiceifyJs` 里读 `BreakMapper` 的那一处；D1-18 的 `for pass := 0 to 1 do` 带上前一行注释定位；D1-20、D3-19 「删掉这一行」会让上一行的 `for` / `if` 吃掉下一句，改成空操作（`Priority := Priority`、`if not named[i] then ;`）；D4-03 / D4-04 是同一行文本、缩进不同，带下一行定位；D4-16 照清单「顺手护住下标」，第二处改成 `(t < n) and (...)`。
+
+| 批 | 变异 | 第一轮杀死 | 存活 | 处理后 |
+|---|---|---|---|---|
+| D1（§169） | 21 + 1 | 21 | 1 | 全杀 |
+| D2（§170） | 22 + 1 | 22 | 1 | 全杀 |
+| D3（§171） | 21 + 1 | 21 | 1 | 全杀 |
+| D4（§172） | 22 + 1 | 17 | 6 | 全杀（1 个露出代码的错） |
+
+共 90 个（每批 +1 是哨兵，四个哨兵都被杀）；D3 的哨兵第一次因为上一个测试程序还没退出、`tytests.exe` 写不进去报了编不过，单独重跑被杀，不算无效变异。第一轮 9 个存活，补用例后全部被杀，没有等价的。
+
+存活的处理：
+
+- **D1-20**（断开标签的 z2 不抬）：`v-hide-overlap` 名为「断开标签先留」，可那个用例里所有标签都放得下、一个都没藏，优先级从来没被比过。补上游用例 `v-hide-overlap-crowded`：`splitNumber: 40`、断开 52..900、gap `'1%'`，步长 3，标签挤成一串，`hideOverlap` 每两三个留一个；上游先留 52 与 900（它们的邻居 48、903 都藏了），连 0 和 1,002 也让了位。不抬优先级就按值的次序取，留下的不是这一组。杀了。
+- **D2-08**（条件对象一律当「不是数组样」）：`e-length` 写的是 `{dimension, gt, length: 2}`，就算不按数组样拒绝，`length` 也是不认识的运算符，照样抛。补上游用例 `e-length-and`：`{and: [...], length: 1}`——`and` 在任何运算符之前读，只有数组样的检查拒绝它。杀了。
+- **D3-09**（squareRoot 的上限 50 改 60）：`h-sqrt-cap` 是 0..1000 上的 2600 个值，50 个箱与 ⌈√2600⌉ = 51 个箱除出来的粗步长都取整到 20，箱数一样。补上游用例 `h-sqrt-cap-step`：同样 2600 个值、跨度约 160——160 / 50 = 3.2 过了 √10，步长 5；160 / 51 ≈ 3.14 没过，步长 2。守卫「上限决定步长」（结果不超过 40 行）。杀了。
+- **D4-03**（init sort 的渲染里新加的柱也补间）：清单就猜它会活。正常的竞赛里 init sort 的那次渲染没有新加的柱（`_isFirstFrame` 要等有数据的那次渲染之后才派发），要让一根柱在 init sort 的渲染里出生，得是 `lazyUpdate` 的合并还没渲染、手动派发的 `changeAxisOrder`（`isInitSort: true`）把它带出来——上游 `doDispatchAction` 里「Still dirty」那一支：等着的更新由动作带着自己的 payload 渲染，然后丢掉。补上游用例 `action-init-sort-adds`（不竞赛的柱，300 ms 时 lazy 合并加第六行，同一帧手动派发 init sort）：上游六根柱都当场摆到位（`attr`），没有一个补间。**端口在这里错了**，见下面的修补。修好以后这个变异被杀。基准脚本与测试都加了 setOption 的 `lazy` 输入：合并当场做，渲染留给下一帧或之前的动作。
+- **D4-06**（换序的渲染里，进行中的计数也从 0 重数）：`action-change-order` 的第二次换序在 600 ms，第一次的计数（200 ms）早就数完了，「从插值接着数」与「从 0 数」没有差别。补上游用例 `action-order-in-flight`：第二次换序在 400 ms，第一次的计数还在路上——上游从插值接着数。杀了。
+- **D4-07**（数值没变的标签不记 prevValue）：`race-v` 600 ms 的更新把五个值全改了，没有一个走「值相同、什么都不做」那条路。补上游用例 `race-v-some-kept`：600 ms 的更新保留 A、B、D 的值，它们的 prevValue 成了值本身，后面几次换序不再从头数；变异下它们还挂着「没有旧值」，换序时从 0 重数。杀了。
+- **D4-11**（竞赛系列的裁剪跟着 `clip` 走）：清单就猜它会活——用例都没写 `clip: false`。补上游用例 `race-clip-false`：竞赛系列写 `clip: false`，上游照样裁（`needsClip = clip || realtimeSort`），两根超出 `max` 的柱忽略。杀了。
+- **D4-15**（没有柱的刻度当 0 而不是 `Number.MIN_VALUE`）、**D4-16**（刻度号不小于行数不算「视野里有差别」）：`race-partial-data` 里五根柱都比 `MIN_VALUE` 长，`_isOrderChangedWithinSameData` 从来不认为次序动了，后面那段根本没跑。补上游用例 `race-partial-zero`：六个类目、五个数，最短的一根是 0——没有柱的 F 是 `MIN_VALUE`，比 0 大，算「动了」；排出来的次序和原来一样，可刻度 5 不小于行数 5，算视野里有差别，于是派发。派发的次序没变，下一帧的 `rendered` 又是同样的判断，**每一帧都再派发一次**，补间永远不停（上游如此，端口也逐帧对上：800 ms 里 41 个事件，最后一帧 5 个 clip）。这个用例不进「最后一帧静止」的守卫，另加守卫「重复派发不少于 10 次」。两个变异都不再派发，被杀。
+
+这一轮存活的九个里八个是测试的缺口，一个（D4-03）露出了代码的错。
+
+### 修补
+
+- **lazy 更新等着时派发的动作，按动作自己的渲染布防**（D4-03 发现）。端口的 `AnimFullBegin` 在「已有一次更新等着布防」时直接返回：等着的是整更新就收下新的 payload，等着的是合并（lazy 的合并就是这样）就什么都不收——payload 丢了，`changeAxisOrder` 的标记（`FRtChange`）也丢了，`AnimFullEnd` 又只给整更新布防，合并的动画留到下一次绘制按合并的语义布防。上游 `doDispatchAction` 里只要还脏（`PENDING_UPDATE`），就 `prepare` 之后用动作的 payload 跑 `update`，然后把等着的那次丢掉。修法：`FLazyPending` 时 `AnimFullBegin` 收下 payload 与 `FRtChange`，记 `FAnimLazyTaken`，`AnimFullEnd` 照整更新那样当场布防；模型还是那次合并（或 notMerge）的。`action-init-sort-adds` 修前 670 处不同（每根柱带着补间、x 还是五个类目时的位置、11 个 clip），修后逐位对上；`AnimMerge`、`OptionMerge`、`AnimFullUpdate` 三个碰 lazy 的套件不变。§134 的 lazyUpdate 条目在原处标注。
+- **`TyJsToFixed(-0, p)` 回 +0**（D3 留下的注）。toFixed 的符号来自 `x < 0`，−0 不是，`(-0).toFixed(2)` 是 `'0.00'`，读回 +0；`-0.001` 到两位是 `'-0.00'`，读回 −0。端口原来对 ±0 原样返回（`m = 0` 与「整数是自己」走同一个出口），现在 `m = 0` 回 +0，`-0.001` 那种照旧是 −0。`StatTransform` 的 `FixedNum` 不再把所有的零规整成 +0——那样连 `-0.001` 的 −0 也改了，上游并不改。其余调用点（`Scale` 的 nice 与刻度、`Stack`、`DataZoom`、`Funnel`、`Gauge`、`Graph`、`Marker`、`MarkerView`、极坐标裁剪、`Parallel`）逐个看过：零经 `TyJsNumberToString` / `TyJsToFixedStr` 都印 `0`，比较不看符号，这些值没有进 `1/x` 或 `atan2`，看不出差别。所以测试只在函数一层：`TestToFixedRoundsTheWayJavaScriptDoes` 补 −0（两位、零位）回 +0、+0 不变、`-0.001` 两位是 −0，修前红。§171 的两处在原处标注。
+
+### CONTRIBUTING 检查
+
+- Lazarus 3.0：`laz30_build.ps1`（私有 `--pcp`、`--skip-dependencies -B`）把 `tycontrols.lpk`、`tycontrols_db.lpk`、`tycontrols_dt.lpk` 在 `D:\lazarus30` 下各编一遍，修补前后两次三个都是 0。3.0 的构建把 `languages/tyControls.StrConsts.pot` 按编译器的次序重写了一遍（D2 / D3 手工追加的条目挪到了字母序的位置，内容一字不差），提交的是重写后的那份，免得以后每次编包都弄脏工作树。
+- custom 拆类守卫：见上。
+- 语言文件：`StrConsts.pas` 397 个资源串，`.pot` 与 zh_CN `.po` 各 397 条、一一对应、没有空译文；这四批新增 49 条，没有带来新的重复 msgid（原有 12 组同名条目按标识区分）；themebuilder 那份 zh_CN 与 `languages/tycontrols.strconsts.zh_CN.po` 逐字节相同。
+- 生成物：重跑 `gen-defaulttheme.ps1`（1658 行内容）、`gen-tycss-catalog.ps1`（266 个令牌、315 个类型键）、`gen-builtinthemes.ps1`（15 套皮肤），`git diff --quiet` 为真。
+- 新单元：`AdvChart.AxisBreak`、`AdvChart.DataTransform`、`AdvChart.StatTransform` 都在 `tycontrols.lpk` 里；不进库的 `tycontrols.pas` 里原来缺这三个（§169 说加了，加在了 tmp/an2 的那份里），补上。
+
+### 路线图
+
+`docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`：Tier 3 从 DONE 3 · PARTIAL 7 · NOT STARTED 13 变成 DONE 6 · PARTIAL 6 · NOT STARTED 11。`realtimeSort` 柱状竞赛 NOT STARTED → DONE，统计变换 NOT STARTED → DONE，dataset transform 管线 PARTIAL → DONE（`reg` 照路线图不做）；断轴仍是 PARTIAL——分段映射、锯齿与缓存、刻度剪枝、nice、展开收起都在了，缺的是 log 轴与 singleAxis 上的 `breaks`（上游有）。阶段 D 表里 D1 标 PARTIAL、D2–D4 标 DONE；Tier 1 多轴那一行「alignTicks 与断轴的交互没做」改成照上游不参加（§169）。
+
+### 落地
+
+- `source/tyControls.AdvanceChart.pas`：`AnimFullBegin` / `AnimFullEnd` 与 `FAnimLazyTaken`。
+- `source/tyControls.AdvChart.Scale.pas`：`TyJsToFixed` 的 ±0；`source/tyControls.AdvChart.StatTransform.pas`：`FixedNum`。
+- `tests/test.advchart.valueaxis.pas`（−0 的断言）、`tests/test.advchart.realtimesort.pas`（setOption 的 `lazy` 输入）。
+- `tools/advchart-oracle/axis-breaks.js`、`dataset-transform.js`、`stat-transforms.js`、`realtime-sort.js` 与四份基准：重生成后已有用例一个字节没变，只多了新用例（断轴的守卫条目跟着多列出新用例）。用例数：断轴 43 → 44、dataset transform 128 → 129（守卫 86 → 87）、统计变换 164 → 165（守卫 82 → 83）、竞赛 11 → 16（守卫 25 → 30）。
+- `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`；`languages/tyControls.StrConsts.pot`（重排）；本 spec 的 §134、§169、§170、§171、§172 在原处标注。
