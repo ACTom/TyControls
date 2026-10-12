@@ -2161,6 +2161,11 @@ type
       没有批注的表不该为此每格建一个临时键(与 FAttrs.IsEmpty 同一条理由)。 }
     FHasComments:    Boolean;
     FPickEditor: TTyComboBox;
+    { A pick from the open list ended the edit: the grid takes the focus when the list has
+      closed (PickEditorChange / PickEditorCloseUp, #59). Only a pick: on win32 a list left
+      for another control closes before the edit ends, so "not editing" alone would hold
+      there, but the flag does not depend on the order a widgetset closes things in. }
+    FPickEndedTheEdit: Boolean;
     FOnGetPickList: TTyGridGetPickListEvent;
     FOnCreateEditLink: TTyGridCreateEditLinkEvent;
     FOnClipboardCopy:  TTyGridClipboardEvent;
@@ -2352,6 +2357,7 @@ type
     procedure DateEditorExit(Sender: TObject);
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
+    procedure PickEditorCloseUp(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     { Esc ONLY, for the editors that cannot share EditorKeyDown because they spend Enter on
       their own content: the memo (Enter is a newline), the spin/slider/calc/date pickers
@@ -8426,6 +8432,7 @@ begin
   FPickEditor.OnKeyDown := @PickEditorKeyDown;
   FPickEditor.OnChange := @PickEditorChange;
   FPickEditor.OnExit := @PickEditorExit;
+  FPickEditor.OnCloseUp := @PickEditorCloseUp;
 
   { 第三个复用编辑器:日期选择器。 }
   FDateEditor := TTyDateTimePicker.Create(Self);
@@ -8453,6 +8460,7 @@ begin
   FPickEditor.OnKeyDown := nil;
   FPickEditor.OnChange := nil;
   FPickEditor.OnExit := nil;
+  FPickEditor.OnCloseUp := nil;
   FDateEditor.OnKeyDown := nil;
   FDateEditor.OnExit := nil;
   FFilterEditor.OnKeyDown := nil;
@@ -16135,9 +16143,30 @@ begin
 end;
 
 procedure TTyCustomStringGrid.PickEditorChange(Sender: TObject);
+var
+  fromList: Boolean;
 begin
   { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。被拦下就留在下拉里。 }
-  if FEditing then TryEndEdit(True);
+  if not FEditing then Exit;
+  fromList := FPickEditor.DroppedDown;
+  if not TryEndEdit(True) then Exit;
+  { #59. The pick just hid the editor that held the focus, and LCL clears the form's active
+    control with it: left alone, the focus went wherever the system sent it next -- another
+    control on the form. Give it back to the grid. A pick from the open list is made inside
+    the list's click, in the list's own window, so take the focus once the list has closed
+    rather than under that click (TTyComboBox.PopupListChange defers its close-up for the same
+    reason). Whether the list was open is read while the editor still shows, before the
+    edit ends and hides it. }
+  if fromList then FPickEndedTheEdit := True
+  else if HandleAllocated and CanFocus then SetFocus;
+end;
+
+procedure TTyCustomStringGrid.PickEditorCloseUp(Sender: TObject);
+begin
+  if not FPickEndedTheEdit then Exit;
+  FPickEndedTheEdit := False;
+  { #59: a pick from the list ended the edit (PickEditorChange); the list is closed now. }
+  if not FEditing and HandleAllocated and CanFocus then SetFocus;
 end;
 
 procedure TTyCustomStringGrid.PickEditorExit(Sender: TObject);
@@ -16219,6 +16248,20 @@ end;
 procedure TTyCustomStringGrid.PickEditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
+  { #59. A closed pick list leaves Up/Down to the grid, as LCL's TPickListCellEditor does:
+    commit and move a row, as the text editor's arrows do through ChildKey (#52). The list
+    took them as "the next item" -- and a pick commits at once, so the cell's value changed
+    under a key pressed to move, and the editor closed under the focus. Open, the list has the
+    arrows; Alt+Down, a modifier, still opens it. }
+  if ((Key = VK_UP) or (Key = VK_DOWN)) and not FPickEditor.DroppedDown and
+     (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    if Key = VK_UP then MoveCursor(FCol, FRow - 1)
+    else MoveCursor(FCol, FRow + 1);
+    if not FEditing and HandleAllocated and CanFocus then SetFocus;
+    Key := 0;
+    Exit;
+  end;
   if Key <> VK_ESCAPE then Exit;
   { An open dropdown owns the key -- Esc there means "close the list", not "abandon the cell",
     and swallowing it would make the two gestures indistinguishable. }
