@@ -2989,6 +2989,7 @@ type
     property OnHeaderClick;
     property OnHeaderRightClick;
     property OnTopLeftChanged;
+    property OnFieldEditMask;
   end;
 
   TGenDBImage = class(TTyCustomDBImage)
