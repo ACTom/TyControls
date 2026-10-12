@@ -31,7 +31,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Legend, tyControls.AdvChart.Sankey,
      tyControls.AdvChart.Tree, tyControls.AdvChart.Treemap,
      tyControls.AdvChart.Graph, tyControls.AdvChart.Chord,
-     tyControls.AdvChart.Sunburst,
+     tyControls.AdvChart.Sunburst, tyControls.AdvChart.Layout,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -60,6 +60,7 @@ type
     procedure Draw(ACase: TJSONObject);
     procedure Verdict(AMinCount: Integer);
     procedure CheckGrids(ACase: TJSONObject);
+    procedure CheckNames(ACase: TJSONObject);
     procedure CheckCalls(ACase: TJSONObject);
     procedure CheckPolars(ACase: TJSONObject);
     procedure CheckTitles(ACase: TJSONObject);
@@ -303,6 +304,61 @@ begin
       Miss(Format('grid %d boxed %s here', [g.Integers['index'], BoolToStr(gb.Boxed, True)]));
     if gb.Boxed then SameRect(Format('grid %d ref', [g.Integers['index']]), gb.RefXYWH, g.Find('ref'));
     SameRect(Format('grid %d rect', [g.Integers['index']]), gb.PlotXYWH, g.Find('rect'));
+  end;
+  if ACase.Find('names') is TJSONArray then CheckNames(ACase);
+end;
+
+{ the axis names as drawn -- the determine pass, its margin level of the
+  refContainer [D9-D14 mutation round] }
+procedure TAdvChartBoxUsageOracleTest.CheckNames(ACase: TJSONObject);
+var
+  arr: TJSONArray;
+  o: TJSONObject;
+  k, q: Integer;
+  gb: TTyGridBuild;
+  axis: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  w: string;
+begin
+  arr := ACase.Arrays['names'];
+  for k := 0 to arr.Count - 1 do
+  begin
+    o := arr.Objects[k];
+    w := Format('%s axis %d name', [o.Strings['dim'], o.Integers['index']]);
+    gb := nil;
+    for q := 0 to FChart.Build.GridCount - 1 do
+      if FChart.Build.Grid(q).ComponentIndex = o.Integers['grid'] then gb := FChart.Build.Grid(q);
+    axis := nil;
+    if gb <> nil then
+    begin
+      if o.Strings['dim'] = 'x' then
+      begin
+        for q := 0 to gb.XAxisCount - 1 do
+          if gb.XAxis(q).ComponentIndex = o.Integers['index'] then axis := gb.XAxis(q);
+      end
+      else
+        for q := 0 to gb.YAxisCount - 1 do
+          if gb.YAxis(q).ComponentIndex = o.Integers['index'] then axis := gb.YAxis(q);
+    end;
+    Inc(FCompared);
+    spec := nil;
+    if axis <> nil then spec := gb.SpecFor(axis);
+    if spec = nil then
+    begin
+      Miss(w + ': no such axis here');
+      Continue;
+    end;
+    Inc(FCount);
+    if IsNull(o.Find('at')) then
+    begin
+      if spec^.NamePlacement.Shown then Miss(w + ': drawn here, not upstream');
+      Continue;
+    end;
+    if not spec^.NamePlacement.Shown then begin Miss(w + ': not drawn here'); Continue; end;
+    if spec^.NamePlacement.Text <> o.Strings['text'] then
+      Miss(Format('%s: text %s here', [w, spec^.NamePlacement.Text]));
+    SameH(w + ' x', spec^.NamePlacement.X, o.Arrays['at'].Items[0]);
+    SameH(w + ' y', spec^.NamePlacement.Y, o.Arrays['at'].Items[1]);
   end;
 end;
 
@@ -631,6 +687,28 @@ begin
       SameH(w + ' cy', ch.CY, nd.Find('cy'));
       SameH(w + ' r0', ch.R0, nd.Find('r0'));
       SameH(w + ' r', ch.R, nd.Find('r'));
+      { the angles, where the case recorded them: a node value the
+        coordinate system's dimensions read or leave unread }
+      if s.Find('angles') is TJSONArray then
+      begin
+        nodes := s.Arrays['angles'];
+        for j := 0 to nodes.Count - 1 do
+        begin
+          nd := nodes.Objects[j];
+          i := nd.Integers['i'];
+          q := -1;
+          for p := 0 to High(ch.Nodes) do
+            if ch.Nodes[p].DataIndex = i then q := p;
+          Inc(FCompared);
+          if (q < 0) or not ch.Nodes[q].HasLayout then
+          begin
+            Miss(Format('%s: node %d not laid out here', [w, i]));
+            Continue;
+          end;
+          SameH(Format('%s node %d startAngle', [w, i]), ch.Nodes[q].StartAngle, nd.Find('startAngle'));
+          SameH(Format('%s node %d endAngle', [w, i]), ch.Nodes[q].EndAngle, nd.Find('endAngle'));
+        end;
+      end;
     end
     else if t = 'sunburst' then
     begin
@@ -706,6 +784,13 @@ begin
         SameH(Format('%s row %d y', [w, i]), tm.Nodes[i].Y, nd.Find('y'));
         SameH(Format('%s row %d w', [w, i]), tm.Nodes[i].W, nd.Find('width'));
         SameH(Format('%s row %d h', [w, i]), tm.Nodes[i].H, nd.Find('height'));
+        { the pruning, where the case recorded it }
+        if nd.Find('invisible') <> nil then
+        begin
+          Inc(FCompared);
+          if tm.Nodes[i].Invisible <> nd.Booleans['invisible'] then
+            Miss(Format('%s row %d invisible %s here', [w, i, BoolToStr(tm.Nodes[i].Invisible, True)]));
+        end;
       end;
       crumbs := s.Arrays['crumbs'];
       Inc(FCompared);

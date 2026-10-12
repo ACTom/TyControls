@@ -828,6 +828,10 @@ add('series', 'pie-cells', 'pies in cells: center names, a coord over a percenta
 add('series', 'funnel-cell', 'a funnel in a cell, its box against the cell',
   { matrix: { x: { data: ['a', 'b'] }, y: { data: ['p', 'q'] } },
     series: [{ type: 'funnel', coordinateSystem: 'matrix', coord: ['b', 'q'], left: '10%', right: '10%', top: 5, bottom: 5, data: [{ value: 5, name: 'k' }, { value: 3, name: 'l' }, { value: 1, name: 'm' }] }] });
+add('series', 'funnel-frac', 'funnels in a cell whose box is not whole (x + width - x is not width in doubles): a vertical one (the view width is the cross size and centres the trapezoids) and a horizontal ascending one (the view width is the along size and the start)',
+  { matrix: { x: { data: ['a', 'b', 'c'] }, y: { data: ['p', 'q'] } },
+    series: [{ type: 'funnel', coordinateSystem: 'matrix', coord: ['b', 'p'], left: '7%', right: '3%', top: 5, bottom: 5, data: [{ value: 5, name: 'k' }, { value: 3, name: 'l' }, { value: 1, name: 'm' }] },
+      { type: 'funnel', coordinateSystem: 'matrix', coord: ['b', 'q'], left: '7%', right: '3%', top: 5, bottom: 5, orient: 'horizontal', sort: 'ascending', gap: 2, data: [{ value: 5, name: 'k' }, { value: 3, name: 'l' }, { value: 1, name: 'm' }] }] });
 gal('series', 'matrix-confusion', 'the gallery: a confusion matrix (its custom series drawn by the generic cell)');
 gal('series', 'matrix-periodic-table', 'the gallery: the periodic table (the generic cell)');
 gal('series', 'matrix-pie', 'the gallery: pies in cells');
@@ -1001,6 +1005,7 @@ function guards(out) {
   guard('pie: an explicit data usage is on the canvas', !cs('pie-cells').pies[4].box && n(cs('pie-cells').pies[4].sectors[0].cx) === 700);
   guard('pie: an unknown name has no centre', Number.isNaN(n(cs('pie-cells').pies[3].sectors[0].cx)));
   guard('funnel: in the cell', cs('funnel-cell').funnels[0].items[0].points !== null);
+  guard('funnel: in a fractional cell, both ways', cs('funnel-frac').funnels.length === 2 && cs('funnel-frac').funnels.every(f => f.items.every(it => it.points !== null)));
   guard('the gallery pies are in their cells', cs('gallery-matrix-pie').pies.length > 10);
   // view
   const vl = cs('label-rotate').matrices[0].els.filter(e => e.label);

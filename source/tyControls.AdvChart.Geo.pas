@@ -495,9 +495,10 @@ type
     procedure Resize(const AContainer: TTyRectF; APPI: Integer);
     { [Batch 154] the same in createBoxLayoutReference's container given as
       x / y / width / height -- a matrix cell or a calendar day: the box (and
-      layoutCenter / layoutSize) against the cell. A cell of no size is laid
-      out far off the canvas (TyBoxNowhere), out of sight as upstream's
-      not-a-number view. }
+      layoutCenter / layoutSize) against the cell. A cell of no height is
+      laid out far off the canvas (TyBoxNowhere), out of sight -- upstream
+      throws on it; one of no width (no column) is laid out as upstream's,
+      from x nought. }
     procedure ResizeXYWH(const ARef: TTyXYWH; APPI: Integer);
     { getRegion / getGeoCoord }
     function RegionByName(const AName: string): TTyGeoRegion;
@@ -1769,100 +1770,6 @@ begin
   Result := -1;
 end;
 
-{ THE NUMBERS AGAIN, correctly rounded. fpjson reads a number through
-  FPC's Val, which is not correctly rounded (about one in twelve thousand
-  decimals comes back a unit in the last place out), and a map is thousands
-  of decimals that JSON.parse reads exactly. So every number token of the
-  text is collected in document order and each float node of the tree, in
-  the same order, is given the value JavaScript's Number() gives the token.
-  The integers fpjson keeps are exact. Should the two orders not line up,
-  nothing is changed. }
-procedure FixNumbers(const AText: string; ARoot: TJSONData);
-var
-  toks: array of string;
-  n, i, k, len: Integer;
-  ok: Boolean;
-
-  procedure Collect;
-  var j: Integer; c: Char;
-  begin
-    i := 1;
-    len := Length(AText);
-    n := 0;
-    while i <= len do
-    begin
-      c := AText[i];
-      if c = '"' then
-      begin
-        Inc(i);
-        while (i <= len) and (AText[i] <> '"') do
-          { a backslash escapes the next character }
-          if AText[i] = #92 then Inc(i, 2) else Inc(i);
-        Inc(i);
-      end
-      else if (c = '/') and (i < len) and (AText[i + 1] = '/') then
-      begin
-        while (i <= len) and not (AText[i] in [#10, #13]) do Inc(i);
-      end
-      else if (c = '/') and (i < len) and (AText[i + 1] = '*') then
-      begin
-        Inc(i, 2);
-        while (i < len) and not ((AText[i] = '*') and (AText[i + 1] = '/')) do Inc(i);
-        Inc(i, 2);
-      end
-      else if c in ['-', '0'..'9'] then
-      begin
-        j := i;
-        Inc(i);
-        while (i <= len) and ((AText[i] in ['0'..'9', '.', 'e', 'E'])
-          or ((AText[i] in ['+', '-']) and (AText[i - 1] in ['e', 'E']))) do Inc(i);
-        if n >= Length(toks) then SetLength(toks, n * 2 + 64);
-        toks[n] := Copy(AText, j, i - j);
-        Inc(n);
-      end
-      else if c in ['a'..'z', 'A'..'Z', '_'] then
-      begin
-        while (i <= len) and (AText[i] in ['a'..'z', 'A'..'Z', '_', '0'..'9']) do Inc(i);
-      end
-      else
-        Inc(i);
-    end;
-  end;
-
-  procedure Walk(AData: TJSONData; AApply: Boolean);
-  var m: Integer;
-  begin
-    if not ok then Exit;
-    case AData.JSONType of
-      jtArray, jtObject:
-        for m := 0 to AData.Count - 1 do Walk(AData.Items[m], AApply);
-      jtNumber:
-        begin
-          if k >= n then
-          begin
-            ok := False;
-            Exit;
-          end;
-          if AApply and (AData is TJSONFloatNumber) then
-            AData.AsFloat := TyJsToNumber(toks[k]);
-          Inc(k);
-        end;
-    end;
-  end;
-
-begin
-  if ARoot = nil then Exit;
-  toks := nil;
-  Collect;
-  { first count, then write: a mismatch anywhere leaves the tree alone }
-  ok := True;
-  k := 0;
-  Walk(ARoot, False);
-  if not ok or (k <> n) then Exit;
-  k := 0;
-  Walk(ARoot, True);
-end;
-
 function ParseText(const AText: string): TJSONData;
 var err: TTyOptionError;
 begin
@@ -1872,7 +1779,8 @@ begin
     FreeAndNil(Result);
     Exit;
   end;
-  FixNumbers(AText, Result);
+  { the numbers correctly rounded: TyOptionParseRaw re-reads them
+    [Milestone D9-D14] }
 end;
 
 function TyChartRegisterMap(const AName, AGeoJson: string;
@@ -2850,9 +2758,14 @@ begin
       end;
       SetBoundingRect(lt0, lt1, rb0 - lt0, rb1 - lt1);
     end;
-    { a cell of no size: out of sight [Batch 154] }
+    { A CELL OF NO HEIGHT: out of sight [Batch 154] -- upstream's resizeGeo
+      throws on one (no roam transform is ever made). A cell of no WIDTH (a
+      coord naming a row and no column) is laid out as upstream lays it out:
+      getLayoutRect's `|| 0` for the x, the width from the height through the
+      aspect. [D9-D14 mutation round: it was put out of sight too, while
+      upstream draws it and converts through it.] }
     cont := ARef;
-    if not TyXYWHHasSize(cont) then
+    if IsNan(cont.H) or (cont.H < 0) then
       cont := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
     LayoutView(cont);
     FValid := True;
@@ -3391,6 +3304,15 @@ begin
     Result.FillSrc := gisTheme;
     Result.FillToken := tok;
     Result.Fill := InkOf(tok, AInk);
+  end
+  else if AState < 0 then
+  begin
+    { [D9-D14] areaColor and color both null: getItemStyle sets no fill,
+      and the path reads zrender's DEFAULT_PATH_STYLE fill '#000' through
+      the style's prototype (a state's style is sparse: nothing there) }
+    Result.FillSrc := gisOption;
+    Result.FillRaw := '#000';
+    TyTryParseChartColor('#000', Result.Fill);
   end;
   { [Batch 152] the data's visual over the normal fill: a visualMap's colour }
   if (AState < 0) and AGeo.Data.Active and (AGroup >= 0)

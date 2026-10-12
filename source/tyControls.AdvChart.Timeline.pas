@@ -108,6 +108,11 @@ type
       AValue: Double);
     function StateOf(AIndex: Integer): TTyAnimState;
     procedure UseStatesOf(AIndex: Integer; ANoAnimation: Boolean);
+    procedure RenderJs(ANode, ARoot: TJSONObject; AW, AH: Double;
+      const AInk: TTyTimelineInk; const AMeasurer: ITyTextMeasurer;
+      const AAnim: TTyTlAnimCfg; AUseUTC: Boolean);
+    function HitAtJs(AX, AY: Double; const AMeasurer: ITyTextMeasurer): Integer;
+    function NearestTickJs(ACoord: Double): Integer;
   public
     Uid: string;
     { [Batch 154] getViewRect's container when the timeline is in a matrix
@@ -157,6 +162,11 @@ type
     function DataToCoord(AValue: Double): Double;
     { every element's global transform (updateTransform) }
     procedure UpdateTransforms;
+    { [Milestone D9-D14] the element has a place to be painted at: its
+      global transform and its bounding rect are finite (a time axis over
+      data that are not dates puts the ticks and the labels at NaN; the
+      canvas draws nothing there) }
+    function Drawable(AIndex: Integer; const AMeasurer: ITyTextMeasurer): Boolean;
     { the display list's order: z2, then the tree's }
     function DisplayOrder: TTyIntegerArray;
     { findHover: the topmost element that is not silent under (AX, AY), css
@@ -996,7 +1006,42 @@ begin
   if A > B then Result := A else Result := B;
 end;
 
+{ [Milestone D9-D14] The view computes with JavaScript's numbers: a time
+  axis over data that are not dates has NaN values and an empty extent
+  (getDataExtent's Infinity, -Infinity), and every place is NaN. Comparing a
+  NaN with the traps on raises EInvalidOp, so the render, the hit test and
+  the nearest tick run with the traps masked (the comparisons are then
+  false, as in JavaScript); the sticky flags are cleared before the mask
+  goes back. }
+function MaskFP: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure UnmaskFP(const AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
 procedure TTyTimelineView.Render(ANode, ARoot: TJSONObject; AW, AH: Double;
+  const AInk: TTyTimelineInk; const AMeasurer: ITyTextMeasurer;
+  const AAnim: TTyTlAnimCfg; AUseUTC: Boolean);
+var mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    RenderJs(ANode, ARoot, AW, AH, AInk, AMeasurer, AAnim, AUseUTC);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TTyTimelineView.RenderJs(ANode, ARoot: TJSONObject; AW, AH: Double;
   const AInk: TTyTimelineInk; const AMeasurer: ITyTextMeasurer;
   const AAnim: TTyTlAnimCfg; AUseUTC: Boolean);
 type
@@ -1889,8 +1934,36 @@ begin
 end;
 
 procedure TTyTimelineView.UpdateTransforms;
+var mask: TFPUExceptionMask;
 begin
-  TyGfxUpdateTransforms(Root);
+  mask := MaskFP;
+  try
+    TyGfxUpdateTransforms(Root);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TTyTimelineView.Drawable(AIndex: Integer; const AMeasurer: ITyTextMeasurer): Boolean;
+var
+  mask: TFPUExceptionMask;
+  el: TTyGfxEl;
+  r: TTyXYWH;
+  i: Integer;
+begin
+  el := Els[AIndex];
+  mask := MaskFP;
+  try
+    Result := False;
+    if el.HasTransform then
+      for i := 0 to 5 do
+        if IsNan(el.Transform[i]) or IsInfinite(el.Transform[i]) then Exit;
+    r := TyGfxRect(el, AMeasurer);
+    Result := not (IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H)
+      or IsInfinite(r.X) or IsInfinite(r.Y) or IsInfinite(r.W) or IsInfinite(r.H));
+  finally
+    UnmaskFP(mask);
+  end;
 end;
 
 function TTyTimelineView.DisplayOrder: TTyIntegerArray;
@@ -1917,6 +1990,17 @@ begin
 end;
 
 function TTyTimelineView.HitAt(AX, AY: Double; const AMeasurer: ITyTextMeasurer): Integer;
+var mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    Result := HitAtJs(AX, AY, AMeasurer);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TTyTimelineView.HitAtJs(AX, AY: Double; const AMeasurer: ITyTextMeasurer): Integer;
 var
   order: TTyIntegerArray;
   i, k: Integer;
@@ -1961,6 +2045,17 @@ begin
 end;
 
 function TTyTimelineView.NearestTick(ACoord: Double): Integer;
+var mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    Result := NearestTickJs(ACoord);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TTyTimelineView.NearestTickJs(ACoord: Double): Integer;
 var
   i: Integer;
   dist, d: Double;

@@ -13617,7 +13617,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **数据集表头靠猜**：没写 `sourceHeader` 时「首行全是字符串、下面还有行」就当表头，只影响显示（行标签）和「表头格子保持字符串」，不影响写回的形状。
 - **裸写的 `series: { … }`**：列表一变形状就成数组；之后即使又只剩一个也不变回对象（整值重写这个 `series`，里面的注释计入 `Lost`）。
 - **不知道身份的数组**（系列列表以外，包括表格写回的数据数组）按「位置 + 相同的旧元素算挪动」配对：表格删了中间一行又改了下一行时，按位置补丁、结果正确，但被删那行里的注释可能挪到下一行身上——身份只交给了系列列表。中段长度乘积超过 4 096 时不找挪动，只按位置。
-- **映射失败只在读取器与扫描器对同一段文本有分歧时发生**（理论上的转义写法差异）；这时整段重写、所有注释计入 `Lost`、确定前问。正常能解析的文本（画廊 245 个、补丁测试里的各种写法）都映射得上。
+- **[里程碑 D9–D14：说错了。读取器（fcl-json 的宽松模式）读完根值不看后面，`{ series: [...] };` 这样从 JS 里贴来、末尾带 `;` 的文本照样读进来，扫描器却要读到文本结束，映射失败；键里孤立的代理项转义（`\uD800`）也是：读取器解成 U+FFFD，`DecodeKey` 留下原字节。新测试 `TestAWholeRewriteIsAskedFirst` 走的就是前一种，见 §194]** **映射失败只在读取器与扫描器对同一段文本有分歧时发生**（理论上的转义写法差异）；这时整段重写、所有注释计入 `Lost`、确定前问。正常能解析的文本（画廊 245 个、补丁测试里的各种写法）都映射得上。
 - **整段写出（空文本、映射失败）用的风格**是编辑器补全的写法（裸键、单引号、两格），不是 JSON。
 - **预览是真控件**：每次切到预览或停顿后重设 `Option` 会重播入场动画；没有关动画的开关。
 - **校验只显示**，不拦确定：和 §25 的「确定不拦」一致；唯一会拦一下的是「写回会丢注释 / 会整段重写」，那是问，不是拒。
@@ -13756,7 +13756,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **模型**：缺省 `z: -50`、`left / top / right / bottom: '10%'`；x / y 都是 `show: true`，标签 `show`、颜色 `tokens.color.secondary`、`overflow: 'break'`、`lineOverflow: 'truncate'`、`padding: [2, 3, 2, 3]`、`distance: 0`，itemStyle `color: 'none'`、`borderWidth: 1`、`borderColor: borderTint`，`dividerLineStyle` 宽 1、`tokens.color.border`；body 同 x / y 的格子；corner 的 `borderColor: 'none'`；`backgroundStyle` 无填充、边 `axisLine` 宽 1。缺省是 **merge 进选项**的，维模型是 `new Model(this.get('x', true) || {})`——**不挂父模型**，所以写了 null 的键挡住缺省。盒子：组件 init 时先合并缺省，再用选项自己的键做 `mergeLayoutParam`（不忽略尺寸）：写了 `right` 与 `width`，缺省的 `left` 就被丢掉；只写 `bottom`，缺省的 `top` 留着。矩形是 `getLayoutRect` 在整张画布上，没有边距。
 - **表头树**：`data` 前序遍历，每个节点记 `firstLeafLocator`、`level` 与它的叶子数（没有子节点或 `children: []` 算 1）；同一 `firstLeafLocator` 的节点压进一张表，然后**一轮一轮地从每张表尾部弹出**——第一轮弹出的正是每个定位的叶子，所以叶子的序号就是它的定位，父节点排在后面（`A1 A2 A31 A32 A A3`）。值：字符串是值，对象带 `value`（不是字符串就当 null），别的（数字、布尔、null）没有值。之后按序号一遍：**null 或重名**改成 `X<n>`（y 维 `Y<n>`），`n` 从「所有形如 `X数字` 的值里最大的数加一」开始递增——画出来的就是改过的名字（`['A', 'B' → ['A', 'C'], null, 'X1', {value: 5}, 'X1']` 里第二个 `A` 画成 `X2`、null 画成 `X3`、数字值画成 `X4`、第二个 `X1` 画成 `X5`）。叶子在另一个方向上的 span 是「层数减它的层」，浅的叶子一直伸到正文。`length: n` 等于 n 个 null（`X0`、`X1` …）。既没有 `data` 也没有 `length`：一层、零个叶子，类目表**收集**系列的数据（去重），每收一个就多一个叶子。
 - **定位器与序号**：沿一个方向，`0..` 是正文的列（叶子），`-1, -2, …` 是对面那棵树的层，从正文往外数。一个值先按序号找表头格（字符串查类目表，数字 `Math.round`——`-0.4` 是 `-0`、落在第 0 格），找到了就是它的定位器到 `定位器 + span - 1`；找不到而且是负数，就是对面树在 `round(值)` 上的那一层；都不是是 NaN。区间两端再各取一次单元，x 是前端的 xy、宽是 `后端.xy + 后端.wh - 前端.xy`。`dataToPoint` 是矩形中心。
-- **布局**（`layOutUnitsOnDimension`，x 再 y）：沿 x 的单元是 y 树的层（行表头的列）再 x 树的叶子。先把指定了的定下来：层的 `levels[i].levelSize`，没有就该树的 `levelSize`（对面树隐藏时是 0），叶子的 `size`（**只有叶子**，父节点的 size 不读），`parsePositionSizeOption`（百分比是 matrix 矩形的，不是画布的），再 `confineSize` 夹到矩形与剩余里，剩余也夹到 ≥ 0。没指定的平分剩余；从矩形起点往后排，**定位器是最后一个叶子的那个单元**的宽改成「矩形右缘 − 它的起点」（对抗累积误差）——除非全部都指定了而且剩下至少 1 px。零个叶子时「最后一个叶子」是 -1，于是最后一层贴边。然后每个表头格按它的单元算两个方向的矩形，非叶子再记下自己的 xy / wh。
+- **[里程碑 D9–D14：「剩余也夹到 ≥ 0」只在宽度是 −0 时起作用——上游的矩形没有负宽（`BoundingRect` 会翻过来），`width: '-0'` 经 `parseFloat` 留下 −0，夹一下成 +0；用例 `box-negative-zero`，见 §194]** **布局**（`layOutUnitsOnDimension`，x 再 y）：沿 x 的单元是 y 树的层（行表头的列）再 x 树的叶子。先把指定了的定下来：层的 `levels[i].levelSize`，没有就该树的 `levelSize`（对面树隐藏时是 0），叶子的 `size`（**只有叶子**，父节点的 size 不读），`parsePositionSizeOption`（百分比是 matrix 矩形的，不是画布的），再 `confineSize` 夹到矩形与剩余里，剩余也夹到 ≥ 0。没指定的平分剩余；从矩形起点往后排，**定位器是最后一个叶子的那个单元**的宽改成「矩形右缘 − 它的起点」（对抗累积误差）——除非全部都指定了而且剩下至少 1 px。零个叶子时「最后一个叶子」是 -1，于是最后一层贴边。然后每个表头格按它的单元算两个方向的矩形，非叶子再记下自己的 xy / wh。
 - **视图**：组里依次是 x 的表头格（序号顺序）、y 的表头格（隐藏的树不画）、正文格（y 的叶子在外层、x 的叶子在内层）、两棵树都显示时的角落格（x 的层在外、y 的层在内）、背景（`getItemStyle` 去掉 borderWidth、`lineWidth = 0`）、外框（去掉 color 等、不填充）、x 的分隔线（y 叶子 0 的上缘，横贯矩形）与 y 的分隔线。z2：正文与角落 25（格子自己有 itemStyle 时 100），表头 50 / 125，格子写的 `z2` 再父的 `z2` 优先；背景 0；外框 `borderZ2`（缺省 99），分隔线比它小 1；`traverseUpdateZ` 把文字的 z2 抬到宿主加 2。矩形与线按线宽做 `subPixelOptimize`（矩形四边各自取整，宽高是两边之差；线只在两端的两倍取整相等的方向上），`dataToLayout` 给的是取整之前的矩形（上游自己留了 FIXME）。全部 `silent`（格子没有填充时；交互是 MX2）。
 - **格子标签**：位置缺省 `'inside'`（`createTextConfig`，`distance` 0），`layoutRect` 是取整后的格子、`autoOverflowArea` 打开：`updateInnerText` 把格子按文字自己的局部变换（平移的逆）搬到文字坐标里，`calcInnerTextOverflowArea` 拿一个**两倍格子大小**、按对齐挂在原点上的框去夹它（`BoundingRect.intersect` 带 `clamp`，不相交时取近的那条边、尺寸 0），交出的矩形就是「外宽高」，原点按对齐挪到它上面；`parsePlainText` 在样式没有 `width` / `height` 时用外宽高减 padding——于是 `'break'` 按格宽断行、`lineOverflow: 'truncate'` 按格高丢掉放不下的行。**高度为负**（格子比上下 padding 还矮）时 `Math.floor(负数 / 行高)` 是负数，`lines.slice(0, 负数)` **保留除最后几行外的所有行**。有 overflow（不是 `'none'`）且有 lineOverflow 时再加一个裁剪：格子按半个边宽往里缩（`expandOrShrinkRect`，不会缩到负）。标签颜色缺省是 token（一定写着），所以没有自动描边。字符串 formatter 是 `formatTplSimple`：`componentType`、`componentIndex`、`name`、`value`、`coord`（`'x,y'`）、`$vars` 各替换第一次出现。
 - **matrix 上的系列**：`Matrix.getDimensionsInfo` 是 `x`（序数）、`y`（序数）、`value`；`referHelper` 把两棵树的维模型当作类目轴，存储的 x / y 是序号（未知的名字是 NaN、数字原样）。热力图：`dataToLayout([x, y]).rect`，z2 1，只在 `shape.x` 是 NaN 时跳过——**不看值**（`'-'` 的行照样有一格，visualMap 给它的颜色是 undefined，看不见），y 是 NaN 时造一个 y 为 NaN 的矩形。散点：`dataToPoint`，没有 clip（matrix 没有 `getArea`）；**缺省标签没有字**：defaultedLabel 是最后一个能显示的坐标维，matrix 的坐标维只有序数的 x 与 y。
@@ -13850,7 +13850,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **resizeGeo**：`boundingCoords` 不为 null 时四个数都 `isFinite` 才用，有投影时沿四条边各取 101 个点投影后取极值——**第四条「左边」是从 `(xMin, yMax)` 到 `(xMax, yMin)` 的对角线**（上游的笔误）；然后 `aspect = rect.width / rect.height * aspectScale`；`layoutCenter` 与 `layoutSize` 都为真且解析出三个数时，`aspect > 1` 宽取 size、否则高取 size，以中心摆放；否则 `getLayoutRect(盒子 + aspect, 画布)`（宽高都没写时一边取画布的 80%）再 `applyPreserveAspect`（两边的 `atan` 差小于 1e-9 时不动）。盒子是 `mergeLayoutParam` 合过缺省（`left: 'center'`、`top: 'center'`）的，`getShallow` 时 null / undefined 爬到选项根。
 - **View**：raw 是 `calculateTransform(数据矩形（y 翻转：-y - h）, 视图矩形)` 经 `decomposeTransform` 拆成 Transformable、再把 scaleY 取反、再 `getLocalTransform` 合成；roam 是 `x = 视图中心 - zoom * 中心点（center 选项按数据矩形解析、经 raw 矩阵）`、scale 是 zoom；overall 是 `decompose(roam × raw)` 再合成。**翻转的矩阵拆出来是 skewX = π**（`shearX = π/2 + rotation - atan2(m3, m2)`，m3 为负），合成时 `tan(π)`（V8 是 -1.2246467991473532e-16，不是 0）乘 scaleY 进了 m[2]——于是 overall 矩阵的 m[2] 是 4e-15 量级，每个 `dataToPoint` 的 x 都加上这一项乘纬度，三分之一的点末位不同。逆矩阵在行列式为 0 或 NaN 时保留上一次的（创建时是单位阵）。`zoom` 是 `clamp(zoom || 1, scaleLimit) || 1`。
 - **dataToPoint**：字符串是区域名，查 `getGeoCoord`（`geoCoord` 表——GE4——否则区域中心），查不到是 undefined；数组先投影（投影可以答 null），再乘 overall。**pointToData 先对像素做 unproject、再乘逆矩阵**（上游的次序，看着像笔误，照抄）。`containPoint` 是数据矩形经 overall 变换后的框。
-- **画（MapDraw）**：每个区域名一个组（重名的区域合用一组）；每个区域一条 CompoundPath 装它所有多边形（外环、洞依次是子路径），一条装它所有线；点先投影、再乘 **raw** 矩阵，组挂 **roam** 变换；`segmentIgnoreThreshold: 1`、`culling: true`。样式：`itemStyle` 的 `getItemStyle`（region 选项 → geo 选项逐键回退），`areaColor` 不为 null 时盖住 `color`，`strokeNoScale`。缺省值来自 `GeoModel`：`borderWidth 0.5`、`borderColor` 是 border 令牌、`color` 只在 geo 的 itemStyle 里**根本没有 color 这个键**时补成 backgroundTint——写了 `color: null` 就是不填。线（LineString）在样式之后 `fixLineStyle`：`stroke = stroke || fill`、`fill = null`。标签：文字是 `getFormattedLabel(name, 'normal')`——字符串 formatter `replace('{a}', name)`（只换第一个），函数用 `{name, status}` 调，否则是区域名；`align: center`、`verticalAlign: middle`；`textConfig.position` 是区域中心（投影后经 raw）在**路径带描边的包围盒**里的两个百分比字符串，`layoutRect` 存的就是这个盒子；渲染时盒子经元素的全局变换，锚点是 `x + parseFloat(百分比) / 100 * width`。标签的 z2 是 2（区域是 0）。geo 的标签缺省 `show: false`，但 `emphasis.label.show` 缺省为真，所以标签元素总在、常态下 `ignore`。
+- **[里程碑 D9–D14：「写了 `color: null` 就是不填」说错了。只写 `color: null` 时填充仍是 `areaColor` 的令牌；`areaColor` 与 `color` 都是 null 时上游不设填充，路径从 zrender 的缺省样式读到 `fill: '#000'`，填黑——端口原来不填，标签框按描边阈值多撑了，线也错；只有 `'none'` 才不填。修了，用例 `stroke-only`，见 §194]** **画（MapDraw）**：每个区域名一个组（重名的区域合用一组）；每个区域一条 CompoundPath 装它所有多边形（外环、洞依次是子路径），一条装它所有线；点先投影、再乘 **raw** 矩阵，组挂 **roam** 变换；`segmentIgnoreThreshold: 1`、`culling: true`。样式：`itemStyle` 的 `getItemStyle`（region 选项 → geo 选项逐键回退），`areaColor` 不为 null 时盖住 `color`，`strokeNoScale`。缺省值来自 `GeoModel`：`borderWidth 0.5`、`borderColor` 是 border 令牌、`color` 只在 geo 的 itemStyle 里**根本没有 color 这个键**时补成 backgroundTint——写了 `color: null` 就是不填。线（LineString）在样式之后 `fixLineStyle`：`stroke = stroke || fill`、`fill = null`。标签：文字是 `getFormattedLabel(name, 'normal')`——字符串 formatter `replace('{a}', name)`（只换第一个），函数用 `{name, status}` 调，否则是区域名；`align: center`、`verticalAlign: middle`；`textConfig.position` 是区域中心（投影后经 raw）在**路径带描边的包围盒**里的两个百分比字符串，`layoutRect` 存的就是这个盒子；渲染时盒子经元素的全局变换，锚点是 `x + parseFloat(百分比) / 100 * width`。标签的 z2 是 2（区域是 0）。geo 的标签缺省 `show: false`，但 `emphasis.label.show` 缺省为真，所以标签元素总在、常态下 `ignore`。
 - **第一次画到 canvas 的路径**（`brushPath`，首帧直接模式）：PathProxy 的 `_ux = |1 / dpr / scaleX|`（全局缩放），`lineTo` 离上一个**画出的**点两个方向都不超过一个单位的点不画，只记作「待画点」（取最远的那个）；下一个 `moveTo` 或 `closePath` 先把待画点画出来；一段超过单位的 `lineTo` 直接画、待画点作废。所以一条折线末尾的碎段**永远不画**。
 - **包围盒（`getBoundingRect`）**：路径数据里所有 M / L 点的 `Math.min` / `Math.max`（没有点是 0），有描边时按 `lineWidth / lineScale` 加宽（没有填充时取 `max(lineWidth, 5)`），`lineScale` 在 `strokeNoScale` 下是全局变换的 `sqrt(|det|)`（两个对角都离 1 不到 1e-10 时是 1）。标签算位置时元素还没有变换（lineScale 1），样式是 `fixLineStyle` 之前的；画完之后再问，盒子是变换后、修过线样式的。
 
@@ -13907,7 +13907,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **`z` 取整**（元素的 z 是整数），`zlevel` 记下但没有分层；`excludeComponents` 藏不掉 geo（没有对应的视图开关）。
 - **`getMap`** 答注册时的文本（数字重读之后的树再写出来），不是上游那个解码之后被原地改过的对象；端口多了注销与清空。
 - **SVG 地图**、投影的 `stream` 不做；`legacyViewCoordSysCenterBase` 照 §6 永不实现。
-- **数字重读只在 GeoJSON 上**：选项读取器本身仍经 fpjson 的 `Val`，任何选项里的小数都有约一万两千分之一的机会差末位——这是全端口的老问题，不是这批引入的；改读取器会动所有选项，留给里程碑决定（候选：把这里的 `FixNumbers` 挪进 `TyOptionParseRaw`）。
+- **[里程碑 D9–D14：挪进了 `TyOptionParseRaw`（`TyJsonFixNumbers`），每份选项的每个小数都按 JS 的 `Number()` 逐位读；画廊 112 688 个小数里 14 个原来差末位，代价与做法见 §194]** **数字重读只在 GeoJSON 上**：选项读取器本身仍经 fpjson 的 `Val`，任何选项里的小数都有约一万两千分之一的机会差末位——这是全端口的老问题，不是这批引入的；改读取器会动所有选项，留给里程碑决定（候选：把这里的 `FixNumbers` 挪进 `TyOptionParseRaw`）。
 - **PPI**：数字盒子、`layoutCenter`、`layoutSize` 按 PPI / 96 缩放，数据单位（`boundingCoords`、`center`）不缩放；小线段的单位是一个设备像素（相当于上游 dpr 下的 `1 / dpr`）。
 
 ### §6 与 §7 Q4b
@@ -14152,7 +14152,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
   - **pointer**：7 步——带底色的合并格中心与右下角（都命中左上角那一格）、合并格的标签、没有底色的数值格的标签、函数 formatter 的格子、角落的值、空处；`triggerEvent` 与 `matrix.tooltip.show` 都开。
   - **merge**：4 组先后两三次的 `setOption`（left 之后 right + width、top 之后 bottom + height、width 之后 left、right 之后 left 再 width），记最后的盒子与矩形。
 - 13 个 matrix、141 个表头格、389 个视图元素（178 个有字的标签）、1069 个探点、184 个格子表记录、29 个合并。
-- **79 条守卫**全部成立：每例的转写（R1 正文 / 角落格的形状是它的单元或 spanRect 的亚像素、R2 spanRect 是 id 与 span 的单元、R3 每个探点与 algebra 的矩形是定位器范围两端的单元、R4 显示次序就是按 z2 的稳定排序）与 57 条事实：数值、布尔的字、special z2、写的 z2、整列、整格替换、无效项、不合并的范围、角落、父格子铺开、表头定位器、不夹的 null、角落的夹；合并画一次且是 spanRect、1 × 1、真值 `1`、角落合并、并集与放弃、副本接管、样式被盖、连锁只剩一个 owner、**旧 span**（owner 保留自己的 span、并集外的格子单独画、探点按并集扩张）、嵌套时 special z2 也丢、表头定位器上的合并不画却扩张、角落合并、**跨进正文的合并让 `_resize` 抛错**、隐藏表头的五块；模板、x 维 / 一格的函数 formatter、`formatter: null` 用父的、合并格断行、渐变、decal 不上格子、正文与格子的 z2；缺省扩张、`ignoreMergeCells` 与它的真值读法、范围碰到合并就长大、clamp 3 不扩正文、clamp 2 不扩角落；合并格里的热力图、custom 的两种答案、`convertToLayout` 的两种答案；合并格任何地方都命中左上角、正文的值进 tooltip、事件带格子的 value；盒子的写回两条；画廊三条（五块合并、地区名、两棵树收到 3 列 10 行）。
+- **[里程碑 D9–D14：其中「clamp 3 不扩正文、clamp 2 不扩角落」两条是空的——clamp 3 把两个定位都夹到 ≤ −1、clamp 2 夹到 ≥ 0，`alg-overlap` 与 `alg-headers` 里正文的合并格碰不到夹到角落的范围，角落的也碰不到夹到正文的，有没有那个判断都成立；补了 `alg-swapped`（正文的 data 里一块合并格整个落在角落的定位上、角落的落在正文的定位上），见 §194]** **79 条守卫**全部成立：每例的转写（R1 正文 / 角落格的形状是它的单元或 spanRect 的亚像素、R2 spanRect 是 id 与 span 的单元、R3 每个探点与 algebra 的矩形是定位器范围两端的单元、R4 显示次序就是按 z2 的稳定排序）与 57 条事实：数值、布尔的字、special z2、写的 z2、整列、整格替换、无效项、不合并的范围、角落、父格子铺开、表头定位器、不夹的 null、角落的夹；合并画一次且是 spanRect、1 × 1、真值 `1`、角落合并、并集与放弃、副本接管、样式被盖、连锁只剩一个 owner、**旧 span**（owner 保留自己的 span、并集外的格子单独画、探点按并集扩张）、嵌套时 special z2 也丢、表头定位器上的合并不画却扩张、角落合并、**跨进正文的合并让 `_resize` 抛错**、隐藏表头的五块；模板、x 维 / 一格的函数 formatter、`formatter: null` 用父的、合并格断行、渐变、decal 不上格子、正文与格子的 z2；缺省扩张、`ignoreMergeCells` 与它的真值读法、范围碰到合并就长大、clamp 3 不扩正文、clamp 2 不扩角落；合并格里的热力图、custom 的两种答案、`convertToLayout` 的两种答案；合并格任何地方都命中左上角、正文的值进 tooltip、事件带格子的 value；盒子的写回两条；画廊三条（五块合并、地区名、两棵树收到 3 列 10 行）。
 
 ### 测试
 
@@ -14265,7 +14265,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **[第 152 批：做了——载荷是 `componentType: 'series'` 加 `seriesId`，组的 geo 照 GE3 往返，不是自己手势的整个重画、悬停丢掉，见 §191]** **map 系列的 geoRoam**（没有 geo 键、`componentType` 不是 geo）是 GE4 的事：这一批什么都不动，事件照发。
 - **写回不进选项文本**：中心与缩放存在 `FGeoRoam`（和关系图的 `FGraphRoam` 一样），`OptionJson` 看不到；`GeoRoamState` 答选项此刻怎么说。
 - **控制器的先后只在 geo 与系列之间按 z 比**：缩略图的控制器（z 10）与内部 dataZoom 的滚轮在端口里总排在 geo 前面，不管 geo 的 z；brush 占着 globalPan 时端口在按下时就不武装（上游按下照武装、每次移动再看）。合并或 notMerge 在拖动中途结束拖动（上游的控制器挂在 MapDraw 上，`_dragging` 留着）。
-- **悬停在拖动之间**：端口每一步 roam 都把动过的 geo 的元素原位换进现有列表（不应用状态），下一次指针事件在动过的画面上命中——与基准里每个事件后刷新显示列表的模型一致；浏览器里两次 mousemove 之间不一定有一帧，上游那时的命中用的是旧变换。列表还没建（没画过）时什么都不换，等下一次画。
+- **[里程碑 D9–D14：关系图的漫游以前没有这样做——`GraphDispatchRoam` 丢掉整张列表，同一次移动随后找悬停什么都找不到（移出、没有 mousemove，松手也没有 mouseup）；现在照 zrender 先在漫游前的画面上找悬停、这一次移动的事件与提示框用它，漫游后列表当场重建，见 §194]** **悬停在拖动之间**：端口每一步 roam 都把动过的 geo 的元素原位换进现有列表（不应用状态），下一次指针事件在动过的画面上命中——与基准里每个事件后刷新显示列表的模型一致；浏览器里两次 mousemove 之间不一定有一帧，上游那时的命中用的是旧变换。列表还没建（没画过）时什么都不换，等下一次画。
 - **[第 152 批：geo 上有系列（或有任何 custom）时，roam 当场给它们重新布局并重建列表，命中不等画；状态照旧；其他坐标系上的系列仍不重画，见 §191]** **`updateTransform` 重画系列**：上游 geoRoam 之后所有系列重画一遍（组件不重画）；这一批没有 geo 上的系列，端口只把静态层整张重画，其余系列的悬停状态不重置——没有用例覆盖，GE4 接上 geo 上的系列时再核。
 - **roam 动画**：带动画时 setOption 改了 `center` / `zoom`，上游的变换组按 `updateProps` 过渡；端口直接到终值（基准都写了 `animation: false`）。触屏的 pinch 不做（端口没有触屏手势）；光标不变（`grab` / `grabbing`，全库都没有）。
 - **缩略图**：6.1 只认 graph，geo 不接，端口一样不接。
@@ -14435,7 +14435,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 `test.advchart.geoseries`（新，注册在 `tytests.lpr`）：
 
 - **基准重放**（`TAdvChartGeoSeriesOracleTest`，1 个）：每个用例用控件自己的指针路径与 `DispatchAction` / `SetOption` 走同样的步，逐状态比上面记的每一样——126 908 次比较，其中 heatmap 的字节 112 000 个、区域组 700 个、点 291 个（三个数各有下限断言，防止空转）。点击这一步在 move 与 down 之间不画（多画一次会让 z2 多爬一级）。
-- **手写**（`TAdvChartGeoSeriesTest`，7 个）：heatmap 的零件（取整到偶数、无模糊与有模糊的笔刷、分段 `isInRange` 记住上次那一段、空色表）；map 区域画成皮肤的 `TyAdvChartMapArea` 色、悬停后是 highlight（看像素不看列表）；geoRoam 之后不画，命中测试在平移后的位置找到散点；没注册的地图什么都不画、旁边的散点照画；`pieToggleSelect` / `mapSelect` 只选中自己那一类；`coordinateSystem` 写成 cartesian2d 的 map 照样在 geo 上；画廊里七份 GeoJSON 的 geo 文件（地图换成两个方块注册在它们要的名字下）不抛异常、画出了地图。
+- **[里程碑 D9–D14：「`coordinateSystem` 写成 cartesian2d 的 map 照样在 geo 上」那个手写测试抓不住回退——选项里有坐标轴，变异下直角坐标照样绑得上、组照样把它收进 geo；真正抓它的是新的基准用例 `map-cs-written`（写 `'nope'` 与 `'radar'` 的 map），见 §194]** **手写**（`TAdvChartGeoSeriesTest`，7 个）：heatmap 的零件（取整到偶数、无模糊与有模糊的笔刷、分段 `isInRange` 记住上次那一段、空色表）；map 区域画成皮肤的 `TyAdvChartMapArea` 色、悬停后是 highlight（看像素不看列表）；geoRoam 之后不画，命中测试在平移后的位置找到散点；没注册的地图什么都不画、旁边的散点照画；`pieToggleSelect` / `mapSelect` 只选中自己那一类；`coordinateSystem` 写成 cartesian2d 的 map 照样在 geo 上；画廊里七份 GeoJSON 的 geo 文件（地图换成两个方块注册在它们要的名字下）不抛异常、画出了地图。
 - `test.advchart.marks`：别处画的名单加 `map`，断言 map 有渲染器、`'noSuchType'` 没有。`test.advchart.diagnose`：「还没有渲染器」的示例换成临时注册的假类型 `'undrawnType'`（之后 `TySeriesClearTypes` + `TySeriesRegisterBuiltinTypes` 还原）——§168 记的「再搬到 map」到这里搬不动了，map 能画了。
 
 首跑：heatmap 的字节一次全对。其余的红都是端口的缺陷或我对上游的预期错了：map 区域没填色（上面的 GE1 缺陷，连带点不中）；map 的 `selectedMode` 缺省是关的；全量重画后悬停还留着；旧动作不是全量更新；NaN 比较抛 `EInvalidOp`（散点布局放进屏蔽段）；测试挑散点元素的条件漏了带标签请求的符号。生成器那边：选择那一步的系列序号写错；带 `geoIndex` 的多边形刷选要写 `coordRange`；没有图例时每个区域都有标签（守卫写反了）；提示框富文本的记号不稳定，改拆成行。
@@ -14457,7 +14457,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **一组的布局与 spec 的属主**：geo 的盒子、`z`、`silent` 等取第一个声明的系列（上游的 geo 也是这样），区域模型的链却是主系列（F[0]）的——图例关掉第一个声明的系列以后，两者是不同的系列，上游的 `getRegionModel` 落在哪一个没有用例覆盖。
 - **符号标签的位置**总是 `'bottom'`、距离 5（上游的缺省），选项里写的 `label.position` 不读。
 - **roam 之后的重画**：端口在 roam 时只给落在这个 geo 上的系列（以及所有 custom 系列）重新布局；其他坐标系上的系列不重画（上游 `updateTransform` 全部重画，但它们的布局与 geo 无关，画出来一样）。
-- **visualMap 的 `hoverLink`**：悬停时 `DropStatic` 丢掉整张列表，move 之后不画就点击，命中测试面对空列表——端口原有的行为，基准用例写了 `hoverLink: false` 绕开，没有修。
+- **[里程碑 D9–D14：修了。指示器的显示与隐藏改调 `DropStaticKeepList`——原来有效的列表当场重建，缓存的画面照旧丢掉；测试 `TestAClickAfterAHoverLinkNeedsNoRepaint`，见 §194]** **visualMap 的 `hoverLink`**：悬停时 `DropStatic` 丢掉整张列表，move 之后不画就点击，命中测试面对空列表——端口原有的行为，基准用例写了 `hoverLink: false` 绕开，没有修。
 - **全量更新后的提示框**：旧选择动作是全量更新，端口把提示框关了；上游靠定时器在下一帧刷新它。基准用例在动作之前先 leave。
 - **没有坐标系的 pie / custom** 在 `convertToPixel` 里经 geo 0 回答的那条路没做。
 - **[第 154 批：`coordinateSystemUsage: 'box'` 的 map 做了，见 §193；dataset 输入仍不支持。]** **map 系列的 dataset 输入**不支持（只读 `data`）；`coordinateSystemUsage: 'box'` 的 map 没做。
@@ -14602,7 +14602,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - **撑轴**：`TyAxisNoZoomExtent` 在数据循环之后对每个有 `BoxCart` 的绑定 `BoxCoordUnion`——`coord`（饼再看 `center`）的那一维，数字原样、类目轴上的字符串按 `GetOrdinal`，非数不并。
 - **圆心**：`BoxPointOf`（直角坐标经 `TyCartesianToPixel`——`convertToPixel` 的那套算术，仿射快路照走；geo 经 `GeoPointOfJson`）；`SolvePies` 的 geo 分支改成看 `BoxPoint`（`GeoPieLayout` 的点改由 `BoxPointOf` 取）；`SolveChords` 多一支 `TyChordSolveAt`（`Chord`：画布当视图矩形、圆心是那个点，组的动画原点照旧按画布）；geo 漫游后 `GeoDependentsRelayout` 在有 geo 上的 `'box'` chord 时重解 chord。
 - **换算**：`FinderMatrix` 在系列没有按数据的 matrix 时看 `DataMatrix`。
-- **没有大小的格子**：timeline、single、parallel、geo 放到画布外的 `TyBoxNowhere` 盒子（同 BX1 的 grid 与 polar）；visualMap、slider、toolbox 照 `getLayoutRect` 的 `|| 0` 排（上游如此，结果有限）。
+- **[里程碑 D9–D14：geo 说错了。只写行、不写列的格子（有高、宽是 NaN）上游照常排：x 由 `getLayoutRect` 的 `|| 0` 得 0，宽由高按纵横比算出，都是有限数，只有高是 NaN 才抛错；`ResizeXYWH` 现在只在高是 NaN 或负时去 `TyBoxNowhere`，用例 `geo-no-column`，见 §194。timeline、single、parallel 没有核]** **没有大小的格子**：timeline、single、parallel、geo 放到画布外的 `TyBoxNowhere` 盒子（同 BX1 的 grid 与 polar）；visualMap、slider、toolbox 照 `getLayoutRect` 的 `|| 0` 排（上游如此，结果有限）。
 - 没有新单元、没有新的用户可见字符串、没有新的主题令牌、没有新的 JSON 入口；控件不拆，没有新的 published 属性。
 
 ### 基准
@@ -14611,7 +14611,7 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 
 - **19 例**，矩阵与日历沿用 BX1 的（格子 713 / 4 宽、527 / 7 高；日历 90 × 70 的日格）：
   - **component**（10）：visualMap 四个（连续的缺省在一格、分段的靠右居中跨两行、日历一天里居中、`matrixIndex` 不在的在画布上）；slider 三个（格子里的缺省占位——目标 grid 在画布上、格子里写四边、日历一天里竖的）；toolbox 三个（缺省右上、竖的居中跨三行、日历里带 padding）；timeline 两例（跨三列写四边、日历一天里的缺省盒子）；thumbnail（缺省盒子在两乘三的格子范围里，graph 在画布上）；radar 三个（缺省、百分比中心与混合半径跨格子、日历）；singleAxis 三个（缺省 5%、写了盒子的类目轴跨两列、日历里竖的）；parallel 两个（跨三列写四边、日历里竖排）；geo 五个（缺省盒子、`layoutCenter` / `layoutSize`、跨格子写四边且 `aspectScale: 1`、日历一天、`matrixIndex` 不在的在画布上）。
-  - **series**（5）：直角坐标上的饼三个（`coord` 加像素半径、`center` 当坐标加百分比半径、第二根 y 轴上的环）与折线，外加类目轴上按类目名的饼；geo 与直角坐标上的 `'box'` chord、geo 上按 `coord` 的饼、`'data'` 的 chord，再一步 geoRoam；map 三个（`'box'` 在一格、`'box'` 在日历一天里带 `layoutCenter` / `layoutSize`、没写用法的在画布上）；matrix 上按数据用的 tree、treemap、chord、gauge、sunburst 与缺省盒子的 sankey 的换算。
+  - **[里程碑 D9–D14：「没写用法的在画布上」那个 map 与系列 0 同一张地图，在系列 0 的组里，它的 geo 是系列 0 的、在格子里——这个用例从来没有显示过没写用法的 map 在画布上；补了 `map-data-default`（自成一组的 map，缺省用法 `'data'`，在画布上），见 §194]** **series**（5）：直角坐标上的饼三个（`coord` 加像素半径、`center` 当坐标加百分比半径、第二根 y 轴上的环）与折线，外加类目轴上按类目名的饼；geo 与直角坐标上的 `'box'` chord、geo 上按 `coord` 的饼、`'data'` 的 chord，再一步 geoRoam；map 三个（`'box'` 在一格、`'box'` 在日历一天里带 `layoutCenter` / `layoutSize`、没写用法的在画布上）；matrix 上按数据用的 tree、treemap、chord、gauge、sunburst 与缺省盒子的 sankey 的换算。
   - **interact**（3）：格子里的两个 grid 带轴 tooltip——三步 `updateAxisPointer`（第一个 grid 里、第二个 grid 里、两个都不在），`findHover` 四点、`convertFromPixel` 两次、`containPixel` 三次；格子里的 grid 带 inside 与画布上的 slider，一步 `dataZoom` 动作；`'box'` 的 graph 与 geo 各在一片格子里带 roam——graphRoam 缩放与平移、geoRoam 缩放与平移、滚轮在 graph 上、在 geo 上、在两者之外，共七步。
   - **gallery**：`matrix-mini-bar-geo`（二十个 grid、十个 geo）。
 - **记录**：每个状态记 matrix、grid、visualMap 的组、slider 的 `_location` / `_size`、toolbox 的组、timeline 的两个组、thumbnail 的背景与内容区、radar 的中心与半径、single 与 parallel 的矩形（parallel 再记每根轴的位置）、geo 的视图与 `getRoamTransform`；饼与 chord 的扇形、map 的 geo 视图、graph 的视图与节点经 `dataToPoint` 的全局点；每根直角坐标轴的 `scale.getExtent()`；`convertToPixel` / `convertFromPixel` / `containPixel`；`findHover`（只在第一个状态：之后 tooltip 的富文本框在 node 里是可命中的元素，端口的不是）；axisPointer 模型的每根轴（显隐、值、行）；tooltip 的显示、内容、锚点。
@@ -14638,14 +14638,14 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 
 ### 推迟与偏差
 
-- **没有大小的格子**：timeline、single、parallel、geo 放到画布外的 `TyBoxNowhere` 盒子（同 §190 的 grid 与 polar）——看不见，但换算会答出一个画布外的点，上游是 NaN。
+- **[里程碑 D9–D14：geo 说错了，见上面实现那一条与 §194]** **没有大小的格子**：timeline、single、parallel、geo 放到画布外的 `TyBoxNowhere` 盒子（同 §190 的 grid 与 polar）——看不见，但换算会答出一个画布外的点，上游是 NaN。
 - **撑轴的边角**：`coord` 是 `Infinity` 时端口不并（上游 `unionExtentFromNumber` 照并）；类目轴上找不到的类目名端口不并，上游的 `OrdinalScale.parse` 在轴没有 `data` 时会把它收进类目。
 - **直角坐标上 `'box'` 的 graph** 不在这条路上（它的视图另有 `injectCoordSysByOption`），照旧按数据用的直角坐标绑定；用例没有覆盖。
 - **geo 上 `'data'` 的饼**：GE4 把它画在 geo 的点上，现在照上游画在画布上；geo 上 `'data'` 的 chord 仍记 `GeoIndex`（`convertToPixel` 经 geo 答，上游如此），布局在画布上。
 - **tooltip 的框当命中目标**：node 里富文本框可命中，端口不是（§192 已记）；基准只在第一个状态比 `findHover`。
 - **漫游与命中**：基准覆盖格子里的 graph 与 geo；格子里的 tree、sankey、treemap 的漫游走的是同一套视图（`ContainTrigger` 看变换后的视图矩形），没有单独的用例；格子里 polar 的指针没有用例。
 - **按数据用的画布类型**：换算经 matrix 答了；`containPixel` 指它们照旧（上游问系列视图的 `containPoint`，gauge 等没有）——没有核。
-- **timeline 的旧问题**：缺省 `axisType: 'time'` 而 `data` 不是日期时 `DataToCoord` 比较 NaN 报 `EInvalidOp`——与格子无关，画布上一样；这一批没有修，留给里程碑。
+- **[里程碑 D9–D14：修了。上游的值都是 NaN、范围是 [Infinity, -Infinity]，刻度、标签、进度在 NaN 处（什么都画不出），按钮与动作照常；端口的渲染、命中、最近刻度与变换在屏蔽浮点陷阱下算，变换或矩形不是有限数的元素不进绘制列表；用例 `time-strings` 与手写测试，见 §194]** **timeline 的旧问题**：缺省 `axisType: 'time'` 而 `data` 不是日期时 `DataToCoord` 比较 NaN 报 `EInvalidOp`——与格子无关，画布上一样；这一批没有修，留给里程碑。
 - **控件原点不为零**：参照由 `ComponentBoxRef` 减去 `FLastRect` 的左上角得来，测试的原点都是 (0, 0)，非零原点没有用例。
 
 ### 落地
@@ -14657,3 +14657,122 @@ SVG 地图（`registerMap(name, {svg})`、`GeoSVGResource`）整个不做：它�
 - `tools/advchart-oracle/box-usage2.js`、`tests/fixtures/advchart-box-usage2.json`、`tests/test.advchart.boxusage2.pas`（新，注册在 `tytests.lpr`）。
 - 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
 - §184、§185、§188、§190、§191 在原处标注。
+
+## 194. 里程碑 D9–D14 统一验证（2026-10-13）
+
+D9–D14 与 D8b 十三批（§181–§193：粗指针与脏矩形、设计期对话框、键盘与无障碍、matrix 三批、geo 四批、box 用法两批、动作驱动的提示框）落地时每批只跑了自己的新套件和直接碰到的套件，加上两个合并提交（649d7d6f 合入 D10，8872ad9b 合入 geo 与 D10），全部在 feat/advancechart-tier2 的 64d97e56 上。这一节在 64d97e56 上做全量、变异和收尾，模式照 §174 与 §180。这是剩余路线图的最后一个里程碑。
+
+### 全量
+
+第一次全量（64d97e56 原样；七个变异工作树同时在编、在跑）：11573 个用例，0 个错误、2 个失败、1 个忽略（`TSelectPathOptionsTest.TestNoReadOnlyReturn`，同 §174），墙钟约 56 分钟。两个失败：`TTyTerminalPerfTests.TestTheLongestSliceStaysNearTheBudget`（最长一片 23.9 ms，机器满载时的已知偶发，最后一次全量里过了）；`TAdvChartCandleDrawTest.TestATypeWithNoRendererSaysSo`——**真的红**：它还在等「map 没有渲染器」，可 GE4 让 map 画在它的 geo 上了，GE4 只改了诊断套件里同一个例子，漏了这一个（见修补）。窗口测试在全量里都跑了（前面的套件初始化了 widgetset）；另外单独跑了 `TY_COARSEDIRTY_WINDOW=1` 的 `TAdvChartCoarseDirtyTest` 与 `TY_KEYBOARD_WINDOW=1` 的 `TAdvChartKeyboardTest`，一次一个，都过。
+
+最后一次全量（下面的修补、补充用例、行尾规整全部在内；变异工作树已删）：11584 个用例（多了十一个手写测试，其余补的是基准用例与已有测试里的断言），0 个错误、0 个失败、1 个忽略（同上），墙钟约 43 分钟。终端的 perf / zmodem / H6、表格剪贴板、滚动条宿主焦点这次都没有失败。
+
+custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit`）两次都是 11 个全过——D9 给 `TTyAdvanceChart` 加了 published 的 `CoarsePointer`、`PointerSize`、`UseDirtyRect`，D8 的 `Group` 也在，它仍在 `CNotSplit` 里，守卫照旧过。
+
+### 变异
+
+十三批的候选清单（`s181`–`s193.md.candidates.md`）逐条换成精确文本（每条断言命中恰好一次，CRLF 原样），每批前面加一个必杀的哨兵；驱动是 `d58_mut.py` 改了批号与日志名（`d914_mut.py`）。十三个模块（`d914_m181`–`d914_m193`）分在七个临时工作树里同时跑（`D:/Projects/ty-controls/.claude/worktrees/` 下），存活者在各自的树里补用例、重跑，补丁合回主树后再跑修补的反向变异，八个工作树（七个变异树加一个修补树）最后都删掉。改写过的：D11 的 16–18 三条跳过——D8b 之后键盘的提示框改走 `showTip` 动作，那几行代码已经没有了；D11-03、BX2-11、BX2-17、GE1-19、GE3-21、GE3-22、MX2-23、MX3-08 删掉一句会让前面的 `if` / `for` 吞下下一句，改成连条件一起删或换成空语句；GE1-13、GE1-14、GE2-25、GE3-15–17 照合并后的代码改写；BX1、BX2、D8b 各加了清单「可能存活」一节里点名的几条（共六条）。D10 的候选都在 `source/`（`TextPatch`、`SeriesEdit`），没有落在 `designtime/` 的。
+
+| 批 | 变异 | 第一轮杀死 | 存活 | 处理后 |
+|---|---|---|---|---|
+| D9（§181） | 32 + 1 | 24 | 9 | 4 个被杀，5 个等价 |
+| D10（§182） | 30 + 1 | 26 | 5 | 全杀 |
+| D11（§183） | 27 + 1 | 26 | 2 | 全杀（都只在窗口测试里能看见） |
+| D12 MX1（§184） | 22 + 1 | 22 | 1 | 全杀 |
+| D14 GE1（§185） | 22 + 1 | 17 | 6 | 全杀（露出代码的错） |
+| D12 MX2（§186） | 26 + 1 | 25 | 2 | 1 个被杀，1 个等价 |
+| D14 GE2（§187） | 27 + 1 | 23 | 5 | 全杀 |
+| D12 MX3（§188） | 24 + 1 | 23 | 2 | 全杀 |
+| D14 GE3（§189） | 26 + 1 | 25 | 2 | 全杀（用例露出代码的错） |
+| D13 BX1（§190） | 24 + 1 | 21 | 4 | 全杀（露出代码的错） |
+| D14 GE4（§191） | 20 + 1 | 19 | 2 | 全杀 |
+| D8b（§192） | 21 + 1 | 21 | 1 | 全杀 |
+| D13 BX2（§193） | 25 + 1 | 23 | 3 | 2 个被杀（一个露出代码的错），1 个等价 |
+
+共 339 个（每批 +1 是哨兵，十三个哨兵都被杀），没有编不过的。第一轮 44 个存活：37 个补用例后被杀，7 个等价。
+
+存活的处理：
+
+- **D9-02**（矩形池满后并列时取后一个）：用例里面积增量从没并列过。补 `tie`：池满五个以后第六个正好落在两个之间，并进哪个面积增量都一样，上游取第一个。杀了。
+- **D9-06 / D9-07**（旧矩形 / 新矩形只在脏时收）：`ignore` 会把元素从显示列表里拿掉，原有的 ignore 用例走不到这两支。补 `hidden-quietly`：echarts 有些地方直接写属性、不 `markRedraw`——第一根柱 `invisible` 直接写真（不脏、不该画，收它的旧矩形），再直接写假（不脏、没画过，收它的新矩形）；隐藏的那根放在列表第一个，它的旧矩形是第一个重画矩形，zrender 在那里 brush 它、`__isRendered` 才变假。两个都杀了。
+- **D9-28**（没变的无界元素不画）：清单就猜它活。补手写 `TestAnUnboundedBatchUnderARectIsDrawnAgain`：柱上压着一个 large 散点批（没有绘制矩形），悬停换柱的局部重画不画它，像素就和全画不同。杀了（先试的富文本标签在悬停里会变，整层重画，用不上）。
+- **D9-09**（样点环 `theta <= 2π`）：等价。24 次 `+= π/12` 累出来比 2π 小 1.8e-15，第 25 次大 0.26，`theta` 永远不会正好等于 2π。
+- **D9-27**（动画中也走局部重画）：等价。`PaintSeries` 一进来就把 `FDrStaticList` 置空，`FAnimLive` 或 `FAnimContinuous` 时提前退出、不再设它，所以守卫里另两个条件被 `FDrStaticList = nil` 包含了。
+- **D9-29**（有布局待做也走局部）：等价（窗口测试下也活）。`FDirty` 的十四处置位里，除了 `Resize`，要么同时 `Invalidate`（`DropStatic` 让快照失效，`DrCanPartial` 已经是假），要么在还没画过的时候；`Resize` 尺寸变了工作位图的尺寸检查挡住，尺寸没变布局就是同一份。
+- **D9-30**（每次请求都排一次 flush）：等价（窗口测试下也活）。多排的那一次进来时 `FDrPending` 已经被前一次清掉，直接返回；中间有新请求时它只是提前把那一帧刷掉，结果一样。
+- **D9-31**（回退时再同步一遍状态）：等价。`StAnimSync` 里每个代理 `want = p.CurrentStates` 就返回，第二遍什么都不布防；`AnimFlushArmed` 第二遍没有已布防的。
+- **D10-24**（单个 0 当字符串）：只有 `'007'` 的用例，0 开头的两种写法都是字符串。`TestACellKeepsItsKind` 补 `'0'` 与 `'-0.25'`。杀了。
+- **D10-27 / 28 / 29**（成对数据也给类目列、删行时成对系列也删、任何坐标系都给类目列）：补 `TestOnlyOneValueCartesianDataTakesCategories`：同一根类目轴上一个一维、一个成对的系列，再一个 `polar` 上的柱；成对的没有类目列、删行只删一维系列那一格、极坐标的柱只有一个值列。三个都杀了。
+- **D10-30**（整段重写不问）：§182 说映射失败「只是理论上的」——不对：读取器读完根值不看后面，末尾带 `;` 的文本读得进来、映射不上（键里孤立的代理项转义也是）。补 `TestAWholeRewriteIsAskedFirst`：这样的文本不改时原样返回、不问；改了名字后读得回、`RewritesWhole`、`Lost = 0`、要先问。杀了。§182 的那一条在原处标注。（顺带：`TyOptionParseRaw` 同样不理根值后面的东西，`{...} xyz` 也读得进来；要不要当错误是另一回事，没动。）
+- **D11-27**（`WM_GETOBJECT` 答窗口的 id）：只有窗口测试能看见，`TY_KEYBOARD_WINDOW=1` 下被杀。
+- **D11-28**（焦点事件的子 id 用正数）：窗口测试下也活——焦点通知只交给外部的 `NotifyWinEvent`，测试原来只看它「跑了」。窗口测试加一个本进程的 out-of-context WinEvent 钩子（`SetWinEventHook`，`EVENT_OBJECT_FOCUS`），按右键后泵一次消息：收到焦点事件、子 id 是负数、根的 `get_accName` 认得它（第一根柱）。窗口测试下杀了。
+- **MX1-03**（剩余不夹到 ≥ 0）：`oversize` 杀不了——单元先夹到剩余里，剩余永远不会是负的；上游矩形也没有负宽。唯一起作用的是宽度 −0：补 `box-negative-zero`（`width: '-0'`，等分是 +0，变异下是 −0）。杀了。§184 那一条在原处标注。
+- **MX2-25**（漏斗的宽从矩形两端相减）：`funnel-cell` 那一格 `(x + w) - x` 正好等于 `w`。在真实的格子矩形里找到一格不等的：补 `funnel-frac`（三列、格子 b、`left: '7%'`、`right: '3%'`，竖与横各一个）。杀了。
+- **MX2-06**（`max(-0, +0)` 答 −0）：等价。逐个调用点看过：区间上端、`lower`、`ALo` 都碰不到（−0, +0）这一对；只有 `PointArea` 能，而夹过的坐标只进 `<=` / `<` 比较，−0 与 +0 一样，上游也是。
+- **MX3-01 / 02**（clamp 3 也扩正文的合并、clamp 2 也扩角落的合并）：§188 的两条守卫是空的（见该处标注）。补 `alg-swapped`：正文 data 里一块合并格整个落在角落的定位上、角落 data 里一块落在正文的定位上。两个都杀了。
+- **GE1-09 / 11**（挂起的点在移动时丢掉、等距时取后一个）：补 `pending-points`（新地图 `ties`：一条线最后一段极小、一个环最后两点到上一个画出的点等距，布局取二进分数让矩阵精确）。杀了。
+- **GE1-15 / 16、GE2-08**（标签框不按描边阈值撑、线的描边总从填充来、null 的线宽当一半）：补 `stroke-only`（四个 geo：`areaColor: 'none'` 带描边、线有自己的 `borderColor`、两种颜色都 null、`borderWidth: null`）。三个都杀了。写这个用例时露出**代码的错**（见修补：两种颜色都 null 时上游填黑）。
+- **GE1-21 / 22**（缩放的第一个 `|| 1` 去掉、纵横比总重排）：补 `limit-aspect`（`zoom` 0 与 null 配 `scaleLimit {max: 0.5}`——§185 #21 说「夹完后的第二个 `|| 1` 也兜住 0」不对，上游得 0.5；纵横比恰好合上的盒子）。杀了。
+- **GE2-14**（渐变盖在合并的填充上）：补 `gradient`（A 的 `areaColor` 是渐变，悬停再离开），步比较里加一条：上游是渐变的填充端口必须是渐变。杀了。
+- **GE2-15 / 17**（命中路径不闭合、线按整宽命中）：补 `open-ring`（新地图 `ge2x`：不闭合的环、离闭合边 3 px 的探点；斜线、离线 5.2–6 px 的探点，在半宽 4 与全宽 8 之间）。杀了。
+- **GE2-27**（geo 应用状态的回答丢掉）：只有缓存的绘制路径看得出。补手写 `TestACachedFrameTakesTheHover`（`RenderCached`、悬停 A、再 `RenderCached`：像素要变、要等于 `RenderTo` 的）。杀了。
+- **GE3-17**（geo 与系列 z 相同时给系列）：补 `geo-vs-series`：同 z 的 geo 与 roam 的 graph，拖动与滚轮归 geo。杀了。这个用例原本还有后一半（graph 高一层、在 geo 的区域 D 上拖），写出来就红，露出**代码的错**（见修补），当时先拿掉、修好后补回。
+- **GE3-26**（拖动中不看 globalPan）：补 `global-pan`（拖到一半 brush `takeGlobalCursor`，被占着的那一步不平移、起点不动，放开后从原起点接着平移）。杀了。
+- **GE4-01**（map 系列不强制在 geo 上）：计划中的手写测试抓不住——选项里有坐标轴，变异下直角坐标照样绑得上、组照样收进 geo。补 `map-cs-written`（`coordinateSystem` 写 `'nope'` 与 `'radar'` 的 map，上游都画在自己的 geo 上）。杀了。§191 那一条在原处标注。
+- **GE4-03**（`min` 统计答 max）：老用例的 `min` 落在没有 visualMap、没有提示框的地图上，看不见统计。补 `map-calc-min`（visualMap 着色、提示框数值）。杀了。
+- **BX1-04**（轴名的 margin level 按画布）：补 `grid-names`（基准记每个轴名的 x / y，测试加 `CheckNames`）：格子里的 grid 比格子的一半宽、比画布的一半窄。杀了。
+- **BX1-07**（box 系列给 matrix 存储）：补 `box-nodes`：写 `nodes` 的 chord 在格子里，matrix 存储只读 `data`，图例项少了三个。杀了。写这个用例时露出**代码的错**（见修补：chord / sankey 的节点值）。
+- **BX1-23**（矩形树图的裁剪按第一格的宽）：补 `treemap-prune`（记节点的 `invisible`）。杀了。
+- **BX1-24**（每个 box 系列都读 center 当坐标）：补 `chord-centre`（日历上 `'box'` 的 chord、没写 `coord`、`center` 是时间戳）。杀了。
+- **D8b-08**（没有行的基轴也出提示框）：清单猜它活。补 `short-rows` 与 `TestABaseAxisWithoutRowsAsUpstream`（柱系列到 b 为止，在 d 上上游跳过这根轴、发 hideTip）。杀了。
+- **BX2-15**（没写用法的 map 当 box）：§193 的「没写用法的在画布上」那个 map 与系列 0 同一张地图，在系列 0 的组里，从来没在画布上过。补 `map-data-default`（自成一组）。杀了。§193 那一条在原处标注。
+- **BX2-24**（没有大小的格子里 geo 也排）：清单猜它活；查下去是**代码的错**（见修补：只有高是 NaN 上游才抛错），照新代码改写的变异被手写 `TestAGeoOfNoRowIsOutOfSight` 杀，修前的规则当变异被 `geo-no-column` 杀。
+- **BX2-23**（局部参照加上原点）：等价。`FLastRect` 只在 `Relayout` 里赋值，每个调用 `PaintStatic` 的地方都传 `Rect(0, 0, w, h)`（`RenderTo` 先把矩形化成本地的、`EndPaint` 在原点贴），左上角恒为 0，`X - 0 = X + 0`。
+
+第一轮 44 个存活里 37 个是测试的缺口，补用例时露出五处代码的错（geo 两种颜色都 null、chord / sankey 的节点值、没有宽的格子里的 geo、关系图漫游的悬停、饼的位置字符串），7 个等价。
+
+反向变异：修补里每一处改动反着打回去（`fix-a`–`fix-o`，15 个），各自的新测试或用例都红：数字重读没调用、中点检查恒真、短路径多收一位、短路径漏减小数位数、时间线的渲染 / 命中 / 变换不屏蔽陷阱、NaN 元素照画、MXCSR 粘滞位不清、visualMap 指示器显示与隐藏丢列表、关系图漫游丢列表、漫游后再找悬停、漫游后关系图仍强调、位置字符串整串解析。
+
+### 修补
+
+- **每份选项的小数都逐位**（修复清单）。fpjson 经 FPC 的 `Val` 读小数，大约八千个里有一个差末位；GE1 只对注册的 GeoJSON 重读。现在 GE1 的 `FixNumbers` 挪进 `TyOptionParseRaw`（`Option.pas` 的 `TyJsonFixNumbers`，接口里有）：每个浮点节点按文本里同位置的数字 token 照 JS 的 `Number()` 重给值，次序对不上就整棵不动；Geo 的解析不再自己重读。先量了：画廊 245 份选项、9.7 MB、112 688 个浮点节点，原来差末位的 14 个（boxplot-multi 1、candlestick-sh-2015 1、lines-bmap 5、scatter-jitter 7）；第一版每个 token 都走 `TyJsToNumber`，整份画廊约多 1 秒，是 fpjson 自己（约 0.45 秒）的两倍多，大头是 17 位的坐标走大数长除法。于是做便宜：token 只记位置不建串；15 位以内、十的幂在 ±22 以内的照 `TyJsDecimalToDouble` 的短路径就地算（两个精确的 Double，一次舍入）；更长的先用新加的 `TyJsDecimalIsNearest`（`Scale.pas`）判断 fpjson 的值是否严格落在它的两个半程点之间——两次精确的大数比较、不做除法——是就留着，只有剩下的走长除法。整份画廊的重读降到约 0.19 秒（fpjson 的四成），一般选项的代价在亚毫秒。全部 223 个 AdvChart 套件在这个改动下照旧全过（没有一个基准因为这个变）。测试：`TAdvChartOptionTest.TestEveryDecimalReadsAsJavaScriptReadsIt`（修前红在 −162.256456；字符串里、注释里、未加引号的键里的数字不算 token）与 `TestTheShortPathAgreesWithNumber`（定种子 20 000 个 1–20 位、指数 −30..30 的小数，与 `TyJsToNumber` 逐位比）。§185 的偏差在原处标注。
+- **visualMap 的 `hoverLink` 丢掉列表**（修复清单）。指示器显示与隐藏调 `DropStatic`，连绘制列表一起作废，移动之后、绘制之前的按下什么都打不中（输入消息排在 WM_PAINT 前面，真机上也会遇到）。新加 `DropStaticKeepList`：原来有效的列表当场重建，缓存的画面照旧丢掉。测试 `TAdvChartVisualMapInteractTest.TestAClickAfterAHoverLinkNeedsNoRepaint`（悬停条、移到柱上、按下松开，都不绘制：柱照样被打中、mouseover 与 click 各一次；修前红在「still the last bar there」）。§191 的偏差在原处标注。
+- **时间线的 `axisType: 'time'` 配非日期数据**（修复清单）。上游：`parseDate` 都是 NaN，`getDataExtent` 是 [Infinity, −Infinity]，刻度、标签、进度线都在 NaN 处（什么都画不出），按钮、动作、播放照常。端口的 `DataToCoord` 比较 NaN 报 `EInvalidOp`。现在 `TTyTimelineView` 的渲染、命中、最近刻度与变换更新在屏蔽浮点陷阱下算（照 parallel 的 `MaskFP` / `UnmaskFP`，恢复前清 MXCSR 的粘滞位），`Drawable` 把变换或包围盒不是有限数的元素挡在绘制列表外。基准 `timeline.js` 加 `time-strings`（点下一项、播放；标签的角色按 NaN 位置依次配），既有用例逐个未变；手写 `TestATimeAxisOverStringsDrawsNothingAtNaN`（刻度在 NaN、不画，线照画，悬停 / 点击 / 拖动不抛，动作照走，宿主的除以零仍是 `EZeroDivide`）。修前两处都红在 `DataToCoord`。§193 的偏差在原处标注。
+- **关系图漫游丢掉悬停**（GE3 存活者的用例发现）。zrender 的 Handler 先找悬停、再派发，RoamController 挂在 zr 级的 mousemove 上、最后才平移，所以这一次移动的事件与提示框说的是平移之前画面里指针下的东西；端口的 `MouseMove` 先平移（`GraphDispatchRoam` 里 `DropStatic`），随后找悬停什么都找不到——区域 D 被移出、没有 mousemove，松手也没有 mouseup，D 的强调丢了。现在 `MouseMove` 在关系图或缩略图漫游之前先找悬停与事件目标（`FEvPresetT`，`EventMove` 用它），漫游后列表当场重建（`DropStaticKeepList`），松手与下一步找得到挪过的画面；漫游的那一步关系图自己的悬停照上游放掉（视图重画了，强调不留）。`geo-vs-series` 补回后一半，另加 `graph-node-roam`（在节点上按下平移：移动的事件是节点滑开后露出的区域 C，松手在挪过去的节点上）。关系图的 `roam.js` 基准照旧逐位。上游还有一处没有建模：漫游之后紧接着再拖，开头会对同一个节点发一对 mouseout / mouseover（上游的悬停元素换了），端口不发，用例里没有这一步。
+- **饼的位置字符串按 `parseFloat` 读**（BX2 存活者的用例发现）。`TyPieMeasureOf` 用 `TryStrToFloat` 读整串，上游 `parsePositionSizeOption` 是 JS 的 `parseFloat`：`'120px'` 是 120，`'2017-02-10'` 是 2017。现在两种写法都走 `TyJsParseFloat`，读不出前导数字的仍留缺省（老偏差，上游是 NaN）。测试 `TAdvChartPieTest.TestAPositionStringIsReadByParseFloat`（修前红在「120px is 120」）。
+- **geo 两种颜色都 null 时填黑**（GE1 存活者的用例发现）。上游 `getItemStyle` 不设填充，路径从 zrender 的 `DEFAULT_PATH_STYLE` 读到 `'#000'`；端口不填，标签框还按描边阈值 5 撑大。`PaintFor` 的常态补上黑色。修前 `stroke-only` 37 处不同。§185 的 MapDraw 条目在原处标注。
+- **chord / sankey 的节点值按坐标系的维度取**（BX1 存活者的用例发现）。上游 `createGraphFromNodeEdge` 按坐标系的维度建节点数据：直角坐标、极坐标、matrix、geo 上没有 `value` 维，`getValue('value')` 什么都读不到；日历（time, value）上是第 1 个元素；其余是第 0 个。端口总读第 0 个。现在 `NodeValueSlot` / `NodeValueAt` 两个单元都照这个取。修前 `box-nodes` 18 处不同。
+- **没有宽的格子里的 geo**（BX2 存活者的用例发现）。只写行的格子有高、宽是 NaN，上游照常排（x 得 0、宽按纵横比），只有高是 NaN 才抛错；端口一律放到画布外。`ResizeXYWH` 只在高是 NaN 或负时去 `TyBoxNowhere`。修前 `geo-no-column` 20 处不同。§193 两处在原处标注。
+- **GE4 漏掉的旧测试**（全量发现）。`TAdvChartCandleDrawTest.TestATypeWithNoRendererSaysSo` 改成诊断套件那样：测试自己注册一个没有渲染器的类型，看诊断说它，再看写在网格上的 map 什么都不说。
+- **重复的 msgid**（语言检查发现）。D11 加的 `rsTyChartAccessibleName = 'Chart'` 与原有的 `rsTyChartTypeChart` 同文、没有 msgctxt；无障碍名改用 `rsTyChartTypeChart`，那一条从 `StrConsts`、`.pot`、zh_CN 与 themebuilder 的副本里拿掉。
+
+### CONTRIBUTING 检查
+
+- Lazarus 3.0：`laz30_build.ps1`（私有 `--pcp`、`--skip-dependencies -B`）在修补后把 `tycontrols.lpk`、`tycontrols_db.lpk`、`tycontrols_dt.lpk`（含 D10 的对话框）在 `D:\lazarus30` 下各编一遍，三个都是 0。D11 的 `tyControls.Accessible`（`CommCtrl`、`SetWindowSubclass`）在 3.0 下编得过；接口里 IAccessible 的声明与实现里的 MSAA 服务端都在 `{$IFDEF WINDOWS}` 里，别的平台是空的 `{$ELSE}` 分支，`AdvanceChart.pas` 不碰 Windows 专有的符号。
+- Lazarus 4.4：`laz44_example.ps1` 私有编包与 AdvChart 示例，两个都是 0。不进库的 `tycontrols_dt.pas` 随之重新生成，带上了 `SeriesDialog`。
+- custom 拆类守卫：见上。
+- 语言文件：`StrConsts` 417 条（去掉重复的那一条），`.pot` 与 zh_CN 各 417、一一对应、没有空译文，同名 msgid 仍是原有的 12 组；DB 11、`Design.AdvChart.Editor` 8、`Design.AdvChart.SeriesDialog`（D10 新目录）22、`CompEditors` 25、`Css.Editor` 10、`NewItems` 8、`PropEditors` 18，每个目录的 `.pot` 与 zh_CN 都齐。themebuilder 那份 zh_CN 与 `languages/tycontrols.strconsts.zh_CN.po` 逐字节相同。（检查脚本把 `Design.AdvChart.Editor` 的 zh_CN 里 `rsOptEdCatalogLang` 算成缺——那一条在，只是前面少一个空行、和上一条粘在一起，gettext 照读。）
+- 生成物：重跑 `gen-defaulttheme.ps1`（1692 行内容）、`gen-tycss-catalog.ps1`（266 个令牌、321 个类型键）、`gen-builtinthemes.ps1`（15 套皮肤），`git diff --quiet` 为真。
+- 新单元：D9–D14 的 `Accessible`、`AdvChart.DirtyRect`、`Geo`、`GeoFix`、`HeatLayer`、`KeyNav`、`Matrix`、`SeriesEdit`、`TextPatch` 都在 `tycontrols.lpk` 与不进库的 `tycontrols.pas` 里，`Design.AdvChart.SeriesDialog` 在 `tycontrols_dt.lpk` 里；修补没有新单元。
+- 行尾：`source/`、`tests/`、`designtime/`、`tools/advchart-oracle/` 下工作区里只有 LF 的文本文件有 151 个（不少是各批的基准脚本写出来的基准文件，老的也有），都规整成 CRLF；仓库里存的是 LF（`core.autocrlf`），所以不产生差异。带 `-text` / `eol=lf` 属性的（终端 zmodem、AI 样本）不动。
+- 新代码的注释里不放花括号；源码里没有中文字面量。
+
+### 路线图
+
+`docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`：Tier 3 从 DONE 10 · PARTIAL 7 · NOT STARTED 6 变成 DONE 19 · PARTIAL 4 · NOT STARTED 0。geo、map 系列、geo 上的热力图、matrix 从 NOT STARTED 到 DONE；粗指针 NOT STARTED → DONE；脏矩形、设计期对话框、`'box'` 用法、跨控件联动（D8b 补上了提示框与指示器）PARTIAL → DONE；键盘 + 无障碍 NOT STARTED → PARTIAL（组件没有键盘、gtk / cocoa 没接）。阶段 D 表里 D8b、D9、D10、D12、D13、D14 标 DONE，D11 标 PARTIAL，D8 因批量动作仍 PARTIAL。表头加了总计（88 行：DONE 78 · PARTIAL 10 · NOT STARTED 0），渲染器表改成 23 种都能画，表尾加「剩下的」一节，把 10 行 PARTIAL 缺的部分列在一处；Tier 1 的 tooltip 与数据管道两行、押后项里关系图漫游的悬停跟着改了。
+
+### 落地
+
+- `source/tyControls.AdvChart.Option.pas`：`TyJsonFixNumbers`，`TyOptionParseRaw` 调它；`source/tyControls.AdvChart.Scale.pas`：`TyJsDecimalIsNearest`；`source/tyControls.AdvChart.Geo.pas`：去掉自己的 `FixNumbers`，`PaintFor` 的缺省黑色，`ResizeXYWH` 的无宽格子。
+- `source/tyControls.AdvChart.Timeline.pas`：屏蔽陷阱的 `Render` / `HitAt` / `NearestTick` / `UpdateTransforms`、`Drawable`。
+- `source/tyControls.AdvanceChart.pas`：`DropStaticKeepList`（visualMap 指示器、关系图漫游）；`MouseMove` 的漫游前悬停与 `FEvPreset` / `FEvPresetT`；`BuildTimeline` 跳过画不出的元素；无障碍名用 `rsTyChartTypeChart`。
+- `source/tyControls.AdvChart.Pie.pas`（`TyPieMeasureOf` 走 `TyJsParseFloat`）、`Chord.pas` 与 `Sankey.pas`（节点值的维度）、`StrConsts.pas`。
+- 测试：`test.advchart.option.pas`、`test.advchart.timeline.pas`、`test.advchart.visualmapinteract.pas`、`test.advchart.coarsedirty.pas`、`test.advchart.candlestick.pas`、`test.advchart.pie.pas`、`test.advchart.keyboard.pas`（WinEvent 钩子）、`test.advchart.serieseditor.pas`、`test.advchart.geointeract.pas`、`test.advchart.boxusage.pas`、`test.advchart.boxusage2.pas`、`test.advchart.tooltipactions.pas`。
+- 基准脚本与基准：`coarse-dirty.js`（`tie`、`hidden-quietly`，操作多一种 `set`）、`timeline.js`（`time-strings`）、`matrix.js` / `matrix2.js` / `matrix3.js`（`box-negative-zero`、`funnel-frac`、`alg-swapped`）、`geo.js`（`pending-points`、`stroke-only`、`limit-aspect`）、`geo-interact.js`（`open-ring`、`gradient`）、`geo-roam.js`（`geo-vs-series` 补全、`global-pan`、`graph-node-roam`）、`geo-series.js`（`map-cs-written`、`map-calc-min`）、`box-usage.js`（`grid-names`、`box-nodes`、`treemap-prune`、`chord-centre`）、`box-usage2.js`（`map-data-default`、`geo-no-column`）、`tooltip-actions.js`（`short-rows`）。已有用例一个字节没变（时间线的基准文件按现在的脚本整份重写过，用例逐个比过相同）。
+- 语言文件：`tyControls.StrConsts.pot`、`tycontrols.strconsts.zh_CN.po` 与 themebuilder 的副本。
+- `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`；本 spec 的 §182、§184、§185（两处）、§188、§189、§191（两处）、§193（四处）在原处标注。
+
+### 剩余路线图这一程
+
+2026-10-01 的剩余路线图（`2026-10-01-advancechart-remaining-roadmap.md`）把 Tier 1 / 2 / 3 还没做的排成四个阶段约 70 批：A 地基（句柄接线、字号、事件、富文本、动画引擎、option 合并，11 批）、B 做完 Tier 1（状态、图例、tooltip、坐标轴、去碰撞、调色板、采样、导出、media、饼的避让与引导线、endLabel，15 批）、C Tier 2 的系列与组件（K 线与箱线、换算、polar、关系图 / 桑基 / 旭日 / 矩形树图的交互、visualMap 交互、large、progressive、单轴与主题河流、chord、lines、graphic、custom、toolbox、brush、parallel、timeline、decal 与 aria，22 批）、D Tier 3（断轴、数据集变换、统计、竞赛柱、universalTransition、关键帧、缩略图与轴展开、联动与批量、粗指针与脏矩形、设计期对话框、键盘与无障碍、matrix、box 用法、geo，14 项、实际 26 批），里程碑 §180 又补了 D8b。到这个里程碑为止全部落地：第 82–154 批，每四到八批一个里程碑做全量与变异（§174、§180、本节，以及之前 C 段的几次），每个能力都对着真跑的 ECharts 6.1 逐位比。88 行里 78 行 DONE、10 行 PARTIAL、没有 NOT STARTED。剩下的是那 10 行点名的子项——动画引擎里六种系列的入场与状态过渡、关系图 / 树 / 矩形树图接共享状态模型、tooltip 的 click 触发与 keepShow、断轴的 log 轴与单轴、universalTransition 的其余元素种类、其余动作的批量、组件的键盘与非 Windows 的无障碍桥、几种系列的 decal——与各行「缺什么」里的边角偏差，加上只能在真机上做的 IDE 与阅读器清单；路线图表尾的「剩下的」一节把它们列在一处。

@@ -83,6 +83,7 @@ type
     procedure TestHandDispatchedAsUpstream;
     procedure TestNoTooltipComponentAsUpstream;
     procedure TestTheAxesInfoRestrictsAsUpstream;
+    procedure TestABaseAxisWithoutRowsAsUpstream;
   end;
 
   TAdvChartTooltipActionsTest = class(TTestCase)
@@ -674,6 +675,13 @@ end;
 procedure TAdvChartTooltipActionsOracleTest.TestTheAxesInfoRestrictsAsUpstream;
 begin
   RunCase('restrict');
+end;
+
+{ [D9-D14 mutation round] showTooltip skips a base axis with no row under
+  the point; with none left the pointer's action is a hideTip }
+procedure TAdvChartTooltipActionsOracleTest.TestABaseAxisWithoutRowsAsUpstream;
+begin
+  RunCase('short-rows');
 end;
 
 { ==================== the hand-written test ==================== }

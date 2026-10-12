@@ -1301,6 +1301,29 @@ type
   TObjectFromLresult = function(lResult: LRESULT; riid: PGUID; wParam: WPARAM;
     ppvObject: PPointer): HResult; stdcall;
 
+{ [Milestone D9-D14] what a screen reader hears: an out-of-context WinEvent
+  hook on this process, its callbacks run while the thread pumps messages }
+var
+  GFocusWnd: HWND;
+  GFocusChild: LongInt;
+  GFocusCount: Integer;
+
+procedure FocusEventProc(AHook: THandle; AEvent: DWORD; AWnd: HWND;
+  AObject, AChild: LongInt; AThread, ATime: DWORD); stdcall;
+begin
+  if (AEvent = $8005) and (AWnd = GFocusWnd) and (AObject = TyAccObjIdClient) then
+  begin
+    GFocusChild := AChild;
+    Inc(GFocusCount);
+  end;
+end;
+
+function TySetWinEventHook(AMin, AMax: DWORD; AMod: HMODULE; AProc: Pointer;
+  AProcess, AThread, AFlags: DWORD): THandle; stdcall;
+  external 'user32.dll' name 'SetWinEventHook';
+function TyUnhookWinEvent(AHook: THandle): BOOL; stdcall;
+  external 'user32.dll' name 'UnhookWinEvent';
+
 procedure TAdvChartKeyboardTest.TestTheWindowAnswersGetObject;
 const
   IID_IAccessible: TGUID = '{618736E0-3C3D-11CF-810C-00AA00389B71}';
@@ -1310,6 +1333,7 @@ var
   lres: LRESULT;
   p: Pointer;
   acc: IAccessible;
+  hook: THandle;
 begin
   { A WINDOW NEEDS THE WIDGETSET, and initialising it here would move every
     later suite's text onto the real fonts (suite-order-widgetset-init):
@@ -1336,8 +1360,24 @@ begin
   Pointer(acc) := p;
   AssertEquals('Chart', NameOf(acc, TyAccChildSelf));
   AssertEquals('the scatter', 'The 2 series is a Scatter plot.', NameOf(acc, 3));
-  { a focus move is announced (nothing to observe here but that it runs) }
-  FChart.Key(VK_RIGHT);
+  { A FOCUS MOVE IS ANNOUNCED [Milestone D9-D14]: EVENT_OBJECT_FOCUS on the
+    client object, the child a descendant's id -(1 + its pre-order index),
+    which the root's own get_accName answers }
+  GFocusWnd := FChart.Handle;
+  GFocusChild := 0;
+  GFocusCount := 0;
+  hook := TySetWinEventHook($8005, $8005, 0, @FocusEventProc, GetCurrentProcessId, 0, 0);
+  AssertTrue('a WinEvent hook', hook <> 0);
+  try
+    FChart.Key(VK_RIGHT);
+    Application.ProcessMessages;
+  finally
+    TyUnhookWinEvent(hook);
+  end;
+  AssertTrue('the focus was announced', GFocusCount > 0);
+  AssertTrue('as a descendant: a negative child id', GFocusChild < 0);
+  AssertEquals('the root names that descendant (the first bar)',
+    'the data for a is 0, 1', NameOf(acc, GFocusChild));
   acc := nil;
   FChart.DestroyHandle;
   AssertFalse('unhooked with the window', FChart.AccessibleLink.InUse);

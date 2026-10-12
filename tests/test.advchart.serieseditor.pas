@@ -55,10 +55,12 @@ type
     procedure TestThePairGridAndItsColumns;
     procedure TestItemObjectsKeepWhatTheGridDoesNotShow;
     procedure TestACellKeepsItsKind;
+    procedure TestOnlyOneValueCartesianDataTakesCategories;
     procedure TestTheDatasetGrids;
     procedure TestWhatTheGridCannotShowSaysWhy;
     procedure TestApplyingTwiceIsApplyingOnce;
     procedure TestALostCommentIsReportedBeforeAnything;
+    procedure TestAWholeRewriteIsAskedFirst;
     procedure TestTheDiagnosticsSeeTheEditedText;
     procedure TheSeriesDialogStaysAShell;
   end;
@@ -925,6 +927,14 @@ begin
   d := TyEditCellValue('007', False);
   AssertEquals('an id, not seven', Ord(jtString), Ord(d.JSONType));
   d.Free;
+  d := TyEditCellValue('0', False);
+  AssertEquals('a lone zero is a number', Ord(jtNumber), Ord(d.JSONType));
+  AssertEquals('0', TyEditCellText(d));
+  d.Free;
+  d := TyEditCellValue('-0.25', False);
+  AssertEquals('zero before the point is a number', Ord(jtNumber), Ord(d.JSONType));
+  AssertEquals('-0.25', TyEditCellText(d));
+  d.Free;
   d := TyEditCellValue('-', False);
   AssertEquals('ECharts'' empty mark stays what it is', '-', d.AsString);
   d.Free;
@@ -942,6 +952,55 @@ begin
   d := TyEditCellValue('true', False);
   AssertEquals(Ord(jtBoolean), Ord(d.JSONType));
   d.Free;
+end;
+
+procedure TAdvChartSeriesEditTest.TestOnlyOneValueCartesianDataTakesCategories;
+const
+  { A is one value per category; B is paired data on the same category axis
+    (its categories are in its own x dimension); C is a bar on a polar
+    system, in an option that also has a category x axis }
+  T = '{ xAxis: { type: ''category'', data: [''Mon'', ''Tue'', ''Wed''] }, yAxis: {}, '
+    + 'polar: {}, angleAxis: { type: ''category'', data: [''p'', ''q''] }, radiusAxis: {}, '
+    + 'series: [{ type: ''bar'', data: [120, 200, 150] }, '
+    + '{ type: ''line'', data: [[0, 5], [1, 6], [2, 7]] }, '
+    + '{ type: ''bar'', coordinateSystem: ''polar'', data: [1, 2] }] }';
+var
+  m: TTySeriesEditModel;
+  g: TTyEditTable;
+begin
+  m := NewModel(T);
+  try
+    g := m.SeriesTable(1);
+    try
+      AssertEquals('paired data: two value columns', 2, g.ColCount);
+      AssertEquals('paired data takes no category column', Ord(eckValue), Ord(g.ColKind(0)));
+      AssertEquals('0', g.Cells[0, 0]);
+      AssertEquals('5', g.Cells[1, 0]);
+    finally
+      g.Free;
+    end;
+    g := m.SeriesTable(2);
+    try
+      AssertEquals('a polar series: one value column', 1, g.ColCount);
+      AssertEquals('a polar series takes no x-axis categories', Ord(eckValue), Ord(g.ColKind(0)));
+    finally
+      g.Free;
+    end;
+    { deleting a category deletes it from the one-value series only: the
+      paired series names its categories itself and is left alone }
+    g := m.SeriesTable(0);
+    try
+      AssertEquals(Ord(eckCategory), Ord(g.ColKind(0)));
+      g.DeleteRow(0);
+      m.ApplySeriesTable(g);
+      AssertEquals(Swap1(Swap1(T, '[''Mon'', ''Tue''', '[''Tue'''), '[120, 200', '[200'),
+        ModelText(m));
+    finally
+      g.Free;
+    end;
+  finally
+    m.Free;
+  end;
 end;
 
 procedure TAdvChartSeriesEditTest.TestTheDatasetGrids;
@@ -1074,6 +1133,30 @@ begin
     AssertTrue(Pos('[1, 3]', once) > 0);
   finally
     t.Free;
+    m.Free;
+  end;
+end;
+
+procedure TAdvChartSeriesEditTest.TestAWholeRewriteIsAskedFirst;
+const
+  { the reader (fcl-json, not strict) stops after the root value and takes
+    the `;` pasted from JavaScript with it; the map does not, so the text
+    cannot be patched -- an edit rewrites it whole, with no comment to lose }
+  T = '{ series: [{ type: ''bar'', name: ''A'', data: [1, 2] }] };';
+var
+  m: TTySeriesEditModel;
+  err: string;
+begin
+  m := NewModel(T);
+  try
+    AssertEquals('no edit: the text itself', T, m.Text);
+    AssertFalse('no edit: nothing to ask', m.NeedsConfirm);
+    AssertTrue(m.SetFieldText(0, 'name', 'B', err));
+    AssertTrue('the edited tree reads back', ReadsBackAs(m.Text, m.Tree));
+    AssertTrue('written whole', m.RewritesWhole);
+    AssertEquals('no comment to lose', 0, m.Lost);
+    AssertTrue('a whole rewrite is asked first', m.NeedsConfirm);
+  finally
     m.Free;
   end;
 end;

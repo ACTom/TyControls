@@ -5006,6 +5006,1297 @@
      "ref": null
     }
    ]
+  },
+  {
+   "id": "grid-names",
+   "group": "grid",
+   "note": "axis names on a grid in two columns of cells: the determine pass' nameMarginLevel is of the refContainer -- the grid is wider than half its cells (the y names' level 2) and narrower than half the canvas",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "grid": {
+     "coordinateSystem": "matrix",
+     "coord": [
+      [
+       "a",
+       "b"
+      ],
+      [
+       "p",
+       "r"
+      ]
+     ],
+     "left": 50,
+     "right": 20,
+     "top": 10,
+     "bottom": 30
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+     ],
+     "name": "Day",
+     "nameLocation": "middle"
+    },
+    "yAxis": [
+     {
+      "type": "value",
+      "name": "Amount",
+      "nameLocation": "middle"
+     },
+     {
+      "type": "value",
+      "name": "Rate",
+      "nameLocation": "middle",
+      "max": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1200,
+       2000,
+       1500,
+       800,
+       700,
+       1100,
+       1300
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.2,
+       0.5,
+       0.4,
+       0.9,
+       0.1,
+       0.3,
+       0.6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "406c3b6db6db6db8"
+     },
+     "rect": {
+      "x": "4072a63d70a3d70a",
+      "y": "405d924924924925",
+      "width": "406cf51eb851eb80",
+      "height": "4065bea0ea0ea0ec"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      "Wed",
+      1000
+     ],
+     "ret": [
+      "4077d202ecfb9c85",
+      "4069a87507507508"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ],
+   "names": [
+    {
+     "dim": "x",
+     "index": 0,
+     "grid": 0,
+     "text": "Day",
+     "at": [
+      "4079e3851eb851ea",
+      "4073d24924924925"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "grid": 0,
+     "text": "Amount",
+     "at": [
+      "406f280000000000",
+      "4069a87507507508"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 1,
+     "grid": 0,
+     "text": "Rate",
+     "at": [
+      "4081ae0000000000",
+      "4069a87507507508"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "box-nodes",
+   "group": "series",
+   "note": "box series on a matrix with their nodes as `nodes` (data || nodes; the legend lists them), node values the matrix's dimensions leave unread (createSeriesData on x and y: no value dimension), and a chord on a calendar day whose node value is the row's second element (time, value)",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "legend": {
+     "top": 0
+    },
+    "series": [
+     {
+      "type": "chord",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       [
+        "a",
+        "b"
+       ],
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "nodes": [
+       {
+        "name": "N1"
+       },
+       {
+        "name": "N2"
+       },
+       {
+        "name": "N3"
+       }
+      ],
+      "links": [
+       {
+        "source": "N1",
+        "target": "N2",
+        "value": 3
+       },
+       {
+        "source": "N2",
+        "target": "N3",
+        "value": 2
+       },
+       {
+        "source": "N3",
+        "target": "N1",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "type": "chord",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       "c",
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "data": [
+       {
+        "name": "A",
+        "value": 30
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "type": "sankey",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "a",
+        "b"
+       ],
+       [
+        "s",
+        "u"
+       ]
+      ],
+      "nodes": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 5
+       },
+       {
+        "source": "A",
+        "target": "C",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "D",
+        "value": 4
+       },
+       {
+        "source": "C",
+        "target": "D",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "type": "sankey",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       [
+        "s",
+        "u"
+       ]
+      ],
+      "data": [
+       {
+        "name": "A",
+        "value": 30
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 5
+       },
+       {
+        "source": "A",
+        "target": "C",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "D",
+        "value": 4
+       },
+       {
+        "source": "C",
+        "target": "D",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "type": "chord",
+      "coordinateSystem": "calendar",
+      "coordinateSystemUsage": "box",
+      "coord": "2017-02-09",
+      "data": [
+       {
+        "name": "A",
+        "value": [
+         1,
+         30
+        ]
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "group": [
+      "406fd33333333334",
+      "4014000000000000"
+     ],
+     "items": [
+      {
+       "i": 0,
+       "name": "N1",
+       "t": [
+        "406fd33333333334",
+        "4014000000000000"
+       ],
+       "r": [
+        "0000000000000000",
+        "0000000000000000",
+        "4046ae147ae147ae",
+        "402c000000000000"
+       ]
+      },
+      {
+       "i": 1,
+       "name": "N2",
+       "t": [
+        "40733f5c28f5c290",
+        "4014000000000000"
+       ],
+       "r": [
+        "0000000000000000",
+        "0000000000000000",
+        "4046ae147ae147ae",
+        "402c000000000000"
+       ]
+      },
+      {
+       "i": 2,
+       "name": "N3",
+       "t": [
+        "4076951eb851eb86",
+        "4014000000000000"
+       ],
+       "r": [
+        "0000000000000000",
+        "0000000000000000",
+        "4046ae147ae147ae",
+        "402c000000000000"
+       ]
+      },
+      {
+       "i": 3,
+       "name": "A",
+       "t": [
+        "4079eae147ae147b",
+        "4014000000000000"
+       ],
+       "r": [
+        "0000000000000000",
+        "0000000000000000",
+        "4043051eb851eb85",
+        "402c000000000000"
+       ]
+      },
+      {
+       "i": 4,
+       "name": "B",
+       "t": [
+        "407ccb851eb851ec",
+        "4014000000000000"
+       ],
+       "r": [
+        "0000000000000000",
+        "0000000000000000",
+        "4043051eb851eb85",
+        "402c000000000000"
+       ]
+      },
+      {
+       "i": 5,
+       "name": "C",
+       "t": [
+        "407fac28f5c28f5c",
+        "4014000000000000"
+       ],
+       "r": [
+        "0000000000000000",
+        "0000000000000000",
+        "404351eb851eb852",
+        "402c000000000000"
+       ]
+      }
+     ]
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "chord",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924926"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4079780000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      },
+      {
+       "i": 1,
+       "cx": "4079780000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      },
+      {
+       "i": 2,
+       "cx": "4079780000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      }
+     ],
+     "angles": [
+      {
+       "i": 0,
+       "startAngle": "4012d97c7f3321d2",
+       "endAngle": "401c6109a8c02ea6"
+      },
+      {
+       "i": 1,
+       "startAngle": "401c96a77ca7267e",
+       "endAngle": "4021b29871bcceb0"
+      },
+      {
+       "i": 2,
+       "startAngle": "4021cd675bb04a9b",
+       "endAngle": "4025e2ecffc82b88"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "chord",
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4062d24924924926"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4085170000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      },
+      {
+       "i": 1,
+       "cx": "4085170000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      },
+      {
+       "i": 2,
+       "cx": "4085170000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      }
+     ],
+     "angles": [
+      {
+       "i": 0,
+       "startAngle": "4012d97c7f3321d2",
+       "endAngle": "401c6109a8c02ea6"
+      },
+      {
+       "i": 1,
+       "startAngle": "401c96a77ca7267e",
+       "endAngle": "4021b29871bcceb0"
+      },
+      {
+       "i": 2,
+       "startAngle": "4021cd675bb04a9b",
+       "endAngle": "4025e2ecffc82b88"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 2,
+     "type": "sankey",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "4074e24924924925",
+      "width": "4076480000000000",
+      "height": "406c3b6db6db6db6"
+     },
+     "layoutInfo": {
+      "x": "406ee26666666666",
+      "y": "407596f8af8af8b0",
+      "width": "4070b60000000000",
+      "height": "406968af8af8af8a"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "3ff2a4926f75aacf",
+       "dx": "4034000000000000",
+       "dy": "406868af8af8af8a"
+      },
+      {
+       "i": 1,
+       "x": "405eec0000000000",
+       "y": "3cf0000000000000",
+       "dx": "4034000000000000",
+       "dy": "405e82db6db6db6c"
+      },
+      {
+       "i": 2,
+       "x": "405eec0000000000",
+       "y": "4060416db6db6db6",
+       "dx": "4034000000000000",
+       "dy": "40524e83a83a83a8"
+      },
+      {
+       "i": 3,
+       "x": "406eec0000000000",
+       "y": "4038df56d3320ae2",
+       "dx": "4034000000000000",
+       "dy": "40624e83a83a83a8"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 3,
+     "type": "sankey",
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "4074e24924924925",
+      "width": "4066480000000000",
+      "height": "406c3b6db6db6db6"
+     },
+     "layoutInfo": {
+      "x": "4082954ccccccccd",
+      "y": "407596f8af8af8b0",
+      "width": "4060b60000000000",
+      "height": "406968af8af8af8a"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "3ff2a4926f75aacf",
+       "dx": "4034000000000000",
+       "dy": "406868af8af8af8a"
+      },
+      {
+       "i": 1,
+       "x": "404c6c0000000000",
+       "y": "3cf0000000000000",
+       "dx": "4034000000000000",
+       "dy": "405e82db6db6db6c"
+      },
+      {
+       "i": 2,
+       "x": "404c6c0000000000",
+       "y": "4060416db6db6db6",
+       "dx": "4034000000000000",
+       "dy": "40524e83a83a83a8"
+      },
+      {
+       "i": 3,
+       "x": "405c6c0000000000",
+       "y": "4038df56d3320ae2",
+       "dx": "4034000000000000",
+       "dy": "40624e83a83a83a8"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 4,
+     "type": "chord",
+     "boxed": true,
+     "ref": {
+      "x": "4060500000000000",
+      "y": "4083140000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4065e00000000000",
+       "cy": "4084280000000000",
+       "r0": "4038266666666666",
+       "r": "403b99999999999a"
+      },
+      {
+       "i": 1,
+       "cx": "4065e00000000000",
+       "cy": "4084280000000000",
+       "r0": "4038266666666666",
+       "r": "403b99999999999a"
+      },
+      {
+       "i": 2,
+       "cx": "4065e00000000000",
+       "cy": "4084280000000000",
+       "r0": "4038266666666666",
+       "r": "403b99999999999a"
+      }
+     ],
+     "angles": [
+      {
+       "i": 0,
+       "startAngle": "4012d97c7f3321d2",
+       "endAngle": "402263caa18f8b24"
+      },
+      {
+       "i": 1,
+       "startAngle": "40227e998b830710",
+       "endAngle": "4023fd1b9bd6b0c5"
+      },
+      {
+       "i": 2,
+       "startAngle": "402417ea85ca2cb0",
+       "endAngle": "4025e2ecffc82b89"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "treemap-prune",
+   "group": "series",
+   "note": "treemaps in a cell right of the first cell's width, in a calendar day, and one running off the canvas' right edge: the pruning's clip rect is the canvas",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "treemap",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       [
+        "p",
+        "r"
+       ]
+      ],
+      "breadcrumb": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "A",
+        "value": 10,
+        "children": [
+         {
+          "name": "A1",
+          "value": 6
+         },
+         {
+          "name": "A2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "value": 5
+       },
+       {
+        "name": "C",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "type": "treemap",
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-23",
+      "breadcrumb": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "A",
+        "value": 10,
+        "children": [
+         {
+          "name": "A1",
+          "value": 6
+         },
+         {
+          "name": "A2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "value": 5
+       },
+       {
+        "name": "C",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "type": "treemap",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       "u"
+      ],
+      "left": "90%",
+      "width": 400,
+      "breadcrumb": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "A",
+        "value": 10,
+        "children": [
+         {
+          "name": "A1",
+          "value": 6
+         },
+         {
+          "name": "A2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "value": 5
+       },
+       {
+        "name": "C",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "treemap",
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "406c3b6db6db6db8"
+     },
+     "layoutInfo": {
+      "x": "4082ee0000000000",
+      "y": "4063c92492492492",
+      "width": "4061480000000000",
+      "height": "405f76db6db6db70"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4061480000000000",
+       "height": "405f76db6db6db70",
+       "invisible": false
+      },
+      {
+       "i": 1,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "405ccd5555555557",
+       "height": "4054f9e79e79e79f",
+       "invisible": false
+      },
+      {
+       "i": 2,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4051480000000001",
+       "height": "4054f9e79e79e79f",
+       "invisible": false
+      },
+      {
+       "i": 3,
+       "x": "4051480000000001",
+       "y": "0000000000000000",
+       "width": "40470aaaaaaaaaac",
+       "height": "4054f9e79e79e79f",
+       "invisible": false
+      },
+      {
+       "i": 4,
+       "x": "0000000000000000",
+       "y": "4054f9e79e79e79f",
+       "width": "405ccd5555555557",
+       "height": "4044f9e79e79e7a2",
+       "invisible": false
+      },
+      {
+       "i": 5,
+       "x": "405ccd5555555557",
+       "y": "0000000000000000",
+       "width": "40370aaaaaaaaaa4",
+       "height": "405f76db6db6db70",
+       "invisible": false
+      }
+     ],
+     "crumbs": []
+    },
+    {
+     "seriesIndex": 1,
+     "type": "treemap",
+     "boxed": true,
+     "ref": {
+      "x": "4073680000000000",
+      "y": "4083140000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "layoutInfo": {
+      "x": "4074a80000000000",
+      "y": "4083ac0000000000",
+      "width": "4048800000000000",
+      "height": "403f000000000000"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4048800000000000",
+       "height": "403f000000000000",
+       "invisible": true
+      },
+      {
+       "i": 1,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "403b38e38e38e38f",
+       "height": "403f000000000000",
+       "invisible": true
+      },
+      {
+       "i": 2,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4030555555555556",
+       "height": "403f000000000000",
+       "invisible": true
+      },
+      {
+       "i": 3,
+       "x": "4030555555555556",
+       "y": "0000000000000000",
+       "width": "4025c71c71c71c72",
+       "height": "403f000000000000",
+       "invisible": true
+      },
+      {
+       "i": 4,
+       "x": "403b38e38e38e38f",
+       "y": "0000000000000000",
+       "width": "4035c71c71c71c71",
+       "height": "4033600000000001",
+       "invisible": true
+      },
+      {
+       "i": 5,
+       "x": "403b38e38e38e38f",
+       "y": "4033600000000001",
+       "width": "4035c71c71c71c71",
+       "height": "40273ffffffffffe",
+       "invisible": true
+      }
+     ],
+     "crumbs": []
+    },
+    {
+     "seriesIndex": 2,
+     "type": "treemap",
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "407e4b6db6db6db7",
+      "width": "4066480000000000",
+      "height": "4052d24924924924"
+     },
+     "layoutInfo": {
+      "x": "4087516666666666",
+      "y": "407fe00000000001",
+      "width": "4079000000000000",
+      "height": "4038b6db6db6db70"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4079000000000000",
+       "height": "4038b6db6db6db70",
+       "invisible": false
+      },
+      {
+       "i": 1,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "406bc71c71c71c73",
+       "height": "4038b6db6db6db70",
+       "invisible": false
+      },
+      {
+       "i": 2,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4060aaaaaaaaaaab",
+       "height": "4038b6db6db6db70",
+       "invisible": false
+      },
+      {
+       "i": 3,
+       "x": "4060aaaaaaaaaaab",
+       "y": "0000000000000000",
+       "width": "405638e38e38e390",
+       "height": "4038b6db6db6db70",
+       "invisible": true
+      },
+      {
+       "i": 4,
+       "x": "406bc71c71c71c73",
+       "y": "0000000000000000",
+       "width": "405bc71c71c71c72",
+       "height": "4038b6db6db6db70",
+       "invisible": true
+      },
+      {
+       "i": 5,
+       "x": "4074d55555555556",
+       "y": "0000000000000000",
+       "width": "4050aaaaaaaaaaa8",
+       "height": "4038b6db6db6db70",
+       "invisible": true
+      }
+     ],
+     "crumbs": []
+    }
+   ]
+  },
+  {
+   "id": "chord-centre",
+   "group": "series",
+   "note": "a chord with usage 'box' on a calendar, no coord and a date (2017-02-10 as a time value) for its center: getCoord2 is a pie's alone, so its day is dataToLayout(undefined) (no x, no y: getLayoutRect's `|| 0`) and the time value its center in pixels",
+   "gallery": null,
+   "option": {
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 60
+    },
+    "series": [
+     {
+      "type": "chord",
+      "coordinateSystem": "calendar",
+      "coordinateSystemUsage": "box",
+      "center": 1486684800000,
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "chord",
+     "boxed": true,
+     "ref": {
+      "x": "7ff8000000000000",
+      "y": "7ff8000000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4275a2551c400000",
+       "cy": "4275a2551c400000",
+       "r0": "4038266666666666",
+       "r": "403b99999999999a"
+      },
+      {
+       "i": 1,
+       "cx": "4275a2551c400000",
+       "cy": "4275a2551c400000",
+       "r0": "4038266666666666",
+       "r": "403b99999999999a"
+      },
+      {
+       "i": 2,
+       "cx": "4275a2551c400000",
+       "cy": "4275a2551c400000",
+       "r0": "4038266666666666",
+       "r": "403b99999999999a"
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -5087,6 +6378,22 @@
   },
   {
    "name": "gallery-matrix-stock: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "grid-names: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "box-nodes: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "treemap-prune: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "chord-centre: the recipes hold (R1-R3)",
    "ok": true
   },
   {
@@ -5183,6 +6490,26 @@
   },
   {
    "name": "the stock's five grids and four titles are in its cells",
+   "ok": true
+  },
+  {
+   "name": "the named grid is wider than half its cells and narrower than half the canvas: its cells decide the y names' level",
+   "ok": true
+  },
+  {
+   "name": "a chord on a matrix leaves its node value unread, one on a calendar day reads the row's second element",
+   "ok": true
+  },
+  {
+   "name": "the legend lists the nodes a chord writes as `nodes`",
+   "ok": true
+  },
+  {
+   "name": "a treemap right of the first cell's width is all in view; one off the canvas' edge is partly not",
+   "ok": true
+  },
+  {
+   "name": "a chord with no coord is in dataToLayout(undefined): its center's date read as a number from x nought",
    "ok": true
   }
  ]

@@ -7,7 +7,8 @@ unit test.advchart.option;
   product is a parser that rejects the configs people actually paste, or one that
   blanks a chart because someone was mid-keystroke. }
 interface
-uses Classes, SysUtils, fpjson, fpcunit, testregistry, tyControls.AdvChart.Option;
+uses Classes, SysUtils, Math, fpjson, fpcunit, testregistry, tyControls.AdvChart.Option,
+     tyControls.AdvChart.Data;
 type
   TAdvChartOptionTest = class(TTestCase)
   private
@@ -51,6 +52,9 @@ type
     procedure TestAnEscapedQuoteOrBackslashStaysInsideTheString;
     procedure TestAQuoteInACommentDoesNotStartAString;
     procedure TestNestingPastTheLimitIsRefusedNotRecursedInto;
+    { ---- the numbers [Milestone D9-D14] ---- }
+    procedure TestEveryDecimalReadsAsJavaScriptReadsIt;
+    procedure TestTheShortPathAgreesWithNumber;
   end;
 implementation
 
@@ -472,6 +476,107 @@ begin
     AssertEquals(StringOfChar('[', 1000), o.GetStr('t', ''));
   finally
     o.Free;
+  end;
+end;
+
+function HexOfDouble(AValue: Double): string;
+var q: QWord;
+begin
+  Move(AValue, q, SizeOf(q));
+  Result := LowerCase(IntToHex(q, 16));
+end;
+
+{ JSON.parse reads every decimal correctly rounded; fpjson goes through FPC's
+  Val, which is a unit in the last place out now and then (-162.256456 is
+  one). The bits are node's Number() of each token. Numbers inside strings
+  (either quote), comments and unquoted keys are no tokens. }
+procedure TAdvChartOptionTest.TestEveryDecimalReadsAsJavaScriptReadsIt;
+const
+  cWant: array[0..10] of string = ('c0644834e3369b9d', '3fb999999999999a',
+    '405edd3c07fb4c69', '3e7ad7f29abcaf48', '40a3880000000000',
+    '405edd3c07fb4c99', '8000000000000000', '3fd3333333333334',
+    '44b52d02c7e14af6', '42000004b0400000', '401d000000000000');
+var
+  data: TJSONData;
+  err: TTyOptionError;
+  a: TJSONArray;
+  i: Integer;
+begin
+  AssertTrue(TyOptionParseRaw('{k1: ''x 5.5'', /* 7.5 */ "s": "1.25", // 3.75' + LineEnding
+    + '"v": [-162.256456, 0.1, 123.456789012345, 1e-7, 2.5e+3, '
+    + '123.456789012345678901, -0.0, 0.30000000000000004, 1e23, 8.589973e9, 7.25], '
+    + '"n": 12}', data, err));
+  try
+    a := TJSONArray(TJSONObject(data).Find('v'));
+    AssertEquals('eleven numbers', 11, a.Count);
+    for i := 0 to a.Count - 1 do
+      AssertEquals(Format('v[%d]', [i]), cWant[i], HexOfDouble(a.Items[i].AsFloat));
+    AssertEquals('an integer stays one', 12, TJSONObject(data).Integers['n']);
+  finally
+    data.Free;
+  end;
+end;
+
+{ The re-read reads a short decimal itself, with no string made; whatever it
+  answers must be what TyJsToNumber answers for the same token. A fixed
+  generator: digit counts 1..20, points anywhere, exponents -30..30, signs. }
+procedure TAdvChartOptionTest.TestTheShortPathAgreesWithNumber;
+var
+  seed: LongWord;
+  toks: TStringList;
+  text, tok: string;
+  i, j, nd, pt: Integer;
+  data: TJSONData;
+  err: TTyOptionError;
+  a: TJSONArray;
+  got, want: Double;
+
+  function Next(AN: Integer): Integer;
+  begin
+    seed := seed * 1103515245 + 12345;
+    Result := Integer((seed shr 8) mod LongWord(AN));
+  end;
+
+begin
+  seed := 20261013;
+  toks := TStringList.Create;
+  try
+    text := '[';
+    for i := 0 to 19999 do
+    begin
+      nd := 1 + Next(20);
+      tok := '';
+      for j := 1 to nd do tok := tok + Chr(Ord('0') + Next(10));
+      pt := Next(nd + 1);
+      if pt = 0 then tok := '0.' + tok
+      else if pt < nd then Insert('.', tok, pt + 1)
+      else tok := tok + '.5';
+      while (Length(tok) > 1) and (tok[1] = '0') and (tok[2] <> '.') do Delete(tok, 1, 1);
+      case Next(3) of
+        0: tok := tok + 'e' + IntToStr(Next(61) - 30);
+        1: tok := tok + 'E+' + IntToStr(Next(23));
+      end;
+      if Next(2) = 0 then tok := '-' + tok;
+      toks.Add(tok);
+      if i > 0 then text := text + ',';
+      text := text + tok;
+    end;
+    text := text + ']';
+    AssertTrue(TyOptionParseRaw(text, data, err));
+    try
+      a := TJSONArray(data);
+      AssertEquals(toks.Count, a.Count);
+      for i := 0 to a.Count - 1 do
+      begin
+        got := a.Items[i].AsFloat;
+        want := TyJsToNumber(toks[i]);
+        AssertEquals(toks[i], HexOfDouble(want), HexOfDouble(got));
+      end;
+    finally
+      data.Free;
+    end;
+  finally
+    toks.Free;
   end;
 end;
 

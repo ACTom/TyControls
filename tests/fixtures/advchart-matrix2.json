@@ -115858,6 +115858,239 @@
    "fails": []
   },
   {
+   "id": "funnel-frac",
+   "group": "series",
+   "note": "funnels in a cell whose box is not whole (x + width - x is not width in doubles): a vertical one (the view width is the cross size and centres the trapezoids) and a horizontal ascending one (the view width is the along size and the start)",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "p"
+      ],
+      "left": "7%",
+      "right": "3%",
+      "top": 5,
+      "bottom": 5,
+      "data": [
+       {
+        "value": 5,
+        "name": "k"
+       },
+       {
+        "value": 3,
+        "name": "l"
+       },
+       {
+        "value": 1,
+        "name": "m"
+       }
+      ]
+     },
+     {
+      "type": "funnel",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "q"
+      ],
+      "left": "7%",
+      "right": "3%",
+      "top": 5,
+      "bottom": 5,
+      "orient": "horizontal",
+      "sort": "ascending",
+      "gap": 2,
+      "data": [
+       {
+        "value": 5,
+        "name": "k"
+       },
+       {
+        "value": 3,
+        "name": "l"
+       },
+       {
+        "value": 1,
+        "name": "m"
+       }
+      ]
+     }
+    ]
+   },
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4054000000000000",
+      "y": "404e000000000000",
+      "width": "4084000000000000",
+      "height": "407e000000000000"
+     }
+    }
+   ],
+   "custom": [],
+   "graphs": [],
+   "pies": [],
+   "funnels": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "points": [
+        [
+         "4079b33333333333",
+         "406c200000000000"
+        ],
+        [
+         "408159999999999a",
+         "406c200000000000"
+        ],
+        [
+         "4080733333333333",
+         "4071300000000000"
+        ],
+        [
+         "407b800000000000",
+         "4071300000000000"
+        ]
+       ]
+      },
+      {
+       "i": 1,
+       "points": [
+        [
+         "407b800000000000",
+         "4071300000000000"
+        ],
+        [
+         "4080733333333333",
+         "4071300000000000"
+        ],
+        [
+         "407f19999999999a",
+         "4074500000000000"
+        ],
+        [
+         "407d4ccccccccccd",
+         "4074500000000000"
+        ]
+       ]
+      },
+      {
+       "i": 2,
+       "points": [
+        [
+         "407d4ccccccccccd",
+         "4074500000000000"
+        ],
+        [
+         "407f19999999999a",
+         "4074500000000000"
+        ],
+        [
+         "407e333333333333",
+         "4077700000000000"
+        ],
+        [
+         "407e333333333333",
+         "4077700000000000"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "items": [
+      {
+       "i": 0,
+       "points": [
+        [
+         "408159999999999a",
+         "4078100000000000"
+        ],
+        [
+         "408159999999999a",
+         "4080b80000000000"
+        ],
+        [
+         "407fc88888888889",
+         "407f900000000000"
+        ],
+        [
+         "407fc88888888889",
+         "4079f00000000000"
+        ]
+       ]
+      },
+      {
+       "i": 1,
+       "points": [
+        [
+         "407fa88888888889",
+         "4079f00000000000"
+        ],
+        [
+         "407fa88888888889",
+         "407f900000000000"
+        ],
+        [
+         "407cbdddddddddde",
+         "407db00000000000"
+        ],
+        [
+         "407cbdddddddddde",
+         "407bd00000000000"
+        ]
+       ]
+      },
+      {
+       "i": 2,
+       "points": [
+        [
+         "407c9dddddddddde",
+         "407bd00000000000"
+        ],
+        [
+         "407c9dddddddddde",
+         "407db00000000000"
+        ],
+        [
+         "4079b33333333333",
+         "407cc00000000000"
+        ],
+        [
+         "4079b33333333333",
+         "407cc00000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ],
+   "fails": []
+  },
+  {
    "id": "gallery-matrix-confusion",
    "group": "series",
    "note": "the gallery: a confusion matrix (its custom series drawn by the generic cell)",
@@ -125009,6 +125242,10 @@
    "ok": true
   },
   {
+   "name": "funnel-frac: every record matches its recipe",
+   "ok": true
+  },
+  {
    "name": "gallery-matrix-confusion: every record matches its recipe",
    "ok": true
   },
@@ -125186,6 +125423,10 @@
   },
   {
    "name": "funnel: in the cell",
+   "ok": true
+  },
+  {
+   "name": "funnel: in a fractional cell, both ways",
    "ok": true
   },
   {

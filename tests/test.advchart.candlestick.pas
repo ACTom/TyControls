@@ -21,6 +21,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Option, tyControls.AdvChart.Marks,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Scale, tyControls.AdvChart.AnimAxis,
+     tyControls.AdvChart.Series,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartCandleRuleTest = class(TTestCase)
@@ -374,6 +375,7 @@ begin
 end;
 
 procedure TAdvChartCandleDrawTest.TestATypeWithNoRendererSaysSo;
+var info: TTySeriesTypeInfo;
 begin
   { A CHART THAT CANNOT DRAW SOMETHING HAS TO SAY SO. Binding knows the
     twenty-three names ECharts ships and nothing about which of them this
@@ -383,13 +385,30 @@ begin
     The example was a funnel until the funnel drew, then a sankey until the
     sankey drew, then a chord until the chord drew [Batch 120], then a
     custom series until it drew [Batch 123], then a parallel series until
-    it drew [Batch 128]; moving it is what this test is for. The map is the
-    last undrawn type (until D14) and does not bind on a grid by default,
-    hence the explicit coordinateSystem. }
+    it drew [Batch 128]; moving it is what this test is for. The map was the
+    last undrawn type (until D14) [Milestone D9-D14: it draws since Batch 152
+    -- on its geo, wherever the option puts it -- so no type the library
+    ships is left undrawn: the example is a type of the test's own,
+    registered with no renderer and taken out again, as in the diagnose
+    suite; and the map written onto a grid says nothing]. }
+  info := Default(TTySeriesTypeInfo);
+  info.Name := 'undrawnType';
+  info.DefaultCoordSys := 'cartesian2d';
+  info.Usage := scuData;
+  TySeriesRegisterType(info);
+  try
+    Draw('{"xAxis":{"type":"category","data":["a"]},"yAxis":{},' +
+         '"series":[{"type":"undrawnType","data":[]}]}');
+    AssertTrue('the type says it is not drawn: ' + Diagnostics,
+               Pos('"undrawnType" series type is not drawn', Diagnostics) > 0);
+  finally
+    TySeriesClearTypes;
+    TySeriesRegisterBuiltinTypes;
+  end;
   Draw('{"xAxis":{"type":"category","data":["a"]},"yAxis":{},' +
        '"series":[{"type":"map","coordinateSystem":"cartesian2d","data":[]}]}');
-  AssertTrue('the map series says it is not drawn',
-             Pos('"map" series type is not drawn', Diagnostics) > 0);
+  AssertEquals('the map draws (on its geo)', 0,
+               Pos('series type is not drawn', Diagnostics));
 end;
 
 procedure TAdvChartCandleDrawTest.TestATypeWithARendererDoesNot;

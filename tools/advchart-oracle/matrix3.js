@@ -967,6 +967,10 @@ add('algebra', 'alg-headers', 'dataToLayout over the merges crossing the headers
   CASES.find(c => c.id === 'merge-headers').option);
 add('algebra', 'alg-stale', 'dataToLayout over the stale spans',
   CASES.find(c => c.id === 'merge-stale').option);
+add('algebra', 'alg-swapped', 'dataToLayout over a body merge lying wholly in the corner locators and a corner merge lying wholly in the body ones (each map takes any coord; only a merge crossing from the headers into the body throws): clamp 3 must not expand by the body merges, clamp 2 not by the corner merges',
+  { matrix: { left: 60, right: 60, top: 60, bottom: 60, x: { data: TREE_BOTH_X }, y: { data: TREE_BOTH_Y },
+    body: { data: [{ coord: [[-3, -2], [-2, -1]], mergeCells: true, value: 'body in the corner' }] },
+    corner: { data: [{ coord: [[0, 1], [0, 1]], mergeCells: true, value: 'corner in the body' }] } } });
 
 // ---- the series ----
 add('series', 'series-merged', 'series in merged cells: heatmap and scatter rows expanded to the merge, a custom series asking with and without ignoreMergeCells, a pie in a merged cell; the conversions with the opt',
@@ -1134,6 +1138,10 @@ function guards(out) {
   guard('clamp 3 skips the body\'s merges', () => n(lay('alg-overlap', [1, 0], { clamp: 3 }).loc[0][0]) !== 0);
   guard('clamp 2 skips the corner\'s merges', () => n(lay('alg-headers', [-1, -1], null).loc[0][0]) === -3
     && n(lay('alg-headers', [-1, -1], { clamp: 3 }).loc[0][0]) === -3 && n(lay('alg-headers', [-1, -1], { clamp: 2 }).loc[0][0]) !== -3);
+  guard('clamp 3 skips the body merges even where one lies in the corner', () => n(lay('alg-swapped', [-2, -1], null).loc[0][0]) === -3
+    && n(lay('alg-swapped', [-2, -1], { clamp: 3 }).loc[0][0]) === -2 && n(lay('alg-swapped', [-2, -1], { clamp: 3 }).loc[1][0]) === -1);
+  guard('clamp 2 skips the corner merges even where one lies in the body', () => n(lay('alg-swapped', [0, 0], null).loc[0][1]) === 1
+    && n(lay('alg-swapped', [0, 0], { clamp: 2 }).loc[0][1]) === 0 && n(lay('alg-swapped', [0, 0], { clamp: 2 }).loc[1][1]) === 0);
   // series
   const sr = cs('series-merged');
   guard('a heatmap row in a merged cell covers the merge', () => n(sr.series[0].rows[0].shape.width) > n(sr.series[0].rows[1].shape.width) * 1.9);

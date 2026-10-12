@@ -352,19 +352,13 @@ begin
     Result := nil;
 end;
 
-function ParseFloatIn(const AText: string; out AValue: Double): Boolean;
-var fs: TFormatSettings;
-begin
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  Result := TryStrToFloat(Trim(AText), AValue, fs);
-end;
-
-{ parsePositionOption's keyword table plus its two number forms. A value that
-  parses to nothing keeps the default, which is where this and upstream part
-  company: JavaScript answers NaN and lets the arithmetic carry it. A NaN
-  centre would put the whole pie nowhere, so an unreadable option is treated as
-  absent instead. }
+{ parsePositionOption's keyword table plus its two number forms, each read
+  by JavaScript's parseFloat -- the leading number, whatever follows it
+  ('120px' is 120, '2017-02-10' is 2017) [Milestone D9-D14; it was
+  TryStrToFloat of the whole string]. A value with no leading number keeps
+  the default, which is where this and upstream part company: JavaScript
+  answers NaN and lets the arithmetic carry it. A NaN centre would put the
+  whole pie nowhere, so an unreadable option is treated as absent instead. }
 function TyPieMeasureOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
 var
   s: string;
@@ -379,12 +373,10 @@ begin
   if (s = 'center') or (s = 'centre') or (s = 'middle') then Exit(TyBoxPercent(50));
   if (s = 'left') or (s = 'top') then Exit(TyBoxPercent(0));
   if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
-  if s[Length(s)] = '%' then
-  begin
-    if ParseFloatIn(Copy(s, 1, Length(s) - 1), v) then Exit(TyBoxPercent(v));
-    Exit;
-  end;
-  if ParseFloatIn(s, v) then Result := TyBoxPx(v);
+  v := TyJsParseFloat(s);
+  if IsNan(v) then Exit;
+  if s[Length(s)] = '%' then Result := TyBoxPercent(v)
+  else Result := TyBoxPx(v);
 end;
 
 function TyPieResolve(const AValue: TTyBoxValue; ABase: Double): Double;

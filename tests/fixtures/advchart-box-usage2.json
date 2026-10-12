@@ -7109,6 +7109,413 @@
      "axes": []
     }
    ]
+  },
+  {
+   "id": "map-data-default",
+   "group": "series",
+   "note": "a map series naming a matrix cell with no usage written, the first (and only) of its map: a series' default usage is 'data', so its own geo is laid out on the canvas by its box",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "map",
+      "map": "target_map",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "q"
+      ],
+      "left": 100,
+      "top": 100,
+      "width": 300,
+      "height": 100,
+      "data": []
+     }
+    ]
+   },
+   "steps": [],
+   "fails": [],
+   "states": [
+    {
+     "tip": null,
+     "matrices": [
+      {
+       "index": 0,
+       "rect": {
+        "x": "4049800000000000",
+        "y": "4040800000000000",
+        "width": "4086480000000000",
+        "height": "4080780000000000"
+       }
+      }
+     ],
+     "grids": [],
+     "visualMaps": [],
+     "sliders": [],
+     "toolboxes": [],
+     "timelines": [],
+     "thumbnails": [],
+     "radars": [],
+     "singles": [],
+     "parallels": [],
+     "geos": [],
+     "series": [
+      {
+       "seriesIndex": 0,
+       "type": "map",
+       "boxed": false,
+       "view": {
+        "x": "4059000000000000",
+        "y": "4059000000000000",
+        "width": "4072c00000000000",
+        "height": "4059000000000000"
+       }
+      }
+     ],
+     "extents": [],
+     "calls": [
+      {
+       "finder": {
+        "seriesIndex": 0
+       },
+       "value": [
+        3,
+        0.5
+       ],
+       "ret": [
+        "4067c00000000000",
+        "4062c00000000000"
+       ]
+      }
+     ],
+     "backs": [],
+     "contains": [],
+     "hovers": [],
+     "axes": []
+    }
+   ]
+  },
+  {
+   "id": "geo-no-column",
+   "group": "component",
+   "note": "geos whose coord names a row and no column (dataToLayout: no x, no width; a y and a height) and a day off the calendar's range (no x, no y; a width and a height): resizeGeo still lays each out -- getLayoutRect's `|| 0`, the aspect from the height -- and a map series with usage 'box' the same way",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "geo": [
+     {
+      "map": "bx2sq",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "zz",
+       "p"
+      ]
+     },
+     {
+      "map": "bx2sq",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "zz",
+       "q"
+      ],
+      "left": 10,
+      "width": 50
+     },
+     {
+      "map": "bx2sq",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "zz",
+       "r"
+      ],
+      "left": 5,
+      "top": 10,
+      "height": 30
+     },
+     {
+      "map": "bx2sq",
+      "coordinateSystem": "calendar",
+      "coord": "2019-01-01"
+     }
+    ],
+    "series": [
+     {
+      "type": "map",
+      "map": "target_map",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       "zz",
+       "s"
+      ],
+      "data": []
+     }
+    ]
+   },
+   "steps": [],
+   "fails": [],
+   "states": [
+    {
+     "tip": null,
+     "matrices": [
+      {
+       "index": 0,
+       "rect": {
+        "x": "4049800000000000",
+        "y": "4040800000000000",
+        "width": "4086480000000000",
+        "height": "4080780000000000"
+       }
+      }
+     ],
+     "grids": [],
+     "visualMaps": [],
+     "sliders": [],
+     "toolboxes": [],
+     "timelines": [],
+     "thumbnails": [],
+     "radars": [],
+     "singles": [],
+     "parallels": [],
+     "geos": [
+      {
+       "index": 0,
+       "boxed": true,
+       "ref": {
+        "x": "7ff8000000000000",
+        "y": "405b124924924925",
+        "width": "7ff8000000000000",
+        "height": "4052d24924924925"
+       },
+       "view": {
+        "x": "0000000000000000",
+        "y": "405cf41d41d41d42",
+        "width": "404b1a54d880bb3f",
+        "height": "404e1d41d41d41d5"
+       },
+       "roam": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ]
+      },
+      {
+       "index": 1,
+       "boxed": true,
+       "ref": {
+        "x": "7ff8000000000000",
+        "y": "4066f24924924925",
+        "width": "7ff8000000000000",
+        "height": "4052d24924924926"
+       },
+       "view": {
+        "x": "4024000000000000",
+        "y": "40682df7df7df7e0",
+        "width": "4049000000000000",
+        "height": "404bc71c71c71c73"
+       },
+       "roam": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ]
+      },
+      {
+       "index": 2,
+       "boxed": true,
+       "ref": {
+        "x": "7ff8000000000000",
+        "y": "40702db6db6db6dc",
+        "width": "7ff8000000000000",
+        "height": "4052d24924924924"
+       },
+       "view": {
+        "x": "4014000000000000",
+        "y": "4070cdb6db6db6dc",
+        "width": "403affffffffffff",
+        "height": "403e000000000000"
+       },
+       "roam": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ]
+      },
+      {
+       "index": 3,
+       "boxed": true,
+       "ref": {
+        "x": "7ff8000000000000",
+        "y": "7ff8000000000000",
+        "width": "4056400000000000",
+        "height": "4051400000000000"
+       },
+       "view": {
+        "x": "4033a8f5c28f5c29",
+        "y": "401b999999999998",
+        "width": "4048d70a3d70a3d7",
+        "height": "404b99999999999a"
+       },
+       "roam": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ]
+      }
+     ],
+     "series": [
+      {
+       "seriesIndex": 0,
+       "type": "map",
+       "boxed": true,
+       "view": {
+        "x": "0000000000000000",
+        "y": "40755abe2be2be2c",
+        "width": "407c3b6db6db6db7",
+        "height": "404e1d41d41d41d4"
+       }
+      }
+     ],
+     "extents": [],
+     "calls": [
+      {
+       "finder": {
+        "geoIndex": 0
+       },
+       "value": [
+        2,
+        1.5
+       ],
+       "ret": [
+        "4032118de5ab2780",
+        "4063bf2d593bfa26"
+       ]
+      },
+      {
+       "finder": {
+        "geoIndex": 1
+       },
+       "value": [
+        2,
+        1.5
+       ],
+       "ret": [
+        "403aaaaaaaaaaaac",
+        "406d0a69a69a69a8"
+       ]
+      },
+      {
+       "finder": {
+        "geoIndex": 2
+       },
+       "value": [
+        2,
+        1.5
+       ],
+       "ret": [
+        "402c000000000000",
+        "40721db6db6db6dc"
+       ]
+      },
+      {
+       "finder": {
+        "geoIndex": 3
+       },
+       "value": [
+        2,
+        1.5
+       ],
+       "ret": [
+        "40421c28f5c28f5c",
+        "4046c51eb851eb85"
+       ]
+      },
+      {
+       "finder": {
+        "seriesIndex": 0
+       },
+       "value": [
+        3,
+        0.5
+       ],
+       "ret": [
+        "4060f07507507507",
+        "40773c9249249249"
+       ]
+      }
+     ],
+     "backs": [],
+     "contains": [],
+     "hovers": [],
+     "axes": []
+    }
+   ]
   }
  ],
  "guards": [
@@ -7186,6 +7593,14 @@
   },
   {
    "name": "gallery-matrix-mini-bar-geo: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "map-data-default: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "geo-no-column: the recipes hold (R1-R3)",
    "ok": true
   },
   {
@@ -7310,6 +7725,14 @@
   },
   {
    "name": "the gallery's twenty grids and ten geos are in its cells",
+   "ok": true
+  },
+  {
+   "name": "a map naming a cell with no usage is on the canvas, by its own box",
+   "ok": true
+  },
+  {
+   "name": "a geo in a coord of no column is laid out from x nought with finite numbers",
    "ok": true
   }
  ]

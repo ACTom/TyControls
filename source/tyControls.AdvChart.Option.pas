@@ -235,6 +235,11 @@ function TyJsonNestingExceeds(const AText: string; AMax: Integer;
 function TyOptionParseRaw(const AText: string; out AData: TJSONData;
   out AError: TTyOptionError): Boolean;
 
+{ Every float node of ARoot (parsed from AText) given the value JavaScript's
+  Number() gives its token -- see the implementation. TyOptionParseRaw does
+  it to every tree it parses. }
+procedure TyJsonFixNumbers(const AText: string; ARoot: TJSONData);
+
 implementation
 
 uses
@@ -242,7 +247,7 @@ uses
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
   tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
-  tyControls.AdvChart.Scale;
+  tyControls.AdvChart.Scale, tyControls.AdvChart.Data;
 
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 var
@@ -794,7 +799,200 @@ begin
   finally
     parser.Free;
   end;
+  TyJsonFixNumbers(AText, AData);
   Result := True;
+end;
+
+{ THE NUMBERS AGAIN, correctly rounded [Batch 146; every option since
+  Milestone D9-D14]. fpjson reads a number through FPC's Val, which is not
+  correctly rounded (about one in eight thousand decimals comes back a unit in
+  the last place out), and JSON.parse reads every decimal exactly -- a map is
+  thousands of them, and one is enough for a coordinate a bit off. So every
+  number token of the text is found in document order and each float node of
+  the tree, in the same order, is given the value JavaScript's Number() gives
+  the token. The integers fpjson keeps are exact. Should the two orders not
+  line up, nothing is changed.
+
+  CHEAP: a token is only a place in the text until a float node asks for it,
+  and the common decimal -- at most fifteen significant digits, a power of ten
+  within 22 -- is read here the way TyJsDecimalToDouble's short path reads it
+  (the digits and the power both exact Doubles, one IEEE operation), with no
+  string made. A longer one (a coordinate printed to seventeen digits) keeps
+  fpjson's value when TyJsDecimalIsNearest finds it between its two half-way
+  points -- two exact comparisons -- and only the rest goes through
+  TyJsToNumber's long division. }
+procedure TyJsonFixNumbers(const AText: string; ARoot: TJSONData);
+var
+  starts, lens: array of Integer;
+  n, i, k, len: Integer;
+  ok: Boolean;
+
+  procedure Collect;
+  var j: Integer; c, q: Char;
+  begin
+    i := 1;
+    len := Length(AText);
+    n := 0;
+    while i <= len do
+    begin
+      c := AText[i];
+      if (c = '"') or (c = #39) then
+      begin
+        q := c;
+        Inc(i);
+        while (i <= len) and (AText[i] <> q) do
+          { a backslash escapes the next character }
+          if AText[i] = #92 then Inc(i, 2) else Inc(i);
+        Inc(i);
+      end
+      else if (c = '/') and (i < len) and (AText[i + 1] = '/') then
+      begin
+        while (i <= len) and not (AText[i] in [#10, #13]) do Inc(i);
+      end
+      else if (c = '/') and (i < len) and (AText[i + 1] = '*') then
+      begin
+        Inc(i, 2);
+        while (i < len) and not ((AText[i] = '*') and (AText[i + 1] = '/')) do Inc(i);
+        Inc(i, 2);
+      end
+      else if c in ['-', '0'..'9'] then
+      begin
+        j := i;
+        Inc(i);
+        while (i <= len) and ((AText[i] in ['0'..'9', '.', 'e', 'E'])
+          or ((AText[i] in ['+', '-']) and (AText[i - 1] in ['e', 'E']))) do Inc(i);
+        if n >= Length(starts) then
+        begin
+          SetLength(starts, n * 2 + 64);
+          SetLength(lens, n * 2 + 64);
+        end;
+        starts[n] := j;
+        lens[n] := i - j;
+        Inc(n);
+      end
+      else if c in ['a'..'z', 'A'..'Z', '_'] then
+      begin
+        while (i <= len) and (AText[i] in ['a'..'z', 'A'..'Z', '_', '0'..'9']) do Inc(i);
+      end
+      else
+        Inc(i);
+    end;
+  end;
+
+  { Number() of the token at AStart, ALen bytes long }
+  function ValueAt(AStart, ALen: Integer; AOld: Double): Double;
+  var
+    p, stop, d, fracLen, ex, expo, intStart, intEnd, fracStart: Integer;
+    neg, expNeg, seen: Boolean;
+    m: QWord;
+  begin
+    p := AStart;
+    stop := AStart + ALen;
+    neg := AText[p] = '-';
+    if neg then Inc(p);
+    m := 0;
+    d := 0;
+    fracLen := 0;
+    seen := False;
+    intStart := p;
+    fracStart := p;
+    { the integer digits, then the fraction's: leading noughts are no
+      significant digits, every other digit is (a trailing nought too, as
+      TyJsDecimalToDouble counts it) }
+    while (p < stop) and (AText[p] in ['0'..'9']) do
+    begin
+      if seen or (AText[p] <> '0') then
+      begin
+        seen := True;
+        Inc(d);
+        if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
+      end;
+      Inc(p);
+    end;
+    intEnd := p;
+    if (p < stop) and (AText[p] = '.') then
+    begin
+      Inc(p);
+      fracStart := p;
+      while (p < stop) and (AText[p] in ['0'..'9']) do
+      begin
+        Inc(fracLen);
+        if seen or (AText[p] <> '0') then
+        begin
+          seen := True;
+          Inc(d);
+          if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
+        end;
+        Inc(p);
+      end;
+    end;
+    expo := 0;
+    if (p < stop) and (AText[p] in ['e', 'E']) then
+    begin
+      Inc(p);
+      expNeg := False;
+      if (p < stop) and (AText[p] in ['+', '-']) then
+      begin
+        expNeg := AText[p] = '-';
+        Inc(p);
+      end;
+      ex := 0;
+      while (p < stop) and (AText[p] in ['0'..'9']) and (ex < 100000) do
+      begin
+        ex := ex * 10 + Ord(AText[p]) - Ord('0');
+        Inc(p);
+      end;
+      if expNeg then expo := -ex else expo := ex;
+    end;
+    expo := expo - fracLen;
+    if (p = stop) and (d <= 15) and (expo >= -22) and (expo <= 22) then
+    begin
+      if d = 0 then Result := 0
+      else if expo >= 0 then Result := Double(m) * TyJsPow10(expo)
+      else Result := Double(m) / TyJsPow10(-expo);
+      if neg then Result := -Result;
+    end
+    else if (p = stop) and (d > 15) and TyJsDecimalIsNearest(
+      Copy(AText, intStart, intEnd - intStart) + Copy(AText, fracStart, fracLen),
+      expo, Abs(AOld)) then
+      Result := AOld
+    else
+      Result := TyJsToNumber(Copy(AText, AStart, ALen));
+  end;
+
+  procedure Walk(AData: TJSONData; AApply: Boolean);
+  var m: Integer;
+  begin
+    if not ok then Exit;
+    case AData.JSONType of
+      jtArray, jtObject:
+        for m := 0 to AData.Count - 1 do Walk(AData.Items[m], AApply);
+      jtNumber:
+        begin
+          if k >= n then
+          begin
+            ok := False;
+            Exit;
+          end;
+          if AApply and (AData is TJSONFloatNumber) then
+            AData.AsFloat := ValueAt(starts[k], lens[k], AData.AsFloat);
+          Inc(k);
+        end;
+    end;
+  end;
+
+begin
+  if ARoot = nil then Exit;
+  starts := nil;
+  lens := nil;
+  Collect;
+  { first count, then write: a mismatch anywhere leaves the tree alone }
+  ok := True;
+  k := 0;
+  Walk(ARoot, False);
+  if not ok or (k <> n) then Exit;
+  k := 0;
+  Walk(ARoot, True);
 end;
 
 { ==================== the brush preprocessor [Batch 127] ====================

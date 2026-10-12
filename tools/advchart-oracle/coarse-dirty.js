@@ -26,7 +26,9 @@ ECHARTS_DIST) in node:
            every call (nothing is drawn; the bookkeeping is real), useDirtyRect
            true. Frames are zr.refreshImmediately(); between frames the case's
            operations change real zrender displayables (Rect, Circle) through
-           their own API (setStyle, setShape, attr, remove, add). Before every
+           their own API (setStyle, setShape, attr, remove, add), or write a
+           property straight on (set: no markRedraw, as echarts does in
+           places). Before every
            frame each element of the display list and of the previous display
            list is recorded as createRepaintRects reads it (shouldBePainted,
            __isRendered, __dirty & REDRAW_BIT, getPaintRect, getPrevPaintRect,
@@ -319,6 +321,9 @@ function spread(n) {
   for (let i = 0; i < n; i++) els['e' + i] = R(10 + (i % 6) * 40, 10 + Math.floor(i / 6) * 40, 8, 8);
   return els;
 }
+function allStyleOf(ids, fill) {
+  return ids.map(id => ({ op: 'style', el: id, style: { fill } }));
+}
 function allStyle(n, fill) {
   const ops = [];
   for (let i = 0; i < n; i++) ops.push({ op: 'style', el: 'e' + i, style: { fill } });
@@ -371,6 +376,14 @@ const DIRTY_CASES = [
     elements: { a: R(10, 10, 40, 40, null, { z2: 1 }), b: R(30, 30, 40, 40, null, { z2: 2 }) },
     frames: [[], [{ op: 'attr', el: 'a', attr: { z2: 3 } }]] },
   { id: 'nothing', note: 'a frame where nothing changed: no rects computed', elements: BARS5, frames: [[], [], []] },
+  // [Milestone D9-D14]
+  { id: 'tie', note: 'the pool full, a sixth rect half way between two: the union grows the same with either, the first one takes it',
+    elements: { a: R(10, 10, 8, 8), b: R(50, 10, 8, 8), c: R(200, 200, 8, 8), d: R(300, 200, 8, 8), e: R(200, 100, 8, 8), f: R(30, 10, 8, 8) },
+    frames: [[], allStyleOf(['a', 'b', 'c', 'd', 'e', 'f'], '#00f')] },
+  { id: 'hidden-quietly', note: 'invisible written straight onto an element (no markRedraw, not dirty; unlike ignore it stays in the display list) while another changes: its previous rect because it is not to be painted (and, its rect the first, brushed there: not rendered any more); shown again the same way: its current rect because it was not rendered',
+    elements: BARS5, frames: [[], [{ op: 'style', el: 'b0', style: { fill: '#0f0' } }],
+      [{ op: 'set', el: 'b0', prop: 'invisible', value: true }, { op: 'style', el: 'b4', style: { fill: '#0f0' } }],
+      [{ op: 'set', el: 'b0', prop: 'invisible', value: false }, { op: 'style', el: 'b4', style: { fill: '#c00' } }]] },
 ];
 
 function makeEl(def) {
@@ -426,6 +439,9 @@ function runDirty(c) {
       if (o.op === 'style') el.setStyle(o.style);
       else if (o.op === 'shape') el.setShape(o.shape);
       else if (o.op === 'attr') el.attr(o.attr);
+      // a property written straight on, as echarts does in places: no
+      // markRedraw, the element not dirty
+      else if (o.op === 'set') el[o.prop] = o.value;
       else if (o.op === 'remove') zr.remove(el);
       else if (o.op === 'add') {
         const nel = makeEl(o.def);

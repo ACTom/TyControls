@@ -577,6 +577,22 @@ gal('matrix-mini-bar-geo', 'the gallery: twenty grids and ten geos in cells (the
   { calls: [{ finder: { geoIndex: 0 }, value: [0.5, 0.5] }, { finder: { geoIndex: 9 }, value: [9.5, 0.5] },
     { finder: { gridIndex: 0 }, value: [100, 2] }, { finder: { gridIndex: 39 }, value: [100, 2] }] });
 
+// [D9-D14 mutation round] cases added after the batch
+add('series', 'map-data-default', "a map series naming a matrix cell with no usage written, the first (and only) of its map: a series' default usage is 'data', so its own geo is laid out on the canvas by its box",
+  { matrix: MX(),
+    series: [{ type: 'map', map: 'target_map', coordinateSystem: 'matrix', coord: ['b', 'q'], left: 100, top: 100, width: 300, height: 100, data: [] }] },
+  { calls: [{ finder: { seriesIndex: 0 }, value: [3, 0.5] }] });
+
+add('component', 'geo-no-column', "geos whose coord names a row and no column (dataToLayout: no x, no width; a y and a height) and a day off the calendar's range (no x, no y; a width and a height): resizeGeo still lays each out -- getLayoutRect's `|| 0`, the aspect from the height -- and a map series with usage 'box' the same way",
+  { matrix: MX(), calendar: CAL(),
+    geo: [
+      { map: 'bx2sq', coordinateSystem: 'matrix', coord: ['zz', 'p'] },
+      { map: 'bx2sq', coordinateSystem: 'matrix', coord: ['zz', 'q'], left: 10, width: 50 },
+      { map: 'bx2sq', coordinateSystem: 'matrix', coord: ['zz', 'r'], left: 5, top: 10, height: 30 },
+      { map: 'bx2sq', coordinateSystem: 'calendar', coord: '2019-01-01' }],
+    series: [{ type: 'map', map: 'target_map', coordinateSystem: 'matrix', coordinateSystemUsage: 'box', coord: ['zz', 's'], data: [] }] },
+  { calls: [0, 1, 2, 3].map(g => ({ finder: { geoIndex: g }, value: [2, 1.5] })).concat([{ finder: { seriesIndex: 0 }, value: [3, 0.5] }]) });
+
 function load(c) {
   if (!c.gallery) return clone(c.option);
   return JSON.parse(fs.readFileSync(path.join(GALLERY, c.gallery + '.json'), 'utf8'));
@@ -780,6 +796,17 @@ function guards(out) {
   guard('the gallery\'s twenty grids and ten geos are in its cells', () => {
     const c = s0('gallery-matrix-mini-bar-geo');
     return c.grids.length === 20 && c.grids.every(r => r.boxed) && c.geos.length === 10 && c.geos.every(r => r.boxed);
+  });
+  // [D9-D14 mutation round]
+  guard('a map naming a cell with no usage is on the canvas, by its own box', () => {
+    const s = s0('map-data-default').series[0];
+    return !s.boxed && Object.is(n(s.view.x), 100);
+  });
+  guard('a geo in a coord of no column is laid out from x nought with finite numbers', () => {
+    const c = s0('geo-no-column');
+    return c.geos.length === 4 && c.geos.every(r => r.boxed && Number.isNaN(n(r.ref.x)) && Number.isFinite(n(r.view.x))
+      && Number.isFinite(n(r.view.width))) && c.calls.every(q => q.ret && Number.isFinite(n(q.ret[0])))
+      && Object.is(n(c.geos[1].view.x), 10);
   });
   return g;
 }

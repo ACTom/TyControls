@@ -600,6 +600,8 @@ add('two-matrices', 'two matrices; series by matrixIndex and matrixId',
     series: [{ type: 'heatmap', coordinateSystem: 'matrix', matrixIndex: 1, data: [['g1', 'r', 3], ['g2', 'r', 7]] },
       { type: 'scatter', coordinateSystem: 'matrix', matrixId: 'left', symbolSize: 12, data: [['a', 'p', 1], ['b', 'q', 2]] },
       { type: 'heatmap', coordinateSystem: 'matrix', data: [['a', 'q', 5]] }] });
+add('box-negative-zero', 'a width of "-0" (parseFloat; getLayoutRect keeps the -0, BoundingRect only flips a negative): a sized leaf is confined to +0 and what is left to +0 (confineSize: Math.max(-0 - 0, 0)), so the equal share is +0, not -0',
+  { matrix: { left: 300, width: '-0', x: { data: [{ value: 'a', size: 50 }, 'b', 'c'] }, y: { data: ['p', 'q'] } } });
 
 gal('matrix-simple', 'the gallery: a heatmap on a tree');
 gal('matrix-correlation-heatmap', 'the gallery: a correlation heatmap');
@@ -681,6 +683,8 @@ function guards(out) {
     && m0('collect').dims[1].cells.map(c => c.value).join() === 'p,q,r');
   guard('two matrices', cs('two-matrices').matrices.length === 2 && cs('two-matrices').series[0].matrixIndex === 1
     && cs('two-matrices').series[1].matrixIndex === 0);
+  guard('a width of -0: the rect keeps it, the equal share is +0', Object.is(n(m0('box-negative-zero').rect.width), -0)
+    && Object.is(n(m0('box-negative-zero').dims[0].cells[1].wh), 0) && Object.is(n(m0('box-negative-zero').dims[1].levels[0].wh), 0));
   guard('the visualMap sizes the scatter', cs('scatter-vm').series[0].rows.some(r => r.size[0] === 40));
   guard('the gallery draws', cs('gallery-matrix-covariance').series[0].rows.filter(r => r.drawn).length > 100);
   return g;

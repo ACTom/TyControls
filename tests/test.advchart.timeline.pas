@@ -108,6 +108,7 @@ type
     procedure TestTheEventsAreRegistrable;
     procedure TestTheExportCanLeaveTheTimelineOut;
     procedure TestTheTimelineIsDrawnInTheSkinsInk;
+    procedure TestATimeAxisOverStringsDrawsNothingAtNaN;
   end;
 
 implementation
@@ -1086,6 +1087,58 @@ begin
       AssertTrue('not upstream''s accent20', v.Els[i].StyleValue('fill').Str <> '#c0c9e6');
     end;
   AssertTrue('ticks', found);
+end;
+
+{ [Milestone D9-D14] the default axisType is 'time': data that are not dates
+  are NaN, every tick and label sits at NaN (upstream draws them there; the
+  oracle's time-strings case has the places). The render, a hover, a click
+  and a drag on the line raise nothing, the NaN elements stay out of the
+  paint list, and the host's own traps are on again afterwards. }
+procedure TAdvChartTimelineTest.TestATimeAxisOverStringsDrawsNothingAtNaN;
+var
+  v: TTyTimelineView;
+  i, ticks: Integer;
+  meas: ITyTextMeasurer;
+  a, b: Double;
+  raised: string;
+begin
+  Show('{"baseOption": {"timeline": {"data": ["a", "b", "c", "d"]}, '
+    + '"xAxis": {"type": "category", "data": ["x", "y"]}, "yAxis": {}, '
+    + '"series": [{"type": "bar", "data": [1, 2]}]}, '
+    + '"options": [{}, {}, {}, {}]}');
+  v := FChart.TimelineView;
+  AssertTrue('shown', (v <> nil) and v.Shown);
+  meas := FChart.NewTextMeasurer(96);
+  ticks := 0;
+  for i := 0 to High(v.Els) do
+    case v.RoleOf(i).Kind of
+      tlrTick:
+        begin
+          Inc(ticks);
+          AssertTrue('a tick at NaN', IsNan(v.Els[i].X));
+          AssertFalse('a tick at NaN is not drawn', v.Drawable(i, meas));
+        end;
+      tlrLine: AssertTrue('the line is drawn', v.Drawable(i, meas));
+    end;
+  AssertEquals('four ticks', 4, ticks);
+  { over the line, where a tick would be; a click there; a drag along it }
+  FChart.Move(300, 370);
+  FChart.Down(300, 370);
+  FChart.Move(320, 370);
+  FChart.Up(320, 370);
+  RenderNow;
+  FChart.DispatchAction('{"type": "timelineChange", "currentIndex": 2}');
+  RenderNow;
+  AssertEquals('the action still moves the index', 2, v.CurrentIndex, 0);
+  a := 1;
+  b := 0;
+  raised := '';
+  try
+    a := a / b;
+  except
+    on E: Exception do raised := E.ClassName;
+  end;
+  AssertEquals('the host''s division by zero', 'EZeroDivide', raised);
 end;
 
 initialization

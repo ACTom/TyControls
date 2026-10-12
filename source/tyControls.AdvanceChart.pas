@@ -1004,6 +1004,10 @@ type
     FVmDragVm, FVmDragIdx, FVmDragX, FVmDragY: Integer;
     FVmUidSeq: Integer;
     FEvHoverX, FEvHoverY: Integer;
+    { [Milestone D9-D14] the target a pan's move found before the picture
+      moved: EventMove takes it instead of looking again }
+    FEvPreset: Boolean;
+    FEvPresetT: TTyChartEventTarget;
     { a slider dataZoom's own picture, by the author's dataZoom index }
     FDzViews: array of TTyDzSliderSpec;
     FDzLayouts: array of TTyDzSliderLayout;
@@ -2694,6 +2698,12 @@ type
       freed -- which is most of a frame when there is nothing moving. }
     function HasDynamicContent: Boolean;
     procedure DropStatic;
+    { DropStatic from a pointer handler: a list that was valid is built again
+      at once (the cached picture still goes), so the pointer's next event
+      hits what the change left -- zrender's storage is current the moment
+      the states change, and a press usually comes before the paint the move
+      asked for [Milestone D9-D14] }
+    procedure DropStaticKeepList;
   protected
     { Every surviving series as a formatter would see it, in section order --
       so `{a0}` is the first row of the first section. }
@@ -3388,7 +3398,7 @@ type
     function SetKeyboardItem(ASeriesIndex, ADataIndex: Integer): Boolean;
     procedure ClearKeyboardItem;
     { ITyAccessibleHost. The tree under GetAccessibleObject (role larChart,
-      named by the first title or rsTyChartAccessibleName, described by
+      named by the first title or rsTyChartTypeChart, described by
       AccessibleSummary): one larListBox per walked series, named with the
       description's phrase for that series, and under it one larListItem per
       row (the first cTyAccMaxItems), named with the description's phrase
@@ -4144,7 +4154,7 @@ begin
   FAccGen := -1;
   FAccLink := TTyAccessibleLink.Create(Self);
   AccessibleRole := larChart;
-  AccessibleName := rsTyChartAccessibleName;
+  AccessibleName := rsTyChartTypeChart;
   FRoamSeries := -1;
   FRoamGeo := -1;
   FGraphDragSlot := -1;
@@ -13691,9 +13701,11 @@ begin
   ThumbUpdateWindows;
   { A NEW PICTURE, NOT A NEW LAYOUT: the static layer goes, the build and
     the force answer stay. The hover names an element of a list about to be
-    rebuilt. }
+    rebuilt. The list is built again at once [Milestone D9-D14]: the next
+    pointer event -- this drag's release, the next move's hover -- finds the
+    picture where it moved, as zrender's storage holds it. }
   TipReset;
-  DropStatic;
+  DropStaticKeepList;
   inherited Invalidate;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   EmitUpdated;
@@ -25720,7 +25732,9 @@ begin
   { and a geo region a render replaced [Batch 148] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 14) and (GeoOfTarget(FEvHover) = nil) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
-  t := EventTargetAt(AX, AY);
+  if FEvPreset then t := FEvPresetT
+  else t := EventTargetAt(AX, AY);
+  FEvPreset := False;
   if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     { the element's own mouseout, bubbled [Batch 116] }
@@ -29901,7 +29915,7 @@ begin
   { the handle labels fade: api.enterBlur }
   if FVisualViews[AIndex].Calculable then
     for h := 0 to 1 do FVmLive[AIndex].LabelBlur[h] := True;
-  DropStatic;
+  DropStaticKeepList;
   inherited Invalidate;
 end;
 
@@ -29913,7 +29927,7 @@ begin
   FVmLive[AIndex].IndVisible := False;
   FVmLive[AIndex].IndLabelVisible := False;
   for h := 0 to 1 do FVmLive[AIndex].LabelBlur[h] := False;
-  DropStatic;
+  DropStaticKeepList;
   inherited Invalidate;
 end;
 
@@ -37270,10 +37284,10 @@ end;
 
 procedure TTyAdvanceChart.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  d: TTyChartDatumRef;
+  d, preD: TTyChartDatumRef;
   spec: TTyTooltipSpec;
-  el: Integer;
-  wasOn, graphChanged, tipWas: Boolean;
+  el, preEl: Integer;
+  wasOn, graphChanged, tipWas, pre, roamed: Boolean;
   dx, dy, pdx, pdy: Double;
 begin
   { the frame between two pointer events [Batch 125] }
@@ -37297,6 +37311,19 @@ begin
     FTmHoverRow := d.DataIndex;
     graphChanged := True;
   end;
+  { THE HOVER BEFORE THE PAN [Milestone D9-D14]: zrender's Handler finds
+    the element under the pointer first; the RoamController (and the
+    thumbnail's) listens on the zr-level mousemove and moves the picture
+    after, so this move's events and tooltip name what was under the
+    pointer before it moved -- a region the graph slides over, a node it
+    slides away from }
+  pre := ((FThumbDrag >= 0) and (FThumbDrag <= High(FThumbs))) or (FRoamSeries >= 0);
+  roamed := False;
+  if pre then
+  begin
+    preD := HitTestAt(X, Y, preEl);
+    FEvPresetT := EventTargetAt(X, Y);
+  end;
   { THE DRAG FIRST: the delta from where the pointer was last, wherever it is
     now -- a drag that leaves the control keeps panning. }
   if (FThumbDrag >= 0) and (FThumbDrag <= High(FThumbs)) then
@@ -37313,7 +37340,7 @@ begin
           dx, dy, pdx, pdy);
         FThumbDragX := X;
         FThumbDragY := Y;
-        GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
       end
       else
       begin
@@ -37332,7 +37359,7 @@ begin
     else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
     { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
     else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
-    else GraphRoam(FRoamSeries, dx, dy);
+    else roamed := GraphRoam(FRoamSeries, dx, dy);
   end;
   { A NODE DRAG: one 'drag' per move, the delta from the last move [Batch 114] }
   if FGraphDragSlot >= 0 then GraphDragMove(X, Y);
@@ -37349,7 +37376,20 @@ begin
     the box off switch the highlight off too. }
 
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
-  d := HitTestAt(X, Y, el);
+  if pre then
+  begin
+    d := preD;
+    el := preEl;
+    { A GRAPH'S ROAM RENDERS ITS VIEW AGAIN: its symbols and edges are new
+      elements, none of them in the emphasis the hovered one had }
+    if roamed and IsGraphDatum(d) then
+    begin
+      d := TyChartNoDatum;
+      el := -1;
+    end;
+  end
+  else
+    d := HitTestAt(X, Y, el);
   { A GRAPH'S HOVER LIVES IN THE STATIC LAYER, so a change of it -- onto a
     graph element, off one, or from one to another -- draws that layer
     again. A label's hit is its node's: they share the datum. }
@@ -37365,6 +37405,7 @@ begin
   tipWas := FTipShown;
   { the chart's own mouse events [Batch 84] -- zrender hears the chart's
     listeners before the pointer's global one }
+  FEvPreset := pre;
   EventMove(X, Y);
   { THE AXIS POINTER AND THE BOX THROUGH THEIR ACTIONS [Batch 153]: the
     global listener turns the move into updateAxisPointer (the pointer's
@@ -39371,6 +39412,18 @@ begin
   FPaintListValid := False;
 end;
 
+procedure TTyAdvanceChart.DropStaticKeepList;
+var had: Boolean;
+begin
+  had := (FPaintList <> nil) and FPaintListValid;
+  DropStatic;
+  if had and (FLastPPI > 0) and not FExporting then
+  begin
+    BuildSeriesList(NewTextMeasurer(FLastPPI), FLastPPI);
+    StaticDrop;
+  end;
+end;
+
 procedure TTyAdvanceChart.PointerStateChanged;
 begin
   InvalidateFrame;
@@ -39824,7 +39877,7 @@ begin
     if root = nil then Exit;
     root.AccessibleRole := larChart;
     { the name: the first title, as getTitle reads it; else the word }
-    nm := rsTyChartAccessibleName;
+    nm := rsTyChartTypeChart;
     d := FOption.ComponentAt('title', 0);
     if d is TJSONObject then
     begin
@@ -43295,6 +43348,7 @@ begin
   begin
     el := FTlView.Els[i];
     if el.Ignore then Continue;
+    if not FTlView.Drawable(i, meas) then Continue;
     if not TyGfxPaintElement(el, meas, ctx, pe) then Continue;
     { the pointer is the timeline's own: nothing in the paint list answers
       for it }

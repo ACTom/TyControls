@@ -116,6 +116,7 @@ type
     procedure TestABatchOfAnotherTypeIsRefused;
     procedure TestAHighlightBatchIsOneEventWithEveryItem;
     procedure TestTheIndicatorIsDrawnWhereItIs;
+    procedure TestAClickAfterAHoverLinkNeedsNoRepaint;
   end;
 
 implementation
@@ -1036,6 +1037,38 @@ begin
   for i := 0 to list.Count - 1 do
     if (list.Element(i).Caption.Text = live.IndLabel.Text) and (live.IndLabel.Text <> '') then Inc(n);
   AssertEquals('its label is drawn once', 1, n);
+end;
+
+{ [Milestone D9-D14] hoverLink shows the indicator and highlights the items
+  in range when the pointer is on the bar, and takes both away when it
+  leaves -- each a change of what the visualMap draws. The pointer's next
+  event must still find what is under it: zrender's storage is current the
+  moment the states change, and a press usually comes before the paint the
+  move asked for (input outranks WM_PAINT). }
+procedure TAdvChartVisualMapInteractTest.TestAClickAfterAHoverLinkNeedsNoRepaint;
+var
+  L: TTyVisualMapLayout;
+  bx, by: Double;
+begin
+  FChart.ChartOn('click', @FChart.OnEv);
+  FChart.ChartOn('mouseover', @FChart.OnEv);
+  Show(cBar + '"visualMap":{"type":"continuous","min":0,"max":100,"right":20,"top":"middle"}}');
+  AssertEquals('the last bar is under (420, 300)', 4, FChart.HitTestAt(420, 300).DataIndex);
+  L := FChart.VisualMapLayout(0);
+  bx := L.GroupX + L.Bar[0] * (L.ItemW / 2) + L.Bar[2] * (L.ItemH / 2) + L.Bar[4];
+  by := L.GroupY + L.Bar[1] * (L.ItemW / 2) + L.Bar[3] * (L.ItemH / 2) + L.Bar[5];
+  { on the bar: the indicator and the highlight; no paint after it }
+  FChart.Move(Round(bx), Round(by));
+  AssertTrue('the indicator shows', FChart.VisualMapLive(0).IndVisible);
+  AssertEquals('still the last bar there', 4, FChart.HitTestAt(420, 300).DataIndex);
+  { off it, onto the last bar (the series' mouseover shows the indicator at
+    its value), and a click there -- still no paint }
+  FChart.Move(420, 300);
+  AssertTrue('the indicator from the series', FChart.VisualMapLive(0).IndVisible);
+  FChart.Down(420, 300);
+  FChart.Up(420, 300);
+  AssertEquals('the click found the bar', 1, FChart.Count('click'));
+  AssertEquals('one mouseover on it', 1, FChart.Count('mouseover'));
 end;
 
 initialization

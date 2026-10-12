@@ -387,6 +387,11 @@ const TIP = { hideDelay: 0, position: [5, 5] };
 function opt(geo, extra) {
   return Object.assign({ animation: false, geo: geo }, extra || {});
 }
+// a roaming graph on its own view, its nodes in two corners of the canvas
+function graphOn(z) {
+  return { type: 'graph', layout: 'none', roam: true, roamTrigger: 'global', z, symbolSize: 6,
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 60 }] };
+}
 const CASES = [
   {
     id: 'drag',
@@ -486,6 +491,34 @@ const CASES = [
       { setOption: opt([{ map: 'ge3', roam: true, z: 0 }, { map: 'ge3', roam: false, left: 140, top: 20, z: 5 }]), notMerge: true },
       { drag: [{ region: 'A', geo: 1 }, { region: 'A', geo: 1, dx: 5 }] }, { drag: [{ at: [15, 15], geo: 1 }, { at: [15, 15], geo: 1, dx: 10, dy: -10 }] },
       { wheel: { at: { region: 'B', geo: 1 }, delta: 120 } }, { wheel: { at: { at: [15, 15], geo: 1 }, delta: 120 } },
+    ],
+  },
+  {
+    id: 'geo-vs-series',
+    note: "a roaming geo and a roaming graph (its own view, roamTrigger 'global') at one zlevel and z: on the geo the geo takes the drag and the wheel (the components' controllers are added before the series'); the graph one z higher takes them there -- and the region under the pointer, found before the graph moves, keeps its hover, its mousemove and its mouseup",
+    option: opt({ map: 'ge3', roam: true, z: 2 }, { series: [graphOn(2)] }),
+    steps: [
+      { drag: [[300, 200], [310, 205]] }, { wheel: [300, 200, 120] },
+      { setOption: opt({ map: 'ge3', roam: true, z: 2 }, { series: [graphOn(3)] }), notMerge: true },
+      { drag: [[300, 200], [290, 195]] }, { wheel: [300, 200, -120] },
+    ],
+  },
+  {
+    id: 'graph-node-roam',
+    note: "[milestone D9-D14] a press on a graph node (not draggable) pans the graph: each move's events name what was under the pointer BEFORE the graph moved (the region the node slid off), the release finds the node where it went, and the next move hovers it again",
+    option: opt({ map: 'ge3', roam: false }, { series: [Object.assign(graphOn(3), { left: 100, top: 100, width: 100, height: 60, symbolSize: 20 })] }),
+    steps: [{ drag: [[100, 100], [115, 108], [130, 116]] }, { move: [131, 116] }],
+  },
+  {
+    id: 'global-pan',
+    note: "a left drag on the geo while a brush takes globalPan part way (takeGlobalCursor): a move while it is taken does not pan and the last point stays where it was; once released the next move pans from that point",
+    option: opt({ map: 'ge3', roam: true }, { brush: { geoIndex: 0 } }),
+    steps: [
+      { press: [300, 200], button: 1 }, { move: [310, 205] },
+      { action: { type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'rect' } } },
+      { move: [330, 215] },
+      { action: { type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } } },
+      { move: [335, 220] }, { release: [335, 220], button: 1 },
     ],
   },
   {

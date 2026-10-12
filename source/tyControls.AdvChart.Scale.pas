@@ -698,6 +698,14 @@ function TyJsAddCommas(const AText: string): string;
   denormals too: what JavaScript's Number() and parseFloat() give. Never
   through FPC's Val, which rounds a denormal half-way case the wrong way. }
 function TyJsDecimalToDouble(const ADigits: string; AExp10: Int64): Double;
+{ Is AValue (positive, normal) the Double nearest ADigits x 10^AExp10? True
+  only when the decimal lies strictly between AValue's two half-way points;
+  False when it does not, or sits on one, or AValue is no positive normal
+  Double -- the caller then asks TyJsDecimalToDouble. Two exact comparisons,
+  no division: the cheap check of a value that is almost always right
+  [Milestone D9-D14]. }
+function TyJsDecimalIsNearest(const ADigits: string; AExp10: Int64;
+  AValue: Double): Boolean;
 
 type
   { How a label's precision was written. lpNone: the value's own decimals,
@@ -2354,6 +2362,63 @@ begin
     bits := mant; // a denormal: e2 is -1074
   Result := 0;
   Move(bits, Result, SizeOf(Result));
+end;
+
+function TyJsDecimalIsNearest(const ADigits: string; AExp10: Int64;
+  AValue: Double): Boolean;
+var
+  bits, mant, hi, lo: QWord;
+  be, e2, i, first, cnt, chunk: Integer;
+  num: TJsBig;
+
+  { the sign of num x 10^AExp10 - AK x 2^AF }
+  function Cmp(AK: QWord; AF: Integer): Integer;
+  var a, b: TJsBig;
+  begin
+    a := Copy(num);
+    b := BigOf(AK);
+    if AExp10 >= 0 then BigMulPow10(a, AExp10) else BigMulPow10(b, -AExp10);
+    if AF >= 0 then BigShl(b, AF) else BigShl(a, -AF);
+    Result := BigCmp(a, b);
+  end;
+
+begin
+  Result := False;
+  if IsNan(AValue) or IsInfinite(AValue) or not (AValue > 0) then Exit;
+  if (AExp10 > 400) or (AExp10 < -400) then Exit;
+  Move(AValue, bits, SizeOf(bits));
+  be := Integer((bits shr 52) and $7FF);
+  if be = 0 then Exit;
+  mant := (bits and ((QWord(1) shl 52) - 1)) or (QWord(1) shl 52);
+  e2 := be - 1075;
+  first := 1;
+  while (first <= Length(ADigits)) and (ADigits[first] = '0') do Inc(first);
+  if first > Length(ADigits) then Exit;
+  num := nil;
+  i := first;
+  while i <= Length(ADigits) do
+  begin
+    cnt := Min(9, Length(ADigits) - i + 1);
+    chunk := StrToInt(Copy(ADigits, i, cnt));
+    if Length(num) > 0 then BigMulPow10(num, cnt);
+    BigAddSmall(num, chunk);
+    Inc(i, cnt);
+  end;
+  { the half-way points: (2m + 1) 2^(e2 - 1) above; below the same, or
+    (4m - 1) 2^(e2 - 2) at the bottom of a binade, where the spacing below
+    halves }
+  hi := 2 * mant + 1;
+  if (mant = QWord(1) shl 52) and (be > 1) then
+  begin
+    lo := 4 * mant - 1;
+    if Cmp(lo, e2 - 2) <= 0 then Exit;
+  end
+  else
+  begin
+    lo := 2 * mant - 1;
+    if Cmp(lo, e2 - 1) <= 0 then Exit;
+  end;
+  Result := Cmp(hi, e2 - 1) < 0;
 end;
 
 function TyJsNumberToString(AValue: Double): string;

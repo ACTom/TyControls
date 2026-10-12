@@ -1174,10 +1174,6 @@ msgstr "第{seriesId}个系列是一个表示{seriesName}的{seriesType}，"
 msgid " The {seriesId} series is a {seriesType}."
 msgstr "第{seriesId}个系列是一个{seriesType}，"
 
-#: tycontrols.strconsts.rstychartaccessiblename
-msgid "Chart"
-msgstr "图表"
-
 #: tycontrols.strconsts.rstychartariaalldata
 msgid "The data is as follows: "
 msgstr "其数据是——"

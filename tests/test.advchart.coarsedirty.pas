@@ -101,6 +101,7 @@ type
     procedure TestDirtyEqualsFullUnderAnAxisPointer;
     procedure TestDirtyEqualsFullOverEmphasisAndBlur;
     procedure TestDirtyEqualsFullThroughAnEnterAnimation;
+    procedure TestAnUnboundedBatchUnderARectIsDrawnAgain;
     procedure TestDirtyEqualsFullThroughARoam;
     procedure TestDirtyEqualsFullAtTwiceThePPI;
     procedure TestAHoverRepaintsAroundTheBarOnly;
@@ -1002,6 +1003,36 @@ begin
   finally
     early.Free;
   end;
+end;
+
+{ [Milestone D9-D14] A LARGE BATCH HAS NO PAINT RECT (one element for every
+  point), so the partial repaint draws it wherever it is -- unchanged, its
+  points still sit over the bar the hover repaints, and leaving it out would
+  paint the bar over them }
+procedure TAdvChartCoarseDirtyTest.TestAnUnboundedBatchUnderARectIsDrawnAgain;
+var k: Integer; pts: string;
+begin
+  pts := '';
+  for k := 0 to 59 do
+  begin
+    if k > 0 then pts := pts + ',';
+    pts := pts + Format('[%d,%d]', [k mod 4, 5 + (k * 7) mod 70]);
+  end;
+  Pair('{"animation":false,"xAxis":{"type":"category","data":["A","B","C","D"]},'
+    + '"yAxis":{"type":"value","min":0,"max":100},'
+    + '"series":[{"type":"bar","data":[50,70,60,80]},'
+    + '{"type":"scatter","large":true,"largeThreshold":10,"symbolSize":6,'
+    + '"itemStyle":{"color":"#000"},"data":[' + pts + ']}]}', 420, 300, 96);
+  Frame('first');
+  for k := 0 to 3 do
+  begin
+    HoverBoth(84 + k * 84, 200);
+    Frame(Format('on bar %d', [k]));
+  end;
+  FA.Leave;
+  FB.Leave;
+  Frame('left');
+  AssertTrue('the dirty path engaged', FPartial >= 3);
 end;
 
 procedure TAdvChartCoarseDirtyTest.TestDirtyEqualsFullThroughARoam;

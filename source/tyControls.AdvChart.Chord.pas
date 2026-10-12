@@ -264,6 +264,38 @@ begin
   end;
 end;
 
+{ THE NODE'S VALUE DIMENSION, as createGraphFromNodeEdge builds the node
+  data: on a cartesian2d, a polar or a matrix (createSeriesData) and on a
+  geo (lng, lat) the dimensions are the coordinate system's and none is
+  `value` -- node.getValue('value') reads nothing (-1); on a calendar (time,
+  value) it is the row's second element (1); otherwise the first (0). A
+  scalar value is every element. [D9-D14 mutation round] }
+function NodeValueSlot(ASeries: TJSONObject): Integer;
+var d: TJSONData;
+begin
+  Result := 0;
+  if ASeries = nil then Exit;
+  d := ASeries.Find('coordinateSystem');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  if (d.AsString = 'cartesian2d') or (d.AsString = 'polar')
+    or (d.AsString = 'matrix') or (d.AsString = 'geo') then Result := -1
+  else if d.AsString = 'calendar' then Result := 1;
+end;
+
+{ the value at that slot: nothing at -1, an array's element (NaN past its
+  end), a scalar itself }
+function NodeValueAt(AData: TJSONData; ASlot: Integer): Double;
+begin
+  Result := NaN;
+  if (AData = nil) or (ASlot < 0) then Exit;
+  if AData.JSONType = jtArray then
+  begin
+    if ASlot >= AData.Count then Exit;
+    AData := AData.Items[ASlot];
+  end;
+  Result := NumOrNaN(AData);
+end;
+
 { JS String(v) }
 function JsStr(AData: TJSONData): string;
 var k: Integer;
@@ -413,7 +445,7 @@ function ChordSolveImpl(AOption: TTyChartOption; ASeriesIndex: Integer;
 var
   vx: TTyXYWH;
   node, arr, d: TJSONData;
-  n, m, i, j, k, lo, a, b, rendered, nodeCount: Integer;
+  n, m, i, j, k, lo, a, b, rendered, nodeCount, slot: Integer;
   ends: array[0..1] of Integer;
   keys: TTyStringArray;
   spec: TTyPieSpec;
@@ -443,6 +475,7 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then Result.Z := Round(d.AsFloat);
 
   { ---- the nodes: data || nodes ---- }
+  slot := NodeValueSlot(Result.Series);
   arr := Result.Series.Find('data');
   if not Truthy(arr) then arr := Result.Series.Find('nodes');
   n := 0;
@@ -472,11 +505,12 @@ begin
     d := nil;
     if Result.Nodes[i].Obj <> nil then d := Result.Nodes[i].Obj.Find('name');
     if Present(d) then Result.Nodes[i].Name := JsStr(d);
-    { the value dimension: the item's `value`, or the item itself }
+    { the value dimension: the item's `value`, or the item itself -- at the
+      slot the coordinate system's dimensions give it }
     if Result.Nodes[i].Obj <> nil then
-      Result.Nodes[i].DataValue := NumOrNaN(Result.Nodes[i].Obj.Find('value'))
+      Result.Nodes[i].DataValue := NodeValueAt(Result.Nodes[i].Obj.Find('value'), slot)
     else
-      Result.Nodes[i].DataValue := NumOrNaN(arr.Items[i]);
+      Result.Nodes[i].DataValue := NodeValueAt(arr.Items[i], slot);
   end;
 
   { ---- the links: edges || links; Graph.addEdge's two lookups ---- }

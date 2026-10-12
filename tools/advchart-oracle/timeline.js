@@ -451,11 +451,14 @@ function rolesOf(view) {
   must(btns.length === order.length, 'buttons ' + btns.length + ' for ' + order.join());
   btns.forEach((el, i) => roles.set(el, order[i]));
   // a label's data index: its tick's place along the axis
+  // (NaN places -- a time axis over strings -- match in order: Object.is)
+  const usedLabel = new Set();
   (view._tickLabels || []).forEach(el => {
     let k = -1;
     data.each(['value'], (v, di) => {
-      if (k < 0 && view._axis.dataToCoord(v) === el.x) k = di;
+      if (k < 0 && !usedLabel.has(di) && Object.is(view._axis.dataToCoord(v), el.x)) k = di;
     });
+    usedLabel.add(k);
     must(k >= 0, 'a label at no tick');
     roles.set(el, 'label:' + k);
   });
@@ -796,6 +799,8 @@ const CASES = [
   { id: 'cat-top', group: 'layout', note: 'horizontal in the upper half: the labels go above', option: bars(tlCat({ top: 10, bottom: null, height: 50 })), steps: [] },
   { id: 'time-h', group: 'layout', note: 'a time axis, a string formatter, UTC', option: bars({ axisType: 'time', data: [UTC(2002, 0, 1), UTC(2003, 0, 1), UTC(2004, 6, 1), UTC(2005, 0, 1)], label: { formatter: '{yyyy}-{MM}' } }, null, { useUTC: true }), steps: [] },
   { id: 'time-dict', group: 'layout', note: 'a time axis, the default dictionary: a year, a month, a day, an hour', option: bars({ axisType: 'time', data: [UTC(2002, 0, 1), UTC(2002, 3, 1), UTC(2002, 3, 9), UTC(2002, 3, 9) + 3600000 * 5] }, null, { useUTC: true }), steps: [] },
+  { id: 'time-strings', group: 'layout', note: "the default axisType 'time' over data that are not dates: every value NaN, the extent empty", option: bars({ data: ['a', 'b', 'c', 'd'] }),
+    steps: [{ kind: 'tap', at: 'next' }, { kind: 'tap', at: 'play', dt: 400 }, { kind: 'wait', dt: 2000 }] },
   { id: 'value-h', group: 'layout', note: 'a value axis, uneven values, a {value} template', option: bars({ axisType: 'value', data: [0, 1.5, 4, 10], label: { formatter: '{value} km' } }), steps: [] },
   { id: 'value-default', group: 'layout', note: 'a value axis with the default label (getPrecision, addCommas)', option: bars({ axisType: 'value', data: [1200, 1250.5, 3000, 12345.25] }), steps: [] },
   { id: 'cat-template', group: 'layout', note: 'a category {value} template, a rotated label and its own size', option: bars(tlCat({ label: { formatter: 'Y{value}', rotate: 30, fontSize: 14 } })), steps: [] },

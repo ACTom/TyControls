@@ -205,7 +205,21 @@ const RIVERS = {
   ],
 };
 
+// [D9-D14 survivors] the pending point of PathProxy: a polygon whose last two
+// points are both a dyadic 1/256 off the last drawn point (equal distances
+// under a raw matrix of powers of two -- the earlier one is kept), and a
+// MultiLineString whose first line ends in a tiny segment (drawn by the next
+// moveTo)
+const TIES = {
+  type: 'FeatureCollection',
+  features: [
+    { type: 'Feature', properties: { name: 'Tie' }, geometry: { type: 'Polygon', coordinates: [[[8 + 1 / 256, 8], [12, 4], [12, 12], [8, 8], [8 - 1 / 256, 8], [8 + 1 / 256, 8]]] } },
+    { type: 'Feature', properties: { name: 'Hook' }, geometry: { type: 'MultiLineString', coordinates: [[[2, 2], [6, 2], [6 + 1 / 256, 2]], [[2, 6], [6, 6]]] } },
+  ],
+};
+
 const TEXT = {
+  ties: JSON.stringify(TIES),
   usa: JSON.stringify(USA_SUB),
   world: JSON.stringify(WORLD_SUB),
   macau: JSON.stringify(MACAU),
@@ -342,6 +356,22 @@ const CASES = [
     option: { geo: { map: 'craftedNull' } } },
   { id: 'missing-map', note: 'a map nobody registered: Geo reads regions off undefined and setOption throws', maps: [],
     option: { geo: { map: 'nosuch' } } },
+  // [D9-D14 survivors]
+  { id: 'pending-points', note: 'PathProxy\'s pending point: a tie of two folded points keeps the earlier; a line\'s folded end is drawn by the next sub-path\'s moveTo', maps: [M('ties', 'ties')],
+    option: { geo: { map: 'ties', boundingCoords: [[0, 16], [16, 0]], aspectScale: 1, left: 0, top: 0, width: 512, height: 512 } } },
+  { id: 'stroke-only', note: 'no fill (areaColor "none"): the label rect grows by strokeContainThreshold; a line with its own borderColor keeps it through fixLineStyle; areaColor and color null leave the default fill #000 of zrender; borderWidth null its default lineWidth 1', maps: [M('crafted', 'crafted')],
+    option: { geo: [
+      { map: 'crafted', left: 0, top: 0, width: 400, height: 300, label: { show: true }, itemStyle: { areaColor: 'none', borderColor: '#000000', borderWidth: 1 } },
+      { map: 'crafted', left: 400, top: 0, width: 400, height: 300, label: { show: true }, itemStyle: { color: '#88aa00', borderColor: '#ff0000' } },
+      { map: 'crafted', left: 0, top: 300, width: 400, height: 300, label: { show: true }, itemStyle: { areaColor: null, color: null, borderColor: '#000000', borderWidth: 1 } },
+      { map: 'crafted', left: 400, top: 300, width: 400, height: 300, label: { show: true }, itemStyle: { borderWidth: null } },
+    ] } },
+  { id: 'limit-aspect', note: 'zoom 0 (and null) is 1 before scaleLimit {max: 0.5} clamps it; preserveAspect with a box of the same aspect (to the bit) is not laid out again', maps: [M('usaplain', 'usa')],
+    option: { geo: [
+      { map: 'usaplain', zoom: 0, scaleLimit: { max: 0.5 }, left: 0, top: 0, width: 400, height: 300 },
+      { map: 'usaplain', zoom: null, scaleLimit: { max: 0.5 }, left: 400, top: 0, width: 400, height: 300 },
+      { map: 'usaplain', boundingCoords: [[0, 1], [1, 0]], aspectScale: 0.7, preserveAspect: true, left: 100, top: 50, width: 350, height: 500 },
+    ] } },
 ];
 
 // ============================================================================
@@ -598,6 +628,31 @@ function guards(cases) {
   add('line-style', (() => { const s = grp(G('lines-only'), 'A').paths[0].style; return s.fill === null && s.stroke === '#3366ff'; })(), 'a line takes its stroke from the fill');
   add('missing-throws', !!C('missing-map').throws, 'a map nobody registered throws in setOption');
   add('first-point-centre', (() => { const g = G('crafted'); return R(g, 'Line').center !== null; })(), 'a region of lines is centred on its rect');
+  // [D9-D14 survivors]
+  add('pending-tie', (() => {
+    const p = grp(G('pending-points'), 'Tie').paths[0];
+    const s = p.subs[0].map(q => q.map(fromHex));
+    const d2 = q => (q[0] - s[3][0]) ** 2 + (q[1] - s[3][1]) ** 2;
+    const last = p.drawn[p.drawn.length - 2];
+    return d2(s[4]) === d2(s[5]) && d2(s[4]) > 0 && last[0] === 'L' && fromHex(last[1]) === s[4][0] && fromHex(last[2]) === s[4][1];
+  })(), 'two pending points at the same distance: the earlier is drawn (d2 > pendingPtDist)');
+  add('pending-on-move', (() => {
+    const p = grp(G('pending-points'), 'Hook').paths[0];
+    const s = p.subs[0].map(q => q.map(fromHex));
+    const k = p.drawn.findIndex((c, i) => i > 0 && c[0] === 'M');
+    const c = p.drawn[k - 1];
+    return k > 0 && c[0] === 'L' && fromHex(c[1]) === s[2][0] && fromHex(c[2]) === s[2][1];
+  })(), 'a line\'s folded last point is drawn by the next moveTo');
+  add('unfilled-rect', (() => {
+    const p = grp(G('stroke-only', 0), 'Poly').paths[0];
+    const l = p.label.layout.map(fromHex);
+    const xs = [].concat(...p.subs.map(s => s.map(q => fromHex(q[0]))));
+    return p.style.fill === 'none' && p.style.stroke === '#000000' && l[2] === (Math.max(...xs) - Math.min(...xs)) + 5;
+  })(), 'with no fill the label rect grows by strokeContainThreshold 5, not the 1 px border');
+  add('null-width-is-one', fromHex(grp(G('stroke-only', 3), 'Poly').paths[0].style.lineWidth) === 1, 'borderWidth null: the path style default lineWidth 1, not the 0.5 of GeoModel');
+  add('line-own-stroke',grp(G('stroke-only', 1), 'Line').paths[0].style.stroke === '#ff0000' && grp(G('stroke-only', 1), 'Line').paths[0].style.fill === null, 'fixLineStyle keeps a line\'s own stroke');
+  add('zoom-limit-zero', fromHex(G('limit-aspect', 0).zoom) === 0.5 && fromHex(G('limit-aspect', 1).zoom) === 0.5, 'zoom 0 / null is 1 before the clamp: scaleLimit max 0.5 answers 0.5');
+  add('aspect-not-relaid', (() => { const v = G('limit-aspect', 2).viewRect.map(fromHex); return v[1] === 50 && v[3] === 500 && 350 / 0.7 !== 500; })(), 'a box at the aspect to atan 1e-9 is kept (350 / 0.7 would not give 500 again)');
   return out;
 }
 

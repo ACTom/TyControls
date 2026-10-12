@@ -208,12 +208,23 @@ function sectorsOf(data) {
   return out;
 }
 
-function recordSeries(chart, s) {
+function recordSeries(chart, s, c) {
   const type = s.subType;
   const rec = { seriesIndex: s.seriesIndex, type, boxed: !!s.boxCoordinateSystem, ref: refRec(s) };
   const data = s.getData();
   if (type === 'pie' || type === 'sunburst') rec.sectors = sectorsOf(data);
-  else if (type === 'chord') rec.sectors = sectorsOf(data);
+  else if (type === 'chord') {
+    rec.sectors = sectorsOf(data);
+    // the angles, only where a case asks: node values the coordinate
+    // system's dimensions read or leave unread
+    if (c && c.angles) {
+      rec.angles = [];
+      data.each(i => {
+        const l = data.getItemLayout(i);
+        if (l) rec.angles.push({ i, startAngle: hex(l.startAngle), endAngle: hex(l.endAngle) });
+      });
+    }
+  }
   else if (type === 'funnel') {
     rec.items = [];
     data.each(i => {
@@ -229,6 +240,7 @@ function recordSeries(chart, s) {
       if (!l) return;
       if (type === 'sankey') rec.nodes.push({ i, x: hex(l.x), y: hex(l.y), dx: hex(l.dx), dy: hex(l.dy) });
       else if (type === 'tree') rec.nodes.push({ i, x: hex(l.x), y: hex(l.y) });
+      else if (c && c.prune) rec.nodes.push({ i, x: hex(l.x), y: hex(l.y), width: hex(l.width), height: hex(l.height), invisible: !!l.invisible });
       else rec.nodes.push({ i, x: hex(l.x), y: hex(l.y), width: hex(l.width), height: hex(l.height) });
     });
     if (type === 'treemap') {
@@ -309,7 +321,18 @@ function recordChart(chart, c) {
           t: [hex(gt[4]), hex(gt[5])], r: [hex(r.x), hex(r.y), hex(r.width), hex(r.height)] };
       }) });
   });
-  ec.eachSeries(s => rec.series.push(recordSeries(chart, s)));
+  ec.eachSeries(s => rec.series.push(recordSeries(chart, s, c)));
+  // the axis names as drawn (the determine pass, its nameMarginLevel of the
+  // refContainer): only the cases that ask
+  if (c.names) {
+    rec.names = [];
+    ['xAxis', 'yAxis'].forEach(mt => ec.eachComponent(mt, am => {
+      let el = null;
+      chart.getViewOfComponentModel(am).group.traverse(e => { if (!el && e.anid === 'name') el = e; });
+      rec.names.push({ dim: mt[0], index: am.componentIndex, grid: am.get('gridIndex') || 0,
+        text: el ? String(el.style.text) : null, at: el ? [hex(el.x), hex(el.y)] : null });
+    }));
+  }
   return rec;
 }
 
@@ -491,6 +514,37 @@ gal('matrix-stock', 'the gallery: five grids (time axes with breaks) and four ti
     { finder: { gridIndex: 2 }, value: [1760580240000, -0.001119309246099931] },
     { finder: { gridIndex: 3 }, value: [43, 0] },
     { finder: { gridIndex: 4 }, value: [3, 10178] }] });
+
+// [D9-D14 mutation round] cases added after the batch; each records only what
+// it asks for, so the cases above keep their bytes
+add('grid', 'grid-names', "axis names on a grid in two columns of cells: the determine pass' nameMarginLevel is of the refContainer -- the grid is wider than half its cells (the y names' level 2) and narrower than half the canvas",
+  { matrix: MX(),
+    grid: { coordinateSystem: 'matrix', coord: [['a', 'b'], ['p', 'r']], left: 50, right: 20, top: 10, bottom: 30 },
+    xAxis: { type: 'category', data: WEEK, name: 'Day', nameLocation: 'middle' },
+    yAxis: [{ type: 'value', name: 'Amount', nameLocation: 'middle' }, { type: 'value', name: 'Rate', nameLocation: 'middle', max: 1 }],
+    series: [{ type: 'bar', data: [1200, 2000, 1500, 800, 700, 1100, 1300] }, { type: 'line', yAxisIndex: 1, data: [0.2, 0.5, 0.4, 0.9, 0.1, 0.3, 0.6] }] },
+  { names: true, calls: [{ finder: { gridIndex: 0 }, value: ['Wed', 1000] }] });
+
+add('series', 'box-nodes', "box series on a matrix with their nodes as `nodes` (data || nodes; the legend lists them), node values the matrix's dimensions leave unread (createSeriesData on x and y: no value dimension), and a chord on a calendar day whose node value is the row's second element (time, value)",
+  { matrix: MX(), calendar: Object.assign(CAL(), { top: 330 }), legend: { top: 0 }, series: [
+    { type: 'chord', coordinateSystem: 'matrix', coordinateSystemUsage: 'box', coord: [['a', 'b'], ['p', 'q']],
+      nodes: [{ name: 'N1' }, { name: 'N2' }, { name: 'N3' }], links: CL.map(l => ({ source: 'N' + (CN.findIndex(q => q.name === l.source) + 1), target: 'N' + (CN.findIndex(q => q.name === l.target) + 1), value: l.value })) },
+    { type: 'chord', coordinateSystem: 'matrix', coordinateSystemUsage: 'box', coord: ['c', ['p', 'q']], data: [{ name: 'A', value: 30 }, { name: 'B' }, { name: 'C' }], links: CL },
+    { type: 'sankey', coordinateSystem: 'matrix', coord: [['a', 'b'], ['s', 'u']], nodes: SK_NODES, links: SK_LINKS },
+    { type: 'sankey', coordinateSystem: 'matrix', coord: ['c', ['s', 'u']], data: [{ name: 'A', value: 30 }, { name: 'B' }, { name: 'C' }, { name: 'D' }], links: SK_LINKS },
+    { type: 'chord', coordinateSystem: 'calendar', coordinateSystemUsage: 'box', coord: '2017-02-09', data: [{ name: 'A', value: [1, 30] }, { name: 'B' }, { name: 'C' }], links: CL }] },
+  { angles: true });
+
+add('series', 'treemap-prune', "treemaps in a cell right of the first cell's width, in a calendar day, and one running off the canvas' right edge: the pruning's clip rect is the canvas",
+  { matrix: MX(), calendar: Object.assign(CAL(), { top: 330 }), series: [
+    { type: 'treemap', coordinateSystem: 'matrix', coord: ['c', ['p', 'r']], breadcrumb: { show: false }, data: TM },
+    { type: 'treemap', coordinateSystem: 'calendar', coord: '2017-02-23', breadcrumb: { show: false }, data: TM },
+    { type: 'treemap', coordinateSystem: 'matrix', coord: ['c', 'u'], left: '90%', width: 400, breadcrumb: { show: false }, data: TM }] },
+  { prune: true });
+
+add('series', 'chord-centre', "a chord with usage 'box' on a calendar, no coord and a date (2017-02-10 as a time value) for its center: getCoord2 is a pie's alone, so its day is dataToLayout(undefined) (no x, no y: getLayoutRect's `|| 0`) and the time value its center in pixels",
+  { calendar: CAL(), series: [
+    { type: 'chord', coordinateSystem: 'calendar', coordinateSystemUsage: 'box', center: 1486684800000, data: CN, links: CL }] });
 
 function load(c) {
   if (!c.gallery) return clone(c.option);
@@ -693,6 +747,28 @@ function guards(out) {
   guard('the stock\'s five grids and four titles are in its cells', () => {
     const c = by('gallery-matrix-stock');
     return c.grids.length === 5 && c.grids.every(r => r.boxed) && c.titles.filter(t => t.boxed).length === 4;
+  });
+  // [D9-D14 mutation round]
+  guard('the named grid is wider than half its cells and narrower than half the canvas: its cells decide the y names\' level', () => {
+    const c = by('grid-names');
+    const g = c.grids[0];
+    return n(g.rect.width) > n(g.ref.width) * 0.5 && n(g.rect.width) <= W * 0.5
+      && c.names.length === 3 && c.names.every(q => q.at !== null);
+  });
+  guard('a chord on a matrix leaves its node value unread, one on a calendar day reads the row\'s second element', () => {
+    const c = by('box-nodes');
+    const span = (s, i) => n(c.series[s].angles[i].endAngle) - n(c.series[s].angles[i].startAngle);
+    return span(1, 0) === span(0, 0) && span(4, 0) > span(0, 0) * 1.5;
+  });
+  guard('the legend lists the nodes a chord writes as `nodes`', () => by('box-nodes').legends[0].items.some(it => it.name === 'N1'));
+  guard('a treemap right of the first cell\'s width is all in view; one off the canvas\' edge is partly not', () => {
+    const c = by('treemap-prune');
+    return n(c.series[0].ref.x) > n(c.series[0].ref.width) && c.series[0].nodes.every(q => !q.invisible)
+      && c.series[2].nodes.some(q => q.invisible) && c.series[2].nodes.some(q => !q.invisible);
+  });
+  guard('a chord with no coord is in dataToLayout(undefined): its center\'s date read as a number from x nought', () => {
+    const s = by('chord-centre').series[0];
+    return Number.isNaN(n(s.ref.x)) && Object.is(n(s.sectors[0].cx), 1486684800000);
   });
   return g;
 }

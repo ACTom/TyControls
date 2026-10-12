@@ -790,6 +790,26 @@ const CASES = [
       ] }),
   },
   {
+    id: 'map-calc-min',
+    note: "mapValueCalculation min on the first series of a group whose second series has a smaller value at one name and a larger at the other: the statistic in the visual fill and the tooltip",
+    option: opt({ tooltip: Object.assign({ trigger: 'item' }, TIP),
+      visualMap: { min: 0, max: 10, inRange: { color: ['#ffffff', '#ff0000'] } },
+      series: [
+        { type: 'map', map: 'g2', name: 'r', mapValueCalculation: 'min', data: [{ name: 'P', value: 5 }, { name: 'Q', value: 3 }] },
+        { type: 'map', map: 'g2', name: 's', data: [{ name: 'P', value: 1 }, { name: 'Q', value: 7 }] },
+      ] }),
+    steps: [{ move: { series: 0, region: 'P' } }, { move: { series: 0, region: 'Q' } }, { leave: true }],
+  },
+  {
+    id: 'map-cs-written',
+    note: "a map series is on a geo whatever coordinateSystem it writes: a name no coordinate system has, and 'radar' with no radar component -- each draws its map",
+    option: opt({
+      series: [
+        { type: 'map', map: 'g4', name: 'n', coordinateSystem: 'nope', data: [{ name: 'A', value: 4 }] },
+        { type: 'map', map: 'g2', name: 'r', coordinateSystem: 'radar', left: 400, top: 250, width: 150, height: 100, data: [{ name: 'P', value: 5 }] },
+      ] }),
+  },
+  {
     id: 'map-on-geo',
     note: "a map series on a geo component (geoIndex): the geo draws the regions with the series' data -- the visual fill, labels always (the geo's), the regions the series' items (events and tooltip the series')",
     option: opt({ tooltip: Object.assign({}, TIP),

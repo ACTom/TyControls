@@ -68,6 +68,7 @@ type
     procedure TestNormaliseNeverStretchesPastOneTurn;
     procedure TestAWholeTurnComesOutExact;
     procedure TestTheScalarsAreActuallyReadOffTheOption;
+    procedure TestAPositionStringIsReadByParseFloat;
     procedure TestBorderRadiusReachesTheSectorAndIsAShareOfTheOuterRadius;
   end;
 
@@ -572,6 +573,28 @@ begin
     everywhere a percentage is accepted. }
   AssertEquals('centre means fifty per cent', 200.0,
     TyPieResolve(spec.CentreX, 400), EpsPx);
+end;
+
+{ [Milestone D9-D14] parsePositionSizeOption reads a string with JavaScript's
+  parseFloat: the leading number, whatever follows -- '120px' is 120, a date
+  string '2017-02-10' is 2017, '30% ' with a blank and ' 40.5%' are
+  percentages. Only a string with no leading number keeps the default here
+  (upstream: NaN). }
+procedure TAdvChartPieTest.TestAPositionStringIsReadByParseFloat;
+var spec: TTyPieSpec;
+begin
+  AssertTrue('the option parsed', FOpt.SetOptionText(
+    '{ "series": [ { "type": "pie", "center": ["120px", "2017-02-10"],'
+    + ' "radius": [" 40.5%", "1e2abc"], "data": [1] } ] }'));
+  spec := TyPieSpecOf(FOpt, 0);
+  AssertEquals('120px is 120', 120.0, TyPieResolve(spec.CentreX, 400), EpsPx);
+  AssertEquals('a date string is its year', 2017.0, TyPieResolve(spec.CentreY, 400), EpsPx);
+  AssertEquals('a blank before the percentage', 40.5, TyPieResolve(spec.Radius0, 100), EpsPx);
+  AssertEquals('an exponent, then junk', 100.0, TyPieResolve(spec.Radius1, 400), EpsPx);
+  AssertTrue('the option parsed', FOpt.SetOptionText(
+    '{ "series": [ { "type": "pie", "center": ["px120", "50%"], "data": [1] } ] }'));
+  spec := TyPieSpecOf(FOpt, 0);
+  AssertEquals('no leading number: the default', 200.0, TyPieResolve(spec.CentreX, 400), EpsPx);
 end;
 
 procedure TAdvChartPieTest.TestBorderRadiusReachesTheSectorAndIsAShareOfTheOuterRadius;

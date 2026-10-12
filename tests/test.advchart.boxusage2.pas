@@ -94,6 +94,7 @@ type
     procedure TestTheGalleryAsUpstream;
     procedure TestTheBindings;
     procedure TestACoordNamingNoCellDoesNotRaise;
+    procedure TestAGeoOfNoRowIsOutOfSight;
   end;
 
 implementation
@@ -1016,6 +1017,32 @@ begin
   { the geo of no cell is out of sight; the single axis is far off the
     canvas -- upstream's not-a-number rects draw nothing }
   AssertTrue('the single axis on a day of no place keeps a size', FChart.SingleLayout(0) <> nil);
+end;
+
+{ A GEO IN A CELL OF NO HEIGHT (a coord naming a column and no row) is put
+  out of sight, far off the canvas, with finite numbers -- upstream's
+  resizeGeo throws on one; one of no width is laid out as upstream lays it
+  out (the geo-no-column case). [D9-D14 mutation round] }
+procedure TAdvChartBoxUsage2OracleTest.TestAGeoOfNoRowIsOutOfSight;
+var
+  geo: TTyGeo;
+  v: TTyXYWH;
+  k: Integer;
+begin
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation": false, "matrix": {"x": {"data": ["a", "b"]}, "y": {"data": ["p"]}},'
+    + ' "geo": [{"map": "bx2sq", "coordinateSystem": "matrix", "coord": ["a", "zz"]},'
+    + '  {"map": "bx2sq", "coordinateSystem": "matrix", "coord": ["zz", "zz"]}]}';
+  FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+  for k := 0 to 1 do
+  begin
+    geo := FChart.GeoLayout(k);
+    AssertTrue('laid out', (geo <> nil) and geo.Valid);
+    v := geo.ViewRect;
+    AssertTrue('a view of finite numbers', TyXYWHIsValid(v));
+    AssertTrue(Format('far off the canvas (%s, %s)', [Fmt(v.X), Fmt(v.Y)]),
+      (v.X + v.W < -1000) and (v.Y + v.H < -1000));
+  end;
 end;
 
 initialization

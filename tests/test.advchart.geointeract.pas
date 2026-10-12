@@ -34,6 +34,7 @@ type
   TGiProbe = class(TTyAdvanceChart)
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
     procedure Move(AX, AY: Integer);
     procedure ClickAt(AX, AY: Integer);
@@ -102,6 +103,7 @@ type
     procedure TestTheClipCutsOnlyWhereAsked;
     procedure TestTheRegionTooltipCascade;
     procedure TestTheSelectionOutlivesARender;
+    procedure TestACachedFrameTakesTheHover;
   end;
 
 implementation
@@ -121,6 +123,11 @@ const
 procedure TGiProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TGiProbe.Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderCached(ACanvas, ARect, APPI);
 end;
 
 function TGiProbe.List: TTyPaintList;
@@ -547,7 +554,19 @@ begin
         begin
           if not NextEl(el) then Exit;
           SameInt(where + ' datum', el.Datum.DataIndex, g);
-          SameColour(where + ' fill', el.Style.HasFill, el.Style.FillColor, pw.Find('fill'));
+          d := pw.Find('fill');
+          Inc(FCompared);
+          if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'gradient') then
+          begin
+            if not (el.Style.HasFill and (el.Style.FillGradient.Kind <> cgkNone)) then
+              Bad(where + ' fill: no gradient, upstream one');
+          end
+          else
+          begin
+            SameColour(where + ' fill', el.Style.HasFill, el.Style.FillColor, d);
+            if el.Style.HasFill and (el.Style.FillGradient.Kind <> cgkNone) then
+              Bad(where + ' fill: a gradient, upstream a colour or none');
+          end;
           SameColour(where + ' stroke', el.Style.StrokeWidthLogical > 0, el.Style.StrokeColor,
             pw.Find('stroke'));
           if pw.Find('lw').JSONType <> jtNull then
@@ -913,6 +932,59 @@ begin
   AssertEquals('select again', 'select',
     TyStNamesText(geo.PathItem(geo.GroupIndexOf('B'), 0).Host.States));
   AssertFalse('A not', FChart.GeoSelected(0, 'A'));
+end;
+
+{ The cached paint keeps its static layer until the frame says something
+  changed: a hover on a region changes only the geo's states, so the geos'
+  answer to the frame (GeoApplyChanged) is what drops the layer -- the
+  picture shows the emphasis, as a full paint does. [D9-D14] }
+procedure TAdvChartGeoInteractTest.TestACachedFrameTakesTheHover;
+var
+  geo: TTyGeo;
+  p: TTyPointF;
+  x, y: Integer;
+  rest, hover, full: TBGRAPixel;
+  bmp: TBGRABitmap;
+
+  function PixelOf(ABmp: TBGRABitmap): TBGRAPixel;
+  var px: PBGRAPixel;
+  begin
+    px := ABmp.ScanLine[y];
+    Inc(px, x);
+    Result := px^;
+  end;
+
+  function PxText(const A: TBGRAPixel): string;
+  begin
+    Result := Format('%d,%d,%d', [A.red, A.green, A.blue]);
+  end;
+
+begin
+  NewChart('{"animation": false, "geo": {"map": "sq"}}');
+  geo := FChart.GeoLayout(0);
+  { a point of A away from its centre (the emphasis shows the label there) }
+  AssertTrue(geo.PointOf(2, 2, p));
+  x := Round(p.X);
+  y := Round(p.Y);
+  FBmp.Fill(BGRA(1, 2, 3, 255));
+  FChart.Layered(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+  rest := PixelOf(FBmp);
+  FChart.Move(x, y);
+  FBmp.Fill(BGRA(1, 2, 3, 255));
+  FChart.Layered(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+  hover := PixelOf(FBmp);
+  { the frame applied the hover }
+  AssertEquals('A in emphasis', 'emphasis', TyStNamesText(geo.PathItem(0, 0).Host.States));
+  bmp := TBGRABitmap.Create(cW, cH, BGRA(1, 2, 3, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, cW, cH), 96);
+    full := PixelOf(bmp);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue('the hover repaints the cached layer: rest ' + PxText(rest) + ', hover ' + PxText(hover),
+    PxText(rest) <> PxText(hover));
+  AssertEquals('as the full paint draws it', PxText(full), PxText(hover));
 end;
 
 initialization

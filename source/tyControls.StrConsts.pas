@@ -499,9 +499,6 @@ resourcestring
   // the save dialog's filter for saveAsImage
   rsTyChartToolboxImageFilter = 'PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*';
 
-  // --- AdvanceChart: the chart's accessible name [Batch 144] ---
-  // What a screen reader calls a chart that has no title.
-  rsTyChartAccessibleName = 'Chart';
 
   // --- AdvanceChart: the chart's description, its aria-label [Batch 131] ---
   // ECharts' own locale (langEN.ts aria and series.typeNames), so an
@@ -546,6 +543,8 @@ resourcestring
   rsTyChartTypeThemeRiver = 'Theme River Map';
   rsTyChartTypeSunburst = 'Sunburst';
   rsTyChartTypeCustom = 'Custom chart';
+  // Also what a screen reader calls a chart that has no title [Batch 144;
+  // one string since Milestone D9-D14, not a second 'Chart'].
   rsTyChartTypeChart = 'Chart';
 
   // --- AdvanceChart: what the build could not honour ---

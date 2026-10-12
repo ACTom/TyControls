@@ -235,6 +235,38 @@ begin
   end;
 end;
 
+{ THE NODE'S VALUE DIMENSION, as createGraphFromNodeEdge builds the node
+  data: on a cartesian2d, a polar or a matrix (createSeriesData) and on a
+  geo (lng, lat) the dimensions are the coordinate system's and none is
+  `value` -- node.getValue('value') reads nothing (-1); on a calendar (time,
+  value) it is the row's second element (1); otherwise the first (0). A
+  scalar value is every element. [D9-D14 mutation round] }
+function NodeValueSlot(ASeries: TJSONObject): Integer;
+var d: TJSONData;
+begin
+  Result := 0;
+  if ASeries = nil then Exit;
+  d := ASeries.Find('coordinateSystem');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  if (d.AsString = 'cartesian2d') or (d.AsString = 'polar')
+    or (d.AsString = 'matrix') or (d.AsString = 'geo') then Result := -1
+  else if d.AsString = 'calendar' then Result := 1;
+end;
+
+{ the value at that slot: nothing at -1, an array's element (NaN past its
+  end), a scalar itself }
+function NodeValueAt(AData: TJSONData; ASlot: Integer): Double;
+begin
+  Result := NaN;
+  if (AData = nil) or (ASlot < 0) then Exit;
+  if AData.JSONType = jtArray then
+  begin
+    if ASlot >= AData.Count then Exit;
+    AData := AData.Items[ASlot];
+  end;
+  Result := NumOrNaN(AData);
+end;
+
 { JS String(v) }
 function JsStr(AData: TJSONData): string;
 var k: Integer;
@@ -344,7 +376,7 @@ var
   mask: TFPUExceptionMask;
   node, d, arr, ln: TJSONData;
   S: ^TTySankeySolved;
-  n, m, i, j, k, x, iterations, h, t, lo: Integer;
+  n, m, i, j, k, x, iterations, h, t, lo, slot: Integer;
   keys: array of string;
   indeg, zero, next, rem, nsrc: TTyIntegerArray;
   remain: array of Boolean;
@@ -679,12 +711,14 @@ begin
     end;
 
     { ---- computeNodeValues ---- }
+    slot := NodeValueSlot(Result.Series);
     for i := 0 to n - 1 do
     begin
       v1 := SumOut(i);
       v2 := SumIn(i);
       raw := NaN;
-      if Result.Nodes[i].Item <> nil then raw := NumOrNaN(Result.Nodes[i].Item.Find('value'));
+      if Result.Nodes[i].Item <> nil then
+        raw := NodeValueAt(Result.Nodes[i].Item.Find('value'), slot);
       if IsNan(raw) or (raw = 0) then raw := 0;
       Result.Nodes[i].Value := JsMax(JsMax(v1, v2), raw);
     end;

@@ -541,6 +541,22 @@ const CASES = [
       { op: 'idle', ms: 150 },
     ],
   },
+  // [D9-D14 mutation round]
+  {
+    id: 'short-rows', note: 'a base axis with no row under the pointer: the series stops at b, so over c and d buildPayloadsBySeries '
+      + 'finds nothing, showTooltip adds no axis and the pointer\'s action is a hideTip; showTip at x / y there the same',
+    charts: [barLine({ trigger: 'axis' }, { series: [{ type: 'bar', data: [3, 5] }] })], group: null,
+    steps: [
+      { op: 'move', chart: 0, at: [250, 200] },
+      { op: 'move', chart: 0, at: [480, 200] },
+      { op: 'idle', ms: 150 },
+      { op: 'move', chart: 0, at: [250, 200] },
+      { op: 'action', chart: 0, payload: { type: 'showTip', x: 370, y: 200 } },
+      { op: 'idle', ms: 150 },
+      { op: 'leave', chart: 0 },
+      { op: 'idle', ms: 150 },
+    ],
+  },
 ];
 
 // =====================================================================
@@ -673,6 +689,12 @@ function anchors(cases) {
     'B\'s own pointer: both axes, never the item-triggered series');
   const nt = cs('no-tooltip');
   guard('nt-publishes', ev(nt.steps[0], 0, 'updateaxispointer').length === 1 && ev(nt.steps[1], 0, 'updateaxispointer').length === 1, 'no tooltip, still the pointer\'s action (move and wheel)');
+  const sr = cs('short-rows');
+  guard('sr-row-shows', sr.steps[0].state[0].tip.visible && ev(sr.steps[0], 0, 'showtip').length === 1, 'over b the series has a row: the box shows');
+  guard('sr-no-row-hides', ev(sr.steps[1], 0, 'showtip').length === 0 && ev(sr.steps[1], 0, 'hidetip').length === 1
+    && !sr.steps[2].state[0].tip.visible, 'over d it has none: a hideTip, no showTip, the box goes');
+  guard('sr-showtip-no-row', ev(sr.steps[4], 0, 'showtip').length === 1 && ev(sr.steps[4], 0, 'hidetip').length >= 1
+    && !sr.steps[4].state[0].tip.show && !sr.steps[5].state[0].tip.visible, 'showTip at c: its detour finds no axis to show and hides, the box goes');
   return guards;
 }
 

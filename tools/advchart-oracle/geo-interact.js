@@ -195,6 +195,15 @@ const MAPS = [
     select: { label: { color: '#00ffff' } },
     silent: false,
   })) },
+  // [D9-D14 survivors] a ring left open (no closing point: the closePath's
+  // edge is a real one) and a sloped line (containStroke's distance branch)
+  { name: 'ge2x', text: JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      feat('O', { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10]]] }),
+      feat('S', { type: 'LineString', coordinates: [[14, 0], [24, 10]] }),
+    ],
+  }) },
 ];
 function registerMaps() {
   for (const m of MAPS) echarts.registerMap(m.name, m.text);
@@ -547,6 +556,21 @@ const CASES = [
     option: opt({ map: 'ge2s', selectedMode: true }),
     steps: [{ move: { region: 'B' } }, { click: { region: 'B' } }, { leave: true }],
   },
+  // [D9-D14 survivors]
+  {
+    id: 'open-ring',
+    note: 'borderWidth 8: a ring with no closing point is hit 3 px off the edge its closePath draws; a sloped line is hit within half its width (4) of the line, not at 5.2 to 6 px',
+    option: opt({ map: 'ge2x', itemStyle: { borderWidth: 8 } }),
+    probes: [{ at: [0, 5], dx: -3 }, { at: [10, 5], dx: 3 }, { at: [19, 5], dx: 4 }, { at: [19, 5], dx: 7 }, { at: [19, 5], dx: -7 }],
+    steps: [{ move: { at: [0, 5], dx: -3 } }, { leave: true }],
+  },
+  {
+    id: 'gradient',
+    note: "a region's gradient areaColor: drawn while no state sets the fill; the emphasis' highlight fill replaces it and the rest brings it back",
+    option: opt({ map: 'ge2', regions: [{ name: 'A', itemStyle: { areaColor: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+      colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } } }] }),
+    steps: [{ move: { region: 'A' } }, { leave: true }],
+  },
 ];
 
 // ---------- guards ----------
@@ -642,6 +666,16 @@ function guards(out) {
   add('root-climb', a.fill === '#00ff00' && a.stroke === '#ff0000' && a.op === hex(0.8), 'the root reached');
   c = C('echarts-style');
   add('echarts-style', grp(c.states[1], 0, 'B').paths[0].fill === '#aa00aa', 'echartsStyle in emphasis');
+  // [D9-D14 survivors]
+  c = C('open-ring');
+  add('open-ring-close', c.probes[0].hit && c.probes[0].hit.name === 'O' && c.probes[1].hit && c.probes[1].hit.name === 'O',
+    'the closing edge of an open ring is stroked like the others');
+  add('slope-half-width', c.probes[2].hit && c.probes[2].hit.name === 'S' && c.probes[3].hit === null && c.probes[4].hit === null,
+    'a sloped line: within half the width (perpendicular 3.2) a hit, 5.6 not');
+  add('open-ring-hover', grp(c.states[1], 0, 'O').paths[0].states === 'emphasis', 'the closing edge takes the hover');
+  c = C('gradient');
+  add('gradient-states', grp(c.states[0], 0, 'A').paths[0].fill === 'gradient' && grp(c.states[1], 0, 'A').paths[0].fill === tok.highlight
+    && grp(c.states[2], 0, 'A').paths[0].fill === 'gradient', 'the gradient at rest, the highlight in emphasis, the gradient again');
   return g;
 }
 

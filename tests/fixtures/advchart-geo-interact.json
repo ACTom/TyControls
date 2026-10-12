@@ -20,6 +20,10 @@
   {
    "name": "ge2s",
    "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\",\"echartsStyle\":{\"emphasis\":{\"itemStyle\":{\"areaColor\":\"#aa00aa\"}},\"select\":{\"label\":{\"color\":\"#00ffff\"}},\"silent\":false}},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"C\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,10],[10,10],[10,20],[0,20],[0,10]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"D\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,10],[20,10],[20,20],[10,20],[10,10]],[[13,13],[13,17],[17,17],[17,13],[13,13]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"E\"},\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[23,0],[23,20]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"F\"},\"geometry\":{\"type\":\"MultiPolygon\",\"coordinates\":[[[[0,22],[4,22],[4,26],[0,26],[0,22]]],[[[6,22],[10,22],[10,26],[6,26],[6,22]]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"G\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[12,22],[15,22],[15,25],[12,25],[12,22]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"G\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[16,22],[19,22],[19,25],[16,25],[16,22]]]}}]}"
+  },
+  {
+   "name": "ge2x",
+   "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"O\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"S\"},\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[14,0],[24,10]]}}]}"
   }
  ],
  "notes": [
@@ -29192,6 +29196,1165 @@
      ]
     }
    ]
+  },
+  {
+   "id": "open-ring",
+   "note": "borderWidth 8: a ring with no closing point is hit 3 px off the edge its closePath draws; a sloped line is hit within half its width (4) of the line, not at 5.2 to 6 px",
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "ge2x",
+     "itemStyle": {
+      "borderWidth": 8
+     }
+    }
+   },
+   "steps": [
+    {
+     "move": [
+      57,
+      200
+     ]
+    },
+    {
+     "leave": true
+    }
+   ],
+   "probes": [
+    {
+     "px": [
+      57,
+      200
+     ],
+     "hit": {
+      "geo": 0,
+      "name": "O",
+      "label": false
+     }
+    },
+    {
+     "px": [
+      263,
+      200
+     ],
+     "hit": {
+      "geo": 0,
+      "name": "O",
+      "label": false
+     }
+    },
+    {
+     "px": [
+      444,
+      200
+     ],
+     "hit": {
+      "geo": 0,
+      "name": "S",
+      "label": false
+     }
+    },
+    {
+     "px": [
+      447,
+      200
+     ],
+     "hit": null
+    },
+    {
+     "px": [
+      433,
+      200
+     ],
+     "hit": null
+    }
+   ],
+   "states": [
+    {
+     "events": [],
+     "tip": null,
+     "geos": [
+      [
+       {
+        "name": "O",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "4020000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "O",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "S",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": null,
+          "stroke": "#b7b9be",
+          "lw": "4020000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "S",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       }
+      ]
+     ]
+    },
+    {
+     "events": [
+      {
+       "type": "mousemove",
+       "componentType": "geo",
+       "componentIndex": 0,
+       "geoIndex": 0,
+       "name": "O",
+       "region": "{\"name\":\"O\"}"
+      },
+      {
+       "type": "mouseover",
+       "componentType": "geo",
+       "componentIndex": 0,
+       "geoIndex": 0,
+       "name": "O",
+       "region": "{\"name\":\"O\"}"
+      }
+     ],
+     "tip": null,
+     "geos": [
+      [
+       {
+        "name": "O",
+        "hover": 2,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "emphasis",
+          "fill": "rgba(255,231,130,0.8)",
+          "stroke": "rgba(201,203,209,1)",
+          "lw": "4020000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 10,
+          "label": {
+           "states": "emphasis",
+           "ignore": false,
+           "text": "O",
+           "fill": "#3c3c41",
+           "op": "3ff0000000000000",
+           "z2": 12,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": "4064000000000000",
+           "y": "4069000000000001",
+           "rot": "0000000000000000",
+           "tx": "4064000000000000",
+           "ty": "4069000000000001"
+          }
+         }
+        ]
+       },
+       {
+        "name": "S",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": null,
+          "stroke": "#b7b9be",
+          "lw": "4020000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "S",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       }
+      ]
+     ]
+    },
+    {
+     "events": [
+      {
+       "type": "mouseout",
+       "componentType": "geo",
+       "componentIndex": 0,
+       "geoIndex": 0,
+       "name": "O",
+       "region": "{\"name\":\"O\"}"
+      }
+     ],
+     "tip": null,
+     "geos": [
+      [
+       {
+        "name": "O",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "4020000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "O",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "S",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": null,
+          "stroke": "#b7b9be",
+          "lw": "4020000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "S",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gradient",
+   "note": "a region's gradient areaColor: drawn while no state sets the fill; the emphasis' highlight fill replaces it and the rest brings it back",
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "ge2",
+     "regions": [
+      {
+       "name": "A",
+       "itemStyle": {
+        "areaColor": {
+         "type": "linear",
+         "x": 0,
+         "y": 0,
+         "x2": 1,
+         "y2": 0,
+         "colorStops": [
+          {
+           "offset": 0,
+           "color": "#ff0000"
+          },
+          {
+           "offset": 1,
+           "color": "#0000ff"
+          }
+         ]
+        }
+       }
+      }
+     ]
+    }
+   },
+   "steps": [
+    {
+     "move": [
+      240,
+      298
+     ]
+    },
+    {
+     "leave": true
+    }
+   ],
+   "probes": [],
+   "states": [
+    {
+     "events": [],
+     "tip": null,
+     "geos": [
+      [
+       {
+        "name": "A",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "gradient",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "A",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "B",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "C",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "C",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "D",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "D",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "E",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": null,
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "E",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "F",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "F",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "G",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "G",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         },
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "G",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       }
+      ]
+     ]
+    },
+    {
+     "events": [
+      {
+       "type": "mousemove",
+       "componentType": "geo",
+       "componentIndex": 0,
+       "geoIndex": 0,
+       "name": "A",
+       "region": "{\"name\":\"A\",\"itemStyle\":{\"areaColor\":{\"type\":\"linear\",\"x\":0,\"y\":0,\"x2\":1,\"y2\":0,\"colorStops\":[{\"offset\":0,\"color\":\"#ff0000\"},{\"offset\":1,\"color\":\"#0000ff\"}]}}}"
+      },
+      {
+       "type": "mouseover",
+       "componentType": "geo",
+       "componentIndex": 0,
+       "geoIndex": 0,
+       "name": "A",
+       "region": "{\"name\":\"A\",\"itemStyle\":{\"areaColor\":{\"type\":\"linear\",\"x\":0,\"y\":0,\"x2\":1,\"y2\":0,\"colorStops\":[{\"offset\":0,\"color\":\"#ff0000\"},{\"offset\":1,\"color\":\"#0000ff\"}]}}}"
+      }
+     ],
+     "tip": null,
+     "geos": [
+      [
+       {
+        "name": "A",
+        "hover": 2,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "emphasis",
+          "fill": "rgba(255,231,130,0.8)",
+          "stroke": "rgba(201,203,209,1)",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 10,
+          "label": {
+           "states": "emphasis",
+           "ignore": false,
+           "text": "A",
+           "fill": "#3c3c41",
+           "op": "3ff0000000000000",
+           "z2": 12,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": "406e000000000000",
+           "y": "4072a76276276276",
+           "rot": "0000000000000000",
+           "tx": "406e000000000000",
+           "ty": "4072a76276276276"
+          }
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "B",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "C",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "C",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "D",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "D",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "E",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": null,
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "E",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "F",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "F",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "G",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "G",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         },
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "G",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       }
+      ]
+     ]
+    },
+    {
+     "events": [
+      {
+       "type": "mouseout",
+       "componentType": "geo",
+       "componentIndex": 0,
+       "geoIndex": 0,
+       "name": "A",
+       "region": "{\"name\":\"A\",\"itemStyle\":{\"areaColor\":{\"type\":\"linear\",\"x\":0,\"y\":0,\"x2\":1,\"y2\":0,\"colorStops\":[{\"offset\":0,\"color\":\"#ff0000\"},{\"offset\":1,\"color\":\"#0000ff\"}]}}}"
+      }
+     ],
+     "tip": null,
+     "geos": [
+      [
+       {
+        "name": "A",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "gradient",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "A",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "B",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "C",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "C",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "D",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "D",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "E",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": null,
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "E",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "F",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "F",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       },
+       {
+        "name": "G",
+        "hover": 0,
+        "hbo": 0,
+        "selected": false,
+        "paths": [
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "G",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         },
+         {
+          "states": "",
+          "fill": "rgba(234,237,245,0.5)",
+          "stroke": "#b7b9be",
+          "lw": "3fe0000000000000",
+          "op": "3ff0000000000000",
+          "dash": null,
+          "z2": 0,
+          "label": {
+           "states": "",
+           "ignore": true,
+           "text": "G",
+           "fill": "#6d6e73",
+           "op": "3ff0000000000000",
+           "z2": 2,
+           "fontSize": 12,
+           "fontWeight": "normal",
+           "x": null,
+           "y": null,
+           "rot": null,
+           "tx": null,
+           "ty": null
+          }
+         }
+        ]
+       }
+      ]
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -29419,6 +30582,26 @@
    "id": "echarts-style",
    "ok": true,
    "detail": "echartsStyle in emphasis"
+  },
+  {
+   "id": "open-ring-close",
+   "ok": true,
+   "detail": "the closing edge of an open ring is stroked like the others"
+  },
+  {
+   "id": "slope-half-width",
+   "ok": true,
+   "detail": "a sloped line: within half the width (perpendicular 3.2) a hit, 5.6 not"
+  },
+  {
+   "id": "open-ring-hover",
+   "ok": true,
+   "detail": "the closing edge takes the hover"
+  },
+  {
+   "id": "gradient-states",
+   "ok": true,
+   "detail": "the gradient at rest, the highlight in emphasis, the gradient again"
   }
  ]
 }
