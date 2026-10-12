@@ -52,7 +52,7 @@
 | `TColor` | `vekColor` |
 | `TFont` | `vekFont`：沿用编辑器现成的字体行和子行，写回时把整个字体 `Assign` 回去 |
 | 其他 `TPersistent` 类属性（`Constraints`、`BorderSpacing` 这类子对象），以及带 `csSubComponent` 的子组件 | 显示 `(TClassName)`，只读；子行是它的 published 属性，递归往下，有深度上限防止循环引用 |
-| 组件引用（其余 `TComponent` 子类，如 `PopupMenu`、`Images`、`Controller`） | `vekEnum`：选项是 `(none)` 加上被检查组件的 `Owner` 名下、类型兼容的组件名；当前值不在其中时也列上。`OnGetComponentNames(Sender; AInstance; APropInfo; AList: TStrings)` 可以改这份清单（比如跨窗体）。被检查的对象没有 `Owner` 时只有 `(none)` 和当前值 |
+| 组件引用（其余 `TComponent` 子类，如 `PopupMenu`、`Images`、`Controller`） | `vekEnum`：选项是 `(none)` 加上被检查组件的 `Owner` 名下（**已由 D11(a) 改：被检查的是窗体 / 数据模块 / 框架时取它自己名下，候选根本身也列入**）、类型兼容的组件名；当前值不在其中时也列上。`OnGetComponentNames(Sender; AInstance; APropInfo; AList: TStrings)` 可以改这份清单（比如跨窗体）。被检查的对象没有 `Owner` 时只有 `(none)` 和当前值 |
 | `TStrings` | `vekDialog`：经 `OnEditRow` 的默认处理弹一个多行文本对话框（用本库的对话框，测试可替换） |
 | `TCollection` | 显示 `(N items)`；子行是每一项（`[0] 项的 DisplayName`），每一项再展开成它的 published 属性，可以直接改。增删项、调整顺序放第二期 |
 | 事件（`tkMethod`） | 默认不显示；`TypeFilter` 里加上 `tkMethod` 时显示处理程序名，只读 |
@@ -67,7 +67,7 @@
 **D6 扩展点**（用户原则：内置只做常用行为，其余走事件和公开几何）：
 - `OnFilterProperty`、`OnPropertyChanging` / `OnPropertyChanged` / `OnPropertyError`。
 - `OnGetPropertyRow(Sender; AInstance; APropInfo: PPropInfo; ARow: TTyValueRow)`：行建好之后调用，应用可以改编辑器种类、枚举选项、显示文字、样式，或者把行设成只读。
-- 公开 `PropertyAt(ARow: TTyValueRow; out AInstance: TPersistent; out APropName: string): Boolean`：应用的 `OnEditRow` 能据此给某种属性接上自己的对话框。
+- 公开 `PropertyAt(ARow: TTyValueRow; out AInstance: TPersistent; out APropName: string): Boolean`：应用的 `OnEditRow` 能据此给某种属性接上自己的对话框。（**已由 D11(b) 改：对话框行走 `OnEditProperty`，`OnEditRow` 不发布。**）
 
 **D7 第二期（本计划不做，写进 #65）**：同时选中多个对象（只显示共同属性，改一处写回全部）、集合项的增删和排序、属性分类与分组、搜索过滤框。
 
@@ -83,6 +83,11 @@
 5. **改：集合（`TCollection`）在第一期就能展开、改每一项的属性。** 原方案第一期只显示 `(N items)`，但表格的列、状态栏的面板都是集合，看得见改不了太弱；展开复用类属性那套递归，代价很小。增删和排序才放第二期。多选仍放第二期：它要的是另一套数据模型（多个对象求共同属性）。
 
 复核时另外补上的：带 `csSubComponent` 的子组件按类属性展开，而不是当成引用；浮点固定用 `.`；界面文字走 resourcestring（D10）。
+
+**D11 定案**（2026-10-12，主控复核 Task 1–3 的报告后定，约束 Task 4–5）：
+- (a) **组件引用的候选根**：被检查的组件是 `TCustomForm`、`TDataModule` 或 `TCustomFrame` 时，候选根是它自己，不是它的 `Owner`（检查一个窗体，`ActiveControl` 要能从窗体上的控件里选）；其他组件的候选根是 `Owner`。候选根本身类型兼容时也列入。`OnGetComponentNames` 仍有最后决定权。
+- (b) **对话框行带「已处理」标志**：发布 `OnEditProperty(Sender; ARow: TTyValueRow; AInstance: TPersistent; const APropName: string; var AHandled: Boolean)`，任何对话框行先触发它；没处理就走内置默认（`TStrings` 对话框，其他行什么都不做）。`TTyPropertyGrid` 不发布继承来的 `OnEditRow`。D6 的 `OnGetPropertyRow`、`PropertyAt` 照原计划。
+- (c) **文档要写明**：控件可能自己维护某些属性（如 `TTyButton` 把 `Constraints.MinWidth` 维持在内容宽度），写进去的值可能被控件改掉；`Refresh` 显示的是真实值。
 
 ## 任务
 
@@ -118,4 +123,52 @@
 
 ### Task 6：编译、全量、变异、Lazarus 3.0、冒烟、签收【主控执行为主】
 
+## 实现记录（Task 4–5，按实际做成的样子）
+
+Task 4（`677944c4`）、Task 5（`32406302`）。和上文不同或上文没写的：
+
+- **排序枚举改名**：`TTyPropertyOrder = (poAlphabetical, poDeclared)`（Task 2 时叫 `poByName`，主控 Task 4 指令用 `poAlphabetical`）。`TyPropertyGridDefaultTypeFilter` 改成无类型常量，才能当发布属性 `TypeFilter` 的 `default`。
+- **发布面**：`TTyPropertyGrid` 发布的是值列表编辑器的那份清单，去掉 `KeyOptions`、`Items`、`ItemIndex`、`TopIndex`、`Sorted`、`MultiSelect`、`ExtendedSelect`、`ScrollWidth`、`Action`、`AutoSize`、`ChildSizing`、`OnKeyChanged`、`OnKeyRejected`、`OnEditRow`、`OnValueChanged`；加上 `SelectedComponent`、`PropertyOrder`、`TypeFilter`、`HiddenProperties`、`ExpandedProperties`（也发布：设计期可以预先展开 `Font`）和七个事件。`KeyOptions` 在自定义类里重声明成只读、恒为 `[]`。
+- **`OnEditRow`**：自定义类里重声明为 public（字段是表格自己的），防止应用改掉继承来的 `OnEditRow` 让表格失灵；`OnEditProperty` 没处理时它先被问，赋了值就当已处理。只是 public，不发布（D11(b)）。
+- **写回事件的对象和名字**：`AInstance` 是真正拥有这个属性的对象。集合元素一行报整个集合（`ANewValue` 是写入后的 `[a,b]`）；字体子行报在那个 `TFont` 上（`Size`），字体对话框整体换报在宿主上（`Font`）。`OnPropertyChanged` 写完后重新解析对象，不用写之前拿到的指针。处理程序里重建了行（`FBuildCount` 变了）就不再碰调用方的行。
+- **出错**：没挂 `OnPropertyError` 时异常照常抛出（经事件链到 `Application.HandleException`）；挂了就交给它、到此为止。两种情况都先把所有行按对象重读一遍。顺带修了值列表编辑器：下拉列表里选的值提交时抛异常，列表以前不关，现在 `try/finally` 关掉（`HandleDropCommit`）。
+- **`Refresh`**：值重读；对象的结构变了（集合项数变了、子对象出现 / 消失 / 换了类）才自动重建。`Rebuild` 和换对象都按路径保留当前行；`Rebuild` / `Refresh` 保留滚动位置，换对象从顶部开始。
+- **`ExpandedProperties`**：懒同步。有人读它、或者重建之前，从行上收（展开的加、收起的删，当前对象没有的路径留着）；重建之后、或者列表本身被改时，写回行上。
+- **载入**：`csLoading` 时设 `SelectedComponent` 只记下来，`Loaded` 里统一建行（实测 fixup 在 `Loaded` 之前，变异 M12 证明 `Loaded` 是必需的）。
+- **设计期**：`WriteProperty`、`KeyDown` 的空格、对话框行都不写；行照样列出。
+- **守卫**：Task 4 时重新引入 `CNotYetOnThePalette`（Task 5 删掉）；`test.danglingrefs` 把 `BeginPoison` / `EndPoison` 导出到 interface，供释放后不读取的测试用；点击聚焦探针（`ClickProbeControls`）也加了属性表格。
+- **主题**：`GetStyleTypeKey = 'TyPropertyGrid'`，`initialization` 里 `TyTryRegisterTypeKeyParent('TyPropertyGrid', 'TyValueListEditor')`，`finalization` 注销；行和各部件仍用值列表编辑器的键。没改任何主题文件。
+- **示例**：`examples/propertygrid`，`.lfm` 里直接设 `SelectedComponent = Button1`、`ExpandedProperties = ('Font')`；字符串表格的列在 `Header.Columns` 里，演示集合就地编辑。`languages/` 里的 `tycontrols.zh_CN.po` 是库目录那份的拷贝（含本计划新增的 `rsTyPropGrid*`）。
+
 ## 签收（执行时填）
+
+### 测试部分（Task 4–5 实现 agent，2026-10-12）
+
+提交：Task 4 `677944c4`，Task 5 `32406302`，另有 `5b80eaef`（全量查出：主题编辑器带的库目录副本 `tools/themebuilder/languages/tycontrols.zh_CN.po` 没跟上 Task 2/3 加的 `rsTyPropGrid*`，照抄一份）。
+
+**本计划的 suite**（均为全绿）：`TPropertyRowsTest` 12、`TPropertyGridEditTest` 18、`TPropertyGridObjectsTest` 13、`TPropertyGridButtonTest` 11、`TPropertyGridControlTest` 26（新）、`TPropertyGridTypeKeyTest` 4（新）、`TValueListCommitHookTest` 14、`TValueListEditorTest` 21。守卫：`TTyCustomClassesGuardTest` 11（G9 / G10 含新类，G10 只多出 `TTyPropertyGrid` 一节，与值列表编辑器的相同）、`TVersionTest` 6、`TTyFocusTabStopTest` 8、`TTyClickFocusTest` 8（探针名单加了属性表格）、`TDanglingRefsTest` 6、`TComponentLeakTest`、`TFreeWhileOwnerLivesTest`、`TWheelEventTest`、`TDesignEditorsTest`、`TTranslatableTest`、`TTyMeasureFontDpiTest`、`TI18NTest`、`TReleaseManifestTest`、`TDBTypeKeysTest`。`scripts/check-lfm-props.py`、`scripts/check-example-po.py` 无问题。
+
+**变异**（每条：改 → 重编 → 跑 → 确认红 → 还原 → 校验哈希 → 重编；16 条全红、全部还原、哈希一致）：
+
+| # | 变异 | 变红的测试 |
+|---|---|---|
+| M1 | 写回后不重读其他行 | `TestASetterThatMovesAnotherPropertyRefreshesItsRow`；按钮 suite 4 条 |
+| M2 | 挂了 `OnPropertyError` 后行显示新值 | `TestOnPropertyErrorTakesTheException…`、`TestAValueThatDoesNotParse…` |
+| M3 | `Notification` 不清空 | 两条释放测试（投毒下 `EAccessViolation`） |
+| M4 | D11(a) 候选根退回 `Owner` | `TestAFormListsTheControlsOnIt` |
+| M5 | D11(b) 已处理也跑内置对话框 | `TestOnEditPropertyCanTakeTheStringsRow`、`TestOnEditPropertyReachesAnyDialogRow` |
+| M6 | 忽略 `OnPropertyChanging` 的否决 | `TestOnPropertyChangingCanRefuse` |
+| M7 | 重建后不恢复展开 | 往返流、集合增长、跨对象展开 3 条 |
+| M8 | `Refresh` 从不重建 | `TestRefreshRebuildsWhenACollectionGrows` |
+| M9 | 设计期照写 | `TestAtDesignTimeTheRowsAreListedButNothingIsWritten` |
+| M10 | 下拉提交抛异常时不关列表（值列表编辑器） | `TestAPickThatRaisesStillClosesTheList` |
+| M11 | 集合元素按元素报（`True`） | `TestASetElementIsAnnouncedAsTheWholeSet` |
+| M12 | `Loaded` 不建行 | `TestTheSelectionAndTheSettingsComeBackFromAFormFile` |
+| M13 | 候选根本身不列入 | `TestAFormListsTheControlsOnIt` |
+| M14 | 重建丢当前行 | `TestRefreshRebuildsWhenACollectionGrows` |
+| T1 | 表格答值列表编辑器的键 | `TestTheGridAnswersItsOwnKeyOnTheEditorsChain` |
+| T2 | 不把 `TyPropertyGrid` 挂到 `TyValueListEditor` | 类型键 suite 3 条（136 处样式不同） |
+
+**全量**（`32406302`，12 分 35 秒报告时间，墙钟约 75 分钟）：N 11522，E 0，F 2，I 1。F：`TPaletteIconTest.TestEveryPaletteClassHasItsIconResources`（新类还没有面板图标，预期，主控生成）；`TTbMainFormTests.TestTheLibraryCatalogueIsACopy`（见上，`5b80eaef` 修后单跑 84/84 绿）。I：`TSelectPathOptionsTest.TestNoReadOnlyReturn`（本机条件，原有）。
+
+**留给主控**：面板图标（`tools/genicons/genicons.lpr` + `scripts/gen-icons.ps1`）；编 `.lpk` / dt 包、`examples/propertygrid`；Lazarus 3.0 构建；GUI 冒烟。
