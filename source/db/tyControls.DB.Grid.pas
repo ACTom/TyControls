@@ -53,8 +53,27 @@ unit tyControls.DB.Grid;
   any other dataset it is LCL's three-position bar (top, middle, bottom -- BOF, inside, EOF) and
   moving it moves by its direction: one step MoveBy(+-1), more MoveBy(+-the window's rows). It
   shows when the records do not all fit in the window (a sequenced dataset), or when the window
-  is full (any other). Horizontal scrolling is the string grid's. A move closes the open
-  editor first. }
+  is full (any other). Horizontal scrolling is the string grid's.
+
+  EDITING (LCL's TDBGrid again). A cell opens its editor with the field's Text (a memo's
+  content under dgDisplayMemoText), its mask is the field's EditMask through OnFieldEditMask,
+  a lookup field edits as a pick list of its LookupDataSet. Opening an editor on the current
+  record -- typing, F2, a double click -- puts the dataset in dsEdit through the data link; a
+  refused Edit (the data source does not AutoEdit, say) makes the cell read-only and the key is
+  swallowed. Leaving the cell writes the text into the field (Field.Text; a lookup writes its
+  key fields as well); leaving the record posts it (the dataset's own CheckBrowseMode), and so
+  does the dataset's Post while an editor is open (UpdateData). Esc drops the cell's edit, and
+  with no editor open cancels the record. Down past the last record appends one while the
+  grid can modify and dgDisableInsert is off; a new record nobody has typed into is cancelled
+  again by Up, by Down (when inserted inside the dataset), by a click on another row, by any
+  move, and by the focus leaving the grid (dgCancelOnExit). Insert inserts, Ctrl+Del deletes --
+  asked first through ConfirmDeleteRecord when dgConfirmDelete. A check box writes AsBoolean
+  (a boolean field) or the column's words (another field). A value the field or the dataset
+  refuses (an exception from Field.Text or from Post) keeps the editor on its cell with what
+  the user typed; the exception goes on to the application. A cell is read-only when the grid
+  is ReadOnly, dgEditing is off, the data link is ReadOnly, the dataset or the field cannot
+  modify, the column is ReadOnly, or the field is calculated, an auto-increment counter, a
+  blob (a memo without dgDisplayMemoText) or a lookup whose key fields cannot be modified. }
 interface
 
 uses
@@ -75,7 +94,8 @@ type
   TTyCustomDBGrid = class;
 
   { LCL's TComponentDataLink, which DBGrids keeps to itself: every dataset event reaches the
-    grid. UpdateData writes nothing yet -- the grid does not edit yet. }
+    grid. UpdateData (the dataset is about to post or leave the record) writes the open
+    editor's text into its field. }
   TTyDBGridDataLink = class(TDataLink)
   private
     FGrid: TTyCustomDBGrid;
@@ -94,7 +114,7 @@ type
   end;
 
   { What TTyCustomDBGrid.DataOp does to the dataset. }
-  TTyDBGridDataOp = (dgoMoveBy, dgoRecNo, dgoFirst, dgoLast);
+  TTyDBGridDataOp = (dgoMoveBy, dgoRecNo, dgoFirst, dgoLast, dgoInsert, dgoAppend);
 
   { One column of the data-aware grid: a field by name. Text (the title), Width and Alignment
     follow the field until they are set -- set from code, the Object Inspector or a form file,
@@ -194,6 +214,15 @@ type
     FMeasuringBars: Boolean;
     FLayingOutBars: Boolean;
     FBarPosition: Integer;
+    { The text an editor reopens with after its field refused it (GetEditText answers it). }
+    FHoldingText: Boolean;
+    FHeldCol, FHeldRow: Integer;
+    FHeldText: string;
+    FCommittingForData: Boolean;
+    { A gesture closed the editor itself before it moved the record (to tell a new record
+      nobody typed into): a refused move still brings the editor back. }
+    FEditorWasOpen: Boolean;
+    FOnFieldEditMask: TGetDbEditMaskEvent;
     function GetDataSource: TDataSource;
     procedure SetDataSource(AValue: TDataSource);
     function GetColumns: TTyDBGridColumns;
@@ -270,20 +299,51 @@ type
     procedure DoVScroll(APosition: Integer); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure KeyPress(var Key: Char); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    function ChildKey(var Message: TLMKey): Boolean; override;
+    procedure DoExit; override;
     { OnKeyDown (and the key handlers) for a key this grid handles itself instead of passing
       it to the string grid, as LCL's TDBGrid.KeyDown does. }
     procedure UserKeyDown(var Key: Word; Shift: TShiftState);
-    { Do AOp to the dataset (ADelta: the distance, or the RecNo), the open editor closed
-      first. False when the editor's value was refused (the editor stays) or there is
-      no dataset. }
+    { Do AOp to the dataset (ADelta: the distance, or the RecNo), the open editor's text
+      written first. False when the editor's value was refused (the editor stays) or there is
+      no dataset. An exception -- the dataset would not post the record being left -- keeps
+      the editor on the cell it was on, and goes on. }
     function DataOp(AOp: TTyDBGridDataOp; ADelta: Integer = 0): Boolean;
     { Close the open editor, writing its text (TryEndEdit). False: refused, still open. }
     function CommitEditor: Boolean;
-    { Down / Up: one record. }
+    { Open the editor on the current cell again, after the dataset refused what it held. }
+    procedure ReopenEditor;
+    { LCL's doVKDown / doVKUp: Down past the last record appends, a new record nobody typed
+      into is cancelled. }
     procedure KeyDownRecord;
     procedure KeyUpRecord;
 
+    { --- editing (plan Task 4) --- }
+    { The grid as a whole may change the dataset: not ReadOnly, dgEditing, the link not
+      ReadOnly, the dataset open and modifiable. }
+    function GridCanModify: Boolean;
+    { No editing in this column: see the unit comment's list. }
+    function ColumnIsReadOnly(ACol: Integer): Boolean;
+    { A record inserted and not changed since (LCL's InsertCancelable). }
+    function InsertCancelable: Boolean;
+    { Before an editor opens on the current record: the dataset goes into dsEdit (refused:
+      no editor), and a lookup column's pick list is filled. }
+    function CanEditCell(ACol, ARow: Integer): Boolean; override;
+    function EditMaskFor(ACol: Integer): string; override;
+    function MaxEditLengthFor(ACol, ARow: Integer): Integer; override;
+    { Write AText, the cell's new text, into AField: AsBoolean for a boolean check box (the
+      check box vocabulary), AsString for a memo and another check box column, Text
+      otherwise; a lookup field then writes its key fields from the LookupDataSet. }
+    procedure WriteFieldText(ACol: Integer; AField: TField; const AText: string); virtual;
+    procedure WriteLookupKeys(AField: TField; const AText: string);
+    procedure FillLookupPickList(ACol: Integer; AField: TField);
+    { Asked before Ctrl+Del deletes, when dgConfirmDelete is set: True deletes. A themed
+      TyMessageDlg with OK and Cancel, as LCL asks with its MessageDlg. }
+    function ConfirmDeleteRecord: Boolean; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -306,6 +366,8 @@ type
       default TyDBGridDefaultOptions;
     property OptionsExtra: TDBGridExtraOptions read FExtraOptions write SetExtraOptions
       default TyDBGridDefaultExtraOptions;
+    { The edit mask of a cell of Field, starting from Field.EditMask (LCL's). }
+    property OnFieldEditMask: TGetDbEditMaskEvent read FOnFieldEditMask write FOnFieldEditMask;
   end;
 
   { TTyDBGrid publishes TTyCustomDBGrid's properties; everything lives in TTyCustomDBGrid. }
@@ -384,13 +446,15 @@ type
     property OnHeaderClick;
     property OnHeaderRightClick;
     property OnTopLeftChanged;
+    property OnFieldEditMask;
   end;
 
 implementation
 
 uses
-  BGRABitmap, tyControls.Painter, tyControls.StyleModel, tyControls.ScrollBar,
-  tyControls.Grid.Layout;
+  Variants, Dialogs, BGRABitmap, tyControls.Painter, tyControls.StyleModel, tyControls.Dialogs,
+  tyControls.ScrollBar, tyControls.Grid.Layout,
+  tyControls.DB.Common, tyControls.DB.StrConsts;
 
 { ================================================================== TTyDBGridDataLink == }
 
@@ -1058,7 +1122,8 @@ end;
 procedure TTyCustomDBGrid.LinkActiveChanged;
 begin
   if csDestroying in ComponentState then Exit;
-  { The cell under an open editor is gone. }
+  { The cell under an open editor is gone (its text, when there was a record to write it
+    to, went in through UpdateData first). }
   if EditorMode then EndEdit(False);
   { Opened: make the automatic columns, find the fields, size the window. Closed: drop the
     automatic columns, forget the fields, no rows. }
@@ -1069,16 +1134,17 @@ procedure TTyCustomDBGrid.LinkDataSetChanged;
 begin
   if csDestroying in ComponentState then Exit;
   { Posted, cancelled, inserted, deleted, refreshed: the record under an open editor may be
-    another one now. }
-  if EditorMode then EndEdit(False);
+    another one now. A post wrote the editor's text first (UpdateData); a cancel drops it. }
+  if EditorMode and not FCommittingForData then EndEdit(False);
   LayoutChanged;
 end;
 
 procedure TTyCustomDBGrid.LinkDataSetScrolled(ADistance: Integer);
 begin
   if csDestroying in ComponentState then Exit;
-  { The editor's cell now shows another record. }
-  if EditorMode then EndEdit(False);
+  { The editor's cell now shows another record. A move in dsEdit wrote the editor's text
+    before it moved (UpdateData); nothing else may land in the new record. }
+  if EditorMode and not FCommittingForData then EndEdit(False);
   UpdateBufferCount;
   SyncCurrentRow;
   { The window moved under every row (Distance <> 0), or only the current record did. }
@@ -1099,7 +1165,17 @@ end;
 
 procedure TTyCustomDBGrid.LinkUpdateData;
 begin
-  { Nothing to write back yet: the grid does not edit. }
+  { The dataset is about to post the record or leave it (UpdateRecord): what the open editor
+    holds goes into its field first, as LCL's UpdateData writes the editor's text. A value
+    the field refuses raises out of the post, and the editor stays on its cell
+    (SetEditText). }
+  if FCommittingForData or not EditorMode then Exit;
+  FCommittingForData := True;
+  try
+    TryEndEdit(True);
+  finally
+    FCommittingForData := False;
+  end;
 end;
 
 { ---- the cells ---------------------------------------------------------------------- }
@@ -1162,13 +1238,16 @@ var
   f: TField;
   old: Integer;
 begin
+  { An editor reopening after its field refused the text gets the text back, not the field's
+    value (SetEditText). }
+  if FHoldingText and (ACol = FHeldCol) and (ARow = FHeldRow) then Exit(FHeldText);
   Result := '';
   f := ColumnField(ACol);
   if (f = nil) or (ARow < 0) or (ARow >= FDataLink.RecordCount) then Exit;
   old := FDataLink.ActiveRecord;
   FDataLink.ActiveRecord := ARow;
   try
-    if f.DataType in [ftMemo, ftWideMemo] then
+    if (f.DataType in [ftMemo, ftWideMemo]) and (dgDisplayMemoText in FDBOptions) then
       Result := f.AsString
     else
       Result := f.Text;
@@ -1177,18 +1256,66 @@ begin
   end;
 end;
 
+{ Every user edit lands here (the editor's commit, a check box, paste, cut, fill, replace,
+  clear): into the field of the current record, never into the cell store. Another row's
+  cell is not the current record and is left alone, and so is a read-only cell. }
 procedure TTyCustomDBGrid.SetEditText(ACol, ARow: Integer; const AText: string);
+var
+  f: TField;
+  kind: TTyGridEditorKind;
 begin
-  { An edit lands in the field, never in the cell store; until the grid edits (plan Task 4)
-    it lands nowhere. }
+  f := ColumnField(ACol);
+  if (f = nil) or (ARow <> FDataLink.ActiveRecord) or ColumnIsReadOnly(ACol) then Exit;
+  if not FDataLink.Editing and not FDataLink.Edit then Exit;   // refused: read-only
+  try
+    WriteFieldText(ACol, f, AText);
+  except
+    { The field (or its OnValidate) refused the text: the editor stays on its cell with what
+      the user typed -- it has just been closed by the commit, so it opens again -- and the
+      exception goes on to the application, as LCL's grid lets it. }
+    kind := EditorKindFor(ACol, ARow);
+    if (ACol = Col) and (ARow = Row) and not EditorMode
+      and not (kind in [gekNone, gekCheckBox, gekRating, gekColor]) then
+    begin
+      FHeldCol := ACol;
+      FHeldRow := ARow;
+      FHeldText := AText;
+      FHoldingText := True;
+      try
+        try
+          BeginEdit(ACol, ARow);
+        except
+          { Opening it again is a courtesy; the field's exception is the one to report. }
+        end;
+      finally
+        FHoldingText := False;
+      end;
+    end;
+    raise;
+  end;
 end;
 
 function TTyCustomDBGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
+var
+  f: TField;
 begin
-  if IsCheckBoxColumn(ACol) then
-    Result := gekCheckBox
-  else
-    Result := inherited EditorKindFor(ACol, ARow);
+  { A boolean field is a check box whether or not it can be changed: the kind is also how
+    the cell is drawn. }
+  if IsCheckBoxColumn(ACol) then Exit(gekCheckBox);
+  Result := inherited EditorKindFor(ACol, ARow);
+  if (Result = gekNone) or (Result = gekCheckBox) then Exit;
+  f := ColumnField(ACol);
+  if (f = nil) or ColumnIsReadOnly(ACol) then Exit(gekNone);
+  { The field's own kind replaces the plain text editor, never a kind the column or
+    OnGetEditorKind chose. The mask the event gives is asked only for the current cell, the
+    one an editor can open on (this is asked for every cell painted). }
+  if Result <> gekText then Exit;
+  if f.FieldKind = fkLookup then
+    Result := gekPickList
+  else if (f.EditMask <> '')
+    or ((ACol = Col) and (ARow = Row) and Assigned(FOnFieldEditMask)
+        and (EditMaskFor(ACol) <> '')) then
+    Result := gekMask;
 end;
 
 procedure TTyCustomDBGrid.AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
@@ -1388,6 +1515,28 @@ begin
   if ACol <> Col then inherited MoveCursor(ACol, Row);
 end;
 
+procedure TTyCustomDBGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  hit: TTyGridHit;
+begin
+  { LCL: a click on another row first drops a new record nobody typed into, when it is the
+    appended one (the editor's text written first -- what was typed is a change). The
+    string grid then moves the cursor, which moves the record (MoveCursor). }
+  FEditorWasOpen := EditorMode;
+  try
+    if (FDataLink <> nil) and FDataLink.Active and (Button = mbLeft) then
+    begin
+      hit := CellAt(X, Y);
+      if (hit.Part = ghpCell) and (hit.Row <> Row) and CommitEditor and InsertCancelable
+        and FDataLink.DataSet.EOF then
+        FDataLink.DataSet.Cancel;
+    end;
+    inherited MouseDown(Button, Shift, X, Y);
+  finally
+    FEditorWasOpen := False;
+  end;
+end;
+
 procedure TTyCustomDBGrid.UserKeyDown(var Key: Word; Shift: TShiftState);
 begin
   if Assigned(OnKeyDown) then OnKeyDown(Self, Key, Shift);
@@ -1395,17 +1544,23 @@ begin
 end;
 
 procedure TTyCustomDBGrid.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  ds: TDataSet;
 begin
   if (FDataLink = nil) or not FDataLink.Active or not Enabled
-    or not (Key in [VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END])
+    or not (Key in [VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_ESCAPE,
+                    VK_INSERT, VK_DELETE])
     { Home / End without Ctrl are the string grid's: the first and the last column. }
-    or ((Key in [VK_HOME, VK_END]) and not (ssCtrl in Shift)) then
+    or ((Key in [VK_HOME, VK_END, VK_DELETE]) and not (ssCtrl in Shift))
+    { Esc in the editor drops the cell's edit, which is the string grid's. }
+    or ((Key = VK_ESCAPE) and EditorMode) then
   begin
     inherited KeyDown(Key, Shift);
     Exit;
   end;
   UserKeyDown(Key, Shift);
   if Key = 0 then Exit;
+  ds := FDataLink.DataSet;
   case Key of
     VK_DOWN:
       begin
@@ -1437,17 +1592,67 @@ begin
         DataOp(dgoLast);
         Key := 0;
       end;
+    VK_ESCAPE:
+      { No editor open: the record's changes go. Nothing to cancel leaves the key to the
+        form (its Cancel button). }
+      if ds.State in dsEditModes then
+      begin
+        ds.Cancel;
+        Key := 0;
+      end;
+    VK_INSERT:
+      if GridCanModify and not (dgDisableInsert in FDBOptions) then
+      begin
+        DataOp(dgoInsert);
+        Key := 0;
+      end;
+    VK_DELETE:
+      if GridCanModify and not (dgDisableDelete in FDBOptions) and not ds.IsEmpty then
+        if not (dgConfirmDelete in FDBOptions) or ConfirmDeleteRecord then
+        begin
+          if EditorMode then EndEdit(False);
+          ds.Delete;
+          Key := 0;
+        end;
   end;
 end;
 
 procedure TTyCustomDBGrid.KeyDownRecord;
+var
+  ds: TDataSet;
 begin
-  DataOp(dgoMoveBy, 1);
+  FEditorWasOpen := EditorMode;
+  try
+    { The editor's text first: what was typed makes a new record a changed one. }
+    if not CommitEditor then Exit;
+    ds := FDataLink.DataSet;
+    if InsertCancelable then
+    begin
+      { On the appended record, Down stays; on one inserted inside the dataset it drops it. }
+      if not ds.EOF then ds.Cancel;
+      Exit;
+    end;
+    if not DataOp(dgoMoveBy, 1) then Exit;
+    FEditorWasOpen := False;
+    if GridCanModify and ds.EOF and not (dgDisableInsert in FDBOptions) then
+      DataOp(dgoAppend);
+  finally
+    FEditorWasOpen := False;
+  end;
 end;
 
 procedure TTyCustomDBGrid.KeyUpRecord;
 begin
-  DataOp(dgoMoveBy, -1);
+  FEditorWasOpen := EditorMode;
+  try
+    if not CommitEditor then Exit;
+    if InsertCancelable then
+      FDataLink.DataSet.Cancel
+    else
+      DataOp(dgoMoveBy, -1);
+  finally
+    FEditorWasOpen := False;
+  end;
 end;
 
 function TTyCustomDBGrid.CommitEditor: Boolean;
@@ -1466,21 +1671,334 @@ begin
   end;
 end;
 
+procedure TTyCustomDBGrid.ReopenEditor;
+begin
+  try
+    BeginEdit(Col, Row);
+  except
+    { A courtesy; the dataset's exception is the one to report. }
+  end;
+end;
+
 function TTyCustomDBGrid.DataOp(AOp: TTyDBGridDataOp; ADelta: Integer): Boolean;
 var
   ds: TDataSet;
+  wasEditing: Boolean;
 begin
   Result := False;
   if (FDataLink = nil) or not FDataLink.Active then Exit;
+  wasEditing := EditorMode or FEditorWasOpen;
   if not CommitEditor then Exit;
   ds := FDataLink.DataSet;
-  case AOp of
-    dgoMoveBy: FDataLink.MoveBy(ADelta);
-    dgoRecNo:  ds.RecNo := ADelta;
-    dgoFirst:  ds.First;
-    dgoLast:   ds.Last;
+  try
+    case AOp of
+      dgoMoveBy: FDataLink.MoveBy(ADelta);
+      dgoRecNo:  ds.RecNo := ADelta;
+      dgoFirst:  ds.First;
+      dgoLast:   ds.Last;
+      dgoInsert: ds.Insert;
+      dgoAppend: ds.Append;
+    end;
+  except
+    { The record could not be left (its post was refused): the user goes on where they were
+      typing. }
+    if wasEditing and not EditorMode and FDataLink.Active and (ds.State in dsEditModes) then
+      ReopenEditor;
+    raise;
   end;
   Result := True;
+end;
+
+procedure TTyCustomDBGrid.KeyPress(var Key: Char);
+var
+  f: TField;
+begin
+  if (FDataLink <> nil) and FDataLink.Active and not EditorMode and (Key >= #32) then
+  begin
+    { A character the field does not take (a letter in a number) starts nothing. LCL's
+      EditorCanAcceptKey. }
+    f := ColumnField(Col);
+    if (f <> nil) and not IsCheckBoxColumn(Col) and (f.FieldKind = fkData)
+      and not f.IsValidChar(Key) then
+    begin
+      Key := #0;
+      Exit;
+    end;
+  end;
+  inherited KeyPress(Key);
+  { Typing that opened no editor -- a read-only cell, a dataset that would not edit -- is
+    swallowed, as LCL's grid swallows it. }
+  if (FDataLink <> nil) and FDataLink.Active and not EditorMode and (Key >= #32) then
+    Key := #0;
+end;
+
+procedure TTyCustomDBGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  inherited UTF8KeyPress(UTF8Key);
+  if (FDataLink <> nil) and FDataLink.Active and not EditorMode and (Length(UTF8Key) > 1) then
+    UTF8Key := '';
+end;
+
+function TTyCustomDBGrid.ChildKey(var Message: TLMKey): Boolean;
+var
+  wasEditing: Boolean;
+begin
+  { The string grid's #52 claim, whole (its override is private to it, so "inherited" here
+    may not reach it): an unmodified arrow a child leaves standing goes nowhere, and Up / Down
+    in the editor move -- here as LCL's doVKDown / doVKUp, appending past the last record
+    included. }
+  if (Message.CharCode in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN])
+    and (GetKeyShiftState * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    wasEditing := EditorMode;
+    if EditorMode and (Message.CharCode in [VK_UP, VK_DOWN]) then
+    begin
+      if (FDataLink <> nil) and FDataLink.Active then
+      begin
+        if Message.CharCode = VK_DOWN then KeyDownRecord else KeyUpRecord;
+      end
+      else if Message.CharCode = VK_DOWN then
+        MoveCursor(Col, Row + 1)
+      else
+        MoveCursor(Col, Row - 1);
+    end;
+    if wasEditing and not EditorMode and HandleAllocated and CanFocus then SetFocus;
+    Message.CharCode := VK_UNKNOWN;
+    Exit(True);
+  end;
+  Result := inherited ChildKey(Message);
+end;
+
+procedure TTyCustomDBGrid.DoExit;
+begin
+  { dgCancelOnExit: a new record nobody typed into does not outlive the focus. An editor
+    still open here holds a refused value -- the user did type. }
+  if (FDataLink <> nil) and FDataLink.Active and (dgCancelOnExit in FDBOptions)
+    and not EditorMode and InsertCancelable then
+    FDataLink.DataSet.Cancel;
+  inherited DoExit;
+end;
+
+{ ---- editing ------------------------------------------------------------------------ }
+
+function TTyCustomDBGrid.GridCanModify: Boolean;
+begin
+  Result := not ReadOnly and (dgEditing in FDBOptions) and (FDataLink <> nil)
+    and FDataLink.Active and not FDataLink.ReadOnly and FDataLink.DataSet.CanModify;
+end;
+
+function TTyCustomDBGrid.ColumnIsReadOnly(ACol: Integer): Boolean;
+var
+  f: TField;
+  c: TTyGridColumn;
+  keys: TList;
+  i: Integer;
+begin
+  Result := True;
+  if not GridCanModify then Exit;
+  c := GridColumn(ACol);
+  if (c = nil) or c.ReadOnly then Exit;
+  f := ColumnField(ACol);
+  if f = nil then Exit;
+  if f.FieldKind = fkLookup then
+  begin
+    { A lookup is changed through its key fields: read-only when it has none, or one of them
+      cannot be modified (LCL's EditorIsReadOnly). }
+    keys := TList.Create;
+    try
+      f.DataSet.GetFieldList(keys, f.KeyFields);
+      if keys.Count = 0 then Exit;
+      for i := 0 to keys.Count - 1 do
+        if not TField(keys[i]).CanModify then Exit;
+    finally
+      keys.Free;
+    end;
+    Exit(False);
+  end;
+  { A memo edits as text only while it shows its text; any other blob not at all. }
+  if f.IsBlob and not ((f.DataType in [ftMemo, ftWideMemo])
+    and (dgDisplayMemoText in FDBOptions)) then Exit;
+  Result := not TyFieldIsEditable(f) or not f.CanModify;
+end;
+
+function TTyCustomDBGrid.InsertCancelable: Boolean;
+begin
+  Result := (FDataLink <> nil) and FDataLink.Active
+    and (FDataLink.DataSet.State = dsInsert) and not FDataLink.DataSet.Modified;
+end;
+
+function TTyCustomDBGrid.CanEditCell(ACol, ARow: Integer): Boolean;
+var
+  f: TField;
+begin
+  Result := inherited CanEditCell(ACol, ARow);
+  if not Result then Exit;
+  { A check box (drawn as one even when read-only) toggles only when it may. }
+  if ColumnIsReadOnly(ACol) then Exit(False);
+  { BeginEdit asks before it moves to another row; that record's Edit comes when its text
+    is written (SetEditText). }
+  if (FDataLink = nil) or not FDataLink.Active or (ARow <> Row) then Exit;
+  { LCL's EditorIsReadOnly: not editing yet, start; refused, read-only. }
+  if not FDataLink.Editing then Result := FDataLink.Edit;
+  if not Result then Exit;
+  f := ColumnField(ACol);
+  if (f <> nil) and (f.FieldKind = fkLookup) and (EditorKindFor(ACol, ARow) = gekPickList) then
+    FillLookupPickList(ACol, f);
+end;
+
+function TTyCustomDBGrid.EditMaskFor(ACol: Integer): string;
+var
+  f: TField;
+begin
+  Result := inherited EditMaskFor(ACol);   // the column's own, when it has one
+  if Result <> '' then Exit;
+  f := ColumnField(ACol);
+  if f = nil then Exit;
+  Result := f.EditMask;
+  if Assigned(FOnFieldEditMask) then FOnFieldEditMask(Self, f, Result);
+end;
+
+function TTyCustomDBGrid.MaxEditLengthFor(ACol, ARow: Integer): Integer;
+var
+  f: TField;
+begin
+  Result := inherited MaxEditLengthFor(ACol, ARow);
+  if Result <> 0 then Exit;
+  { LCL: a string field takes no more than its Size. }
+  f := ColumnField(ACol);
+  if (f is TStringField) and (f.FieldKind = fkData) then Result := f.Size;
+end;
+
+procedure TTyCustomDBGrid.WriteFieldText(ACol: Integer; AField: TField; const AText: string);
+var
+  c: TTyGridColumn;
+  unchecked: string;
+begin
+  if IsCheckBoxColumn(ACol) then
+  begin
+    { The check box vocabulary: '2' grayed (NULL), the column's unchecked word or '' off,
+      anything else on. }
+    if AText = '2' then
+      AField.Clear
+    else
+    begin
+      c := GridColumn(ACol);
+      if c <> nil then unchecked := c.ValueUnchecked else unchecked := '';
+      AField.AsBoolean := (AText <> '') and ((unchecked = '') or not SameText(AText, unchecked));
+    end;
+  end
+  else if (AField.DataType in [ftMemo, ftWideMemo])
+    or (EditorKindFor(ACol, Row) = gekCheckBox) then
+    { A memo's content; a check box column's words (ValueChecked / ValueUnchecked). }
+    AField.AsString := AText
+  else
+  begin
+    AField.Text := AText;
+    if AField.FieldKind = fkLookup then WriteLookupKeys(AField, AText);
+  end;
+end;
+
+procedure TTyCustomDBGrid.WriteLookupKeys(AField: TField; const AText: string);
+var
+  lds: TDataSet;
+  keys: Variant;
+  wasActive: Boolean;
+  bm: TBookmark;
+begin
+  keys := Null;
+  if AField.LookupCache then
+    keys := AField.LookupList.FirstKeyByValue(AText)
+  else
+  begin
+    lds := AField.LookupDataSet;
+    if lds = nil then Exit;
+    { LCL's LookupGetBookMark / LookupGotoBookMark: the lookup table is put back. }
+    wasActive := lds.Active;
+    bm := nil;
+    if wasActive then
+    begin
+      bm := lds.GetBookmark;
+      lds.DisableControls;
+    end
+    else
+      lds.Open;
+    try
+      if lds.Locate(AField.LookupResultField, AText, []) then
+        keys := lds.FieldValues[AField.LookupKeyFields];
+    finally
+      if wasActive then
+      begin
+        try
+          lds.GotoBookmark(bm);
+          lds.FreeBookmark(bm);
+        finally
+          lds.EnableControls;
+        end;
+      end
+      else
+        lds.Close;
+    end;
+  end;
+  AField.DataSet.FieldValues[AField.KeyFields] := keys;
+end;
+
+procedure TTyCustomDBGrid.FillLookupPickList(ACol: Integer; AField: TField);
+var
+  c: TTyGridColumn;
+  lds: TDataSet;
+  wasActive: Boolean;
+  bm: TBookmark;
+begin
+  { Into the column's own list, as LCL's TColumn.GetPickList fills it. }
+  c := GridColumn(ACol);
+  if c = nil then Exit;
+  c.PickList.BeginUpdate;
+  try
+    c.PickList.Clear;
+    if AField.LookupCache then
+      AField.LookupList.ValuesToStrings(c.PickList)
+    else
+    begin
+      lds := AField.LookupDataSet;
+      if lds = nil then Exit;
+      wasActive := lds.Active;
+      bm := nil;
+      if wasActive then
+      begin
+        bm := lds.GetBookmark;
+        lds.DisableControls;
+      end
+      else
+        lds.Open;
+      try
+        lds.First;
+        while not lds.EOF do
+        begin
+          c.PickList.Add(lds.FieldByName(AField.LookupResultField).AsString);
+          lds.Next;
+        end;
+      finally
+        if wasActive then
+        begin
+          try
+            lds.GotoBookmark(bm);
+            lds.FreeBookmark(bm);
+          finally
+            lds.EnableControls;
+          end;
+        end
+        else
+          lds.Close;
+      end;
+    end;
+  finally
+    c.PickList.EndUpdate;
+  end;
+end;
+
+function TTyCustomDBGrid.ConfirmDeleteRecord: Boolean;
+begin
+  Result := TyMessageDlg(rsTyDBNavConfirmDelete, mtConfirmation, [mbOK, mbCancel], 0) <> mrCancel;
 end;
 
 initialization

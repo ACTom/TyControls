@@ -38,13 +38,32 @@ type
     RecNoSets: Integer;
   end;
 
-  { What the suites reach that is protected: the key and mouse paths. }
+  { What the suites reach that is protected: the key, mouse and focus paths. }
   TDBGridProbe = class(TTyDBGrid)
   public
+    ConfirmAnswer: Boolean;
+    ConfirmCount: Integer;
     function PressKey(AKey: Word; AShift: TShiftState = []): Word;
+    function TypeChar(AChar: Char): Char;
     procedure ClickAt(X, Y: Integer; AShift: TShiftState = []);
     procedure ClickCell(ACol, ARow: Integer);
+    procedure ClickCheckBox(ACol, ARow: Integer);
+    procedure DblClickCell(ACol, ARow: Integer);
+    function ChildArrow(AKey: Word): Boolean;
+    function DoCommit: Boolean;
     function Cell(ACol, ARow: Integer): string;
+    function EditKind(ACol, ARow: Integer): TTyGridEditorKind;
+    function EditorText: string;
+    procedure SetEditorText(const AText: string);
+    procedure PressKeyInEditor(AKey: Word);
+    function MaskOfEditor: string;
+    function EditorMaxLength: Integer;
+    function MaskEditorShown: Boolean;
+    function PickEditorItems: TStrings;
+    function PickEditorIndex: Integer;
+    procedure SetPickEditorIndex(AIndex: Integer);
+  protected
+    function ConfirmDeleteRecord: Boolean; override;
   end;
 
   TDBGridNavTest = class(TTestCase)
@@ -97,7 +116,7 @@ procedure WheelTick(ATarget: TControl; ADelta: Integer);
 implementation
 
 uses
-  test.db.edits;
+  tyControls.ComboBox, tyControls.MaskEdit, test.db.edits;
 
 function TNonSeqDataSet.IsSequenced: Boolean;
 begin
@@ -154,6 +173,12 @@ begin
   KeyDown(Result, AShift);
 end;
 
+function TDBGridProbe.TypeChar(AChar: Char): Char;
+begin
+  Result := AChar;
+  KeyPress(Result);
+end;
+
 procedure TDBGridProbe.ClickAt(X, Y: Integer; AShift: TShiftState);
 begin
   MouseDown(mbLeft, AShift, X, Y);
@@ -168,9 +193,98 @@ begin
   ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
 end;
 
+procedure TDBGridProbe.ClickCheckBox(ACol, ARow: Integer);
+var
+  r: TRect;
+begin
+  r := CheckBoxRect(ACol, ARow);
+  ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TDBGridProbe.DblClickCell(ACol, ARow: Integer);
+begin
+  ClickCell(ACol, ARow);
+  DblClick;
+end;
+
+function TDBGridProbe.ChildArrow(AKey: Word): Boolean;
+var
+  msg: TLMKey;
+begin
+  FillChar(msg{%H-}, SizeOf(msg), 0);
+  msg.Msg := LM_KEYDOWN;
+  msg.CharCode := AKey;
+  Result := ChildKey(msg);
+end;
+
+function TDBGridProbe.DoCommit: Boolean;
+begin
+  Result := CommitEditor;
+end;
+
 function TDBGridProbe.Cell(ACol, ARow: Integer): string;
 begin
   Result := GetCellText(ACol, ARow);
+end;
+
+function TDBGridProbe.EditKind(ACol, ARow: Integer): TTyGridEditorKind;
+begin
+  Result := EditorKindFor(ACol, ARow);
+end;
+
+function TDBGridProbe.EditorText: string;
+begin
+  Result := InlineEditor.Text;
+end;
+
+procedure TDBGridProbe.SetEditorText(const AText: string);
+begin
+  InlineEditor.Text := AText;
+end;
+
+{ The editor's own OnKeyDown, the wire a key pressed in it really takes. }
+procedure TDBGridProbe.PressKeyInEditor(AKey: Word);
+var
+  k: Word;
+begin
+  k := AKey;
+  if Assigned(InlineEditor.OnKeyDown) then InlineEditor.OnKeyDown(InlineEditor, k, []);
+end;
+
+function TDBGridProbe.MaskOfEditor: string;
+begin
+  Result := MaskEditor.Mask;
+end;
+
+function TDBGridProbe.EditorMaxLength: Integer;
+begin
+  Result := InlineEditor.MaxLength;
+end;
+
+function TDBGridProbe.MaskEditorShown: Boolean;
+begin
+  Result := MaskEditor.Visible;
+end;
+
+function TDBGridProbe.PickEditorItems: TStrings;
+begin
+  Result := (InplaceEditor as TTyComboBox).Items;
+end;
+
+function TDBGridProbe.PickEditorIndex: Integer;
+begin
+  Result := (InplaceEditor as TTyComboBox).ItemIndex;
+end;
+
+procedure TDBGridProbe.SetPickEditorIndex(AIndex: Integer);
+begin
+  (InplaceEditor as TTyComboBox).ItemIndex := AIndex;
+end;
+
+function TDBGridProbe.ConfirmDeleteRecord: Boolean;
+begin
+  Inc(ConfirmCount);
+  Result := ConfirmAnswer;
 end;
 
 { =================================================================== TDBGridNavTest ===== }

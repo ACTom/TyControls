@@ -254,6 +254,7 @@ uses
   test.db.navigator,
   test.db.grid,
   test.db.grid.nav,
+  test.db.grid.edit,
   test.db.typekeys;
 
 type
