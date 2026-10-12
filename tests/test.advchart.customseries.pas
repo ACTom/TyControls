@@ -2232,7 +2232,8 @@ begin
 end;
 
 { [Batch 124: a polar is drawn now -- a geo is the system this port has
-  none of] }
+  none of] [Batch 152: the port has a geo now; a custom naming one where the
+  option has no geo component has no coordinate system, and says so] }
 procedure TAdvChartCustomSeriesTest.TestAGeoCustomSaysItIsNotDrawn;
 begin
   TyChartRegisterRenderItem('Plain', @Plain);

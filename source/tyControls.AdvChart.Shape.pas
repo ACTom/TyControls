@@ -104,6 +104,26 @@ type
     Large: TTyLargeGeom;
   end;
 
+  { [Batch 148] zrender's Path.contain over a path's data, device px: the
+    commands (move, line, close) of every sub-path with every point --
+    not the drawn folds -- whether the path fills and how wide its stroke
+    tests (0: no stroke; the line width, at least strokeContainThreshold
+    where there is no fill), and the stroked bounding rect the point must
+    be in first. }
+  TTyPathHit = record
+    Active: Boolean;
+    Cmds: TTyPathCmdArray;
+    Fill: Boolean;
+    StrokePx: Double;
+    Box: TTyRectF;
+  end;
+
+{ [Batch 148] Path.contain: inside the box, then within half the stroke of
+  a segment (contain/line.ts containStroke, closing segments included), or
+  inside by the nonzero winding (contain/path.ts containPath: every
+  sub-path closed back to its start, a point on an edge inside). }
+function TyPathHitContains(const AHit: TTyPathHit; AX, AY: Double): Boolean;
+
 { ---- constructors, so a caller never has to remember which fields a kind uses ---- }
 function TyShapeRect(const ABounds: TTyRectF): TTyChartShape;
 function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
@@ -1364,6 +1384,127 @@ begin
             cy + (AShape.Points[i].Y - cy) * ARatio);
       end;
   end;
+end;
+
+{ contain/line.ts containStroke }
+function LineContainStroke(AX0, AY0, AX1, AY1, AW, AX, AY: Double): Boolean;
+var a, b, t, d: Double;
+begin
+  Result := False;
+  if AW = 0 then Exit;
+  if ((AY > AY0 + AW) and (AY > AY1 + AW)) or ((AY < AY0 - AW) and (AY < AY1 - AW))
+    or ((AX > AX0 + AW) and (AX > AX1 + AW)) or ((AX < AX0 - AW) and (AX < AX1 - AW)) then
+    Exit;
+  if AX0 <> AX1 then
+  begin
+    a := (AY0 - AY1) / (AX0 - AX1);
+    b := (AX0 * AY1 - AX1 * AY0) / (AX0 - AX1);
+  end
+  else
+    Exit(Abs(AX - AX0) <= AW / 2);
+  t := a * AX - AY + b;
+  d := t * t / (a * a + 1);
+  Result := d <= AW / 2 * AW / 2;
+end;
+
+{ contain/path.ts windingLine: an edge crossed at the point's height, a
+  point on it infinite }
+function WindingLine(AX0, AY0, AX1, AY1, AX, AY: Double): Double;
+var t, dir, x: Double;
+begin
+  Result := 0;
+  if ((AY > AY0) and (AY > AY1)) or ((AY < AY0) and (AY < AY1)) then Exit;
+  if AY1 = AY0 then Exit;
+  t := (AY - AY0) / (AY1 - AY0);
+  if AY1 < AY0 then dir := 1 else dir := -1;
+  if (t = 1) or (t = 0) then
+  begin
+    if AY1 < AY0 then dir := 0.5 else dir := -0.5;
+  end;
+  x := t * (AX1 - AX0) + AX0;
+  if x = AX then Exit(Infinity);
+  if x > AX then Result := dir;
+end;
+
+function TyPathHitContains(const AHit: TTyPathHit; AX, AY: Double): Boolean;
+const
+  cAroundEps: Double = 1e-4;
+var
+  i: Integer;
+  xi, yi, x0, y0, w, wl: Double;
+begin
+  Result := False;
+  if not AHit.Active or (Length(AHit.Cmds) = 0) then Exit;
+  if IsNan(AX) or IsNan(AY) then Exit;
+  if not ((AX >= AHit.Box.Left) and (AX <= AHit.Box.Right)
+    and (AY >= AHit.Box.Top) and (AY <= AHit.Box.Bottom)) then Exit;
+  { the stroke first }
+  if AHit.StrokePx > 0 then
+  begin
+    xi := 0; yi := 0; x0 := 0; y0 := 0;
+    for i := 0 to High(AHit.Cmds) do
+      case AHit.Cmds[i].Kind of
+        pckMove:
+          begin
+            x0 := AHit.Cmds[i].X;
+            y0 := AHit.Cmds[i].Y;
+            xi := x0;
+            yi := y0;
+          end;
+        pckLine:
+          begin
+            if LineContainStroke(xi, yi, AHit.Cmds[i].X, AHit.Cmds[i].Y,
+              AHit.StrokePx, AX, AY) then Exit(True);
+            xi := AHit.Cmds[i].X;
+            yi := AHit.Cmds[i].Y;
+          end;
+        pckClose:
+          begin
+            if LineContainStroke(xi, yi, x0, y0, AHit.StrokePx, AX, AY) then Exit(True);
+            xi := x0;
+            yi := y0;
+          end;
+      end;
+  end;
+  if not AHit.Fill then Exit;
+  { the fill: the nonzero winding }
+  w := 0;
+  xi := 0; yi := 0; x0 := 0; y0 := 0;
+  for i := 0 to High(AHit.Cmds) do
+  begin
+    { a new sub-path closes the one before }
+    if (AHit.Cmds[i].Kind = pckMove) and (i > 0) then
+      w := w + WindingLine(xi, yi, x0, y0, AX, AY);
+    case AHit.Cmds[i].Kind of
+      pckMove:
+        begin
+          x0 := AHit.Cmds[i].X;
+          y0 := AHit.Cmds[i].Y;
+          xi := x0;
+          yi := y0;
+        end;
+      pckLine:
+        begin
+          wl := WindingLine(xi, yi, AHit.Cmds[i].X, AHit.Cmds[i].Y, AX, AY);
+          if not IsNan(wl) then w := w + wl;
+          xi := AHit.Cmds[i].X;
+          yi := AHit.Cmds[i].Y;
+        end;
+      pckClose:
+        begin
+          w := w + WindingLine(xi, yi, x0, y0, AX, AY);
+          xi := x0;
+          yi := y0;
+        end;
+    end;
+  end;
+  { !isAroundEqual(yi, y0): 1e-4 apart or more }
+  if Abs(yi - y0) >= cAroundEps then
+  begin
+    wl := WindingLine(xi, yi, x0, y0, AX, AY);
+    if not IsNan(wl) then w := w + wl;
+  end;
+  Result := w <> 0;
 end;
 
 function TyShapeContains(const AShape: TTyChartShape; AX, AY, ASlopPx: Double): Boolean;

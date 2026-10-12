@@ -579,8 +579,9 @@ begin
   while i + 1 < Length(pts) do
   begin
     { BOTTOM FIRST: setHoverTarget walks the candidates from the end }
+    { an element's own contain: a geo region's path [Batch 148] }
     for k := nc - 1 downto 0 do
-      if TyShapeContains(AList.Element(cand[k]).Shape, pts[i], pts[i + 1], slops[k]) then
+      if TyElementContains(AList.Element(cand[k]), pts[i], pts[i + 1], slops[k]) then
         Exit(cand[k]);
     Inc(i, 2);
   end;

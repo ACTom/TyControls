@@ -8,7 +8,7 @@ unit test.advchart.diagnose;
   thing to SAY, in the right order, pointing at the right place". }
 interface
 uses Classes, SysUtils, fpcunit, testregistry,
-     tyControls.AdvChart.Diagnose;
+     tyControls.AdvChart.Diagnose, tyControls.AdvChart.Series;
 type
   TAdvChartDiagnoseTest = class(TTestCase)
   private
@@ -103,6 +103,7 @@ var
   d: TTyOptDiag;
   txt: string;
   n, p: Integer;
+  info: TTySeriesTypeInfo;
 begin
   { MIXED IS THE CASE THAT NEEDS WORDS. Both of these are valid, one appears
     and one does not, and "the option is understood" on its own would leave the
@@ -114,37 +115,47 @@ begin
     renderer -- which is exactly what a test pinning "X is not implemented
     yet" is for. The claim is about the RULE; the type is only the current
     example of it, and finding this test red is the reminder that one more of
-    them now draws. The map is the last (its geo is D14's), and it does not
-    bind on a grid by default, so the example is given the grid explicitly:
-    binding takes the name it is given. }
-  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''map'','
-    + ' coordinateSystem: ''cartesian2d'', data: [] }] }',
-    odkAllClear, d));
-  AssertTrue('names map, got: ' + d.Text, Pos('map', d.Text) > 0);
-  AssertTrue('and does not name bar, got: ' + d.Text, Pos('bar', d.Text) = 0);
+    them now draws. The map was the last (its geo is D14's) [Batch 152: it
+    draws now -- MapDraw on its geo -- so no type the library ships is left
+    undrawn, and the example is a type of the test's own, registered with
+    no renderer and taken out again]. }
+  info := Default(TTySeriesTypeInfo);
+  info.Name := 'undrawnType';
+  info.DefaultCoordSys := 'cartesian2d';
+  info.Usage := scuData;
+  TySeriesRegisterType(info);
+  try
+    AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
+      + '{ type: ''bar'', data: [1] }, { type: ''undrawnType'', data: [] }] }',
+      odkAllClear, d));
+    AssertTrue('names the type, got: ' + d.Text, Pos('undrawnType', d.Text) > 0);
+    AssertTrue('and does not name bar, got: ' + d.Text, Pos('bar', d.Text) = 0);
 
-  { AND ONLY ONCE for a chart full of them, or the sentence becomes a list of
-    the same word. }
-  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''map'','
-    + ' coordinateSystem: ''cartesian2d'', data: [] },'
-    + ' { type: ''map'', coordinateSystem: ''cartesian2d'', data: [] }] }',
-    odkAllClear, d));
-  txt := d.Text;
-  n := 0;
-  p := Pos('map', txt);
-  while p > 0 do
-  begin
-    Inc(n);
-    Delete(txt, 1, p + 2);
-    p := Pos('map', txt);
+    { AND ONLY ONCE for a chart full of them, or the sentence becomes a list
+      of the same word. }
+    AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
+      + '{ type: ''bar'', data: [1] }, { type: ''undrawnType'', data: [] },'
+      + ' { type: ''undrawnType'', data: [] }] }',
+      odkAllClear, d));
+    txt := d.Text;
+    n := 0;
+    p := Pos('undrawnType', txt);
+    while p > 0 do
+    begin
+      Inc(n);
+      Delete(txt, 1, p + 10);
+      p := Pos('undrawnType', txt);
+    end;
+    AssertEquals('named once, got: ' + d.Text, 1, n);
+  finally
+    TySeriesClearTypes;
+    TySeriesRegisterBuiltinTypes;
   end;
-  AssertEquals('map named once, got: ' + d.Text, 1, n);
 
   { TWO DIFFERENT TYPES ARE BOTH NAMED -- deduping must not turn "several
     unpainted types" into "the first one". With the map the only undrawn type
-    left [Batch 128], no chart can show that any more, so the rule is held to
+    left [Batch 128] -- and none since it draws [Batch 152] -- no chart of
+    the library's own types can show that any more, so the rule is held to
     at the routine the all-clear builds its list with, on names the library
     does not need to have.
 

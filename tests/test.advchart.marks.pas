@@ -517,7 +517,10 @@ begin
       or (cTypes[i] = 'custom')
       { a parallel series' rows by AdvChart.Parallel on its parallel
         [Batch 128] }
-      or (cTypes[i] = 'parallel') then
+      or (cTypes[i] = 'parallel')
+      { a map series' regions by MapDraw on its geo (AdvChart.Geo)
+        [Batch 152] }
+      or (cTypes[i] = 'map') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));
@@ -549,9 +552,11 @@ begin
   AssertTrue('and the custom series [Batch 123]', TySeriesTypeHasRenderer('custom'));
   AssertTrue('and the parallel [Batch 128]', TySeriesTypeHasRenderer('parallel'));
   { [Batch 123: this was custom until custom drew, then parallel until
-    C19 drew it [Batch 128]; a map series is the example now -- its
-    geo coordinate system is D14's] }
-  AssertFalse('a map series does not yet', TySeriesTypeHasRenderer('map'));
+    C19 drew it [Batch 128], then the map until D14 drew it [Batch 152] --
+    every type the library ships draws now, so the no is a name nobody
+    registered] }
+  AssertTrue('and the map [Batch 152]', TySeriesTypeHasRenderer('map'));
+  AssertFalse('a type nobody registered does not', TySeriesTypeHasRenderer('noSuchType'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot
     draw. }

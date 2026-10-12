@@ -353,6 +353,13 @@ function TyBuildCalendarScatter(const ABinding: TTySeriesBinding;
   const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
   AList: TTyPaintList): Integer;
 
+{ [Batch 152, D14 GE4] A scatter or an effectScatter whose points the caller
+  worked out: one symbol per view row at APoints[row] (a geo's dataToPoint,
+  NaN where there is none or the row is clipped -- not drawn). }
+function TyBuildPointScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AVisual: TTySeriesVisual; const APoints: TTyPointFArray;
+  AList: TTyPaintList): Integer;
+
 { A heatmap on a calendar: one cell per row, the calendar's content rect for
   its date, at z2 1. [Batch 70] }
 function TyBuildCalendarHeatmap(const ABinding: TTySeriesBinding;
@@ -2602,6 +2609,30 @@ begin
   end;
 end;
 
+{ A SCATTER ON A GEO [Batch 152, D14 GE4]: layout/points.ts' points --
+  dataToPoint([lng, lat]) of the first two dimensions, NaN through -- worked
+  out by the caller (the geo is not this unit's), and SymbolDraw's
+  symbolNeedsDraw: a point that is not a number, or one a clipping geo's
+  area leaves out, is not drawn. }
+function TyBuildPointScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AVisual: TTySeriesVisual; const APoints: TTyPointFArray;
+  AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  p: TTyPointF;
+begin
+  Result := 0;
+  if (AStore = nil) or (AList = nil) then Exit;
+  if AVisual.Symbol.Kind = tsyNone then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    if i > High(APoints) then Break;
+    p := APoints[i];
+    if IsNan(p.X) or IsNan(p.Y) then Continue;
+    Inc(Result, AddScatterSymbol(ABinding, AStore, AVisual, i, p, AVisual.Symbol, AList));
+  end;
+end;
+
 { A HEATMAP ON A CALENDAR: the cell is the calendar's CONTENT rect for the
   row's date -- the day's cell inset by half the calendar's own border, with
   no half-pixel widening (HeatmapView.ts:271-285). A row whose value is not a
@@ -3663,10 +3694,12 @@ const
     axis; [Batch 120] a chord's sectors and ribbons by AdvChart.Chord;
     [Batch 121] a lines series' rows by AdvChart.Lines; [Batch 128] a
     parallel series' rows by AdvChart.Parallel }
-  cElsewhere: array[0..13] of string = ('pie', 'funnel', 'gauge', 'radar',
+  cElsewhere: array[0..14] of string = ('pie', 'funnel', 'gauge', 'radar',
                                        'graph', 'tree', 'sunburst', 'treemap',
                                        'sankey', 'themeRiver', 'chord',
-                                       'lines', 'custom', 'parallel');
+                                       'lines', 'custom', 'parallel',
+                                       { [Batch 152] MapDraw, on its geo }
+                                       'map');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;

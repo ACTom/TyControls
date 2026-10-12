@@ -1462,6 +1462,25 @@ TyAdvChartThumbnailWindow { background: var(--border); border-color: mix(var(--o
    border grey, dashed; here the skin's surface at 60% and its border, so a
    dark skin's breaks are dark. The dash is the option's (3, 3 by default). */
 TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }
+/* A geo component's map. Upstream fills a region with its backgroundTint
+   token (a pale blue-grey at half), rims it in its border grey at half a
+   pixel and, when the option shows them, writes the region names in its
+   tertiary ink. Here a tenth of the accent in the surface, so a dark
+   skin's map is a dark one, the skin's border, and the muted ink. The
+   half-pixel rim is the option's. */
+TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }
+TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }
+/* A map series' regions. Upstream fills them with its background token (a
+   near-white blue, lighter than a geo component's tint) and rims them in
+   the same border grey; here a twentieth of the accent in the surface, a
+   shade lighter than a geo's, and the skin's border. */
+TyAdvChartMapArea { background: mix(var(--accent), var(--surface), 95%); border-color: var(--border); }
+/* A hovered or selected region and its name. Upstream fills it with its
+   highlight token (a warm yellow at 80%) and writes the name in its primary
+   ink; here a third of the accent in the surface and the skin's own text
+   colour, so the region stands out in any skin. */
+TyAdvChartGeoArea:hover { background: mix(var(--accent), var(--surface), 65%); border-color: var(--border); }
+TyAdvChartGeoLabel:hover { color: var(--on-surface); font-size: var(--font-size-base); }
 /* A decal's symbols, where the decal names no colour of its own -- the aria
    decals that tell the series apart without their colours. Upstream draws
    them black at 20%; here the skin's ink at 20%, so a dark skin's decals

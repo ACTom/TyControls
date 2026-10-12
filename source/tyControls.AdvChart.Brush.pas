@@ -312,6 +312,10 @@ type
     GridComponent, Grid: Integer;
     Rect: TTyXYWH;
     Carts: array of TTyCartesian2D;
+    { [Batch 152] a geo's target: its component index (-1: a grid's) and
+      the TTyGeo itself (this unit does not name the class) }
+    GeoComponent: Integer;
+    Geo: TObject;
   end;
   TTyBrushTargetArray = array of TTyBrushTarget;
 

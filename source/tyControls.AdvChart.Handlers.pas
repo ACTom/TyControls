@@ -115,6 +115,10 @@ type
     { A MATRIX CELL'S locator pair, upstream's `coord` in its eventData and
       `xyLocator` in its tooltip's params; empty elsewhere [Batch 147] }
     Coord: TTyDoubleArray;
+    { A GEO REGION'S eventData.region [Batch 148]: its region option as
+      JSON text (an empty object where the model map holds none); '' everywhere else.
+      A geo event's geoIndex is its ComponentIndex. }
+    Region: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 

@@ -26,7 +26,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Types, tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Data, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Connect,
+     tyControls.AdvChart.Connect, tyControls.AdvChart.Geo,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -100,6 +100,8 @@ type
     procedure TestASilentShowTipPublishesNothing;
     procedure TestAShowTipBatchIsRefused;
     procedure TestAMatrixCellByNameShowsItsTip;
+    procedure TestAGeoRegionByNameShowsItsTip;
+    procedure TestAGeoRegionUnderThePointerShowsItsTip;
     procedure TestTheKeyboardDispatchesShowTip;
   end;
 
@@ -683,6 +685,14 @@ const
   cAxisBars = '{"animation":false,"tooltip":{"trigger":"axis"},'
     + '"xAxis":{"type":"category","data":["a","b","c","d"]},"yAxis":{"min":0,"max":10},'
     + '"series":[{"type":"bar","data":[3,5,2,6]}]}';
+  { two unit squares side by side, A then B }
+  cSquares = '{"type":"FeatureCollection","features":['
+    + '{"type":"Feature","properties":{"name":"A"},"geometry":{"type":"Polygon",'
+    + '"coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"B"},"geometry":{"type":"Polygon",'
+    + '"coordinates":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}';
+  cGeo = '{"animation":false,"tooltip":{},'
+    + '"geo":{"id":"g0","map":"mgeo_sq","tooltip":{"show":true}}}';
 
 procedure TAdvChartTooltipActionsTest.SetUp;
 begin
@@ -809,6 +819,87 @@ begin
     AssertFalse(ch.TooltipShown);
   finally
     ch.Free;
+  end;
+end;
+
+{ findComponentReference on a geo: the region group whose tooltip config
+  names the payload's name, by geoIndex or geoId; the box placed from the
+  group's centre [Batch 148 x Batch 153] }
+procedure TAdvChartTooltipActionsTest.TestAGeoRegionByNameShowsItsTip;
+var
+  ch: TTyAdvanceChart;
+  geo: TTyGeo;
+  c: TTyGeoPt;
+  px: TTyPointF;
+begin
+  AssertTrue(TyChartRegisterMap('mgeo_sq', cSquares));
+  ch := NewChart(cGeo);
+  try
+    FLog.Clear;
+    AssertTrue('taken', ch.DispatchAction('{"type":"showTip","geoIndex":0,"name":"B"}'));
+    AssertTrue('shown', ch.TooltipShown);
+    AssertEquals('geo:0:B', ch.TooltipShownWhich);
+    { the point is region B's centre }
+    geo := ch.GeoLayout(0);
+    AssertNotNull(geo);
+    c := geo.RegionByName('B').GetCenter;
+    AssertTrue(geo.PointOf(c.X, c.Y, px));
+    AssertEquals('placed from x', px.X, ch.TooltipAnchorF.X, 0.5);
+    AssertEquals('placed from y', px.Y, ch.TooltipAnchorF.Y, 0.5);
+    { showTip, the view's showTip, updated }
+    AssertEquals(3, FLog.Count);
+    AssertEquals('showtip {"type":"showtip","geoIndex":0,"name":"B"}', FLog[0]);
+    AssertEquals(1, Pos('showtip {"type":"showtip","from":"ec_', FLog[1]));
+    FLog.Clear;
+    AssertTrue('taken', ch.DispatchAction('{"type":"hideTip"}'));
+    ch.TooltipTick(1000);
+    AssertFalse(ch.TooltipShown);
+    { by id }
+    AssertTrue('taken', ch.DispatchAction('{"type":"showTip","geoId":"g0","name":"A"}'));
+    AssertEquals('geo:0:A', ch.TooltipShownWhich);
+    AssertTrue('taken', ch.DispatchAction('{"type":"hideTip"}'));
+    ch.TooltipTick(2000);
+    { a name no region has, a geo that is not there: nothing shown }
+    AssertTrue('taken', ch.DispatchAction('{"type":"showTip","geoIndex":0,"name":"Z"}'));
+    AssertFalse(ch.TooltipShown);
+    AssertTrue('taken', ch.DispatchAction('{"type":"showTip","geoIndex":1,"name":"A"}'));
+    AssertFalse(ch.TooltipShown);
+  finally
+    ch.Free;
+    TyChartClearMaps;
+  end;
+end;
+
+{ a region under the pointer: the item tooltip's listener shows the
+  component's tooltip whatever the trigger says and hands the listener a
+  showTip from the view; leaving hides it through a hideTip }
+procedure TAdvChartTooltipActionsTest.TestAGeoRegionUnderThePointerShowsItsTip;
+var
+  ch: TTyAdvanceChart;
+  geo: TTyGeo;
+  c: TTyGeoPt;
+  px: TTyPointF;
+begin
+  AssertTrue(TyChartRegisterMap('mgeo_sq', cSquares));
+  ch := NewChart(StringReplace(cGeo, '"tooltip":{},', '"tooltip":{"trigger":"axis"},', []));
+  try
+    geo := ch.GeoLayout(0);
+    AssertNotNull(geo);
+    c := geo.RegionByName('A').GetCenter;
+    AssertTrue(geo.PointOf(c.X, c.Y, px));
+    FLog.Clear;
+    TTaProbe(ch).Move(Round(px.X), Round(px.Y));
+    AssertTrue('shown', ch.TooltipShown);
+    AssertEquals('geo:0:A', ch.TooltipShownWhich);
+    AssertTrue('a showTip from the view',
+      Pos('showtip {"type":"showtip","from":"ec_', FLog.Text) > 0);
+    FLog.Clear;
+    TTaProbe(ch).Leave;
+    AssertTrue('a hideTip from the view',
+      Pos('hidetip {"type":"hidetip","from":"ec_', FLog.Text) > 0);
+  finally
+    ch.Free;
+    TyChartClearMaps;
   end;
 end;
 

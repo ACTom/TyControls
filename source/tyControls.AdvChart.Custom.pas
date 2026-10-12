@@ -163,6 +163,9 @@ type
     CellWidth, CellHeight: Double;
     RangeStart, RangeEnd: TTyCustomCalDate;
     Weeks, DayCount: Double;
+    { [Batch 152] geo: the rect is the map's data rect (lng / lat, not
+      pixels), and the zoom the view's (viewCoordSysGetZoomOption) }
+    Zoom: Double;
   end;
 
   TTyCustomRect = record

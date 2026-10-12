@@ -1495,6 +1495,25 @@ begin
     '   border grey, dashed; here the skin''s surface at 60% and its border, so a' + LineEnding +
     '   dark skin''s breaks are dark. The dash is the option''s (3, 3 by default). */' + LineEnding +
     'TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '/* A geo component''s map. Upstream fills a region with its backgroundTint' + LineEnding +
+    '   token (a pale blue-grey at half), rims it in its border grey at half a' + LineEnding +
+    '   pixel and, when the option shows them, writes the region names in its' + LineEnding +
+    '   tertiary ink. Here a tenth of the accent in the surface, so a dark' + LineEnding +
+    '   skin''s map is a dark one, the skin''s border, and the muted ink. The' + LineEnding +
+    '   half-pixel rim is the option''s. */' + LineEnding +
+    'TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }' + LineEnding +
+    'TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A map series'' regions. Upstream fills them with its background token (a' + LineEnding +
+    '   near-white blue, lighter than a geo component''s tint) and rims them in' + LineEnding +
+    '   the same border grey; here a twentieth of the accent in the surface, a' + LineEnding +
+    '   shade lighter than a geo''s, and the skin''s border. */' + LineEnding +
+    'TyAdvChartMapArea { background: mix(var(--accent), var(--surface), 95%); border-color: var(--border); }' + LineEnding +
+    '/* A hovered or selected region and its name. Upstream fills it with its' + LineEnding +
+    '   highlight token (a warm yellow at 80%) and writes the name in its primary' + LineEnding +
+    '   ink; here a third of the accent in the surface and the skin''s own text' + LineEnding +
+    '   colour, so the region stands out in any skin. */' + LineEnding +
+    'TyAdvChartGeoArea:hover { background: mix(var(--accent), var(--surface), 65%); border-color: var(--border); }' + LineEnding +
+    'TyAdvChartGeoLabel:hover { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
     '/* A decal''s symbols, where the decal names no colour of its own -- the aria' + LineEnding +
     '   decals that tell the series apart without their colours. Upstream draws' + LineEnding +
     '   them black at 20%; here the skin''s ink at 20%, so a dark skin''s decals' + LineEnding +

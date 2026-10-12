@@ -47,6 +47,11 @@ const
   TyMatrixSysName = 'matrix';
   TyCalendarTimeDim = 'time';
   TyCalendarValueDim = 'value';
+  { [Batch 152, D14 GE4] A series on a geo: the system's two dimensions
+    (Geo.ts `dimensions = ['lng', 'lat']`), and the map series' type name }
+  TyGeoLngDim = 'lng';
+  TyGeoLatDim = 'lat';
+  TyMapSeriesTypeName = 'map';
 
 type
   { How a series occupies the chart.
@@ -165,6 +170,15 @@ type
       and a treemap by default too, a chord and a graph (its view) when
       they say 'box'. }
     MatrixBox: Boolean;
+    { WHICH GEO COMPONENT, or -1 [Batch 152, D14 GE4]. A series on a geo
+      (`coordinateSystem: 'geo'`, getReferringComponents SINGLE_REFERRING:
+      neither key written is the first) is Resolved with HasAxes False and
+      this index; one naming no geo there is not resolved (upstream leaves
+      it with no coordinate system and draws nothing). A MAP series names a
+      geo only by a written geoIndex / geoId (useDefault false) -- found, it
+      is drawn on that geo; otherwise -1 and the series has a geo of its own,
+      shared by every map series of the same `map` (the control builds it). }
+    GeoIndex: Integer;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -824,6 +838,7 @@ begin
     b.ParallelIndex := -1;
     b.MatrixIndex := -1;
     b.CalendarBoxIndex := -1;
+    b.GeoIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -857,6 +872,10 @@ begin
       otherwise the type's own default, which for a pie or a treemap is nothing
       at all. }
     sys := StrOf(node, 'coordinateSystem', info.DefaultCoordSys);
+    { A MAP SERIES IS ALWAYS ON A GEO [Batch 152]: whatever it writes, its
+      coordinate system is the geo it names or one of its own
+      (buildAllMapSeriesGroups takes every map series) }
+    if b.SeriesType = TyMapSeriesTypeName then sys := 'geo';
     b.CoordSysName := sys;
     b.Usage := info.Usage;
     b.RadarIndex := -1;
@@ -868,6 +887,7 @@ begin
     b.ParallelIndex := -1;
     b.Parallel := nil;
     b.MatrixIndex := -1;
+    b.GeoIndex := -1;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -1072,6 +1092,38 @@ begin
       Continue;
     end;
 
+    if sys = 'geo' then
+    begin
+      { A GEO [Batch 152, D14 GE4]. A map series: a written geoIndex or geoId
+        that finds a geo hosts it; anything else (neither written, or one that
+        finds nothing) is its own geo. Any other series: SINGLE_REFERRING --
+        neither written is the first geo -- and none found is no coordinate
+        system at all. }
+      if b.SeriesType = TyMapSeriesTypeName then
+      begin
+        if ((node.Find('geoIndex') <> nil) and (node.Find('geoIndex').JSONType <> jtNull))
+          or ((node.Find('geoId') <> nil) and (node.Find('geoId').JSONType <> jtNull)) then
+          b.GeoIndex := TyResolveComponentRef(node, 'geoIndex', 'geoId',
+            AOption.ComponentCount('geo'), MainIds(AOption, 'geo'), MainHoles(AOption, 'geo'));
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
+      b.GeoIndex := TyResolveComponentRef(node, 'geoIndex', 'geoId',
+        AOption.ComponentCount('geo'), MainIds(AOption, 'geo'), MainHoles(AOption, 'geo'));
+      if b.GeoIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
     if sys = 'view' then
     begin
       { THE THIRD SYSTEM, AND THE ONE WITH NOTHING TO LOOK UP. A radar names
@@ -1088,7 +1140,7 @@ begin
     if sys <> 'cartesian2d' then
     begin
       { The two-step shape is here. A series naming a system this port does
-        not have (geo, singleAxis, ...) resolves to nothing rather than
+        not have (matrix, ...) resolves to nothing rather than
         silently falling back to the cartesian it did not ask for. }
       ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
       Result[i] := b;

@@ -39,6 +39,10 @@ function TyElementGradientBox(const AElement: TTyChartElement;
   kept; nil for anything else or anything that does not decode. Owned by the
   cache. [Batch 105] }
 function TyPatternImage(const ASource: string): TBGRABitmap;
+{ [Batch 152] an image the chart made itself (a heatmap layer), kept under
+  AKey -- a 'data:' key no decoder reads -- for TyPatternImage to answer;
+  the cache owns ABmp }
+procedure TyPatternRegisterImage(const AKey: string; ABmp: TBGRABitmap);
 
 { A DECAL'S TILE at AScale device px per CSS px [Batch 131]: the bitmap
   createOrUpdatePatternFromDecal draws on its canvas -- the tile's size
@@ -220,6 +224,25 @@ begin
   if GPatternCache.Count >= 64 then GPatternCache.Clear;
   GPatternCache.AddObject(ASource, bmp);
   Result := bmp;
+end;
+
+procedure TyPatternRegisterImage(const AKey: string; ABmp: TBGRABitmap);
+var k: Integer;
+begin
+  if GPatternCache = nil then
+  begin
+    GPatternCache := TStringList.Create;
+    GPatternCache.OwnsObjects := True;
+    GPatternCache.Sorted := True;
+    GPatternCache.CaseSensitive := True;
+  end;
+  if GPatternCache.Find(AKey, k) then
+  begin
+    ABmp.Free;
+    Exit;
+  end;
+  if GPatternCache.Count >= 64 then GPatternCache.Clear;
+  GPatternCache.AddObject(AKey, ABmp);
 end;
 
 function TyElementGradientBox(const AElement: TTyChartElement;
