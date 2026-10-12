@@ -8,9 +8,14 @@ uses
   tyControls.Popup;
 
 type
-  { How a row's VALUE cell is edited. Layer 1 implements vekText (inline TTyEdit) and vekReadOnly;
-    the typed editors (bool/enum/colour/font/dialog) are added in a later layer but the kind is
-    stored now so the model is complete. }
+  { How a row's VALUE cell is edited -- every kind is wired (see BeginEdit):
+      vekText              the inline editor, free text;
+      vekInteger/vekFloat  the inline editor restricted to a number ('.' is the only decimal point);
+      vekBoolean/vekEnum   a pick list dropped under the cell (False/True, or EnumValues);
+      vekColor             a swatch pick list whose last row opens the colour dialog;
+      vekFont              read-only inline text plus a '…' that opens the font dialog;
+      vekDialog            read-only inline text plus a '…' that fires OnEditRow;
+      vekReadOnly          not editable (the same as TTyValueRow.ReadOnly). }
   TTyValueEditorKind = (vekText, vekInteger, vekFloat, vekBoolean, vekEnum, vekColor, vekFont,
     vekDialog, vekReadOnly);
 
@@ -33,6 +38,9 @@ type
     TextColor: TColor;       // value colour; clDefault => theme
     ImageIndex: Integer;     // value cell image (via the editor's Images); -1 => none
     Expanded: Boolean;
+    { Free for the application or a descendant to hang its own record on the row -- what the
+      row stands for. nil by default, and NOT owned: freeing the row leaves it alone. }
+    Data: Pointer;
     constructor Create;
     destructor Destroy; override;
     // Append a child row (nesting). Returns it for further configuration.
@@ -131,6 +139,7 @@ type
     FColorList: TTyListBox;           // content for vekColor (a TTyColorMorePopupList instance)
     FMoreCaption: string;             // vekColor: the trailing "more…" row caption
     FColorDlgRow: TTyValueRow;        // row awaiting the deferred "more…" colour dialog (by identity), or nil
+    FCommitFont: TFont;               // the font the font dialog picked, while its commit is asked about
     FKeyColumnWidth: Integer;         // logical px
     FIndent: Integer;                 // logical px per nesting level
     FReadOnly: Boolean;
@@ -202,6 +211,7 @@ type
     procedure DropClosed(Sender: TObject);
     procedure EditorEllipsis(Sender: TObject);
     procedure EditFontRow(AFlat: Integer);
+    function FontSummary(AFont: TFont): string;
     procedure SeedFontFromRow(ARow: TTyValueRow; AFont: TFont);
     procedure SyncFontChildren(ARow: TTyValueRow; AFont: TFont);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -218,6 +228,32 @@ type
       both dropdowns, protected so the guards can read it headlessly -- the popup itself
       needs a real window, which is exactly what a test run does not have. }
     function DropdownHeightFor(ARows: Integer): Integer;
+    { Asked before ANY commit changes a row's value: the inline editor (Enter / focus-out), a
+      pick from the boolean / enum / colour list, the colour dialog, the font dialog, SetRowValue
+      and the Values[] / ValueFromIndex[] writes. False refuses it -- the row keeps its value and
+      OnValueChanged does not fire. AText may be rewritten into the form the subclass actually
+      stored (a property grid writes '007' into an Integer and the row should read '7'); when the
+      rewritten text equals the row's current value nothing changes and nothing fires.
+
+      The font dialog on a row WITH child rows (name / size / style...) asks once, on that row,
+      with the 'Name, Size Style' summary, and CommitFont holds the font that was picked; the
+      children follow only when the answer is True. Without children the font row commits like
+      any other row, 'Name, Size', with CommitFont set too.
+
+      An override must not free ARow (or rebuild the rows) from in here. Default: True. }
+    function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; virtual;
+    { The two dialogs this control opens itself, so a descendant can supply its own and a test
+      can answer without a modal window. ExecuteFontDialog starts from AFont and writes the
+      choice back into it; ExecuteColorDialog likewise for AColor. True = the user confirmed. }
+    function ExecuteFontDialog(AFont: TFont): Boolean; virtual;
+    function ExecuteColorDialog(var AColor: TColor): Boolean; virtual;
+    { The font the font dialog picked, while CanCommitValue is being asked about it; nil at any
+      other time. }
+    property CommitFont: TFont read FCommitFont;
+    { The pick list currently dropped (the boolean / enum list or the colour list), nil when none
+      is. Protected for the same reason DropdownHeightFor is: a guard picks an entry the way the
+      user's click does. }
+    function DropList: TTyListBox;
     { NOT MIRRORED, and this is the whole reason TTyListBox asks per class.
 
       Every other member of the list-box family hit-tests rows on Y alone, so mirroring the
@@ -921,12 +957,19 @@ end;
 { The row-numbered setter addresses EXISTING rows only -- out of range is a no-op. It must NOT
   grow the list the way the keyed setter does, or a stray index would append an empty-keyed row. }
 procedure TTyCustomValueListEditor.SetValueFromIndex(AIndex: Integer; const AValue: string);
+var
+  r: TTyValueRow;
+  txt: string;
 begin
   if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
-  if FRoot[AIndex].Value = AValue then Exit;
-  FRoot[AIndex].Value := AValue;
+  r := FRoot[AIndex];
+  if r.Value = AValue then Exit;
+  txt := AValue;
+  if not CanCommitValue(r, txt) then begin Invalidate; Exit; end;
+  if not RowExists(r) or (r.Value = txt) then begin Invalidate; Exit; end;
+  r.Value := txt;
   Invalidate;
-  if Assigned(FOnValueChanged) then FOnValueChanged(Self, FRoot[AIndex]);
+  if Assigned(FOnValueChanged) then FOnValueChanged(Self, r);
 end;
 
 { Key matching FOLDS CASE, as on LCL: TValueListEditor resolves the key through
@@ -1063,9 +1106,16 @@ end;
 { Commit by row IDENTITY (not flat index) — used by the deferred colour dialog, which must survive
   the row being renumbered/scrolled across the async + modal boundary. }
 procedure TTyCustomValueListEditor.CommitEditorRow(ARow: TTyValueRow; const AText: string);
+var
+  txt: string;
 begin
   if (ARow = nil) or (ARow.Value = AText) then Exit;
-  ARow.Value := AText;
+  txt := AText;
+  { The veto (and the descendant's chance to store the value) comes BEFORE the row moves, so a
+    refusal leaves nothing to undo. Re-check the row afterwards: the hook is foreign code. }
+  if not CanCommitValue(ARow, txt) then begin Invalidate; Exit; end;
+  if not RowExists(ARow) or (ARow.Value = txt) then begin Invalidate; Exit; end;
+  ARow.Value := txt;
   if Assigned(FOnValueChanged) then FOnValueChanged(Self, ARow);
   PropagateUp(ARow);   // a Font/Style parent re-summarises from its (now-changed) children
   Invalidate;
@@ -1074,6 +1124,43 @@ end;
 procedure TTyCustomValueListEditor.SetRowValue(ARow: TTyValueRow; const AText: string);
 begin
   CommitEditorRow(ARow, AText);
+end;
+
+function TTyCustomValueListEditor.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomValueListEditor.ExecuteFontDialog(AFont: TFont): Boolean;
+var
+  dlg: TTyFontDialog;
+begin
+  dlg := TTyFontDialog.Create(nil);
+  try
+    dlg.Font.Assign(AFont);
+    Result := dlg.Execute;
+    if Result then AFont.Assign(dlg.Font);
+  finally
+    dlg.Free;
+  end;
+end;
+
+function TTyCustomValueListEditor.ExecuteColorDialog(var AColor: TColor): Boolean;
+var
+  a: Byte;
+begin
+  a := 255;
+  Result := TySelectColor('选择颜色', AColor, a);
+end;
+
+function TTyCustomValueListEditor.DropList: TTyListBox;
+begin
+  Result := nil;
+  if not FDropMode then Exit;
+  case FDropKind of
+    dkEnum:  Result := FEnumList;
+    dkColor: Result := FColorList;
+  end;
 end;
 
 function TTyCustomValueListEditor.ChildByKey(ARow: TTyValueRow; const AKey: string): TTyValueRow;
@@ -1428,14 +1515,13 @@ begin
 end;
 
 procedure TTyCustomValueListEditor.DeferredColorDialog(Data: PtrInt);
-var col: TColor; a: Byte; r: TTyValueRow;
+var col: TColor; r: TTyValueRow;
 begin
   r := FColorDlgRow;
   FColorDlgRow := nil;
   if (r = nil) or not RowExists(r) then Exit;   // row removed while the async call was pending
   col := StringToColorDef(r.Value, clBlack);
-  a := 255;
-  if TySelectColor('选择颜色', col, a) and RowExists(r) then   // re-check: the modal pumped messages
+  if ExecuteColorDialog(col) and RowExists(r) then   // re-check: the modal pumped messages
     CommitEditorRow(r, ColorToString(col));
 end;
 
@@ -1576,26 +1662,53 @@ begin
   if didChange then RebuildFlat;
 end;
 
+{ 'Name, Size' plus the style words, in ComposeValue's order -- what a font row with children
+  reads once its leaves follow AFont. }
+function TTyCustomValueListEditor.FontSummary(AFont: TFont): string;
+var flags: string;
+begin
+  Result := Format('%s, %d', [AFont.Name, AFont.Size]);
+  flags := '';
+  if fsBold in AFont.Style then flags := flags + 'Bold ';
+  if fsItalic in AFont.Style then flags := flags + 'Italic ';
+  if fsUnderline in AFont.Style then flags := flags + 'Underline ';
+  if fsStrikeOut in AFont.Style then flags := flags + 'StrikeOut ';
+  flags := Trim(flags);
+  if flags <> '' then Result := Result + ' ' + flags;
+end;
+
 procedure TTyCustomValueListEditor.EditFontRow(AFlat: Integer);
-var dlg: TTyFontDialog; r: TTyValueRow;
+var f: TFont; r: TTyValueRow; txt: string;
 begin
   r := FFlatRow[AFlat];
-  dlg := TTyFontDialog.Create(nil);
+  f := TFont.Create;
   try
-    SeedFontFromRow(r, dlg.Font);
-    if dlg.Execute then
+    SeedFontFromRow(r, f);
+    { By IDENTITY after the dialog: the modal pumped messages, so the row may have moved or gone. }
+    if ExecuteFontDialog(f) and RowExists(r) then
     begin
-      if r.HasChildren then
-      begin
-        SyncFontChildren(r, dlg.Font);   // write Name/Size/Bold/Italic/Color leaves
-        RecomputeComposite(r);           // re-summarise the Style node + the Font row from the leaves
-        Invalidate;
-      end
-      else
-        CommitEditor(AFlat, Format('%s, %d', [dlg.Font.Name, dlg.Font.Size]));
+      FCommitFont := f;
+      try
+        if r.HasChildren then
+        begin
+          { One question for the whole font, on the font row: the leaves below are derived from
+            the answer, so they are not asked one by one. }
+          txt := FontSummary(f);
+          if CanCommitValue(r, txt) and RowExists(r) then
+          begin
+            SyncFontChildren(r, f);   // write Name/Size/Bold/Italic/Color leaves
+            RecomputeComposite(r);    // re-summarise the Style node + the Font row from the leaves
+            Invalidate;
+          end;
+        end
+        else
+          CommitEditorRow(r, Format('%s, %d', [f.Name, f.Size]));
+      finally
+        FCommitFont := nil;
+      end;
     end;
   finally
-    dlg.Free;
+    f.Free;
   end;
   if CanFocus then SetFocus;
 end;
