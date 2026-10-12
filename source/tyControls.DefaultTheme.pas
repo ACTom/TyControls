@@ -1503,6 +1503,11 @@ begin
     '   half-pixel rim is the option''s. */' + LineEnding +
     'TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }' + LineEnding +
     'TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A map series'' regions. Upstream fills them with its background token (a' + LineEnding +
+    '   near-white blue, lighter than a geo component''s tint) and rims them in' + LineEnding +
+    '   the same border grey; here a twentieth of the accent in the surface, a' + LineEnding +
+    '   shade lighter than a geo''s, and the skin''s border. */' + LineEnding +
+    'TyAdvChartMapArea { background: mix(var(--accent), var(--surface), 95%); border-color: var(--border); }' + LineEnding +
     '/* A hovered or selected region and its name. Upstream fills it with its' + LineEnding +
     '   highlight token (a warm yellow at 80%) and writes the name in its primary' + LineEnding +
     '   ink; here a third of the accent in the surface and the skin''s own text' + LineEnding +

@@ -58,8 +58,20 @@ unit tyControls.AdvChart.Geo;
   drawn boxes -- is worked out again on the kept picture, the state records
   untouched.
 
-  NOT HERE YET (spec sections 185, 187 and 189): the map series and series
-  on a geo (GE4), SVG maps and projection streams.
+  THE MAP SERIES [Batch 152, D14 GE4]. MapDraw draws a map series' regions
+  too -- the series' own geo (one per `map` of a group of map series, laid
+  out from the first declared one) or a geo component the series names --
+  and then the data rides along: the region option is the data item (with
+  the feature's echartsStyle merged in where it is silent) over the
+  series' option and MapSeries' defaults, the normal fill the visualMap's
+  colour where a visualMap encodes the series, the label there only where
+  the value is not a number or no legend symbol stands on the region
+  (resetLabelForRegion), its text the series' getFormattedLabel; a region
+  group is the item's graphic element (its events, tooltip and states the
+  series'). A TTyGeo carries that as a TTyGeoData the control sets.
+
+  NOT HERE (spec sections 185, 187, 189 and 191): SVG maps and projection
+  streams.
 
   PURE but for fpjson: no painter, no LCL. }
 interface
@@ -70,7 +82,8 @@ uses
   tyControls.AdvChart.Layout, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Color, tyControls.AdvChart.Graph,
-  tyControls.AdvChart.States, tyControls.AdvChart.GeoFix;
+  tyControls.AdvChart.States, tyControls.AdvChart.GeoFix,
+  tyControls.AdvChart.Handlers;
 
 const
   TyGeoCoordSysName = 'geo';
@@ -210,12 +223,15 @@ type
     LabelFontWeight: Integer;
     HighlightFill: TTyChartColor;
     LabelHighlight: TTyChartColor;
+    { [Batch 152] a map series' area: MapSeries' areaColor default (the
+      background token, not the geo's tint) }
+    MapAreaFill: TTyChartColor;
   end;
 
   { [Batch 148] which of GeoModel's token defaults a colour is: the skin's
-    ink here }
+    ink here. [Batch 152] gtkMapArea is MapSeries' area. }
   TTyGeoToken = (gtkNone, gtkArea, gtkBorder, gtkLabel, gtkHighlight,
-    gtkLabelHighlight);
+    gtkLabelHighlight, gtkMapArea);
 
   { Where a style value came from: nowhere (not painted), the theme, the
     option (Raw holds what was written). }
@@ -367,6 +383,33 @@ type
   end;
   TTyGeoGroupStArray = array of TTyGeoGroupSt;
 
+  { [Batch 152, D14 GE4] WHOSE GEO: a geo component's, or a map series
+    group's own (MapDraw's mapOrGeoModel is the series then) }
+  TTyGeoKind = (gkComponent, gkMapSeries);
+
+  { [Batch 152] ONE REGION GROUP'S DATA, MapDraw with a series' data: the
+    data index of its name (-1: none), the region model's option (a map
+    series' data item with the feature's echartsStyle merged in -- owned by
+    the geo once set; nil: the series' own), the visualMap's colour for the
+    normal fill (isVisualEncodedByVisualMap && style.fill), whether
+    resetLabelForRegion gives it a text (a map series' rule: the value not
+    a number, or no legend symbol on it), and getDataParams for the series'
+    label formatter (ValueText as String() prints the value) }
+  TTyGeoDataGroup = record
+    Row: Integer;
+    Opt: TJSONObject;
+    HasFill: Boolean;
+    Fill: TTyChartColor;
+    LabelOn: Boolean;
+    Params: TTyChartCallbackParams;
+  end;
+  TTyGeoData = record
+    Active: Boolean;
+    SeriesIndex: Integer;
+    { per group, in the geo's group order }
+    Groups: array of TTyGeoDataGroup;
+  end;
+
   { A Transformable's props, as View keeps its three: no origin, no anchor. }
   TTyGeoTrans = record
     X, Y, ScaleX, ScaleY, Rotation, SkewX, SkewY: Double;
@@ -378,6 +421,12 @@ type
     FIndex: Integer;
     FSpec: TTyGeoSpec;
     FNode: TJSONObject;
+    { [Batch 152] whose geo, the option a region model's chain climbs to
+      (a map series group's main series; the geo's own node otherwise), the
+      data drawn with it }
+    FKind: TTyGeoKind;
+    FChainNode: TJSONObject;
+    FSeriesData: TTyGeoData;
     FNameMap: TJSONObject;
     FSource: TTyGeoSource;
     FValid: Boolean;
@@ -427,7 +476,21 @@ type
     procedure LayoutView(const AContainer: TTyRectF);
   public
     constructor Create(AOption: TTyChartOption; AIndex: Integer);
+    { [Batch 152] A map series group's own geo: laid out from ALayoutSeries
+      (the first map series declared for the map), its regions named by
+      ANameMap (the group's nameMaps merged; nil: none). AIndex is the own
+      geo's place among the control's. }
+    constructor CreateForMap(AOption: TTyChartOption; ALayoutSeries, AIndex: Integer;
+      ANameMap: TJSONObject);
     destructor Destroy; override;
+    { [Batch 152] the series drawn with this geo (after Resize: one group per
+      region name, in GroupName's order), and the series option a map
+      series' region model climbs to (ANode: nil keeps the layout series') }
+    procedure SetData(const AData: TTyGeoData; AChainNode: TJSONObject = nil);
+    property Kind: TTyGeoKind read FKind;
+    property Data: TTyGeoData read FSeriesData;
+    { the flags of a group, written as the series' item holds them }
+    function SetFlags(AGroup, AHover: Integer; AHbo: Cardinal; ASelected: Boolean): Boolean;
     { The map loaded, the view laid out on the container (device px) }
     procedure Resize(const AContainer: TTyRectF; APPI: Integer);
     { getRegion / getGeoCoord }
@@ -475,6 +538,12 @@ type
     { RoamController._checkPointer's area for this geo: roamTrigger
       'global' or containPoint, and inside the clip rect when it clips }
     function RoamPointerIn(AX, AY: Double): Boolean;
+    { [Batch 152] the data rect through the overall matrix (BoundingRect.
+      applyTransform): a brush's panel, containPoint's box }
+    function OverallRect: TTyXYWH;
+    { the view rect through the roam transform (HeatmapView: getViewRect
+      applyTransform getRoamTransform) }
+    function RoamViewRect: TTyXYWH;
     property RoamGen: Integer read FRoamGen;
     { the picture and its state records are there (a list was built) }
     function ItemsReady: Boolean;
@@ -593,6 +662,9 @@ function TyGeoApply(const M: TTyMat2D; AX, AY: Double): TTyGeoPt;
 
 { [Batch 148] JSON.stringify of an option value }
 function TyGeoJsJson(AData: TJSONData): string;
+{ [Batch 152] zrUtil.merge without overwrite: what ATarget leaves out, an
+  object into an object deep }
+procedure TyGeoMergeAbsent(ATarget, ASource: TJSONObject);
 
 { MapDraw._buildGeoJSON's picture, as data }
 function TyGeoDrawOf(AGeo: TTyGeo; const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
@@ -606,7 +678,7 @@ implementation
 uses
   tyControls.AdvChart.Data,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Convert,
-  tyControls.AdvChart.Calendar, tyControls.AdvChart.Handlers,
+  tyControls.AdvChart.Calendar,
   tyControls.AdvChart.Labels, tyControls.AdvChart.OptionMerge,
   tyControls.AdvChart.Scale;
 
@@ -1984,7 +2056,22 @@ begin
   end;
 end;
 
+function TyGeoSpecOfNode(ANode, ARoot: TJSONObject; AMapSeries: Boolean): TTyGeoSpec; forward;
+
 function TyGeoSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyGeoSpec;
+var d: TJSONData; root: TJSONObject;
+begin
+  if AOption = nil then Exit(TyGeoSpecOfNode(nil, nil, False));
+  d := AOption.ComponentAt('geo', AIndex);
+  root := nil;
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root);
+  if d is TJSONObject then Result := TyGeoSpecOfNode(TJSONObject(d), root, False)
+  else Result := TyGeoSpecOfNode(nil, root, False);
+end;
+
+{ the options of a geo component's node, or [Batch 152] of a map series'
+  (MapSeries' defaults: z 2, its silent the series', no show) }
+function TyGeoSpecOfNode(ANode, ARoot: TJSONObject; AMapSeries: Boolean): TTyGeoSpec;
 var
   node, root: TJSONObject;
   d, e: TJSONData;
@@ -2021,16 +2108,15 @@ begin
   Result.LimitMax := Infinity;
   Result.Box.Left := TyBoxRawStr('center');
   Result.Box.Top := TyBoxRawStr('center');
-  if AOption = nil then Exit;
-  d := AOption.ComponentAt('geo', AIndex);
-  if not (d is TJSONObject) then Exit;
-  node := TJSONObject(d);
-  root := nil;
-  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root);
+  if AMapSeries then Result.Z := 2;
+  if ANode = nil then Exit;
+  node := ANode;
+  root := ARoot;
 
-  { show: true by default; a written null asks the root }
+  { show: true by default; a written null asks the root. A map series has
+    no show: its MapDraw always draws. }
   d := node.Find('show');
-  if d = nil then Result.Show := True
+  if AMapSeries or (d = nil) then Result.Show := True
   else if d.JSONType = jtNull then Result.Show := Truthy(Climb(nil, root, 'show'))
   else Result.Show := Truthy(d);
   d := node.Find('map');
@@ -2045,7 +2131,14 @@ begin
   { getShallow('clip', true): its own }
   Result.Clip := Truthy(node.Find('clip'));
   d := Climb(node, root, 'z');
-  if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.Z := 0
+  if AMapSeries then
+  begin
+    { the series' z, MapSeries' 2 by default }
+    d := node.Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then Result.Z := Trunc(d.AsFloat)
+    else Result.Z := 2;
+  end
+  else if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.Z := 0
   else Result.Z := Trunc(TyJsonToNumber(d));
   d := Climb(node, root, 'zlevel');
   if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.ZLevel := 0
@@ -2171,6 +2264,7 @@ begin
   begin
     d := AOption.ComponentAt('geo', AIndex);
     if d is TJSONObject then FNode := TJSONObject(d.Clone);
+    FChainNode := FNode;
     root := nil;
     if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root);
     d := Climb(FNode, root, 'nameMap');
@@ -2192,9 +2286,83 @@ begin
   FScale := 1;
 end;
 
+constructor TTyGeo.CreateForMap(AOption: TTyChartOption; ALayoutSeries, AIndex: Integer;
+  ANameMap: TJSONObject);
+var d: TJSONData; root: TJSONObject; k: Integer;
+begin
+  inherited Create;
+  FKind := gkMapSeries;
+  FIndex := AIndex;
+  FNode := nil;
+  FNameMap := nil;
+  root := nil;
+  if (AOption <> nil) and (AOption.Root is TJSONObject) then root := TJSONObject(AOption.Root);
+  d := nil;
+  if AOption <> nil then d := AOption.ComponentAt('series', ALayoutSeries);
+  if d is TJSONObject then
+  begin
+    FNode := TJSONObject(d.Clone);
+    FSpec := TyGeoSpecOfNode(FNode, root, True);
+  end
+  else
+    FSpec := TyGeoSpecOfNode(nil, root, True);
+  FChainNode := FNode;
+  if ANameMap <> nil then FNameMap := TJSONObject(ANameMap.Clone);
+  FRoot := TJSONObject.Create;
+  if root <> nil then
+    for k := 0 to High(cRootStyleKeys) do
+    begin
+      d := root.Find(cRootStyleKeys[k]);
+      if d <> nil then FRoot.Add(cRootStyleKeys[k], d.Clone);
+    end;
+  FMtRaw := MatIdentity;
+  FMtRawInv := MatIdentity;
+  FMtOverall := MatIdentity;
+  FMtOverallInv := MatIdentity;
+  FZoom := 1;
+  FScale := 1;
+end;
+
+procedure FreeDataOpts(var AData: TTyGeoData);
+var i: Integer;
+begin
+  for i := 0 to High(AData.Groups) do FreeAndNil(AData.Groups[i].Opt);
+end;
+
+procedure TTyGeo.SetData(const AData: TTyGeoData; AChainNode: TJSONObject);
+var i: Integer;
+begin
+  FreeDataOpts(FSeriesData);
+  if (FChainNode <> nil) and (FChainNode <> FNode) then FreeAndNil(FChainNode);
+  FSeriesData := AData;
+  SetLength(FSeriesData.Groups, Length(AData.Groups));
+  for i := 0 to High(FSeriesData.Groups) do
+    if AData.Groups[i].Opt <> nil then
+      FSeriesData.Groups[i].Opt := TJSONObject(AData.Groups[i].Opt.Clone);
+  if AChainNode <> nil then FChainNode := TJSONObject(AChainNode.Clone)
+  else FChainNode := FNode;
+  { the picture is the data's: again, the flags kept }
+  FDrawOk := False;
+  FItemsOk := False;
+end;
+
+function TTyGeo.SetFlags(AGroup, AHover: Integer; AHbo: Cardinal; ASelected: Boolean): Boolean;
+begin
+  Result := False;
+  EnsureGroups;
+  if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  Result := (FSt[AGroup].Hover <> AHover) or (FSt[AGroup].Hbo <> AHbo)
+    or (FSt[AGroup].Selected <> ASelected);
+  FSt[AGroup].Hover := AHover;
+  FSt[AGroup].Hbo := AHbo;
+  FSt[AGroup].Selected := ASelected;
+end;
+
 destructor TTyGeo.Destroy;
 var i: Integer;
 begin
+  FreeDataOpts(FSeriesData);
+  if (FChainNode <> nil) and (FChainNode <> FNode) then FChainNode.Free;
   for i := 0 to High(FOpts) do FOpts[i].Free;
   FRoot.Free;
   FSource.Free;
@@ -2372,6 +2540,28 @@ end;
 function TTyGeo.ItemsReady: Boolean;
 begin
   Result := FDrawOk and FItemsOk;
+end;
+
+function TTyGeo.OverallRect: TTyXYWH;
+var mask: TFpuMask;
+begin
+  mask := MaskFpu;
+  try
+    Result := RectApply(FData, FMtOverall);
+  finally
+    UnmaskFpu(mask);
+  end;
+end;
+
+function TTyGeo.RoamViewRect: TTyXYWH;
+var mask: TFpuMask;
+begin
+  mask := MaskFpu;
+  try
+    Result := RectApply(FView, RoamMatrix);
+  finally
+    UnmaskFpu(mask);
+  end;
 end;
 
 function TTyGeo.RoamPointerIn(AX, AY: Double): Boolean;
@@ -2902,6 +3092,7 @@ const
 
 var
   GGeoDefaults: TJSONObject = nil;
+  GMapDefaults: TJSONObject = nil;
 
 { GeoModel.defaultOption as far as a region's style and label read it }
 function GeoDefaults: TJSONObject;
@@ -2920,6 +3111,25 @@ begin
   Result := GGeoDefaults;
 end;
 
+{ [Batch 152] MapSeries.defaultOption as far as a region's style and label
+  read it: areaColor the background token, emphasis an areaColor, select a
+  color }
+function MapDefaults: TJSONObject;
+begin
+  if GMapDefaults = nil then
+    GMapDefaults := TJSONObject.Create([
+      'label', TJSONObject.Create(['show', False, 'color', cTok + 'label']),
+      'itemStyle', TJSONObject.Create(['borderWidth', 0.5,
+        'borderColor', cTok + 'border', 'areaColor', cTok + 'mapArea']),
+      'emphasis', TJSONObject.Create([
+        'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
+        'itemStyle', TJSONObject.Create(['areaColor', cTok + 'highlight'])]),
+      'select', TJSONObject.Create([
+        'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
+        'itemStyle', TJSONObject.Create(['color', cTok + 'highlight'])])]);
+  Result := GMapDefaults;
+end;
+
 function TokenOf(AData: TJSONData): TTyGeoToken;
 var s: string;
 begin
@@ -2932,7 +3142,8 @@ begin
   else if s = 'border' then Result := gtkBorder
   else if s = 'label' then Result := gtkLabel
   else if s = 'highlight' then Result := gtkHighlight
-  else if s = 'labelHighlight' then Result := gtkLabelHighlight;
+  else if s = 'labelHighlight' then Result := gtkLabelHighlight
+  else if s = 'mapArea' then Result := gtkMapArea;
 end;
 
 function InkOf(AToken: TTyGeoToken; const AInk: TTyGeoInk): TTyChartColor;
@@ -2943,6 +3154,7 @@ begin
     gtkLabel: Result := AInk.LabelColour;
     gtkHighlight: Result := AInk.HighlightFill;
     gtkLabelHighlight: Result := AInk.LabelHighlight;
+    gtkMapArea: Result := AInk.MapAreaFill;
   else
     Result := 0;
   end;
@@ -2963,8 +3175,10 @@ begin
   if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
 end;
 
-{ the geo's option merged over the defaults, read at a path }
-function GeoMergedGet(AGeoNode: TJSONObject; const APath: array of string): TJSONData;
+{ the geo's option merged over the defaults, read at a path [Batch 152: or
+  a map series' over MapSeries' defaults] }
+function GeoMergedGet(AGeoNode: TJSONObject; const APath: array of string;
+  AMapSeries: Boolean = False): TJSONData;
 var
   u, d, uv, dv: TJSONData;
   i: Integer;
@@ -2973,7 +3187,7 @@ begin
   Result := nil;
   u := AGeoNode;
   live := u <> nil;
-  d := GeoDefaults;
+  if AMapSeries then d := MapDefaults else d := GeoDefaults;
   for i := 0 to High(APath) do
   begin
     dv := nil;
@@ -2995,7 +3209,7 @@ begin
       end;
       { init's `option.itemStyle = option.itemStyle || (an empty object)`: a falsy
         itemStyle is a fresh object that takes the colour default only }
-      if (i = 0) and (APath[0] = 'itemStyle') and not Truthy(uv)
+      if not AMapSeries and (i = 0) and (APath[0] = 'itemStyle') and not Truthy(uv)
         and (High(APath) = 1) and (APath[1] = 'color') and (dv is TJSONObject) then
         Exit(TJSONObject(dv).Find('color'));
       Exit(nil);
@@ -3072,7 +3286,7 @@ begin
   AToken := gtkNone;
   Result := PathGet(ARegion, APath);
   if Result <> nil then Exit;
-  Result := GeoMergedGet(FNode, APath);
+  Result := GeoMergedGet(FChainNode, APath, FKind = gkMapSeries);
   if Result <> nil then
   begin
     AToken := TokenOf(Result);
@@ -3117,7 +3331,7 @@ end;
   (the normal one is fixed where the picture is made, after its label's
   rect). [Batch 148: GE1's normal reader, with the chain to the root.] }
 function PaintFor(AGeo: TTyGeo; ARegion: TJSONObject; AState: Integer;
-  const AInk: TTyGeoInk; AIsLine: Boolean): TTyGeoPaint;
+  const AInk: TTyGeoInk; AIsLine: Boolean; AGroup: Integer = -1): TTyGeoPaint;
 var
   d: TJSONData;
   tok: TTyGeoToken;
@@ -3137,9 +3351,10 @@ var
 begin
   Result := Default(TTyGeoPaint);
   Result.Opacity := 1;
-  { fill: areaColor over color (the colour a token default) }
+  { fill: areaColor over color (the colour a token default) -- [Batch 152]
+    a token areaColor (a map series' default) is an areaColor too }
   d := Get('areaColor');
-  if d = nil then d := Get('color');
+  if (d = nil) and (tok = gtkNone) then d := Get('color');
   if d <> nil then
   begin
     Result.FillHas := True;
@@ -3159,6 +3374,18 @@ begin
     Result.FillSrc := gisTheme;
     Result.FillToken := tok;
     Result.Fill := InkOf(tok, AInk);
+  end;
+  { [Batch 152] the data's visual over the normal fill: a visualMap's colour }
+  if (AState < 0) and AGeo.Data.Active and (AGroup >= 0)
+    and (AGroup <= High(AGeo.Data.Groups)) and AGeo.Data.Groups[AGroup].HasFill then
+  begin
+    Result.FillHas := True;
+    Result.FillSrc := gisOption;
+    Result.FillRaw := '';
+    Result.FillToken := gtkNone;
+    Result.FillInherit := False;
+    Result.Fill := AGeo.Data.Groups[AGroup].Fill;
+    Result.FillGradient := Default(TTyChartGradient);
   end;
   { stroke: borderColor }
   d := Get('borderColor');
@@ -3464,8 +3691,10 @@ end;
   whatever the state, else the normal text). [Batch 148: GE1's normal
   reader, with the chain to the root, and the states.] }
 function LabelFor(AGeo: TTyGeo; ARegion: TJSONObject; const AName: string;
-  const AInk: TTyGeoInk): TTyGeoLabel;
+  const AInk: TTyGeoInk; AGroup: Integer = -1): TTyGeoLabel;
 var
+  isMap: Boolean;
+  dg: TTyGeoDataGroup;
   d: TJSONData;
   tok: TTyGeoToken;
   g: TTyChartGradient;
@@ -3473,6 +3702,70 @@ var
   s: TTyStName;
   st: TTyGeoLabelState;
   c: TTyChartColor;
+
+  { [Batch 152] a map series' DataFormatMixin.getFormattedLabel(dataIndex,
+    status): the state's own formatter up the item's chain (the normal
+    one label.formatter, a state's its own), a '@' handler given the
+    params and the status, a string through formatTpl over
+    [seriesName, name, value] with each at-dimension reference the value
+    (the one dimension) -- no labelFetcher where the name has no data:
+    undefined }
+  function SeriesFormatted(const AStatus: string; out AText: string): Boolean;
+  var
+    f: TJSONData;
+    fmt: TTyChartFormatter;
+    params: TTyChartParams;
+    t: TTyGeoToken;
+    vars: array of TTyStringArray;
+    s, dim: string;
+    i, j: Integer;
+  begin
+    Result := False;
+    AText := '';
+    if dg.Row < 0 then Exit;
+    if AStatus = 'normal' then f := AGeo.Chain(ARegion, ['label', 'formatter'], t)
+    else f := AGeo.Chain(ARegion, [AStatus, 'label', 'formatter'], t);
+    if (f = nil) or (f.JSONType <> jtString) or (f.AsString = '') then Exit;
+    if f.AsString[1] = '@' then
+    begin
+      if not TyChartFindFormatter(Copy(f.AsString, 2, MaxInt), fmt) then Exit;
+      SetLength(params, 1);
+      params[0] := dg.Params;
+      params[0].Status := AStatus;
+      AText := fmt(params);
+      Exit(True);
+    end;
+    vars := nil;
+    SetLength(vars, 1);
+    SetLength(vars[0], 3);
+    vars[0][0] := dg.Params.SeriesName;
+    vars[0][1] := dg.Params.Name;
+    vars[0][2] := dg.Params.ValueText;
+    s := TyJsFormatTpl(f.AsString, 3, vars);
+    { DIMENSION_LABEL_REG: the value dimension by name or by [0], any other
+      name nothing }
+    AText := '';
+    i := 1;
+    while i <= Length(s) do
+    begin
+      if (s[i] = '{') and (i < Length(s)) and (s[i + 1] = '@') then
+      begin
+        j := i + 2;
+        while (j <= Length(s)) and (s[j] <> '}') do Inc(j);
+        if (j <= Length(s)) and (j > i + 2) then
+        begin
+          dim := Copy(s, i + 2, j - i - 2);
+          if (dim = 'value') or (dim = '[0]') or (dim = '[]') then
+            AText := AText + dg.Params.ValueText;
+          i := j + 1;
+          Continue;
+        end;
+      end;
+      AText := AText + s[i];
+      Inc(i);
+    end;
+    Result := True;
+  end;
 
   { getFormattedLabel(name, status): a '@' handler is a function given
     the name and the status; a string replaces its first a-placeholder; anything else is
@@ -3486,6 +3779,7 @@ var
   begin
     Result := False;
     AText := '';
+    if isMap then Exit(SeriesFormatted(AStatus, AText));
     if AStatus = 'normal' then f := AGeo.Chain(ARegion, ['label', 'formatter'], t)
     else f := AGeo.Chain(ARegion, ['emphasis', 'label', 'formatter'], t);
     if (f = nil) or (f.JSONType <> jtString) then Exit;
@@ -3516,6 +3810,10 @@ var
 
 begin
   Result := Default(TTyGeoLabel);
+  isMap := (AGeo.Kind = gkMapSeries) and AGeo.Data.Active and (AGroup >= 0)
+    and (AGroup <= High(AGeo.Data.Groups));
+  if isMap then dg := AGeo.Data.Groups[AGroup]
+  else dg := Default(TTyGeoDataGroup);
   Result.Shown := Truthy(Get('', 'show'));
   Result.Exists := Result.Shown;
   if not Formatted('normal', Result.Text) then Result.Text := AName;
@@ -3648,6 +3946,9 @@ begin
     end;
     Result.States[s] := st;
   end;
+  { [Batch 152] resetLabelForRegion's rule for a map series: no text at all
+    where the value is a number and a legend symbol stands on the region }
+  if isMap and not dg.LabelOn then Result.Exists := False;
 end;
 
 function TyGeoDrawOf(AGeo: TTyGeo; const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
@@ -3728,7 +4029,7 @@ var
     p := Default(TTyGeoDrawPath);
     p.IsLine := AIsLine;
     p.Subs := ASubs;
-    p.Paint := PaintFor(AGeo, ropt, -1, AInk, False);
+    p.Paint := PaintFor(AGeo, ropt, -1, AInk, False, gi);
     { [Batch 148] the three states' styles }
     for sn := Low(TTyStName) to High(TTyStName) do
       p.StatePaint[sn] := PaintFor(AGeo, ropt, Ord(sn), AInk, AIsLine);
@@ -3748,7 +4049,7 @@ var
       p.Rect.Y := p.Rect.Y - lw / 2;
     end;
     { the label }
-    p.Lbl := LabelFor(AGeo, ropt, region.Name, AInk);
+    p.Lbl := LabelFor(AGeo, ropt, region.Name, AInk, gi);
     if hasCentre then
     begin
       p.Lbl.HasPos := True;
@@ -3834,6 +4135,19 @@ begin
   Result := nil;
   if (FSource = nil) or (ARegionIndex < 0) or (ARegionIndex > High(FSource.Regions)) then Exit;
   nm := FSource.Regions[ARegionIndex].Name;
+  { [Batch 152] a map series' region model is its data item's (getItemModel
+    of the name's data index) }
+  if (FKind = gkMapSeries) and FSeriesData.Active then
+  begin
+    EnsureGroups;
+    for i := 0 to High(FGroupNames) do
+      if FGroupNames[i] = nm then
+      begin
+        if i <= High(FSeriesData.Groups) then Exit(FSeriesData.Groups[i].Opt);
+        Exit(nil);
+      end;
+    Exit;
+  end;
   { optionModelMap keeps a truthy name only: getRegionModel('') is a model
     of nothing }
   if nm = '' then Exit;
@@ -3922,6 +4236,11 @@ end;
 function TyGeoJsJson(AData: TJSONData): string;
 begin
   Result := JsJsonText(AData);
+end;
+
+procedure TyGeoMergeAbsent(ATarget, ASource: TJSONObject);
+begin
+  if (ATarget <> nil) and (ASource <> nil) then MergeAbsent(ATarget, ASource);
 end;
 
 function TTyGeo.GroupFocusSelf(AGroup: Integer): Boolean;
@@ -4036,7 +4355,8 @@ begin
     and (A.LabelColour = B.LabelColour) and (A.LabelFontName = B.LabelFontName)
     and (A.LabelFontSizeLogical = B.LabelFontSizeLogical)
     and (A.LabelFontWeight = B.LabelFontWeight)
-    and (A.HighlightFill = B.HighlightFill) and (A.LabelHighlight = B.LabelHighlight);
+    and (A.HighlightFill = B.HighlightFill) and (A.LabelHighlight = B.LabelHighlight)
+    and (A.MapAreaFill = B.MapAreaFill);
 end;
 
 function TTyGeo.Draw(const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
@@ -4219,6 +4539,20 @@ var
     end;
   end;
 
+  { [Batch 152] a group with a series' data is the item's graphic element
+    (setItemGraphicEl): the series' datum, the data index the name's }
+  function GroupDatum(AGroup: Integer): TTyChartDatumRef;
+  var r: Integer;
+  begin
+    if AGeo.Data.Active and (AGroup <= High(AGeo.Data.Groups)) then
+    begin
+      r := AGeo.Data.Groups[AGroup].Row;
+      Result := TyChartDatum(AGeo.Data.SeriesIndex, r);
+    end
+    else
+      Result := TyChartComponentDatum(ctkGeo, AGeo.Index, AGroup);
+  end;
+
   procedure AddCmd(AKind: TTyPathCmdKind; AX, AY: Double);
   begin
     if n >= Length(hit) then SetLength(hit, n * 2 + 16);
@@ -4303,7 +4637,7 @@ begin
           el.Z := AGeo.Spec.Z;
           el.Z2 := Round(c.Num[stkZ2]);
           el.Silent := silentGroup;
-          el.Datum := TyChartComponentDatum(ctkGeo, AGeo.Index, g);
+          el.Datum := GroupDatum(g);
           if dr.HasClip then
           begin
             el.HasClip := True;
@@ -4443,7 +4777,7 @@ begin
         el.Ignore := (c.Num[stkIgnore] <> 0) or (txt = '') or (w <= 0) or (h <= 0);
         { a text is silent on its own or under a silent host }
         el.Silent := p.Lbl.Silent or silentGroup;
-        el.Datum := TyChartComponentDatum(ctkGeo, AGeo.Index, g);
+        el.Datum := GroupDatum(g);
         if dr.HasClip then
         begin
           el.HasClip := True;
@@ -4462,4 +4796,5 @@ end;
 finalization
   TyChartClearMaps;
   FreeAndNil(GGeoDefaults);
+  FreeAndNil(GMapDefaults);
 end.

@@ -49,7 +49,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
-  tyControls.AdvChart.Geo,
+  tyControls.AdvChart.Geo, tyControls.AdvChart.HeatLayer,
   tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
   tyControls.AdvChart.Sankey,
   tyControls.AdvChart.Graph,
@@ -259,8 +259,43 @@ type
       of its tree a part with states of its own }
     sskCustom,
     { [Batch 128] a parallel row: its polyline, states read lineStyle }
-    sskParallel);
+    sskParallel,
+    { [Batch 152] a map series' region: the row's flags only -- the paths
+      and their states are the geo's (MapDraw), which takes the flags }
+    sskMap);
   TTyStNodeArray = array of TJSONObject;
+
+const
+  { [Batch 152] a roam host index past this is a map series group's geo }
+  cMapRoamBase = 1000000;
+
+type
+  { [Batch 152, D14 GE4] A MAP_SERIES_GROUP: the map series on one geo
+    component ('o' and its index) or of one `map` ('i' and the name) --
+    every one of them (R, raw order) and the ones the legend left (F); the
+    main one (F's first, -1: none) draws the map and holds the statistic }
+  TTyMapGroup = record
+    Key, MapType: string;
+    Own: Boolean;
+    HostGeo: Integer;
+    R, F: TTyIntegerArray;
+    Main: Integer;
+    { mapSymbolLayout: per F series, per raw row, the symbol's offset (-1:
+      none) }
+    SymOff: array of TTyIntegerArray;
+  end;
+  { the centre and zoom a geoRoam wrote back into a group's series }
+  TTyMapRoam = record
+    Key: string;
+    State: TTyGraphRoamState;
+  end;
+  { where the last build put a map picture (Geo a TTyGeo) or a series'
+    legend symbols (Geo nil) }
+  TTyGeoDrawRange = record
+    Geo: TObject;
+    Series, Start, Count: Integer;
+  end;
+
   TTyStSeries = record
     Kind: TTyStKind;
     IsLine: Boolean;
@@ -603,6 +638,20 @@ type
       lives; and how many geos the last geoRoam moved }
     FGeoRoam: array of TTyGraphRoamState;
     FGeoRoamHits: Integer;
+    { [Batch 152, D14 GE4] the map series: their groups, each slot's group,
+      the original data of a series whose data is now the group's
+      statistic (owned), the groups' own geos (nil for one on a geo
+      component), the roam written back into a group's series, and where
+      the last build put each map picture and each series' legend symbols }
+    FMapGroups: array of TTyMapGroup;
+    FMapGroupOf: TTyIntegerArray;
+    FMapOrig: array of TTyDataStore;
+    FMapGeos: array of TTyGeo;
+    FMapRoam: array of TTyMapRoam;
+    FGeoDraws: array of TTyGeoDrawRange;
+    FMapSyms: array of TTyGeoDrawRange;
+    { a heatmap on a geo's layer, per slot, as the last build made it }
+    FHeatLayers: array of TTyHeatLayer;
     { THE TREES, laid out per slot -- an empty record where the slot is no
       tree. [Batch 73] }
     FTrees: array of TTyTreeSolved;
@@ -2046,6 +2095,10 @@ type
       a geo wins a tie); the geoRoam action; a gesture's payload; the drag's
       step (zrender's zr-level mousemove); a merge over a written-back roam }
     function GeoRoamPick(AX, AY: Integer; AZoom: Boolean): Integer;
+    { [Batch 152] a roam host index's geo (a map group's past cMapRoamBase) }
+    function RoamGeoOf(AIndex: Integer): TTyGeo;
+    { the geoRoam action on the map series it queries (needsDrawMap) }
+    procedure DoMapRoamAction(APayload: TJSONObject; var AReached: Boolean);
     function GeoIrrelevant(AGeo, AX, AY: Integer): Boolean;
     function RoamTargetAt(AX, AY: Integer; AZoom: Boolean; out AGeo: Integer): Integer;
     function DoGeoRoamAction(APayload: TJSONObject): Boolean;
@@ -2055,6 +2108,75 @@ type
     procedure GeoPatchList(AGeo: Integer);
     procedure MergeGeoRoam(var AState: TTyGraphRoamState; AIndex: Integer;
       ANew: TJSONObject);
+    { ==== [Batch 152, D14 GE4] the series on a geo and the map series ==== }
+    { the geo a series is on: a geo component, or a map series' own (nil:
+      none, or not laid out) }
+    function GeoOfSlot(ASlot: Integer): TTyGeo;
+    { layout/points.ts on a geo: dataToPoint([lng, lat]) per view row, NaN
+      where none -- and where a clipping geo's area (its view rect grown by
+      0.1, not roamed) leaves the point out of a series that clips }
+    function GeoSeriesPoints(ASlot: Integer): TTyPointFArray;
+    { a coordinate of a geo as an option writes it: a region name, or a pair
+      through JS ToNumber }
+    function GeoPointOfJson(AGeo: TTyGeo; AValue: TJSONData; out APt: TTyPointF): Boolean;
+    { a pie on a geo: createBoxLayoutReference by point -- the box against
+      the chart, the centre the geo's dataToPoint of `coord`, else of
+      `center` }
+    function GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+    { something besides the geo's own picture moves with a roam of AGeo:
+      a series on it; any custom series (renderItem runs again) }
+    function GeoRoamHasDependents(AGeo: TTyGeo): Boolean;
+    { HeatmapView._renderOnGeo: the layer, as an image element }
+    function BuildGeoHeatmap(ASlot: Integer; AList: TTyPaintList): Integer;
+    { a scatter on a geo as the brush selects it: each row's point }
+    function GeoBrushLayouts(ASlot: Integer): TTyBrushItemLayoutArray;
+    { coordConvert through a brush target, a grid's or a geo's }
+    function BrushConvertOn(const ATarget: TTyBrushTarget; AIndex: Integer;
+      AType: TTyBrushType; AToData: Boolean; const AView: TTyBrushView;
+      const ARange: TTyBrushRange; AClamp: Boolean; out AValues, AXYMinMax: TTyBrushRange): Boolean;
+    { a lines series' coordinate pair on its geo }
+    function GeoLinesPoint(const AX, AY: TTyLinesValue): TTyPointF;
+    { a graph on a geo: every node at the geo's dataToPoint of its value's
+      first two numbers (simpleLayout; NaN where either is none), then the
+      edges }
+    function GeoGraphPoints(ASeriesIndex: Integer; AGeo: TTyGeo): TTyPointFArray;
+    procedure SolveGeoGraph(ASlot: Integer);
+    { updateTransform's series: every layout a geo's view feeds, again }
+    procedure GeoDependentsRelayout;
+    { ---- the map series ---- }
+    { getMapType: the host geo's `map`, else the series' own }
+    function MapTypeOf(ASlot: Integer): string;
+    { MapSeries.getInitialData: the value column, then a row for every region
+      of the series' map its data does not name }
+    procedure MapFillStore(ASlot: Integer; AStore: TTyDataStore);
+    { buildAllMapSeriesGroups and mapDataStatistic, after the legend filter }
+    procedure SolveMapSeries;
+    { the groups' own geos and the data a geo draws with (after the visual
+      maps); mapSymbolLayout's offsets }
+    procedure SolveMapGeos(APPI: Integer);
+    function GeoDataOf(AGeo: TTyGeo; ASlot: Integer; AMap: Boolean): TTyGeoData;
+    function MapOrigStore(ASlot: Integer): TTyDataStore;
+    { the geo a map series draws with (its group's own, or the hosting geo
+      component), nil: none }
+    function MapGeoOfSlot(ASlot: Integer): TTyGeo;
+    { a map series' view: the main series draws its group's map, every one
+      its legend symbols }
+    function BuildMapSeries(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
+      APPI: Integer; AList: TTyPaintList): Integer;
+    function BuildMapSymbols(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
+      APPI: Integer; AList: TTyPaintList): Integer;
+    { the region groups' flags from the series' rows (setItemGraphicEl: the
+      group is the item); True when one changed }
+    function GeoSyncFromRows(AGeo: TTyGeo): Boolean;
+    { after the states' sync of a build, and in a frame: a map picture whose
+      flags moved takes its states again, its elements in place }
+    procedure MapRepatch(APPI: Integer);
+    function MapApplyChanged: Boolean;
+    { MapSeries.formatTooltip }
+    function MapTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
+    { createLegacyDataSelectAction: pieToggleSelect, mapSelect ... as the
+      select action over the series of the type the query finds }
+    procedure DoLegacySelect(APayload: TJSONObject; const ASeriesType, AType: string);
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
@@ -3441,6 +3563,15 @@ type
       control and gone at the next layout. [Batch 146] }
     function GeoCount: Integer;
     function GeoLayout(AIndex: Integer): TTyGeo;
+    { [Batch 152] the geo map series ASeriesIndex is on (its group's own or
+      the geo component hosting it), nil: none; where the last build put a
+      geo's map picture, and a map series' legend symbols (a circle, and
+      after it its label where it has one) }
+    function MapGeoOf(ASeriesIndex: Integer): TTyGeo;
+    { [Batch 152] a heatmap on a geo's layer as the last build made it }
+    function GeoHeatLayer(ASeriesIndex: Integer; out ALayer: TTyHeatLayer): Boolean;
+    function GeoDrawRange(AGeo: TTyGeo; out AStart, ACount: Integer): Boolean;
+    function MapSymbolRange(ASeriesIndex: Integer; out AStart, ACount: Integer): Boolean;
     { [Batch 148] whether geo AIndex's model holds region AName selected
       (GeoModel.isSelected over option.selectedMap) }
     function GeoSelected(AIndex: Integer; const AName: string): Boolean;
@@ -3957,6 +4088,9 @@ begin
   for i := 0 to High(FStores) do
     FStores[i].Free;
   FStores := nil;
+  { [Batch 152] a map series' own data, its store the statistic }
+  for i := 0 to High(FMapOrig) do FMapOrig[i].Free;
+  FMapOrig := nil;
   FBarCols := nil;
   FPolarBars := nil;
   FRivers := nil;
@@ -4225,8 +4359,10 @@ begin
   FSel := nil;
   { new geo models: optionUpdated makes their selectedMap again [Batch 148] }
   FreeGeoSel;
-  { and hold no written-back roam; a drag ends [Batch 150] }
+  { and hold no written-back roam; a drag ends [Batch 150] -- the map
+    series' too [Batch 152] }
   FGeoRoam := nil;
+  FMapRoam := nil;
   FRoamGeo := -1;
   { AND WHAT THE POINTER IS OVER IS A REMOVED ELEMENT: the next move finds a
     new one there -- an out to the old, an over to the new, as zrender's
@@ -5137,6 +5273,13 @@ begin
           FBindings[i].SeriesType <> TyTreeSeriesTypeName);
         Continue;
       end;
+      { A MAP SERIES: a value per region name, and a row for every region
+        its data leaves out [Batch 152, D14 GE4] }
+      if FBindings[i].SeriesType = TyMapSeriesTypeName then
+      begin
+        MapFillStore(i, st);
+        Continue;
+      end;
       { ON A CALENDAR: the calendar's two dimensions, a time and a value --
         element 0 of the row is the date and element 1 the value, and any
         more are raw positions the store keeps for the label and the
@@ -5153,6 +5296,34 @@ begin
         dims[1] := Default(TTySeriesDim);
         dims[1].Name := TyCalendarValueDim;
         dims[1].Kind := ddtFloat;
+        TyFillSeriesStore(FOption, i, dims, st);
+        Continue;
+      end;
+      { ON A GEO: the geo's two dimensions, lng and lat -- elements 0 and 1
+        of the row; any more are raw positions the store keeps (a heatmap's
+        value, a visualMap's dimension) [Batch 152, D14 GE4] }
+      if (FBindings[i].GeoIndex >= 0)
+        and (FBindings[i].SeriesType <> TyPieSeriesTypeName)
+        and (FBindings[i].SeriesType <> TyMapSeriesTypeName) then
+      begin
+        st.AddDimension(TyGeoLngDim, ddtFloat);
+        st.AddDimension(TyGeoLatDim, ddtFloat);
+        SetLength(dims, 2);
+        dims[0] := Default(TTySeriesDim);
+        dims[0].Name := TyGeoLngDim;
+        dims[0].Kind := ddtFloat;
+        dims[1] := Default(TTySeriesDim);
+        dims[1].Name := TyGeoLatDim;
+        dims[1].Kind := ddtFloat;
+        { a heatmap's third: its value (HeatmapView's mapDimension('value')) }
+        if FBindings[i].SeriesType = 'heatmap' then
+        begin
+          st.AddDimension(TyPieValueDim, ddtFloat);
+          SetLength(dims, 3);
+          dims[2] := Default(TTySeriesDim);
+          dims[2].Name := TyPieValueDim;
+          dims[2].Kind := ddtFloat;
+        end;
         TyFillSeriesStore(FOption, i, dims, st);
         Continue;
       end;
@@ -5311,6 +5482,9 @@ begin
     none of it has to wait for Relayout. }
   SolveLegendData;
   ApplyLegendFilter;
+  { THE MAP SERIES' STATISTIC (PRIORITY.PROCESSOR.STATISTIC), over the series
+    the filter left, before the visual stage [Batch 152] }
+  SolveMapSeries;
   { AFTER the filter, because a graph the legend switched off takes no slot of
     the shared category palette -- upstream's categoryVisual walks only the
     series the filter kept. }
@@ -10356,6 +10530,12 @@ begin
       FPies[i] := CalendarPieLayout(i, dim);
       Continue;
     end;
+    { ON A GEO [Batch 152, D14 GE4] }
+    if FBindings[i].GeoIndex >= 0 then
+    begin
+      FPies[i] := GeoPieLayout(i, dim);
+      Continue;
+    end;
     FPies[i] := TyPieLayoutOf(FPieSpecs[i], FLastRect, FStores[i], dim);
   end;
 end;
@@ -10466,6 +10646,10 @@ var i: Integer;
 begin
   for i := 0 to High(FGeos) do FreeAndNil(FGeos[i]);
   FGeos := nil;
+  for i := 0 to High(FMapGeos) do FreeAndNil(FMapGeos[i]);
+  FMapGeos := nil;
+  FGeoDraws := nil;
+  FMapSyms := nil;
 end;
 
 procedure TTyAdvanceChart.SolveGeos(APPI: Integer);
@@ -10474,11 +10658,10 @@ begin
   FreeGeos;
   n := 0;
   if FOption <> nil then n := FOption.ComponentCount('geo');
-  if n = 0 then Exit;
-  SetLength(FGeos, n);
   { [Batch 148] a render makes new region elements: a hover found on the
     last ones is stale }
   Inc(FGeoGen);
+  SetLength(FGeos, n);
   for i := 0 to n - 1 do
   begin
     FGeos[i] := TTyGeo.Create(FOption, i);
@@ -10490,6 +10673,8 @@ begin
     { GeoView.render's updateSelectStatus }
     GeoSyncSelected(i);
   end;
+  { [Batch 152] the map series' geos and the data drawn with them }
+  SolveMapGeos(APPI);
 end;
 
 { THE GEO'S INK: the area and its rim from the skin's geo keys, the labels
@@ -10515,6 +10700,9 @@ begin
   Result.HighlightFill := TTyChartColor(st.Background.Color);
   st := model.ResolveStyle('TyAdvChartGeoLabel', '', [tysHover]);
   Result.LabelHighlight := TTyChartColor(st.TextColor);
+  { [Batch 152] a map series' area: upstream's background token }
+  st := model.ResolveStyle('TyAdvChartMapArea', '', []);
+  Result.MapAreaFill := TTyChartColor(st.Background.Color);
 end;
 
 { ==================== the geo regions' interaction [Batch 148] ====================
@@ -10568,12 +10756,16 @@ begin
   end
   else if (el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0) then
   begin
-    { a series on a coordinate system (none here is the geo's: GE4) }
+    { a series on a coordinate system; one on this very geo has the geo
+      for its coordinate system's model [Batch 152] }
     si := el.Datum.SeriesIndex;
     slot := SlotOfSeries(si);
     if (slot < 0) or (slot > High(FBindings)) then Exit;
+    if (FBindings[slot].GeoIndex = AGeo)
+      and (FBindings[slot].SeriesType <> TyMapSeriesTypeName) then Exit;
     hasCoord := (FBindings[slot].Cart <> nil) or (FBindings[slot].Polar <> nil)
-      or (FBindings[slot].CalendarIndex >= 0)
+      or (FBindings[slot].CalendarIndex >= 0) or (FBindings[slot].GeoIndex >= 0)
+      or (FBindings[slot].SeriesType = TyMapSeriesTypeName)
       or (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
       or (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
       or (FBindings[slot].SeriesType = 'radar');
@@ -10590,6 +10782,18 @@ begin
   Result := diff > 0;
 end;
 
+{ [Batch 152] the geo a roam host index names: a geo component's, or past
+  cMapRoamBase a map series group's own }
+function TTyAdvanceChart.RoamGeoOf(AIndex: Integer): TTyGeo;
+begin
+  Result := nil;
+  if AIndex >= cMapRoamBase then
+  begin
+    if AIndex - cMapRoamBase <= High(FMapGeos) then Result := FMapGeos[AIndex - cMapRoamBase];
+  end
+  else if (AIndex >= 0) and (AIndex <= High(FGeos)) then Result := FGeos[AIndex];
+end;
+
 function TTyAdvanceChart.GeoRoamPick(AX, AY: Integer; AZoom: Boolean): Integer;
 var
   i: Integer;
@@ -10598,21 +10802,32 @@ var
 begin
   Result := -1;
   if csDesigning in ComponentState then Exit;
-  for i := 0 to High(FGeos) do
+  for i := 0 to High(FGeos) + Length(FMapGeos) do
   begin
-    g := FGeos[i];
+    if i <= High(FGeos) then g := FGeos[i]
+    else
+    begin
+      { a map series' own MapDraw: a group's main series draws it [Batch 152] }
+      if (i - Length(FGeos) > High(FMapGroups))
+        or (FMapGroups[i - Length(FGeos)].Main < 0) then Continue;
+      g := FMapGeos[i - Length(FGeos)];
+    end;
     { a geo that draws nothing has no MapDraw, so no controller }
     if (g = nil) or not g.Valid or not g.Spec.Show then Continue;
     if AZoom then ok := g.Spec.Roam in [grmZoom, grmBoth]
     else ok := g.Spec.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not g.RoamPointerIn(AX, AY) then Continue;
-    if GeoIrrelevant(i, AX, AY) then Continue;
+    if (i <= High(FGeos)) and GeoIrrelevant(i, AX, AY) then Continue;
     { HIGHER zlevel, THEN HIGHER z; a tie to the first (z2 -Infinity on
       both sides makes the comparison NaN: the one added later goes after) }
-    if (Result < 0) or (g.Spec.ZLevel > FGeos[Result].Spec.ZLevel)
-      or ((g.Spec.ZLevel = FGeos[Result].Spec.ZLevel) and (g.Spec.Z > FGeos[Result].Spec.Z)) then
-      Result := i;
+    if (Result < 0) or (g.Spec.ZLevel > RoamGeoOf(Result).Spec.ZLevel)
+      or ((g.Spec.ZLevel = RoamGeoOf(Result).Spec.ZLevel)
+        and (g.Spec.Z > RoamGeoOf(Result).Spec.Z)) then
+    begin
+      if i <= High(FGeos) then Result := i
+      else Result := cMapRoamBase + i - Length(FGeos);
+    end;
   end;
 end;
 
@@ -10626,8 +10841,8 @@ begin
   if gi < 0 then Exit;
   { the components render before the series: on a tie the geo's listener
     is the earlier one }
-  if (Result < 0) or (FGeos[gi].Spec.ZLevel > szl)
-    or ((FGeos[gi].Spec.ZLevel = szl) and (FGeos[gi].Spec.Z >= sz)) then
+  if (Result < 0) or (RoamGeoOf(gi).Spec.ZLevel > szl)
+    or ((RoamGeoOf(gi).Spec.ZLevel = szl) and (RoamGeoOf(gi).Spec.Z >= sz)) then
   begin
     AGeo := gi;
     Result := -1;
@@ -10640,9 +10855,37 @@ end;
   (geoBackwardCompat) and the geo's id }
 procedure TTyAdvanceChart.GeoGesture(AGeo: Integer; AHasPan: Boolean; ADX, ADY: Double;
   AHasZoom: Boolean; AScale, AOriginX, AOriginY: Double);
-var p, anim: TJSONObject;
+var p, anim: TJSONObject; g: Integer;
 begin
-  if (FOption = nil) or (AGeo < 0) or (AGeo >= FOption.ComponentCount('geo')) then Exit;
+  if FOption = nil then Exit;
+  { a map series' own controller: componentType 'series' and its id
+    [Batch 152] }
+  if AGeo >= cMapRoamBase then
+  begin
+    g := AGeo - cMapRoamBase;
+    if (g > High(FMapGroups)) or (FMapGroups[g].Main < 0) then Exit;
+    p := TJSONObject.Create;
+    p.Add('type', 'geoRoam');
+    if AHasPan then
+    begin
+      p.Add('dx', ADX);
+      p.Add('dy', ADY);
+    end;
+    if AHasZoom then
+    begin
+      p.Add('zoom', AScale);
+      p.Add('originX', AOriginX);
+      p.Add('originY', AOriginY);
+    end;
+    anim := TJSONObject.Create;
+    anim.Add('duration', 0);
+    p.Add('animation', anim);
+    p.Add('componentType', 'series');
+    p.Add('seriesId', FOption.ComponentId('series', FBindings[FMapGroups[g].Main].SeriesIndex));
+    DispatchActionObject(p);
+    Exit;
+  end;
+  if (AGeo < 0) or (AGeo >= FOption.ComponentCount('geo')) then Exit;
   p := TJSONObject.Create;
   p.Add('type', 'geoRoam');
   if AHasPan then
@@ -10681,7 +10924,8 @@ begin
 end;
 
 { the geoRoam action: the main type is the payload's componentType, else
-  'geo' where a geo key is written, else the map series' (GE4: none here);
+  'geo' where a geo key is written, else the map series' ([Batch 152] the
+  map series' own geos: DoMapRoamAction);
   each queried geo is synced back and laid out again from what that wrote
   (ownRoamModelCoordSysUpdateInAction), and its view moves without a
   rebuild (ownRoamViewUpdateDirectlyInAction, which also gives the
@@ -10693,7 +10937,7 @@ var
   mainType: string;
   geos: TTyIntegerArray;
   k, gi, n: Integer;
-  hasPan, hasZoom, reached, ok: Boolean;
+  hasPan, hasZoom, reached, ok, dep: Boolean;
   dx, dy, z, ox, oy, zw: Double;
   c: TTyGraphCentre;
   ev, anim: TJSONObject;
@@ -10721,6 +10965,8 @@ begin
   if JsTruthy(ct) then mainType := TyJsonJsString(ct)
   else if Written('geoId') or Written('geoName') or Written('geoIndex') then mainType := 'geo'
   else mainType := 'series';
+  { the map series' own geos [Batch 152] }
+  if (mainType = 'series') and (FOption <> nil) then DoMapRoamAction(APayload, reached);
   if (mainType = 'geo') and (FOption <> nil) then
   begin
     hasPan := Num('dx', dx) and Num('dy', dy);
@@ -10757,6 +11003,22 @@ begin
     for k := 0 to High(geos) do
       if (geos[k] >= 0) and (geos[k] <= High(FGeos)) and (FGeos[geos[k]] <> nil) then
         GeoPatchList(geos[k]);
+    { updateTransform [Batch 152, D14 GE4]: a series on a moved geo is laid
+      out again (scatter, effectScatter and lines in place; the rest
+      rendered again, renderItem too), and the list built anew -- the
+      records of the states stay, as upstream's elements keep theirs }
+    dep := False;
+    for k := 0 to High(geos) do
+      if (geos[k] >= 0) and (geos[k] <= High(FGeos)) and (FGeos[geos[k]] <> nil)
+        and GeoRoamHasDependents(FGeos[geos[k]]) then dep := True;
+    if dep then
+    begin
+      GeoDependentsRelayout;
+      DropStatic;
+      { at once, as upstream renders in the dispatch: the next pointer
+        event finds the series where the roam put them }
+      if FLastPPI > 0 then BuildSeriesList(NewTextMeasurer(FLastPPI), FLastPPI);
+    end;
     StaticDrop;
     FProgReuse := False;
     inherited Invalidate;
@@ -10783,6 +11045,85 @@ end;
 { the geo's elements of the standing list built again on its kept picture
   (no states applied: the frame does that) and put back where they stand;
   a list that cannot take them is dropped }
+procedure TTyAdvanceChart.DoMapRoamAction(APayload: TJSONObject; var AReached: Boolean);
+var
+  idx: TTyIntegerArray;
+  k, slot, g, r, si, raw: Integer;
+  hasPan, hasZoom, ok, own, moved: Boolean;
+  dx, dy, z, ox, oy, zw: Double;
+  c: TTyGraphCentre;
+  ct, sid: TJSONData;
+
+  function Num(const AKey: string; out AV: Double): Boolean;
+  var x: TJSONData;
+  begin
+    x := APayload.Find(AKey);
+    Result := (x <> nil) and (x.JSONType = jtNumber);
+    if Result then AV := x.AsFloat else AV := NaN;
+  end;
+
+begin
+  hasPan := Num('dx', dx) and Num('dy', dy);
+  hasZoom := Num('zoom', z);
+  Num('originX', ox);
+  Num('originY', oy);
+  ok := not (hasZoom and (IsNan(z) or IsInfinite(z) or (z <= 0)
+    or IsNan(ox) or IsInfinite(ox) or IsNan(oy) or IsInfinite(oy)));
+  moved := False;
+  { makeQueryConditionKindA over the map series, those that draw the map }
+  idx := MatchSeries(APayload);
+  for k := 0 to High(idx) do
+  begin
+    slot := SlotOfSeries(idx[k]);
+    if (slot < 0) or (FBindings[slot].SeriesType <> TyMapSeriesTypeName) then Continue;
+    if (slot > High(FMapGroupOf)) or (FMapGroupOf[slot] < 0) then Continue;
+    g := FMapGroupOf[slot];
+    if not FMapGroups[g].Own or (FMapGroups[g].Main <> slot) then Continue;
+    if (g > High(FMapGeos)) or (FMapGeos[g] = nil) then Continue;
+    AReached := True;
+    if not ok then Continue;
+    if not FMapGeos[g].RoamBy(hasPan, dx, dy, hasZoom, z, ox, oy, c, zw) then Continue;
+    { the write-back, synced over the group's series }
+    r := -1;
+    for si := 0 to High(FMapRoam) do
+      if FMapRoam[si].Key = FMapGroups[g].Key then r := si;
+    if r < 0 then
+    begin
+      r := Length(FMapRoam);
+      SetLength(FMapRoam, r + 1);
+      FMapRoam[r].Key := FMapGroups[g].Key;
+    end;
+    FMapRoam[r].State.Valid := True;
+    FMapRoam[r].State.Centre := c;
+    FMapRoam[r].State.Zoom := zw;
+    moved := True;
+    { MapView.render: a roam that is not the series' own (componentType
+      'series' and its id) draws the map again -- new region groups, no
+      hover }
+    ct := APayload.Find('componentType');
+    sid := APayload.Find('seriesId');
+    own := (ct <> nil) and (ct.JSONType = jtString) and (ct.AsString = 'series')
+      and (sid <> nil) and (sid.JSONType in [jtString, jtNumber])
+      and (sid.AsString = FOption.ComponentId('series', FBindings[slot].SeriesIndex));
+    if not own and (FBindings[slot].SeriesIndex <= High(FSt)) then
+      for raw := 0 to High(FSt[FBindings[slot].SeriesIndex].Rows) do
+      begin
+        FSt[FBindings[slot].SeriesIndex].Rows[raw].Host.HoverState := TyStHoverNormal;
+        FSt[FBindings[slot].SeriesIndex].Rows[raw].Host.HighByOuter := 0;
+      end;
+  end;
+  if moved then
+  begin
+    GeoDependentsRelayout;
+    DropStatic;
+    FStDirty := True;
+    if FLastPPI > 0 then BuildSeriesList(NewTextMeasurer(FLastPPI), FLastPPI);
+    StaticDrop;
+    FProgReuse := False;
+    inherited Invalidate;
+  end;
+end;
+
 procedure TTyAdvanceChart.GeoPatchList(AGeo: Integer);
 var
   tmp: TTyPaintList;
@@ -10820,6 +11161,1321 @@ begin
   finally
     tmp.Free;
   end;
+end;
+
+{ ==================== [Batch 152, D14 GE4] series on a geo ====================
+
+  A series on a geo is laid out through the geo's dataToPoint -- the projection
+  and the overall matrix, the roam in it -- so its points move with every roam
+  (updateTransform). Upstream lays a scatter, an effectScatter and the lines
+  out again in place and renders every other series again; here the solvers a
+  geo's view feeds run again and the list is built anew, the state records
+  kept (renderSeries' clearStates and the prevStates it restores). }
+
+{ the FPU's traps masked over a stretch that meets NaN (a point off the
+  map), and the flags the stretch left cleared again }
+function GeoMaskFpu: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure GeoUnmaskFpu(const AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+function TTyAdvanceChart.GeoOfSlot(ASlot: Integer): TTyGeo;
+var gi: Integer;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  gi := FBindings[ASlot].GeoIndex;
+  if (gi >= 0) and (gi <= High(FGeos)) then Result := FGeos[gi];
+  if (Result <> nil) and not Result.Valid then Result := nil;
+end;
+
+function TTyAdvanceChart.GeoSeriesPoints(ASlot: Integer): TTyPointFArray;
+var
+  geo: TTyGeo;
+  st: TTyDataStore;
+  i, cx, cy: Integer;
+  p: TTyPointF;
+  clip: Boolean;
+  r: TTyXYWH;
+  tol: Double;
+  node, d: TJSONData;
+  mask: TFPUExceptionMask;
+begin
+  Result := nil;
+  geo := GeoOfSlot(ASlot);
+  if (geo = nil) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  cx := st.DimIndexOf(TyGeoLngDim);
+  cy := st.DimIndexOf(TyGeoLatDim);
+  SetLength(Result, st.Count);
+  { createCoordSysClipAreaSimply: the series' own clip (true by default for
+    a scatter and an effectScatter) and the geo's shouldClip, the area the
+    view rect grown by 0.1 }
+  clip := True;
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('clip');
+    if d <> nil then clip := JsTruthy(d);
+  end;
+  clip := clip and geo.Spec.Clip;
+  r := geo.ViewRect;
+  tol := 0.1 * FLastPPI / 96;
+  mask := GeoMaskFpu;
+  try
+    for i := 0 to st.Count - 1 do
+    begin
+      Result[i].X := NaN;
+      Result[i].Y := NaN;
+      if (cx < 0) or (cy < 0) then Continue;
+      if not geo.PointOf(st.Get(cx, i), st.Get(cy, i), p) then Continue;
+      if IsNan(p.X) or IsNan(p.Y) then Continue;
+      { BoundingRect.contain, both edges in }
+      if clip and not ((p.X >= r.X - tol) and (p.X <= r.X - tol + (r.W + 2 * tol))
+        and (p.Y >= r.Y - tol) and (p.Y <= r.Y - tol + (r.H + 2 * tol))) then Continue;
+      Result[i] := p;
+    end;
+  finally
+    GeoUnmaskFpu(mask);
+  end;
+end;
+
+function TTyAdvanceChart.BuildGeoHeatmap(ASlot: Integer; AList: TTyPaintList): Integer;
+var
+  geo: TTyGeo;
+  st: TTyDataStore;
+  si, k, vm, i, cx, cy, cv, n, pIdx, z: Integer;
+  node, d: TJSONData;
+  sid, key: string;
+  spec: TTyVisualMapSpec;
+  pointSize, blurSize, minOp, maxOp, scale, x, y, x2, y2, w, h, val, al, cw, ch: Double;
+  rr: TTyXYWH;
+  pts: TTyHeatPointArray;
+  p: TTyPointF;
+  gin, gout: TTyHeatGradient;
+  rng: TTyHeatRange;
+  lay: TTyHeatLayer;
+  lo, hi: array of Double;
+  sel: array of Boolean;
+  bmp: TBGRABitmap;
+  px: PBGRAPixel;
+  el: TTyChartElement;
+  hash: QWord;
+  mask: TFPUExceptionMask;
+
+  function Num(const AKey: string; ADefault: Double): Double;
+  var x0: TJSONData;
+  begin
+    Result := ADefault;
+    if not (node is TJSONObject) then Exit;
+    x0 := TJSONObject(node).Find(AKey);
+    if (x0 <> nil) and (x0.JSONType = jtNumber) then Result := x0.AsFloat;
+  end;
+
+  function ColorsOf(AState: TTyVisualState): TTyVisualColorArray;
+  var q: Integer;
+  begin
+    Result := nil;
+    for q := 0 to High(spec.States[AState]) do
+      if spec.States[AState][q].Kind = 'color' then Exit(spec.States[AState][q].Colors);
+  end;
+
+begin
+  Result := 0;
+  if Length(FHeatLayers) < Length(FBindings) then SetLength(FHeatLayers, Length(FBindings));
+  FHeatLayers[ASlot] := Default(TTyHeatLayer);
+  geo := GeoOfSlot(ASlot);
+  if (geo = nil) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  si := FBindings[ASlot].SeriesIndex;
+  node := FOption.ComponentAt('series', si);
+  { the visualMap of the series: the last one targeting it (upstream throws
+    without one) }
+  sid := '';
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('id');
+    if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then sid := d.AsString;
+  end;
+  vm := -1;
+  for k := 0 to High(FVisualSpecs) do
+    if TyVisualMapTargets(FVisualSpecs[k], si, sid) then vm := k;
+  if vm < 0 then Exit;
+  spec := FVisualSpecs[vm];
+  pointSize := Num('pointSize', 20);
+  blurSize := Num('blurSize', 30);
+  minOp := Num('minOpacity', 0);
+  maxOp := Num('maxOpacity', 1);
+  if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
+  lay := Default(TTyHeatLayer);
+  mask := GeoMaskFpu;
+  try
+    { the view rect through the roam, on the viewport, in CSS px }
+    rr := geo.RoamViewRect;
+    cw := (FLastRect.Right - FLastRect.Left) / scale;
+    ch := (FLastRect.Bottom - FLastRect.Top) / scale;
+    x := Max(rr.X / scale, 0);
+    y := Max(rr.Y / scale, 0);
+    x2 := Min(rr.W / scale + rr.X / scale, cw);
+    y2 := Min(rr.H / scale + rr.Y / scale, ch);
+    w := x2 - x;
+    h := y2 - y;
+    cx := st.DimIndexOf(TyGeoLngDim);
+    cy := st.DimIndexOf(TyGeoLatDim);
+    cv := st.DimIndexOf(TyPieValueDim);
+    SetLength(pts, st.Count);
+    for i := 0 to st.Count - 1 do
+    begin
+      pts[i].X := NaN;
+      pts[i].Y := NaN;
+      pts[i].Alpha := NaN;
+      if (cx < 0) or (cy < 0) or (cv < 0) then Continue;
+      if geo.PointOf(st.Get(cx, i), st.Get(cy, i), p) then
+      begin
+        pts[i].X := p.X / scale - x;
+        pts[i].Y := p.Y / scale - y;
+      end;
+      { the in-range colour's normalizer: linear over the extent, or the
+        piece index over the pieces }
+      val := st.Get(cv, i);
+      if spec.SubType = 'piecewise' then
+      begin
+        pIdx := TyVisualFindPiece(spec.Pieces, val, TyJsNumberToString(val), True);
+        if pIdx >= 0 then al := TyVmLinearMap(pIdx, 0, Length(spec.Pieces) - 1, 0, 1, True)
+        else al := NaN;
+      end
+      else
+        al := TyVmLinearMap(val, spec.Extent0, spec.Extent1, 0, 1, True);
+      pts[i].Alpha := al;
+    end;
+    lay.Valid := True;
+    lay.X := x;
+    lay.Y := y;
+    lay.W := w;
+    lay.H := h;
+    { the canvas' width and height attributes: whole pixels }
+    if w > 0 then lay.PixW := Trunc(w) else lay.PixW := 0;
+    if h > 0 then lay.PixH := Trunc(h) else lay.PixH := 0;
+    SetLength(lay.DrawX, Length(pts));
+    SetLength(lay.DrawY, Length(pts));
+    SetLength(lay.DrawAlpha, Length(pts));
+    for i := 0 to High(pts) do
+    begin
+      lay.DrawX[i] := pts[i].X - (pointSize + blurSize);
+      lay.DrawY[i] := pts[i].Y - (pointSize + blurSize);
+      lay.DrawAlpha[i] := pts[i].Alpha;
+    end;
+    gin := TyHeatGradientOf(ColorsOf(tvsInRange));
+    gout := TyHeatGradientOf(ColorsOf(tvsOutOfRange));
+    if spec.SubType = 'piecewise' then
+    begin
+      SetLength(lo, Length(spec.Pieces));
+      SetLength(hi, Length(spec.Pieces));
+      SetLength(sel, Length(spec.Pieces));
+      for k := 0 to High(spec.Pieces) do
+      begin
+        lo[k] := spec.Pieces[k].Lo;
+        hi[k] := spec.Pieces[k].Hi;
+        sel[k] := (k <= High(spec.Selected)) and spec.Selected[k];
+      end;
+      rng := TyHeatPiecewiseRange(spec.Extent0, spec.Extent1, lo, hi, sel);
+    end
+    else if spec.RangeAuto then
+      rng := TyHeatContinuousRange(spec.Extent0, spec.Extent1, spec.Extent0, spec.Extent1)
+    else
+      rng := TyHeatContinuousRange(spec.Extent0, spec.Extent1, spec.Range0, spec.Range1);
+    if (lay.PixW > 0) and (lay.PixH > 0) then
+      lay.Bytes := TyHeatRender(pts, lay.PixW, lay.PixH, pointSize, blurSize, minOp, maxOp,
+        gin, gout, rng);
+  finally
+    GeoUnmaskFpu(mask);
+  end;
+  FHeatLayers[ASlot] := lay;
+  if (lay.PixW <= 0) or (lay.PixH <= 0) or (Length(lay.Bytes) = 0) then Exit;
+  { the image: the bytes under a key of their own (FNV-1a over them) }
+  hash := QWord($cbf29ce484222325);
+  for k := 0 to High(lay.Bytes) do
+    hash := (hash xor lay.Bytes[k]) * QWord($100000001b3);
+  key := Format('data:image/x-ty-heatmap;base64,%dx%d-%s', [lay.PixW, lay.PixH,
+    IntToHex(hash, 16)]);
+  bmp := TBGRABitmap.Create(lay.PixW, lay.PixH);
+  n := 0;
+  for i := 0 to lay.PixH - 1 do
+  begin
+    px := bmp.ScanLine[i];
+    for k := 0 to lay.PixW - 1 do
+    begin
+      px^.red := lay.Bytes[n];
+      px^.green := lay.Bytes[n + 1];
+      px^.blue := lay.Bytes[n + 2];
+      px^.alpha := lay.Bytes[n + 3];
+      Inc(px);
+      Inc(n, 4);
+    end;
+  end;
+  bmp.InvalidateBitmap;
+  TyPatternRegisterImage(key, bmp);
+  z := SeriesIntIn(si, 'z', 2);
+  el := TyChartElement(TyShapeRect(TyRectF(lay.X * scale, lay.Y * scale,
+    (lay.X + lay.W) * scale, (lay.Y + lay.H) * scale)));
+  el.Style.HasFill := True;
+  el.Style.FillColor := 0;
+  el.Style.FillPattern.Present := True;
+  el.Style.FillPattern.Image := key;
+  el.Style.FillPattern.Repetition := 'no-repeat';
+  el.Style.FillPattern.HasMatrix := True;
+  el.Style.FillPattern.UnitImage := True;
+  el.Style.FillPattern.Matrix[0] := lay.W;
+  el.Style.FillPattern.Matrix[1] := 0;
+  el.Style.FillPattern.Matrix[2] := 0;
+  el.Style.FillPattern.Matrix[3] := lay.H;
+  el.Style.FillPattern.Matrix[4] := lay.X;
+  el.Style.FillPattern.Matrix[5] := lay.Y;
+  el.Silent := True;
+  el.Z := z;
+  el.Z2 := 0;
+  el.Datum := TyChartNoDatum;
+  AList.Add(el);
+  Result := 1;
+end;
+
+function TTyAdvanceChart.GeoHeatLayer(ASeriesIndex: Integer; out ALayer: TTyHeatLayer): Boolean;
+var slot: Integer;
+begin
+  ALayer := Default(TTyHeatLayer);
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FHeatLayers)) and FHeatLayers[slot].Valid;
+  if Result then ALayer := FHeatLayers[slot];
+end;
+
+function TTyAdvanceChart.GeoBrushLayouts(ASlot: Integer): TTyBrushItemLayoutArray;
+var
+  geo: TTyGeo;
+  st: TTyDataStore;
+  i, cx, cy: Integer;
+  p: TTyPointF;
+begin
+  Result := nil;
+  geo := GeoOfSlot(ASlot);
+  if (geo = nil) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  if (FBindings[ASlot].SeriesType <> 'scatter') and (FBindings[ASlot].SeriesType <> 'effectScatter') then Exit;
+  st := FStores[ASlot];
+  cx := st.DimIndexOf(TyGeoLngDim);
+  cy := st.DimIndexOf(TyGeoLatDim);
+  SetLength(Result, st.Count);
+  for i := 0 to st.Count - 1 do
+  begin
+    Result[i] := Default(TTyBrushItemLayout);
+    Result[i].Kind := blkPoint;
+    Result[i].X := NaN;
+    Result[i].Y := NaN;
+    if (cx < 0) or (cy < 0) then Continue;
+    if geo.PointOf(st.Get(cx, i), st.Get(cy, i), p) then
+    begin
+      Result[i].X := p.X;
+      Result[i].Y := p.Y;
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.GeoPointOfJson(AGeo: TTyGeo; AValue: TJSONData;
+  out APt: TTyPointF): Boolean;
+var x, y: Double;
+begin
+  APt.X := NaN;
+  APt.Y := NaN;
+  Result := False;
+  if (AGeo = nil) or (AValue = nil) then Exit;
+  if AValue.JSONType = jtString then Exit(AGeo.PointOfName(AValue.AsString, APt));
+  if AValue.JSONType <> jtArray then Exit;
+  if AValue.Count > 0 then x := TyJsonToNumber(TJSONArray(AValue).Items[0]) else x := NaN;
+  if AValue.Count > 1 then y := TyJsonToNumber(TJSONArray(AValue).Items[1]) else y := NaN;
+  Result := AGeo.PointOf(x, y, APt);
+end;
+
+function TTyAdvanceChart.GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+var
+  node, d: TJSONData;
+  geo: TTyGeo;
+  p: TTyPointF;
+  k: Integer;
+begin
+  { getLayoutRect(the box, the chart): the radius' reference }
+  Result := TyPieLayoutOf(FPieSpecs[ASlot], FLastRect, FStores[ASlot], ADim);
+  geo := GeoOfSlot(ASlot);
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  d := nil;
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('coord');
+    if (d = nil) or (d.JSONType = jtNull) then d := TJSONObject(node).Find('center');
+  end;
+  { the default centre ['50%', '50%'] read as a coordinate is no point }
+  if not GeoPointOfJson(geo, d, p) or IsNan(p.X) or IsNan(p.Y) then
+  begin
+    Result.Valid := False;
+    Exit;
+  end;
+  Result.CX := p.X;
+  Result.CY := p.Y;
+  for k := 0 to High(Result.Sectors) do
+  begin
+    Result.Sectors[k].CX := p.X;
+    Result.Sectors[k].CY := p.Y;
+  end;
+end;
+
+function TTyAdvanceChart.GeoRoamHasDependents(AGeo: TTyGeo): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesType = TyCustomSeriesType then Exit(True);
+    if (FBindings[i].GeoIndex >= 0) and (FBindings[i].GeoIndex <= High(FGeos))
+      and (FGeos[FBindings[i].GeoIndex] = AGeo) then Exit(True);
+  end;
+end;
+
+procedure TTyAdvanceChart.GeoDependentsRelayout;
+var ppi, i: Integer;
+begin
+  ppi := FLastPPI;
+  if ppi <= 0 then ppi := 96;
+  SolvePies;
+  SolveLines(ppi);
+  SolveCustom(ppi);
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesType = TyGraphSeriesTypeName) and (FBindings[i].GeoIndex >= 0) then
+      SolveGeoGraph(i);
+end;
+
+function TTyAdvanceChart.GeoGraphPoints(ASeriesIndex: Integer; AGeo: TTyGeo): TTyPointFArray;
+var
+  node, d, it, v: TJSONData;
+  k: Integer;
+  x, y: Double;
+  p: TTyPointF;
+
+  function NumOf(AData: TJSONData): Double;
+  begin
+    Result := NaN;
+    if AData = nil then Exit;
+    case AData.JSONType of
+      jtNumber: Result := AData.AsFloat;
+      jtString:
+        if (AData.AsString <> '') and (AData.AsString <> '-') then
+          Result := TyJsToNumber(AData.AsString);
+    end;
+  end;
+
+begin
+  Result := nil;
+  if AGeo = nil then Exit;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if not (node is TJSONObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if not (d is TJSONArray) then d := TJSONObject(node).Find('nodes');
+  if not (d is TJSONArray) then Exit;
+  SetLength(Result, d.Count);
+  for k := 0 to d.Count - 1 do
+  begin
+    Result[k] := TyPointF(NaN, NaN);
+    it := d.Items[k];
+    v := it;
+    if v is TJSONObject then v := TJSONObject(v).Find('value');
+    if not (v is TJSONArray) then Continue;
+    if v.Count > 0 then x := NumOf(v.Items[0]) else x := NaN;
+    if v.Count > 1 then y := NumOf(v.Items[1]) else y := NaN;
+    { simpleLayout: one number is enough to lay a node out -- and a pair
+      with a NaN in it is no point }
+    if IsNan(x) and IsNan(y) then Continue;
+    if AGeo.PointOf(x, y, p) then Result[k] := p;
+  end;
+end;
+
+procedure TTyAdvanceChart.SolveGeoGraph(ASlot: Integer);
+var
+  solved: TTyGraphSolved;
+  geo: TTyGeo;
+  si: Integer;
+begin
+  if (ASlot > High(FGraphLaidOut)) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  geo := GeoOfSlot(ASlot);
+  if geo = nil then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  solved := TyGraphSolveAtPoints(FOption, si, FStores[ASlot], GeoGraphPoints(si, geo));
+  FGraphLaidOut[ASlot] := True;
+  FGraphSpecs[ASlot] := solved.Spec;
+  FGraphNodes[ASlot] := solved.Nodes;
+  FGraphEdges[ASlot] := solved.Edges;
+  FGraphCats[ASlot] := solved.Cats;
+end;
+
+{ ==================== [Batch 152, D14 GE4] the map series ====================
+
+  MapSeries.getInitialData fills a series' data with a row for every region
+  its map has and its data does not name; buildAllMapSeriesGroups puts the
+  map series that share a geo component -- or, with none, a `map` -- into one
+  group, and mapDataStatistic gives every series the group's statistic over
+  the series the legend left (sum, average, max or min of the first one's
+  mapValueCalculation), each row the main series'. The original data stays
+  for the legend symbols and the tooltip's names (FMapOrig); FStores holds
+  the statistic, which is what the visual stage, the labels, the tooltip and
+  the selection read.
+
+  A group with no geo component has a geo of its own, laid out from the
+  first map series declared; its main series (the first the legend left)
+  draws the map -- MapDraw with the series' data -- and every series of it
+  its legend symbols. A geo component a map series names draws the regions
+  with the first such series' data. Either way a region group is the item's
+  graphic element: its events, its tooltip and its states are the series'
+  (sskMap rows), and the geo takes the rows' flags for its paths. }
+
+function TTyAdvanceChart.MapTypeOf(ASlot: Integer): string;
+var node, d: TJSONData;
+begin
+  Result := '';
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].GeoIndex >= 0 then
+    node := FOption.ComponentAt('geo', FBindings[ASlot].GeoIndex)
+  else
+    node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (node is TJSONObject) then Exit;
+  d := TJSONObject(node).Find('map');
+  if (d <> nil) and (d.JSONType <> jtNull) then Result := TyJsonJsString(d);
+end;
+
+procedure TTyAdvanceChart.MapFillStore(ASlot: Integer; AStore: TTyDataStore);
+var
+  dims: TTySeriesDimArray;
+  node, d: TJSONData;
+  nameMap: TJSONObject;
+  nameProp, nm: string;
+  src: TTyGeoSource;
+  i, k, n0, r: Integer;
+  found: Boolean;
+begin
+  AStore.AddDimension(TyPieValueDim, ddtFloat);
+  SetLength(dims, 1);
+  dims[0] := Default(TTySeriesDim);
+  dims[0].Name := TyPieValueDim;
+  dims[0].Kind := ddtFloat;
+  TyFillSeriesStore(FOption, ASlot, dims, AStore);
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (node is TJSONObject) then Exit;
+  nameMap := nil;
+  d := TJSONObject(node).Find('nameMap');
+  if d is TJSONObject then nameMap := TJSONObject(d);
+  nameProp := 'name';
+  d := TJSONObject(node).Find('nameProperty');
+  if (d <> nil) and JsTruthy(d) then nameProp := TyJsonJsString(d);
+  src := TyGeoLoadMap(MapTypeOf(ASlot), nameMap, nameProp);
+  if src = nil then Exit;
+  try
+    { the names the data had before any region was appended }
+    n0 := AStore.RawCount;
+    for i := 0 to High(src.Regions) do
+    begin
+      nm := src.Regions[i].Name;
+      found := False;
+      for k := 0 to n0 - 1 do
+        if AStore.GetNameByRaw(k) = nm then
+        begin
+          found := True;
+          Break;
+        end;
+      if found then Continue;
+      r := AStore.AppendRow([NaN]);
+      AStore.SetName(r, nm);
+    end;
+  finally
+    src.Free;
+  end;
+end;
+
+function TTyAdvanceChart.MapOrigStore(ASlot: Integer): TTyDataStore;
+begin
+  Result := nil;
+  if (ASlot >= 0) and (ASlot <= High(FMapOrig)) then Result := FMapOrig[ASlot];
+  if (Result = nil) and (ASlot >= 0) and (ASlot <= High(FStores)) then Result := FStores[ASlot];
+end;
+
+procedure TTyAdvanceChart.SolveMapSeries;
+var
+  i, g, k, raw, dimV, idx, li, n: Integer;
+  key, calc, nm: string;
+  names: TStringList;
+  lists: array of TTyDoubleArray;
+  st, ns: TTyDataStore;
+  v, sum, mn, mx: Double;
+  stats: TTyDoubleArray;
+  node, d: TJSONData;
+begin
+  for i := 0 to High(FMapOrig) do FreeAndNil(FMapOrig[i]);
+  FMapOrig := nil;
+  SetLength(FMapOrig, Length(FBindings));
+  FMapGroups := nil;
+  FMapGroupOf := nil;
+  SetLength(FMapGroupOf, Length(FBindings));
+  for i := 0 to High(FMapGroupOf) do FMapGroupOf[i] := -1;
+  { buildAllMapSeriesGroups: a geo component's id, else the map's name }
+  for i := 0 to High(FBindings) do
+  begin
+    if i > High(FStores) then Break;
+    if (FBindings[i].SeriesType <> TyMapSeriesTypeName) or not FBindings[i].Resolved then Continue;
+    if FBindings[i].GeoIndex >= 0 then key := 'o' + IntToStr(FBindings[i].GeoIndex)
+    else key := 'i' + MapTypeOf(i);
+    g := -1;
+    for k := 0 to High(FMapGroups) do
+      if FMapGroups[k].Key = key then g := k;
+    if g < 0 then
+    begin
+      g := Length(FMapGroups);
+      SetLength(FMapGroups, g + 1);
+      FMapGroups[g] := Default(TTyMapGroup);
+      FMapGroups[g].Key := key;
+      FMapGroups[g].Own := FBindings[i].GeoIndex < 0;
+      FMapGroups[g].HostGeo := FBindings[i].GeoIndex;
+      FMapGroups[g].MapType := MapTypeOf(i);
+      FMapGroups[g].Main := -1;
+    end;
+    FMapGroupOf[i] := g;
+    SetLength(FMapGroups[g].R, Length(FMapGroups[g].R) + 1);
+    FMapGroups[g].R[High(FMapGroups[g].R)] := i;
+    if not FBindings[i].Hidden then
+    begin
+      SetLength(FMapGroups[g].F, Length(FMapGroups[g].F) + 1);
+      FMapGroups[g].F[High(FMapGroups[g].F)] := i;
+    end;
+  end;
+  { mapDataStatistic, per group with a main series }
+  for g := 0 to High(FMapGroups) do
+  begin
+    if Length(FMapGroups[g].F) = 0 then Continue;
+    FMapGroups[g].Main := FMapGroups[g].F[0];
+    calc := '';
+    node := FOption.ComponentAt('series', FBindings[FMapGroups[g].Main].SeriesIndex);
+    if node is TJSONObject then
+    begin
+      d := TJSONObject(node).Find('mapValueCalculation');
+      if (d <> nil) and (d.JSONType = jtString) then calc := d.AsString;
+    end;
+    { every name's numbers, over the series in order ('ec-' + name) }
+    names := TStringList.Create;
+    try
+      names.CaseSensitive := True;
+      names.Sorted := True;
+      lists := nil;
+      for k := 0 to High(FMapGroups[g].F) do
+      begin
+        st := FStores[FMapGroups[g].F[k]];
+        if st = nil then Continue;
+        dimV := st.DimIndexOf(TyPieValueDim);
+        for raw := 0 to st.RawCount - 1 do
+        begin
+          nm := st.GetNameByRaw(raw);
+          idx := names.IndexOf(nm);
+          if idx < 0 then
+          begin
+            li := Length(lists);
+            SetLength(lists, li + 1);
+            names.AddObject(nm, TObject(PtrInt(li)));
+          end
+          else
+            li := PtrInt(names.Objects[idx]);
+          if dimV >= 0 then v := st.GetByRaw(dimV, raw) else v := NaN;
+          if not IsNan(v) then
+          begin
+            n := Length(lists[li]);
+            SetLength(lists[li], n + 1);
+            lists[li][n] := v;
+          end;
+        end;
+      end;
+      { the main series' rows, each its name's statistic }
+      st := FStores[FMapGroups[g].Main];
+      dimV := st.DimIndexOf(TyPieValueDim);
+      SetLength(stats, st.RawCount);
+      for raw := 0 to st.RawCount - 1 do
+      begin
+        idx := names.IndexOf(st.GetNameByRaw(raw));
+        stats[raw] := NaN;
+        if idx < 0 then Continue;
+        li := PtrInt(names.Objects[idx]);
+        n := Length(lists[li]);
+        if n = 0 then Continue;
+        sum := 0;
+        mn := Infinity;
+        mx := -Infinity;
+        for k := 0 to n - 1 do
+        begin
+          if lists[li][k] < mn then mn := lists[li][k];
+          if lists[li][k] > mx then mx := lists[li][k];
+          sum := sum + lists[li][k];
+        end;
+        if calc = 'min' then stats[raw] := mn
+        else if calc = 'max' then stats[raw] := mx
+        else if calc = 'average' then stats[raw] := sum / n
+        else stats[raw] := sum;
+      end;
+    finally
+      names.Free;
+    end;
+    { every series of the group takes the statistic: the main series' rows
+      (setData(data.cloneShallow())), its own data kept }
+    for k := 0 to High(FMapGroups[g].F) do
+    begin
+      i := FMapGroups[g].F[k];
+      ns := TTyDataStore.Create;
+      MapFillStore(FMapGroups[g].Main, ns);
+      dimV := ns.DimIndexOf(TyPieValueDim);
+      for raw := 0 to Min(ns.RawCount, Length(stats)) - 1 do
+        ns.SetCalculated(dimV, raw, stats[raw]);
+      FMapOrig[i] := FStores[i];
+      FStores[i] := ns;
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.MapGeoOfSlot(ASlot: Integer): TTyGeo;
+var g: Integer;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FMapGroupOf)) then Exit;
+  g := FMapGroupOf[ASlot];
+  if (g < 0) or (g > High(FMapGroups)) then Exit;
+  if FMapGroups[g].Own then
+  begin
+    if g <= High(FMapGeos) then Result := FMapGeos[g];
+  end
+  else if (FMapGroups[g].HostGeo >= 0) and (FMapGroups[g].HostGeo <= High(FGeos)) then
+    Result := FGeos[FMapGroups[g].HostGeo];
+end;
+
+function TTyAdvanceChart.GeoDataOf(AGeo: TTyGeo; ASlot: Integer; AMap: Boolean): TTyGeoData;
+var
+  st: TTyDataStore;
+  dimV, g, row, raw, k, fi, gi, cnt: Integer;
+  nm: string;
+  v: Double;
+  encoded, sym: Boolean;
+  node, data, item, es: TJSONData;
+  opt: TJSONObject;
+  si: Integer;
+  o: TTyDataStore;
+begin
+  Result := Default(TTyGeoData);
+  if (AGeo = nil) or (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  si := FBindings[ASlot].SeriesIndex;
+  Result.Active := True;
+  Result.SeriesIndex := si;
+  SetLength(Result.Groups, AGeo.GroupCount);
+  dimV := st.DimIndexOf(TyPieValueDim);
+  { isVisualEncodedByVisualMap: a visualMap wrote the data's visualMeta }
+  encoded := (ASlot <= High(FVisualMetas)) and (Length(FVisualMetas[ASlot]) > 0);
+  node := FOption.ComponentAt('series', si);
+  data := nil;
+  cnt := 0;
+  if node is TJSONObject then data := TJSONObject(node).Find('data');
+  if data is TJSONArray then cnt := data.Count;
+  gi := -1;
+  if ASlot <= High(FMapGroupOf) then gi := FMapGroupOf[ASlot];
+  for g := 0 to High(Result.Groups) do
+  begin
+    Result.Groups[g] := Default(TTyGeoDataGroup);
+    nm := AGeo.GroupName(g);
+    { data.indexOfName: the first }
+    raw := -1;
+    for k := 0 to st.RawCount - 1 do
+      if st.GetNameByRaw(k) = nm then
+      begin
+        raw := k;
+        Break;
+      end;
+    if raw >= 0 then row := st.IndexOfRawIndex(raw) else row := -1;
+    Result.Groups[g].Row := row;
+    if (row >= 0) and (dimV >= 0) then v := st.GetByRaw(dimV, raw) else v := NaN;
+    { the visual's fill: a visualMap's colour of a number }
+    if encoded and (row >= 0) and not IsNan(v) and (ASlot <= High(FVisualRows))
+      and (raw <= High(FVisualRows[ASlot])) and FVisualRows[ASlot][raw].ColorSet then
+    begin
+      Result.Groups[g].HasFill := True;
+      Result.Groups[g].Fill := TyVisualToChart(FVisualRows[ASlot][raw].Color);
+    end;
+    if not AMap then Continue;
+    { resetLabelForRegion: the value not a number, or no legend symbol on
+      the name (mapSymbolLayout's showLabel) }
+    sym := False;
+    if (gi >= 0) and (gi <= High(FMapGroups)) then
+      for fi := 0 to Min(High(FMapGroups[gi].F), High(FMapGroups[gi].SymOff)) do
+      begin
+        o := MapOrigStore(FMapGroups[gi].F[fi]);
+        if o = nil then Continue;
+        for k := 0 to Min(o.RawCount - 1, High(FMapGroups[gi].SymOff[fi])) do
+          if (FMapGroups[gi].SymOff[fi][k] >= 0) and (o.GetNameByRaw(k) = nm) then
+          begin
+            sym := True;
+            Break;
+          end;
+        if sym then Break;
+      end;
+    Result.Groups[g].LabelOn := (row < 0) or IsNan(v) or not sym;
+    { the region model's option: the data item (an appended region's name
+      alone) with the feature's echartsStyle merged in where it is silent }
+    opt := nil;
+    if raw >= 0 then
+    begin
+      item := nil;
+      if raw < cnt then item := TJSONArray(data).Items[raw];
+      if item is TJSONObject then opt := TJSONObject(item.Clone)
+      else if raw >= cnt then opt := TJSONObject.Create(['name', nm]);
+      if (opt <> nil) and (AGeo.Source <> nil) then
+        for k := 0 to High(AGeo.Source.Regions) do
+          if AGeo.Source.Regions[k].Name = nm then
+          begin
+            es := nil;
+            if AGeo.Source.Regions[k].Properties is TJSONObject then
+              es := TJSONObject(AGeo.Source.Regions[k].Properties).Find('echartsStyle');
+            if es is TJSONObject then
+            begin
+              TyGeoMergeAbsent(opt, TJSONObject(es));
+              Break;
+            end;
+          end;
+    end;
+    Result.Groups[g].Opt := opt;
+    { getDataParams: the series', the row's; the value as String() prints it }
+    if row >= 0 then
+      Result.Groups[g].Params := TooltipParams(TyChartDatum(si, row))
+    else
+      Result.Groups[g].Params := TyChartBlankParams;
+    Result.Groups[g].Params.ComponentType := 'series';
+    Result.Groups[g].Params.SeriesType := TyMapSeriesTypeName;
+    Result.Groups[g].Params.SeriesIndex := si;
+    Result.Groups[g].Params.SeriesName := SeriesModelName(si);
+    Result.Groups[g].Params.Name := nm;
+    if IsNan(v) then Result.Groups[g].Params.ValueText := 'NaN'
+    else Result.Groups[g].Params.ValueText := TyJsNumberToString(v);
+  end;
+end;
+
+procedure TTyAdvanceChart.SolveMapGeos(APPI: Integer);
+var
+  gi, i, g, k, fi, raw, idx: Integer;
+  nameMap, nm2: TJSONObject;
+  node, d: TJSONData;
+  geo: TTyGeo;
+  legend, showSym: Boolean;
+  counts: TStringList;
+  o: TTyDataStore;
+  nm: string;
+  dimV: Integer;
+  data: TTyGeoData;
+begin
+  for i := 0 to High(FMapGeos) do FreeAndNil(FMapGeos[i]);
+  FMapGeos := nil;
+  { a geo component draws with the data of the first map series naming it
+    (MapDraw.draw's eachComponent over every map series) }
+  for gi := 0 to High(FGeos) do
+  begin
+    if (FGeos[gi] = nil) or not FGeos[gi].Valid then Continue;
+    for i := 0 to High(FBindings) do
+      if (FBindings[i].SeriesType = TyMapSeriesTypeName) and FBindings[i].Resolved
+        and (FBindings[i].GeoIndex = gi) then
+      begin
+        data := GeoDataOf(FGeos[gi], i, False);
+        FGeos[gi].SetData(data);
+        for k := 0 to High(data.Groups) do FreeAndNil(data.Groups[k].Opt);
+        Break;
+      end;
+  end;
+  SetLength(FMapGeos, Length(FMapGroups));
+  legend := (FOption <> nil) and (FOption.ComponentCount('legend') > 0);
+  for g := 0 to High(FMapGroups) do
+  begin
+    FMapGroups[g].SymOff := nil;
+    if not FMapGroups[g].Own or (Length(FMapGroups[g].R) = 0) then Continue;
+    { the group's nameMaps merged (zrUtil.mergeAll: the first's keys win;
+      none on the first, none at all) }
+    nameMap := nil;
+    for k := 0 to High(FMapGroups[g].R) do
+    begin
+      node := FOption.ComponentAt('series', FBindings[FMapGroups[g].R[k]].SeriesIndex);
+      d := nil;
+      if node is TJSONObject then d := TJSONObject(node).Find('nameMap');
+      if k = 0 then
+      begin
+        if d is TJSONObject then nameMap := TJSONObject(d.Clone);
+      end
+      else if (nameMap <> nil) and (d is TJSONObject) then
+        TyGeoMergeAbsent(nameMap, TJSONObject(d));
+    end;
+    try
+      geo := TTyGeo.CreateForMap(FOption, FBindings[FMapGroups[g].R[0]].SeriesIndex, g, nameMap);
+    finally
+      nameMap.Free;
+    end;
+    FMapGeos[g] := geo;
+    for k := 0 to High(FMapRoam) do
+      if (FMapRoam[k].Key = FMapGroups[g].Key) and FMapRoam[k].State.Valid then
+        geo.SetRoamOption(FMapRoam[k].State.Centre, FMapRoam[k].State.Zoom);
+    geo.Resize(FLastRect, APPI);
+    geo.Gen := FGeoGen;
+    if FMapGroups[g].Main < 0 then Continue;
+    { mapSymbolLayout: the offsets of the legend symbols }
+    SetLength(FMapGroups[g].SymOff, Length(FMapGroups[g].F));
+    counts := TStringList.Create;
+    try
+      counts.CaseSensitive := True;
+      counts.Sorted := True;
+      for fi := 0 to High(FMapGroups[g].F) do
+      begin
+        i := FMapGroups[g].F[fi];
+        o := MapOrigStore(i);
+        if o = nil then Continue;
+        SetLength(FMapGroups[g].SymOff[fi], o.RawCount);
+        for raw := 0 to o.RawCount - 1 do FMapGroups[g].SymOff[fi][raw] := -1;
+        showSym := True;
+        node := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+        if node is TJSONObject then
+        begin
+          d := TJSONObject(node).Find('showLegendSymbol');
+          if d <> nil then showSym := JsTruthy(d);
+        end;
+        if not (showSym and legend and geo.Valid) then Continue;
+        dimV := o.DimIndexOf(TyPieValueDim);
+        for raw := 0 to o.RawCount - 1 do
+        begin
+          nm := o.GetNameByRaw(raw);
+          if geo.RegionByName(nm) = nil then Continue;
+          if (dimV < 0) or IsNan(o.GetByRaw(dimV, raw)) then Continue;
+          idx := counts.IndexOf(nm);
+          if idx < 0 then
+          begin
+            FMapGroups[g].SymOff[fi][raw] := 0;
+            counts.AddObject(nm, TObject(PtrInt(1)));
+          end
+          else
+          begin
+            FMapGroups[g].SymOff[fi][raw] := PtrInt(counts.Objects[idx]);
+            counts.Objects[idx] := TObject(PtrInt(counts.Objects[idx]) + 1);
+          end;
+        end;
+      end;
+    finally
+      counts.Free;
+    end;
+    { the main series' data drawn with it, its region models over the main
+      series' option }
+    nm2 := nil;
+    node := FOption.ComponentAt('series', FBindings[FMapGroups[g].Main].SeriesIndex);
+    if node is TJSONObject then nm2 := TJSONObject(node);
+    data := GeoDataOf(geo, FMapGroups[g].Main, True);
+    geo.SetData(data, nm2);
+    for k := 0 to High(data.Groups) do FreeAndNil(data.Groups[k].Opt);
+  end;
+end;
+
+function TTyAdvanceChart.GeoSyncFromRows(AGeo: TTyGeo): Boolean;
+var
+  data: TTyGeoData;
+  g, row, raw, si, slot, hover: Integer;
+  hbo: Cardinal;
+  sel: Boolean;
+begin
+  Result := False;
+  if AGeo = nil then Exit;
+  data := AGeo.Data;
+  if not data.Active then Exit;
+  si := data.SeriesIndex;
+  slot := SlotOfSeries(si);
+  for g := 0 to High(data.Groups) do
+  begin
+    row := data.Groups[g].Row;
+    hover := TyStHoverNormal;
+    hbo := 0;
+    sel := False;
+    if (row >= 0) and (si >= 0) and (si <= High(FSt)) and (FSt[si].Kind = sskMap)
+      and (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+    begin
+      raw := FStores[slot].GetRawIndex(row);
+      if (raw >= 0) and (raw <= High(FSt[si].Rows)) and FSt[si].Rows[raw].Host.Exists then
+      begin
+        hover := FSt[si].Rows[raw].Host.HoverState;
+        hbo := FSt[si].Rows[raw].Host.HighByOuter;
+        sel := FSt[si].Rows[raw].Host.Selected;
+      end;
+    end;
+    if AGeo.SetFlags(g, hover, hbo, sel) then Result := True;
+  end;
+end;
+
+procedure TTyAdvanceChart.MapRepatch(APPI: Integer);
+var
+  k, i, n: Integer;
+  geo: TTyGeo;
+  tmp: TTyPaintList;
+  ink: TTyGeoInk;
+begin
+  if FPaintList = nil then Exit;
+  ink := GeoInk;
+  for k := 0 to High(FGeoDraws) do
+  begin
+    geo := TTyGeo(FGeoDraws[k].Geo);
+    if (geo = nil) or not geo.Data.Active then Continue;
+    if not GeoSyncFromRows(geo) then Continue;
+    geo.ApplyStates(ink, APPI);
+    tmp := TTyPaintList.Create;
+    try
+      n := TyBuildGeo(geo, ink, NewTextMeasurer(APPI), APPI, tmp, False);
+      if n <> FGeoDraws[k].Count then Continue;
+      for i := 0 to n - 1 do
+        FPaintList.SetElement(FGeoDraws[k].Start + i, tmp.Element(i));
+    finally
+      tmp.Free;
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.MapApplyChanged: Boolean;
+var k, ppi: Integer; geo: TTyGeo; ink: TTyGeoInk;
+begin
+  Result := False;
+  if Length(FGeoDraws) = 0 then Exit;
+  ink := GeoInk;
+  ppi := FPaintListPPI;
+  if ppi <= 0 then ppi := FLastPPI;
+  for k := 0 to High(FGeoDraws) do
+  begin
+    geo := TTyGeo(FGeoDraws[k].Geo);
+    if (geo = nil) or not geo.Data.Active then Continue;
+    GeoSyncFromRows(geo);
+    if geo.ApplyStates(ink, ppi) then Result := True;
+  end;
+end;
+
+function TTyAdvanceChart.BuildMapSeries(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+var g, n: Integer; geo: TTyGeo;
+begin
+  Result := 0;
+  if (ASlot < 0) or (ASlot > High(FMapGroupOf)) then Exit;
+  g := FMapGroupOf[ASlot];
+  if (g < 0) or (g > High(FMapGroups)) or not FMapGroups[g].Own then Exit;
+  if g > High(FMapGeos) then Exit;
+  geo := FMapGeos[g];
+  if (geo = nil) or not geo.Valid then Exit;
+  { mapSeriesNeedsDrawMap: the main series of a group with no geo component }
+  if FMapGroups[g].Main = ASlot then
+  begin
+    GeoSyncFromRows(geo);
+    n := AList.Count;
+    Inc(Result, TyBuildGeo(geo, GeoInk, AMeasurer, APPI, AList));
+    SetLength(FGeoDraws, Length(FGeoDraws) + 1);
+    FGeoDraws[High(FGeoDraws)].Geo := geo;
+    FGeoDraws[High(FGeoDraws)].Series := FBindings[ASlot].SeriesIndex;
+    FGeoDraws[High(FGeoDraws)].Start := n;
+    FGeoDraws[High(FGeoDraws)].Count := AList.Count - n;
+  end;
+  Inc(Result, BuildMapSymbols(ASlot, AMeasurer, APPI, AList));
+end;
+
+{ MapView._renderSymbols: a circle of radius 3 at each region centre the
+  series has a value for, nine pixels along per series before it there
+  (the offset), silent, z2 8 -- 19 for the first, which carries the label
+  (position bottom, its text the main series' getFormattedLabel of the
+  name, its show and look the series' own item's, its state the region
+  group's: onHoverStateChange) }
+function TTyAdvanceChart.BuildMapSymbols(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+var
+  g, fi, k, raw, off, gr, si, hover, start: Integer;
+  geo: TTyGeo;
+  o: TTyDataStore;
+  nm, txt, fam: string;
+  reg: TTyGeoRegion;
+  c: TTyGeoPt;
+  p: TTyPointF;
+  scale, cx, cy, w, h, ax, ay: Double;
+  el: TTyChartElement;
+  colour, lc: TTyChartColor;
+  z, fsz, fwt: Integer;
+  ink: TTyGeoInk;
+  dr: TTyGeoDraw;
+  lbl: TTyGeoLabel;
+  hasLbl, shown, nShow, sShow, has: Boolean;
+  st: string;
+  nodes: array[0..1] of TJSONObject;
+  dd: TJSONData;
+
+  { the item's label up its chain: the item, the series; nil where neither
+    writes it }
+  function LGet(const APath: array of string): TJSONData;
+  var q, j: Integer; x: TJSONData;
+  begin
+    Result := nil;
+    for q := 0 to 1 do
+    begin
+      if nodes[q] = nil then Continue;
+      x := nodes[q];
+      for j := 0 to High(APath) do
+      begin
+        if not (x is TJSONObject) then
+        begin
+          x := nil;
+          Break;
+        end;
+        x := TJSONObject(x).Find(APath[j]);
+        if x = nil then Break;
+      end;
+      if (x <> nil) and (x.JSONType <> jtNull) then Exit(x);
+    end;
+  end;
+
+begin
+  Result := 0;
+  g := FMapGroupOf[ASlot];
+  if (g < 0) or (g > High(FMapGroups)) then Exit;
+  fi := -1;
+  for k := 0 to High(FMapGroups[g].F) do
+    if FMapGroups[g].F[k] = ASlot then fi := k;
+  if (fi < 0) or (fi > High(FMapGroups[g].SymOff)) then Exit;
+  geo := FMapGeos[g];
+  o := MapOrigStore(ASlot);
+  if (geo = nil) or (o = nil) then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  si := FBindings[ASlot].SeriesIndex;
+  colour := TTyChartColor(SeriesColor(si));
+  z := SeriesIntIn(si, 'z', 2);
+  ink := GeoInk;
+  dr := geo.LastDraw;
+  start := AList.Count;
+  nodes[1] := StSeriesNode(si);
+  for raw := 0 to Min(o.RawCount - 1, High(FMapGroups[g].SymOff[fi])) do
+  begin
+    off := FMapGroups[g].SymOff[fi][raw];
+    if off < 0 then Continue;
+    nm := o.GetNameByRaw(raw);
+    reg := geo.RegionByName(nm);
+    if reg = nil then Continue;
+    c := reg.GetCenter;
+    if not geo.PointOf(c.X, c.Y, p) then Continue;
+    cx := p.X + off * 9 * scale;
+    cy := p.Y;
+    el := TyChartElement(TyShapeCircle(cx, cy, 3 * scale));
+    el.Style.HasFill := True;
+    el.Style.FillColor := colour;
+    el.Silent := True;
+    el.Z := z;
+    if off = 0 then el.Z2 := 8 + 11 else el.Z2 := 8;
+    el.Datum := TyChartNoDatum;
+    AList.Add(el);
+    Inc(Result);
+    if off <> 0 then Continue;
+    { the label: the series' own item over the series, MapSeries' defaults
+      under them }
+    nodes[0] := StItemNode(si, raw);
+    dd := LGet(['label', 'show']);
+    nShow := (dd <> nil) and JsTruthy(dd);
+    gr := geo.GroupIndexOf(nm);
+    hover := TyStHoverNormal;
+    if gr >= 0 then hover := geo.GroupFlags(gr).Hover;
+    if hover = TyStHoverEmphasis then st := 'emphasis'
+    else if hover = TyStHoverBlur then st := 'blur'
+    else st := '';
+    { getLabelStatesModels: a state's show over the normal's; emphasis and
+      select show by default }
+    dd := LGet(['emphasis', 'label', 'show']);
+    if dd <> nil then has := JsTruthy(dd) else has := True;
+    dd := LGet(['select', 'label', 'show']);
+    if dd <> nil then sShow := JsTruthy(dd) else sShow := True;
+    hasLbl := nShow or has or sShow;
+    dd := LGet(['blur', 'label', 'show']);
+    if (dd <> nil) and JsTruthy(dd) then hasLbl := True;
+    if not hasLbl then Continue;
+    if st = 'emphasis' then shown := has
+    else if st = 'blur' then
+    begin
+      dd := LGet(['blur', 'label', 'show']);
+      if dd <> nil then shown := JsTruthy(dd) else shown := nShow;
+    end
+    else shown := nShow;
+    { the text: the main series' getFormattedLabel of the name, else the name }
+    txt := nm;
+    if (gr >= 0) and (gr <= High(dr.Groups)) and (Length(dr.Groups[gr].Paths) > 0) then
+    begin
+      lbl := dr.Groups[gr].Paths[0].Lbl;
+      if st = 'emphasis' then txt := lbl.States[stnEmphasis].Text
+      else if st = 'blur' then txt := lbl.States[stnBlur].Text
+      else txt := lbl.Text;
+    end;
+    { the colour: the state's own, else the normal's, else the tokens }
+    lc := ink.LabelColour;
+    dd := LGet(['label', 'color']);
+    if (dd <> nil) and (dd.JSONType = jtString) then TyTryParseChartColor(dd.AsString, lc);
+    if st = 'emphasis' then
+    begin
+      dd := LGet(['emphasis', 'label', 'color']);
+      if (dd <> nil) and (dd.JSONType = jtString) then TyTryParseChartColor(dd.AsString, lc)
+      else lc := ink.LabelHighlight;
+    end;
+    fsz := ink.LabelFontSizeLogical;
+    dd := LGet(['label', 'fontSize']);
+    if dd <> nil then fsz := TyOptFontSize(dd, ink.LabelFontSizeLogical);
+    fwt := ink.LabelFontWeight;
+    fam := ink.LabelFontName;
+    w := 0;
+    h := 0;
+    if (txt <> '') and (AMeasurer <> nil) then AMeasurer.MeasureLine(txt, fam, fsz, fwt, w, h);
+    { position 'bottom': the box's bottom middle and the distance 5 below }
+    ax := cx;
+    ay := cy + 3 * scale + 5 * scale;
+    el := TyChartElement(TyShapeRect(TyAnchorBox(ax, ay, w, h, tahCentre, tavTop)));
+    el.Caption.Text := txt;
+    el.Caption.FontName := fam;
+    el.Caption.FontSizeLogical := fsz;
+    el.Caption.FontWeight := fwt;
+    el.Caption.Colour := lc;
+    el.Caption.X := ax;
+    el.Caption.Y := ay;
+    el.Caption.AnchorH := tahCentre;
+    el.Caption.AnchorV := tavTop;
+    el.Caption.Truncate := False;
+    el.Z := z;
+    el.Z2 := 19;
+    el.Silent := True;
+    el.Ignore := not shown or (txt = '') or (w <= 0) or (h <= 0);
+    el.Datum := TyChartNoDatum;
+    AList.Add(el);
+    Inc(Result);
+  end;
+  SetLength(FMapSyms, Length(FMapSyms) + 1);
+  FMapSyms[High(FMapSyms)].Geo := nil;
+  FMapSyms[High(FMapSyms)].Series := si;
+  FMapSyms[High(FMapSyms)].Start := start;
+  FMapSyms[High(FMapSyms)].Count := AList.Count - start;
+end;
+
+function TTyAdvanceChart.MapTooltip(const ADatum: TTyChartDatumRef;
+  out ABlock: TTyTooltipBlock): Boolean;
+var
+  slot, g, k, f, raw, dimV, dimO: Integer;
+  st, o: TTyDataStore;
+  nm, header: string;
+  v: Double;
+begin
+  Result := False;
+  ABlock := nil;
+  if ADatum.Kind <> ctkSeries then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if (slot < 0) or (slot > High(FBindings)) then Exit;
+  if FBindings[slot].SeriesType <> TyMapSeriesTypeName then Exit;
+  if (slot > High(FMapGroupOf)) or (FMapGroupOf[slot] < 0) then Exit;
+  g := FMapGroupOf[slot];
+  st := FStores[slot];
+  if (st = nil) or (ADatum.DataIndex < 0) or (ADatum.DataIndex >= st.Count) then Exit;
+  dimV := st.DimIndexOf(TyPieValueDim);
+  nm := st.GetName(ADatum.DataIndex);
+  if dimV >= 0 then v := st.Get(dimV, ADatum.DataIndex) else v := NaN;
+  { the series of the group with a value under the name }
+  header := '';
+  for k := 0 to High(FMapGroups[g].F) do
+  begin
+    f := FMapGroups[g].F[k];
+    o := MapOrigStore(f);
+    if o = nil then Continue;
+    dimO := o.DimIndexOf(TyPieValueDim);
+    for raw := 0 to o.RawCount - 1 do
+      if o.GetNameByRaw(raw) = nm then
+      begin
+        if (dimO >= 0) and not IsNan(o.GetByRaw(dimO, raw)) then
+        begin
+          if header <> '' then header := header + ', ';
+          header := header + SeriesModelName(FBindings[f].SeriesIndex);
+        end;
+        Break;
+      end;
+  end;
+  ABlock := TTyTooltipBlock.CreateSection(header, header = '');
+  ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False,
+    TyTooltipValueText(v), False));
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.DoLegacySelect(APayload: TJSONObject;
+  const ASeriesType, AType: string);
+var
+  q: TJSONObject;
+  arr: TJSONArray;
+  idx: TTyIntegerArray;
+  k, slot: Integer;
+begin
+  q := TJSONObject(APayload.Clone);
+  try
+    q.Strings['type'] := AType;
+    arr := TJSONArray.Create;
+    idx := MatchSeries(APayload);
+    for k := 0 to High(idx) do
+    begin
+      slot := SlotOfSeries(idx[k]);
+      if (slot >= 0) and (FBindings[slot].SeriesType = ASeriesType) then arr.Add(idx[k]);
+    end;
+    if q.IndexOfName('seriesIndex') >= 0 then q.Elements['seriesIndex'] := arr
+    else q.Add('seriesIndex', arr);
+    { the legacy action is registered with no update of its own: 'update',
+      a render; the select it dispatches runs after }
+    FullUpdate;
+    DoSelectAction(q);
+  finally
+    q.Free;
+  end;
+end;
+
+function TTyAdvanceChart.MapGeoOf(ASeriesIndex: Integer): TTyGeo;
+begin
+  Result := MapGeoOfSlot(SlotOfSeries(ASeriesIndex));
+end;
+
+function TTyAdvanceChart.GeoDrawRange(AGeo: TTyGeo; out AStart, ACount: Integer): Boolean;
+var k: Integer;
+begin
+  AStart := -1;
+  ACount := 0;
+  for k := 0 to High(FGeoDraws) do
+    if FGeoDraws[k].Geo = AGeo then
+    begin
+      AStart := FGeoDraws[k].Start;
+      ACount := FGeoDraws[k].Count;
+      Exit(True);
+    end;
+  Result := False;
+end;
+
+function TTyAdvanceChart.MapSymbolRange(ASeriesIndex: Integer; out AStart, ACount: Integer): Boolean;
+var k: Integer;
+begin
+  AStart := -1;
+  ACount := 0;
+  for k := 0 to High(FMapSyms) do
+    if FMapSyms[k].Series = ASeriesIndex then
+    begin
+      AStart := FMapSyms[k].Start;
+      ACount := FMapSyms[k].Count;
+      Exit(True);
+    end;
+  Result := False;
 end;
 
 procedure TTyAdvanceChart.MergeGeoRoam(var AState: TTyGraphRoamState; AIndex: Integer;
@@ -15819,7 +17475,13 @@ begin
       FGraphCats[i] := solved.Cats;
       Continue;
     end;
-    { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar, geo --
+    { A GRAPH ON A GEO [Batch 152] }
+    if (FBindings[i].GeoIndex >= 0) and (store <> nil) then
+    begin
+      SolveGeoGraph(i);
+      Continue;
+    end;
+    { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar --
       and a graph on one resolves and draws nothing rather than being quietly
       given a view it did not ask for. }
     if FBindings[i].CoordSysName <> 'view' then Continue;
@@ -16261,7 +17923,36 @@ begin
     Exit(cal.DatePoint(cal.ParseDate(dv), AClamp));
   end;
   if b.Cart <> nil then
-    Result := b.Cart.DataToPoint([Parse(b.XAxis, AX), Parse(b.YAxis, AY)]);
+    Result := b.Cart.DataToPoint([Parse(b.XAxis, AX), Parse(b.YAxis, AY)])
+  { A GEO [Batch 152]: dataToPoint of the pair -- applyTransform's
+    arithmetic turns a string into a number and a null into 0 }
+  else if b.GeoIndex >= 0 then
+    Result := GeoLinesPoint(AX, AY);
+end;
+
+function TTyAdvanceChart.GeoLinesPoint(const AX, AY: TTyLinesValue): TTyPointF;
+var
+  geo: TTyGeo;
+  x, y: Double;
+
+  function JsNum(const AV: TTyLinesValue): Double;
+  begin
+    case AV.Kind of
+      lvkNumber: Result := AV.Num;
+      lvkString: Result := TyJsToNumber(AV.Str);
+      lvkNull: Result := 0;
+    else
+      Result := NaN;
+    end;
+  end;
+
+begin
+  Result := TyPointF(NaN, NaN);
+  geo := GeoOfSlot(FLnSlot);
+  if geo = nil then Exit;
+  x := JsNum(AX);
+  y := JsNum(AY);
+  if not geo.PointOf(x, y, Result) then Result := TyPointF(NaN, NaN);
 end;
 
 function TTyAdvanceChart.LinesTrailAlpha(ASeriesIndex: Integer): Double;
@@ -16512,7 +18203,9 @@ begin
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
     if (FBindings[i].Cart = nil) and not (FBindings[i].Polar is TTyPolar)
       and ((FBindings[i].CalendarIndex < 0)
-        or (FBindings[i].CalendarIndex > High(FCalendars))) then Continue;
+        or (FBindings[i].CalendarIndex > High(FCalendars)))
+      { a geo's lines [Batch 152]: no clip (createClipPath has none) }
+      and (GeoOfSlot(i) = nil) then Continue;
     si := FBindings[i].SeriesIndex;
     d := FOption.ComponentAt('series', si);
     if not (d is TJSONObject) then Continue;
@@ -19633,9 +21326,23 @@ begin
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
   if drawn > furniture then ViewDrew(cvCalendar);
   furniture := drawn;
-  { THE GEOS' MAPS, a component group ahead of every series [Batch 146] }
+  { THE GEOS' MAPS, a component group ahead of every series [Batch 146] --
+    and where each went, a map series' data's flags taken first
+    [Batch 152] }
+  FGeoDraws := nil;
+  FMapSyms := nil;
   for i := 0 to High(FGeos) do
+  begin
+    if FGeos[i] = nil then Continue;
+    GeoSyncFromRows(FGeos[i]);
+    n := list.Count;
     Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
+    SetLength(FGeoDraws, Length(FGeoDraws) + 1);
+    FGeoDraws[High(FGeoDraws)].Geo := FGeos[i];
+    FGeoDraws[High(FGeoDraws)].Series := -1;
+    FGeoDraws[High(FGeoDraws)].Start := n;
+    FGeoDraws[High(FGeoDraws)].Count := list.Count - n;
+  end;
   furniture := drawn;
   { nothing is large until the loop below says so [Batch 117] }
   SetLength(FLargeKinds, Length(FBindings));
@@ -19878,6 +21585,13 @@ begin
         end;
         Continue;
       end;
+      { A MAP SERIES: its group's map where it is the main one, its legend
+        symbols [Batch 152, D14 GE4] }
+      if FBindings[i].SeriesType = TyMapSeriesTypeName then
+      begin
+        Inc(drawn, BuildMapSeries(i, AMeasurer, APPI, list));
+        Continue;
+      end;
       { A THEMERIVER: a polygon per layer, its label at the layer's start
         [Batch 118] }
       if FBindings[i].SeriesType = TyThemeRiverSeriesTypeName then
@@ -20033,6 +21747,25 @@ begin
         end;
         Continue;
       end;
+      { ON A GEO: the points through the geo's dataToPoint, laid out at
+        every build -- a roam moves them as updateTransform does
+        [Batch 152, D14 GE4] }
+      if FBindings[i].GeoIndex >= 0 then
+      begin
+        if (FStores[i] <> nil) and (GeoOfSlot(i) <> nil) then
+        begin
+          if (FBindings[i].SeriesType = 'scatter')
+            or (FBindings[i].SeriesType = 'effectScatter') then
+          begin
+            v.LabelValueDim := FStores[i].DimIndexOf(TyGeoLatDim);
+            Inc(drawn, TyBuildPointScatter(FBindings[i], FStores[i], v,
+              GeoSeriesPoints(i), list));
+          end
+          else if FBindings[i].SeriesType = 'heatmap' then
+            Inc(drawn, BuildGeoHeatmap(i, list));
+        end;
+        Continue;
+      end;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
       { no end label on a polar (LineView warns and draws none) }
@@ -20071,6 +21804,9 @@ begin
       nothing drawn too: a legend can switch every series off, and their
       records go with their elements [Batch 93] }
     StSync(list, APPI);
+    { a map picture's flags are its rows' -- the selection the sync just
+      wrote among them [Batch 152] }
+    MapRepatch(APPI);
     { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because
       its captions are ANSWERS rather than requests -- they arrive with a
       font and an anchor already on them, which is what the expansion exists
@@ -22230,6 +23966,8 @@ begin
   if HierTooltipContent(ADatum, DatumColour(ADatum), Result) then Exit;
   { a lines row: LinesSeries.formatTooltip [Batch 121] }
   if LinesTooltip(ADatum, Result) then Exit;
+  { a map region: MapSeries.formatTooltip [Batch 152] }
+  if MapTooltip(ADatum, Result) then Exit;
   p := TooltipParams(ADatum);
   { The DISPLAY name heads the section: an unnamed series has none. }
   seriesName := SeriesNameOf(ADatum.SeriesIndex);
@@ -23608,7 +25346,10 @@ begin
   else if t = TyCustomSeriesType then Result := sskCustom
   { a parallel row's polyline [Batch 128] }
   else if (t = TyParallelSeriesTypeName) and (FBindings[ASlot].Parallel <> nil) then
-    Result := sskParallel;
+    Result := sskParallel
+  { a map series' regions [Batch 152] }
+  else if t = TyMapSeriesTypeName then
+    Result := sskMap;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -23681,6 +25422,18 @@ begin
   if FSt[s].Kind = sskCustom then
   begin
     StDeclareCustom(ASlot, ARaw, AList);
+    Exit;
+  end;
+  { A MAP REGION'S ROW: only its flags matter here -- the region group's
+    paths take them through the geo [Batch 152] }
+  if FSt[s].Kind = sskMap then
+  begin
+    item := @FSt[s].Rows[ARaw];
+    item^.Host.Exists := True;
+    item^.Host.IsPath := True;
+    nodes := StNodes(s, ARaw);
+    item^.Host.Proxy := not TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+    for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
     Exit;
   end;
   item := @FSt[s].Rows[ARaw];
@@ -24300,6 +26053,14 @@ begin
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
     raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
+    { A MAP REGION: the first path of the group is the row's; the geo keeps
+      the paths' and the texts' states [Batch 152] }
+    if FSt[s].Kind = sskMap then
+    begin
+      if not el.Silent and (el.Caption.FontSizeLogical = 0)
+        and (FSt[s].HostIdx[raw] < 0) then FSt[s].HostIdx[raw] := k;
+      Continue;
+    end;
     { A CUSTOM ITEM'S PATHS, in the order its tree draws them: the first
       hosts, the rest are parts with states of their own; a text, an image
       and a textContent take no state here [Batch 123] }
@@ -24374,7 +26135,15 @@ begin
       else if FStRerender then
       begin
         TyStClearItem(item^);
-        if prev <> [] then TyStUseItemStates(item^, prev);
+        { A MAP'S REGION GROUPS ARE NEW after a render (MapDraw removes
+          them all): no hover is carried, the selection comes back from the
+          model below [Batch 152] }
+        if FSt[s].Kind = sskMap then
+        begin
+          item^.Host.HoverState := TyStHoverNormal;
+          item^.Host.HighByOuter := 0;
+        end
+        else if prev <> [] then TyStUseItemStates(item^, prev);
       end;
     end;
     { updateSeriesElementSelection, then applyElementStates }
@@ -24519,6 +26288,8 @@ begin
   for s := 0 to High(FSt) do
   begin
     if FSt[s].Kind = sskNone then Continue;
+    { a map region's elements are the geo's to write [Batch 152] }
+    if FSt[s].Kind = sskMap then Continue;
     for raw := 0 to High(FSt[s].HostIdx) do
     begin
       if FSt[s].HostIdx[raw] < 0 then Continue;
@@ -24603,6 +26374,8 @@ begin
   Result := False;
   { the geos' flags too [Batch 148] }
   if GeoApplyChanged then Result := True;
+  { and a map picture's, which are its series' rows' [Batch 152] }
+  if MapApplyChanged then Result := True;
   if not FStDirty then Exit;
   FStDirty := False;
   for s := 0 to High(FSt) do
@@ -25073,6 +26846,9 @@ begin
     Result := 'single' + IntToStr(FBindings[ASlot].SingleIndex)
   else if FBindings[ASlot].CalendarIndex >= 0 then
     Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
+  { the geo component [Batch 152] }
+  else if FBindings[ASlot].GeoIndex >= 0 then
+    Result := 'geo' + IntToStr(FBindings[ASlot].GeoIndex)
   else if FBindings[ASlot].RadarIndex >= 0 then
     Result := 'radar' + IntToStr(FBindings[ASlot].RadarIndex)
   { the parallel the series is on [Batch 128] }
@@ -25834,6 +27610,7 @@ end;
 procedure TTyAdvanceChart.SelEnsure(ASlot: Integer);
 var
   s, i: Integer;
+  tb: TJSONBoolean;
   node: TJSONObject;
   data: TTySelData;
   flags: TTyBoolArray;
@@ -25850,7 +27627,19 @@ begin
   if FSelInit[s] then Exit;
   if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
   node := StSeriesNode(s);
-  if node <> nil then FSel[s] := TySelNew(TySelModeOf(node.Find('selectedMode')))
+  { a map series' selectedMode is true unless written (MapSeries.
+    defaultOption) [Batch 152] }
+  if (node <> nil) and (node.Find('selectedMode') = nil)
+    and (FBindings[ASlot].SeriesType = TyMapSeriesTypeName) then
+  begin
+    tb := TJSONBoolean.Create(True);
+    try
+      FSel[s] := TySelNew(TySelModeOf(tb));
+    finally
+      tb.Free;
+    end;
+  end
+  else if node <> nil then FSel[s] := TySelNew(TySelModeOf(node.Find('selectedMode')))
   else FSel[s] := TySelNew(ssmOff);
   FSelInit[s] := True;
   { _initSelectedMapFromData: `selected: true` on a data item }
@@ -28214,12 +30003,27 @@ begin
       if Result.Kind <> cvkNone then Exit;
     end;
     { THE GEOS [Batch 146], registered before the graph's view: the geo the
-      finder names (a series on a geo is GE4) }
+      finder names -- [Batch 152] or the geo the series it names is on
+      (Geo's getCoordSys: geoModel, else seriesModel.coordinateSystem) }
     target := TyFinderModel(pf, 'geo');
     if (target >= 0) and (target <= High(FGeos)) and (FGeos[target] <> nil) then
     begin
       Result := ConvertOnGeo(FGeos[target], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
+    end
+    else if target < 0 then
+    begin
+      slot := SlotOfSeries(TyFinderModel(pf, 'series'));
+      if (slot >= 0) and (GeoOfSlot(slot) <> nil) then
+      begin
+        Result := ConvertOnGeo(GeoOfSlot(slot), AValue, AFrom);
+        if Result.Kind <> cvkNone then Exit;
+      end
+      else if (slot >= 0) and (MapGeoOfSlot(slot) <> nil) and MapGeoOfSlot(slot).Valid then
+      begin
+        Result := ConvertOnGeo(MapGeoOfSlot(slot), AValue, AFrom);
+        if Result.Kind <> cvkNone then Exit;
+      end;
     end;
     { the graphs' views: one per graph series laid out on 'view', in series
       order; each answers only for its own series }
@@ -28858,6 +30662,22 @@ begin
     else if (t = 'select') or (t = 'unselect') or (t = 'toggleSelect') then
     begin
       DoSelectAction(p);
+      Result := True;
+    end
+    { the legacy data selection actions [Batch 152] }
+    else if (t = 'mapToggleSelect') or (t = 'pieToggleSelect') then
+    begin
+      DoLegacySelect(p, Copy(t, 1, 3), 'toggleSelect');
+      Result := True;
+    end
+    else if (t = 'mapSelect') or (t = 'pieSelect') then
+    begin
+      DoLegacySelect(p, Copy(t, 1, 3), 'select');
+      Result := True;
+    end
+    else if (t = 'mapUnSelect') or (t = 'pieUnSelect') then
+    begin
+      DoLegacySelect(p, Copy(t, 1, 3), 'unselect');
       Result := True;
     end
     else if (t = 'highlight') or (t = 'downplay') then
@@ -30166,6 +31986,8 @@ begin
     d := TJSONObject(st).Find('borderWidth');
     if (d <> nil) and (d.JSONType = jtNumber) then ASrc.VisualLineWidth := d.AsFloat;
   end;
+  { MapSeries.getLegendIcon: the border is no border [Batch 152] }
+  if t = TyMapSeriesTypeName then ASrc.HasStroke := False;
 end;
 
 function TTyAdvanceChart.ItemStates(ASeriesIndex, ADataIndex: Integer;
@@ -36737,7 +38559,9 @@ end;
 type
   { the coordinate system a custom series is drawn on [Batch 124]:
     cusUnknown one with no prepareCustom (nothing is drawn) }
-  TTyCuSys = (cusUnknown, cusNone, cusCart, cusPolar, cusSingle, cusCalendar);
+  TTyCuSys = (cusUnknown, cusNone, cusCart, cusPolar, cusSingle, cusCalendar,
+    { [Batch 152] coord/geo/prepareCustom.ts }
+    cusGeo);
 
   { THE API a renderItem is handed: CustomView.makeRenderItem's closures over
     the series' data, its visuals and its coordinate system's prepareCustom
@@ -36763,6 +38587,7 @@ type
     Polar: TTyPolar;
     Single: TTySingle;
     Calendar: TTyCalendar;
+    Geo: TTyGeo;
     Store: TTyDataStore;
     Node: TJSONObject;
     { the dataIndexInside of the running call }
@@ -37098,6 +38923,22 @@ begin
           Result[0] := p.X / Scale;
           Result[1] := p.Y / Scale;
         end;
+      { a geo's dataToPoint: a region name, or the pair through ToNumber
+        [Batch 152] }
+      cusGeo:
+        begin
+          SetLength(Result, 2);
+          Result[0] := NaN;
+          Result[1] := NaN;
+          if Geo = nil then Exit;
+          if (Length(ACells) = 1) and (cx.Kind = cckText) then
+          begin
+            if not Geo.PointOfName(cx.Text, p) then Exit;
+          end
+          else if not Geo.PointOf(CuNumCell(cx).Num, CuNumCell(cy).Num, p) then Exit;
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
     end;
   finally
     ConvertUnmask(mask);
@@ -37142,6 +38983,7 @@ var
   ax: TTyAxis;
   i: Integer;
   val, half, w: Double;
+  p1, p2: TTyPointF;
   item: array[0..1] of Double;
   mask: TFPUExceptionMask;
 begin
@@ -37149,6 +38991,40 @@ begin
   b := Chart.FBindings[Slot];
   mask := CuMask;
   try
+    { dataToCoordSize on a geo: each dimension's span about the item through
+      dataToPoint [Batch 152] }
+    if (Sys = cusGeo) and (Geo <> nil) then
+    begin
+      if Length(ADataItem) = 0 then
+      begin
+        item[0] := 0;
+        item[1] := 0;
+      end
+      else
+      begin
+        item[0] := ADataItem[0];
+        if Length(ADataItem) > 1 then item[1] := ADataItem[1] else item[1] := NaN;
+      end;
+      SetLength(Result, 2);
+      for i := 0 to 1 do
+      begin
+        val := item[i];
+        if i <= High(ADataSize) then half := ADataSize[i] / 2 else half := NaN;
+        if i = 0 then
+        begin
+          if not Geo.PointOf(val - half, item[1], p1) then p1 := TyPointF(NaN, NaN);
+          if not Geo.PointOf(val + half, item[1], p2) then p2 := TyPointF(NaN, NaN);
+          Result[0] := Abs(p1.X / Scale - p2.X / Scale);
+        end
+        else
+        begin
+          if not Geo.PointOf(item[0], val - half, p1) then p1 := TyPointF(NaN, NaN);
+          if not Geo.PointOf(item[0], val + half, p2) then p2 := TyPointF(NaN, NaN);
+          Result[1] := Abs(p1.Y / Scale - p2.Y / Scale);
+        end;
+      end;
+      Exit;
+    end;
     case Sys of
       cusCart, cusPolar:
         begin
@@ -37775,6 +39651,8 @@ begin
       sys := cusCalendar;
       cal := FCalendars[FBindings[i].CalendarIndex];
     end
+    { a geo [Batch 152] }
+    else if GeoOfSlot(i) <> nil then sys := cusGeo
     else if CustomOnNone(i) then sys := cusNone;
     { NOT RENDERED: a series the legend switched off has its group emptied
       (ChartView.remove) and keeps its data; one on a coordinate system with
@@ -37785,8 +39663,9 @@ begin
       view.RemoveAll;
       { A COORDINATE SYSTEM WITH NO prepareCustom (a radar, a graph's view):
         upstream asserts in its development build and calls undefined in its
-        production one; nothing is drawn and the chart says so. A geo and a
-        matrix do not resolve at all (their binding said so). }
+        production one; nothing is drawn and the chart says so. A matrix
+        does not resolve at all (its binding said so); a geo has its
+        prepareCustom [Batch 152]. }
       if FBindings[i].Resolved and not FBindings[i].Hidden and (sys = cusUnknown) then
         FBuild.Note(Format(rsTyChartSeriesCoordSys, [si, FBindings[i].CoordSysName]));
       Continue;
@@ -37819,6 +39698,7 @@ begin
     api.Polar := pol;
     api.Single := sgl;
     api.Calendar := cal;
+    api.Geo := GeoOfSlot(i);
     FCustomApi := api;
     FCustomSlot := i;
     FCustomParams := Default(TTyCustomParams);
@@ -37888,6 +39768,19 @@ begin
           SetLength(names, 2);
           names[0] := TyCalendarTimeDim;
           names[1] := TyCalendarValueDim;
+        end;
+      { the map's data rect, not pixels, and the view's zoom [Batch 152] }
+      cusGeo:
+        begin
+          FCustomParams.CoordSys.Type_ := 'geo';
+          FCustomParams.CoordSys.X := GeoOfSlot(i).DataRect.X;
+          FCustomParams.CoordSys.Y := GeoOfSlot(i).DataRect.Y;
+          FCustomParams.CoordSys.Width := GeoOfSlot(i).DataRect.W;
+          FCustomParams.CoordSys.Height := GeoOfSlot(i).DataRect.H;
+          FCustomParams.CoordSys.Zoom := GeoOfSlot(i).Zoom;
+          SetLength(names, 2);
+          names[0] := TyGeoLngDim;
+          names[1] := TyGeoLatDim;
         end;
     else
       begin
@@ -40878,7 +42771,9 @@ function TTyAdvanceChart.BrushTargets(ABrush: Integer): TTyBrushTargetArray;
 var
   fd: TJSONData;
   pf: TTyParsedFinder;
-  xs, ys, gs, order: TTyIntegerArray;
+  xs, ys, gs, order, geos: TTyIntegerArray;
+  r: TTyXYWH;
+  s: Double;
   i, k, gb, c, n: Integer;
   ax: TTyAxis;
   cart: TTyCartesian2D;
@@ -40915,6 +42810,7 @@ begin
   xs := TyFinderModels(pf, 'xAxis');
   ys := TyFinderModels(pf, 'yAxis');
   gs := TyFinderModels(pf, 'grid');
+  geos := TyFinderModels(pf, 'geo');
   order := nil;
   for i := 0 to High(xs) do
   begin
@@ -40954,7 +42850,30 @@ begin
     t.PanelId := 'grid--' + ComponentModelId('grid', order[k]);
     t.GridComponent := order[k];
     t.Grid := gb;
+    t.GeoComponent := -1;
     t.Rect := DzGridRect(gb);
+    n := Length(Result);
+    SetLength(Result, n + 1);
+    Result[n] := t;
+  end;
+  { THE GEOS the finder names [Batch 152]: the panel the data rect through
+    the overall matrix, in the brush's CSS px }
+  s := DzScale;
+  for k := 0 to High(geos) do
+  begin
+    if (geos[k] < 0) or (geos[k] > High(FGeos)) or (FGeos[geos[k]] = nil)
+      or not FGeos[geos[k]].Valid then Continue;
+    t := Default(TTyBrushTarget);
+    t.PanelId := 'geo--' + ComponentModelId('geo', geos[k]);
+    t.GridComponent := -1;
+    t.Grid := -1;
+    t.GeoComponent := geos[k];
+    t.Geo := FGeos[geos[k]];
+    r := FGeos[geos[k]].OverallRect;
+    t.Rect.X := (r.X - BrushViewOf.OX) / s;
+    t.Rect.Y := (r.Y - BrushViewOf.OY) / s;
+    t.Rect.W := r.W / s;
+    t.Rect.H := r.H / s;
     n := Length(Result);
     SetLength(Result, n + 1);
     Result[n] := t;
@@ -40986,6 +42905,13 @@ begin
   finally
     fd.Free;
   end;
+  { targetInfoMatchers' geo: the area's geo }
+  x := TyFinderModel(pf, 'geo');
+  if x >= 0 then
+  begin
+    for i := 0 to High(ATargets) do
+      if ATargets[i].GeoComponent = x then Exit(i);
+  end;
   gm := TyFinderModel(pf, 'grid');
   if gm < 0 then
   begin
@@ -41007,12 +42933,109 @@ begin
   end;
   if gm < 0 then Exit;
   for i := 0 to High(ATargets) do
-    if ATargets[i].GridComponent = gm then Exit(i);
+    if (ATargets[i].GridComponent = gm) and (ATargets[i].Geo = nil) then Exit(i);
 end;
 
 { setInputRanges: every area bound to a target takes its panel, and its
   range from its coordRange -- back through dataToPoint, less the offset
   of the round trip at the size ratio }
+{ coordConvert on a target: a grid's cartesian AIndex, or [Batch 152] a
+  geo's dataToPoint / pointToData -- a rect by its two corners, a polygon
+  by its points (a geo has no axis: no lineX, no lineY) }
+function TTyAdvanceChart.BrushConvertOn(const ATarget: TTyBrushTarget; AIndex: Integer;
+  AType: TTyBrushType; AToData: Boolean; const AView: TTyBrushView;
+  const ARange: TTyBrushRange; AClamp: Boolean; out AValues, AXYMinMax: TTyBrushRange): Boolean;
+var
+  geo: TTyGeo;
+  i: Integer;
+  a, b: TTyBrushPair;
+  mask: TFPUExceptionMask;
+
+  function Conv(AX, AY: Double): TTyBrushPair;
+  var p: TTyPointF; d: TTyGeoPt;
+  begin
+    Result[0] := NaN;
+    Result[1] := NaN;
+    if AToData then
+    begin
+      if geo.DataOf(AView.OX + AX * AView.S, AView.OY + AY * AView.S, d) then
+      begin
+        Result[0] := d.X;
+        Result[1] := d.Y;
+      end;
+    end
+    else if geo.PointOf(AX, AY, p) then
+    begin
+      Result[0] := (p.X - AView.OX) / AView.S;
+      Result[1] := (p.Y - AView.OY) / AView.S;
+    end;
+  end;
+
+  function Mm(A, B: Double): TTyBrushPair;
+  begin
+    if A > B then
+    begin
+      Result[0] := B;
+      Result[1] := A;
+    end
+    else
+    begin
+      Result[0] := A;
+      Result[1] := B;
+    end;
+  end;
+
+begin
+  AValues := nil;
+  AXYMinMax := nil;
+  if ATarget.Geo = nil then
+  begin
+    Result := (AIndex >= 0) and (AIndex <= High(ATarget.Carts))
+      and TyBrushConvert(AType, AToData, ATarget.Carts[AIndex], AView, ARange, AClamp,
+        AValues, AXYMinMax);
+    Exit;
+  end;
+  Result := False;
+  geo := TTyGeo(ATarget.Geo);
+  mask := GeoMaskFpu;
+  try
+    case AType of
+      btRect:
+        begin
+          if Length(ARange) < 2 then Exit;
+          a := Conv(ARange[0][0], ARange[1][0]);
+          b := Conv(ARange[0][1], ARange[1][1]);
+          SetLength(AValues, 2);
+          AValues[0] := Mm(a[0], b[0]);
+          AValues[1] := Mm(a[1], b[1]);
+          AXYMinMax := Copy(AValues);
+          Result := True;
+        end;
+      btPolygon:
+        begin
+          SetLength(AValues, Length(ARange));
+          SetLength(AXYMinMax, 2);
+          AXYMinMax[0][0] := Infinity;
+          AXYMinMax[0][1] := NegInfinity;
+          AXYMinMax[1][0] := Infinity;
+          AXYMinMax[1][1] := NegInfinity;
+          for i := 0 to High(ARange) do
+          begin
+            a := Conv(ARange[i][0], ARange[i][1]);
+            AXYMinMax[0][0] := Math.Min(AXYMinMax[0][0], a[0]);
+            AXYMinMax[1][0] := Math.Min(AXYMinMax[1][0], a[1]);
+            AXYMinMax[0][1] := Math.Max(AXYMinMax[0][1], a[0]);
+            AXYMinMax[1][1] := Math.Max(AXYMinMax[1][1], a[1]);
+            AValues[i] := a;
+          end;
+          Result := True;
+        end;
+    end;
+  finally
+    GeoUnmaskFpu(mask);
+  end;
+end;
+
 procedure TTyAdvanceChart.BrushLayout(ABrush: Integer);
 var
   tg: TTyBrushTargetArray;
@@ -41038,7 +43061,7 @@ begin
     begin
       a.Opt.HasPanel := True;
       a.Opt.PanelId := tg[t].PanelId;
-      if a.HasCoordRange and TyBrushConvert(a.Opt.BrushType, False, tg[t].Carts[0], v,
+      if a.HasCoordRange and BrushConvertOn(tg[t], 0, a.Opt.BrushType, False, v,
         a.CoordRange, False, vals, xy) then
       begin
         if a.HasOffset then
@@ -41123,9 +43146,9 @@ begin
   begin
     t := BrushFindTarget(tg, Result[i]);
     if t < 0 then Continue;
-    for c := 0 to High(tg[t].Carts) do
+    for c := 0 to Max(High(tg[t].Carts), Ord(tg[t].Geo <> nil) - 1) do
     begin
-      if not TyBrushConvert(Result[i].Opt.BrushType, True, tg[t].Carts[c], v,
+      if not BrushConvertOn(tg[t], c, Result[i].Opt.BrushType, True, v,
         Result[i].Opt.Range, True, vals, xy) then Continue;
       Result[i].HasCoordRanges := True;
       n := Length(Result[i].CoordRanges);
@@ -41135,7 +43158,7 @@ begin
       begin
         Result[i].HasCoordRange := True;
         Result[i].CoordRange := vals;
-        if TyBrushConvert(Result[i].Opt.BrushType, False, tg[t].Carts[c], v, vals,
+        if BrushConvertOn(tg[t], c, Result[i].Opt.BrushType, False, v, vals,
           False, back, bxy) then
         begin
           Result[i].HasOffset := True;
@@ -41933,7 +43956,12 @@ var
     if ASlot <= High(FBarCols) then sv.Bar := FBarCols[ASlot];
     if ASlot <= High(FWhiskers) then sv.Whisker := FWhiskers[ASlot];
     sv.Large := LargeKindOf(ASlot);
-    lays[ASlot] := TyBrushItemLayouts(FBindings[ASlot], FStores[ASlot], StackFor(ASlot), sv);
+    { a series on a geo: the points layout (dataToPoint, unclipped)
+      [Batch 152] }
+    if (FBindings[ASlot].GeoIndex >= 0) and (GeoOfSlot(ASlot) <> nil) then
+      lays[ASlot] := GeoBrushLayouts(ASlot)
+    else
+      lays[ASlot] := TyBrushItemLayouts(FBindings[ASlot], FStores[ASlot], StackFor(ASlot), sv);
     { the cartesian's device px -> the brush's CSS px }
     for q := 0 to High(lays[ASlot]) do
     begin
@@ -42003,6 +44031,8 @@ begin
         if not ctrl then
           for r := 0 to High(tg[t].Carts) do
             if tg[t].Carts[r] = FBindings[i].Cart then ctrl := True;
+        { a series on the target's geo [Batch 152] }
+        if not ctrl and (tg[t].Geo <> nil) and (GeoOfSlot(i) = tg[t].Geo) then ctrl := True;
         if ctrl then
         begin
           n := Length(lists[i]);

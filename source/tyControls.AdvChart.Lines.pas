@@ -17,7 +17,8 @@ unit tyControls.AdvChart.Lines;
 
   THE COORDINATE HOOK. A row's coordinates go through TTyLinesProject, one
   pair at a time -- the coordinate system's dataToPoint. A cartesian, a polar
-  and a calendar answer it now; a geo (D14) plugs in by answering it too.
+  and a calendar answer it now; a geo too [Batch 152: the geo's dataToPoint
+  of the pair, the control's GeoLinesPoint].
   Nothing here knows which system it is.
 
   THE CONTROL POINT IS NOT THE GRAPH'S. linesLayout puts it at the chord's
