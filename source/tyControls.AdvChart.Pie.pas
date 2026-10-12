@@ -1029,6 +1029,9 @@ begin
     { layout.angle, the sweep the datum was given: a shape key upstream's
       update tweens with the rest [Batch 90] }
     el.Anim.G[6] := ALayout.Sectors[i].Angle;
+    { the layout's direction: 1 anticlockwise, the path a universal
+      transition morphs is built with it [Batch 136] }
+    if ALayout.Clockwise then el.Anim.G[7] := 0 else el.Anim.G[7] := 1;
     AList.Add(el);
     Inc(drawn);
   end;

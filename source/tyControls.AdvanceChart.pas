@@ -1141,6 +1141,9 @@ type
     FAnimOldBuild: TTyChartBuild;
     FAnimOldBindings: TTySeriesBindingArray;
     FAnimOldViewKeys: TTyStringArray;
+    { the old option's universal transition keys, by series index: 'L' (a
+      list seriesKey) or '-', then the typed key [Batch 136] }
+    FAnimOldUtKeys: TTyStringArray;
     { A FULL UPDATE OF THE SAME OPTION waiting for its arming -- a legend
       toggle, a dataZoom -- and the update payload's animation it renders
       with (a dataZoom from the inside roam or a realtime slider) [Batch 96] }
@@ -1231,6 +1234,7 @@ type
       whether a resize does them -- which snaps, as upstream's resize update
       runs with duration 0 }
     FMergeOldKeys, FMergeOldAxes: TTyStringArray;
+    FMergeOldUtKeys: TTyStringArray;
     FMergeFirst, FMergeResize: Boolean;
     { the size the media queries are asked about: the client area in CSS px
       (logical px at the font's PPI) }
@@ -1291,6 +1295,9 @@ type
     { upstream's series view ids of the option, by series index: the
       models' ids, which a merge keeps [Batch 95] }
     function AnimViewKeys: TTyStringArray;
+    { the series' universal transition keys now, as FAnimOldUtKeys keeps
+      them [Batch 136] }
+    function AnimUtKeys: TTyStringArray;
     { the axis views of the option now: 'xAxis0=' + id + #1 + subtype [Batch 99] }
     function AxisViewKeys: TTyStringArray;
     { the view of every series model now, shown or not: view key + #1 + type
@@ -3505,7 +3512,11 @@ begin
     series whose view id and type are the same -- unless an update already
     waits, whose old render is still the one before it [Batch 90] -- or a
     lazy one does [Batch 97] }
-  if not FAnimPrev.Valid and not FLazyPending then FAnimOldViewKeys := AnimViewKeys;
+  if not FAnimPrev.Valid and not FLazyPending then
+  begin
+    FAnimOldViewKeys := AnimViewKeys;
+    FAnimOldUtKeys := AnimUtKeys;
+  end;
   { new models: none asks for a new view (initBase ignores replaceMerge) }
   FAnimFresh := nil;
   { the state records the reused elements keep, while the old option and
@@ -3682,6 +3693,7 @@ var
 begin
   { the old views, before the merge renames anything }
   FMergeOldKeys := AnimViewKeys;
+  FMergeOldUtKeys := AnimUtKeys;
   FMergeOldAxes := AxisViewKeys;
   FMergeFirst := True;
   FMergeResize := False;
@@ -3720,6 +3732,7 @@ begin
       if not FAnimPrev.Valid and not FLazyPending then
       begin
         FAnimOldViewKeys := FMergeOldKeys;
+        FAnimOldUtKeys := FMergeOldUtKeys;
         FAnimFresh := nil;
         FAnimOldAxisKeys := FMergeOldAxes;
         FAnimFreshAxes := nil;
@@ -3819,6 +3832,7 @@ begin
   if (FOption.Media.UnitCount = 0) and not FOption.Media.HasDefault then Exit;
   MediaViewSize;
   FMergeOldKeys := AnimViewKeys;
+  FMergeOldUtKeys := AnimUtKeys;
   FMergeOldAxes := AxisViewKeys;
   FMergeFirst := True;
   FMergeResize := True;
@@ -30595,6 +30609,32 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.AnimUtKeys: TTyStringArray;
+var
+  i, n: Integer;
+  own, t: TJSONData;
+  typ: string;
+  isList: Boolean;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  n := FOption.ComponentCount('series');
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+  begin
+    own := TyAnimSeriesModel(FOption.Root, i, 0).Own;
+    typ := '';
+    if own is TJSONObject then
+    begin
+      t := TJSONObject(own).Find('type');
+      if (t <> nil) and (t.JSONType = jtString) then typ := t.AsString;
+    end;
+    Result[i] := TyUtTransitionKey(own, FOption.Root, typ,
+      FOption.ComponentId('series', i), isList);
+    if isList then Result[i] := 'L' + Result[i] else Result[i] := '-' + Result[i];
+  end;
+end;
+
 function TTyAdvanceChart.AxisViewKeys: TTyStringArray;
 var
   t, i, n: Integer;
@@ -30729,6 +30769,7 @@ begin
   { the same option: its series views are the ones there are now, its axis
     views too [Batch 99] }
   FAnimOldViewKeys := AnimViewKeys;
+  FAnimOldUtKeys := AnimUtKeys;
   FAnimOldAxisKeys := AxisViewKeys;
   FAnimFreshAxes := nil;
   FAnimPayload := APayload;
@@ -30789,6 +30830,12 @@ begin
     end;
     if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]
     else r.ViewKey := 'x:' + IntToStr(si);
+    { its universal transition key, read off the old option [Batch 136] }
+    if (si <= High(FAnimOldUtKeys)) and (FAnimOldUtKeys[si] <> '') then
+    begin
+      r.UtKeyList := FAnimOldUtKeys[si][1] = 'L';
+      r.UtKey := Copy(FAnimOldUtKeys[si], 2, MaxInt);
+    end;
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
     FAnimPrev.Series[si] := r;
@@ -30901,6 +30948,8 @@ begin
       or FBindings[slot].BaseAxis.Horizontal;
     { AN UPDATE'S VIEW [Batch 90] }
     r.SeriesType := t;
+    { the universal transition [Batch 136] }
+    TyUtSeriesInfo(r, FOption.Root, FOption.ComponentId('series', si));
     if si <= High(viewKeys) then r.ViewKey := viewKeys[si]
     else r.ViewKey := 'x:' + IntToStr(si);
     { brand new: a key no old view has [Batch 97] }
@@ -34640,6 +34689,7 @@ begin
       AddType(d);
   end;
   FMergeOldKeys := AnimViewKeys;
+  FMergeOldUtKeys := AnimUtKeys;
   FMergeOldAxes := AxisViewKeys;
   FMergeFirst := True;
   FMergeResize := False;
