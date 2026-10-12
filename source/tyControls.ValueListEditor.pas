@@ -137,7 +137,6 @@ type
     FDropPopup: TTyDropdownPopup;     // lazy dropdown shared by bool/enum and colour
     FEnumList: TTyListBox;            // content for vekBoolean / vekEnum
     FColorList: TTyListBox;           // content for vekColor (a TTyColorMorePopupList instance)
-    FMoreCaption: string;             // vekColor: the trailing "more…" row caption
     FColorDlgRow: TTyValueRow;        // row awaiting the deferred "more…" colour dialog (by identity), or nil
     FCommitFont: TFont;               // the font the font dialog picked, while its commit is asked about
     FKeyColumnWidth: Integer;         // logical px
@@ -490,7 +489,7 @@ implementation
 uses
   Forms, BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath,
   tyControls.ColorBox, tyControls.ColorComboBox,
-  tyControls.Dialogs.Color, tyControls.Dialogs.Font;
+  tyControls.Dialogs.Color, tyControls.Dialogs.Font, tyControls.StrConsts;
 
 { Density-aware icon/indent slot (logical px). Mirrors TyDensityHeight: at CLASSIC density it
   returns AClassic byte-identical (--icon-size is defined in the base theme as 16 and so cannot be
@@ -642,7 +641,6 @@ begin
   FColorDlgRow := nil;
   FKeyColumnWidth := 110;
   FIndent := 14;
-  FMoreCaption := '更多…';
   FEditor := TTyValueEdit.Create(Self);
   FEditor.Parent := Self;
   FEditor.Visible := False;
@@ -1150,7 +1148,7 @@ var
   a: Byte;
 begin
   a := 255;
-  Result := TySelectColor('选择颜色', AColor, a);
+  Result := TySelectColor(rsColorButtonDialogTitle, AColor, a);   // #68: the title was a Chinese literal
 end;
 
 function TTyCustomValueListEditor.DropList: TTyListBox;
@@ -1466,7 +1464,9 @@ begin
   FColorList.Items.Clear;
   TyAddDefaultColorPalette(FColorList.Items);
   idx := TySelectColorIndex(FColorList.Items, StringToColorDef(FFlatRow[AFlat].Value, clBlack));
-  TyAddColorItem(FColorList.Items, FMoreCaption, clNone);   // "more…" sentinel, kept LAST
+  { #68: the translated "More…" (it was a Chinese literal), read here rather than kept from
+    the constructor so a language picked later still reaches it -- as TTyColorComboBox does. }
+  TyAddColorItem(FColorList.Items, rsColorComboMore, clNone);   // "more…" sentinel, kept LAST
   FColorList.ItemIndex := idx;
   FDropSeeding := False;
   ConfigureDropCorners;

@@ -2174,6 +2174,9 @@ type
       两条路到达校验,不记住的话宿主的提示框会连弹两次。文本一变就作废。 }
     FRefusedText: string;
     FRefused: Boolean;
+    { #67: the mask editor's text as the edit opened. An edit is checked against the mask,
+      not a stored value. }
+    FMaskOpenText: string;
     FOnCanEditCell:  TTyGridCanEditEvent;
     FOnEditChange:   TTyGridEditChangeEvent;
     FOnCanInsertRow: TTyGridCanRowEvent;
@@ -2430,6 +2433,12 @@ type
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
+    { #67: the open edit is in the mask editor, changed, and leaves a required slot empty. }
+    function MaskUnfilled: Boolean;
+    { #67: report the mask's own error for an edit that was just refused because of it. It is
+      raised, so call it only from a key or mouse handler: LCL reports it from there as it
+      reports the mask editor's own. }
+    procedure ReportUnfilledMask;
     { #52: an arrow one of the grid's own children leaves standing. See the implementation. }
     function ChildKey(var Message: TLMKey): Boolean; override;
     function  EditorTargetRect: TRect;
@@ -3690,6 +3699,41 @@ const
   NoDateSentinel = -1.0e18;
   { 星级的满分。绘制与命中都用它,别各写一个 5。 }
   TyGridRatingMax = 5;
+
+type
+  { UTF8KeyPress is protected on TWinControl: TypeIntoCell hands the key that opened an
+    editor to it through this. }
+  TTyEditorKeyAccess = class(TWinControl);
+
+  { #67. The grid's mask editor. A mask editor checks itself when it loses the focus and
+    raises on a required slot left empty (maskedit.md 5.2) -- in a cell, at the wrong times.
+    Hiding the editor at the end of an edit ran the check: on a value being thrown away, or
+    one the grid had already refused. Leaving the grid raised it in the middle of LCL's focus
+    change, which then never told the grid the focus had gone, and an editor was left open on
+    a grid without the focus. Here the grid owns the check: ValidateEdit raises only when the
+    grid reports an edit it refused (Report). }
+  TTyGridMaskEdit = class(TTyMaskEdit)
+  private
+    FReporting: Boolean;
+  public
+    procedure ValidateEdit; override;
+    procedure Report;
+  end;
+
+procedure TTyGridMaskEdit.ValidateEdit;
+begin
+  if FReporting then inherited ValidateEdit;
+end;
+
+procedure TTyGridMaskEdit.Report;
+begin
+  FReporting := True;
+  try
+    ValidateEdit;
+  finally
+    FReporting := False;
+  end;
+end;
 
 { 过滤表达式的存储格式是 '<op序号>|<文本>' —— 一条字符串装下两样东西,
   沿用既有的 name=value 存储,不必再开一张表。 }
@@ -8519,7 +8563,7 @@ begin
   FCalcEditor.OnKeyDown := @EditorCancelKeyDown;
   FCalcEditor.OnExit := @EditorExit;
 
-  FMaskEditor := TTyMaskEdit.Create(Self);
+  FMaskEditor := TTyGridMaskEdit.Create(Self);   { #67: the grid owns its exit check }
   FMaskEditor.Parent := Self;
   FMaskEditor.Visible := False;
   FMaskEditor.ControlStyle := FMaskEditor.ControlStyle + [csNoDesignVisible];
@@ -9619,6 +9663,7 @@ begin
   begin
     FGestureRefused := True;
     RefocusEditor;
+    ReportUnfilledMask;   { #67 }
     Exit;
   end;
   inherited MouseDown(Button, Shift, X, Y);
@@ -9917,9 +9962,14 @@ begin
 end;
 
 function TTyCustomStringGrid.TypeIntoCell(const AChar: string): Boolean;
+var
+  key: TUTF8Char;
+  was: string;
+  home: Word;
 begin
   Result := BeginEdit;
   if not Result then Exit;
+  key := AChar;
   { 这一笔就是新内容的第一个字符 —— 覆盖原值,与 Excel 一致。 }
   if FEditor.Visible then
   begin
@@ -9928,7 +9978,54 @@ begin
     { AChar 按约定就是**一个**字符,所以光标位置是 1 —— TTyEdit 的 SelStart 数的是
       码点不是字节,一个汉字在这里同样只算 1。 }
     FEditor.SelStart := 1;
-  end;
+  end
+  { #64. Every other editor opened and never saw the key. It now gets it through its own
+    UTF8KeyPress -- the way a real key arrives -- so its own rules decide what the key does:
+    the spin and calculator edits take digits, the mask fills its first slot, the date picker
+    types into a field, the pick list finds the item by its letter (and commits, #59). LCL's
+    grid does the same (grids.pas EditorShowChar -> SendCharToEditor).
+    The key replaces what was there, as above: an editor with a selection selects everything
+    first. (The calculator and the mask, both TTyEdits, have done so already when the focus
+    came from the keyboard, as it did here -- AutoSelect; said again so the replacing does not
+    hang on how the focus arrived. The memo has no AutoSelect.) The spin edit has no
+    selection, so it is emptied -- and given its number back when it does not take the key,
+    or a key it refuses would leave the cell blank.
+    A host editor (OnCreateEditLink) is none of these and keeps the key out: there is no way
+    to hand it one. Neither do the cells with nothing to type into (check box, rating, slider,
+    colour) -- none of these editors is showing for them. }
+  else if FSpinEditor.Visible then
+  begin
+    was := FSpinEditor.Text;
+    FSpinEditor.Text := '';
+    TTyEditorKeyAccess(FSpinEditor).UTF8KeyPress(key);
+    if FSpinEditor.Text = '' then FSpinEditor.Text := was;
+  end
+  else if FMemoEditor.Visible then
+  begin
+    FMemoEditor.SelectAll;
+    TTyEditorKeyAccess(FMemoEditor).UTF8KeyPress(key);
+  end
+  else if FCalcEditor.Visible then
+  begin
+    FCalcEditor.SelectAll;
+    TTyEditorKeyAccess(FCalcEditor).UTF8KeyPress(key);
+  end
+  else if FMaskEditor.Visible then
+  begin
+    FMaskEditor.SelectAll;
+    TTyEditorKeyAccess(FMaskEditor).UTF8KeyPress(key);
+  end
+  else if FDateEditor.Visible then
+  begin
+    { Every date and time cell shares this one picker, and it keeps the field the last edit
+      left it on. The key starts what the cell will hold, so it goes where Home and then the
+      key would put it: into the first field. }
+    home := VK_HOME;
+    TTyEditorKeyAccess(FDateEditor).KeyDown(home, []);
+    TTyEditorKeyAccess(FDateEditor).UTF8KeyPress(key);
+  end
+  else if FPickEditor.Visible then
+    TTyEditorKeyAccess(FPickEditor).UTF8KeyPress(key);
 end;
 
 procedure TTyCustomStringGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
@@ -16089,6 +16186,7 @@ begin
     FMaskEditor.Controller := Self.Controller;
     FMaskEditor.Mask := EditMaskFor(FCol);
     FMaskEditor.Text := GetEditText(FCol, FRow);
+    FMaskOpenText := FMaskEditor.Text;
     FMaskEditor.BoundsRect := r;
     FMaskEditor.Visible := True;
     if HandleAllocated and FMaskEditor.CanFocus then FMaskEditor.SetFocus;
@@ -16123,7 +16221,10 @@ begin
   { 一次只会有一个编辑器可见,所以按可见性挑;日期与时间共用一个控件,得看开编辑时记下的种类
     (从前一律当日期提交,时间格被写成 1899-12-30 —— 见旧 EndEdit 里的注释)。 }
   if FEditLink <> nil then Exit(FEditLink.GetValue);
-  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.Value));
+  { #66. Not Value: the number being typed sits in the spin edit's text until the spin edit
+    commits it -- on Enter, or in its DoExit, which runs after the OnExit that ends the edit
+    here. Read it the way that commit will, clamped to the range. }
+  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.StrToValue(FSpinEditor.Text)));
   if FSliderEditor.Visible then Exit(IntToStr(FSliderEditor.Position));
   if FMemoEditor.Visible   then Exit(FMemoEditor.Text);
   if FMaskEditor.Visible   then Exit(FMaskEditor.Text);
@@ -16152,6 +16253,9 @@ begin
   if not FEditing then Exit;
   if FEndingEdit then Exit;
   if not ACommit then begin EndEdit(False); Exit; end;   { 放弃从不被否决 }
+  { #67. A required slot left empty is refused the way OnValidateCell refuses a value. The
+    gesture that asked reports it (ReportUnfilledMask); this only answers. }
+  if MaskUnfilled then Exit(False);
   if Assigned(FOnValidateCell) then
   begin
     oldTxt := GetEditText(FEditCol, FEditRow);
@@ -16177,7 +16281,7 @@ end;
 procedure TTyCustomStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
-  accept, valid, preValidated: Boolean;
+  accept, valid, preValidated, maskRefused: Boolean;
 begin
   { 先收旗子再过守卫:TryEndEdit 举了旗又被守卫弹回来的话,旗不能留到下一次。 }
   preValidated := FValidatedPending;
@@ -16192,6 +16296,8 @@ begin
       取值走 PendingEditText —— 校验时宿主看到的字符串和这里写回的是同一个。 }
     oldTxt := GetEditText(FEditCol, FEditRow);
     if ACommit then newTxt := PendingEditText else newTxt := oldTxt;
+    { #67. Not written, even by a close that nothing can refuse. }
+    maskRefused := ACommit and MaskUnfilled;
     FEditing := False;
     if FEditLink <> nil then
     begin
@@ -16209,7 +16315,7 @@ begin
     FEditor.Visible := False;
     if ACommit and (newTxt <> oldTxt) then
     begin
-      accept := True;
+      accept := not maskRefused;
       { 数值列:非法值一律不写回(总比把 'abc' 存进金额列强)。 }
       if (EditorKindFor(FEditCol, FEditRow) = gekNumeric)
          and (newTxt <> '') and (StrToFloatDef(newTxt, MaxDouble) = MaxDouble) then
@@ -16259,6 +16365,24 @@ begin
     父窗体上抛 "Can not focus"(无头运行的窗体从没 Show 过)。与 DoBeginEdit 给编辑器
     SetFocus 时的守卫一字不差。 }
   if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
+end;
+
+function TTyCustomStringGrid.MaskUnfilled: Boolean;
+begin
+  { Changed, not merely unfilled: a cell whose stored value does not fill the mask -- it came
+    in from a file -- can be opened and left again untouched, as a mask editor is left
+    without a check when its text is what it was on entry (TTyMaskEdit.DoExit).
+    The mask is asked for first: with none, IsComplete answers False (no slot is filled),
+    and every change would be refused with nothing to report -- ValidateEdit has no mask to
+    report against. The editor shows only while an edit is open, and never beside a host's. }
+  Result := FMaskEditor.Visible and (FMaskEditor.Mask <> '')
+    and (FMaskEditor.Text <> FMaskOpenText) and not FMaskEditor.IsComplete;
+end;
+
+procedure TTyCustomStringGrid.ReportUnfilledMask;
+begin
+  { The mask editor's own error, the one it raises when the focus leaves it unfilled. }
+  if MaskUnfilled then TTyGridMaskEdit(FMaskEditor).Report;
 end;
 
 { Where the open editor belongs now: on its cell's visible part, widened as BeginEdit
@@ -16357,7 +16481,7 @@ end;
   stays where it is. Arrows with a modifier are not navigation, and are left alone. }
 function TTyCustomStringGrid.ChildKey(var Message: TLMKey): Boolean;
 var
-  wasEditing: Boolean;
+  wasEditing, refused: Boolean;
 begin
   if (Message.CharCode in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN]) and
      (GetKeyShiftState * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
@@ -16369,7 +16493,12 @@ begin
         VK_DOWN: MoveCursor(FCol, FRow + 1);
       end;
     if wasEditing and not FEditing and HandleAllocated and CanFocus then SetFocus;
+    { #67: an Up/Down the edit turned down. Only Up/Down reach here from the mask editor --
+      it takes Left/Right itself, even at either end of its text -- and for any other editor
+      ReportUnfilledMask has nothing to say, so the edit still being open is enough. }
+    refused := FEditing;
     Message.CharCode := VK_UNKNOWN;
+    if refused then ReportUnfilledMask;
     Exit(True);
   end;
   Result := inherited ChildKey(Message);
@@ -16383,7 +16512,13 @@ begin
       本文件其余十来处 SetFocus 都带着它,只有这两处漏了。 }
     VK_RETURN: begin Key := 0;
                  { 被拦下就把焦点留给编辑器 —— 不然用户看着编辑器还在,键却敲进了网格。 }
-                 if TryEndEdit(True) and HandleAllocated and CanFocus then SetFocus; end;
+                 if TryEndEdit(True) then
+                 begin
+                   if HandleAllocated and CanFocus then SetFocus;
+                 end
+                 else
+                   ReportUnfilledMask;   { #67 }
+               end;
     VK_ESCAPE: begin EndEdit(False); Key := 0;
                  if HandleAllocated and CanFocus then SetFocus; end;
   end;
@@ -16767,6 +16902,9 @@ end;
 initialization
   { 设计器与 .lfm 流式化按类名查类,必须登记。 }
   RegisterClasses([TTyCustomGrid, TTyDrawGrid, TTyStringGrid]);
+  { #67: the grid's own mask editor. A grid streamed as the root writes the editors it owns
+    along with it, and reading them back looks each class up by name. }
+  RegisterClass(TTyGridMaskEdit);
   { 这里**没有** `TyGridCheckedWord := rsGridCheckedWord;`,并且不能加回来:
     语言目录装载晚于单元初始化,那份拷贝抓到的永远是英文 —— 判定在 CellChecked
     里实时读 resourcestring(见 TyGridCheckedWord 声明处)。 }

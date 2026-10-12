@@ -92,7 +92,7 @@ end;
 | `gekSlider` | 滑动条,范围同上。编辑时自带数值读数,拖到哪儿一眼看得见 |
 | `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感);光标停在格上时直接敲 0–5 也行,0 清空,敲完按 Enter / ↓ 去下一行 |
 | `gekMemo` | 多行文本,编辑器向下撑开 |
-| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同) |
+| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同)。改过之后必填位还空着就不让提交:编辑器留着、不写回,按 Enter、↑↓ 或点别的格时报掩码框自己的那条错误,跟 `OnValidateCell` 拒绝一样;没改过的格随时能离开 |
 | `gekTime` | 只选时间 |
 | `gekPassword` | 输入时打点 |
 | `gekCalculator` | 带计算器的数值输入 |
@@ -391,7 +391,9 @@ TyGridButton                按钮单元格(:hover / :active)
 - 走 `OnCreateEditLink` 的:省略号按钮弹任意对话框、子表格、图片选择器 ——
   这些的"编辑器"本体是宿主的业务 UI,内建反而限制人
 - 逐格 `CellReadOnly[c,r]`
-- 键盘手感:直接敲字进编辑(这一笔即第一个字符)、Enter 向下、Tab 按格推进折行
+- 键盘手感:直接敲字进编辑(这一笔即第一个字符,各编辑器按自己的规矩接:微调只收数字、
+  掩码填进第一个空位、日期时间从第一个字段输起、下拉按首字母选中;经 `OnCreateEditLink`
+  接入的宿主编辑器收不到这一笔)、Enter 向下、Tab 按格推进折行
 - 输入约束按键级过滤(非法字符**连编辑都不进**)
 - 宿主自带编辑器:`OnCreateEditLink` + `TTyGridEditLink`
 - 单元格类型:文本 / 数值 / 下拉 / 日期 / 颜色 / 勾选框 / 进度条 / 评分 / 图片 / 按钮
