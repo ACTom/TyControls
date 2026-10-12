@@ -1004,6 +1004,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyRibbonGallery` | Ribbon 画廊的内嵌行外框(与 `TyListBox` 共块) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
 | `TyListItem` | 单行条目:`background` 决定行底、`color` 决定文字 | `TTyListBox`;`TTyRibbonGallery` 的图块也仍解析它 | `:hover` `:active`(=选中行) |
 | `TyValueListEditorRow` | 属性网格的一行(与 `TyListItem` 共块) | `TTyValueListEditor` | `:hover` `:active` |
+| `TyValueListEditorGroup` | 属性网格的标题行(`TTyValueRow.Heading`,属性表格的分类)平时的底色、文字色、字重;挂在 `TyValueListEditorRow` 下面 | `TTyValueListEditor` | —(悬停、选中时照 `TyValueListEditorRow` 画) |
 
 `TyValueListEditorKey` / `-Value` / `-Divider` / `-Expander` 由代码解析但**基础层刻意不定义**,见 §8.4。
 

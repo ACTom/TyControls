@@ -422,7 +422,7 @@ CharImage1.GlyphName := 'house';
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
 | [dbcontrols](examples/dbcontrols/) | 数据感知控件:21 个控件绑一张内存表,导航、编辑、空值、查找、照片 |
 | [dbgrid](examples/dbgrid/) | 数据表格:一千条订单,设计期列(勾选、查找、备注、金额格式),标题点击排序,多选删除,只读开关 |
-| [propertygrid](examples/propertygrid/) | 属性表格:点哪个控件就检查哪个,改了直接写回;显示事件开关,用 `OnFilterProperty` 做的过滤框 |
+| [propertygrid](examples/propertygrid/) | 属性表格:点哪个控件就检查哪个,Ctrl+点击多选,改了直接写回;按名字过滤、分类、只看可写的、显示事件,给字符串表格增删列 |
 | [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY / 管道)、ZModem 收发、换肤、配色方案、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。

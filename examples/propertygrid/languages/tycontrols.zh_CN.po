@@ -227,6 +227,10 @@ msgstr "无效的 linear-gradient：%s"
 msgid "background-image needs url(): %s"
 msgstr "background-image 需要 url()：%s"
 
+#: tycontrols.strconsts.rsribbonmoregroups
+msgid "More groups"
+msgstr "更多分组"
+
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
 #, object-pascal-format
 msgid "background-image needs slice(): %s"
@@ -575,6 +579,34 @@ msgstr ""
 "无窗口的图形控件绘制在窗体自身上,会被内容区遮挡而看不见。\n"
 "请把它移进 Surface 内容容器,它才会显示。"
 
+#: tycontrols.strconsts.rstypropgridadditem
+msgid "Add Item"
+msgstr "添加项"
+
+#: tycontrols.strconsts.rstypropgridcatappearance
+msgid "Appearance"
+msgstr "外观"
+
+#: tycontrols.strconsts.rstypropgridcatbehavior
+msgid "Behavior"
+msgstr "行为"
+
+#: tycontrols.strconsts.rstypropgridcatevents
+msgid "Events"
+msgstr "事件"
+
+#: tycontrols.strconsts.rstypropgridcatlayout
+msgid "Layout"
+msgstr "布局"
+
+#: tycontrols.strconsts.rstypropgridcatother
+msgid "Other"
+msgstr "其他"
+
+#: tycontrols.strconsts.rstypropgriddeleteitem
+msgid "Delete Item"
+msgstr "删除项"
+
 #: tycontrols.strconsts.rstypropgridinvalidvalue
 #, object-pascal-format
 msgid "'%s' is not a valid value for %s"
@@ -584,6 +616,14 @@ msgstr "“%s”不是 %s 的有效值"
 #, object-pascal-format
 msgid "(%d items)"
 msgstr "（%d 项）"
+
+#: tycontrols.strconsts.rstypropgridmovedown
+msgid "Move Down"
+msgstr "下移"
+
+#: tycontrols.strconsts.rstypropgridmoveup
+msgid "Move Up"
+msgstr "上移"
 
 #: tycontrols.strconsts.rstypropgridnocomponent
 #, object-pascal-format
