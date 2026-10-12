@@ -1,5 +1,6 @@
 unit tyControls.DB.Grid;
 {$mode objfpc}{$H+}
+{$modeswitch nestedprocvars}
 { The data-aware grid (issue #34, phase 2): LCL's TDBGrid on top of the library's string grid.
   TTyCustomDBGrid holds the data link and all the code, TTyDBGrid publishes.
 
@@ -73,13 +74,43 @@ unit tyControls.DB.Grid;
   the user typed; the exception goes on to the application. A cell is read-only when the grid
   is ReadOnly, dgEditing is off, the data link is ReadOnly, the dataset or the field cannot
   modify, the column is ReadOnly, or the field is calculated, an auto-increment counter, a
-  blob (a memo without dgDisplayMemoText) or a lookup whose key fields cannot be modified. }
+  blob (a memo without dgDisplayMemoText) or a lookup whose key fields cannot be modified.
+  A check box toggles only when the dataset goes into dsEdit (CanToggleCellCheck): a refused
+  toggle changes nothing and reports nothing (no OnCheckBoxChange).
+
+  TAB (dgTabs) moves field by field and, past the last field of the window's last row, on to
+  the next record's first field -- appending past the last record as Down does; Shift+Tab is
+  the mirror. LCL leaves the grid there instead while the record is being edited or the grid
+  cannot modify; this grid always goes on.
+
+  THE INDICATOR (plan D6) marks the current record with its state -- a triangle browsing, an
+  I-beam editing, the I-beam in the insert colour (the accent the theme gives a selected cell)
+  inserting -- and every other selected row (dgMultiselect) with a dot. A theme replaces a
+  mark with an icon-font glyph: '--glyph-dbgrid-browse', '-edit', '-insert', '-selected';
+  otherwise the grid draws it with the painter in the indicator column's text colour. It turns
+  round with the reading direction.
+
+  MULTISELECT (dgMultiselect, LCL's rules): a click selects the record clicked alone, Ctrl+click
+  (and Ctrl+*) toggles it, Shift+Up / Shift+Down extend or shrink the run, the other moves select
+  the record moved to alone; dgPersistentMultiSelect keeps the selection through all of them
+  but Ctrl+click. SelectedRows holds a bookmark per record (TTyBookmarkList); a selected row is
+  drawn as a selected cell is. The list empties when the dataset closes or is changed, and when
+  dgMultiselect goes.
+
+  A TITLE CLICK is OnTitleClick(Column) -- the dataset is the one to sort (IndexFieldNames, an
+  ORDER BY); there are no filter buttons on the titles either.
+
+  EVENTS are LCL's (plan D9) with this grid's column in place of TColumn; the drawing ones
+  carry the painter (there is no canvas to draw on), and OnPrepareCanvas changes the cell's
+  style (TTyGridCellAppearance) rather than a canvas. While a cell's event runs the data link's
+  active record is that cell's row. }
 interface
 
 uses
-  Classes, SysUtils, Math, Controls, Graphics, LCLType, LMessages, LazUTF8,
-  DB, DBCtrls, DBGrids,
-  tyControls.Types, tyControls.Base, tyControls.Columns, tyControls.Grid;
+  Classes, SysUtils, Math, Types, Controls, Graphics, StdCtrls, LCLType, LMessages, LazUTF8,
+  DB, DBCtrls, Grids, DBGrids,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns, tyControls.Grid,
+  tyControls.Grid.Layout;
 
 const
   { LCL's TDBGrid defaults (dbgrids.pas, TCustomDBGrid.Options / OptionsExtra). Untyped, so
@@ -91,7 +122,75 @@ const
   TyDBGridIndicatorWidth = 12;
 
 type
+  { What the indicator column shows on a row (plan D6). }
+  TTyDBGridIndicator = (dgiNone, dgiBrowse, dgiEdit, dgiInsert, dgiSelected);
+
+const
+  { The icon-font override each indicator mark looks for (v3/C5); without one the grid draws
+    its own mark with the painter. }
+  TyDBGridIndicatorTokens: array[TTyDBGridIndicator] of string = (
+    '', '--glyph-dbgrid-browse', '--glyph-dbgrid-edit', '--glyph-dbgrid-insert',
+    '--glyph-dbgrid-selected');
+
+type
   TTyCustomDBGrid = class;
+  TTyDBGridColumn = class;
+
+  { LCL's DBGrids event types, with this grid's column where LCL's take a TColumn. }
+  TTyDBGridClickEvent = procedure(Column: TTyDBGridColumn) of object;
+  { OnDrawColumnCell: the cell's background is painted, its text not yet. Draw with APainter
+    in Rect; AHandled := True and the grid draws no text of its own. }
+  TTyDBGridDrawColumnCellEvent = procedure(Sender: TObject; const Rect: TRect;
+    DataCol: Integer; Column: TTyDBGridColumn; State: TGridDrawState;
+    APainter: TTyPainter; var AHandled: Boolean) of object;
+  { OnDrawColumnTitle: after the title is drawn, as LCL's (DefaultDrawing). }
+  TTyDBGridDrawColumnTitleEvent = procedure(Sender: TObject; const Rect: TRect;
+    DataCol: Integer; Column: TTyDBGridColumn; State: TGridDrawState;
+    APainter: TTyPainter) of object;
+  { OnPrepareCanvas: LCL hands over the canvas to set colours and font on; this grid draws
+    with a painter, and what a cell is drawn with is AStyle -- background, text colour, font,
+    alignment -- which the handler may change. }
+  TTyDBGridPrepareStyleEvent = procedure(Sender: TObject; DataCol: Integer;
+    Column: TTyDBGridColumn; AState: TGridDrawState;
+    var AStyle: TTyGridCellAppearance) of object;
+  TTyDBGridSelEditorEvent = procedure(Sender: TObject; Column: TTyDBGridColumn;
+    var Editor: TWinControl) of object;
+  TTyDBGridCheckboxStateEvent = procedure(Sender: TObject; Column: TTyDBGridColumn;
+    var AState: TCheckBoxState) of object;
+  TTyDBGridCellHintEvent = procedure(Sender: TObject; Column: TTyDBGridColumn;
+    var AText: string) of object;
+
+  { LCL's TBookmarkList, for the rows the user picked under dgMultiselect: a bookmark per
+    record, made, compared (CompareBookmarks) and freed by the dataset. The list is the
+    grid's; it empties when the dataset closes or dgMultiselect goes. }
+  TTyBookmarkList = class
+  private
+    FGrid: TTyCustomDBGrid;
+    FList: array of TBookmark;
+    FDataSet: TDataSet;   // the one the bookmarks came from
+    function GetCount: Integer;
+    function GetItem(AIndex: Integer): TBookmark;
+    function GetCurrentRowSelected: Boolean;
+    procedure SetCurrentRowSelected(AValue: Boolean);
+    function LinkDataSet: TDataSet;
+    procedure FreeOne(ABookmark: TBookmark);
+    procedure Changed;
+  public
+    constructor Create(AGrid: TTyCustomDBGrid);
+    destructor Destroy; override;
+    procedure Clear;
+    { Delete every selected record from the dataset, then forget them (LCL's). }
+    procedure Delete;
+    { The position of the record ABookmark marks, -1 when it is not selected. }
+    function IndexOf(const ABookmark: TBookmark): Integer;
+    { Forget the bookmarks the dataset no longer holds (BookmarkValid); True when any went. }
+    function Refresh: Boolean;
+    property Count: Integer read GetCount;
+    property Items[AIndex: Integer]: TBookmark read GetItem; default;
+    { Is the dataset's current record selected? Setting it selects or deselects it. }
+    property CurrentRowSelected: Boolean read GetCurrentRowSelected
+      write SetCurrentRowSelected;
+  end;
 
   { LCL's TComponentDataLink, which DBGrids keeps to itself: every dataset event reaches the
     grid. UpdateData (the dataset is about to post or leave the record) writes the open
@@ -222,7 +321,34 @@ type
     { A gesture closed the editor itself before it moved the record (to tell a new record
       nobody typed into): a refused move still brings the editor back. }
     FEditorWasOpen: Boolean;
+    { Moves DataOp has made (a MoveBy that went somewhere, a First, an Append, ...): a
+      gesture compares it before and after to tell whether the record changed. }
+    FMoveCount: Integer;
+    FSelectedRows: TTyBookmarkList;
+    { Which rows are selected, worked out once per paint (RowIsSelected). }
+    FSelRowCache: array of Boolean;
+    FSelCacheValid: Boolean;
+    FUserCreateEditLink: TTyGridCreateEditLinkEvent;
+    FControlLink: TTyGridEditLink;
     FOnFieldEditMask: TGetDbEditMaskEvent;
+    FOnCellClick: TTyDBGridClickEvent;
+    FOnTitleClick: TTyDBGridClickEvent;
+    FOnColEnter: TNotifyEvent;
+    FOnColExit: TNotifyEvent;
+    FOnColumnMoved: TMovedEvent;
+    FOnColumnSized: TNotifyEvent;
+    FOnDrawColumnCell: TTyDBGridDrawColumnCellEvent;
+    FOnDrawColumnTitle: TTyDBGridDrawColumnTitleEvent;
+    FOnPrepareCanvas: TTyDBGridPrepareStyleEvent;
+    FOnSelectEditor: TTyDBGridSelEditorEvent;
+    FOnUserCheckboxState: TTyDBGridCheckboxStateEvent;
+    FOnGetCellHint: TTyDBGridCellHintEvent;
+    FOnEditButtonClick: TNotifyEvent;
+    procedure SetOnGetCellHint(AValue: TTyDBGridCellHintEvent);
+    { The string grid's own hint, cell edit-link and their LCL-shaped counterparts here. }
+    procedure BaseCellHint(Sender: TObject; ACol, ARow: Integer; var AHint: string);
+    procedure ProvideEditLink(Sender: TObject; ACol, ARow: Integer;
+      var ALink: TTyGridEditLink);
     function GetDataSource: TDataSource;
     procedure SetDataSource(AValue: TDataSource);
     function GetColumns: TTyDBGridColumns;
@@ -344,6 +470,56 @@ type
     { Asked before Ctrl+Del deletes, when dgConfirmDelete is set: True deletes. A themed
       TyMessageDlg with OK and Cancel, as LCL asks with its MessageDlg. }
     function ConfirmDeleteRecord: Boolean; virtual;
+    { The check box toggle writes the field: none while the cell is read-only or the dataset
+      will not edit (then no OnCellEdited, no OnCheckBoxChange either). }
+    function CanToggleCellCheck(ACol, ARow: Integer): Boolean; override;
+    { Does ACol show a check box (a boolean field under dgeCheckboxColumn, or a column whose
+      EditorKind is gekCheckBox)? }
+    function ColumnShowsCheckBox(ACol: Integer): Boolean;
+    { A check box cell's text under OnUserCheckboxState (the current buffer record). }
+    function UserCheckBoxText(ACol: Integer; AField: TField): string;
+
+    { --- the indicator, multiselect, title click, events (plan Task 5) --- }
+    { What the indicator shows on data row ARow (plan D6): the current record's state -- a
+      triangle browsing, a bar editing, a bar in the insert colour inserting -- and a dot on
+      the other selected rows under dgMultiselect. }
+    function IndicatorFor(ARow: Integer): TTyDBGridIndicator;
+    procedure RenderChrome(P: TTyPainter; const M: TTyGridMetrics); override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); override;
+    procedure RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
+      AHeaderH: Integer); override;
+    function DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
+    procedure DoGetCellStyle(ACol, ARow: Integer;
+      var AAppearance: TTyGridCellAppearance); override;
+    { A selected row (dgMultiselect) is drawn as a selected cell is. }
+    function CellStates(ACol, ARow: Integer): TTyStateSet; override;
+    { The LCL draw state of a body cell. }
+    function DrawStateOf(ACol, ARow: Integer): TGridDrawState;
+    { Is data row ARow one of SelectedRows? }
+    function RowIsSelected(ARow: Integer): Boolean;
+    { LCL's ClearSelection: under dgMultiselect without dgPersistentMultiSelect, forget the
+      selection; ASelectCurrent then selects the current record. }
+    procedure ClearSelection(ASelectCurrent: Boolean);
+    procedure ToggleSelectedRow;
+    { Shift+Up / Shift+Down (LCL's SelectNext): the record moved to is selected; the one
+      left is deselected when both were selected (the run shrinks), selected otherwise. }
+    procedure ExtendSelection(APrevSelected, ANewSelected, ADown: Boolean);
+    { Tab past the last field of the window's last row goes on to the next record (appending
+      at the end, as Down does), Shift+Tab before the first field of its first row back to
+      the record before. False: nothing moved, the key is the string grid's. }
+    function WrapTab(ABackward: Boolean): Boolean;
+    function ShowsFilterButton(ACol: Integer): Boolean; override;
+    procedure InvokeEllipsis(ACol, ARow: Integer); override;
+    procedure CursorMoved(AOldCol, AOldRow: Integer); override;
+    procedure HeaderSectionClicked(ACol: Integer); override;
+    procedure ColumnSized(ACol: Integer); override;
+    procedure ColumnMoved(AFromPos, AToPos: Integer); override;
+    { OnMouseWheel / OnMouseWheelUp / OnMouseWheelDown, LCL's TControl.DoMouseWheel order.
+      See the implementation: a stand-in for the string grid until it fires them itself. }
+    function FireWheelEvents(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean;
+    { The column ACol as this grid's column (nil when out of range). }
+    function DBColumn(ACol: Integer): TTyDBGridColumn;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -366,8 +542,42 @@ type
       default TyDBGridDefaultOptions;
     property OptionsExtra: TDBGridExtraOptions read FExtraOptions write SetExtraOptions
       default TyDBGridDefaultExtraOptions;
+    { The rows the user selected (dgMultiselect). }
+    property SelectedRows: TTyBookmarkList read FSelectedRows;
     { The edit mask of a cell of Field, starting from Field.EditMask (LCL's). }
     property OnFieldEditMask: TGetDbEditMaskEvent read FOnFieldEditMask write FOnFieldEditMask;
+    { LCL's events (plan D9). OnCellClick: a left click on a body cell, the record moved
+      there. OnTitleClick: a click on a title -- the application sorts the dataset; the grid
+      does not sort. OnColExit / OnColEnter: the current column is about to change / has
+      changed. OnColumnMoved: the user dragged a column to another place (display
+      positions). OnColumnSized: the user let go of a column divider. OnSelectEditor: an
+      editor is about to open; Editor comes in nil (the grid's own), a control put there edits
+      the cell instead -- given the field's text, read back when the cell is left.
+      OnUserCheckboxState: the state a check box cell shows. OnGetCellHint: the hint of the
+      cell under the mouse, the dataset on its record. OnEditButtonClick: the ellipsis button
+      of a gekEllipsis column. OnDrawColumnCell / OnDrawColumnTitle / OnPrepareCanvas: see
+      their types. While a cell event runs, the data link's active record is that cell's row,
+      so Column.Field reads the row's value. }
+    property OnCellClick: TTyDBGridClickEvent read FOnCellClick write FOnCellClick;
+    property OnColEnter: TNotifyEvent read FOnColEnter write FOnColEnter;
+    property OnColExit: TNotifyEvent read FOnColExit write FOnColExit;
+    property OnColumnMoved: TMovedEvent read FOnColumnMoved write FOnColumnMoved;
+    property OnColumnSized: TNotifyEvent read FOnColumnSized write FOnColumnSized;
+    property OnDrawColumnCell: TTyDBGridDrawColumnCellEvent
+      read FOnDrawColumnCell write FOnDrawColumnCell;
+    property OnDrawColumnTitle: TTyDBGridDrawColumnTitleEvent
+      read FOnDrawColumnTitle write FOnDrawColumnTitle;
+    property OnEditButtonClick: TNotifyEvent read FOnEditButtonClick write FOnEditButtonClick;
+    property OnGetCellHint: TTyDBGridCellHintEvent read FOnGetCellHint write SetOnGetCellHint;
+    property OnPrepareCanvas: TTyDBGridPrepareStyleEvent
+      read FOnPrepareCanvas write FOnPrepareCanvas;
+    property OnSelectEditor: TTyDBGridSelEditorEvent read FOnSelectEditor write FOnSelectEditor;
+    property OnTitleClick: TTyDBGridClickEvent read FOnTitleClick write FOnTitleClick;
+    property OnUserCheckboxState: TTyDBGridCheckboxStateEvent
+      read FOnUserCheckboxState write FOnUserCheckboxState;
+    { The string grid's host edit-link event, asked first; OnSelectEditor after it. }
+    property OnCreateEditLink: TTyGridCreateEditLinkEvent
+      read FUserCreateEditLink write FUserCreateEditLink;
   end;
 
   { TTyDBGrid publishes TTyCustomDBGrid's properties; everything lives in TTyCustomDBGrid. }
@@ -446,15 +656,157 @@ type
     property OnHeaderClick;
     property OnHeaderRightClick;
     property OnTopLeftChanged;
+    property OnCellClick;
+    property OnColEnter;
+    property OnColExit;
+    property OnColumnMoved;
+    property OnColumnSized;
+    property OnDrawColumnCell;
+    property OnDrawColumnTitle;
+    property OnEditButtonClick;
     property OnFieldEditMask;
+    property OnGetCellHint;
+    property OnPrepareCanvas;
+    property OnSelectEditor;
+    property OnTitleClick;
+    property OnUserCheckboxState;
   end;
 
 implementation
 
 uses
-  Variants, Dialogs, BGRABitmap, tyControls.Painter, tyControls.StyleModel, tyControls.Dialogs,
-  tyControls.ScrollBar, tyControls.Grid.Layout,
+  Variants, Dialogs, BGRABitmap, tyControls.StyleModel, tyControls.Dialogs,
+  tyControls.ScrollBar,
   tyControls.DB.Common, tyControls.DB.StrConsts;
+
+type
+  { TControl keeps Text protected; the editor a handler gave OnSelectEditor is read and
+    written through it. }
+  TTyDBGridControlText = class(TWinControl);
+
+  { The control OnSelectEditor handed over, as the string grid's host edit link: it is
+    placed on the cell, given the field's text, and read when the cell is left. The grid
+    shows and hides it; the application owns it. }
+  TTyDBGridControlLink = class(TTyGridEditLink)
+  public
+    Control: TWinControl;
+    function CreateEditor(AParent: TWinControl; ACol, ARow: Integer): TWinControl; override;
+    procedure SetBounds(const ARect: TRect); override;
+    function GetValue: string; override;
+    procedure SetValue(const AValue: string); override;
+    procedure FocusEditor; override;
+    procedure ReleaseEditor; override;
+  end;
+
+function TTyDBGridControlLink.CreateEditor(AParent: TWinControl; ACol,
+  ARow: Integer): TWinControl;
+begin
+  Result := Control;
+  if Control = nil then Exit;
+  Control.Parent := AParent;
+  Control.Visible := True;
+end;
+
+procedure TTyDBGridControlLink.SetBounds(const ARect: TRect);
+begin
+  if Control <> nil then Control.BoundsRect := ARect;
+end;
+
+function TTyDBGridControlLink.GetValue: string;
+begin
+  if Control <> nil then
+    Result := TTyDBGridControlText(Control).Text
+  else
+    Result := '';
+end;
+
+procedure TTyDBGridControlLink.SetValue(const AValue: string);
+begin
+  if Control <> nil then TTyDBGridControlText(Control).Text := AValue;
+end;
+
+procedure TTyDBGridControlLink.FocusEditor;
+begin
+  if (Control <> nil) and Control.HandleAllocated and Control.CanFocus then Control.SetFocus;
+end;
+
+procedure TTyDBGridControlLink.ReleaseEditor;
+begin
+  if Control <> nil then Control.Visible := False;
+  Control := nil;
+end;
+
+{ ---- the marks the indicator draws when the theme gives no glyph ---------------------- }
+
+{ The mark AKind in the square ABox (device px) in AColor; AMirror turns it round for a
+  right-to-left grid (the triangle points the way the rows read). The stroke is a seventh of
+  the box, so the mark keeps its weight at every DPI. }
+procedure DrawIndicatorMark(P: TTyPainter; const ABox: TRect; AKind: TTyDBGridIndicator;
+  AColor: TTyColor; AMirror: Boolean);
+var
+  side, stroke: Double;
+
+  function X(AX: Double): Double;
+  begin
+    if AMirror then AX := 1 - AX;
+    Result := ABox.Left + AX * side;
+  end;
+
+  function Y(AY: Double): Double;
+  begin
+    Result := ABox.Top + AY * side;
+  end;
+
+  procedure Line(AX0, AY0, AX1, AY1: Double);
+  begin
+    P.BeginPath;
+    P.MoveTo(X(AX0), Y(AY0));
+    P.LineTo(X(AX1), Y(AY1));
+    P.StrokePath(AColor, stroke);
+  end;
+
+  { The text cursor's I-beam: a bar with a serif at each end. }
+  procedure IBeam;
+  begin
+    Line(0.5, 0.14, 0.5, 0.86);
+    Line(0.3, 0.14, 0.7, 0.14);
+    Line(0.3, 0.86, 0.7, 0.86);
+  end;
+
+begin
+  side := ABox.Right - ABox.Left;
+  if side <= 0 then Exit;
+  { StrokePath takes logical px and scales them itself. }
+  stroke := P.Unscale(Round(side)) / 7;
+  if stroke <= 0 then stroke := side / 7;
+  P.SaveState;
+  try
+    P.SetLineCap(tlcRound);
+    P.SetLineJoin(tljRound);
+    case AKind of
+      dgiBrowse:
+        begin
+          P.BeginPath;
+          P.MoveTo(X(0.28), Y(0.18));
+          P.LineTo(X(0.28), Y(0.82));
+          P.LineTo(X(0.78), Y(0.5));
+          P.ClosePath;
+          P.FillPath(AColor);
+        end;
+      dgiEdit, dgiInsert:
+        IBeam;
+      dgiSelected:
+        begin
+          P.BeginPath;
+          P.ArcTo(ABox.Left + 0.5 * side, ABox.Top + 0.5 * side, 0.2 * side, 0, 2 * Pi);
+          P.ClosePath;
+          P.FillPath(AColor);
+        end;
+    end;
+  finally
+    P.RestoreState;
+  end;
+end;
 
 { ================================================================== TTyDBGridDataLink == }
 
@@ -763,6 +1115,176 @@ begin
   Result := False;
 end;
 
+{ ==================================================================== TTyBookmarkList == }
+
+constructor TTyBookmarkList.Create(AGrid: TTyCustomDBGrid);
+begin
+  inherited Create;
+  FGrid := AGrid;
+end;
+
+destructor TTyBookmarkList.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+function TTyBookmarkList.LinkDataSet: TDataSet;
+begin
+  Result := nil;
+  if (FGrid <> nil) and (FGrid.DataLink <> nil) and FGrid.DataLink.Active then
+    Result := FGrid.DataLink.DataSet;
+end;
+
+procedure TTyBookmarkList.FreeOne(ABookmark: TBookmark);
+begin
+  { The dataset made it and is told it goes (TDataSet.FreeBookmark; a bookmark is a managed
+    array in FPC 3.2, released with the list's slot). }
+  if FDataSet <> nil then FDataSet.FreeBookmark(ABookmark);
+end;
+
+procedure TTyBookmarkList.Changed;
+begin
+  if FGrid <> nil then FGrid.Invalidate;
+end;
+
+function TTyBookmarkList.GetCount: Integer;
+begin
+  Result := Length(FList);
+end;
+
+function TTyBookmarkList.GetItem(AIndex: Integer): TBookmark;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FList)) then
+    raise EListError.CreateFmt('TTyBookmarkList: index %d out of bounds (count %d)',
+      [AIndex, Length(FList)]);
+  Result := FList[AIndex];
+end;
+
+procedure TTyBookmarkList.Clear;
+var
+  i: Integer;
+begin
+  if Length(FList) = 0 then Exit;
+  for i := 0 to High(FList) do
+    FreeOne(FList[i]);
+  SetLength(FList, 0);
+  FDataSet := nil;
+  Changed;
+end;
+
+function TTyBookmarkList.IndexOf(const ABookmark: TBookmark): Integer;
+var
+  ds: TDataSet;
+  i: Integer;
+begin
+  Result := -1;
+  ds := LinkDataSet;
+  if (ds = nil) or (ABookmark = nil) or (ds <> FDataSet) then Exit;
+  for i := 0 to High(FList) do
+    if ds.CompareBookmarks(FList[i], ABookmark) = 0 then Exit(i);
+end;
+
+function TTyBookmarkList.GetCurrentRowSelected: Boolean;
+var
+  ds: TDataSet;
+  bm: TBookmark;
+begin
+  Result := False;
+  ds := LinkDataSet;
+  if (ds = nil) or (Length(FList) = 0) or (ds.State in [dsInsert, dsSetKey]) then Exit;
+  bm := ds.GetBookmark;
+  try
+    Result := IndexOf(bm) >= 0;
+  finally
+    ds.FreeBookmark(bm);
+  end;
+end;
+
+procedure TTyBookmarkList.SetCurrentRowSelected(AValue: Boolean);
+var
+  ds: TDataSet;
+  bm: TBookmark;
+  i, n: Integer;
+begin
+  ds := LinkDataSet;
+  { A record not posted yet has no place to mark (LCL's: nothing selected while inserting). }
+  if (ds = nil) or ds.IsEmpty or (ds.State in [dsInsert, dsSetKey]) then Exit;
+  if (FDataSet <> nil) and (FDataSet <> ds) then Clear;
+  bm := ds.GetBookmark;
+  if bm = nil then Exit;
+  FDataSet := ds;
+  i := IndexOf(bm);
+  if AValue = (i >= 0) then
+  begin
+    ds.FreeBookmark(bm);
+    Exit;
+  end;
+  if AValue then
+  begin
+    n := Length(FList);
+    SetLength(FList, n + 1);
+    FList[n] := bm;
+  end
+  else
+  begin
+    ds.FreeBookmark(bm);
+    FreeOne(FList[i]);
+    { Element by element: the bookmarks are managed, Move would skip their reference counts. }
+    for n := i to High(FList) - 1 do
+      FList[n] := FList[n + 1];
+    SetLength(FList, Length(FList) - 1);
+    if Length(FList) = 0 then FDataSet := nil;
+  end;
+  Changed;
+end;
+
+procedure TTyBookmarkList.Delete;
+var
+  ds: TDataSet;
+  i: Integer;
+begin
+  ds := LinkDataSet;
+  if (ds = nil) or (Length(FList) = 0) then Exit;
+  ds.DisableControls;
+  try
+    for i := 0 to High(FList) do
+      if ds.BookmarkValid(FList[i]) then
+      begin
+        ds.GotoBookmark(FList[i]);
+        ds.Delete;
+      end;
+  finally
+    Clear;
+    ds.EnableControls;
+  end;
+end;
+
+function TTyBookmarkList.Refresh: Boolean;
+var
+  ds: TDataSet;
+  i, n: Integer;
+begin
+  Result := False;
+  ds := LinkDataSet;
+  if ds = nil then Exit;
+  n := 0;
+  for i := 0 to High(FList) do
+    if ds.BookmarkValid(FList[i]) then
+    begin
+      FList[n] := FList[i];
+      Inc(n);
+    end
+    else
+    begin
+      FreeOne(FList[i]);
+      Result := True;
+    end;
+  SetLength(FList, n);
+  if n = 0 then FDataSet := nil;
+  if Result then Changed;
+end;
+
 { ==================================================================== TTyCustomDBGrid == }
 
 constructor TTyCustomDBGrid.Create(AOwner: TComponent);
@@ -777,16 +1299,26 @@ begin
   { A header click is the application's to sort the dataset with, not the grid's. }
   Header.Options := Header.Options - [hoHeaderClickAutoSort];
   IndicatorWidth := TyDBGridIndicatorWidth;
+  FSelectedRows := TTyBookmarkList.Create(Self);
+  FControlLink := TTyDBGridControlLink.Create;
+  { The string grid asks its host edit-link event before every editor; this grid asks the
+    application's (OnCreateEditLink here) and then OnSelectEditor. }
+  inherited OnCreateEditLink := @ProvideEditLink;
   ApplyOptions;
 end;
 
 destructor TTyCustomDBGrid.Destroy;
 begin
-  { The link first: freeing it unhooks the data source without another event. The columns are
-    told the grid is going, so the header freeing them reaches nothing of ours. }
+  { The bookmarks go back to the dataset while it is still there. The link next: freeing it
+    unhooks the data source without another event. The columns are told the grid is going,
+    so the header freeing them reaches nothing of ours. }
+  if FSelectedRows <> nil then FSelectedRows.Clear;
   FreeAndNil(FDataLink);
+  FreeAndNil(FSelectedRows);
   if Header <> nil then TTyDBGridColumns(Header.Columns).FGrid := nil;
   inherited Destroy;
+  { After the string grid, which releases an editor still open through it. }
+  FreeAndNil(FControlLink);
 end;
 
 function TTyCustomDBGrid.GetStyleTypeKey: string;
@@ -815,6 +1347,7 @@ end;
 procedure TTyCustomDBGrid.SetDataSource(AValue: TDataSource);
 begin
   if AValue = DataSource then Exit;
+  if FSelectedRows <> nil then FSelectedRows.Clear;
   ChangeDataSource(Self, FDataLink, AValue);
   LayoutChanged;
 end;
@@ -841,6 +1374,8 @@ begin
     AValue := AValue - [dgEditing, dgAlwaysShowEditor, dgRowHighlight];
   if FDBOptions = AValue then Exit;
   FDBOptions := AValue;
+  { The selection belongs to dgMultiselect. }
+  if not (dgMultiselect in FDBOptions) and (FSelectedRows <> nil) then FSelectedRows.Clear;
   ApplyOptions;
   { Titles on or off change the body's height, and dgDisplayMemoText the text. }
   UpdateBufferCount;
@@ -1125,6 +1660,8 @@ begin
   { The cell under an open editor is gone (its text, when there was a record to write it
     to, went in through UpdateData first). }
   if EditorMode then EndEdit(False);
+  { The bookmarks are the dataset's: a closed (or another) dataset has none of them. }
+  if FSelectedRows <> nil then FSelectedRows.Clear;
   { Opened: make the automatic columns, find the fields, size the window. Closed: drop the
     automatic columns, forget the fields, no rows. }
   LayoutChanged;
@@ -1228,8 +1765,53 @@ begin
   FDataLink.ActiveRecord := ARow;
   try
     Result := FieldCellText(f);
+    if Assigned(FOnUserCheckboxState) and ColumnShowsCheckBox(ACol) then
+      Result := UserCheckBoxText(ACol, f);
   finally
     FDataLink.ActiveRecord := old;
+  end;
+end;
+
+{ LCL's DrawCheckboxBitmaps: the state the field gives (a boolean's value; another field's
+  ValueChecked / ValueUnchecked, anything else grayed), then OnUserCheckboxState's word, as
+  the text the string grid's check box reads. }
+function TTyCustomDBGrid.UserCheckBoxText(ACol: Integer; AField: TField): string;
+var
+  st: TCheckBoxState;
+  c: TTyGridColumn;
+  wc, wu: string;
+begin
+  c := GridColumn(ACol);
+  if c <> nil then
+  begin
+    wc := c.ValueChecked;
+    wu := c.ValueUnchecked;
+  end
+  else
+  begin
+    wc := '';
+    wu := '';
+  end;
+  if AField.IsNull then
+    st := cbGrayed
+  else if AField.DataType = ftBoolean then
+  begin
+    if AField.AsBoolean then st := cbChecked else st := cbUnchecked;
+  end
+  else if (wc <> '') and (AField.AsString = wc) then
+    st := cbChecked
+  else if AField.AsString = wu then
+    st := cbUnchecked
+  else
+    st := cbGrayed;
+  FOnUserCheckboxState(Self, DBColumn(ACol), st);
+  case st of
+    cbChecked:
+      if (AField.DataType <> ftBoolean) and (wc <> '') then Result := wc else Result := '1';
+    cbUnchecked:
+      if AField.DataType <> ftBoolean then Result := wu else Result := '';
+  else
+    Result := '2';
   end;
 end;
 
@@ -1477,20 +2059,10 @@ function TTyCustomDBGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   notches: Integer;
 begin
+  { The application's handlers first, as LCL's TControl.DoMouseWheel asks them. }
+  if FireWheelEvents(Shift, WheelDelta, MousePos) then Exit(True);
   if (FDataLink = nil) or not FDataLink.Active then
     Exit(inherited DoMouseWheel(Shift, WheelDelta, MousePos));
-  { LCL's TControl.DoMouseWheel, which the string grid's override does not call: the
-    application's handlers first. }
-  Result := False;
-  if Assigned(OnMouseWheel) then OnMouseWheel(Self, Shift, WheelDelta, MousePos, Result);
-  if Result then Exit;
-  if WheelDelta < 0 then
-  begin
-    if Assigned(OnMouseWheelDown) then OnMouseWheelDown(Self, Shift, MousePos, Result);
-  end
-  else if Assigned(OnMouseWheelUp) then
-    OnMouseWheelUp(Self, Shift, MousePos, Result);
-  if Result then Exit;
   { One record per notch, as LCL's TDBGrid moves one per wheel message. }
   notches := Abs(WheelDelta) div 120;   // WHEEL_DELTA
   if notches < 1 then notches := 1;
@@ -1501,8 +2073,35 @@ begin
   Result := True;
 end;
 
+{ ===== STAND-IN FOR A BASE-CLASS FIX -- the one place this grid fires the wheel events. =====
+  TTyCustomGrid.DoMouseWheel (3.0 and later) never calls TControl.DoMouseWheel, so
+  OnMouseWheel / OnMouseWheelDown / OnMouseWheelUp never fire on any grid. That is a 3.0 bug,
+  handed to the 3.0 session; its fix will reach main and make the string grid call inherited
+  first. When it lands, the call in DoMouseWheel's "no dataset" path (inherited) fires the
+  events itself: the call below must then go from that path -- the data path, which never
+  calls the string grid's DoMouseWheel, keeps it. TDBGridEventsTest.TestOneNotchFiresTheEventOnce
+  counts the events on both paths and turns red on a double fire. }
+function TTyCustomDBGrid.FireWheelEvents(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  Result := False;
+  if Assigned(OnMouseWheel) then OnMouseWheel(Self, Shift, WheelDelta, MousePos, Result);
+  if Result then Exit;
+  if WheelDelta < 0 then
+  begin
+    if Assigned(OnMouseWheelDown) then OnMouseWheelDown(Self, Shift, MousePos, Result);
+  end
+  else if Assigned(OnMouseWheelUp) then
+    OnMouseWheelUp(Self, Shift, MousePos, Result);
+end;
+
 procedure TTyCustomDBGrid.MoveCursor(ACol, ARow: Integer);
 begin
+  { LCL's BeforeMoveSelection: the column the user is leaving hears it first, while it is
+    still the current one. }
+  if Assigned(FOnColExit) and not FSyncingRow and (ACol <> Col) and (ACol >= 0)
+    and (ACol < Columns.Count) and not (csDesigning in ComponentState) then
+    FOnColExit(Self);
   if FSyncingRow or (FDataLink = nil) or not FDataLink.Active or (RowCount = 0)
     or (ARow = Row) then
   begin
@@ -1524,14 +2123,29 @@ begin
     string grid then moves the cursor, which moves the record (MoveCursor). }
   FEditorWasOpen := EditorMode;
   try
+    hit := CellAt(X, Y);
     if (FDataLink <> nil) and FDataLink.Active and (Button = mbLeft) then
     begin
-      hit := CellAt(X, Y);
       if (hit.Part = ghpCell) and (hit.Row <> Row) and CommitEditor and InsertCancelable
         and FDataLink.DataSet.EOF then
         FDataLink.DataSet.Cancel;
     end;
     inherited MouseDown(Button, Shift, X, Y);
+    { The record is the clicked one now (unless the click was refused). }
+    if (FDataLink <> nil) and FDataLink.Active and (Button = mbLeft)
+      and (hit.Part = ghpCell) and (hit.Row = Row) and (hit.Col = Col) then
+    begin
+      { LCL's multiselect clicks: Ctrl toggles the record, a plain click selects it alone. }
+      if dgMultiselect in FDBOptions then
+      begin
+        if ssCtrl in Shift then
+          ToggleSelectedRow
+        else
+          ClearSelection(True);
+      end;
+      if Assigned(FOnCellClick) and not (csDesigning in ComponentState) then
+        FOnCellClick(DBColumn(hit.Col));
+    end;
   finally
     FEditorWasOpen := False;
   end;
@@ -1546,12 +2160,22 @@ end;
 procedure TTyCustomDBGrid.KeyDown(var Key: Word; Shift: TShiftState);
 var
   ds: TDataSet;
+  tabWraps: Boolean;
+  prevSel, newSel: Boolean;
+  moves: Integer;
 begin
+  { Tab wraps to another record only off the window's last field (first, backwards); every
+    other Tab is the string grid's, which moves within the window (and so through
+    MoveCursor). }
+  tabWraps := (Key = VK_TAB) and (dgTabs in FDBOptions) and (FDataLink <> nil)
+    and FDataLink.Active and (Shift * [ssCtrl, ssAlt, ssMeta] = []) and (RowCount > 0)
+    and (((ssShift in Shift) and (Col <= FirstVisibleCol) and (Row = 0))
+      or (not (ssShift in Shift) and (Col >= LastVisibleCol) and (Row = RowCount - 1)));
   if (FDataLink = nil) or not FDataLink.Active or not Enabled
-    or not (Key in [VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_ESCAPE,
-                    VK_INSERT, VK_DELETE])
+    or not (tabWraps or (Key in [VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END,
+                                VK_ESCAPE, VK_INSERT, VK_DELETE, VK_MULTIPLY]))
     { Home / End without Ctrl are the string grid's: the first and the last column. }
-    or ((Key in [VK_HOME, VK_END, VK_DELETE]) and not (ssCtrl in Shift))
+    or ((Key in [VK_HOME, VK_END, VK_DELETE, VK_MULTIPLY]) and not (ssCtrl in Shift))
     { Esc in the editor drops the cell's edit, which is the string grid's. }
     or ((Key = VK_ESCAPE) and EditorMode) then
   begin
@@ -1562,34 +2186,64 @@ begin
   if Key = 0 then Exit;
   ds := FDataLink.DataSet;
   case Key of
-    VK_DOWN:
+    VK_TAB:
+      if WrapTab(ssShift in Shift) then
+        Key := 0
+      else
+        inherited KeyDown(Key, Shift);
+    VK_DOWN, VK_UP:
       begin
-        KeyDownRecord;
-        Key := 0;
-      end;
-    VK_UP:
-      begin
-        KeyUpRecord;
+        { LCL's SelectNext: Shift extends the selection over the record moved to, a plain
+          arrow selects that record alone (dgMultiselect without dgPersistentMultiSelect). }
+        prevSel := False;
+        if (ssShift in Shift) and (dgMultiselect in FDBOptions) then
+          prevSel := FSelectedRows.CurrentRowSelected;
+        moves := FMoveCount;
+        if Key = VK_DOWN then KeyDownRecord else KeyUpRecord;
+        if (FMoveCount <> moves) and (ds.State = dsBrowse) then
+        begin
+          if ssShift in Shift then
+          begin
+            if [dgMultiselect, dgPersistentMultiSelect] * FDBOptions = [dgMultiselect] then
+            begin
+              newSel := FSelectedRows.CurrentRowSelected;
+              ExtendSelection(prevSel, newSel, Key = VK_DOWN);
+            end;
+          end
+          else
+            ClearSelection(True);
+        end;
         Key := 0;
       end;
     VK_NEXT:
       begin
         DataOp(dgoMoveBy, PageRecords);
+        ClearSelection(True);
         Key := 0;
       end;
     VK_PRIOR:
       begin
         DataOp(dgoMoveBy, -PageRecords);
+        ClearSelection(True);
         Key := 0;
       end;
     VK_HOME:
       begin
         DataOp(dgoFirst);
+        ClearSelection(True);
         Key := 0;
       end;
     VK_END:
       begin
         DataOp(dgoLast);
+        ClearSelection(True);
+        Key := 0;
+      end;
+    VK_MULTIPLY:
+      { LCL: Ctrl+* toggles the current record's selection. }
+      if dgMultiselect in FDBOptions then
+      begin
+        ToggleSelectedRow;
         Key := 0;
       end;
     VK_ESCAPE:
@@ -1692,13 +2346,15 @@ begin
   ds := FDataLink.DataSet;
   try
     case AOp of
-      dgoMoveBy: FDataLink.MoveBy(ADelta);
+      dgoMoveBy:
+        if FDataLink.MoveBy(ADelta) <> 0 then Inc(FMoveCount);
       dgoRecNo:  ds.RecNo := ADelta;
       dgoFirst:  ds.First;
       dgoLast:   ds.Last;
       dgoInsert: ds.Insert;
       dgoAppend: ds.Append;
     end;
+    if AOp <> dgoMoveBy then Inc(FMoveCount);
   except
     { The record could not be left (its post was refused): the user goes on where they were
       typing. }
@@ -1999,6 +2655,364 @@ end;
 function TTyCustomDBGrid.ConfirmDeleteRecord: Boolean;
 begin
   Result := TyMessageDlg(rsTyDBNavConfirmDelete, mtConfirmation, [mbOK, mbCancel], 0) <> mrCancel;
+end;
+
+function TTyCustomDBGrid.ColumnShowsCheckBox(ACol: Integer): Boolean;
+var
+  c: TTyGridColumn;
+begin
+  if IsCheckBoxColumn(ACol) then Exit(True);
+  c := GridColumn(ACol);
+  Result := (c <> nil) and (c.EditorKind = gekCheckBox);
+end;
+
+function TTyCustomDBGrid.CanToggleCellCheck(ACol, ARow: Integer): Boolean;
+begin
+  Result := inherited CanToggleCellCheck(ACol, ARow);
+  if not Result or (FDataLink = nil) or not FDataLink.Active then Exit;
+  { Only the current record is written (SetEditText); LCL's EditorIsReadOnly: a dataset that
+    will not go into dsEdit makes the cell read-only, and the toggle is not a toggle. }
+  if (ARow <> FDataLink.ActiveRecord) or ColumnIsReadOnly(ACol) then Exit(False);
+  if not FDataLink.Editing then Result := FDataLink.Edit;
+end;
+
+function TTyCustomDBGrid.DBColumn(ACol: Integer): TTyDBGridColumn;
+begin
+  Result := nil;
+  if (ACol >= 0) and (ACol < Columns.Count) then Result := Columns[ACol];
+end;
+
+{ ---- the indicator ------------------------------------------------------------------ }
+
+function TTyCustomDBGrid.IndicatorFor(ARow: Integer): TTyDBGridIndicator;
+begin
+  Result := dgiNone;
+  if (FDataLink = nil) or not FDataLink.Active or (ARow < 0)
+    or (ARow >= FDataLink.RecordCount) then Exit;
+  if ARow = FDataLink.ActiveRecord then
+    case FDataLink.DataSet.State of
+      dsEdit:   Result := dgiEdit;
+      dsInsert: Result := dgiInsert;
+    else
+      Result := dgiBrowse;
+    end
+  else if RowIsSelected(ARow) then
+    Result := dgiSelected;
+end;
+
+procedure TTyCustomDBGrid.RenderChrome(P: TTyPainter; const M: TTyGridMetrics);
+var
+  i0, i1, r: Integer;
+  kind: TTyDBGridIndicator;
+  indS, selS: TTyStyleSet;
+  ink, insertInk: TTyColor;
+  mirror: Boolean;
+
+  procedure DrawOne;
+  var
+    rr, box: TRect;
+    side, cx, cy: Integer;
+    c: TTyColor;
+  begin
+    rr := TyGridRowRect(DataToDisplay(r), M);
+    side := Min(i1 - i0, rr.Bottom - rr.Top) - ScaleI(2);
+    if side <= 0 then Exit;
+    cx := (i0 + i1) div 2;
+    cy := (rr.Top + rr.Bottom) div 2;
+    box := Rect(cx - side div 2, cy - side div 2, cx - side div 2 + side,
+      cy - side div 2 + side);
+    if kind = dgiInsert then c := insertInk else c := ink;
+    if not TyTryDrawGlyphOverride(P, ActiveController, box,
+      TyDBGridIndicatorTokens[kind], c) then
+      DrawIndicatorMark(P, box, kind, c, mirror);
+  end;
+
+begin
+  inherited RenderChrome(P, M);
+  if (FDataLink = nil) or not FDataLink.Active or (RowCount = 0) then Exit;
+  if not IndicatorBandX(i0, i1) then Exit;
+  { The marks take the indicator column's own text colour, as its row numbers do; the insert
+    bar the accent a theme gives a selected cell -- a theme colour either way. }
+  indS := ActiveController.Model.ResolveStyle('TyGridIndicator', StyleClass, []);
+  if tpTextColor in indS.Present then ink := indS.TextColor
+  else ink := CurrentStyle.TextColor;
+  selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
+  if (tpBackground in selS.Present) and (selS.Background.Kind <> tfkNone) then
+    insertInk := selS.Background.Color
+  else
+    insertInk := ink;
+  mirror := RtlLayout;
+  for r := 0 to RowCount - 1 do
+  begin
+    kind := IndicatorFor(r);
+    if kind = dgiNone then Continue;
+    DrawInRowBand(P, DataToDisplay(r), M, @DrawOne);
+  end;
+end;
+
+{ ---- multiselect -------------------------------------------------------------------- }
+
+function TTyCustomDBGrid.RowIsSelected(ARow: Integer): Boolean;
+var
+  old: Integer;
+begin
+  Result := False;
+  if (FSelectedRows = nil) or (FSelectedRows.Count = 0) or not (dgMultiselect in FDBOptions)
+    or (FDataLink = nil) or not FDataLink.Active or (ARow < 0)
+    or (ARow >= FDataLink.RecordCount) then Exit;
+  if FSelCacheValid and (ARow < Length(FSelRowCache)) then Exit(FSelRowCache[ARow]);
+  old := FDataLink.ActiveRecord;
+  FDataLink.ActiveRecord := ARow;
+  try
+    Result := FSelectedRows.CurrentRowSelected;
+  finally
+    FDataLink.ActiveRecord := old;
+  end;
+end;
+
+procedure TTyCustomDBGrid.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  r: Integer;
+begin
+  { Every cell of a row asks whether the row is selected (CellStates): ask the bookmarks once
+    per row and frame. }
+  SetLength(FSelRowCache, 0);
+  if (FDataLink <> nil) and FDataLink.Active and (FSelectedRows.Count > 0)
+    and (dgMultiselect in FDBOptions) then
+  begin
+    SetLength(FSelRowCache, FDataLink.RecordCount);
+    for r := 0 to High(FSelRowCache) do
+      FSelRowCache[r] := RowIsSelected(r);
+  end;
+  FSelCacheValid := True;
+  try
+    inherited RenderTo(ACanvas, ARect, APPI);
+  finally
+    FSelCacheValid := False;
+  end;
+end;
+
+function TTyCustomDBGrid.CellStates(ACol, ARow: Integer): TTyStateSet;
+begin
+  Result := inherited CellStates(ACol, ARow);
+  if RowIsSelected(ARow) then Include(Result, tysSelected);
+end;
+
+procedure TTyCustomDBGrid.ClearSelection(ASelectCurrent: Boolean);
+begin
+  if [dgMultiselect, dgPersistentMultiSelect] * FDBOptions <> [dgMultiselect] then Exit;
+  FSelectedRows.Clear;
+  if ASelectCurrent then FSelectedRows.CurrentRowSelected := True;
+end;
+
+procedure TTyCustomDBGrid.ToggleSelectedRow;
+begin
+  if not (dgMultiselect in FDBOptions) then Exit;
+  FSelectedRows.CurrentRowSelected := not FSelectedRows.CurrentRowSelected;
+end;
+
+procedure TTyCustomDBGrid.ExtendSelection(APrevSelected, ANewSelected, ADown: Boolean);
+var
+  old, prev: Integer;
+begin
+  FSelectedRows.CurrentRowSelected := True;
+  { The record left is the buffer's neighbour: the move was one record. }
+  old := FDataLink.ActiveRecord;
+  if ADown then prev := old - 1 else prev := old + 1;
+  if (prev < 0) or (prev >= FDataLink.RecordCount) then Exit;
+  FDataLink.ActiveRecord := prev;
+  try
+    FSelectedRows.CurrentRowSelected := not (APrevSelected and ANewSelected);
+  finally
+    FDataLink.ActiveRecord := old;
+  end;
+end;
+
+function TTyCustomDBGrid.WrapTab(ABackward: Boolean): Boolean;
+var
+  moves: Integer;
+  st: TDataSetState;
+begin
+  moves := FMoveCount;
+  st := FDataLink.DataSet.State;
+  { Down's and Up's own steps (LCL's MoveSel ends in doVKDown / doVKUp): the editor's text
+    first, a new record nobody typed into dropped, past the last record an Append. }
+  if ABackward then KeyUpRecord else KeyDownRecord;
+  Result := (FMoveCount <> moves) or (FDataLink.DataSet.State <> st);
+  if not Result then Exit;
+  if ABackward then
+    inherited MoveCursor(LastVisibleCol, Row)
+  else
+    inherited MoveCursor(FirstVisibleCol, Row);
+end;
+
+{ ---- what the string grid would sort and filter by ------------------------------------ }
+
+function TTyCustomDBGrid.ShowsFilterButton(ACol: Integer): Boolean;
+begin
+  { Filtering is the dataset's (see the unit comment): no funnel on a title. }
+  Result := False;
+end;
+
+{ ---- events ------------------------------------------------------------------------- }
+
+function TTyCustomDBGrid.DrawStateOf(ACol, ARow: Integer): TGridDrawState;
+begin
+  Result := [];
+  if IsCellSelected(ACol, ARow) or RowIsSelected(ARow) then Include(Result, gdSelected);
+  if (ACol = Col) and (ARow = Row) then Include(Result, gdFocused);
+  if (goRowHighlight in inherited Options) and (ARow = Row) then
+    Include(Result, gdRowHighlight);
+end;
+
+function TTyCustomDBGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
+var
+  r: TRect;
+  old: Integer;
+begin
+  Result := False;
+  if Assigned(FOnDrawColumnCell) and not (csDesigning in ComponentState)
+    and (FDataLink <> nil) and FDataLink.Active and (ARow >= 0)
+    and (ARow < FDataLink.RecordCount) then
+  begin
+    r := CellVisibleRect(ACol, ARow);
+    if not IsRectEmpty(r) then
+    begin
+      old := FDataLink.ActiveRecord;
+      FDataLink.ActiveRecord := ARow;
+      try
+        FOnDrawColumnCell(Self, r, ACol, DBColumn(ACol), DrawStateOf(ACol, ARow), P, Result);
+      finally
+        FDataLink.ActiveRecord := old;
+      end;
+    end;
+  end;
+  if not Result then Result := inherited DoDrawCell(P, ACol, ARow);
+end;
+
+procedure TTyCustomDBGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
+  AHeaderH: Integer);
+var
+  i, l, w, bandTop: Integer;
+begin
+  inherited RenderHeaderSections(P, M, AHeaderH);
+  if not Assigned(FOnDrawColumnTitle) or (csDesigning in ComponentState) then Exit;
+  { The sections' own geometry (TTyCustomGrid.RenderHeaderSections). }
+  bandTop := GroupBandHeightPx;
+  for i := 0 to Columns.Count - 1 do
+  begin
+    if not Columns[i].Visible then Continue;
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    if (w <= 0) or (l >= M.ClientW) or (l + w <= 0) then Continue;
+    if not ClipColToBody(M, i, l, w) then Continue;
+    FOnDrawColumnTitle(Self, Rect(l, bandTop, l + w, bandTop + AHeaderH), i, Columns[i], [gdFixed], P);
+  end;
+end;
+
+procedure TTyCustomDBGrid.DoGetCellStyle(ACol, ARow: Integer;
+  var AAppearance: TTyGridCellAppearance);
+var
+  before: TTyFill;
+  old: Integer;
+begin
+  inherited DoGetCellStyle(ACol, ARow, AAppearance);
+  if not Assigned(FOnPrepareCanvas) or (FDataLink = nil) or not FDataLink.Active
+    or (ARow < 0) or (ARow >= FDataLink.RecordCount) then Exit;
+  before := AAppearance.Background;
+  old := FDataLink.ActiveRecord;
+  FDataLink.ActiveRecord := ARow;
+  try
+    FOnPrepareCanvas(Self, ACol, DBColumn(ACol), DrawStateOf(ACol, ARow), AAppearance);
+  finally
+    FDataLink.ActiveRecord := old;
+  end;
+  { As the string grid's own OnGetCellStyle: a background the handler set is the cell's
+    (drawn, and kept under the decoration layers). }
+  AAppearance.HasBackground := AAppearance.Background.Kind <> tfkNone;
+  if AAppearance.HasBackground
+    and ((before.Kind <> AAppearance.Background.Kind)
+         or (before.Color <> AAppearance.Background.Color)) then
+    AAppearance.HasExplicitBackground := True;
+end;
+
+procedure TTyCustomDBGrid.InvokeEllipsis(ACol, ARow: Integer);
+begin
+  { LCL's EditButtonClicked: the column's button was pressed. The string grid's own
+    OnEllipsisClick (which may write a value) follows. }
+  if Assigned(FOnEditButtonClick) and not (csDesigning in ComponentState) then
+    FOnEditButtonClick(Self);
+  inherited InvokeEllipsis(ACol, ARow);
+end;
+
+procedure TTyCustomDBGrid.CursorMoved(AOldCol, AOldRow: Integer);
+begin
+  inherited CursorMoved(AOldCol, AOldRow);
+  if (Col <> AOldCol) and Assigned(FOnColEnter) and not (csDesigning in ComponentState) then
+    FOnColEnter(Self);
+end;
+
+procedure TTyCustomDBGrid.HeaderSectionClicked(ACol: Integer);
+begin
+  inherited HeaderSectionClicked(ACol);
+  if Assigned(FOnTitleClick) and not (csDesigning in ComponentState)
+    and (DBColumn(ACol) <> nil) then
+    FOnTitleClick(DBColumn(ACol));
+end;
+
+procedure TTyCustomDBGrid.ColumnSized(ACol: Integer);
+begin
+  inherited ColumnSized(ACol);
+  if Assigned(FOnColumnSized) and not (csDesigning in ComponentState) then
+    FOnColumnSized(Self);
+end;
+
+procedure TTyCustomDBGrid.ColumnMoved(AFromPos, AToPos: Integer);
+begin
+  inherited ColumnMoved(AFromPos, AToPos);
+  if Assigned(FOnColumnMoved) and not (csDesigning in ComponentState) then
+    FOnColumnMoved(Self, AFromPos, AToPos);
+end;
+
+procedure TTyCustomDBGrid.SetOnGetCellHint(AValue: TTyDBGridCellHintEvent);
+begin
+  FOnGetCellHint := AValue;
+  { The string grid sets Hint and ShowHint whenever its own hint event is assigned; it is
+    hooked only while the application asks, so the grid's Hint is left alone otherwise. }
+  if Assigned(AValue) then
+    inherited OnGetCellHint := @BaseCellHint
+  else
+    inherited OnGetCellHint := nil;
+end;
+
+procedure TTyCustomDBGrid.BaseCellHint(Sender: TObject; ACol, ARow: Integer;
+  var AHint: string);
+var
+  old: Integer;
+begin
+  if not Assigned(FOnGetCellHint) or (FDataLink = nil) or not FDataLink.Active
+    or (ARow < 0) or (ARow >= FDataLink.RecordCount) then Exit;
+  old := FDataLink.ActiveRecord;
+  FDataLink.ActiveRecord := ARow;
+  try
+    FOnGetCellHint(Self, DBColumn(ACol), AHint);
+  finally
+    FDataLink.ActiveRecord := old;
+  end;
+end;
+
+procedure TTyCustomDBGrid.ProvideEditLink(Sender: TObject; ACol, ARow: Integer;
+  var ALink: TTyGridEditLink);
+var
+  ed: TWinControl;
+begin
+  if Assigned(FUserCreateEditLink) then FUserCreateEditLink(Self, ACol, ARow, ALink);
+  if (ALink <> nil) or not Assigned(FOnSelectEditor) then Exit;
+  ed := nil;
+  FOnSelectEditor(Self, DBColumn(ACol), ed);
+  if (ed = nil) or (ed = Self) then Exit;
+  TTyDBGridControlLink(FControlLink).Control := ed;
+  ALink := FControlLink;
 end;
 
 initialization

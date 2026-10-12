@@ -255,6 +255,7 @@ uses
   test.db.grid,
   test.db.grid.nav,
   test.db.grid.edit,
+  test.db.grid.events,
   test.db.typekeys;
 
 type

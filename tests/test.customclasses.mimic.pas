@@ -2989,7 +2989,20 @@ type
     property OnHeaderClick;
     property OnHeaderRightClick;
     property OnTopLeftChanged;
+    property OnCellClick;
+    property OnColEnter;
+    property OnColExit;
+    property OnColumnMoved;
+    property OnColumnSized;
+    property OnDrawColumnCell;
+    property OnDrawColumnTitle;
+    property OnEditButtonClick;
     property OnFieldEditMask;
+    property OnGetCellHint;
+    property OnPrepareCanvas;
+    property OnSelectEditor;
+    property OnTitleClick;
+    property OnUserCheckboxState;
   end;
 
   TGenDBImage = class(TTyCustomDBImage)
