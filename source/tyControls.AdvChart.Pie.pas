@@ -148,6 +148,8 @@ type
     { per sector: the fill as an object -- a gradient or a pattern, the
       series' or the datum's own -- or nothing [Batch 105] }
     Objs: TTyChartObjFillArray;
+    { per sector: the decal it is drawn with, or none [Batch 131] }
+    Decals: TTyChartDecalArray;
     { per sector: a visualMap's opacity, NaN where none was written }
     Alphas: TTyDoubleArray;
     Stroke: TTyChartColor;
@@ -987,6 +989,7 @@ begin
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
     { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
       the arc's extent -- grown by the border when there is one [Batch 105] }
+    if i <= High(AVisual.Decals) then el.Style.Decal := AVisual.Decals[i];
     if (i <= High(AVisual.Objs)) and AVisual.Objs[i].Present then
     begin
       el.Style.FillGradient := AVisual.Objs[i].Gradient;

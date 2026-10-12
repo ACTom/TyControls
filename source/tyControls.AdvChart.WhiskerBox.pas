@@ -117,6 +117,12 @@ function TyWhiskerBand(AAxis: TTyAxis; const AStores: array of TTyDataStore;
 function TyCandleEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;
   AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double): TTyCandleEnds;
 
+{ candlestickLayout's makeBrushRect: lowest to highest along the value axis,
+  a candle wide across it, from the lowest point moved back half a candle
+  [Batch 127] }
+function TyCandleBrushRect(ACart: TTyCartesian2D; ABaseIsX: Boolean;
+  AAxisVal, ALowest, AHighest, AWidth: Double): TTyXYWH;
+
 { One box's points: AValues the five, min to max. }
 function TyBoxEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;
   AAxisVal: Double; const AValues: array of Double;
@@ -366,6 +372,34 @@ begin
   end
   else if ABaseIsX then Result.InitBaseline := ocLow.Y
   else Result.InitBaseline := ocLow.X;
+end;
+
+function TyCandleBrushRect(ACart: TTyCartesian2D; ABaseIsX: Boolean;
+  AAxisVal, ALowest, AHighest, AWidth: Double): TTyXYWH;
+const
+  cHalf: Double = 2;
+var pmin, pmax: TTyPointF;
+begin
+  pmin := PointOf(ACart, ABaseIsX, AAxisVal, ALowest);
+  pmax := PointOf(ACart, ABaseIsX, AAxisVal, AHighest);
+  if ABaseIsX then
+  begin
+    pmin.X := pmin.X - AWidth / cHalf;
+    pmax.X := pmax.X - AWidth / cHalf;
+    Result.X := pmin.X;
+    Result.Y := pmin.Y;
+    Result.W := AWidth;
+    Result.H := pmax.Y - pmin.Y;
+  end
+  else
+  begin
+    pmin.Y := pmin.Y - AWidth / cHalf;
+    pmax.Y := pmax.Y - AWidth / cHalf;
+    Result.X := pmin.X;
+    Result.Y := pmin.Y;
+    Result.W := pmax.X - pmin.X;
+    Result.H := AWidth;
+  end;
 end;
 
 function TyBoxEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;

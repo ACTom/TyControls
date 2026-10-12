@@ -167,8 +167,9 @@ end;
 
 function TyProgViewIncremental(const AType: string): Boolean;
 begin
+  { [Batch 128] and a parallel series' (ParallelView.incrementalRender) }
   Result := (AType = 'scatter') or (AType = 'bar') or (AType = 'candlestick')
-    or (AType = 'heatmap');
+    or (AType = 'heatmap') or (AType = 'parallel');
 end;
 
 function TyProgHasBlockTask(const AType: string): Boolean;

@@ -99,6 +99,8 @@ type
     Fills: array of TTyChartColor;
     { per RAW row: the fill as an object, or nothing [Batch 105] }
     Objs: TTyChartObjFillArray;
+    { per RAW row: the decal, or none [Batch 131] }
+    Decals: TTyChartDecalArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
     Alpha: Double;
@@ -617,6 +619,9 @@ begin
       el.Style.FillColor := AVisual.Fills[ALayout.Items[i].RawIndex]
     else
       el.Style.FillColor := 0;
+    if (ALayout.Items[i].RawIndex >= 0)
+      and (ALayout.Items[i].RawIndex <= High(AVisual.Decals)) then
+      el.Style.Decal := AVisual.Decals[ALayout.Items[i].RawIndex];
     { a gradient or a pattern, the band's own box [Batch 105] }
     if (ALayout.Items[i].RawIndex >= 0)
       and (ALayout.Items[i].RawIndex <= High(AVisual.Objs))

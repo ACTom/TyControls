@@ -1105,6 +1105,30 @@ msgstr "加载选项不是合法的 JSON。"
 msgid "Switch to Bar Chart"
 msgstr "切换为柱状图"
 
+#: tycontrols.strconsts.rstycharttoolboxbrushclear
+msgid "Clear Selections"
+msgstr "清除选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushkeep
+msgid "Keep Selections"
+msgstr "保持选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushlinex
+msgid "Horizontally Select"
+msgstr "横向选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushliney
+msgid "Vertically Select"
+msgstr "纵向选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushpolygon
+msgid "Lasso Select"
+msgstr "圈选"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushrect
+msgid "Box Select"
+msgstr "矩形选择"
+
 #: tycontrols.strconsts.rstycharttoolboxdataview
 msgid "Data View"
 msgstr "数据视图"
@@ -1121,6 +1145,146 @@ msgstr "刷新"
 #: tycontrols.strconsts.rstycharttoolboximagefilter
 msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
 msgstr "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpeg;*.jpg)|*.jpeg;*.jpg|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rstychartariawithtitle
+msgid "This is a chart about \"{title}\""
+msgstr "这是一个关于“{title}”的图表。"
+
+#: tycontrols.strconsts.rstychartariawithouttitle
+msgid "This is a chart"
+msgstr "这是一个图表，"
+
+#: tycontrols.strconsts.rstychartariasinglewithname
+msgid " with type {seriesType} named {seriesName}."
+msgstr "图表类型是{seriesType}，表示{seriesName}。"
+
+#: tycontrols.strconsts.rstychartariasinglewithoutname
+msgid " with type {seriesType}."
+msgstr "图表类型是{seriesType}。"
+
+#: tycontrols.strconsts.rstychartariamultipleprefix
+msgid ". It consists of {seriesCount} series count."
+msgstr "它由{seriesCount}个图表系列组成。"
+
+#: tycontrols.strconsts.rstychartariamultiplewithname
+msgid " The {seriesId} series is a {seriesType} representing {seriesName}."
+msgstr "第{seriesId}个系列是一个表示{seriesName}的{seriesType}，"
+
+#: tycontrols.strconsts.rstychartariamultiplewithoutname
+msgid " The {seriesId} series is a {seriesType}."
+msgstr "第{seriesId}个系列是一个{seriesType}，"
+
+#: tycontrols.strconsts.rstychartariaalldata
+msgid "The data is as follows: "
+msgstr "其数据是——"
+
+#: tycontrols.strconsts.rstychartariapartialdata
+msgid "The first {displayCnt} items are: "
+msgstr "其中，前{displayCnt}项是——"
+
+#: tycontrols.strconsts.rstychartariadatawithname
+msgid "the data for {name} is {value}"
+msgstr "{name}的数据是{value}"
+
+#: tycontrols.strconsts.rstychartariaseparators
+msgid "||, |. "
+msgstr "；|。|，|"
+
+#: tycontrols.strconsts.rstycharttypepie
+msgid "Pie chart"
+msgstr "饼图"
+
+#: tycontrols.strconsts.rstycharttypebar
+msgid "Bar chart"
+msgstr "柱状图"
+
+#: tycontrols.strconsts.rstycharttypeline
+msgid "Line chart"
+msgstr "折线图"
+
+#: tycontrols.strconsts.rstycharttypescatter
+msgid "Scatter plot"
+msgstr "散点图"
+
+#: tycontrols.strconsts.rstycharttypeeffectscatter
+msgid "Ripple scatter plot"
+msgstr "涟漪散点图"
+
+#: tycontrols.strconsts.rstycharttyperadar
+msgid "Radar chart"
+msgstr "雷达图"
+
+#: tycontrols.strconsts.rstycharttypetree
+msgid "Tree"
+msgstr "树图"
+
+#: tycontrols.strconsts.rstycharttypetreemap
+msgid "Treemap"
+msgstr "矩形树图"
+
+#: tycontrols.strconsts.rstycharttypeboxplot
+msgid "Boxplot"
+msgstr "箱型图"
+
+#: tycontrols.strconsts.rstycharttypecandlestick
+msgid "Candlestick"
+msgstr "K线图"
+
+#: tycontrols.strconsts.rstycharttypek
+msgid "K line chart"
+msgstr "K线图"
+
+#: tycontrols.strconsts.rstycharttypeheatmap
+msgid "Heat map"
+msgstr "热力图"
+
+#: tycontrols.strconsts.rstycharttypemap
+msgid "Map"
+msgstr "地图"
+
+#: tycontrols.strconsts.rstycharttypeparallel
+msgid "Parallel coordinate map"
+msgstr "平行坐标图"
+
+#: tycontrols.strconsts.rstycharttypelines
+msgid "Line graph"
+msgstr "线图"
+
+#: tycontrols.strconsts.rstycharttypegraph
+msgid "Relationship graph"
+msgstr "关系图"
+
+#: tycontrols.strconsts.rstycharttypesankey
+msgid "Sankey diagram"
+msgstr "桑基图"
+
+#: tycontrols.strconsts.rstycharttypefunnel
+msgid "Funnel chart"
+msgstr "漏斗图"
+
+#: tycontrols.strconsts.rstycharttypegauge
+msgid "Gauge"
+msgstr "仪表盘图"
+
+#: tycontrols.strconsts.rstycharttypepictorialbar
+msgid "Pictorial bar"
+msgstr "象形柱图"
+
+#: tycontrols.strconsts.rstycharttypethemeriver
+msgid "Theme River Map"
+msgstr "主题河流图"
+
+#: tycontrols.strconsts.rstycharttypesunburst
+msgid "Sunburst"
+msgstr "旭日图"
+
+#: tycontrols.strconsts.rstycharttypecustom
+msgid "Custom chart"
+msgstr "自定义图表"
+
+#: tycontrols.strconsts.rstycharttypechart
+msgid "Chart"
+msgstr "图表"
 
 #: tycontrols.strconsts.rstycharttoolboxline
 msgid "Switch to Line Chart"

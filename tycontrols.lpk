@@ -941,8 +941,20 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Timeline"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Decal.pas"/>
+        <UnitName Value="tyControls.AdvChart.Decal"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Aria.pas"/>
+        <UnitName Value="tyControls.AdvChart.Aria"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Polar.pas"/>
         <UnitName Value="tyControls.AdvChart.Polar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Parallel.pas"/>
+        <UnitName Value="tyControls.AdvChart.Parallel"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.AdvChart.PolarBar.pas"/>

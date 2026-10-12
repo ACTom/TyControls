@@ -83,11 +83,14 @@ const
   );
 
 const
-  cPubTypes: array[0..10] of string = ('select', 'unselect', 'toggleselect',
+  cPubTypes: array[0..11] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay',
     { the legend's [Batch 93] }
     'legendselectchanged', 'legendselected', 'legendunselected',
-    'legendselectall', 'legendinverseselect');
+    'legendselectall', 'legendinverseselect',
+    { the legend's update dispatches brushSelect: an empty batch with no
+      brush component [Batch 130] }
+    'brushselected');
 
 { ==================== the probe ==================== }
 
@@ -404,9 +407,11 @@ begin
   lg.Log := FLog;
   { [Batch 88: this asked about selectchanged, which the chart emits since
     the selection batch -- upstream publishes it from the select actions. A
-    type it never emits is the question: brushselected, the brush's.] }
-  AssertEquals('brushselected is not emitted', -1,
-    FChart.ChartOn('brushselected', @lg.Handle));
+    type it never emits is the question: brushselected, the brush's.]
+    [Batch 130: the chart publishes brushselected now; a type no chart
+    publishes is the question.] }
+  AssertEquals('an unknown type is refused', -1,
+    FChart.ChartOn('nosuchevent', @lg.Handle));
   FChart.Option := '{"animation":false,"xAxis":{"type":"category","data":["a"]},'
     + '"yAxis":{"type":"value"},"series":[{"type":"bar","data":[10]}]}';
   FChart.SetBounds(0, 0, 600, 400);

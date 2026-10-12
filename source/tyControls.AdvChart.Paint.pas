@@ -101,6 +101,33 @@ type
   end;
   TTyChartObjFillArray = array of TTyChartObjFill;
 
+  { A DECAL [Batch 131]: the pattern upstream GENERATES from a decal object
+    (util/decal.ts createOrUpdatePatternFromDecal) and paints over a filled
+    shape as a second fill -- the aria decals, and any itemStyle.decal.
+    Held NORMALISED: the defaults filled (rect, symbolSize 1, keepAspect,
+    the skin's colour, no background, dash 5 by 5, rotation 0, tiles of at
+    most 512), the dash arrays ceiled and their odd lengths doubled, the
+    symbols a list of rows. AdvChart.Decal makes one and lays its tile out;
+    the renderer draws the tile and repeats it, turned by Rotation, in the
+    canvas' space. }
+  TTyChartDecal = record
+    Present: Boolean;
+    { a row of symbol names per symbol row }
+    Symbols: array of TTyStringArray;
+    SymbolSize: Double;
+    KeepAspect: Boolean;
+    Color: TTyChartColor;
+    HasBackground: Boolean;
+    Background: TTyChartColor;
+    { the x dashes, one array per line; the y dashes }
+    DashX: array of TTyDoubleArray;
+    DashY: TTyDoubleArray;
+    { radians, the pattern's own: zrender turns the repeat, not the symbols }
+    Rotation: Double;
+    MaxTileW, MaxTileH: Double;
+  end;
+  TTyChartDecalArray = array of TTyChartDecal;
+
   TTyChartElementStyle = record
     HasFill: Boolean;
     FillColor: TTyChartColor;
@@ -117,6 +144,10 @@ type
     { AN IMAGE INSTEAD OF THE FILL COLOUR [Batch 105]. FillColor holds what
       upstream's convertToColorString makes of it -- transparent. }
     FillPattern: TTyChartPattern;
+    { A DECAL OVER THE FILL [Batch 131]: zrender's decal element -- the same
+      path filled with the generated pattern, then its stroke again, drawn
+      right after the element. Only where the element has a fill. }
+    Decal: TTyChartDecal;
     { THE BOX A LOCAL GRADIENT NORMALISES AGAINST, when the builder knows it
       better than the shape does: upstream's el.getBoundingRect() is the PATH's
       box grown by the stroke, and a sector's path box is its arc's extent
@@ -591,7 +622,12 @@ type
       shape.percent, drives the line, the two end symbols and the label),
       and its effect symbol (a looping clip of its own). G[0..5] the line's
       ends and control point, G[6] curved -- see AdvChart.Lines }
-    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect);
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect,
+    { [Batch 128, C19] a parallel series' row: the data group's enter clip
+      (one proxy per series, row -1), G[0..3] the parallel's rect, G[4] 1 on
+      a horizontal layout (the width grows, else the height), G[5] 1 on the
+      view's first render (only then does the clip start) }
+    carParallelLine);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
@@ -717,6 +753,9 @@ type
     function PaintOrder(AIndex: Integer): Integer;
     { Topmost non-silent element containing the point, or -1. }
     function HitTestElement(AX, AY: Double; APPI: Integer): Integer;
+    { Topmost element containing the point, a silent one too -- zrender's
+      `topTarget` -- or -1 [Batch 127] }
+    function TopElementAt(AX, AY: Double; APPI: Integer): Integer;
     { The same walk, reported as a datum. This and HitTestElement are ONE code
       path, so the element the caller highlights and the datum it reports can
       never be two different things. }
@@ -1099,6 +1138,26 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    if APPI > 0 then
+      slop := FItems[idx].HitSlopLogical * APPI / 96
+    else
+      slop := FItems[idx].HitSlopLogical;
+    if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
+      Exit(idx);
+  end;
+end;
+
+function TTyPaintList.TopElementAt(AX, AY: Double; APPI: Integer): Integer;
+var
+  i, idx: Integer;
+  slop: Double;
+begin
+  Result := -1;
+  EnsureOrder;
+  for i := FCount - 1 downto 0 do
+  begin
+    idx := FOrder[i];
+    if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if APPI > 0 then
       slop := FItems[idx].HitSlopLogical * APPI / 96
     else

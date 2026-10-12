@@ -1007,6 +1007,7 @@ begin
     carChord: Result := 'chordGroup';
     carLinesLine, carLinesFrom, carLinesTo, carLinesLabel: Result := 'linesLine';
     carLinesEffect: Result := 'linesEffect';
+    carParallelLine: Result := 'parallelClip';
   else
     Result := '';
   end;
@@ -1020,7 +1021,7 @@ end;
 
 function KeyIndexOf(const AEl: TTyChartElement): Integer;
 begin
-  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel] then Result := -1
+  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine] then Result := -1
   else Result := AEl.Anim.Index;
 end;
 
@@ -1449,6 +1450,27 @@ begin
   idx := KeyIndexOf(AEl);
   half := Pi / 2;
   case AEl.Anim.Role of
+    carParallelLine:
+      begin
+        { createGridClipShape [Batch 128]: the data group's clip, the
+          parallel's rect with no width (horizontal) or no height, initProps
+          to the whole rect on the series -- no row; the view removes it
+          once it ends. Only on the view's first render (G[5]): a view a
+          legend hid and shows again is not new }
+        if AEl.Anim.G[5] = 0 then Exit;
+        p := Make(AEl.Anim.Series, -1, 'parallelClip');
+        props := TyAnimProps([Num1('shape.x', AEl.Anim.G[0]),
+          Num1('shape.y', AEl.Anim.G[1]), Num1('shape.width', AEl.Anim.G[2]),
+          Num1('shape.height', AEl.Anim.G[3])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        if AEl.Anim.G[4] <> 0 then p.SetNum('shape.width', 0)
+        else p.SetNum('shape.height', 0);
+        opts := TyAnimCallNoIndex;
+        opts.Done := @NoOp;
+        Start(TyAnimProps([Num1('shape.width', AEl.Anim.G[2]),
+          Num1('shape.height', AEl.Anim.G[3])]), opts);
+      end;
     carBar:
       begin
         p := Make(AEl.Anim.Series, idx, 'bar');
@@ -2053,6 +2075,15 @@ var
         begin
           p := OldProxy(AOld, -1, 'chordGroup');
           if p <> nil then Carry(p, s, -1);
+        end;
+      carParallelLine:
+        begin
+          { THE VIEW IS KEPT: its enter clip runs on (it is made only on the
+            view's first render); a row's points move to their new place
+            with no tween here [Batch 128] }
+          if Find(s, -1, 'parallelClip') <> nil then Exit;
+          q2 := OldProxy(AOld, -1, 'parallelClip');
+          if q2 <> nil then Carry(q2, s, -1);
         end;
       carBar:
         begin
@@ -3304,6 +3335,15 @@ begin
   end;
   if (AProxy = nil) or AProxy.AtFinal then Exit;
   case AEl.Anim.Role of
+    carParallelLine:
+      begin
+        { the data group's clip while it grows [Batch 128] }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y');
+        AEl.HasClip := True;
+        AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
+          y + AProxy.Num('shape.height'));
+      end;
     carLinesLine:
       TyLinesFrameLine(AEl, AProxy.Num('shape.percent'));
     carLinesFrom, carLinesTo:

@@ -190,6 +190,9 @@ type
     function ComponentAt(const AMainType: string; AIndex: Integer): TJSONData;
 
     property Root: TJSONData read FRoot;
+    { THE PIECE THE LAST MERGE MERGED IN (its base option), nil after a
+      set: what the aria preprocessor reads per setOption [Batch 131] }
+    property MergedPiece: TJSONData read FMerged;
     property Text: string read FText;
     property Error: TTyOptionError read FError;
   end;
@@ -224,7 +227,8 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
-  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits;
+  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
+  tyControls.AdvChart.Scale;
 
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 var
@@ -758,6 +762,267 @@ begin
   Result := True;
 end;
 
+{ ==================== the brush preprocessor [Batch 127] ====================
+
+  component/brush/preprocessor.ts, run over every option unit the
+  preprocessors see (the base and the media with a query): a brush
+  component brings the toolbox's brush feature. The first toolbox (one is
+  made, with an empty feature object, when the option has none) gets
+  `feature.brush.type`
+  -- its own list, the brush components' `toolbox` lists appended, the
+  duplicates dropped by their string; a new option (the first setOption, a
+  notMerge) whose list is still empty takes rect, polygon, keep and clear.
+  Where upstream would throw (a feature that is no object, a type that is
+  no array) nothing is done. }
+
+function PreJsKey(AData: TJSONData): string;
+begin
+  case AData.JSONType of
+    jtString: Result := AData.AsString;
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+  else
+    Result := #1 + AData.AsJSON;
+  end;
+end;
+
+function PreTruthy(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+procedure TyBrushPreprocess(AOption: TJSONObject; AIsNew: Boolean);
+var
+  d, tbs, tbNode: TJSONData;
+  brushes: array of TJSONData;
+  spec: TJSONArray;
+  toolbox, feature, brushF: TJSONObject;
+  types, kept: TJSONArray;
+  seen: TStringList;
+  i, k: Integer;
+  key: string;
+begin
+  if AOption = nil then Exit;
+  d := AOption.Find('brush');
+  brushes := nil;
+  if d is TJSONArray then
+  begin
+    for i := 0 to d.Count - 1 do
+    begin
+      SetLength(brushes, Length(brushes) + 1);
+      brushes[High(brushes)] := d.Items[i];
+    end;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    SetLength(brushes, 1);
+    brushes[0] := d;
+  end;
+  if Length(brushes) = 0 then Exit;
+  spec := TJSONArray.Create;
+  try
+    for i := 0 to High(brushes) do
+    begin
+      if not (brushes[i] is TJSONObject) then Continue;
+      tbs := TJSONObject(brushes[i]).Find('toolbox');
+      if tbs is TJSONArray then
+        for k := 0 to tbs.Count - 1 do spec.Add(tbs.Items[k].Clone);
+    end;
+    tbNode := AOption.Find('toolbox');
+    toolbox := nil;
+    if tbNode is TJSONArray then
+    begin
+      if (tbNode.Count > 0) and PreTruthy(tbNode.Items[0]) then
+      begin
+        if not (tbNode.Items[0] is TJSONObject) then Exit;
+        toolbox := TJSONObject(tbNode.Items[0]);
+      end;
+    end
+    else if PreTruthy(tbNode) then
+    begin
+      if not (tbNode is TJSONObject) then Exit;
+      toolbox := TJSONObject(tbNode);
+    end;
+    if toolbox = nil then
+    begin
+      toolbox := TJSONObject.Create;
+      toolbox.Add('feature', TJSONObject.Create);
+      if AOption.IndexOfName('toolbox') >= 0 then AOption.Delete('toolbox');
+      AOption.Add('toolbox', TJSONArray.Create([toolbox]));
+    end;
+    d := toolbox.Find('feature');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then toolbox.Delete('feature');
+      toolbox.Add('feature', TJSONObject.Create);
+      d := toolbox.Find('feature');
+    end;
+    if not (d is TJSONObject) then Exit;
+    feature := TJSONObject(d);
+    d := feature.Find('brush');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then feature.Delete('brush');
+      feature.Add('brush', TJSONObject.Create);
+      d := feature.Find('brush');
+    end;
+    if not (d is TJSONObject) then Exit;
+    brushF := TJSONObject(d);
+    d := brushF.Find('type');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then brushF.Delete('type');
+      brushF.Add('type', TJSONArray.Create);
+      d := brushF.Find('type');
+    end;
+    if not (d is TJSONArray) then Exit;
+    types := TJSONArray(d);
+    for k := 0 to spec.Count - 1 do types.Add(spec.Items[k].Clone);
+    { removeDuplicates by the item's string }
+    seen := TStringList.Create;
+    kept := TJSONArray.Create;
+    try
+      seen.Sorted := True;
+      seen.CaseSensitive := True;
+      for k := 0 to types.Count - 1 do
+      begin
+        key := PreJsKey(types.Items[k]);
+        if seen.IndexOf(key) >= 0 then Continue;
+        seen.Add(key);
+        kept.Add(types.Items[k].Clone);
+      end;
+      types.Clear;
+      for k := 0 to kept.Count - 1 do types.Add(kept.Items[k].Clone);
+    finally
+      kept.Free;
+      seen.Free;
+    end;
+    if AIsNew and (types.Count = 0) then
+    begin
+      types.Add('rect');
+      types.Add('polygon');
+      types.Add('keep');
+      types.Add('clear');
+    end;
+  finally
+    spec.Free;
+  end;
+end;
+
+{ zrUtil.merge(target, source, false): a key the target lacks is a clone of
+  the source's; two plain objects recurse; anything else stays the target's }
+procedure PreMergeKeep(ATarget, ASource: TJSONObject);
+var
+  i, k: Integer;
+  key: string;
+  sp, tp: TJSONData;
+begin
+  if (ATarget = nil) or (ASource = nil) then Exit;
+  for i := 0 to ASource.Count - 1 do
+  begin
+    key := ASource.Names[i];
+    sp := ASource.Items[i];
+    k := ATarget.IndexOfName(key);
+    if k >= 0 then tp := ATarget.Items[k] else tp := nil;
+    if (sp is TJSONObject) and (tp is TJSONObject) then
+      PreMergeKeep(TJSONObject(tp), TJSONObject(sp))
+    else if k < 0 then
+      ATarget.Add(key, sp.Clone);
+  end;
+end;
+
+{ normalizeToArray's item AIndex of AData: an array's own, a single value
+  as item 0, nothing for null or absent }
+function PreItem(AData: TJSONData; AIndex: Integer): TJSONData;
+begin
+  Result := nil;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AData is TJSONArray then
+  begin
+    if (AIndex >= 0) and (AIndex < AData.Count) then Result := TJSONArray(AData).Items[AIndex];
+  end
+  else if AIndex = 0 then
+    Result := AData;
+end;
+
+function PreCount(AData: TJSONData): Integer;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Result := 0
+  else if AData is TJSONArray then Result := AData.Count
+  else Result := 1;
+end;
+
+{ parallelPreprocessor [Batch 128, C19]: createParallelIfNeeded -- with no
+  truthy `parallel` and a series of type 'parallel' the option gets
+  `parallel: [{}]` -- then mergeAxisOptionFromParallel: every parallelAxis
+  object takes the parallelAxisDefault of the parallel its `parallelIndex
+  || 0` names (in this option), under its own keys }
+procedure TyParallelPreprocess(AOption: TJSONObject);
+var
+  ser, axes, pars, it, pd, def: TJSONData;
+  i: Integer;
+  has: Boolean;
+  v: Double;
+begin
+  if AOption = nil then Exit;
+  if not PreTruthy(AOption.Find('parallel')) then
+  begin
+    has := False;
+    ser := AOption.Find('series');
+    for i := 0 to PreCount(ser) - 1 do
+    begin
+      it := PreItem(ser, i);
+      if (it is TJSONObject) and (TJSONObject(it).Find('type') <> nil)
+        and (TJSONObject(it).Find('type').JSONType = jtString)
+        and (TJSONObject(it).Find('type').AsString = 'parallel') then
+        has := True;
+    end;
+    if has then
+    begin
+      if AOption.IndexOfName('parallel') >= 0 then AOption.Delete('parallel');
+      AOption.Add('parallel', TJSONArray.Create([TJSONObject.Create]));
+    end;
+  end;
+  axes := AOption.Find('parallelAxis');
+  pars := AOption.Find('parallel');
+  for i := 0 to PreCount(axes) - 1 do
+  begin
+    it := PreItem(axes, i);
+    if not (it is TJSONObject) then Continue;
+    pd := TJSONObject(it).Find('parallelIndex');
+    if not PreTruthy(pd) then v := 0
+    else if pd.JSONType = jtNumber then v := pd.AsFloat
+    else Continue;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v > MaxInt) then Continue;
+    pd := PreItem(pars, Trunc(v));
+    if not (pd is TJSONObject) then Continue;
+    def := TJSONObject(pd).Find('parallelAxisDefault');
+    if def is TJSONObject then PreMergeKeep(TJSONObject(it), TJSONObject(def));
+  end;
+end;
+
+procedure PreprocessUnits(ABase: TJSONObject; const ASet: TTyMediaSet; AIsNew: Boolean);
+var i: Integer;
+begin
+  TyParallelPreprocess(ABase);
+  TyBrushPreprocess(ABase, AIsNew);
+  for i := 0 to High(ASet.Units) do
+    if ASet.Units[i].Option <> nil then
+    begin
+      TyParallelPreprocess(ASet.Units[i].Option);
+      TyBrushPreprocess(ASet.Units[i].Option, AIsNew);
+    end;
+end;
+
 function TTyChartOption.SetOptionText(const AText: string): Boolean;
 begin
   Result := SetOptionText(AText, [], nil);
@@ -809,6 +1074,8 @@ begin
   begin
     base := TJSONObject(parsed);
     TyParseRawOption(base, mset);
+    { the preprocessors: a new option [Batch 127] }
+    PreprocessUnits(base, mset, True);
     parsed := base;
   end;
   FMedia.Reset(mset);
@@ -883,6 +1150,8 @@ begin
   { the base and the units apart [Batch 107] }
   base := TJSONObject(parsed);
   TyParseRawOption(base, mset);
+  { the preprocessors: not a new option [Batch 127] }
+  PreprocessUnits(base, mset, False);
   FMerged := base;
   if not TyOptionMerge(TJSONObject(FRoot), FKeys, base, AReplaceMerge,
     ABefore, AReport, err) then

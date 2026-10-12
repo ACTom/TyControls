@@ -514,7 +514,10 @@ begin
       or (cTypes[i] = 'lines')
       { a custom series' elements are its renderItem's, drawn from its view
         (AdvChart.Custom) [Batch 123] }
-      or (cTypes[i] = 'custom') then
+      or (cTypes[i] = 'custom')
+      { a parallel series' rows by AdvChart.Parallel on its parallel
+        [Batch 128] }
+      or (cTypes[i] = 'parallel') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));
@@ -544,9 +547,11 @@ begin
   AssertTrue('and the chord [Batch 120]', TySeriesTypeHasRenderer('chord'));
   AssertTrue('and the lines [Batch 121]', TySeriesTypeHasRenderer('lines'));
   AssertTrue('and the custom series [Batch 123]', TySeriesTypeHasRenderer('custom'));
-  { [Batch 123: this was custom until custom drew; a parallel series is the
-    example now -- its coordinate system is C19's] }
-  AssertFalse('a parallel series does not yet', TySeriesTypeHasRenderer('parallel'));
+  AssertTrue('and the parallel [Batch 128]', TySeriesTypeHasRenderer('parallel'));
+  { [Batch 123: this was custom until custom drew, then parallel until
+    C19 drew it [Batch 128]; a map series is the example now -- its
+    geo coordinate system is D14's] }
+  AssertFalse('a map series does not yet', TySeriesTypeHasRenderer('map'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot
     draw. }

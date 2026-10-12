@@ -108,66 +108,60 @@ begin
     and one does not, and "the option is understood" on its own would leave the
     author hunting for the series that is missing. Naming it is the whole
     difference between a panel that helps and a panel that is merely correct. }
-  { A PARALLEL SERIES MOVED ONTO THE GRID HERE. It was scatter, then pie,
-    then funnel, then sankey, then chord [Batch 120], then custom [Batch
-    123], and each moved on the day its type grew a renderer -- which is
-    exactly what a test pinning "X is not implemented yet" is for. The claim
-    is about the RULE; the type is only the current example of it, and
-    finding this test red is the reminder that one more of them now draws.
-    No type left undrawn binds on a grid by default, so the example is given
-    the grid explicitly: binding takes the name it is given. }
+  { A MAP SERIES MOVED ONTO THE GRID HERE. It was scatter, then pie, then
+    funnel, then sankey, then chord [Batch 120], then custom [Batch 123],
+    then parallel [Batch 128], and each moved on the day its type grew a
+    renderer -- which is exactly what a test pinning "X is not implemented
+    yet" is for. The claim is about the RULE; the type is only the current
+    example of it, and finding this test red is the reminder that one more of
+    them now draws. The map is the last (its geo is D14's), and it does not
+    bind on a grid by default, so the example is given the grid explicitly:
+    binding takes the name it is given. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''parallel'','
+    + '{ type: ''bar'', data: [1] }, { type: ''map'','
     + ' coordinateSystem: ''cartesian2d'', data: [] }] }',
     odkAllClear, d));
-  AssertTrue('names parallel, got: ' + d.Text, Pos('parallel', d.Text) > 0);
+  AssertTrue('names map, got: ' + d.Text, Pos('map', d.Text) > 0);
   AssertTrue('and does not name bar, got: ' + d.Text, Pos('bar', d.Text) = 0);
 
   { AND ONLY ONCE for a chart full of them, or the sentence becomes a list of
     the same word. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''parallel'','
+    + '{ type: ''bar'', data: [1] }, { type: ''map'','
     + ' coordinateSystem: ''cartesian2d'', data: [] },'
-    + ' { type: ''parallel'', coordinateSystem: ''cartesian2d'', data: [] }] }',
+    + ' { type: ''map'', coordinateSystem: ''cartesian2d'', data: [] }] }',
     odkAllClear, d));
   txt := d.Text;
   n := 0;
-  p := Pos('parallel', txt);
+  p := Pos('map', txt);
   while p > 0 do
   begin
     Inc(n);
-    Delete(txt, 1, p + 7);
-    p := Pos('parallel', txt);
+    Delete(txt, 1, p + 2);
+    p := Pos('map', txt);
   end;
-  AssertEquals('parallel named once, got: ' + d.Text, 1, n);
+  AssertEquals('map named once, got: ' + d.Text, 1, n);
 
   { TWO DIFFERENT TYPES ARE BOTH NAMED -- deduping must not turn "several
-    unpainted types" into "the first one".
+    unpainted types" into "the first one". With the map the only undrawn type
+    left [Batch 128], no chart can show that any more, so the rule is held to
+    at the routine the all-clear builds its list with, on names the library
+    does not need to have.
 
-    WHAT THIS DOES NOT PIN, said plainly because the comment that was here
-    claimed it did: the dedup used to match bare substrings, so a name that is
-    a SUFFIX of one already listed was swallowed. Among the twenty-three types
-    the only such pair is 'map' after 'treemap' or 'heatmap' -- and 'map' never
-    reaches this row, because it wants the geo coordinate system and the
-    builder reports that first, which suppresses the all-clear entirely.
-    [Batch 121: a map given an explicit cartesian2d does reach it, below --
-    but a treemap and a heatmap both draw now, so neither is ever listed
-    ahead of it.] 'tree' before 'treemap' is a PREFIX and was never affected.
-    So the fix is right and unreachable, and the mutant for it survives on purpose. }
-  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''map'', coordinateSystem: ''cartesian2d'','
-    + ' data: [] }, { type: ''parallel'', coordinateSystem: ''cartesian2d'','
-    + ' data: [] }] }', odkAllClear, d));
-  { [Batches 73/75/76/79: a tree, a sunburst, a treemap and a sankey draw
-    now; Batch 120: a chord too; Batch 121: and the lines, so custom was the
-    last undrawn type on a grid by default; Batch 123: custom draws, so both
-    are moved onto the grid by an explicit coordinateSystem -- a map and a
-    parallel -- binding takes the name it is given, and neither has a
-    renderer there.] }
-  AssertTrue('names map, got: ' + d.Text, Pos('map', d.Text) > 0);
-  txt := d.Text;
-  Delete(txt, Pos('map', txt), 3);
-  AssertTrue('and parallel as well, got: ' + d.Text, Pos('parallel', txt) > 0);
+    AND MATCHED WHOLE. The dedup used to match bare substrings, so a name that
+    is a SUFFIX of one already listed was swallowed: 'map' after 'treemap' or
+    'heatmap'. Through a chart that was never reachable -- a map wants geo,
+    and by the time one could be put on a grid both of those drew -- so the
+    routine is where it is pinned. 'tree' before 'treemap' is a PREFIX and
+    was never affected; it is here so a match that only looks at the start
+    is caught as well. }
+  txt := '';
+  TyOptListTypeOnce(txt, 'treemap');
+  TyOptListTypeOnce(txt, 'map');
+  TyOptListTypeOnce(txt, 'treemap');
+  TyOptListTypeOnce(txt, 'tree');
+  TyOptListTypeOnce(txt, 'map');
+  AssertEquals('each named, each once, in order', 'treemap, map, tree', txt);
 end;
 
 procedure TAdvChartDiagnoseTest.TestTextThatDoesNotParseYieldsExactlyOneThing;

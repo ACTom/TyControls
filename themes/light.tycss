@@ -1441,6 +1441,18 @@ TyAdvChartTimelineControl { background: var(--accent); border-color: var(--accen
 TyAdvChartTimelineControl:hover { background: darken(var(--accent), 25%); border-color: darken(var(--accent), 25%); }
 TyAdvChartTimelineLabel { color: var(--muted); font-size: var(--font-size-base); }
 TyAdvChartTimelineLabel:hover { color: darken(var(--accent), 10%); }
+/* What a brush leaves out. Upstream greys the items outside every cover in a
+   light neutral; here the skin's border colour, which is that neutral. */
+TyAdvChartBrushOut { color: var(--border); }
+/* A parallel axis' area select: the band a drag along the axis leaves.
+   Upstream fills and rims it in one light blue at 30% opacity (the opacity
+   is the chart's, not the skin's); here the accent halfway to the surface. */
+TyAdvChartParallelSelect { background: mix(var(--accent), var(--surface), 50%); border-color: mix(var(--accent), var(--surface), 50%); }
+/* A decal's symbols, where the decal names no colour of its own -- the aria
+   decals that tell the series apart without their colours. Upstream draws
+   them black at 20%; here the skin's ink at 20%, so a dark skin's decals
+   are light. */
+TyAdvChartDecal { color: alpha(var(--on-surface), 0.2); }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

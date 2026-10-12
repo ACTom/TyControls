@@ -65,6 +65,14 @@ function TyOptDiagnose(const AText: string): TTyOptDiagArray;
   was in the middle of writing. }
 function TyOptFormat(const AText: string; out AOut: string): Boolean;
 
+{ The all-clear's list of the types that are not drawn yet: AType appended to
+  the comma-separated AList unless it is already there, matched whole -- each
+  type once, in the order the series name them. Its own routine so the rule
+  can be held to with types the library does not have: since the parallel
+  drew, the map is the only undrawn type left, and one type cannot show that
+  two different ones are both named. }
+procedure TyOptListTypeOnce(var AList: string; const AType: string);
+
 implementation
 
 uses
@@ -334,19 +342,8 @@ begin
           if bindings[i].HasAxes then withAxes := True;
           if TySeriesTypeHasRenderer(bindings[i].SeriesType) then
             Inc(painted)
-          else if Pos(', ' + bindings[i].SeriesType + ',',
-                      ', ' + unpainted + ',') = 0 then
-          begin
-            { Each type once, in the order they appear: a chart with nine
-              scatter series should say "scatter", not say it nine times.
-
-              MATCHED WHOLE, with the separators around it. A bare substring
-              test made 'map' look already-listed the moment 'treemap' was --
-              both are real ECharts types and neither draws yet, so a chart
-              with both named only one. }
-            if unpainted <> '' then unpainted := unpainted + ', ';
-            unpainted := unpainted + bindings[i].SeriesType;
-          end;
+          else
+            TyOptListTypeOnce(unpainted, bindings[i].SeriesType);
         end;
 
       if resolved = 0 then
@@ -396,6 +393,19 @@ begin
   end;
 
   Result := Copy(C.Items, 0, C.Count);
+end;
+
+procedure TyOptListTypeOnce(var AList: string; const AType: string);
+begin
+  { Each type once, in the order they appear: a chart with nine scatter
+    series should say "scatter", not say it nine times.
+
+    MATCHED WHOLE, with the separators around it. A bare substring test made
+    'map' look already-listed the moment 'treemap' was -- both are real
+    ECharts types, and while neither drew a chart with both named only one. }
+  if Pos(', ' + AType + ',', ', ' + AList + ',') > 0 then Exit;
+  if AList <> '' then AList := AList + ', ';
+  AList := AList + AType;
 end;
 
 function TyOptFormat(const AText: string; out AOut: string): Boolean;

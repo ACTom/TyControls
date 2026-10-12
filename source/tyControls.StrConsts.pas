@@ -487,10 +487,62 @@ resourcestring
   rsTyChartToolboxBar = 'Switch to Bar Chart';
   rsTyChartToolboxStack = 'Stack';
   rsTyChartToolboxTiled = 'Tile';
+  // the brush feature's buttons [Batch 127] (langEN.ts toolbox.brush.title)
+  rsTyChartToolboxBrushRect = 'Box Select';
+  rsTyChartToolboxBrushPolygon = 'Lasso Select';
+  rsTyChartToolboxBrushLineX = 'Horizontally Select';
+  rsTyChartToolboxBrushLineY = 'Vertically Select';
+  rsTyChartToolboxBrushKeep = 'Keep Selections';
+  rsTyChartToolboxBrushClear = 'Clear Selections';
   // what the data view says when its text does not parse back
   rsTyChartToolboxDataViewBad = 'The data view''s text could not be read back: %s';
   // the save dialog's filter for saveAsImage
   rsTyChartToolboxImageFilter = 'PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*';
+
+  // --- AdvanceChart: the chart's description, its aria-label [Batch 131] ---
+  // ECharts' own locale (langEN.ts aria and series.typeNames), so an
+  // untranslated build says exactly what upstream's EN build says. The words
+  // in braces are placeholders the chart fills in: keep them as they are.
+  // A leading or trailing space is part of the sentence.
+  rsTyChartAriaWithTitle = 'This is a chart about "{title}"';
+  rsTyChartAriaWithoutTitle = 'This is a chart';
+  rsTyChartAriaSingleWithName = ' with type {seriesType} named {seriesName}.';
+  rsTyChartAriaSingleWithoutName = ' with type {seriesType}.';
+  rsTyChartAriaMultiplePrefix = '. It consists of {seriesCount} series count.';
+  rsTyChartAriaMultipleWithName = ' The {seriesId} series is a {seriesType} representing {seriesName}.';
+  rsTyChartAriaMultipleWithoutName = ' The {seriesId} series is a {seriesType}.';
+  rsTyChartAriaAllData = 'The data is as follows: ';
+  rsTyChartAriaPartialData = 'The first {displayCnt} items are: ';
+  rsTyChartAriaDataWithName = 'the data for {name} is {value}';
+  // The four separators in one string, '|' between them: between two
+  // series, after the last, between two values or rows, after the last.
+  // One string because some are empty in one language and not another.
+  rsTyChartAriaSeparators = '||, |. ';
+  // the series types' names (series.typeNames)
+  rsTyChartTypePie = 'Pie chart';
+  rsTyChartTypeBar = 'Bar chart';
+  rsTyChartTypeLine = 'Line chart';
+  rsTyChartTypeScatter = 'Scatter plot';
+  rsTyChartTypeEffectScatter = 'Ripple scatter plot';
+  rsTyChartTypeRadar = 'Radar chart';
+  rsTyChartTypeTree = 'Tree';
+  rsTyChartTypeTreemap = 'Treemap';
+  rsTyChartTypeBoxplot = 'Boxplot';
+  rsTyChartTypeCandlestick = 'Candlestick';
+  rsTyChartTypeK = 'K line chart';
+  rsTyChartTypeHeatmap = 'Heat map';
+  rsTyChartTypeMap = 'Map';
+  rsTyChartTypeParallel = 'Parallel coordinate map';
+  rsTyChartTypeLines = 'Line graph';
+  rsTyChartTypeGraph = 'Relationship graph';
+  rsTyChartTypeSankey = 'Sankey diagram';
+  rsTyChartTypeFunnel = 'Funnel chart';
+  rsTyChartTypeGauge = 'Gauge';
+  rsTyChartTypePictorialBar = 'Pictorial bar';
+  rsTyChartTypeThemeRiver = 'Theme River Map';
+  rsTyChartTypeSunburst = 'Sunburst';
+  rsTyChartTypeCustom = 'Custom chart';
+  rsTyChartTypeChart = 'Chart';
 
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
