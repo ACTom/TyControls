@@ -901,6 +901,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Connect"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.DirtyRect.pas"/>
+        <UnitName Value="tyControls.AdvChart.DirtyRect"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Media.pas"/>
         <UnitName Value="tyControls.AdvChart.Media"/>
       </Item>

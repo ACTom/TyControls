@@ -673,6 +673,13 @@ type
     { How far outside the shape still counts, LOGICAL px. A 6 px scatter marker
       needs a forgiving target; a line series needs a whole ribbon. }
     HitSlopLogical: Double;
+    { THE PORT'S OWN FORGIVENESS on top of it, LOGICAL px: a symbol's
+      target grown past what upstream's Path.contain answers, so a mouse
+      does not keep missing a four-pixel mark. A COARSE POINTER drops it --
+      its fallback is upstream's answer to the same problem, and with both
+      a mark would be found where upstream finds none. Zero everywhere
+      else. [Batch 142] }
+    HitPadLogical: Double;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -754,8 +761,11 @@ type
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
     { The insertion index of the AIndex-th element in PAINT order (back first). }
     function PaintOrder(AIndex: Integer): Integer;
-    { Topmost non-silent element containing the point, or -1. }
-    function HitTestElement(AX, AY: Double; APPI: Integer): Integer;
+    { Topmost non-silent element containing the point, or -1. APad False
+      leaves out the port's pad (HitPadLogical) -- a coarse pointer's direct
+      test [Batch 142]. }
+    function HitTestElement(AX, AY: Double; APPI: Integer;
+      APad: Boolean = True): Integer;
     { Topmost element containing the point, a silent one too -- zrender's
       `topTarget` -- or -1 [Batch 127] }
     function TopElementAt(AX, AY: Double; APPI: Integer): Integer;
@@ -1127,7 +1137,8 @@ begin
   Result := FOrder[AIndex];
 end;
 
-function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer): Integer;
+function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
+  APad: Boolean): Integer;
 var
   i, idx: Integer;
   slop: Double;
@@ -1141,10 +1152,9 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
-    if APPI > 0 then
-      slop := FItems[idx].HitSlopLogical * APPI / 96
-    else
-      slop := FItems[idx].HitSlopLogical;
+    slop := FItems[idx].HitSlopLogical;
+    if APad then slop := slop + FItems[idx].HitPadLogical;
+    if APPI > 0 then slop := slop * APPI / 96;
     if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
       Exit(idx);
   end;
@@ -1161,10 +1171,8 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
-    if APPI > 0 then
-      slop := FItems[idx].HitSlopLogical * APPI / 96
-    else
-      slop := FItems[idx].HitSlopLogical;
+    slop := FItems[idx].HitSlopLogical + FItems[idx].HitPadLogical;
+    if APPI > 0 then slop := slop * APPI / 96;
     if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
       Exit(idx);
   end;

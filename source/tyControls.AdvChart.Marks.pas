@@ -1050,8 +1050,28 @@ end;
   zrender's max(pen, 5) [Batch 90]. }
 const
   cHitSlopSymbolLogical = 4;
+
   { zrender's strokeContainThreshold [Batch 90] }
   cLineContainThreshold: Double = 5;
+
+{ A SYMBOL'S TARGET in two parts [Batch 142]: the pen's own reach, which is
+  upstream's (Path.contain strokes with the line width, max(width, 5)
+  without a fill), and the rest of the four logical px as the port's pad,
+  which a coarse pointer leaves out. Together they are the four px the
+  target has always had. }
+procedure SymbolHitSlop(var AEl: TTyChartElement);
+var reach: Double;
+begin
+  reach := 0;
+  if AEl.Style.StrokeWidthLogical > 0 then
+  begin
+    if AEl.Style.HasFill then reach := AEl.Style.StrokeWidthLogical / 2
+    else reach := Max(AEl.Style.StrokeWidthLogical, Double(5)) / 2;
+  end;
+  if reach > cHitSlopSymbolLogical then reach := cHitSlopSymbolLogical;
+  AEl.HitSlopLogical := reach;
+  AEl.HitPadLogical := cHitSlopSymbolLogical - reach;
+end;
 
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;
   ASeries, ARow: Integer): TTyChartElement;
@@ -1532,7 +1552,7 @@ var
       hover lifts by ten [Batch 88: it was the series' z2, and the hovered
       line's polyline then covered every other symbol] }
     el.Z2 := 100 + Round(lift);
-    el.HitSlopLogical := cHitSlopSymbolLogical;
+    SymbolHitSlop(el);
     { THE SYMBOL GROUP'S POSITION and the clip it is measured against: a
       line's symbol pops in when the growing clip reaches it
       (LineView._initSymbolLabelAnimation). Flag 1: there is a clip.
@@ -2307,7 +2327,7 @@ begin
   end;
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
   el.Z2 := 100 + Round(lift);
-  el.HitSlopLogical := cHitSlopSymbolLogical;
+  SymbolHitSlop(el);
   { A SCATTER SYMBOL POPS IN: its path scales from nought to half its size
     about its own origin -- the point and the symbol's offset -- and fades
     in (Symbol.ts:184-200). An effectScatter's runs on update timing and

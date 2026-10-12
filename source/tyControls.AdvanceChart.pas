@@ -73,6 +73,8 @@ uses
   tyControls.AdvChart.Parallel, tyControls.AdvChart.Thumbnail,
   { echarts.connect's revert map and the combined export [Batch 141] }
   tyControls.AdvChart.Connect,
+  { the coarse pointer and the dirty rectangles [Batch 142] }
+  tyControls.AdvChart.DirtyRect,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -1061,6 +1063,43 @@ type
       at a different PPI. }
     FStatic: TTyPaintCache;
     FStaticPPI: Integer;
+    { ==== THE INIT OPTIONS a zrender takes [Batch 142] ====
+      useCoarsePointer / pointerSize (the coarse pointer) and useDirtyRect.
+      Published with upstream's defaults: 'auto' -- off on every desktop
+      widgetset, see TyTouchPlatform -- 44, and off. }
+    FCoarsePointer: TTyChartCoarsePointer;
+    FPointerSize: Integer;
+    FUseDirtyRect: Boolean;
+    { ==== THE DIRTY-RECT PATH [Batch 142] ====
+      FDrWork: the static painter's surface, kept, and the scratch a partial
+      repaint draws on. FDrBase: the static picture before the series (the
+      frame, the ground, the graphic under the axes, the axes), captured by
+      every full static paint -- what a repainted rect starts from.
+      FDrSnap: the list the static layer holds now, element by element
+      with its paint rect; FDrSnapOk while it describes the cache.
+      FDrDyn: the dynamic layer, kept, transparent outside FDrDynTiles.
+      FDrMode 1: PaintSeries builds and prepares the list but draws nothing
+      (FDrStaticList is what it would draw at rest, nil when the static
+      layer would not hold one list). FDrPrepDone: the build already ran
+      this frame -- a fallback to the full static paint must not run it
+      again. The last frame's answer: FDrLastFull, FDrLastRects. The window:
+      FDrPending (something asked for a frame), FDrQueued (the flush is
+      queued), FDrFlushed (the frame is prepared and its rects invalidated:
+      the paint only composites). }
+    FDrWork: TBGRABitmap;
+    FDrBase: TBGRABitmap;
+    FDrBaseOk: Boolean;
+    FDrCapture: Boolean;
+    FDrSnap: TTyDirtySnap;
+    FDrSnapOk: Boolean;
+    FDrDyn: TBGRABitmap;
+    FDrDynTiles: TTyZrRectArray;
+    FDrMode: Integer;
+    FDrStaticList: TTyPaintList;
+    FDrPrepDone: Boolean;
+    FDrLastFull: Boolean;
+    FDrLastRects: TTyZrRectArray;
+    FDrPending, FDrQueued, FDrFlushed: Boolean;
     { WHAT WAS DRAWN, KEPT. Every mark, wedge, label and legend entry of the
       last static render, with its shape, its z and the datum behind it.
 
@@ -2316,6 +2355,34 @@ type
       named. This one is what a WINDOW wants, and works in client space:
       TTyPaintCache.Blit draws at the canvas origin. }
     procedure RenderCached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { ---- the dirty-rect path [Batch 142] ---- }
+    { the frame: the static layer (whole, or in rects), the dynamic layer,
+      the flush events; FDrLastFull / FDrLastRects say what changed }
+    procedure DrPrepare(const ARect: TRect; APPI: Integer);
+    { what changed onto ACanvas: everything, or the rects }
+    procedure DrComposite(ACanvas: TCanvas; const ARect: TRect);
+    { the window's paint: composite the clip, preparing first unless a
+      flush already did }
+    procedure DrPaintWindow;
+    procedure DrFlushAsync(AData: PtrInt);
+    function DrCanPartial(AW, AH: Integer): Boolean;
+    function DrStaticPartial(const R: TRect; APPI: Integer;
+      var APool: TTyRepaintPool): Boolean;
+    procedure DrStaticFull(const R: TRect; APPI: Integer);
+    procedure DrDynamic(const R: TRect; APPI: Integer; var APool: TTyRepaintPool;
+      var AFull: Boolean);
+    procedure DrCaptureBase(ABmp: TBGRABitmap);
+    procedure StaticDrop;
+    procedure SetUseDirtyRect(AValue: Boolean);
+    { the coarse pointer's size, logical px: 0 when it is off }
+    function CoarseSize: Integer;
+    { the display list's hit at a point: the direct test, then the coarse
+      fallback -- the insertion index, or -1 }
+    function ListHitAt(AX, AY: Double): Integer;
+    { the last frame's repaint, for a test and the bench: everything, or
+      these rects (device px; empty when nothing changed) }
+    function LastRepaintFull: Boolean;
+    function LastRepaintRects: TTyZrRectArray;
     { WHAT THE LAST FULL RENDER DREW, by view -- RenderTo's, an export's, a
       static layer's. [Batch 106] }
     function LastViewsDrawn: TTyChartViews;
@@ -3418,6 +3485,22 @@ type
       in, '' (the default) for none. A group does nothing until
       TyChartConnect connects it. }
     property Group: string read FGroup write FGroup;
+    { echarts.init's useCoarsePointer and pointerSize [Batch 142]: when the
+      pointer finds nothing, the elements near it -- within a square
+      PointerSize logical px wide -- are tried at points around it, ring by
+      ring (zrender's findHover). ccpAuto, the default, is upstream's 'auto':
+      on for a touch platform, which no desktop widgetset is (see
+      TyTouchPlatform); ccpOn and ccpOff force it. PointerSize 0 is off. }
+    property CoarsePointer: TTyChartCoarsePointer read FCoarsePointer
+      write FCoarsePointer default ccpAuto;
+    property PointerSize: Integer read FPointerSize write FPointerSize
+      default cTyDefaultPointerSize;
+    { echarts.init's useDirtyRect [Batch 142], off by default as upstream's:
+      a frame repaints only the rects around what changed -- a hovered
+      mark's restyle in the static layer, the dynamic layer's old and new
+      ink -- and a window invalidates only those. }
+    property UseDirtyRect: Boolean read FUseDirtyRect write SetUseDirtyRect
+      default False;
   end;
 
 { ==== echarts.connect [Batch 141] ====
@@ -3437,6 +3520,9 @@ implementation
 
 uses
   tyControls.Controller,
+  { the frame a dirty-rect window flushes before it is painted, and the
+    rects it invalidates [Batch 142] }
+  Forms, LCLIntf,
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvChart family keeps, invisible to a host. }
   tyControls.StrConsts,
@@ -3574,6 +3660,9 @@ begin
   FThumbDrag := -1;
   { an instance from now on [Batch 141] }
   FConnectStatus := -1;
+  { the init options' defaults [Batch 142] }
+  FCoarsePointer := ccpAuto;
+  FPointerSize := cTyDefaultPointerSize;
   Inc(GTyChartSeq);
   FInstanceNo := GTyChartSeq;
   if GTyCharts = nil then GTyCharts := TFPList.Create;
@@ -3599,6 +3688,11 @@ begin
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
+  { the dirty-rect path's surfaces, and a flush still queued [Batch 142] }
+  if FDrQueued and (Application <> nil) then Application.RemoveAsyncCalls(Self);
+  FreeAndNil(FDrWork);
+  FreeAndNil(FDrBase);
+  FreeAndNil(FDrDyn);
   FreeAndNil(FProgLayer);
   FreeAndNil(FTrailLayer);
   FreeAndNil(FDzTimer);
@@ -4537,11 +4631,27 @@ begin
     as a relayout is that a theme change arrives as a bare Invalidate, and a
     kept cache would blit the old theme over the new one. }
   DropStatic;
+  { a dirty-rect window prepares at its next paint [Batch 142] }
+  FDrPending := True;
   inherited Invalidate;
 end;
 
 procedure TTyAdvanceChart.InvalidateFrame;
 begin
+  { A DIRTY-RECT WINDOW FLUSHES FIRST [Batch 142]: the frame is prepared
+    when the queue next runs -- once, however many asked -- and only the
+    rects it changed are invalidated; zrender likewise renders at its next
+    animation frame, not when it is asked. }
+  if FUseDirtyRect and HandleAllocated and not (csDesigning in ComponentState) then
+  begin
+    FDrPending := True;
+    if not FDrQueued and (Application <> nil) then
+    begin
+      FDrQueued := True;
+      Application.QueueAsyncCall(@DrFlushAsync, 0);
+    end;
+    Exit;
+  end;
   { The static layer is KEPT -- see the declaration. This is the repaint an
     animation tick asks for: same model, same layout, same axes, one frame on. }
   inherited Invalidate;
@@ -6868,6 +6978,9 @@ begin
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
+  { THE GROUND A REPAINTED RECT STARTS FROM: everything above, before the
+    first series [Batch 142] }
+  if FDrCapture and (APainter <> nil) then DrCaptureBase(APainter.Bitmap);
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
@@ -19453,13 +19566,21 @@ end;
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 var
-  drawn: Integer;
-  built: Boolean;
+  drawn, i: Integer;
+  built, prepped, layered: Boolean;
+  frame: TTyPaintList;
 begin
+  { WHAT THE STATIC LAYER HOLDS, for the dirty-rect path: one list at rest,
+    or nil [Batch 142] }
+  FDrStaticList := nil;
+  { A DIRTY-RECT FALLBACK after the partial repaint's preparation: the list
+    is built and prepared for this frame already [Batch 142] }
+  prepped := FDrPrepDone and (FPaintList <> nil) and FPaintListValid and not FExporting;
+  FDrPrepDone := False;
   { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. A
     PROGRESS FRAME changed which elements are shown and nothing else: its
     list is drawn as it stands [Batch 119] }
-  built := not (FProgReuse and FPaintListValid and (FPaintList <> nil)
+  built := not prepped and not (FProgReuse and FPaintListValid and (FPaintList <> nil)
     and not FExporting);
   FProgReuse := False;
   if built then drawn := BuildSeriesList(AMeasurer, APPI)
@@ -19473,26 +19594,48 @@ begin
   end;
   if built then AnimAfterBuild;
   { the states on their proxies, then the armed option's flush [Batch 94] }
-  StAnimSync;
-  AnimFlushArmed;
+  if not prepped then
+  begin
+    StAnimSync;
+    AnimFlushArmed;
+  end;
   { IN MOTION, THE SERIES ARE THE DYNAMIC LAYER'S: a static layer holding
     them would freeze the first frame under every later one (Q7). }
   { ONLY LOOPS LEFT: everything but the ripples and their symbols stays
     here [Batch 92] }
   if FAnimContinuous then
   begin
-    if drawn > 0 then TyRenderPaintList(APainter, AnimPart(False));
+    if (drawn > 0) and (FDrMode = 0) then TyRenderPaintList(APainter, AnimPart(False));
     Exit;
   end;
   if FAnimLive then Exit;
   if drawn > 0 then
+  begin
     { AT REST, a proxy may still hold a value a unit in the last place off
       the layout -- the frame draws where upstream's element rests }
     if (Length(FAnimBind) > 0) or (Length(FAnimStBind) > 0) or TmAnimAny then
-      TyRenderPaintList(APainter, AnimFrame)
+    begin
+      frame := AnimFrame;
+      if FDrMode = 0 then TyRenderPaintList(APainter, frame);
+      FDrStaticList := frame;
+    end
     else
+    begin
       { a progressive run's chunks through their own layer [Batch 119] }
-      ProgRenderList(APainter, FPaintList, APPI);
+      if FDrMode = 0 then ProgRenderList(APainter, FPaintList, APPI);
+      { ...which is not one list the rects could be drawn from }
+      layered := False;
+      for i := 0 to FPaintList.Count - 1 do
+        if ProgIsLayered(FPaintList.Element(i)) then
+        begin
+          layered := True;
+          Break;
+        end;
+      if not layered then FDrStaticList := FPaintList;
+    end;
+  end
+  else
+    FDrStaticList := FPaintList;
 end;
 
 function TTyAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
@@ -19562,10 +19705,8 @@ begin
     insertion indices, so the element named is the list's [Batch 89] }
   { and AT REST ON A STATE PROXY, where the list keeps the rest values (a
     selected slice is out, a hovered symbol larger) [Batch 94] }
-  if FAnimLive or (Length(FAnimStBind) > 0) then
-    idx := AnimFrame.HitTestElement(AX, AY, FPaintListPPI)
-  else
-    idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
+  { the direct test, then the coarse pointer's fallback [Batch 142] }
+  idx := ListHitAt(AX, AY);
   if idx < 0 then Exit;
   AElement := idx;
   Result := FPaintList.Element(idx).Datum;
@@ -20126,7 +20267,7 @@ begin
   else
   begin
     { THE SAME LIST, more of it shown -- and on the layer already }
-    if FStatic <> nil then FStatic.Drop;
+    StaticDrop;
     FProgReuse := True;
   end;
   InvalidateFrame;
@@ -21445,14 +21586,8 @@ begin
   { THE DISPLAY LIST: series items, their labels, markers, legend items --
     as DRAWN: in motion, or on a state proxy, the frame (its insertion
     indices are the list's) [Batch 94] }
-  idx := -1;
-  if (FPaintList <> nil) and FPaintListValid then
-  begin
-    if FAnimLive or (Length(FAnimStBind) > 0) then
-      idx := AnimFrame.HitTestElement(AX, AY, FPaintListPPI)
-    else
-      idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
-  end;
+  { the direct test, then the coarse pointer's fallback [Batch 142] }
+  idx := ListHitAt(AX, AY);
   if idx >= 0 then
   begin
     el := FPaintList.Element(idx);
@@ -28578,7 +28713,7 @@ begin
   FLegendSelHoverLegend := ALegend;
   FLegendSelHoverIdx := AIndex;
   { the button is drawn in the static layer: a new ink is a new picture }
-  if FStatic <> nil then FStatic.Drop;
+  StaticDrop;
   InvalidateFrame;
 end;
 
@@ -28654,7 +28789,7 @@ begin
   { a racing view's first frame: its init sort, pending [Batch 135] }
   RtRenderPass;
   { the cached picture is the old render's; the list is the new one's }
-  if FStatic <> nil then FStatic.Drop;
+  StaticDrop;
   inherited Invalidate;
 end;
 
@@ -29807,7 +29942,7 @@ procedure TTyAdvanceChart.RestyleStatic;
 begin
   { THE CACHE ONLY. The list stays valid: its geometry is what the pointer is
     still being tested against until the next paint rebuilds it. }
-  if FStatic <> nil then FStatic.Drop;
+  StaticDrop;
   inherited Invalidate;
 end;
 
@@ -33635,7 +33770,7 @@ end;
 
 procedure TTyAdvanceChart.DropStatic;
 begin
-  if FStatic <> nil then FStatic.Drop;
+  StaticDrop;
   FProgReuse := False;
   { AND THE LIST WITH IT. The two describe the same frame: the list is what
     the static pass added up to, so a kept list beside a dropped cache would
@@ -33657,6 +33792,14 @@ var
   w, h: Integer;
   measurer: ITyTextMeasurer;
 begin
+  { THE DIRTY-RECT PATH [Batch 142]: the canvas holds the last frame, and
+    only what changed is drawn on it }
+  if FUseDirtyRect then
+  begin
+    DrPrepare(ARect, APPI);
+    DrComposite(ACanvas, ARect);
+    Exit;
+  end;
   w := ARect.Right - ARect.Left;
   h := ARect.Bottom - ARect.Top;
   if (w <= 0) or (h <= 0) then Exit;
@@ -33725,8 +33868,10 @@ end;
 
 procedure TTyAdvanceChart.Paint;
 begin
-  { a paint is a frame: the toolbox's hover states land [Batch 125] }
-  if not (csDesigning in ComponentState) then TbFrame;
+  { a paint is a frame: the toolbox's hover states land [Batch 125] -- a
+    dirty-rect window's frame is its flush, and a paint that only
+    composites is not one [Batch 142] }
+  if not (csDesigning in ComponentState) and not FUseDirtyRect then TbFrame;
   { THE DESIGNER RENDERS STRAIGHT THROUGH, as TTyPanel's does: it repaints
     rarely and streams while it does, so a cache buys nothing there and is one
     more thing that can be holding a frame from before the last property
@@ -33739,10 +33884,483 @@ begin
   { A WINDOW'S PAINT: the one render camAuto animates [Batch 89] }
   FAnimWindow := True;
   try
-    RenderCached(Canvas, ClientRect, Font.PixelsPerInch);
+    { the dirty-rect window: the clip composited [Batch 142] }
+    if FUseDirtyRect then DrPaintWindow
+    else RenderCached(Canvas, ClientRect, Font.PixelsPerInch);
   finally
     FAnimWindow := False;
   end;
+end;
+
+{ ==================== the coarse pointer and the dirty rectangles [Batch 142] ====================
+
+  THE COARSE POINTER is a fallback of the display list's hit test: the
+  direct test first -- without the port's pad, so it answers what
+  upstream's Path.contain answers -- and only when it finds nothing,
+  zrender's rings of samples over the candidates near the pointer
+  (AdvChart.DirtyRect). What the port hit-tests apart from the list (the
+  brush covers, break areas, titles, the toolbox, the timeline, the
+  visualMaps, the dataZoom handles) stays direct: in upstream they are
+  display-list elements and candidates like any other.
+
+  THE DIRTY RECTANGLES keep both layers and make each cheaper, never
+  different: what the dirty path puts on the canvas is, pixel for pixel,
+  what the full path puts there.
+
+  - THE STATIC LAYER, when only states changed (a hover's emphasis, a
+    selection: StApplyChanged): the list is built and prepared exactly as a
+    full static paint builds it, but not drawn; it is compared element by
+    element with the list the cache holds (FDrSnap) and createRepaintRects
+    makes the rects. Each rect starts from the ground captured before the
+    series (FDrBase), the elements whose rects meet one are drawn in paint
+    order, then what the static paint draws after the series (break areas,
+    parallel axes, titles) -- on the static painter's own surface, which is
+    then copied into the cache in those rects only. Anything else that
+    drops the static layer -- a relayout, a roam step, a legend selector's
+    hover, an animation leaving the static layer -- repaints it whole, and
+    so does a change the rects cannot hold (see TyDirtyDiff).
+  - THE DYNAMIC LAYER is kept from frame to frame and transparent outside
+    the tiles it inked last (FDrDynTiles): those are cleared, the layer is
+    painted as always, and its ink is found again. Its old and new tiles
+    join the static rects in createRepaintRects' pool, so a frame of a
+    moving tooltip costs the tooltip's area, not the control's -- the
+    control-sized bitmap the full path allocates, fills and blends every
+    frame (Q7's floor) is gone.
+  - THE WINDOW: InvalidateFrame queues one flush (QueueAsyncCall); the
+    flush prepares the frame and invalidates its rects only, and the paint
+    composites the clip it was given. A paint nobody flushed for (an
+    Invalidate, a window uncovered) prepares the frame itself. }
+
+procedure TTyAdvanceChart.StaticDrop;
+begin
+  if FStatic <> nil then FStatic.Drop;
+  { the cache no longer holds what the snapshot says [Batch 142] }
+  FDrSnapOk := False;
+end;
+
+procedure TTyAdvanceChart.SetUseDirtyRect(AValue: Boolean);
+begin
+  if FUseDirtyRect = AValue then Exit;
+  FUseDirtyRect := AValue;
+  StaticDrop;
+  FDrDynTiles := nil;
+  FreeAndNil(FDrDyn);
+  FDrPending := True;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.CoarseSize: Integer;
+begin
+  Result := TyCoarsePointerSize(FCoarsePointer, FPointerSize, TyTouchPlatform);
+end;
+
+function TTyAdvanceChart.ListHitAt(AX, AY: Double): Integer;
+var
+  L: TTyPaintList;
+  sz: Integer;
+begin
+  Result := -1;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT, and at rest on a state proxy
+    (see HitTestAt) }
+  if FAnimLive or (Length(FAnimStBind) > 0) then L := AnimFrame else L := FPaintList;
+  sz := CoarseSize;
+  if sz <= 0 then Exit(L.HitTestElement(AX, AY, FPaintListPPI));
+  Result := L.HitTestElement(AX, AY, FPaintListPPI, False);
+  if Result < 0 then Result := TyCoarseHitTest(L, AX, AY, FPaintListPPI, sz);
+end;
+
+function TTyAdvanceChart.LastRepaintFull: Boolean;
+begin
+  Result := FDrLastFull;
+end;
+
+function TTyAdvanceChart.LastRepaintRects: TTyZrRectArray;
+begin
+  Result := Copy(FDrLastRects);
+end;
+
+procedure TTyAdvanceChart.DrCaptureBase(ABmp: TBGRABitmap);
+begin
+  if ABmp = nil then Exit;
+  if (FDrBase = nil) or (FDrBase.Width <> ABmp.Width) or (FDrBase.Height <> ABmp.Height) then
+  begin
+    FreeAndNil(FDrBase);
+    FDrBase := TBGRABitmap.Create(ABmp.Width, ABmp.Height);
+  end;
+  FDrBase.PutImage(0, 0, ABmp, dmSet);
+  FDrBaseOk := True;
+end;
+
+function TTyAdvanceChart.DrCanPartial(AW, AH: Integer): Boolean;
+begin
+  { the cache holds the snapshot's list over the captured ground, at this
+    size, with nothing to lay out again and the series at rest in it }
+  Result := FDrSnapOk and FDrBaseOk and (FDrWork <> nil) and (FDrBase <> nil)
+    and (FDrWork.Width = AW) and (FDrWork.Height = AH)
+    and (FDrBase.Width = AW) and (FDrBase.Height = AH)
+    and not FDirty and (FLastRect.Right = AW) and (FLastRect.Bottom = AH)
+    and not FExporting and not FAnimLive and not FAnimContinuous;
+end;
+
+procedure TTyAdvanceChart.DrStaticFull(const R: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  measurer: ITyTextMeasurer;
+begin
+  if (FDrWork = nil) or (FDrWork.Width <> R.Right) or (FDrWork.Height <> R.Bottom) then
+  begin
+    FreeAndNil(FDrWork);
+    FDrWork := TBGRABitmap.Create(R.Right, R.Bottom);
+  end;
+  { what BeginPaint's own bitmap starts as }
+  FDrWork.Fill(BGRAPixelTransparent);
+  FDrBaseOk := False;
+  FDrSnapOk := False;
+  FDrSnap := nil;
+  measurer := NewTextMeasurer(APPI);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(FStatic.Canvas, R, APPI, FDrWork);
+    FDrCapture := True;
+    try
+      PaintStatic(P, R, APPI, measurer);
+    finally
+      FDrCapture := False;
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  if FDrBaseOk and (FDrStaticList <> nil) then
+  begin
+    FDrSnap := TyDirtySnapshot(FDrStaticList, APPI);
+    FDrSnapOk := True;
+  end;
+end;
+
+function TTyAdvanceChart.DrStaticPartial(const R: TRect; APPI: Integer;
+  var APool: TTyRepaintPool): Boolean;
+var
+  measurer: ITyTextMeasurer;
+  snap: TTyDirtySnap;
+  rects, zr: TTyZrRectArray;
+  px: array of TRect;
+  pr, oldClip: TRect;
+  box: TTyXYWH;
+  i, k, n, idx: Integer;
+  hit: Boolean;
+  P: TTyPainter;
+begin
+  Result := False;
+  measurer := NewTextMeasurer(APPI);
+  { THE LIST AS A FULL STATIC PAINT WOULD BUILD AND PREPARE IT -- the
+    graphic component's elements, the states, the proxies -- and not drawn }
+  GfxBuild(APPI);
+  FDrMode := 1;
+  try
+    PaintSeries(nil, measurer, APPI);
+  finally
+    FDrMode := 0;
+  end;
+  { from here a fallback must not build it again }
+  FDrPrepDone := True;
+  { a state's transition took the series into the dynamic layer, or the
+    static layer would not hold one list: everything }
+  if FAnimLive or FAnimContinuous or (FDrStaticList = nil) then Exit;
+  snap := TyDirtySnapshot(FDrStaticList, APPI);
+  if not TyDirtyDiff(FDrSnap, snap, rects) then Exit;
+  FDrPrepDone := False;
+  FDrSnap := snap;
+  Result := True;
+  n := 0;
+  SetLength(px, Length(rects));
+  SetLength(zr, Length(rects));
+  for i := 0 to High(rects) do
+    if TyZrRectToPixels(rects[i], R.Right, R.Bottom, pr) then
+    begin
+      px[n] := pr;
+      zr[n] := rects[i];
+      Inc(n);
+    end;
+  if n = 0 then Exit;
+  { EACH RECT FROM THE GROUND, then what meets it in paint order }
+  for i := 0 to n - 1 do
+  begin
+    FDrWork.PutImagePart(px[i].Left, px[i].Top, FDrBase, px[i], dmSet);
+    box.X := px[i].Left;
+    box.Y := px[i].Top;
+    box.W := px[i].Right - px[i].Left;
+    box.H := px[i].Bottom - px[i].Top;
+    TyRepaintPoolAdd(APool, box);
+  end;
+  P := TTyPainter.Create;
+  oldClip := FDrWork.ClipRect;
+  try
+    P.BeginPaintOn(nil, R, APPI, FDrWork);
+    { ONE PASS UNDER THE RECTS' BOUNDS: the bitmap's clip is the box round
+      every rect, and an element is drawn once when it meets any of them.
+      zrender clips and draws rect by rect; drawn that way here an element
+      crossing several rects -- a line's polyline across the plot -- is
+      stroked once per rect, and stroking a long polyline costs the same
+      however small the clip. What lands outside the rects is never copied
+      out. }
+    box := TyRectToXYWH(TyRectF(px[0].Left, px[0].Top, px[0].Right, px[0].Bottom));
+    for k := 1 to n - 1 do
+      TyZrRectUnion(box, TyRectToXYWH(TyRectF(px[k].Left, px[k].Top, px[k].Right, px[k].Bottom)));
+    FDrWork.ClipRect := Rect(Round(box.X), Round(box.Y), Round(box.X + box.W), Round(box.Y + box.H));
+    for i := 0 to FDrStaticList.Count - 1 do
+    begin
+      idx := FDrStaticList.PaintOrder(i);
+      if (idx < 0) or (idx > High(snap)) then Continue;
+      { TyRenderPaintList's own skips }
+      if snap[idx].El.Ignore or snap[idx].El.ProgHidden or snap[idx].El.GfxUnder then
+        Continue;
+      { an element nothing bounds is drawn wherever it is: unchanged, it may
+        still be under a rect }
+      if snap[idx].Bounded then
+      begin
+        hit := False;
+        for k := 0 to n - 1 do
+          if TyZrRectIntersect(snap[idx].Rect, zr[k]) then
+          begin
+            hit := True;
+            Break;
+          end;
+        if not hit then Continue;
+      end;
+      TyRenderElement(P, snap[idx].El);
+    end;
+    { what the static paint draws over the series, as it draws it }
+    PaintBreakAreas(P);
+    PaintParallels(P, APPI, measurer);
+    PaintTitles(P);
+    FDrWork.ClipRect := oldClip;
+    P.EndPaint;
+  finally
+    FDrWork.ClipRect := oldClip;
+    P.Free;
+  end;
+  { INTO THE CACHE, those rects only, blended as EndPaint blends }
+  for i := 0 to n - 1 do
+    FDrWork.DrawPart(px[i], FStatic.Canvas, px[i].Left, px[i].Top, False);
+end;
+
+const
+  { the dynamic layer's ink is found in tiles this many px square }
+  cDrInkTile = 32;
+
+procedure TTyAdvanceChart.DrDynamic(const R: TRect; APPI: Integer;
+  var APool: TTyRepaintPool; var AFull: Boolean);
+var
+  i: Integer;
+  pr: TRect;
+  cur: TTyZrRectArray;
+  P: TTyPainter;
+  measurer: ITyTextMeasurer;
+begin
+  if (FDrDyn = nil) or (FDrDyn.Width <> R.Right) or (FDrDyn.Height <> R.Bottom) then
+  begin
+    FreeAndNil(FDrDyn);
+    FDrDyn := TBGRABitmap.Create(R.Right, R.Bottom, BGRAPixelTransparent);
+    FDrDynTiles := nil;
+    AFull := True;
+  end;
+  { THE LAST INK GOES: the layer is transparent again everywhere }
+  for i := 0 to High(FDrDynTiles) do
+  begin
+    if TyZrRectToPixels(FDrDynTiles[i], R.Right, R.Bottom, pr) then
+      FDrDyn.FillRect(pr, BGRAPixelTransparent, dmSet);
+    TyRepaintPoolAdd(APool, FDrDynTiles[i]);
+  end;
+  cur := nil;
+  { A PAINTER ONLY WHEN THERE IS SOMETHING TO PUT IN IT -- as the full path }
+  if HasDynamicContent then
+  begin
+    measurer := NewTextMeasurer(APPI);
+    P := TTyPainter.Create;
+    try
+      P.BeginPaintOn(nil, R, APPI, FDrDyn);
+      PaintDynamic(P, R, APPI, measurer);
+      P.EndPaint;
+    finally
+      P.Free;
+    end;
+    TyInkTiles(FDrDyn, cDrInkTile, cur);
+    for i := 0 to High(cur) do TyRepaintPoolAdd(APool, cur[i]);
+  end;
+  FDrDynTiles := cur;
+end;
+
+procedure TTyAdvanceChart.DrPrepare(const ARect: TRect; APPI: Integer);
+var
+  w, h: Integer;
+  R: TRect;
+  pool: TTyRepaintPool;
+  full, partial: Boolean;
+begin
+  FDrLastRects := nil;
+  FDrLastFull := True;
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  R := Rect(0, 0, w, h);
+  if FStatic = nil then FStatic := TTyPaintCache.Create;
+  { PPI IS PART OF THE KEY -- see RenderCached }
+  if APPI <> FStaticPPI then
+  begin
+    StaticDrop;
+    FStaticPPI := APPI;
+  end;
+  TyRepaintPoolInit(pool);
+  full := False;
+  { upstream's frame: the flags become state lists [Batch 88] -- and a
+    change of them is repainted in rects where it can be }
+  if StApplyChanged then
+  begin
+    FProgReuse := False;
+    partial := DrCanPartial(w, h) and DrStaticPartial(R, APPI, pool);
+    if not partial then StaticDrop;
+  end;
+  if FStatic.NeedsRender(w, h) then
+  begin
+    DrStaticFull(R, APPI);
+    full := True;
+  end;
+  DrDynamic(R, APPI, pool, full);
+  FDrLastFull := full;
+  if not full then FDrLastRects := TyRepaintPoolFinish(pool);
+  { the update painted: `rendered` [Batch 119] }
+  EmitFlush;
+  { the bar race, as RenderTo's [Batch 135] }
+  if FRtAfterRelayout then
+  begin
+    FRtAfterRelayout := False;
+    RtRenderPass;
+    RtRendered;
+  end;
+  RtFlushQueue;
+end;
+
+procedure TTyAdvanceChart.DrComposite(ACanvas: TCanvas; const ARect: TRect);
+var
+  i, k, w, h: Integer;
+  px: TRect;
+  ink: Boolean;
+begin
+  if (FStatic = nil) or (ACanvas = nil) then Exit;
+  if FDrLastFull then
+  begin
+    FStatic.Blit(ACanvas);
+    if (FDrDyn <> nil) and (Length(FDrDynTiles) > 0) then
+      FDrDyn.Draw(ACanvas, ARect.Left, ARect.Top, False);
+    Exit;
+  end;
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  for i := 0 to High(FDrLastRects) do
+  begin
+    if not TyZrRectToPixels(FDrLastRects[i], w, h, px) then Continue;
+    { the static layer at the canvas origin, as Blit puts it }
+    ACanvas.CopyRect(px, FStatic.Canvas, px);
+    ink := False;
+    if FDrDyn <> nil then
+      for k := 0 to High(FDrDynTiles) do
+        if TyZrRectIntersect(FDrDynTiles[k], FDrLastRects[i]) then
+        begin
+          ink := True;
+          Break;
+        end;
+    if ink then
+      FDrDyn.DrawPart(px, ACanvas, ARect.Left + px.Left, ARect.Top + px.Top, False);
+  end;
+end;
+
+procedure TTyAdvanceChart.DrPaintWindow;
+var
+  clip, px, client, ink: TRect;
+  i: Integer;
+  prepared: Boolean;
+begin
+  client := ClientRect;
+  clip := Canvas.ClipRect;
+  if (clip.Right <= clip.Left) or (clip.Bottom <= clip.Top) then clip := client;
+  { A PAINT NOBODY FLUSHED FOR prepares its own frame: an Invalidate, a
+    window uncovered, a flush overtaken by a newer request }
+  prepared := not FDrFlushed or FDrPending or (FStatic = nil);
+  if prepared then
+  begin
+    TbFrame;
+    DrPrepare(client, Font.PixelsPerInch);
+  end;
+  FDrFlushed := False;
+  FDrPending := False;
+  if FStatic = nil then Exit;
+  { THE CLIP, whatever invalidated it }
+  Canvas.CopyRect(clip, FStatic.Canvas, clip);
+  if (FDrDyn <> nil) and (Length(FDrDynTiles) > 0) then
+  begin
+    ink := Rect(MaxInt, MaxInt, -MaxInt, -MaxInt);
+    for i := 0 to High(FDrDynTiles) do
+      if TyZrRectToPixels(FDrDynTiles[i], client.Right, client.Bottom, px) then
+      begin
+        if px.Left < ink.Left then ink.Left := px.Left;
+        if px.Top < ink.Top then ink.Top := px.Top;
+        if px.Right > ink.Right then ink.Right := px.Right;
+        if px.Bottom > ink.Bottom then ink.Bottom := px.Bottom;
+      end;
+    if IntersectRect(px, ink, clip) then
+      FDrDyn.DrawPart(px, Canvas, px.Left, px.Top, False);
+  end;
+  { A FRAME LARGER THAN THE CLIP is invalidated again where the clip did
+    not reach; that paint only composites }
+  if prepared and HandleAllocated then
+  begin
+    if FDrLastFull then
+    begin
+      if (clip.Left > 0) or (clip.Top > 0) or (clip.Right < client.Right)
+        or (clip.Bottom < client.Bottom) then
+      begin
+        FDrFlushed := True;
+        LCLIntf.InvalidateRect(Handle, nil, False);
+      end;
+    end
+    else
+      for i := 0 to High(FDrLastRects) do
+        if TyZrRectToPixels(FDrLastRects[i], client.Right, client.Bottom, px)
+          and not ((px.Left >= clip.Left) and (px.Top >= clip.Top)
+            and (px.Right <= clip.Right) and (px.Bottom <= clip.Bottom)) then
+        begin
+          FDrFlushed := True;
+          LCLIntf.InvalidateRect(Handle, @px, False);
+        end;
+  end;
+end;
+
+procedure TTyAdvanceChart.DrFlushAsync(AData: PtrInt);
+var
+  i: Integer;
+  px: TRect;
+begin
+  FDrQueued := False;
+  if not FUseDirtyRect or not FDrPending or not HandleAllocated
+    or (csDestroying in ComponentState) then Exit;
+  { the window's frame: camAuto animates it, the toolbox's hover lands }
+  FAnimWindow := True;
+  try
+    TbFrame;
+    DrPrepare(ClientRect, Font.PixelsPerInch);
+  finally
+    FAnimWindow := False;
+  end;
+  FDrPending := False;
+  FDrFlushed := True;
+  if FDrLastFull then
+    LCLIntf.InvalidateRect(Handle, nil, False)
+  else
+    for i := 0 to High(FDrLastRects) do
+      if TyZrRectToPixels(FDrLastRects[i], ClientWidth, ClientHeight, px) then
+        LCLIntf.InvalidateRect(Handle, @px, False);
 end;
 
 { ==================== the graphic component [Batch 122] ==================== }
@@ -35832,7 +36450,7 @@ begin
           scratch.Free;
         end;
         { the list is the window's again; the cached picture is not }
-        if FStatic <> nil then FStatic.Drop;
+        StaticDrop;
       end
       else
         { the list was built for the export (its views excluded, nothing bound):
