@@ -94,6 +94,7 @@ type
     procedure TestCheckBoxOfAWordField;
     procedure TestReadOnlyCheckBoxDoesNotToggle;
     procedure TestLookupPicksFromItsDataSetAndWritesTheKey;
+    procedure TestUpDownInAClosedPickListMoveTheRecord;
     procedure TestEditMaskIsTheField;
     { refusals }
     procedure TestFieldRefusalKeepsTheEditor;
@@ -690,6 +691,25 @@ begin
   AssertEquals('the cell shows the pick', 'Lima', FGrid.Cell(ColOf('City'), FGrid.Row));
   FGrid.PressKey(VK_DOWN);
   AssertEquals('posted', '3', ValueIn(FKinds, 'Name', 'One', 'CityID'));
+end;
+
+procedure TDBGridEditTest.TestUpDownInAClosedPickListMoveTheRecord;
+begin
+  { #59 hands a closed pick list's Up/Down to the grid; here that move is the dataset's. }
+  BindKinds;
+  GoToCell('City');
+  FGrid.PressKey(VK_F2);
+  AssertTrue('a pick list', FGrid.EditorMode);
+  AssertEquals('on the first record', 1, FKinds.RecNo);
+  FGrid.PressKeyInPickList(VK_DOWN);
+  AssertEquals('Down moved the dataset', 2, FKinds.RecNo);
+  AssertEquals('the grid row follows the record', 1, FGrid.Row);
+  AssertEquals('the value under the key left alone', '2', ValueIn(FKinds, 'Name', 'One', 'CityID'));
+  FGrid.PressKey(VK_F2);
+  FGrid.PressKeyInPickList(VK_UP);
+  AssertEquals('Up moved it back', 1, FKinds.RecNo);
+  AssertEquals('the row too', 0, FGrid.Row);
+  AssertEquals('that value left alone too', '1', ValueIn(FKinds, 'Name', 'Two', 'CityID'));
 end;
 
 procedure TDBGridEditTest.TestEditMaskIsTheField;

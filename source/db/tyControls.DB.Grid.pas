@@ -514,8 +514,8 @@ type
     procedure HeaderSectionClicked(ACol: Integer); override;
     procedure ColumnSized(ACol: Integer); override;
     procedure ColumnMoved(AFromPos, AToPos: Integer); override;
-    { OnMouseWheel / OnMouseWheelUp / OnMouseWheelDown, LCL's TControl.DoMouseWheel order.
-      See the implementation: a stand-in for the string grid until it fires them itself. }
+    { OnMouseWheel / OnMouseWheelUp / OnMouseWheelDown, LCL's TControl.DoMouseWheel order,
+      for the data path, which never reaches TControl.DoMouseWheel. }
     function FireWheelEvents(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
     { The column ACol as this grid's column (nil when out of range). }
@@ -2059,10 +2059,11 @@ function TTyCustomDBGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   notches: Integer;
 begin
-  { The application's handlers first, as LCL's TControl.DoMouseWheel asks them. }
-  if FireWheelEvents(Shift, WheelDelta, MousePos) then Exit(True);
+  { No dataset: the string grid's wheel, which fires the application's handlers itself. }
   if (FDataLink = nil) or not FDataLink.Active then
     Exit(inherited DoMouseWheel(Shift, WheelDelta, MousePos));
+  { The application's handlers first, as LCL's TControl.DoMouseWheel asks them. }
+  if FireWheelEvents(Shift, WheelDelta, MousePos) then Exit(True);
   { One record per notch, as LCL's TDBGrid moves one per wheel message. }
   notches := Abs(WheelDelta) div 120;   // WHEEL_DELTA
   if notches < 1 then notches := 1;
@@ -2073,14 +2074,9 @@ begin
   Result := True;
 end;
 
-{ ===== STAND-IN FOR A BASE-CLASS FIX -- the one place this grid fires the wheel events. =====
-  TTyCustomGrid.DoMouseWheel (3.0 and later) never calls TControl.DoMouseWheel, so
-  OnMouseWheel / OnMouseWheelDown / OnMouseWheelUp never fire on any grid. That is a 3.0 bug,
-  handed to the 3.0 session; its fix will reach main and make the string grid call inherited
-  first. When it lands, the call in DoMouseWheel's "no dataset" path (inherited) fires the
-  events itself: the call below must then go from that path -- the data path, which never
-  calls the string grid's DoMouseWheel, keeps it. TDBGridEventsTest.TestOneNotchFiresTheEventOnce
-  counts the events on both paths and turns red on a double fire. }
+{ The wheel events on the data path, which moves records instead of calling the string grid's
+  DoMouseWheel (that one fires them through TControl, #62). TDBGridEventsTest.
+  TestOneNotchFiresTheEventOnce counts the events on both paths and turns red on a double fire. }
 function TTyCustomDBGrid.FireWheelEvents(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin

@@ -488,7 +488,7 @@ begin
 
   OpenWith(gekMemo, STORE, 'probe');
   FGrid.Memo.Text := 'new';
-  Commit('memo', 'new' + LineEnding, STORE);   { see OpenWith }
+  Commit('memo', 'new', STORE);   { the memo's text as it is, no line break added (#58) }
 
   OpenWith(gekMask, STORE, 'probe');
   FGrid.Mask.Text := 'new';

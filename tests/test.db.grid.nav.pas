@@ -60,6 +60,8 @@ type
     function EditorMaxLength: Integer;
     function MaskEditorShown: Boolean;
     function PickEditorItems: TStrings;
+    { A key in the pick list as the system delivers it, the list closed. }
+    procedure PressKeyInPickList(AKey: Word);
     function PickEditorIndex: Integer;
     procedure SetPickEditorIndex(AIndex: Integer);
   protected
@@ -264,6 +266,16 @@ end;
 function TDBGridProbe.MaskEditorShown: Boolean;
 begin
   Result := MaskEditor.Visible;
+end;
+
+procedure TDBGridProbe.PressKeyInPickList(AKey: Word);
+var
+  k: Word;
+  cb: TTyComboBox;
+begin
+  k := AKey;
+  cb := InplaceEditor as TTyComboBox;
+  if Assigned(cb.OnKeyDown) then cb.OnKeyDown(cb, k, []);
 end;
 
 function TDBGridProbe.PickEditorItems: TStrings;
