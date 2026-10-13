@@ -72,10 +72,10 @@ uses tyControls.TreeView, tyControls.Columns;
 | `toMultiSelect` | 启用多选（Ctrl / Shift / Ctrl+A + 键盘范围扩展） |
 | `toCheckSupport` | 启用复选框 / 三态 / 单选钮支持（`CheckType` 生效、点击复选槽切换状态） |
 | `toFullRowSelect` | 整行高亮（而非仅标签区） |
-| `toAutoTristateTracking` | 复选状态自动向下传播（父勾则子全勾）+ 向上重算三态父节点 |
+| `toAutoTristateTracking` | 复选状态自动向下传播（父勾则子全勾，之后才建出来的子节点也一样）+ 向上重算三态父节点；鼠标点击和代码设置 `CheckState` / `Checked` 都会联动 |
 | `toVariableNodeHeight` | 启用每节点变高，配合 `OnMeasureItem` 返回逐行高度 |
 | `toIncrementalSearch` | 启用键入查找：有焦点时键入可打印字符跳转到下一匹配的可见节点 |
-| `toOwnerDraw` | 启用逐单元格自绘 `OnDrawNode`（完全替换默认单元格内容） |
+| `toOwnerDraw` | 启用逐单元格自绘 `OnDrawNode`（替换默认的文本和图标；行背景、选中高亮、树线、展开按钮、复选框照常绘制） |
 | `toEditable` | 启用就地编辑：F2 / 双击可编辑单元格弹出主题化 `TTyEdit` 覆盖框 |
 | `toNodeDrag` | 启用树内节点拖放（拖动节点在兄弟间重排 / 重设父级） |
 
@@ -274,8 +274,8 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 | `OnGetTextWithType` | `TTyTreeGetTextWithTypeEvent` | 取单元格文本（完整签名，带 `Column` + `TextType: ttNormal/ttStatic`；多列用） |
 | `OnGetImageIndex` | `TTyTreeGetImageIndexEvent` | 取节点图标索引（带 `Kind` + `Column` + `var Ghosted`）。`Ghosted := True` **会被采纳**：该行图标按"不可用"绘制（走 `TCustomImageList.Draw` 的禁用灰化）。以前这个标志被收下就丢掉；后来只在**多列**分支接上，0 列（默认形态）仍然丢——现在两条分支都接上了。`Kind` 现在会被真的问到三次：`ikNormal` 每行都问，`ikSelected` 只对选中行问（**以当前 `ikNormal` 结果为初值**，handler 不管它就保持原图标，老代码渲染不变），`ikOverlay` 初值 `-1`、答了就叠画在普通图标之上。`ikState` 仍未实现（需要第二个图像列表和自己的槽位，见"注意事项"） |
 | `OnPaintText` | `TTyTreePaintTextEvent` | 文本绘制后的钩子 |
-| `OnMeasureItem` | `TTyTreeMeasureItemEvent` | 从 `InitNode` 触发（仅 `toVariableNodeHeight`），app 通过 `var ANodeHeight` 返回逐行高度（逻辑像素） |
-| `OnDrawNode` | `TTyTreeDrawNodeEvent` | 逐单元格**完全自绘**（仅 `toOwnerDraw`）；在 BGRA 合成后、裁剪到单元格设备矩形时触发，跳过默认单元格内容 |
+| `OnMeasureItem` | `TTyTreeMeasureItemEvent` | 从 `InitNode` 触发（仅 `toVariableNodeHeight`），app 通过 `var ANodeHeight` 返回逐行高度（逻辑像素）。运行时打开该选项、或默认行高变了（`DefaultNodeHeight`、密度），已初始化的节点会再测一次 |
+| `OnDrawNode` | `TTyTreeDrawNodeEvent` | 逐单元格自绘（仅 `toOwnerDraw`）；在 BGRA 合成后、裁剪到单元格设备矩形时触发。这个单元格不再画默认的文本和图标，也不触发 `OnPaintText`；行背景、选中高亮、树线、展开按钮、复选框照常画在下面，复选框也照常能点。handler 在它们之后画，需要时可以盖住 |
 | `OnAfterCellPaint` | `TTyTreeCellPaintEvent` | 每个绘制单元格之上的**叠加层**（独立于 `toOwnerDraw`），用于徽标 / 焦点环等装饰 |
 | `OnIncrementalSearch` | `TTyTreeIncrementalSearchEvent` | 键入查找的自定义匹配谓词（不赋值时默认对主列文本做大小写不敏感前缀匹配） |
 
@@ -582,7 +582,7 @@ Tree.OnNodeMoved := @OnMoved;
 - **`Items` 与 `OnGetText` 不能同时用**（本轮新增的第二重要陷阱）：`Items` 非空即进入条目模式，此时再挂 `OnGetText` / `OnGetTextWithType` / 设 `NodeDataSize` / 调 `RootNodeCount :=` 都会抛 `ETyTreeItemMode`，反方向同样。控件**不会**静默择一。二选一：清空 `Items` 走虚拟模式，或者移除事件走条目模式。见第 3.5 节。
 - **虚拟 = 数据在你手里，不在树里**（这一段只适用于虚拟模式，即 `Items` 为空时）：树本身不存文本 / 图标 / 子节点。文本经 `OnGetText` / `OnGetTextWithType` 现算；子节点数经 `OnInitChildren` 现算。持久数据放进节点数据块（`NodeDataSize` + `GetNodeData`），**不要**用 `Node^.Index` 作为持久 key——排序会重新戳 `Index`，稳定 key 必须存在数据块里。
 - **三阶段懒惰初始化**：① `RootNodeCount :=` 创建根节点骨架（未初始化）；② 首次需要一个节点时 `InitNode` 触发 `OnInitNode`，app 声明 `ivsHasChildren` / `ivsExpanded` / `ivsSelected`；③ 展开一个声明了有子节点的节点时 `InitChildren` 触发 `OnInitChildren` 物化子节点。恒定内存直到用户实际展开。
-- **变高节点**：`toVariableNodeHeight` + `OnMeasureItem` 才生效；测量在 `InitNode` 末尾进行一次。未启用时每行都用 `DefaultNodeHeight`。
+- **变高节点**：`toVariableNodeHeight` + `OnMeasureItem` 才生效；测量在 `InitNode` 末尾进行一次，运行时打开选项或默认行高变化时，已初始化的节点重新测量。未启用时每行都用 `DefaultNodeHeight`，用 `NodeHeight[]` 单独设过高度的行除外。PgUp / PgDn 按各行的实际高度翻一页。
 - **`OnNodeDragOver` 只能收紧不能放宽**：`CanMoveNode` 是硬闸（非空、模式非 `dmNone`、目标不在源子树内、非空操作等），对无效移动即便 handler 设 `Allowed := True` 也会被 `MoveNode` 拦下。
 - **`OnAfterCellPaint` 与 `OnDrawNode` 的裁剪时机**：二者都在 BGRA 图层合成到画布**之后**触发（跨平台后处理路径）。因此没有「在默认文本下方绘制背景」的 `OnBeforeCellPaint`——那需要不同的绘制路径，目前未实现。
 - **`ACellRect` 是整个单元格，不是标题文字的位置**：0 列树里它就是整行（`Column = -1`），左边缘属于缩进、展开箭头和图标槽。从 `ACellRect.Left` 起画，不同层级的标题会全落在同一个 x 上、压在箭头和树线上。要问「这一行的标题该从哪开始」，用 `DisplayRect(Node, True, R)`（或 `DisplayTextLeft`）——它走的是绘制侧同一次槽位走查，与默认标题的落点逐像素一致。
