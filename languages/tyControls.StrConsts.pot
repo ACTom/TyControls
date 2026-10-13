@@ -284,6 +284,7 @@ msgid "Add Group"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlglgeadditem
+msgctxt "tycontrols.strconsts.rsdlglgeadditem"
 msgid "Add Item"
 msgstr ""
 
@@ -1129,6 +1130,7 @@ msgid "The option is nested more than %d levels deep."
 msgstr ""
 
 #: tycontrols.strconsts.rstypropgridadditem
+msgctxt "tycontrols.strconsts.rstypropgridadditem"
 msgid "Add Item"
 msgstr ""
 
@@ -1167,10 +1169,12 @@ msgid "(%d items)"
 msgstr ""
 
 #: tycontrols.strconsts.rstypropgridmovedown
+msgctxt "tycontrols.strconsts.rstypropgridmovedown"
 msgid "Move Down"
 msgstr ""
 
 #: tycontrols.strconsts.rstypropgridmoveup
+msgctxt "tycontrols.strconsts.rstypropgridmoveup"
 msgid "Move Up"
 msgstr ""
 
