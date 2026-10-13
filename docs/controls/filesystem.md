@@ -66,5 +66,4 @@ TTyFsFilterSpecArray = array of TTyFsFilterSpec;
 ## 消费者
 
 `TTyShellListView`(over TTyListView)、`TTyShellTreeView`(over TTyTreeView)、过滤/路径 combo、
-以及 `TTyOpenDialog`/`TTySaveDialog` 都是这个单元的薄视图。见
-`docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md`。
+以及 `TTyOpenDialog`/`TTySaveDialog` 都是这个单元的薄视图。见[文件对话框](filedialog.md)。

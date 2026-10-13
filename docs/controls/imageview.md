@@ -66,4 +66,3 @@ View.ZoomToActual;               // 平滑动画到 100%
 ## 消费者 / 关联
 
 文件对话框的图片[预览框](previewbox.md)是轻量只读版;`TTyImageView` 是全功能查看器(缩放/平移/滤镜)。
-见 `docs/superpowers/plans/2026-07-11-imageview.md`。

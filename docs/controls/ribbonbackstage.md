@@ -22,7 +22,6 @@ Office 式「文件」**backstage** 视图:一个铺满窗口(除标题栏外)�
 > 主按钮以外的颜色,也没法把某一行的悬停/选中与按钮的悬停/按下分开配。`TyRibbonBackstageSidebar` /
 > `TyRibbonBackstageItem`(+`:hover`/`:selected`) / `TyRibbonBackstageBack` /
 > `TyRibbonBackstageSeparator` 是**有意推迟**的子部件键,**目前并不存在**,写进皮肤不会被解析。
-> 清单与推迟原因见 `docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md`。
 >
 > 另有几处视觉数值仍写死在绘制代码里:命令栏字号是 `ResolveFontSize(SideS) + 2`、大标题是 `fs + 8`
 > 且字重固定 `600`、分隔线用的是命令栏的**文字色**(拿墨色当线色)、返回箭头几何与若干内边距为

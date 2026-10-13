@@ -1275,8 +1275,7 @@ stays silent so the fallbacks keep working.
 
 `b824a49` / `d58eada` covered **box keys only**. A batch of **sub-part keys** proposed by the same audit was
 **deliberately deferred**: they are an **extension** of skinnability rather than coverage gaps, and several of them
-**would move pixels** (the code currently invents a color where the key ought to supply one). Per-key rationale:
-[superpowers/plans/2026-07-23-typekey-explicit-borrowers.md](superpowers/plans/2026-07-23-typekey-explicit-borrowers.md).
+**would move pixels** (the code currently invents a color where the key ought to supply one).
 
 **Do not write rules for the following names; they match nothing today:**
 

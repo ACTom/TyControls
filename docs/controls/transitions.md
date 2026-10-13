@@ -51,4 +51,4 @@ procedure TyTransitionStartOffset(AKind: TTyTransitionKind; AW, AH: Integer; out
 
 ## 关联
 
-见 `docs/superpowers/plans/2026-07-12-phase9-finish.md`。动画内核见 `tyControls.Animation`(`TTyAnimator`)。
+动画内核见 `tyControls.Animation`(`TTyAnimator`)。

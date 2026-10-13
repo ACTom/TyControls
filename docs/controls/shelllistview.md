@@ -102,5 +102,4 @@ Shell.OnFileActivate := @FileChosen;     // 双击文件 / Enter;双击文件夹
 
 ## 消费者
 
-它是 Phase 7 文件对话框(`TTyOpenDialog`/`TTySaveDialog`)的文件面板。见
-`docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md`。
+它是[文件对话框](filedialog.md)(`TTyOpenDialog`/`TTySaveDialog`)的文件面板。

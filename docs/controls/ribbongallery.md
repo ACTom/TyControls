@@ -29,8 +29,7 @@
 > **只拆了内联行的盒子键。** 弹窗网格表面与每一格瓷砖目前**仍解析列表框的键**，也就是说：改 `TyListItem`
 > 会同时改到全库的列表行，改 `TyListBox` 会同时改到弹窗网格与全库列表框。这是"尚未拆分"，不是"设计如此"——
 > `TyRibbonGalleryItem`(+`:hover`/`:active`) 与 `TyRibbonGalleryPopup` 是**有意推迟**的子部件键，
-> 现在**并不存在**，写进皮肤不会被解析。清单见
-> `docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md`。
+> 现在**并不存在**，写进皮肤不会被解析。
 
 尺寸走 metric token,不是样式属性:`--gallery-cell-width`(格宽)、`--gallery-arrow-width`(右侧箭头区宽)、
 `--gallery-glyph-pad`(字形四周留白)。

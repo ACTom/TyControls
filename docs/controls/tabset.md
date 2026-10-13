@@ -35,7 +35,7 @@
 > 不必再去加粗 `TyTabControl` 从而连页面容器的外框一起改。
 >
 > 那条基线轨目前还**没有**自己的键：`TyTabSetRail` 属于**有意推迟**的子部件键，现在**并不存在**，
-> 写进皮肤不会被解析。见 `docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md`。
+> 写进皮肤不会被解析。
 >
 > `TyTab` / `TyTabClose` 与 `TTyPageControl` **共享**（同一个页签头引擎画的就是同一种页签头），
 > 这是刻意的：改它们会同时改到 PageControl 的页签。
