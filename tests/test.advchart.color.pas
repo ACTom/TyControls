@@ -53,6 +53,7 @@ type
     procedure TestNoneIsNotTransparent;
     { the cursor }
     procedure TestARepeatedNameConsumesNothing;
+    procedure TestTheNameMapRemembersThousandsOfNames;
     procedure TestAnEmptyNameConsumesWithoutBeingRemembered;
     procedure TestTheCursorWrapsRatherThanRunningOut;
     procedure TestAnUnnamedSeriesIsNotNameless;
@@ -390,6 +391,61 @@ begin
   AssertEquals('the same colour as before', pal[0], c);
   AssertTrue('c', TyPaletteTake(cur, 'c', c));
   AssertEquals('and the cursor never moved for the repeat', pal[2], c);
+end;
+
+{ upstream's paletteNameMap behind TyPaletteFrom: a series coloured by data asks with every
+  row's name, so a scatter of thousands asks thousands. Every answer must be the map's --
+  a name asked again gets its first answer and moves nothing, a new one takes the next
+  slot -- for names asked in no particular order, against a plain list kept by the test;
+  and a copy of a scope is a copy: what the copy learns the original does not. }
+procedure TAdvChartColorTest.TestTheNameMapRemembersThousandsOfNames;
+var
+  pal: TTyPalette;
+  layers: TTyPaletteLayers;
+  sc, cp: TTyPaletteScope;
+  names: array of string;
+  slots: array of Integer;
+  i, j, k, idx, n: Integer;
+  nm: string;
+  p: TTyPalettePick;
+begin
+  pal := Default(TTyPalette);
+  SetLength(pal.Colors, 7);
+  for i := 0 to 6 do pal.Colors[i] := TTyChartColor($FF000000 + i);
+  layers := Default(TTyPaletteLayers);
+  sc := Default(TTyPaletteScope);
+  names := nil;
+  slots := nil;
+  idx := 0;
+  for i := 0 to 2999 do
+  begin
+    nm := 'n' + IntToStr((i * 7919) mod 1300);
+    if i mod 11 = 0 then nm := IntToStr(i mod 97);
+    k := -1;
+    for j := 0 to High(names) do
+      if names[j] = nm then k := j;
+    p := TyPaletteFrom(pal, layers, nm, sc, 3000);
+    AssertEquals('a colour, ' + nm, Ord(ppkColor), Ord(p.Kind));
+    if k >= 0 then
+      AssertEquals('asked again: its first answer, ' + nm, pal.Colors[slots[k]], p.Color)
+    else
+    begin
+      AssertEquals('new: the next slot, ' + nm, pal.Colors[idx], p.Color);
+      n := Length(names);
+      SetLength(names, n + 1);
+      SetLength(slots, n + 1);
+      names[n] := nm;
+      slots[n] := idx;
+      idx := (idx + 1) mod 7;
+    end;
+  end;
+  cp := sc;
+  p := TyPaletteFrom(pal, layers, 'only the copy', cp, 3000);
+  AssertEquals('the copy takes the next slot', pal.Colors[idx], p.Color);
+  p := TyPaletteFrom(pal, layers, 'only the original', sc, 3000);
+  AssertEquals('the original never saw the copy''s name or its slot', pal.Colors[idx], p.Color);
+  p := TyPaletteFrom(pal, layers, 'only the copy', sc, 3000);
+  AssertEquals('so to the original it is new', pal.Colors[(idx + 1) mod 7], p.Color);
 end;
 
 procedure TAdvChartColorTest.TestAnEmptyNameConsumesWithoutBeingRemembered;

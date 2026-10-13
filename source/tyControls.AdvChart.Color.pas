@@ -165,10 +165,18 @@ type
     Pick: TTyPalettePick;
   end;
 
-  { upstream's inner(scope): paletteIdx and paletteNameMap }
+  { upstream's inner(scope): paletteIdx and paletteNameMap. The map is
+    Names[0..Count-1] in the order the names were asked, and Order their
+    indices sorted by name: a binary search. It was a linear scan, and every
+    row of a series coloured by data asks with its own name -- a scatter of a
+    few thousand unnamed points (named by index) spent a second of its first
+    frame comparing strings. Copies of a scope do not share the map: TyPaletteFrom
+    makes both arrays its own before it writes, as SetLength always did. }
   TTyPaletteScope = record
     Idx: Integer;
     Names: array of TTyPaletteMemo;
+    Count: Integer;
+    Order: array of Integer;
   end;
 
 function TyPaletteLength(const APalette: TTyPalette): Integer;
@@ -855,15 +863,21 @@ function TyPaletteFrom(const ADefault: TTyPalette;
   const ALayers: TTyPaletteLayers; const AName: string;
   var AScope: TTyPaletteScope; ARequest: Integer): TTyPalettePick;
 var
-  i, n: Integer;
+  i, n, lo, hi, mid, c: Integer;
   pal: TTyPalette;
 begin
   Result := Default(TTyPalettePick);
   Result.Kind := ppkNone;
   { THE NAME FIRST, an undefined answer included -- hasOwnProperty }
-  for i := 0 to High(AScope.Names) do
-    if AScope.Names[i].Name = AName then
-      Exit(AScope.Names[i].Pick);
+  lo := 0;
+  hi := AScope.Count - 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) shr 1;
+    c := CompareStr(AScope.Names[AScope.Order[mid]].Name, AName);
+    if c = 0 then Exit(AScope.Names[AScope.Order[mid]].Pick);
+    if c < 0 then lo := mid + 1 else hi := mid - 1;
+  end;
   if (ARequest < 0) or not ALayers.Present then
     pal := ADefault
   else if Length(ALayers.Layers) = 0 then
@@ -901,9 +915,22 @@ begin
   end;
   if AName <> '' then
   begin
-    SetLength(AScope.Names, Length(AScope.Names) + 1);
-    AScope.Names[High(AScope.Names)].Name := AName;
-    AScope.Names[High(AScope.Names)].Pick := Result;
+    { a copy of the scope may share the arrays: SetLength makes them this
+      scope's own (and is free when they already are) }
+    SetLength(AScope.Names, Length(AScope.Names));
+    SetLength(AScope.Order, Length(AScope.Order));
+    if AScope.Count >= Length(AScope.Names) then
+    begin
+      SetLength(AScope.Names, Max(8, 2 * AScope.Count));
+      SetLength(AScope.Order, Length(AScope.Names));
+    end;
+    { lo is where the search stopped: the name's place in Order }
+    if lo < AScope.Count then
+      Move(AScope.Order[lo], AScope.Order[lo + 1], (AScope.Count - lo) * SizeOf(Integer));
+    AScope.Order[lo] := AScope.Count;
+    AScope.Names[AScope.Count].Name := AName;
+    AScope.Names[AScope.Count].Pick := Result;
+    Inc(AScope.Count);
   end;
   AScope.Idx := (AScope.Idx + 1) mod n;
 end;
