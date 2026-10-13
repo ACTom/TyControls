@@ -35,7 +35,8 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
-  tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose;
+  tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose,
+  umaps;
 
 type
   { One row of gallery/index.json. `Ok` false means the harvester could not
@@ -74,6 +75,8 @@ type
     FEntries: array of TGalleryEntry;
     FCategories: TStringList;
     FGalleryDir: string;
+    { maps/ beside gallery/: the GeoJSON the geo examples register }
+    FMapsDir: string;
     { The gallery slot the memo and chart now hold, -1 for none. Picking a row
       in code fires the list's change event as well, so without it one click on
       a tab loaded the same option two or three times. }
@@ -301,6 +304,9 @@ var
   i, notes: Integer;
   s: string;
 begin
+  { THE PAGE'S OWN registerMap. An ECharts example fetches its GeoJSON before
+    it sets the option; the harvest kept only the map's name. }
+  RegisterGalleryMapsFor(OptionMemo.Text, FMapsDir);
   Chart.Option := OptionMemo.Text;
   if Chart.OptionError <> '' then
   begin
@@ -373,6 +379,8 @@ begin
     LblStatus.Caption := rsNoGallery
   else
   begin
+    FMapsDir := ExtractFilePath(ExcludeTrailingPathDelimiter(FGalleryDir))
+      + 'maps' + PathDelim;
     LoadIndex;
     FillCategories;
     FillList;

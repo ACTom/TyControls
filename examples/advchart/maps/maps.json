@@ -1,0 +1,17 @@
+{
+  "comment": "Map name -> file, as the gallery examples register them with echarts.registerMap. Read by umaps.pas. Sources: THIRD-PARTY-NOTICES.md.",
+  "maps": {
+    "world": { "file": "world.json" },
+    "USA": {
+      "file": "USA.json",
+      "specialAreas": {
+        "Alaska": { "left": -131, "top": 25, "width": 15 },
+        "Hawaii": { "left": -110, "top": 28, "width": 5 },
+        "Puerto Rico": { "left": -76, "top": 26, "width": 2 }
+      }
+    },
+    "ch": { "file": "ch.geo.json" },
+    "target_map": { "file": "ch.geo.json" },
+    "iceland": { "file": "iceland.geo.json" }
+  }
+}
