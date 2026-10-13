@@ -7904,7 +7904,7 @@ type
     { toFullRowSelect: click past the caption selects the row }
     procedure TestFullRowSelectClickPastCaption;
     { Without toFullRowSelect: click in indent zone does NOT select (single-select ③b) }
-    procedure TestNoFullRowSelectIndentZoneDoesNotSelect;
+    procedure TestNoFullRowSelectCaptionAndRowEndClicksSelect;
     { toFullRowSelect: Ctrl+click past caption adds to multi-selection }
     procedure TestFullRowSelectCtrlClickAdds;
     { toMultiSelect OFF → Ctrl+Space does nothing (not consumed) }
@@ -8140,11 +8140,10 @@ begin
   finally t.Free; end;
 end;
 
-procedure TTreeD2MultiSelectKeyboardTest.TestNoFullRowSelectIndentZoneDoesNotSelect;
-{ Without toFullRowSelect: a click in the label area still selects; a click in
-  the indent zone also selects (hpIndent → single-select path).
-  But a click in the indent zone for toMultiSelect without toFullRowSelect falls
-  through to the single-select path (FocusedNode := node). }
+procedure TTreeD2MultiSelectKeyboardTest.TestNoFullRowSelectCaptionAndRowEndClicksSelect;
+{ toMultiSelect without toFullRowSelect: a plain click on a caption, or in the row past
+  it, selects that node alone. (A click in the indent: TestEveryPlainMoveCollapsesA-
+  MultiSelection.) }
 var
   t: TTyTreeView;
   nodes: array[0..4] of PTyTreeNode;
