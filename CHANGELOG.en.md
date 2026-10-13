@@ -7,6 +7,48 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.2] — 2026-10-13
+
+A bug-fix release for 3.0.
+
+### Changed
+
+- A standalone `TTyScrollBar` no longer takes the keyboard focus by default: `TabStop` now defaults to False, so the bar is not in the Tab order and a click does not focus it; set `TabStop := True` for the previous behaviour (Tab stop, click to focus, arrow and page keys). ([#56](https://github.com/ACTom/TyControls/issues/56))
+
+### Fixed
+
+- The built-in skins restyled only a few controls such as buttons and edits; tabs, grids, lists, trees, menus, scroll bars and the rest kept the default theme's rounded shapes. ([#47](https://github.com/ACTom/TyControls/issues/47))
+- `TTyPageControl` and `TTyTabSet` tabs at the bottom, left or right kept their rounded corners on top. ([#45](https://github.com/ACTom/TyControls/issues/45))
+- A `linear-gradient` with two stops ignored their positions. ([#49](https://github.com/ACTom/TyControls/issues/49))
+- A left-aligned title bar caption jumped past the controls after it when the window was widened. ([#50](https://github.com/ACTom/TyControls/issues/50))
+- `TTyRibbonQuickAccess.AddButton` showed its buttons in reverse order, the last one added on the left. ([#51](https://github.com/ACTom/TyControls/issues/51))
+- Selected `TTyStringGrid` cells kept the normal dark text, hard to read on a dark accent. ([#46](https://github.com/ACTom/TyControls/issues/46))
+- The `TTyStringGrid` cell editor stayed where it was when the grid scrolled or a column or row was resized, and a header sort dropped a value that had failed `OnValidateCell`. ([#48](https://github.com/ACTom/TyControls/issues/48))
+- Up/Down while editing a `TTyStringGrid` cell or a header filter moved the keyboard focus to the scroll bar. ([#52](https://github.com/ACTom/TyControls/issues/52))
+- `TTyStringGrid` PageUp/PageDown always moved 10 rows instead of a page. ([#57](https://github.com/ACTom/TyControls/issues/57))
+- Up/Down on a `TTyStringGrid` pick-list cell sent the focus out of the grid and changed the cell to the next item. ([#59](https://github.com/ACTom/TyControls/issues/59))
+- With row selection, or a range selected, `TTyStringGrid` did not show which cell the cursor was on. ([#60](https://github.com/ACTom/TyControls/issues/60))
+- `OnMouseWheel`, `OnMouseWheelUp` and `OnMouseWheelDown` never fired on `TTyStringGrid` and `TTyDrawGrid`, nor on `TTyImageView` with a picture loaded. ([#62](https://github.com/ACTom/TyControls/issues/62))
+- Typing on a `TTyStringGrid` cell lost the first key in every editor but the text editor: spin, memo, calculator, mask, date and pick-list cells. ([#64](https://github.com/ACTom/TyControls/issues/64))
+- A number typed into a `TTyStringGrid` spin cell was lost when the edit ended. ([#66](https://github.com/ACTom/TyControls/issues/66))
+- Ending an edit in a `TTyStringGrid` mask cell raised an error, and a value that did not fill the mask, an untouched one included, was written anyway; it is now refused with a message and only Esc leaves the cell. ([#67](https://github.com/ACTom/TyControls/issues/67), [#69](https://github.com/ACTom/TyControls/issues/69))
+- Grid columns moved through `Index` (Move Up / Move Down in the collection editor) left their cells behind and went back to the old order on the next load. ([#70](https://github.com/ACTom/TyControls/issues/70))
+- Without `toFullRowSelect`, a selected `TTyTreeView` node highlighted the whole row over the expand button and tree lines; only the caption is highlighted now. ([#71](https://github.com/ACTom/TyControls/issues/71))
+- In a multi-select `TTyTreeView`, PgUp/PgDn, Left/Right, type-to-find, a click in the indent and a right click moved the focus without updating the selection, and `SelectedCount` drifted; Shift extended the range with Up/Down only. ([#72](https://github.com/ACTom/TyControls/issues/72))
+- `toAutoTristateTracking` in `TTyTreeView` missed children made later and ignored `CheckState` and `Checked` set from code. ([#73](https://github.com/ACTom/TyControls/issues/73))
+- `SelectAll` on a single-select `TTyTreeView` selected every node. ([#74](https://github.com/ACTom/TyControls/issues/74))
+- Existing `TTyTreeView` rows kept their height when `DefaultNodeHeight`, the density or `toVariableNodeHeight` changed. ([#75](https://github.com/ACTom/TyControls/issues/75))
+- With rows of different heights, `TTyTreeView` PgUp/PgDn skipped several pages at once. ([#76](https://github.com/ACTom/TyControls/issues/76))
+- The `TTyListView` rename box closed the moment it opened. ([#54](https://github.com/ACTom/TyControls/issues/54))
+- The scroll bars that grids, list boxes, list views, trees, `TTyMemo` and scroll boxes create for themselves could take the keyboard focus, so one click took it from the control. ([#55](https://github.com/ACTom/TyControls/issues/55))
+- `TTyMemo.Text` came back with an extra trailing line break, and `Lines.LoadFromFile` followed by `SaveToFile` changed the file's final line break and line-break style. ([#58](https://github.com/ACTom/TyControls/issues/58))
+- The `TTyImageView` wheel zoom did not keep the pointer's spot in place, and the wheel did nothing in the `TTyCascader` drop-down. ([#63](https://github.com/ACTom/TyControls/issues/63))
+- The "more…" row and colour dialog title of the `TTyValueListEditor` colour drop-down, and the `TTyRibbon` overflow button hint, showed Chinese in any language. ([#68](https://github.com/ACTom/TyControls/issues/68))
+
+### Performance
+
+- `TTyMemo` with `WordWrap` off loads large texts much faster: 57 000 lines in under half a second instead of about 50 seconds. ([#77](https://github.com/ACTom/TyControls/issues/77))
+
 ## [3.0.1] — 2026-10-07
 
 A bug-fix release for 3.0.
