@@ -247,7 +247,7 @@ begin
 end;
 ```
 
-> **与 `TTyForm` 联动（可选）：** 若把菜单栏赋给窗体的 `MenuBar` 属性（`Form.MenuBar := MenuBar`），可启用 `TTyForm.IsShortcut` 的快捷键派发与 mac 全局菜单栏交接（见示例第 151 行）。
+> **与 `TTyForm` 联动：** 把菜单栏赋给窗体的 `MenuBar` 属性（`Form.MenuBar := MenuBar`）后，菜单项的快捷键才会生效；macOS 上菜单交给系统的全局菜单栏，窗口里的菜单栏隐藏。菜单示例在 `umain.lfm` 里写的是 `MenuBar = TyMenuBar1`。不要用窗体的 `Menu` 属性，见 [ttyform.md](ttyform.md)。
 
 ---
 

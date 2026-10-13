@@ -84,7 +84,10 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | `TitleBar` | `TTyTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
+| `MenuBar` | `TTyMenuBar` | 窗体的主菜单栏，指向窗体上某个 `TTyMenuBar`。设了之后，菜单项的快捷键（`ShortCut`）才会生效；macOS 上这个菜单交给系统，显示在屏幕顶端的全局菜单栏，窗口里的菜单栏隐藏。不设的话菜单栏照样显示、能点，只是快捷键不起作用。 |
 | `Surface` | `TTyFormSurface` | 内容承载容器（`alClient`，固定名 `Surface`）。由 `.lfm` 流式化，不在构造函数里创建。 |
+
+> **不用 `Menu`。** `TTyForm` 不把继承来的 `Menu` 当原生菜单栏用（macOS 上由 `MenuBar` 负责交给系统）。对象检查器里不显示它，往窗体上放 `TMainMenu` 时设计器也不会自动设它。从 `.lfm` 读进来的、或窗口创建前在代码里设的菜单，会被移出 `Menu`，没设 `MenuBar` 时它的快捷键照常有效。菜单请用 `TTyMenuBar` 加 `MenuBar`。
 
 ### 继承的标准 TForm 生命周期事件
 
