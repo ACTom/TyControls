@@ -1235,6 +1235,8 @@ const CASES = [
     option: timeChart([{ start: 13, end: 77 }]) },
   { id: 'W8b', groups: ['W'], note: "time x, startValue / endValue as ISO strings with Z (parseDate's UTC branch), never rounded",
     option: timeChart([{ startValue: '2020-01-05T00:00:00Z', endValue: '2020-01-12T12:30:00.250Z' }]) },
+  { id: 'W8c', groups: ['W'], note: 'time x, numeric startValue / endValue with fractions of a ms: TimeScale.parse rounds a number (Math.round) -- the other value-mode ends are never rounded (W9e); F1b',
+    option: timeChart([{ startValue: T0 + 2 * DAY + 0.4, endValue: T0 + 9 * DAY + 0.6 }]) },
   { id: 'W16', groups: ['W'], note: "category {startValue 'c3', endValue 'c7'}: OrdinalScale.parse of a category name; percent = ordinal / 19 * 100",
     option: catChart('bar', [{ startValue: 'c3', endValue: 'c7' }]) },
   { id: 'W9a', groups: ['W'], note: '{startValue 30} only: modes [value, percent], end 100%', option: scatterChart([{ startValue: 30 }]) },

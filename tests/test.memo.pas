@@ -156,6 +156,7 @@ type
     procedure TestWidestScanSkipsPerCharMeasure;
     procedure TestTotalWidthEqualsLastPrefix;
     procedure TestWidestScanMeasuresOnlyLinesThatCouldWin;
+    procedure TestWidestScanMeasuresAShapedLineWhole;
     procedure TestTheWidestScanStaysShortAfterAFontChange;
   end;
 
@@ -1423,6 +1424,56 @@ begin
     [callsAfter - callsBefore]), (callsAfter - callsBefore) <= 2);
   // A second scan is fully memoised — no new per-char calls, same result.
   AssertEquals('widest is stable across repeat scans', widest, FMemo.ProbeWidestLineWidth(96));
+end;
+
+procedure TTyMemoTest.TestWidestScanMeasuresAShapedLineWhole;
+// The widest-line scan trusts a per-character estimate to within a pixel a character. That holds
+// where a line's glyphs are its characters one by one; it does not where the line is SHAPED as a
+// whole -- Arabic joining, Indic conjuncts and reordering, marks stacked on a base, jamo composing
+// into a syllable, a ZWJ emoji sequence -- where the run's width is no sum of its characters'
+// (GDI happens to shape them narrower than the sum; a renderer with fractional advances or
+// another shaper need not). So such a line is measured whole, whatever its estimate says. Here a
+// long Latin line is the widest by far: the scan used to stop after it, and must now also have
+// measured each shaped line -- and nothing else (Cyrillic, Greek, CJK, punctuation are estimated).
+const
+  cShaped: array[0..6] of string = (
+    #$D9#$85#$D8#$B1#$D8#$AD#$D8#$A8#$D8#$A7,  // Arabic: joining
+    #$D7#$A9#$D6#$B8#$D7#$81#$D7#$9C#$D7#$95#$D6#$B9#$D7#$9D,  // Hebrew with points: marks
+    #$E0#$A4#$A8#$E0#$A4#$AE#$E0#$A4#$B8#$E0#$A5#$8D#$E0#$A4#$A4#$E0#$A5#$87,  // Devanagari: conjunct, reordered vowel sign
+    #$E0#$B8#$AA#$E0#$B8#$A7#$E0#$B8#$B1#$E0#$B8#$AA#$E0#$B8#$94#$E0#$B8#$B5,  // Thai: stacked marks
+    'cafe'#$CC#$81' x',  // Latin + U+0301 combining acute
+    #$E1#$84#$80#$E1#$85#$A1#$E1#$86#$A8,  // conjoining jamo U+1100 U+1161 U+11A8
+    #$F0#$9F#$91#$A8#$E2#$80#$8D#$F0#$9F#$91#$A9);  // U+1F468 ZWJ U+1F469: one emoji
+  cPlain: array[0..4] of string = ('abc def',
+    #$D0#$9F#$D1#$80#$D0#$B8#$D0#$B2#$D0#$B5#$D1#$82#$20#$D0#$BC#$D0#$B8#$D1#$80,  // Cyrillic
+    #$CE#$95#$CE#$BB#$CE#$BB#$CE#$B7#$CE#$BD#$CE#$B9#$CE#$BA#$CE#$AC,  // Greek
+    #$E4#$B8#$AD#$E6#$96#$87#$20#$E6#$A0#$87#$E7#$AD#$BE,  // CJK
+    #$E2#$80#$94' '#$E2#$80#$9C'q'#$E2#$80#$9D' '#$E2#$82#$AC'5');  // dash, quotes, euro
+var
+  L: TStringList;
+  i, before, measured, widest, exhaustive: Integer;
+begin
+  SetUpWithCss('TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }');
+  FMemo.WordWrap := False;
+  L := TStringList.Create;
+  try
+    L.Add(StringOfChar('W', 40));
+    for i := 0 to High(cShaped) do L.Add(cShaped[i]);
+    for i := 0 to High(cPlain) do L.Add(cPlain[i]);
+    before := FMemo.ProbeLineTotalMeasures;
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  widest := FMemo.ProbeWidestLineWidth(96);
+  measured := FMemo.ProbeLineTotalMeasures - before;
+  exhaustive := 0;
+  for i := 0 to FMemo.Lines.Count - 1 do
+    if FMemo.ProbeMeasureLineTotalWidth(FMemo.Lines[i], 96) > exhaustive then
+      exhaustive := FMemo.ProbeMeasureLineTotalWidth(FMemo.Lines[i], 96);
+  AssertEquals('the widest line is the one an exhaustive scan finds', exhaustive, widest);
+  AssertEquals('the Latin line and every shaped line measured whole, the plain ones not',
+    1 + Length(cShaped), measured);
 end;
 
 procedure TTyMemoTest.TestWidestScanMeasuresOnlyLinesThatCouldWin;

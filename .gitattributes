@@ -27,3 +27,7 @@ tests/fixtures/terminal-zmodem/**  -text
 
 # The AI samples: hand-written streams, byte for byte (one of them uses CRLF on purpose).
 tests/fixtures/themebuilder/ai/**  -text
+
+# Map data the AdvChart demo registers (GeoJSON from Apache ECharts and its examples):
+# byte for byte, as upstream ships them.
+examples/advchart/maps/** -text

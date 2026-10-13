@@ -3592,13 +3592,24 @@ end;
 { ONE STEP of upstream's forceLayout (forceHelper.ts step), on the instance
   the state holds: beforeStep (a fixed node is copied from its layout), the
   springs, gravity, the repulsion, the move, then afterStep (a free node's
-  layout is where it is now). AFriction is this step's friction. }
+  layout is where it is now). AFriction is this step's friction.
+
+  REGISTER VARIABLES for this one procedure: at the default level every
+  Double local of the pair loop lives on the stack, and the loop -- n squared
+  over two, five hundred times; 62 million pairs for 492 nodes -- spent more
+  time storing and reloading them than computing. In registers it runs in
+  under half the time. A 64-bit register holds a Double exactly as memory
+  does, so the arithmetic and its rounding are the same; on x86-64 only, where
+  Doubles are SSE values (an x87 register would hold more bits than memory). }
+{$push}
+{$IFDEF CPUX86_64}{$OPTIMIZATION REGVAR}{$ENDIF}
 procedure ForceStep(var St: TTyGraphForceState; AFriction: Double);
 var
   n, ne, i, j, k, a, b: Integer;
   d, w, len_, vx, vy, s, g, xi, yi, ri, ax, ay, repFact: Double;
   fi: Boolean;
   qx, qy, qpx, qpy, qr: PDouble;
+  qf: PBoolean;
 begin
   n := Length(St.InstPX);
   ne := Length(St.InstE1);
@@ -3683,12 +3694,13 @@ begin
   qpx := PDouble(St.InstPPX);
   qpy := PDouble(St.InstPPY);
   qr := PDouble(St.InstRep);
+  qf := PBoolean(St.InstFixed);
   for i := 0 to n - 1 do
   begin
     xi := qx[i];
     yi := qy[i];
     ri := qr[i];
-    fi := St.InstFixed[i];
+    fi := qf[i];
     ax := qpx[i];
     ay := qpy[i];
     for j := i + 1 to n - 1 do
@@ -3708,7 +3720,7 @@ begin
         ax := ax + vx * repFact;
         ay := ay + vy * repFact;
       end;
-      if not St.InstFixed[j] then
+      if not qf[j] then
       begin
         qpx[j] := qpx[j] + vx * (-repFact);
         qpy[j] := qpy[j] + vy * (-repFact);
@@ -3738,6 +3750,7 @@ begin
       St.InstLY[i] := St.InstPY[i];
     end;
 end;
+{$pop}
 
 { What the pass hands back: every node where its layout is -- a free one where
   the solver left it, a fixed one where its layout says -- and the preserved

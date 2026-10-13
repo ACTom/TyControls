@@ -933,6 +933,11 @@ msgstr ""
 msgid "The loading options are not valid JSON."
 msgstr ""
 
+#: tycontrols.strconsts.rstychartmapnotregistered
+#, object-pascal-format
+msgid "%s: no map is registered as \"%s\", so nothing is drawn"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartnosuchhandler
 #, object-pascal-format
 msgid "No formatter named '%s' is registered."

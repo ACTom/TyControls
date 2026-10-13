@@ -43,7 +43,12 @@ type
       panel that has not run yet look the same, and a developer shown nothing
       concludes the editor gave up. What it says depends on how much of the
       chart can actually be drawn -- see the end of TyOptDiagnose. }
-    odkAllClear);
+    odkAllClear,
+    { The last row of a list that hit its cap: "and N more like these". Not a
+      problem of its own, so a count of problems must not count it -- it says
+      how many were left out, in Hidden. [F1b: it was an odkBuild, and the
+      demo counted the cut-off list as a hundred problems.] }
+    odkTruncated);
 
   TTyOptDiag = record
     Kind: TTyOptDiagKind;
@@ -54,6 +59,8 @@ type
     Line, Col, Len: Integer;
     { Ready to show. Already carries the "did you mean" when there is one. }
     Text: string;
+    { odkTruncated only: how many rows were left out. 0 on every other row. }
+    Hidden: Integer;
   end;
   TTyOptDiagArray = array of TTyOptDiag;
 
@@ -78,7 +85,8 @@ implementation
 uses
   fpjson,
   tyControls.AdvChart.Catalog, tyControls.AdvChart.Builder,
-  tyControls.AdvChart.Series, tyControls.AdvChart.Marks, tyControls.StrConsts;
+  tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
+  tyControls.AdvChart.Custom, tyControls.AdvChart.Geo, tyControls.StrConsts;
 
 const
   { Enough that a real config's problems all fit, small enough that a pathological
@@ -101,6 +109,7 @@ begin
   C.Items[C.Count].Kind := AKind;
   C.Items[C.Count].Path := APath;
   C.Items[C.Count].Text := AText;
+  C.Items[C.Count].Hidden := 0;
   C.Items[C.Count].Line := 0;
   C.Items[C.Count].Col := 0;
   C.Items[C.Count].Len := 0;
@@ -242,6 +251,38 @@ begin
   end;
 end;
 
+{ WHAT A PAINT WOULD FIND AND THE BUILD ABOVE CANNOT. TyBuildGrids and
+  TyBindSeries place series; they never ask whether a custom series has a
+  renderItem to call or whether a geo's map exists, because the control only
+  finds that out while it paints. So an option that draws an empty chart was
+  told it was understood. [F1b: 13 gallery customs whose renderItem was a JS
+  function, and 15 maps the demo never registered.] }
+procedure NoteWhatCannotDraw(AOption: TTyChartOption; var C: TCollector);
+var
+  i: Integer;
+  d, r: TJSONData;
+  spec: string;
+  handler: TTyChartRenderItem;
+  missing: TTyGeoMissingMapArray;
+begin
+  for i := 0 to AOption.ComponentCount('series') - 1 do
+  begin
+    d := AOption.ComponentAt('series', i);
+    if not (d is TJSONObject) then Continue;
+    if TJSONObject(d).Get('type', '') <> TyCustomSeriesType then Continue;
+    spec := '';
+    r := TJSONObject(d).Find('renderItem');
+    if (r <> nil) and (r.JSONType = jtString) then spec := r.AsString;
+    if not TyChartFindRenderItem(spec, handler) then
+      Add(C, odkBuild, 'series[' + IntToStr(i) + '].renderItem',
+        Format(rsTyChartCustomNoRenderItem, [i, spec]));
+  end;
+  missing := TyGeoUnregisteredMaps(AOption);
+  for i := 0 to High(missing) do
+    Add(C, odkBuild, missing[i].Path + '.map',
+      Format(rsTyChartMapNotRegistered, [missing[i].Path, missing[i].MapName]));
+end;
+
 function TyOptDiagnose(const AText: string): TTyOptDiagArray;
 var
   C: TCollector;
@@ -321,6 +362,8 @@ begin
       build.Free;
     end;
 
+    NoteWhatCannotDraw(opt, C);
+
     { Nothing wrong -- which is worth saying, because a correct bar config
       draws axes and no bars today, and a developer told nothing concludes the
       editor lied.
@@ -382,13 +425,14 @@ begin
     stopping, which would read as "that is all of them". }
   if C.Count > cMaxRows then
   begin
-    C.Items[cMaxRows - 1].Kind := odkBuild;
+    C.Items[cMaxRows - 1].Kind := odkTruncated;
     C.Items[cMaxRows - 1].Path := '';
     C.Items[cMaxRows - 1].Line := 0;
     C.Items[cMaxRows - 1].Col := 0;
     C.Items[cMaxRows - 1].Len := 0;
+    C.Items[cMaxRows - 1].Hidden := C.Count - cMaxRows + 1;
     C.Items[cMaxRows - 1].Text :=
-      Format(rsTyOptDiagMoreRows, [C.Count - cMaxRows + 1]);
+      Format(rsTyOptDiagMoreRows, [C.Items[cMaxRows - 1].Hidden]);
     C.Count := cMaxRows;
   end;
 

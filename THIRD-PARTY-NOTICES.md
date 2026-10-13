@@ -98,6 +98,30 @@ limitations under the License.
 
 ---
 
+## Maps for the AdvChart demo — `examples/advchart/maps/`
+
+GeoJSON the gallery examples register with `echarts.registerMap` before they draw; the demo
+registers them the same way (`examples/advchart/umaps.pas`). They are data, used unmodified
+(`maps.json`, the name-to-file list, is ours).
+
+- `USA.json`, `ch.geo.json`, `iceland.geo.json` — `public/data/asset/geo/` of
+  <https://github.com/apache/echarts-examples>, copied as they are. `USA.json` is the US states
+  file built from US Census Bureau boundaries (the example credits www.census.gov); the
+  property names of the other two (`name` / `name_en`) are those of Natural Earth's admin-1
+  layer, which is in the public domain. The repository records no other source for them.
+
+Copyright The Apache Software Foundation, licensed under the Apache License 2.0 (the text is in
+the gallery section above).
+
+Not included: maps that draw national borders -- `china`, `world` and `HK`, which a few examples
+ask for. Borders are disputed, and some places require published maps to be reviewed (mainland
+China, for one), so the demo ships none; it says so when an example needs one, and picks up a
+file the user saves in `maps/` under the map's name. (`HK.json` would also be out on its own: its
+fields are GADM's, whose terms forbid redistribution without permission.) Nor the SVG maps, which
+`TyChartRegisterMap` does not read yet.
+
+---
+
 ## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Buffer.Reflow.inc`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Core.Services.inc`, `source/tyControls.Terminal.Core.InputHandler.inc`, `source/tyControls.Terminal.Core.WriteQueue.inc`, `source/tyControls.Terminal.Charsets.inc`, `source/tyControls.Terminal.Keyboard.pas`, `source/tyControls.Terminal.Render.pas`, `source/tyControls.Terminal.CustomGlyphs.inc`, `source/tyControls.Terminal.Luminance.inc`, `source/tyControls.Terminal.Selection.pas`, `source/tyControls.Terminal.Links.pas`
 
 Upstream: <https://github.com/xtermjs/xterm.js> · pinned at 6.0.0, commit `c58ea3637f39`.

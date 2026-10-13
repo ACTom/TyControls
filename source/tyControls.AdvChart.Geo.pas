@@ -638,6 +638,23 @@ function TyChartRegisterMap(const AName, AGeoJson: string;
   '' for none). False for a name nobody registered. }
 function TyChartGetMap(const AName: string; out AGeoJson, ASpecialAreas: string): Boolean;
 function TyChartMapRegistered(const AName: string): Boolean;
+
+type
+  TTyGeoMissingMap = record
+    { 'geo[0]' or 'series[2]' }
+    Path: string;
+    { the name the option asks for, '' when it names none }
+    MapName: string;
+  end;
+  TTyGeoMissingMapArray = array of TTyGeoMissingMap;
+
+{ Every geo component, and every map series that draws its own map (one
+  without a geoIndex), whose map nobody has registered. Upstream warns in the
+  console and draws an empty view; the control and TyOptDiagnose both say so
+  from this one list, so the two cannot disagree about which maps are
+  missing. [F1b] }
+function TyGeoUnregisteredMaps(AOption: TTyChartOption): TTyGeoMissingMapArray;
+
 { Not upstream's: a way to take a map back out, for a design-time host and
   for tests. }
 procedure TyChartUnregisterMap(const AName: string);
@@ -4729,6 +4746,48 @@ begin
     end;
   finally
     UnmaskFpu(mask);
+  end;
+end;
+
+function TyGeoUnregisteredMaps(AOption: TTyChartOption): TTyGeoMissingMapArray;
+var
+  i, n: Integer;
+  d, g: TJSONData;
+  root: TJSONObject;
+  name: string;
+
+  procedure Note(const APath, AName: string);
+  begin
+    SetLength(Result, n + 1);
+    Result[n].Path := APath;
+    Result[n].MapName := AName;
+    Inc(n);
+  end;
+
+begin
+  Result := nil;
+  n := 0;
+  if AOption = nil then Exit;
+  root := nil;
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root);
+  for i := 0 to AOption.ComponentCount('geo') - 1 do
+  begin
+    name := TyGeoSpecOf(AOption, i).MapName;
+    if not TyChartMapRegistered(name) then
+      Note('geo[' + IntToStr(i) + ']', name);
+  end;
+  for i := 0 to AOption.ComponentCount('series') - 1 do
+  begin
+    d := AOption.ComponentAt('series', i);
+    if not (d is TJSONObject) then Continue;
+    if TJSONObject(d).Get('type', '') <> 'map' then Continue;
+    { MapSeries.getHostGeoModel: with a geoIndex the series draws on that
+      geo, whose own map was checked above }
+    g := TJSONObject(d).Find('geoIndex');
+    if (g <> nil) and (g.JSONType <> jtNull) then Continue;
+    name := TyGeoSpecOfNode(TJSONObject(d), root, True).MapName;
+    if not TyChartMapRegistered(name) then
+      Note('series[' + IntToStr(i) + ']', name);
   end;
 end;
 

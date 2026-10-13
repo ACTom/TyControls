@@ -39,16 +39,20 @@ type
     procedure TestTheListIsInTextOrder;
     procedure TestFormatTidiesAndRefusesWhatItCannotParse;
     procedure TestRepeatedDiagnosisDoesNotGrowTheHeap;
+    { ---- an empty chart is not an understood one [F1b] ---- }
+    procedure TestACustomSeriesWithNoRenderItemSaysSo;
+    procedure TestAMapNobodyRegisteredSaysSo;
+    procedure TestACutListSaysHowManyItHidAndIsNotAProblem;
   end;
 
 implementation
 
-uses tyControls.StrConsts;
+uses tyControls.StrConsts, tyControls.AdvChart.Geo;
 
 function TAdvChartDiagnoseTest.Kinds(const AText: string): string;
 const
   cNames: array[TTyOptDiagKind] of string = (
-    'parse', 'unknown', 'enum', 'notype', 'build', 'ok');
+    'parse', 'unknown', 'enum', 'notype', 'build', 'ok', 'more');
 var
   all: TTyOptDiagArray;
   i: Integer;
@@ -476,6 +480,84 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over two hundred calls',
     [before, after]), after <= before + 65536);
+end;
+
+{ ---- an empty chart is not an understood one [F1b] ---- }
+
+procedure TAdvChartDiagnoseTest.TestACustomSeriesWithNoRenderItemSaysSo;
+var d: TTyOptDiag;
+begin
+  { The control's paint notes it and the editor did not: TyOptDiagnose only
+    builds grids and binds series, and a renderItem is looked up while
+    painting. 13 gallery charts drew nothing and were told "understood". }
+  AssertEquals('build', Kinds('{ xAxis: {}, yAxis: {},'
+    + ' series: [{ type: ''custom'', renderItem: ''f1bNoSuchItem'', data: [[1, 2]] }] }'));
+  AssertTrue(FirstOf('{ xAxis: {}, yAxis: {},'
+    + ' series: [{ type: ''custom'', renderItem: ''f1bNoSuchItem'', data: [[1, 2]] }] }',
+    odkBuild, d));
+  AssertEquals(Format(rsTyChartCustomNoRenderItem, [0, 'f1bNoSuchItem']), d.Text);
+  AssertEquals('points at the renderItem', 'series[0].renderItem', d.Path);
+  AssertTrue('and has a place to jump to', d.Line > 0);
+  { one with no renderItem at all -- what the gallery's harvest leaves }
+  AssertEquals('build', Kinds('{ xAxis: {}, yAxis: {},'
+    + ' series: [{ type: ''custom'', data: [[1, 2]] }] }'));
+end;
+
+procedure TAdvChartDiagnoseTest.TestAMapNobodyRegisteredSaysSo;
+const
+  cGeo = '{ geo: { map: ''f1bNowhere'' },'
+    + ' series: [{ type: ''map'', map: ''f1bNowhereToo'', data: [] },'
+    + ' { type: ''map'', geoIndex: 0, data: [] }] }';
+var
+  all: TTyOptDiagArray;
+  i: Integer;
+  s: string;
+begin
+  TyChartUnregisterMap('f1bNowhere');
+  TyChartUnregisterMap('f1bNowhereToo');
+  all := TyOptDiagnose(cGeo);
+  s := '';
+  for i := 0 to High(all) do s := s + all[i].Text + '|';
+  { the geo and the map series that draws its own map; the series on the geo
+    is the geo's business, said once }
+  AssertEquals(Format(rsTyChartMapNotRegistered, ['geo[0]', 'f1bNowhere']) + '|'
+    + Format(rsTyChartMapNotRegistered, ['series[0]', 'f1bNowhereToo']) + '|', s);
+  TyChartRegisterMap('f1bNowhere', '{ "type": "FeatureCollection", "features": [] }');
+  try
+    all := TyOptDiagnose(cGeo);
+    s := '';
+    for i := 0 to High(all) do s := s + all[i].Text + '|';
+    AssertEquals('a registered map is not mentioned',
+      Format(rsTyChartMapNotRegistered, ['series[0]', 'f1bNowhereToo']) + '|', s);
+  finally
+    TyChartUnregisterMap('f1bNowhere');
+  end;
+end;
+
+procedure TAdvChartDiagnoseTest.TestACutListSaysHowManyItHidAndIsNotAProblem;
+var
+  txt: string;
+  all: TTyOptDiagArray;
+  i, n: Integer;
+begin
+  txt := '{ xAxis: { data: [''A''] }, yAxis: {}, series: [{ type: ''bar'', data: [1],';
+  for i := 1 to 150 do txt := txt + ' zz' + IntToStr(i) + ': 1,';
+  txt := txt + ' z: 1 }] }';
+  all := TyOptDiagnose(txt);
+  AssertEquals('capped', 100, Length(all));
+  n := 0;
+  for i := 0 to High(all) do
+    if all[i].Kind = odkTruncated then Inc(n);
+  AssertEquals('one row says what was cut', 1, n);
+  AssertTrue('and it is the last', all[99].Kind = odkTruncated);
+  AssertEquals('how many it hid', 51, all[99].Hidden);
+  AssertEquals(Format(rsTyOptDiagMoreRows, [51]), all[99].Text);
+  { every other row is a real one, carrying nothing hidden }
+  for i := 0 to 98 do
+  begin
+    AssertTrue('row ' + IntToStr(i), all[i].Kind = odkUnknownOption);
+    AssertEquals(0, all[i].Hidden);
+  end;
 end;
 
 initialization

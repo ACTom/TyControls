@@ -1149,6 +1149,11 @@ type
       that kind. }
     FDatumPicks: array of array of TTyPalettePick;
     FDatumAsked: array of array of Boolean;
+    { SeriesRowFills' object colours, by slot, read once a build: every row's
+      itemStyle read out of the option, which a tooltip's colour dot asked for
+      again on every pointer move. Dropped where FDatumPicks is rebuilt. }
+    FRowObjFills: array of TTyRowFillArray;
+    FRowObjDone: array of Boolean;
     { DECALS [Batch 131]. The series scope of the aria decal palette lives as
       long as upstream's GlobalModel: a merge keeps it (a renamed series picks
       on), a notMerge makes a new one. Per binding slot: the series' decal,
@@ -5857,6 +5862,8 @@ var
 begin
   FDatumPicks := nil;
   FDatumAsked := nil;
+  FRowObjFills := nil;
+  FRowObjDone := nil;
   SetLength(FDatumPicks, Length(FBindings));
   SetLength(FDatumAsked, Length(FBindings));
   if FOption = nil then Exit;
@@ -6029,6 +6036,28 @@ begin
   Result := nil;
   if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
   n := FStores[ASlot].RawCount;
+  { the rows' own object colours: the option's, so read once a build }
+  if Length(FRowObjDone) < Length(FStores) then
+  begin
+    SetLength(FRowObjDone, Length(FStores));
+    SetLength(FRowObjFills, Length(FStores));
+  end;
+  if not FRowObjDone[ASlot] or (Length(FRowObjFills[ASlot]) <> n) then
+  begin
+    SetLength(FRowObjFills[ASlot], n);
+    for k := 0 to n - 1 do
+    begin
+      FRowObjFills[ASlot][k] := Default(TTyRowFill);
+      if RowObjectFill(ASlot, k, oc) then
+      begin
+        FRowObjFills[ASlot][k].ObjSet := True;
+        FRowObjFills[ASlot][k].ObjSolid := oc.Color;
+        FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
+        FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
+      end;
+    end;
+    FRowObjDone[ASlot] := True;
+  end;
   SetLength(Result, n);
   any := False;
   for k := 0 to n - 1 do
@@ -6041,12 +6070,12 @@ begin
       Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
       any := True;
     end;
-    if RowObjectFill(ASlot, k, oc) then
+    if FRowObjFills[ASlot][k].ObjSet then
     begin
       Result[k].ObjSet := True;
-      Result[k].ObjSolid := oc.Color;
-      Result[k].ObjGradient := oc.Gradient;
-      Result[k].ObjPattern := oc.Pattern;
+      Result[k].ObjSolid := FRowObjFills[ASlot][k].ObjSolid;
+      Result[k].ObjGradient := FRowObjFills[ASlot][k].ObjGradient;
+      Result[k].ObjPattern := FRowObjFills[ASlot][k].ObjPattern;
       any := True;
     end;
   end;
@@ -6938,6 +6967,47 @@ end;
 
 { ==================== paint ==================== }
 
+{ A TURNED NAME OF SEVERAL LINES. DrawTextRotated sets one line; a name with
+  a line break came out as one line with the break in it. zrender turns the
+  whole block about its anchor: the block's lines stack in the text's own
+  frame -- each one aligned on its own, the block aligned vertically as a
+  whole -- and the frame turns. ABlockH is the block's measured height, the
+  same number the layout reserved its box from. [F1b] }
+procedure DrawRotatedNameLines(APainter: TTyPainter; const AText, AFontName: string;
+  AFontSize, AWeight: Integer; AColor: TTyColor; AX, AY, ARot: Double;
+  AHAlign: TAlignment; AVAlign: TTextLayout; ABlockH: Double);
+var
+  lines: TStringArray;
+  i, n: Integer;
+  lineH, top, dy, sa, ca: Double;
+begin
+  if Pos(#10, AText) = 0 then
+  begin
+    APainter.DrawTextRotated(AText, AFontName, AFontSize, AWeight, AColor,
+      AX, AY, ARot, AHAlign, AVAlign);
+    Exit;
+  end;
+  lines := AText.Split([#10]);
+  n := Length(lines);
+  lineH := ABlockH / n;
+  case AVAlign of
+    tlCenter: top := -ABlockH / 2;
+    tlBottom: top := -ABlockH;
+  else
+    top := 0;
+  end;
+  sa := Sin(ARot);
+  ca := Cos(ARot);
+  for i := 0 to n - 1 do
+  begin
+    { (0, dy) in the text's frame, turned the way DrawTextRotated turns its
+      own offsets }
+    dy := top + i * lineH;
+    APainter.DrawTextRotated(lines[i], AFontName, AFontSize, AWeight, AColor,
+      AX + dy * sa, AY + dy * ca, ARot, AHAlign, tlTop);
+  end;
+end;
+
 procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
   const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean);
@@ -7514,12 +7584,15 @@ begin
         Pos(#10, spec^.NamePlacement.Text) > 0);
     end
     else
-      APainter.DrawTextRotated(spec^.NamePlacement.Text, nameS.FontName,
+    begin
+      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+      DrawRotatedNameLines(APainter, spec^.NamePlacement.Text, nameS.FontName,
         ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
         spec^.NamePlacement.X, spec^.NamePlacement.Y,
         spec^.NamePlacement.RotationRad,
         AnchorAlign(spec^.NamePlacement.AnchorH),
-        AnchorLayout(spec^.NamePlacement.AnchorV));
+        AnchorLayout(spec^.NamePlacement.AnchorV), lblH);
+    end;
   end;
 
   if not (tpTextColor in labelS.Present) then Exit;
@@ -11137,8 +11210,18 @@ procedure TTyAdvanceChart.SolveGeos(APPI: Integer);
 var
   i, n: Integer;
   ref: TTyXYWH;
+  missing: TTyGeoMissingMapArray;
 begin
   FreeGeos;
+  { A MAP NOBODY REGISTERED draws an empty view, and upstream says so in its
+    console; here the build says so [F1b] }
+  if FBuild <> nil then
+  begin
+    missing := TyGeoUnregisteredMaps(FOption);
+    for i := 0 to High(missing) do
+      FBuild.Note(Format(rsTyChartMapNotRegistered,
+        [missing[i].Path, missing[i].MapName]));
+  end;
   n := 0;
   if FOption <> nil then n := FOption.ComponentCount('geo');
   { [Batch 148] a render makes new region elements: a hover found on the
@@ -16185,9 +16268,12 @@ begin
           nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
       end
       else
-        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
           nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+      end;
     end;
     if not (tpTextColor in labelS.Present) then Continue;
     for q := 0 to High(sp.Placements) do
@@ -16900,9 +16986,12 @@ var
           nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
       end
       else
-        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
           nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+      end;
     end;
     if not (tpTextColor in labelS.Present) then Exit;
     for q := 0 to High(sp.Placements) do
@@ -19456,9 +19545,12 @@ begin
             nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
         end
         else
-          APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
             nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+        end;
       end;
       if not (tpTextColor in labelS.Present) then Continue;
       for q := 0 to High(sp.Placements) do

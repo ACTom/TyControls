@@ -47,6 +47,17 @@ type
     procedure TestATopLevelMarkerIsTheSeriesMarker;
     procedure TestBadEnumValueIsReported;
     procedure TestAnUntypedSeriesIsNotReportedAsUnknownOptions;
+    { ---- what the runtime reads beyond the documentation [F1b] ---- }
+    procedure TestTreeChildrenNestAsDeepAsTheDataDoes;
+    procedure TestAGraphicGroupsChildrenAreGraphicElements;
+    procedure TestMarkerDataTakesSingleItemsAndPairs;
+    procedure TestAnObjectTheCatalogGivesNoKeysIsNotJudged;
+    procedure TestEncodeTakesAnyDimensionName;
+    procedure TestTheRuntimeListIsAcceptedAndOnlyIt;
+    procedure TestEnumValuesTheRuntimeAcceptsAreAccepted;
+    procedure TestAnArrayIsNotCheckedAgainstItsStringFormsEnum;
+    procedure TestTheRuntimeListStillNeedsToExist;
+    procedure TestTheGalleryRaisesOnlyItsKnownComplaints;
   end;
 implementation
 
@@ -54,6 +65,29 @@ function TAdvChartCatalogTest.RepoRoot: string;
 begin
   { The test exe lives in tests/. Same idiom as test.designregistry. }
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+end;
+
+function IssuesOf(const AText: string): string;
+var
+  opt: TTyChartOption;
+  issues: TTyOptIssueArray;
+  i: Integer;
+begin
+  Result := '';
+  opt := TTyChartOption.Create;
+  try
+    if not opt.SetOptionText(AText) then Exit('<parse error>');
+    issues := TyOptValidate(opt);
+    for i := 0 to High(issues) do
+    begin
+      if Result <> '' then Result := Result + ' ';
+      Result := Result + issues[i].Path;
+      if issues[i].Kind = oikBadEnumValue then
+        Result := Result + '=' + issues[i].Value;
+    end;
+  finally
+    opt.Free;
+  end;
 end;
 
 function TAdvChartCatalogTest.ReadLF(const AFile: string): string;
@@ -609,6 +643,276 @@ begin
     AssertEquals('nothing is claimed to be unknown', 0, Length(issues));
   finally
     opt.Free;
+  end;
+end;
+
+{ ---- what the runtime reads beyond the documentation [F1b] ---- }
+
+procedure TAdvChartCatalogTest.TestTreeChildrenNestAsDeepAsTheDataDoes;
+begin
+  { The documentation writes one level of `children`, an Array with nothing
+    inside it; the runtime nests data items to any depth. Every key below was
+    "not an option ECharts knows" -- 905 rows over 24 gallery charts. }
+  AssertEquals('three levels of real tree data', '', IssuesOf(
+    '{ series: [{ type: ''tree'', data: [{ name: ''a'', children: ['
+    + '{ name: ''b'', value: 1, collapsed: true, children: ['
+    + '{ name: ''c'', children: [{ name: ''d'', value: 2 }] }] }] }] }] }'));
+  AssertEquals('a treemap and a sunburst too', '', IssuesOf(
+    '{ series: [{ type: ''treemap'', data: [{ name: ''a'', children: ['
+    + '{ name: ''b'', id: ''x'', children: [{ name: ''c'', value: 3 }] }] }] },'
+    + ' { type: ''sunburst'', data: [{ name: ''a'', children: ['
+    + '{ name: ''b'', itemStyle: { color: ''red'' }, children: [{ value: 1 }] }] }] }] }'));
+  { and a typo deep down is still the one thing reported, where it is }
+  AssertEquals('series[0].data[0].children[0].children[0].nmae', IssuesOf(
+    '{ series: [{ type: ''tree'', data: [{ name: ''a'', children: ['
+    + '{ name: ''b'', children: [{ nmae: ''c'' }] }] }] }] }'));
+  { a matrix header nests the same way }
+  AssertEquals('matrix.x.data[0].children[0].children[0].sizee', IssuesOf(
+    '{ matrix: { x: { data: [{ value: ''A'', children: [{ value: ''B'','
+    + ' children: [{ value: ''C'', sizee: 1 }] }] }] } } }'));
+end;
+
+procedure TAdvChartCatalogTest.TestAGraphicGroupsChildrenAreGraphicElements;
+begin
+  { A group's children are graphic elements of any type, each checked as its
+    own type -- not as members of the group. }
+  AssertEquals('graphic.elements[0].children[1].bogus', IssuesOf(
+    '{ graphic: { elements: [{ type: ''group'', left: 10, children: ['
+    + '{ type: ''rect'', shape: { width: 10, height: 5 }, style: { fill: ''red'' } },'
+    + ' { type: ''circle'', shape: { r: 4 }, bogus: 1 }] }] } }'));
+end;
+
+procedure TAdvChartCatalogTest.TestMarkerDataTakesSingleItemsAndPairs;
+begin
+  { markLine / markArea document `data` as the pair `0` and `1`; the runtime
+    takes a list of single items and of pairs. Both used to come back as
+    unknown keys. }
+  AssertEquals('', IssuesOf(
+    '{ series: [{ type: ''line'', markLine: { data: ['
+    + '{ type: ''average'', name: ''avg'' }, { yAxis: 3, label: { show: true } },'
+    + ' [{ coord: [0, 1], symbol: ''none'' }, { coord: [2, 3], name: ''end'' }] ] },'
+    + ' markArea: { data: [[{ name: ''a'', xAxis: ''Mon'' }, { xAxis: ''Tue'' }]] },'
+    + ' markPoint: { data: [{ type: ''max'' }, { xAxis: 1, yAxis: 2 }] } }] }'));
+  { a single item is still checked }
+  AssertEquals('series[0].markLine.data[0].nmae', IssuesOf(
+    '{ series: [{ type: ''line'', markLine: { data: [{ type: ''max'', nmae: ''x'' }] } }] }'));
+  { the second end of a pair is checked as the second end }
+  AssertEquals('series[0].markLine.data[0][1].cord', IssuesOf(
+    '{ series: [{ type: ''line'', markLine: { data: ['
+    + '[{ coord: [0, 1] }, { cord: [2, 3] }] ] } }] }'));
+end;
+
+procedure TAdvChartCatalogTest.TestAnObjectTheCatalogGivesNoKeysIsNotJudged;
+begin
+  { A node with no documented children says nothing about the keys inside
+    it: a colour written as a gradient, a visualMap's inRange, a piece, a
+    nameMap, a dataset's rows, a transform's config. }
+  AssertEquals('', IssuesOf(
+    '{ series: [{ type: ''line'', areaStyle: { color: { type: ''linear'','
+    + ' x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: ''red'' }] } } },'
+    + ' { type: ''map'', map: ''m'', nameMap: { Kowloon: ''K'' } }],'
+    + ' backgroundColor: { image: ''x.png'', repeat: ''repeat'' },'
+    + ' visualMap: { type: ''piecewise'', pieces: [{ gt: 1, lte: 5, color: ''red'' }],'
+    + ' inRange: { color: [''red''], symbolSize: [1, 2] } },'
+    + ' dataset: [{ source: [{ product: ''a'', ''2015'': 1 }] },'
+    + ' { transform: { type: ''filter'', config: { dimension: ''x'', ''>'': 1 } } }] }'));
+  { and a typo NEXT to such an object is still found }
+  AssertEquals('series[0].areaStyle.colr', IssuesOf(
+    '{ series: [{ type: ''line'', areaStyle: { colr: 1, color: { type: ''radial'' } } }] }'));
+end;
+
+procedure TAdvChartCatalogTest.TestEncodeTakesAnyDimensionName;
+begin
+  AssertEquals('', IssuesOf(
+    '{ series: [{ type: ''scatter'', encode: { x: 0, y: [1, 2], tooltip: 3,'
+    + ' itemGroupId: ''g'', seriesName: 4 } }] }'));
+end;
+
+procedure TAdvChartCatalogTest.TestTheRuntimeListIsAcceptedAndOnlyIt;
+begin
+  { read by 6.1 though echarts-doc never lists them }
+  AssertEquals('', IssuesOf(
+    '{ title: { textBaseline: ''top'' }, tooltip: { borderRadius: 4 },'
+    + ' xAxis: { gridId: ''g'' }, yAxis: { gridId: ''g'' },'
+    + ' series: [{ type: ''graph'', data: [{ id: ''n1'', name: ''a'' }] },'
+    + ' { type: ''tree'', animationDurationUpdate: 500 },'
+    + ' { type: ''lines'', blendMode: ''lighter'', data: [{ effect: { show: true } }] }] }'));
+  { BY NODE: a graph's `id` is not every series' `id` on its data items }
+  AssertEquals('series[0].data[0].id', IssuesOf(
+    '{ series: [{ type: ''pie'', data: [{ id: ''n1'', value: 1 }] }] }'));
+  { and what upstream does NOT read stays reported }
+  AssertEquals('toolbox.feature.mark calculable', IssuesOf(
+    '{ toolbox: { feature: { mark: { show: true } } }, calculable: true }'));
+end;
+
+procedure TAdvChartCatalogTest.TestEnumValuesTheRuntimeAcceptsAreAccepted;
+begin
+  AssertEquals('', IssuesOf(
+    '{ tooltip: { triggerOn: ''none'' },'
+    + ' series: [{ type: ''pie'', label: { alignTo: ''none'' } },'
+    + ' { type: ''tree'', orient: ''vertical'' },'
+    + ' { type: ''bar'', coordinateSystem: ''polar'', label: { position: ''middle'' } }],'
+    + ' textStyle: { fontFamily: ''Ubuntu Condensed, sans-serif'' },'
+    + ' calendar: { dayLabel: { nameMap: ''cn'' }, monthLabel: { nameMap: ''ZH'' } } }'));
+  { the list is still a list }
+  AssertEquals('legend.orient=sideways tooltip.triggerOn=hover', IssuesOf(
+    '{ legend: { orient: ''sideways'' }, tooltip: { triggerOn: ''hover'' } }'));
+end;
+
+procedure TAdvChartCatalogTest.TestAnArrayIsNotCheckedAgainstItsStringFormsEnum;
+begin
+  { `nameMap: ['Sun', 'Mon', ...]` is a calendar's own day names; every
+    element was compared with EN,ZH. Every enumerated option that takes an
+    array is a string|Array union whose array form means something else. }
+  AssertEquals('', IssuesOf(
+    '{ calendar: { dayLabel: { nameMap: [''S'', ''M'', ''T'', ''W'', ''T'', ''F'', ''S''] } },'
+    + ' series: [{ type: ''line'', lineStyle: { type: [5, 10] },'
+    + ' label: { position: [10, ''50%''] } }] }'));
+end;
+
+procedure TAdvChartCatalogTest.TestTheRuntimeListStillNeedsToExist;
+var
+  i, j: Integer;
+  parent, key, path, values: string;
+  lk: TTyOptLookup;
+  names, enums, vals: TStringList;
+begin
+  { THE LIST IS HELD TO THE CATALOG. A parent that no longer resolves is an
+    entry that silently stopped working; a key the catalog has since learned
+    is an entry that should be deleted. Both are what a re-extract for the
+    next ECharts would leave behind without anyone noticing. }
+  AssertTrue('there is a list', TyOptRuntimeKeyCount > 0);
+  names := TStringList.Create;
+  enums := TStringList.Create;
+  vals := TStringList.Create;
+  try
+    for i := 0 to TyOptRuntimeKeyCount - 1 do
+    begin
+      TyOptRuntimeKeyAt(i, parent, key);
+      lk := TyOptFind(parent);
+      AssertTrue(parent + ' resolves', lk.Found);
+      { a list's keys are its element's }
+      while TyOptArrayItem(lk.Node) >= 0 do lk.Node := TyOptArrayItem(lk.Node);
+      TyOptChildNames(lk.Node, names);
+      AssertTrue(parent + '.' + key + ' is in the catalog now: drop it',
+        names.IndexOf(key) < 0);
+    end;
+    AssertTrue('there is an enum list', TyOptRuntimeEnumCount > 0);
+    for i := 0 to TyOptRuntimeEnumCount - 1 do
+    begin
+      TyOptRuntimeEnumAt(i, path, values);
+      lk := TyOptFind(path);
+      AssertTrue(path + ' resolves', lk.Found);
+      AssertTrue(path + ' is enumerated', TyOptEnumOf(lk.Node, enums));
+      vals.Delimiter := ',';
+      vals.StrictDelimiter := True;
+      vals.DelimitedText := values;
+      for j := 0 to vals.Count - 1 do
+        AssertTrue(path + ': ' + vals[j] + ' is documented now: drop it',
+          enums.IndexOf(vals[j]) < 0);
+    end;
+  finally
+    vals.Free;
+    enums.Free;
+    names.Free;
+  end;
+end;
+
+procedure TAdvChartCatalogTest.TestTheGalleryRaisesOnlyItsKnownComplaints;
+const
+  { WHAT THE GALLERY IS STILL TOLD, AND WHY. Paths are index-free, and a run
+    of `children[].` is folded to one, so a key reported at every depth of a
+    tree is one entry. Every one of these is a key ECharts 6.1 does not read
+    where it is written (or a root key the port does not yet pass down, the
+    F4 item), so saying nothing would be the lie. }
+  cKnown: array[0..25] of string = (
+    'toolbox.feature.mark',            // no such feature since ECharts 3
+    'calculable',                      // ECharts 2
+    'bmap',                            // the Baidu-map extension, not core
+    'dataGroupId', 'id',               // read on a series, not on the root
+    'dataZoom[].realtime',             // only SliderZoomView reads it; these are inside
+    'dataZoom[].height', 'dataZoom[].show', 'dataZoom[].top', // ditto
+    'parallel.parallelAxisDefault.splitLine', // parallel axes draw no split lines
+    'parallelAxis[].splitLine',
+    'series.layout',                   // sankey: the pre-5 spelling, unread
+    'series[].label.margin',           // pie: edgeDistance since 5
+    'series[].emphasis.label.position',// FunnelView.ts:116, position is not used
+    'title[].width', 'title.textStyle.align', // title: unread / textAlign wins
+    'series[].data[].path',            // treemap: unread
+    'series[].data[].children[].path',
+    'series[].data[].children[].discretion', // in no upstream source
+    'tooltip.axisPointer.show',        // modelHelper.ts:241 copies other fields
+    'series[].dimensions',             // lines: LinesSeries.ts:314 ignores it
+    'series[].data[].discretion',
+    'series[].categories[].keyword',   // graph: the webkit dump's own fields,
+    'series[].categories[].base',      // read by nothing upstream
+    'silent', 'progressive');          // root: F4, the model's parent chain
+var
+  dir, id, text, p, q, bad: string;
+  inBr: Boolean;
+  root: TJSONData;
+  arr: TJSONArray;
+  i, j, k: Integer;
+  opt: TTyChartOption;
+  issues: TTyOptIssueArray;
+  known: TStringList;
+  sl: TStringList;
+begin
+  { [F1b] Before: 125 of 244 gallery charts were told some option was not one
+    ECharts knows -- 2,332 rows shown and some 22,000 more cut off -- and 13
+    had a value "not one of" a list the runtime does not hold it to. Nearly
+    all of it was the validator, not the option. }
+  dir := RepoRoot + 'examples' + PathDelim + 'advchart' + PathDelim + 'gallery'
+    + PathDelim;
+  AssertTrue('the gallery is there', FileExists(dir + 'index.json'));
+  known := TStringList.Create;
+  sl := TStringList.Create;
+  opt := TTyChartOption.Create;
+  root := GetJSON(ReadLF(dir + 'index.json'));
+  try
+    for i := 0 to High(cKnown) do known.Add(cKnown[i]);
+    bad := '';
+    arr := TJSONArray(TJSONObject(root).Find('entries'));
+    for i := 0 to arr.Count - 1 do
+    begin
+      if not TJSONObject(arr.Items[i]).Get('ok', False) then Continue;
+      id := TJSONObject(arr.Items[i]).Get('id', '');
+      sl.LoadFromFile(dir + id + '.json');
+      text := sl.Text;
+      AssertTrue(id + ' parses', opt.SetOptionText(text));
+      issues := TyOptValidate(opt);
+      for j := 0 to High(issues) do
+      begin
+        { index-free, and a run of children folded to one }
+        q := issues[j].Path;
+        p := '';
+        inBr := False;
+        for k := 1 to Length(q) do
+          if q[k] = '[' then
+          begin
+            inBr := True;
+            p := p + '[';
+          end
+          else if q[k] = ']' then
+          begin
+            inBr := False;
+            p := p + ']';
+          end
+          else if not inBr then
+            p := p + q[k];
+        while Pos('children[].children[].', p) > 0 do
+          p := StringReplace(p, 'children[].children[].', 'children[].', [rfReplaceAll]);
+        if (issues[j].Kind = oikBadEnumValue) or (known.IndexOf(p) < 0) then
+          if Pos(id + ': ' + p + ';', bad) = 0 then
+            bad := bad + id + ': ' + p + '; ';
+      end;
+    end;
+    AssertEquals('gallery complaints nobody has judged', '', bad);
+  finally
+    root.Free;
+    opt.Free;
+    sl.Free;
+    known.Free;
   end;
 end;
 

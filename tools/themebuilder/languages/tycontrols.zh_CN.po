@@ -1479,6 +1479,11 @@ msgstr "series[%d]：没有登记名为“%s”的 renderItem，所以什么都�
 msgid "series[%d]: renderItem \"%s\" failed: %s"
 msgstr "series[%d]：renderItem“%s”失败：%s"
 
+#: tycontrols.strconsts.rstychartmapnotregistered
+#, object-pascal-format
+msgid "%s: no map is registered as \"%s\", so nothing is drawn"
+msgstr "%s：没有登记名为“%s”的地图，所以什么都不画"
+
 #: tycontrols.strconsts.rstychartseriesnoaxis
 #, object-pascal-format
 msgid "series[%d] names an axis that does not exist"

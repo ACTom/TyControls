@@ -43,8 +43,8 @@ msgstr "option 解析成功。"
 
 #: umain.rsdiagnostics
 #, object-pascal-format
-msgid "%d thing(s) the chart could not honour:"
-msgstr "有 %d 项图表无法兑现 — 见下。"
+msgid "%d note(s) on this option:"
+msgstr "这份 option 有 %d 条提示："
 
 # --- code resourcestrings (msgid=Pascal source) ---
 
@@ -52,6 +52,11 @@ msgstr "有 %d 项图表无法兑现 — 见下。"
 #, object-pascal-format
 msgid "%s — %d example(s)"
 msgstr "%s — %d 个示例"
+
+#: umain.rsbordermapnotshipped
+#, object-pascal-format
+msgid "This example needs the map %s, which the demo does not include. Borders between countries are disputed, and some places require published maps to be reviewed, so neither TyControls nor this demo ships a map that draws them. To see the example, save a GeoJSON file under the map's name in %s (for instance china.json), or register one in code with TyChartRegisterMap. Natural Earth (naturalearthdata.com) offers public-domain country data."
+msgstr "这个示例要用地图 %s，demo 没有附带。各国对边界的画法有争议，一些地区还要求公开的地图先经审核，所以 TyControls 和这个 demo 都不附带画国界的地图。要看这个示例，把一份 GeoJSON 以地图名存进 %s（例如 china.json），或者在代码里用 TyChartRegisterMap 注册。在中国大陆向社会公开的地图，依据《测绘法》第三十八条和《地图管理条例》第十五条须报送审核、取得审图号，国界、台湾、南海诸岛等的表示须符合《地图管理条例》第八条与国家有关规定；面向大陆用户请使用天地图等带审图号的数据。大陆以外可以用 Natural Earth（naturalearthdata.com）等公共领域数据。"
 
 #: umain.rsnogallery
 msgid "The gallery was not found. Run tools/advchart-gallery/harvest.js to build examples/advchart/gallery."

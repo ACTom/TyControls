@@ -256,6 +256,26 @@ function TyOptDefaultSubType(const AMainType: string;
   an editor reporting them in order reports them top to bottom. }
 function TyOptValidate(AOption: TTyChartOption): TTyOptIssueArray;
 
+{ ---- what the 6.1 runtime reads and the documentation does not list ----
+
+  The catalog is the DOCUMENTATION's truth, and the documentation is not the
+  runtime: a graph node's `id`, a tree's `animationDurationUpdate`, a title's
+  `textBaseline` are all read by ECharts 6.1 and written in its own gallery,
+  and none of them is in echarts-doc. Validation therefore accepts a short,
+  hand-kept list on top of the generated catalog -- each entry checked against
+  the upstream source and cited there -- instead of editing generated data.
+
+  Exposed so a guard can hold the list to the catalog: every parent must still
+  resolve, and an entry the catalog has since learned must be deleted rather
+  than linger. }
+function TyOptRuntimeKeyCount: Integer;
+{ AParent is a CATALOG path (TyOptFind's spelling); AKey the property name. }
+procedure TyOptRuntimeKeyAt(AIndex: Integer; out AParent, AKey: string);
+{ The same for enumerated values the runtime accepts beyond the documented
+  list. AValues is comma-separated. }
+function TyOptRuntimeEnumCount: Integer;
+procedure TyOptRuntimeEnumAt(AIndex: Integer; out APath, AValues: string);
+
 implementation
 
 uses
@@ -907,6 +927,312 @@ end;
 procedure WalkValidate(AData: TJSONData; ANode: Integer; const APath: string;
   var C: TIssueCollector); forward;
 
+{ ---- the runtime list ---- }
+
+type
+  TRuntimeKey = record
+    Parent, Key: string;
+  end;
+  TRuntimeEnum = record
+    Path, Values: string;
+  end;
+
+const
+  { Keys ECharts 6.1 reads where the documentation lists none. Parent is a
+    catalog path; the comment is where upstream (src/ of the 6.1 tag) reads it.
+    A key upstream does NOT read stays out of here and stays reported --
+    toolbox.feature.mark, the root `calculable`, an inside dataZoom's
+    `realtime` -- because saying nothing about it would be the lie. }
+  cRuntimeKeys: array[0..46] of TRuntimeKey = (
+    { model/mixin/palette.ts:53 -- a series' own palette }
+    (Parent: 'series-scatter'; Key: 'color'),
+    { label/labelStyle.ts:551 }
+    (Parent: 'series-scatter.data.label'; Key: 'opacity'),
+    { chart/helper/createGraphFromNodeEdge.ts:48 -- a node's id, which links may name }
+    (Parent: 'series-graph.data'; Key: 'id'),
+    { chart/tree/TreeSeries.ts:313 -- in the series' own defaults }
+    (Parent: 'series-tree'; Key: 'animationDuration'),
+    { chart/tree/TreeSeries.ts:315 }
+    (Parent: 'series-tree'; Key: 'animationDurationUpdate'),
+    { chart/chord/ChordSeries.ts:146 -- the node labels }
+    (Parent: 'series-chord'; Key: 'label'),
+    { chart/custom/CustomView.ts:126/712 -- deprecated, still read }
+    (Parent: 'series-custom'; Key: 'label'),
+    { data/SeriesData.ts:524 -- every series' data item }
+    (Parent: 'series-effectScatter.data'; Key: 'name'),
+    { util/model.ts:151 getDataItemValue }
+    (Parent: 'series-effectScatter.data'; Key: 'value'),
+    { data/helper/sourceHelper.ts:303 -- any series }
+    (Parent: 'series-boxplot'; Key: 'datasetIndex'),
+    { component/marker/markerHelper.ts:103-148 -- turned into coord }
+    (Parent: 'series-line.markPoint.data'; Key: 'xAxis'),
+    { component/marker/markerHelper.ts:103-148 }
+    (Parent: 'series-line.markPoint.data'; Key: 'yAxis'),
+    { component/marker/markerHelper.ts:103-148 }
+    (Parent: 'series-line.markArea.data.0'; Key: 'xAxis'),
+    { component/marker/markerHelper.ts:103-148 }
+    (Parent: 'series-line.markArea.data.0'; Key: 'yAxis'),
+    { component/marker/markerHelper.ts:103-148 }
+    (Parent: 'series-line.markArea.data.1'; Key: 'xAxis'),
+    { component/marker/markerHelper.ts:103-148 }
+    (Parent: 'series-line.markArea.data.1'; Key: 'yAxis'),
+    { component/marker/MarkerModel.ts:93 }
+    (Parent: 'series-line.markPoint'; Key: 'tooltip'),
+    { component/marker/MarkerModel.ts:93 }
+    (Parent: 'series-line.markLine'; Key: 'tooltip'),
+    { label/labelStyle.ts:525 -- a plain text style key }
+    (Parent: 'series-line.markLine.label'; Key: 'align'),
+    { zrender graphic/Text.ts:88 TextStyleProps }
+    (Parent: 'graphic.elements-text.style'; Key: 'fontSize'),
+    { zrender graphic/Text.ts:79 }
+    (Parent: 'graphic.elements-text.style'; Key: 'fontWeight'),
+    { zrender graphic/Text.ts:75 }
+    (Parent: 'graphic.elements-text.style'; Key: 'fontStyle'),
+    { zrender graphic/Text.ts:83 }
+    (Parent: 'graphic.elements-text.style'; Key: 'fontFamily'),
+    { coord/radar/RadarModel.ts:160 -- the old name of `name` }
+    (Parent: 'radar.indicator'; Key: 'text'),
+    { component/matrix/MatrixView.ts:208 -- a header cell's own label }
+    (Parent: 'matrix.x.data'; Key: 'label'),
+    { component/matrix/MatrixView.ts:208 }
+    (Parent: 'matrix.y.data'; Key: 'label'),
+    { label/labelStyle.ts:160 -- the item's own formatter }
+    (Parent: 'series-bar.data.label'; Key: 'formatter'),
+    { label/labelStyle.ts:160 }
+    (Parent: 'series-pie.data.label'; Key: 'formatter'),
+    { visual/style.ts:159 -- a data item's decal }
+    (Parent: 'series-heatmap.data.itemStyle'; Key: 'decal'),
+    { animation/basicTransition.ts:75 isAnimationEnabled, for the roam }
+    (Parent: 'geo'; Key: 'animation'),
+    { component/tooltip/TooltipView.ts:971 }
+    (Parent: 'geo.tooltip'; Key: 'confine'),
+    { component/tooltip/TooltipView.ts:833 }
+    (Parent: 'geo.regions.tooltip'; Key: 'enterable'),
+    { component/tooltip/TooltipModel.ts -- a common tooltip key }
+    (Parent: 'geo.regions.tooltip'; Key: 'alwaysShowContent'),
+    { label/labelStyle.ts:551 }
+    (Parent: 'series-scatter.label'; Key: 'opacity'),
+    { chart/sunburst/sunburstLayout.ts:127 }
+    (Parent: 'series-sunburst.levels'; Key: 'r'),
+    { chart/sunburst/sunburstLayout.ts:126 }
+    (Parent: 'series-sunburst.levels'; Key: 'r0'),
+    { chart/sunburst/SunburstPiece.ts:65 }
+    (Parent: 'series-sunburst.levels.label'; Key: 'silent'),
+    { core/echarts.ts:2639 -- any series }
+    (Parent: 'series-lines'; Key: 'blendMode'),
+    { chart/helper/EffectLine.ts:68 }
+    (Parent: 'series-lines.data'; Key: 'effect'),
+    { label/labelStyle.ts:757, via GaugeView.ts:693 }
+    (Parent: 'series-gauge.detail'; Key: 'precision'),
+    { label/labelStyle.ts:754, via BarView.ts:1055 }
+    (Parent: 'series-bar.label'; Key: 'valueAnimation'),
+    { chart/treemap/TreemapView.ts:889 }
+    (Parent: 'series-treemap.levels.emphasis.itemStyle'; Key: 'borderColor'),
+    { component/axisPointer/BaseAxisPointer.ts:212 }
+    (Parent: 'singleAxis.axisPointer'; Key: 'animation'),
+    { component/title/install.ts:162 }
+    (Parent: 'title'; Key: 'textBaseline'),
+    { component/tooltip/TooltipModel.ts:140 -- in its defaults }
+    (Parent: 'tooltip'; Key: 'borderRadius'),
+    { coord/cartesian/Grid.ts:579 }
+    (Parent: 'xAxis'; Key: 'gridId'),
+    { coord/cartesian/Grid.ts:579 }
+    (Parent: 'yAxis'; Key: 'gridId')
+  );
+
+  { Enumerated values the runtime accepts beyond the documented list. }
+  cRuntimeEnums: array[0..3] of TRuntimeEnum = (
+    { TooltipView.ts:228/258 -- 'none' turns the trigger off; the value is
+      matched with indexOf, and the default itself is
+      'mousemove|click|mousewheel' (TooltipModel.ts:109) }
+    (Path: 'tooltip.triggerOn';
+     Values: 'none,mousewheel,mousemove|click,mousemove|click|mousewheel'),
+    { PieSeries.ts:72/274 -- 'none' is the DEFAULT; labelLayout.ts:111 }
+    (Path: 'series-pie.label.alignTo'; Values: 'none'),
+    { TreeSeries.ts:106/205 -- the old spellings, horizontal = LR, vertical = TB }
+    (Path: 'series-tree.orient'; Values: 'horizontal,vertical'),
+    { label/sectorLabel.ts:103-165 -- a bar on a polar places its label by
+      the sector's own positions (spec section 148) }
+    (Path: 'series-bar.label.position';
+     Values: 'startArc,insideStartArc,startAngle,insideStartAngle,middle,'
+       + 'endArc,insideEndArc,endAngle,insideEndAngle')
+  );
+
+  { Option keys whose value is the user's own vocabulary, not the schema's:
+    `encode` maps any dimension name to any channel (x, y, value, tooltip,
+    itemGroupId, ...), so the two keys the documentation happens to list are
+    not a closed set. }
+  cFreeFormKeys: array[0..0] of string = ('encode');
+
+  { Enumerations that are SUGGESTIONS: the documentation's UI offers a list,
+    the runtime takes any CSS font family. }
+  cOpenEnumKeys: array[0..1] of string = (
+    'fontFamily',
+    { a calendar's dayLabel / monthLabel: a string names a LOCALE, looked up
+      with getLocaleModel and falling back when absent (CalendarView.ts:411-418),
+      and registerLocale can add any name -- EN and ZH are only the two
+      built in }
+    'nameMap');
+
+var
+  { cRuntimeKeys / cRuntimeEnums resolved to catalog nodes, once. }
+  GRuntimeKeyNode: array of Integer;
+  GRuntimeEnumNode: array of Integer;
+  GRuntimeResolved: Boolean = False;
+  GGraphicGroupNode: Integer = -1;
+  GGraphicElementsNode: Integer = -1;
+
+function TyOptRuntimeKeyCount: Integer;
+begin
+  Result := Length(cRuntimeKeys);
+end;
+
+procedure TyOptRuntimeKeyAt(AIndex: Integer; out AParent, AKey: string);
+begin
+  AParent := '';
+  AKey := '';
+  if (AIndex < 0) or (AIndex > High(cRuntimeKeys)) then Exit;
+  AParent := cRuntimeKeys[AIndex].Parent;
+  AKey := cRuntimeKeys[AIndex].Key;
+end;
+
+function TyOptRuntimeEnumCount: Integer;
+begin
+  Result := Length(cRuntimeEnums);
+end;
+
+procedure TyOptRuntimeEnumAt(AIndex: Integer; out APath, AValues: string);
+begin
+  APath := '';
+  AValues := '';
+  if (AIndex < 0) or (AIndex > High(cRuntimeEnums)) then Exit;
+  APath := cRuntimeEnums[AIndex].Path;
+  AValues := cRuntimeEnums[AIndex].Values;
+end;
+
+{ The node an OBJECT at this catalog path is walked against: TyOptFind stops
+  at `series-graph.data`, the list, and the walk checks the list's element. }
+function ElementNodeOf(const APath: string): Integer;
+var
+  lk: TTyOptLookup;
+  guard: Integer;
+begin
+  Result := -1;
+  lk := TyOptFind(APath);
+  if not lk.Found then Exit;
+  Result := lk.Node;
+  guard := 0;
+  while (TyOptArrayItem(Result) >= 0) and (guard < 8) do
+  begin
+    Result := TyOptArrayItem(Result);
+    Inc(guard);
+  end;
+end;
+
+procedure ResolveRuntime;
+var
+  i: Integer;
+  lk: TTyOptLookup;
+begin
+  if GRuntimeResolved then Exit;
+  SetLength(GRuntimeKeyNode, Length(cRuntimeKeys));
+  for i := 0 to High(cRuntimeKeys) do
+    GRuntimeKeyNode[i] := ElementNodeOf(cRuntimeKeys[i].Parent);
+  SetLength(GRuntimeEnumNode, Length(cRuntimeEnums));
+  for i := 0 to High(cRuntimeEnums) do
+  begin
+    lk := TyOptFind(cRuntimeEnums[i].Path);
+    if lk.Found then GRuntimeEnumNode[i] := lk.Node
+    else GRuntimeEnumNode[i] := -1;
+  end;
+  lk := TyOptFind('graphic.elements-group');
+  if lk.Found then GGraphicGroupNode := lk.Node;
+  lk := TyOptFind('graphic.elements');
+  if lk.Found then GGraphicElementsNode := lk.Node;
+  GRuntimeResolved := True;
+end;
+
+function RuntimeKnows(ANode: Integer; const AKey: string): Boolean;
+var i: Integer;
+begin
+  ResolveRuntime;
+  Result := False;
+  { By NODE, not by path: the catalog is a DAG, and a graph's `data` and its
+    `nodes` are one record -- an `id` is legal under both, and both are this
+    one node. }
+  for i := 0 to High(cRuntimeKeys) do
+    if (GRuntimeKeyNode[i] = ANode) and (cRuntimeKeys[i].Key = AKey) then
+      Exit(True);
+end;
+
+function RuntimeEnumAccepts(ANode: Integer; const AValue: string): Boolean;
+var
+  i: Integer;
+  list: TStringList;
+begin
+  ResolveRuntime;
+  Result := False;
+  for i := 0 to High(cRuntimeEnums) do
+    if GRuntimeEnumNode[i] = ANode then
+    begin
+      list := TStringList.Create;
+      try
+        list.Delimiter := ',';
+        list.StrictDelimiter := True;
+        list.DelimitedText := cRuntimeEnums[i].Values;
+        if list.IndexOf(AValue) >= 0 then Exit(True);
+      finally
+        list.Free;
+      end;
+    end;
+end;
+
+function IsFreeFormKey(const AKey: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(cFreeFormKeys) do
+    if cFreeFormKeys[i] = AKey then Exit(True);
+end;
+
+function IsOpenEnumPath(const APath: string): Boolean;
+var
+  i, p: Integer;
+  leaf: string;
+begin
+  Result := False;
+  leaf := APath;
+  for p := Length(APath) downto 1 do
+    if APath[p] = '.' then
+    begin
+      leaf := Copy(APath, p + 1, MaxInt);
+      Break;
+    end;
+  for i := 0 to High(cOpenEnumKeys) do
+    if cOpenEnumKeys[i] = leaf then Exit(True);
+end;
+
+{ The node a `children` array's elements are validated against, or -1 when
+  this `children` is not a recursive one.
+
+  THE DOCUMENTATION WRITES ONE LEVEL. A tree's, a treemap's, a sunburst's and
+  a matrix header's data item has `children`, documented as an Array with
+  nothing inside -- and the runtime nests it to any depth, every level being
+  another data item. A graphic group's children are graphic elements of any
+  type. Both are recursion the schema cannot spell, so it is spelled here. }
+function RecursiveChildrenTarget(AParent, AChild: Integer): Integer;
+begin
+  Result := -1;
+  if not ValidNode(AChild) then Exit;
+  if TyOptNodes[AChild].ChildCount <> 0 then Exit;
+  if Pos('Array', TyOptTypeOf(AChild)) = 0 then Exit;
+  ResolveRuntime;
+  if (AParent = GGraphicGroupNode) and (GGraphicElementsNode >= 0) then
+    Result := GGraphicElementsNode
+  else
+    Result := AParent;
+end;
+
 procedure ValidateLeaf(AData: TJSONData; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -915,11 +1241,12 @@ var
 begin
   if AData.JSONType <> jtString then Exit;
   if TyOptNodes[ANode].EnumStr < 0 then Exit;
+  if IsOpenEnumPath(APath) then Exit;
   v := AData.AsString;
   list := TStringList.Create;
   try
     TyOptEnumOf(ANode, list);
-    if list.IndexOf(v) < 0 then
+    if (list.IndexOf(v) < 0) and not RuntimeEnumAccepts(ANode, v) then
       AddIssue(C, oikBadEnumValue, APath, v, TyOptStrAt(TyOptNodes[ANode].EnumStr));
   finally
     list.Free;
@@ -947,7 +1274,7 @@ end;
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
-  i, child: Integer;
+  i, child, target: Integer;
   key, sub: string;
 begin
   for i := 0 to AObj.Count - 1 do
@@ -957,7 +1284,23 @@ begin
     child := TyOptChild(ANode, key);
     if (child < 0) and (APath = '') then child := RootMarkerNode(key);
     if child < 0 then
+    begin
+      { known to the runtime though not to the documentation: accepted, and
+        not walked -- there is no schema for what is inside }
+      if RuntimeKnows(ANode, key) then Continue;
       AddIssue(C, oikUnknownOption, sub, '', '');
+    end
+    else if IsFreeFormKey(key) then
+      Continue
+    else if key = 'children' then
+    begin
+      target := RecursiveChildrenTarget(ANode, child);
+      if target >= 0 then
+      begin
+        WalkValidate(AObj.Items[i], target, sub, C);
+        Continue;
+      end;
+    end;
     { Descending with child = -1 is deliberate rather than guarded here: the
       ValidNode test at the top of WalkValidate is what stops an unknown subtree
       from being walked. An explicit Continue was here first and mutation showed
@@ -970,8 +1313,8 @@ end;
 procedure WalkValidate(AData: TJSONData; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
-  i, item, variant: Integer;
-  arr: TJSONArray;
+  i, j, item, variant, pair0, pairNode: Integer;
+  arr, pair: TJSONArray;
   tag, sub: string;
 begin
   { An unresolvable node stops the walk. This is what keeps ONE misspelled
@@ -980,6 +1323,15 @@ begin
   if (AData = nil) or (not ValidNode(ANode)) then Exit;
   case AData.JSONType of
     jtObject:
+      { A NODE THE CATALOG GIVES NO STRUCTURE TO says nothing about the keys
+        inside it, and nothing is what it may be held to. A colour written as
+        a gradient or a pattern object, a visualMap's inRange, a nameMap, a
+        dataset's source rows, a transform's config: every key in them used
+        to come back as unknown, because an empty list of children rejects
+        every name. }
+      if TyOptNodes[ANode].ChildCount = 0 then
+        Exit
+      else
       { A COMPONENT SLOT ACCEPTS EITHER SHAPE, and the two used to be validated
         very differently. `series: { type: 'bar', ... }` -- the bare-object form
         ECharts documents everywhere -- resolves no variant here, so every key
@@ -1028,6 +1380,35 @@ begin
           else
           begin
             item := TyOptArrayItem(ANode);
+            pair0 := TyOptChild(ANode, '0');
+            { A MARKER'S DATA: markLine / markArea document `data` as the
+              pair `0` and `1`, and the runtime takes a list whose elements
+              are either one item (a markLine's `type: 'average'` item) or such a
+              pair. A single item is checked as the pair's first end. }
+            if (item < 0) and (pair0 >= 0) then
+            begin
+              if arr.Items[i].JSONType = jtArray then
+              begin
+                pair := TJSONArray(arr.Items[i]);
+                for j := 0 to pair.Count - 1 do
+                begin
+                  pairNode := TyOptChild(ANode, IntToStr(j));
+                  if pairNode < 0 then pairNode := pair0;
+                  WalkValidate(pair.Items[j], pairNode,
+                    sub + '[' + IntToStr(j) + ']', C);
+                end;
+              end
+              else
+                WalkValidate(arr.Items[i], pair0, sub, C);
+              Continue;
+            end;
+            { A PLAIN VALUE IN A LIST IS NOT AN ENUM MEMBER. Every enumerated
+              node that takes an array is a `string|Array` union whose array
+              form means something else entirely -- a position [x, y], a dash
+              pattern, a calendar's own list of day names -- so its elements
+              are never checked against the string form's list. }
+            if (item < 0) and not (arr.Items[i].JSONType in [jtObject, jtArray]) then
+              Continue;
             { NO '[]' EDGE IS NOT THE SAME AS NOTHING TO CHECK. The multi-
               component options -- xAxis, yAxis, grid -- carry their properties
               directly and have no element node, because the schema describes

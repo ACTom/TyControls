@@ -95,9 +95,12 @@ type
     procedure TestTheMapIsDrawnInTheSkinsInk;
     procedure TestTheLabelsSitOverEveryRegion;
     procedure TestTheRoamMovesThePictureNotThePoints;
+    procedure TestAMapNobodyRegisteredIsNoted;
   end;
 
 implementation
+
+uses tyControls.StrConsts;
 
 const
   cW = 800;
@@ -847,6 +850,24 @@ begin
   FChart.Option := AOption;
   FChart.SetBounds(0, 0, cW, cH);
   FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+end;
+
+procedure TAdvChartGeoTest.TestAMapNobodyRegisteredIsNoted;
+var
+  i: Integer;
+  s: string;
+begin
+  { [F1b] an empty geo used to be silent: upstream warns in its console, the
+    control said nothing, and 15 gallery charts drew a blank }
+  AssertTrue(TyChartRegisterMap('sq', cSquare));
+  NewChart('{"animation": false, "geo": [{"map": "sq"}, {"map": "f1bNowhere"}],'
+    + ' "series": [{"type": "map", "map": "f1bNowhereToo"}]}');
+  s := '';
+  for i := 0 to FChart.DiagnosticCount - 1 do
+    if Pos('no map is registered', FChart.Diagnostic(i)) > 0 then
+      s := s + FChart.Diagnostic(i) + '|';
+  AssertEquals(Format(rsTyChartMapNotRegistered, ['geo[1]', 'f1bNowhere']) + '|'
+    + Format(rsTyChartMapNotRegistered, ['series[0]', 'f1bNowhereToo']) + '|', s);
 end;
 
 procedure TAdvChartGeoTest.TestRegisterMapRefusesWhatDoesNotParse;

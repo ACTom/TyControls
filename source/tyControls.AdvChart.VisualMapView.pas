@@ -322,7 +322,7 @@ implementation
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Data, tyControls.AdvChart.Color,
      tyControls.AdvChart.Complete, tyControls.AdvChart.Symbol,
-     tyControls.AdvChart.Handlers;
+     tyControls.AdvChart.Handlers, tyControls.AdvChart.ZrPath;
 
 { ==================== small things ==================== }
 
@@ -909,137 +909,25 @@ begin
   end;
 end;
 
-const
-  PI2 = 2 * Pi;
-
-{ JavaScript's % for a positive divisor }
-function JsRem(A, B: Double): Double;
-begin
-  Result := A - B * Int(A / B);
-end;
-
-procedure FromArc(X, Y, RX, RY, AStart, AEnd: Double; AAnti: Boolean;
-  var MinX, MinY, MaxX, MaxY: Double);
-var
-  diff, sx, sy, ex, ey, angle, t: Double;
-begin
-  diff := Abs(AStart - AEnd);
-  if (JsRem(diff, PI2) < 1e-4) and (diff > 1e-4) then
-  begin
-    MinX := X - RX; MinY := Y - RY; MaxX := X + RX; MaxY := Y + RY;
-    Exit;
-  end;
-  sx := TyJsCos(AStart) * RX + X;
-  sy := TyJsSin(AStart) * RY + Y;
-  ex := TyJsCos(AEnd) * RX + X;
-  ey := TyJsSin(AEnd) * RY + Y;
-  MinX := Min(sx, ex); MinY := Min(sy, ey);
-  MaxX := Max(sx, ex); MaxY := Max(sy, ey);
-  AStart := JsRem(AStart, PI2);
-  if AStart < 0 then AStart := AStart + PI2;
-  AEnd := JsRem(AEnd, PI2);
-  if AEnd < 0 then AEnd := AEnd + PI2;
-  if (AStart > AEnd) and not AAnti then AEnd := AEnd + PI2
-  else if (AStart < AEnd) and AAnti then AStart := AStart + PI2;
-  if AAnti then
-  begin
-    t := AEnd;
-    AEnd := AStart;
-    AStart := t;
-  end;
-  angle := 0;
-  while angle < AEnd do
-  begin
-    if angle > AStart then
-    begin
-      sx := TyJsCos(angle) * RX + X;
-      sy := TyJsSin(angle) * RY + Y;
-      MinX := Min(MinX, sx); MinY := Min(MinY, sy);
-      MaxX := Max(MaxX, sx); MaxY := Max(MaxY, sy);
-    end;
-    angle := angle + Pi / 2;
-  end;
-end;
-
-{ PathProxy.getBoundingRect. Curves take their control points -- an
-  over-estimate; the default icon has none. }
+{ PathProxy.getBoundingRect, which is ZrPath's: a curve's box is its
+  extrema (bbox.fromCubic / fromQuadratic), not its control points. This unit
+  kept a copy that took the control points, so a custom icon whose curves
+  bulge less than their handles was fitted into its box too small and drawn
+  off-centre. [F1b: dataZoom had already moved to TyZrBBox.] }
 function PathRect(const ASegs: TZrSegArray): TTyXYWH;
+const
+  cCmd: array[TZrCmd] of TTyZrCmd = (zrM, zrL, zrC, zrQ, zrA, zrZ);
 var
-  i: Integer;
-  mnX, mnY, mxX, mxY, m2x, m2y, x2x, x2y, xi, yi, x0, y0, ea: Double;
-  s: TZrSeg;
-
-  procedure Line(AX0, AY0, AX1, AY1: Double);
-  begin
-    m2x := Min(AX0, AX1); m2y := Min(AY0, AY1);
-    x2x := Max(AX0, AX1); x2y := Max(AY0, AY1);
-  end;
-
+  p: TTyZrPath;
+  i, k: Integer;
 begin
-  mnX := MaxDouble; mnY := MaxDouble; mxX := -MaxDouble; mxY := -MaxDouble;
-  m2x := MaxDouble; m2y := MaxDouble; x2x := -MaxDouble; x2y := -MaxDouble;
-  xi := 0; yi := 0; x0 := 0; y0 := 0;
+  SetLength(p, Length(ASegs));
   for i := 0 to High(ASegs) do
   begin
-    s := ASegs[i];
-    if i = 0 then
-    begin
-      xi := s.V[0];
-      yi := s.V[1];
-      x0 := xi;
-      y0 := yi;
-    end;
-    case s.Cmd of
-      zcM:
-        begin
-          xi := s.V[0]; x0 := xi;
-          yi := s.V[1]; y0 := yi;
-          m2x := x0; m2y := y0; x2x := x0; x2y := y0;
-        end;
-      zcL:
-        begin
-          Line(xi, yi, s.V[0], s.V[1]);
-          xi := s.V[0]; yi := s.V[1];
-        end;
-      zcC:
-        begin
-          Line(xi, yi, s.V[4], s.V[5]);
-          m2x := Min(m2x, Min(s.V[0], s.V[2])); x2x := Max(x2x, Max(s.V[0], s.V[2]));
-          m2y := Min(m2y, Min(s.V[1], s.V[3])); x2y := Max(x2y, Max(s.V[1], s.V[3]));
-          xi := s.V[4]; yi := s.V[5];
-        end;
-      zcQ:
-        begin
-          Line(xi, yi, s.V[2], s.V[3]);
-          m2x := Min(m2x, s.V[0]); x2x := Max(x2x, s.V[0]);
-          m2y := Min(m2y, s.V[1]); x2y := Max(x2y, s.V[1]);
-          xi := s.V[2]; yi := s.V[3];
-        end;
-      zcA:
-        begin
-          ea := s.V[5] + s.V[4];
-          if i = 0 then
-          begin
-            x0 := TyJsCos(s.V[4]) * s.V[2] + s.V[0];
-            y0 := TyJsSin(s.V[4]) * s.V[3] + s.V[1];
-          end;
-          FromArc(s.V[0], s.V[1], s.V[2], s.V[3], s.V[4], ea, s.V[7] = 0,
-            m2x, m2y, x2x, x2y);
-          xi := TyJsCos(ea) * s.V[2] + s.V[0];
-          yi := TyJsSin(ea) * s.V[3] + s.V[1];
-        end;
-      zcZ:
-        begin
-          xi := x0;
-          yi := y0;
-        end;
-    end;
-    mnX := Min(mnX, m2x); mnY := Min(mnY, m2y);
-    mxX := Max(mxX, x2x); mxY := Max(mxY, x2y);
+    p[i].Cmd := cCmd[ASegs[i].Cmd];
+    for k := 0 to 7 do p[i].V[k] := ASegs[i].V[k];
   end;
-  if Length(ASegs) = 0 then
-    Exit(XYWH(0, 0, 0, 0));
-  Result := XYWH(mnX, mnY, mxX - mnX, mxY - mnY);
+  Result := TyZrBBox(p);
 end;
 
 { transformPath, each store a float32 one when the data is }

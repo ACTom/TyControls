@@ -9,12 +9,12 @@ unit umain;
   it is editable, because "paste an option from the web and it draws" is the
   claim being made.
 
-  IT IS ALSO A SCOREBOARD, and deliberately an honest one. Most of the gallery
-  needs series types that have no renderer yet, and those examples draw their
-  axes and say why underneath. The saying-why is not written here: it comes from
-  TyOptDiagnose, the same diagnostics the option editor shows, so the demo
-  cannot flatter the library by wording things more kindly than the library
-  does.
+  IT IS ALSO A SCOREBOARD, and deliberately an honest one. Whatever the chart
+  has to say about an option -- a key it does not know, a value outside its
+  list, a series it cannot place -- is shown underneath. The saying is not
+  written here: it comes from TyOptDiagnose, the same diagnostics the option
+  editor shows, so the demo cannot flatter the library by wording things more
+  kindly than the library does.
 
   WHY TyOptDiagnose AND NOT Chart.DiagnosticCount. The control's own
   diagnostics come from its build, and the build is only made during a PAINT --
@@ -35,7 +35,8 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
-  tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose;
+  tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose,
+  umaps;
 
 type
   { One row of gallery/index.json. `Ok` false means the harvester could not
@@ -74,6 +75,8 @@ type
     FEntries: array of TGalleryEntry;
     FCategories: TStringList;
     FGalleryDir: string;
+    { maps/ beside gallery/: the GeoJSON the geo examples register }
+    FMapsDir: string;
     { The gallery slot the memo and chart now hold, -1 for none. Picking a row
       in code fires the list's change event as well, so without it one click on
       a tab loaded the same option two or three times. }
@@ -101,11 +104,20 @@ resourcestring
   rsNoGallery = 'The gallery was not found. Run tools/advchart-gallery/harvest.js '
     + 'to build examples/advchart/gallery.';
   rsOptionOk = 'The option parsed and this chart draws.';
-  rsDiagnostics = '%d thing(s) the chart could not honour:';
+  rsDiagnostics = '%d note(s) on this option:';
   rsNotConverted = 'Not converted: %s';
   rsPickOne = 'Pick an example on the left.';
   rsSavedTo = 'Saved to %s';
   rsCounts = '%s — %d example(s)';
+  { said under the notes when an example needs a border map the demo does not
+    ship: %s the map name(s), %s the maps folder }
+  rsBorderMapNotShipped = 'This example needs the map %s, which the demo does '
+    + 'not include. Borders between countries are disputed, and some places '
+    + 'require published maps to be reviewed, so neither TyControls nor this demo '
+    + 'ships a map that draws them. To see the example, save a GeoJSON file under '
+    + 'the map''s name in %s (for instance china.json), or register one in code '
+    + 'with TyChartRegisterMap. Natural Earth (naturalearthdata.com) offers '
+    + 'public-domain country data.';
 
 { The gallery sits beside the .lpi, and the binary sits in
   lib/<cpu>-<os>/ under it -- so the same upward walk the .lpr uses to find
@@ -298,9 +310,12 @@ end;
 procedure TMainForm.Apply;
 var
   diags: TTyOptDiagArray;
-  i: Integer;
-  s: string;
+  i, notes: Integer;
+  s, border: string;
 begin
+  { THE PAGE'S OWN registerMap. An ECharts example fetches its GeoJSON before
+    it sets the option; the harvest kept only the map's name. }
+  RegisterGalleryMapsFor(OptionMemo.Text, FMapsDir);
   Chart.Option := OptionMemo.Text;
   if Chart.OptionError <> '' then
   begin
@@ -317,9 +332,45 @@ begin
     LblStatus.Caption := rsOptionOk;
     Exit;
   end;
-  s := Format(rsDiagnostics, [Length(diags)]);
+  { ONLY REAL NOTES ARE COUNTED. The all-clear row says the option is
+    understood; counting it under the header announced one thing the chart
+    "could not honour" above a single line saying nothing was wrong. When it is the only kind of row there
+    is, it is shown on its own, without a header. The header itself says
+    "note", not "failure": an option the catalog does not know is often one the
+    chart simply has no use for.
+
+    A LONG LIST IS CUT, and its last row says how many were left out. That row
+    is not a note of its own; what it hides is counted instead, so the header
+    gives the real total rather than the hundred rows that fit. }
+  notes := 0;
   for i := 0 to High(diags) do
-    s := s + LineEnding + '• ' + diags[i].Text;
+    case diags[i].Kind of
+      odkAllClear: ;
+      odkTruncated: Inc(notes, diags[i].Hidden);
+    else
+      Inc(notes);
+    end;
+  if notes = 0 then
+  begin
+    s := '';
+    for i := 0 to High(diags) do
+    begin
+      if s <> '' then s := s + LineEnding;
+      s := s + diags[i].Text;
+    end;
+  end
+  else
+  begin
+    s := Format(rsDiagnostics, [notes]);
+    for i := 0 to High(diags) do
+      if diags[i].Kind <> odkAllClear then
+        s := s + LineEnding + '• ' + diags[i].Text;
+  end;
+  { A MAP THE DEMO DOES NOT SHIP. The library only says the map is not
+    registered; the demo, which chose not to ship it, says why and what to do. }
+  border := BorderMapsMissing(OptionMemo.Text, FMapsDir);
+  if border <> '' then
+    s := s + LineEnding + LineEnding + Format(rsBorderMapNotShipped, [border, FMapsDir]);
   LblStatus.Caption := s;
 end;
 
@@ -343,6 +394,8 @@ begin
     LblStatus.Caption := rsNoGallery
   else
   begin
+    FMapsDir := ExtractFilePath(ExcludeTrailingPathDelimiter(FGalleryDir))
+      + 'maps' + PathDelim;
     LoadIndex;
     FillCategories;
     FillList;

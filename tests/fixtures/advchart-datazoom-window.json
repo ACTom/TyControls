@@ -1600,6 +1600,138 @@
    ]
   },
   {
+   "id": "W8c",
+   "groups": ["W"],
+   "note": "time x, numeric startValue / endValue with fractions of a ms: TimeScale.parse rounds a number (Math.round) -- the other value-mode ends are never rounded (W9e); F1b",
+   "width": 800,
+   "height": 600,
+   "gallery": null,
+   "option": {
+    "useUTC": true,
+    "xAxis": {"type":"time"},
+    "yAxis": {"type":"value"},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [1577836800000,12.34],[1577923200000,45.67],[1578009600000,23.456],[1578096000000,78.9],[1578182400000,34.5],[1578268800000,56.78],[1578355200000,90.12],[1578441600000,11.1],[1578528000000,67.89],[1578614400000,43.21],[1578700800000,29.99],
+       [1578787200000,88.8],[1578873600000,14.7],[1578960000000,63.3],[1579046400000,51.05],[1579132800000,37.7],[1579219200000,72.25],[1579305600000,19.9],[1579392000000,84.4],[1579478400000,58.6]
+      ]
+     }
+    ],
+    "dataZoom": [{"startValue":1578009600000.4,"endValue":1578614400000.6}]
+   },
+   "dataZooms": [
+    {
+     "index": 0,
+     "subType": "slider",
+     "orient": "horizontal",
+     "noTarget": false,
+     "targets": [{"dim":"x","axisIndex":0}],
+     "hosts": [{"dim":"x","axisIndex":0}],
+     "rangePropMode": ["value","value"],
+     "settled": {"startValue":1578009600000.4,"endValue":1578614400000.6,"start":null,"end":null},
+     "filterMode": "filter",
+     "window": {
+      "value": ["4276f68b3a000000","4276f8cc02401000"],
+      "valueText": ["1578009600000","1578614400001"],
+      "percent": ["40250d79435e50d7","4047af286c4cebf9"],
+      "percentText": ["10.526315789473683","47.36842111354776"],
+      "percentInverted": ["40250d79435e50d7","4047af286c4cebf9"],
+      "percentInvertedText": ["10.526315789473683","47.36842111354776"],
+      "valuePrecision": "0000000000000000",
+      "valuePrecisionText": "0"
+     },
+     "minMaxSpan": {"minSpan":null,"minSpanText":null,"minValueSpan":null,"minValueSpanText":null,"maxSpan":null,"maxSpanText":null,"maxValueSpan":null,"maxValueSpanText":null}
+    }
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "index": 0,
+     "gridIndex": 0,
+     "type": "time",
+     "categoryCount": null,
+     "zoomed": true,
+     "hostedBy": 0,
+     "pxSpan": "4082c00000000000",
+     "pxSpanText": "600",
+     "pxSpanFinal": "4082c00000000000",
+     "pxSpanFinalText": "600",
+     "dataMM": ["4276f5e66e800000","4276fc03fbc00000"],
+     "dataMMText": ["1577836800000","1579478400000"],
+     "noZoom": ["4276f5e66e800000","4276fc03fbc00000"],
+     "noZoomText": ["1577836800000","1579478400000"],
+     "zoomMM": ["4276f68b3a000000","4276f8cc02401000"],
+     "zoomMMText": ["1578009600000","1578614400001"],
+     "extent": ["4276f68b3a000000","4276f8cc02401000"],
+     "extentText": ["1578009600000","1578614400001"],
+     "fixMM": [true,true],
+     "zoomFixMM": [true,true],
+     "interval": null,
+     "intervalText": null,
+     "ticks": ["4276f68b3a000000","4276f6dd9fc00000","4276f73005800000","4276f7826b400000","4276f7d4d1000000","4276f82736c00000","4276f8799c800000","4276f8cc02400000","4276f8cc02401000"],
+     "ticksText": ["1578009600000","1578096000000","1578182400000","1578268800000","1578355200000","1578441600000","1578528000000","1578614400000","1578614400001"]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "gridIndex": 0,
+     "type": "value",
+     "categoryCount": null,
+     "zoomed": false,
+     "hostedBy": null,
+     "pxSpan": null,
+     "pxSpanText": null,
+     "pxSpanFinal": "407c700000000000",
+     "pxSpanFinalText": "455",
+     "dataMM": ["4026333333333333","405687ae147ae148"],
+     "dataMMText": ["11.1","90.12"],
+     "noZoom": ["0000000000000000","405687ae147ae148"],
+     "noZoomText": ["0","90.12"],
+     "zoomMM": [null,null],
+     "zoomMMText": [null,null],
+     "extent": ["0000000000000000","4059000000000000"],
+     "extentText": ["0","100"],
+     "fixMM": [false,false],
+     "zoomFixMM": [false,false],
+     "interval": "4034000000000000",
+     "intervalText": "20",
+     "ticks": ["0000000000000000","4034000000000000","4044000000000000","404e000000000000","4054000000000000","4059000000000000"],
+     "ticksText": ["0","20","40","60","80","100"]
+    }
+   ],
+   "series": [
+    {
+     "index": 0,
+     "type": "line",
+     "name": "series/0",
+     "filtered": false,
+     "coordinateSystem": "cartesian2d",
+     "xAxisIndex": 0,
+     "yAxisIndex": 0,
+     "dimNames": ["x","y"],
+     "axisDims": {"x":[0],"y":[1]},
+     "stackedDim": null,
+     "stackResultDim": null,
+     "rawCount": 20,
+     "count": 8,
+     "rawIndices": [2,3,4,5,6,7,8,9],
+     "approx": [{"coordDim":"x","dim":0,"extent":["4276f68b3a000000","4276f8cc02401000"],"extentText":["1578009600000","1578614400001"]}],
+     "stage": null,
+     "emptied": null,
+     "layout": [
+      ["405e000000000000","4079d46740000000"],["4069b6db60000000","4064202900000000"],["407236db60000000","4076b06660000000"],["4077924920000000","40705a6a80000000"],["407cedb6e0000000","405b7d0e60000000"],["4081249240000000","407d57eb80000000"],
+      ["4083d24920000000","406a633740000000"],["4086800000000000","4074364fe0000000"]
+     ],
+     "layoutText": [
+      ["120","413.27520751953125"],["205.7142791748047","161.0050048828125"],["291.4285583496094","363.0249938964844"],["377.1428527832031","261.6510009765625"],["462.8571472167969","109.9540023803711"],["548.5714111328125","469.4949951171875"],
+      ["634.2857055664062","211.10049438476562"],["720","323.3945007324219"]
+     ]
+    }
+   ]
+  },
+  {
    "id": "W16",
    "groups": ["W"],
    "note": "category {startValue 'c3', endValue 'c7'}: OrdinalScale.parse of a category name; percent = ordinal / 19 * 100",
@@ -16435,7 +16567,7 @@
    "mutation": "the percent window pins the axis, filters and sets the approximate extents instead of the value window",
    "named": ["W2","W4","W6"],
    "changed": [
-    "W1","W2","W3","W3b","W3n","W4","W4c","W5","W6","W7","W7b","W8a","W8b","W16","W9d","W11b","W11c","W12c","W13a","W13b","W13c","W14","W14b","T1","T2","T2b","T3","T4","T5","T6","T8","T9c","T10","T11","A1","A2","A3","F2","F5","F5b","F6",
+    "W1","W2","W3","W3b","W3n","W4","W4c","W5","W6","W7","W7b","W8a","W8b","W8c","W16","W9d","W11b","W11c","W12c","W13a","W13b","W13c","W14","W14b","T1","T2","T2b","T3","T4","T5","T6","T8","T9c","T10","T11","A1","A2","A3","F2","F5","F5b","F6",
     "G-line-function","G-area-simple","G-grid-multiple","G-mix-zoom-on-value","G-line-aqi","G-candlestick-brush","G-candlestick-sh-2015","G-dataset-encode1","G-area-rainfall","G-bar-gradient"
    ],
    "ok": true,
@@ -16532,7 +16664,7 @@
    "id": "percent-always",
    "mutation": "rangePropMode is always ['percent', 'percent']",
    "named": ["W9a","W9c","W10c","G-line-function","G-line-aqi"],
-   "changed": ["W7b","W8b","W16","W9a","W9c","W9d","W9e","W10c","W10e","A2","G-line-function","G-line-aqi"],
+   "changed": ["W7b","W8b","W8c","W16","W9a","W9c","W9d","W9e","W10c","W10e","A2","G-line-function","G-line-aqi"],
    "ok": true,
    "differs": [
     {
@@ -16585,8 +16717,8 @@
    "mutation": "needIncludeZero ignored in the base",
    "named": ["W5"],
    "changed": [
-    "W1","W2","W3","W3b","W3n","W4","W4c","W5","W6","W7b","W8a","W8b","W16","W9a","W9b","W9c","W9d","W9e","W10a","W10d","W11b","W12a","W12c","W12d","W13a","W13b","W13c","W14","T1","T2","T2b","T3","T4","T6","T7","T8","T9c","T10","T11","A1","A2","A3",
-    "F1","F4b","F5","F5b","F6","G-grid-multiple","G-mix-zoom-on-value","G-line-aqi","G-dataset-encode1","G-area-rainfall","G-bar-gradient"
+    "W1","W2","W3","W3b","W3n","W4","W4c","W5","W6","W7b","W8a","W8b","W8c","W16","W9a","W9b","W9c","W9d","W9e","W10a","W10d","W11b","W12a","W12c","W12d","W13a","W13b","W13c","W14","T1","T2","T2b","T3","T4","T6","T7","T8","T9c","T10","T11","A1","A2",
+    "A3","F1","F4b","F5","F5b","F6","G-grid-multiple","G-mix-zoom-on-value","G-line-aqi","G-dataset-encode1","G-area-rainfall","G-bar-gradient"
    ],
    "ok": true,
    "differs": [
