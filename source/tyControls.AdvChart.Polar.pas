@@ -43,7 +43,8 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Paint,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Convert;
+  tyControls.AdvChart.Builder, tyControls.AdvChart.Convert,
+  tyControls.AdvChart.Data, tyControls.AdvChart.Series;
 
 const
   TyPolarCoordSysName = 'polar';
@@ -177,12 +178,35 @@ type
   and the family are in ANotes, one entry each as 'polarIndex:mainType'. }
 function TyBuildPolars(AOption: TTyChartOption; const AViewport: TTyRectF;
   out AMissing: TTyStringArray): TTyPolarArray;
+{ resizePolar: the centre against AContainer (polar.center's percentages of
+  its width and height, plus its x and y), the radius extent against half
+  its shorter side. AContainer is createBoxLayoutReference's refContainer --
+  the canvas, or the matrix cell or calendar day a polar names with
+  `coordinateSystem` + `coord` [Batch 151: out of TyBuildPolars]. }
+procedure TyPolarResize(AOption: TTyChartOption; APolar: TTyPolar;
+  const AContainer: TTyXYWH);
 
-{ updatePolarScale: each axis' raw extent (no series yet), its nice step --
-  the grid's own routine -- and, when the raw extent ran backwards, its
-  inverse toggled; then a category angle axis without a band gives up one
-  band of its extent so the last category does not sit on the first. }
-procedure TyPolarApplyExtents(AOption: TTyChartOption; const APolars: TTyPolarArray);
+{ THE SERIES ON A POLAR [Batch 113, C4]: every binding that resolved to a
+  polar takes that polar's axes -- XAxis the radius, YAxis the angle (the
+  store's columns, polarDimensions' order), BaseAxis getBaseAxis' answer,
+  ValueAxis the other -- and the polar itself in Polar. A binding naming a
+  polar that was not built keeps no axes and draws nothing. }
+procedure TyAttachPolarSeries(var ABindings: TTySeriesBindingArray;
+  const APolars: TTyPolarArray);
+
+{ updatePolarScale: each axis' raw extent -- the series on it, a stack's
+  sums, a bar's start, a dataZoom's window (AZooms, as the grid's axes take
+  it) [Batch 113: there were no series] -- its nice step, the grid's own
+  routine, a bar's containShape on the base axis, and, when the raw extent
+  ran backwards, its inverse toggled; then a category angle axis without a
+  band gives up one band of its extent so the last category does not sit on
+  the first. }
+procedure TyPolarApplyExtents(AOption: TTyChartOption; const APolars: TTyPolarArray;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  const AZooms: TTyAxisZoomArray); overload;
+{ no series, no zoom: the C3 form }
+procedure TyPolarApplyExtents(AOption: TTyChartOption; const APolars: TTyPolarArray); overload;
 
 { Both axis views of every polar, as AngleAxisView and RadiusAxisView build
   them. AMinorTickLenLogical is the theme's minor tick length where the
@@ -205,6 +229,14 @@ function TyPolarFullTurn(AFirst, ALast: Double): Boolean;
 function TyPolarRadialLine(APolar: TTyPolar; AR0, AR1, AAngle: Double): TTyPolarLine;
 { graphic.subPixelOptimizeLine, with Math.round }
 procedure TyPolarSubPixelLine(var ALine: TTyPolarLine; AWidth: Double);
+{ AxisBuilder's tick marks of an axis laid out by ASpec (getTicksCoords: a
+  category axis' interval and band edges, axisTick.customValues, else every
+  major tick), in the axis' own coordinates; and its minor ticks' --
+  shared with the parallel axes [Batch 128] }
+function TyPolarTickMarks(AOption: TTyChartOption; AAxis: TTyAxis;
+  const ASpec: TTyAxisLayoutSpec; const AFurn: TTyAxisFurniture;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisMarkArray;
+function TyPolarMinorCoords(AAxis: TTyAxis): TTyDoubleArray;
 
 { ---- the pointer ---- }
 type
@@ -242,8 +274,7 @@ function TyPolarContainJson(APolar: TTyPolar; APoint: TJSONData): Boolean;
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
-  tyControls.AdvChart.AxisName, tyControls.AdvChart.Series,
-  tyControls.AdvChart.ZrPath;
+  tyControls.AdvChart.AxisName, tyControls.AdvChart.ZrPath;
 
 const
   cTwoPi = 2 * Pi;
@@ -527,12 +558,12 @@ var
   n, p, q, cnt, ai, ri: Integer;
   ids: TTyStringArray;
   holes: array of Boolean;
-  d, c0, c1, r0d, r1d: TJSONData;
+  d: TJSONData;
   node, an, rn: TJSONObject;
   ra, aa: TTyAxis;
   polar: TTyPolar;
   u: string;
-  w, h, size, start, stop, r0, r1: Double;
+  start, stop: Double;
   inv: Boolean;
   mask: TFPUExceptionMask;
 
@@ -572,8 +603,6 @@ begin
     ids[p] := StrIn(ObjOf(d), 'id');
   end;
   SetLength(Result, n);
-  w := AViewport.Right - AViewport.Left;
-  h := AViewport.Bottom - AViewport.Top;
   mask := MaskFP;
   try
     for p := 0 to n - 1 do
@@ -607,6 +636,31 @@ begin
       else if inv then stop := start + -360
       else stop := start + 360;
       aa.SetPxExtent(start, stop);
+      { resizePolar on the canvas; one in a matrix cell or a calendar day is
+        placed again once those are laid out [Batch 151] }
+      TyPolarResize(AOption, polar, TyXYWHOfRect(AViewport));
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyPolarResize(AOption: TTyChartOption; APolar: TTyPolar;
+  const AContainer: TTyXYWH);
+var
+  d, c0, c1, r0d, r1d: TJSONData;
+  node: TJSONObject;
+  ra: TTyAxis;
+  w, h, size, r0, r1: Double;
+  mask: TFPUExceptionMask;
+begin
+  if (APolar = nil) or (AOption = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt('polar', APolar.Index));
+  ra := APolar.RadiusAxis;
+  w := AContainer.W;
+  h := AContainer.H;
+  mask := MaskFP;
+  try
       { resizePolar: the centre against the container, the radius against
         half its shorter side }
       d := FindIn(node, 'center');
@@ -614,15 +668,15 @@ begin
       c1 := nil;
       if d = nil then
       begin
-        polar.SetCentre(TyBoxRawResolve(TyBoxRawStr('50%'), w) + AViewport.Left,
-          TyBoxRawResolve(TyBoxRawStr('50%'), h) + AViewport.Top);
+        APolar.SetCentre(TyBoxRawResolve(TyBoxRawStr('50%'), w) + AContainer.X,
+          TyBoxRawResolve(TyBoxRawStr('50%'), h) + AContainer.Y);
       end
       else
       begin
         if (d.JSONType = jtArray) and (d.Count > 0) then c0 := d.Items[0];
         if (d.JSONType = jtArray) and (d.Count > 1) then c1 := d.Items[1];
-        polar.SetCentre(TyBoxRawResolve(TyBoxRawOf(c0), w) + AViewport.Left,
-          TyBoxRawResolve(TyBoxRawOf(c1), h) + AViewport.Top);
+        APolar.SetCentre(TyBoxRawResolve(TyBoxRawOf(c0), w) + AContainer.X,
+          TyBoxRawResolve(TyBoxRawOf(c1), h) + AContainer.Y);
       end;
       size := Math.Min(w, h) / 2;
       d := FindIn(node, 'radius');
@@ -651,15 +705,44 @@ begin
         r0 := TyBoxRawResolve(TyBoxRawNum(0), size);
         r1 := TyBoxRawResolve(TyBoxRawOf(d), size);
       end;
-      if polar.RadiusInverse then ra.SetPxExtent(r1, r0)
+      if APolar.RadiusInverse then ra.SetPxExtent(r1, r0)
       else ra.SetPxExtent(r0, r1);
-    end;
   finally
     UnmaskFP(mask);
   end;
 end;
 
+procedure TyAttachPolarSeries(var ABindings: TTySeriesBindingArray;
+  const APolars: TTyPolarArray);
+var
+  i: Integer;
+  p: TTyPolar;
+begin
+  for i := 0 to High(ABindings) do
+  begin
+    if not ABindings[i].Resolved then Continue;
+    if ABindings[i].CoordSysName <> TyPolarCoordSysName then Continue;
+    if (ABindings[i].PolarIndex < 0) or (ABindings[i].PolarIndex > High(APolars)) then Continue;
+    p := APolars[ABindings[i].PolarIndex];
+    if p = nil then Continue;
+    ABindings[i].Polar := p;
+    ABindings[i].XAxis := p.RadiusAxis;
+    ABindings[i].YAxis := p.AngleAxis;
+    { BaseBarSeries.getBaseAxis and every other series': the polar's }
+    ABindings[i].BaseAxis := p.BaseAxis;
+    ABindings[i].ValueAxis := p.OtherAxis(ABindings[i].BaseAxis);
+  end;
+end;
+
 procedure TyPolarApplyExtents(AOption: TTyChartOption; const APolars: TTyPolarArray);
+begin
+  TyPolarApplyExtents(AOption, APolars, nil, [], nil, nil, nil);
+end;
+
+procedure TyPolarApplyExtents(AOption: TTyChartOption; const APolars: TTyPolarArray;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  const AZooms: TTyAxisZoomArray);
 var
   i: Integer;
   p: TTyPolar;
@@ -668,17 +751,66 @@ var
   mask: TFPUExceptionMask;
 
   { the polar's two axis models default splitNumber themselves: 12 on the
-    angle axis, 5 on the radius -- over the time axis' 6 on either }
+    angle axis, 5 on the radius -- over the time axis' 6 on either. The raw
+    extent is the series' (TyAxisNoZoomExtent, the grid's own), or the
+    window of a dataZoom that hosts the axis, its pinned ends fixed; then a
+    bar's half band where the axis is a polar bar's base (containShape) }
   function Nice(AAxis: TTyAxis; ADefaultSplit: Double): Boolean;
   var
     node: TJSONObject;
     raw: TTyAxisRawExtent;
+    any, ctnShp, fixLo, fixHi: Boolean;
+    k, zi: Integer;
   begin
     node := ObjOf(AOption.ComponentAt(AAxis.MainType, AAxis.ComponentIndex));
-    { the series on this polar join the raw extent with C4; none yet }
-    raw := TyAxisRawExtent(node, AAxis, Infinity, NegInfinity, False);
-    TyNiceAxisScale(AOption, AAxis, node, raw, False, nil, NaN, False, False,
-      False, Result, ADefaultSplit);
+    { the angle axis' model defaults containShape to false ("a round axis is
+      not suitable"); the radius takes the common default }
+    if (AAxis.MainType = 'angleAxis') and ((node = nil) or (node.Find('containShape') = nil)
+      or (node.Find('containShape').JSONType = jtNull)) then
+      ctnShp := False
+    else
+      ctnShp := (AIndex <> nil) and TyAxisWantsContainShape(AAxis, node, ABindings,
+        TyPolarCoordSysName);
+    fixLo := False;
+    fixHi := False;
+    zi := -1;
+    for k := 0 to High(AZooms) do
+      if AZooms[k].Axis = AAxis then zi := k;
+    if zi >= 0 then
+    begin
+      raw := AZooms[zi].Raw;
+      any := AZooms[zi].Any;
+      if not IsNan(AZooms[zi].ZoomLo) then
+      begin
+        raw.Lo := AZooms[zi].ZoomLo;
+        raw.FixLo := True;
+        fixLo := True;
+      end;
+      if not IsNan(AZooms[zi].ZoomHi) then
+      begin
+        raw.Hi := AZooms[zi].ZoomHi;
+        raw.FixHi := True;
+        fixHi := True;
+      end;
+    end
+    else if AIndex <> nil then
+      raw := TyAxisNoZoomExtent(AOption, ABindings, AStores, AStacks, AIndex,
+        AAxis, AAxis.MainType, any)
+    else
+    begin
+      raw := TyAxisRawExtent(node, AAxis, Infinity, NegInfinity, False);
+      any := False;
+    end;
+    TyNiceAxisScale(AOption, AAxis, node, raw, any, nil, NaN, fixLo, fixHi,
+      ctnShp, Result, ADefaultSplit);
+    if ctnShp then
+    begin
+      { a band already holds its bar, and a blank axis has none }
+      if (AAxis.AxisType = atCategory) and ((not (AAxis.Scale is TTyOrdinalScale))
+        or AAxis.Scale.MarkedBlank) then Exit;
+      TyAxisApplyContainShape(AAxis, ABindings, AStores, AIndex,
+        TyPolarCoordSysName, fixLo, fixHi);
+    end;
   end;
 
 begin
@@ -871,6 +1003,18 @@ begin
     Inc(k);
   end;
   SetLength(Result, k);
+end;
+
+function TyPolarTickMarks(AOption: TTyChartOption; AAxis: TTyAxis;
+  const ASpec: TTyAxisLayoutSpec; const AFurn: TTyAxisFurniture;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisMarkArray;
+begin
+  Result := TickMarks(AOption, AAxis, ASpec, AFurn, AMeasurer, APPI);
+end;
+
+function TyPolarMinorCoords(AAxis: TTyAxis): TTyDoubleArray;
+begin
+  Result := MinorCoords(AAxis);
 end;
 
 { a point through the axis group's matrix -- none where it needs no local

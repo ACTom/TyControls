@@ -89,6 +89,12 @@ function TyRtDefaultOf(AHasFill: Boolean; AFill: TTyChartColor;
 function TyRtLay(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+{ THE SAME ABOUT (ABaseX, ABaseY) in the text's own frame, CSS px: a text
+  whose overflow area moved its base (zrender Text's
+  calcInnerTextOverflowArea, a matrix cell's label) [Batch 145] }
+function TyRtLayAt(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; ABaseX, ABaseY, AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
 
 { THE BOX THE PIECES OCCUPY in their own frame: zrender's Text
   getBoundingRect, the union of every child -- an undrawn rect included, a
@@ -752,6 +758,21 @@ begin
     m := AMeasurer;
   Result := TyRtLayout(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich, ADefault,
     0, 0, m).Pieces;
+end;
+
+function TyRtLayAt(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; ABaseX, ABaseY, AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var m: ITyTextMeasurer;
+begin
+  Result := nil;
+  if AMeasurer = nil then Exit;
+  if (AScale > 0) and (Abs(AScale - 1) > 1e-12) then
+    m := TScaledMeasurer.Create(AMeasurer, AScale)
+  else
+    m := AMeasurer;
+  Result := TyRtLayout(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich, ADefault,
+    ABaseX, ABaseY, m).Pieces;
 end;
 
 function AdjustX(AX, AW: Double; AAlign: TTyRtAlign): Double;

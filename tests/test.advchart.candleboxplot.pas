@@ -1038,12 +1038,13 @@ begin
       '{"transform":{"type":"filter","config":{"dimension":0,">":1}}},' +
       '{"transform":[]},{"transform":{"type":"boxplot"},"fromDatasetIndex":9},' +
       '{"source":[{"a":1}]},{"transform":{"type":"boxplot"},"fromDatasetIndex":4}]}'));
-    { D2's, not here yet }
-    AssertNull('a filter', cache.ResultNode(opt, 1, 0));
+    { [Batch 133] the filter is D2's and has a table now }
+    AssertNotNull('a filter', cache.ResultNode(opt, 1, 0));
     { an empty pipe throws upstream }
     AssertNull('an empty pipe', cache.ResultNode(opt, 2, 0));
-    { an upstream naming nothing }
-    AssertNull('no upstream', cache.ResultNode(opt, 3, 0));
+    { an upstream naming nothing: [Batch 133] the dataset is a root one,
+      read from its own source, which it has not }
+    AssertFalse('no upstream', TySourceOf(opt, 3, -1, cache).Valid);
     { a table of objects is not a boxplot's input }
     AssertNull('object rows', cache.ResultNode(opt, 5, 0));
     { and the root is itself }

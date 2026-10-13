@@ -581,7 +581,7 @@ function transcribeCase(c, top, mut) {
     s.rows.forEach((row, i) => {
       const raw = s.rawItems[i];
       const run = {
-        color: seriesColor, opacity: s.opacity == null ? undefined : num(s.opacity),
+        color: seriesColor, opacity: s.opacity == null || mut.ownOpacityIgnored ? undefined : num(s.opacity),
         symbol: s.symbol, symbolSize: s.symbolSize == null ? undefined : (s.symbolSizeArray ? s.symbolSize.map(num) : num(s.symbolSize[0])),
         liftZ: undefined, fromPalette: s.colorFromPalette,
       };
@@ -599,7 +599,7 @@ function transcribeCase(c, top, mut) {
       // 4500: dataStyleTask, dataSymbolTask (the raw item's own keys), then the palette
       if (isObj(raw) && isObj(raw.itemStyle)) {
         if (raw.itemStyle.color != null) { run.color = C.parse(raw.itemStyle.color); run.fromPalette = false; }
-        if (raw.itemStyle.opacity != null) run.opacity = raw.itemStyle.opacity;
+        if (raw.itemStyle.opacity != null && !mut.ownOpacityIgnored) run.opacity = raw.itemStyle.opacity;
       }
       if (isObj(raw)) {
         if (raw.symbol != null) run.symbol = raw.symbol;
@@ -864,6 +864,14 @@ const CASES = [
   { id: 'C7e', groups: ['C7'], note: 'pie, inRange {colorLightness} only, range [300, 600]: outOfRange completes to colorLightness [0, 0] -> black, opaque',
     option: { legend: {}, visualMap: { show: false, min: 0, max: 600, range: [300, 600], inRange: { colorLightness: [0.3, 0.7] } },
       series: [{ type: 'pie', itemStyle: { color: '#c23531' }, data: pieData([100, 350, 500]) }] } },
+  { id: 'C7f', groups: ['C7'], note: "pie, no visualMap: the series itemStyle.opacity 0.6 is every sector's; a row's own 0.25 (and 0) replaces it",
+    option: { series: [{ type: 'pie', itemStyle: { opacity: 0.6 }, data: pieData([10, { value: 20, itemStyle: { opacity: 0.25 } }, 30,
+      { value: 40, itemStyle: { opacity: 0 } }]) }] } },
+  { id: 'C7g', groups: ['C7'], note: "pie, inRange {opacity: [0.2, 1]} over the series itemStyle.opacity 0.5: the visual replaces the series', the row's "
+    + 'own 0.9 replaces the visual, a visualMap:false row keeps the series 0.5',
+    option: { visualMap: { show: false, min: 0, max: 100, inRange: { opacity: [0.2, 1] } },
+      series: [{ type: 'pie', itemStyle: { opacity: 0.5 }, data: pieData([20, 60, { value: 100, itemStyle: { opacity: 0.9 } },
+        { value: 80, visualMap: false }]) }] } },
   { id: 'L1', groups: ['line'], note: "line symbols take the row colour: s0 default emptyCircle (fill '#fff', stroke = row colour, lineWidth 2), "
     + "s1 symbol 'circle' (fill = row colour; row 1 itemStyle.color '#00aa00' wins), s2 its own visualMap with colorLightness + symbolSize",
   option: { xAxis: { type: 'category', data: cat(3) }, yAxis: {},
@@ -1172,6 +1180,8 @@ const GUARDS = [
   { id: 'C7-rescue', mutation: 'no zero-alpha rescue in the by-datum legend', mut: { noRescue: true }, named: ['C7a', 'C7b', 'C7c', 'C7d'] },
   { id: 'C7-funnel', mutation: 'the funnel polygon takes the visual opacity', mut: { funnelVisualOpacity: true }, named: ['C7d'] },
   { id: 'C7-lightness', mutation: 'completeInactive gives colorLightness no [0, 0] default', mut: { noInactiveLightness: true }, named: ['C7e'] },
+  { id: 'C7-ownopacity', mutation: 'the series and item itemStyle.opacity ignored (only a visual opacity drawn)', mut: { ownOpacityIgnored: true },
+    named: ['C7f', 'C7g'] },
   { id: 'L-series', mutation: 'line symbols painted in the series colour (the port today)', mut: { lineSeriesColour: true }, named: ['L1'] },
   { id: 'L-empty', mutation: "an empty symbol filled with the colour instead of '#fff'", mut: { emptyFilled: true }, named: ['L1', 'C6'] },
   { id: 'R-ignored', mutation: 'radar ignores the visualMap', mut: { radarIgnored: true }, named: ['R1', 'R2'] },

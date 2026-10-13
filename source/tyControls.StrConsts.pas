@@ -502,6 +502,81 @@ resourcestring
   rsTyChartExportOptsBad = 'The export options are not valid JSON.';
   rsTyChartLoadingCfgBad = 'The loading options are not valid JSON.';
 
+  // --- AdvanceChart: the toolbox [Batch 125] ---
+  // The icons' titles and the data view's words. The English is ECharts'
+  // own locale (langEN.ts toolbox), so an untranslated build measures and
+  // lays out the titles exactly as upstream does; the data view's Close
+  // button is rsMsgBtnClose.
+  rsTyChartToolboxSaveAsImage = 'Save as Image';
+  rsTyChartToolboxRestore = 'Restore';
+  rsTyChartToolboxDataView = 'Data View';
+  rsTyChartToolboxDataViewRefresh = 'Refresh';
+  rsTyChartToolboxZoom = 'Zoom';
+  rsTyChartToolboxZoomBack = 'Zoom Reset';
+  rsTyChartToolboxLine = 'Switch to Line Chart';
+  rsTyChartToolboxBar = 'Switch to Bar Chart';
+  rsTyChartToolboxStack = 'Stack';
+  rsTyChartToolboxTiled = 'Tile';
+  // the brush feature's buttons [Batch 127] (langEN.ts toolbox.brush.title)
+  rsTyChartToolboxBrushRect = 'Box Select';
+  rsTyChartToolboxBrushPolygon = 'Lasso Select';
+  rsTyChartToolboxBrushLineX = 'Horizontally Select';
+  rsTyChartToolboxBrushLineY = 'Vertically Select';
+  rsTyChartToolboxBrushKeep = 'Keep Selections';
+  rsTyChartToolboxBrushClear = 'Clear Selections';
+  // what the data view says when its text does not parse back
+  rsTyChartToolboxDataViewBad = 'The data view''s text could not be read back: %s';
+  // the save dialog's filter for saveAsImage
+  rsTyChartToolboxImageFilter = 'PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*';
+
+
+  // --- AdvanceChart: the chart's description, its aria-label [Batch 131] ---
+  // ECharts' own locale (langEN.ts aria and series.typeNames), so an
+  // untranslated build says exactly what upstream's EN build says. The words
+  // in braces are placeholders the chart fills in: keep them as they are.
+  // A leading or trailing space is part of the sentence.
+  rsTyChartAriaWithTitle = 'This is a chart about "{title}"';
+  rsTyChartAriaWithoutTitle = 'This is a chart';
+  rsTyChartAriaSingleWithName = ' with type {seriesType} named {seriesName}.';
+  rsTyChartAriaSingleWithoutName = ' with type {seriesType}.';
+  rsTyChartAriaMultiplePrefix = '. It consists of {seriesCount} series count.';
+  rsTyChartAriaMultipleWithName = ' The {seriesId} series is a {seriesType} representing {seriesName}.';
+  rsTyChartAriaMultipleWithoutName = ' The {seriesId} series is a {seriesType}.';
+  rsTyChartAriaAllData = 'The data is as follows: ';
+  rsTyChartAriaPartialData = 'The first {displayCnt} items are: ';
+  rsTyChartAriaDataWithName = 'the data for {name} is {value}';
+  // The four separators in one string, '|' between them: between two
+  // series, after the last, between two values or rows, after the last.
+  // One string because some are empty in one language and not another.
+  rsTyChartAriaSeparators = '||, |. ';
+  // the series types' names (series.typeNames)
+  rsTyChartTypePie = 'Pie chart';
+  rsTyChartTypeBar = 'Bar chart';
+  rsTyChartTypeLine = 'Line chart';
+  rsTyChartTypeScatter = 'Scatter plot';
+  rsTyChartTypeEffectScatter = 'Ripple scatter plot';
+  rsTyChartTypeRadar = 'Radar chart';
+  rsTyChartTypeTree = 'Tree';
+  rsTyChartTypeTreemap = 'Treemap';
+  rsTyChartTypeBoxplot = 'Boxplot';
+  rsTyChartTypeCandlestick = 'Candlestick';
+  rsTyChartTypeK = 'K line chart';
+  rsTyChartTypeHeatmap = 'Heat map';
+  rsTyChartTypeMap = 'Map';
+  rsTyChartTypeParallel = 'Parallel coordinate map';
+  rsTyChartTypeLines = 'Line graph';
+  rsTyChartTypeGraph = 'Relationship graph';
+  rsTyChartTypeSankey = 'Sankey diagram';
+  rsTyChartTypeFunnel = 'Funnel chart';
+  rsTyChartTypeGauge = 'Gauge';
+  rsTyChartTypePictorialBar = 'Pictorial bar';
+  rsTyChartTypeThemeRiver = 'Theme River Map';
+  rsTyChartTypeSunburst = 'Sunburst';
+  rsTyChartTypeCustom = 'Custom chart';
+  // Also what a screen reader calls a chart that has no title [Batch 144;
+  // one string since Milestone D9-D14, not a second 'Chart'].
+  rsTyChartTypeChart = 'Chart';
+
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
   // design-time editor, so they are as translatable as any caption. They were
@@ -519,9 +594,70 @@ resourcestring
   rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
   rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
   rsTyChartSeriesNoRenderer = 'series[%d]: the "%s" series type is not drawn yet';
+  rsTyChartCustomNoRenderItem =
+    'series[%d]: no renderItem is registered as "%s", so nothing is drawn';
+  rsTyChartCustomRenderItemFailed = 'series[%d]: renderItem "%s" failed: %s';
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
+  // --- AdvanceChart: dataset transforms [Batch 133] ---
+  // Why a dataset has no table: the chart's diagnostics say
+  // rsTyChartDatasetNoTable with one of the reasons below.  Upstream
+  // throws out of setOption instead.
+  rsTyChartDatasetNoTable = 'dataset[%d] has no table: %s';
+  rsTyDsReadsItself = 'it reads itself';
+  rsTyDsUpstreamFailed = 'dataset[%d], which it reads, has no table';
+  rsTyDsNoResult = 'its upstream has no result %s';
+  rsTyDsOneUpstream = 'fromTransformResult needs exactly one upstream dataset';
+  rsTyDsEmptyPipe = 'the transform list is empty';
+  rsTyDsNotObject = 'a transform is not an object';
+  rsTyDsUnknownType = 'no transform is registered as "%s"';
+  rsTyDsUpstreamMissing = 'a transform has no input';
+  rsTyDsUpstreamByRow = 'its upstream is laid out by row';
+  rsTyDsUpstreamFormat = 'its upstream is not a table';
+  rsTyDsDuplicateDim = 'the dimension name "%s" is used twice';
+  rsTyDsCopyHasNoMeta =
+    'it reads a fromTransformResult copy, which has no dimensions to pass on';
+  rsTyDsBadResult = 'a transform result is not a table of arrays or of objects';
+  rsTyDsNotSupported =
+    '%s is not available to a transform registered outside ECharts';
+  rsTyDsKeyedNoDims = 'its upstream table of columns has no dimensions';
+  rsTyDsRowNotList = 'a row of the table is not a list';
+  rsTyDsCondNotObject = 'a filter condition is not an object';
+  rsTyDsCondAndOr = '"%s" must be a non-empty list of conditions';
+  rsTyDsCondNot = '"not" must be a condition object';
+  rsTyDsCondNoDimension = 'a filter condition has no dimension';
+  rsTyDsNoDimension = 'there is no dimension %s';
+  rsTyDsCondNoOperator = 'a filter condition has no operator';
+  rsTyDsCondBadOperator = '"%s" is not a filter operator';
+  rsTyDsCondNeedsNumber = '"%s" compares with a number only';
+  rsTyDsCondReg = '"reg" (a regular expression) is not supported';
+  rsTyDsSortEmpty = 'the sort has no config';
+  rsTyDsSortNoDimension = 'a sort key has no dimension';
+  rsTyDsSortOrder = 'a sort key''s order must be "asc" or "desc"';
+  rsTyDsSortIncomparable = '"incomparable" must be "min" or "max"';
+  rsTyDsSortParser = '"%s" is not a parser';
+  rsTyDsSortFormat = 'the sort reads only a table of arrays or of objects';
+  rsTyDsBoxplotRows = 'the boxplot reads only a table of arrays';
+  // --- AdvanceChart: ecStat's dataset transforms [Batch 134] ---
+  // More reasons for rsTyChartDatasetNoTable: what 'ecStat:regression',
+  // 'ecStat:histogram' and 'ecStat:clustering' refuse.
+  rsTyStatRegMethod = '"%s" is not a regression method';
+  rsTyStatPolyOrder = 'the polynomial order must be a whole number from -1 to %d';
+  rsTyStatBinMethod = '"%s" is not a binning method';
+  rsTyStatBinLayout = 'the bins cannot be laid out over these values';
+  rsTyStatBinPrecision = 'the bins are finer than 20 decimal places';
+  rsTyStatTooManyBins = 'more than %d bins';
+  rsTyStatClusterCount = '"clusterCount" must be a number of 2 or more';
+  rsTyStatClusterIndex = '"outputClusterIndexDimension" is required, as a number';
+  rsTyStatNewDim = 'a new dimension must be an index or { name, index }';
+  rsTyStatIndexNotNumber = 'the index of a new dimension must be written as a number';
+  rsTyStatTooManyClusters = 'more than %d clusters';
+  rsTyStatNoSplit = 'no cluster could be split';
+  rsTyStatUnassigned = 'a point belongs to no cluster';
+  rsTyStatNoConverge = 'k-means did not settle';
+  rsTyStatDimHole = 'a dimension of the result is left undefined';
+  rsTyStatIndexTooFar = 'a new dimension''s index is past %d';
 
   // --- AdvanceChart: the option editor's own vocabulary ---
   // Shown in the design-time editor's status line and its completion popup.
@@ -557,6 +693,36 @@ resourcestring
     'The option is understood. There are no series, so only the axes would '
     + 'draw.';
   rsTyOptDiagMoreRows = 'and %d more like these.';
+
+  // --- AdvanceChart: the design-time series and data editor [Batch 143] ---
+  // Said by tyControls.AdvChart.SeriesEdit, shown in the series dialog.
+  rsTySerEdNotObject = 'The option is not an object, so it has no series to edit.';
+  rsTySerEdEmptyLiteral = 'Write a value here, or clear the field to remove the key.';
+  rsTySerEdOneValue = 'Write exactly one value here.';
+  rsTySerEdNotInteger = '"%s" is not a whole number.';
+  rsTySerEdNotBoolean = '"%s" is neither true nor false.';
+  rsTySerEdCaption = '%d: %s';
+  rsTySerEdCaptionNamed = '%d: %s "%s"';
+  rsTySerEdHole = '(empty slot)';
+  rsTySerEdNoType = '(no type)';
+  rsTySerEdColCategory = '%s category';
+  rsTySerEdColName = 'name';
+  rsTySerEdColValue = 'value';
+  rsTySerEdColDim = 'dim %d';
+  rsTySerEdNoteHole = 'This slot holds no object, so there is nothing to edit in it.';
+  rsTySerEdNoteNotList = 'This data is not a list; edit it as text.';
+  rsTySerEdNoteTree = 'This data is a tree (items have children); edit it as text.';
+  rsTySerEdNoteNoData =
+    'This series has no data of its own and reads a dataset. Rows '
+    + 'added here give it data of its own, which then wins over the '
+    + 'dataset.';
+  rsTySerEdNoteCategory =
+    'Each row is a category of %s. Deleting a row deletes that '
+    + 'category, and its value in every series on that axis.';
+  rsTySerEdNoteTransform =
+    'This dataset is made from another one by a transform; edit '
+    + 'the source dataset instead.';
+  rsTySerEdNoteDatasetForm = 'This dataset is not a table of rows; edit it as text.';
 
 { ==================== which language the names come from ==================== }
 

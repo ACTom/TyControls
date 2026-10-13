@@ -1225,8 +1225,9 @@ begin
 end;
 
 { THE AXIS TRIGGER ON A POLAR WITH NO SERIES: the pointer follows the mouse
-  and no box is drawn -- upstream dispatches no showTip without data; the
-  port keeps an axis tooltip with no section, which draws nothing }
+  and no box is drawn -- upstream dispatches no showTip without data, and
+  neither does the port now: updateAxisPointer's hideTip [Batch 153; it
+  kept an axis tooltip with no section, which drew nothing] }
 procedure TAdvChartPolarAxesTest.TestHoveringAPolarDrawsThePointerAndNoTooltip;
 var
   cs: TJSONObject;
@@ -1245,7 +1246,7 @@ begin
     FChart.Render(a.Canvas, Rect(0, 0, cW, cH), 96);
     FChart.PointerTo(380, 120);
     FChart.Render(b.Canvas, Rect(0, 0, cW, cH), 96);
-    AssertEquals('an axis tooltip with no section', 'axis:', FChart.TooltipShownWhich);
+    AssertEquals('no showTip without data', '', FChart.TooltipShownWhich);
     AssertTrue('no box drawn', IsNan(FChart.TooltipBox.Left)
       or (FChart.TooltipBox.Right <= FChart.TooltipBox.Left));
     diff := 0;

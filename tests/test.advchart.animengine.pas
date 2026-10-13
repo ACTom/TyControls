@@ -69,6 +69,7 @@ type
     procedure TestLifeZeroIsAThousand;
     procedure TestStopTracksSpliceSkipsTheNextAnimator;
     procedure TestArraysAlignWithTheLastKeyframe;
+    procedure TestAFinishedBaseIsDroppedInTheFrameItEnds;
   end;
 
 implementation
@@ -1299,6 +1300,48 @@ begin
     v := bag.GetAnimProp('shape.b');
     AssertEquals('a NaN takes the last frame''s item', 10.0, v.Arr[0]);
     AssertEquals(10.0, v.Arr[1]);
+  finally
+    bag.Free;
+    drv.Free;
+  end;
+end;
+
+procedure TAdvChartAnimEngineTest.TestAFinishedBaseIsDroppedInTheFrameItEnds;
+var
+  drv: TTyAnimation;
+  bag: TTyAnimBag;
+  cfg: TTyAnimCfg;
+begin
+  { Track.step: `if (this._additiveTrack && this._additiveTrack._finished)
+    this._additiveTrack = null` -- in the very frame the base ends, the
+    additive track writes its own value instead of adding to what the base
+    just wrote. The base's animator is only freed after the frame (and its
+    destructor drops the link then), so this frame is the one place the rule
+    is visible. It shows in the last bit: the base rests at 0.7 + (0.1 - 0.7)
+    = 0.09999999999999998, not at its keyframe 0.1, which is where the
+    additive track starts. [milestone C6-C13] }
+  drv := TTyAnimation.Create;
+  bag := TTyAnimBag.Create;
+  try
+    drv.Start(T0);
+    bag.Animation := drv;
+    bag.SetNum('x', 0.7);
+    bag.AnimateTo(TyAnimProps([TyAnimProp('x', TyAnimNum(0.1))]),
+      TyAnimCfg(100, 0, 'linear'));
+    drv.Update(T0);
+    drv.Update(T0 + 50);
+    cfg := TyAnimCfg(100, 0, 'linear');
+    cfg.Additive := True;
+    bag.AnimateTo(TyAnimProps([TyAnimProp('x', TyAnimNum(0.3))]), cfg);
+    AssertEquals('two animators, the second added to the first', 2, bag.AnimatorCount);
+    drv.Update(T0 + 50);
+    drv.Update(T0 + 100);
+    { (0.3 - 0.1) * 0.5 + 0.1 on its own; 0.09999999999999998 + 0.1 added }
+    AssertEquals('the base ended this frame: the own value, 0.2',
+      '3fc999999999999a', Hex(bag.Num('x')));
+    drv.Update(T0 + 150);
+    AssertEquals('and the second runs out to its own end', '3fd3333333333333',
+      Hex(bag.Num('x')));
   finally
     bag.Free;
     drv.Free;

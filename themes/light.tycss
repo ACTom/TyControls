@@ -208,6 +208,7 @@
   --advchart-label-margin: 8px;
   --advchart-minor-tick-length: 3px;
   --advchart-name-gap: 15px;
+  --advchart-single-tick-length: 6px;
   --advchart-tick-length: 5px;
   --advchart-axispointer-margin: 3px;
   --advchart-tooltip-gap: 20px;
@@ -1459,6 +1460,86 @@ TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); borde
 TyAdvChartDataZoomHandle:hover { background: var(--surface); border-color: alpha(var(--accent), 0.55); }
 TyAdvChartDataZoomMoveHandle:hover { background: alpha(var(--accent), 0.8); color: var(--surface); }
 TyAdvChartDataZoomBrush { background: alpha(var(--accent), 0.3); }
+/* The toolbox. Upstream draws its icons as hairline outlines in the accent,
+   a deeper accent under the pointer, and the title that appears below the
+   icon takes that same deeper ink; the bar itself has no ground and no
+   frame unless the option asks. The rectangle a zoom drag sweeps out is the
+   accent faded right down. */
+TyAdvChartToolbox { border-color: var(--accent); font-size: var(--font-size-base); }
+TyAdvChartToolbox:hover { border-color: darken(var(--accent), 25%); }
+TyAdvChartToolboxBackground { background: transparent; }
+TyAdvChartToolboxBorder { border-color: var(--border); }
+TyAdvChartToolboxBrush { background: alpha(var(--accent), 0.15); }
+/* The brush component's covers. Upstream lays a pale tint over what it
+   selects and rims it in a light grey; here the ink faded right down and
+   the skin's own border colour. */
+TyAdvChartBrush { background: alpha(var(--on-surface), 0.06); border-color: var(--border); }
+/* The timeline. Upstream builds the whole slider from its accent in steps:
+   the axis line palest, the passed part of it a little deeper, the ticks
+   deeper again and a passed tick deeper still, the checkpoint and the
+   buttons the accent itself; under the pointer a tick, a button and a label
+   take a darker accent. The labels are the muted ink; an empty symbol's
+   inside is the surface. */
+TyAdvChartTimeline { border-color: alpha(var(--accent), 0.2); background: var(--surface); }
+TyAdvChartTimelineProgress { border-color: alpha(var(--accent), 0.45); background: alpha(var(--accent), 0.65); }
+TyAdvChartTimelineItem { background: alpha(var(--accent), 0.3); }
+TyAdvChartTimelineItem:hover { background: darken(var(--accent), 10%); border-color: darken(var(--accent), 10%); }
+TyAdvChartTimelineCheckpoint { background: var(--accent); border-color: var(--accent); }
+TyAdvChartTimelineControl { background: var(--accent); border-color: var(--accent); }
+TyAdvChartTimelineControl:hover { background: darken(var(--accent), 25%); border-color: darken(var(--accent), 25%); }
+TyAdvChartTimelineLabel { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartTimelineLabel:hover { color: darken(var(--accent), 10%); }
+/* What a brush leaves out. Upstream greys the items outside every cover in a
+   light neutral; here the skin's border colour, which is that neutral. */
+TyAdvChartBrushOut { color: var(--border); }
+/* A parallel axis' area select: the band a drag along the axis leaves.
+   Upstream fills and rims it in one light blue at 30% opacity (the opacity
+   is the chart's, not the skin's); here the accent halfway to the surface. */
+TyAdvChartParallelSelect { background: mix(var(--accent), var(--surface), 50%); border-color: mix(var(--accent), var(--surface), 50%); }
+/* A thumbnail's box: the small copy of a graph in its corner. Upstream fills
+   it with the option's backgroundColor, else its neutral00 token, and rims
+   it in its border token; here the skin's surface and border. An author's
+   itemStyle colours win. */
+TyAdvChartThumbnail { background: var(--surface); border-color: var(--border); }
+/* The window over the copy, where the canvas looks. Upstream fills it with
+   neutral30 and rims it with neutral40 (the 0.3 opacity is the option's);
+   here the skin's border, rimmed a step toward the ink. */
+TyAdvChartThumbnailWindow { background: var(--border); border-color: mix(var(--on-surface), var(--border), 25%); }
+/* An axis break's area: the zigzag band where a stretch of the axis is cut
+   out, over the series. Upstream fills it white at 60% and rims it in its
+   border grey, dashed; here the skin's surface at 60% and its border, so a
+   dark skin's breaks are dark. The dash is the option's (3, 3 by default). */
+TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }
+/* A geo component's map. Upstream fills a region with its backgroundTint
+   token (a pale blue-grey at half), rims it in its border grey at half a
+   pixel and, when the option shows them, writes the region names in its
+   tertiary ink. Here a tenth of the accent in the surface, so a dark
+   skin's map is a dark one, the skin's border, and the muted ink. The
+   half-pixel rim is the option's. */
+TyAdvChartGeoArea { background: mix(var(--accent), var(--surface), 90%); border-color: var(--border); }
+TyAdvChartGeoLabel { color: var(--muted); font-size: var(--font-size-base); }
+/* A map series' regions. Upstream fills them with its background token (a
+   near-white blue, lighter than a geo component's tint) and rims them in
+   the same border grey; here a twentieth of the accent in the surface, a
+   shade lighter than a geo's, and the skin's border. */
+TyAdvChartMapArea { background: mix(var(--accent), var(--surface), 95%); border-color: var(--border); }
+/* A hovered or selected region and its name. Upstream fills it with its
+   highlight token (a warm yellow at 80%) and writes the name in its primary
+   ink; here a third of the accent in the surface and the skin's own text
+   colour, so the region stands out in any skin. */
+TyAdvChartGeoArea:hover { background: mix(var(--accent), var(--surface), 65%); border-color: var(--border); }
+TyAdvChartGeoLabel:hover { color: var(--on-surface); font-size: var(--font-size-base); }
+/* A decal's symbols, where the decal names no colour of its own -- the aria
+   decals that tell the series apart without their colours. Upstream draws
+   them black at 20%; here the skin's ink at 20%, so a dark skin's decals
+   are light. */
+TyAdvChartDecal { color: alpha(var(--on-surface), 0.2); }
+/* The item the keyboard holds. Upstream has no keyboard, so this is the
+   library's own focus ring, drawn around the mark: the skin's focus ring, at
+   the width the other controls draw theirs. The offset follows the library's
+   ring convention (a positive one insets the ring), so a negative one sets it
+   off the mark. */
+TyAdvChartFocusItem { outline: 2px var(--focus-ring); outline-offset: -3px; }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

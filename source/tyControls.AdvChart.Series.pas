@@ -44,8 +44,14 @@ const
   { A series on a calendar: the system's name, and the two dimensions it
     gives a series -- Calendar.ts `dimensions = ['time', 'value']`. }
   TyCalendarSysName = 'calendar';
+  TyMatrixSysName = 'matrix';
   TyCalendarTimeDim = 'time';
   TyCalendarValueDim = 'value';
+  { [Batch 152, D14 GE4] A series on a geo: the system's two dimensions
+    (Geo.ts `dimensions = ['lng', 'lat']`), and the map series' type name }
+  TyGeoLngDim = 'lng';
+  TyGeoLatDim = 'lat';
+  TyMapSeriesTypeName = 'map';
 
 type
   { How a series occupies the chart.
@@ -115,6 +121,86 @@ type
       calendar is laid out by the control, after binding. Resolved with
       HasAxes False, like a radar. [Batch 70] }
     CalendarIndex: Integer;
+    { THE CALENDAR WHOSE DAY THE SERIES IS LAID OUT IN, or -1
+      (coordinateSystemUsage 'box': a pie, a funnel, a sankey, a tree, a
+      treemap by default; a chord or a graph that says so). Such a series
+      has no coordinate system of its own -- only upstream's
+      boxCoordinateSystem -- so CalendarIndex stays -1 and nothing that
+      places per item, converts or keys by the calendar sees it
+      [Batch 151]. }
+    CalendarBoxIndex: Integer;
+    { WHICH POLAR, or -1 [Batch 113, C4]. Resolved with HasAxes False, like a
+      radar or a calendar -- HasAxes means the cartesian pair -- but once the
+      control has built its polars (TyAttachPolarSeries) the axes ARE filled
+      in: XAxis is the polar's radius axis and YAxis its angle axis, the
+      store's two columns in upstream's polarDimensions order, BaseAxis and
+      ValueAxis as getBaseAxis gives them. That is what puts a polar series
+      into the axis index, the stack, the extents and the pointer's search
+      with no second path. Polar is the TTyPolar itself, as a plain object
+      (this unit cannot name the class); nil until attached, and nil when the
+      polar named was not built. }
+    PolarIndex: Integer;
+    Polar: TObject;
+    { WHICH SINGLE AXIS, or -1 [Batch 118, C10]: `coordinateSystem:
+      'singleAxis'` by singleAxisIndex / singleAxisId (SINGLE_REFERRING,
+      neither written is the first). Resolved with HasAxes False, like a
+      polar; once the control has built its singles (TyAttachSingleSeries)
+      XAxis and BaseAxis are the single's one axis -- YAxis and ValueAxis
+      stay nil, a single has no other -- and Single is the TTySingle, nil
+      until attached or when the single named was not built. }
+    SingleIndex: Integer;
+    Single: TObject;
+    { WHICH PARALLEL, or -1 [Batch 128, C19]. Resolved with HasAxes False;
+      Parallel is the TTyParallel the control built (a plain object here),
+      nil until attached. }
+    ParallelIndex: Integer;
+    Parallel: TObject;
+    { WHICH MATRIX, or -1 [Batch 145, D12 MX1]: `coordinateSystem: 'matrix'`
+      by matrixIndex / matrixId (SINGLE_REFERRING, neither written is the
+      first). Resolved with HasAxes False, like a calendar. [Batch 147] The
+      types upstream 6.1 draws there: per item a heatmap, a scatter, an
+      effectScatter, a custom and a graph (decideCoordSysUsageKind 'data');
+      a pie and a funnel laid out in ONE cell (their default usage 'box':
+      MatrixBox) -- any other, or a usage the type cannot take, says the
+      coordinate system is not built. }
+    MatrixIndex: Integer;
+    { the series is laid out in a cell of the matrix (usage 'box'), not
+      placed per item: it has no coordinate system of its own -- a finder
+      naming it converts nothing [Batch 147]. [Batch 151] A sankey, a tree
+      and a treemap by default too, a chord and a graph (its view) when
+      they say 'box'. }
+    MatrixBox: Boolean;
+    { WHICH GEO COMPONENT, or -1 [Batch 152, D14 GE4]. A series on a geo
+      (`coordinateSystem: 'geo'`, getReferringComponents SINGLE_REFERRING:
+      neither key written is the first) is Resolved with HasAxes False and
+      this index; one naming no geo there is not resolved (upstream leaves
+      it with no coordinate system and draws nothing). A MAP series names a
+      geo only by a written geoIndex / geoId (useDefault false) -- found, it
+      is drawn on that geo; otherwise -1 and the series has a geo of its own,
+      shared by every map series of the same `map` (the control builds it). }
+    GeoIndex: Integer;
+    { [Batch 154] A BOX USAGE ON A HOST WITH NO dataToLayout -- a cartesian
+      or a geo (`coordinateSystemUsage: 'box'`, a pie's default):
+      createBoxLayoutReference with enableLayoutOnlyByCenter takes the host's
+      dataToPoint of `coord` (a pie's `center` when it has none) as a pie's
+      or a chord's centre; every other type lays itself out on the canvas.
+      BoxPoint says so. On a cartesian the series has no coordinate system
+      (Cart, XAxis and YAxis stay nil, nothing places, converts or stacks by
+      them): BoxCart is the pair it takes its point from and BoxXAxis /
+      BoxYAxis the axes its coord widens (scaleRawExtentInfoCreateDeal's
+      boxCoordinateSystem branch). On a geo GeoIndex is the host. }
+    BoxPoint: Boolean;
+    BoxCart: TTyCartesian2D;
+    BoxXAxis, BoxYAxis: TTyAxis;
+    { [Batch 154] THE MATRIX INJECTED AS THE COORDINATE SYSTEM OF A SERIES
+      THAT NEVER USES IT, or -1: a treemap, a chord, a gauge or a sunburst
+      with usage 'data' on a matrix lays itself out on the canvas, but
+      upstream's seriesModel.coordinateSystem is the matrix -- a finder
+      naming the series converts through it. (A tree's and a sankey's own
+      view takes its place.) HasDataMatrix says there is one -- the zero
+      record has none. }
+    HasDataMatrix: Boolean;
+    DataMatrix: Integer;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -315,6 +401,16 @@ procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
   APPI: Integer; const AZooms: TTyAxisZoomArray); overload;
 
+{ containShape, shared by the grid's axes and the polar's [Batch 113]:
+  whether AAxis widens for the bars laid out along it on ACoordSys, and the
+  widening (its mapping extent) once its effective extent is final }
+function TyAxisWantsContainShape(AAxis: TTyAxis; ANode: TJSONObject;
+  const ABindings: TTySeriesBindingArray; const ACoordSys: string): Boolean;
+procedure TyAxisApplyContainShape(AAxis: TTyAxis;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  AIndex: TTyAxisSeriesIndex; const ACoordSys: string;
+  AZoomFixLo, AZoomFixHi: Boolean);
+
 { ONE AXIS' SCALE FROM ITS RAW EXTENT, as the grid's axes get it [Batch 111]:
   a time axis with nothing at all on it shows today; splitNumber, interval,
   minInterval, maxInterval and the minor split read from ANode; a category
@@ -356,13 +452,40 @@ function TyAxisNoZoomExtent(AOption: TTyChartOption;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
   AAxis: TTyAxis; const AMainType: string; out AAny: Boolean): TTyAxisRawExtent;
 
+{ [Batch 151] the series whose own defaults say coordinateSystemUsage 'box'
+  (pie, funnel, sankey, tree, treemap) }
+function TyBoxUsageByDefault(const AType: string): Boolean;
+{ the series that lay themselves out in a box reference when their usage is
+  'box': the five above, a chord and a graph (its view) }
+function TyBoxLayoutType(const AType: string): Boolean;
+{ the series upstream draws on the canvas when the matrix or calendar they
+  name gives them no box -- one not there, or a usage their layout never
+  asks for: a gauge and a sunburst always (their layouts read the canvas),
+  the box types above when the host is missing or their usage is 'data' }
+function TyCanvasOnHostType(const AType: string): Boolean;
+{ [Batch 154] the series whose layout takes a centre from a host with only
+  a dataToPoint (getCircleLayout's enableLayoutOnlyByCenter): a pie and a
+  chord }
+function TyBoxPointType(const AType: string): Boolean;
+{ decideCoordSysUsageKind for a component that is no series: 'matrix' or
+  'calendar' when its coordinateSystem names one of the two (the
+  nonSeriesBox coordinate systems) and its coordinateSystemUsage is 'box',
+  unwritten or a written null; '' otherwise ('data' is no usage for a
+  component, nor is any other word) }
+function TyComponentBoxSysOf(ANode: TJSONData): string;
+{ a main type's ids ('' where none) and replaceMerge's holes in it, as the
+  series binder resolves a reference by them [Batch 151: exported for the
+  components' box references] }
+function TyMainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
+function TyMainHoles(AOption: TTyChartOption; const AMain: string): TTyBoolArray;
+
 implementation
 
 uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.AdvChart.AxisBreak;
 
 const
   StatDelim = '|&';
@@ -452,7 +575,9 @@ begin
       ['base', 'min', 'Q1', 'median', 'Q3', 'max'], '');
   Reg('candlestick', 'cartesian2d', scuData, ['cartesian2d'],
       ['base', 'open', 'close', 'lowest', 'highest'], '');
-  Reg('lines', 'geo', scuData, [], ['value'], '');
+  { [Batch 121] drawn on a cartesian, a polar and a calendar; a geo plugs
+    into the same coordinate hook (AdvChart.Lines) }
+  Reg('lines', 'geo', scuData, ['cartesian2d', 'polar', 'calendar', 'geo'], ['value'], '');
   Reg('map', 'geo', scuData, ['geo'], ['value'], '');
   { Absent rather than 'none': the source declares no coordinateSystem at all
     and lays these out in a box. }
@@ -541,13 +666,193 @@ begin
   end;
 end;
 
+{ Each polar component's `id`, '' where it has none. }
+function PolarIds(AOption: TTyChartOption): TTyStringArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount('polar'));
+  for k := 0 to High(Result) do
+  begin
+    Result[k] := '';
+    d := AOption.ComponentAt('polar', k);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType = jtString) then Result[k] := d.AsString
+      else if (d <> nil) and (d.JSONType = jtNumber) then Result[k] := d.AsString;
+    end;
+  end;
+end;
+
+{ Each component's `id` of a main type, '' where it has none [Batch 118] }
+{ decideCoordSysUsageKind for a series: 'data' or 'box' as written (a
+  written null is a series' default, 'data'), '' for any other value (no
+  usage at all); unwritten, the type's own default -- 'box' for a pie and a
+  funnel [Batch 147] }
+function TyMatrixUsageOf(ANode: TJSONData; const AType: string): string;
+var d: TJSONData;
+begin
+  d := nil;
+  if ANode is TJSONObject then d := TJSONObject(ANode).Find('coordinateSystemUsage');
+  if d = nil then
+  begin
+    { the series whose defaults write 'box' [Batch 151: sankey, tree and
+      treemap too] }
+    if TyBoxUsageByDefault(AType) then Exit('box');
+    Exit('data');
+  end;
+  if d.JSONType = jtNull then Exit('data');
+  Result := '';
+  if d.JSONType = jtString then
+    if (d.AsString = 'data') or (d.AsString = 'box') then Result := d.AsString;
+end;
+
+function TyBoxUsageByDefault(const AType: string): Boolean;
+begin
+  Result := (AType = 'pie') or (AType = 'funnel') or (AType = 'sankey')
+    or (AType = 'tree') or (AType = 'treemap');
+end;
+
+function TyBoxLayoutType(const AType: string): Boolean;
+begin
+  Result := TyBoxUsageByDefault(AType) or (AType = 'chord') or (AType = 'graph');
+end;
+
+function TyCanvasOnHostType(const AType: string): Boolean;
+begin
+  Result := (AType = 'pie') or (AType = 'funnel') or (AType = 'sankey')
+    or (AType = 'tree') or (AType = 'treemap') or (AType = 'chord')
+    or (AType = 'gauge') or (AType = 'sunburst');
+end;
+
+function TyBoxPointType(const AType: string): Boolean;
+begin
+  Result := (AType = 'pie') or (AType = 'chord');
+end;
+
+function TyComponentBoxSysOf(ANode: TJSONData): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if not (ANode is TJSONObject) then Exit;
+  d := TJSONObject(ANode).Find('coordinateSystem');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  { canBeNonSeriesBoxCoordSys: the two in nonSeriesBoxCoordSysCreators }
+  if (d.AsString <> TyMatrixSysName) and (d.AsString <> TyCalendarSysName) then Exit;
+  Result := d.AsString;
+  d := TJSONObject(ANode).Find('coordinateSystemUsage');
+  { unwritten or null: a component's default, 'box'; 'data' is none for a
+    component, and so is any other word }
+  if (d <> nil) and (d.JSONType <> jtNull)
+    and not ((d.JSONType = jtString) and (d.AsString = 'box')) then
+    Result := '';
+end;
+
+function MainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount(AMain));
+  for k := 0 to High(Result) do
+  begin
+    Result[k] := '';
+    d := AOption.ComponentAt(AMain, k);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType = jtString) then Result[k] := d.AsString
+      else if (d <> nil) and (d.JSONType = jtNumber) then Result[k] := d.AsString;
+    end;
+  end;
+end;
+
+{ replaceMerge's holes in a main type's family [Batch 118] }
+function MainHoles(AOption: TTyChartOption; const AMain: string): TTyBoolArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount(AMain));
+  for k := 0 to High(Result) do
+  begin
+    d := AOption.ComponentAt(AMain, k);
+    Result[k] := (d <> nil) and (d.JSONType <> jtObject);
+  end;
+end;
+
+{ replaceMerge's holes in the polar family }
+function PolarHoles(AOption: TTyChartOption): TTyBoolArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount('polar'));
+  for k := 0 to High(Result) do
+  begin
+    d := AOption.ComponentAt('polar', k);
+    Result[k] := (d <> nil) and (d.JSONType <> jtObject);
+  end;
+end;
+
+{ a parallel series' parallel: parallelIndex (default 0) unless written null,
+  then parallelId [Batch 128] }
+function ParallelRef(AOption: TTyChartOption; ANode: TJSONObject): Integer;
+var
+  d: TJSONData;
+  n, k: Integer;
+  v: Double;
+  id: string;
+begin
+  Result := -1;
+  n := AOption.ComponentCount('parallel');
+  d := ANode.Find('parallelIndex');
+  if (d = nil) or (d.JSONType <> jtNull) then
+  begin
+    v := 0;
+    if d <> nil then
+    begin
+      if d.JSONType <> jtNumber then Exit;
+      v := d.AsFloat;
+    end;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= n) then Exit;
+    k := Trunc(v);
+    if AOption.ComponentAt('parallel', k) is TJSONObject then Result := k;
+    Exit;
+  end;
+  d := ANode.Find('parallelId');
+  if (d = nil) or not (d.JSONType in [jtString, jtNumber]) then Exit;
+  if d.JSONType = jtNumber then id := TyJsNumberToString(d.AsFloat)
+  else id := d.AsString;
+  for k := 0 to n - 1 do
+    if (AOption.ComponentAt('parallel', k) is TJSONObject)
+      and (StrOf(TJSONObject(AOption.ComponentAt('parallel', k)), 'id', '') = id) then
+      Exit(k);
+end;
+
+function TyMainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
+begin
+  Result := MainIds(AOption, AMain);
+end;
+
+function TyMainHoles(AOption: TTyChartOption; const AMain: string): TTyBoolArray;
+begin
+  Result := MainHoles(AOption, AMain);
+end;
+
 function TyBindSeries(AOption: TTyChartOption; ABuild: TTyChartBuild): TTySeriesBindingArray;
 var
   i, n, xi, yi: Integer;
   node: TJSONObject;
   b: TTySeriesBinding;
   info: TTySeriesTypeInfo;
-  sys: string;
+  sys, usage: string;
 begin
   Result := nil;
   if (AOption = nil) or (ABuild = nil) then Exit;
@@ -558,6 +863,13 @@ begin
   begin
     b := Default(TTySeriesBinding);
     b.SeriesIndex := i;
+    { no polar, even for a hole that leaves below [Batch 113] }
+    b.PolarIndex := -1;
+    b.SingleIndex := -1;
+    b.ParallelIndex := -1;
+    b.MatrixIndex := -1;
+    b.CalendarBoxIndex := -1;
+    b.GeoIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -591,10 +903,22 @@ begin
       otherwise the type's own default, which for a pie or a treemap is nothing
       at all. }
     sys := StrOf(node, 'coordinateSystem', info.DefaultCoordSys);
+    { A MAP SERIES IS ALWAYS ON A GEO [Batch 152]: whatever it writes, its
+      coordinate system is the geo it names or one of its own
+      (buildAllMapSeriesGroups takes every map series) }
+    if b.SeriesType = TyMapSeriesTypeName then sys := 'geo';
     b.CoordSysName := sys;
     b.Usage := info.Usage;
     b.RadarIndex := -1;
     b.CalendarIndex := -1;
+    b.PolarIndex := -1;
+    b.Polar := nil;
+    b.SingleIndex := -1;
+    b.Single := nil;
+    b.ParallelIndex := -1;
+    b.Parallel := nil;
+    b.MatrixIndex := -1;
+    b.GeoIndex := -1;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -634,7 +958,214 @@ begin
         its days are the calendar's own, not an axis'. [Batch 70] }
       b.CalendarIndex := TyResolveComponentRef(node, 'calendarIndex', 'calendarId',
         AOption.ComponentCount('calendar'), CalendarIds(AOption));
+      usage := TyMatrixUsageOf(node, b.SeriesType);
       if b.CalendarIndex < 0 then
+      begin
+        { NO CALENDAR TO INJECT: a series that lays itself out in a box, or
+          on the canvas whatever it names, is on the canvas [Batch 151] }
+        if TyCanvasOnHostType(b.SeriesType)
+          or ((usage = 'box') and TyBoxLayoutType(b.SeriesType)) then
+        begin
+          b.Resolved := True;
+          b.HasAxes := False;
+          Result[i] := b;
+          Continue;
+        end;
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      { IN ONE DAY'S CELL: a box usage of a type that lays itself out in one
+        [Batch 151] }
+      if (usage = 'box') and TyBoxLayoutType(b.SeriesType) then
+      begin
+        b.CalendarBoxIndex := b.CalendarIndex;
+        b.CalendarIndex := -1;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = TyMatrixSysName then
+    begin
+      { A MATRIX [Batch 145, D12 MX1]: which one, by matrixIndex or
+        matrixId; its two dimensions are the matrix's header trees, not
+        axes. [Batch 147] decideCoordSysUsageKind: the usage written (a
+        written null is a series' 'data'), else the type's default -- 'box'
+        for a pie and a funnel, 'data' for the rest. }
+      usage := TyMatrixUsageOf(node, b.SeriesType);
+      { [Batch 151] a gauge or a sunburst lays itself out on the canvas
+        whatever it names; a box type with 'data' (other than a pie and a
+        funnel, which MX2 took there already) is injected a coordinate
+        system its layout never asks -- the canvas too }
+      if (b.SeriesType = 'gauge') or (b.SeriesType = 'sunburst')
+        or ((usage = 'data') and TyCanvasOnHostType(b.SeriesType)
+          and (b.SeriesType <> 'pie') and (b.SeriesType <> 'funnel')) then
+      begin
+        { the matrix a finder converts through [Batch 154] }
+        if (usage = 'data') and ((b.SeriesType = 'gauge') or (b.SeriesType = 'sunburst')
+          or (b.SeriesType = 'treemap') or (b.SeriesType = 'chord')) then
+        begin
+          b.DataMatrix := TyResolveComponentRef(node, 'matrixIndex', 'matrixId',
+            AOption.ComponentCount(TyMatrixSysName), MainIds(AOption, TyMatrixSysName),
+            MainHoles(AOption, TyMatrixSysName));
+          b.HasDataMatrix := b.DataMatrix >= 0;
+        end;
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
+      if usage = 'box' then
+      begin
+        if not TyBoxLayoutType(b.SeriesType) then usage := '?';
+      end
+      else if usage = 'data' then
+      begin
+        if (b.SeriesType <> 'heatmap') and (b.SeriesType <> 'scatter')
+          and (b.SeriesType <> 'effectScatter') and (b.SeriesType <> 'custom')
+          and (b.SeriesType <> 'graph') and (b.SeriesType <> 'pie')
+          and (b.SeriesType <> 'funnel') then usage := '?';
+      end;
+      { a box type with no usage at all (a word that is neither) is laid
+        out on the canvas: no coordinate system }
+      if (usage = '') and TyCanvasOnHostType(b.SeriesType) then
+      begin
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
+      if (usage = '?') or (usage = '') then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.MatrixIndex := TyResolveComponentRef(node, 'matrixIndex', 'matrixId',
+        AOption.ComponentCount(TyMatrixSysName), MainIds(AOption, TyMatrixSysName),
+        MainHoles(AOption, TyMatrixSysName));
+      if b.MatrixIndex < 0 then
+      begin
+        { NO MATRIX TO INJECT: a box layout falls back to the canvas
+          (createBoxLayoutReference with no boxCoordinateSystem)
+          [Batch 151] }
+        if (usage = 'box') or TyCanvasOnHostType(b.SeriesType) then
+        begin
+          b.Resolved := True;
+          b.HasAxes := False;
+          Result[i] := b;
+          Continue;
+        end;
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.MatrixBox := usage = 'box';
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = 'polar' then
+    begin
+      { A POLAR [Batch 113, C4]: which one, by polarIndex or polarId
+        (getReferringComponents, SINGLE_REFERRING: neither written is the
+        first). Its axes are the polar's, filled in once the polars are
+        built (TyAttachPolarSeries). Upstream throws on a polar that is not
+        there; here the series resolves to nothing and says so. }
+      b.PolarIndex := TyResolveComponentRef(node, 'polarIndex', 'polarId',
+        AOption.ComponentCount('polar'), PolarIds(AOption), PolarHoles(AOption));
+      if b.PolarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = 'singleAxis' then
+    begin
+      { A SINGLE AXIS [Batch 118, C10]: which one, by singleAxisIndex or
+        singleAxisId (getReferringComponents, SINGLE_REFERRING). Its axis is
+        filled in once the singles are built (TyAttachSingleSeries). Upstream
+        leaves a series naming none with no coordinate system; here it
+        resolves to nothing and says so. }
+      b.SingleIndex := TyResolveComponentRef(node, 'singleAxisIndex', 'singleAxisId',
+        AOption.ComponentCount('singleAxis'), MainIds(AOption, 'singleAxis'),
+        MainHoles(AOption, 'singleAxis'));
+      if b.SingleIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = 'parallel' then
+    begin
+      { A PARALLEL [Batch 128, C19]: getReferringComponents with the series'
+        default `parallelIndex: 0`, which a parallelId does not override
+        (only a written null lets the id be read). Upstream throws on a
+        parallel that is not there; here the series resolves to nothing. }
+      b.ParallelIndex := ParallelRef(AOption, node);
+      if b.ParallelIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = 'geo' then
+    begin
+      { A GEO [Batch 152, D14 GE4]. A map series: a written geoIndex or geoId
+        that finds a geo hosts it; anything else (neither written, or one that
+        finds nothing) is its own geo. Any other series: SINGLE_REFERRING --
+        neither written is the first geo -- and none found is no coordinate
+        system at all. }
+      if b.SeriesType = TyMapSeriesTypeName then
+      begin
+        if ((node.Find('geoIndex') <> nil) and (node.Find('geoIndex').JSONType <> jtNull))
+          or ((node.Find('geoId') <> nil) and (node.Find('geoId').JSONType <> jtNull)) then
+          b.GeoIndex := TyResolveComponentRef(node, 'geoIndex', 'geoId',
+            AOption.ComponentCount('geo'), MainIds(AOption, 'geo'), MainHoles(AOption, 'geo'));
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
+      b.GeoIndex := TyResolveComponentRef(node, 'geoIndex', 'geoId',
+        AOption.ComponentCount('geo'), MainIds(AOption, 'geo'), MainHoles(AOption, 'geo'));
+      { [Batch 154] a box usage takes its centre from the geo's dataToPoint
+        (a pie by default, a chord when it says so); a type that lays itself
+        out on the canvas whatever it names has no geo to miss }
+      usage := TyMatrixUsageOf(node, b.SeriesType);
+      b.BoxPoint := (usage = 'box') and TyBoxPointType(b.SeriesType);
+      if (b.GeoIndex < 0) and TyCanvasOnHostType(b.SeriesType) then
+      begin
+        b.BoxPoint := False;
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
+      if b.GeoIndex < 0 then
       begin
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;
@@ -661,8 +1192,8 @@ begin
 
     if sys <> 'cartesian2d' then
     begin
-      { The two-step shape is here; only cartesian and radar have a system to
-        ask yet. A series naming polar resolves to nothing rather than
+      { The two-step shape is here. A series naming a system this port does
+        not have (matrix, ...) resolves to nothing rather than
         silently falling back to the cartesian it did not ask for. }
       ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
       Result[i] := b;
@@ -681,6 +1212,29 @@ begin
       ABuild.AxisCount('xAxis'), AxisIds(ABuild, 'xAxis'), AxisHoles(ABuild, 'xAxis'));
     yi := TyResolveComponentRef(node, 'yAxisIndex', 'yAxisId',
       ABuild.AxisCount('yAxis'), AxisIds(ABuild, 'yAxis'), AxisHoles(ABuild, 'yAxis'));
+    { [Batch 154] A BOX USAGE ON A CARTESIAN (a pie's default, any other
+      type that writes it and lays itself out in a box or on the canvas):
+      no coordinate system -- the pair is only where a pie's or a chord's
+      centre is taken from, and the axes its coord widens. With no pair the
+      series is on the canvas. }
+    usage := TyMatrixUsageOf(node, b.SeriesType);
+    if (usage = 'box') and TyCanvasOnHostType(b.SeriesType) then
+    begin
+      if (xi >= 0) and (yi >= 0) then
+      begin
+        b.BoxCart := ABuild.CartesianAt(xi, yi);
+        if b.BoxCart <> nil then
+        begin
+          b.BoxXAxis := ABuild.Axis('xAxis', xi);
+          b.BoxYAxis := ABuild.Axis('yAxis', yi);
+          b.BoxPoint := TyBoxPointType(b.SeriesType);
+        end;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
     if (xi < 0) or (yi < 0) then
     begin
       ABuild.Note(Format(rsTyChartSeriesNoAxis, [i]));
@@ -718,7 +1272,9 @@ end;
 
 function TySeriesLegendByDatum(const AType: string): Boolean;
 const
-  cByDatum: array[0..2] of string = ('pie', 'funnel', 'radar');
+  { a themeRiver's legend names its layers, the rows' names [Batch 118]; a
+    chord's its nodes (LegendVisualProvider over the node data) [Batch 120] }
+  cByDatum: array[0..4] of string = ('pie', 'funnel', 'radar', 'themeRiver', 'chord');
 var i: Integer;
 begin
   for i := 0 to High(cByDatum) do
@@ -1435,8 +1991,11 @@ var
 
   function Numeric(A: TTyAxis): Boolean;
   begin
+    { an axis that writes `breaks` neither aligns nor is aligned to
+      (prepareAlignToInCoordSysCreate) [Batch 132] }
     Result := (A <> nil) and (A.Scale is TTyIntervalScale)
-      and not (A.Scale is TTyTimeScale);
+      and not (A.Scale is TTyTimeScale)
+      and not TyAxisBreaksWritten(ObjAt(AOption, A.MainType, A.ComponentIndex));
   end;
 
   function Asks(A: TTyAxis): Boolean;
@@ -1496,6 +2055,47 @@ begin
     SetLength(Result, n + 1);
     Result[n] := AStack.ResultCol;
   end;
+end;
+
+{ scaleRawExtentInfoCreateDeal's boxCoordinateSystem branch for one
+  binding [Batch 154] }
+procedure BoxCoordUnion(AOption: TTyChartOption; const AB: TTySeriesBinding;
+  AAxis: TTyAxis; var ALo, AHi: Double; var AAny: Boolean);
+var
+  node: TJSONObject;
+  d, item: TJSONData;
+  k: Integer;
+  v: Double;
+begin
+  if AB.BoxCart = nil then Exit;
+  if AB.BoxXAxis = AAxis then k := 0
+  else if AB.BoxYAxis = AAxis then k := 1
+  else Exit;
+  node := ObjAt(AOption, 'series', AB.SeriesIndex);
+  if node = nil then Exit;
+  d := node.Find('coord');
+  if ((d = nil) or (d.JSONType = jtNull)) and (AB.SeriesType = 'pie') then
+    d := node.Find('center');
+  if not (d is TJSONArray) or (k >= d.Count) then Exit;
+  item := d.Items[k];
+  if (item = nil) or (item.JSONType in [jtNull, jtArray]) then Exit;
+  v := NaN;
+  if AAxis.AxisType = atCategory then
+  begin
+    if item.JSONType = jtString then
+    begin
+      k := AAxis.Categories.GetOrdinal(item.AsString);
+      if k >= 0 then v := k;
+    end
+    else if item.JSONType = jtNumber then
+      v := item.AsFloat;
+  end
+  else if item.JSONType = jtNumber then
+    v := item.AsFloat;
+  if IsNan(v) or IsInfinite(v) then Exit;
+  AAny := True;
+  if v < ALo then ALo := v;
+  if v > AHi then AHi := v;
 end;
 
 function TyAxisNoZoomExtent(AOption: TTyChartOption;
@@ -1574,6 +2174,13 @@ begin
       if dhi > hi then hi := dhi;
     end;
   end;
+  { [Batch 154] A BOX USAGE ON THIS AXIS' CARTESIAN widens it by its coord:
+    `coord` (a pie's `center` when it has none), when it is an array, its
+    element at the axis' dimension (x 0, y 1) -- not null and not an array
+    -- parsed by the scale; a number that is not one adds nothing
+    (unionExtentFromNumber's comparisons) }
+  for si := 0 to High(ABindings) do
+    BoxCoordUnion(AOption, ABindings[si], AAxis, lo, hi, AAny);
   { THE RAW EXTENT, UPSTREAM'S ORDER. No data is not-a-number from here on --
     the data loop left the ends at their infinities -- and min, max,
     boundaryGap, zero, a backwards pair and startValue all happen in
@@ -1764,6 +2371,143 @@ begin
   end;
 end;
 
+{ ==================== containShape ==================== }
+
+{ A BAR OF THIS TYPE IS LAID OUT ALONG AAxis on ACoordSys -- upstream's
+  statistics key, which exists for a series the legend has switched off and
+  for one with no rows. The index skips the first, so the bindings are asked
+  directly. [Batch 113: out of TyApplyAxisExtents, for the polar too.] }
+function KeyOnAxis(AAxis: TTyAxis; const AType: string;
+  const ABindings: TTySeriesBindingArray; const ACoordSys: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(ABindings) do
+    if (ABindings[i].BaseAxis = AAxis) and (ABindings[i].SeriesType = AType)
+      and (ABindings[i].CoordSysName = ACoordSys) then Exit(True);
+end;
+
+{ UPSTREAM'S ctnShp. `containShape` as written, JavaScript-truthy; absent,
+  it is on unless the axis has bands, where the bar already sits inside
+  one. And only on the base axis of a series that registers the handler:
+  the axis a bar stands on is its value axis, and that one is never
+  widened.
+
+  [Batch 64: FOUR types register it, not two -- bar and pictorialBar
+  (layout/barGrid.ts) and candlestick and boxplot (their layouts), all with
+  the same band-width handler. A zoomed candlestick on a category axis
+  without boundaryGap (candlestick-sh) mapped its candles half a band too
+  wide; its markers showed it.] [Batch 113: on a polar only the bar
+  registers it (barPolar.ts registerBarPolarAxisHandlers), and no other
+  type binds to one.] }
+function TyAxisWantsContainShape(AAxis: TTyAxis; ANode: TJSONObject;
+  const ABindings: TTySeriesBindingArray; const ACoordSys: string): Boolean;
+var
+  d: TJSONData;
+  opt: Boolean;
+begin
+  d := nil;
+  if ANode <> nil then d := ANode.Find('containShape');
+  if (d = nil) or (d.JSONType = jtNull) then opt := not AAxis.OnBand
+  else opt := JsTruthyOf(d);
+  Result := opt and (KeyOnAxis(AAxis, 'bar', ABindings, ACoordSys)
+    or KeyOnAxis(AAxis, 'pictorialBar', ABindings, ACoordSys)
+    or KeyOnAxis(AAxis, 'candlestick', ABindings, ACoordSys)
+    or KeyOnAxis(AAxis, 'boxplot', ABindings, ACoordSys));
+end;
+
+{ THE MAPPING EXTENT: the effective one, widened by half a bar each way so
+  the bars at its ends are drawn inside the plot. Run once the effective
+  extent is final. Ticks, labels and split lines stay on the effective
+  extent; only where values land moves.
+
+  The half bar is measured in data space, from the axis' pixel length AS
+  THE LAYOUT OPTIONS GAVE IT -- phase A's extent, before labels shrank the
+  plot. Upstream does the same, because its nice step runs on a freshly
+  made coordinate system that has not been shrunk yet. }
+procedure TyAxisApplyContainShape(AAxis: TTyAxis;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  AIndex: TTyAxisSeriesIndex; const ACoordSys: string;
+  AZoomFixLo, AZoomFixHi: Boolean);
+const
+  cSingleRatio: Double = 0.8;
+var
+  e, lin: TTyRange;
+  a, b, span, px, w2, gap, sup0, sup1, lo, hi: Double;
+  haveSup, ordinal: Boolean;
+  k: Integer;
+  typ: string;
+begin
+  ordinal := AAxis.Scale is TTyOrdinalScale;
+  { A band already holds its bar: no half width to add. }
+  if ordinal and AAxis.OnBand then Exit;
+  e := AAxis.Scale.GetExtent;
+  a := AAxis.Scale.Mapper.TransformIn(e.Start);
+  b := AAxis.Scale.Mapper.TransformIn(e.Stop);
+  { the span in the linear space as the scale KEEPS it -- a log axis' nice
+    decades -- while the ends the half bar is added to are taken through
+    the logarithm, as upstream's transformIn takes them }
+  lin := AAxis.Scale.LinearExtent2(sekEffective);
+  span := lin.Stop - lin.Start;
+  px := AAxis.PxLength;
+  haveSup := False;
+  sup0 := 0;
+  sup1 := 0;
+  for k := 0 to 3 do
+  begin
+    case k of
+      0: typ := 'bar';
+      1: typ := 'pictorialBar';
+      2: typ := 'candlestick';
+    else
+      typ := 'boxplot';
+    end;
+    if not KeyOnAxis(AAxis, typ, ABindings, ACoordSys) then Continue;
+    w2 := NaN;
+    if ordinal then
+    begin
+      { One category's width in categories -- 1, give or take the last bit,
+        which upstream's round trip through pixels decides. }
+      if (span <> 0) and (px <> 0) and not IsNan(span) then
+        w2 := px / span * span / px;
+    end
+    else
+    begin
+      gap := TyLiPosMinGap(AStores,
+        AIndex.SeriesOnAxisOfKey(AAxis, TySeriesStatKey(typ, ACoordSys)),
+        AAxis);
+      if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
+        and (gap > 0) then
+        w2 := gap
+      else if (gap = cTyMinGapSingle) and (px > 0) then
+        { ONE VALUE: the band is four fifths of the axis, and the round
+          trip through pixels is upstream's -- 0.8 * span parts from it in
+          the last bit a third of the time. }
+        w2 := px * cSingleRatio * span / px;
+    end;
+    if IsNan(w2) or IsInfinite(w2) then Continue;
+    haveSup := True;
+    sup0 := Min(sup0, -w2 / 2);
+    sup1 := Max(sup1, w2 / 2);
+    AAxis.ZeroDiscouraged := True;
+  end;
+  if not haveSup then Exit;
+  if ordinal then
+    AAxis.Scale.SetExtent2(sekMapping,
+      TyRange(Min(e.Start, e.Start + sup0), Max(e.Stop, e.Stop + sup1)))
+  else
+  begin
+    { AN END A dataZoom PINNED IS NOT WIDENED: the axis ends exactly at the
+      window, and a bar past it is clipped }
+    if AZoomFixLo then lo := e.Start
+    else lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
+    if AZoomFixHi then hi := e.Stop
+    else hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
+    if (lo < e.Start) or (hi > e.Stop) then
+      AAxis.Scale.SetExtent2(sekMapping, TyRange(lo, hi));
+  end;
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
@@ -1785,132 +2529,6 @@ var
   { the axis being done: its ends a dataZoom pinned (zoomFixMM) }
   zoomFixLo, zoomFixHi: Boolean;
 
-  { A BAR OF THIS TYPE IS LAID OUT ALONG AAxis -- upstream's statistics key,
-    which exists for a series the legend has switched off and for one with no
-    rows. The index skips the first, so the bindings are asked directly. }
-  function KeyOnAxis(AAxis: TTyAxis; const AType: string): Boolean;
-  var i: Integer;
-  begin
-    Result := False;
-    for i := 0 to High(ABindings) do
-      if (ABindings[i].BaseAxis = AAxis) and (ABindings[i].SeriesType = AType)
-        and (ABindings[i].CoordSysName = 'cartesian2d') then Exit(True);
-  end;
-
-  { UPSTREAM'S ctnShp. `containShape` as written, JavaScript-truthy; absent,
-    it is on unless the axis has bands, where the bar already sits inside
-    one. And only on the base axis of a series that registers the handler:
-    the axis a bar stands on is its value axis, and that one is never
-    widened.
-
-    [Batch 64: FOUR types register it, not two -- bar and pictorialBar
-    (layout/barGrid.ts) and candlestick and boxplot (their layouts), all with
-    the same band-width handler. A zoomed candlestick on a category axis
-    without boundaryGap (candlestick-sh) mapped its candles half a band too
-    wide; its markers showed it.] }
-  function WantsContainShape(AAxis: TTyAxis; ANode: TJSONObject): Boolean;
-  var
-    d: TJSONData;
-    opt: Boolean;
-  begin
-    d := nil;
-    if ANode <> nil then d := ANode.Find('containShape');
-    if (d = nil) or (d.JSONType = jtNull) then opt := not AAxis.OnBand
-    else opt := JsTruthyOf(d);
-    Result := opt and (KeyOnAxis(AAxis, 'bar')
-      or KeyOnAxis(AAxis, 'pictorialBar') or KeyOnAxis(AAxis, 'candlestick')
-      or KeyOnAxis(AAxis, 'boxplot'));
-  end;
-
-  { THE MAPPING EXTENT: the effective one, widened by half a bar each way so
-    the bars at its ends are drawn inside the plot. Run once the effective
-    extent is final. Ticks, labels and split lines stay on the effective
-    extent; only where values land moves.
-
-    The half bar is measured in data space, from the axis' pixel length AS
-    THE LAYOUT OPTIONS GAVE IT -- phase A's extent, before labels shrank the
-    plot. Upstream does the same, because its nice step runs on a freshly
-    made coordinate system that has not been shrunk yet. }
-  procedure ApplyContainShape(AAxis: TTyAxis);
-  const
-    cSingleRatio: Double = 0.8;
-  var
-    e, lin: TTyRange;
-    a, b, span, px, w2, gap, sup0, sup1, lo, hi: Double;
-    haveSup, ordinal: Boolean;
-    k: Integer;
-    typ: string;
-  begin
-    ordinal := AAxis.Scale is TTyOrdinalScale;
-    { A band already holds its bar: no half width to add. }
-    if ordinal and AAxis.OnBand then Exit;
-    e := AAxis.Scale.GetExtent;
-    a := AAxis.Scale.Mapper.TransformIn(e.Start);
-    b := AAxis.Scale.Mapper.TransformIn(e.Stop);
-    { the span in the linear space as the scale KEEPS it -- a log axis' nice
-      decades -- while the ends the half bar is added to are taken through
-      the logarithm, as upstream's transformIn takes them }
-    lin := AAxis.Scale.LinearExtent2(sekEffective);
-    span := lin.Stop - lin.Start;
-    px := AAxis.PxLength;
-    haveSup := False;
-    sup0 := 0;
-    sup1 := 0;
-    for k := 0 to 3 do
-    begin
-      case k of
-        0: typ := 'bar';
-        1: typ := 'pictorialBar';
-        2: typ := 'candlestick';
-      else
-        typ := 'boxplot';
-      end;
-      if not KeyOnAxis(AAxis, typ) then Continue;
-      w2 := NaN;
-      if ordinal then
-      begin
-        { One category's width in categories -- 1, give or take the last bit,
-          which upstream's round trip through pixels decides. }
-        if (span <> 0) and (px <> 0) and not IsNan(span) then
-          w2 := px / span * span / px;
-      end
-      else
-      begin
-        gap := TyLiPosMinGap(AStores,
-          AIndex.SeriesOnAxisOfKey(AAxis, TySeriesStatKey(typ, 'cartesian2d')),
-          AAxis);
-        if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
-          and (gap > 0) then
-          w2 := gap
-        else if (gap = cTyMinGapSingle) and (px > 0) then
-          { ONE VALUE: the band is four fifths of the axis, and the round
-            trip through pixels is upstream's -- 0.8 * span parts from it in
-            the last bit a third of the time. }
-          w2 := px * cSingleRatio * span / px;
-      end;
-      if IsNan(w2) or IsInfinite(w2) then Continue;
-      haveSup := True;
-      sup0 := Min(sup0, -w2 / 2);
-      sup1 := Max(sup1, w2 / 2);
-      AAxis.ZeroDiscouraged := True;
-    end;
-    if not haveSup then Exit;
-    if ordinal then
-      AAxis.Scale.SetExtent2(sekMapping,
-        TyRange(Min(e.Start, e.Start + sup0), Max(e.Stop, e.Stop + sup1)))
-    else
-    begin
-      { AN END A dataZoom PINNED IS NOT WIDENED: the axis ends exactly at the
-        window, and a bar past it is clipped }
-      if zoomFixLo then lo := e.Start
-      else lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
-      if zoomFixHi then hi := e.Stop
-      else hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
-      if (lo < e.Start) or (hi > e.Stop) then
-        AAxis.Scale.SetExtent2(sekMapping, TyRange(lo, hi));
-    end;
-  end;
-
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string;
     AAlignTo: TTyAxis; AAlignPx: Double);
   var
@@ -1922,7 +2540,7 @@ var
   begin
     if AAxis = nil then Exit;
     node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
-    ctnShp := WantsContainShape(AAxis, node);
+    ctnShp := TyAxisWantsContainShape(AAxis, node, ABindings, 'cartesian2d');
     zoomFixLo := False;
     zoomFixHi := False;
     zi := -1;
@@ -1962,12 +2580,14 @@ var
       { a band already holds its bar, and a blank axis has none }
       if (AAxis.Scale is TTyOrdinalScale) and ctnShp
         and not AAxis.Scale.MarkedBlank then
-        ApplyContainShape(AAxis);
+        TyAxisApplyContainShape(AAxis, ABindings, AStores, AIndex,
+          'cartesian2d', zoomFixLo, zoomFixHi);
       Exit;
     end;
     { AFTER the effective extent is final: the half bar widens what the
       nice step left, pins and all. }
-    if ctnShp then ApplyContainShape(AAxis);
+    if ctnShp then TyAxisApplyContainShape(AAxis, ABindings, AStores, AIndex,
+          'cartesian2d', zoomFixLo, zoomFixHi);
   end;
 
   function InList(AAxis: TTyAxis): Boolean;
@@ -1982,8 +2602,10 @@ var
     and so can align or be aligned to. }
   function Numeric(AAxis: TTyAxis): Boolean;
   begin
+    { not an axis that writes `breaks` [Batch 132] }
     Result := (AAxis <> nil) and (AAxis.Scale is TTyIntervalScale)
-      and not (AAxis.Scale is TTyTimeScale);
+      and not (AAxis.Scale is TTyTimeScale)
+      and not TyAxisBreaksWritten(ObjAt(AOption, AAxis.MainType, AAxis.ComponentIndex));
   end;
 
   { `alignTicks` asked for, and no `interval` written. }

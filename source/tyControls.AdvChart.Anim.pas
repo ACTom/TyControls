@@ -37,9 +37,27 @@ unit tyControls.AdvChart.Anim;
   boolean, or null. AN2 binds a chart element by deriving from it;
   TTyAnimBag is a ready-made one keyed by name.
 
-  WHAT IS NOT HERE: additive animation (only visualMap's continuous indicator
-  uses it upstream), gradients, per-keyframe easing (ECharts never sets it),
-  pause/resume (ECharts never pauses a series). A numeric STRING is
+  ADDITIVE [Batch 116, C7]: an animateTo with `additive` stops nothing; its
+  animator remembers the element's running animators of the same nested
+  object, a new track starts from the LAST keyframe of the latest of them on
+  that property, and while that one runs the track steps its keyframes'
+  differences from its first one and adds them to what the earlier animator
+  just wrote -- a number plus, a colour channel by channel over a parse of
+  the string there, an array item by item. Once that animator has finished
+  the track steps its own values. Only visualMap's continuous indicator uses
+  it upstream.
+
+  KEYFRAMES [Batch 139, D6]: a keyframe may carry an easing of its own
+  (Track.addKeyframe); the segment that ENDS on it is eased with it, after
+  the clip's easing. A track that finishes finishes the track it adds to
+  (Track.setFinished), so the value stops where the latest animator left it.
+  An animator made by Element.animate('') has NO target name (upstream's
+  undefined, not the '' animateTo gives the element's own animators): an
+  animateTo on the element's keys does not stop it, and it is never one an
+  additive animateTo adds to.
+
+  WHAT IS NOT HERE: gradients, pause/resume (ECharts never pauses a
+  series). A numeric STRING is
   interpolated as its number; upstream classifies it as a number too but then
   concatenates, which no chart relies on.
 
@@ -134,6 +152,11 @@ type
     { parsed: a colour is its four rgba numbers }
     Value: TTyAnimValue;
     Raw: TTyAnimValue;
+    { additive: Value less the first keyframe's [Batch 116] }
+    AddValue: TTyAnimValue;
+    { the keyframe's own easing: the segment ending here is eased with it
+      (ekNone: none) [Batch 139] }
+    Easing: TTyEasing;
   end;
 
   { ---- one property (Animator.ts Track) ---- }
@@ -145,10 +168,17 @@ type
     FDiscrete, FFinished, FNeedsSort, FInKeys: Boolean;
     FLastFr: Integer;
     FLastFrP: Double;
+    { ADDITIVE [Batch 116]: the earlier animator's track this one adds to
+      while it runs, and the scratch the differences interpolate into }
+    FAdditive: TTyAnimTrack;
+    FAddScratch: TTyAnimValue;
   public
     constructor Create(const APropName: string);
-    procedure AddKeyframe(ATime: Double; const ARaw: TTyAnimValue);
-    procedure Prepare(AMaxTime: Double);
+    { AEasing: the keyframe's own ('' for none) [Batch 139] }
+    procedure AddKeyframe(ATime: Double; const ARaw: TTyAnimValue;
+      const AEasing: string = '');
+    { AAdditive: the track to add to, nil for none }
+    procedure Prepare(AMaxTime: Double; AAdditive: TTyAnimTrack = nil);
     procedure Step(AAnimator: TTyAnimator; APercent: Double);
     function NeedsAnimate: Boolean;
     procedure SetFinished;
@@ -157,6 +187,7 @@ type
     property ValType: TTyAnimValType read FValType;
     property Discrete: Boolean read FDiscrete;
     property Finished: Boolean read FFinished;
+    property AdditiveTrack: TTyAnimTrack read FAdditive;
   end;
 
   TTyAnimCbKind = (ackDirty, ackRemove, ackUser);
@@ -196,6 +227,15 @@ type
     { __fromStateTransition: the state list a transition's animator was made
       for ('' for any other animator) [Batch 94] }
     FFromState: string;
+    { made by Element.animate(''): targetName undefined [Batch 139] }
+    FNoTarget: Boolean;
+    { ADDITIVE [Batch 116]: the element's running animators of the same
+      nested object when this one was made, and the animators made additive
+      to this one (so a freed animator leaves no track pointing at it) }
+    FAdditiveTo: array of TTyAnimator;
+    FDependents: array of TTyAnimator;
+    function GetAdditiveTrack(const AProp: string): TTyAnimTrack;
+    procedure SetAdditiveTo(const AList: array of TTyAnimator);
     function FindTrack(const AProp: string): TTyAnimTrack;
     function FullKey(const AProp: string): string;
     procedure ClipFrame(APercent: Double);
@@ -217,7 +257,7 @@ type
       value -- a keyframe at 0 when ATime > 0 -- and a key whose current
       value is null makes no track. }
     function WhenWithKeys(ATime: Double; const AKeys: array of string;
-      const AValues: array of TTyAnimValue): TTyAnimator;
+      const AValues: array of TTyAnimValue; const AEasing: string = ''): TTyAnimator;
     function Delay(ATime: Double): TTyAnimator;
     { Run for ADuration whatever the tracks say, even with none; HasDuration
       False is upstream's undefined, which starts as 0. }
@@ -249,6 +289,9 @@ type
     property FromStateTransition: string read FFromState write FFromState;
     property Element: TTyAnimElement read FElement;
     property TargetName: string read FTargetName;
+    { Element.animate('') made it: its targetName is undefined, which no
+      animateTo's '' equals [Batch 139] }
+    property NoTargetName: Boolean read FNoTarget;
     property Scope: string read FScope write FScope;
     property Clip: TTyAnimClip read FClip;
     property MaxTime: Double read FMaxTime;
@@ -301,6 +344,8 @@ type
     Delay: Double;
     Easing: string;
     Force, SetToFinal: Boolean;
+    { additive animation [Batch 116] }
+    Additive: Boolean;
     Scope: string;
     Done, Aborted: TTyAnimNotify;
     During: TTyAnimDuring;
@@ -333,6 +378,8 @@ type
     FHasStateCfg: Boolean;
     FStateSkip: array of string;
     FStatePath: Boolean;
+    { a Text: its fill, stroke, font size ... transition too [Batch 129] }
+    FStateText: Boolean;
     procedure SetAnimation(AValue: TTyAnimation);
     procedure AddAnimator(AAnimator: TTyAnimator);
     procedure RemoveFromList(AAnimator: TTyAnimator);
@@ -400,6 +447,11 @@ type
     { a Path (its fill, stroke, width ... animate), else a Text (opacity and
       the shadow only); True by default }
     property StatePath: Boolean read FStatePath write FStatePath;
+    { not a Path but a Text (zrender's DEFAULT_TEXT_ANIMATION_PROPS: fill,
+      stroke, the opacities, lineWidth, fontSize, lineHeight, the box and
+      the text shadow over the common ones); False by default -- the common
+      ones only [Batch 129] }
+    property StateText: Boolean read FStateText write FStateText;
     property Animation: TTyAnimation read FAnimation write SetAnimation;
   end;
 
@@ -745,6 +797,9 @@ end;
 procedure TTyAnimTrack.SetFinished;
 begin
   FFinished := True;
+  { the track added to finishes too: the value stays where the latest
+    animator left it [Batch 139] }
+  if FAdditive <> nil then FAdditive.SetFinished;
 end;
 
 function TTyAnimTrack.KeyframeCount: Integer;
@@ -752,7 +807,8 @@ begin
   Result := Length(FKeyframes);
 end;
 
-procedure TTyAnimTrack.AddKeyframe(ATime: Double; const ARaw: TTyAnimValue);
+procedure TTyAnimTrack.AddKeyframe(ATime: Double; const ARaw: TTyAnimValue;
+  const AEasing: string);
 var
   len: Integer;
   isDiscrete: Boolean;
@@ -801,6 +857,10 @@ begin
   FKeyframes[len].Percent := 0;
   FKeyframes[len].Value := value;
   FKeyframes[len].Raw := TyAnimClone(ARaw);
+  { `if (easing)`: easingFuncs[easing] || createCubicEasingFunc(easing) --
+    an easing that resolves to nothing eases nothing [Batch 139] }
+  if AEasing <> '' then FKeyframes[len].Easing := TyEasingResolve(AEasing)
+  else FKeyframes[len].Easing := TyEasingNone;
 end;
 
 { fillArray: align an earlier keyframe's array with the last one's -- cut a
@@ -842,11 +902,11 @@ begin
   end;
 end;
 
-procedure TTyAnimTrack.Prepare(AMaxTime: Double);
+procedure TTyAnimTrack.Prepare(AMaxTime: Double; AAdditive: TTyAnimTrack);
 var
   i, j, n: Integer;
   tmp: TTyAnimKeyframe;
-  last: TTyAnimValue;
+  last, start: TTyAnimValue;
 begin
   n := Length(FKeyframes);
   if FNeedsSort then
@@ -873,6 +933,30 @@ begin
       else FillArray(FKeyframes[i].Value, last, 2);
     end;
   end;
+  { ONLY ON INTERPOLABLE VALUES OF THE SAME TYPE, both tracks animating and
+    the other not yet finished: each keyframe's difference from the first }
+  if (not FDiscrete) and (AAdditive <> nil) and NeedsAnimate and AAdditive.NeedsAnimate
+    and (FValType = AAdditive.FValType) and not AAdditive.FFinished then
+  begin
+    FAdditive := AAdditive;
+    start := TyAnimClone(FKeyframes[0].Value);
+    for i := 0 to n - 1 do
+    begin
+      case FValType of
+        vtNumber:
+          FKeyframes[i].AddValue := TyAnimNum(FKeyframes[i].Value.Num - start.Num);
+        vtColor, vt1DArray, vt2DArray:
+          begin
+            FKeyframes[i].AddValue := TyAnimClone(FKeyframes[i].Value);
+            for j := 0 to High(FKeyframes[i].AddValue.Arr) do
+              if j <= High(start.Arr) then
+                FKeyframes[i].AddValue.Arr[j] := FKeyframes[i].Value.Arr[j] - start.Arr[j]
+              else
+                FKeyframes[i].AddValue.Arr[j] := NaN;
+          end;
+      end;
+    end;
+  end;
 end;
 
 procedure TTyAnimTrack.Step(AAnimator: TTyAnimator; APercent: Double);
@@ -882,9 +966,11 @@ var
   frame, next: ^TTyAnimKeyframe;
   cur: TTyAnimValue;
   tmp: array[0..3] of Double;
-  v: Double;
+  v, r, g, b, a: Double;
 begin
   if FFinished then Exit;
+  { the track added to has finished: from now on this one's own values }
+  if (FAdditive <> nil) and FAdditive.FFinished then FAdditive := nil;
   n := Length(FKeyframes);
   if n = 0 then Exit;
   if n = 1 then
@@ -934,11 +1020,54 @@ begin
     { Math.min(w, 1) }
     if w > 1 then w := 1;
   end;
+  { the easing of the keyframe the segment ends on [Batch 139] }
+  if next^.Easing.Kind <> ekNone then w := TyEasingApply(next^.Easing, w);
 
   if FDiscrete then
   begin
     if w < 1 then AAnimator.PutValue(FPropName, frame^.Raw)
     else AAnimator.PutValue(FPropName, next^.Raw);
+  end
+  else if FAdditive <> nil then
+  begin
+    { THE DIFFERENCE AT THIS FRAME, added to what the earlier animator just
+      wrote (Animator.ts _addToTarget) }
+    cur := AAnimator.GetValue(FPropName);
+    case FValType of
+      vtNumber:
+        begin
+          v := (next^.AddValue.Num - frame^.AddValue.Num) * w + frame^.AddValue.Num;
+          AAnimator.PutValue(FPropName, TyAnimNum(cur.Num + v));
+        end;
+      vtColor:
+        begin
+          FAddScratch := TyAnimClone(frame^.AddValue);
+          for i := 0 to 3 do
+            FAddScratch.Arr[i] := (next^.AddValue.Arr[i] - frame^.AddValue.Arr[i]) * w
+              + frame^.AddValue.Arr[i];
+          if (cur.Kind = avkString) and TyTryParseCssRgba(cur.Str, r, g, b, a) then
+          begin
+            tmp[0] := r + FAddScratch.Arr[0];
+            tmp[1] := g + FAddScratch.Arr[1];
+            tmp[2] := b + FAddScratch.Arr[2];
+            tmp[3] := a + FAddScratch.Arr[3];
+            AAnimator.PutValue(FPropName,
+              TyAnimStr(TyAnimRgbaString(tmp[0], tmp[1], tmp[2], tmp[3])));
+          end;
+        end;
+      vt1DArray, vt2DArray:
+        if cur.Kind = avkArray then
+        begin
+          len := Min(Length(frame^.AddValue.Arr), Length(cur.Arr));
+          for i := 0 to len - 1 do
+          begin
+            v := (next^.AddValue.Arr[i] - frame^.AddValue.Arr[i]) * w + frame^.AddValue.Arr[i];
+            if cur.Float32 then cur.Arr[i] := TyJsFround(cur.Arr[i] + v)
+            else cur.Arr[i] := cur.Arr[i] + v;
+          end;
+          AAnimator.PutValue(FPropName, cur);
+        end;
+    end;
   end
   else if FValType in [vt1DArray, vt2DArray] then
   begin
@@ -1035,8 +1164,25 @@ begin
 end;
 
 destructor TTyAnimator.Destroy;
-var i: Integer;
+var i, j, k: Integer;
 begin
+  { NO TRACK KEEPS POINTING HERE: a dependent's tracks added to ours drop
+    them (ours are finished by now, which is what the dependent would have
+    found), and the bases forget us }
+  for i := 0 to High(FDependents) do
+  begin
+    if FDependents[i] = nil then Continue;
+    for j := 0 to High(FDependents[i].FTracks) do
+      for k := 0 to High(FTracks) do
+        if FDependents[i].FTracks[j].FAdditive = FTracks[k] then
+          FDependents[i].FTracks[j].FAdditive := nil;
+    for j := 0 to High(FDependents[i].FAdditiveTo) do
+      if FDependents[i].FAdditiveTo[j] = Self then FDependents[i].FAdditiveTo[j] := nil;
+  end;
+  for i := 0 to High(FAdditiveTo) do
+    if FAdditiveTo[i] <> nil then
+      for j := 0 to High(FAdditiveTo[i].FDependents) do
+        if FAdditiveTo[i].FDependents[j] = Self then FAdditiveTo[i].FDependents[j] := nil;
   if FOwnedClip <> nil then
   begin
     if FOwnedClip.FAnimation <> nil then FOwnedClip.FAnimation.RemoveClip(FOwnedClip);
@@ -1082,6 +1228,31 @@ begin
   Result := FindTrack(AProp);
 end;
 
+{ _getAdditiveTrack: the track of the LATEST animator added to that has one }
+function TTyAnimator.GetAdditiveTrack(const AProp: string): TTyAnimTrack;
+var i: Integer; t: TTyAnimTrack;
+begin
+  Result := nil;
+  for i := 0 to High(FAdditiveTo) do
+  begin
+    if FAdditiveTo[i] = nil then Continue;
+    t := FAdditiveTo[i].FindTrack(AProp);
+    if t <> nil then Result := t;
+  end;
+end;
+
+procedure TTyAnimator.SetAdditiveTo(const AList: array of TTyAnimator);
+var i: Integer;
+begin
+  SetLength(FAdditiveTo, Length(AList));
+  for i := 0 to High(AList) do
+  begin
+    FAdditiveTo[i] := AList[i];
+    SetLength(AList[i].FDependents, Length(AList[i].FDependents) + 1);
+    AList[i].FDependents[High(AList[i].FDependents)] := Self;
+  end;
+end;
+
 function TTyAnimator.TrackCount: Integer;
 begin
   Result := Length(FTrackKeys);
@@ -1107,10 +1278,10 @@ begin
 end;
 
 function TTyAnimator.WhenWithKeys(ATime: Double; const AKeys: array of string;
-  const AValues: array of TTyAnimValue): TTyAnimator;
+  const AValues: array of TTyAnimValue; const AEasing: string): TTyAnimator;
 var
   i: Integer;
-  track: TTyAnimTrack;
+  track, addT: TTyAnimTrack;
   initial: TTyAnimValue;
 begin
   for i := 0 to High(AKeys) do
@@ -1121,15 +1292,30 @@ begin
       track := TTyAnimTrack.Create(AKeys[i]);
       SetLength(FTracks, Length(FTracks) + 1);
       FTracks[High(FTracks)] := track;
-      initial := GetValue(AKeys[i]);
+      { ADDITIVE: from where the latest animator added to will end -- a
+        colour as rgba2String writes it [Batch 116] }
+      addT := GetAdditiveTrack(AKeys[i]);
+      if addT <> nil then
+      begin
+        initial := TyAnimNull;
+        if Length(addT.FKeyframes) > 0 then
+        begin
+          initial := TyAnimClone(addT.FKeyframes[High(addT.FKeyframes)].Value);
+          if (addT.FValType = vtColor) and (Length(initial.Arr) >= 4) then
+            initial := TyAnimStr(TyAnimRgbaString(initial.Arr[0], initial.Arr[1],
+              initial.Arr[2], initial.Arr[3]));
+        end;
+      end
+      else
+        initial := GetValue(AKeys[i]);
       { an invalid value: the track exists, but is never run }
       if initial.Kind = avkNull then Continue;
-      if ATime > 0 then track.AddKeyframe(0, initial);
+      if ATime > 0 then track.AddKeyframe(0, initial, AEasing);
       track.FInKeys := True;
       SetLength(FTrackKeys, Length(FTrackKeys) + 1);
       FTrackKeys[High(FTrackKeys)] := track;
     end;
-    track.AddKeyframe(ATime, AValues[i]);
+    track.AddKeyframe(ATime, AValues[i], AEasing);
   end;
   FMaxTime := JsMax(FMaxTime, ATime);
   Result := Self;
@@ -1275,7 +1461,7 @@ begin
     for i := 0 to High(FTrackKeys) do
     begin
       track := FTrackKeys[i];
-      track.Prepare(mt);
+      track.Prepare(mt, GetAdditiveTrack(track.FPropName));
       if track.NeedsAnimate then
       begin
         if (not FAllowDiscrete) and track.FDiscrete then
@@ -1398,7 +1584,8 @@ begin
     t := track.FKeyframes[n - 1].Time;
     SetLength(track.FKeyframes, n - 1);
     track.AddKeyframe(t, AValues[i]);
-    track.Prepare(OrZero(FMaxTime));
+    { prepared again with the track it adds to [Batch 139] }
+    track.Prepare(OrZero(FMaxTime), track.FAdditive);
   end;
 end;
 
@@ -1642,6 +1829,8 @@ function TTyAnimElement.Animate(const ATargetName: string; ALoop: Boolean;
   AAllowDiscrete: Boolean): TTyAnimator;
 begin
   Result := TTyAnimator.Create(Self, ATargetName, ALoop, AAllowDiscrete);
+  { `key && (animator.targetName = key)`: no key leaves it undefined }
+  Result.FNoTarget := ATargetName = '';
   AddAnimator(Result);
 end;
 
@@ -1780,8 +1969,13 @@ const
     'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'shadowColor', 'opacity');
   cCommonAnimStyle: array[0..4] of string = ('shadowBlur', 'shadowOffsetX',
     'shadowOffsetY', 'shadowColor', 'opacity');
+  { Text.ts DEFAULT_TEXT_ANIMATION_PROPS' own [Batch 129] }
+  cTextAnimStyle: array[0..17] of string = ('fill', 'stroke', 'fillOpacity',
+    'strokeOpacity', 'lineWidth', 'fontSize', 'lineHeight', 'width', 'height',
+    'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY',
+    'backgroundColor', 'padding', 'borderColor', 'borderWidth', 'borderRadius');
 
-function StyleAnimatable(APath: Boolean; const AKey: string): Boolean;
+function StyleAnimatable(APath, AText: Boolean; const AKey: string): Boolean;
 var i: Integer;
 begin
   Result := True;
@@ -1791,8 +1985,13 @@ begin
       if cPathAnimStyle[i] = AKey then Exit;
   end
   else
+  begin
+    if AText then
+      for i := 0 to High(cTextAnimStyle) do
+        if cTextAnimStyle[i] = AKey then Exit;
     for i := 0 to High(cCommonAnimStyle) do
       if cCommonAnimStyle[i] = AKey then Exit;
+  end;
   Result := False;
 end;
 
@@ -1811,6 +2010,7 @@ var
   keptVals: array of TTyAnimValue;
   fromVals, toVals: array of TTyAnimValue;
   duration: Double;
+  others: array of TTyAnimator;
 
   function FullOf(const AInner: string): string;
   begin
@@ -1828,7 +2028,7 @@ begin
     { animationProps: a state transition's style animates only the props
       getAnimationStyleProps names; the rest is assigned [Batch 94] }
     if (AValues[i].Kind <> avkNull) and (cur.Kind <> avkNull)
-      and not (AFilter and (ATopKey = 'style') and not StyleAnimatable(FStatePath, AKeys[i])) then
+      and not (AFilter and (ATopKey = 'style') and not StyleAnimatable(FStatePath, FStateText, AKeys[i])) then
     begin
       n := Length(keys);
       SetLength(keys, n + 1); SetLength(vals, n + 1); SetLength(assigned, n + 1);
@@ -1850,14 +2050,17 @@ begin
   end;
 
   { stop the previous animation on the same properties; the forward walk
-    with a splice skips the animator after a removed one, as upstream's }
-  if Length(keys) > 0 then
+    with a splice skips the animator after a removed one, as upstream's --
+    unless additive: then nothing stops [Batch 116] }
+  if (Length(keys) > 0) and not ACfg.Additive then
   begin
     i := 0;
     while i < FAnimators.Count do
     begin
       a := TTyAnimator(FAnimators[i]);
-      if a.FTargetName = ATopKey then
+      { an animator Element.animate('') made has an undefined targetName,
+        never the element's '' [Batch 139] }
+      if (a.FTargetName = ATopKey) and not a.FNoTarget then
         if a.StopTracks(keys) then
         begin
           idx := FAnimators.IndexOf(a);
@@ -1913,6 +2116,19 @@ begin
     end;
 
     a := TTyAnimator.Create(Self, ATopKey, False, False);
+    { additive: the running animators of the same nested object }
+    if ACfg.Additive then
+    begin
+      others := nil;
+      for i := 0 to FAnimators.Count - 1 do
+        if (TTyAnimator(FAnimators[i]).FTargetName = ATopKey)
+          and not TTyAnimator(FAnimators[i]).FNoTarget then
+        begin
+          SetLength(others, Length(others) + 1);
+          others[High(others)] := TTyAnimator(FAnimators[i]);
+        end;
+      a.SetAdditiveTo(others);
+    end;
     if ACfg.Scope <> '' then a.FScope := ACfg.Scope;
     if ACfg.SetToFinal then a.WhenWithKeys(0, keys, fromVals);
     if ACfg.HasDuration then duration := ACfg.Duration else duration := 500;
@@ -2210,7 +2426,7 @@ begin
   while i < FAnimators.Count do
   begin
     a := TTyAnimator(FAnimators[i]);
-    if a.FTargetName = ATopKey then
+    if (a.FTargetName = ATopKey) and not a.FNoTarget then
       if a.StopTracks(keys) then
       begin
         idx := FAnimators.IndexOf(a);

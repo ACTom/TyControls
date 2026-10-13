@@ -299,6 +299,24 @@ function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
   `trigger: 'axis'` the marker shows no box of its own. }
 function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
   const AKind: string; AItem: Integer): TTyTooltipSpec;
+{ [Batch 147] A MATRIX CELL'S cascade (TooltipView._showComponentItemTooltip
+  over setTooltipConfig): the matrix's `tooltip` (a string is its
+  formatter), the matrix model itself, `{formatter: AContent}` -- the cell's
+  name, so there is always a formatter --, then the global component. The
+  trigger is not consulted for a component item: always 'item'. }
+function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
+  const AContent: string): TTyTooltipSpec;
+{ [Batch 148] A GEO REGION'S CASCADE (setTooltipConfig and
+  TooltipView._showComponentItemTooltip): the region's tooltip --
+  regionModel.get('tooltip'), so the region option's, else the geo's; a
+  string is a formatter -- then the geo component's own, then
+  a level whose formatter is the content -- the region's name (defaults()
+  keeps it whatever the option says), then the global component. The
+  name's level is always there, so the global formatter is never reached;
+  no trigger is asked of a component's item. ARegionTip: the region
+  option's `tooltip` (nil: none). }
+function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
+  ARegionTip: TJSONData; const AName: string): TTyTooltipSpec;
 
 { ---- content ---- }
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
@@ -996,6 +1014,103 @@ begin
   MergeTooltipNode(TJSONObject(comp), Result, seen);
 end;
 
+function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
+  const AContent: string): TTyTooltipSpec;
+var
+  seen: TTyStringArray;
+  mx: TJSONData;
+  s: string;
+  comp: TJSONObject;
+begin
+  Result := TyTooltipSpecDefault;
+  seen := nil;
+  if AOption = nil then Exit;
+  mx := AOption.ComponentAt('matrix', AMatrixIndex);
+  if not (mx is TJSONObject) then mx := nil;
+  if mx <> nil then
+  begin
+    { the item's own: matrix.tooltip }
+    if TooltipStringOf(mx, s) then
+    begin
+      Result.Formatter := s;
+      Result.HasFormatter := s <> '';
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end;
+    MergeTooltipNode(TooltipNodeOf(mx), Result, seen);
+    { the component model }
+    MergeTooltipNode(TJSONObject(mx), Result, seen);
+  end;
+  { the last level: the content as the formatter }
+  if not Result.HasFormatter then
+  begin
+    Result.Formatter := AContent;
+    Result.HasFormatter := AContent <> '';
+  end;
+  SetLength(seen, Length(seen) + 1);
+  seen[High(seen)] := 'formatter';
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(comp, Result, seen);
+  Result.Trigger := tttItem;
+end;
+
+function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
+  ARegionTip: TJSONData; const AName: string): TTyTooltipSpec;
+var
+  seen: TTyStringArray;
+  geoNode, item, gt: TJSONData;
+  comp: TJSONObject;
+
+  function InSeen(const AKey: string): Boolean;
+  var i: Integer;
+  begin
+    for i := 0 to High(seen) do
+      if seen[i] = AKey then Exit(True);
+    Result := False;
+  end;
+
+  procedure Level(AData: TJSONData);
+  begin
+    if AData = nil then Exit;
+    if AData.JSONType = jtString then
+    begin
+      if InSeen('formatter') then Exit;
+      Result.Formatter := AData.AsString;
+      Result.HasFormatter := AData.AsString <> '';
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end
+    else if AData is TJSONObject then
+      MergeTooltipNode(TJSONObject(AData), Result, seen);
+  end;
+
+begin
+  Result := TyTooltipSpecDefault;
+  seen := nil;
+  if AOption = nil then Exit;
+  geoNode := AOption.ComponentAt('geo', AGeoIndex);
+  gt := nil;
+  if geoNode is TJSONObject then gt := TJSONObject(geoNode).Find('tooltip');
+  if (gt <> nil) and (gt.JSONType = jtNull) then gt := nil;
+  item := ARegionTip;
+  if (item <> nil) and (item.JSONType = jtNull) then item := nil;
+  if item = nil then item := gt;
+  Level(item);
+  Level(gt);
+  { the content's own level: its formatter }
+  if not InSeen('formatter') then
+  begin
+    Result.Formatter := AName;
+    Result.HasFormatter := AName <> '';
+    SetLength(seen, Length(seen) + 1);
+    seen[High(seen)] := 'formatter';
+  end;
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(comp, Result, seen);
+end;
+
 { ============================ placement ============================ }
 
 function PosValueOf(AData: TJSONData): TTyChartPosValue;
@@ -1189,12 +1304,25 @@ begin
     { not a number: nought (upstream hands NaN to the DOM) }
     if IsNan(x) or IsInfinite(x) then x := 0;
     if IsNan(y) or IsInfinite(y) then y := 0;
-    if ASpec.Confine then
+    if ASpec.Confine and ASpec.ConfineSet then
     begin
       x := Min(x + w, AIn.ViewW) - w;
       y := Min(y + h, AIn.ViewH) - h;
-      x := Max(x, 0);
-      y := Max(y, 0);
+      { a typed nought: Max of a Double and an integer literal is the Single
+        overload, and a fractional point lost its low bits [Batch 153] }
+      x := Max(x, Double(0));
+      y := Max(y, Double(0));
+    end
+    else if ASpec.Confine then
+    begin
+      { THE PORT'S OWN DEFAULT (see the unit header): the same slide, but a
+        box already inside is not touched -- upstream does not confine an
+        unwritten `confine` at all, and min(y + h, view) - h moves a
+        fractional y by an ulp [Batch 153] }
+      if x + w > AIn.ViewW then x := AIn.ViewW - w;
+      if y + h > AIn.ViewH then y := AIn.ViewH - h;
+      if x < 0 then x := 0;
+      if y < 0 then y := 0;
     end;
   finally
     ClearExceptions(False);

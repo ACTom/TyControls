@@ -102,6 +102,7 @@ type
     procedure TestAGhostIsDrawnAndSilent;
     procedure TestAResizeEndsAnUpdate;
     procedure TestHeadlessUpdateWaitsForTheWindow;
+    procedure TestManyNamedRowsUpdateInLinearTime;
   end;
 
 implementation
@@ -1163,6 +1164,49 @@ begin
   for i := 0 to lst.Count - 1 do
     AssertTrue(Format('element %d drawn as laid out', [i]),
       SameShape(lst.Element(i), frm.Element(i)));
+end;
+
+{ The rows' keys (getId: the name, and '__ec__' + its count from the second
+  time on) are counted in a sorted, byte-compared list. [Milestone D5-D8:
+  an unsorted list compared through the locale took every name against
+  every earlier one -- six thousand categories spent tens of seconds per
+  update there, ten times the first render, and the dataZoom gallery
+  suites minutes.] Measured against the first render of the same rows, so
+  that a loaded machine slows both: the update is about as dear as that. }
+procedure TAdvChartAnimUpdateTest.TestManyNamedRowsUpdateInLinearTime;
+const
+  cN = 6000;
+var
+  cats, vals, vals2: string;
+  i: Integer;
+  t0, dt, first: QWord;
+begin
+  cats := '';
+  vals := '';
+  vals2 := '';
+  for i := 0 to cN - 1 do
+  begin
+    if i > 0 then
+    begin
+      cats := cats + ',';
+      vals := vals + ',';
+      vals2 := vals2 + ',';
+    end;
+    cats := cats + '"day ' + IntToStr(i) + '"';
+    vals := vals + IntToStr((i * 37) mod 100);
+    vals2 := vals2 + IntToStr((i * 41) mod 100);
+  end;
+  NewChart(camAuto);
+  t0 := GetTickCount64;
+  Load('{"xAxis": {"type": "category", "data": [' + cats + ']}, "yAxis": {},'
+    + ' "series": [{"type": "line", "data": [' + vals + ']}]}');
+  first := GetTickCount64 - t0;
+  t0 := GetTickCount64;
+  SetNext('{"xAxis": {"type": "category", "data": [' + cats + ']}, "yAxis": {},'
+    + ' "series": [{"type": "line", "data": [' + vals2 + ']}]}');
+  dt := GetTickCount64 - t0;
+  AssertTrue(Format('an update over %d named rows took %d ms, the first render %d ms',
+    [cN, dt, first]), dt < 3 * first + 2000);
 end;
 
 initialization

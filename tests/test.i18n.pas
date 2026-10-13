@@ -590,6 +590,12 @@ const
     '''日''', '''一''', '''二''', '''三''', '''四''', '''五''', '''六''',
     '''周''', '''星期''');
 
+  { AdvChart's geo carries ECharts' fixes for a map registered as 'china' (src/coord/geo/fix/
+    nanhai.ts, textCoord.ts, diaoyuIsland.ts): region names matched against the map's own
+    feature names, so they must be the names the map data uses. Data, not text for a user. }
+  AdvChartGeoFixData: array[0..6] of string = (
+    '''北京''', '''南海诸岛''', '''台湾''', '''天津''', '''广东''', '''澳门''', '''香港''');
+
 { AFound (ChineseLiterals' lines) without the lines whose literal is one of AExempt. }
 function WithoutLiterals(const AFound: string; const AExempt: array of string): string;
 var
@@ -644,6 +650,8 @@ begin
       Inc(scanned);
       if SameText(name, 'tyControls.AdvChart.Calendar.pas') then
         found := found + WithoutLiterals(ChineseLiterals(files[i]), AdvChartCalendarData)
+      else if SameText(name, 'tyControls.AdvChart.GeoFix.pas') then
+        found := found + WithoutLiterals(ChineseLiterals(files[i]), AdvChartGeoFixData)
       else
         found := found + ChineseLiterals(files[i]);
     end;

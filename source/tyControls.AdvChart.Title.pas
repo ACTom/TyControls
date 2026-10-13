@@ -103,7 +103,14 @@ function TyTitleSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyTitleSpec;
 function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
   APPI: Integer; const ATextMeter: ITyTextMeasurer = nil;
-  const ASubMeter: ITyTextMeasurer = nil): TTyTitleLayout;
+  const ASubMeter: ITyTextMeasurer = nil): TTyTitleLayout; overload;
+{ THE SAME AGAINST x, y, width, height: createBoxLayoutReference's
+  refContainer -- the canvas, or the matrix cell or calendar day the title
+  names with `coordinateSystem` + `coord` [Batch 151] }
+function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
+  const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
+  APPI: Integer; const ATextMeter: ITyTextMeasurer = nil;
+  const ASubMeter: ITyTextMeasurer = nil): TTyTitleLayout; overload;
 
 implementation
 
@@ -282,6 +289,17 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
   APPI: Integer; const ATextMeter: ITyTextMeasurer;
   const ASubMeter: ITyTextMeasurer): TTyTitleLayout;
+begin
+  Result := Default(TTyTitleLayout);
+  if not TyRectFIsValid(AContainer) then Exit;
+  Result := TyLayoutTitle(ASpec, TyXYWHOfRect(AContainer), AMeasurer, AFont,
+    ASubFont, APPI, ATextMeter, ASubMeter);
+end;
+
+function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
+  const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
+  APPI: Integer; const ATextMeter: ITyTextMeasurer;
+  const ASubMeter: ITyTextMeasurer): TTyTitleLayout;
 var
   raw: TTyRawBox;
   r: TTyXYWH;
@@ -290,12 +308,19 @@ var
   i: Integer;
   word_: string;
   scale: Double;
+  mask: TFPUExceptionMask;
 begin
   Result := Default(TTyTitleLayout);
   if not ASpec.Show then Exit;
   if (ASpec.Text = '') and (ASpec.Subtext = '') then Exit;
   if AMeasurer = nil then Exit;
-  if not TyRectFIsValid(AContainer) then Exit;
+  { A CONTAINER OF NO POSITION IS NOT NOTHING [Batch 151]: a coord that
+    names no column leaves the cell's x and width not numbers, and
+    getLayoutRect's `containerRect.x || 0` and `left || 0` put the title at
+    the canvas' left in the row it named -- laid out below, the traps off.
+    Only a negative size is no container. }
+  if ((not IsNan(AContainer.W)) and (AContainer.W < 0))
+    or ((not IsNan(AContainer.H)) and (AContainer.H < 0)) then Exit;
 
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   for i := 0 to 3 do pad[i] := ASpec.Padding[i] * scale;
@@ -333,9 +358,17 @@ begin
   raw := ASpec.Box;
   raw.Width := TyBoxRawNum(gw);
   raw.Height := TyBoxRawNum(gh);
-  r := TyGetLayoutRect(raw, AContainer.Left, AContainer.Top,
-    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top,
-    [pad[0], pad[1], pad[2], pad[3]]);
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    r := TyGetLayoutRect(raw, AContainer.X, AContainer.Y,
+      AContainer.W, AContainer.H,
+      [pad[0], pad[1], pad[2], pad[3]]);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+  if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) then Exit;
   gx := r.X;
   gy := r.Y;
 

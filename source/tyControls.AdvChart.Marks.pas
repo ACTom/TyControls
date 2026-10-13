@@ -46,7 +46,9 @@ uses
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter;
+  tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter,
+  tyControls.AdvChart.PolarBar, tyControls.AdvChart.Large,
+  tyControls.AdvChart.Brush;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -193,6 +195,11 @@ type
       the default for exactly that case is asked of the solver too, so there is
       no second definition of what a lone bar's width is. }
     Bar: TTyBarColumn;
+    { A BAR RACE [Batch 135]: realtimeSort on a category base axis of a
+      cartesian2d (BarView's shouldRealtimeSort). Its bars are clipped
+      whatever `clip` says, and one clipped past the plot is kept -- ignored,
+      laid at the edge it left by -- so it can slide back in. }
+    RealtimeSort: Boolean;
     { A PICTORIAL BAR'S OWN OPTIONS. Here for the same reason the bar column
       is: a mark builder is handed no option node, so anything option-shaped
       has to arrive on this record. }
@@ -202,6 +209,9 @@ type
     Z, Z2: Integer;
     { The line-shaped options, ignored by every other renderer. }
     Line: TTyLineSpec;
+    { A BAR ON A POLAR, solved across every bar on its base axis like the
+      grid's column (AdvChart.PolarBar) [Batch 113] }
+    PolarBar: TTyPolarBarLayout;
     { The symbol a datum is drawn as. Scatter draws nothing else; a line will
       draw these on top of itself once showSymbol lands. }
     Symbol: TTySymbolSpec;
@@ -267,12 +277,30 @@ type
     RowFills: TTyRowFillArray;
     { the series' fill as an image [Batch 105] }
     FillPattern: TTyChartPattern;
+    { THE DECALS [Batch 131]: the series' (its style's), and by RAW row a
+      row's own where RowDecalSet says the row has one -- an item decal, or
+      the aria palette's for a series coloured by data. A row without one
+      takes the series' (getItemVisual's fallback). Drawn on a bar, a polar
+      bar and a line's area; upstream's symbols drop theirs. }
+    Decal: TTyChartDecal;
+    RowDecals: TTyChartDecalArray;
+    RowDecalSet: TTyBoolArray;
     { A LINE'S PEN AND AREA when a visualMap gave it a visualMeta on x or y:
       one colour or a global gradient in device px, instead of the series
       colour. The two flags say which of them take it -- an authored
       lineStyle.color keeps the pen, an authored areaStyle.color the area. }
     VisualLine: TTyVisualLineFill;
     VisualLineStroke, VisualLineArea: Boolean;
+    { LARGE MODE, decided by the control (the count after the dataZoom
+      filter against `largeThreshold`): the series is drawn as one batched
+      element per style instead of an element per datum [Batch 117] }
+    Large: TTyLargeKind;
+    { PROGRESSIVE LARGE MODE [Batch 119]: the view rows of every chunk the
+      run has planned, in the order the layout walks them (modNext for a
+      bar and a candlestick in 'mod'); empty for a batch drawn at once. A
+      bar or a candlestick then makes its batch per chunk, a scatter merges
+      chunks into a batch while it holds under 2e4 numbers. }
+    LargeChunks: array of TTyIntegerArray;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
@@ -325,11 +353,28 @@ function TyBuildCalendarScatter(const ABinding: TTySeriesBinding;
   const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
   AList: TTyPaintList): Integer;
 
+{ [Batch 152, D14 GE4] A scatter or an effectScatter whose points the caller
+  worked out: one symbol per view row at APoints[row] (a geo's dataToPoint,
+  NaN where there is none or the row is clipped -- not drawn). }
+function TyBuildPointScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AVisual: TTySeriesVisual; const APoints: TTyPointFArray;
+  AList: TTyPaintList): Integer;
+
 { A heatmap on a calendar: one cell per row, the calendar's content rect for
   its date, at z2 1. [Batch 70] }
 function TyBuildCalendarHeatmap(const ABinding: TTySeriesBinding;
   const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
   AList: TTyPaintList): Integer;
+
+{ A heatmap on a matrix: one cell per row, the matrix's dataToLayout rect
+  for its x and y (AColX / AColY) at z2 1, whatever its value. A scatter or
+  an effectScatter on one: the symbol at dataToPoint. [Batch 145] }
+function TyBuildMatrixHeatmap(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+function TyBuildMatrixScatter(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
 
 { Append this series' marks to AList and answer how many were added.
 
@@ -342,10 +387,66 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const AStack: TTySeriesStack;
   const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
 
+{ THE ITEM LAYOUTS a series' brushSelector reads (data.getItemLayout), one per
+  row of the store [Batch 127]: a scatter's or an effectScatter's point
+  (stacked, unjittered), a bar's barGrid layout on a cartesian -- its signed
+  size, barMinHeight in, before the border and the clip --, a candlestick's
+  brushRect. None for every other type, in large mode, for a gap. }
+function TyBrushItemLayouts(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual): TTyBrushItemLayoutArray;
+
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
-     tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide;
+     tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
+     tyControls.AdvChart.Polar, tyControls.AdvChart.ZrPath,
+     tyControls.AdvChart.Single;
+
+{ THE POLAR A SERIES IS ON, nil on a cartesian [Batch 113] }
+function PolarOf(const ABinding: TTySeriesBinding): TTyPolar;
+begin
+  if ABinding.Polar is TTyPolar then Result := TTyPolar(ABinding.Polar)
+  else Result := nil;
+end;
+
+{ THE SINGLE AXIS a series is on, nil elsewhere [Batch 118] }
+function SingleOf(const ABinding: TTySeriesBinding): TTySingle;
+begin
+  if ABinding.Single is TTySingle then Result := TTySingle(ABinding.Single)
+  else Result := nil;
+end;
+
+{ datum -> point on whichever system the series is on }
+function SysPoint(const ABinding: TTySeriesBinding; const AData: array of Double): TTyPointF;
+var
+  pol: TTyPolar;
+  sgl: TTySingle;
+begin
+  pol := PolarOf(ABinding);
+  sgl := SingleOf(ABinding);
+  if pol <> nil then Result := pol.DataToPoint(AData)
+  { a single axis' dataToPoint: the first value, the rect's middle across
+    [Batch 118] }
+  else if sgl <> nil then Result := sgl.DataToPoint(AData)
+  else Result := ABinding.Cart.DataToPoint(AData);
+end;
+
+{ Polar.getArea's contain: the ring between the radius extent's ends, a
+  ten-thousandth either way on the squares, nothing when the two are one
+  (the angles do not matter) }
+function PolarRingContains(APolar: TTyPolar; AX, AY: Double): Boolean;
+var
+  r0, r1, lo, hi, dx, dy, d2: Double;
+begin
+  APolar.AxisExtent(APolar.RadiusAxis, r0, r1);
+  lo := Min(r0, r1);
+  hi := Max(r0, r1);
+  dx := AX - APolar.CX;
+  dy := AY - APolar.CY;
+  d2 := dx * dx + dy * dy;
+  Result := (hi <> lo) and (d2 - 1e-4 <= hi * hi) and (d2 + 1e-4 >= lo * lo);
+end;
 
 { THE SYMBOL'S LABEL RECT. A `line` symbol (not empty) is drawn here as a
   2 px pen without fill, but upstream's path keeps the item's fill and its
@@ -552,6 +653,15 @@ end;
 
 function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
 begin
+  { EVERY FIELD FROM NOUGHT FIRST: the ones below are set one by one, and a
+    field nobody set -- the jitter pass, a class reference -- was whatever
+    the stack held; a record that grew elsewhere moved the garbage under it
+    and a scatter jittered through it [Batch 121] }
+  Result := Default(TTySeriesVisual);
+  { drawn an element per datum unless the control says otherwise: the
+    fields below are set one by one, so this one is too [Batch 117] }
+  Result.Large := lgkNone;
+  Result.LargeChunks := nil;
   Result.SeriesIndex := -1;
   Result.SeriesType := '';
   Result.Fill := AFill;
@@ -791,7 +901,7 @@ end;
 
   A row that names an unreadable colour keeps the series' -- the same rule
   the series level follows. }
-function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+function RowVisualEarly(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
 var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
   rf: TTyRowFill;
@@ -871,6 +981,28 @@ begin
   end;
 end;
 
+{ THE BRUSH'S VISUALS COME LAST: its stage (5000) runs after the item's own
+  style (4500) and the per-datum palette (4600), and writes over both
+  [Batch 127] }
+function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTySeriesVisual;
+var raw: Integer; vr: TTyVisualRow;
+begin
+  Result := RowVisualEarly(AVisual, AStore, ARow);
+  if (AVisual.VisualRows = nil) or (AStore = nil) then Exit;
+  raw := AStore.GetRawIndex(ARow);
+  if (raw < 0) or (raw > High(AVisual.VisualRows)) then Exit;
+  vr := AVisual.VisualRows[raw];
+  if vr.LateColor then
+  begin
+    Result.Fill := TyVisualToChart(vr.Color);
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
+  end;
+  if vr.LateOpacity and not IsNan(vr.Opacity) then
+    Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
+end;
+
 { THE SYMBOL A visualMap WROTE ON THIS ROW over the series' own: its name,
   its size, and liftZ, which lifts the mark in the paint order. }
 function RowSymbol(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
@@ -901,6 +1033,20 @@ begin
   if vr.LiftZSet and not IsNan(vr.LiftZ) then ALift := vr.LiftZ;
 end;
 
+{ THE DECAL A VIEW ROW IS DRAWN WITH [Batch 131]: its own, else the
+  series' }
+function RowDecal(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTyChartDecal;
+var raw: Integer;
+begin
+  Result := AVisual.Decal;
+  if (AVisual.RowDecalSet = nil) or (AStore = nil) then Exit;
+  raw := AStore.GetRawIndex(ARow);
+  if (raw >= 0) and (raw <= High(AVisual.RowDecalSet))
+    and (raw <= High(AVisual.RowDecals)) and AVisual.RowDecalSet[raw] then
+    Result := AVisual.RowDecals[raw];
+end;
+
 { HOW FAR OUTSIDE A MARK STILL COUNTS, in LOGICAL px -- the hit test scales it
   by PPI, the shapes are already device px.
 
@@ -921,8 +1067,28 @@ end;
   zrender's max(pen, 5) [Batch 90]. }
 const
   cHitSlopSymbolLogical = 4;
+
   { zrender's strokeContainThreshold [Batch 90] }
   cLineContainThreshold: Double = 5;
+
+{ A SYMBOL'S TARGET in two parts [Batch 142]: the pen's own reach, which is
+  upstream's (Path.contain strokes with the line width, max(width, 5)
+  without a fill), and the rest of the four logical px as the port's pad,
+  which a coarse pointer leaves out. Together they are the four px the
+  target has always had. }
+procedure SymbolHitSlop(var AEl: TTyChartElement);
+var reach: Double;
+begin
+  reach := 0;
+  if AEl.Style.StrokeWidthLogical > 0 then
+  begin
+    if AEl.Style.HasFill then reach := AEl.Style.StrokeWidthLogical / 2
+    else reach := Max(AEl.Style.StrokeWidthLogical, Double(5)) / 2;
+  end;
+  if reach > cHitSlopSymbolLogical then reach := cHitSlopSymbolLogical;
+  AEl.HitSlopLogical := reach;
+  AEl.HitPadLogical := cHitSlopSymbolLogical - reach;
+end;
 
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;
   ASeries, ARow: Integer): TTyChartElement;
@@ -1072,7 +1238,7 @@ var
   r, bg, plot: TTyRectF;
   p, loPt: TTyPointF;
   col: TTyBarColumn;
-  baseHoriz, haveCol, stacked: Boolean;
+  baseHoriz, haveCol, stacked, clipped: Boolean;
   shape: TTyChartShape;
   bgEl, el: TTyChartElement;
   rv: TTySeriesVisual;
@@ -1269,7 +1435,12 @@ begin
       paints nothing, and it still carries its label.
       [Revised in batch 36: every bar of no length was dropped, and its label
       with it.] }
-    if col.Clip and ClipBarLayout(ABinding.Cart.GetArea, lx, ly, lw, lh) then
+    { A RACING BAR clipped past the plot is not dropped: BarView keeps the
+      element, `ignore` (neither drawn nor hit), at the edge the clip put it
+      on, and the next order may bring it back from there [Batch 135] }
+    clipped := (col.Clip or AVisual.RealtimeSort)
+      and ClipBarLayout(ABinding.Cart.GetArea, lx, ly, lw, lh);
+    if clipped and not AVisual.RealtimeSort then
       Continue;
     r := LayoutBox(lx, ly, lw, lh);
 
@@ -1277,12 +1448,12 @@ begin
       still hit-testable -- which is what a bar on a value axis used to be. }
     if baseHoriz then
     begin
-      if r.Right - r.Left <= 0 then Continue;
+      if (r.Right - r.Left <= 0) and not clipped then Continue;
       zero := lh = 0;
     end
     else
     begin
-      if r.Bottom - r.Top <= 0 then Continue;
+      if (r.Bottom - r.Top <= 0) and not clipped then Continue;
       zero := lw = 0;
     end;
     if TyHasCorner(col.Radii) then
@@ -1291,6 +1462,8 @@ begin
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
+    el.Style.Decal := RowDecal(AVisual, AStore, i);
+    el.Ignore := clipped;
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }
@@ -1351,6 +1524,12 @@ var
   { the whole series' layout points, stacked-on points and data values,
     flattened, for an update's lineAnimationDiff [Batch 90] }
   animPts, animBase, animVals: TTyDoubleArray;
+  { ON A POLAR [Batch 113]: the polar, its clip sector (createPolarClipPath:
+    the centre and the radii to one decimal, the angles getArea's) and
+    whether a symbol must stand in its ring }
+  pol: TTyPolar;
+  pcx, pcy, pr0, pr1, psa, pea, symCur, ar0, ar1: Double;
+  pcw: Boolean;
 
   { One marker, answering for its own row. False when the symbol draws
     nothing. }
@@ -1390,7 +1569,7 @@ var
       hover lifts by ten [Batch 88: it was the series' z2, and the hovered
       line's polyline then covered every other symbol] }
     el.Z2 := 100 + Round(lift);
-    el.HitSlopLogical := cHitSlopSymbolLogical;
+    SymbolHitSlop(el);
     { THE SYMBOL GROUP'S POSITION and the clip it is measured against: a
       line's symbol pops in when the growing clip reaches it
       (LineView._initSymbolLabelAnimation). Flag 1: there is a clip.
@@ -1410,6 +1589,24 @@ var
       shrinks it to nought (Symbol.fadeOut) [Batch 90] }
     el.Anim.G[7] := rs.WidthPx / 2;
     el.Anim.G[8] := rs.HeightPx / 2;
+    { ON A POLAR the pop-in is timed along the clip's angles (an angle base)
+      or radii (a radius base): G[2] and G[3] are getArea's start and end,
+      G[9] where the symbol is -- minus its angle in radians, or its radius
+      -- from pointToCoord [Batch 113] }
+    if pol <> nil then
+    begin
+      if ABinding.BaseAxis = pol.AngleAxis then
+      begin
+        el.Anim.G[2] := psa;
+        el.Anim.G[3] := pea;
+      end
+      else
+      begin
+        el.Anim.G[2] := ar0;
+        el.Anim.G[3] := ar1;
+      end;
+      el.Anim.G[9] := symCur;
+    end;
     ItemCaption(AVisual, AStore, ARow, el.Caption);
     { the rect zrender places the label against and LabelManager weighs
       [Batch 103] }
@@ -1436,6 +1633,18 @@ var
     AEl.Anim.G[3] := clipH;
     AEl.Anim.G[4] := clipEx;
     AEl.Anim.G[5] := animFlags;
+    { A POLAR'S CLIP IS A SECTOR [Batch 113]: the centre, the radii, the two
+      angles (G[4] the start, G[11] the end) and in the flags 8 (polar), 16
+      (clockwise), 32 (the base is the angle: the sweep grows, else r) }
+    if pol <> nil then
+    begin
+      AEl.Anim.G[0] := pcx;
+      AEl.Anim.G[1] := pcy;
+      AEl.Anim.G[2] := pr0;
+      AEl.Anim.G[3] := pr1;
+      AEl.Anim.G[4] := psa;
+      AEl.Anim.G[11] := pea;
+    end;
     { WHAT AN UPDATE DIFFS: the run's place among the series' runs, the
       whole series' points, the value start an added point's base falls
       to, and how the path is drawn [Batch 90] }
@@ -1471,6 +1680,8 @@ var
     offs: TTyBoolArray;
   begin
     thin := False;
+    { not on a polar: LineView's isIgnoreFunc is cartesian's [Batch 113] }
+    if pol <> nil then Exit;
     if AVisual.Line.ShowAllSymbol = sasYes then Exit;
     if ABinding.BaseAxis = nil then Exit;
     if not (ABinding.BaseAxis.Scale is TTyOrdinalScale) then Exit;
@@ -1507,8 +1718,48 @@ var
   procedure PrepareClip;
   var
     area: TTyXYWH;
-    lw, x, y, w, h, ex: Double;
+    lw, x, y, w, h, ex, e0, e1: Double;
   begin
+    if pol <> nil then
+    begin
+      { createPolarClipPath: Sector(round(cx, 1), round(cy, 1), round(r0, 1),
+        round(r, 1), getArea's angles and clockwise) -- `clip: false` does not
+        widen it }
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      pcx := TyJsToFixed(pol.CX, 1);
+      pcy := TyJsToFixed(pol.CY, 1);
+      pr0 := TyJsToFixed(Min(e0, e1), 1);
+      pr1 := TyJsToFixed(Max(e0, e1), 1);
+      if IsNan(e0) or IsNan(e1) then
+      begin
+        pr0 := NaN;
+        pr1 := NaN;
+      end;
+      pol.AxisExtent(pol.AngleAxis, e0, e1);
+      psa := -e0 * (Pi / 180);
+      pea := -e1 * (Pi / 180);
+      pcw := pol.AngleInverse;
+      { the flags anew: 8 polar, 16 clockwise, 32 an angle base, 4 the base
+        axis inverse (the polar's own flag) }
+      animFlags := 8;
+      if pcw then animFlags := animFlags + 16;
+      if ABinding.BaseAxis = pol.AngleAxis then
+      begin
+        animFlags := animFlags + 32;
+        if pol.AngleInverse then animFlags := animFlags + 4;
+      end
+      else if pol.RadiusInverse then animFlags := animFlags + 4;
+      { the pop-in's own extent is getArea's, unrounded }
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      ar0 := Min(e0, e1);
+      ar1 := Max(e0, e1);
+      clipX := 0;
+      clipY := 0;
+      clipW := 0;
+      clipH := 0;
+      clipEx := 0;
+      Exit;
+    end;
     area := ABinding.Cart.GetArea;
     lw := AVisual.StrokeWidthLogical;
     if lw <= 0 then lw := 2;
@@ -1555,6 +1806,10 @@ var
   function InSymbolArea(const AP: TTyPointF): Boolean;
   begin
     if not spec.Clip then Exit(True);
+    { a polar's clipShapeForSymbol is its getArea, whose contain is the ring
+      -- the rect padding LineView gives it (it has a width) moves nothing
+      the ring reads [Batch 113] }
+    if pol <> nil then Exit(PolarRingContains(pol, AP.X, AP.Y));
     Result := (AP.X >= symbolArea.X) and (AP.X <= symbolArea.X + symbolArea.W)
       and (AP.Y >= symbolArea.Y) and (AP.Y <= symbolArea.Y + symbolArea.H);
   end;
@@ -1620,6 +1875,35 @@ var
     end;
   end;
 
+  { the run's clip: the plot's rect, or a polar's sector }
+  procedure SetClip(var AEl: TTyChartElement);
+  begin
+    if pol = nil then
+    begin
+      AEl.HasClip := True;
+      AEl.ClipRect := lineClip;
+      Exit;
+    end;
+    AEl.HasClipSector := True;
+    AEl.ClipCX := pcx;
+    AEl.ClipCY := pcy;
+    AEl.ClipR0 := pr0;
+    AEl.ClipR1 := pr1;
+    AEl.ClipSA := psa;
+    AEl.ClipEA := pea;
+    AEl.ClipCW := pcw;
+  end;
+
+  { where a symbol stands on the polar, for the pop-in: pointToCoord, the
+    angle as minus radians (an angle base) or the radius }
+  procedure SymbolCoord(const AP: TTyPointF);
+  var r, a: Double;
+  begin
+    pol.PointToCoord(AP.X, AP.Y, r, a);
+    if ABinding.BaseAxis = pol.AngleAxis then symCur := -a / 180 * Pi
+    else symCur := r;
+  end;
+
   { The run's own path from upstream's, when the runs line up: drawn from
     the commands, and bounded by them when they curve }
   procedure AttachPath(var AShape: TTyChartShape; const ARuns: TTyPathCmdArray2;
@@ -1668,7 +1952,7 @@ var
       pp := TyPointF(NaN, NaN);
       if not (IsNan(px) or IsNan(py)) then
       begin
-        pp := ABinding.Cart.DataToPoint([px, py]);
+        pp := SysPoint(ABinding, [px, py]);
         pp := TyPointF(TyJsFround(pp.X), TyJsFround(pp.Y));
       end;
       fullP[k] := pp;
@@ -1685,9 +1969,9 @@ var
       qq := TyPointF(NaN, NaN);
       if baseHoriz then
       begin
-        if not IsNan(px) then qq := ABinding.Cart.DataToPoint([px, lv]);
+        if not IsNan(px) then qq := SysPoint(ABinding, [px, lv]);
       end
-      else if not IsNan(py) then qq := ABinding.Cart.DataToPoint([lv, py]);
+      else if not IsNan(py) then qq := SysPoint(ABinding, [lv, py]);
       if not (IsNan(qq.X) or IsNan(qq.Y)) then
         qq := TyPointF(TyJsFround(qq.X), TyJsFround(qq.Y));
       fullB[k] := qq;
@@ -1783,6 +2067,8 @@ var
         { A visualMap's gradient, unless the area named its own colour. }
         if AVisual.VisualLineArea then ApplyVisualLine(v, True);
         el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
+        { the area polygon takes the series' style decal (LineView) }
+        el.Style.Decal := AVisual.Decal;
         AttachPath(el.Shape, areaRuns, (spec.Smooth > 0) or (spec.StackedOnSmooth > 0));
         { The area's opacity REPLACES the series' -- it is a key on its own
           block, not a second multiplier on the item's. }
@@ -1790,8 +2076,7 @@ var
         { SILENT: the fill is decoration behind the line, and a pointer landing
           on it should find the line, not the shading. }
         el.Silent := True;
-        el.HasClip := True;
-        el.ClipRect := lineClip;
+        SetClip(el);
         TagClip(el, carLineArea);
         AList.Add(el);
         Inc(Result);
@@ -1824,8 +2109,7 @@ var
         el.HitSlopLogical := v.StrokeWidthLogical / 2
       else
         el.HitSlopLogical := cLineContainThreshold / 2;
-      el.HasClip := True;
-      el.ClipRect := lineClip;
+      SetClip(el);
       TagClip(el, carLineRun);
       AList.Add(el);
       Inc(Result);
@@ -1838,9 +2122,11 @@ var
       line between two markers cannot. }
     if spec.ShowSymbol then
       for k := 0 to n - 1 do
-        if SymbolKept(rows[k]) and InSymbolArea(pts[k])
-          and EmitSymbol(pts[k], rows[k]) then
-          Inc(Result);
+        if SymbolKept(rows[k]) and InSymbolArea(pts[k]) then
+        begin
+          if pol <> nil then SymbolCoord(pts[k]);
+          if EmitSymbol(pts[k], rows[k]) then Inc(Result);
+        end;
     Inc(runIdx);
   end;
 
@@ -1849,6 +2135,11 @@ begin
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
+  pol := PolarOf(ABinding);
+  symCur := 0;
+  { step does not run on a polar (LineView: `!isCoordSysPolar ? step : false`)
+    [Batch 113] }
+  if pol <> nil then spec.Step := lstNone;
   startV := AreaStartValue(ABinding.ValueAxis, spec);
   animFlags := 0;
   if baseHoriz then animFlags := animFlags + 2;
@@ -1883,7 +2174,7 @@ begin
       that array says }
     if not gap then
     begin
-      p := ABinding.Cart.DataToPoint([x, y]);
+      p := SysPoint(ABinding, [x, y]);
       p := TyPointF(TyJsFround(p.X), TyJsFround(p.Y));
       gap := Illegal(p);
     end;
@@ -1898,8 +2189,8 @@ begin
       if AStack.Stacked and (AStack.OverCol >= 0) then
         lowV := AStore.Get(AStack.OverCol, i);
       if IsNan(lowV) then lowV := startV;
-      if baseHoriz then q := ABinding.Cart.DataToPoint([x, lowV])
-                   else q := ABinding.Cart.DataToPoint([lowV, y]);
+      if baseHoriz then q := SysPoint(ABinding, [x, lowV])
+                   else q := SysPoint(ABinding, [lowV, y]);
       q := TyPointF(TyJsFround(q.X), TyJsFround(q.Y));
       gap := Illegal(q);
     end;
@@ -2053,7 +2344,7 @@ begin
   end;
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
   el.Z2 := 100 + Round(lift);
-  el.HitSlopLogical := cHitSlopSymbolLogical;
+  SymbolHitSlop(el);
   { A SCATTER SYMBOL POPS IN: its path scales from nought to half its size
     about its own origin -- the point and the symbol's offset -- and fades
     in (Symbol.ts:184-200). An effectScatter's runs on update timing and
@@ -2125,13 +2416,20 @@ var
   x, y, sz: Double;
   p: TTyPointF;
   spec: TTySymbolSpec;
-  baseHoriz, stacked: Boolean;
+  baseHoriz, stacked, noClip: Boolean;
   area: TTyXYWH;
+  pol: TTyPolar;
 begin
   Result := 0;
   spec := AVisual.Symbol;
   if spec.Kind = tsyNone then Exit;
-  area := ABinding.Cart.GetAreaTol(0.1);
+  { ON A POLAR the clip is getArea(.1), whose contain is the ring -- the
+    tolerance is not read there [Batch 113] }
+  pol := PolarOf(ABinding);
+  { A SINGLE AXIS HAS NO getArea: nothing is clipped [Batch 118] }
+  noClip := SingleOf(ABinding) <> nil;
+  if (pol = nil) and not noClip then area := ABinding.Cart.GetAreaTol(0.1)
+  else area := Default(TTyXYWH);
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
 
@@ -2160,7 +2458,7 @@ begin
       symbol will be drawn [Batch 110] }
     if AVisual.Jitter <> nil then
     begin
-      p := ABinding.Cart.DataToPoint([x, y]);
+      p := SysPoint(ABinding, [x, y]);
       if AVisual.JitterOnX then
         p.X := AVisual.Jitter.Fix(p.Y, p.X, ScatterRowRadius(AVisual, AStore, i, spec, sizeCol))
       else
@@ -2168,12 +2466,17 @@ begin
     end;
     if IsNan(x) or IsNan(y) then Continue;
     if AVisual.Jitter = nil then
-      p := ABinding.Cart.DataToPoint([x, y]);
+      p := SysPoint(ABinding, [x, y]);
     if IsNan(p.X) or IsNan(p.Y)
       or IsInfinite(p.X) or IsInfinite(p.Y) then Continue;
     { OUTSIDE THE PLOT, WITH CLIP ON, NO MARKER: upstream's getArea(0.1) }
-    if AVisual.Line.Clip and not ((p.X >= area.X) and (p.X <= area.X + area.W)
-      and (p.Y >= area.Y) and (p.Y <= area.Y + area.H)) then Continue;
+    if AVisual.Line.Clip and not noClip then
+      if pol <> nil then
+      begin
+        if not PolarRingContains(pol, p.X, p.Y) then Continue;
+      end
+      else if not ((p.X >= area.X) and (p.X <= area.X + area.W)
+        and (p.Y >= area.Y) and (p.Y <= area.Y + area.H)) then Continue;
 
     if sizeCol >= 0 then
     begin
@@ -2306,6 +2609,30 @@ begin
   end;
 end;
 
+{ A SCATTER ON A GEO [Batch 152, D14 GE4]: layout/points.ts' points --
+  dataToPoint([lng, lat]) of the first two dimensions, NaN through -- worked
+  out by the caller (the geo is not this unit's), and SymbolDraw's
+  symbolNeedsDraw: a point that is not a number, or one a clipping geo's
+  area leaves out, is not drawn. }
+function TyBuildPointScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AVisual: TTySeriesVisual; const APoints: TTyPointFArray;
+  AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  p: TTyPointF;
+begin
+  Result := 0;
+  if (AStore = nil) or (AList = nil) then Exit;
+  if AVisual.Symbol.Kind = tsyNone then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    if i > High(APoints) then Break;
+    p := APoints[i];
+    if IsNan(p.X) or IsNan(p.Y) then Continue;
+    Inc(Result, AddScatterSymbol(ABinding, AStore, AVisual, i, p, AVisual.Symbol, AList));
+  end;
+end;
+
 { A HEATMAP ON A CALENDAR: the cell is the calendar's CONTENT rect for the
   row's date -- the day's cell inset by half the calendar's own border, with
   no half-pixel widening (HeatmapView.ts:271-285). A row whose value is not a
@@ -2334,6 +2661,56 @@ begin
     el.Z2 := 1;
     AList.Add(el);
     Inc(Result);
+  end;
+end;
+
+{ A HEATMAP ON A MATRIX (HeatmapView's matrix branch): the rect is
+  dataToLayout([x, y]).rect, no widening and no inset; a row whose x names
+  no cell is skipped -- and one whose y names none too, where upstream
+  makes a rect with a y of NaN that paints nothing. The VALUE IS NOT
+  TESTED: a gap still has its cell, in whatever the visual left it. z2 1.
+  [Batch 145] }
+function TyBuildMatrixHeatmap(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  lay: TTyCoordLayout;
+  el: TTyChartElement;
+begin
+  Result := 0;
+  if (AStore = nil) or (AMatrix = nil) or (AList = nil) then Exit;
+  if (AColX < 0) or (AColY < 0) then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    lay := AMatrix.DataToLayout([AStore.Get(AColX, i), AStore.Get(AColY, i)]);
+    if IsNan(lay.Rect.Left) or IsNan(lay.Rect.Top) then Continue;
+    el := HeatCell(ABinding, AStore, AVisual, i, lay.Rect);
+    el.Z2 := 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
+{ A SCATTER ON A MATRIX: the symbol at the centre of the row's cell
+  (layout/points.ts' dataToPoint); a point that is not a number is not
+  drawn. No clip: a matrix has no area to clip to. [Batch 145] }
+function TyBuildMatrixScatter(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  p: TTyPointF;
+begin
+  Result := 0;
+  if (AStore = nil) or (AMatrix = nil) or (AList = nil) then Exit;
+  if AVisual.Symbol.Kind = tsyNone then Exit;
+  if (AColX < 0) or (AColY < 0) then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    p := AMatrix.DataToPoint([AStore.Get(AColX, i), AStore.Get(AColY, i)]);
+    if IsNan(p.X) or IsNan(p.Y) then Continue;
+    Inc(Result, AddScatterSymbol(ABinding, AStore, AVisual, i, p, AVisual.Symbol, AList));
   end;
 end;
 
@@ -2469,6 +2846,18 @@ begin
     v.Fill := fill;
     v.Stroke := border;
     v.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
+    { THE BRUSH'S fill and opacity (its visual stage writes style.fill, the
+      drawType, over the rise / fall colour; the pen stays) [Batch 127] }
+    if (AVisual.VisualRows <> nil) and (AStore.GetRawIndex(i) >= 0)
+      and (AStore.GetRawIndex(i) <= High(AVisual.VisualRows)) then
+    begin
+      if AVisual.VisualRows[AStore.GetRawIndex(i)].LateColor then
+        v.Fill := TyVisualToChart(AVisual.VisualRows[AStore.GetRawIndex(i)].Color);
+      if AVisual.VisualRows[AStore.GetRawIndex(i)].LateOpacity
+        and not IsNan(AVisual.VisualRows[AStore.GetRawIndex(i)].Opacity) then
+        v.Alpha := Min(Double(1), Max(Double(0),
+          AVisual.VisualRows[AStore.GetRawIndex(i)].Opacity));
+    end;
 
     { THE LAYOUT'S EIGHT POINTS: the body's sides snapped to the half pixel
       apart, the spine to the half pixel [Batch 108] }
@@ -3112,6 +3501,162 @@ begin
   end;
 end;
 
+{ ==================== bars on a polar [Batch 113] ====================
+
+  BarView's polar half over the solved layout (AdvChart.PolarBar): every row
+  with a layout gets its background first (showBackground: silent, z2 as
+  the bar's, upstream's 0 against the bar's 1 kept by the order); a row
+  whose value or layout is not a number gets nothing more; the layout is
+  clipped to the polar's radii (clip.polar: r and r0 only, an angle is
+  clamped by the layout already) and a bar clipped past itself is built
+  IGNORED -- upstream keeps the element and sets ignore; a Sector, or a
+  Sausage for a tangential bar with roundCap; the corners getSectorCornerRadius
+  gives unless roundCap; a sector of no sweep (isZeroOnPolar) paints no fill
+  and no stroke. The label hangs off the sector: a sector position's own
+  anchor, else a built-in position on the path's rect; its turn
+  setSectorTextRotation's. }
+function BuildPolarBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  L: TTyPolarBarLayout;
+  i, raw: Integer;
+  s, bgS: TTyPolarSector;
+  clipped, zero, sausage: Boolean;
+  corners: TTyDoubleArray;
+  el, bgEl: TTyChartElement;
+  rv: TTySeriesVisual;
+  zp: TTyZrPath;
+  box: TTyXYWH;
+  ask: TTyPolarLabelAsk;
+  word: string;
+  spos: TTySectorTextPos;
+  spec: TTyLabelSpec;
+  ax, ay: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  Result := 0;
+  L := AVisual.PolarBar;
+  if not L.Solved then Exit;
+  sausage := (not L.IsRadial) and L.RoundCap;
+  for i := 0 to Math.Min(High(L.Rows), AStore.Count - 1) do
+  begin
+    s := L.Rows[i];
+    if L.ShowBackground then
+    begin
+      bgS := TyPolarBarBackground(L, s);
+      bgEl := TyChartElement(TyPolarSectorShape(bgS, TyPolarCornerRaw(L.BgCorner), False));
+      bgEl.Style.HasFill := True;
+      bgEl.Style.FillColor := AVisual.BackgroundFill;
+      bgEl.Style.Alpha := 1;
+      bgEl.Z := AVisual.Z;
+      bgEl.Z2 := AVisual.Z2;
+      bgEl.Silent := True;
+      { no role and no datum -- nothing animates it and nothing hits it --
+        but which row's it is, and its sector, for a reader of the list }
+      bgEl.Anim.Series := ABinding.SeriesIndex;
+      bgEl.Anim.Index := i;
+      bgEl.Anim.G[0] := bgS.CX;
+      bgEl.Anim.G[1] := bgS.CY;
+      bgEl.Anim.G[2] := bgS.R0;
+      bgEl.Anim.G[3] := bgS.R;
+      bgEl.Anim.G[4] := bgS.SA;
+      bgEl.Anim.G[5] := bgS.EA;
+      AList.Add(bgEl);
+      Inc(Result);
+    end;
+    if not L.Valid[i] then Continue;
+    clipped := False;
+    if L.Clip then clipped := TyPolarBarClip(L.AreaR0, L.AreaR, s);
+    { updateStyle: the corners only on a Sector without roundCap; a
+      roundCap Sector keeps its default 0 }
+    if L.RoundCap then
+    begin
+      SetLength(corners, 1);
+      corners[0] := 0;
+    end
+    else
+      corners := TyPolarCornerList(L.Corners[i], s);
+    rv := RowVisual(AVisual, AStore, i);
+    el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
+      ABinding.SeriesIndex, i);
+    el.Style.Decal := RowDecal(AVisual, AStore, i);
+    zero := TyPolarZero(s);
+    if zero then
+    begin
+      el.Style.HasFill := False;
+      el.Style.FillGradient := Default(TTyChartGradient);
+      el.Style.FillPattern := Default(TTyChartPattern);
+      el.Style.StrokeWidthLogical := 0;
+    end;
+    el.Ignore := clipped;
+    { THE ENTER ANIMATION'S NUMBERS: upstream's layout as drawn -- the
+      centre, r0, r and the two angles, clockwise, whether the bar is radial
+      (it grows r, else the end angle), whether a sausage; G[9] a sector of
+      no sweep }
+    el.Anim.Role := carPolarBar;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := i;
+    el.Anim.G[0] := s.CX;
+    el.Anim.G[1] := s.CY;
+    el.Anim.G[2] := s.R0;
+    el.Anim.G[3] := s.R;
+    el.Anim.G[4] := s.SA;
+    el.Anim.G[5] := s.EA;
+    if s.CW then el.Anim.G[6] := 1 else el.Anim.G[6] := 0;
+    if L.IsRadial then el.Anim.G[7] := 1 else el.Anim.G[7] := 0;
+    if sausage then el.Anim.G[8] := 1 else el.Anim.G[8] := 0;
+    if zero then el.Anim.G[9] := 1 else el.Anim.G[9] := 0;
+    ItemCaption(AVisual, AStore, i, el.Caption);
+    { a clipped bar's label is not drawn: its host is ignored }
+    if clipped then el.Caption.Text := '';
+    if el.Caption.Text <> '' then
+    begin
+      spec := AVisual.Label_;
+      raw := AStore.GetRawIndex(i);
+      if (raw >= 0) and (raw <= High(AVisual.HasItemLabel)) and AVisual.HasItemLabel[raw] then
+        spec := AVisual.ItemLabels[raw];
+      ask := L.Labels[i];
+      word := ask.Word;
+      { 'outside' is the bar's own: past the end it grows to }
+      if word = 'outside' then word := TyPolarOutsideWord(s, L.IsRadial);
+      { no position written is labelStyle's 'inside' (position || 'inside'),
+        which zrender's isInside reads: the inside ink }
+      if (word = '') and not ask.IsArray then word := 'inside';
+      el.Caption.SecHas := True;
+      { the path's rect, the stroke in it (Path.getBoundingRect) }
+      if sausage then zp := TyZrSausagePath(s) else zp := TyZrSectorPath(s, corners);
+      box := TyZrBBox(zp);
+      box := TyZrStrokeRect(box, TyZrDataLength(zp),
+        (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0),
+        el.Style.HasFill, el.Style.StrokeWidthLogical * AVisual.PxScale, 1);
+      el.Caption.HasHostBox := True;
+      el.Caption.HostBox := box;
+      if ask.IsArray then spos := stpBuiltin
+      else spos := TySectorTextPosOf(word, L.IsRadial);
+      if spos <> stpBuiltin then
+      begin
+        TySectorLabelAnchor(s, spos, spec.DistanceLogical * AVisual.PxScale,
+          sausage, ax, ay, ah, av);
+        el.Caption.SecAnchor := True;
+        el.Caption.SecPos := Ord(spos);
+        el.Caption.SecDist := spec.DistanceLogical * AVisual.PxScale;
+        el.Caption.SecX := ax;
+        el.Caption.SecY := ay;
+        el.Caption.SecAH := ah;
+        el.Caption.SecAV := av;
+      end;
+      el.Caption.SecRot := TySectorLabelRotation(s, ask, word, L.IsRadial);
+      { textConfig.inside: true for 'middle', else 'inside' in the word }
+      el.Caption.SecInside := (ask.Word = 'middle')
+        or ((not ask.IsArray) and (Pos('inside', word) > 0));
+    end;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
 const
   { THE ONE LIST. Five of the twenty-three types draw; a renderer arrives as
     a row here and both the drawing and the published answer follow from it.
@@ -3145,9 +3690,16 @@ const
     drives TyBuildSeriesMarks, which a pie deliberately never enters. What
     guards it is TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector, which
     counts the control's own pixels. }
-  cElsewhere: array[0..8] of string = ('pie', 'funnel', 'gauge', 'radar',
+  { [Batch 118] a themeRiver's layers are built by the control, on its single
+    axis; [Batch 120] a chord's sectors and ribbons by AdvChart.Chord;
+    [Batch 121] a lines series' rows by AdvChart.Lines; [Batch 128] a
+    parallel series' rows by AdvChart.Parallel }
+  cElsewhere: array[0..14] of string = ('pie', 'funnel', 'gauge', 'radar',
                                        'graph', 'tree', 'sunburst', 'treemap',
-                                       'sankey');
+                                       'sankey', 'themeRiver', 'chord',
+                                       'lines', 'custom', 'parallel',
+                                       { [Batch 152] MapDraw, on its geo }
+                                       'map');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;
@@ -3172,6 +3724,547 @@ begin
   Result := False;
 end;
 
+{ ==================== large mode [Batch 117] ==================== }
+
+{ the element of one batch: its bounding rect worked out, the series as
+  its datum with no row (a row is found by the batch's own scan) }
+function LargeElement(const AGeom: TTyLargeGeom; const AVisual: TTySeriesVisual;
+  ASeries: Integer): TTyChartElement;
+var shape: TTyChartShape;
+begin
+  shape := Default(TTyChartShape);
+  shape.Kind := cskLarge;
+  shape.Large := AGeom;
+  TyLargeSetBox(shape.Large);
+  shape.Bounds := TyLargeBounds(shape.Large);
+  Result := MarkElement(shape, AVisual, ASeries, -1);
+  Result.HitSlopLogical := 0;
+end;
+
+function XYWHOf(const ARect: TTyRectF): TTyXYWH;
+begin
+  Result.X := ARect.Left;
+  Result.Y := ARect.Top;
+  Result.W := ARect.Right - ARect.Left;
+  Result.H := ARect.Bottom - ARect.Top;
+end;
+
+{ JavaScript's a - b where an infinity less the same infinity is not a
+  number rather than a raise }
+function JsSub(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if IsInfinite(A) and IsInfinite(B) and (Sign(A) = Sign(B)) then Exit(NaN);
+  Result := A - B;
+end;
+
+{ barGrid's createProgressiveLayout in its large branch and BarView's
+  createLarge: [x, y, size] per row of the view, Float32, the size the
+  signed length along the value axis -- from the start value or, stacked
+  on a series, from (cumulative - own); barMinHeight applied; NO clipping
+  of the layout and no border taken out of it (the view group's clip rect
+  does the cutting), no rounded corners (ctx.rect). A row with no value
+  keeps its place with not-a-number in it. The background's points are the
+  column across the whole grid rect. }
+function ChunkBars(const AGeom: TTyLargeGeom; const ARows: TTyIntegerArray): TTyLargeGeom; forward;
+function AddLargeBars(const ABinding: TTySeriesBinding; const AVisual: TTySeriesVisual;
+  const ACol: TTyBarColumn; const AGeom, ABg: TTyLargeGeom; AList: TTyPaintList;
+  AChunk: Integer): Integer; forward;
+
+function BuildLargeBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  i, k, n, valCol: Integer;
+  baseHoriz, stacked, onBelow, haveCol: Boolean;
+  col: TTyBarColumn;
+  lay: TTyCoordLayout;
+  baseline, x, y, own, value, baseV, startV, baseCoord, lx, ly, lw, lh, bgSize: Double;
+  p, q: TTyPointF;
+  g, bg: TTyLargeGeom;
+  grid: TTyRectF;
+  clip: TTyXYWH;
+begin
+  Result := 0;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  onBelow := stacked and AStack.HasBelow;
+  if baseHoriz then valCol := AColY else valCol := AColX;
+  baseline := 0;
+  if ABinding.ValueAxis <> nil then
+    baseline := ABinding.ValueAxis.DataToCoord(TyValueAxisStart(ABinding.ValueAxis));
+  { the column: solved for the axis, else the lone column of the first
+    row the coordinate system can place }
+  haveCol := AVisual.Bar.Solved;
+  col := AVisual.Bar;
+  if not haveCol then
+    for i := 0 to AStore.Count - 1 do
+    begin
+      lay := ABinding.Cart.DataToLayout([AStore.Get(AColX, i), AStore.Get(AColY, i)]);
+      if not TyRectFIsValid(lay.Rect) then Continue;
+      col := ColumnFor(AVisual, lay.Rect, baseHoriz);
+      haveCol := True;
+      Break;
+    end;
+  if not haveCol then Exit;
+  grid := ABinding.Cart.GetRect;
+  if baseHoriz then bgSize := grid.Bottom - grid.Top else bgSize := grid.Right - grid.Left;
+
+  n := AStore.Count;
+  g := Default(TTyLargeGeom);
+  g.Kind := lgkBar;
+  if baseHoriz then g.BaseDim := 0 else g.BaseDim := 1;
+  g.BarW := col.Width;
+  SetLength(g.Pts, n * 3);
+  SetLength(g.Idx, n);
+  bg := Default(TTyLargeGeom);
+  bg.Kind := lgkBar;
+  bg.BaseDim := g.BaseDim;
+  bg.BarW := g.BarW;
+  if col.ShowBackground then SetLength(bg.Pts, n * 3);
+  for i := 0 to n - 1 do
+  begin
+    x := AStore.Get(AColX, i);
+    y := AStore.Get(AColY, i);
+    own := AStore.Get(valCol, i);
+    if stacked then
+    begin
+      if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                   else x := AStore.Get(AStack.ResultCol, i);
+    end;
+    if baseHoriz then
+    begin
+      value := y;
+      baseV := x;
+    end
+    else
+    begin
+      value := x;
+      baseV := y;
+    end;
+    baseCoord := baseline;
+    { stacked on a series: the floor is (cumulative - own) }
+    if onBelow then
+    begin
+      startV := JsSub(value, own);
+      if baseHoriz then baseCoord := ABinding.Cart.DataToPoint([baseV, startV]).Y
+      else baseCoord := ABinding.Cart.DataToPoint([startV, baseV]).X;
+    end;
+    if baseHoriz then
+    begin
+      p := ABinding.Cart.DataToPoint([baseV, value]);
+      lx := p.X + col.Offset;
+      ly := baseCoord;
+      lh := JsSub(p.Y, baseCoord);
+      { barMinHeight: a zero points up the screen -- `<= 0` }
+      if (not IsNan(lh)) and (Abs(lh) < col.MinHeightPx) then
+        if lh <= 0 then lh := -col.MinHeightPx else lh := col.MinHeightPx;
+      g.Pts[i * 3] := TyLargeF32(lx);
+      g.Pts[i * 3 + 1] := TyLargeF32(ly);
+      g.Pts[i * 3 + 2] := TyLargeF32(lh);
+      if col.ShowBackground then
+      begin
+        bg.Pts[i * 3] := TyLargeF32(lx);
+        bg.Pts[i * 3 + 1] := TyLargeF32(grid.Top);
+        bg.Pts[i * 3 + 2] := TyLargeF32(bgSize);
+      end;
+    end
+    else
+    begin
+      q := ABinding.Cart.DataToPoint([value, baseV]);
+      lx := baseCoord;
+      ly := q.Y + col.Offset;
+      lw := JsSub(q.X, baseCoord);
+      { and on a horizontal bar a zero points right -- `< 0` }
+      if (not IsNan(lw)) and (Abs(lw) < col.MinHeightPx) then
+        if lw < 0 then lw := -col.MinHeightPx else lw := col.MinHeightPx;
+      g.Pts[i * 3] := TyLargeF32(lx);
+      g.Pts[i * 3 + 1] := TyLargeF32(ly);
+      g.Pts[i * 3 + 2] := TyLargeF32(lw);
+      if col.ShowBackground then
+      begin
+        bg.Pts[i * 3] := TyLargeF32(grid.Left);
+        bg.Pts[i * 3 + 1] := TyLargeF32(ly);
+        bg.Pts[i * 3 + 2] := TyLargeF32(bgSize);
+      end;
+    end;
+    g.Idx[i] := i;
+  end;
+  bg.Idx := g.Idx;
+  { THE VIEW GROUP'S CLIP: createGridClipPath with no pen, and it cuts the
+    hover where it cuts the ink }
+  if col.Clip then
+  begin
+    clip := XYWHOf(TyWhiskerClipRect(ABinding.Cart.GetArea));
+    g.ClipOn := True;
+    g.Clip := clip;
+    bg.ClipOn := True;
+    bg.Clip := clip;
+  end;
+  { PROGRESSIVE: a background and a bar batch per chunk [Batch 119] }
+  if Length(AVisual.LargeChunks) > 0 then
+  begin
+    for k := 0 to High(AVisual.LargeChunks) do
+      Inc(Result, AddLargeBars(ABinding, AVisual, col, ChunkBars(g, AVisual.LargeChunks[k]),
+        ChunkBars(bg, AVisual.LargeChunks[k]), AList, k + 1));
+    Exit;
+  end;
+  Inc(Result, AddLargeBars(ABinding, AVisual, col, g, bg, AList, 0));
+end;
+
+{ largeProgress over one chunk: the rows in the walk's order, and
+  largeDataIndices -- a Float32Array of the chunk's count written at
+  [dataIndex] = dataIndex, so a row past the count is lost and its slot
+  stays 0 [Batch 119] }
+function ChunkBars(const AGeom: TTyLargeGeom; const ARows: TTyIntegerArray): TTyLargeGeom;
+var j, r, m: Integer;
+begin
+  Result := AGeom;
+  Result.Pts := nil;
+  Result.Idx := nil;
+  if Length(AGeom.Pts) = 0 then Exit;
+  m := Length(ARows);
+  SetLength(Result.Pts, m * 3);
+  SetLength(Result.Idx, m);
+  for j := 0 to m - 1 do
+  begin
+    r := ARows[j];
+    Result.Pts[j * 3] := AGeom.Pts[r * 3];
+    Result.Pts[j * 3 + 1] := AGeom.Pts[r * 3 + 1];
+    Result.Pts[j * 3 + 2] := AGeom.Pts[r * 3 + 2];
+    Result.Idx[j] := 0;
+  end;
+  for j := 0 to m - 1 do
+  begin
+    r := ARows[j];
+    if (r >= 0) and (r < m) then Result.Idx[r] := r;
+  end;
+end;
+
+{ createLarge: the background batch first (z2 0, silent), then the bars (z2
+  1, no pen: the stroke is dropped, #20465); AChunk the progressive chunk
+  that draws them, 0 for none }
+function AddLargeBars(const ABinding: TTySeriesBinding; const AVisual: TTySeriesVisual;
+  const ACol: TTyBarColumn; const AGeom, ABg: TTyLargeGeom; AList: TTyPaintList;
+  AChunk: Integer): Integer;
+var
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+  col: TTyBarColumn;
+begin
+  Result := 0;
+  col := ACol;
+  if col.ShowBackground then
+  begin
+    v := AVisual;
+    v.Fill := AVisual.BackgroundFill;
+    v.FillGradient := Default(TTyChartGradient);
+    v.FillPattern := Default(TTyChartPattern);
+    v.Alpha := 1;
+    v.StrokeWidthLogical := 0;
+    el := LargeElement(ABg, v, ABinding.SeriesIndex);
+    el.Silent := True;
+    el.Style.DashLogical := nil;
+    if col.Clip then
+    begin
+      el.HasClip := True;
+      el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
+    end;
+    el.ProgChunk := AChunk;
+    AList.Add(el);
+    Inc(Result);
+  end;
+  v := AVisual;
+  v.StrokeWidthLogical := 0;
+  el := LargeElement(AGeom, v, ABinding.SeriesIndex);
+  el.Style.DashLogical := nil;
+  el.Z2 := AVisual.Z2 + 1;
+  if col.Clip then
+  begin
+    el.HasClip := True;
+    el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
+  end;
+  el.ProgChunk := AChunk;
+  AList.Add(el);
+  Inc(Result);
+end;
+
+{ pointsLayout with a typed array, jitterLayout over it, and
+  LargeSymbolDraw: [x, y] per row, Float32 -- a jittered coordinate
+  rounded again after the jitter; the series' symbol and size, never a
+  row's own; drawn filled in the series colour whatever its `empty`
+  (setColor on the batch takes the plain branch); the soft clip only when
+  `clip` is on. }
+function BuildLargeSymbols(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  i, n, k, k0, j, rows: Integer;
+  part: TTyLargeGeom;
+  ch: TTyIntegerArray;
+  baseHoriz, stacked: Boolean;
+  x, y, px, py, scale: Double;
+  p: TTyPointF;
+  g: TTyLargeGeom;
+  spec: TTySymbolSpec;
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+begin
+  Result := 0;
+  spec := AVisual.Symbol;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  scale := AVisual.PxScale;
+  if scale <= 0 then scale := 1;
+  n := AStore.Count;
+  g := Default(TTyLargeGeom);
+  g.Kind := lgkSymbol;
+  g.SymW := spec.WidthPx;
+  g.SymH := spec.HeightPx;
+  g.SymKind := Ord(spec.Kind);
+  { BOOST_SIZE_THRESHOLD, 4 px: under it the symbols are squares by
+    fillRect; the hit box never shrinks under it }
+  g.Boost := (not IsNan(spec.WidthPx)) and (spec.WidthPx < 4 * scale);
+  g.HitMin := 4 * scale;
+  if AVisual.Line.Clip then
+  begin
+    g.SoftOn := True;
+    g.Soft := ABinding.Cart.GetAreaTol(0.1);
+  end;
+  SetLength(g.Pts, n * 2);
+  for i := 0 to n - 1 do
+  begin
+    x := AStore.Get(AColX, i);
+    y := AStore.Get(AColY, i);
+    if stacked then
+    begin
+      if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                   else x := AStore.Get(AStack.ResultCol, i);
+    end;
+    p := SysPoint(ABinding, [x, y]);
+    px := TyLargeF32(p.X);
+    py := TyLargeF32(p.Y);
+    { THE JITTER reads the rounded point and is rounded again on its way
+      back into the array (jitterLayout over `points`) }
+    if AVisual.Jitter <> nil then
+    begin
+      if AVisual.JitterOnX then
+        px := TyLargeF32(AVisual.Jitter.Fix(py, px, ScatterRowRadius(AVisual, AStore, i, spec, -1)))
+      else
+        py := TyLargeF32(AVisual.Jitter.Fix(px, py, ScatterRowRadius(AVisual, AStore, i, spec, -1)));
+    end;
+    g.Pts[i * 2] := px;
+    g.Pts[i * 2 + 1] := py;
+  end;
+  v := AVisual;
+  v.FillPattern := Default(TTyChartPattern);
+  { the style is the series' itemStyle without its colour, then the visual
+    colour as the fill; a boosted batch is squares filled one by one, with
+    no pen }
+  if g.Boost or (v.Stroke = 0) then v.StrokeWidthLogical := 0;
+  if Length(AVisual.LargeChunks) = 0 then
+  begin
+    el := LargeElement(g, v, ABinding.SeriesIndex);
+    AList.Add(el);
+    Inc(Result);
+    Exit;
+  end;
+  { PROGRESSIVE [Batch 119]: LargeSymbolDraw.incrementalUpdate concatenates
+    a chunk onto the batch added last while that holds under 2e4 numbers
+    (its endIndex moves, its startIndex stays), else starts a batch at the
+    chunk's start }
+  k0 := -1;
+  part := g;
+  rows := 0;
+  for k := 0 to High(AVisual.LargeChunks) do
+  begin
+    if (k0 >= 0) and (rows * 2 < 20000) then
+    begin
+      ch := AVisual.LargeChunks[k];
+      SetLength(part.Pts, (rows + Length(ch)) * 2);
+      for j := 0 to High(ch) do
+      begin
+        part.Pts[(rows + j) * 2] := g.Pts[ch[j] * 2];
+        part.Pts[(rows + j) * 2 + 1] := g.Pts[ch[j] * 2 + 1];
+      end;
+      Inc(rows, Length(ch));
+      SetLength(part.ChunkEnds, Length(part.ChunkEnds) + 1);
+      part.ChunkEnds[High(part.ChunkEnds)] := rows;
+      Continue;
+    end;
+    if k0 >= 0 then
+    begin
+      el := LargeElement(part, v, ABinding.SeriesIndex);
+      el.ProgChunk := k0 + 1;
+      AList.Add(el);
+      Inc(Result);
+    end;
+    ch := AVisual.LargeChunks[k];
+    k0 := k;
+    part := g;
+    part.Pts := nil;
+    part.ChunkEnds := nil;
+    part.ChunkFirst := k;
+    if Length(ch) > 0 then part.Start := ch[0] else part.Start := 0;
+    SetLength(part.Pts, Length(ch) * 2);
+    for j := 0 to High(ch) do
+    begin
+      part.Pts[j * 2] := g.Pts[ch[j] * 2];
+      part.Pts[j * 2 + 1] := g.Pts[ch[j] * 2 + 1];
+    end;
+    rows := Length(ch);
+    SetLength(part.ChunkEnds, 1);
+    part.ChunkEnds[0] := rows;
+  end;
+  if k0 >= 0 then
+  begin
+    el := LargeElement(part, v, ABinding.SeriesIndex);
+    el.ProgChunk := k0 + 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
+{ candlestickLayout's largeProgress and CandlestickView's createLarge:
+  [sign, x, ylow, yhigh] per row, Float32 -- a row without its base, its
+  lowest or its highest is [NaN, 0, 0, 0]; ylow and yhigh are point[1] of
+  the lowest and the highest, so on a vertical layout (a category y) both
+  are the row's y and the line has no length, upstream's own. Three paths,
+  sign 1, -1, 0, each stroked in getBorderColor(sign) || getColor(sign)
+  with the series' pen, through the view group's clip. }
+function BuildLargeCandles(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+const
+  cSigns: array[0..2] of Integer = (1, -1, 0);
+var
+  i, k, n, colBase, colOpen, colClose, colLow, colHigh, sgn, c, j, nChunks: Integer;
+  baseHoriz, clipOn: Boolean;
+  at, openV, closeV, lowV, highV, prevClose, scale, lw: Double;
+  pLow, pHigh: TTyPointF;
+  pts, cpts: TTyDoubleArray;
+  ch: TTyIntegerArray;
+  g: TTyLargeGeom;
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+begin
+  Result := 0;
+  if (ABinding.BaseAxis = nil) or (ABinding.Cart = nil) then Exit;
+  baseHoriz := ABinding.BaseAxis.Horizontal;
+  if baseHoriz then colBase := AColX else colBase := AColY;
+  colOpen := AStore.DimIndexOf('open');
+  colClose := AStore.DimIndexOf('close');
+  colLow := AStore.DimIndexOf('lowest');
+  colHigh := AStore.DimIndexOf('highest');
+  if (colOpen < 0) or (colClose < 0) or (colLow < 0) or (colHigh < 0) then Exit;
+  scale := AVisual.PxScale;
+  if scale <= 0 then scale := 1;
+  n := AStore.Count;
+  SetLength(pts, n * 4);
+  for i := 0 to n - 1 do
+  begin
+    at := AStore.Get(colBase, i);
+    openV := AStore.Get(colOpen, i);
+    closeV := AStore.Get(colClose, i);
+    lowV := AStore.Get(colLow, i);
+    highV := AStore.Get(colHigh, i);
+    if IsNan(at) or IsNan(lowV) or IsNan(highV) then
+    begin
+      pts[i * 4] := NaN;
+      pts[i * 4 + 1] := 0;
+      pts[i * 4 + 2] := 0;
+      pts[i * 4 + 3] := 0;
+      Continue;
+    end;
+    { getSign: the comparisons JavaScript makes, false on a not-a-number }
+    if (not IsNan(openV)) and (not IsNan(closeV)) and (openV > closeV) then sgn := -1
+    else if (not IsNan(openV)) and (not IsNan(closeV)) and (openV < closeV) then sgn := 1
+    else if AVisual.Candle.HasDojiBorder then sgn := 0
+    else if i = 0 then sgn := 1
+    else
+    begin
+      prevClose := AStore.Get(colClose, i - 1);
+      if (not IsNan(prevClose)) and (not IsNan(closeV)) and (prevClose <= closeV) then sgn := 1
+      else sgn := -1;
+    end;
+    if baseHoriz then
+    begin
+      pLow := ABinding.Cart.DataToPoint([at, lowV]);
+      pHigh := ABinding.Cart.DataToPoint([at, highV]);
+    end
+    else
+    begin
+      pLow := ABinding.Cart.DataToPoint([lowV, at]);
+      pHigh := ABinding.Cart.DataToPoint([highV, at]);
+    end;
+    pts[i * 4] := sgn;
+    pts[i * 4 + 1] := TyLargeF32(pLow.X);
+    pts[i * 4 + 2] := TyLargeF32(pLow.Y);
+    pts[i * 4 + 3] := TyLargeF32(pHigh.Y);
+  end;
+  clipOn := (not AVisual.Whisker.Solved) or AVisual.Whisker.Clip;
+  lw := AVisual.Candle.BorderWidthLogical;
+  { PROGRESSIVE: three paths per chunk, over the chunk's rows in the walk's
+    order [Batch 119] }
+  nChunks := Length(AVisual.LargeChunks);
+  if nChunks = 0 then nChunks := 1;
+  for c := 0 to nChunks - 1 do
+  begin
+  if Length(AVisual.LargeChunks) = 0 then cpts := pts
+  else
+  begin
+    ch := AVisual.LargeChunks[c];
+    cpts := nil;
+    SetLength(cpts, Length(ch) * 4);
+    for j := 0 to High(ch) do
+    begin
+      cpts[j * 4] := pts[ch[j] * 4];
+      cpts[j * 4 + 1] := pts[ch[j] * 4 + 1];
+      cpts[j * 4 + 2] := pts[ch[j] * 4 + 2];
+      cpts[j * 4 + 3] := pts[ch[j] * 4 + 3];
+    end;
+  end;
+  for k := 0 to 2 do
+  begin
+    g := Default(TTyLargeGeom);
+    g.Kind := lgkCandle;
+    g.Pts := cpts;
+    g.Sign := cSigns[k];
+    { containStroke at max(lineWidth, 5) for a path with no fill; no pen
+      at all is never hit }
+    if lw > 0 then g.StrokeHit := Max(lw, Double(5)) * scale else g.StrokeHit := 0;
+    if clipOn then
+    begin
+      g.ClipOn := True;
+      g.Clip := XYWHOf(TyWhiskerClipRect(ABinding.Cart.GetArea));
+    end;
+    v := AVisual;
+    v.Fill := 0;
+    v.FillGradient := Default(TTyChartGradient);
+    v.FillPattern := Default(TTyChartPattern);
+    v.StrokeGradient := Default(TTyChartGradient);
+    case cSigns[k] of
+      1: v.Stroke := AVisual.Candle.UpBorder;
+      -1: v.Stroke := AVisual.Candle.DownBorder;
+    else
+      if AVisual.Candle.HasDojiBorder then v.Stroke := AVisual.Candle.DojiBorder
+      else v.Stroke := AVisual.Candle.Down;
+    end;
+    v.StrokeWidthLogical := lw;
+    el := LargeElement(g, v, ABinding.SeriesIndex);
+    el.Style.HasFill := False;
+    if clipOn then
+    begin
+      el.HasClip := True;
+      el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
+    end;
+    if Length(AVisual.LargeChunks) > 0 then el.ProgChunk := c + 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
+  end;
+end;
+
 { The first store column feeding one axis, or -1. }
 function FirstColumnOn(AStore: TTyDataStore; AAxis: TTyAxis): Integer;
 var cols: TTyIntegerArray;
@@ -3180,6 +4273,172 @@ begin
   if (AStore = nil) or (AAxis = nil) then Exit;
   cols := AStore.DimsOfCoord(AAxis.Dim);
   if Length(cols) > 0 then Result := cols[0];
+end;
+
+function TyBrushItemLayouts(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual): TTyBrushItemLayoutArray;
+var
+  colX, colY, valCol, i, colOpen, colClose, colLow, colHigh, colBase: Integer;
+  x, y, own, floorV, floorPx, baseline, lx, ly, lw, lh, width, band: Double;
+  baseHoriz, stacked, haveCol: Boolean;
+  p, loPt: TTyPointF;
+  lay: TTyCoordLayout;
+  col: TTyBarColumn;
+  r: TTyXYWH;
+  m: TFPUExceptionMask;
+begin
+  Result := nil;
+  if (AStore = nil) or not ABinding.Resolved then Exit;
+  SetLength(Result, AStore.Count);
+  for i := 0 to High(Result) do Result[i] := Default(TTyBrushItemLayout);
+  { large mode keeps no item layout: nothing is selected }
+  if AVisual.Large <> lgkNone then Exit;
+  if (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
+  colX := FirstColumnOn(AStore, ABinding.XAxis);
+  colY := FirstColumnOn(AStore, ABinding.YAxis);
+  if (colX < 0) or (colY < 0) then Exit;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  m := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+    begin
+      if (PolarOf(ABinding) = nil) and (ABinding.Cart = nil) then Exit;
+      for i := 0 to AStore.Count - 1 do
+      begin
+        x := AStore.Get(colX, i);
+        y := AStore.Get(colY, i);
+        if stacked then
+        begin
+          if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                       else x := AStore.Get(AStack.ResultCol, i);
+        end;
+        if IsNan(x) or IsNan(y) then
+        begin
+          Result[i].Kind := blkPoint;
+          Result[i].X := NaN;
+          Result[i].Y := NaN;
+          Continue;
+        end;
+        p := SysPoint(ABinding, [x, y]);
+        Result[i].Kind := blkPoint;
+        Result[i].X := p.X;
+        Result[i].Y := p.Y;
+      end;
+      Exit;
+    end;
+    if PolarOf(ABinding) <> nil then Exit;
+    if ABinding.Cart = nil then Exit;
+    if ABinding.SeriesType = 'bar' then
+    begin
+      { BuildBars' layout, to barMinHeight }
+      if baseHoriz then valCol := colY else valCol := colX;
+      baseline := 0;
+      if ABinding.ValueAxis <> nil then
+        baseline := ABinding.ValueAxis.DataToCoord(TyValueAxisStart(ABinding.ValueAxis));
+      haveCol := False;
+      col := Default(TTyBarColumn);
+      for i := 0 to AStore.Count - 1 do
+      begin
+        x := AStore.Get(colX, i);
+        y := AStore.Get(colY, i);
+        own := AStore.Get(valCol, i);
+        if stacked then
+        begin
+          if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                       else x := AStore.Get(AStack.ResultCol, i);
+        end;
+        if IsNan(x) or IsNan(y) then Continue;
+        if not haveCol then
+        begin
+          lay := ABinding.Cart.DataToLayout([x, y]);
+          if not TyRectFIsValid(lay.Rect) then Continue;
+          col := ColumnFor(AVisual, lay.Rect, baseHoriz);
+          haveCol := True;
+        end;
+        floorPx := baseline;
+        if stacked and AStack.HasBelow and not IsNan(own) then
+        begin
+          if baseHoriz then
+          begin
+            if IsInfinite(y) and IsInfinite(own) then floorV := NaN else floorV := y - own;
+            loPt := ABinding.Cart.DataToPoint([x, floorV]);
+            floorPx := loPt.Y;
+          end
+          else
+          begin
+            if IsInfinite(x) and IsInfinite(own) then floorV := NaN else floorV := x - own;
+            loPt := ABinding.Cart.DataToPoint([floorV, y]);
+            floorPx := loPt.X;
+          end;
+        end;
+        if IsNan(floorPx) or IsInfinite(floorPx) then Continue;
+        p := ABinding.Cart.DataToPoint([x, y]);
+        if baseHoriz then
+        begin
+          lx := p.X + col.Offset;
+          ly := floorPx;
+          lw := col.Width;
+          lh := p.Y - floorPx;
+          if Abs(lh) < col.MinHeightPx then
+            if lh <= 0 then lh := -col.MinHeightPx else lh := col.MinHeightPx;
+        end
+        else
+        begin
+          lx := floorPx;
+          ly := p.Y + col.Offset;
+          lw := p.X - floorPx;
+          lh := col.Width;
+          if Abs(lw) < col.MinHeightPx then
+            if lw < 0 then lw := -col.MinHeightPx else lw := col.MinHeightPx;
+        end;
+        Result[i].Kind := blkRect;
+        Result[i].X := lx;
+        Result[i].Y := ly;
+        Result[i].W := lw;
+        Result[i].H := lh;
+      end;
+      Exit;
+    end;
+    if ABinding.SeriesType = 'candlestick' then
+    begin
+      if ABinding.BaseAxis = nil then Exit;
+      baseHoriz := ABinding.BaseAxis.Horizontal;
+      colBase := colX;
+      if not baseHoriz then colBase := colY;
+      colOpen := AStore.DimIndexOf('open');
+      colClose := AStore.DimIndexOf('close');
+      colLow := AStore.DimIndexOf('lowest');
+      colHigh := AStore.DimIndexOf('highest');
+      if (colOpen < 0) or (colClose < 0) or (colLow < 0) or (colHigh < 0) then Exit;
+      if AVisual.Whisker.Solved then
+        width := AVisual.Whisker.CandleWidth
+      else
+      begin
+        band := ABinding.BaseAxis.BandWidth;
+        if band <= 0 then band := 8;
+        width := Max(Double(1), band / 2);
+      end;
+      for i := 0 to AStore.Count - 1 do
+      begin
+        r := TyCandleBrushRect(ABinding.Cart, baseHoriz, AStore.Get(colBase, i),
+          AStore.Get(colLow, i), AStore.Get(colHigh, i), width);
+        Result[i].Kind := blkRect;
+        Result[i].X := r.X;
+        Result[i].Y := r.Y;
+        Result[i].W := r.W;
+        Result[i].H := r.H;
+      end;
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(m);
+  end;
 end;
 
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
@@ -3194,6 +4453,34 @@ begin
   if (AList = nil) or (AStore = nil) then Exit;
   if not ABinding.Resolved then Exit;
   first := AList.Count;
+  { ON A POLAR [Batch 113]: a bar, a line, a scatter and an effectScatter
+    draw; a heatmap draws nothing there, upstream's HeatmapView knows no
+    polar }
+  { ON A SINGLE AXIS [Batch 118]: a scatter and an effectScatter, laid out
+    from its one column (pointsLayout's dimLen 1) }
+  if SingleOf(ABinding) <> nil then
+  begin
+    if ABinding.XAxis = nil then Exit;
+    colX := FirstColumnOn(AStore, ABinding.XAxis);
+    if colX < 0 then Exit;
+    if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+      Result := BuildScatter(ABinding, AStore, AStack, AVisual, AList, colX, colX);
+  end
+  else if PolarOf(ABinding) <> nil then
+  begin
+    if (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
+    colX := FirstColumnOn(AStore, ABinding.XAxis);
+    colY := FirstColumnOn(AStore, ABinding.YAxis);
+    if (colX < 0) or (colY < 0) then Exit;
+    if ABinding.SeriesType = 'bar' then
+      Result := BuildPolarBars(ABinding, AStore, AStack, AVisual, AList, colX, colY)
+    else if ABinding.SeriesType = 'line' then
+      Result := BuildLine(ABinding, AStore, AStack, AVisual, AList, colX, colY)
+    else if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+      Result := BuildScatter(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  end
+  else
+  begin
   { No axes is a legitimate resolved state -- a pie is not on any -- and this
     unit only knows how to draw on a cartesian. }
   if (not ABinding.HasAxes) or (ABinding.Cart = nil) then Exit;
@@ -3216,9 +4503,18 @@ begin
     twenty-three series types have no renderer yet, and the control's
     diagnostics are what say so. Drawing an approximation would be worse than
     drawing nothing. }
-  build := RendererFor(ABinding.SeriesType);
-  if build <> nil then
-    Result := build(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  { LARGE MODE: one batch per style instead of an element per datum
+    [Batch 117] }
+  case AVisual.Large of
+    lgkBar: Result := BuildLargeBars(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+    lgkSymbol: Result := BuildLargeSymbols(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+    lgkCandle: Result := BuildLargeCandles(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  else
+    build := RendererFor(ABinding.SeriesType);
+    if build <> nil then
+      Result := build(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  end;
+  end;
   { THE RAW ROW BESIDE THE VIEW ROW. The builders address the view; once a
     dataZoom has filtered the store the two differ, and a tooltip or a
     callback reading RawDataIndex would name the wrong datum. Filled here,

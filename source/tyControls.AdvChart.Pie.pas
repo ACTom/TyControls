@@ -148,6 +148,8 @@ type
     { per sector: the fill as an object -- a gradient or a pattern, the
       series' or the datum's own -- or nothing [Batch 105] }
     Objs: TTyChartObjFillArray;
+    { per sector: the decal it is drawn with, or none [Batch 131] }
+    Decals: TTyChartDecalArray;
     { per sector: a visualMap's opacity, NaN where none was written }
     Alphas: TTyDoubleArray;
     Stroke: TTyChartColor;
@@ -208,6 +210,13 @@ function TyPieSectorPercents(const ALayout: TTyPieLayout;
 { ADim is the store column holding the value. AViewport is the control's own
   rect: the series' box is solved against it. }
 function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+{ THE SAME IN A VIEW ALREADY SOLVED -- getCircleLayout's viewRect, as x, y,
+  width, height: the series' box got by getLayoutRect in a matrix cell or a
+  calendar day (createBoxLayoutReference). The centre's percentages run
+  against the view's own width and height, the radii against half its
+  shorter side [Batch 151]. }
+function TyPieLayoutInView(const ASpec: TTyPieSpec; const AView: TTyXYWH;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
 
 { Resolve one sector's corner radii against its own geometry.
@@ -343,19 +352,13 @@ begin
     Result := nil;
 end;
 
-function ParseFloatIn(const AText: string; out AValue: Double): Boolean;
-var fs: TFormatSettings;
-begin
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  Result := TryStrToFloat(Trim(AText), AValue, fs);
-end;
-
-{ parsePositionOption's keyword table plus its two number forms. A value that
-  parses to nothing keeps the default, which is where this and upstream part
-  company: JavaScript answers NaN and lets the arithmetic carry it. A NaN
-  centre would put the whole pie nowhere, so an unreadable option is treated as
-  absent instead. }
+{ parsePositionOption's keyword table plus its two number forms, each read
+  by JavaScript's parseFloat -- the leading number, whatever follows it
+  ('120px' is 120, '2017-02-10' is 2017) [Milestone D9-D14; it was
+  TryStrToFloat of the whole string]. A value with no leading number keeps
+  the default, which is where this and upstream part company: JavaScript
+  answers NaN and lets the arithmetic carry it. A NaN centre would put the
+  whole pie nowhere, so an unreadable option is treated as absent instead. }
 function TyPieMeasureOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
 var
   s: string;
@@ -370,12 +373,10 @@ begin
   if (s = 'center') or (s = 'centre') or (s = 'middle') then Exit(TyBoxPercent(50));
   if (s = 'left') or (s = 'top') then Exit(TyBoxPercent(0));
   if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
-  if s[Length(s)] = '%' then
-  begin
-    if ParseFloatIn(Copy(s, 1, Length(s) - 1), v) then Exit(TyBoxPercent(v));
-    Exit;
-  end;
-  if ParseFloatIn(s, v) then Result := TyBoxPx(v);
+  v := TyJsParseFloat(s);
+  if IsNan(v) then Exit;
+  if s[Length(s)] = '%' then Result := TyBoxPercent(v)
+  else Result := TyBoxPx(v);
 end;
 
 function TyPieResolve(const AValue: TTyBoxValue; ABase: Double): Double;
@@ -681,20 +682,26 @@ begin
   Result := (AVal - AD0) / subDomain * subRange + AR0;
 end;
 
-function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
-  AStore: TTyDataStore; ADim: Integer): TTyPieLayout; forward;
+function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewRect: TTyRectF;
+  const AView: TTyXYWH; AStore: TTyDataStore; ADim: Integer): TTyPieLayout; forward;
 
 { AN INFINITE SLICE IS DATA NOW -- 'Infinity' reads as what upstream reads it
   as -- and its arithmetic goes on to not-a-number angles the way
   JavaScript's does, where FPC would raise. }
 function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
-var mask: TFPUExceptionMask;
+var
+  mask: TFPUExceptionMask;
+  vr: TTyRectF;
 begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
   try
-    Result := PieLayoutOfImpl(ASpec, AViewport, AStore, ADim);
+    { getCircleLayout, layout.ts:225-251. The two bases are different and
+      that is the whole point of doing it here rather than reusing the
+      grid's solver. }
+    vr := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
+    Result := PieLayoutOfImpl(ASpec, vr, TyXYWHOfRect(vr), AStore, ADim);
   finally
     ClearExceptions(False);
     {$IFDEF CPUX86_64}
@@ -704,8 +711,25 @@ begin
   end;
 end;
 
-function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+function TyPieLayoutInView(const ASpec: TTyPieSpec; const AView: TTyXYWH;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := PieLayoutOfImpl(ASpec, TyRectOfXYWH(AView), AView, AStore, ADim);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewRect: TTyRectF;
+  const AView: TTyXYWH; AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
 var
   size, startA, endA, padA, minA, minPad, halfPad: Double;
   unitRad, sum, angleRange, restAngle, sumBig, cur, ang, endOfIt: Double;
@@ -720,14 +744,12 @@ begin
   Result := Default(TTyPieLayout);
   Result.Clockwise := ASpec.Clockwise;
 
-  { getCircleLayout, layout.ts:225-251. The two bases are different and that is
-    the whole point of doing it here rather than reusing the grid's solver. }
-  Result.ViewRect := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
-  Result.CX := TyPieResolve(ASpec.CentreX, TyRectFWidth(Result.ViewRect))
-    + Result.ViewRect.Left;
-  Result.CY := TyPieResolve(ASpec.CentreY, TyRectFHeight(Result.ViewRect))
-    + Result.ViewRect.Top;
-  size := Min(TyRectFWidth(Result.ViewRect), TyRectFHeight(Result.ViewRect));
+  { the view's own x, y, width and height: the centre against each, the
+    radii against half the shorter [Batch 151: from the view handed in] }
+  Result.ViewRect := AViewRect;
+  Result.CX := TyPieResolve(ASpec.CentreX, AView.W) + AView.X;
+  Result.CY := TyPieResolve(ASpec.CentreY, AView.H) + AView.Y;
+  size := Min(AView.W, AView.H);
   Result.R0 := TyPieResolve(ASpec.Radius0, size / 2);
   Result.R1 := TyPieResolve(ASpec.Radius1, size / 2);
 
@@ -987,6 +1009,7 @@ begin
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
     { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
       the arc's extent -- grown by the border when there is one [Batch 105] }
+    if i <= High(AVisual.Decals) then el.Style.Decal := AVisual.Decals[i];
     if (i <= High(AVisual.Objs)) and AVisual.Objs[i].Present then
     begin
       el.Style.FillGradient := AVisual.Objs[i].Gradient;
@@ -1026,6 +1049,9 @@ begin
     { layout.angle, the sweep the datum was given: a shape key upstream's
       update tweens with the rest [Batch 90] }
     el.Anim.G[6] := ALayout.Sectors[i].Angle;
+    { the layout's direction: 1 anticlockwise, the path a universal
+      transition morphs is built with it [Batch 136] }
+    if ALayout.Clockwise then el.Anim.G[7] := 0 else el.Anim.G[7] := 1;
     AList.Add(el);
     Inc(drawn);
   end;

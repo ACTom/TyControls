@@ -50,6 +50,12 @@ type
   ITyBoxContainer = interface
     ['{8D31C60F-4A72-4B95-BE28-3F7A05D6C914}']
     function ContainerRect: TTyRectF;
+    { THE SAME RECT AS UPSTREAM'S refContainer HOLDS IT: x, y, width,
+      height. Not the rect's right edge less its left -- a matrix cell's
+      width is the matrix's own sum, and (x + w) - x need not round back to
+      w; a box solved in a cell takes the width the cell was given
+      [Batch 151]. }
+    function ContainerXYWH: TTyXYWH;
   end;
 
 function TyBoxSpec: TTyBoxSpec;              { every field buAuto }
@@ -123,6 +129,18 @@ function TyLinearMap(AValue, ADomainLo, ADomainHi, ARangeLo, ARangeHi: Double;
 function TyFixedContainer(const ARect: TTyRectF): ITyBoxContainer;
 function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
   const AData: array of Double): ITyBoxContainer;
+{ A CONTAINER GIVEN AS x, y, width, height -- createBoxLayoutReference's
+  refContainer for a component or a series laid out in a matrix cell or a
+  calendar day (coordinateSystemUsage 'box'), or the canvas [Batch 151] }
+function TyXYWHContainer(const ARect: TTyXYWH): ITyBoxContainer;
+const
+  { WHERE A BOX OF NO POSITION IS PUT: a grid or a polar whose `coord`
+    names no cell is laid out here, far off any canvas, in a box of an
+    ordinary size (an empty one makes axes of no length, whose ticks are
+    not numbers) -- upstream's not-a-number rect draws nothing, and neither
+    does this [Batch 151] }
+  TyBoxNowhere = -1e6;
+  TyBoxNowhereSize = 100;
 
 { The one solver. Every component's rect comes from here. }
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
@@ -188,6 +206,10 @@ function TyBoxWord(const A, B: TTyBoxRaw): string;
   in CSS order. }
 function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   const AMargin: array of Double): TTyXYWH;
+{ A box as the shared solver holds it, back in the raw form getLayoutRect
+  reads: auto absent, px a number, a percentage its text with a `%`, centre
+  the word [Batch 147] }
+function TyBoxSpecRaw(const ASpec: TTyBoxSpec): TTyRawBox;
 
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
@@ -253,6 +275,9 @@ type
     LabelMarginLogical: Double;
     TickLengthLogical: Double;
     NameGapLogical: Double;
+    { THE AXIS LINE'S WIDTH, the skin's: the ends of a line cut at its breaks
+      are snapped as the line is [Batch 132] }
+    AxisLineWidthLogical: Double;
     { The axis NAME's font, which the layout measures the name in: the same
       one the paint pass draws it in, and not always the labels'. }
     NameFontName: string;
@@ -366,6 +391,28 @@ type
     Colour: Cardinal;
   end;
   TTyAxisInkArray = array of TTyAxisInk;
+
+  { A SEGMENT OF AN AXIS LINE CUT AT ITS BREAKS [Batch 132]: the anid
+    upstream gives it (breakLine_<id before>_<NUL>_<id after>, a NUL for
+    an end) and its two ends, on the pixel grid. }
+  TTyAxisLineSeg = record
+    Anid: string;
+    X1, Y1, X2, Y2: Double;
+  end;
+  TTyAxisLineSegArray = array of TTyAxisLineSeg;
+  TTyBreakPointArray = array of TTyPointF;
+  { ONE BREAK'S AREA AS IT IS DRAWN [Batch 132]: its identity, which of the
+    scale's breaks, polyline A and -- where the gap is not nothing --
+    polyline B and the polygon between them; Lo / Hi its two ends along the
+    axis (global px, snapped, in order) }
+  TTyBreakAreaGeom = record
+    Id: string;
+    BreakIndex: Integer;
+    A, B: TTyBreakPointArray;
+    HasB: Boolean;
+    Lo, Hi: Double;
+  end;
+  TTyBreakAreaGeomArray = array of TTyBreakAreaGeom;
 
   { nameLocation: 'end' is upstream's default and so the zero value;
     'center' is 'middle'. }
@@ -663,6 +710,23 @@ type
       on its Side. }
     FreeFrame: Boolean;
     LabelDirection: Integer;
+
+    { ---- axis breaks [Batch 132] ---- }
+
+    { which labels stand for a break's end: 0 none, 1 its start, 2 its end
+      -- and which break (the scale's BreakList). Parallel to Labels; empty
+      on an axis with no break. A break label is weighed first under
+      hideOverlap, and the two of one break are moved apart. }
+    LabelBreakKind: TTyIntegerArray;
+    LabelBreakIndex: TTyIntegerArray;
+    { breakLabelLayout.moveOverlap: true or 'auto' }
+    BreakMoveOverlap: Boolean;
+    { the axis line cut at the breaks, on the final rect; HasBreakLine False
+      draws the one whole line }
+    HasBreakLine: Boolean;
+    BreakLineSegs: TTyAxisLineSegArray;
+    { the break areas, on the final rect, in the order upstream adds them }
+    BreakAreas: TTyBreakAreaGeomArray;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -827,6 +891,7 @@ function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
 implementation
 
 uses tyControls.AdvChart.AxisName, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.AxisBreak,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Data;
 
 type
@@ -836,6 +901,7 @@ type
   public
     constructor Create(const ARect: TTyRectF);
     function ContainerRect: TTyRectF;
+    function ContainerXYWH: TTyXYWH;
   end;
 
   TTyCoordCellContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -845,6 +911,16 @@ type
   public
     constructor Create(const ACoordSys: ITyCoordSys; const AData: array of Double);
     function ContainerRect: TTyRectF;
+    function ContainerXYWH: TTyXYWH;
+  end;
+
+  TTyXYWHContainer = class(TInterfacedObject, ITyBoxContainer)
+  private
+    FRect: TTyXYWH;
+  public
+    constructor Create(const ARect: TTyXYWH);
+    function ContainerRect: TTyRectF;
+    function ContainerXYWH: TTyXYWH;
   end;
 
 function TyBoxAuto: TTyBoxValue;
@@ -995,6 +1071,7 @@ function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
   const AMargin: array of Double): TTyRectF;
 var
   c: TTyRectF;
+  cx: TTyXYWH;
   l, r, t, b, lw, lh: Double;
   m: array[0..3] of Double;
   i: Integer;
@@ -1022,9 +1099,12 @@ begin
   else
     for i := 0 to 3 do m[i] := AMargin[i];
   end;
-  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
+  { the container's own width and height, not its edges' difference
+    [Batch 151] }
+  cx := AContainer.ContainerXYWH;
+  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, cx.X, cx.W,
     m[3], m[1], l, r, lw);
-  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
+  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, cx.Y, cx.H,
     m[0], m[2], t, b, lh);
   Result := TyRectF(l, t, r, b);
 end;
@@ -1038,15 +1118,17 @@ function TySolveBoxXYWH(const ASpec: TTyBoxSpec;
   const AContainer: ITyBoxContainer): TTyXYWH;
 var
   c: TTyRectF;
+  cx: TTyXYWH;
   l, r, t, b, lw, lh: Double;
 begin
   Result := TyXYWH(NaN, NaN, NaN, NaN);
   if AContainer = nil then Exit;
   c := AContainer.ContainerRect;
   if not TyRectFIsValid(c) then Exit;
-  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
+  cx := AContainer.ContainerXYWH;
+  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, cx.X, cx.W,
     0, 0, l, r, lw);
-  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
+  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, cx.Y, cx.H,
     0, 0, t, b, lh);
   Result := TyXYWH(l, t, lw, lh);
 end;
@@ -1060,6 +1142,27 @@ begin
 end;
 
 function TTyFixedContainer.ContainerRect: TTyRectF;
+begin
+  Result := FRect;
+end;
+
+function TTyFixedContainer.ContainerXYWH: TTyXYWH;
+begin
+  Result := TyXYWH(FRect.Left, FRect.Top, TyRectFWidth(FRect), TyRectFHeight(FRect));
+end;
+
+constructor TTyXYWHContainer.Create(const ARect: TTyXYWH);
+begin
+  inherited Create;
+  FRect := ARect;
+end;
+
+function TTyXYWHContainer.ContainerRect: TTyRectF;
+begin
+  Result := TyRectOfXYWH(FRect);
+end;
+
+function TTyXYWHContainer.ContainerXYWH: TTyXYWH;
 begin
   Result := FRect;
 end;
@@ -1084,6 +1187,13 @@ begin
   { ContentRect, not Rect — a nested thing must not paint over the host's
     divider. Same choice HeatmapView.ts:279 makes. }
   Result := l.ContentRect;
+end;
+
+function TTyCoordCellContainer.ContainerXYWH: TTyXYWH;
+var r: TTyRectF;
+begin
+  r := ContainerRect;
+  Result := TyXYWH(r.Left, r.Top, TyRectFWidth(r), TyRectFHeight(r));
 end;
 
 function TyBoxResolve(const AValue: TTyBoxValue; ABase: Double): Double;
@@ -1244,6 +1354,11 @@ function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
   const AData: array of Double): ITyBoxContainer;
 begin
   Result := TTyCoordCellContainer.Create(ACoordSys, AData);
+end;
+
+function TyXYWHContainer(const ARect: TTyXYWH): ITyBoxContainer;
+begin
+  Result := TTyXYWHContainer.Create(ARect);
 end;
 
 
@@ -1667,6 +1782,34 @@ begin
   if IsNan(AV) or (AV = 0) then Result := 0 else Result := AV;
 end;
 
+function TyBoxSpecRaw(const ASpec: TTyBoxSpec): TTyRawBox;
+var fs: TFormatSettings;
+
+  function Raw(const V: TTyBoxValue): TTyBoxRaw;
+  begin
+    Result := Default(TTyBoxRaw);
+    case V.Kind of
+      buPx: Result := TyBoxRawNum(V.Value);
+      { seventeen digits read back as the same double }
+      buPercent: Result := TyBoxRawStr(FloatToStrF(V.Value, ffGeneral, 17, 0, fs) + '%');
+      buCentre: Result := TyBoxRawStr('center');
+    else
+      Result.Kind := brAbsent;
+    end;
+  end;
+
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  fs.ThousandSeparator := #0;
+  Result.Left := Raw(ASpec.Left);
+  Result.Right := Raw(ASpec.Right);
+  Result.Top := Raw(ASpec.Top);
+  Result.Bottom := Raw(ASpec.Bottom);
+  Result.Width := Raw(ASpec.Width);
+  Result.Height := Raw(ASpec.Height);
+end;
+
 function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   const AMargin: array of Double): TTyXYWH;
 var
@@ -1706,13 +1849,15 @@ begin
   Result.Y := OrZero(ACY) + top + m[0];
   Result.W := w;
   Result.H := h;
-  { new BoundingRect: a negative size flips the rect onto its other edge }
-  if Result.W < 0 then
+  { new BoundingRect: a negative size flips the rect onto its other edge;
+    a size that is not a number is no size to compare -- a container of no
+    position, a matrix coord naming no cell [Batch 151] }
+  if (not IsNan(Result.W)) and (Result.W < 0) then
   begin
     Result.X := Result.X + Result.W;
     Result.W := -Result.W;
   end;
-  if Result.H < 0 then
+  if (not IsNan(Result.H)) and (Result.H < 0) then
   begin
     Result.Y := Result.Y + Result.H;
     Result.H := -Result.H;
@@ -2320,10 +2465,36 @@ begin
   end;
 end;
 
+{ adjustBreakLabels: each break whose start and end both have a label, the
+  two moved apart [Batch 132] }
+procedure AdjustBreakLabels(const ASpec: TTyAxisLayoutSpec;
+  var APlaces: TTyAxisLabelPlacementArray; AAxisRotation: Double;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+var
+  i, j: Integer;
+  m0, b0, m1, b1: TTyLabelBox;
+begin
+  { retrieveAxisBreakPairs: every start, then the end of the same break }
+  for i := 0 to High(APlaces) do
+  begin
+    if ASpec.LabelBreakKind[i] <> 1 then Continue;
+    for j := 0 to High(APlaces) do
+      if (ASpec.LabelBreakKind[j] = 2)
+        and (ASpec.LabelBreakIndex[j] = ASpec.LabelBreakIndex[i]) then
+      begin
+        LabelBoxes(ASpec, APlaces[i], AMeasurer, APPI, m0, b0);
+        LabelBoxes(ASpec, APlaces[j], AMeasurer, APPI, m1, b1);
+        TyAdjustBreakLabelPair(ASpec.Inverse, AAxisRotation, APlaces[i], APlaces[j],
+          m0, m1, b0.LocalRect, b1.LocalRect);
+        Break;
+      end;
+  end;
+end;
+
 function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
 var
-  i, k, m, n: Integer;
+  i, k, m, n, z2Min, z2Max: Integer;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   gap, len, iv, t: Double;
@@ -2454,6 +2625,12 @@ begin
   if not ASpec.ShowLabels then Exit;
   n := Length(ASpec.Labels);
 
+  { A BREAK'S TWO LABELS MOVED APART where they overlap, before the end
+    rules and hideOverlap weigh any box [Batch 132] }
+  if (Length(ASpec.LabelBreakKind) = n) and ASpec.BreakMoveOverlap
+    and (AMeasurer <> nil) and byFrame then
+    AdjustBreakLabels(ASpec, Result, fr.Rotation, AMeasurer, APPI);
+
   { THE BUILT LIST. A category axis: every interval-th category from nought,
     and its two ends; anything else: every tick. }
   values := nil;
@@ -2494,6 +2671,24 @@ begin
     Inc(m);
   end;
   SetLength(cands, m);
+  { A BREAK'S LABELS COME FIRST [Batch 132]: their z2 lifted past every
+    other label's -- by the spread of z2 over the axis, plus one }
+  if Length(ASpec.LabelBreakKind) = n then
+  begin
+    z2Min := MaxInt;
+    z2Max := -MaxInt;
+    for i := 0 to n - 1 do
+    begin
+      k := 10;
+      if (ASpec.LabelKind = lakTime) and (i <= High(ASpec.LabelLevel)) then
+        k := 10 + ASpec.LabelLevel[i];
+      if k < z2Min then z2Min := k;
+      if k > z2Max then z2Max := k;
+    end;
+    for k := 0 to m - 1 do
+      if ASpec.LabelBreakKind[cands[k].Index] <> 0 then
+        cands[k].Priority := cands[k].Priority + (z2Max - z2Min + 1);
+  end;
 
   { THE BOXES the rules weigh: every one under hideOverlap, else only the
     two at each end }

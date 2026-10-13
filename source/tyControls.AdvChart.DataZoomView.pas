@@ -85,6 +85,11 @@ type
   { What the chart knows that the option does not. CSS px. }
   TTyDzSliderInput = record
     CanvasW, CanvasH: Double;
+    { [Batch 154] createBoxLayoutReference's container when the slider is in
+      a matrix cell or a calendar day (CSS px from the canvas' corner); the
+      canvas when not HasRef }
+    HasRef: Boolean;
+    Ref: TTyXYWH;
     { _findCoordRect: the first target axis' grid, as laid out; without one
       the middle three fifths of the canvas }
     HasCoordRect: Boolean;
@@ -770,7 +775,7 @@ const
     dzrMoveZone);
 var
   merged, params: TTyRawBox;
-  cr, lr, hpRect, hRect, iconRect: TTyXYWH;
+  cr, lr, hpRect, hRect, iconRect, ref: TTyXYWH;
   W, H, mhs, edgeGap, L, T, hh, hw, mh, iconSize, iconY, sx, sy, rot,
     offset, px, py, tw, th, ty: Double;
   hi: array[0..1] of Double;
@@ -949,10 +954,15 @@ begin
   if ASpec.BrushSelect then mhs := 7 else mhs := 0;
   edgeGap := 15;
   params := merged;
+  { the refContainer: the canvas, or the slider's cell [Batch 154] -- the
+    placeholders take its size and the grid's rect as they are, the frames
+    mixed as upstream mixes them }
+  if AIn.HasRef then ref := AIn.Ref
+  else ref := XYWH(0, 0, W, H);
   if AIn.Horizontal then
   begin
-    Ph(params.Right, W - cr.X - cr.W);
-    Ph(params.Top, H - 30 - edgeGap - mhs);
+    Ph(params.Right, ref.W - cr.X - cr.W);
+    Ph(params.Top, ref.H - 30 - edgeGap - mhs);
     Ph(params.Width, cr.W);
     Ph(params.Height, 30);
   end
@@ -963,7 +973,7 @@ begin
     Ph(params.Width, 30);
     Ph(params.Height, cr.H);
   end;
-  lr := TyGetLayoutRect(params, 0, 0, W, H, []);
+  lr := TyGetLayoutRect(params, ref.X, ref.Y, ref.W, ref.H, []);
   Result.LocX := lr.X;
   Result.LocY := lr.Y;
   if AIn.Horizontal then

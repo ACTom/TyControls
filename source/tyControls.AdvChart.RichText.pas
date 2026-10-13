@@ -832,6 +832,10 @@ var
     if AStyle.LineOverflowTruncate and (contentH > height) then
     begin
       keep := Floor(height / lh);
+      { Array.slice: a negative end counts from the end -- a height under
+        nought (a cell shorter than its padding) keeps all the lines but
+        the last [Batch 145] }
+      if keep < 0 then keep := Max(Length(lines) + keep, 0);
       if keep < Length(lines) then
       begin
         SetLength(lines, Max(keep, 0));

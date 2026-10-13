@@ -29,6 +29,12 @@ unit tyControls.AdvChart.Option;
   units merged again only when the set that applies has changed. The view
   size is the host's to keep current (SetViewSize, CSS px).
 
+  THE TIMELINE'S FRAMES [Batch 129]: the root's `options`, kept beside the
+  units; every setOption merges, after its base and before the units, the
+  frame at the first timeline's currentIndex (getTimelineOption), and
+  TimelineReset is the timelineChange action's resetOption('timeline'):
+  that frame merged alone.
+
   A REJECTED OPTION LEAVES NO OPTION. The tree goes and Error says why, so the
   chart is blank rather than showing something the option no longer says. The
   earlier rule kept the last good tree, for an editor that re-applied text on
@@ -75,6 +81,10 @@ type
     procedure LegendsNewIn(const AReport: TTyMergeReport);
     { getMediaOption and the merges of what it hands over }
     function MergeMedia(const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+    { getTimelineOption and its merge: the frame at the first timeline's
+      currentIndex [Batch 129] }
+    function MergeFrame(const AReplaceMerge: array of string;
       ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
     procedure SetError(const AMsg: string; ALine, ACol: Integer);
     procedure ClearError;
@@ -125,6 +135,11 @@ type
       anything was merged. [Batch 107] }
     function MediaRecheck(ABefore: TTyMergeBeforeComponent;
       AAfter: TTyMergePassEvent): Boolean;
+    { resetOption('timeline') with a replaceMerge: the frame at the first
+      timeline's currentIndex merged, with AReplaceMerge -- the timeline's
+      own. True when a frame was merged. [Batch 129] }
+    function TimelineReset(const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
     property Media: TTyMediaManager read FMedia;
     { False, with Error saying which, when a name is no component main type
       -- upstream asserts on it before it touches anything; the option is
@@ -175,6 +190,9 @@ type
     function ComponentAt(const AMainType: string; AIndex: Integer): TJSONData;
 
     property Root: TJSONData read FRoot;
+    { THE PIECE THE LAST MERGE MERGED IN (its base option), nil after a
+      set: what the aria preprocessor reads per setOption [Batch 131] }
+    property MergedPiece: TJSONData read FMerged;
     property Text: string read FText;
     property Error: TTyOptionError read FError;
   end;
@@ -203,13 +221,33 @@ const
 function TyJsonNestingExceeds(const AText: string; AMax: Integer;
   out ALine, ACol: Integer): Boolean;
 
+{ THE READER SetOptionText uses, on its own: the nesting guard, the escape
+  pre-decode, fcl-json in relaxed mode -- and nothing after it. No
+  preprocessor, no media, no merge, no legend `selected` made up: the tree
+  exactly as written. The design-time series editor reads the user's text
+  with it [Batch 143], because what it writes back is a patch against what
+  is THERE, and a tree the preprocessors had touched would differ from the
+  text before anyone edited anything.
+
+  False with AError set -- the message and position SetOptionText would
+  give -- when the text does not parse. True with AData nil for text with
+  no value in it (empty, blanks, comments only). }
+function TyOptionParseRaw(const AText: string; out AData: TJSONData;
+  out AError: TTyOptionError): Boolean;
+
+{ Every float node of ARoot (parsed from AText) given the value JavaScript's
+  Number() gives its token -- see the implementation. TyOptionParseRaw does
+  it to every tree it parses. }
+procedure TyJsonFixNumbers(const AText: string; ARoot: TJSONData);
+
 implementation
 
 uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
-  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits;
+  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
+  tyControls.AdvChart.Scale, tyControls.AdvChart.Data;
 
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 var
@@ -352,6 +390,55 @@ begin
   for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
   FMediaMerged := nil;
   Result := MergeMedia([], ABefore, AAfter);
+end;
+
+function TTyChartOption.MergeFrame(const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+var
+  tl, d: TJSONData;
+  idx: Double;
+  frame: TJSONObject;
+  n: Integer;
+  rep: TTyMergeReport;
+  err: string;
+begin
+  Result := False;
+  if not (FRoot is TJSONObject) then Exit;
+  if FMedia.FrameCount = 0 then Exit;
+  { getComponent('timeline'): the first slot, a hole is none }
+  tl := ComponentAt('timeline', 0);
+  if not (tl is TJSONObject) then Exit;
+  { getCurrentIndex: the model's option, its default nought }
+  d := TJSONObject(tl).Find('currentIndex');
+  if d = nil then idx := 0
+  else if d.JSONType = jtNumber then idx := d.AsFloat
+  else Exit;
+  { timelineOptions[index]: an index that is no element is undefined }
+  if IsNan(idx) or IsInfinite(idx) or (Frac(idx) <> 0) or (idx < 0)
+    or (idx >= FMedia.FrameCount) then Exit;
+  frame := FMedia.Frame(Trunc(idx));
+  if frame = nil then Exit;
+  frame := TJSONObject(frame.Clone);
+  { kept: the report's NewOpt points into it }
+  n := Length(FMediaMerged);
+  SetLength(FMediaMerged, n + 1);
+  FMediaMerged[n] := frame;
+  if TyOptionMerge(TJSONObject(FRoot), FKeys, frame, AReplaceMerge, True,
+    ABefore, rep, err) then
+  begin
+    Result := True;
+    LegendsNewIn(rep);
+    if Assigned(AAfter) then AAfter(rep);
+  end;
+end;
+
+function TTyChartOption.TimelineReset(const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
+  FMediaMerged := nil;
+  Result := MergeFrame(AReplaceMerge, ABefore, AAfter);
 end;
 
 procedure TTyChartOption.ClearError;
@@ -655,17 +742,38 @@ begin
 end;
 
 function TTyChartOption.ParseText(const AText: string; out AParsed: TJSONData): Boolean;
+var err: TTyOptionError;
+begin
+  Result := TyOptionParseRaw(AText, AParsed, err);
+  if not Result then SetError(err.Message, err.Line, err.Col);
+end;
+
+function TyOptionParseRaw(const AText: string; out AData: TJSONData;
+  out AError: TTyOptionError): Boolean;
 var
   parser: TJSONParser;
   line, col: Integer;
   msg: string;
+
+  procedure Fail(const AMsg: string; ALine, ACol: Integer);
+  begin
+    AError.Failed := True;
+    AError.Message := AMsg;
+    AError.Line := ALine;
+    AError.Col := ACol;
+  end;
+
 begin
   Result := False;
-  AParsed := nil;
+  AData := nil;
+  AError.Failed := False;
+  AError.Message := '';
+  AError.Line := 0;
+  AError.Col := 0;
   { TOO DEEP IS REFUSED before the parser can recurse into it }
   if TyJsonNestingExceeds(AText, TyOptionMaxNesting, line, col) then
   begin
-    SetError(Format(rsTyOptTooDeep, [TyOptionMaxNesting]), line, col);
+    Fail(Format(rsTyOptTooDeep, [TyOptionMaxNesting]), line, col);
     Exit(False);
   end;
   { DECODED FIRST -- see TyDecodeUnicodeEscapes. The scanner in FPC 3.2.2 drops
@@ -675,7 +783,7 @@ begin
     [joUTF8, joComments, joIgnoreTrailingComma]);
   try
     try
-      AParsed := parser.Parse;
+      AData := parser.Parse;
     except
       on E: Exception do
       begin
@@ -683,15 +791,469 @@ begin
         msg := E.Message;
         if TyOptionTextHasFunction(AText) then
           msg := msg + ' ' + rsTyOptFunctionValue;
-        SetError(msg, line, col);
-        AParsed := nil;
+        Fail(msg, line, col);
+        AData := nil;
         Exit(False);
       end;
     end;
   finally
     parser.Free;
   end;
+  TyJsonFixNumbers(AText, AData);
   Result := True;
+end;
+
+{ THE NUMBERS AGAIN, correctly rounded [Batch 146; every option since
+  Milestone D9-D14]. fpjson reads a number through FPC's Val, which is not
+  correctly rounded (about one in eight thousand decimals comes back a unit in
+  the last place out), and JSON.parse reads every decimal exactly -- a map is
+  thousands of them, and one is enough for a coordinate a bit off. So every
+  number token of the text is found in document order and each float node of
+  the tree, in the same order, is given the value JavaScript's Number() gives
+  the token. The integers fpjson keeps are exact. Should the two orders not
+  line up, nothing is changed.
+
+  CHEAP: a token is only a place in the text until a float node asks for it,
+  and the common decimal -- at most fifteen significant digits, a power of ten
+  within 22 -- is read here the way TyJsDecimalToDouble's short path reads it
+  (the digits and the power both exact Doubles, one IEEE operation), with no
+  string made. A longer one (a coordinate printed to seventeen digits) keeps
+  fpjson's value when TyJsDecimalIsNearest finds it between its two half-way
+  points -- two exact comparisons -- and only the rest goes through
+  TyJsToNumber's long division. }
+procedure TyJsonFixNumbers(const AText: string; ARoot: TJSONData);
+var
+  starts, lens: array of Integer;
+  n, i, k, len: Integer;
+  ok: Boolean;
+
+  procedure Collect;
+  var j: Integer; c, q: Char;
+  begin
+    i := 1;
+    len := Length(AText);
+    n := 0;
+    while i <= len do
+    begin
+      c := AText[i];
+      if (c = '"') or (c = #39) then
+      begin
+        q := c;
+        Inc(i);
+        while (i <= len) and (AText[i] <> q) do
+          { a backslash escapes the next character }
+          if AText[i] = #92 then Inc(i, 2) else Inc(i);
+        Inc(i);
+      end
+      else if (c = '/') and (i < len) and (AText[i + 1] = '/') then
+      begin
+        while (i <= len) and not (AText[i] in [#10, #13]) do Inc(i);
+      end
+      else if (c = '/') and (i < len) and (AText[i + 1] = '*') then
+      begin
+        Inc(i, 2);
+        while (i < len) and not ((AText[i] = '*') and (AText[i + 1] = '/')) do Inc(i);
+        Inc(i, 2);
+      end
+      else if c in ['-', '0'..'9'] then
+      begin
+        j := i;
+        Inc(i);
+        while (i <= len) and ((AText[i] in ['0'..'9', '.', 'e', 'E'])
+          or ((AText[i] in ['+', '-']) and (AText[i - 1] in ['e', 'E']))) do Inc(i);
+        if n >= Length(starts) then
+        begin
+          SetLength(starts, n * 2 + 64);
+          SetLength(lens, n * 2 + 64);
+        end;
+        starts[n] := j;
+        lens[n] := i - j;
+        Inc(n);
+      end
+      else if c in ['a'..'z', 'A'..'Z', '_'] then
+      begin
+        while (i <= len) and (AText[i] in ['a'..'z', 'A'..'Z', '_', '0'..'9']) do Inc(i);
+      end
+      else
+        Inc(i);
+    end;
+  end;
+
+  { Number() of the token at AStart, ALen bytes long }
+  function ValueAt(AStart, ALen: Integer; AOld: Double): Double;
+  var
+    p, stop, d, fracLen, ex, expo, intStart, intEnd, fracStart: Integer;
+    neg, expNeg, seen: Boolean;
+    m: QWord;
+  begin
+    p := AStart;
+    stop := AStart + ALen;
+    neg := AText[p] = '-';
+    if neg then Inc(p);
+    m := 0;
+    d := 0;
+    fracLen := 0;
+    seen := False;
+    intStart := p;
+    fracStart := p;
+    { the integer digits, then the fraction's: leading noughts are no
+      significant digits, every other digit is (a trailing nought too, as
+      TyJsDecimalToDouble counts it) }
+    while (p < stop) and (AText[p] in ['0'..'9']) do
+    begin
+      if seen or (AText[p] <> '0') then
+      begin
+        seen := True;
+        Inc(d);
+        if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
+      end;
+      Inc(p);
+    end;
+    intEnd := p;
+    if (p < stop) and (AText[p] = '.') then
+    begin
+      Inc(p);
+      fracStart := p;
+      while (p < stop) and (AText[p] in ['0'..'9']) do
+      begin
+        Inc(fracLen);
+        if seen or (AText[p] <> '0') then
+        begin
+          seen := True;
+          Inc(d);
+          if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
+        end;
+        Inc(p);
+      end;
+    end;
+    expo := 0;
+    if (p < stop) and (AText[p] in ['e', 'E']) then
+    begin
+      Inc(p);
+      expNeg := False;
+      if (p < stop) and (AText[p] in ['+', '-']) then
+      begin
+        expNeg := AText[p] = '-';
+        Inc(p);
+      end;
+      ex := 0;
+      while (p < stop) and (AText[p] in ['0'..'9']) and (ex < 100000) do
+      begin
+        ex := ex * 10 + Ord(AText[p]) - Ord('0');
+        Inc(p);
+      end;
+      if expNeg then expo := -ex else expo := ex;
+    end;
+    expo := expo - fracLen;
+    if (p = stop) and (d <= 15) and (expo >= -22) and (expo <= 22) then
+    begin
+      if d = 0 then Result := 0
+      else if expo >= 0 then Result := Double(m) * TyJsPow10(expo)
+      else Result := Double(m) / TyJsPow10(-expo);
+      if neg then Result := -Result;
+    end
+    else if (p = stop) and (d > 15) and TyJsDecimalIsNearest(
+      Copy(AText, intStart, intEnd - intStart) + Copy(AText, fracStart, fracLen),
+      expo, Abs(AOld)) then
+      Result := AOld
+    else
+      Result := TyJsToNumber(Copy(AText, AStart, ALen));
+  end;
+
+  procedure Walk(AData: TJSONData; AApply: Boolean);
+  var m: Integer;
+  begin
+    if not ok then Exit;
+    case AData.JSONType of
+      jtArray, jtObject:
+        for m := 0 to AData.Count - 1 do Walk(AData.Items[m], AApply);
+      jtNumber:
+        begin
+          if k >= n then
+          begin
+            ok := False;
+            Exit;
+          end;
+          if AApply and (AData is TJSONFloatNumber) then
+            AData.AsFloat := ValueAt(starts[k], lens[k], AData.AsFloat);
+          Inc(k);
+        end;
+    end;
+  end;
+
+begin
+  if ARoot = nil then Exit;
+  starts := nil;
+  lens := nil;
+  Collect;
+  { first count, then write: a mismatch anywhere leaves the tree alone }
+  ok := True;
+  k := 0;
+  Walk(ARoot, False);
+  if not ok or (k <> n) then Exit;
+  k := 0;
+  Walk(ARoot, True);
+end;
+
+{ ==================== the brush preprocessor [Batch 127] ====================
+
+  component/brush/preprocessor.ts, run over every option unit the
+  preprocessors see (the base and the media with a query): a brush
+  component brings the toolbox's brush feature. The first toolbox (one is
+  made, with an empty feature object, when the option has none) gets
+  `feature.brush.type`
+  -- its own list, the brush components' `toolbox` lists appended, the
+  duplicates dropped by their string; a new option (the first setOption, a
+  notMerge) whose list is still empty takes rect, polygon, keep and clear.
+  Where upstream would throw (a feature that is no object, a type that is
+  no array) nothing is done. }
+
+function PreJsKey(AData: TJSONData): string;
+begin
+  case AData.JSONType of
+    jtString: Result := AData.AsString;
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+  else
+    Result := #1 + AData.AsJSON;
+  end;
+end;
+
+function PreTruthy(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+procedure TyBrushPreprocess(AOption: TJSONObject; AIsNew: Boolean);
+var
+  d, tbs, tbNode: TJSONData;
+  brushes: array of TJSONData;
+  spec: TJSONArray;
+  toolbox, feature, brushF: TJSONObject;
+  types, kept: TJSONArray;
+  seen: TStringList;
+  i, k: Integer;
+  key: string;
+begin
+  if AOption = nil then Exit;
+  d := AOption.Find('brush');
+  brushes := nil;
+  if d is TJSONArray then
+  begin
+    for i := 0 to d.Count - 1 do
+    begin
+      SetLength(brushes, Length(brushes) + 1);
+      brushes[High(brushes)] := d.Items[i];
+    end;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    SetLength(brushes, 1);
+    brushes[0] := d;
+  end;
+  if Length(brushes) = 0 then Exit;
+  spec := TJSONArray.Create;
+  try
+    for i := 0 to High(brushes) do
+    begin
+      if not (brushes[i] is TJSONObject) then Continue;
+      tbs := TJSONObject(brushes[i]).Find('toolbox');
+      if tbs is TJSONArray then
+        for k := 0 to tbs.Count - 1 do spec.Add(tbs.Items[k].Clone);
+    end;
+    tbNode := AOption.Find('toolbox');
+    toolbox := nil;
+    if tbNode is TJSONArray then
+    begin
+      if (tbNode.Count > 0) and PreTruthy(tbNode.Items[0]) then
+      begin
+        if not (tbNode.Items[0] is TJSONObject) then Exit;
+        toolbox := TJSONObject(tbNode.Items[0]);
+      end;
+    end
+    else if PreTruthy(tbNode) then
+    begin
+      if not (tbNode is TJSONObject) then Exit;
+      toolbox := TJSONObject(tbNode);
+    end;
+    if toolbox = nil then
+    begin
+      toolbox := TJSONObject.Create;
+      toolbox.Add('feature', TJSONObject.Create);
+      if AOption.IndexOfName('toolbox') >= 0 then AOption.Delete('toolbox');
+      AOption.Add('toolbox', TJSONArray.Create([toolbox]));
+    end;
+    d := toolbox.Find('feature');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then toolbox.Delete('feature');
+      toolbox.Add('feature', TJSONObject.Create);
+      d := toolbox.Find('feature');
+    end;
+    if not (d is TJSONObject) then Exit;
+    feature := TJSONObject(d);
+    d := feature.Find('brush');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then feature.Delete('brush');
+      feature.Add('brush', TJSONObject.Create);
+      d := feature.Find('brush');
+    end;
+    if not (d is TJSONObject) then Exit;
+    brushF := TJSONObject(d);
+    d := brushF.Find('type');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then brushF.Delete('type');
+      brushF.Add('type', TJSONArray.Create);
+      d := brushF.Find('type');
+    end;
+    if not (d is TJSONArray) then Exit;
+    types := TJSONArray(d);
+    for k := 0 to spec.Count - 1 do types.Add(spec.Items[k].Clone);
+    { removeDuplicates by the item's string }
+    seen := TStringList.Create;
+    kept := TJSONArray.Create;
+    try
+      seen.Sorted := True;
+      seen.CaseSensitive := True;
+      for k := 0 to types.Count - 1 do
+      begin
+        key := PreJsKey(types.Items[k]);
+        if seen.IndexOf(key) >= 0 then Continue;
+        seen.Add(key);
+        kept.Add(types.Items[k].Clone);
+      end;
+      types.Clear;
+      for k := 0 to kept.Count - 1 do types.Add(kept.Items[k].Clone);
+    finally
+      kept.Free;
+      seen.Free;
+    end;
+    if AIsNew and (types.Count = 0) then
+    begin
+      types.Add('rect');
+      types.Add('polygon');
+      types.Add('keep');
+      types.Add('clear');
+    end;
+  finally
+    spec.Free;
+  end;
+end;
+
+{ zrUtil.merge(target, source, false): a key the target lacks is a clone of
+  the source's; two plain objects recurse; anything else stays the target's }
+procedure PreMergeKeep(ATarget, ASource: TJSONObject);
+var
+  i, k: Integer;
+  key: string;
+  sp, tp: TJSONData;
+begin
+  if (ATarget = nil) or (ASource = nil) then Exit;
+  for i := 0 to ASource.Count - 1 do
+  begin
+    key := ASource.Names[i];
+    sp := ASource.Items[i];
+    k := ATarget.IndexOfName(key);
+    if k >= 0 then tp := ATarget.Items[k] else tp := nil;
+    if (sp is TJSONObject) and (tp is TJSONObject) then
+      PreMergeKeep(TJSONObject(tp), TJSONObject(sp))
+    else if k < 0 then
+      ATarget.Add(key, sp.Clone);
+  end;
+end;
+
+{ normalizeToArray's item AIndex of AData: an array's own, a single value
+  as item 0, nothing for null or absent }
+function PreItem(AData: TJSONData; AIndex: Integer): TJSONData;
+begin
+  Result := nil;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AData is TJSONArray then
+  begin
+    if (AIndex >= 0) and (AIndex < AData.Count) then Result := TJSONArray(AData).Items[AIndex];
+  end
+  else if AIndex = 0 then
+    Result := AData;
+end;
+
+function PreCount(AData: TJSONData): Integer;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Result := 0
+  else if AData is TJSONArray then Result := AData.Count
+  else Result := 1;
+end;
+
+{ parallelPreprocessor [Batch 128, C19]: createParallelIfNeeded -- with no
+  truthy `parallel` and a series of type 'parallel' the option gets
+  `parallel: [{}]` -- then mergeAxisOptionFromParallel: every parallelAxis
+  object takes the parallelAxisDefault of the parallel its `parallelIndex
+  || 0` names (in this option), under its own keys }
+procedure TyParallelPreprocess(AOption: TJSONObject);
+var
+  ser, axes, pars, it, pd, def: TJSONData;
+  i: Integer;
+  has: Boolean;
+  v: Double;
+begin
+  if AOption = nil then Exit;
+  if not PreTruthy(AOption.Find('parallel')) then
+  begin
+    has := False;
+    ser := AOption.Find('series');
+    for i := 0 to PreCount(ser) - 1 do
+    begin
+      it := PreItem(ser, i);
+      if (it is TJSONObject) and (TJSONObject(it).Find('type') <> nil)
+        and (TJSONObject(it).Find('type').JSONType = jtString)
+        and (TJSONObject(it).Find('type').AsString = 'parallel') then
+        has := True;
+    end;
+    if has then
+    begin
+      if AOption.IndexOfName('parallel') >= 0 then AOption.Delete('parallel');
+      AOption.Add('parallel', TJSONArray.Create([TJSONObject.Create]));
+    end;
+  end;
+  axes := AOption.Find('parallelAxis');
+  pars := AOption.Find('parallel');
+  for i := 0 to PreCount(axes) - 1 do
+  begin
+    it := PreItem(axes, i);
+    if not (it is TJSONObject) then Continue;
+    pd := TJSONObject(it).Find('parallelIndex');
+    if not PreTruthy(pd) then v := 0
+    else if pd.JSONType = jtNumber then v := pd.AsFloat
+    else Continue;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v > MaxInt) then Continue;
+    pd := PreItem(pars, Trunc(v));
+    if not (pd is TJSONObject) then Continue;
+    def := TJSONObject(pd).Find('parallelAxisDefault');
+    if def is TJSONObject then PreMergeKeep(TJSONObject(it), TJSONObject(def));
+  end;
+end;
+
+procedure PreprocessUnits(ABase: TJSONObject; const ASet: TTyMediaSet; AIsNew: Boolean);
+var i: Integer;
+begin
+  TyParallelPreprocess(ABase);
+  TyBrushPreprocess(ABase, AIsNew);
+  for i := 0 to High(ASet.Units) do
+    if ASet.Units[i].Option <> nil then
+    begin
+      TyParallelPreprocess(ASet.Units[i].Option);
+      TyBrushPreprocess(ASet.Units[i].Option, AIsNew);
+    end;
 end;
 
 function TTyChartOption.SetOptionText(const AText: string): Boolean;
@@ -745,6 +1307,8 @@ begin
   begin
     base := TJSONObject(parsed);
     TyParseRawOption(base, mset);
+    { the preprocessors: a new option [Batch 127] }
+    PreprocessUnits(base, mset, True);
     parsed := base;
   end;
   FMedia.Reset(mset);
@@ -756,8 +1320,9 @@ begin
   TyOptionKeysOfTree(FRoot, FKeys);
   for i := 0 to ComponentCount('legend') - 1 do LegendInitSelected(i);
   ClearError;
-  { and the media that apply, merged over the fresh models: nothing kept
-    outside the tree to write back }
+  { the timeline's frame, then the media that apply, merged over the fresh
+    models: nothing kept outside the tree to write back [Batch 129] }
+  MergeFrame(AReplaceMerge, nil, AAfter);
   MergeMedia(AReplaceMerge, nil, AAfter);
   Result := True;
 end;
@@ -818,6 +1383,8 @@ begin
   { the base and the units apart [Batch 107] }
   base := TJSONObject(parsed);
   TyParseRawOption(base, mset);
+  { the preprocessors: not a new option [Batch 127] }
+  PreprocessUnits(base, mset, False);
   FMerged := base;
   if not TyOptionMerge(TJSONObject(FRoot), FKeys, base, AReplaceMerge,
     ABefore, AReport, err) then
@@ -834,6 +1401,8 @@ begin
   ClearError;
   LegendsNewIn(AReport);
   if Assigned(AAfter) then AAfter(AReport);
+  { the frame of the merged timeline, then the media [Batch 129] }
+  MergeFrame(AReplaceMerge, ABefore, AAfter);
   MergeMedia(AReplaceMerge, ABefore, AAfter);
   Result := True;
 end;

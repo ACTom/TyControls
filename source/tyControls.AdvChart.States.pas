@@ -76,6 +76,9 @@ type
     IsPath: Boolean;
     { echarts' default state proxy is installed: emphasis not disabled }
     Proxy: Boolean;
+    { an element a custom series made: its z2EmphasisLift and z2SelectLift
+      are 1, not 10 and 9 (CustomView.createEl) [Batch 123] }
+    LiftOne: Boolean;
     { the flags }
     HoverState: Integer;
     Selected: Boolean;
@@ -123,6 +126,10 @@ type
   TTyStFocus = record
     Kind: TTyStFocusKind;
     Indices: TTyIntegerArray;
+    { A SECOND DATA TYPE'S INDICES [Batch 114]: a sankey's focus is an
+      object of two lists, node and edge -- blurSeries leaves the blur for
+      each data type's elements. Indices are the node data's then. }
+    EdgeIndices: TTyIntegerArray;
   end;
   { blurScope: falsy is 'coordinateSystem'; anything but the two words acts
     as 'global' }
@@ -212,7 +219,9 @@ function TyStBlursSeries(const AFocus: TTyStFocus; AScope: TTyStScope;
 { `[state].[block]` read nearest node first (a data item, then its series):
   itemStyle -> color fill, borderColor stroke, borderWidth lineWidth,
   opacity; lineStyle -> color stroke, width lineWidth (AWidthBolder True when
-  the width is 'bolder'), opacity; areaStyle -> color fill, opacity. AState ''
+  the width is 'bolder'), opacity; areaStyle -> color fill, opacity;
+  'lineStyle:item' -> the lineStyle block read with itemStyle's keys (a
+  sankey link: getItemStyle of its lineStyle model) [Batch 114]. AState ''
   reads the block at the node itself. }
 function TyStReadStyle(const ANodes: array of TJSONObject; const AState,
   ABlock: string; out AWidthBolder: Boolean): TTyStObject;
@@ -398,7 +407,10 @@ begin
   { only when there is a state at all: a label with no emphasis object gets
     no lift }
   if exists and not AObj.Has[stkZ2] then
-    TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2EmphasisLift);
+  begin
+    if AEl.LiftOne then TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + 1)
+    else TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2EmphasisLift);
+  end;
   Result := exists;
 end;
 
@@ -421,7 +433,10 @@ begin
         if not Result then Exit;
         AObj := AEl.Decl[stnSelect];
         if not AObj.Has[stkZ2] then
-          TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2SelectLift);
+        begin
+          if AEl.LiftOne then TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + 1)
+          else TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2SelectLift);
+        end;
       end;
   else
     begin
@@ -834,7 +849,14 @@ var s: string; has: Boolean;
 begin
   Result := TyStNoObject;
   AWidthBolder := False;
-  if ABlock = 'lineStyle' then
+  if ABlock = 'lineStyle:item' then
+  begin
+    ReadColour(ANodes, AState, 'lineStyle', 'color', stkFill, AState = 'emphasis', Result);
+    ReadColour(ANodes, AState, 'lineStyle', 'borderColor', stkStroke, False, Result);
+    ReadNum(ANodes, AState, 'lineStyle', 'borderWidth', stkLineWidth, Result);
+    ReadNum(ANodes, AState, 'lineStyle', 'opacity', stkOpacity, Result);
+  end
+  else if ABlock = 'lineStyle' then
   begin
     ReadColour(ANodes, AState, ABlock, 'color', stkStroke, False, Result);
     if AState = '' then s := TyStReadString(ANodes, [ABlock, 'width'], has)

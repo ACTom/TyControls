@@ -457,11 +457,10 @@ begin
   try
     if AWant is TJSONArray then
       for i := 0 to TJSONArray(AWant).Count - 1 do
-        { A LINK'S LABEL IS NOT DRAWN: graph and sankey edge labels are not
-          ported (batches 46 and 79) }
-        if Copy(TJSONArray(AWant).Strings[i],
-          Length(TJSONArray(AWant).Strings[i]) - 4, 5) <> '|edge' then
-          want.Add(TJSONArray(AWant).Strings[i]);
+        { [Batch 114: a link's label is drawn now, graph and sankey alike, and
+          its handler is handed the edge's params -- the filter that dropped
+          the '|edge' texts is gone.] }
+        want.Add(TJSONArray(AWant).Strings[i]);
     want.Sort;
     TStringList(AGot).Sort;
     Inc(FCompared);

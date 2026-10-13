@@ -60,6 +60,18 @@ type
     Values: TTyDoubleArray;
   end;
 
+  { WHAT convertToLayout ANSWERED [Batch 147]: Valid a coordinate system
+    took the finder; its rect; a calendar's content rect; a matrix's
+    matrixXYLocatorRange. Device px, as every conversion here. }
+  TTyConvertLayout = record
+    Valid: Boolean;
+    Rect: TTyXYWH;
+    HasContentRect: Boolean;
+    ContentRect: TTyXYWH;
+    HasLocatorRange: Boolean;
+    LocatorRange: array[0..1, 0..1] of Double;
+  end;
+
   { One main type the finder named, and the models it found, in order. }
   TTyFinderModels = record
     MainType: string;

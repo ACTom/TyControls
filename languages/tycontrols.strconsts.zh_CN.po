@@ -871,6 +871,7 @@ msgid "Not in a tool window bar: hidden at run time"
 msgstr "不在工具窗口栏里，运行时隐藏"
 
 #: tycontrols.strconsts.rstytoolwindowrestore
+msgctxt "tycontrols.strconsts.rstytoolwindowrestore"
 msgid "Restore"
 msgstr "还原"
 
@@ -1173,6 +1174,220 @@ msgstr "导出选项不是合法的 JSON。"
 msgid "The loading options are not valid JSON."
 msgstr "加载选项不是合法的 JSON。"
 
+#: tycontrols.strconsts.rstycharttoolboxbar
+msgid "Switch to Bar Chart"
+msgstr "切换为柱状图"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushclear
+msgid "Clear Selections"
+msgstr "清除选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushkeep
+msgid "Keep Selections"
+msgstr "保持选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushlinex
+msgid "Horizontally Select"
+msgstr "横向选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushliney
+msgid "Vertically Select"
+msgstr "纵向选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushpolygon
+msgid "Lasso Select"
+msgstr "圈选"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushrect
+msgid "Box Select"
+msgstr "矩形选择"
+
+#: tycontrols.strconsts.rstycharttoolboxdataview
+msgid "Data View"
+msgstr "数据视图"
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewbad
+#, object-pascal-format
+msgid "The data view's text could not be read back: %s"
+msgstr "数据视图的文本无法读回：%s"
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewrefresh
+msgid "Refresh"
+msgstr "刷新"
+
+#: tycontrols.strconsts.rstycharttoolboximagefilter
+msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
+msgstr "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpeg;*.jpg)|*.jpeg;*.jpg|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rstychartariawithtitle
+msgid "This is a chart about \"{title}\""
+msgstr "这是一个关于“{title}”的图表。"
+
+#: tycontrols.strconsts.rstychartariawithouttitle
+msgid "This is a chart"
+msgstr "这是一个图表，"
+
+#: tycontrols.strconsts.rstychartariasinglewithname
+msgid " with type {seriesType} named {seriesName}."
+msgstr "图表类型是{seriesType}，表示{seriesName}。"
+
+#: tycontrols.strconsts.rstychartariasinglewithoutname
+msgid " with type {seriesType}."
+msgstr "图表类型是{seriesType}。"
+
+#: tycontrols.strconsts.rstychartariamultipleprefix
+msgid ". It consists of {seriesCount} series count."
+msgstr "它由{seriesCount}个图表系列组成。"
+
+#: tycontrols.strconsts.rstychartariamultiplewithname
+msgid " The {seriesId} series is a {seriesType} representing {seriesName}."
+msgstr "第{seriesId}个系列是一个表示{seriesName}的{seriesType}，"
+
+#: tycontrols.strconsts.rstychartariamultiplewithoutname
+msgid " The {seriesId} series is a {seriesType}."
+msgstr "第{seriesId}个系列是一个{seriesType}，"
+
+#: tycontrols.strconsts.rstychartariaalldata
+msgid "The data is as follows: "
+msgstr "其数据是——"
+
+#: tycontrols.strconsts.rstychartariapartialdata
+msgid "The first {displayCnt} items are: "
+msgstr "其中，前{displayCnt}项是——"
+
+#: tycontrols.strconsts.rstychartariadatawithname
+msgid "the data for {name} is {value}"
+msgstr "{name}的数据是{value}"
+
+#: tycontrols.strconsts.rstychartariaseparators
+msgid "||, |. "
+msgstr "；|。|，|"
+
+#: tycontrols.strconsts.rstycharttypepie
+msgid "Pie chart"
+msgstr "饼图"
+
+#: tycontrols.strconsts.rstycharttypebar
+msgid "Bar chart"
+msgstr "柱状图"
+
+#: tycontrols.strconsts.rstycharttypeline
+msgid "Line chart"
+msgstr "折线图"
+
+#: tycontrols.strconsts.rstycharttypescatter
+msgid "Scatter plot"
+msgstr "散点图"
+
+#: tycontrols.strconsts.rstycharttypeeffectscatter
+msgid "Ripple scatter plot"
+msgstr "涟漪散点图"
+
+#: tycontrols.strconsts.rstycharttyperadar
+msgid "Radar chart"
+msgstr "雷达图"
+
+#: tycontrols.strconsts.rstycharttypetree
+msgid "Tree"
+msgstr "树图"
+
+#: tycontrols.strconsts.rstycharttypetreemap
+msgid "Treemap"
+msgstr "矩形树图"
+
+#: tycontrols.strconsts.rstycharttypeboxplot
+msgid "Boxplot"
+msgstr "箱型图"
+
+#: tycontrols.strconsts.rstycharttypecandlestick
+msgid "Candlestick"
+msgstr "K线图"
+
+#: tycontrols.strconsts.rstycharttypek
+msgid "K line chart"
+msgstr "K线图"
+
+#: tycontrols.strconsts.rstycharttypeheatmap
+msgid "Heat map"
+msgstr "热力图"
+
+#: tycontrols.strconsts.rstycharttypemap
+msgid "Map"
+msgstr "地图"
+
+#: tycontrols.strconsts.rstycharttypeparallel
+msgid "Parallel coordinate map"
+msgstr "平行坐标图"
+
+#: tycontrols.strconsts.rstycharttypelines
+msgid "Line graph"
+msgstr "线图"
+
+#: tycontrols.strconsts.rstycharttypegraph
+msgid "Relationship graph"
+msgstr "关系图"
+
+#: tycontrols.strconsts.rstycharttypesankey
+msgid "Sankey diagram"
+msgstr "桑基图"
+
+#: tycontrols.strconsts.rstycharttypefunnel
+msgid "Funnel chart"
+msgstr "漏斗图"
+
+#: tycontrols.strconsts.rstycharttypegauge
+msgid "Gauge"
+msgstr "仪表盘图"
+
+#: tycontrols.strconsts.rstycharttypepictorialbar
+msgid "Pictorial bar"
+msgstr "象形柱图"
+
+#: tycontrols.strconsts.rstycharttypethemeriver
+msgid "Theme River Map"
+msgstr "主题河流图"
+
+#: tycontrols.strconsts.rstycharttypesunburst
+msgid "Sunburst"
+msgstr "旭日图"
+
+#: tycontrols.strconsts.rstycharttypecustom
+msgid "Custom chart"
+msgstr "自定义图表"
+
+#: tycontrols.strconsts.rstycharttypechart
+msgid "Chart"
+msgstr "图表"
+
+#: tycontrols.strconsts.rstycharttoolboxline
+msgid "Switch to Line Chart"
+msgstr "切换为折线图"
+
+#: tycontrols.strconsts.rstycharttoolboxrestore
+msgctxt "tycontrols.strconsts.rstycharttoolboxrestore"
+msgid "Restore"
+msgstr "还原"
+
+#: tycontrols.strconsts.rstycharttoolboxsaveasimage
+msgid "Save as Image"
+msgstr "保存为图片"
+
+#: tycontrols.strconsts.rstycharttoolboxstack
+msgid "Stack"
+msgstr "切换为堆叠"
+
+#: tycontrols.strconsts.rstycharttoolboxtiled
+msgid "Tile"
+msgstr "切换为平铺"
+
+#: tycontrols.strconsts.rstycharttoolboxzoom
+msgid "Zoom"
+msgstr "区域缩放"
+
+#: tycontrols.strconsts.rstycharttoolboxzoomback
+msgid "Zoom Reset"
+msgstr "区域缩放还原"
+
 #: tycontrols.strconsts.rstychartnosuchhandler
 #, object-pascal-format
 msgid "No formatter named '%s' is registered."
@@ -1254,6 +1469,16 @@ msgstr "series[%d]：coordinateSystem“%s”尚未实现"
 msgid "series[%d]: the \"%s\" series type is not drawn yet"
 msgstr "series[%d]：“%s”这个系列类型还画不出来"
 
+#: tycontrols.strconsts.rstychartcustomnorenderitem
+#, object-pascal-format
+msgid "series[%d]: no renderItem is registered as \"%s\", so nothing is drawn"
+msgstr "series[%d]：没有登记名为“%s”的 renderItem，所以什么都不画"
+
+#: tycontrols.strconsts.rstychartcustomrenderitemfailed
+#, object-pascal-format
+msgid "series[%d]: renderItem \"%s\" failed: %s"
+msgstr "series[%d]：renderItem“%s”失败：%s"
+
 #: tycontrols.strconsts.rstychartseriesnoaxis
 #, object-pascal-format
 msgid "series[%d] names an axis that does not exist"
@@ -1263,6 +1488,219 @@ msgstr "series[%d] 指向了一条不存在的轴"
 #, object-pascal-format
 msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
 msgstr "series[%d]：xAxis[%d] 与 yAxis[%d] 不在同一个 grid 上"
+
+#: tycontrols.strconsts.rstychartdatasetnotable
+#, object-pascal-format
+msgid "dataset[%d] has no table: %s"
+msgstr "dataset[%d] 没有数据表：%s"
+
+#: tycontrols.strconsts.rstydsreadsitself
+msgid "it reads itself"
+msgstr "它读的是自己"
+
+#: tycontrols.strconsts.rstydsupstreamfailed
+#, object-pascal-format
+msgid "dataset[%d], which it reads, has no table"
+msgstr "它读的 dataset[%d] 没有数据表"
+
+#: tycontrols.strconsts.rstydsnoresult
+#, object-pascal-format
+msgid "its upstream has no result %s"
+msgstr "上游没有第 %s 个结果"
+
+#: tycontrols.strconsts.rstydsoneupstream
+msgid "fromTransformResult needs exactly one upstream dataset"
+msgstr "fromTransformResult 只能有一个上游 dataset"
+
+#: tycontrols.strconsts.rstydsemptypipe
+msgid "the transform list is empty"
+msgstr "transform 列表是空的"
+
+#: tycontrols.strconsts.rstydsnotobject
+msgid "a transform is not an object"
+msgstr "有一个 transform 不是对象"
+
+#: tycontrols.strconsts.rstydsunknowntype
+#, object-pascal-format
+msgid "no transform is registered as \"%s\""
+msgstr "没有注册名为“%s”的 transform"
+
+#: tycontrols.strconsts.rstydsupstreammissing
+msgid "a transform has no input"
+msgstr "有一个 transform 没有输入"
+
+#: tycontrols.strconsts.rstydsupstreambyrow
+msgid "its upstream is laid out by row"
+msgstr "上游是按行排的"
+
+#: tycontrols.strconsts.rstydsupstreamformat
+msgid "its upstream is not a table"
+msgstr "上游不是数据表"
+
+#: tycontrols.strconsts.rstydsduplicatedim
+#, object-pascal-format
+msgid "the dimension name \"%s\" is used twice"
+msgstr "维度名“%s”重复了"
+
+#: tycontrols.strconsts.rstydscopyhasnometa
+msgid "it reads a fromTransformResult copy, which has no dimensions to pass on"
+msgstr "它读的是 fromTransformResult 的副本，副本没有可以沿用的维度"
+
+#: tycontrols.strconsts.rstydsbadresult
+msgid "a transform result is not a table of arrays or of objects"
+msgstr "transform 的结果不是数组行或对象行的表"
+
+#: tycontrols.strconsts.rstydsnotsupported
+#, object-pascal-format
+msgid "%s is not available to a transform registered outside ECharts"
+msgstr "%s 只有 ECharts 自带的 transform 能用"
+
+#: tycontrols.strconsts.rstydskeyednodims
+msgid "its upstream table of columns has no dimensions"
+msgstr "上游的按列表没有维度"
+
+#: tycontrols.strconsts.rstydsrownotlist
+msgid "a row of the table is not a list"
+msgstr "表里有一行不是数组"
+
+#: tycontrols.strconsts.rstydscondnotobject
+msgid "a filter condition is not an object"
+msgstr "filter 的条件不是对象"
+
+#: tycontrols.strconsts.rstydscondandor
+#, object-pascal-format
+msgid "\"%s\" must be a non-empty list of conditions"
+msgstr "“%s”必须是非空的条件列表"
+
+#: tycontrols.strconsts.rstydscondnot
+msgid "\"not\" must be a condition object"
+msgstr "“not”必须是一个条件对象"
+
+#: tycontrols.strconsts.rstydscondnodimension
+msgid "a filter condition has no dimension"
+msgstr "filter 的条件没有写 dimension"
+
+#: tycontrols.strconsts.rstydsnodimension
+#, object-pascal-format
+msgid "there is no dimension %s"
+msgstr "没有维度 %s"
+
+#: tycontrols.strconsts.rstydscondnooperator
+msgid "a filter condition has no operator"
+msgstr "filter 的条件没有运算符"
+
+#: tycontrols.strconsts.rstydscondbadoperator
+#, object-pascal-format
+msgid "\"%s\" is not a filter operator"
+msgstr "“%s”不是 filter 的运算符"
+
+#: tycontrols.strconsts.rstydscondneedsnumber
+#, object-pascal-format
+msgid "\"%s\" compares with a number only"
+msgstr "“%s”只能和数比较"
+
+#: tycontrols.strconsts.rstydscondreg
+msgid "\"reg\" (a regular expression) is not supported"
+msgstr "不支持“reg”（正则表达式）"
+
+#: tycontrols.strconsts.rstydssortempty
+msgid "the sort has no config"
+msgstr "sort 没有 config"
+
+#: tycontrols.strconsts.rstydssortnodimension
+msgid "a sort key has no dimension"
+msgstr "sort 的排序键没有 dimension"
+
+#: tycontrols.strconsts.rstydssortorder
+msgid "a sort key's order must be \"asc\" or \"desc\""
+msgstr "sort 的 order 必须是“asc”或“desc”"
+
+#: tycontrols.strconsts.rstydssortincomparable
+msgid "\"incomparable\" must be \"min\" or \"max\""
+msgstr "“incomparable”必须是“min”或“max”"
+
+#: tycontrols.strconsts.rstydssortparser
+#, object-pascal-format
+msgid "\"%s\" is not a parser"
+msgstr "“%s”不是 parser"
+
+#: tycontrols.strconsts.rstydssortformat
+msgid "the sort reads only a table of arrays or of objects"
+msgstr "sort 只能读数组行或对象行的表"
+
+#: tycontrols.strconsts.rstydsboxplotrows
+msgid "the boxplot reads only a table of arrays"
+msgstr "boxplot 只能读数组行的表"
+
+#: tycontrols.strconsts.rstystatregmethod
+#, object-pascal-format
+msgid "\"%s\" is not a regression method"
+msgstr "“%s”不是回归方法"
+
+#: tycontrols.strconsts.rstystatpolyorder
+#, object-pascal-format
+msgid "the polynomial order must be a whole number from -1 to %d"
+msgstr "多项式的阶数必须是 -1 到 %d 之间的整数"
+
+#: tycontrols.strconsts.rstystatbinmethod
+#, object-pascal-format
+msgid "\"%s\" is not a binning method"
+msgstr "“%s”不是分箱方法"
+
+#: tycontrols.strconsts.rstystatbinlayout
+msgid "the bins cannot be laid out over these values"
+msgstr "这些值排不出分箱"
+
+#: tycontrols.strconsts.rstystatbinprecision
+msgid "the bins are finer than 20 decimal places"
+msgstr "分箱比 20 位小数还细"
+
+#: tycontrols.strconsts.rstystattoomanybins
+#, object-pascal-format
+msgid "more than %d bins"
+msgstr "分箱超过 %d 个"
+
+#: tycontrols.strconsts.rstystatclustercount
+msgid "\"clusterCount\" must be a number of 2 or more"
+msgstr "clusterCount 必须是不小于 2 的数"
+
+#: tycontrols.strconsts.rstystatclusterindex
+msgid "\"outputClusterIndexDimension\" is required, as a number"
+msgstr "必须写 outputClusterIndexDimension，而且要写成数"
+
+#: tycontrols.strconsts.rstystatnewdim
+msgid "a new dimension must be an index or { name, index }"
+msgstr "新维度必须是下标或 { name, index }"
+
+#: tycontrols.strconsts.rstystatindexnotnumber
+msgid "the index of a new dimension must be written as a number"
+msgstr "新维度的下标必须写成数"
+
+#: tycontrols.strconsts.rstystattoomanyclusters
+#, object-pascal-format
+msgid "more than %d clusters"
+msgstr "聚类超过 %d 个"
+
+#: tycontrols.strconsts.rstystatnosplit
+msgid "no cluster could be split"
+msgstr "没有哪个聚类能再分"
+
+#: tycontrols.strconsts.rstystatunassigned
+msgid "a point belongs to no cluster"
+msgstr "有一个点不属于任何聚类"
+
+#: tycontrols.strconsts.rstystatnoconverge
+msgid "k-means did not settle"
+msgstr "k-means 没有收敛"
+
+#: tycontrols.strconsts.rstystatdimhole
+msgid "a dimension of the result is left undefined"
+msgstr "结果有一个维度没有定义"
+
+#: tycontrols.strconsts.rstystatindextoofar
+#, object-pascal-format
+msgid "a new dimension's index is past %d"
+msgstr "新维度的下标超过了 %d"
 
 #: tycontrols.strconsts.rstyoptsummarydefault
 #, object-pascal-format
@@ -1335,6 +1773,93 @@ msgstr "TB"
 #, object-pascal-format
 msgid "and %d more like these."
 msgstr "另有 %d 条同类。"
+
+#: tycontrols.strconsts.rstyserednotobject
+msgid "The option is not an object, so it has no series to edit."
+msgstr "option 不是一个对象，没有可以编辑的系列。"
+
+#: tycontrols.strconsts.rstyseredemptyliteral
+msgid "Write a value here, or clear the field to remove the key."
+msgstr "这里要写一个值；清空就是删掉这个键。"
+
+#: tycontrols.strconsts.rstyseredonevalue
+msgid "Write exactly one value here."
+msgstr "这里只能写一个值。"
+
+#: tycontrols.strconsts.rstyserednotinteger
+#, object-pascal-format
+msgid "\"%s\" is not a whole number."
+msgstr "“%s”不是整数。"
+
+#: tycontrols.strconsts.rstyserednotboolean
+#, object-pascal-format
+msgid "\"%s\" is neither true nor false."
+msgstr "“%s”既不是 true 也不是 false。"
+
+#: tycontrols.strconsts.rstyseredcaption
+#, object-pascal-format
+msgid "%d: %s"
+msgstr "%d：%s"
+
+#: tycontrols.strconsts.rstyseredcaptionnamed
+#, object-pascal-format
+msgid "%d: %s \"%s\""
+msgstr "%d：%s “%s”"
+
+#: tycontrols.strconsts.rstyseredhole
+msgid "(empty slot)"
+msgstr "（空位）"
+
+#: tycontrols.strconsts.rstyserednotype
+msgid "(no type)"
+msgstr "（没有 type）"
+
+#: tycontrols.strconsts.rstyseredcolcategory
+#, object-pascal-format
+msgid "%s category"
+msgstr "%s 类目"
+
+#: tycontrols.strconsts.rstyseredcolname
+msgid "name"
+msgstr "名称"
+
+#: tycontrols.strconsts.rstyseredcolvalue
+msgid "value"
+msgstr "值"
+
+#: tycontrols.strconsts.rstyseredcoldim
+#, object-pascal-format
+msgid "dim %d"
+msgstr "维 %d"
+
+#: tycontrols.strconsts.rstyserednotehole
+msgid "This slot holds no object, so there is nothing to edit in it."
+msgstr "这个位置上不是对象，没有可以编辑的内容。"
+
+#: tycontrols.strconsts.rstyserednotenotlist
+msgid "This data is not a list; edit it as text."
+msgstr "这份数据不是列表，请在文本里编辑。"
+
+#: tycontrols.strconsts.rstyserednotetree
+msgid "This data is a tree (items have children); edit it as text."
+msgstr "这份数据是树（数据项带 children），请在文本里编辑。"
+
+#: tycontrols.strconsts.rstyserednotenodata
+msgid "This series has no data of its own and reads a dataset. Rows added here give it data of its own, which then wins over the dataset."
+msgstr "这个系列没有自己的数据，读的是 dataset。在这里加行就给了它自己的数据，之后以它为准，不再读 dataset。"
+
+#: tycontrols.strconsts.rstyserednotecategory
+#, object-pascal-format
+msgid "Each row is a category of %s. Deleting a row deletes that category, and its value in every series on that axis."
+msgstr "每一行是 %s 的一个类目。删掉一行会删掉这个类目，以及这根轴上每个系列在这个类目上的值。"
+
+#: tycontrols.strconsts.rstyserednotetransform
+msgid "This dataset is made from another one by a transform; edit the source dataset instead."
+msgstr "这个 dataset 是从另一个经 transform 得来的，请去编辑源 dataset。"
+
+#: tycontrols.strconsts.rstyserednotedatasetform
+msgid "This dataset is not a table of rows; edit it as text."
+msgstr "这个 dataset 不是按行排的表，请在文本里编辑。"
 
 #: tycontrols.strconsts.rstyoptdiagallclear
 msgid "The option is understood."

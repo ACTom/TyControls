@@ -1174,7 +1174,9 @@ begin
   AssertFalse('no type', FChart.DispatchAction('{"seriesIndex":0}'));
   AssertFalse('unknown', FChart.DispatchAction('{"type":"nosuch"}'));
   AssertFalse('case matters', FChart.DispatchAction('{"type":"toggleselect"}'));
-  AssertFalse('a batch', FChart.DispatchAction('{"type":"select","batch":[{"dataIndex":0}]}'));
+  { [Batch 141] a select batch is taken; a type that takes no batch is not }
+  AssertFalse('a batch', FChart.DispatchAction('{"type":"restore","batch":[{"dataIndex":0}]}'));
+  AssertTrue('a select batch', FChart.DispatchAction('{"type":"select","batch":[{"dataIndex":0}]}'));
   AssertTrue(FChart.DispatchAction('{"type":"toggleSelect","dataIndex":0}'));
 end;
 

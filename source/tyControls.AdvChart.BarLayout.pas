@@ -81,6 +81,12 @@ type
 function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   AIndex: TTyAxisSeriesIndex): TTyBarColumnArray;
+{ The same, told which slots draw in LARGE MODE: their barMinWidth defaults
+  to half a pixel, not one (barGrid.ts: `get('barMinWidth') ||
+  (isInLargeMode ? 0.5 : 1)`) [Batch 117] }
+function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  AIndex: TTyAxisSeriesIndex; const ALarge: TTyBoolArray): TTyBarColumnArray;
 
 { The answer for ONE default bar series in a band of ABandWidth.
 
@@ -120,6 +126,8 @@ const
     reference and this repo's generated catalog both state: the catalog is
     transcribed from the documentation, and the documentation is stale. }
   cDefaultBarGap = 0.10;
+  { barMinWidth's default in large mode [Batch 117] }
+  cLargeBarMinWidth = 0.5;
   { barMinWidth's own default, which is never unset upstream: barGrid.ts passes
     `get('barMinWidth') || 1`, so every auto column is floored at 1px even when
     that makes columns overlap. On a value axis that is the point. }
@@ -488,6 +496,13 @@ end;
 function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   AIndex: TTyAxisSeriesIndex): TTyBarColumnArray;
+begin
+  Result := TySolveBarLayout(AOption, ABuild, ABindings, AStores, AIndex, nil);
+end;
+
+function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  AIndex: TTyAxisSeriesIndex; const ALarge: TTyBoolArray): TTyBarColumnArray;
 var
   g, a, i: Integer;
   gb: TTyGridBuild;
@@ -600,6 +615,8 @@ var
       v := SizeIn(node, 'barMinWidth');
       if v.Present then
         cols[m].MinWidth := Resolve(v, band)
+      else if (si >= 0) and (si <= High(ALarge)) and ALarge[si] then
+        cols[m].MinWidth := cLargeBarMinWidth
       else
         cols[m].MinWidth := cDefaultBarMinWidth;
 

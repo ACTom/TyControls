@@ -99,6 +99,8 @@ type
     Fills: array of TTyChartColor;
     { per RAW row: the fill as an object, or nothing [Batch 105] }
     Objs: TTyChartObjFillArray;
+    { per RAW row: the decal, or none [Batch 131] }
+    Decals: TTyChartDecalArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
     Alpha: Double;
@@ -183,6 +185,12 @@ function TyFunnelVisual: TTyFunnelVisual;
   AViewport is the CONTROL's rect and not a grid's: a funnel is laid out
   against the canvas, and its own left/top/right/bottom shrink that. }
 function TyFunnelLayoutOf(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
+{ THE SAME IN A VIEW ALREADY SOLVED, held as upstream's getLayoutRect holds
+  it (x, y, width, height): the width and the height are the box's, never a
+  right edge less a left one -- a funnel in a matrix cell, whose edges are
+  not whole pixels [Batch 147] }
+function TyFunnelLayoutInView(const ASpec: TTyFunnelSpec; const AView: TTyXYWH;
   AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
 
 { The bands, into the paint list. }
@@ -410,7 +418,8 @@ begin
 end;
 
 function FunnelLayoutOfImpl(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
-  AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout; forward;
+  AStore: TTyDataStore; ADim: Integer; AHasView: Boolean;
+  const AView: TTyXYWH): TTyFunnelLayout; forward;
 
 { An infinite value's arithmetic goes on to not-a-number, as JavaScript's
   does, where FPC would raise. }
@@ -421,7 +430,25 @@ begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
   try
-    Result := FunnelLayoutOfImpl(ASpec, AViewport, AStore, ADim);
+    Result := FunnelLayoutOfImpl(ASpec, AViewport, AStore, ADim, False, Default(TTyXYWH));
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TyFunnelLayoutInView(const ASpec: TTyFunnelSpec; const AView: TTyXYWH;
+  AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := FunnelLayoutOfImpl(ASpec, TyRectF(AView.X, AView.Y, AView.X + AView.W,
+      AView.Y + AView.H), AStore, ADim, True, AView);
   finally
     ClearExceptions(False);
     {$IFDEF CPUX86_64}
@@ -432,7 +459,8 @@ begin
 end;
 
 function FunnelLayoutOfImpl(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
-  AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
+  AStore: TTyDataStore; ADim: Integer; AHasView: Boolean;
+  const AView: TTyXYWH): TTyFunnelLayout;
 var
   order: TTyIntegerArray;
   n, i, k: Integer;
@@ -490,7 +518,13 @@ var
 begin
   Result := Default(TTyFunnelLayout);
   Result.Horizontal := ASpec.Horizontal;
-  Result.ViewRect := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
+  if AHasView then
+  begin
+    if IsNan(AView.X) or IsNan(AView.Y) or IsNan(AView.W) or IsNan(AView.H) then Exit;
+    Result.ViewRect := AViewport;
+  end
+  else
+    Result.ViewRect := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
   if not TyRectFIsValid(Result.ViewRect) then Exit;
   if AStore = nil then Exit;
   if (ADim < 0) or (ADim >= AStore.DimCount) then Exit;
@@ -499,8 +533,16 @@ begin
     loop no times; Pascal raises. }
   if n = 0 then Exit;
 
-  viewW := TyRectFWidth(Result.ViewRect);
-  viewH := TyRectFHeight(Result.ViewRect);
+  if AHasView then
+  begin
+    viewW := AView.W;
+    viewH := AView.H;
+  end
+  else
+  begin
+    viewW := TyRectFWidth(Result.ViewRect);
+    viewH := TyRectFHeight(Result.ViewRect);
+  end;
   if ASpec.Horizontal then
   begin
     viewSize := viewW;
@@ -556,7 +598,13 @@ begin
   begin
     itemSize := -itemSize;
     gap := -gap;
-    if ASpec.Horizontal then x := Result.ViewRect.Right
+    { x += viewWidth: in a solved view exactly that }
+    if AHasView then
+    begin
+      if ASpec.Horizontal then x := x + viewW
+      else y := y + viewH;
+    end
+    else if ASpec.Horizontal then x := Result.ViewRect.Right
     else y := Result.ViewRect.Bottom;
     for i := 0 to Length(order) div 2 - 1 do
     begin
@@ -617,6 +665,9 @@ begin
       el.Style.FillColor := AVisual.Fills[ALayout.Items[i].RawIndex]
     else
       el.Style.FillColor := 0;
+    if (ALayout.Items[i].RawIndex >= 0)
+      and (ALayout.Items[i].RawIndex <= High(AVisual.Decals)) then
+      el.Style.Decal := AVisual.Decals[ALayout.Items[i].RawIndex];
     { a gradient or a pattern, the band's own box [Batch 105] }
     if (ALayout.Items[i].RawIndex >= 0)
       and (ALayout.Items[i].RawIndex <= High(AVisual.Objs))

@@ -38,7 +38,10 @@ unit tyControls.AdvChart.Dataset;
     transform the boxplot series registers, 'boxplot', are here --
     TTyDatasetCache below; 'filter' and 'sort' are D2's, and a transform of a
     type nobody registered leaves the dataset without a source, where
-    upstream throws.]
+    upstream throws.] [Batch 133: the registry, 'filter' and 'sort' are in
+    tyControls.AdvChart.DataTransform; this unit keeps the chain. A dataset
+    whose transform fails has no table and a reason (ErrorOf), which the
+    control reports as a diagnostic -- upstream throws out of setOption.]
 
     TYPED ARRAYS, which cannot survive a trip through JSON, and KEYED COLUMNS
     (`{ product: [...], 2015: [...] }`), which no corpus example uses. Both
@@ -168,35 +171,119 @@ type
     it in ApplyOne. Anything upstream throws on -- an unknown type, an empty
     pipe, an upstream that is not a table of arrays or is laid out by row, a
     result index that is not there, a dataset that reads itself -- answers
-    nil here, and the series reading it draws nothing. }
+    nil here, and the series reading it draws nothing.
+    [Batch 133: the registry is tyControls.AdvChart.DataTransform's
+    (TyRegisterDataTransform; 'filter', 'sort' and 'boxplot' are built in).
+    A dataset upstream throws on keeps the reason (ErrorOf), and so does
+    every dataset reading it; an upstream reference that finds nothing makes
+    the dataset a root one, as the source manager does; a result index past
+    a dataset's own results is its upstream's (getSource's fallback).] }
   TTyJSONObjectArray = array of TJSONObject;
+
+  { ONE RESULT OF A DATASET [Batch 133]: the node its table is read from and
+    whether it is a `fromTransformResult` COPY. upstream's cloneSourceShallow
+    keeps the table, its header count and its names, and drops the raw
+    `seriesLayoutBy` / `sourceHeader` / `dimensions` -- so a series reading
+    a copy guesses the header again, and a transform whose first result
+    would inherit the copy's dimensions throws. Node nil is no result. }
+  TTySourceRef = record
+    Node: TJSONObject;
+    IsClone: Boolean;
+  end;
+  TTySourceRefArray = array of TTySourceRef;
 
   TTyDatasetCache = class
   private
     FOption: TTyChartOption;
     { per dataset: its results (nil when it has none) }
-    FResults: array of array of TJSONObject;
+    FResults: array of TTySourceRefArray;
+    { per dataset: the datasets it reads (queryDatasetUpstreamDatasetModels;
+      none for a root) -- getSource's fallback walks the first }
+    FUps: array of TTyIntegerArray;
+    { per dataset: why it has no table, '' when it has one [Batch 133] }
+    FErrors: array of string;
     { per dataset: 0 not looked at, 1 being resolved, 2 resolved }
     FState: array of Byte;
     FOwned: TFPList;
+    { THE Math.random the transforms draw from [Batch 134]: FRandom when
+      nobody lent one, reseeded with TyJitterSeed on every reset }
+    FRandom: LongWord;
+    FRandomPtr: PLongWord;
+    function GetRandomState: PLongWord;
     procedure Reset(AOption: TTyChartOption);
     procedure Resolve(AIndex: Integer);
-    function UpstreamOf(ANode: TJSONObject): Integer;
-    function ApplyPipe(ATransform: TJSONData; AUp: TJSONObject;
-      out AResults: TTyJSONObjectArray): Boolean;
-    function ApplyOne(ATransform: TJSONData; const AUps: TTyJSONObjectArray;
-      out AResults: TTyJSONObjectArray): Boolean;
-    function Own(ANode: TJSONObject): TJSONObject;
+    function UpstreamsOf(ANode: TJSONObject): TTyIntegerArray;
+    function SourceAt(AIndex, AResult: Integer): TTySourceRef;
+    procedure Sync(AOption: TTyChartOption);
   public
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
     { The node result AResult of dataset AIndex is read from, or nil. }
     function ResultNode(AOption: TTyChartOption; AIndex, AResult: Integer): TJSONObject;
+    { Whether that result is a fromTransformResult copy [Batch 133]. }
+    function ResultIsClone(AOption: TTyChartOption; AIndex, AResult: Integer): Boolean;
+    { The node a SERIES reading dataset AIndex reads: getSource(0), which
+      falls back to the upstream's when the dataset has no result 0. }
+    function SeriesNode(AOption: TTyChartOption; AIndex: Integer;
+      out AIsClone: Boolean): TJSONObject;
+    { How many results dataset AIndex has (resolving it). }
+    function ResultCount(AOption: TTyChartOption; AIndex: Integer): Integer;
+    { Why dataset AIndex has no table -- '' when it has one or has not been
+      resolved yet. Does not resolve. [Batch 133] }
+    function ErrorOf(AIndex: Integer): string;
+    { How many datasets the cache was last reset for. }
+    function DatasetCount: Integer;
+    { THE STATE THE TRANSFORMS DRAW FROM [Batch 134] -- ecStat's k-means
+      calls Math.random. Lend the chart's (the control does, so a
+      clustering draws where upstream's setOption would); nil, the default,
+      is the cache's own, seeded with TyJitterSeed whenever the cache starts
+      afresh. Clear leaves a lent state lent. }
+    property RandomState: PLongWord read GetRandomState write FRandomPtr;
+  end;
+
+  { ONE NAMED DIMENSION as createSource leaves it (normalizeDimensionsOption):
+    a name made a string, a display name defaulting to it, and a name used
+    twice given a '-1', '-2' suffix. [Batch 133] }
+  TTyNormDim = record
+    HasName: Boolean;
+    Name: string;
+    HasDisplayName: Boolean;
+    DisplayName: string;
+  end;
+  TTyNormDimArray = array of TTyNormDim;
+
+  { WHAT createSource MAKES OF A NODE (Source.ts, determineSourceDimensions)
+    -- the fields a transform's upstream is built from. DimsDefined is
+    upstream's `dimensionsDefine` being there at all: an empty list is
+    defined. DetectedCount is -1 for null. Data is borrowed. [Batch 133] }
+  TTySourceFields = record
+    Format: TTySourceFormat;
+    LayoutBy: TTySeriesLayoutBy;
+    StartIndex: Integer;
+    DimsDefined: Boolean;
+    Dims: TTyNormDimArray;
+    DetectedCount: Integer;
+    Data: TJSONData;
   end;
 
 { How many `dataset` components the option carries. }
 function TyDatasetCount(AOption: TTyChartOption): Integer;
+
+{ JavaScript's String() of an option value: a number as it prints, a
+  boolean as its word, null 'null', a list joined by commas (a null or an
+  absent element as nothing), an object '[object Object]'. nil is
+  'undefined'. [Batch 133] }
+function TyJsTextOf(AData: TJSONData): string;
+
+{ normalizeDimensionsOption over a `dimensions` value: nil when it is not a
+  list. [Batch 133] }
+function TyNormalizeDims(AValue: TJSONData): TTyNormDimArray;
+
+{ The fields createSource computes for a node holding `source`,
+  `seriesLayoutBy`, `sourceHeader` and `dimensions` -- a root dataset, or a
+  transform's result. [Batch 133] }
+function TySourceFieldsOf(ANode: TJSONObject): TTySourceFields;
 
 { JavaScript's truthiness of an option value: absent, null, false, 0, NaN
   and '' are false; every object and array, empty or not, is true. }
@@ -334,7 +421,9 @@ function TyEncodeCursorFor(var AList: TTyEncodeCursorArray;
 
 implementation
 
-uses tyControls.AdvChart.Data;
+uses tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
+  tyControls.AdvChart.DataTransform, tyControls.AdvChart.Jitter,
+  tyControls.StrConsts;
 
 const
   { Source.ts:351 -- `10 is an experience number, avoid long loop.` }
@@ -376,6 +465,96 @@ begin
     jtString: Result := AData.AsString <> '';
   else
     Result := True;
+  end;
+end;
+
+function TyJsTextOf(AData: TJSONData): string;
+var i: Integer;
+begin
+  if AData = nil then Exit('undefined');
+  case AData.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtString: Result := AData.AsString;
+    jtArray:
+      begin
+        Result := '';
+        for i := 0 to TJSONArray(AData).Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          if TJSONArray(AData).Items[i].JSONType <> jtNull then
+            Result := Result + TyJsTextOf(TJSONArray(AData).Items[i]);
+        end;
+      end;
+  else
+    Result := '[object Object]';
+  end;
+end;
+
+function TyNormalizeDims(AValue: TJSONData): TTyNormDimArray;
+var
+  arr: TJSONArray;
+  i, j, k: Integer;
+  item, nm, dn: TJSONData;
+  seenNames: TStringList;
+begin
+  Result := nil;
+  arr := ArrOf(AValue);
+  if arr = nil then Exit;
+  SetLength(Result, arr.Count);
+  { nameMap: how many times an ORIGINAL name was seen -- a suffixed name is
+    not entered, so ['a', 'a', 'a-1'] ends with two 'a-1' }
+  seenNames := TStringList.Create;
+  try
+    seenNames.Sorted := True;
+    seenNames.Duplicates := dupIgnore;
+    seenNames.CaseSensitive := True;
+    for i := 0 to arr.Count - 1 do
+    begin
+      Result[i] := Default(TTyNormDim);
+      item := arr.Items[i];
+      { an object is the definition and anything else is its name -- a list
+        is an object too, and has no name }
+      if item.JSONType in [jtObject, jtArray] then
+      begin
+        nm := nil;
+        dn := nil;
+        if item is TJSONObject then
+        begin
+          nm := TJSONObject(item).Find('name');
+          dn := TJSONObject(item).Find('displayName');
+        end;
+      end
+      else
+      begin
+        nm := item;
+        dn := nil;
+      end;
+      if (dn <> nil) and (dn.JSONType <> jtNull) then
+      begin
+        Result[i].HasDisplayName := True;
+        Result[i].DisplayName := TyJsTextOf(dn);
+      end;
+      if (nm = nil) or (nm.JSONType = jtNull) then Continue;
+      Result[i].HasName := True;
+      Result[i].Name := TyJsTextOf(nm);
+      if not Result[i].HasDisplayName then
+      begin
+        Result[i].HasDisplayName := True;
+        Result[i].DisplayName := Result[i].Name;
+      end;
+      if seenNames.Find(Result[i].Name, j) then
+      begin
+        k := PtrInt(seenNames.Objects[j]);
+        seenNames.Objects[j] := TObject(PtrInt(k + 1));
+        Result[i].Name := Result[i].Name + '-' + IntToStr(k);
+      end
+      else
+        seenNames.AddObject(Result[i].Name, TObject(PtrInt(1)));
+    end;
+  finally
+    seenNames.Free;
   end;
 end;
 
@@ -579,6 +758,7 @@ constructor TTyDatasetCache.Create;
 begin
   inherited Create;
   FOwned := TFPList.Create;
+  FRandom := TyJitterSeed;
 end;
 
 destructor TTyDatasetCache.Destroy;
@@ -594,6 +774,8 @@ begin
   for i := 0 to FOwned.Count - 1 do TObject(FOwned[i]).Free;
   FOwned.Clear;
   FResults := nil;
+  FUps := nil;
+  FErrors := nil;
   FState := nil;
   FOption := nil;
 end;
@@ -603,15 +785,19 @@ var n: Integer;
 begin
   Clear;
   FOption := AOption;
+  FRandom := TyJitterSeed;
   n := TyDatasetCount(AOption);
   SetLength(FResults, n);
+  SetLength(FUps, n);
+  SetLength(FErrors, n);
   SetLength(FState, n);
 end;
 
-function TTyDatasetCache.Own(ANode: TJSONObject): TJSONObject;
+{ A DIFFERENT OPTION, or one grown since, starts afresh }
+procedure TTyDatasetCache.Sync(AOption: TTyChartOption);
 begin
-  FOwned.Add(ANode);
-  Result := ANode;
+  if (AOption <> FOption) or (Length(FResults) <> TyDatasetCount(AOption)) then
+    Reset(AOption);
 end;
 
 function TTyDatasetCache.ResultNode(AOption: TTyChartOption;
@@ -619,167 +805,296 @@ function TTyDatasetCache.ResultNode(AOption: TTyChartOption;
 begin
   Result := nil;
   if AOption = nil then Exit;
-  { A DIFFERENT OPTION, or one grown since, starts afresh }
-  if (AOption <> FOption) or (Length(FResults) <> TyDatasetCount(AOption)) then
-    Reset(AOption);
+  Sync(AOption);
   if (AIndex < 0) or (AIndex > High(FResults)) then Exit;
   Resolve(AIndex);
   if (AResult < 0) or (AResult > High(FResults[AIndex])) then Exit;
-  Result := FResults[AIndex][AResult];
+  Result := FResults[AIndex][AResult].Node;
 end;
 
-{ queryDatasetUpstreamDatasetModels: fromDatasetIndex, else fromDatasetId,
-  else dataset 0 -- SINGLE_REFERRING's default; -1 for one naming nothing }
-function TTyDatasetCache.UpstreamOf(ANode: TJSONObject): Integer;
+function TTyDatasetCache.ResultIsClone(AOption: TTyChartOption;
+  AIndex, AResult: Integer): Boolean;
+begin
+  Result := False;
+  if ResultNode(AOption, AIndex, AResult) = nil then Exit;
+  Result := FResults[AIndex][AResult].IsClone;
+end;
+
+function TTyDatasetCache.SeriesNode(AOption: TTyChartOption; AIndex: Integer;
+  out AIsClone: Boolean): TJSONObject;
+var r: TTySourceRef;
+begin
+  Result := nil;
+  AIsClone := False;
+  if AOption = nil then Exit;
+  Sync(AOption);
+  if (AIndex < 0) or (AIndex > High(FResults)) then Exit;
+  Resolve(AIndex);
+  if FErrors[AIndex] <> '' then Exit;
+  r := SourceAt(AIndex, 0);
+  Result := r.Node;
+  AIsClone := r.IsClone;
+end;
+
+function TTyDatasetCache.ResultCount(AOption: TTyChartOption;
+  AIndex: Integer): Integer;
+begin
+  Result := 0;
+  if AOption = nil then Exit;
+  Sync(AOption);
+  if (AIndex < 0) or (AIndex > High(FResults)) then Exit;
+  Resolve(AIndex);
+  Result := Length(FResults[AIndex]);
+end;
+
+function TTyDatasetCache.ErrorOf(AIndex: Integer): string;
+begin
+  Result := '';
+  if (AIndex < 0) or (AIndex > High(FErrors)) then Exit;
+  if FState[AIndex] <> 2 then Exit;
+  Result := FErrors[AIndex];
+end;
+
+function TTyDatasetCache.DatasetCount: Integer;
+begin
+  Result := Length(FResults);
+end;
+
+function TTyDatasetCache.GetRandomState: PLongWord;
+begin
+  if FRandomPtr <> nil then Result := FRandomPtr else Result := @FRandom;
+end;
+
+{ queryDatasetUpstreamDatasetModels through queryReferringComponents with
+  SINGLE_REFERRING: `fromDatasetIndex` when it is not null -- a number, a
+  list of them, a string naming an index -- else `fromDatasetId` (a string
+  or a number compared as text, or a list of them), else dataset 0. An
+  index naming nothing is left out, so a list can shrink to nothing.
+  [Batch 133: a list and a string index were read as nothing.] }
+function TTyDatasetCache.UpstreamsOf(ANode: TJSONObject): TTyIntegerArray;
 var
   d, idd: TJSONData;
-  i, n: Integer;
+  i, k, n: Integer;
   ds: TJSONObject;
-begin
-  Result := -1;
-  n := Length(FResults);
-  d := ANode.Find('fromDatasetIndex');
-  if (d <> nil) and (d.JSONType = jtNumber) then
+
+  procedure Push(AIdx: Integer);
   begin
-    Result := TyRoundOpt(d.AsFloat);
-    if (Result < 0) or (Result >= n) then Result := -1;
-    Exit;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := AIdx;
   end;
-  d := ANode.Find('fromDatasetId');
-  if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+
+  { `cmpts[idx]`: a number that is a whole index, or a string that is an
+    array index as written }
+  procedure ByIndex(AItem: TJSONData);
+  var v: Double; s: string; c: Integer;
   begin
-    for i := 0 to n - 1 do
+    if AItem = nil then Exit;
+    if AItem.JSONType = jtNumber then
     begin
-      ds := ObjOf(FOption.ComponentAt('dataset', i));
+      v := AItem.AsFloat;
+      if IsNan(v) or (v < 0) or (v >= n) or (Frac(v) <> 0) then Exit;
+      Push(Trunc(v));
+    end
+    else if AItem.JSONType = jtString then
+    begin
+      s := AItem.AsString;
+      if (s = '') or (Length(s) > 9) then Exit;
+      if (Length(s) > 1) and (s[1] = '0') then Exit;
+      for c := 1 to Length(s) do
+        if not (s[c] in ['0'..'9']) then Exit;
+      if StrToInt(s) < n then Push(StrToInt(s));
+    end;
+  end;
+
+  function IdMatches(const AWant: string): Integer;
+  var j: Integer;
+  begin
+    for j := 0 to n - 1 do
+    begin
+      ds := ObjOf(FOption.ComponentAt('dataset', j));
       if ds = nil then Continue;
       idd := ds.Find('id');
       if (idd <> nil) and (idd.JSONType in [jtString, jtNumber])
-        and (idd.AsString = d.AsString) then Exit(i);
+        and (TyJsTextOf(idd) = AWant) then Exit(j);
     end;
-    Exit(-1);
+    Result := -1;
   end;
-  Result := 0;
+
+begin
+  Result := nil;
+  n := Length(FResults);
+  d := ANode.Find('fromDatasetIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    if d is TJSONArray then
+      for k := 0 to TJSONArray(d).Count - 1 do ByIndex(TJSONArray(d).Items[k])
+    else
+      ByIndex(d);
+    Exit;
+  end;
+  d := ANode.Find('fromDatasetId');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    if d is TJSONArray then
+    begin
+      { a filter over the components: each once, in component order }
+      for i := 0 to n - 1 do
+        for k := 0 to TJSONArray(d).Count - 1 do
+          if (TJSONArray(d).Items[k].JSONType in [jtString, jtNumber])
+            and (IdMatches(TyJsTextOf(TJSONArray(d).Items[k])) = i) then
+          begin
+            Push(i);
+            Break;
+          end;
+    end
+    else if d.JSONType in [jtString, jtNumber] then
+    begin
+      k := IdMatches(TyJsTextOf(d));
+      if k >= 0 then Push(k);
+    end;
+    Exit;
+  end;
+  if n > 0 then Push(0);
+end;
+
+{ SourceManager.getSource(k): this dataset's k-th result, or -- when it has
+  none -- its first upstream's k-th, and so on up the chain }
+function TTyDatasetCache.SourceAt(AIndex, AResult: Integer): TTySourceRef;
+var guard: Integer;
+begin
+  Result := Default(TTySourceRef);
+  guard := 0;
+  while (AIndex >= 0) and (AIndex <= High(FResults)) and (guard <= Length(FResults)) do
+  begin
+    if (AResult >= 0) and (AResult <= High(FResults[AIndex]))
+      and (FResults[AIndex][AResult].Node <> nil) then
+      Exit(FResults[AIndex][AResult]);
+    if Length(FUps[AIndex]) = 0 then Exit;
+    AIndex := FUps[AIndex][0];
+    Inc(guard);
+  end;
 end;
 
 procedure TTyDatasetCache.Resolve(AIndex: Integer);
 var
-  node, upNode: TJSONObject;
+  node: TJSONObject;
   tr, ftr: TJSONData;
-  up, ri: Integer;
-  outs: TTyJSONObjectArray;
+  ups: TTyIntegerArray;
+  i, ri: Integer;
+  ftrGiven: Boolean;
   r: Double;
+  s, err: string;
+  upSrcs, outs: TTySourceRefArray;
+  one: TTySourceRef;
+
+  procedure Fail(const AWhy: string);
+  begin
+    FResults[AIndex] := nil;
+    FErrors[AIndex] := AWhy;
+  end;
+
 begin
   if FState[AIndex] <> 0 then Exit;
   FState[AIndex] := 1;
   try
     FResults[AIndex] := nil;
+    FErrors[AIndex] := '';
+    FUps[AIndex] := nil;
     node := ObjOf(FOption.ComponentAt('dataset', AIndex));
     if node = nil then Exit;
     tr := node.Find('transform');
     ftr := node.Find('fromTransformResult');
+    one.Node := node;
+    one.IsClone := False;
     { A ROOT DATASET: `!transform && !fromTransformResult` -- a
       fromTransformResult of 0 alone is a root one too }
     if not (TyDatasetTruthy(tr) or TyDatasetTruthy(ftr)) then
     begin
       SetLength(FResults[AIndex], 1);
-      FResults[AIndex][0] := node;
+      FResults[AIndex][0] := one;
       Exit;
     end;
-    up := UpstreamOf(node);
-    if (up < 0) or (up = AIndex) then Exit;
-    Resolve(up);
-    { getSource(fromTransformResult || 0) }
-    ri := 0;
-    if (ftr <> nil) and (ftr.JSONType <> jtNull) then
+    ups := UpstreamsOf(node);
+    { NO UPSTREAM FOUND IS NO UPSTREAM AT ALL: the source manager treats the
+      dataset as a root one and reads its own `source` [Batch 133] }
+    if Length(ups) = 0 then
     begin
-      r := SampleOf(ftr);
-      if IsNan(r) or IsInfinite(r) or (Frac(r) <> 0) then Exit;
-      if r <> 0 then ri := Trunc(r);
+      SetLength(FResults[AIndex], 1);
+      FResults[AIndex][0] := one;
+      Exit;
     end;
-    if (ri < 0) or (ri > High(FResults[up])) then Exit;
-    upNode := FResults[up][ri];
-    if upNode = nil then Exit;
+    FUps[AIndex] := ups;
+    ftrGiven := (ftr <> nil) and (ftr.JSONType <> jtNull);
+    if ftrGiven and (Length(ups) <> 1) then
+    begin
+      Fail(rsTyDsOneUpstream);
+      Exit;
+    end;
+    { getSource(fromTransformResult || 0): a whole number, or a string that
+      is an index as written; anything else names no result }
+    ri := 0;
+    if TyDatasetTruthy(ftr) then
+    begin
+      ri := -1;
+      if ftr.JSONType = jtNumber then
+      begin
+        r := ftr.AsFloat;
+        if (r >= 0) and (Frac(r) = 0) and (r < MaxInt) then ri := Trunc(r);
+      end
+      else if ftr.JSONType = jtString then
+      begin
+        s := ftr.AsString;
+        if (s <> '') and (Length(s) <= 9) and not ((Length(s) > 1) and (s[1] = '0')) then
+        begin
+          ri := 0;
+          for i := 1 to Length(s) do
+            if not (s[i] in ['0'..'9']) then ri := -1;
+          if ri = 0 then ri := StrToInt(s);
+        end;
+      end;
+    end;
+    SetLength(upSrcs, Length(ups));
+    for i := 0 to High(ups) do
+    begin
+      { A CYCLE: upstream recurses until the stack runs out }
+      if (ups[i] = AIndex) or (FState[ups[i]] = 1) then
+      begin
+        Fail(rsTyDsReadsItself);
+        Exit;
+      end;
+      Resolve(ups[i]);
+      if FErrors[ups[i]] <> '' then
+      begin
+        Fail(Format(rsTyDsUpstreamFailed, [ups[i]]));
+        Exit;
+      end;
+      upSrcs[i] := SourceAt(ups[i], ri);
+      if ftrGiven and (upSrcs[i].Node = nil) then
+      begin
+        Fail(Format(rsTyDsNoResult, [TyJsTextOf(ftr)]));
+        Exit;
+      end;
+    end;
     if TyDatasetTruthy(tr) then
     begin
-      if not ApplyPipe(tr, upNode, outs) then Exit;
+      if not TyApplyDataTransform(tr, upSrcs, FOwned, outs, err, GetRandomState) then
+      begin
+        Fail(err);
+        Exit;
+      end;
       FResults[AIndex] := outs;
     end
     else
     begin
-      { cloneSourceShallow: the upstream's own table and rules }
+      { cloneSourceShallow: the upstream's table, header count and names,
+        without its raw meta }
       SetLength(FResults[AIndex], 1);
-      FResults[AIndex][0] := upNode;
+      FResults[AIndex][0].Node := upSrcs[0].Node;
+      FResults[AIndex][0].IsClone := True;
     end;
   finally
     FState[AIndex] := 2;
   end;
-end;
-
-{ applyDataTransform: a list is a pipe, each step fed the one before's
-  results (only its FIRST read by a single-input transform); an empty pipe
-  throws }
-function TTyDatasetCache.ApplyPipe(ATransform: TJSONData; AUp: TJSONObject;
-  out AResults: TTyJSONObjectArray): Boolean;
-var
-  ups: TTyJSONObjectArray;
-  i: Integer;
-begin
-  Result := False;
-  AResults := nil;
-  SetLength(ups, 1);
-  ups[0] := AUp;
-  if ATransform is TJSONArray then
-  begin
-    if TJSONArray(ATransform).Count = 0 then Exit;
-    for i := 0 to TJSONArray(ATransform).Count - 1 do
-    begin
-      if not ApplyOne(TJSONArray(ATransform).Items[i], ups, AResults) then Exit;
-      ups := AResults;
-    end;
-  end
-  else if not ApplyOne(ATransform, ups, AResults) then Exit;
-  Result := Length(AResults) > 0;
-end;
-
-{ applySingleDataTransform for the transforms this port registers: the
-  upstream must be a table of arrays laid out by column (createExternalSource
-  and boxplotTransform both throw otherwise); 'boxplot' answers the boxes,
-  named, and the outliers, unnamed -- neither carries a header line }
-function TTyDatasetCache.ApplyOne(ATransform: TJSONData;
-  const AUps: TTyJSONObjectArray; out AResults: TTyJSONObjectArray): Boolean;
-var
-  t, up, box, outs: TJSONObject;
-  d, src: TJSONData;
-  boxes, outliers: TJSONArray;
-begin
-  Result := False;
-  AResults := nil;
-  if (Length(AUps) = 0) or (AUps[0] = nil) then Exit;
-  t := ObjOf(ATransform);
-  if t = nil then Exit;
-  d := t.Find('type');
-  if (d = nil) or (d.JSONType <> jtString) or (d.AsString <> 'boxplot') then Exit;
-  up := AUps[0];
-  d := up.Find('seriesLayoutBy');
-  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'row') then Exit;
-  src := up.Find('source');
-  if TyDetectSourceFormat(src) <> tsfArrayRows then Exit;
-  if not (src is TJSONArray) then Exit;
-  d := t.Find('config');
-  if not TyPrepareBoxplotData(TJSONArray(src), ObjOf(d), boxes, outliers) then Exit;
-  box := Own(TJSONObject.Create);
-  box.Add('source', boxes);
-  box.Add('dimensions', TJSONArray.Create(['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']));
-  box.Add('sourceHeader', 0);
-  box.Add('seriesLayoutBy', 'column');
-  outs := Own(TJSONObject.Create);
-  outs.Add('source', outliers);
-  outs.Add('sourceHeader', 0);
-  outs.Add('seriesLayoutBy', 'column');
-  SetLength(AResults, 2);
-  AResults[0] := box;
-  AResults[1] := outs;
-  Result := True;
 end;
 
 { ==================== the source ==================== }
@@ -979,13 +1294,17 @@ var
   i, n: Integer;
   named: TTySourceDimArray;
   cell: TJSONData;
+  ownMeta, isClone: Boolean;
 
-  { The series' answer, or the dataset's, or nothing -- in that order. }
+  { The series' answer, or the dataset's, or nothing -- in that order. A
+    series reading a fromTransformResult COPY has only its own: the copy
+    carries no raw meta, so upstream builds the series' source from the
+    series' answers alone [Batch 133]. }
   function Meta(const AKey: string): TJSONData;
   begin
     Result := nil;
     if snode <> nil then Result := snode.Find(AKey);
-    if Result = nil then Result := node.Find(AKey);
+    if (Result = nil) and ownMeta then Result := node.Find(AKey);
   end;
 
 begin
@@ -995,6 +1314,7 @@ begin
   if AOption = nil then Exit;
   node := ObjOf(AOption.ComponentAt('dataset', AIndex));
   if node = nil then Exit;
+  ownMeta := True;
   { A COMPUTED TABLE is read from the node its result is held in -- its own
     rows, dimensions and header rule, never the dataset's (upstream reads
     those off a root dataset only) [Batch 108] }
@@ -1002,8 +1322,9 @@ begin
     or TyDatasetTruthy(node.Find('fromTransformResult')) then
   begin
     if ACache = nil then Exit;
-    node := ACache.ResultNode(AOption, AIndex, 0);
+    node := ACache.SeriesNode(AOption, AIndex, isClone);
     if node = nil then Exit;
+    if ASeriesIndex >= 0 then ownMeta := not isClone;
   end;
   snode := nil;
   if ASeriesIndex >= 0 then
@@ -1060,6 +1381,12 @@ begin
     end
     else if (d.JSONType = jtString) and (d.AsString = 'auto') then
       Result.StartIndex := DetectStartIndex(Result.Data, Result.LayoutBy)
+    else if d.JSONType = jtNull then
+      Result.StartIndex := DetectStartIndex(Result.Data, Result.LayoutBy)
+    else if TyDatasetTruthy(d) then
+      { `sourceHeader ? 1 : 0` -- any other truthy value is one line
+        [Batch 133: a string other than 'auto' was none] }
+      Result.StartIndex := 1
     else
       Result.StartIndex := 0;
     if Result.StartIndex < 0 then Result.StartIndex := 0;
@@ -1102,6 +1429,133 @@ begin
   if Length(Result.Dims) > Result.DimCount then
     Result.DimCount := Length(Result.Dims);
   Result.Valid := True;
+end;
+
+function TySourceFieldsOf(ANode: TJSONObject): TTySourceFields;
+var
+  d, dimsOpt, first: TJSONData;
+  arr: TJSONArray;
+  obj: TJSONObject;
+  i, n: Integer;
+  raw: TJSONArray;
+begin
+  Result := Default(TTySourceFields);
+  Result.Format := tsfUnknown;
+  Result.LayoutBy := slbColumn;
+  Result.DetectedCount := -1;
+  if ANode = nil then Exit;
+  Result.Data := ANode.Find('source');
+  Result.Format := TyDetectSourceFormat(Result.Data);
+  d := ANode.Find('seriesLayoutBy');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'row') then
+    Result.LayoutBy := slbRow;
+  dimsOpt := ANode.Find('dimensions');
+  { `!dimensionsDefine`: only a list (or a truthy non-list, which names
+    nothing) counts as given }
+  if not TyDatasetTruthy(dimsOpt) then dimsOpt := nil;
+  case Result.Format of
+    tsfArrayRows:
+      begin
+        arr := TJSONArray(Result.Data);
+        d := ANode.Find('sourceHeader');
+        if (d = nil) or (d.JSONType = jtNull)
+          or ((d.JSONType = jtString) and (d.AsString = 'auto')) then
+        begin
+          Result.StartIndex := DetectStartIndex(arr, Result.LayoutBy);
+        end
+        else if d.JSONType = jtNumber then
+          Result.StartIndex := TyRoundOpt(d.AsFloat)
+        else if TyDatasetTruthy(d) then
+          Result.StartIndex := 1
+        else
+          Result.StartIndex := 0;
+        if Result.StartIndex < 0 then Result.StartIndex := 0;
+        if dimsOpt <> nil then
+        begin
+          Result.DimsDefined := True;
+          Result.Dims := TyNormalizeDims(dimsOpt);
+        end
+        else if Result.StartIndex = 1 then
+        begin
+          { every cell of the first line, `val != null ? val + '' : ''` }
+          raw := TJSONArray.Create;
+          try
+            n := FirstLineLength(arr, Result.LayoutBy);
+            for i := 0 to n - 1 do
+            begin
+              first := FirstLineCell(arr, Result.LayoutBy, i);
+              if (first = nil) or (first.JSONType = jtNull) then raw.Add('')
+              else raw.Add(TyJsTextOf(first));
+            end;
+            Result.DimsDefined := True;
+            Result.Dims := TyNormalizeDims(raw);
+          finally
+            raw.Free;
+          end;
+        end;
+        if Result.DimsDefined then
+          Result.DetectedCount := Length(Result.Dims)
+        else if Result.LayoutBy = slbRow then
+          Result.DetectedCount := arr.Count
+        else if (arr.Count > 0) and (arr.Items[0] is TJSONArray) then
+          Result.DetectedCount := TJSONArray(arr.Items[0]).Count;
+      end;
+    tsfObjectRows:
+      begin
+        if dimsOpt <> nil then
+        begin
+          Result.DimsDefined := True;
+          Result.Dims := TyNormalizeDims(dimsOpt);
+        end
+        else
+        begin
+          { the keys of the first TRUTHY row (Source.ts in the 6.1 dist) }
+          arr := TJSONArray(Result.Data);
+          for i := 0 to arr.Count - 1 do
+            if TyDatasetTruthy(arr.Items[i]) then
+            begin
+              raw := TJSONArray.Create;
+              try
+                if arr.Items[i] is TJSONObject then
+                begin
+                  obj := TJSONObject(arr.Items[i]);
+                  for n := 0 to obj.Count - 1 do raw.Add(obj.Names[n]);
+                end
+                else if arr.Items[i] is TJSONArray then
+                  for n := 0 to TJSONArray(arr.Items[i]).Count - 1 do raw.Add(IntToStr(n));
+                Result.DimsDefined := True;
+                Result.Dims := TyNormalizeDims(raw);
+              finally
+                raw.Free;
+              end;
+              Break;
+            end;
+        end;
+      end;
+    tsfKeyedColumns:
+      begin
+        Result.DimsDefined := True;
+        if dimsOpt <> nil then
+          Result.Dims := TyNormalizeDims(dimsOpt)
+        else
+        begin
+          obj := TJSONObject(Result.Data);
+          raw := TJSONArray.Create;
+          try
+            for n := 0 to obj.Count - 1 do raw.Add(obj.Names[n]);
+            Result.Dims := TyNormalizeDims(raw);
+          finally
+            raw.Free;
+          end;
+        end;
+      end;
+  else
+    if dimsOpt <> nil then
+    begin
+      Result.DimsDefined := True;
+      Result.Dims := TyNormalizeDims(dimsOpt);
+    end;
+  end;
 end;
 
 function TySourceRowCount(const ASource: TTyChartSource): Integer;

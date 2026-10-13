@@ -84,6 +84,12 @@ type
     { `repeat || 'repeat'` as zrender hands it to createPattern }
     Repetition: string;
     X, Y, Rotation, ScaleX, ScaleY: Double;
+    { A WHOLE MATRIX instead of the five numbers, css px [Batch 122]: a
+      graphic image drawn through its element's transform. With UnitImage
+      the matrix places the image's unit square -- the renderer divides by
+      the decoded image's own size. }
+    HasMatrix, UnitImage: Boolean;
+    Matrix: TTyMat2D;
   end;
 
   { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum
@@ -94,6 +100,33 @@ type
     Pattern: TTyChartPattern;
   end;
   TTyChartObjFillArray = array of TTyChartObjFill;
+
+  { A DECAL [Batch 131]: the pattern upstream GENERATES from a decal object
+    (util/decal.ts createOrUpdatePatternFromDecal) and paints over a filled
+    shape as a second fill -- the aria decals, and any itemStyle.decal.
+    Held NORMALISED: the defaults filled (rect, symbolSize 1, keepAspect,
+    the skin's colour, no background, dash 5 by 5, rotation 0, tiles of at
+    most 512), the dash arrays ceiled and their odd lengths doubled, the
+    symbols a list of rows. AdvChart.Decal makes one and lays its tile out;
+    the renderer draws the tile and repeats it, turned by Rotation, in the
+    canvas' space. }
+  TTyChartDecal = record
+    Present: Boolean;
+    { a row of symbol names per symbol row }
+    Symbols: array of TTyStringArray;
+    SymbolSize: Double;
+    KeepAspect: Boolean;
+    Color: TTyChartColor;
+    HasBackground: Boolean;
+    Background: TTyChartColor;
+    { the x dashes, one array per line; the y dashes }
+    DashX: array of TTyDoubleArray;
+    DashY: TTyDoubleArray;
+    { radians, the pattern's own: zrender turns the repeat, not the symbols }
+    Rotation: Double;
+    MaxTileW, MaxTileH: Double;
+  end;
+  TTyChartDecalArray = array of TTyChartDecal;
 
   TTyChartElementStyle = record
     HasFill: Boolean;
@@ -111,6 +144,10 @@ type
     { AN IMAGE INSTEAD OF THE FILL COLOUR [Batch 105]. FillColor holds what
       upstream's convertToColorString makes of it -- transparent. }
     FillPattern: TTyChartPattern;
+    { A DECAL OVER THE FILL [Batch 131]: zrender's decal element -- the same
+      path filled with the generated pattern, then its stroke again, drawn
+      right after the element. Only where the element has a fill. }
+    Decal: TTyChartDecal;
     { THE BOX A LOCAL GRADIENT NORMALISES AGAINST, when the builder knows it
       better than the shape does: upstream's el.getBoundingRect() is the PATH's
       box grown by the stroke, and a sector's path box is its arc's extent
@@ -130,7 +167,20 @@ type
     { [Batch 98] a legend's selector button (DataIndex the button) and its
       pager's page buttons (DataIndex 0 the previous, 1 the next): targets
       without ECData, so no chart mouse event names them }
-    ctkLegendSelector, ctkLegendPager);
+    ctkLegendSelector, ctkLegendPager,
+    { [Batch 122] a graphic component's element: ComponentIndex the
+      component, DataIndex the element's serial in the view's last build;
+      it has ECData's eventData, not a data index }
+    ctkGraphic,
+    { [Batch 147] a matrix cell -- its rect or its label: ComponentIndex the
+      matrix, DataIndex the cell's serial in the matrix's last build
+      (TTyMatrix.CellInfo); eventData when the matrix says triggerEvent,
+      a component tooltip when the cell has words }
+    ctkMatrix,
+    { [Batch 148] a geo component's region: ComponentIndex the geo,
+      DataIndex its region group (one per distinct name, MapDraw's order)
+      -- a path or its text; the eventData of the group }
+    ctkGeo);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -377,6 +427,26 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
+      text position (sectorLabel.ts) -- SecAnchor: one of the sector
+      positions, its anchor and the alignment it implies; else a built-in
+      position on the path's rect (HostBox) -- and always its own turn
+      (setSectorTextRotation, which a numeric `rotate` reaches as it is
+      written, not in radians). The offset, the style's alignment and the
+      ink run as for any label; SecInside is zrender's isInside for it
+      (textConfig.inside, set for 'middle', else 'inside' in the word). }
+    SecHas: Boolean;
+    SecAnchor: Boolean;
+    SecX, SecY: Double;
+    SecAH: TTyTextAnchorH;
+    SecAV: TTyTextAnchorV;
+    SecRot: Double;
+    SecInside: Boolean;
+    { the sector position (Ord of PolarBar's TTySectorTextPos) and its
+      distance, device px -- a label following its bar through the enter
+      animation is placed again on the bar as drawn }
+    SecPos: Integer;
+    SecDist: Double;
     { THE CAPTION'S OWN z2, when the mark knows it: a treemap label's is the
       running maximum over the walk plus two, not its host's plus two.
       [Batch 76] }
@@ -535,7 +605,38 @@ type
     carMarkPointLabel,
     { [Batch 108] a boxplot's path: its fourteen points in Pts, the median's
       value coordinate in G[0], G[1] 1 on a horizontal layout }
-    carBoxplot);
+    carBoxplot,
+    { [Batch 113, C4] a bar on a polar: its Sector or Sausage, the layout in
+      G[0..5] (cx, cy, r0, r, the start and end angles), G[6] clockwise,
+      G[7] radial (r grows, else the end angle), G[8] a sausage, G[9] of no
+      sweep }
+    carPolarBar,
+    { [Batch 115, C6] a sunburst piece (Index its row, 0 the return circle):
+      G[0..5] cx, cy, r0, r and the start and end angles as upstream holds
+      them; a treemap rect (Index its row, Sub 0 the background, 1 the
+      content): its frame comes from the treemap's own drill-down
+      animation (the control's TreemapFrame), G[0..3] its local shape x, y,
+      width, height }
+    carSunPiece, carTmRect,
+    { [Batch 118, C10] a themeRiver layer's polygon (Index its layer):
+      G[0..3] its path's bounding rect in the view group's frame (x, y,
+      width, height) -- what the enter clip is made from -- and G[4] the
+      group's y }
+    carRiver,
+    { [Batch 120, C11] a chord's sector or ribbon: the view group's enter
+      scale, one proxy for the series (Index -1); G[0..1] the group's
+      origin, the centre option against the whole canvas }
+    carChord,
+    { [Batch 121, C12] a lines series' row: its line (one proxy, the line's
+      shape.percent, drives the line, the two end symbols and the label),
+      and its effect symbol (a looping clip of its own). G[0..5] the line's
+      ends and control point, G[6] curved -- see AdvChart.Lines }
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect,
+    { [Batch 128, C19] a parallel series' row: the data group's enter clip
+      (one proxy per series, row -1), G[0..3] the parallel's rect, G[4] 1 on
+      a horizontal layout (the width grows, else the height), G[5] 1 on the
+      view's first render (only then does the clip start) }
+    carParallelLine);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
@@ -559,6 +660,9 @@ type
       array form's two numbers and whether each is a fraction, and how far
       the host's stroke grew the rect, all device px. }
     HostPlus1: Integer;
+    { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
+      element itself) [Batch 137] }
+    UtPiece: Integer;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
@@ -578,6 +682,19 @@ type
     { How far outside the shape still counts, LOGICAL px. A 6 px scatter marker
       needs a forgiving target; a line series needs a whole ribbon. }
     HitSlopLogical: Double;
+    { THE PORT'S OWN FORGIVENESS on top of it, LOGICAL px: a symbol's
+      target grown past what upstream's Path.contain answers, so a mouse
+      does not keep missing a four-pixel mark. A COARSE POINTER drops it --
+      its fallback is upstream's answer to the same problem, and with both
+      a mark would be found where upstream finds none. Zero everywhere
+      else. [Batch 142] }
+    HitPadLogical: Double;
+    { A RECT HIT ON ITS STROKE ONLY, LOGICAL px: zrender's Path.contain of a
+      path with no fill -- the stroke widened to at least
+      strokeContainThreshold (5) -- so the rect answers within half of this
+      of its outline and not inside. 0: the area, as every other element.
+      A matrix cell written `silent: false` with no fill [Batch 147]. }
+    HitStrokeBand: Double;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -603,6 +720,14 @@ type
       half of a glyph survived the cut. }
     HasClip: Boolean;
     ClipRect: TTyRectF;
+    { A SECTOR CLIP, a polar line's (createPolarClipPath) [Batch 113]: the
+      ink is cut to the ring between ClipR0 and ClipR1 over the sweep from
+      ClipSA to ClipEA (radians clockwise on screen; ClipCW zrender's
+      clockwise), about (ClipCX, ClipCY). Ignored by the hit test, as the
+      rect is. }
+    HasClipSector: Boolean;
+    ClipCX, ClipCY, ClipR0, ClipR1, ClipSA, ClipEA: Double;
+    ClipCW: Boolean;
     Datum: TTyChartDatumRef;
     { zrender's `ignore`: neither drawn nor hit. A label that only a state
       shows (`select.label.show` over a hidden normal label) is built
@@ -613,6 +738,31 @@ type
     IsGuide: Boolean;
     { the enter animation's view of it [Batch 89] }
     Anim: TTyChartAnim;
+    { PROGRESSIVE RENDERING [Batch 119]: the chunk (1-based) whose frame
+      draws the element -- 0, the zero value, for one drawn with the update
+      as every element was before -- the series slot it belongs to, and
+      whether its chunk is still to come. A hidden element is neither drawn
+      nor hit nor found for its datum: upstream has not made it yet.
+      ProgRow is the view row of an element per datum, kept where the datum
+      itself is not (an incremental candle has none). }
+    ProgChunk: Integer;
+    ProgSlot: Integer;
+    ProgRow: Integer;
+    ProgHidden: Boolean;
+    { A GRAPHIC ELEMENT UNDER THE AXES [Batch 122]: zlevel 0 and z 0 or
+      less, which upstream draws before the axes' z 0 (the component's
+      group joins the zrender root first). The list's renderer skips it;
+      the control paints it before the axes. Hit and ordered as any other. }
+    GfxUnder: Boolean;
+    { [Batch 148] UPSTREAM'S OWN Path.contain, where the element asks for
+      it (a geo region): the full path, not the shape's points -- see
+      TTyPathHit. The shape test is not consulted then. }
+    PathHit: TTyPathHit;
+    { [Batch 148] THE CLIP CUTS THE HIT TOO, as zrender's isHover asks
+      every clip path up the element's parents -- for an element that
+      says so (a geo region and its text). Everything else keeps the
+      rule above: the hit test ignores the clip. }
+    ClipHits: Boolean;
   end;
 
   TTyPaintList = class
@@ -635,8 +785,14 @@ type
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
     { The insertion index of the AIndex-th element in PAINT order (back first). }
     function PaintOrder(AIndex: Integer): Integer;
-    { Topmost non-silent element containing the point, or -1. }
-    function HitTestElement(AX, AY: Double; APPI: Integer): Integer;
+    { Topmost non-silent element containing the point, or -1. APad False
+      leaves out the port's pad (HitPadLogical) -- a coarse pointer's direct
+      test [Batch 142]. }
+    function HitTestElement(AX, AY: Double; APPI: Integer;
+      APad: Boolean = True): Integer;
+    { Topmost element containing the point, a silent one too -- zrender's
+      `topTarget` -- or -1 [Batch 127] }
+    function TopElementAt(AX, AY: Double; APPI: Integer): Integer;
     { The same walk, reported as a datum. This and HitTestElement are ONE code
       path, so the element the caller highlights and the datum it reports can
       never be two different things. }
@@ -675,6 +831,10 @@ function TyChartEdgeDatum(ASeries, ARow: Integer): TTyChartDatumRef;
 function TyChartComponentDatum(AKind: TTyChartTargetKind; AComponent,
   AIndex: Integer): TTyChartDatumRef;
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
+{ [Batch 148] one element at a point, as the list's hit test asks it: its
+  clip first where it asks (ClipHits), then upstream's Path.contain where it
+  carries one (PathHit), else the shape with ASlopPx }
+function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
@@ -734,7 +894,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     { A ROW IS A DATUM'S, never a graph link's that happens to share its
       number. }
@@ -753,7 +913,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     if FItems[idx].Datum.IsEdge then Continue;
     if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
@@ -1005,10 +1165,25 @@ begin
   Result := FOrder[AIndex];
 end;
 
-function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer): Integer;
+{ [Batch 148] one element at a point: its clip first where it asks
+  (isHover's clip paths), then upstream's own Path.contain where it carries
+  one, else the shape with its slop }
+function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+begin
+  if AEl.ClipHits and AEl.HasClip
+    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
+      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
+    Exit(False);
+  if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
+  else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
+end;
+
+function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
+  APad: Boolean): Integer;
 var
   i, idx: Integer;
-  slop: Double;
+  slop, half: Double;
+  b: TTyRectF;
 begin
   Result := -1;
   EnsureOrder;
@@ -1018,12 +1193,42 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
-    if APPI > 0 then
-      slop := FItems[idx].HitSlopLogical * APPI / 96
-    else
-      slop := FItems[idx].HitSlopLogical;
-    if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
+    if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    if (FItems[idx].HitStrokeBand > 0) and (FItems[idx].Shape.Kind = cskRect) then
+    begin
+      { the outline's band: inside the rect grown by half the band, not
+        strictly inside the rect shrunk by it [Batch 147] }
+      half := FItems[idx].HitStrokeBand / 2;
+      if APPI > 0 then half := half * APPI / 96;
+      b := FItems[idx].Shape.Bounds;
+      if (AX >= b.Left - half) and (AX <= b.Right + half) and (AY >= b.Top - half)
+        and (AY <= b.Bottom + half) and not ((AX > b.Left + half) and (AX < b.Right - half)
+        and (AY > b.Top + half) and (AY < b.Bottom - half)) then
+        Exit(idx);
+      Continue;
+    end;
+    slop := FItems[idx].HitSlopLogical;
+    if APad then slop := slop + FItems[idx].HitPadLogical;
+    if APPI > 0 then slop := slop * APPI / 96;
+    if TyElementContains(FItems[idx], AX, AY, slop) then
+      Exit(idx);
+  end;
+end;
+
+function TTyPaintList.TopElementAt(AX, AY: Double; APPI: Integer): Integer;
+var
+  i, idx: Integer;
+  slop: Double;
+begin
+  Result := -1;
+  EnsureOrder;
+  for i := FCount - 1 downto 0 do
+  begin
+    idx := FOrder[i];
+    if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    slop := FItems[idx].HitSlopLogical + FItems[idx].HitPadLogical;
+    if APPI > 0 then slop := slop * APPI / 96;
+    if TyElementContains(FItems[idx], AX, AY, slop) then
       Exit(idx);
   end;
 end;

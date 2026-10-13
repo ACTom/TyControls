@@ -905,6 +905,34 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Loading"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Connect.pas"/>
+        <UnitName Value="tyControls.AdvChart.Connect"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.DirtyRect.pas"/>
+        <UnitName Value="tyControls.AdvChart.DirtyRect"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.GeoFix.pas"/>
+        <UnitName Value="tyControls.AdvChart.GeoFix"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Geo.pas"/>
+        <UnitName Value="tyControls.AdvChart.Geo"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.HeatLayer.pas"/>
+        <UnitName Value="tyControls.AdvChart.HeatLayer"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.KeyNav.pas"/>
+        <UnitName Value="tyControls.AdvChart.KeyNav"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Accessible.pas"/>
+        <UnitName Value="tyControls.Accessible"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Media.pas"/>
         <UnitName Value="tyControls.AdvChart.Media"/>
       </Item>
@@ -921,8 +949,84 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Jitter"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Large.pas"/>
+        <UnitName Value="tyControls.AdvChart.Large"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Progressive.pas"/>
+        <UnitName Value="tyControls.AdvChart.Progressive"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Lines.pas"/>
+        <UnitName Value="tyControls.AdvChart.Lines"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Toolbox.pas"/>
+        <UnitName Value="tyControls.AdvChart.Toolbox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.ToolboxDlg.pas"/>
+        <UnitName Value="tyControls.AdvChart.ToolboxDlg"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Brush.pas"/>
+        <UnitName Value="tyControls.AdvChart.Brush"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Timeline.pas"/>
+        <UnitName Value="tyControls.AdvChart.Timeline"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Decal.pas"/>
+        <UnitName Value="tyControls.AdvChart.Decal"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.AxisBreak.pas"/>
+        <UnitName Value="tyControls.AdvChart.AxisBreak"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Aria.pas"/>
+        <UnitName Value="tyControls.AdvChart.Aria"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Polar.pas"/>
         <UnitName Value="tyControls.AdvChart.Polar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Parallel.pas"/>
+        <UnitName Value="tyControls.AdvChart.Parallel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Thumbnail.pas"/>
+        <UnitName Value="tyControls.AdvChart.Thumbnail"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.PolarBar.pas"/>
+        <UnitName Value="tyControls.AdvChart.PolarBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Single.pas"/>
+        <UnitName Value="tyControls.AdvChart.Single"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.ThemeRiver.pas"/>
+        <UnitName Value="tyControls.AdvChart.ThemeRiver"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Chord.pas"/>
+        <UnitName Value="tyControls.AdvChart.Chord"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.GfxEl.pas"/>
+        <UnitName Value="tyControls.AdvChart.GfxEl"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Graphic.pas"/>
+        <UnitName Value="tyControls.AdvChart.Graphic"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Custom.pas"/>
+        <UnitName Value="tyControls.AdvChart.Custom"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.AdvChart.Symbol.pas"/>
@@ -985,6 +1089,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Dataset"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.DataTransform.pas"/>
+        <UnitName Value="tyControls.AdvChart.DataTransform"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.StatTransform.pas"/>
+        <UnitName Value="tyControls.AdvChart.StatTransform"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Morph.pas"/>
+        <UnitName Value="tyControls.AdvChart.Morph"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Color.pas"/>
         <UnitName Value="tyControls.AdvChart.Color"/>
       </Item>
@@ -1027,6 +1143,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
       <Item>
         <Filename Value="source/tyControls.AdvChart.Calendar.pas"/>
         <UnitName Value="tyControls.AdvChart.Calendar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Matrix.pas"/>
+        <UnitName Value="tyControls.AdvChart.Matrix"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.AdvChart.Tree.pas"/>
@@ -1115,6 +1235,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
       <Item>
         <Filename Value="source/tyControls.AdvChart.Locate.pas"/>
         <UnitName Value="tyControls.AdvChart.Locate"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.TextPatch.pas"/>
+        <UnitName Value="tyControls.AdvChart.TextPatch"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.SeriesEdit.pas"/>
+        <UnitName Value="tyControls.AdvChart.SeriesEdit"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.AdvChart.Builder.pas"/>

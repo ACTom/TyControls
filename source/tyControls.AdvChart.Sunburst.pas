@@ -30,6 +30,12 @@ unit tyControls.AdvChart.Sunburst;
   flipped where they would read upside down. Placed here, not by the label
   expansion's table, which has no such position.
 
+  THE VIEW ROOT [Batch 115]: a drill-down (sunburstRootToNode) lays out only
+  the view root's subtree, the view root itself a full turn on the SECOND
+  ring, and the virtual root -- the return circle -- a full turn on the
+  first: sunburstLayout.ts with `renderRollupNode`, the levels counted from
+  the view root's height plus one, the unit radian from its value.
+
   PURE: SysUtils, Math, fpjson and the AdvChart units. No painter, no LCL. }
 interface
 uses
@@ -63,12 +69,25 @@ type
     Levels: array of TJSONObject; // borrowed, by depth; nil where none
     Z: Integer;
     RenderZero: Boolean;
+    { THE VIEW ROOT, a row (0: the virtual root -- nothing drilled); the
+      virtual root is placed (Nodes[0].Placed) only under a drill, as the
+      return circle [Batch 115] }
+    ViewRoot: Integer;
+    { the virtual root's own colour: an itemStyle.color on level 0 or the
+      series; else the control's theme colour [Batch 115] }
+    HasRootFill: Boolean;
+    { the series' `clockwise`, which every piece's sector shape carries
+      [Batch 138] }
+    Clockwise: Boolean;
   end;
 
   { Everything a theme answers. }
   TTySunburstInk = record
     { the palette the roots take from: the author's, else the theme's ramp }
     Palette: TTyChartColorArray;
+    { the return circle's fill when nothing names one (upstream's
+      neutral50) [Batch 115] }
+    RootFill: TTyChartColor;
     { the ring separator: upstream's white, the chart's own ground here }
     Border: TTyChartColor;
     Label_: TTyLabelSpec;
@@ -78,7 +97,12 @@ type
   end;
 
 function TySunburstSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const AContainer: TTyRectF; APPI: Integer): TTySunburstSolved;
+  const AContainer: TTyRectF; APPI: Integer; AViewRoot: Integer = 0): TTySunburstSolved;
+{ The rows under ARow, ARow first, in the drawn (sorted) pre-order. }
+function TySunburstSubtree(const ASolved: TTySunburstSolved; ARow: Integer): TTyIntegerArray;
+{ A row's `nodeClick` along item -> level -> series ('rootToNode' by
+  default; '' for a false or a null) [Batch 115] }
+function TySunburstNodeClick(const ASolved: TTySunburstSolved; ARow: Integer): string;
 { The colour visual over one series, with the cursor every sunburst in the
   chart shares. }
 procedure TySunburstColour(var ASolved: TTySunburstSolved;
@@ -183,11 +207,12 @@ begin
 end;
 
 function TySunburstSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const AContainer: TTyRectF; APPI: Integer): TTySunburstSolved;
+  const AContainer: TTyRectF; APPI: Integer; AViewRoot: Integer): TTySunburstSolved;
 var
   mask: TFPUExceptionMask;
   node, d: TJSONData;
-  n, row, k, j, depthCount, sortMode: Integer;
+  n, row, k, j, depthCount, sortMode, rootDepth, levelsN: Integer;
+  rollup: Boolean;
   sum, v, scale, W, H, size, r0, r, startA, minA, unitRad, rPerLevel, dir: Double;
   still, cw: Boolean;
   cx0, cx1, rad0, rad1: TTyBoxRaw;
@@ -231,7 +256,10 @@ var
       else angle := v * unitRad;
       if angle < minA then angle := minA;
       endA := AStart + dir * angle;
-      depth := sol^.Hier.Nodes[ARow].Depth - 0 - 1;
+      { the depth below the view root, the return circle's ring first when
+        drilled: node.depth - rootDepth - (renderRollupNode ? -1 : 1) }
+      if rollup then depth := sol^.Hier.Nodes[ARow].Depth - rootDepth + 1
+      else depth := sol^.Hier.Nodes[ARow].Depth - rootDepth - 1;
       rStart := r0 + rPerLevel * depth;
       rEnd := r0 + rPerLevel * (depth + 1);
       { a level's own radius: `radius`, else the older r0 / r }
@@ -372,23 +400,89 @@ begin
       or ((d.JSONType <> jtBoolean) and (d.JSONType <> jtNull)
         and not ((d.JSONType = jtNumber) and (d.AsFloat = 0))
         and not ((d.JSONType = jtString) and (d.AsString = '')));
+    Result.Clockwise := cw;
     d := Result.Series.Find('stillShowZeroSum');
     still := (d = nil) or not ((d.JSONType = jtBoolean) and not d.AsBoolean);
-    sum := Result.Nodes[0].Value;
-    depthCount := Length(Result.Hier.Nodes[0].Children);
+    { THE VIEW ROOT: a row past the end is the root, as resetViewRoot keeps
+      only a node the tree still holds }
+    if (AViewRoot < 0) or (AViewRoot >= n) then AViewRoot := 0;
+    Result.ViewRoot := AViewRoot;
+    rootDepth := Result.Hier.Nodes[AViewRoot].Depth;
+    rollup := rootDepth > 0;
+    sum := Result.Nodes[AViewRoot].Value;
+    { validDataCount: the view root's children whose value is a number }
+    depthCount := 0;
+    for k := 0 to High(Result.Hier.Nodes[AViewRoot].Children) do
+      if not IsNan(Result.Nodes[Result.Hier.Nodes[AViewRoot].Children[k]].Value) then
+        Inc(depthCount);
     if sum <> 0 then unitRad := Pi / sum * 2
     else unitRad := Pi / depthCount * 2;
-    rootHeight := Result.Hier.Nodes[0].Height;
-    k := rootHeight - 1;
-    if k = 0 then k := 1;
-    rPerLevel := (r - r0) / k;
+    rootHeight := Result.Hier.Nodes[AViewRoot].Height;
+    { levels = height - (renderRollupNode ? -1 : 1), and `levels || 1` }
+    if rollup then levelsN := rootHeight + 1 else levelsN := rootHeight - 1;
+    if levelsN = 0 then levelsN := 1;
+    rPerLevel := (r - r0) / levelsN;
     if cw then dir := 1 else dir := -1;
-    RenderNode(0, startA);
+    { the return circle: the first ring, a full turn from the start angle }
+    if rollup then
+    begin
+      Result.Nodes[0].Placed := True;
+      Result.Nodes[0].StartRad := startA;
+      Result.Nodes[0].EndRad := startA + Pi * 2;
+      Result.Nodes[0].R0 := r0;
+      Result.Nodes[0].R := r0 + rPerLevel;
+    end;
+    RenderNode(AViewRoot, startA);
     Result.Valid := True;
   finally
     ClearExceptions(False);
     SetExceptionMask(mask);
   end;
+end;
+
+function TySunburstSubtree(const ASolved: TTySunburstSolved; ARow: Integer): TTyIntegerArray;
+var
+  stack: TTyIntegerArray;
+  top, row, k, n: Integer;
+begin
+  Result := nil;
+  if (ARow < 0) or (ARow > High(ASolved.Nodes)) then Exit;
+  SetLength(Result, Length(ASolved.Nodes));
+  n := 0;
+  SetLength(stack, 16);
+  stack[0] := ARow;
+  top := 1;
+  while top > 0 do
+  begin
+    Dec(top);
+    row := stack[top];
+    Result[n] := row;
+    Inc(n);
+    for k := High(ASolved.Nodes[row].Order) downto 0 do
+    begin
+      if top >= Length(stack) then SetLength(stack, 2 * Length(stack));
+      stack[top] := ASolved.Nodes[row].Order[k];
+      Inc(top);
+    end;
+  end;
+  SetLength(Result, n);
+end;
+
+function TySunburstNodeClick(const ASolved: TTySunburstSolved; ARow: Integer): string;
+var d: TJSONData;
+begin
+  Result := 'rootToNode';
+  if (ARow < 0) or (ARow > High(ASolved.Nodes)) then Exit('');
+  d := nil;
+  { Model.get: the first of item -> level -> series that HAS the key (a null
+    included: it reads as null) }
+  if ItemOf(ASolved, ARow) <> nil then d := ItemOf(ASolved, ARow).Find('nodeClick');
+  if (d = nil) and (LevelOf(ASolved, ARow) <> nil) then
+    d := LevelOf(ASolved, ARow).Find('nodeClick');
+  if (d = nil) and (ASolved.Series <> nil) then d := ASolved.Series.Find('nodeClick');
+  if d = nil then Exit;
+  if d.JSONType = jtString then Result := d.AsString
+  else Result := '';
 end;
 
 { ==================== the colours ==================== }
@@ -440,13 +534,16 @@ begin
       stack[top] := ASolved.Nodes[row].Order[k];
       Inc(top);
     end;
-    if row = 0 then Continue;
     d := ChainFind(ASolved, row, 'itemStyle', 'color');
     if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
     begin
       ASolved.Nodes[row].Fill := c;
+      if row = 0 then ASolved.HasRootFill := True;
       Continue;
     end;
+    { the virtual root takes no palette colour: it shows only as the return
+      circle, in the theme's neutral (sunburstVisual's pickColor) }
+    if row = 0 then Continue;
     { the depth-1 ancestor's palette colour, by its name }
     cur := row;
     while ASolved.Hier.Nodes[cur].Depth > 1 do cur := ASolved.Hier.Nodes[cur].Parent;
@@ -651,8 +748,8 @@ function TyBuildSunburstMarks(ASeriesIndex: Integer; const ASolved: TTySunburstS
   const AInk: TTySunburstInk; AStore: TTyDataStore; AList: TTyPaintList;
   APPI: Integer): Integer;
 var
-  stack: TTyIntegerArray;
-  top, row, k: Integer;
+  rows: TTyIntegerArray;
+  row, k: Integer;
   nd: TTySunNode;
   el: TTyChartElement;
   s0, s1, scale, lmin, w: Double;
@@ -664,30 +761,47 @@ begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
-  SetLength(stack, 16);
-  stack[0] := 0;
-  top := 1;
-  while top > 0 do
+  { THE VIEW ROOT'S SUBTREE in the drawn pre-order, then the return circle
+    (its piece is added to the group after the others) [Batch 115] }
+  rows := TySunburstSubtree(ASolved, ASolved.ViewRoot);
+  if ASolved.Nodes[0].Placed and (ASolved.ViewRoot > 0) then
   begin
-    Dec(top);
-    row := stack[top];
-    for k := High(ASolved.Nodes[row].Order) downto 0 do
-    begin
-      if top >= Length(stack) then SetLength(stack, 2 * Length(stack));
-      stack[top] := ASolved.Nodes[row].Order[k];
-      Inc(top);
-    end;
-    if row = 0 then Continue;
+    SetLength(rows, Length(rows) + 1);
+    rows[High(rows)] := 0;
+  end;
+  for k := 0 to High(rows) do
+  begin
+    row := rows[k];
+    { the virtual root is drawn only as the return circle }
+    if (row = 0) and (ASolved.ViewRoot = 0) then Continue;
     nd := ASolved.Nodes[row];
     if not nd.Placed then Continue;
-    { a node of no value is not drawn }
-    if (not ASolved.RenderZero) and ((nd.Value = 0) or IsNan(nd.Value)) then Continue;
+    { a node of no value is not drawn -- the return circle always is
+      (SunburstView's renderRollUp has no such test) }
+    if (row <> 0) and (not ASolved.RenderZero) and ((nd.Value = 0) or IsNan(nd.Value)) then
+      Continue;
     s0 := Min(nd.StartRad, nd.EndRad);
     s1 := Max(nd.StartRad, nd.EndRad);
     el := TyChartElement(TyShapeSector(ASolved.CX, ASolved.CY, nd.R0, nd.R, s0, s1,
       Corners(ASolved, row, nd.R0, nd.R)));
     el.Style.HasFill := True;
-    el.Style.FillColor := nd.Fill;
+    if (row = 0) and not ASolved.HasRootFill then el.Style.FillColor := AInk.RootFill
+    else el.Style.FillColor := nd.Fill;
+    { THE DRILL-DOWN'S VIEW: the piece's layout as upstream holds it, its
+      angles in order (a counter-clockwise piece ends before it starts)
+      [Batch 115] }
+    el.Anim.Role := carSunPiece;
+    el.Anim.Series := ASeriesIndex;
+    el.Anim.Index := row;
+    el.Anim.G[0] := ASolved.CX;
+    el.Anim.G[1] := ASolved.CY;
+    el.Anim.G[2] := nd.R0;
+    el.Anim.G[3] := nd.R;
+    el.Anim.G[4] := nd.StartRad;
+    el.Anim.G[5] := nd.EndRad;
+    { the sector shape's clockwise, for a universal transition's path
+      [Batch 138] }
+    el.Anim.G[6] := Ord(ASolved.Clockwise);
     d := ChainFind(ASolved, row, 'itemStyle', 'borderColor');
     if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
       el.Style.StrokeColor := c

@@ -112,7 +112,10 @@ type
       system's, and a clipped line still has to be drawn towards a real
       off-band point. }
     function DataToCoord(AValue: Double; AClamp: Boolean = False): Double;
-    function CoordToData(ACoord: Double): Double;
+    function CoordToData(ACoord: Double): Double; overload;
+    { Axis.coordToData(coord, clamp): with AClamp, at and beyond the ends the
+      ends (linearMap's clamp) -- the brush's conversion [Batch 125] }
+    function CoordToData(ACoord: Double; AClamp: Boolean): Double; overload;
     property Dim: string read FDim;
     property Scale: TTyScale read FScale;
     property Horizontal: Boolean read FHorizontal;
@@ -208,6 +211,11 @@ type
       seven category labels stood at the plot's edge and the last at the
       other, a band's half-width wide of the bars they named.] }
     function NormalizedCoord(AValue: Double): Double;
+    { A TICK'S DATA VALUE, upstream's getTickValueOutermost: a category
+      axis' tick number through its sort (getRawOrdinalNumber), any other
+      axis' tick as it is. A tick's place is the place of THAT value
+      [Batch 135]. }
+    function TickDataValue(ATick: Double): Double;
 
     { Where the TICK MARKS go, in device px.
 
@@ -533,6 +541,14 @@ begin
   Result := (DataToCoord(AValue) - PxStart) / (PxStop - PxStart);
 end;
 
+function TTyAxis.TickDataValue(ATick: Double): Double;
+begin
+  if FScale is TTyOrdinalScale then
+    Result := TTyOrdinalScale(FScale).TickToOrdinal(ATick)
+  else
+    Result := ATick;
+end;
+
 { The Level-0 members of a tick array, in order. }
 function TyMajorTicks(const ATicks: TTyScaleTickArray): TTyScaleTickArray;
 var i, n: Integer;
@@ -570,7 +586,7 @@ begin
     { One per tick, on the anchor the label uses. }
     SetLength(Result, n);
     for i := 0 to n - 1 do
-      Result[i] := DataToCoord(ticks[i].Value);
+      Result[i] := DataToCoord(TickDataValue(ticks[i].Value));
     Exit;
   end;
 
@@ -584,7 +600,7 @@ begin
   if FInverse then dir := -dir;
   SetLength(Result, n + 1);
   for i := 0 to n - 1 do
-    Result[i] := DataToCoord(ticks[i].Value) - dir * bw / 2;
+    Result[i] := DataToCoord(TickDataValue(ticks[i].Value)) - dir * bw / 2;
   Result[n] := Result[n - 1] + dir * bw;
 end;
 
@@ -636,6 +652,32 @@ end;
 function TTyAxis.DataToCoord(AValue: Double; AClamp: Boolean): Double;
 begin
   Result := ToGlobal(DataToLocal(AValue, AClamp));
+end;
+
+function TTyAxis.CoordToData(ACoord: Double; AClamp: Boolean): Double;
+var c, r0, r1, sub, t: Double;
+begin
+  if not AClamp then Exit(CoordToData(ACoord));
+  if IsNan(ACoord) then
+    Exit(NaN);
+  c := ToLocal(ACoord);
+  BandExtent(r0, r1);
+  sub := r1 - r0;
+  if sub = 0 then
+    t := (0 + 1) / 2
+  else if sub > 0 then
+  begin
+    if c <= r0 then t := 0
+    else if c >= r1 then t := 1
+    else t := (c - r0) / sub * 1 + 0;
+  end
+  else
+  begin
+    if c >= r0 then t := 0
+    else if c <= r1 then t := 1
+    else t := (c - r0) / sub * 1 + 0;
+  end;
+  Result := FScale.Denormalize(t);
 end;
 
 function TTyAxis.CoordToData(ACoord: Double): Double;
@@ -712,9 +754,9 @@ end;
 function CanAffine(AAxis: TTyAxis): Boolean;
 begin
   { upstream's canCalculateAffineTransform: an interval or a time scale --
-    not log, not ordinal. (Breaks too, which nothing here builds yet.) }
+    not log, not ordinal, and not one with breaks [Batch 132] }
   Result := (AAxis <> nil) and (AAxis.AxisType in [atValue, atTime])
-    and (AAxis.Scale is TTyIntervalScale);
+    and (AAxis.Scale is TTyIntervalScale) and (AAxis.Scale.BreakMapper = nil);
 end;
 
 procedure TTyCartesian2D.CalcAffineTransform;

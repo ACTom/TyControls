@@ -1,0 +1,102 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgadd
+msgid "Add"
+msgstr "添加"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgaddcolumn
+msgid "Add column"
+msgstr "加一列"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgaddrow
+msgid "Add row"
+msgstr "加一行"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgcannotopen
+#, object-pascal-format
+msgid "The option does not parse yet, so it cannot be edited as a structure: %s"
+msgstr "option 还解析不了，没法按结构编辑：%s"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgdata
+msgid "Data"
+msgstr "数据"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgdataset
+msgid "Dataset"
+msgstr "数据集"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgdelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgdeletecolumn
+msgid "Delete column"
+msgstr "删除列"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgdeleterow
+msgid "Delete row"
+msgstr "删除行"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgdown
+msgid "Down"
+msgstr "下移"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgheaderrow
+msgid "header"
+msgstr "表头"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlglosescomments
+#, object-pascal-format
+msgid "Writing these changes back drops %d comment(s) that sat inside the parts being rewritten. Write them back anyway?"
+msgstr "写回这些改动会丢掉被重写部分里的 %d 条注释。仍然写回吗？"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgnodataset
+msgid "This option has no dataset."
+msgstr "这个 option 没有 dataset。"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgnoseries
+msgid "Select a series to edit it."
+msgstr "选中一个系列来编辑。"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgpreview
+msgid "Preview"
+msgstr "预览"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgrewriteswhole
+#, object-pascal-format
+msgid "This option text cannot be patched piece by piece, so writing these changes back rewrites all of it: the layout goes, and %d comment(s) with it. Write it anyway?"
+msgstr "这段 option 文本没法逐处修补，写回会把它整段重写：原来的排版没了，%d 条注释也跟着没了。仍然写回吗？"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgseries
+msgid "Series"
+msgstr "系列"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgtitle
+msgid "Chart series and data"
+msgstr "图表系列与数据"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgtype
+msgid "Type"
+msgstr "类型"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgup
+msgid "Up"
+msgstr "上移"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgwarnlost
+#, object-pascal-format
+msgid "Writing back will drop %d comment(s)."
+msgstr "写回会丢掉 %d 条注释。"
+
+#: tycontrols.design.advchart.seriesdialog.rsserdlgwarnwhole
+msgid "Writing back will rewrite the whole text."
+msgstr "写回会把整段文本重写。"

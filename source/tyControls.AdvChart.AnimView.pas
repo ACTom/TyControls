@@ -24,6 +24,11 @@ unit tyControls.AdvChart.AnimView;
                  delay = duration * (where the clip reaches it) + delay, or
                  the delay function at the row; ignores the threshold
                  (LineView.ts:1078-1177)
+    riverClip    a themeRiver layer's clip rect [Batch 118]: from x - 10,
+                 y - 10, width 0, height + 20 of the polygon's own rect, to
+                 x - 50 and width + 100, enter timing with no row, only for
+                 a series that animates; gone when it ends
+                 (ThemeRiverView.ts createGridClipShape)
     lineClip     the line's clip rect grows along the base axis, enter timing
                  with no row; `clip: false` widens it after the call, and
                  the forced tracks write the unwidened rect back on the next
@@ -127,6 +132,31 @@ unit tyControls.AdvChart.AnimView;
                  LineView._endLabelOnDuring (the place on the line where the
                  clip has got to, and the value there).
 
+  A BAR RACE [Batch 135]. A bar series with realtimeSort on a category base
+  axis of a cartesian2d (BarView.updateRealtimeAnimation) splits its shape
+  in two: the length (y / height on a horizontal base axis, x / width on a
+  vertical one) on the SERIES' timing, the place along the base axis
+  (x / width, or y / height) on the BASE AXIS model's -- both at the row,
+  initProps for a new bar and updateProps for a kept one, the axis model
+  only where the series animates. A render for changeAxisOrder starts the
+  place alone (the length tween goes on) and touches no label: a count
+  goes on, unless its last setLabelValueAnimation found no previous value
+  (prevValue null), which counts again from where it is at enter timing.
+  The init sort's render (isInitSort) sets every bar, racing or not, to its
+  layout at once (attr) under the tweens already running. A racing bar
+  clipped past the plot is kept, ignored, and its label counts on.
+
+  A SUNBURST'S DRILL-DOWN [Batch 115, C6]. sunburstRootToNode is an
+  updateView: every piece the new view keeps runs SunburstPiece.updateData
+  -- updateProps of its whole shape, update timing with no row; a piece
+  that is new (and the return circle, the first time) is created with r at
+  r0 and initProps r, enter timing at its row; a piece the view drops is
+  removed at once. Its label moves from its old layout (LabelManager) and a
+  new one fades. Only the drill's own render does this (HierDrill): the
+  sunburst's first render and its other updates stay unanimated here.
+  A TREEMAP'S rects (carTmRect) are not this set's: TreemapView animates
+  them with its own wrap, which the control runs.
+
   STATES [Batch 94, AN3b]. emphasis, blur and select switch through the
   engine's useStates on the SAME proxy the enter and update animations run on
   when upstream's element is the same one (a bar, a slice, a scatter symbol's
@@ -142,12 +172,38 @@ unit tyControls.AdvChart.AnimView;
   opacities as they are, x / y as a translation, a scale about the symbol's
   centre, a radius as the slice's. A key the role's own branch draws (a
   symbol's scale and opacity, a slice's shape, a label's place and fade) is
-  left to it. }
+  left to it.
+
+  THE UNIVERSAL TRANSITION [Batch 136, D5 UT1]. After every view of a
+  setOption has armed (series:transition), the new series that ask for it
+  are batched with the old series of the same transition key, their items
+  diffed by id, and each pair handled one to one: the same element takes
+  its style from the old one; another element stops its own animation and
+  morphs from the old element's path (AdvChart.Morph, its __morphT on the
+  role proxy, the frame drawing the morph as a path) with the old style;
+  a new element with no old one fades in. Where anything morphed, every
+  path of the new views without an animation fades in. The old elements
+  are read before anything of the new render is armed (SnapUniversal).
+  Bars, slices, scatter symbols and line symbols take part.
+
+  COMBINING AND SEPARATING [Batch 137, D5 UT2]. Items pair by group --
+  their groupId, else their series' dataGroupId (its own or the root's),
+  else their id -- and series by a list seriesKey against single keys too.
+  Many old elements into one new one (combineMorph): the new path divided
+  (split, or cloned with its opacity fitted), both sides sorted on the
+  hilbert curve, and the new element drawn as its children -- owned piece
+  proxies, each morphing from one old path -- until the host's __morphT
+  (handed on in its during) or every child's own delayed morph is done.
+  One old element into many new ones (separateMorph): the old path divided
+  by the old item's divideShape (or a combining element's children cloned
+  round), sorted, each new element morphing from its piece. An old element
+  a morph takes from stops leaving. The drill direction is UT3's. }
 interface
-uses SysUtils, Classes, Math, contnrs,
+uses SysUtils, Classes, Math, contnrs, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Anim,
-  tyControls.AdvChart.AnimOpt;
+  tyControls.AdvChart.AnimOpt, tyControls.AdvChart.Lines,
+  tyControls.AdvChart.Morph;
 
 type
   TTyChartAnimProxy = class;
@@ -198,6 +254,9 @@ type
       value while it runs, the precision, the words; and the text now }
     FValFrom, FValTo, FValInterp, FValPrec: Double;
     FValHasInterp, FValHasPrec: Boolean;
+    { the last setLabelValueAnimation found no previous value
+      (labelInnerStore.prevValue null) [Batch 135] }
+    FValNoPrev: Boolean;
     FValTpl: string;
     FText: string;
     FHasText: Boolean;
@@ -211,8 +270,42 @@ type
       oldLayoutSelect }
     FStSelX, FStSelY: Double;
     FStHasSel: Boolean;
+    { A LINES EFFECT SYMBOL'S RUN [Batch 121]: where the clip's during has
+      moved it, and whether a clip that does not loop has finished (the
+      symbol removed) }
+    FEff: TTyLinesEffect;
+    FEffGone: Boolean;
+    { A MORPH [Batch 136, D5 UT1]: zrender's morphPath on this element --
+      the two paths' bezier rings aligned, centred and turned
+      (AdvChart.Morph) -- drawn at the proxy's __morphT while it runs; and
+      the universal transition's style keys (style.fill / stroke / lineWidth
+      / opacity), drawn over the element while their animator runs. FUtPass:
+      the update that last gave it a style transition -- an older one's is
+      stale once the view has set a new style }
+    FMorph: TTyMorphData;
+    FMorphOn: Boolean;
+    FUtStyleOn: Boolean;
+    FUtPass: Integer;
+    { COMBINING [Batch 137, D5 UT2]: zrender's combineMorph on this element
+      -- drawn as its children (childrenRef) while it runs: the pieces its
+      path was divided into, each morphing from one old path. FPieces are
+      owned (never in the set's index); FCombineLeft counts the pieces still
+      morphing on their own delays. A PIECE: its host, its own path (local)
+      with the host's transform, its own style keys -- its style is always
+      the bag's. }
+    FCombineOn: Boolean;
+    FPieces: array of TTyChartAnimProxy;
+    FCombineLeft: Integer;
+    FHost: TTyChartAnimProxy;
+    FRest: TTyDoubleArray;
+    FRestHasM: Boolean;
+    FRestM: TTyMat2D;
+    FPieceOwn: TTyStringArray;
+    FPieceNoScale: Boolean;
+    procedure ClearPieces;
   public
     constructor Create(ASeries, AIndex: Integer; const ARole: string);
+    destructor Destroy; override;
     { the values the layout gave every key }
     procedure SetFinal(const AProps: TTyAnimProps);
     function FinalOf(const AKey: string): TTyAnimValue;
@@ -228,6 +321,12 @@ type
     { the line clip's during and done, for its end label }
     procedure EndLabelDuring(APercent: Double);
     procedure EndLabelDone;
+    { a lines effect symbol's during (_updateSymbolPosition at __t) and
+      done (removed) [Batch 121] }
+    procedure LinesEffectDuring(APercent: Double);
+    procedure LinesEffectDone;
+    property LinesEffect: TTyLinesEffect read FEff;
+    property LinesEffectGone: Boolean read FEffGone;
     { A STATE KEY at its rest value [Batch 94]: added (and set) when the
       proxy has none yet, or when AForce; its rest value either way }
     procedure StSeed(const AKey: string; const AValue: TTyAnimValue; AForce: Boolean);
@@ -252,6 +351,22 @@ type
     property Leaving: Boolean read FLeaving;
     property Gone: Boolean read FGone;
     property Ghost: TTyChartElement read FGhost;
+    { the morph's done (restoreToPath), the style transition's }
+    procedure MorphDone;
+    procedure UtStyleDone;
+    property MorphOn: Boolean read FMorphOn;
+    property MorphData: TTyMorphData read FMorph;
+    property UtStyleOn: Boolean read FUtStyleOn;
+    { combining: the host's during hands its __morphT to every piece, its
+      done (restoreToPath) ends it; a piece's own morph done counts down
+      to the host's }
+    procedure CombineDuring(APercent: Double);
+    procedure CombineDone;
+    procedure PieceMorphDone;
+    property CombineOn: Boolean read FCombineOn;
+    function PieceCount: Integer;
+    function Piece(AIndex: Integer): TTyChartAnimProxy;
+    property Host: TTyChartAnimProxy read FHost;
   end;
 
   TTyChartAnimProxyArray = array of TTyChartAnimProxy;
@@ -291,8 +406,59 @@ type
       -- the marker's `animation` and the host's isAnimationEnabled -- is
       Present False when the host does not animate }
     MarkLine, MarkPoint: TTyAnimModel;
+    { [Batch 115] this render is the series' drill-down (a sunburst's
+      sunburstRootToNode): its pieces and labels transition }
+    HierDrill: Boolean;
+    { A BAR RACE [Batch 135]: shouldRealtimeSort, and the base axis' model
+      (the axis tween's -- Present False where the series does not
+      animate) }
+    RtSort: Boolean;
+    RtAxis: TTyAnimModel;
+    { THE RENDER IS changeAxisOrder's: 1, 2 for the init sort (isInitSort);
+      0 for any other -- every bar series reads it }
+    ChangeOrder: Integer;
+    { ---- THE UNIVERSAL TRANSITION [Batch 136, D5 UT1] ----
+      isUniversalTransitionEnabled (`universalTransition: true`, or an object
+      whose `enabled` is truthy); the transition key as TyUtTransitionKey
+      gives it, and whether seriesKey was a list (UT2 pairs a list's items
+      with single keys); divideShape ('' undefined); the delay handler's
+      name ('' none). Per view row: the group getGroupId gives ('' where it
+      is the id, else '=' and the group) [Batch 137], and the childGroupId
+      ('' where it is undefined, else '=' and the child) [Batch 138] }
+    UtOn: Boolean;
+    UtKey: string;
+    UtKeyList: Boolean;
+    UtDivide: string;
+    UtDelay: string;
+    UtGroupIds, UtChildGroupIds: TTyStringArray;
+    { [Batch 137] a list seriesKey's items, typed as UtKey is, in the order
+      sort() left them }
+    UtKeyItems: TTyStringArray;
   end;
   TTyChartAnimSeriesArray = array of TTyChartAnimSeries;
+
+  { A SERIES' UNIVERSAL TRANSITION AS ITS OPTION SAYS IT [Batch 137]: what
+    the next update reads of an old series -- its transition key (and a
+    list's items), its divideShape, and getGroupId's groupId per item of
+    its `data` ('=' and String(groupId) where truthy, else '=' and the
+    dataGroupId -- its own or the root's -- where truthy, else '': the
+    id), GroupDefault for rows past `data`.
+    [Batch 138] An encoded itemGroupId dimension wins over all of them: its
+    value's string per item (getValueByDimension). ChildByRaw: the
+    childGroupId per item -- the encoded itemChildGroupId dimension's
+    string, else '=' and String(childGroupId) where truthy, else ''
+    (undefined); ChildDefault for rows past `data`. }
+  TTyUtSeriesKeys = record
+    Key: string;
+    List: Boolean;
+    Items: TTyStringArray;
+    Divide: string;
+    GroupsByRaw: TTyStringArray;
+    GroupDefault: string;
+    ChildByRaw: TTyStringArray;
+    ChildDefault: string;
+  end;
+  TTyUtSeriesKeysArray = array of TTyUtSeriesKeys;
 
   { where the NEW datum (x, y) sits in the OLD coordinate system of the
     series that was AOldSeries }
@@ -319,8 +485,41 @@ type
     AliveKeys: TTyStringArray;
     Series: TTyChartAnimSeriesArray;
     Elements: array of TTyChartElement;
+    { item elements the old data still names that the old render did not
+      draw: a drilled sunburst's pieces outside its view, which a universal
+      transition morphs from [milestone D5-D8] }
+    UtStale: array of TTyChartElement;
     ToOldPoint: TTyChartAnimToPoint;
   end;
+
+  { AN OLD ITEM ELEMENT AS A UNIVERSAL TRANSITION READS IT [Batch 136]:
+    the path it draws (PathProxy data) and its computed transform, and its
+    style's own keys -- as they were before the new render's tweens set a
+    carried proxy to the new layout }
+  TTyUtOldSnap = record
+    Data: TTyDoubleArray;
+    HasM: Boolean;
+    M: TTyMat2D;
+    Style: TTyAnimProps;
+    { [Batch 137] what the dividers and sortPaths read: the path's type and
+      its shape now (a morphing path still divides its shape), whether it
+      draws a morph, its own transform (a clone keeps it), its effective
+      opacity (the clone divider's), its stroke (the bounding rect's); a
+      combining element's children: PieceCount snaps from PieceFirst on,
+      in this same array }
+    Kind: Integer;
+    Morphing: Boolean;
+    RX, RY, RW, RH: Double;
+    SCX, SCY, SR0, SR, SSA, SEA: Double;
+    SCW: Boolean;
+    HasLocal: Boolean;
+    Local: TTyMat2D;
+    Opacity: Double;
+    HasStroke, HasFill, NoScale: Boolean;
+    LineWidth: Double;
+    PieceFirst, PieceCount: Integer;
+  end;
+  TTyUtOldSnapArray = array of TTyUtOldSnap;
 
   TTyDataDiffKind = (ddkAdd, ddkUpdate, ddkRemove);
   TTyDataDiffCmd = record
@@ -335,7 +534,26 @@ type
     FIndex: TFPHashList;
     FGhosts: TFPList;
     FAnimation: TTyAnimation;
+    { the updates armed so far: a style transition's stamp [Batch 136] }
+    FPass: Integer;
     procedure NoOp;
+    { THE UNIVERSAL TRANSITION (series:transition) [Batch 136, D5 UT1]:
+      after every view of the new render has armed, the series batched by
+      their transition key, their items diffed by id, and each pair one to
+      one -- the same element's style from the old one, another element's
+      path morphed from the old element's, a new element with no old one
+      faded in -- then, where anything morphed, every path of the new views
+      that has no animation fades in }
+    procedure ArmUniversal(AList: TTyPaintList; const ASeries: TTyChartAnimSeriesArray;
+      const APrev: TTyChartAnimPrev; AUtIdx, APrevIdx: TFPHashList;
+      const AUtSnaps: TTyUtOldSnapArray; const AOldOf: TTyIntegerArray;
+      const ARowMap: array of TTyIntegerArray; const AUpd: array of Boolean);
+    { the old render's item elements as they are now, before anything is
+      armed: KeyOf(series, row, 'ut') -> index + 1 into ASnaps; nothing when
+      no new series asks for a transition }
+    procedure SnapUniversal(const ASeries: TTyChartAnimSeriesArray;
+      const APrev: TTyChartAnimPrev; AOldIndex, AIdx: TFPHashList;
+      out ASnaps: TTyUtOldSnapArray);
     function Make(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
     procedure ArmOne(AList: TTyPaintList; AAt: Integer; const AEl: TTyChartElement;
       const AC: TTyChartAnimSeries; AUpdate: Boolean = False);
@@ -419,12 +637,48 @@ function TyDataDiff(const AOld, ANew: TTyStringArray): TTyDataDiffCmdArray;
   the two point sets' extents (illegal points left out). }
 function TyLineBoundingDiff(const A, B: TTyDoubleArray): Double;
 
+{ ---- THE UNIVERSAL TRANSITION [Batch 136, D5 UT1] ---- }
+{ isUniversalTransitionEnabled on a series' own option object }
+function TyUtEnabled(AOwn: TJSONData): Boolean;
+{ series.getModel('universalTransition').get(AKey): the series' own object,
+  then -- unless it is not an object -- its type's default (line, scatter,
+  effectScatter: divideShape 'clone', answered nil here), then the root
+  option's universalTransition object; nil for none (null falls through) }
+function TyUtGet(AOwn, ARoot: TJSONData; const ASeriesType, AKey: string): TJSONData;
+{ getSeriesTransitionKey + convertArraySeriesKeyToString, typed as zrender's
+  Map keys them: 's:' a string (AId, the model id, when seriesKey is falsy;
+  a list sorted and joined with ','), 'n:' a number, 'b:' a boolean }
+function TyUtTransitionKey(AOwn, ARoot: TJSONData; const ASeriesType, AId: string;
+  out AIsList: Boolean): string; overload;
+{ ... and a list's items, typed, in the order sort() leaves them (the
+  array is sorted in place before it is joined) [Batch 137] }
+function TyUtTransitionKey(AOwn, ARoot: TJSONData; const ASeriesType, AId: string;
+  out AIsList: Boolean; out AItems: TTyStringArray): string; overload;
+{ the Ut* fields of a series whose Model and SeriesType are set (the group
+  ids wait for its rows: TyUtRowGroups) }
+procedure TyUtSeriesInfo(var ASeries: TTyChartAnimSeries; ARoot: TJSONData;
+  const AId: string);
+{ what an old series' option said, for the next update [Batch 137] }
+function TyUtSeriesKeysOf(AOwn, ARoot: TJSONData; const ASeriesType,
+  AId: string): TTyUtSeriesKeys;
+{ the group of each view row (by its raw index); '' where it is the id }
+function TyUtRowGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+{ the childGroupId of each view row (by its raw index); '' where it is
+  undefined [Batch 138] }
+function TyUtRowChildGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+{ a morph and the universal transition's style keys over one element, as
+  its proxy has them now (nothing when it has neither) }
+procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+
 implementation
 
 uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.Color,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView,
-  tyControls.AdvChart.LabelGuide;
+  tyControls.AdvChart.LabelGuide, tyControls.AdvChart.PolarBar,
+  tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelLayout;
+
+function UtHostRole(const AEl: TTyChartElement): string; forward;
 
 { ==================== the proxy ==================== }
 
@@ -650,6 +904,17 @@ begin
     FEnd.Text := StringReplace(FEnd.Tpl, #1, TyJsNumberToString(v), [rfReplaceAll]);
     FEnd.HasText := True;
   end;
+end;
+
+procedure TTyChartAnimProxy.LinesEffectDuring(APercent: Double);
+begin
+  TyLinesEffectStep(FEff, Num('__t'));
+  if APercent < 0 then ;
+end;
+
+procedure TTyChartAnimProxy.LinesEffectDone;
+begin
+  FEffGone := True;
 end;
 
 procedure TTyChartAnimProxy.EndLabelDone;
@@ -940,11 +1205,12 @@ end;
 function TyChartAnimProxyRole(ARole: TTyChartAnimRole): string;
 begin
   case ARole of
-    carBar: Result := 'bar';
+    carBar, carPolarBar: Result := 'bar';
     carSymbol: Result := 'symbol';
     carLineSymbol: Result := 'lineSymbol';
     carLineRun, carLineArea: Result := 'lineClip';
     carSector: Result := 'sector';
+    carSunPiece: Result := 'sunPiece';
     carFunnel: Result := 'funnel';
     carGaugePointer: Result := 'gaugePointer';
     carGaugeProgress, carGaugeCap: Result := 'gaugeProgress';
@@ -960,6 +1226,11 @@ begin
     carMarkPoint, carMarkPointLabel: Result := 'markPoint';
     carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel: Result := 'markLine';
     carEndLabel: Result := 'lineClip';
+    carRiver: Result := 'riverClip';
+    carChord: Result := 'chordGroup';
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel: Result := 'linesLine';
+    carLinesEffect: Result := 'linesEffect';
+    carParallelLine: Result := 'parallelClip';
   else
     Result := '';
   end;
@@ -973,7 +1244,7 @@ end;
 
 function KeyIndexOf(const AEl: TTyChartElement): Integer;
 begin
-  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel] then Result := -1
+  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine] then Result := -1
   else Result := AEl.Anim.Index;
 end;
 
@@ -1016,7 +1287,17 @@ begin
   hasClip := (flags and 1) <> 0;
   { undefined === undefined: no clip is a ratio of nought }
   ratio := 0;
-  if hasClip then
+  if hasClip and ((flags and 8) <> 0) then
+  begin
+    { a polar: getArea's start and end -- the angles, or the radii -- and
+      where the symbol is, the builder's [Batch 113] }
+    start := AEl.Anim.G[2];
+    stop := AEl.Anim.G[3];
+    cur := AEl.Anim.G[9];
+    if stop = start then ratio := 0
+    else ratio := (cur - start) / (stop - start);
+  end
+  else if hasClip then
   begin
     if (flags and 2) <> 0 then
     begin
@@ -1059,6 +1340,25 @@ begin
     Num1('shape.height', AEl.Anim.G[3])]);
 end;
 
+{ a bar on a polar: its sector, as BarView's polar creator gives it
+  [Batch 113] }
+function PolarBarProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[5])]);
+end;
+
+{ a sunburst piece's layout, upstream's shape keys [Batch 115] }
+function SunPieceProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[5])]);
+end;
+
 function SectorProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
@@ -1077,6 +1377,15 @@ end;
 
 { the line's clip rect as the static layer draws it: widened by `clip:
   false` }
+{ a polar line's clip sector [Batch 113] }
+function PolarClipProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[11])]);
+end;
+
 function ClipProps(const AEl: TTyChartElement): TTyAnimProps;
 var
   x, y, w, h, ex: Double;
@@ -1229,6 +1538,46 @@ begin
     [TyAnimNum(0)]).Delay(delay).Start('');
 end;
 
+{ EffectLine._updateEffectAnimation / _animateSymbol for one symbol: the
+  path, then -- the period above 0 -- `animate('', loop).when(period (twice
+  for a round trip), {__t: 1 or 2}).delay(delay).during(...)`, removed when
+  a clip that does not loop is done. AResume: the __t an update's restart
+  goes on from (delay -period * __t), below 0 for none. [Batch 121] }
+procedure StartLinesEffect(AP: TTyChartAnimProxy; const AEl: TTyChartElement;
+  AResume: Double);
+var
+  period, delay, life, top: Double;
+  flags: Integer;
+  loop, round_: Boolean;
+  an: TTyAnimator;
+begin
+  TyLinesEffectOfElement(AEl, AP.FEff);
+  AP.FEffGone := False;
+  period := AEl.Anim.G[7];
+  delay := AEl.Anim.G[8];
+  flags := Round(AEl.Anim.G[9]);
+  loop := (flags and 1) <> 0;
+  round_ := (flags and 2) <> 0;
+  AP.SetNum('__t', 0);
+  AP.SetFinal(TyAnimProps([Num1('__t', 0)]));
+  if not (period > 0) then Exit;
+  if AResume > 0 then delay := -period * AResume;
+  if round_ then
+  begin
+    life := period * 2;
+    top := 2;
+  end
+  else
+  begin
+    life := period;
+    top := 1;
+  end;
+  an := AP.Animate('', loop).WhenWithKeys(life, ['__t'], [TyAnimNum(top)])
+    .Delay(delay).During(@AP.LinesEffectDuring);
+  if not loop then an.Done(@AP.LinesEffectDone);
+  an.Start('');
+end;
+
 { a run's points as points }
 function PtsOf(const A: TTyDoubleArray): TTyPointFArray;
 var i: Integer;
@@ -1280,6 +1629,37 @@ begin
   AP.FEnd.Text := AEnd.Caption.Text;
 end;
 
+{ BarView's updateRealtimeAnimation: the length on the series' timing --
+  unless the render is only an order's -- then the place along the base axis
+  on the axis model's (seriesAnimationModel ? baseAxis.model : null); initProps
+  for a new bar, updateProps for a kept one; both at the row [Batch 135] }
+procedure RtTween(AP: TTyChartAnimProxy; const AEl: TTyChartElement;
+  const AC: TTyChartAnimSeries; AUpdate, AChangeOrder: Boolean; ARow: Integer);
+var
+  axisT, serT: TTyAnimProps;
+  axisModel: TTyAnimModel;
+begin
+  if AEl.Anim.G[4] <> 0 then
+  begin
+    axisT := TyAnimProps([Num1('shape.x', AEl.Anim.G[0]), Num1('shape.width', AEl.Anim.G[2])]);
+    serT := TyAnimProps([Num1('shape.y', AEl.Anim.G[1]), Num1('shape.height', AEl.Anim.G[3])]);
+  end
+  else
+  begin
+    axisT := TyAnimProps([Num1('shape.y', AEl.Anim.G[1]), Num1('shape.height', AEl.Anim.G[3])]);
+    serT := TyAnimProps([Num1('shape.x', AEl.Anim.G[0]), Num1('shape.width', AEl.Anim.G[2])]);
+  end;
+  { animationModel: the series only where it animates }
+  if not AChangeOrder then
+  begin
+    if AUpdate then TyUpdateProps(AP, serT, AC.Model, TyAnimCallAt(ARow))
+    else TyInitProps(AP, serT, AC.Model, TyAnimCallAt(ARow));
+  end;
+  if AC.Enabled then axisModel := AC.RtAxis else axisModel := TyAnimNoModel;
+  if AUpdate then TyUpdateProps(AP, axisT, axisModel, TyAnimCallAt(ARow))
+  else TyInitProps(AP, axisT, axisModel, TyAnimCallAt(ARow));
+end;
+
 procedure TTyChartAnimSet.ArmOne(AList: TTyPaintList; AAt: Integer;
   const AEl: TTyChartElement; const AC: TTyChartAnimSeries; AUpdate: Boolean);
 var
@@ -1324,6 +1704,27 @@ begin
   idx := KeyIndexOf(AEl);
   half := Pi / 2;
   case AEl.Anim.Role of
+    carParallelLine:
+      begin
+        { createGridClipShape [Batch 128]: the data group's clip, the
+          parallel's rect with no width (horizontal) or no height, initProps
+          to the whole rect on the series -- no row; the view removes it
+          once it ends. Only on the view's first render (G[5]): a view a
+          legend hid and shows again is not new }
+        if AEl.Anim.G[5] = 0 then Exit;
+        p := Make(AEl.Anim.Series, -1, 'parallelClip');
+        props := TyAnimProps([Num1('shape.x', AEl.Anim.G[0]),
+          Num1('shape.y', AEl.Anim.G[1]), Num1('shape.width', AEl.Anim.G[2]),
+          Num1('shape.height', AEl.Anim.G[3])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        if AEl.Anim.G[4] <> 0 then p.SetNum('shape.width', 0)
+        else p.SetNum('shape.height', 0);
+        opts := TyAnimCallNoIndex;
+        opts.Done := @NoOp;
+        Start(TyAnimProps([Num1('shape.width', AEl.Anim.G[2]),
+          Num1('shape.height', AEl.Anim.G[3])]), opts);
+      end;
     carBar:
       begin
         p := Make(AEl.Anim.Series, idx, 'bar');
@@ -1335,6 +1736,61 @@ begin
         begin
           if AEl.Anim.G[4] <> 0 then p.SetNum('shape.height', 0)
           else p.SetNum('shape.width', 0);
+        end;
+        { the init sort's render sets it to its layout; a racing bar tweens
+          its two halves apart [Batch 135] }
+        if AC.ChangeOrder = 2 then p.Attr(props)
+        else if AC.RtSort then RtTween(p, AEl, AC, False, False, idx)
+        else Start(props, TyAnimCallAt(idx));
+      end;
+    carRiver:
+      begin
+        { createGridClipShape over polygon.getBoundingRect() -- taken before
+          the style is set, so no stroke in it -- only where the series
+          animates: x - 10, y - 10, no width, height + 20, initProps to
+          x - 50, width + 100 (height + 20 again) on the series, no row; the
+          clip is removed when it ends [Batch 118] }
+        if not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'riverClip');
+        x := AEl.Anim.G[0];
+        y := AEl.Anim.G[1];
+        w := AEl.Anim.G[2];
+        h := AEl.Anim.G[3];
+        props := TyAnimProps([Num1('shape.x', x - 50), Num1('shape.y', y - 10),
+          Num1('shape.width', w + 100), Num1('shape.height', h + 20)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.x', x - 10);
+        p.SetNum('shape.width', 0);
+        Start(TyAnimProps([props[0], props[2], props[3]]), TyAnimCallNoIndex);
+      end;
+    carChord:
+      begin
+        { ChordView's first render: the view group at 0.01 about the centre
+          option, initProps to 1 on the series, no row; with the series not
+          animating initProps sets 1 at once -- no proxy [Batch 120] }
+        if not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, -1, 'chordGroup');
+        props := TyAnimProps([Num1('scaleX', 1), Num1('scaleY', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0.01);
+        p.SetNum('scaleY', 0.01);
+        Start(props, TyAnimCallNoIndex);
+      end;
+    carPolarBar:
+      begin
+        { the polar creator: a radial bar's r from r0, a tangential one's end
+          angle from its start; its own initProps without a row is stopped
+          by the one with it, so one animation at the row [Batch 113] }
+        p := Make(AEl.Anim.Series, idx, 'bar');
+        props := PolarBarProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        if AC.Enabled then
+        begin
+          if AEl.Anim.G[7] <> 0 then p.SetNum('shape.r', AEl.Anim.G[2])
+          else p.SetNum('shape.endAngle', AEl.Anim.G[4]);
         end;
         Start(props, TyAnimCallAt(idx));
       end;
@@ -1362,6 +1818,23 @@ begin
         p.AnimateTo(props, cfg);
       end;
     carLineRun, carLineArea:
+      if (Round(AEl.Anim.G[5]) and 8) <> 0 then
+      begin
+        { createPolarClipPath: the sweep from its start (an angle base) or
+          r from r0, initProps({endAngle, r}) on the series, no row
+          [Batch 113] }
+        p := Make(AEl.Anim.Series, -1, 'lineClip');
+        props := PolarClipProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        if (Round(AEl.Anim.G[5]) and 32) <> 0 then
+          p.SetNum('shape.endAngle', AEl.Anim.G[4])
+        else
+          p.SetNum('shape.r', AEl.Anim.G[2]);
+        Start(TyAnimProps([Num1('shape.endAngle', AEl.Anim.G[11]),
+          Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallNoIndex);
+      end
+      else
       begin
         p := Make(AEl.Anim.Series, -1, 'lineClip');
         x := AEl.Anim.G[0];
@@ -1439,6 +1912,18 @@ begin
           Start(TyAnimProps([Num1('shape.startAngle', AEl.Anim.G[4]),
             Num1('shape.endAngle', AEl.Anim.G[5])]), TyAnimCallAt(idx));
         end;
+      end;
+    carSunPiece:
+      begin
+        { only a drill-down's new piece: created with r at r0, initProps r
+          at its row (SunburstPiece.updateData's firstCreate) [Batch 115] }
+        if not (AUpdate and AC.HierDrill) then Exit;
+        p := Make(AEl.Anim.Series, idx, 'sunPiece');
+        props := SunPieceProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.r', AEl.Anim.G[2]);
+        Start(TyAnimProps([Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallAt(idx));
       end;
     carFunnel:
       begin
@@ -1523,6 +2008,7 @@ begin
         begin
           if not AC.Enabled then Exit;
           p := Make(AEl.Anim.Series, idx, 'label');
+          p.FValNoPrev := True;
           StartCount(p, AEl, NaN, False, AC.Model, idx);
           Exit;
         end;
@@ -1551,6 +2037,10 @@ begin
           Exit;
         end;
         if not (AC.Enabled and AC.LabelFade) or AC.LabelValueAnim then Exit;
+        { A HIDDEN LABEL IS NOT FADED IN: LabelManager walks the texts that
+          are not ignored -- a themeRiver's built for its emphasis alone
+          [Batch 118] }
+        if AEl.Ignore and (AC.SeriesType = 'themeRiver') then Exit;
         p := Make(AEl.Anim.Series, idx, 'label');
         p.Attr(props);
         p.SetFinal(props);
@@ -1627,6 +2117,21 @@ begin
         p.SetFinal(props);
         StartRipple(p, AEl);
       end;
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel:
+      begin
+        { Line._createLine: `shape.percent = 0`, initProps to 1 on the
+          series' model at the row -- the symbols and the label read it
+          every frame (beforeUpdate), the label's fade runs on the same
+          timing [Batch 121] }
+        p := Make(AEl.Anim.Series, idx, 'linesLine');
+        props := TyAnimProps([Num1('shape.percent', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.percent', 0);
+        TyInitProps(p, props, AC.Model, TyAnimCallAt(idx));
+      end;
+    carLinesEffect:
+      StartLinesEffect(Make(AEl.Anim.Series, idx, 'linesEffect'), AEl, -1);
   end;
   if AAt < 0 then ;
 end;
@@ -1681,6 +2186,8 @@ var
   oldItems: TFPList;
   oldIndex: TFPHashList;
   prevIdx: TFPHashList;
+  utIdx: TFPHashList;
+  utSnaps: TTyUtOldSnapArray;
   oldOf: TTyIntegerArray;
   rowMap: array of TTyIntegerArray;
   diffs: array of TTyDataDiffCmdArray;
@@ -1748,10 +2255,13 @@ var
     ASer, ARow: Integer; const ARole: string; const AModel: TTyAnimModel);
   var from: Double;
   begin
+    { setLabelValueAnimation: prevValue is the old value [Batch 135] }
+    if AP <> nil then AP.FValNoPrev := not AOldEl.Caption.ValHas;
     if AOldEl.Caption.ValHas and (not IsNan(AOldEl.Caption.ValNum))
       and (not IsNan(AEl.Caption.ValNum))
       and (AOldEl.Caption.ValNum = AEl.Caption.ValNum) then Exit;
     if AP = nil then AP := Make(ASer, ARow, ARole);
+    AP.FValNoPrev := not AOldEl.Caption.ValHas;
     if AP.FValHasInterp then from := AP.FValInterp
     else if AOldEl.Caption.ValHas then from := AOldEl.Caption.ValNum
     else from := NaN;
@@ -1819,6 +2329,26 @@ var
     rk: string;
   begin
     case AEl.Anim.Role of
+      carRiver:
+        { A KEPT LAYER is not clipped again (its points tween upstream,
+          snapped here); a new one enters [Batch 118] }
+        if AOldRow < 0 then ArmOne(AList, AAt, AEl, AC, True);
+      carChord:
+        { A KEPT VIEW scales no more (`if (!oldData)`): an enter still
+          running goes on [Batch 120] }
+        begin
+          p := OldProxy(AOld, -1, 'chordGroup');
+          if p <> nil then Carry(p, s, -1);
+        end;
+      carParallelLine:
+        begin
+          { THE VIEW IS KEPT: its enter clip runs on (it is made only on the
+            view's first render); a row's points move to their new place
+            with no tween here [Batch 128] }
+          if Find(s, -1, 'parallelClip') <> nil then Exit;
+          q2 := OldProxy(AOld, -1, 'parallelClip');
+          if q2 <> nil then Carry(q2, s, -1);
+        end;
       carBar:
         begin
           if AOldRow < 0 then
@@ -1837,6 +2367,31 @@ var
           begin
             if AEl.Anim.G[4] <> 0 then p.SetNum('shape.height', 0)
             else p.SetNum('shape.width', 0);
+          end;
+          p.SetFinal(props);
+          { the init sort's render: the layout at once, under what runs; a
+            racing bar: its two halves -- an order's render the place alone
+            [Batch 135] }
+          if AC.ChangeOrder = 2 then p.Attr(props)
+          else if AC.RtSort then RtTween(p, AEl, AC, True, AC.ChangeOrder = 1, r)
+          else TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
+      carPolarBar:
+        begin
+          if AOldRow < 0 then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := PolarBarProps(AEl);
+          hasOld := OldEl(AOld, AOldRow, 'bar', oe) and (oe.Anim.Role = carPolarBar);
+          hadProxy := OldProxy(AOld, AOldRow, 'bar') <> nil;
+          if hasOld then oprops := PolarBarProps(oe) else oprops := nil;
+          p := Take(AOld, AOldRow, s, r, 'bar', oprops, props, hasOld);
+          if (not hasOld) and (not hadProxy) and AC.Enabled then
+          begin
+            if AEl.Anim.G[7] <> 0 then p.SetNum('shape.r', AEl.Anim.G[2])
+            else p.SetNum('shape.endAngle', AEl.Anim.G[4]);
           end;
           p.SetFinal(props);
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
@@ -1882,9 +2437,18 @@ var
           { the clip: once a series, to the new rect at ENTER timing, no row
             (LineView.ts:772-783) }
           if Find(s, -1, 'lineClip') <> nil then Exit;
-          props := ClipProps(AEl);
-          hasOld := OldEl(AOld, -1, 'lineClip', oe);
-          if hasOld then oprops := ClipProps(oe) else oprops := nil;
+          if (Round(AEl.Anim.G[5]) and 8) <> 0 then
+          begin
+            props := PolarClipProps(AEl);
+            hasOld := OldEl(AOld, -1, 'lineClip', oe) and ((Round(oe.Anim.G[5]) and 8) <> 0);
+            if hasOld then oprops := PolarClipProps(oe) else oprops := nil;
+          end
+          else
+          begin
+            props := ClipProps(AEl);
+            hasOld := OldEl(AOld, -1, 'lineClip', oe) and ((Round(oe.Anim.G[5]) and 8) = 0);
+            if hasOld then oprops := ClipProps(oe) else oprops := nil;
+          end;
           p := Take(AOld, -1, s, -1, 'lineClip', oprops, props, hasOld);
           p.SetFinal(props);
           { no during in an update: the end label stands where it ends
@@ -1907,6 +2471,23 @@ var
           p.SetFinal(props);
           { the whole sectorShape, at the NEW row (PieView.ts:120-125) }
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
+      carSunPiece:
+        begin
+          { a drill-down's piece: kept -- updateProps of the whole shape
+            from where it is, update timing, no row; new -- ArmOne's
+            [Batch 115] }
+          if not AC.HierDrill then Exit;
+          hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'sunPiece', oe);
+          if not hasOld then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := SunPieceProps(AEl);
+          p := Take(AOld, AOldRow, s, r, 'sunPiece', SunPieceProps(oe), props, True);
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
         end;
       carFunnel:
         begin
@@ -2049,10 +2630,24 @@ var
                 [Batch 103] }
               if AC.Enabled then
               begin
-                if AEl.Caption.ValAnim then
+                { AN ORDER'S RENDER styles no label: prevValue becomes the
+                  value -- the count goes on -- unless it was null, and
+                  animateLabelValue counts again from the interpolated
+                  value (or 0) at ENTER timing [Batch 135] }
+                if AEl.Caption.ValAnim and (AC.ChangeOrder <> 0) then
+                begin
+                  if (p <> nil) and p.FValNoPrev then
+                  begin
+                    if p.FValHasInterp then a := p.FValInterp else a := NaN;
+                    StartCount(p, AEl, a, False, AC.Model, r);
+                  end;
+                end
+                else if AEl.Caption.ValAnim then
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
                 else if (AEl.Anim.HostPlus1 = 0)
-                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree) then
+                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree
+                    { a sunburst's in its drill-down [Batch 115] }
+                    or (AC.HierDrill and (AC.SeriesType = 'sunburst'))) then
                   MoveLabel(p, oe, AEl, s, r, AC.Model);
               end;
               Exit;
@@ -2129,6 +2724,39 @@ var
             if p <> nil then
             begin
               Carry(p, s, r);
+              Exit;
+            end;
+          end;
+          ArmOne(AList, AAt, AEl, AC, True);
+        end;
+      carLinesEffect:
+        begin
+          { EffectLine.updateData: the path anew; the clip runs on unless the
+            period, loop or roundTrip changed -- then it starts over from
+            where __t was (delay -period * __t) [Batch 121] }
+          if (AOldRow >= 0) and OldEl(AOld, AOldRow, 'linesEffect', oe) then
+          begin
+            p := OldProxy(AOld, AOldRow, 'linesEffect');
+            if p <> nil then
+            begin
+              Carry(p, s, r);
+              if (oe.Anim.G[7] = AEl.Anim.G[7])
+                and (Round(oe.Anim.G[9]) and 3 = Round(AEl.Anim.G[9]) and 3) then
+              begin
+                a := p.FEff.T;
+                rot := p.FEff.LastT;
+                TyLinesEffectOfElement(AEl, p.FEff);
+                p.FEff.T := a;
+                p.FEff.LastT := rot;
+                p.FEff.HasLastT := True;
+                p.FEff.Ignore := True;
+              end
+              else
+              begin
+                a := p.Num('__t');
+                p.StopAnimation;
+                StartLinesEffect(p, AEl, a);
+              end;
               Exit;
             end;
           end;
@@ -2474,11 +3102,13 @@ var
 begin
   if AList = nil then Exit;
   Purge;
+  Inc(FPass);
   oldItems := FItems;
   oldIndex := FIndex;
   FItems := TFPList.Create;
   FIndex := TFPHashList.Create;
   prevIdx := TFPHashList.Create;
+  utIdx := TFPHashList.Create;
   try
     for i := 0 to oldItems.Count - 1 do
       TTyChartAnimProxy(oldItems[i]).FClaimed := False;
@@ -2486,11 +3116,19 @@ begin
     for i := 0 to High(APrev.Elements) do
     begin
       el := APrev.Elements[i];
+      { a treemap's item path has no proxy role of its own: the universal
+        transition finds it by its own [Batch 138] }
+      if (el.Anim.Role = carTmRect) and (UtHostRole(el) <> '')
+        and (prevIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'tmRect')) = nil) then
+        prevIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'tmRect'), Pointer(PtrInt(i + 1)));
       role := TyChartAnimRoleKey(el);
       if role = '' then Continue;
       if prevIdx.Find(KeyOf(el.Anim.Series, KeyIndexOf(el), role)) = nil then
         prevIdx.Add(KeyOf(el.Anim.Series, KeyIndexOf(el), role), Pointer(PtrInt(i + 1)));
     end;
+    { THE OLD ITEM ELEMENTS AS THEY ARE, before a tween of this update sets a
+      carried proxy to the new layout [Batch 136] }
+    SnapUniversal(ASeries, APrev, oldIndex, utIdx, utSnaps);
     { WHICH NEW SERIES KEEPS WHICH OLD VIEW: the same model id and type }
     SetLength(oldOf, Length(ASeries));
     SetLength(rowMap, Length(ASeries));
@@ -2590,6 +3228,8 @@ begin
         for k := 0 to High(APrev.Series[o].Keys) do
           Leave(o, o, k, APrev.Series[o].Model);
       end;
+    { THE UNIVERSAL TRANSITION, once every view has armed [Batch 136] }
+    ArmUniversal(AList, ASeries, APrev, utIdx, prevIdx, utSnaps, oldOf, rowMap, upd);
     { THE STATES' OWN PROXIES of a reused element go with it [Batch 96]: a
       line symbol's path, a line's polyline and area, the other types' own
       ('st:' roles, by raw index) -- upstream's element is the same one and
@@ -2625,7 +3265,16 @@ begin
       Unfollow(p);
       p.Free;
     end;
+    { A STYLE TRANSITION OF AN EARLIER UPDATE is stale: the view set a new
+      style object, the old animator writes into the one it replaced
+      [Batch 136] }
+    for i := 0 to FItems.Count - 1 do
+    begin
+      p := TTyChartAnimProxy(FItems[i]);
+      if p.FUtStyleOn and (p.FUtPass <> FPass) then p.FUtStyleOn := False;
+    end;
   finally
+    utIdx.Free;
     prevIdx.Free;
     oldIndex.Free;
     oldItems.Free;
@@ -2803,12 +3452,69 @@ begin
   Result.SectorRadii := AEl.Shape.SectorRadii;
 end;
 
-{ a key the proxy holds, as a number; AOr where it holds none }
+{ a key the proxy holds, as a number; AOr where it holds none (or there is
+  no proxy: a sunburst's first render makes none [Batch 138]) }
 function NumOr(P: TTyChartAnimProxy; const AKey: string; AOr: Double): Double;
 var v: TTyAnimValue;
 begin
+  if P = nil then Exit(AOr);
   v := P.GetAnimProp(AKey);
   if v.Kind in [avkNumber, avkBool] then Result := v.Num else Result := AOr;
+end;
+
+{ a sunburst piece as its proxy has it: its angles in order as the static
+  build passes them, the corners the layout's [Batch 115] }
+function SunPieceFrom(const AEl: TTyChartElement; P: TTyChartAnimProxy): TTyChartShape;
+var a, b: Double;
+begin
+  a := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+  b := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+  Result := TyShapeSector(NumOr(P, 'shape.cx', AEl.Anim.G[0]),
+    NumOr(P, 'shape.cy', AEl.Anim.G[1]), NumOr(P, 'shape.r0', AEl.Anim.G[2]),
+    NumOr(P, 'shape.r', AEl.Anim.G[3]), Min(a, b), Max(a, b));
+  Result.SectorRadii := AEl.Shape.SectorRadii;
+end;
+
+{ a polar bar as its proxy has it: the sector, its corners and its
+  sausage kept; the layout numbers (G) and the label's rect follow
+  [Batch 113] }
+procedure PolarBarFrom(var AEl: TTyChartElement; P: TTyChartAnimProxy);
+var
+  s: TTyPolarSector;
+  radii: TTyCornerRadii;
+  sausage: Boolean;
+  zp: TTyZrPath;
+  list: TTyDoubleArray;
+  k: Integer;
+begin
+  s.CX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+  s.CY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+  s.R0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+  s.R := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+  s.SA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+  s.EA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+  s.CW := AEl.Anim.G[6] <> 0;
+  radii := AEl.Shape.SectorRadii;
+  sausage := AEl.Shape.Sausage;
+  AEl.Shape := TyPolarSectorShape(s, nil, sausage);
+  AEl.Shape.SectorRadii := radii;
+  AEl.Anim.G[0] := s.CX;
+  AEl.Anim.G[1] := s.CY;
+  AEl.Anim.G[2] := s.R0;
+  AEl.Anim.G[3] := s.R;
+  AEl.Anim.G[4] := s.SA;
+  AEl.Anim.G[5] := s.EA;
+  if AEl.Caption.SecHas and AEl.Caption.HasHostBox then
+  begin
+    if sausage then zp := TyZrSausagePath(s)
+    else
+    begin
+      SetLength(list, 4);
+      for k := 0 to 3 do list[k] := radii[k];
+      zp := TyZrSectorPath(s, list);
+    end;
+    AEl.Caption.HostBox := TyZrBBox(zp);
+  end;
 end;
 
 procedure BarFrom(var AEl: TTyChartElement; P: TTyChartAnimProxy);
@@ -2873,6 +3579,48 @@ begin
   Result[3] := NumOr(AProxy, 'shape.y2', Result[3]);
 end;
 
+procedure ChordFrom(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  sx, sy, ox, oy: Double;
+
+  function GX(AV: Double): Double;
+  begin
+    Result := ox + (AV - ox) * sx;
+  end;
+
+  function GY(AV: Double): Double;
+  begin
+    Result := oy + (AV - oy) * sy;
+  end;
+
+begin
+  sx := AProxy.Num('scaleX');
+  sy := AProxy.Num('scaleY');
+  ox := AEl.Anim.G[0];
+  oy := AEl.Anim.G[1];
+  if IsNan(sx) or IsNan(sy) then Exit;
+  TyShapeScaleAbout(AEl.Shape, ox, oy, sx, sy);
+  if AEl.Style.FillGradient.Kind <> cgkNone then
+  begin
+    if AEl.Style.FillGradient.Global then
+    begin
+      AEl.Style.FillGradient.X := GX(AEl.Style.FillGradient.X);
+      AEl.Style.FillGradient.Y := GY(AEl.Style.FillGradient.Y);
+      AEl.Style.FillGradient.X2 := GX(AEl.Style.FillGradient.X2);
+      AEl.Style.FillGradient.Y2 := GY(AEl.Style.FillGradient.Y2);
+      AEl.Style.FillGradient.R := AEl.Style.FillGradient.R * Min(Abs(sx), Abs(sy));
+    end;
+    if AEl.Style.GradBoxSet then
+    begin
+      AEl.Style.GradBox.X := GX(AEl.Style.GradBox.X);
+      AEl.Style.GradBox.Y := GY(AEl.Style.GradBox.Y);
+      AEl.Style.GradBox.W := AEl.Style.GradBox.W * sx;
+      AEl.Style.GradBox.H := AEl.Style.GradBox.H * sy;
+    end;
+  end;
+  AEl.Style.StrokeWidthLogical := AEl.Style.StrokeWidthLogical * Min(Abs(sx), Abs(sy));
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh: Double;
@@ -2882,8 +3630,30 @@ var
   pts: TTyPointFArray;
   mg: TTyDoubleArray;
 begin
+  { A LINES EFFECT SYMBOL is where its run is, whatever its keys say
+    [Batch 121] }
+  if (AProxy <> nil) and (AEl.Anim.Role = carLinesEffect) then
+  begin
+    TyLinesFrameEffect(AEl, AProxy.FEff, AProxy.FEffGone);
+    Exit;
+  end;
   if (AProxy = nil) or AProxy.AtFinal then Exit;
   case AEl.Anim.Role of
+    carParallelLine:
+      begin
+        { the data group's clip while it grows [Batch 128] }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y');
+        AEl.HasClip := True;
+        AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
+          y + AProxy.Num('shape.height'));
+      end;
+    carLinesLine:
+      TyLinesFrameLine(AEl, AProxy.Num('shape.percent'));
+    carLinesFrom, carLinesTo:
+      TyLinesFrameSymbol(AEl, AProxy.Num('shape.percent'));
+    carLinesLabel:
+      TyLinesFrameLabel(AEl, AProxy.Num('shape.percent'));
     carBar:
       BarFrom(AEl, AProxy);
     carSymbol, carLineSymbol, carEffectSymbol:
@@ -2926,7 +3696,35 @@ begin
           MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
             NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
       end;
+    carPolarBar:
+      PolarBarFrom(AEl, AProxy);
+    carChord:
+      { THE VIEW GROUP'S SCALE about its origin: the sector, the ribbon,
+        their gradients and their strokes with it -- the labels are not the
+        group's (a text that is not local takes no parent) [Batch 120] }
+      ChordFrom(AEl, AProxy);
+    carRiver:
+      begin
+        { the polygon cut to its clip rect, in the group's frame
+          [Batch 118] }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y') + AEl.Anim.G[4];
+        AEl.HasClip := True;
+        AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
+          y + AProxy.Num('shape.height'));
+      end;
     carLineRun, carLineArea:
+      if (Round(AEl.Anim.G[5]) and 8) <> 0 then
+      begin
+        AEl.HasClipSector := True;
+        AEl.ClipCX := NumOr(AProxy, 'shape.cx', AEl.ClipCX);
+        AEl.ClipCY := NumOr(AProxy, 'shape.cy', AEl.ClipCY);
+        AEl.ClipR0 := NumOr(AProxy, 'shape.r0', AEl.ClipR0);
+        AEl.ClipR1 := NumOr(AProxy, 'shape.r', AEl.ClipR1);
+        AEl.ClipSA := NumOr(AProxy, 'shape.startAngle', AEl.ClipSA);
+        AEl.ClipEA := NumOr(AProxy, 'shape.endAngle', AEl.ClipEA);
+      end
+      else
       begin
         x := AProxy.Num('shape.x');
         y := AProxy.Num('shape.y');
@@ -2936,6 +3734,9 @@ begin
       end;
     carSector, carGaugeProgress:
       AEl.Shape := SectorFrom(AEl, AProxy);
+    carSunPiece:
+      { the ring as the proxy has it now [Batch 115] }
+      AEl.Shape := SunPieceFrom(AEl, AProxy);
     carGaugeCap:
       begin
         a := AProxy.Num('shape.endAngle');
@@ -3397,6 +4198,8 @@ begin
   case AEl.Anim.Role of
     carBar:
       if G.GetAnimProp('shape.x').Kind = avkNumber then BarFrom(AEl, G);
+    carPolarBar:
+      if G.GetAnimProp('shape.cx').Kind = avkNumber then PolarBarFrom(AEl, G);
     carSector:
       if G.GetAnimProp('shape.cx').Kind = avkNumber then AEl.Shape := SectorFrom(AEl, G);
     carSymbol:
@@ -3432,12 +4235,27 @@ end;
 procedure AnchorOn(const AHost: TTyChartElement; const ALabel: TTyChartElement;
   out AX, AY: Double);
 var
+  sec: TTyPolarSector;
   b: TTyRectF;
   atX, atY: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   box: TTyXYWH;
 begin
+  { a polar bar's sector position, on the sector as drawn [Batch 113] }
+  if AHost.Caption.SecHas and (ALabel.Anim.LabelPos >= 100) then
+  begin
+    sec.CX := AHost.Anim.G[0];
+    sec.CY := AHost.Anim.G[1];
+    sec.R0 := AHost.Anim.G[2];
+    sec.R := AHost.Anim.G[3];
+    sec.SA := AHost.Anim.G[4];
+    sec.EA := AHost.Anim.G[5];
+    sec.CW := AHost.Anim.G[6] <> 0;
+    TySectorLabelAnchor(sec, TTySectorTextPos(ALabel.Anim.LabelPos - 100),
+      ALabel.Anim.LabelDist, AHost.Anim.G[8] <> 0, AX, AY, ah, av);
+    Exit;
+  end;
   if AHost.Caption.HasHostBox then
   begin
     box := AHost.Caption.HostBox;
@@ -3462,25 +4280,2304 @@ begin
     atX, atY, AX, AY, ah, av);
 end;
 
+{ ==================== the universal transition [Batch 136, D5 UT1] ==================== }
+
+type
+  { one flattened data item of a transition's side (flattenDataDiffItems):
+    its series (by series index), its view row, getId, and the keys UT2 and
+    UT3 read -- groupId (always a string: getGroupId falls back on the id)
+    and childGroupId (HasChild False: undefined) [Batch 138] }
+  TUtItem = record
+    Series, Row: Integer;
+    Id, Group, Child: string;
+    HasChild: Boolean;
+    { its series' divideShape [Batch 137] }
+    Divide: string;
+  end;
+  TUtItemArray = array of TUtItem;
+
+const
+  { DATA_COUNT_THRESHOLD }
+  cUtDataLimit = 10000;
+  { TRANSITION_NONE, TRANSITION_P2C, TRANSITION_C2P [Batch 138] }
+  cUtDirNone = 0;
+  cUtDirP2C = 1;
+  cUtDirC2P = 2;
+
+function TyUtEnabled(AOwn: TJSONData): Boolean;
+var u, e: TJSONData;
+begin
+  Result := False;
+  if not (AOwn is TJSONObject) then Exit;
+  u := TJSONObject(AOwn).Find('universalTransition');
+  if u = nil then Exit;
+  { `=== true`, or an object's `enabled`: a number, a string or a list has
+    no `enabled` }
+  case u.JSONType of
+    jtBoolean: Result := u.AsBoolean;
+    jtObject:
+      begin
+        { universalTransitionOpt.enabled, truthy }
+        e := TJSONObject(u).Find('enabled');
+        if e = nil then Exit;
+        case e.JSONType of
+          jtBoolean: Result := e.AsBoolean;
+          jtNumber: Result := (not IsNan(e.AsFloat)) and (e.AsFloat <> 0);
+          jtString: Result := e.AsString <> '';
+          jtArray, jtObject: Result := True;
+        end;
+      end;
+  end;
+end;
+
+function TyUtGet(AOwn, ARoot: TJSONData; const ASeriesType, AKey: string): TJSONData;
+var u: TJSONData;
+begin
+  Result := nil;
+  u := nil;
+  if AOwn is TJSONObject then u := TJSONObject(AOwn).Find('universalTransition');
+  if u is TJSONObject then
+  begin
+    Result := TJSONObject(u).Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    if Result <> nil then Exit;
+  end;
+  { the type's own default object merges under an object (or nothing);
+    a `true` keeps it out: get on a boolean falls through to the parent }
+  if ((u = nil) or (u is TJSONObject)) and (AKey = 'divideShape')
+    and ((ASeriesType = 'line') or (ASeriesType = 'scatter')
+    or (ASeriesType = 'effectScatter')) then Exit(nil);
+  { the parent model: the root option's universalTransition }
+  if ARoot is TJSONObject then
+  begin
+    u := TJSONObject(ARoot).Find('universalTransition');
+    if u is TJSONObject then
+    begin
+      Result := TJSONObject(u).Find(AKey);
+      if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    end;
+  end;
+end;
+
+{ the type default divideShape is 'clone' for those three; TyUtGet answers
+  nil there so that a caller tells it from a written one -- here it is read }
+function UtDivideOf(AOwn, ARoot: TJSONData; const ASeriesType: string): string;
+var d, u: TJSONData;
+begin
+  d := TyUtGet(AOwn, ARoot, ASeriesType, 'divideShape');
+  if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString);
+  u := nil;
+  if AOwn is TJSONObject then u := TJSONObject(AOwn).Find('universalTransition');
+  if ((u = nil) or (u is TJSONObject)) and ((ASeriesType = 'line')
+    or (ASeriesType = 'scatter') or (ASeriesType = 'effectScatter')) then
+    Exit('clone');
+  Result := '';
+end;
+
+{ a typed key: 's:' a string, 'n:' a number, 'b:' a boolean -- zrender's
+  HashMap is a Map, which tells 5 from '5' }
+function UtTypedKey(D: TJSONData): string;
+begin
+  case D.JSONType of
+    jtString: Result := 's:' + D.AsString;
+    jtNumber: Result := 'n:' + TyJsNumberToString(D.AsFloat);
+    jtBoolean: if D.AsBoolean then Result := 'b:true' else Result := 'b:false';
+  else
+    Result := 's:' + D.AsJSON;
+  end;
+end;
+
+{ a JavaScript value's String(): what join writes }
+function UtJoinText(D: TJSONData): string;
+begin
+  case D.JSONType of
+    jtString: Result := D.AsString;
+    jtNumber: Result := TyJsNumberToString(D.AsFloat);
+    jtBoolean: if D.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := '';
+  else
+    Result := '[object Object]';
+  end;
+end;
+
+function TyUtTransitionKey(AOwn, ARoot: TJSONData; const ASeriesType, AId: string;
+  out AIsList: Boolean): string;
+var items: TTyStringArray;
+begin
+  Result := TyUtTransitionKey(AOwn, ARoot, ASeriesType, AId, AIsList, items);
+end;
+
+function TyUtTransitionKey(AOwn, ARoot: TJSONData; const ASeriesType, AId: string;
+  out AIsList: Boolean; out AItems: TTyStringArray): string;
+var
+  k: TJSONData;
+  parts, typed: TTyStringArray;
+  i, j: Integer;
+  t, tt: string;
+  falsy: Boolean;
+begin
+  AIsList := False;
+  AItems := nil;
+  k := TyUtGet(AOwn, ARoot, ASeriesType, 'seriesKey');
+  falsy := k = nil;
+  if not falsy then
+    case k.JSONType of
+      jtString: falsy := k.AsString = '';
+      jtNumber: falsy := IsNan(k.AsFloat) or (k.AsFloat = 0);
+      jtBoolean: falsy := not k.AsBoolean;
+    end;
+  { the series' id by default }
+  if falsy then Exit('s:' + AId);
+  if k.JSONType <> jtArray then Exit(UtTypedKey(k));
+  { a list: sort() (by the items' strings, code unit order) and join(',') --
+    order independent }
+  AIsList := True;
+  SetLength(parts, k.Count);
+  SetLength(typed, k.Count);
+  for i := 0 to k.Count - 1 do
+  begin
+    parts[i] := UtJoinText(k.Items[i]);
+    typed[i] := UtTypedKey(k.Items[i]);
+  end;
+  for i := 1 to High(parts) do
+  begin
+    t := parts[i];
+    tt := typed[i];
+    j := i - 1;
+    while (j >= 0) and (CompareStr(parts[j], t) > 0) do
+    begin
+      parts[j + 1] := parts[j];
+      typed[j + 1] := typed[j];
+      Dec(j);
+    end;
+    parts[j + 1] := t;
+    typed[j + 1] := tt;
+  end;
+  AItems := typed;
+  t := '';
+  for i := 0 to High(parts) do
+  begin
+    if i > 0 then t := t + ',';
+    t := t + parts[i];
+  end;
+  Result := 's:' + t;
+end;
+
+procedure TyUtSeriesInfo(var ASeries: TTyChartAnimSeries; ARoot: TJSONData;
+  const AId: string);
+var
+  own, d: TJSONData;
+begin
+  own := ASeries.Model.Own;
+  ASeries.UtOn := TyUtEnabled(own);
+  ASeries.UtKey := TyUtTransitionKey(own, ARoot, ASeries.SeriesType, AId, ASeries.UtKeyList,
+    ASeries.UtKeyItems);
+  ASeries.UtDivide := UtDivideOf(own, ARoot, ASeries.SeriesType);
+  ASeries.UtDelay := '';
+  d := TyUtGet(own, ARoot, ASeries.SeriesType, 'delay');
+  if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 1) = '@') then
+    ASeries.UtDelay := Copy(d.AsString, 2, MaxInt);
+end;
+
+{ a JavaScript value's truthiness }
+function UtTruthy(D: TJSONData): Boolean;
+begin
+  if D = nil then Exit(False);
+  case D.JSONType of
+    jtString: Result := D.AsString <> '';
+    jtNumber: Result := (not IsNan(D.AsFloat)) and (D.AsFloat <> 0);
+    jtBoolean: Result := D.AsBoolean;
+    jtArray, jtObject: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+{ String(v): a list joins its items' (null and undefined as '') }
+function UtJsString(D: TJSONData): string;
+var i: Integer;
+begin
+  if D = nil then Exit('undefined');
+  case D.JSONType of
+    jtArray:
+      begin
+        Result := '';
+        for i := 0 to D.Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          if D.Items[i].JSONType <> jtNull then Result := Result + UtJsString(D.Items[i]);
+        end;
+      end;
+    jtNull: Result := 'null';
+  else
+    Result := UtJoinText(D);
+  end;
+end;
+
+{ getDataItemValue: an object's `value`, anything else itself }
+function UtItemValue(AItem: TJSONData): TJSONData;
+begin
+  Result := AItem;
+  if AItem is TJSONObject then Result := TJSONObject(AItem).Find('value');
+end;
+
+{ THE ENCODED GROUP DIMENSION [Batch 138]: the dimension encode[AVisual]
+  names (its first entry: a name the series' `dimensions` declares, or a
+  position under the dimension count), at APos of the items' values, and
+  how it stores -- AKind 0 ordinal (the value as it is), 1 a number, 2 an
+  Int32. Its type is the declared one, else doGuessOrdinal's over the
+  first five items: the first that tells decides (a number-like value but
+  '': not ordinal; other text but '-': ordinal), an item whose value is no
+  array says not, none telling says not. False: no such dimension. }
+function UtEncodedDim(AOwn: TJSONObject; const AVisual: string; out APos: Integer;
+  out AKind: Integer): Boolean;
+var
+  enc, e, dims, def, data, v, c, tp: TJSONData;
+  i, width: Integer;
+  nm, s: string;
+  told: Boolean;
+begin
+  Result := False;
+  APos := -1;
+  AKind := 1;
+  enc := AOwn.Find('encode');
+  if not (enc is TJSONObject) then Exit;
+  e := TJSONObject(enc).Find(AVisual);
+  if e is TJSONArray then
+  begin
+    if e.Count = 0 then Exit;
+    e := e.Items[0];
+  end;
+  if e = nil then Exit;
+  dims := AOwn.Find('dimensions');
+  if not (dims is TJSONArray) then dims := nil;
+  data := AOwn.Find('data');
+  if not (data is TJSONArray) then data := nil;
+  { the dimension count: the declared ones, else the first item's width }
+  width := 0;
+  if dims <> nil then width := dims.Count;
+  if (data <> nil) and (data.Count > 0) then
+  begin
+    v := UtItemValue(data.Items[0]);
+    if (v is TJSONArray) and (v.Count > width) then width := v.Count;
+  end;
+  case e.JSONType of
+    jtString:
+      begin
+        if dims = nil then Exit;
+        nm := e.AsString;
+        for i := 0 to dims.Count - 1 do
+        begin
+          def := dims.Items[i];
+          if def is TJSONObject then
+          begin
+            c := TJSONObject(def).Find('name');
+            if (c <> nil) and (c.JSONType = jtString) then s := c.AsString else s := '';
+          end
+          else if def.JSONType = jtString then s := def.AsString
+          else s := '';
+          if (s <> '') and (s = nm) then
+          begin
+            APos := i;
+            Break;
+          end;
+        end;
+      end;
+    jtNumber:
+      if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < width) then
+        APos := Trunc(e.AsFloat);
+  end;
+  if (APos < 0) or (APos >= width) then Exit;
+  Result := True;
+  { a declared type }
+  if (dims <> nil) and (APos < dims.Count) and (dims.Items[APos] is TJSONObject) then
+  begin
+    tp := TJSONObject(dims.Items[APos]).Find('type');
+    if (tp <> nil) and (tp.JSONType = jtString) then
+    begin
+      if tp.AsString = 'ordinal' then AKind := 0
+      else if tp.AsString = 'int' then AKind := 2;
+      Exit;
+    end;
+  end;
+  { guessOrdinal }
+  if data = nil then Exit;
+  told := False;
+  for i := 0 to Min(data.Count, 5) - 1 do
+  begin
+    v := UtItemValue(data.Items[i]);
+    if not (v is TJSONArray) then Break;
+    if APos >= v.Count then Continue;
+    c := v.Items[APos];
+    case c.JSONType of
+      jtNumber: told := True;
+      jtBoolean: told := True;
+      jtString:
+        if c.AsString = '' then
+        begin
+          { Number('') is 0, but `val !== ''` fails first: '' is text }
+          AKind := 0;
+          told := True;
+        end
+        else if not IsNan(TyParseNumberText(c.AsString))
+          and not IsInfinite(TyParseNumberText(c.AsString)) then
+          told := True
+        else if c.AsString <> '-' then
+        begin
+          AKind := 0;
+          told := True;
+        end;
+    end;
+    if told then Break;
+  end;
+end;
+
+{ getValueByDimension on item AItem: what the dimension stored, + '' }
+function UtDimString(AItem: TJSONData; APos, AKind: Integer): string;
+var
+  v, c: TJSONData;
+  x: Double;
+begin
+  c := nil;
+  if AItem <> nil then
+  begin
+    v := UtItemValue(AItem);
+    if v is TJSONArray then
+    begin
+      if APos < v.Count then c := v.Items[APos];
+    end
+    else
+      c := v;
+  end;
+  if AKind = 0 then Exit(UtJsString(c));
+  { parseDataValue: null, undefined and '' are NaN, else Number() }
+  x := NaN;
+  if c <> nil then
+    case c.JSONType of
+      jtNumber: x := c.AsFloat;
+      jtBoolean: if c.AsBoolean then x := 1 else x := 0;
+      jtString: x := TyParseNumberText(c.AsString);
+    end;
+  if AKind = 2 then
+  begin
+    { an Int32Array cell }
+    if IsNan(x) or IsInfinite(x) then x := 0
+    else
+    begin
+      { ToInt32: the whole part modulo 2^32, as a signed 32-bit integer }
+      x := Int(x);
+      x := x - JsFloor(x / 4294967296.0) * 4294967296.0;
+      if x >= 2147483648.0 then x := x - 4294967296.0;
+    end;
+  end;
+  Result := TyJsNumberToString(x);
+end;
+
+function TyUtSeriesKeysOf(AOwn, ARoot: TJSONData; const ASeriesType,
+  AId: string): TTyUtSeriesKeys;
+var
+  dg, data, it, g: TJSONData;
+  i, gPos, gKind, cPos, cKind: Integer;
+  gDim, cDim: Boolean;
+begin
+  Result := Default(TTyUtSeriesKeys);
+  Result.Key := TyUtTransitionKey(AOwn, ARoot, ASeriesType, AId, Result.List, Result.Items);
+  Result.Divide := UtDivideOf(AOwn, ARoot, ASeriesType);
+  { series.get('dataGroupId'): its own, else the root option's }
+  dg := nil;
+  if AOwn is TJSONObject then dg := TJSONObject(AOwn).Find('dataGroupId');
+  if ((dg = nil) or (dg.JSONType = jtNull)) and (ARoot is TJSONObject) then
+    dg := TJSONObject(ARoot).Find('dataGroupId');
+  if UtTruthy(dg) then Result.GroupDefault := '=' + UtJsString(dg);
+  { [Batch 138] the encoded dimensions first }
+  gDim := (AOwn is TJSONObject) and UtEncodedDim(TJSONObject(AOwn), 'itemGroupId', gPos, gKind);
+  cDim := (AOwn is TJSONObject) and UtEncodedDim(TJSONObject(AOwn), 'itemChildGroupId', cPos, cKind);
+  if gDim then Result.GroupDefault := '=' + UtDimString(nil, gPos, gKind);
+  if cDim then Result.ChildDefault := '=' + UtDimString(nil, cPos, cKind);
+  { the raw data item's groupId and childGroupId }
+  data := nil;
+  if AOwn is TJSONObject then data := TJSONObject(AOwn).Find('data');
+  if data is TJSONArray then
+  begin
+    SetLength(Result.GroupsByRaw, data.Count);
+    SetLength(Result.ChildByRaw, data.Count);
+    for i := 0 to data.Count - 1 do
+    begin
+      it := data.Items[i];
+      if gDim then
+        Result.GroupsByRaw[i] := '=' + UtDimString(it, gPos, gKind)
+      else
+      begin
+        g := nil;
+        if it is TJSONObject then g := TJSONObject(it).Find('groupId');
+        if UtTruthy(g) then Result.GroupsByRaw[i] := '=' + UtJsString(g)
+        else Result.GroupsByRaw[i] := Result.GroupDefault;
+      end;
+      if cDim then
+        Result.ChildByRaw[i] := '=' + UtDimString(it, cPos, cKind)
+      else
+      begin
+        g := nil;
+        if it is TJSONObject then g := TJSONObject(it).Find('childGroupId');
+        if UtTruthy(g) then Result.ChildByRaw[i] := '=' + UtJsString(g)
+        else Result.ChildByRaw[i] := '';
+      end;
+    end;
+  end;
+end;
+
+function TyUtRowGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+var r: Integer;
+begin
+  SetLength(Result, Length(ARaws));
+  for r := 0 to High(ARaws) do
+    if (ARaws[r] >= 0) and (ARaws[r] <= High(AKeys.GroupsByRaw)) then
+      Result[r] := AKeys.GroupsByRaw[ARaws[r]]
+    else
+      Result[r] := AKeys.GroupDefault;
+end;
+
+function TyUtRowChildGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+var r: Integer;
+begin
+  SetLength(Result, Length(ARaws));
+  for r := 0 to High(ARaws) do
+    if (ARaws[r] >= 0) and (ARaws[r] <= High(AKeys.ChildByRaw)) then
+      Result[r] := AKeys.ChildByRaw[ARaws[r]]
+    else
+      Result[r] := AKeys.ChildDefault;
+end;
+
+procedure TTyChartAnimProxy.MorphDone;
+begin
+  { restoreToPath: the element's own path again }
+  FMorphOn := False;
+end;
+
+destructor TTyChartAnimProxy.Destroy;
+begin
+  ClearPieces;
+  inherited Destroy;
+end;
+
+procedure TTyChartAnimProxy.ClearPieces;
+var i: Integer;
+begin
+  for i := 0 to High(FPieces) do FPieces[i].Free;
+  FPieces := nil;
+end;
+
+function TTyChartAnimProxy.PieceCount: Integer;
+begin
+  Result := Length(FPieces);
+end;
+
+function TTyChartAnimProxy.Piece(AIndex: Integer): TTyChartAnimProxy;
+begin
+  Result := FPieces[AIndex];
+end;
+
+procedure TTyChartAnimProxy.CombineDuring(APercent: Double);
+var
+  i: Integer;
+  v: TTyAnimValue;
+begin
+  { child.__morphT = toPath.__morphT }
+  v := GetAnimProp('__morphT');
+  for i := 0 to High(FPieces) do FPieces[i].SetAnimProp('__morphT', v);
+end;
+
+procedure TTyChartAnimProxy.CombineDone;
+begin
+  { restoreToPath: no longer combining, __morphT -1 }
+  FCombineOn := False;
+  SetNum('__morphT', -1);
+end;
+
+procedure TTyChartAnimProxy.PieceMorphDone;
+begin
+  { the piece's own morphPath done (restoreToPath), then eachDone }
+  FMorphOn := False;
+  SetNum('__morphT', -1);
+  if FHost = nil then Exit;
+  Dec(FHost.FCombineLeft);
+  if FHost.FCombineLeft = 0 then FHost.CombineDone;
+end;
+
+procedure TTyChartAnimProxy.UtStyleDone;
+begin
+  FUtStyleOn := False;
+end;
+
+{ the role a universal transition morphs: a bar's rect, a pie's slice, a
+  scatter's symbol path, a line's symbol -- the item graphic elements of the
+  four types UT1 transitions ('' for anything else); [Batch 138] a
+  sunburst's piece (not the virtual root's return circle) and a treemap
+  node's path getPathList takes -- a leaf's content (its background is
+  disableMorphing), a parent's background }
+function UtHostRole(const AEl: TTyChartElement): string;
+begin
+  case AEl.Anim.Role of
+    carBar: Result := 'bar';
+    carSector: Result := 'sector';
+    carSymbol: Result := 'symbol';
+    carLineSymbol: Result := 'lineSymbol';
+    carSunPiece:
+      if AEl.Anim.Index > 0 then Result := 'sunPiece' else Result := '';
+    carTmRect:
+      if (AEl.Anim.Sub = 1) or ((AEl.Anim.Sub = 0) and (AEl.Anim.G[4] = 0)) then
+        Result := 'tmRect'
+      else
+        Result := '';
+  else
+    Result := '';
+  end;
+end;
+
+function UtTypeRole(const AType: string): string;
+begin
+  if AType = 'bar' then Result := 'bar'
+  else if AType = 'pie' then Result := 'sector'
+  else if AType = 'scatter' then Result := 'symbol'
+  else if AType = 'line' then Result := 'lineSymbol'
+  else if AType = 'sunburst' then Result := 'sunPiece'
+  else if AType = 'treemap' then Result := 'tmRect'
+  else Result := '';
+end;
+
+{ the proxy a treemap rect's universal transition runs on: its item path's,
+  or a leaf background's fade [Batch 138] }
+function UtTmRole(const AEl: TTyChartElement): string;
+begin
+  if UtHostRole(AEl) <> '' then Result := 'tmRect' else Result := 'utFadeTmBg';
+end;
+
+{ a symbol as SymbolDraw builds it, with its path's scale and its group's
+  place and scale as they are now: the path data and its computed transform,
+  and the path's own (local) transform }
+procedure UtSymbolPath(const AType: string; AKeepAspect: Boolean; ASX, ASY,
+  ARotateDeg, AOffX, AOffY, AGX, AGY, AGSX, AGSY: Double; out AData: TTyDoubleArray;
+  out AHasM: Boolean; out AM: TTyMat2D; out AHasLocal: Boolean; out ALocal: TTyMat2D);
+var
+  path: TTyZrPath;
+  rot: Double;
+  parent: TTyMat2D;
+  hasParent: Boolean;
+begin
+  if (Copy(AType, 1, 7) = 'path://') and not AKeepAspect then
+    path := TyZrMakePathCover(Copy(AType, 8, MaxInt), TyXYWH(-1, -1, 2, 2))
+  else
+    path := TyZrSymbol(AType, -1, -1, 2, 2);
+  AData := TyGuidePathData(path);
+  rot := ARotateDeg * Pi / 180;
+  if IsNan(rot) then rot := 0;
+  AHasLocal := TyLabelLocalTransform(AOffX, AOffY, 0, 0, rot, ASX, ASY, ALocal);
+  hasParent := TyLabelLocalTransform(AGX, AGY, 0, 0, 0, AGSX, AGSY, parent);
+  AHasM := AHasLocal or hasParent;
+  if AHasLocal and hasParent then AM := TyGuideMatMul(parent, ALocal)
+  else if AHasLocal then AM := ALocal
+  else AM := parent;
+end;
+
+{ THE PATH AN ITEM ELEMENT DRAWS NOW, as getUpdatedPathProxy and
+  getComputedTransform give it: its proxy's values where it has one (an
+  animation in flight), the layout's otherwise; a morph in flight draws its
+  frame, with no transform. AHasLocal / ALocal: the path's own transform
+  (a symbol's; a morph leaves it as it was) [Batch 137] }
+procedure UtElementPathEx(const AEl: TTyChartElement; P: TTyChartAnimProxy;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D;
+  out AHasLocal: Boolean; out ALocal: TTyMat2D);
+var
+  path: TTyZrPath;
+  s: TTyPolarSector;
+  corners: TTyDoubleArray;
+  r1, r2, r3, r4: Double;
+  k: Integer;
+  any: Boolean;
+begin
+  AData := nil;
+  AHasM := False;
+  AHasLocal := False;
+  for k := 0 to 5 do
+  begin
+    AM[k] := 0;
+    ALocal[k] := 0;
+  end;
+  path := nil;
+  case AEl.Anim.Role of
+    carBar:
+      begin
+        { Rect.buildPath: rect(), or the rounded one when r is set }
+        if AEl.Shape.Kind = cskRoundRect then
+          TyZrRadii([AEl.Shape.Radii[0], AEl.Shape.Radii[1], AEl.Shape.Radii[2],
+            AEl.Shape.Radii[3]], r1, r2, r3, r4)
+        else
+        begin
+          r1 := 0; r2 := 0; r3 := 0; r4 := 0;
+        end;
+        if (r1 <> 0) or (r2 <> 0) or (r3 <> 0) or (r4 <> 0) then
+          TyZrRoundRect(path, NumOr(P, 'shape.x', AEl.Anim.G[0]), NumOr(P, 'shape.y', AEl.Anim.G[1]),
+            NumOr(P, 'shape.width', AEl.Anim.G[2]), NumOr(P, 'shape.height', AEl.Anim.G[3]),
+            r1, r2, r3, r4)
+        else
+          TyZrRect(path, NumOr(P, 'shape.x', AEl.Anim.G[0]), NumOr(P, 'shape.y', AEl.Anim.G[1]),
+            NumOr(P, 'shape.width', AEl.Anim.G[2]), NumOr(P, 'shape.height', AEl.Anim.G[3]));
+        AData := TyGuidePathData(path);
+      end;
+    carSector:
+      begin
+        s.CX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        s.CY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        s.R0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        s.R := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        s.SA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        s.EA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        { G[7]: the layout ran anticlockwise }
+        s.CW := AEl.Anim.G[7] = 0;
+        any := False;
+        for k := 0 to 3 do
+          if AEl.Shape.SectorRadii[k] <> 0 then any := True;
+        corners := nil;
+        if any then
+        begin
+          SetLength(corners, 4);
+          for k := 0 to 3 do corners[k] := AEl.Shape.SectorRadii[k];
+        end;
+        AData := TyGuidePathData(TyZrSectorPath(s, corners));
+      end;
+    carSymbol:
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]), 1, 1,
+        AData, AHasM, AM, AHasLocal, ALocal);
+    carLineSymbol:
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        AEl.Caption.LgG[0] / 2, AEl.Caption.LgG[1] / 2,
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]),
+        NumOr(P, 'scaleX', 1), NumOr(P, 'scaleY', 1), AData, AHasM, AM, AHasLocal, ALocal);
+    carSunPiece:
+      begin
+        { [Batch 138] SunburstPiece: a Sector of the layout, its clockwise }
+        s.CX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        s.CY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        s.R0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        s.R := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        s.SA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        s.EA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        s.CW := AEl.Anim.G[6] <> 0;
+        any := False;
+        for k := 0 to 3 do
+          if AEl.Shape.SectorRadii[k] <> 0 then any := True;
+        corners := nil;
+        if any then
+        begin
+          SetLength(corners, 4);
+          for k := 0 to 3 do corners[k] := AEl.Shape.SectorRadii[k];
+        end;
+        AData := TyGuidePathData(TyZrSectorPath(s, corners));
+      end;
+    carTmRect:
+      begin
+        { [Batch 138] a treemap rect's local shape under its node group's
+          computed transform (a translation) }
+        TyZrRect(path, AEl.Anim.G[0], AEl.Anim.G[1], AEl.Anim.G[2], AEl.Anim.G[3]);
+        AData := TyGuidePathData(path);
+        AHasM := AEl.Anim.G[5] <> 0;
+        if AHasM then
+        begin
+          AM[0] := 1;
+          AM[3] := 1;
+          AM[4] := AEl.Anim.G[6];
+          AM[5] := AEl.Anim.G[7];
+        end;
+      end;
+  end;
+  if (P <> nil) and P.FMorphOn then
+  begin
+    { the replaced buildPath at __morphT; updateTransform leaves it none }
+    AData := TyMorphPathData(P.FMorph, NumOr(P, '__morphT', 0));
+    AHasM := False;
+    for k := 0 to 5 do AM[k] := 0;
+  end;
+end;
+
+procedure UtElementPath(const AEl: TTyChartElement; P: TTyChartAnimProxy;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D);
+var
+  hasLocal: Boolean;
+  local: TTyMat2D;
+begin
+  UtElementPathEx(AEl, P, AData, AHasM, AM, hasLocal, local);
+end;
+
+{ THE STYLE KEYS a universal transition reads and draws: the style object's
+  OWN keys of the element that was (AOwn), or the values the element that is
+  answers for them -- its own or the path style's defaults (fill '#000',
+  stroke null, lineWidth 1, opacity 1). Only the four the painter draws.
+  A key is own: a fill (a plain colour); a stroke (a colour); a line width
+  above nought; an opacity off 1 -- and always a scatter symbol's, whose
+  itemStyle.opacity (0.8) is written }
+function UtStyleProps(const AEl: TTyChartElement; AOwn: Boolean): TTyAnimProps;
+var
+  n: Integer;
+
+  procedure Put(const AKey: string; const AValue: TTyAnimValue);
+  begin
+    SetLength(Result, n + 1);
+    Result[n].Key := AKey;
+    Result[n].Value := AValue;
+    Inc(n);
+  end;
+
+begin
+  Result := nil;
+  n := 0;
+  if AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then
+    Put('style.fill', TyAnimColorValue(AEl.Style.FillColor, False))
+  else if not AOwn then
+    Put('style.fill', TyAnimStr('#000'));
+  if ((AEl.Style.StrokeColor shr 24) and $FF) > 0 then
+    Put('style.stroke', TyAnimColorValue(AEl.Style.StrokeColor, False));
+  if AEl.Style.StrokeWidthLogical > 0 then
+    Put('style.lineWidth', TyAnimNum(AEl.Style.StrokeWidthLogical))
+  else if not AOwn then
+    Put('style.lineWidth', TyAnimNum(1));
+  if (not AOwn) or (AEl.Style.Alpha <> 1) or (AEl.Anim.Role = carSymbol) then
+    Put('style.opacity', TyAnimNum(AEl.Style.Alpha));
+end;
+
+{ the style keys drawn over an element while their animator runs }
+procedure UtApplyStyle(var AEl: TTyChartElement; P: TTyChartAnimProxy);
+var
+  v: TTyAnimValue;
+  c: TTyChartColor;
+begin
+  v := P.GetAnimProp('style.fill');
+  if v.Kind = avkString then
+  begin
+    if StColourOf(v, c) then
+    begin
+      AEl.Style.HasFill := True;
+      AEl.Style.FillColor := c;
+      AEl.Style.FillGradient := Default(TTyChartGradient);
+    end
+    else
+      AEl.Style.HasFill := False;
+  end;
+  v := P.GetAnimProp('style.stroke');
+  if v.Kind = avkString then
+  begin
+    if StColourOf(v, c) then
+    begin
+      AEl.Style.StrokeColor := c;
+      AEl.Style.StrokeGradient := Default(TTyChartGradient);
+      if not (AEl.Style.StrokeWidthLogical > 0) then
+        AEl.Style.StrokeWidthLogical := NumOr(P, 'style.lineWidth', 1);
+    end
+    else
+      AEl.Style.StrokeColor := 0;
+  end;
+  v := P.GetAnimProp('style.lineWidth');
+  if v.Kind = avkNumber then AEl.Style.StrokeWidthLogical := v.Num;
+  v := P.GetAnimProp('style.opacity');
+  { nought draws nothing, and is hit all the same, as upstream's }
+  if v.Kind = avkNumber then AEl.Style.Alpha := v.Num;
+end;
+
+procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  cmds: TTyPathCmdArray;
+  r: TTyXYWH;
+  i: Integer;
+begin
+  if AProxy = nil then Exit;
+  if AProxy.FMorphOn then
+  begin
+    { the replaced buildPath at __morphT: moves, lines and cubics, drawn
+      with no transform (the element's is null while it morphs) }
+    cmds := TyMorphDataCmds(TyMorphPathData(AProxy.FMorph, NumOr(AProxy, '__morphT', 0)));
+    AEl.Shape := Default(TTyChartShape);
+    AEl.Shape.Kind := cskPolygon;
+    AEl.Shape.Cmds := cmds;
+    SetLength(AEl.Shape.Points, Length(cmds));
+    for i := 0 to High(cmds) do AEl.Shape.Points[i] := TyPointF(cmds[i].X, cmds[i].Y);
+    r := TyPathCmdsRect(cmds);
+    AEl.Shape.HasCmdBounds := True;
+    AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+  end;
+  if AProxy.FUtStyleOn then UtApplyStyle(AEl, AProxy);
+end;
+
+{ ONE CHILD OF A COMBINING ELEMENT in the element's place [Batch 137]: its
+  morph frame at its __morphT (the end frame once its own morph is done --
+  its own path, drawn the same), its style always the bag's; not drawn
+  while its frame is not a number }
+procedure UtPieceApply(var AEl: TTyChartElement; APiece: TTyChartAnimProxy; AK: Integer);
+var
+  cmds: TTyPathCmdArray;
+  r: TTyXYWH;
+  i: Integer;
+  t: Double;
+begin
+  if APiece.FMorphOn then t := NumOr(APiece, '__morphT', NaN) else t := 1;
+  cmds := TyMorphDataCmds(TyMorphPathData(APiece.FMorph, t));
+  AEl.Shape := Default(TTyChartShape);
+  AEl.Shape.Kind := cskPolygon;
+  AEl.Shape.Cmds := cmds;
+  SetLength(AEl.Shape.Points, Length(cmds));
+  for i := 0 to High(cmds) do
+  begin
+    AEl.Shape.Points[i] := TyPointF(cmds[i].X, cmds[i].Y);
+    if IsNan(cmds[i].X) or IsNan(cmds[i].Y) then AEl.Ignore := True;
+  end;
+  r := TyPathCmdsRect(cmds);
+  AEl.Shape.HasCmdBounds := True;
+  AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+  { the child's own style: nothing of the host's but what it copied }
+  AEl.Style.HasFill := False;
+  AEl.Style.FillGradient := Default(TTyChartGradient);
+  AEl.Style.StrokeColor := 0;
+  AEl.Style.StrokeGradient := Default(TTyChartGradient);
+  AEl.Style.StrokeWidthLogical := 0;
+  AEl.Style.Alpha := 1;
+  UtApplyStyle(AEl, APiece);
+  AEl.Anim.UtPiece := AK + 1;
+end;
+
+{ animateOrSetProps without a done that forces: AIsFrom animates from AProps;
+  ASetToFinal as enter and update set it; AScope '' for none }
+procedure UtAnimate(P: TTyChartAnimProxy; const AProps: TTyAnimProps;
+  const ATiming: TTyAnimTiming; AIsFrom, ASetToFinal: Boolean; const AScope: string;
+  ADone: TTyAnimNotify; ADuring: TTyAnimDuring = nil);
+var cfg: TTyAnimCfg;
+begin
+  cfg := Default(TTyAnimCfg);
+  cfg.Duration := ATiming.Duration;
+  cfg.HasDuration := True;
+  if IsNan(ATiming.Delay) then cfg.Delay := 0 else cfg.Delay := ATiming.Delay;
+  cfg.Easing := ATiming.Easing;
+  cfg.SetToFinal := ASetToFinal;
+  cfg.Scope := AScope;
+  cfg.Done := ADone;
+  cfg.During := ADuring;
+  if AIsFrom then P.AnimateFrom(AProps, cfg) else P.AnimateTo(AProps, cfg);
+end;
+
+{ the props an item element rests at, by its role }
+function UtFinalProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  case AEl.Anim.Role of
+    carBar: Result := BarProps(AEl);
+    carSector: Result := SectorProps(AEl);
+    carSymbol: Result := SymbolProps(AEl);
+    carLineSymbol:
+      Result := TyAnimProps([Num1('scaleX', 1), Num1('scaleY', 1),
+        Num1('x', AEl.Anim.G[0]), Num1('y', AEl.Anim.G[1])]);
+    carSunPiece:
+      Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]), Num1('shape.cy', AEl.Anim.G[1]),
+        Num1('shape.r0', AEl.Anim.G[2]), Num1('shape.r', AEl.Anim.G[3]),
+        Num1('shape.startAngle', AEl.Anim.G[4]), Num1('shape.endAngle', AEl.Anim.G[5])]);
+  else
+    Result := nil;
+  end;
+end;
+
+{ the old element's style as it is: its own keys, a universal transition's
+  values in flight where one runs }
+function UtOldStyle(const AOldEl: TTyChartElement; AOldP: TTyChartAnimProxy): TTyAnimProps;
+var
+  k: Integer;
+  v: TTyAnimValue;
+begin
+  Result := UtStyleProps(AOldEl, True);
+  if (AOldP <> nil) and AOldP.FUtStyleOn then
+    for k := 0 to High(Result) do
+    begin
+      v := AOldP.GetAnimProp(Result[k].Key);
+      if v.Kind <> avkNull then Result[k].Value := TyAnimClone(v);
+    end;
+end;
+
+{ ==================== combining and separating [Batch 137, D5 UT2] ==================== }
+
+const
+  { TTyUtOldSnap.Kind: the path's type as split reads it }
+  cUtKindOther = 0;
+  cUtKindRect = 1;
+  cUtKindSector = 2;
+  cUtKindSymbol = 3;
+
+{ the effective path style the own keys make (the defaults under them: fill
+  '#000', stroke null, lineWidth 1, opacity 1) }
+procedure UtSnapStyle(var S: TTyUtOldSnap; AFillDefault: Boolean);
+var
+  k: Integer;
+  v: TTyAnimValue;
+  c: TTyChartColor;
+begin
+  S.Opacity := 1;
+  S.LineWidth := 1;
+  S.HasFill := AFillDefault;
+  S.HasStroke := False;
+  for k := 0 to High(S.Style) do
+  begin
+    v := S.Style[k].Value;
+    if S.Style[k].Key = 'style.opacity' then
+    begin
+      if v.Kind = avkNumber then S.Opacity := v.Num;
+    end
+    else if S.Style[k].Key = 'style.lineWidth' then
+    begin
+      if v.Kind = avkNumber then S.LineWidth := v.Num;
+    end
+    else if S.Style[k].Key = 'style.fill' then
+      S.HasFill := (v.Kind = avkString) and StColourOf(v, c)
+    else if S.Style[k].Key = 'style.stroke' then
+      S.HasStroke := (v.Kind = avkString) and StColourOf(v, c);
+  end;
+  { hasStroke: a stroke and lineWidth > 0 }
+  S.HasStroke := S.HasStroke and (not IsNan(S.LineWidth)) and (S.LineWidth > 0);
+end;
+
+{ AN ITEM ELEMENT AS A TRANSITION READS IT: its path now and transform, its
+  own style keys, and what the dividers and sortPaths read }
+procedure UtSnapEl(const AEl: TTyChartElement; P: TTyChartAnimProxy; out S: TTyUtOldSnap);
+begin
+  S := Default(TTyUtOldSnap);
+  S.PieceFirst := -1;
+  UtElementPathEx(AEl, P, S.Data, S.HasM, S.M, S.HasLocal, S.Local);
+  S.Morphing := (P <> nil) and P.FMorphOn;
+  S.Style := UtOldStyle(AEl, P);
+  case AEl.Anim.Role of
+    carBar:
+      begin
+        S.Kind := cUtKindRect;
+        S.RX := NumOr(P, 'shape.x', AEl.Anim.G[0]);
+        S.RY := NumOr(P, 'shape.y', AEl.Anim.G[1]);
+        S.RW := NumOr(P, 'shape.width', AEl.Anim.G[2]);
+        S.RH := NumOr(P, 'shape.height', AEl.Anim.G[3]);
+      end;
+    carSector:
+      begin
+        S.Kind := cUtKindSector;
+        S.SCX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        S.SCY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        S.SR0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        S.SR := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        S.SSA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        S.SEA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        S.SCW := AEl.Anim.G[7] = 0;
+      end;
+    carSymbol, carLineSymbol: S.Kind := cUtKindSymbol;
+    carSunPiece:
+      begin
+        { [Batch 138] }
+        S.Kind := cUtKindSector;
+        S.SCX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        S.SCY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        S.SR0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        S.SR := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        S.SSA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        S.SEA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        S.SCW := AEl.Anim.G[6] <> 0;
+      end;
+    carTmRect:
+      begin
+        S.Kind := cUtKindRect;
+        S.RX := AEl.Anim.G[0];
+        S.RY := AEl.Anim.G[1];
+        S.RW := AEl.Anim.G[2];
+        S.RH := AEl.Anim.G[3];
+      end;
+  end;
+  UtSnapStyle(S, AEl.Style.HasFill);
+  { a symbol path's style says strokeNoScale }
+  S.NoScale := AEl.Anim.Role in [carSymbol, carLineSymbol];
+end;
+
+{ A COMBINING ELEMENT'S CHILD as it is now: its morph frame (no transform)
+  while it morphs, else its own path under the host's transform }
+procedure UtSnapPiece(APiece: TTyChartAnimProxy; out S: TTyUtOldSnap);
+var
+  k, n: Integer;
+begin
+  S := Default(TTyUtOldSnap);
+  S.PieceFirst := -1;
+  if APiece.FMorphOn then
+  begin
+    S.Data := TyMorphPathData(APiece.FMorph, NumOr(APiece, '__morphT', NaN));
+    S.Morphing := True;
+  end
+  else
+  begin
+    S.Data := APiece.FRest;
+    S.HasM := APiece.FRestHasM;
+    S.M := APiece.FRestM;
+  end;
+  n := 0;
+  SetLength(S.Style, Length(APiece.FPieceOwn));
+  for k := 0 to High(APiece.FPieceOwn) do
+  begin
+    S.Style[n].Key := APiece.FPieceOwn[k];
+    S.Style[n].Value := TyAnimClone(APiece.GetAnimProp(APiece.FPieceOwn[k]));
+    if S.Style[n].Value.Kind <> avkNull then Inc(n);
+  end;
+  SetLength(S.Style, n);
+  UtSnapStyle(S, True);
+  S.NoScale := APiece.FPieceNoScale;
+end;
+
+{ sortPaths' centre: the bounding rect (its stroke) and the translation }
+procedure UtCentre(const S: TTyUtOldSnap; out ACX, ACY: Double);
+var r: TTyXYWH;
+begin
+  r := TyPathDataRect(S.Data);
+  if Length(S.Data) > 0 then
+    r := TyPathStrokeRect(r, S.HasStroke, S.HasFill, S.LineWidth, S.NoScale, S.HasM, S.M);
+  if S.HasM then
+  begin
+    ACX := r.X + r.W / 2 + S.M[4];
+    ACY := r.Y + r.H / 2 + S.M[5];
+  end
+  else
+  begin
+    ACX := r.X + r.W / 2 + 0;
+    ACY := r.Y + r.H / 2 + 0;
+  end;
+end;
+
+function UtSortSnaps(const A: TTyUtOldSnapArray): TTyIntegerArray;
+var
+  cx, cy: TTyDoubleArray;
+  i: Integer;
+begin
+  SetLength(cx, Length(A));
+  SetLength(cy, Length(A));
+  for i := 0 to High(A) do UtCentre(A[i], cx[i], cy[i]);
+  Result := TyMorphSortOrder(cx, cy);
+end;
+
+{ extend(extend(a new object, A), B): A's keys with B's values, then B's own }
+function UtMergeStyle(const A, B: TTyAnimProps): TTyAnimProps;
+var
+  i, j, n: Integer;
+  found: Boolean;
+begin
+  SetLength(Result, Length(A) + Length(B));
+  n := 0;
+  for i := 0 to High(A) do
+  begin
+    Result[n] := A[i];
+    for j := 0 to High(B) do
+      if B[j].Key = A[i].Key then Result[n].Value := B[j].Value;
+    Inc(n);
+  end;
+  for j := 0 to High(B) do
+  begin
+    found := False;
+    for i := 0 to High(A) do
+      if A[i].Key = B[j].Key then found := True;
+    if not found then
+    begin
+      Result[n] := B[j];
+      Inc(n);
+    end;
+  end;
+  SetLength(Result, n);
+end;
+
+procedure UtSetOpacity(var S: TTyUtOldSnap; AOpacity: Double);
+var k: Integer;
+begin
+  S.Opacity := AOpacity;
+  for k := 0 to High(S.Style) do
+    if S.Style[k].Key = 'style.opacity' then
+    begin
+      S.Style[k].Value := TyAnimNum(AOpacity);
+      Exit;
+    end;
+  SetLength(S.Style, Length(S.Style) + 1);
+  S.Style[High(S.Style)].Key := 'style.opacity';
+  S.Style[High(S.Style)].Value := TyAnimNum(AOpacity);
+end;
+
+{ THE DIVIDERS (pathDividers / dividePath.ts split) on a snapped path: the
+  pieces as paths in its own frame, the style copied (a clone's opacity
+  fitted). ASeparate: separateMorph's -- every piece takes the source's
+  computed transform (setLocalTransform); else combineMorph's, where the
+  pieces are sorted before they are put under the host (a split piece has
+  no transform then, a clone the path's own). False: not ACount pieces
+  (upstream's 'Invalid morphing: unmatched splitted path'). }
+function UtDivide(const S: TTyUtOldSnap; const ADivide: string; ACount: Integer;
+  ASeparate: Boolean; out APieces: TTyUtOldSnapArray): Boolean;
+var
+  i, k, np: Integer;
+  rects: TTyDividePieceArray;
+  path: TTyZrPath;
+  sec: TTyPolarSector;
+  scale, a, b: Double;
+  polys: TTyBezierCurves;
+  data: TTyDoubleArray;
+  recHas: Boolean;
+  recM: TTyMat2D;
+begin
+  APieces := nil;
+  recHas := False;
+  for k := 0 to 5 do recM[k] := 0;
+  if ASeparate and S.HasM then TyMorphRecompose(S.M, recHas, recM);
+  if ADivide = 'clone' then
+  begin
+    { clonePath, its opacity fitted: 1 - (1 - opacity) ^ (1 / count) }
+    SetLength(APieces, ACount);
+    for i := 0 to ACount - 1 do
+    begin
+      APieces[i] := S;
+      APieces[i].PieceFirst := -1;
+      APieces[i].PieceCount := 0;
+      APieces[i].Style := Copy(S.Style, 0, Length(S.Style));
+      UtSetOpacity(APieces[i], TyCloneOpacity(S.Opacity, ACount));
+      { copyTransform: the path's own; setLocalTransform over it where the
+        source has a computed one }
+      if ASeparate and S.HasM then
+      begin
+        APieces[i].HasM := recHas;
+        APieces[i].M := recM;
+      end
+      else
+      begin
+        APieces[i].HasM := S.HasLocal;
+        APieces[i].M := S.Local;
+      end;
+    end;
+    Exit(True);
+  end;
+  { split }
+  case S.Kind of
+    cUtKindRect:
+      begin
+        rects := TyDivideRect(S.RX, S.RY, S.RW, S.RH, ACount);
+        SetLength(APieces, Length(rects));
+        for i := 0 to High(rects) do
+        begin
+          path := nil;
+          TyZrRect(path, rects[i].X, rects[i].Y, rects[i].W, rects[i].H);
+          APieces[i].Data := TyGuidePathData(path);
+        end;
+      end;
+    cUtKindSector:
+      begin
+        rects := TyDivideSector(S.SCX, S.SCY, S.SR0, S.SR, S.SSA, S.SEA, True, S.SCW, ACount);
+        SetLength(APieces, Length(rects));
+        for i := 0 to High(rects) do
+        begin
+          sec.CX := rects[i].CX;
+          sec.CY := rects[i].CY;
+          sec.R0 := rects[i].R0;
+          sec.R := rects[i].R;
+          sec.SA := rects[i].StartAngle;
+          sec.EA := rects[i].EndAngle;
+          { !!shape.clockwise }
+          sec.CW := rects[i].HasClockwise and rects[i].Clockwise;
+          APieces[i].Data := TyGuidePathData(TyZrSectorPath(sec, nil));
+        end;
+      end;
+  else
+    begin
+      { the polygons of the path at its scale }
+      scale := 1;
+      if S.HasM then
+      begin
+        a := S.M[0] * S.M[0] + S.M[1] * S.M[1];
+        b := S.M[2] * S.M[2] + S.M[3] * S.M[3];
+        if IsNan(a) or IsNan(b) then scale := NaN
+        else if a > b then scale := Sqrt(a)
+        else scale := Sqrt(b);
+      end;
+      polys := TyPathToPolygons(S.Data, scale);
+      rects := TyDividePolygons(polys, ACount);
+      SetLength(APieces, Length(rects));
+      for i := 0 to High(rects) do
+      begin
+        { Polygon.buildPath: moveTo, lineTo, closePath -- two points at least }
+        data := nil;
+        np := Length(rects[i].Points) div 2;
+        if np >= 2 then
+        begin
+          SetLength(data, np * 3 + 1);
+          for k := 0 to np - 1 do
+          begin
+            if k = 0 then data[0] := TyZrCodeM else data[k * 3] := TyZrCodeL;
+            data[k * 3 + 1] := rects[i].Points[k * 2];
+            data[k * 3 + 2] := rects[i].Points[k * 2 + 1];
+          end;
+          data[np * 3] := TyZrCodeZ;
+        end;
+        APieces[i].Data := data;
+      end;
+    end;
+  end;
+  for i := 0 to High(APieces) do
+  begin
+    { copyPathProps: the style copied }
+    APieces[i].Style := Copy(S.Style, 0, Length(S.Style));
+    APieces[i].Opacity := S.Opacity;
+    APieces[i].LineWidth := S.LineWidth;
+    APieces[i].HasFill := S.HasFill;
+    APieces[i].HasStroke := S.HasStroke;
+    APieces[i].NoScale := S.NoScale;
+    APieces[i].PieceFirst := -1;
+    APieces[i].HasM := ASeparate and recHas;
+    APieces[i].M := recM;
+  end;
+  Result := Length(APieces) = ACount;
+end;
+
+procedure TTyChartAnimSet.SnapUniversal(const ASeries: TTyChartAnimSeriesArray;
+  const APrev: TTyChartAnimPrev; AOldIndex, AIdx: TFPHashList;
+  out ASnaps: TTyUtOldSnapArray);
+var
+  i, s, n, k, first: Integer;
+  any: Boolean;
+  el: TTyChartElement;
+  role: string;
+  op: TTyChartAnimProxy;
+begin
+  ASnaps := nil;
+  if APrev.FullUpdate then Exit;
+  any := False;
+  for s := 0 to High(ASeries) do
+    if ASeries[s].Present and ASeries[s].UtOn and ASeries[s].Enabled then any := True;
+  if not any then Exit;
+  n := 0;
+  for i := 0 to High(APrev.Elements) do
+  begin
+    el := APrev.Elements[i];
+    role := UtHostRole(el);
+    if role = '' then Continue;
+    if AIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut')) <> nil then Continue;
+    op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, el.Anim.Index, role)));
+    SetLength(ASnaps, n + 1);
+    UtSnapEl(el, op, ASnaps[n]);
+    AIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'), Pointer(PtrInt(n + 1)));
+    Inc(n);
+    { A COMBINING ONE's children, as they are [Batch 137] }
+    if (op <> nil) and op.FCombineOn and (Length(op.FPieces) > 0) then
+    begin
+      first := n;
+      SetLength(ASnaps, n + Length(op.FPieces));
+      for k := 0 to High(op.FPieces) do
+      begin
+        UtSnapPiece(op.FPieces[k], ASnaps[n]);
+        Inc(n);
+      end;
+      ASnaps[first - 1].PieceFirst := first;
+      ASnaps[first - 1].PieceCount := Length(op.FPieces);
+    end;
+  end;
+  { THE PIECES THE OLD DATA STILL NAMES, as the render that last drew
+    them left them [milestone D5-D8] }
+  for i := 0 to High(APrev.UtStale) do
+  begin
+    el := APrev.UtStale[i];
+    if UtHostRole(el) = '' then Continue;
+    if AIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut')) <> nil then Continue;
+    SetLength(ASnaps, n + 1);
+    UtSnapEl(el, nil, ASnaps[n]);
+    AIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'), Pointer(PtrInt(n + 1)));
+    Inc(n);
+  end;
+end;
+
+procedure TTyChartAnimSet.ArmUniversal(AList: TTyPaintList;
+  const ASeries: TTyChartAnimSeriesArray; const APrev: TTyChartAnimPrev;
+  AUtIdx, APrevIdx: TFPHashList; const AUtSnaps: TTyUtOldSnapArray;
+  const AOldOf: TTyIntegerArray; const ARowMap: array of TTyIntegerArray;
+  const AUpd: array of Boolean);
+type
+  { a new item element taking part: its series and row, the element, its
+    proxy (stopped) and how it reads }
+  TNewRef = record
+    Ser, Row: Integer;
+    El: TTyChartElement;
+    P: TTyChartAnimProxy;
+    S: TTyUtOldSnap;
+  end;
+  TNewRefArray = array of TNewRef;
+var
+  newIdx: TFPHashList;
+  bKeys: TTyStringArray;
+  bOld, bNew: array of TTyIntegerArray;
+  i, s, o, k, b: Integer;
+  el: TTyChartElement;
+  role, lk: string;
+  olds: TTyIntegerArray;
+  typesOk: Boolean;
+
+  { the new list's item element (ASer, ARow); False for none }
+  function NewEl(ASer, ARow: Integer; out AAt: Integer; out AEl: TTyChartElement): Boolean;
+  var v: Pointer;
+  begin
+    AAt := -1;
+    AEl := Default(TTyChartElement);
+    if (ASer < 0) or (ASer > High(ASeries)) then Exit(False);
+    v := newIdx.Find(KeyOf(ASer, ARow, UtTypeRole(ASeries[ASer].SeriesType)));
+    Result := v <> nil;
+    if Result then
+    begin
+      AAt := PtrInt(v) - 1;
+      AEl := AList.Element(AAt);
+    end;
+  end;
+
+  { the old render's item element (AOld, ARow) }
+  function OldEl(AOld, ARow: Integer; out AEl: TTyChartElement): Boolean;
+  var
+    v: Pointer;
+    k2: Integer;
+  begin
+    AEl := Default(TTyChartElement);
+    if (AOld < 0) or (AOld > High(APrev.Series)) then Exit(False);
+    v := APrevIdx.Find(KeyOf(AOld, ARow, UtTypeRole(APrev.Series[AOld].SeriesType)));
+    Result := v <> nil;
+    if Result then AEl := APrev.Elements[PtrInt(v) - 1]
+    else
+      { a piece the data still names [milestone D5-D8] }
+      for k2 := 0 to High(APrev.UtStale) do
+        if (APrev.UtStale[k2].Anim.Series = AOld) and (APrev.UtStale[k2].Anim.Index = ARow)
+          and (UtHostRole(APrev.UtStale[k2]) = UtTypeRole(APrev.Series[AOld].SeriesType)) then
+        begin
+          AEl := APrev.UtStale[k2];
+          Exit(True);
+        end;
+  end;
+
+  { the old element (AOld, ARow) as it was before this update: -1 for none }
+  function SnapOf(AOld, ARow: Integer): Integer;
+  var v: Pointer;
+  begin
+    v := AUtIdx.Find(KeyOf(AOld, ARow, 'ut'));
+    if v = nil then Result := -1 else Result := PtrInt(v) - 1;
+  end;
+
+  { THE SAME ELEMENT: the new series kept the old one's view, its diff paired
+    the rows, and a symbol kept its type (SymbolDraw makes a new Symbol when
+    it changes) }
+  function SameEl(AOldSer, AOldRow, ANewSer, ANewRow: Integer): Boolean;
+  var
+    oe, ne: TTyChartElement;
+    at: Integer;
+  begin
+    Result := False;
+    if (ANewSer < 0) or (ANewSer > High(AUpd)) or not AUpd[ANewSer]
+      or (AOldOf[ANewSer] <> AOldSer) then Exit;
+    if (ANewRow > High(ARowMap[ANewSer])) or (ARowMap[ANewSer][ANewRow] <> AOldRow) then Exit;
+    if not (OldEl(AOldSer, AOldRow, oe) and NewEl(ANewSer, ANewRow, at, ne)) then Exit;
+    if (oe.Anim.Role in [carSymbol, carLineSymbol])
+      and (oe.Caption.LgSymbol <> ne.Caption.LgSymbol) then Exit;
+    Result := True;
+  end;
+
+  { the new element's proxy, its own animation stopped (stopAnimation:
+    everything rests at the layout, which setToFinal already wrote) -- and,
+    a deviation, a combine of its own ended }
+  function StopNew(ASer, ARow: Integer; const AEl: TTyChartElement): TTyChartAnimProxy;
+  var props: TTyAnimProps;
+  begin
+    Result := Find(ASer, ARow, UtHostRole(AEl));
+    if Result = nil then Result := Make(ASer, ARow, UtHostRole(AEl))
+    else Result.StopAnimation('', False);
+    if Result.FCombineOn then
+    begin
+      Result.FCombineOn := False;
+      Result.ClearPieces;
+    end;
+    props := UtFinalProps(AEl);
+    Result.Attr(props);
+    Result.SetFinal(props);
+    Result.FUtPass := FPass;
+  end;
+
+  { the proxy an element's style animates on: its own, made at rest if none }
+  function HostProxy(ASer, ARow: Integer; const AEl: TTyChartElement): TTyChartAnimProxy;
+  var props: TTyAnimProps;
+  begin
+    Result := Find(ASer, ARow, UtHostRole(AEl));
+    if Result = nil then
+    begin
+      Result := Make(ASer, ARow, UtHostRole(AEl));
+      props := UtFinalProps(AEl);
+      Result.Attr(props);
+      Result.SetFinal(props);
+    end;
+  end;
+
+  { the element's style values set on its proxy, for animateFrom to start
+    from where the old one was (`animateObj[key] != null`) }
+  procedure SeedStyle(P: TTyChartAnimProxy; const AEl: TTyChartElement);
+  var
+    props: TTyAnimProps;
+    k2: Integer;
+  begin
+    props := UtStyleProps(AEl, False);
+    for k2 := 0 to High(props) do P.SetAnimProp(props[k2].Key, props[k2].Value);
+  end;
+
+  { stopAnimation(oldEl) + removeEl(oldEl): an old element a morph takes
+    from stops leaving -- its ghost is gone at once }
+  procedure DropGhost(AOld, ARow: Integer);
+  var
+    k2: Integer;
+    g: TTyChartAnimProxy;
+    role2: string;
+  begin
+    if (AOld < 0) or (AOld > High(APrev.Series)) then Exit;
+    role2 := UtTypeRole(APrev.Series[AOld].SeriesType);
+    for k2 := 0 to FGhosts.Count - 1 do
+    begin
+      g := TTyChartAnimProxy(FGhosts[k2]);
+      if g.FLeaving and not g.FGone and (g.FIndex = ARow) and (g.FRole = role2)
+        and (g.FGhost.Anim.Series = AOld) then
+      begin
+        g.StopAnimation('', False);
+        g.FGone := True;
+      end;
+    end;
+  end;
+
+  { a stopped new element and how it reads }
+  function NewRef(ASer, ARow: Integer; const AEl: TTyChartElement): TNewRef;
+  begin
+    Result.Ser := ASer;
+    Result.Row := ARow;
+    Result.El := AEl;
+    Result.P := StopNew(ASer, ARow, AEl);
+    UtSnapEl(AEl, Result.P, Result.S);
+  end;
+
+  { universalTransition.delay(index, count) of the series ASer }
+  function UtDelayAt(ASer, AIndex, ACount: Integer): Double;
+  var
+    h: TTyAnimTimingHandler;
+    h2: TTyUtDelayHandler;
+  begin
+    if TyChartFindUtDelay(ASeries[ASer].UtDelay, h2) and Assigned(h2) then
+      Result := h2(AIndex, ACount)
+    else if TyChartFindAnimTiming(ASeries[ASer].UtDelay, h) and Assigned(h) then
+      Result := h(AIndex, True)
+    else
+      Result := NaN;
+  end;
+
+  { `delay || 0` }
+  function Or0(A: Double): Double;
+  begin
+    if IsNan(A) or (A = 0) then Result := 0 else Result := A;
+  end;
+
+  { morphPath(from, to): the target's path taken over by the morph }
+  procedure MorphOn(P: TTyChartAnimProxy; const AFrom, ATo: TTyUtOldSnap;
+    const ATm: TTyAnimTiming);
+  begin
+    P.FMorph := TyPrepareMorph(AFrom.Data, AFrom.HasM, AFrom.M, ATo.Data, ATo.HasM, ATo.M);
+    P.FMorphOn := True;
+    P.SetNum('__morphT', 0);
+    UtAnimate(P, TyAnimProps([Num1('__morphT', 1)]), ATm, False, True, '', @P.MorphDone);
+  end;
+
+  { updateMorphingPathProps on a new element: its style from AStyle }
+  procedure StyleFrom(P: TTyChartAnimProxy; const AEl: TTyChartElement;
+    const AStyle: TTyAnimProps; const ATm: TTyAnimTiming);
+  begin
+    SeedStyle(P, AEl);
+    P.FUtStyleOn := True;
+    P.FUtPass := FPass;
+    UtAnimate(P, AStyle, ATm, True, True, '', @P.UtStyleDone);
+  end;
+
+  { fadeInElement: initProps from opacity 0, enter timing }
+  procedure FadeIn(const ANew: TNewRef; AModelSer, AIndex: Integer);
+  var tm: TTyAnimTiming;
+  begin
+    if TyAnimGetConfig(atEnter, ASeries[AModelSer].Model, TyAnimCallAt(AIndex), tm)
+      and (tm.Duration > 0) then
+    begin
+      SeedStyle(ANew.P, ANew.El);
+      ANew.P.FUtStyleOn := True;
+      ANew.P.FUtPass := FPass;
+      UtAnimate(ANew.P, TyAnimProps([Num1('style.opacity', 0)]), tm, True, True, 'enter',
+        @ANew.P.UtStyleDone);
+    end;
+  end;
+
+  { combineMorph: AOlds (snap indices; a combining one gives its children)
+    into ANew's path divided -- the host drawn as the pieces while it runs }
+  procedure Combine(const AOlds: array of Integer; const ANew: TNewRef; const ADivide: string;
+    ASer: Integer; const ATm: TTyAnimTiming; AIdx, ACount: Integer);
+  var
+    from, pieces: TTyUtOldSnapArray;
+    ident, fo, po: TTyIntegerArray;
+    n, i2, k2, f2: Integer;
+    host, pc: TTyChartAnimProxy;
+    individual: Boolean;
+    props, style: TTyAnimProps;
+    t2: TTyAnimTiming;
+
+    procedure AddFrom(AIdx2: Integer);
+    begin
+      SetLength(from, Length(from) + 1);
+      from[High(from)] := AUtSnaps[AIdx2];
+      SetLength(ident, Length(ident) + 1);
+      ident[High(ident)] := AIdx2;
+    end;
+
+  begin
+    from := nil;
+    ident := nil;
+    { addFromPath }
+    for i2 := 0 to High(AOlds) do
+      if AUtSnaps[AOlds[i2]].PieceCount > 0 then
+      begin
+        for k2 := 0 to AUtSnaps[AOlds[i2]].PieceCount - 1 do
+          AddFrom(AUtSnaps[AOlds[i2]].PieceFirst + k2);
+      end
+      else
+        AddFrom(AOlds[i2]);
+    n := Length(from);
+    if n = 0 then Exit;
+    if not UtDivide(ANew.S, ADivide, n, False, pieces) then Exit;
+    fo := UtSortSnaps(from);
+    po := UtSortSnaps(pieces);
+    host := ANew.P;
+    host.ClearPieces;
+    host.FMorphOn := False;
+    individual := ASeries[ASer].UtDelay <> '';
+    props := UtStyleProps(ANew.El, False);
+    SetLength(host.FPieces, n);
+    for i2 := 0 to n - 1 do
+    begin
+      pc := TTyChartAnimProxy.Create(ANew.Ser, ANew.Row, 'utPiece');
+      pc.Animation := FAnimation;
+      pc.FHost := host;
+      host.FPieces[i2] := pc;
+      { under the host, its transform identity: the host's computed one }
+      pc.FRest := pieces[po[i2]].Data;
+      pc.FRestHasM := ANew.S.HasM;
+      pc.FRestM := ANew.S.M;
+      pc.FMorph := TyPrepareMorph(from[fo[i2]].Data, from[fo[i2]].HasM, from[fo[i2]].M,
+        pc.FRest, pc.FRestHasM, pc.FRestM);
+      pc.FMorphOn := True;
+      { the host's style, a clone's opacity fitted }
+      for k2 := 0 to High(props) do pc.SetAnimProp(props[k2].Key, props[k2].Value);
+      pc.SetNum('style.opacity', pieces[po[i2]].Opacity);
+      SetLength(pc.FPieceOwn, Length(pieces[po[i2]].Style));
+      for k2 := 0 to High(pieces[po[i2]].Style) do pc.FPieceOwn[k2] := pieces[po[i2]].Style[k2].Key;
+      pc.FPieceNoScale := ANew.S.NoScale;
+    end;
+    host.FCombineOn := True;
+    if not individual then
+    begin
+      { one __morphT on the host, handed to every child in its during }
+      host.SetNum('__morphT', 0);
+      UtAnimate(host, TyAnimProps([Num1('__morphT', 1)]), ATm, False, True, '',
+        @host.CombineDone, @host.CombineDuring);
+    end
+    else
+    begin
+      { each child morphPath'd on its own: delay + individualDelay(i) }
+      host.FCombineLeft := n;
+      for i2 := 0 to n - 1 do
+      begin
+        t2 := ATm;
+        t2.Delay := Or0(ATm.Delay) + UtDelayAt(ASer, i2 + AIdx, ACount);
+        pc := host.FPieces[i2];
+        pc.SetNum('__morphT', 0);
+        UtAnimate(pc, TyAnimProps([Num1('__morphT', 1)]), t2, False, True, '', @pc.PieceMorphDone);
+      end;
+    end;
+    { animateOtherProps: each child's style from its old path's (rawFrom
+      the batch's k-th, unexpanded) }
+    for k2 := 0 to n - 1 do
+    begin
+      t2 := ATm;
+      if individual then t2.Delay := UtDelayAt(ASer, k2, n);
+      f2 := fo[k2];
+      if (k2 <= High(AOlds)) and (AOlds[k2] <> ident[f2]) then
+        style := UtMergeStyle(AUtSnaps[AOlds[k2]].Style, from[f2].Style)
+      else
+        style := from[f2].Style;
+      UtAnimate(host.FPieces[k2], style, t2, True, True, '', nil);
+    end;
+  end;
+
+  { separateMorph: AOld's path divided (or a combining one's children) into
+    the new elements }
+  procedure Separate(AOld: Integer; const ANews: TNewRefArray; const ADivide: string;
+    ASer: Integer; const ATm: TTyAnimTiming; AIdx, ACount: Integer);
+  var
+    from: TTyUtOldSnapArray;
+    fo, no: TTyIntegerArray;
+    toLen, fromLen, i2, k2: Integer;
+    individual: Boolean;
+    t2: TTyAnimTiming;
+    news: TTyUtOldSnapArray;
+  begin
+    toLen := Length(ANews);
+    if AUtSnaps[AOld].PieceCount > 0 then
+    begin
+      { a combining path reversed: its children, cloned round or cut }
+      fromLen := AUtSnaps[AOld].PieceCount;
+      SetLength(from, fromLen);
+      for i2 := 0 to fromLen - 1 do from[i2] := AUtSnaps[AUtSnaps[AOld].PieceFirst + i2];
+      if fromLen < toLen then
+      begin
+        k2 := 0;
+        SetLength(from, toLen);
+        for i2 := fromLen to toLen - 1 do
+        begin
+          { clonePath: the same path, no parent -- no transform }
+          from[i2] := from[k2 mod fromLen];
+          from[i2].HasM := False;
+          Inc(k2);
+        end;
+      end;
+      SetLength(from, toLen);
+    end
+    else if not UtDivide(AUtSnaps[AOld], ADivide, toLen, True, from) then
+      Exit;
+    SetLength(news, toLen);
+    for i2 := 0 to toLen - 1 do news[i2] := ANews[i2].S;
+    fo := UtSortSnaps(from);
+    no := UtSortSnaps(news);
+    individual := ASeries[ASer].UtDelay <> '';
+    for i2 := 0 to toLen - 1 do
+    begin
+      t2 := ATm;
+      if individual then t2.Delay := Or0(ATm.Delay) + UtDelayAt(ASer, i2 + AIdx, ACount);
+      MorphOn(ANews[no[i2]].P, from[fo[i2]], news[no[i2]], t2);
+    end;
+    for k2 := 0 to toLen - 1 do
+    begin
+      t2 := ATm;
+      if individual then t2.Delay := UtDelayAt(ASer, k2, toLen);
+      StyleFrom(ANews[no[k2]].P, ANews[no[k2]].El,
+        UtMergeStyle(AUtSnaps[AOld].Style, from[fo[k2]].Style), t2);
+    end;
+  end;
+
+  { morphOneBatch with one path a side; a combining source combines again }
+  procedure MorphOne(AOld: Integer; const ANew: TNewRef; const ADivide: string;
+    ASer: Integer; const ATm: TTyAnimTiming; AIdx, ACount: Integer);
+  var t2: TTyAnimTiming;
+  begin
+    if AUtSnaps[AOld].PieceCount > 0 then
+    begin
+      Combine([AOld], ANew, ADivide, ASer, ATm, AIdx, ACount);
+      Exit;
+    end;
+    t2 := ATm;
+    if ASeries[ASer].UtDelay <> '' then t2.Delay := UtDelayAt(ASer, AIdx, ACount);
+    MorphOn(ANew.P, AUtSnaps[AOld], ANew.S, t2);
+    StyleFrom(ANew.P, ANew.El, AUtSnaps[AOld].Style, t2);
+  end;
+
+  { applyMorphAnimation's timing: update, at the index; False: no morph }
+  function MorphTiming(ASer, AIndex: Integer; out ATm: TTyAnimTiming): Boolean;
+  begin
+    Result := TyAnimGetConfig(atUpdate, ASeries[ASer].Model, TyAnimCallAt(AIndex), ATm)
+      and (ATm.Duration > 0);
+  end;
+
+  procedure TransitionBetween(const AOldList, ANewList: TTyIntegerArray);
+  var
+    oldItems, newItems: TUtItemArray;
+    useId, hasMorph: Boolean;
+    still: TFPHashList;
+    oldKeys, newKeys: TTyStringArray;
+    oldMap, newMap: TFPHashList;
+    oldGroups, newGroups: array of TTyIntegerArray;
+    j, q, at: Integer;
+    timing: TTyAnimTiming;
+    p: TTyChartAnimProxy;
+    ne: TTyChartElement;
+    done: Boolean;
+    inner: TTyDataDiffCmdArray;
+    ia, ib: TTyStringArray;
+
+    procedure Flatten(AIsOld: Boolean; const AList_: TTyIntegerArray; var AItems: TUtItemArray);
+    var
+      x, r, cnt: Integer;
+      keys, groups, childs: TTyStringArray;
+      divide: string;
+    begin
+      AItems := nil;
+      for x := 0 to High(AList_) do
+      begin
+        if AIsOld then
+        begin
+          keys := APrev.Series[AList_[x]].Keys;
+          groups := APrev.Series[AList_[x]].UtGroupIds;
+          childs := APrev.Series[AList_[x]].UtChildGroupIds;
+          divide := APrev.Series[AList_[x]].UtDivide;
+        end
+        else
+        begin
+          keys := ASeries[AList_[x]].Keys;
+          groups := ASeries[AList_[x]].UtGroupIds;
+          childs := ASeries[AList_[x]].UtChildGroupIds;
+          divide := ASeries[AList_[x]].UtDivide;
+        end;
+        { universal transition is off past 10k items }
+        if Length(keys) > cUtDataLimit then Continue;
+        cnt := Length(AItems);
+        SetLength(AItems, cnt + Length(keys));
+        for r := 0 to High(keys) do
+        begin
+          AItems[cnt + r].Series := AList_[x];
+          AItems[cnt + r].Row := r;
+          AItems[cnt + r].Id := keys[r];
+          { getGroupId: the encoded dimension, the groupId, else the
+            dataGroupId, else the id; the childGroupId: the encoded
+            dimension, the item's, else undefined [Batch 138] }
+          if (r <= High(groups)) and (groups[r] <> '') then
+            AItems[cnt + r].Group := Copy(groups[r], 2, MaxInt)
+          else
+            AItems[cnt + r].Group := keys[r];
+          AItems[cnt + r].HasChild := (r <= High(childs)) and (childs[r] <> '');
+          if AItems[cnt + r].HasChild then AItems[cnt + r].Child := Copy(childs[r], 2, MaxInt)
+          else AItems[cnt + r].Child := '';
+          AItems[cnt + r].Divide := divide;
+        end;
+      end;
+    end;
+
+    { updateOneToOne }
+    procedure OneToOne(ANewIndex, AOldIndex: Integer);
+    var
+      oi, ni: TUtItem;
+      hasOld, hasNew: Boolean;
+      oe, ne2: TTyChartElement;
+      at2, sn: Integer;
+      p2: TTyChartAnimProxy;
+      tm: TTyAnimTiming;
+      nr: TNewRef;
+    begin
+      oi := oldItems[AOldIndex];
+      ni := newItems[ANewIndex];
+      hasOld := OldEl(oi.Series, oi.Row, oe);
+      sn := SnapOf(oi.Series, oi.Row);
+      if sn < 0 then hasOld := False;
+      hasNew := NewEl(ni.Series, ni.Row, at2, ne2);
+      { the same element (or none on either side) }
+      if (not hasOld and not hasNew)
+        or (hasOld and hasNew and SameEl(oi.Series, oi.Row, ni.Series, ni.Row)) then
+      begin
+        if not hasNew then Exit;
+        { animateElementStyles: from the style the view saved, at update
+          timing and the item's data index }
+        if not TyAnimGetConfig(atUpdate, ASeries[ni.Series].Model, TyAnimCallAt(ni.Row), tm) then
+          Exit;
+        p2 := HostProxy(ni.Series, ni.Row, ne2);
+        SeedStyle(p2, ne2);
+        p2.FUtStyleOn := True;
+        p2.FUtPass := FPass;
+        UtAnimate(p2, AUtSnaps[sn].Style, tm, True, False, '', @p2.UtStyleDone);
+        Exit;
+      end;
+      { an element the new chart still has keeps its own transition }
+      if hasOld and (still <> nil) and (still.Find(KeyOf(oi.Series, oi.Row, 'ut')) <> nil) then Exit;
+      if not hasNew then Exit;
+      nr := NewRef(ni.Series, ni.Row, ne2);
+      if hasOld then
+      begin
+        DropGhost(oi.Series, oi.Row);
+        hasMorph := True;
+        if MorphTiming(ni.Series, ANewIndex, tm) then
+          MorphOne(sn, nr, ni.Divide, ni.Series, tm, 0, 1);
+      end
+      else
+        FadeIn(nr, ni.Series, ANewIndex);
+    end;
+
+    { updateManyToOne }
+    procedure ManyToOne(ANewIndex: Integer; const AOldIdx: TTyIntegerArray);
+    var
+      ni, oi: TUtItem;
+      ne2, oe: TTyChartElement;
+      at2, x, sn: Integer;
+      olds_, oldSer: TTyIntegerArray;
+      nr: TNewRef;
+      tm: TTyAnimTiming;
+    begin
+      ni := newItems[ANewIndex];
+      { the old elements: there, not the new one, not still in the chart }
+      olds_ := nil;
+      oldSer := nil;
+      for x := 0 to High(AOldIdx) do
+      begin
+        oi := oldItems[AOldIdx[x]];
+        if not OldEl(oi.Series, oi.Row, oe) then Continue;
+        sn := SnapOf(oi.Series, oi.Row);
+        if sn < 0 then Continue;
+        if SameEl(oi.Series, oi.Row, ni.Series, ni.Row) then Continue;
+        if (still <> nil) and (still.Find(KeyOf(oi.Series, oi.Row, 'ut')) <> nil) then Continue;
+        SetLength(olds_, Length(olds_) + 1);
+        olds_[High(olds_)] := sn;
+        SetLength(oldSer, Length(oldSer) + 1);
+        oldSer[High(oldSer)] := AOldIdx[x];
+      end;
+      if not NewEl(ni.Series, ni.Row, at2, ne2) then Exit;
+      nr := NewRef(ni.Series, ni.Row, ne2);
+      if Length(olds_) > 0 then
+      begin
+        for x := 0 to High(oldSer) do
+          DropGhost(oldItems[oldSer[x]].Series, oldItems[oldSer[x]].Row);
+        hasMorph := True;
+        if not MorphTiming(ni.Series, ANewIndex, tm) then Exit;
+        { prepareMorphBatches(one, many): one batch, every old path }
+        if Length(olds_) = 1 then MorphOne(olds_[0], nr, ni.Divide, ni.Series, tm, 0, 1)
+        else Combine(olds_, nr, ni.Divide, ni.Series, tm, 0, Length(olds_));
+      end
+      else
+        { fadeInElement at the item's own data index }
+        FadeIn(nr, ni.Series, ni.Row);
+    end;
+
+    { updateOneToMany }
+    procedure OneToMany(const ANewIdx: TTyIntegerArray; AOldIndex: Integer);
+    var
+      oi, ni: TUtItem;
+      oe, ne2: TTyChartElement;
+      hasOld: Boolean;
+      at2, x, sn, ser0: Integer;
+      news: TNewRefArray;
+      tm: TTyAnimTiming;
+    begin
+      oi := oldItems[AOldIndex];
+      hasOld := OldEl(oi.Series, oi.Row, oe);
+      sn := SnapOf(oi.Series, oi.Row);
+      if sn < 0 then hasOld := False;
+      if hasOld and (still <> nil) and (still.Find(KeyOf(oi.Series, oi.Row, 'ut')) <> nil) then Exit;
+      news := nil;
+      for x := 0 to High(ANewIdx) do
+      begin
+        ni := newItems[ANewIdx[x]];
+        if not NewEl(ni.Series, ni.Row, at2, ne2) then Continue;
+        if hasOld and SameEl(oi.Series, oi.Row, ni.Series, ni.Row) then Continue;
+        SetLength(news, Length(news) + 1);
+        news[High(news)].Ser := ni.Series;
+        news[High(news)].Row := ni.Row;
+        news[High(news)].El := ne2;
+      end;
+      if Length(news) = 0 then Exit;
+      ser0 := newItems[ANewIdx[0]].Series;
+      { every new element stopped first }
+      for x := 0 to High(news) do news[x] := NewRef(news[x].Ser, news[x].Row, news[x].El);
+      if hasOld then
+      begin
+        DropGhost(oi.Series, oi.Row);
+        hasMorph := True;
+        if not MorphTiming(ser0, ANewIdx[0], tm) then Exit;
+        { the old item's divideShape }
+        if Length(news) = 1 then MorphOne(sn, news[0], oi.Divide, ser0, tm, 0, 1)
+        else Separate(sn, news, oi.Divide, ser0, tm, 0, Length(news));
+      end
+      else
+        for x := 0 to High(news) do FadeIn(news[x], ser0, ANewIdx[0]);
+    end;
+
+    { THE DIRECTION [Batch 138]: the first new item whose groupId is an old
+      item's childGroupId says parent -> child, the first whose (truthy)
+      childGroupId is an old item's groupId child -> parent -- asked in
+      that order, item by item; none else. Only truthy ids are kept. }
+    function Direction: Integer;
+    var
+      og, oc: TFPHashList;
+      x: Integer;
+    begin
+      Result := cUtDirNone;
+      og := TFPHashList.Create;
+      oc := TFPHashList.Create;
+      try
+        for x := 0 to High(oldItems) do
+        begin
+          if (oldItems[x].Group <> '') and (og.Find(oldItems[x].Group) = nil) then
+            og.Add(oldItems[x].Group, Pointer(1));
+          if oldItems[x].HasChild and (oldItems[x].Child <> '')
+            and (oc.Find(oldItems[x].Child) = nil) then
+            oc.Add(oldItems[x].Child, Pointer(1));
+        end;
+        for x := 0 to High(newItems) do
+        begin
+          if oc.Find(newItems[x].Group) <> nil then Exit(cUtDirP2C);
+          if newItems[x].HasChild and (newItems[x].Child <> '')
+            and (og.Find(newItems[x].Child) <> nil) then Exit(cUtDirC2P);
+        end;
+      finally
+        og.Free;
+        oc.Free;
+      end;
+    end;
+
+    { createKeyGetter: the id, or by the direction the group or the child
+      (undefined's key is 'undefined') }
+    function ItemKey(const AItem: TUtItem; AUseChild: Boolean): string;
+    begin
+      if not AUseChild then Result := AItem.Group
+      else if AItem.HasChild then Result := AItem.Child
+      else Result := 'undefined';
+    end;
+
+    procedure IndexKeys(const AKeys: TTyStringArray; AMap: TFPHashList;
+      var AGroups: array of TTyIntegerArray; out AOrder: TTyIntegerArray);
+    var
+      x, g, c2: Integer;
+      v: Pointer;
+    begin
+      AOrder := nil;
+      for x := 0 to High(AKeys) do
+      begin
+        v := AMap.Find('_ec_' + AKeys[x]);
+        if v = nil then
+        begin
+          g := Length(AOrder);
+          SetLength(AOrder, g + 1);
+          AOrder[g] := x;
+          AMap.Add('_ec_' + AKeys[x], Pointer(PtrInt(g + 1)));
+          SetLength(AGroups[g], 1);
+          AGroups[g][0] := x;
+        end
+        else
+        begin
+          g := PtrInt(v) - 1;
+          c2 := Length(AGroups[g]);
+          SetLength(AGroups[g], c2 + 1);
+          AGroups[g][c2] := x;
+        end;
+      end;
+    end;
+
+  var
+    oldOrder, newOrder: TTyIntegerArray;
+    g, ng: Integer;
+    v: Pointer;
+    ns, dir: Integer;
+  begin
+    Flatten(True, AOldList, oldItems);
+    Flatten(False, ANewList, newItems);
+    dir := Direction;
+    { isAllIdSame }
+    useId := Length(oldItems) = Length(newItems);
+    if useId then
+      for j := 0 to High(oldItems) do
+        if oldItems[j].Id <> newItems[j].Id then
+        begin
+          useId := False;
+          Break;
+        end;
+    still := nil;
+    oldMap := TFPHashList.Create;
+    newMap := TFPHashList.Create;
+    try
+      if not useId then
+      begin
+        { isElementStillInChart: an old element some new item still draws }
+        still := TFPHashList.Create;
+        for j := 0 to High(newItems) do
+          for q := 0 to High(oldItems) do
+            if (still.Find(KeyOf(oldItems[q].Series, oldItems[q].Row, 'ut')) = nil)
+              and SameEl(oldItems[q].Series, oldItems[q].Row, newItems[j].Series, newItems[j].Row) then
+              still.Add(KeyOf(oldItems[q].Series, oldItems[q].Row, 'ut'), Pointer(1));
+      end;
+      { the keys: getId when every id lines up, else the group -- the old
+        side's childGroupId drilling down, the new side's drilling up
+        [Batch 138] }
+      SetLength(oldKeys, Length(oldItems));
+      SetLength(newKeys, Length(newItems));
+      for j := 0 to High(oldItems) do
+        if useId then oldKeys[j] := oldItems[j].Id
+        else oldKeys[j] := ItemKey(oldItems[j], dir = cUtDirP2C);
+      for j := 0 to High(newItems) do
+        if useId then newKeys[j] := newItems[j].Id
+        else newKeys[j] := ItemKey(newItems[j], dir = cUtDirC2P);
+      SetLength(oldGroups, Length(oldItems));
+      SetLength(newGroups, Length(newItems));
+      IndexKeys(oldKeys, oldMap, oldGroups, oldOrder);
+      IndexKeys(newKeys, newMap, newGroups, newOrder);
+      hasMorph := False;
+      { DataDiffer 'multiple': the old keys in order }
+      for g := 0 to High(oldOrder) do
+      begin
+        v := newMap.Find('_ec_' + oldKeys[oldOrder[g]]);
+        if v = nil then Continue;
+        ng := PtrInt(v) - 1;
+        if (Length(oldGroups[g]) > 1) and (Length(newGroups[ng]) = 1) then
+          ManyToOne(newGroups[ng][0], oldGroups[g])
+        else if (Length(oldGroups[g]) = 1) and (Length(newGroups[ng]) > 1) then
+          OneToMany(newGroups[ng], oldGroups[g][0])
+        else if (Length(oldGroups[g]) = 1) and (Length(newGroups[ng]) = 1) then
+          OneToOne(newGroups[ng][0], oldGroups[g][0])
+        else if (Length(oldGroups[g]) > 1) and (Length(newGroups[ng]) > 1) then
+        begin
+          { updateManyToMany: diffed again by id, one to one }
+          SetLength(ia, Length(oldGroups[g]));
+          SetLength(ib, Length(newGroups[ng]));
+          for j := 0 to High(ia) do ia[j] := oldItems[oldGroups[g][j]].Id;
+          for j := 0 to High(ib) do ib[j] := newItems[newGroups[ng][j]].Id;
+          inner := TyDataDiff(ia, ib);
+          for j := 0 to High(inner) do
+            if inner[j].Kind = ddkUpdate then
+              OneToOne(newGroups[ng][inner[j].NewIdx], oldGroups[g][inner[j].OldIdx]);
+        end;
+      end;
+      { NOTHING LEFT WITHOUT AN ANIMATION in the new series' views: every path
+        with no animator fades in from opacity 0 at update timing, index 0 }
+      if hasMorph then
+        for j := 0 to High(ANewList) do
+        begin
+          ns := ANewList[j];
+          if not ASeries[ns].Enabled then Continue;
+          if not TyAnimGetConfig(atUpdate, ASeries[ns].Model, TyAnimCallAt(0), timing) then Continue;
+          if not (timing.Duration > 0) then Continue;
+          for at := 0 to AList.Count - 1 do
+          begin
+            ne := AList.Element(at);
+            if ne.Anim.Series <> ns then Continue;
+            if ne.Anim.Role in [carLineRun, carLineArea] then
+            begin
+              if ne.Anim.Role = carLineRun then role := 'utFadeRun' else role := 'utFadeArea';
+              if Find(ns, -1, role) <> nil then Continue;
+              p := Make(ns, -1, role);
+              p.SetNum('style.opacity', ne.Style.Alpha);
+              p.FUtStyleOn := True;
+              p.FUtPass := FPass;
+              UtAnimate(p, TyAnimProps([Num1('style.opacity', 0)]), timing, True, False, '',
+                @p.UtStyleDone);
+              Continue;
+            end;
+            { a treemap leaf's background (disableMorphing, no animator)
+              [Batch 138] }
+            if (ne.Anim.Role = carTmRect) and (UtHostRole(ne) = '') then
+            begin
+              if Find(ns, ne.Anim.Index, 'utFadeTmBg') <> nil then Continue;
+              p := Make(ns, ne.Anim.Index, 'utFadeTmBg');
+              p.SetNum('style.opacity', ne.Style.Alpha);
+              p.FUtStyleOn := True;
+              p.FUtPass := FPass;
+              UtAnimate(p, TyAnimProps([Num1('style.opacity', 0)]), timing, True, False, '',
+                @p.UtStyleDone);
+              Continue;
+            end;
+            if UtHostRole(ne) = '' then Continue;
+            p := Find(ns, ne.Anim.Index, UtHostRole(ne));
+            { a line symbol's animators are its group's: its path has none
+              unless the transition gave it one }
+            if ne.Anim.Role = carLineSymbol then
+              done := (p <> nil) and (p.FMorphOn or p.FUtStyleOn
+                or (p.FCombineOn and (p.AnimatorCount > 0)))
+            else
+              done := (p <> nil) and ((p.AnimatorCount > 0) or p.FMorphOn);
+            if done then Continue;
+            p := HostProxy(ns, ne.Anim.Index, ne);
+            p.SetNum('style.opacity', ne.Style.Alpha);
+            p.FUtStyleOn := True;
+            p.FUtPass := FPass;
+            UtAnimate(p, TyAnimProps([Num1('style.opacity', 0)]), timing, True, False, '',
+              @p.UtStyleDone);
+          end;
+        end;
+    finally
+      still.Free;
+      oldMap.Free;
+      newMap.Free;
+    end;
+  end;
+
+  { the last old series of a key that is kept (oldDataMap; -1 none) }
+  function OldOfKey(const AKey: string): Integer;
+  var k2: Integer;
+  begin
+    Result := -1;
+    for k2 := 0 to High(APrev.Series) do
+      if APrev.Series[k2].Present and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
+        and (APrev.Series[k2].UtKey = AKey) then
+        Result := k2;
+  end;
+
+  { oldDataMapForSplit: the last old series whose list seriesKey holds AKey }
+  function SplitOf(const AKey: string; out AListKey: string): Integer;
+  var k2, m: Integer;
+  begin
+    Result := -1;
+    AListKey := '';
+    for k2 := 0 to High(APrev.Series) do
+      if APrev.Series[k2].Present and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
+        and APrev.Series[k2].UtKeyList then
+        for m := 0 to High(APrev.Series[k2].UtKeyItems) do
+          if APrev.Series[k2].UtKeyItems[m] = AKey then
+          begin
+            Result := k2;
+            AListKey := APrev.Series[k2].UtKey;
+          end;
+  end;
+
+  function BatchOf(const AKey: string): Integer;
+  var k2: Integer;
+  begin
+    Result := -1;
+    for k2 := 0 to High(bKeys) do
+      if bKeys[k2] = AKey then Exit(k2);
+  end;
+
+  { updateBatches.set: a key already there keeps its place }
+  procedure SetBatch(const AKey: string; const AOldL, ANewL: TTyIntegerArray);
+  var b2: Integer;
+  begin
+    b2 := BatchOf(AKey);
+    if b2 < 0 then
+    begin
+      b2 := Length(bKeys);
+      SetLength(bKeys, b2 + 1);
+      SetLength(bOld, b2 + 1);
+      SetLength(bNew, b2 + 1);
+      bKeys[b2] := AKey;
+    end;
+    bOld[b2] := AOldL;
+    bNew[b2] := ANewL;
+  end;
+
+begin
+  { series:transition runs on a setOption only (optionChanged) }
+  if APrev.FullUpdate then Exit;
+  newIdx := TFPHashList.Create;
+  try
+    for i := 0 to AList.Count - 1 do
+    begin
+      el := AList.Element(i);
+      role := UtHostRole(el);
+      if role = '' then Continue;
+      if newIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, role)) = nil then
+        newIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, role), Pointer(PtrInt(i + 1)));
+    end;
+    { findTransitionSeriesBatches: an updated series that asks for it and
+      animates; the old series of the same key (the last one with it) --
+      else, a list key, the old series of its items (merged); else the old
+      series whose list holds its key (split, the batch under the list's
+      key). A batch is set again by a later series of the same key. }
+    bKeys := nil;
+    for s := 0 to High(ASeries) do
+    begin
+      if not ASeries[s].Present or not ASeries[s].UtOn or not ASeries[s].Enabled then Continue;
+      o := OldOfKey(ASeries[s].UtKey);
+      if o >= 0 then
+      begin
+        SetBatch(ASeries[s].UtKey, TTyIntegerArray.Create(o), TTyIntegerArray.Create(s));
+        Continue;
+      end;
+      if ASeries[s].UtKeyList then
+      begin
+        { 'female', 'male' -> ['female', 'male'] -- an item with no old
+          series is left out (upstream reads `.data` of undefined and throws) }
+        olds := nil;
+        for k := 0 to High(ASeries[s].UtKeyItems) do
+        begin
+          o := OldOfKey(ASeries[s].UtKeyItems[k]);
+          if o < 0 then Continue;
+          SetLength(olds, Length(olds) + 1);
+          olds[High(olds)] := o;
+        end;
+        if Length(olds) > 0 then SetBatch(ASeries[s].UtKey, olds, TTyIntegerArray.Create(s));
+        Continue;
+      end;
+      { ['female', 'male'] -> 'female', 'male' }
+      o := SplitOf(ASeries[s].UtKey, lk);
+      if o < 0 then Continue;
+      b := BatchOf(lk);
+      if b < 0 then
+      begin
+        SetBatch(lk, TTyIntegerArray.Create(o), nil);
+        b := BatchOf(lk);
+      end;
+      SetLength(bNew[b], Length(bNew[b]) + 1);
+      bNew[b][High(bNew[b])] := s;
+    end;
+    for b := 0 to High(bKeys) do
+    begin
+      { the four types whose item elements morph; a batch with any other
+        keeps its own animation }
+      typesOk := (Length(bOld[b]) > 0) and (Length(bNew[b]) > 0);
+      for k := 0 to High(bOld[b]) do
+        if UtTypeRole(APrev.Series[bOld[b][k]].SeriesType) = '' then typesOk := False;
+      for k := 0 to High(bNew[b]) do
+        if UtTypeRole(ASeries[bNew[b][k]].SeriesType) = '' then typesOk := False;
+      { [Batch 138] a treemap or a sunburst only into the other type: the
+        same view keeps its elements (upstream's animateElementStyles, which
+        the port does not model for them) }
+      for k := 0 to High(bOld[b]) do
+        for o := 0 to High(bNew[b]) do
+          if ((APrev.Series[bOld[b][k]].SeriesType = 'treemap')
+            or (APrev.Series[bOld[b][k]].SeriesType = 'sunburst'))
+            and (APrev.Series[bOld[b][k]].SeriesType = ASeries[bNew[b][o]].SeriesType) then
+            typesOk := False;
+      if typesOk then TransitionBetween(bOld[b], bNew[b]);
+    end;
+  finally
+    newIdx.Free;
+  end;
+end;
+
 procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   const ABind: TTyChartAnimProxyArray; ASet: TTyChartAnimSet;
   const AStBind: TTyChartAnimProxyArray);
 var
-  i, h: Integer;
+  i, h, k, nx: Integer;
   el, hostS, hostF: TTyChartElement;
   x0, y0, x1, y1, dx, dy: Double;
   moved: Boolean;
-  g: TTyChartAnimProxy;
+  g, bp: TTyChartAnimProxy;
+  extras: array of TTyChartElement;
 begin
   if (ASource = nil) or (ADest = nil) then Exit;
   ADest.Clear;
+  extras := nil;
+  nx := 0;
   for i := 0 to ASource.Count - 1 do
   begin
     el := ASource.Element(i);
     if (i <= High(ABind)) and (ABind[i] <> nil) then TyAnimApply(el, ABind[i]);
+    { A MORPH and a universal transition's style [Batch 136]; a treemap
+      rect's from the set, its proxy role being none [Batch 138] }
+    bp := nil;
+    if i <= High(ABind) then bp := ABind[i];
+    if (bp = nil) and (ASet <> nil) and (el.Anim.Role = carTmRect) then
+      bp := ASet.Find(el.Anim.Series, el.Anim.Index, UtTmRole(el));
+    if bp <> nil then TyUtApply(el, bp);
+    if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
+    begin
+      if el.Anim.Role = carLineRun then g := ASet.Find(el.Anim.Series, -1, 'utFadeRun')
+      else g := ASet.Find(el.Anim.Series, -1, 'utFadeArea');
+      if (g <> nil) and g.FUtStyleOn then
+        el.Style.Alpha := NumOr(g, 'style.opacity', el.Style.Alpha);
+    end;
     { THE STATES [Batch 94] }
     if (i <= High(AStBind)) and (AStBind[i] <> nil) then
       TyAnimApplyState(el, AStBind[i], (i <= High(ABind)) and (ABind[i] = AStBind[i]));
+    { A COMBINING ELEMENT IS DRAWN AS ITS CHILDREN [Batch 137]: the first in
+      its place, the others after the list, silent (insertion indices kept);
+      a child has its own style -- the element's states are not its }
+    if (bp <> nil) and bp.FCombineOn and (Length(bp.FPieces) > 0) then
+    begin
+      for k := 1 to High(bp.FPieces) do
+      begin
+        if nx >= Length(extras) then SetLength(extras, nx * 2 + 8);
+        extras[nx] := el;
+        UtPieceApply(extras[nx], bp.FPieces[k], k);
+        extras[nx].Silent := True;
+        Inc(nx);
+      end;
+      UtPieceApply(el, bp.FPieces[0], 0);
+    end;
     { A LINE'S POINTS IN AN UPDATE [Batch 90] }
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
       ApplyLine(el, ASet.Find(el.Anim.Series, -1, 'linePoly'),
@@ -3515,6 +6612,7 @@ begin
     end;
     ADest.Add(el);
   end;
+  for i := 0 to nx - 1 do ADest.Add(extras[i]);
   { THE GHOSTS, after the list: silent, so a hit never lands on one }
   if ASet <> nil then
     for i := 0 to ASet.GhostCount - 1 do

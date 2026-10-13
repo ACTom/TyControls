@@ -839,6 +839,50 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartariaalldata
+msgid "The data is as follows: "
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariadatawithname
+msgid "the data for {name} is {value}"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariamultipleprefix
+msgid ". It consists of {seriesCount} series count."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariamultiplewithname
+msgid " The {seriesId} series is a {seriesType} representing {seriesName}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariamultiplewithoutname
+msgid " The {seriesId} series is a {seriesType}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariapartialdata
+msgid "The first {displayCnt} items are: "
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariaseparators
+msgid "||, |. "
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariasinglewithname
+msgid " with type {seriesType} named {seriesName}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariasinglewithoutname
+msgid " with type {seriesType}."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariawithouttitle
+msgid "This is a chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartariawithtitle
+msgid "This is a chart about \"{title}\""
+msgstr ""
+
 #: tycontrols.strconsts.rstychartaxistypeunknown
 #, object-pascal-format
 msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
@@ -846,6 +890,21 @@ msgstr ""
 
 #: tycontrols.strconsts.rstychartaxiswithoutpair
 msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartcustomnorenderitem
+#, object-pascal-format
+msgid "series[%d]: no renderItem is registered as \"%s\", so nothing is drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartcustomrenderitemfailed
+#, object-pascal-format
+msgid "series[%d]: renderItem \"%s\" failed: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartdatasetnotable
+#, object-pascal-format
+msgid "dataset[%d] has no table: %s"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartexportoptsbad
@@ -914,6 +973,176 @@ msgstr ""
 msgid "series[%d] has no type, so it is not drawn"
 msgstr ""
 
+#: tycontrols.strconsts.rstycharttoolboxbar
+msgid "Switch to Bar Chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushclear
+msgid "Clear Selections"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushkeep
+msgid "Keep Selections"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushlinex
+msgid "Horizontally Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushliney
+msgid "Vertically Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushpolygon
+msgid "Lasso Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushrect
+msgid "Box Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataview
+msgid "Data View"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewbad
+#, object-pascal-format
+msgid "The data view's text could not be read back: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewrefresh
+msgid "Refresh"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboximagefilter
+msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxline
+msgid "Switch to Line Chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxrestore
+msgctxt "tycontrols.strconsts.rstycharttoolboxrestore"
+msgid "Restore"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxsaveasimage
+msgid "Save as Image"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxstack
+msgid "Stack"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxtiled
+msgid "Tile"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxzoom
+msgid "Zoom"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxzoomback
+msgid "Zoom Reset"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypebar
+msgid "Bar chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeboxplot
+msgid "Boxplot"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypecandlestick
+msgid "Candlestick"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypechart
+msgid "Chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypecustom
+msgid "Custom chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeeffectscatter
+msgid "Ripple scatter plot"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypefunnel
+msgid "Funnel chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypegauge
+msgid "Gauge"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypegraph
+msgid "Relationship graph"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeheatmap
+msgid "Heat map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypek
+msgid "K line chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeline
+msgid "Line chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypelines
+msgid "Line graph"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypemap
+msgid "Map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypeparallel
+msgid "Parallel coordinate map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypepictorialbar
+msgid "Pictorial bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypepie
+msgid "Pie chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttyperadar
+msgid "Radar chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypesankey
+msgid "Sankey diagram"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypescatter
+msgid "Scatter plot"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypesunburst
+msgid "Sunburst"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypethemeriver
+msgid "Theme River Map"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypetree
+msgid "Tree"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttypetreemap
+msgid "Treemap"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartxaxisnogrid
 #, object-pascal-format
 msgid "xAxis[%d] names no grid, so it is not drawn"
@@ -926,6 +1155,144 @@ msgstr ""
 
 #: tycontrols.strconsts.rstydatetimenameslang
 msgid "__locale__"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsbadresult
+msgid "a transform result is not a table of arrays or of objects"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsboxplotrows
+msgid "the boxplot reads only a table of arrays"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondandor
+#, object-pascal-format
+msgid "\"%s\" must be a non-empty list of conditions"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondbadoperator
+#, object-pascal-format
+msgid "\"%s\" is not a filter operator"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondneedsnumber
+#, object-pascal-format
+msgid "\"%s\" compares with a number only"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnodimension
+msgid "a filter condition has no dimension"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnooperator
+msgid "a filter condition has no operator"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnot
+msgid "\"not\" must be a condition object"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnotobject
+msgid "a filter condition is not an object"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondreg
+msgid "\"reg\" (a regular expression) is not supported"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscopyhasnometa
+msgid "it reads a fromTransformResult copy, which has no dimensions to pass on"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsduplicatedim
+#, object-pascal-format
+msgid "the dimension name \"%s\" is used twice"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsemptypipe
+msgid "the transform list is empty"
+msgstr ""
+
+#: tycontrols.strconsts.rstydskeyednodims
+msgid "its upstream table of columns has no dimensions"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnodimension
+#, object-pascal-format
+msgid "there is no dimension %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnoresult
+#, object-pascal-format
+msgid "its upstream has no result %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnotobject
+msgid "a transform is not an object"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnotsupported
+#, object-pascal-format
+msgid "%s is not available to a transform registered outside ECharts"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsoneupstream
+msgid "fromTransformResult needs exactly one upstream dataset"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsreadsitself
+msgid "it reads itself"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsrownotlist
+msgid "a row of the table is not a list"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortempty
+msgid "the sort has no config"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortformat
+msgid "the sort reads only a table of arrays or of objects"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortincomparable
+msgid "\"incomparable\" must be \"min\" or \"max\""
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortnodimension
+msgid "a sort key has no dimension"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortorder
+msgid "a sort key's order must be \"asc\" or \"desc\""
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortparser
+#, object-pascal-format
+msgid "\"%s\" is not a parser"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsunknowntype
+#, object-pascal-format
+msgid "no transform is registered as \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreambyrow
+msgid "its upstream is laid out by row"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreamfailed
+#, object-pascal-format
+msgid "dataset[%d], which it reads, has no table"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreamformat
+msgid "its upstream is not a table"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreammissing
+msgid "a transform has no input"
 msgstr ""
 
 #: tycontrols.strconsts.rstyfilesizebytes
@@ -1201,6 +1568,93 @@ msgstr ""
 msgid "Edit %s"
 msgstr ""
 
+#: tycontrols.strconsts.rstyseredcaption
+#, object-pascal-format
+msgid "%d: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcaptionnamed
+#, object-pascal-format
+msgid "%d: %s \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcolcategory
+#, object-pascal-format
+msgid "%s category"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcoldim
+#, object-pascal-format
+msgid "dim %d"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcolname
+msgid "name"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcolvalue
+msgid "value"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredemptyliteral
+msgid "Write a value here, or clear the field to remove the key."
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredhole
+msgid "(empty slot)"
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotboolean
+#, object-pascal-format
+msgid "\"%s\" is neither true nor false."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotecategory
+#, object-pascal-format
+msgid "Each row is a category of %s. Deleting a row deletes that category, and its value in every series on that axis."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotedatasetform
+msgid "This dataset is not a table of rows; edit it as text."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotehole
+msgid "This slot holds no object, so there is nothing to edit in it."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotenodata
+msgid "This series has no data of its own and reads a dataset. Rows added here give it data of its own, which then wins over the dataset."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotenotlist
+msgid "This data is not a list; edit it as text."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotetransform
+msgid "This dataset is made from another one by a transform; edit the source dataset instead."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotetree
+msgid "This data is a tree (items have children); edit it as text."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotinteger
+#, object-pascal-format
+msgid "\"%s\" is not a whole number."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotobject
+msgid "The option is not an object, so it has no series to edit."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotype
+msgid "(no type)"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredonevalue
+msgid "Write exactly one value here."
+msgstr ""
+
 #: tycontrols.strconsts.rstyshortday1
 msgid "Sun"
 msgstr ""
@@ -1278,6 +1732,76 @@ msgstr ""
 msgid "Sep"
 msgstr ""
 
+#: tycontrols.strconsts.rstystatbinlayout
+msgid "the bins cannot be laid out over these values"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatbinmethod
+#, object-pascal-format
+msgid "\"%s\" is not a binning method"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatbinprecision
+msgid "the bins are finer than 20 decimal places"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatclustercount
+msgid "\"clusterCount\" must be a number of 2 or more"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatclusterindex
+msgid "\"outputClusterIndexDimension\" is required, as a number"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatdimhole
+msgid "a dimension of the result is left undefined"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatindexnotnumber
+msgid "the index of a new dimension must be written as a number"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatindextoofar
+#, object-pascal-format
+msgid "a new dimension's index is past %d"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatnewdim
+msgid "a new dimension must be an index or { name, index }"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatnoconverge
+msgid "k-means did not settle"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatnosplit
+msgid "no cluster could be split"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatpolyorder
+#, object-pascal-format
+msgid "the polynomial order must be a whole number from -1 to %d"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatregmethod
+#, object-pascal-format
+msgid "\"%s\" is not a regression method"
+msgstr ""
+
+#: tycontrols.strconsts.rstystattoomanybins
+#, object-pascal-format
+msgid "more than %d bins"
+msgstr ""
+
+#: tycontrols.strconsts.rstystattoomanyclusters
+#, object-pascal-format
+msgid "more than %d clusters"
+msgstr ""
+
+#: tycontrols.strconsts.rstystatunassigned
+msgid "a point belongs to no cluster"
+msgstr ""
+
 #: tycontrols.strconsts.rstysurfacedeleted
 msgid ""
 "You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
@@ -1340,6 +1864,7 @@ msgid "Not in a tool window bar: hidden at run time"
 msgstr ""
 
 #: tycontrols.strconsts.rstytoolwindowrestore
+msgctxt "tycontrols.strconsts.rstytoolwindowrestore"
 msgid "Restore"
 msgstr ""
 
