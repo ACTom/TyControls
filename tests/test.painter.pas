@@ -56,6 +56,8 @@ type
     procedure TestMeasureTextBlockLineHeightIsDerivedNotFloored;
     procedure TestMeasureTextBlockWrapsToAWidth;
     procedure TestTheGdiRendererKeepsOneBitmap;
+    procedure TestTheKeptMeasuringDcAnswersAsBgraDoes;
+    procedure TestATurnedRunOnTheKeptDibIsBgrasOwn;
     procedure TestTheKeptBitmapGrowsForATallerRun;
     procedure TestATallRunAfterAWideOneKeepsTheWidth;
     procedure TestARunTooBigForTheKeptBitmapGetsItsOwn;
@@ -937,6 +939,127 @@ begin
   AssertEquals('none made or grown', 1, TyGdiTextBitmapsMade - made);
   AssertEquals('none drawn on a bitmap of its own', 0, TyGdiTextOneOffBitmapsForTest - own);
   AssertEquals('none converted: the coverage read off the DIB', 0, TyGdiTextConversionsForTest - conv);
+end;
+
+{ Every measurement used to make, select into and free a TBitmap of its own (BGRA's
+  scratch: about a millisecond a call here). The renderer measures on one kept DC; the
+  answer must be BGRA's own for every kind of run -- prefixes, tabs, right-to-left,
+  wrapping to a width, CJK, a bold and a big font -- and a hundred measurements make one
+  DC, not a hundred. }
+procedure TPainterTest.TestTheKeptMeasuringDcAnswersAsBgraDoes;
+const
+  cRuns: array[0..9] of string = ('Axis label 12.5', '&Prefixed && run', 'tab'#9'bed',
+    'مرحبا بالعالم', '中文标签 混排 text', 'Wwwwwiiiiil', '', ' ', 'a very long label that wraps when it is given a width',
+    'emoji ☃ ✓');
+  cFonts: array[0..2] of string = ('Segoe UI', 'Microsoft YaHei', 'Consolas');
+var
+  bmp: TBGRABitmap;
+  i, j, k, made: Integer;
+  a, b: TSize;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets measure through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  made := TyGdiTextKeptSurfacesMadeForTest;
+  bmp := TBGRABitmap.Create(10, 10);
+  try
+    for j := 0 to High(cFonts) do
+      for k := 0 to 2 do
+      begin
+        TyConfigureTextFont(bmp, cFonts[j], 9 + k * 7, 400 + (k mod 2) * 300, 96 + k * 48);
+        for i := 0 to High(cRuns) do
+        begin
+          TyGdiTextBgraPathsForTest(True);
+          try
+            a := bmp.TextSize(cRuns[i]);
+            b := bmp.TextSize(cRuns[i], 120, k = 1);
+          finally
+            TyGdiTextBgraPathsForTest(False);
+          end;
+          AssertEquals(Format('%s %d: "%s" wide', [cFonts[j], k, cRuns[i]]), a.cx, bmp.TextSize(cRuns[i]).cx);
+          AssertEquals(Format('%s %d: "%s" high', [cFonts[j], k, cRuns[i]]), a.cy, bmp.TextSize(cRuns[i]).cy);
+          AssertEquals(Format('%s %d: "%s" wrapped wide', [cFonts[j], k, cRuns[i]]), b.cx,
+            bmp.TextSize(cRuns[i], 120, k = 1).cx);
+          AssertEquals(Format('%s %d: "%s" wrapped high', [cFonts[j], k, cRuns[i]]), b.cy,
+            bmp.TextSize(cRuns[i], 120, k = 1).cy);
+        end;
+      end;
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('one kept DC for all of them', 1, TyGdiTextKeptSurfacesMadeForTest - made);
+end;
+
+{ A turned run went through BGRATextOutAngle, which makes a TBitmap to measure on and a
+  BGRA bitmap with a DIB and a canvas to draw on, per run. The renderer does the same
+  steps on two kept surfaces: the pixels must be BGRA's, exactly, at every angle, every
+  alignment, fractional positions (the half-up rounding), translucent and light ink, and
+  a run that wants a bigger surface than the last. }
+procedure TPainterTest.TestATurnedRunOnTheKeptDibIsBgrasOwn;
+const
+  cRuns: array[0..3] of string = ('Rotated label', '中文 标签', 'ij', 'a much longer turned label, 42%');
+var
+  a, b: TBGRABitmap;
+  i, ang, al, made, x, y, n: Integer;
+  ink: TBGRAPixel;
+  xf, yf: Single;
+
+  procedure DrawOn(ABmp: TBGRABitmap; ABgra: Boolean);
+  begin
+    ABmp.Fill(BGRA(250, 250, 250, 255));
+    TyConfigureTextFont(ABmp, 'Segoe UI', 10 + i * 3, 400 + (al mod 2) * 300, 96);
+    TyGdiTextBgraPathsForTest(ABgra);
+    try
+      ABmp.TextOutAngle(xf, yf, ang, cRuns[i], ink, TAlignment(al), False);
+    finally
+      TyGdiTextBgraPathsForTest(False);
+    end;
+  end;
+
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw turned text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  made := TyGdiTextKeptSurfacesMadeForTest;
+  a := TBGRABitmap.Create(400, 400);
+  b := TBGRABitmap.Create(400, 400);
+  try
+    n := 0;
+    for i := 0 to High(cRuns) do
+      for al := 0 to 2 do
+      begin
+        ang := -3150 + i * 1170 + al * 450;
+        xf := 200.3 + al * 0.25;
+        yf := 199.6 - i * 0.375;
+        case (i + al) mod 3 of
+          0: ink := BGRA(20, 30, 40, 255);
+          1: ink := BGRA(200, 20, 20, 140);
+        else
+          ink := BGRA(255, 255, 255, 255);
+        end;
+        DrawOn(a, False);
+        DrawOn(b, True);
+        for y := 0 to 399 do
+          for x := 0 to 399 do
+            if a.GetPixel(x, y) <> b.GetPixel(x, y) then
+              Fail(Format('"%s" at %d tenths, align %d: pixel %d,%d differs', [cRuns[i], ang, al, x, y]));
+        for y := 0 to 399 do
+          for x := 0 to 399 do
+            if a.GetPixel(x, y) <> BGRA(250, 250, 250, 255) then Inc(n);
+      end;
+    AssertTrue(Format('and something was drawn (%d pixels)', [n]), n > 1000);
+    AssertTrue('on the kept surfaces', TyGdiTextKeptSurfacesMadeForTest - made >= 2);
+    { the last, longest run grew the kept surfaces; drawing the first again makes none }
+    made := TyGdiTextKeptSurfacesMadeForTest;
+    i := 0; al := 0; ang := 450; xf := 200; yf := 200; ink := BGRA(0, 0, 0, 255);
+    DrawOn(a, False);
+    AssertEquals('no surface made for a smaller run', 0, TyGdiTextKeptSurfacesMadeForTest - made);
+  finally
+    a.Free;
+    b.Free;
+  end;
 end;
 
 { The kept bitmap grows in each direction on its own: a wide run of small text first

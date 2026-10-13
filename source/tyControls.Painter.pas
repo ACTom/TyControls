@@ -470,6 +470,11 @@ function TyGdiTextConversionsForTest: Integer;
   through the conversion (the path a bitmap that is not a DIB takes). }
 procedure TyGdiTextResetForTest;
 procedure TyGdiTextForceConversionForTest(AOn: Boolean);
+{ The kept measuring DC and turned-run DIB (Win32): how many times either was made or
+  grown, and a switch back to BGRA's own per-call scratch for both -- the reference the
+  kept ones must match pixel for pixel. }
+function TyGdiTextKeptSurfacesMadeForTest: Integer;
+procedure TyGdiTextBgraPathsForTest(AOn: Boolean);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -725,7 +730,7 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText;
+  LCLIntf, BGRAText, BGRAGrayscaleMask;
 
 { THE TWO MEASUREMENT SURFACES, REUSED.
 
@@ -866,6 +871,8 @@ begin
     + AEffFontName + AText;
 end;
 
+procedure TyGdiTextDropKept; forward;
+
 procedure TyInvalidateTextMeasureCache;
 var
   i: Integer;
@@ -885,6 +892,8 @@ begin
     holding a handle resolved before that happened. }
   FreeAndNil(GRenderScratch);
   FreeAndNil(GBlockScratch);
+  { and the renderer's kept measuring and turning DCs, for the same reason }
+  TyGdiTextDropKept;
 end;
 
 procedure TyTextMeasureCacheStats(out AHits, AMisses: Int64; out AEntries: Integer);
@@ -1391,10 +1400,28 @@ type
     class var GShot: TBitmap;
     class var GBitmapsMade, GOneOffs, GConversions: Integer;
     class var GForceConversion: Boolean;
+    { BGRA MEASURES every run, and lays every TURNED run down, on a TBitmap of its own:
+      a memory DC, a bitmap and a font selected into them, made and freed per call. On
+      the machine this was measured on that is about a millisecond a call, and a chart
+      measures a string per label and per tick: a radial tree of 250 labels spent 3 s
+      of its first frame making DCs. GMeasure is the DC BGRA's measuring calls would
+      make (a 0 x 0 TBitmap, as theirs is), kept; GTurn the 32-bit DIB its turned
+      path draws on, kept and grown like GShot. The GDI calls on them are BGRA's own,
+      call for call, on the same font -- see InternalTextSizeStyle and TurnedTextOut --
+      so the sizes and the pixels are the ones BGRA produced. Main thread only, like
+      GShot; dropped with it, and by TyInvalidateTextMeasureCache. }
+    class var GMeasure, GTurn: TBitmap;
+    class var GKeptMade: Integer;        { GMeasure and GTurn made or grown: FOR THE TESTS }
+    class var GBgraPaths: Boolean;       { BGRA's own measuring and turned paths: FOR THE TESTS }
+    class function MeasureSurface(AFont: TFont): TBitmap;
+    procedure TurnedTextOut(ADest: TBGRACustomBitmap; xf, yf: single;
+      AOrientation: integer; const sUTF8: string; c: TBGRAPixel; align: TAlignment);
   protected
     procedure UpdateFont; override;
     { The measuring side, answered for the run exactly as it is drawn. }
     function RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
+    function InternalTextSizeStyle(sUTF8: string; AStyle: TTextStyle;
+      AMaxWidth: integer): TSize; override;
     procedure InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
       AOrientation: integer; sUTF8: string; c: TBGRAPixel; texture: IBGRAScanner;
       align: TAlignment; AShowPrefix: boolean = false; ARightToLeft: boolean = false); override;
@@ -1431,6 +1458,207 @@ begin
   FFont.Quality := fqCleartypeNatural;
 end;
 
+class function TTyGdiTextRenderer.MeasureSurface(AFont: TFont): TBitmap;
+begin
+  if GMeasure = nil then
+  begin
+    GMeasure := TBitmap.Create;
+    Inc(GKeptMade);
+  end;
+  Result := GMeasure;
+  { What BGRA's scratch has: a canvas font born at the screen's PPI (see GShot's note
+    on Assign), then AFont, then AFont's pixel height set outright. }
+  Result.Canvas.Font.PixelsPerInch := ScreenInfo.PixelsPerInchY;
+  Result.Canvas.Font := AFont;
+  Result.Canvas.Font.Height := AFont.Height;
+end;
+
+function TTyGdiTextRenderer.InternalTextSizeStyle(sUTF8: string; AStyle: TTextStyle;
+  AMaxWidth: integer): TSize;
+var
+  bounds: TRect;
+  flags: Cardinal;
+begin
+  { BGRATextSizeStyle -> BGRAOriginalTextSizeStyle -> BitmapTextExtentStyle, on the kept
+    DC instead of a new one. Fine qualities scale the font and divide the answer; they
+    and other threads keep BGRA's path. }
+  if GBgraPaths or (GetCurrentThreadId <> MainThreadID) or not SystemFontAvailable
+    or (FontQuality in [fqFineClearTypeBGR, fqFineClearTypeRGB, fqFineAntialiasing]) then
+    Exit(inherited InternalTextSizeStyle(sUTF8, AStyle, AMaxWidth));
+  bounds := Rect(0, 0, AMaxWidth, MaxInt);
+  flags := DT_CALCRECT;
+  if AStyle.SingleLine then flags := flags or DT_SINGLELINE;
+  if AStyle.EndEllipsis then flags := flags or DT_END_ELLIPSIS;
+  if AStyle.ExpandTabs then flags := flags or DT_EXPANDTABS;
+  if AStyle.Wordbreak then flags := flags or DT_WORDBREAK;
+  if AStyle.RightToLeft then flags := flags or DT_RTLREADING;
+  if not AStyle.ShowPrefix then flags := flags or DT_NOPREFIX;
+  LCLIntf.DrawText(MeasureSurface(FFont).Canvas.Handle, PChar(sUTF8), Length(sUTF8),
+    bounds, flags);
+  Result := Size(bounds.Width, bounds.Height);
+end;
+
+procedure TTyGdiTextRenderer.TurnedTextOut(ADest: TBGRACustomBitmap; xf, yf: single;
+  AOrientation: integer; const sUTF8: string; c: TBGRAPixel; align: TAlignment);
+{ BGRATextOutAngle for fqSystem, statement for statement (the same Single arithmetic,
+  the same rounding), with its two scratch bitmaps replaced by the kept ones: the size
+  is BGRAOriginalTextSizeExAngle's TextExtent with the turned font on GMeasure, the run
+  is drawn white on black on GTurn by the same TCanvas.TextOut, and FilterOriginalText's
+  green channel through GammaExpansionTab is laid down by the same DrawAsAlpha. }
+var
+  posF: TPointF;
+  x, y: integer;
+  deltaX, deltaY: integer;
+  size: TSize;
+  TopLeft, TopRight, BottomRight, BottomLeft: TPointF;
+  Top, dy: Single;
+  Left: Single;
+  cosA, sinA: single;
+  rotBounds: TRect;
+  sizeFactor: integer;
+  w, h, nw, nh, px, py, stride, bpp: integer;
+  ds: TDIBSection;
+  bits, line, pdest: PByte;
+  bottomUp: Boolean;
+  mask: TGrayscaleMask;
+
+  procedure rotBoundsAdd(pt: TPointF);
+  begin
+    if pt.x < Left then Left := pt.x;
+    if pt.y < Top then Top := pt.y;
+    if floor(pt.X) < rotBounds.Left then rotBounds.Left := floor(pt.X/sizeFactor)*sizeFactor;
+    if floor(pt.Y) < rotBounds.Top then rotBounds.Top := floor(pt.Y/sizeFactor)*sizeFactor;
+    if ceil(pt.X) > rotBounds.Right then rotBounds.Right := ceil(pt.X/sizeFactor)*sizeFactor;
+    if ceil(pt.Y) > rotBounds.Bottom then rotBounds.Bottom := ceil(pt.Y/sizeFactor)*sizeFactor;
+  end;
+
+begin
+  sizeFactor := 1;
+  with MeasureSurface(FFont) do
+  begin
+    Canvas.Font.Orientation := AOrientation;
+    size := Canvas.TextExtent(sUTF8);
+  end;
+  if (size.cx = 0) or (size.cy = 0) then Exit;
+  { BGRA's extra vertical margin measures the run a second time with the orientation
+    put back to the same angle, so it is always 0 and dy is 0. }
+  dy := 0;
+
+  cosA := cos(AOrientation*Pi/1800);
+  sinA := sin(AOrientation*Pi/1800);
+  TopLeft := PointF(sinA*dy,cosA*dy);
+  posF := PointF(xf,yf);
+  posF.Offset( TopLeft * (1/sizeFactor) );
+  TopRight := TopLeft + PointF(cosA*size.cx,-sinA*size.cx);
+  BottomRight := TopRight + PointF(sinA*size.cy,cosA*size.cy);
+  BottomLeft := TopLeft + PointF(sinA*size.cy,cosA*size.cy);
+  rotBounds := rect(0,0,0,0);
+  Top := 0;
+  Left := 0;
+  rotBoundsAdd(TopRight);
+  rotBoundsAdd(BottomRight);
+  rotBoundsAdd(BottomLeft);
+  inc(rotBounds.Right);
+  inc(rotBounds.Bottom);
+
+  posF.Offset( Left/sizeFactor, Top/sizeFactor );
+  case align of
+    taLeftJustify: ;
+    taCenter:
+      posF.Offset( -TopRight*(1/(2*sizeFactor)) );
+    taRightJustify:
+      posF.Offset( -TopRight*(1/sizeFactor) );
+  end;
+  x := floor(posF.x);
+  deltaX := HalfUp((posF.x - x)*sizeFactor);
+  y := floor(posF.y);
+  deltaY := HalfUp((posF.y - y)*sizeFactor);
+  if deltaX <> 0 then inc(rotBounds.Right, sizeFactor);
+  if deltaY <> 0 then inc(rotBounds.Bottom, sizeFactor);
+
+  w := rotBounds.Right - rotBounds.Left;
+  h := rotBounds.Bottom - rotBounds.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  if (w > GdiKeptMaxWidth) or (Int64(w) * h > GdiKeptMaxPixels) then
+  begin
+    { too big to keep: BGRA's own path, scratch and all }
+    BGRATextOutAngle(ADest, FFont, FontQuality, xf, yf, AOrientation, sUTF8, c, nil, align, 0);
+    Exit;
+  end;
+  nw := 0;
+  nh := 0;
+  if GTurn <> nil then
+  begin
+    nw := GTurn.Width;
+    nh := GTurn.Height;
+  end;
+  if nw < w then nw := Min(Max(w, nw + nw div 2), GdiKeptMaxWidth);
+  if nh < h then nh := Max(h, nh + nh div 2);
+  if Int64(nw) * nh > GdiKeptMaxPixels then nh := Max(h, GdiKeptMaxPixels div nw);
+  if GTurn = nil then
+  begin
+    GTurn := TBitmap.Create;
+    GTurn.PixelFormat := pf32bit;
+    GTurn.SetSize(nw, nh);
+    Inc(GKeptMade);
+  end
+  else if (GTurn.Width <> nw) or (GTurn.Height <> nh) then
+  begin
+    GTurn.SetSize(nw, nh);
+    Inc(GKeptMade);
+  end;
+  if (LCLIntf.GetObject(GTurn.Handle, SizeOf(ds), @ds) <> SizeOf(ds))
+    or (ds.dsBm.bmBits = nil) or (ds.dsBm.bmBitsPixel <> 32) then
+  begin
+    BGRATextOutAngle(ADest, FFont, FontQuality, xf, yf, AOrientation, sUTF8, c, nil, align, 0);
+    Exit;
+  end;
+  bottomUp := TTyBitmapAccess(GTurn).GetRawImageDescriptionPtr^.LineOrder = riloBottomToTop;
+  bits := ds.dsBm.bmBits;
+  bpp := 4;
+  stride := ds.dsBm.bmWidthBytes;
+  { BGRABlack, as BGRA's scratch is made: blue, green, red 0, alpha 255 }
+  TyGdiFlush;
+  for py := 0 to h - 1 do
+  begin
+    if bottomUp then
+      line := bits + (ds.dsBm.bmHeight - 1 - py) * stride
+    else
+      line := bits + py * stride;
+    for px := 0 to w - 1 do
+      PLongWord(line + px * bpp)^ := $FF000000;
+  end;
+  { BGRATextOutAngle's "with temp do": the font, white, its height, then
+    BitmapTextOutAngle's orientation and clear brush and TCanvas.TextOut. }
+  GTurn.Canvas.Font.PixelsPerInch := ScreenInfo.PixelsPerInchY;
+  GTurn.Canvas.Font := FFont;
+  GTurn.Canvas.Font.Color := clWhite;
+  GTurn.Canvas.Font.Height := FFont.Height*sizeFactor;
+  GTurn.Canvas.Font.Orientation := AOrientation;
+  GTurn.Canvas.Brush.Style := bsClear;
+  GTurn.Canvas.TextOut(-rotBounds.Left+deltaX, -rotBounds.Top+deltaY, sUTF8);
+  TyGdiFlush;
+  mask := TGrayscaleMask.Create(w, h, 0);
+  try
+    for py := 0 to h - 1 do
+    begin
+      if bottomUp then
+        line := bits + (ds.dsBm.bmHeight - 1 - py) * stride
+      else
+        line := bits + py * stride;
+      pdest := mask.ScanLine[py];
+      for px := 0 to w - 1 do
+      begin
+        pdest^ := GammaExpansionTab[line[px * bpp + 1]] shr 8;
+        Inc(pdest);
+      end;
+    end;
+    mask.DrawAsAlpha(ADest, x, y, c);
+  finally
+    mask.Free;
+  end;
+end;
+
 procedure TTyGdiTextRenderer.InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
   AOrientation: integer; sUTF8: string; c: TBGRAPixel; texture: IBGRAScanner;
   align: TAlignment; AShowPrefix: boolean; ARightToLeft: boolean);
@@ -1451,6 +1679,14 @@ var
   bottomUp: Boolean;
 begin
   if sUTF8 = '' then Exit;
+  if (AOrientation mod 3600 <> 0) and (texture = nil) and not FOwnUnderline
+    and not AShowPrefix and (FontQuality = fqSystem) and SystemFontAvailable
+    and (GetCurrentThreadId = MainThreadID) and not GBgraPaths then
+  begin
+    { BGRA's own turned path, on the kept surfaces }
+    if c.alpha <> 0 then TurnedTextOut(ADest, x, y, AOrientation, sUTF8, c, align);
+    Exit;
+  end;
   if (AOrientation mod 3600 <> 0) or (texture <> nil) or FOwnUnderline then
   begin
     inherited InternalTextOutAngle(ADest, x, y, AOrientation, sUTF8, c, texture, align,
@@ -1663,6 +1899,34 @@ procedure TyGdiTextResetForTest;
 begin
   {$IFDEF LCLWin32}
   FreeAndNil(TTyGdiTextRenderer.GShot);
+  FreeAndNil(TTyGdiTextRenderer.GMeasure);
+  FreeAndNil(TTyGdiTextRenderer.GTurn);
+  {$ENDIF}
+end;
+
+function TyGdiTextKeptSurfacesMadeForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GKeptMade;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+procedure TyGdiTextBgraPathsForTest(AOn: Boolean);
+begin
+  {$IFDEF LCLWin32}
+  TTyGdiTextRenderer.GBgraPaths := AOn;
+  {$ELSE}
+  if AOn then ;
+  {$ENDIF}
+end;
+
+procedure TyGdiTextDropKept;
+begin
+  {$IFDEF LCLWin32}
+  FreeAndNil(TTyGdiTextRenderer.GMeasure);
+  FreeAndNil(TTyGdiTextRenderer.GTurn);
   {$ENDIF}
 end;
 
@@ -3863,6 +4127,8 @@ initialization
 finalization
   {$IFDEF LCLWin32}
   FreeAndNil(TTyGdiTextRenderer.GShot);
+  FreeAndNil(TTyGdiTextRenderer.GMeasure);
+  FreeAndNil(TTyGdiTextRenderer.GTurn);
   {$ENDIF}
   FreeAndNil(GImgCache);  // OwnsObjects frees the cached bitmaps
   FreeAndNil(GShadowCache);
