@@ -51,6 +51,12 @@ $pagePicks = @{
   'demo' = @('tab-1', 'gauges')
 }
 
+# What to do to an example's window before its first picture (TY_GALLERY_BEFORE, see
+# tools/gallery/tyGalleryCapture.pas): an example that opens empty gets something to show.
+$beforeSteps = @{
+  'terminal' = 'pick:CmbRecording=git-log-color.cast;click:BtnFit;click:BtnPlay;wait:11000'
+}
+
 # The README's pictures: copies of gallery pictures under docs/images, so the README in the
 # release bundle (which leaves the gallery out) still has them. Refreshed on every run.
 $readmePicks = [ordered]@{
@@ -67,6 +73,10 @@ $readmePicks = [ordered]@{
   'chart.png'          = 'chart/main-light.png'
   'ribbon.png'         = 'ribbon/01-new-document-1-light.png'
   'calendar.png'       = 'calendar/main-light.png'
+  'advchart.png'       = 'advchart/main-light.png'
+  'dbgrid.png'         = 'dbgrid/main-light.png'
+  'propertygrid.png'   = 'propertygrid/main-light.png'
+  'trackbar.png'       = 'trackbar/main-light.png'
 }
 
 function Get-Examples {
@@ -124,6 +134,7 @@ function Shoot($name, $exe) {
   $env:TY_GALLERY_DIR = $dir
   if ($name -eq 'demo') { $env:TY_GALLERY_SKINS = ($skins -join ',') } else { $env:TY_GALLERY_SKINS = '' }
   if ($pagePicks.ContainsKey($name)) { $env:TY_GALLERY_PAGES = ($pagePicks[$name] -join ',') } else { $env:TY_GALLERY_PAGES = '' }
+  if ($beforeSteps.ContainsKey($name)) { $env:TY_GALLERY_BEFORE = $beforeSteps[$name] } else { $env:TY_GALLERY_BEFORE = '' }
   try {
     $p = Start-Process $exe.FullName -ArgumentList '--lang=en' -WorkingDirectory $exe.DirectoryName -PassThru
     if (-not $p.WaitForExit($Timeout * 1000)) {
@@ -133,6 +144,7 @@ function Shoot($name, $exe) {
   } finally {
     Remove-Item Env:TY_GALLERY_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:TY_GALLERY_SKINS -ErrorAction SilentlyContinue
+    Remove-Item Env:TY_GALLERY_BEFORE -ErrorAction SilentlyContinue
     Remove-Item Env:TY_GALLERY_PAGES -ErrorAction SilentlyContinue
   }
   $shots = @(Get-ChildItem $dir -Filter *.png).Count

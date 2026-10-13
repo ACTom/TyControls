@@ -43,13 +43,13 @@ type
     a type lie about every button that is not a TTyButton. }
   TButtonAccess = class(TTyCustomButton);
 
-  TStepKind = (skPrepare, skMode, skPage, skShot, skRestore, skSkin, skDone);
+  TStepKind = (skPrepare, skAction, skMode, skPage, skShot, skRestore, skSkin, skDone);
 
   TStep = class
     Kind: TStepKind;
     Page: TTyPageControl;   // skPage, skRestore
     Index: Integer;         // skPage, skRestore: page index; skSkin: skin index
-    Name: string;           // skShot: file name; skMode: 'light' / 'dark'
+    Name: string;           // skShot: file name; skMode: 'light' / 'dark'; skAction: the action
     Wait: Integer;          // ms before the NEXT step
   end;
 
@@ -58,6 +58,7 @@ type
     FDir: string;
     FSkins: TStringList;
     FPages: TStringList;
+    FBefore: TStringList;
     FLog: TStringList;
     FTimer: TTimer;
     FSteps: TList;
@@ -68,6 +69,7 @@ type
     procedure Add(AKind: TStepKind; AWait: Integer; const AName: string = '';
       APage: TTyPageControl = nil; AIndex: Integer = -1);
     procedure DoStep(AForm: TCustomForm; AStep: TStep);
+    procedure DoAction(AForm: TCustomForm; const AAction: string);
     procedure Finish;
     procedure Log(const S: string);
     procedure Shoot(AForm: TCustomForm; const AName: string);
@@ -182,6 +184,16 @@ begin
   FPages.Delimiter := ',';
   s := SysUtils.GetEnvironmentVariable('TY_GALLERY_PAGES');
   if s <> '' then FPages.DelimitedText := s;
+  { What to do to the window before the first picture, ';'-separated:
+      pick:<combo>=<item>  choose an item of a TTyComboBox (its OnChange runs as for a user)
+      click:<button>       click a button
+      wait:<ms>            let the program work (a recording plays, a chart animates)
+    Components are named as in the form file. }
+  FBefore := TStringList.Create;
+  FBefore.StrictDelimiter := True;
+  FBefore.Delimiter := ';';
+  s := SysUtils.GetEnvironmentVariable('TY_GALLERY_BEFORE');
+  if s <> '' then FBefore.DelimitedText := s;
   Screen.AddHandlerFormAdded(@FormAdded);
 end;
 
@@ -195,6 +207,7 @@ begin
   FSteps.Free;
   FSkins.Free;
   FPages.Free;
+  FBefore.Free;
   FLog.Free;
   inherited Destroy;
 end;
@@ -253,6 +266,11 @@ begin
     Log(Format('form %s %dx%d, %d top-level page control(s)', [AForm.Name, AForm.Width,
       AForm.Height, pcs.Count]));
     Add(skPrepare, 1500);
+    for i := 0 to FBefore.Count - 1 do
+      if Copy(FBefore[i], 1, 5) = 'wait:' then
+        Add(skAction, StrToIntDef(Copy(FBefore[i], 6, MaxInt), 1000), FBefore[i])
+      else
+        Add(skAction, 400, FBefore[i]);
     for k := 0 to 1 do
     begin
       Add(skMode, 900, Modes[k]);
@@ -334,6 +352,8 @@ begin
         SetWindowPos(AForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE);
         SetForegroundWindow(AForm.Handle);
       end;
+    skAction:
+      DoAction(AForm, AStep.Name);
     skMode:
       if not SetDark(AForm, AStep.Name = 'dark') then
         Log('no Dark switch and no Light/Dark buttons: ' + AStep.Name +
@@ -395,6 +415,36 @@ begin
     else
       AForm.Top := wa.Top;
   end;
+end;
+
+procedure TGallery.DoAction(AForm: TCustomForm; const AAction: string);
+var
+  verb, arg, item: string;
+  p, j: Integer;
+  c: TComponent;
+begin
+  p := Pos(':', AAction);
+  verb := Copy(AAction, 1, p - 1);
+  arg := Copy(AAction, p + 1, MaxInt);
+  if verb = 'wait' then Exit;
+  item := '';
+  p := Pos('=', arg);
+  if p > 0 then
+  begin
+    item := Copy(arg, p + 1, MaxInt);
+    arg := Copy(arg, 1, p - 1);
+  end;
+  c := AForm.FindComponent(arg);
+  if (verb = 'pick') and (c is TTyComboBox) then
+  begin
+    j := TTyComboBox(c).Items.IndexOf(item);
+    if j < 0 then Log('not in ' + arg + ': ' + item)
+    else TTyComboBox(c).ItemIndex := j;
+  end
+  else if (verb = 'click') and (c is TTyCustomButton) then
+    TButtonAccess(c).Click
+  else
+    Log('cannot do: ' + AAction);
 end;
 
 function TGallery.SetDark(AForm: TCustomForm; ADark: Boolean): Boolean;
