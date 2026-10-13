@@ -7505,6 +7505,7 @@ type
     procedure TestPlainClickCollapsesSelection;
     { SelectAll → count = visible node count; iterators walk in visible order. }
     procedure TestSelectAllAndIterators;
+    procedure TestSelectAllIsANoOpInASingleSelectTree;
     { GetFirstSelected/GetNextSelected traverse in visible order. }
     procedure TestGetFirstAndNextSelected;
     { OnSelectionChanged fires once per mouse gesture (not per node). }
@@ -7642,6 +7643,30 @@ begin
     for i := 0 to 5 do
       AssertTrue('D1 selectall: node[' + IntToStr(i) + '] selected',
         nsSelected in nodes[i]^.States);
+  finally t.Free; end;
+end;
+
+{ SelectAll selected every visible node whether or not toMultiSelect was on: a single-select
+  tree ended up with all its rows highlighted and SelectedCount above one, which single-select
+  code never undoes. TTyListBox and TTyListView do nothing there. }
+procedure TTreeD1MultiSelectMouseTest.TestSelectAllIsANoOpInASingleSelectTree;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+  i: Integer;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    t.Options := t.Options - [toMultiSelect];
+    t.FocusedNode := nodes[2];
+    AssertEquals('setup: one selected', 1, t.SelectedCount);
+    FSelChangedCount := 0;
+    t.OnSelectionChanged := @OnSelChanged;
+    t.SelectAll;
+    AssertEquals('still one selected', 1, t.SelectedCount);
+    for i := 0 to 5 do
+      AssertEquals('node[' + IntToStr(i) + '] selected', i = 2, nsSelected in nodes[i]^.States);
+    AssertEquals('nothing announced', 0, FSelChangedCount);
   finally t.Free; end;
 end;
 

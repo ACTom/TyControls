@@ -2319,12 +2319,15 @@ end;
 { ── D1 ── multi-select public API ────────────────────────────────────────── }
 
 { SelectAll — select all visible initialised nodes; update FSelectionCount;
-  fire OnSelectionChanged if anything changed. }
+  fire OnSelectionChanged if anything changed. Only with toMultiSelect, as
+  TTyListBox / TTyListView: a single-select tree has no use for it and its
+  single-select logic would never undo it. }
 procedure TTyCustomTreeView.SelectAll;
 var
   n:      PTyTreeNode;
   didAny: Boolean;
 begin
+  if not (toMultiSelect in FOptions) then Exit;
   didAny := False;
   n := GetFirstVisibleNoInit;
   while n <> nil do
