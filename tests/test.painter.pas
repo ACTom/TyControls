@@ -58,6 +58,7 @@ type
     procedure TestTheGdiRendererKeepsOneBitmap;
     procedure TestTheKeptMeasuringDcAnswersAsBgraDoes;
     procedure TestATurnedRunOnTheKeptDibIsBgrasOwn;
+    procedure TestAKeptRunPaintsAsAFreshOne;
     procedure TestTheKeptBitmapGrowsForATallerRun;
     procedure TestATallRunAfterAWideOneKeepsTheWidth;
     procedure TestARunTooBigForTheKeptBitmapGetsItsOwn;
@@ -1062,6 +1063,75 @@ begin
   end;
 end;
 
+{ A chart repaints the same labels on every hover frame, so the renderer keeps what each
+  run came to -- its measurement, its coverage, a turned run's mask -- by everything that
+  decides it. A frame drawn from what was kept must be the frame drawn afresh: the same
+  strings in two sizes, dark and light ink (the coverage is taken in the ink's polarity),
+  translucent ink, straight and turned at several angles and sub-pixel positions, drawn
+  twice, against the same with the keeping off. }
+procedure TPainterTest.TestAKeptRunPaintsAsAFreshOne;
+const
+  cRuns: array[0..2] of string = ('Label 12.5', '中文 标签', 'Wij');
+var
+  ref: TBGRABitmap;
+  x, y, kept: Integer;
+
+  procedure Paint;
+  var
+    i, k, pass: Integer;
+    ink: TTyColor;
+  begin
+    FPainter.Bitmap.Fill(BGRA(120, 120, 120, 255));
+    for pass := 0 to 1 do
+      for i := 0 to High(cRuns) do
+        for k := 0 to 3 do
+        begin
+          case (i + k + pass) mod 3 of
+            0: ink := TyRGBA(10, 20, 30, 255);
+            1: ink := TyRGBA(250, 250, 240, 255);
+          else
+            ink := TyRGBA(200, 30, 30, 120);
+          end;
+          FPainter.DrawText(Rect(10 + pass * 150, 10 + (i * 4 + k) * 22, 300 + pass * 150, 32 + (i * 4 + k) * 22),
+            cRuns[i], 'Segoe UI', 9 + (k mod 2) * 5, 400 + (k div 2) * 300, ink,
+            taLeftJustify, tlCenter, False);
+          FPainter.DrawTextRotated(cRuns[i], 'Segoe UI', 9 + (k mod 2) * 5, 400, ink,
+            320.3 + pass * 0.25 + k * 0.125, 60.6 + i * 110 + k * 0.375, (k + 1) * 0.6,
+            TAlignment(k mod 3), tlCenter);
+        end;
+  end;
+
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  TyGdiTextRunCacheForTest(False);
+  try
+    MakePainter(460, 300, 96);
+    Paint;
+    ref := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    FreePainter;
+  finally
+    TyGdiTextRunCacheForTest(True);
+  end;
+  try
+    AssertEquals('nothing kept with the keeping off', 0, TyGdiTextRunsKeptForTest);
+    MakePainter(460, 300, 96);
+    Paint;
+    kept := TyGdiTextRunsKeptForTest;
+    AssertTrue(Format('runs were kept (%d)', [kept]), kept > 10);
+    for y := 0 to 299 do
+      for x := 0 to 459 do
+        if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then
+          Fail(Format('pixel %d,%d differs from drawing every run afresh', [x, y]));
+    Paint;
+    AssertEquals('a second frame keeps nothing new', kept, TyGdiTextRunsKeptForTest);
+  finally
+    ref.Free;
+  end;
+end;
+
 { The kept bitmap grows in each direction on its own: a wide run of small text first
   (wide enough for what follows, not tall enough), then one very tall letter -- all of it
   drawn, not cut at the height the wide run left (nor read past the bitmap's end). }
@@ -1156,6 +1226,8 @@ begin
   Ignore('Win32 only: the other widgetsets draw text through BGRA');
   {$ENDIF}
   TyGdiTextResetForTest;
+  { drawn afresh every time: a kept run would never touch the kept bitmap }
+  TyGdiTextRunCacheForTest(False);
   MakePainter(200, 60, 96);
   FPainter.DrawText(Rect(0, 0, 200, 60), 'ab 字', 'Segoe UI', 12, 400,
     TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
@@ -1189,6 +1261,7 @@ begin
     AssertEquals('pixels left over from the big run', 0, diff);
   finally
     a.Free;
+    TyGdiTextRunCacheForTest(True);
   end;
 end;
 
