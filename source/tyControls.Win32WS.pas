@@ -204,6 +204,21 @@ begin
   Result := GAeroThickFrame = 1;
 end;
 
+{ #78. A TTyForm window must not carry a native menu bar. TTyForm takes a menu out of Form.Menu
+  before its window is made (TTyForm.TakeFormMenu), but code can still set Form.Menu on a window
+  that is already up, and LCL then attaches the TMainMenu to it (SetMenu). The window has no
+  non-client strip to show the bar in -- the title bar is ours and the WM_NCCALCSIZE below hands
+  the top to the client -- so the bar stays hidden until LCL redraws it: DrawMenuBar, on any
+  change to a menu item (opening a TTyMenuBar dropdown makes some), and then Windows paints it
+  over our pixels below the title bar, unclickable, until the next repaint covers it. Detached,
+  DrawMenuBar has nothing to draw. Form.Menu itself is left alone: LCL's shortcut dispatch reads
+  the TMainMenu, never the window's menu. }
+procedure DetachNativeMenu(Wnd: HWND);
+begin
+  if Windows.GetMenu(Wnd) <> 0 then
+    Windows.SetMenu(Wnd, 0);
+end;
+
 function NcWndProc(Wnd: HWND; Msg: UINT; WP: WPARAM; LP: LPARAM): LRESULT; stdcall;
 var
   st: PNcState;
@@ -338,6 +353,14 @@ begin
         // We route through st^.OrigProc (the captured LCL proc), NOT a raw DefWindowProc, so the
         // subclass chain is preserved exactly like the fall-through below.
         Exit(CallWindowProc(orig, Wnd, Msg, WP, LPARAM(-1)));
+      end;
+    WM_WINDOWPOSCHANGED:
+      begin
+        // #78: SetMenu ends in a frame change, so a menu LCL attaches after the window is up
+        // (Form.Menu assigned in code, a border style change) is caught here as it lands.
+        Result := CallWindowProc(orig, Wnd, Msg, WP, LP);
+        DetachNativeMenu(Wnd);
+        Exit;
       end;
     WM_NCDESTROY:
       begin

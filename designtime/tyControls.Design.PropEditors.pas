@@ -781,6 +781,9 @@ begin
   // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —
   // hide it from the Object Inspector so it is neither shown nor editable.
   RegisterPropertyEditor(TypeInfo(TFormBorderStyle), TTyForm, 'BorderStyle', THiddenPropertyEditor);
+  // #78: TTyForm does not use Form.Menu (a native menu bar) -- MenuBar makes a TTyMenuBar the
+  // window's menu. Still published, inherited from TForm, so a form saved with Menu = ... loads.
+  RegisterPropertyEditor(TypeInfo(TMainMenu), TTyForm, 'Menu', THiddenPropertyEditor);
   { TTyFormSurface is a FIXED alClient content host, not something to configure —editing its Align,
     bounds, Visible, Font, Controller—would only break it (the Controller belongs on the FORM, which
     themes the whole window). So hide EVERY inherited property and leave just the two informational

@@ -383,6 +383,9 @@ type
     procedure TestPrimaryMenuBarDispatchesShortcut;
     procedure TestMenuBarAssociationAndFreeNotification;
     procedure TestNoMenuBarLeavesShortcutToInherited;
+    procedure TestTheWindowNeverCarriesANativeMenu;
+    procedure TestAFormWithAMenuComesUpItsDesignedSize;
+    procedure TestTheDesignerDoesNotMakeANewMainMenuTheFormMenu;
   end;
 
   { Pure caption-button resolution: close<=biSystemMenu, min<=biMinimize,
@@ -529,6 +532,7 @@ type
       override exactly as the widgetset would, returning whether it was consumed.
       ssAlt is encoded into KeyData (MK_ALT) so the match is deterministic headless. }
     function TestIsShortCut(AKey: Word; AShift: TShiftState): Boolean;
+    procedure ForceDesigning(AValue: Boolean);
     { Drive the (protected) offscreen backdrop build directly, and read the resulting
       snapshot — to prove FIX #1: an image theme builds FSharpBackdrop with NO paint cycle. }
     procedure CallRebuildBackdrop;
@@ -597,6 +601,8 @@ begin
   if ssAlt in AShift then msg.KeyData := msg.KeyData or PtrInt(MK_ALT);
   Result := IsShortcut(msg);
 end;
+
+procedure TTyFormAccess.ForceDesigning(AValue: Boolean); begin SetDesigning(AValue, False); end;
 
 procedure TTyFormAccess.CallRebuildBackdrop; begin RebuildBackdrop; end;
 function TTyFormAccess.SharpBackdrop: TBGRABitmap;
@@ -2667,9 +2673,11 @@ var
   it: TMenuItem;
 begin
   FFired := False;
+  { Not owned by the form: one that is would be taken out of Form.Menu and serve its shortcuts
+    on its own (#78), and this would pass without the MenuBar doing anything. }
+  mm := TMainMenu.Create(nil);
   frm := TTyFormAccess.CreateNew(nil);
   try
-    mm := TMainMenu.Create(frm);
     it := TMenuItem.Create(mm);
     it.Caption := 'Save';
     it.ShortCut := ShortCut(Ord('S'), [ssAlt]);   // Alt -> deterministic via KeyData
@@ -2678,11 +2686,14 @@ begin
     bar := TTyMenuBar.Create(frm);
     bar.Parent := frm;
     bar.Menu := mm;
+    AssertFalse('setup: nothing routes Alt+S before the MenuBar is set',
+      frm.TestIsShortCut(Ord('S'), [ssAlt]));
     frm.MenuBar := bar;                           // designate the primary menu bar
     AssertTrue('form routes Alt+S to the menu', frm.TestIsShortCut(Ord('S'), [ssAlt]));
     AssertTrue('item OnClick fired', FFired);
   finally
     frm.Free;
+    mm.Free;
   end;
 end;
 
@@ -2716,6 +2727,146 @@ begin
     AssertFalse('unconsumed with no menu bar', frm.TestIsShortCut(Ord('S'), [ssAlt]));
   finally
     frm.Free;
+  end;
+end;
+
+procedure NeedWidgetSet; forward;   { a real window: see its definition further down }
+
+{$IFDEF LCLWin32}
+function Win32GetMenu(AWnd: THandle): THandle; stdcall; external 'user32' name 'GetMenu';
+{$ENDIF}
+
+{ #78. A TMainMenu in Form.Menu became a native Windows menu bar on the window. The window has no
+  non-client strip to show it in -- the title bar is ours and the client covers the top -- so it
+  was invisible until LCL redrew it (DrawMenuBar, on any menu item change, such as the ones
+  opening a TTyMenuBar dropdown makes): then Windows painted it over the form's own pixels,
+  below the title bar, unclickable, until the next repaint wiped it. Form.Menu is set by LCL
+  itself when a TMainMenu owned by the form is created at run time, and by the designer when one
+  is dropped on the form. Such a menu is now taken out of Form.Menu and still serves its
+  shortcuts; one assigned in code once the window is up is kept off the window. }
+procedure TTyMenuFormTest.TestTheWindowNeverCarriesANativeMenu;
+var
+  frm: TTyFormAccess;
+  mm, later: TMainMenu;
+  it: TMenuItem;
+  h: Integer;
+begin
+  {$IFDEF LCLWin32}
+  NeedWidgetSet;
+  FFired := False;
+  later := nil;
+  frm := TTyFormAccess.CreateNew(nil);
+  try
+    frm.MakeTitleBar;
+    frm.SetBounds(120, 120, 420, 300);
+    mm := TMainMenu.Create(frm);
+    it := TMenuItem.Create(mm);
+    it.Caption := 'Save';
+    it.ShortCut := ShortCut(Ord('S'), [ssAlt]);
+    it.OnClick := @ItemClick;
+    mm.Items.Add(it);
+    AssertTrue('the form''s own new menu is taken out of Form.Menu', frm.Menu = nil);
+
+    frm.Show;
+    Application.ProcessMessages;
+    AssertEquals('no native menu on the shown window', 0, Integer(Win32GetMenu(frm.Handle)));
+    it.Enabled := False;                     { a menu item change: LCL redraws the menu bar }
+    it.Enabled := True;
+    Application.ProcessMessages;
+    AssertEquals('nor after LCL redraws the menu bar', 0, Integer(Win32GetMenu(frm.Handle)));
+    AssertTrue('the menu still serves its shortcuts, with no MenuBar set',
+      frm.TestIsShortCut(Ord('S'), [ssAlt]));
+    AssertTrue('item OnClick fired', FFired);
+
+    h := frm.Height;
+    later := TMainMenu.Create(nil);
+    later.Items.Add(TMenuItem.Create(later));
+    later.Items[0].Caption := 'Later';
+    frm.Menu := later;                       { assigned in code to a window that is already up }
+    Application.ProcessMessages;
+    AssertEquals('nor when a menu is assigned later', 0, Integer(Win32GetMenu(frm.Handle)));
+    AssertEquals('and the window keeps its height', h, frm.Height);
+  finally
+    frm.Free;
+    later.Free;
+  end;
+  {$ENDIF}
+end;
+
+{ #78. LCL sizes a window whose Form.Menu is set as one with a menu bar, so a TTyForm with a menu
+  in Form.Menu came up a menu bar's height (20 px at 100 %) taller than the same form without:
+  whether LCL put it there (a menu owned by the form, created at run time -- the designer's
+  dropped menu streams in the same way) or code did before the window existed. }
+procedure TTyMenuFormTest.TestAFormWithAMenuComesUpItsDesignedSize;
+var
+  plain, owned, assigned: TTyFormAccess;
+  mm, mm2: TMainMenu;
+begin
+  {$IFDEF LCLWin32}
+  NeedWidgetSet;
+  mm2 := nil;
+  plain := TTyFormAccess.CreateNew(nil);
+  owned := TTyFormAccess.CreateNew(nil);
+  assigned := TTyFormAccess.CreateNew(nil);
+  try
+    plain.MakeTitleBar;
+    owned.MakeTitleBar;
+    assigned.MakeTitleBar;
+    plain.SetBounds(100, 100, 420, 300);
+    owned.SetBounds(560, 100, 420, 300);
+    assigned.SetBounds(100, 450, 420, 300);
+    mm := TMainMenu.Create(owned);
+    mm.Items.Add(TMenuItem.Create(mm));
+    mm.Items[0].Caption := 'File';
+    mm2 := TMainMenu.Create(nil);
+    mm2.Items.Add(TMenuItem.Create(mm2));
+    mm2.Items[0].Caption := 'File';
+    assigned.Menu := mm2;
+    plain.Show;
+    owned.Show;
+    assigned.Show;
+    Application.ProcessMessages;
+    AssertEquals('owned: Height', plain.Height, owned.Height);
+    AssertEquals('owned: ClientHeight', plain.ClientHeight, owned.ClientHeight);
+    AssertEquals('owned: Width', plain.Width, owned.Width);
+    AssertEquals('assigned: Height', plain.Height, assigned.Height);
+    AssertEquals('assigned: ClientHeight', plain.ClientHeight, assigned.ClientHeight);
+    AssertTrue('assigned: taken out of Form.Menu', assigned.Menu = nil);
+    AssertEquals('assigned: no native menu', 0, Integer(Win32GetMenu(assigned.Handle)));
+  finally
+    assigned.Free;
+    owned.Free;
+    plain.Free;
+    mm2.Free;
+  end;
+  {$ENDIF}
+end;
+
+{ #78. The designer made a TMainMenu dropped on a TTyForm its Form.Menu and wrote Menu = ... to
+  the .lfm, which then put the menu bar on the window at run time. MenuBar is the TTyForm way. }
+procedure TTyMenuFormTest.TestTheDesignerDoesNotMakeANewMainMenuTheFormMenu;
+var
+  frm: TTyFormAccess;
+  mm, saved: TMainMenu;
+begin
+  NeedWidgetSet;
+  saved := TMainMenu.Create(nil);
+  frm := TTyFormAccess.CreateNew(nil);
+  try
+    frm.ForceDesigning(True);
+    mm := TMainMenu.Create(frm);
+    AssertTrue('setup: the menu is the form''s', mm.Owner = frm);
+    AssertTrue('a dropped menu is not made the Form.Menu', frm.Menu = nil);
+    { a form saved with Menu = ... keeps it in the designer: nothing rewrites the .lfm behind
+      the developer's back }
+    frm.Menu := saved;
+    frm.HandleNeeded;
+    AssertTrue('a Menu the form was saved with stays in the designer', frm.Menu = saved);
+    frm.Menu := nil;
+    frm.ForceDesigning(False);
+  finally
+    frm.Free;
+    saved.Free;
   end;
 end;
 

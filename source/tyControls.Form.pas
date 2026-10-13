@@ -8,7 +8,7 @@ unit tyControls.Form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, Dialogs, ExtCtrls, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, Dialogs, ExtCtrls, Menus, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
   tyControls.Menu, tyControls.WindowEffects, tyControls.PlatformWS,
@@ -317,6 +317,7 @@ type
     FTitleHeightLogical: Integer;
     FSurface: TTyFormSurface;         // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
+    FTakenMenu: TMainMenu;            // #78: a menu taken out of Form.Menu; still serves its shortcuts
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
     FSharpBackdrop: TBGRABitmap;      // form bg snapshot, UNblurred (fills glass corners)
@@ -383,6 +384,8 @@ type
     FEngine: TTyChromeEngine;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    procedure CreateWnd; override;
+    procedure TakeFormMenu;
     { DESIGN-TIME hint (not a block): a control dropped straight onto the form — bypassing the content
       Surface — is allowed, but a GRAPHIC (windowless) control there renders onto the form and is
       occluded by the Surface, so we warn the user to move it into the Surface. Runtime unaffected. }
@@ -2116,6 +2119,9 @@ begin
   if (FMenuBar <> nil) and (FMenuBar.Menu <> nil)
      and FMenuBar.Menu.IsShortCut(Message) then
     Exit(True);
+  // #78: a menu taken out of Form.Menu keeps serving the shortcuts it served from there.
+  if (FTakenMenu <> nil) and FTakenMenu.IsShortCut(Message) then
+    Exit(True);
   {$ENDIF}
   Result := inherited IsShortcut(Message);
 end;
@@ -2267,7 +2273,46 @@ begin
       Application.QueueAsyncCall(@DoWarnSurfaceDeleted, 0);
   end
   else if (Operation = opRemove) and (AComponent = FController) then
-    FController := nil;   // the bound controller was freed: drop the dangling ref
+    FController := nil   // the bound controller was freed: drop the dangling ref
+  else if (Operation = opInsert) and (AComponent is TMainMenu) and (Menu = AComponent) then
+  begin
+    { #78: LCL has just made a TMainMenu the form owns its Form.Menu -- TCustomForm.Notification
+      does that for one created at run time, and for one dropped on the form in the designer,
+      which then writes Menu = ... into the .lfm. Undo it in the designer; take it out at run
+      time. }
+    if csDesigning in ComponentState then
+      Menu := nil
+    else
+      TakeFormMenu;
+  end
+  else if (Operation = opRemove) and (AComponent = FTakenMenu) then
+    FTakenMenu := nil;
+end;
+
+{ #78. A TTyForm does not use Form.Menu, LCL's native menu bar -- except on macOS, where it is the
+  system menu bar MenuBar hands over. On Windows the window has no native caption area to show it
+  in (the title bar is a control and the client covers the top): the bar stayed hidden until LCL
+  redrew it, which it does whenever a menu item changes, and Windows then painted it over the
+  form. LCL also sizes a window whose Form.Menu is set a menu bar's height taller. So a menu that
+  lands in Form.Menu -- streamed from the .lfm, put there by LCL for a TMainMenu the form owns, or
+  set in code before the window exists -- is taken out of it before the window is made, and keeps
+  serving its shortcuts (IsShortcut): a form that relied on Form.Menu for them keeps them.
+  The reference is dropped in Notification when the menu is freed: TCustomForm.SetMenu asked the
+  menu for that free notification when it was assigned (Lazarus 3.0 onwards), and clearing Menu
+  does not take it back. }
+procedure TTyForm.TakeFormMenu;
+begin
+  {$IFNDEF DARWIN}
+  if (Menu = nil) or (csDesigning in ComponentState) then Exit;
+  FTakenMenu := Menu;
+  Menu := nil;
+  {$ENDIF}
+end;
+
+procedure TTyForm.CreateWnd;
+begin
+  TakeFormMenu;   { #78: before LCL sizes the window and attaches the menu to it }
+  inherited CreateWnd;
 end;
 
 procedure TTyForm.DoMinimizeClick(Sender: TObject);
