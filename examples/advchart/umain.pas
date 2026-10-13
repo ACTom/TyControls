@@ -109,6 +109,15 @@ resourcestring
   rsPickOne = 'Pick an example on the left.';
   rsSavedTo = 'Saved to %s';
   rsCounts = '%s — %d example(s)';
+  { said under the notes when an example needs a border map the demo does not
+    ship: %s the map name(s), %s the maps folder }
+  rsBorderMapNotShipped = 'This example needs the map %s, which the demo does '
+    + 'not include. Borders between countries are disputed, and some places '
+    + 'require published maps to be reviewed, so neither TyControls nor this demo '
+    + 'ships a map that draws them. To see the example, save a GeoJSON file under '
+    + 'the map''s name in %s (for instance china.json), or register one in code '
+    + 'with TyChartRegisterMap. Natural Earth (naturalearthdata.com) offers '
+    + 'public-domain country data.';
 
 { The gallery sits beside the .lpi, and the binary sits in
   lib/<cpu>-<os>/ under it -- so the same upward walk the .lpr uses to find
@@ -302,7 +311,7 @@ procedure TMainForm.Apply;
 var
   diags: TTyOptDiagArray;
   i, notes: Integer;
-  s: string;
+  s, border: string;
 begin
   { THE PAGE'S OWN registerMap. An ECharts example fetches its GeoJSON before
     it sets the option; the harvest kept only the map's name. }
@@ -349,13 +358,19 @@ begin
       if s <> '' then s := s + LineEnding;
       s := s + diags[i].Text;
     end;
-    LblStatus.Caption := s;
-    Exit;
+  end
+  else
+  begin
+    s := Format(rsDiagnostics, [notes]);
+    for i := 0 to High(diags) do
+      if diags[i].Kind <> odkAllClear then
+        s := s + LineEnding + '• ' + diags[i].Text;
   end;
-  s := Format(rsDiagnostics, [notes]);
-  for i := 0 to High(diags) do
-    if diags[i].Kind <> odkAllClear then
-      s := s + LineEnding + '• ' + diags[i].Text;
+  { A MAP THE DEMO DOES NOT SHIP. The library only says the map is not
+    registered; the demo, which chose not to ship it, says why and what to do. }
+  border := BorderMapsMissing(OptionMemo.Text, FMapsDir);
+  if border <> '' then
+    s := s + LineEnding + LineEnding + Format(rsBorderMapNotShipped, [border, FMapsDir]);
   LblStatus.Caption := s;
 end;
 
