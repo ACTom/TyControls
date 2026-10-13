@@ -6,6 +6,48 @@
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
+## [3.0.2] — 2026-10-13
+
+3.0 的修复版。
+
+### 变更
+
+- 独立的 `TTyScrollBar` 默认不再获得键盘焦点:`TabStop` 默认改为 False,不进 Tab 顺序,点击也不获焦;设 `TabStop := True` 可恢复原来的行为(Tab 顺序、点击获焦、方向键和翻页键)。([#56](https://github.com/ACTom/TyControls/issues/56))
+
+### 修复
+
+- 内置皮肤只改了按钮、输入框等少数控件的样子,标签页、表格、列表、树、菜单、滚动条等仍是默认主题的圆角形状。([#47](https://github.com/ACTom/TyControls/issues/47))
+- `TTyPageControl` 和 `TTyTabSet` 的标签在下方、左侧或右侧时,圆角仍在上边。([#45](https://github.com/ACTom/TyControls/issues/45))
+- 只有两个色标的 `linear-gradient` 忽略色标位置。([#49](https://github.com/ACTom/TyControls/issues/49))
+- 标题栏的标题左对齐时,窗口拉宽后标题跳到后面的控件右边。([#50](https://github.com/ACTom/TyControls/issues/50))
+- `TTyRibbonQuickAccess.AddButton` 加的按钮顺序是反的,最后加的排在最左边。([#51](https://github.com/ACTom/TyControls/issues/51))
+- `TTyStringGrid` 选中单元格的文字仍是普通的深色,强调色较深时看不清。([#46](https://github.com/ACTom/TyControls/issues/46))
+- `TTyStringGrid` 编辑单元格时滚动表格或改列宽、行高,编辑框不跟着格子走;值没通过 `OnValidateCell` 时点列头排序,这个值被直接丢掉。([#48](https://github.com/ACTom/TyControls/issues/48))
+- `TTyStringGrid` 编辑单元格或列头筛选框时按 ↑/↓,键盘焦点跑到滚动条上。([#52](https://github.com/ACTom/TyControls/issues/52))
+- `TTyStringGrid` 的 PageUp/PageDown 一次固定移 10 行,而不是一页。([#57](https://github.com/ACTom/TyControls/issues/57))
+- `TTyStringGrid` 的下拉列表格按 ↑/↓ 后焦点离开表格,格子的值还被换成下一项。([#59](https://github.com/ACTom/TyControls/issues/59))
+- `TTyStringGrid` 整行选择或选中一片区域时,看不出光标在哪一格。([#60](https://github.com/ACTom/TyControls/issues/60))
+- `TTyStringGrid`、`TTyDrawGrid` 的 `OnMouseWheel`、`OnMouseWheelUp`、`OnMouseWheelDown` 从不触发;`TTyImageView` 载入图片后也是这样。([#62](https://github.com/ACTom/TyControls/issues/62))
+- 在 `TTyStringGrid` 的单元格上直接打字,除文本格外,数字、多行、计算器、掩码、日期和下拉列表格都丢掉第一个键。([#64](https://github.com/ACTom/TyControls/issues/64))
+- `TTyStringGrid` 数字格里打的数字在结束编辑时丢失。([#66](https://github.com/ACTom/TyControls/issues/66))
+- `TTyStringGrid` 的掩码格结束编辑时报错,没填满的值(包括没改过的原值)也照样写进单元格;现在会拦下并提示,只能按 Esc 放弃。([#67](https://github.com/ACTom/TyControls/issues/67)、[#69](https://github.com/ACTom/TyControls/issues/69))
+- 通过 `Index` 移动的表格列(比如在集合编辑器里上移、下移),单元格不跟着移动,下次载入又回到原来的顺序。([#70](https://github.com/ACTom/TyControls/issues/70))
+- `TTyTreeView` 没开 `toFullRowSelect` 时,选中节点仍整行高亮,盖住展开按钮和树线;现在只高亮标题文字。([#71](https://github.com/ACTom/TyControls/issues/71))
+- 多选的 `TTyTreeView` 里,PgUp/PgDn、←/→、键入查找、点缩进区和右键只移动焦点而不更新选择,`SelectedCount` 也会算错;Shift 只在 ↑/↓ 时扩展选区。([#72](https://github.com/ACTom/TyControls/issues/72))
+- `TTyTreeView` 的 `toAutoTristateTracking` 不管之后才建出来的子节点,也不响应代码里设置的 `CheckState`、`Checked`。([#73](https://github.com/ACTom/TyControls/issues/73))
+- 单选的 `TTyTreeView` 调用 `SelectAll` 会选中所有节点。([#74](https://github.com/ACTom/TyControls/issues/74))
+- `TTyTreeView` 已有节点的行高不随 `DefaultNodeHeight`、密度或 `toVariableNodeHeight` 的改变而变化。([#75](https://github.com/ACTom/TyControls/issues/75))
+- `TTyTreeView` 各行高度不同时,PgUp/PgDn 一次会跳过好几页。([#76](https://github.com/ACTom/TyControls/issues/76))
+- `TTyListView` 的重命名编辑框一打开就关闭。([#54](https://github.com/ACTom/TyControls/issues/54))
+- 表格、列表框、列表视图、树、`TTyMemo` 和滚动框自带的滚动条能获得键盘焦点,点一下宿主控件就丢了焦点。([#55](https://github.com/ACTom/TyControls/issues/55))
+- `TTyMemo.Text` 读出来多一个末尾换行;`Lines.LoadFromFile` 后马上 `SaveToFile`,文件的末尾换行和换行风格都会变。([#58](https://github.com/ACTom/TyControls/issues/58))
+- `TTyImageView` 的滚轮缩放不以光标为中心;`TTyCascader` 的下拉面板里滚轮不滚动。([#63](https://github.com/ACTom/TyControls/issues/63))
+- `TTyValueListEditor` 颜色下拉的「更多…」和取色对话框标题、`TTyRibbon` 溢出按钮的提示在非中文界面下仍显示中文。([#68](https://github.com/ACTom/TyControls/issues/68))
+
+### 性能
+
+- `TTyMemo` 关闭 `WordWrap` 时载入大段文本快得多:5.7 万行从约 50 秒降到不到半秒。([#77](https://github.com/ACTom/TyControls/issues/77))
+
 ## [3.0.1] — 2026-10-07
 
 3.0 的修复版。
