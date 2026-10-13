@@ -606,11 +606,11 @@ begin
 end;
 
 procedure TDrawFrameTest.TestGradientParentBackdropCarriesAMultiStopParent;
-{ The painter draws >2 stops through a multi-gradient built with gamma correction OFF, and
-  2 stops through a scanner whose gamma correction defaults ON. A reconstruction that
-  reduces a multi-stop parent to two endpoint colours therefore lands on the other curve,
-  and the ends still match while the MIDDLE drifts — a soft bar across the control that a
-  two-point check would never see.
+{ The painter draws >2 stops through a multi-gradient and 2 stops at 0/1 through the
+  two-colour scanner. Both blend in plain sRGB now, but until they did, a reconstruction
+  that reduced a multi-stop parent to two endpoint colours landed on the other curve: the
+  ends still matched while the MIDDLE drifted — a soft bar across the control that a
+  two-point check would never see. Kept as the guard on that seam.
 
   So the child here deliberately spans the parent's SECOND segment only (rows 60..119 of a
   ramp whose interior stop sits at row 60): no parent stop falls strictly inside it, which

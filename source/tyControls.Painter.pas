@@ -332,9 +332,10 @@ type
       nought. Coordinates are DEVICE pixels: a chart resolves its own
       geometry and hands over real numbers.
 
-      GAMMA OFF. BGRA's gamma-corrected ramp uses an exponent of 1.7 and
-      Canvas 2D interpolates in plain sRGB, so a corrected ramp would put the
-      midpoint of every chart gradient somewhere upstream never puts it. }
+      GAMMA OFF, as everywhere in the painter. BGRA's gamma-corrected ramp
+      uses an exponent of 1.7 while Canvas 2D and CSS interpolate in plain
+      sRGB, so a corrected ramp would put the midpoint of every chart
+      gradient somewhere upstream never puts it. }
     procedure FillPathGradient(const AStops: array of TTyGradStop;
       AX1, AY1, AX2, AY2, ARadius: Double;
       ARule: TTyFillRule = tfrNonZero);
@@ -1969,12 +1970,18 @@ begin
     tfkLinearGradient:
       begin
         GradientEndpoints(ARect, AFill.GradAngleDeg, p1f, p2f);
+        { PLAIN sRGB, BOTH PATHS. A themed gradient blends channel by channel in sRGB, as a
+          CSS gradient and Canvas 2D do, so the colours of a web design come out here as they
+          do in a browser. BGRA defaults the other way -- its two-colour scanner blends with
+          gamma correction (exponent 1.7, a lighter midpoint) -- and when only the multi-stop
+          path turned it off, the same two colours met in a different middle depending on
+          whether they were written as two colours or as stops. }
         if TyGradientNeedsStops(AFill) then
         begin
           // v3/B1 multi-stop: build a BGRA multi-gradient from the stops. Two stops at 0 and 1
-          // keep the exact 2-colour scanner below (existing themes / the golden byte-identical);
-          // two stops anywhere else are placed by position too -- the 2-colour scanner spread
-          // '#F00 20%, #00F 80%' over the whole sweep (#49).
+          // take the two-colour scanner below, which is the cheaper of the two and blends the
+          // same way; two stops anywhere else are placed by position -- the two-colour scanner
+          // spread '#F00 20%, #00F 80%' over the whole sweep (#49).
           SetLength(cols, Length(AFill.GradStops));
           SetLength(poss, Length(AFill.GradStops));
           for i := 0 to High(AFill.GradStops) do
@@ -1996,7 +2003,9 @@ begin
         end
         else
         begin
-          grad := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom), TyColorToBGRA(AFill.GradTo), gtLinear, p1f, p2f);
+          // The last argument is gammaColorCorrection, which DEFAULTS to True: spelled out.
+          grad := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom), TyColorToBGRA(AFill.GradTo),
+            gtLinear, p1f, p2f, False);
           try
             if r <= 0 then
               FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
@@ -3425,9 +3434,10 @@ begin
     end;
     Result.addColorStop(AStops[i].Pos, px);
   end;
-  { GAMMA OFF. BGRA's corrected ramp uses an exponent of 1.7 and Canvas 2D
-    interpolates in plain sRGB, so a corrected ramp would put the midpoint of
-    every chart gradient somewhere upstream never puts it. }
+  { GAMMA OFF, as for every gradient the painter draws (FillBackground,
+    FillPathWith). BGRA's corrected ramp uses an exponent of 1.7 while Canvas 2D
+    and CSS interpolate in plain sRGB, so a corrected ramp would put the
+    midpoint of every chart gradient somewhere upstream never puts it. }
   Result.gammaCorrection := False;
 end;
 
@@ -3566,6 +3576,10 @@ begin
           grad.addColorStop(0, TyColorToBGRA(AFill.GradFrom));
           grad.addColorStop(1, TyColorToBGRA(AFill.GradTo));
         end;
+        { Plain sRGB, as FillBackground blends the same fill. The canvas starts its
+          gradients that way today (gradientGammaCorrection = False), but that is a
+          per-canvas setting anyone can flip; the fill's answer should not depend on it. }
+        grad.gammaCorrection := False;
         ctx.fillStyle(grad);
       end;
     tfkImage, tfkNineSlice:

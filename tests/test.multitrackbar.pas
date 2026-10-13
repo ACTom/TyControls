@@ -6996,8 +6996,9 @@ begin
   finally
     b.Free;
   end;
-  { The default black to white blends without gamma correction, as three stops would: about
-    half way is about half grey (gamma-corrected it would be about #BCBCBC). }
+  { The default black to white -- two stops at 0 and 1, the painter's two-colour path --
+    blends in plain sRGB, as three stops would: about half way is about half grey
+    (gamma-corrected it would be about #BCBCBC). }
   SetStops([0, 100], [clBlack, clWhite]);
   AssertEquals('', TrackAgainstFill(FBar.GradientFill));
   b := Shot(FBar);
@@ -7115,10 +7116,9 @@ begin
   AssertEquals('at the angle asked', 30.0, f.GradAngleDeg, 0.0001);
   AssertEquals(Integer($FF000000), Integer(f.GradFrom));
   AssertEquals(Integer($FFFFFFFF), Integer(f.GradTo));
-  AssertTrue('drawn stop by stop', TyGradientNeedsStops(f));
-  AssertEquals('the first stop repeated', 3, Length(f.GradStops));
-  AssertTrue((f.GradStops[0].Pos = 0) and (f.GradStops[1].Pos = 0) and (f.GradStops[2].Pos = 1));
-  AssertEquals(Integer(f.GradStops[0].Color), Integer(f.GradStops[1].Color));
+  AssertEquals('the two stops as they are', 2, Length(f.GradStops));
+  AssertTrue((f.GradStops[0].Pos = 0) and (f.GradStops[1].Pos = 1));
+  AssertFalse('at 0 and 1: the painter''s two-colour path', TyGradientNeedsStops(f));
   SetStops([20, 80], [clRed, clBlue]);
   f := FBar.GradientFill;
   AssertEquals('two stops inside: as they are', 2, Length(f.GradStops));
@@ -7196,6 +7196,8 @@ procedure TTyGradientTrackBarTest.TestANewStopChangesNothingOnTheTrack;
 begin
   FBar.OnDrawTrack := @SeeTrack;
   FBar.OnDrawThumb := @NoThumbs;
+  { Stops at Min and Max: the painter's two-colour path before the click, the stop-by-stop
+    path after it. The two must blend alike for this to hold. }
   Check('black to white', 37);
   AssertEquals(3, FBar.Thumbs.Count);
   SetStops([10, 90], [RGBToColor($FF, $80, 0), RGBToColor(0, $40, $FF)]);

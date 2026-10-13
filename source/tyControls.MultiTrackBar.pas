@@ -965,11 +965,10 @@ type
       order in Thumbs), each with its position: (Value - Min) / (Max - Min), 0..1. }
     function Gradient: TTyGradStops;
     { Gradient as a fill FillBackground draws: no stops = tfkNone, one = tfkSolid, more = a
-      linear gradient at AAngleDeg (0 = Min at the left, 90 = Min at the top). Always drawn
-      stop by stop, so it blends as the track does whatever the number of stops: two stops at
-      exactly 0 and 1 would otherwise take the painter's two-colour path, which blends with
-      gamma correction, and adding a stop between them would change the whole picture -- the
-      first stop is repeated to keep it on the stop-by-stop path. }
+      linear gradient at AAngleDeg (0 = Min at the left, 90 = Min at the top), the stops as
+      they are. Two stops at exactly 0 and 1 take the painter's two-colour path; it blends in
+      plain sRGB like the stop-by-stop path, so adding a stop between them changes no pixel
+      by more than rounding. }
     function GradientFill(AAngleDeg: Single = 0): TTyFill;
   end;
 
@@ -3528,8 +3527,8 @@ begin
   if b < 0 then Exit(Thumbs[a].Color);
   if a < 0 then Exit(Thumbs[b].Color);
   if Thumbs[a].Value = AValue then Exit(Thumbs[a].Color);
-  { In between: blended channel by channel as the painter's stop-by-stop gradient blends
-    (no gamma correction), so the new stop is where the gradient already was. }
+  { In between: blended channel by channel in plain sRGB, as the painter blends every
+    gradient, so the new stop is where the gradient already was. }
   ca := ColorToRGB(Thumbs[a].Color);
   cb := ColorToRGB(Thumbs[b].Color);
   t := (AValue - Thumbs[a].Value) / (Thumbs[b].Value - Thumbs[a].Value);
@@ -3599,12 +3598,6 @@ begin
   SetLength(Result.GradStops, n);
   for i := 0 to n - 1 do
     Result.GradStops[i] := g[i];
-  if not TyGradientNeedsStops(Result) then
-  begin
-    SetLength(Result.GradStops, 3);
-    Result.GradStops[2] := Result.GradStops[1];
-    Result.GradStops[1] := Result.GradStops[0];
-  end;
 end;
 
 function TTyCustomGradientTrackBar.TrackAngle: Single;
