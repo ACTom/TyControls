@@ -50,7 +50,7 @@
 | `WindowMenuAnchor` | `function: TPoint` | 没有指针位置时菜单挂在哪（屏幕坐标）：显示图标时挂在图标下沿的阅读起始边，否则挂在标题栏阅读起始角的下沿。 |
 | `EffectiveIcon` | `function: TIcon` | `ShowIcon` 实际画的那张图：`Icon` → 窗体 `Icon` → `Application.Icon`，都没有时 nil（槽位照留）。 |
 | `HostIconChanged` | `procedure` | 告诉标题栏窗体或程序的图标换了，下次重画取新图。`TTyForm` 自己会调；标题栏放在别的窗体上时由宿主调。 |
-| `CaptionSpan(AWidth, out ALeft, out ARight)` | `procedure` | 标题文字可用的横向区间：`CaptionLayout.Content` 再避开宿主放在栏上的子控件。子控件把内容区切成几段空隙时，按 `TitleAlignment` 选一段：左对齐取从起始侧数**第一段放得下标题**的空隙，右对齐取最后一段，居中取最宽的一段；哪段都放不下（或标题为空）时取最宽的。所以标题后面紧跟一条工具栏时，窗口再拉宽，标题也不会跳到工具栏右边去。 |
+| `CaptionSpan(AWidth, out ALeft, out ARight)` | `procedure` | 标题文字可用的横向区间：`CaptionLayout.Content` 再避开宿主放在栏上的子控件。子控件把内容区切成几段空隙时，按 `TitleAlignment` 选一段：左对齐取从起始侧数**第一段放得下标题**的空隙，右对齐取最后一段；居中时标题**按整条标题栏居中**（和 macOS、GNOME 的窗口标题一样），只有那样会碰到子控件、图标或标题栏按钮时，才改在最宽的一段里居中。哪段都放不下（或标题为空）时取最宽的。所以标题后面紧跟一条工具栏时，窗口再拉宽，标题也不会跳到工具栏右边去。 |
 | `RightInset` | `function: Integer` | 系统按钮簇占用的总**宽度**（= `CaptionLayout.Band` 的宽度）。宽度没有方向，所以镜像不改变它的值——但镜像后它量的那条带在**左**边，名字会骗人。保留原名是因为改公开成员名属破坏性变更，收益不抵成本（见 `plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 6 条）。 |
 
 这三个按钮的 `Parent` 设为 `TTyTitleBar` 自身（**代码持有**），由 `LayoutButtons` 在构造和 `Resize` 时自动排布。它们是**窗口化子控件**，所以 `LayoutButtons` 写下的 `SetBounds` 同时就是它们的命中区、悬停区和按下区——LCL 按这份 bounds 路由——这也是按钮几何只需要在一个地方正确的原因。

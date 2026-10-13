@@ -184,6 +184,10 @@ type
     procedure TestAMirroredLeftCaptionStartsFromTheRight;
     procedure TestACaptionThatFitsNowhereTakesTheWidestGap;
     procedure TestThePaintPutsTheCaptionWhereTheSpanSays;
+    procedure TestACentredCaptionCentresOnTheWholeBar;
+    procedure TestACentredCaptionWithNoChildrenCentresOnTheWholeBar;
+    procedure TestACentredCaptionThatWouldTouchAChildCentresInTheWidestGap;
+    procedure TestAChildAcrossTheMiddleSendsACentredCaptionToTheWidestGap;
   end;
 
   { ===== a6256: the cross-monitor DPI contract for the title bar ==============
@@ -3876,6 +3880,99 @@ begin
     T.CaptionSpan(T.ClientWidth, l, r);
     AssertEquals('the widest gap starts after the first child', 150, l);
     AssertEquals('and ends at the second', 600, r);
+  finally F.Free; end;
+end;
+
+{ A centred caption is centred on the whole bar, as macOS and GNOME centre a window title, and
+  only moves when that would put it on a child, the icon or the caption buttons. It used to be
+  centred in the widest gap, so controls of different widths on either side -- or just the icon
+  on one and the buttons on the other -- pushed it off the middle of the window. }
+procedure TTitleBarCaptionGapTest.TestACentredCaptionCentresOnTheWholeBar;
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, 'Title');
+  try
+    T.TitleAlignment := taCenter;
+    { a wide group on the left (40..290) and a narrow one on the right (700..820), two controls
+      each, the one nearer the middle added second on the left and first on the right: the
+      bounds are the NEAREST edges, whatever order the children come in }
+    Kid(T, 160, 130);
+    Kid(T, 40, 100);
+    Kid(T, 700, 40);
+    Kid(T, 760, 60);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('the span is centred on the bar', 1000, l + r);
+    AssertTrue('and clear of the left group (' + IntToStr(l) + ')', l >= 290);
+    AssertTrue('and of the right one (' + IntToStr(r) + ')', r <= 700);
+  finally F.Free; end;
+  { the other way round: the left group reaches nearer the middle, so it is the left bound
+    that sets the span's half-width }
+  T := NewGapBar(F, 1000, 'Title');
+  try
+    T.TitleAlignment := taCenter;
+    Kid(T, 200, 130);     { 200..330, the nearer, added first }
+    Kid(T, 40, 100);
+    Kid(T, 760, 60);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('left-bound: centred on the bar', 1000, l + r);
+    AssertTrue('left-bound: clear of the left group (' + IntToStr(l) + ')', l >= 330);
+    AssertTrue('left-bound: and of the right one (' + IntToStr(r) + ')', r <= 760);
+  finally F.Free; end;
+end;
+
+procedure TTitleBarCaptionGapTest.TestACentredCaptionWithNoChildrenCentresOnTheWholeBar;
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, 'Title');
+  try
+    T.TitleAlignment := taCenter;
+    AssertTrue('fixture: the content is not symmetric on the bar',
+      T.CaptionLayout.Content.Left + T.CaptionLayout.Content.Right <> 1000);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('the span is centred on the bar, not on the content', 1000, l + r);
+    AssertTrue('and stays inside the content', (l >= T.CaptionLayout.Content.Left)
+      and (r <= T.CaptionLayout.Content.Right));
+  finally F.Free; end;
+end;
+
+procedure TTitleBarCaptionGapTest.TestACentredCaptionThatWouldTouchAChildCentresInTheWidestGap;
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, 'A much longer window title');
+  try
+    T.TitleAlignment := taCenter;
+    Kid(T, 40, 440);      { 40..480: twenty pixels short of the middle }
+    Kid(T, 760, 60);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('the widest gap starts after the left group', 480, l);
+    AssertEquals('and ends at the right one', 760, r);
+  finally F.Free; end;
+end;
+
+procedure TTitleBarCaptionGapTest.TestAChildAcrossTheMiddleSendsACentredCaptionToTheWidestGap;
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, 'Title');
+  try
+    T.TitleAlignment := taCenter;
+    Kid(T, 450, 100);     { 450..550, across the middle }
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertTrue('fixture: the gap before it is the wider',
+      450 - T.CaptionLayout.Content.Left > T.CaptionLayout.Content.Right - 550);
+    AssertEquals('the caption takes the gap before it', T.CaptionLayout.Content.Left, l);
+    AssertEquals('up to the child', 450, r);
   finally F.Free; end;
 end;
 
