@@ -156,6 +156,7 @@ type
     procedure TestWidestScanSkipsPerCharMeasure;
     procedure TestTotalWidthEqualsLastPrefix;
     procedure TestWidestScanMeasuresOnlyLinesThatCouldWin;
+    procedure TestTheWidestScanStaysShortAfterAFontChange;
   end;
 
 implementation
@@ -1475,6 +1476,59 @@ begin
     hit the content cache). }
   AssertTrue(Format('only lines that could win are measured whole: %d of %d',
     [measured, FMemo.Lines.Count]), measured < FMemo.Lines.Count div 10);
+end;
+
+procedure TTyMemoTest.TestTheWidestScanStaysShortAfterAFontChange;
+// The per-character widths behind the widest-line estimates belong to one font. After a font
+// change they are dropped wherever the width caches are: by the widest scan itself, or by the
+// per-character or the whole-line measuring if one of those notices the new font first (it then
+// records the font, and the scan sees nothing to drop). Kept from a larger font, every estimate is
+// about twice the real width, nothing ever falls below the widest measured, and the scan measures
+// nearly every line whole again -- the stall it exists to avoid. (Many of these lines are close to
+// the widest, so a right scan measures about a tenth of them; a stale one measures them all.)
+const
+  N = 3000;
+  CSS_BIG = 'TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:28px; }';
+  CSS_SMALL = 'TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }';
+var
+  L: TStringList;
+  path, i, big, small, before, measured: Integer;
+begin
+  for path := 0 to 2 do
+  begin
+    SetUpWithCss(CSS_BIG);
+    FMemo.WordWrap := False;
+    L := TStringList.Create;
+    try
+      for i := 0 to N - 1 do
+        case i mod 3 of
+          0: L.Add(StringOfChar(' ', 2 * (i mod 9)) + '"name": "' + IntToStr(i) + '",');
+          1: L.Add('    "value": ' + IntToStr(i * 37));
+        else
+          L.Add(StringOfChar('W', 6 + i mod 5) + IntToStr(i));
+        end;
+      FMemo.Lines := L;
+    finally
+      L.Free;
+    end;
+    big := FMemo.ProbeWidestLineWidth(96);
+    FCtl.LoadThemeCss(CSS_SMALL);
+    case path of
+      1: FMemo.ProbeMeasureLineWidths('x', 96);       { the per-character measuring first }
+      2: FMemo.ProbeMeasureLineTotalWidth('xy', 96);  { the whole-line measuring first }
+    end;
+    before := FMemo.ProbeLineTotalMeasures;
+    small := FMemo.ProbeWidestLineWidth(96);
+    measured := FMemo.ProbeLineTotalMeasures - before;
+    AssertTrue('setup: the font got smaller', small * 3 < big * 2);
+    AssertTrue(Format('path %d: still only the lines that could win: %d of %d',
+      [path, measured, N]), measured < N div 3);
+    if path < 2 then
+    begin
+      FMemo.Free; FMemo := nil;
+      FCtl.Free; FCtl := nil;
+    end;
+  end;
 end;
 
 procedure TTyMemoTest.TestTotalWidthEqualsLastPrefix;
