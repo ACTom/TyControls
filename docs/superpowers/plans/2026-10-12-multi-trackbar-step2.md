@@ -59,6 +59,7 @@
 - 输出：`function Gradient: TTyGradStops`（按值排序的颜色与 0..1 位置）、`function GradientFill(AAngleDeg: Single = 0): TTyFill`（直接交给 `FillBackground` 画同一条渐变）。
   > 【执行时补，Task 4】`TTyGradStops` 原本不存在，在 MultiTrackBar 单元声明为 `array of TTyGradStop`。位置 = `(Value - Min) / (Max - Min)`。`Color = clDefault` 的色标没有自己的颜色，不进 `Gradient`（滑块按主题画）。
   > 【执行时改，Task 4】插值空间：画家的两色快路径（恰好两个色标、位置 0 和 1）用 BGRA 默认的 gamma 校正混色，多色标路径不做 gamma 校正——默认黑→白若走快路径，中间点约 #AAAAAA，加一个色标就整条变样。所以 `GradientFill` 在「恰好 0 / 1 两个色标」时把首个色标重复一次，强制走多色标路径；新色标的颜色按 sRGB 逐通道线性插值（与多色标路径一致），加上后轨道像素变化不超过 1。
+  > 【已推翻，2026-10-13，fix/gradient-gamma】画家的线性渐变两条路径都改成了 sRGB 直接插值（与 CSS 一致），重复色标的绕法不再需要，`GradientFill` 原样交出色标；加色标前后像素差 ≤ 1 的测试照旧通过。
   > 【执行时补，Task 4】轨道经基类新的 protected virtual `PaintGroove`：Min 端滑块中心到 Max 端滑块中心之间画 `GradientFill(按方向的角度)`（水平 0、Reversed 180、竖直 270、竖直 Reversed 90），两端外侧分别用首 / 末色实心延续，最后按主题画凹槽边框；没有带颜色的色标时画普通凹槽。`OnEditStopColor` 处理了就不弹框，色标取处理器留下的 `AColor`（不改即不变）；没处理时对话框以 `AColor` 打开（处理器可预设）。用户改色（颜色确有变化）触发 `OnChange`。空白处双击：第一下加色标、第二下编辑它的颜色。默认值（`AllowCrossing`/`AllowUserThumbs` True、`MinThumbs` 2）在自定义类里重声明（G3b：最终类只能写 `property X;`）。不发布 `Segments` 与 `Pushable`（D6 未列）。真实的 `ExecuteColorDialog` 用 `TTyColorDialog`（它没有 `Controller` 属性，按全局主题显示）。
 
 **D7 主题**：`TyGradientTrackBar` → `TyTrackBar`；新增状态 `:removing`（`TyTrackThumb:removing { opacity: … }`，各内置主题能 resolve 到可见的区别，跨 17 主题 × 亮 / 暗测）、度量 `--track-remove-distance`（light.tycss 定义，其余主题回退）。
@@ -107,5 +108,6 @@
 
 **发现、没修**
 - 画家线性渐变的两色快速路径做 gamma 校正，多色标路径不做；CSS 默认是不做校正的插值。改它会改变现有主题里所有两色渐变的观感，留给用户决定。
+  > 【2026-10-13】用户已拍板改：所有主题渐变按 sRGB 直接插值，见 fix/gradient-gamma。
 - 真实的颜色对话框（`TTyColorDialog`）只经测试替身验证，GUI 里待用户点。
 - 画廊里 trackbar 的截图过期。

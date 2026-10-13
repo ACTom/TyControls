@@ -931,13 +931,13 @@ end;
   (tyControls.Painter.pas:642-679), so a sample taken from it IS the pixel the parent
   painted rather than an approximation of it.
 
-  The two colour paths are NOT interchangeable, which is why this mirrors the painter's
-  choice instead of picking one: >2 stops go through a multi-gradient created with gamma
-  correction OFF, while the 2-stop fast path uses the simple scanner whose
-  gammaColorCorrection argument DEFAULTS to ON. Read a black->white ramp with the wrong one
-  and the middle is out by ~60 levels — which is exactly the seam this whole function
-  exists to remove. AOwned is the multi-gradient (nil on the fast path); the scanner does
-  not own it, so the caller frees both. }
+  It mirrors the painter's choice of path rather than picking one: >2 stops go through a
+  multi-gradient, 2 stops at 0/1 through the simple scanner, BOTH with gamma correction OFF
+  as the painter builds them (plain sRGB, as CSS). The simple scanner's gammaColorCorrection
+  argument DEFAULTS to ON, so it is spelled out: read a black->white ramp gamma-corrected and
+  the middle is out by ~40 levels from what the painter drew — which is exactly the seam
+  this whole function exists to remove. AOwned is the multi-gradient (nil on the fast path);
+  the scanner does not own it, so the caller frees both. }
 function TyGradientScannerFor(const AFill: TTyFill; const ARect: TRect;
   out AOwned: TBGRACustomGradient): TBGRAGradientScanner;
 var
@@ -962,7 +962,7 @@ begin
   end
   else
     Result := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom),
-      TyColorToBGRA(AFill.GradTo), gtLinear, p1, p2);
+      TyColorToBGRA(AFill.GradTo), gtLinear, p1, p2, False);
 end;
 
 { The ONE colour that stands for AFill over ARect: its value at the rect's CENTRE.
@@ -1001,9 +1001,10 @@ end;
   parent stop falling inside the child's span is carried across at its remapped position.
 
   The path is preserved on purpose either side of the painter's rule (TyGradientNeedsStops):
-  a parent drawn through the multi-stop path interpolated without gamma correction, and a
-  two-stop child would silently switch to the gamma-corrected fast path and drift off the
-  ramp it is supposed to continue. When no parent stop lands inside the span, a midpoint
+  both paths blend in plain sRGB, but they round differently (the simple scanner rounds,
+  the multi-gradient truncates), so a two-stop child of a multi-stop parent would switch
+  scanners and could sit a level off the ramp it is supposed to continue. When no parent
+  stop lands inside the span, a midpoint
   sampled from the parent keeps the count above two — collinear, so it changes nothing but
   the path. A two-stop parent off 0 and 1 is a multi-stop parent here too: its stops are
   where the ramp bends, so they are carried across like any other (#49). }
