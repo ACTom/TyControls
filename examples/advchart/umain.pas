@@ -74,6 +74,10 @@ type
     FEntries: array of TGalleryEntry;
     FCategories: TStringList;
     FGalleryDir: string;
+    { The gallery slot the memo and chart now hold, -1 for none. Picking a row
+      in code fires the list's change event as well, so without it one click on
+      a tab loaded the same option two or three times. }
+    FShownSlot: Integer;
     procedure LoadIndex;
     procedure FillCategories;
     procedure FillList;
@@ -246,6 +250,8 @@ begin
   end;
   slot := PtrInt(ExampleList.Items.Objects[ExampleList.ItemIndex]);
   if (slot < 0) or (slot > High(FEntries)) then Exit;
+  if slot = FShownSlot then Exit;
+  FShownSlot := slot;
 
   if not FEntries[slot].Ok then
   begin
@@ -323,6 +329,7 @@ var
   i: Integer;
 begin
   FCategories := TStringList.Create;
+  FShownSlot := -1;
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
