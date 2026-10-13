@@ -2303,6 +2303,32 @@ end;
 // that fits, neither method ever raises FScrollX above 0, so the no-wrap render
 // stays byte-identical to today (FScrollX = 0 collapses every X term).
 
+{ Whether a character's glyph can depend on its neighbours: anything outside the scripts and
+  symbol blocks that are drawn one character to one glyph. Arabic and Hebrew points, Indic and
+  South-East Asian scripts, combining marks, conjoining jamo, joiners, variation selectors and
+  the emoji beyond the BMP all reach here; Latin, Greek, Cyrillic, Armenian, punctuation,
+  symbols, kana, Hangul syllables and CJK do not. Deliberately a list of what is SAFE, so a
+  script nobody thought of is measured whole rather than estimated. }
+function TyNeedsWholeLineShaping(ACode: Cardinal): Boolean;
+begin
+  case ACode of
+    $0000..$02FF,              // ASCII, Latin-1, Latin Extended-A/B, IPA, spacing modifiers
+    $0370..$0482,              // Greek and Coptic, Cyrillic up to its combining marks
+    $048A..$058F,              // the rest of Cyrillic, Cyrillic Supplement, Armenian
+    $1E00..$1FFF,              // Latin Extended Additional, Greek Extended
+    $2000..$200A, $2010..$2027, $202F..$205F, $2070..$20CF,  // punctuation, scripts, currency
+    $2100..$2BFF,              // letterlike, arrows, maths, technical, box, shapes, dingbats
+    $2E80..$3029, $3030..$3098, $309B..$A4CF,  // CJK radicals to Yi, less the combining marks
+    $AC00..$D7A3,              // Hangul syllables
+    $F900..$FAFF,              // CJK compatibility ideographs
+    $FF00..$FFEF,              // half- and full-width forms
+    $20000..$3FFFF:            // CJK extensions
+      Result := False;
+  else
+    Result := True;
+  end;
+end;
+
 function TTyCustomMemo.WidestLineWidth(APPI: Integer): Integer;
 // Widest logical line, in px, exactly as the old full scan found it, without measuring every line.
 // Each whole-line TextSize costs a fixed ~1 ms on top of its length (BGRA sets its font renderer up
@@ -2312,6 +2338,10 @@ function TTyCustomMemo.WidestLineWidth(APPI: Integer): Integer;
 // within one pixel per character of its estimate (each per-character width is rounded on its own),
 // so once an estimate plus the LONGEST line's length (+2) falls below the widest measured so far,
 // no later line can beat it (later lines have smaller estimates; the slack must cover any length).
+// The bound holds only where a line's glyphs are its characters one by one. A line with a character
+// that is shaped with its neighbours (TyNeedsWholeLineShaping: Arabic joining, Indic conjuncts,
+// combining marks, jamo, a ZWJ sequence) can be wider or narrower than its characters' sum by any
+// amount, so it is measured whole up front and takes no part in the estimate order.
 // The scan result is memoised and cleared by InvalidateVisualRows on any text change, and
 // font-signature guarded so a theme/DPI change recomputes.
 var
@@ -2319,6 +2349,7 @@ var
   S: TTyStyleSet;
   sig, line, ch: string;
   est, order: array of Integer;
+  shaped: Boolean;
 
   procedure SortByEstimate(L, R: Integer);
   var a, b, pivot, tmp: Integer;
@@ -2361,15 +2392,21 @@ begin
     SetLength(est, n);
     SetLength(order, n);
     slack := 0;
+    best := 0;
     for i := 0 to n - 1 do
     begin
       line := FLines[i];
       W := 0;
       chars := 0;
+      shaped := False;
       j := 1;
       while j <= Length(line) do
       begin
-        k := UTF8CodepointSize(@line[j]);
+        if TyNeedsWholeLineShaping(UTF8CodepointToUnicode(@line[j], k)) then
+        begin
+          shaped := True;
+          Break;
+        end;
         if k < 1 then k := 1;
         ch := Copy(line, j, k);
         if not FCharWidthCache.TryGetValue(ch, cnt) then
@@ -2384,15 +2421,22 @@ begin
         Inc(chars);
         Inc(j, k);
       end;
+      order[i] := i;
+      if shaped then
+      begin
+        { measured whole now; -1 sorts it last and the scan below never reaches it }
+        W := MeasureLineTotalWidth(line, APPI);
+        if W > best then best := W;
+        est[i] := -1;
+        Continue;
+      end;
       if chars + 2 > slack then slack := chars + 2;
       est[i] := W;
-      order[i] := i;
     end;
     if n > 1 then SortByEstimate(0, n - 1);
-    best := 0;
     for i := 0 to n - 1 do
     begin
-      if est[order[i]] + slack < best then Break;
+      if (est[order[i]] < 0) or (est[order[i]] + slack < best) then Break;
       W := MeasureLineTotalWidth(FLines[order[i]], APPI);
       if W > best then best := W;
     end;
