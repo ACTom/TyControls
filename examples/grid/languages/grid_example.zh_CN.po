@@ -749,7 +749,7 @@ msgid "Button cell clicked: (col %d, row %d) — pressing then dragging off the 
 msgstr "按钮格被点击：(列 %d, 行 %d) —— 按下后拖出按钮再松手不算数"
 
 #: umain.rsbtngroup2
-msgid "Group by region + product"
+msgid "Group region+product"
 msgstr "按大区 + 产品分组"
 
 #: umain.rsbtngroupregion
