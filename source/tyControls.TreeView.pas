@@ -3119,8 +3119,9 @@ begin
   if not Enabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
 
-  // ③d B1: page/wheel estimates use FDefaultNodeHeight even under
-  // toVariableNodeHeight — an acceptable approximation (no per-node walk here).
+  // ③d B1: a notch scrolls three default rows' worth of pixels, also under
+  // toVariableNodeHeight: the wheel moves the view by a distance, not by rows
+  // (Page Up / Page Down count the rows' own heights, #76).
   step := 3 * GetDefaultNodeHeight;
   if WheelDelta > 0 then Delta :=  step   // scroll up
   else                    Delta := -step;  // scroll down
@@ -6981,7 +6982,7 @@ end;
 procedure TTyTreeView.KeyDown(var Key: Word; Shift: TShiftState);
 var
   cur, nxt: PTyTreeNode;
-  viewH, rowH, pgRows, i: Integer;
+  viewH, acc: Integer;
   colIdx: Integer;   { E3: effective edit column for F2 }
 begin
   inherited KeyDown(Key, Shift);
@@ -7154,19 +7155,19 @@ begin
     begin
       if cur <> nil then
       begin
-        { ③d B1: page estimate uses FDefaultNodeHeight even with variable
-          heights — acceptable approximation (ScrollIntoView corrects the view). }
-        rowH  := MulDiv(GetDefaultNodeHeight, Font.PixelsPerInch, 96);
+        { #76: a page of the rows themselves -- the furthest row whose top is within a page
+          of the focused one's, at least one row. It was as many rows as a page holds of
+          DefaultNodeHeight, which with rows of their own height (toVariableNodeHeight,
+          NodeHeight[]) is not a page: taller rows, and one press skipped pages of them.
+          For rows of the default height it is the same count. }
         viewH := ContentRect.Bottom - ContentRect.Top;
-        if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
-        if pgRows < 1 then pgRows := 1;
         nxt := cur;
-        for i := 1 to pgRows do
+        acc := 0;
+        while GetPreviousVisibleNoInit(nxt) <> nil do
         begin
-          if GetPreviousVisibleNoInit(nxt) <> nil then
-            nxt := GetPreviousVisibleNoInit(nxt)
-          else
-            Break;
+          Inc(acc, MulDiv(GetPreviousVisibleNoInit(nxt)^.NodeHeight, Font.PixelsPerInch, 96));
+          if (acc > viewH) and (nxt <> cur) then Break;
+          nxt := GetPreviousVisibleNoInit(nxt);
         end;
         NavigateTo(nxt, ssShift in Shift);   { #72: Shift extends the range }
         ScrollIntoView(nxt);
@@ -7179,17 +7180,15 @@ begin
       if cur = nil then cur := GetFirstVisibleNoInit;
       if cur <> nil then
       begin
-        rowH  := MulDiv(GetDefaultNodeHeight, Font.PixelsPerInch, 96);
+        { #76: as Page Up -- a step over a row moves the focus by that row's height. }
         viewH := ContentRect.Bottom - ContentRect.Top;
-        if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
-        if pgRows < 1 then pgRows := 1;
         nxt := cur;
-        for i := 1 to pgRows do
+        acc := 0;
+        while GetNextVisibleNoInit(nxt) <> nil do
         begin
-          if GetNextVisibleNoInit(nxt) <> nil then
-            nxt := GetNextVisibleNoInit(nxt)
-          else
-            Break;
+          Inc(acc, MulDiv(nxt^.NodeHeight, Font.PixelsPerInch, 96));
+          if (acc > viewH) and (nxt <> cur) then Break;
+          nxt := GetNextVisibleNoInit(nxt);
         end;
         NavigateTo(nxt, ssShift in Shift);   { #72: Shift extends the range }
         ScrollIntoView(nxt);

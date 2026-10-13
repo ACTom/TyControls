@@ -223,6 +223,7 @@ type
     procedure TestTurningTheOptionOnMeasuresTheNodesThatExist;
     procedure TestTurningTheOptionOnLeavesTheRestToInitNode;
     procedure TestAZeroFromAMeasureLaterIsIgnoredToo;
+    procedure TestPageDownAndUpMoveAPageOfRowsOfTheirOwnHeight;
     procedure TestTurningTheOptionOffDropsTheMeasuredHeights;
     procedure TestDefaultNodeHeightReachesTheNodesThatExist;
     procedure TestADensitySwitchReachesTheRowsThatExist;
@@ -9729,6 +9730,112 @@ begin
       n := n^.NextSibling;
     end;
     AssertEquals('content', 4 * 18, t.ContentHeight);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Page Down / Page Up moved the focus by as many rows as fit a page of DefaultNodeHeight
+  rows. With rows of their own height (toVariableNodeHeight, NodeHeight[]) that is not a
+  page: rows taller than the default, and one press skipped pages of them. A page is now
+  the rows themselves -- the focus moves to the furthest row whose top is within a page of
+  where it was. }
+procedure TTreeB1VariableHeightTest.TestPageDownAndUpMoveAPageOfRowsOfTheirOwnHeight;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  rows: array[0..29] of PTyTreeNode;
+  i, viewH: Integer;
+  key: Word;
+  got: PTyTreeNode;
+
+  function TopOf(ANode: PTyTreeNode): Integer;
+  var
+    n: PTyTreeNode;
+  begin
+    Result := 0;
+    n := t.RootNode^.FirstChild;
+    while n <> ANode do
+    begin
+      Inc(Result, t.NodeHeight[n]);
+      n := n^.NextSibling;
+    end;
+  end;
+
+  function IndexOf(ANode: PTyTreeNode): Integer;
+  begin
+    for Result := 0 to High(rows) do
+      if rows[Result] = ANode then Exit;
+    Result := -1;
+  end;
+
+begin
+  t := BuildFlatTree(Ctl, F, 30, False);
+  try
+    t.SetBounds(0, 0, 200, 200);
+    rows[0] := t.RootNode^.FirstChild;
+    for i := 1 to High(rows) do rows[i] := rows[i - 1]^.NextSibling;
+    t.NodeHeight[rows[0]] := 100;
+    for i := 1 to High(rows) do t.NodeHeight[rows[i]] := 20 + 10 * (i mod 3);
+    viewH := t.ContentRect.Bottom - t.ContentRect.Top;
+    AssertTrue('setup: a page holds a few rows, not all', (viewH > 120) and (viewH < 400));
+
+    t.FocusedNode := rows[0];
+    key := VK_NEXT;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    {$POP}
+    got := t.FocusedNode;
+    AssertTrue('Page Down moved', got <> rows[0]);
+    AssertTrue('Page Down: within a page (row ' + IntToStr(IndexOf(got)) + ')',
+      TopOf(got) - TopOf(rows[0]) <= viewH);
+    AssertTrue('Page Down: the furthest row within a page (row ' + IntToStr(IndexOf(got)) + ')',
+      TopOf(got^.NextSibling) - TopOf(rows[0]) > viewH);
+
+    t.FocusedNode := rows[25];
+    key := VK_PRIOR;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    {$POP}
+    got := t.FocusedNode;
+    AssertTrue('Page Up moved', got <> rows[25]);
+    AssertTrue('Page Up: within a page (row ' + IntToStr(IndexOf(got)) + ')',
+      TopOf(rows[25]) - TopOf(got) <= viewH);
+    AssertTrue('Page Up: the furthest row within a page (row ' + IntToStr(IndexOf(got)) + ')',
+      TopOf(rows[25]) - TopOf(got^.PrevSibling) > viewH);
+
+    { a row whose top is exactly a page further is within it -- what makes rows of the
+      default height move the same count as before }
+    t.NodeHeight[rows[10]] := viewH - 40;
+    t.NodeHeight[rows[11]] := 20;
+    t.NodeHeight[rows[12]] := 20;
+    t.FocusedNode := rows[10];
+    key := VK_NEXT;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    {$POP}
+    AssertEquals('Page Down to a row exactly a page away', 13, IndexOf(t.FocusedNode));
+    t.NodeHeight[rows[13]] := 20;
+    t.NodeHeight[rows[12]] := viewH - 40;
+    t.FocusedNode := rows[14];
+    key := VK_PRIOR;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    {$POP}
+    AssertEquals('Page Up to a row exactly a page away', 11, IndexOf(t.FocusedNode));
+
+    { a row taller than a page: still one row a press }
+    t.NodeHeight[rows[27]] := 3 * viewH;
+    t.FocusedNode := rows[27];
+    key := VK_NEXT;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    {$POP}
+    AssertEquals('Page Down from a row taller than a page', 28, IndexOf(t.FocusedNode));
+    key := VK_PRIOR;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    {$POP}
+    AssertEquals('Page Up onto a row taller than a page', 27, IndexOf(t.FocusedNode));
   finally
     F.Free; Ctl.Free;
   end;
