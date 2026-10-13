@@ -41,6 +41,7 @@ type
     function ProbeWidestLineWidth(APPI: Integer): Integer;
     function ProbeMeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
     function ProbeMeasureLineWidthsCalls: Integer;
+    function ProbeLineTotalMeasures: Integer;
   end;
 
   { Clipboard-access subclass: routes the virtual clipboard hooks to an in-memory
@@ -154,6 +155,8 @@ type
     // --- Perf regression (file-preview bulk-load stall) ---
     procedure TestWidestScanSkipsPerCharMeasure;
     procedure TestTotalWidthEqualsLastPrefix;
+    procedure TestWidestScanMeasuresOnlyLinesThatCouldWin;
+    procedure TestTheWidestScanStaysShortAfterAFontChange;
   end;
 
 implementation
@@ -297,6 +300,11 @@ end;
 function TTyMemoProbe.ProbeMeasureLineWidthsCalls: Integer;
 begin
   Result := FMeasureLineWidthsCalls;
+end;
+
+function TTyMemoProbe.ProbeLineTotalMeasures: Integer;
+begin
+  Result := FLineTotalMeasures;
 end;
 
 { TTyMemoClipAccess }
@@ -1415,6 +1423,112 @@ begin
     [callsAfter - callsBefore]), (callsAfter - callsBefore) <= 2);
   // A second scan is fully memoised — no new per-char calls, same result.
   AssertEquals('widest is stable across repeat scans', widest, FMemo.ProbeWidestLineWidth(96));
+end;
+
+procedure TTyMemoTest.TestWidestScanMeasuresOnlyLinesThatCouldWin;
+// A 57 000-line JSON option took ~50 s to load into the AdvChart demo's memo: the widest-line scan
+// measured every line whole, and each whole-line TextSize costs ~1 ms however short the line. The
+// scan now estimates each line from cached per-character widths and measures whole only the lines
+// that could still be the widest. Two things must hold: the answer is EXACTLY the exhaustive one
+// (lines whose estimate order differs from their real order are in the text: narrow 'i' runs
+// against wide 'W' runs, CJK, indentation), and the number of whole-line measurements is a small
+// fraction of the line count (a call count, not a clock).
+const
+  N = 20000;
+var
+  L: TStringList;
+  i, before, measured, widest, exhaustive: Integer;
+begin
+  SetUpWithCss('TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }');
+  FMemo.WordWrap := False;
+  L := TStringList.Create;
+  try
+    for i := 0 to N - 1 do
+      case i mod 7 of
+        0: L.Add(StringOfChar(' ', 2 * (i mod 9)) + '"name": "' + IntToStr(i) + '",');
+        1: L.Add(StringOfChar(' ', 2 * (i mod 9)) + '[' + IntToStr(i * 37) + ', ' + IntToStr(i) + '],');
+        2: L.Add(StringOfChar('i', 20 + i mod 13));
+        3: L.Add(StringOfChar('W', 6 + i mod 5));
+        4: L.Add('    "value": ' + FloatToStr(i / 7));
+        5: L.Add(#$E5#$9B#$BE#$E8#$A1#$A8 + ' ' + IntToStr(i));
+      else
+        L.Add('');
+      end;
+    L.Insert(N div 2, StringOfChar('W', 30) + StringOfChar('i', 3));
+    { counted from before the assignment: loading the lines already asks for the scroll range }
+    before := FMemo.ProbeLineTotalMeasures;
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+
+  widest := FMemo.ProbeWidestLineWidth(96);
+  measured := FMemo.ProbeLineTotalMeasures - before;
+
+  exhaustive := 0;
+  for i := 0 to FMemo.Lines.Count - 1 do
+    if FMemo.ProbeMeasureLineTotalWidth(FMemo.Lines[i], 96) > exhaustive then
+      exhaustive := FMemo.ProbeMeasureLineTotalWidth(FMemo.Lines[i], 96);
+  AssertTrue('a real width was measured', exhaustive > 0);
+  AssertEquals('the widest line is the one an exhaustive scan finds', exhaustive, widest);
+  { The slack is a pixel per character, deliberately loose, so the few hundred JSON-like lines
+    near the widest width are measured too (~5% here); measuring everything is 57%+ (the rest
+    hit the content cache). }
+  AssertTrue(Format('only lines that could win are measured whole: %d of %d',
+    [measured, FMemo.Lines.Count]), measured < FMemo.Lines.Count div 10);
+end;
+
+procedure TTyMemoTest.TestTheWidestScanStaysShortAfterAFontChange;
+// The per-character widths behind the widest-line estimates belong to one font. After a font
+// change they are dropped wherever the width caches are: by the widest scan itself, or by the
+// per-character or the whole-line measuring if one of those notices the new font first (it then
+// records the font, and the scan sees nothing to drop). Kept from a larger font, every estimate is
+// about twice the real width, nothing ever falls below the widest measured, and the scan measures
+// nearly every line whole again -- the stall it exists to avoid. (Many of these lines are close to
+// the widest, so a right scan measures about a tenth of them; a stale one measures them all.)
+const
+  N = 3000;
+  CSS_BIG = 'TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:28px; }';
+  CSS_SMALL = 'TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }';
+var
+  L: TStringList;
+  path, i, big, small, before, measured: Integer;
+begin
+  for path := 0 to 2 do
+  begin
+    SetUpWithCss(CSS_BIG);
+    FMemo.WordWrap := False;
+    L := TStringList.Create;
+    try
+      for i := 0 to N - 1 do
+        case i mod 3 of
+          0: L.Add(StringOfChar(' ', 2 * (i mod 9)) + '"name": "' + IntToStr(i) + '",');
+          1: L.Add('    "value": ' + IntToStr(i * 37));
+        else
+          L.Add(StringOfChar('W', 6 + i mod 5) + IntToStr(i));
+        end;
+      FMemo.Lines := L;
+    finally
+      L.Free;
+    end;
+    big := FMemo.ProbeWidestLineWidth(96);
+    FCtl.LoadThemeCss(CSS_SMALL);
+    case path of
+      1: FMemo.ProbeMeasureLineWidths('x', 96);       { the per-character measuring first }
+      2: FMemo.ProbeMeasureLineTotalWidth('xy', 96);  { the whole-line measuring first }
+    end;
+    before := FMemo.ProbeLineTotalMeasures;
+    small := FMemo.ProbeWidestLineWidth(96);
+    measured := FMemo.ProbeLineTotalMeasures - before;
+    AssertTrue('setup: the font got smaller', small * 3 < big * 2);
+    AssertTrue(Format('path %d: still only the lines that could win: %d of %d',
+      [path, measured, N]), measured < N div 3);
+    if path < 2 then
+    begin
+      FMemo.Free; FMemo := nil;
+      FCtl.Free; FCtl := nil;
+    end;
+  end;
 end;
 
 procedure TTyMemoTest.TestTotalWidthEqualsLastPrefix;
