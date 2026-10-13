@@ -703,6 +703,8 @@ type
     procedure SetFocusedNode(AValue: PTyTreeNode);
     { D1: move focus without touching selection (multi-select helper) }
     procedure MoveFocusOnly(AValue: PTyTreeNode);
+    { #72: a keyboard or mouse move to ANode -- see the implementation. }
+    procedure NavigateTo(ANode: PTyTreeNode; AExtend: Boolean);
     { D1: Ctrl+Shift additive range extension — add anchor..target to current selection }
     procedure AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
     function  MakeNewNode: PTyTreeNode;
@@ -2008,7 +2010,7 @@ begin
   nxt := GetNextVisibleNoInit(Node);
   if (nxt <> nil) and (nxt^.Parent = Node) then
   begin
-    FocusedNode := nxt;
+    NavigateTo(nxt, False);   { #72 }
     ScrollIntoView(nxt);
   end;
 end;
@@ -2027,7 +2029,7 @@ begin
   nxt := GetParent(Node);
   if nxt <> nil then
   begin
-    FocusedNode := nxt;
+    NavigateTo(nxt, False);   { #72 }
     ScrollIntoView(nxt);
   end;
 end;
@@ -2082,9 +2084,13 @@ begin
       is not happening. }
     if not DoChanging(Node) then Exit;
     ClearSelectedNode;             // deselects previous (adjusts FSelectionCount)
-    Include(Node^.States, nsSelected);
+    { #72: in a multi-selection the node may be selected already, and was counted twice. }
+    if not (nsSelected in Node^.States) then
+    begin
+      Include(Node^.States, nsSelected);
+      Inc(FSelectionCount);        { A3: count the new selection }
+    end;
     FSelectedNode := Node;
-    Inc(FSelectionCount);          { A3: count the new selection }
   end
   else
   begin
@@ -2391,6 +2397,42 @@ begin
   Invalidate;
 end;
 
+{ #72. A keyboard or mouse move to ANode. In a multi-select tree a plain move collapses the
+  selection to ANode -- what Up and Down always did -- and AExtend (Shift) selects the
+  range from the anchor instead; either way OnSelectionChanged follows. Otherwise focusing
+  selects (SetFocusedNode). Every move that is not a Ctrl or Shift click comes through
+  here: Page Up / Down, Left / Right onto a parent or a child, type-to-find, a click in
+  the indent and a right click went through FocusedNode, single-select logic, and left
+  the rest of a multi-selection behind. }
+procedure TTyCustomTreeView.NavigateTo(ANode: PTyTreeNode; AExtend: Boolean);
+begin
+  if ANode = nil then Exit;
+  if not (toMultiSelect in FOptions) then
+  begin
+    FocusedNode := ANode;
+    Exit;
+  end;
+  if AExtend then
+  begin
+    if FRangeAnchor = nil then
+    begin
+      if FFocusedNode <> nil then FRangeAnchor := FFocusedNode
+      else FRangeAnchor := ANode;
+    end;
+    MoveFocusOnly(ANode);
+    SelectRange(FRangeAnchor, ANode);
+  end
+  else
+  begin
+    ClearSelection;
+    InternalSetSelected(ANode, True);
+    FRangeAnchor := ANode;
+    MoveFocusOnly(ANode);
+  end;
+  Invalidate;
+  if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+end;
+
 { AddRangeToSelection — Ctrl+Shift additive extend: add every visible node
   from AAnchor to ATarget (inclusive, order-independent) to the EXISTING
   selection without clearing.  InternalSetSelected ignores already-selected nodes. }
@@ -2503,7 +2545,7 @@ begin
   begin
     if NodeMatchesSearch(n, FSearchBuffer) then
     begin
-      FocusedNode := n;     // selects (single-select rule) + fires OnFocusChanged
+      NavigateTo(n, False); // #72: selects only n, in a multi-select tree too
       ScrollIntoView(n);    // SetFocusedNode does not scroll on its own
       Exit;
     end;
@@ -6560,8 +6602,9 @@ begin
         end
         else
         begin
-          { Indent-only click without toFullRowSelect — treat as focus/select (③b) }
-          FocusedNode := node;
+          { Indent-only click without toFullRowSelect — treat as focus/select (③b);
+            #72: a plain click, so the rest of the selection goes. }
+          NavigateTo(node, False);
           if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
         end;
       end
@@ -6584,7 +6627,14 @@ begin
       can turn it off. Ours defaults True — the shipped behaviour — where LCL
       defaults False. }
     if FRightClickSelect and (node <> nil) then
-      FocusedNode := node;
+    begin
+      { #72: a right click on a selected node is about the whole selection -- keep it and
+        move only the focus; on any other node it selects that node alone. }
+      if (toMultiSelect in FOptions) and (nsSelected in node^.States) then
+        MoveFocusOnly(node)
+      else
+        NavigateTo(node, False);
+    end;
   end;
 
   { ③f F2: ARM a node drag (selection above already happened). Gate on toNodeDrag
@@ -7108,22 +7158,8 @@ begin
         nxt := GetNextVisibleNoInit(cur);
       if nxt <> nil then
       begin
-        if toMultiSelect in FOptions then
-        begin
-          { Plain Down in multi-select: collapse to single selection + reset anchor }
-          ClearSelection;
-          InternalSetSelected(nxt, True);
-          FRangeAnchor := nxt;
-          MoveFocusOnly(nxt);
-          Invalidate;
-          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
-          ScrollIntoView(nxt);
-        end
-        else
-        begin
-          FocusedNode := nxt;
-          ScrollIntoView(nxt);
-        end;
+        NavigateTo(nxt, False);   { #72 (Shift+Down is handled above) }
+        ScrollIntoView(nxt);
       end;
       Key := 0;
     end;
@@ -7135,22 +7171,8 @@ begin
         nxt := GetPreviousVisibleNoInit(cur);
         if nxt <> nil then
         begin
-          if toMultiSelect in FOptions then
-          begin
-            { Plain Up in multi-select: collapse to single selection + reset anchor }
-            ClearSelection;
-            InternalSetSelected(nxt, True);
-            FRangeAnchor := nxt;
-            MoveFocusOnly(nxt);
-            Invalidate;
-            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
-            ScrollIntoView(nxt);
-          end
-          else
-          begin
-            FocusedNode := nxt;
-            ScrollIntoView(nxt);
-          end;
+          NavigateTo(nxt, False);   { #72 (Shift+Up is handled above) }
+          ScrollIntoView(nxt);
         end;
       end;
       Key := 0;
@@ -7180,21 +7202,8 @@ begin
       nxt := GetFirstVisibleNoInit;
       if nxt <> nil then
       begin
-        if toMultiSelect in FOptions then
-        begin
-          ClearSelection;
-          InternalSetSelected(nxt, True);
-          FRangeAnchor := nxt;
-          MoveFocusOnly(nxt);
-          Invalidate;
-          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
-          ScrollIntoView(nxt);
-        end
-        else
-        begin
-          FocusedNode := nxt;
-          ScrollIntoView(nxt);
-        end;
+        NavigateTo(nxt, ssShift in Shift);   { #72: Shift extends the range }
+        ScrollIntoView(nxt);
       end;
       Key := 0;
     end;
@@ -7207,21 +7216,8 @@ begin
       begin
         while GetNextVisibleNoInit(nxt) <> nil do
           nxt := GetNextVisibleNoInit(nxt);
-        if toMultiSelect in FOptions then
-        begin
-          ClearSelection;
-          InternalSetSelected(nxt, True);
-          FRangeAnchor := nxt;
-          MoveFocusOnly(nxt);
-          Invalidate;
-          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
-          ScrollIntoView(nxt);
-        end
-        else
-        begin
-          FocusedNode := nxt;
-          ScrollIntoView(nxt);
-        end;
+        NavigateTo(nxt, ssShift in Shift);   { #72: Shift extends the range }
+        ScrollIntoView(nxt);
       end;
       Key := 0;
     end;
@@ -7244,7 +7240,7 @@ begin
           else
             Break;
         end;
-        FocusedNode := nxt;
+        NavigateTo(nxt, ssShift in Shift);   { #72: Shift extends the range }
         ScrollIntoView(nxt);
       end;
       Key := 0;
@@ -7267,7 +7263,7 @@ begin
           else
             Break;
         end;
-        FocusedNode := nxt;
+        NavigateTo(nxt, ssShift in Shift);   { #72: Shift extends the range }
         ScrollIntoView(nxt);
       end;
       Key := 0;

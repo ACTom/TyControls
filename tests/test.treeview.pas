@@ -7647,6 +7647,12 @@ type
     FSelChangedCount: Integer;
     procedure OnSelChanged(Sender: TObject);
     function BuildKeyTree(out nodes: array of PTyTreeNode): TTyTreeView;
+    { #72: "a.." "e.." for the five roots, "x.." for a child. }
+    procedure KeyText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    { #72: rows 0..3 selected by a click and a Shift+click, focus on row 3. }
+    procedure SelectFirstFour(t: TTyTreeView);
+    { #72: SelectedCount agrees with the nodes that carry nsSelected. }
+    procedure AssertCountIsTrue(t: TTyTreeView; const AWhen: string);
   published
     { Shift+Down extends selection by one; anchor stays }
     procedure TestShiftDownExtendsRange;
@@ -7668,7 +7674,46 @@ type
     procedure TestMultiSelectOffCtrlSpaceNoOp;
     { toMultiSelect OFF → Shift+Down single-selects (no extension) }
     procedure TestMultiSelectOffShiftDownSingleSelect;
+    procedure TestEveryPlainMoveCollapsesAMultiSelection;
+    procedure TestARightClickOnASelectedNodeKeepsTheSelection;
+    procedure TestFocusingASelectedNodeKeepsTheCountTrue;
+    procedure TestShiftWithHomeEndAndThePagesExtendTheRange;
   end;
+
+procedure TTreeD2MultiSelectKeyboardTest.KeyText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Text := Chr(Ord('a') + Integer(Node^.Index)) + 'node'
+  else
+    Text := 'xchild';
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.SelectFirstFour(t: TTyTreeView);
+begin
+  {$PUSH}{$HINTS OFF}
+  TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);         { row 0 }
+  TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 70);  { row 3 }
+  {$POP}
+  AssertEquals('setup: rows 0..3 selected', 4, t.SelectedCount);
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.AssertCountIsTrue(t: TTyTreeView;
+  const AWhen: string);
+var
+  n: PTyTreeNode;
+  marked: Integer;
+begin
+  marked := 0;
+  n := t.GetFirstSelected;
+  while n <> nil do
+  begin
+    Inc(marked);
+    n := t.GetNextSelected(n);
+  end;
+  AssertEquals(AWhen + ': SelectedCount is the number of selected nodes', marked,
+    t.SelectedCount);
+end;
 
 procedure TTreeD2MultiSelectKeyboardTest.OnSelChanged(Sender: TObject);
 begin
@@ -7884,6 +7929,177 @@ begin
     AssertEquals('D2 no-fullrow far: count=1', 1, t.SelectedCount);
     AssertTrue('D2 no-fullrow far: node[2] selected', nsSelected in nodes[2]^.States);
   finally t.Free; end;
+end;
+
+{ #72. In a multi-select tree a move without a modifier leaves one node selected,
+  the one it lands on, and says so (OnSelectionChanged) -- plain Up, Down, Home and End
+  always did. Page Up / Page Down, Left / Right onto a parent or a child, type-to-find, a
+  click in the indent and a right click on an unselected node moved the focus and left the
+  rest of the selection behind, unannounced. Rows are 20 px; the tree is 200 high, so a
+  page reaches either end of the five rows. }
+procedure TTreeD2MultiSelectKeyboardTest.TestEveryPlainMoveCollapsesAMultiSelection;
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+  ch: TUTF8Char;
+  child: PTyTreeNode;
+
+  procedure Collapsed(ANode: PTyTreeNode; const AHow: string);
+  begin
+    AssertEquals(AHow + ': one node selected', 1, t.SelectedCount);
+    AssertTrue(AHow + ': the one it moved to', nsSelected in ANode^.States);
+    AssertTrue(AHow + ': and it holds the focus', t.FocusedNode = ANode);
+    AssertTrue(AHow + ': and it was announced', FSelChangedCount > 0);
+    AssertCountIsTrue(t, AHow);
+  end;
+
+begin
+  t := BuildKeyTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    t.OnGetText := @KeyText;
+    {$PUSH}{$HINTS OFF}
+    SelectFirstFour(t);
+    FSelChangedCount := 0;
+    key := VK_NEXT;
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    Collapsed(nodes[4], 'Page Down');
+
+    SelectFirstFour(t);
+    FSelChangedCount := 0;
+    key := VK_PRIOR;
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    Collapsed(nodes[0], 'Page Up');
+
+    t.Options := t.Options + [toIncrementalSearch];
+    SelectFirstFour(t);
+    FSelChangedCount := 0;
+    ch := 'c';
+    TTyTreeViewAccess(t).UTF8KeyPress(ch);
+    Collapsed(nodes[2], 'type-to-find');
+
+    SelectFirstFour(t);
+    FSelChangedCount := 0;
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 5, 50);           { row 2, in the indent }
+    Collapsed(nodes[2], 'a click in the indent');
+
+    SelectFirstFour(t);
+    FSelChangedCount := 0;
+    TTyTreeViewAccess(t).MouseDown(mbRight, [], 30, 90);         { row 4, not selected }
+    Collapsed(nodes[4], 'a right click on an unselected node');
+
+    { Left from a child onto its parent; then Right back into the child. }
+    child := t.AddChild(nodes[0]);
+    t.Expanded[nodes[0]] := True;                                { row 1 is the child }
+    { The child's caption starts at x 32 (level 1). A click on row 3, then Shift on the
+      child: rows 1..3 selected, the focus on the child -- and the last plain pick, row 3,
+      is not the node Left moves to, so a move that only swaps the last pick shows. }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 70);          { row 3 }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 40, 30);   { the child, row 1 }
+    AssertEquals('setup: rows 1..3 selected', 3, t.SelectedCount);
+    AssertTrue('setup: the focus on the child', t.FocusedNode = child);
+    FSelChangedCount := 0;
+    key := VK_LEFT;
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    Collapsed(nodes[0], 'Left onto the parent');
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 50);   { rows 0..2 }
+    FSelChangedCount := 0;
+    t.FocusedNode := nodes[0];
+    key := VK_RIGHT;
+    TTyTreeViewAccess(t).KeyDown(key, []);
+    Collapsed(child, 'Right into the child');
+    {$POP}
+  finally
+    t.Free;
+  end;
+end;
+
+{ #72. A right click on a node that is already selected keeps the selection -- the
+  context menu that follows is about all of it -- and moves only the focus there. }
+procedure TTreeD2MultiSelectKeyboardTest.TestARightClickOnASelectedNodeKeepsTheSelection;
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    SelectFirstFour(t);
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbRight, [], 30, 30);         { row 1, selected }
+    {$POP}
+    AssertEquals('the four stay selected', 4, t.SelectedCount);
+    AssertTrue('row 1 among them', nsSelected in nodes[1]^.States);
+    AssertTrue('row 0 too', nsSelected in nodes[0]^.States);
+    AssertTrue('the focus is on the clicked node', t.FocusedNode = nodes[1]);
+    AssertCountIsTrue(t, 'a right click on a selected node');
+  finally
+    t.Free;
+  end;
+end;
+
+{ #72. Focusing a node that is already in the selection, but is not the last one
+  selected, counted it a second time. }
+procedure TTreeD2MultiSelectKeyboardTest.TestFocusingASelectedNodeKeepsTheCountTrue;
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    SelectFirstFour(t);
+    t.FocusedNode := nodes[1];
+    AssertCountIsTrue(t, 'FocusedNode := a selected node');
+  finally
+    t.Free;
+  end;
+end;
+
+{ #72. Shift extends the range from the anchor with Home, End and the pages as it
+  does with Up and Down; they collapsed the selection instead. }
+procedure TTreeD2MultiSelectKeyboardTest.TestShiftWithHomeEndAndThePagesExtendTheRange;
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+
+  procedure Range(AFrom, ATo: Integer; const AHow: string);
+  var
+    i: Integer;
+  begin
+    AssertEquals(AHow + ': the range''s size', ATo - AFrom + 1, t.SelectedCount);
+    for i := 0 to 4 do
+      AssertEquals(AHow + ': row ' + IntToStr(i), (i >= AFrom) and (i <= ATo),
+        nsSelected in nodes[i]^.States);
+    AssertCountIsTrue(t, AHow);
+  end;
+
+begin
+  t := BuildKeyTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 50);          { row 2: the anchor }
+    FSelChangedCount := 0;
+    key := VK_END;
+    TTyTreeViewAccess(t).KeyDown(key, [ssShift]);
+    Range(2, 4, 'Shift+End');
+    AssertTrue('Shift+End: on the last row', t.FocusedNode = nodes[4]);
+    AssertTrue('Shift+End: announced', FSelChangedCount > 0);
+    key := VK_HOME;
+    TTyTreeViewAccess(t).KeyDown(key, [ssShift]);
+    Range(0, 2, 'Shift+Home');
+    AssertTrue('Shift+Home: on the first row', t.FocusedNode = nodes[0]);
+    key := VK_NEXT;
+    TTyTreeViewAccess(t).KeyDown(key, [ssShift]);
+    Range(2, 4, 'Shift+Page Down');
+    key := VK_PRIOR;
+    TTyTreeViewAccess(t).KeyDown(key, [ssShift]);
+    Range(0, 2, 'Shift+Page Up');
+    {$POP}
+  finally
+    t.Free;
+  end;
 end;
 
 procedure TTreeD2MultiSelectKeyboardTest.TestFullRowSelectCtrlClickAdds;
