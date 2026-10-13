@@ -44,6 +44,9 @@ Thumbs.db
 # Superpowers brainstorming 可视化助手临时产物
 .superpowers/
 
+# 开发文档(superpowers 写的 plans/specs/research)不进公开仓库,在私有仓库同步
+docs/superpowers/
+
 # 图标生成器构建产物（committed: designtime/icons/*.png + tycontrols_icons.lrs）
 /tools/genicons/genicons.exe
 /tools/genicons/lib/

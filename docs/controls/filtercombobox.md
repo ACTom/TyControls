@@ -46,5 +46,4 @@ Filter.OnFilterChange := @FilterChanged;
 
 ## 消费者
 
-Phase 7 文件对话框(`TTyOpenDialog`/`TTySaveDialog`)底部的类型过滤下拉。见
-`docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md`。
+[文件对话框](filedialog.md)(`TTyOpenDialog`/`TTySaveDialog`)底部的类型过滤下拉。

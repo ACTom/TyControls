@@ -1156,8 +1156,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 `b824a49` / `d58eada` 只做了**盒子键**。审计同时提出的一批**子部件键**被**刻意推迟**——
 它们是可换肤性的**扩展**而不是覆盖缺口,而且其中数个**会移动像素**(代码目前在本该由键供色的
-地方自己发明了一个颜色)。逐条理由见
-[superpowers/plans/2026-07-23-typekey-explicit-borrowers.md](superpowers/plans/2026-07-23-typekey-explicit-borrowers.md)。
+地方自己发明了一个颜色)。
 
 **不要为下面这些名字写规则,它们今天什么都不匹配:**
 

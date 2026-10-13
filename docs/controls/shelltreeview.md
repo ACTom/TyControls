@@ -137,8 +137,8 @@ IDE 搞崩」)。本控件照抄了这个豁免:`csLoading` / `csDesigning` 下�
 
 ## 消费者
 
-它是 Phase 7 文件对话框(`TTyOpenDialog`/`TTySaveDialog`)左侧的目录树面板;`OnPathChange` 是"树选中 → 右侧
-`TTyShellListView.LoadDirectory`"的接线点。见 `docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md`。
+它是[文件对话框](filedialog.md)(`TTyOpenDialog`/`TTySaveDialog`)左侧的目录树面板;`OnPathChange` 是"树选中 → 右侧
+`TTyShellListView.LoadDirectory`"的接线点。
 
 ## 与 `TTySelectPathForm` 的关系
 

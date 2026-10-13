@@ -60,5 +60,4 @@ function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray;
 
 ## 消费者
 
-Phase 7 文件对话框顶部的"查找范围"下拉,和目录树 / 文件列表双向联动。见
-`docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md`。
+[文件对话框](filedialog.md)顶部的"查找范围"下拉,和目录树 / 文件列表双向联动。

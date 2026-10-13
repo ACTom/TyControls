@@ -65,4 +65,4 @@ end;
 
 ## 关联
 
-见 `docs/superpowers/plans/2026-07-12-phase9-finish.md`。纯文本标签见 [TTyLabel](label.md)。
+纯文本标签见 [TTyLabel](label.md)。
