@@ -9,13 +9,25 @@ unit umaps;
   an option asks for it, so starting the demo costs nothing.
 
   The SVG maps of the gallery are not here: TyChartRegisterMap takes GeoJSON
-  only, and those examples keep saying their map is not registered. }
+  only, and those examples keep saying their map is not registered.
+
+  MAPS THAT DRAW NATIONAL BORDERS ARE NOT SHIPPED (china, world, HK; the
+  "notShipped" list of maps.json). Borders are disputed, and some places
+  require published maps to be reviewed -- mainland China, for one, under its
+  Surveying and Mapping Law and its Map Management Regulations -- so neither the
+  library nor the demo includes one. A user who has a suitable file drops it in
+  maps/ as <name>.json (or <name>.geo.json) and it is picked up like the
+  others; until then the demo says why the example is empty. }
 interface
 
 { Register, from AMapsDir, every map AOptionText asks for that is listed there
   and not registered yet. Quietly does nothing for text that does not parse or
   a map that is not in the list. }
 procedure RegisterGalleryMapsFor(const AOptionText, AMapsDir: string);
+
+{ The maps AOptionText asks for that are still not registered and are on the
+  "notShipped" list of AMapsDir's maps.json, comma-separated; '' for none. }
+function BorderMapsMissing(const AOptionText, AMapsDir: string): string;
 
 implementation
 
@@ -54,45 +66,99 @@ begin
   Result := GIndex;
 end;
 
+function MissingMaps(const AOptionText: string): TTyGeoMissingMapArray;
+var opt: TTyChartOption;
+begin
+  Result := nil;
+  opt := TTyChartOption.Create;
+  try
+    if opt.SetOptionText(AOptionText) then
+      Result := TyGeoUnregisteredMaps(opt);
+  finally
+    opt.Free;
+  end;
+end;
+
 procedure RegisterGalleryMapsFor(const AOptionText, AMapsDir: string);
 var
-  opt: TTyChartOption;
   missing: TTyGeoMissingMapArray;
   idx, entry: TJSONObject;
   d: TJSONData;
   i: Integer;
-  special: string;
+  special, fn: string;
 begin
   if AMapsDir = '' then Exit;
+  idx := nil;
   try
     idx := MapsIndex(AMapsDir);
   except
     { a broken index is the demo's problem, not the chart's }
+    idx := nil;
+  end;
+  if idx <> nil then
+  begin
+    d := idx.Find('maps');
+    if d is TJSONObject then idx := TJSONObject(d) else idx := nil;
+  end;
+  missing := MissingMaps(AOptionText);
+  for i := 0 to High(missing) do
+  begin
+    if TyChartMapRegistered(missing[i].MapName) then Continue;
+    fn := '';
+    special := '';
+    if idx <> nil then
+    begin
+      d := idx.Find(missing[i].MapName);
+      if d is TJSONObject then
+      begin
+        entry := TJSONObject(d);
+        fn := entry.Get('file', '');
+        d := entry.Find('specialAreas');
+        if d is TJSONObject then special := d.AsJSON;
+      end;
+    end;
+    { NOT LISTED: a file the user put here under the map's own name }
+    if (fn = '') or not FileExists(AMapsDir + fn) then
+    begin
+      fn := missing[i].MapName + '.json';
+      if not FileExists(AMapsDir + fn) then fn := missing[i].MapName + '.geo.json';
+      if not FileExists(AMapsDir + fn) then Continue;
+    end;
+    TyChartRegisterMap(missing[i].MapName, ReadUtf8(AMapsDir + fn), special);
+  end;
+end;
+
+function BorderMapsMissing(const AOptionText, AMapsDir: string): string;
+var
+  missing: TTyGeoMissingMapArray;
+  idx: TJSONObject;
+  list: TJSONArray;
+  d: TJSONData;
+  i, j: Integer;
+begin
+  Result := '';
+  if AMapsDir = '' then Exit;
+  try
+    idx := MapsIndex(AMapsDir);
+  except
     Exit;
   end;
   if idx = nil then Exit;
-  d := idx.Find('maps');
-  if not (d is TJSONObject) then Exit;
-  idx := TJSONObject(d);
-  opt := TTyChartOption.Create;
-  try
-    if not opt.SetOptionText(AOptionText) then Exit;
-    missing := TyGeoUnregisteredMaps(opt);
-    for i := 0 to High(missing) do
-    begin
-      if TyChartMapRegistered(missing[i].MapName) then Continue;
-      d := idx.Find(missing[i].MapName);
-      if not (d is TJSONObject) then Continue;
-      entry := TJSONObject(d);
-      if not FileExists(AMapsDir + entry.Get('file', '')) then Continue;
-      special := '';
-      d := entry.Find('specialAreas');
-      if d is TJSONObject then special := d.AsJSON;
-      TyChartRegisterMap(missing[i].MapName,
-        ReadUtf8(AMapsDir + entry.Get('file', '')), special);
-    end;
-  finally
-    opt.Free;
+  d := idx.Find('notShipped');
+  if not (d is TJSONArray) then Exit;
+  list := TJSONArray(d);
+  missing := MissingMaps(AOptionText);
+  for i := 0 to High(missing) do
+  begin
+    if TyChartMapRegistered(missing[i].MapName) then Continue;
+    for j := 0 to list.Count - 1 do
+      if list.Items[j].AsString = missing[i].MapName then
+      begin
+        if Pos('"' + missing[i].MapName + '"', Result) > 0 then Break;
+        if Result <> '' then Result := Result + ', ';
+        Result := Result + '"' + missing[i].MapName + '"';
+        Break;
+      end;
   end;
 end;
 

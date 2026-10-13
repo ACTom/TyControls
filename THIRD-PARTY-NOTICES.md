@@ -104,11 +104,6 @@ GeoJSON the gallery examples register with `echarts.registerMap` before they dra
 registers them the same way (`examples/advchart/umaps.pas`). They are data, used unmodified
 (`maps.json`, the name-to-file list, is ours).
 
-- `world.json` — the `world` map of Apache ECharts 4, in its encoded form: the object
-  `test/data/map/js/world.js` of <https://github.com/apache/echarts> passes to `registerMap`,
-  cut out of that file byte for byte. ECharts stopped shipping maps in its npm package with 5.0
-  (commit `445797e3`) and keeps them as test data; the examples site still loads this one for
-  `map: 'world'`.
 - `USA.json`, `ch.geo.json`, `iceland.geo.json` — `public/data/asset/geo/` of
   <https://github.com/apache/echarts-examples>, copied as they are. `USA.json` is the US states
   file built from US Census Bureau boundaries (the example credits www.census.gov); the
@@ -118,9 +113,12 @@ registers them the same way (`examples/advchart/umaps.pas`). They are data, used
 Copyright The Apache Software Foundation, licensed under the Apache License 2.0 (the text is in
 the gallery section above).
 
-Not included: the `china` map two examples ask for (no longer distributed by ECharts), `HK.json`
-(its fields are GADM's, whose terms forbid redistribution without permission), and the SVG maps,
-which `TyChartRegisterMap` does not read yet.
+Not included: maps that draw national borders -- `china`, `world` and `HK`, which a few examples
+ask for. Borders are disputed, and some places require published maps to be reviewed (mainland
+China, for one), so the demo ships none; it says so when an example needs one, and picks up a
+file the user saves in `maps/` under the map's name. (`HK.json` would also be out on its own: its
+fields are GADM's, whose terms forbid redistribution without permission.) Nor the SVG maps, which
+`TyChartRegisterMap` does not read yet.
 
 ---
 
