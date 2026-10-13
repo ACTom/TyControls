@@ -71,6 +71,7 @@ type
   published
     procedure TestEveryComponentAsUpstreamLaysItOut;
     procedure TestTheDefaultHandleIconFitsAsZrenderFitsIt;
+    procedure TestACurvedIconIsBoxedByItsCurveNotItsHandles;
   end;
 
 implementation
@@ -539,6 +540,30 @@ begin
   AssertTrue('y: ' + Fmt(r.Y), SameNum(r.Y, 'c0072c2380000000'));
   AssertTrue('w 24: ' + Fmt(r.W), SameNum(r.W, '4038000000000000'));
   AssertTrue('h: ' + Fmt(r.H), SameNum(r.H, '40172c2380000000'));
+end;
+
+procedure TAdvChartVisualMapViewOracleTest.TestACurvedIconIsBoxedByItsCurveNotItsHandles;
+const
+  { node tools/advchart-oracle/visualmap-icon-rect.js }
+  cIcons: array[0..1] of string = (
+    'path://M0,0 C10,-20 30,-20 40,0 C30,20 10,20 0,0 Z',
+    'path://M0,0 Q20,-30 40,0 Q20,30 0,0 Z');
+var
+  r, box: TTyXYWH;
+  i: Integer;
+begin
+  { [F1b] The handles reach 20 (30) past the axis and the curves 15: the
+    port took the handles, called the icon 40 x 40 and fitted it as a
+    square. Upstream boxes the curve, 40 x 30, and fits it 24 x 18. }
+  box.X := -12; box.Y := -12; box.W := 24; box.H := 24;
+  for i := 0 to High(cIcons) do
+  begin
+    r := TyVmIconRect(Copy(cIcons[i], 8, MaxInt), box);
+    AssertTrue(IntToStr(i) + ' x -12: ' + Fmt(r.X), SameNum(r.X, 'c028000000000000'));
+    AssertTrue(IntToStr(i) + ' y -9: ' + Fmt(r.Y), SameNum(r.Y, 'c022000000000000'));
+    AssertTrue(IntToStr(i) + ' w 24: ' + Fmt(r.W), SameNum(r.W, '4038000000000000'));
+    AssertTrue(IntToStr(i) + ' h 18: ' + Fmt(r.H), SameNum(r.H, '4032000000000000'));
+  end;
 end;
 
 initialization
