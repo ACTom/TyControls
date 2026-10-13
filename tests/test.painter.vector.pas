@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter;
+  tyControls.Types, tyControls.Painter, test.danglingrefs;
 type
   TPainterVectorTest = class(TTestCase)
   private
@@ -58,6 +58,8 @@ type
     { ---- state, transform, clip, alpha ---- }
     procedure TestClipRectHonoursTheCurrentTransform;
     procedure TestRestoreStateRestoresTheClip;
+    procedure TestARepeatedClipIsBuiltOnceAndPaintsTheSame;
+    procedure TestAKeptBitmapIsNotLeftSharingAFreedClip;
     procedure TestRestoreStateRestoresTheDash;
     procedure TestRestoreStateRestoresElementAlpha;
     procedure TestElementAlphaDimsTheFill;
@@ -409,6 +411,126 @@ begin
   FPainter.RectPath(0, 0, 120, 60);
   FPainter.FillPath(Red);
   AssertTrue('the clip is gone after restore', Opaque(100, 30));
+end;
+
+{ A chart clips every element to its series' box, and every clip used to build a mask the
+  size of the surface. The painter keeps the masks a frame built and hands the same
+  request -- rect, transform, surface -- the same mask. What is painted must be what
+  building it every time paints: a sequence of clips under two transforms, five rects
+  (more than are kept, so some are dropped and built again), clips intersected inside
+  clips, translucent fills across the clip edges -- pixel for pixel against the same
+  sequence with the reuse off. And fifty elements in one box build one mask. }
+procedure TPainterVectorTest.TestARepeatedClipIsBuiltOnceAndPaintsTheSame;
+const
+  cRects: array[0..4] of TRect = ((Left: 10; Top: 5; Right: 120; Bottom: 70),
+    (Left: 30; Top: 20; Right: 190; Bottom: 95), (Left: 0; Top: 0; Right: 200; Bottom: 100),
+    (Left: 60; Top: 10; Right: 90; Bottom: 90), (Left: 5; Top: 40; Right: 150; Bottom: 60));
+var
+  ref: TBGRABitmap;
+  k, x, y, built: Integer;
+
+  procedure Paint;
+  var
+    i: Integer;
+  begin
+    for i := 0 to 39 do
+    begin
+      FPainter.SaveState;
+      if i mod 7 = 3 then FPainter.Translate(7, 3);
+      FPainter.ClipRect(cRects[(i * 3) mod 5]);
+      if i mod 4 = 1 then
+      begin
+        FPainter.SaveState;
+        FPainter.ClipRect(cRects[(i + 1) mod 5]);
+        FPainter.BeginPath;
+        FPainter.RectPath(i * 4.5, 0, 30, 100);
+        FPainter.FillPath(TyRGBA(0, 120, 255, 90));
+        FPainter.RestoreState;
+      end;
+      FPainter.BeginPath;
+      FPainter.RectPath(i * 5.25 - 20, i * 2.5 - 10, 60.5, 45.25);
+      FPainter.FillPath(TyRGBA(200, i * 6, 40, 120));
+      FPainter.RestoreState;
+    end;
+  end;
+
+begin
+  TyPainterClipReuseForTest(False);
+  try
+    MakePainter(200, 100, 96);
+    Paint;
+    ref := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    FreePainter;
+  finally
+    TyPainterClipReuseForTest(True);
+  end;
+  try
+    built := TyPainterClipMasksBuiltForTest;
+    MakePainter(200, 100, 96);
+    Paint;
+    AssertTrue('the kept masks were used', TyPainterClipMasksBuiltForTest > built);
+    for y := 0 to 99 do
+      for x := 0 to 199 do
+        if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then
+          Fail(Format('pixel %d,%d differs from building every clip', [x, y]));
+  finally
+    ref.Free;
+  end;
+  FreePainter;
+  MakePainter(200, 100, 96);
+  built := TyPainterClipMasksBuiltForTest;
+  for k := 1 to 50 do
+  begin
+    FPainter.SaveState;
+    FPainter.ClipRect(Rect(20, 10, 180, 90));
+    FPainter.BeginPath;
+    FPainter.RectPath(k * 3, 0, 10, 100);
+    FPainter.FillPath(Red);
+    FPainter.RestoreState;
+  end;
+  AssertEquals('fifty elements in one box, one mask', 1, TyPainterClipMasksBuiltForTest - built);
+  AssertEquals('and still clipped', 0, AlphaAt(100, 5));
+  AssertTrue('inside it painted', Opaque(100, 50));
+end;
+
+{ The kept masks belong to the painter and go with it; a state still sharing one -- a
+  clip left unrestored on a bitmap the painter does not own -- must not be left
+  pointing at freed memory. The frees are poisoned, so a dangling read faults. }
+procedure TPainterVectorTest.TestAKeptBitmapIsNotLeftSharingAFreedClip;
+var
+  bmp: TBGRABitmap;
+  p: TTyPainter;
+begin
+  bmp := TBGRABitmap.Create(100, 60, BGRAPixelTransparent);
+  try
+    p := TTyPainter.Create;
+    try
+      p.BeginPaintOn(nil, Rect(0, 0, 100, 60), 96, bmp);
+      p.SaveState;
+      p.ClipRect(Rect(0, 0, 50, 60));    // built and kept
+      p.RestoreState;
+      p.SaveState;
+      p.ClipRect(Rect(0, 0, 50, 60));    // the kept one, shared -- and left unrestored
+      p.SaveState;
+      BeginPoison;
+      try
+        p.EndPaint;
+      finally
+        FreeAndNil(p);
+      end;
+      bmp.Canvas2D.fillStyle(BGRA(255, 0, 0, 255));
+      bmp.Canvas2D.fillRect(0, 0, 100, 60);
+      EndPoison;
+    except
+      EndPoison;
+      p.Free;
+      raise;
+    end;
+    AssertEquals('painted inside the clip', 255, bmp.GetPixel(25, 30).alpha);
+    AssertEquals('not outside it', 0, bmp.GetPixel(75, 30).alpha);
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TPainterVectorTest.TestRestoreStateRestoresTheDash;

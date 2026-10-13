@@ -78,6 +78,18 @@ type
       ctx.save/restore cannot carry it, hence the parallel stack. }
     FVecDash: TTyDashPattern;
     FVecDashStack: array of TTyDashPattern;
+    { Rect clip masks this frame has already built, by everything the mask depends on:
+      see ClipRect. Mask is a TGrayscaleMask (TObject here: the unit's interface does not
+      use BGRAGrayscaleMask). }
+    FClipMasks: array[0..3] of record
+      Mask: TObject;
+      R: TRect;
+      M: TAffineMatrix;
+      W, H: Integer;
+      AA, PC: Boolean;
+    end;
+    FClipNext: Integer;
+    procedure ReleaseClipMasks;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -129,6 +141,7 @@ type
   public
     Opacity: Single;
     OpacityBase: TTyColor;   // when Opacity<1, dim TOWARD this opaque colour (0 = old alpha-reduce)
+    destructor Destroy; override;
     { ARightToLeft arms this frame's MIRRORING. It says one thing only: the alignments the
       caller is about to pass are LOGICAL -- taLeftJustify means "the reading start", not
       "the left edge" -- so the painter resolves each of them to a physical side through
@@ -475,6 +488,10 @@ procedure TyGdiTextForceConversionForTest(AOn: Boolean);
   kept ones must match pixel for pixel. }
 function TyGdiTextKeptSurfacesMadeForTest: Integer;
 procedure TyGdiTextBgraPathsForTest(AOn: Boolean);
+{ TTyPainter.ClipRect's kept masks: how many first clips of a state it has BUILT (a reuse
+  does not count), and a switch that turns the reuse off -- the reference it must match. }
+function TyPainterClipMasksBuiltForTest: Integer;
+procedure TyPainterClipReuseForTest(AOn: Boolean);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -2057,6 +2074,7 @@ end;
 procedure TTyPainter.BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
   ARightToLeft: Boolean = False);
 begin
+  ReleaseClipMasks;
   { A frame starts with no dash and an empty state stack: vector state must
     not survive from the previous paint. }
   FVecDash := nil;
@@ -2078,6 +2096,7 @@ end;
 procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
 begin
+  ReleaseClipMasks;
   { A frame starts with no dash and an empty state stack: vector state must
     not survive from the previous paint. }
   FVecDash := nil;
@@ -2098,6 +2117,8 @@ var
   baseBmp: TBGRABitmap;
   c: TBGRAPixel;
 begin
+  { before the bitmap goes: a kept bitmap's canvas must not be left sharing them }
+  ReleaseClipMasks;
   if Assigned(FBmp) then
   begin
     if Assigned(FCanvas) then
@@ -4056,12 +4077,154 @@ begin
   ctx.clip;
 end;
 
+{ CLIP MASKS, REUSED.
+
+  BGRA's Canvas2D clips with a grayscale mask the size of the whole surface: every clip
+  allocates one filled white and one filled black, fills the path into the second and
+  multiplies it into the first. A chart clips every element to its series' box, so a
+  graph of 2,000 nodes on an 800 x 500 layer built 4,000 masks of 400 KB per frame --
+  five seconds of a first frame, nearly all of it. The mask a clip gives a state with no
+  clip yet depends only on the rect, the matrix it is traced under, the surface's size,
+  antialiasing and pixel centring; ClipRect keeps the masks it built (FClipMasks) and
+  hands an identical request the kept one, shared, as Canvas2D's own save shares a
+  parent's mask with the saved state (not owned: a later clip on the state copies it
+  first, and restore does not free it). The pixels are the ones the clip would have
+  made, because it is the mask the clip made.
+
+  Canvas2D does not publish its current state. TBGRACanvasState2D is public (SetClipMask,
+  clipMaskReadOnly) but the field holding it is private, so CanvasStateOf finds it once:
+  in TBGRACanvas2D's own declaration order FSurface, StateStack, currentState follow one
+  another, and the probe accepts the slot only if the three hold the surface, a TList and
+  a TBGRACanvasState2D. A BGRA that lays them out otherwise is not recognised and every
+  clip is built as before. }
+var
+  GStateSlot: Integer = -2;   // -2: not probed yet; -1: layout not recognised
+  GClipMasksBuilt: Integer = 0;
+  GClipReuseOff: Boolean = False;
+
+function TyPainterClipMasksBuiltForTest: Integer;
+begin
+  Result := GClipMasksBuilt;
+end;
+
+procedure TyPainterClipReuseForTest(AOn: Boolean);
+begin
+  GClipReuseOff := not AOn;
+end;
+
+function CanvasStateSlot(ACtx: TBGRACanvas2D): Integer;
+var
+  p: PPointer;
+  i, n: Integer;
+begin
+  if (GStateSlot = -2) and (ACtx.surface <> nil) then
+  begin
+    GStateSlot := -1;
+    p := PPointer(ACtx);
+    n := ACtx.InstanceSize div SizeOf(Pointer);
+    try
+      for i := 1 to n - 3 do
+        if (p[i] = Pointer(ACtx.surface)) and (p[i + 1] <> nil)
+          and (PPointer(p[i + 1])^ = Pointer(TList)) and (p[i + 2] <> nil)
+          and (PPointer(p[i + 2])^ = Pointer(TBGRACanvasState2D)) then
+        begin
+          GStateSlot := i + 2;
+          Break;
+        end;
+    except
+      GStateSlot := -1;
+    end;
+  end;
+  Result := GStateSlot;
+end;
+
+function CanvasStateOf(ACtx: TBGRACanvas2D): TBGRACanvasState2D;
+var
+  slot: Integer;
+  p: Pointer;
+begin
+  Result := nil;
+  slot := CanvasStateSlot(ACtx);
+  if slot < 0 then Exit;
+  p := PPointer(ACtx)[slot];
+  if (p <> nil) and (PPointer(p)^ = Pointer(TBGRACanvasState2D)) then
+    Result := TBGRACanvasState2D(p);
+end;
+
+{ Every state on ACtx (the current one and the saved ones) that shares AMask gets a copy
+  of its own, so AMask can be freed. }
+procedure CanvasDisownMask(ACtx: TBGRACanvas2D; AMask: TGrayscaleMask);
+var
+  slot, i: Integer;
+  st: TBGRACanvasState2D;
+  stack: TList;
+
+  procedure Disown(S: TBGRACanvasState2D);
+  begin
+    if (S <> nil) and (S.clipMaskReadOnly = AMask) then
+      S.SetClipMask(AMask.Duplicate as TGrayscaleMask, True);
+  end;
+
+begin
+  st := CanvasStateOf(ACtx);
+  if st = nil then Exit;
+  Disown(st);
+  slot := CanvasStateSlot(ACtx);
+  stack := TList(PPointer(ACtx)[slot - 1]);
+  for i := 0 to stack.Count - 1 do
+    Disown(TBGRACanvasState2D(stack[i]));
+end;
+
+procedure TTyPainter.ReleaseClipMasks;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FClipMasks) do
+    if FClipMasks[i].Mask <> nil then
+    begin
+      if FBmp <> nil then
+        CanvasDisownMask(FBmp.Canvas2D, TGrayscaleMask(FClipMasks[i].Mask));
+      FreeAndNil(FClipMasks[i].Mask);
+    end;
+  FClipNext := 0;
+end;
+
+destructor TTyPainter.Destroy;
+begin
+  ReleaseClipMasks;
+  inherited Destroy;
+end;
+
 procedure TTyPainter.ClipRect(const ARect: TRect);
 var
   ctx: TBGRACanvas2D;
+  st: TBGRACanvasState2D;
+  cur: TAffineMatrix;
+  i: Integer;
+  fresh: Boolean;
 begin
   if FBmp = nil then Exit;
   ctx := FBmp.Canvas2D;
+  { an intersection with an earlier clip is built as always; only the first clip of a
+    state comes from (and goes to) the kept masks }
+  st := CanvasStateOf(ctx);
+  fresh := (st <> nil) and (st.clipMaskReadOnly = nil) and not GClipReuseOff;
+  if fresh then
+  begin
+    cur := ctx.matrix;
+    for i := 0 to High(FClipMasks) do
+      with FClipMasks[i] do
+        if (Mask <> nil) and CompareMem(@R, @ARect, SizeOf(TRect))
+          and CompareMem(@M, @cur, SizeOf(cur)) and (W = FBmp.Width) and (H = FBmp.Height)
+          and (AA = ctx.antialiasing) and (PC = ctx.pixelCenteredCoordinates) then
+        begin
+          { what the clip below leaves behind besides the mask }
+          ctx.fillMode := fmWinding;
+          ctx.beginPath;
+          st.SetClipMask(TGrayscaleMask(Mask), False);
+          Exit;
+        end;
+  end;
   { Built as a PATH, not as a rectangular region, so the current matrix applies.
     A region-based clip would cut rotated content with an unrotated box. }
   ctx.beginPath;
@@ -4069,6 +4232,26 @@ begin
   ctx.fillMode := fmWinding;
   ctx.clip;
   ctx.beginPath;   // leave no half-built path behind for the caller to trip on
+  if fresh and (st.clipMaskReadOnly <> nil) then
+    with FClipMasks[FClipNext] do
+    begin
+      Inc(GClipMasksBuilt);
+      if Mask <> nil then
+      begin
+        CanvasDisownMask(ctx, TGrayscaleMask(Mask));
+        FreeAndNil(Mask);
+      end;
+      Mask := st.clipMaskReadOnly.Duplicate as TGrayscaleMask;
+      R := ARect;
+      M := cur;
+      W := FBmp.Width;
+      H := FBmp.Height;
+      AA := ctx.antialiasing;
+      PC := ctx.pixelCenteredCoordinates;
+      { the state shares the kept copy, as a hit would }
+      st.SetClipMask(TGrayscaleMask(Mask), False);
+      FClipNext := (FClipNext + 1) mod Length(FClipMasks);
+    end;
 end;
 
 procedure TTyPainter.SetElementAlpha(AAlpha: Double);
