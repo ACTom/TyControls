@@ -37,6 +37,11 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 ## Features
 
 - **195 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
+- **ECharts-style charts**: `TTyAdvanceChart` is configured with an Apache ECharts option, so the ECharts docs apply and options from its examples paste in unchanged; it draws line, bar, pie, scatter, radar, heatmap, tree, sunburst, Sankey and more, with axes and text that follow the theme
+- **Data-aware controls**: a separate package, `tycontrols_db`, with 22 controls you bind to a `TDataSource` field; the data grid `TTyDBGrid` behaves like LCL's `TDBGrid`
+- **Property grid**: `TTyPropertyGrid` lists any object's published properties at run time and writes edits straight back, with multiselect, a name filter and categories
+- **Terminal**: `TTyTerminalView` parses output and encodes keys after xterm.js; in the example, hooked up to ConPTY / a PTY, it is a working shell window
+- **Made to be subclassed**: most controls come in two layers, `TTyCustomXxx` (the implementation, nothing published) and `TTyXxx` (the one on the palette), so a wrapper shows only the properties you choose; a subclass keeps its parent's theme styling and can register a theme key of its own to be styled separately, see [subclassing.en.md](docs/subclassing.en.md)
 - **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
 - **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
 - **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
@@ -44,7 +49,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 - **Full designer support**: palette drag-and-drop, container controls you drop into directly, live theme preview at design time, File → New project templates
 - **2,022 vector icons built in** (Lucide), referenced by name, zero cost if unused
 - **English and Chinese UI**, gettext `.po` translations
-- **6,000+ unit tests**, whole suite leak-free
+- **10,000+ unit tests**, whole suite leak-free
 
 ## Supported platforms
 
@@ -298,8 +303,8 @@ A separate package, `tycontrols_db`: bind a field of a `TDataSource` and go; the
 |---|---|
 | `TTyMenuBar` | Main menu bar |
 | `TTyPopupMenu` | Context menu |
-| `TTyImagesMenu` | Menu with per-item icons |
-| `TTyMenuEx` | Extended menu |
+| `TTyImagesMenu` | Context menu with an icon column fed by an image list |
+| `TTyMenuEx` | Enhanced context menu: section headers and a side banner on top of the icon column |
 
 ### Ribbon · `TyControls Ribbon` (7)
 
@@ -346,7 +351,7 @@ The font is embedded in the unit — nothing to ship or install, and it costs no
 | `TTyStarShape` | Star with a configurable point count |
 | `TTyArrow` | Directional arrow |
 | `TTyChart` | Chart: line / bar / pie |
-| `TTyAdvanceChart` | Advanced chart, configured by an ECharts-shaped option tree |
+| `TTyAdvanceChart` | Advanced chart configured by an Apache ECharts option, with dataZoom, visualMap, tooltips and a toolbox |
 
 ### Dialogs · `TyControls Dialogs` (20)
 
@@ -373,7 +378,7 @@ The font is embedded in the unit — nothing to ship or install, and it costs no
 | `TTyNotification` | Corner toast |
 | `TTyIconBrowserDialog` | Icon browser |
 
-For the full capabilities of `TTyStringGrid`, `TTyTreeView`, and `TTyForm`, see their docs: [grid.md](docs/controls/grid.md) · [treeview.md](docs/controls/treeview.md) · [ttyform.md](docs/controls/ttyform.md).
+The bigger controls have docs of their own (in Chinese): [grid.md](docs/controls/grid.md) (`TTyStringGrid`) · [treeview.md](docs/controls/treeview.md) (`TTyTreeView`) · [ttyform.md](docs/controls/ttyform.md) (`TTyForm`) · [dbgrid.md](docs/controls/dbgrid.md) (`TTyDBGrid`) · [propertygrid.md](docs/controls/propertygrid.md) (`TTyPropertyGrid`) · [terminal.md](docs/controls/terminal.md) (`TTyTerminalView`) · [multitrackbar.md](docs/controls/multitrackbar.md) (the multi-thumb track bars).
 
 ---
 
@@ -401,31 +406,69 @@ The repository also has a theme editor, `tools/themebuilder`: the preview follow
 
 ## Examples
 
-Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
+52 examples, each of which builds on its own: `lazbuild examples/<name>/<project>.lpi`. They show English or Chinese text to match the OS, and every one has a theme picker and a dark switch in its title bar.
+
+**Showcases**
 
 | Example | Contents |
 |---|---|
+| [advchart](examples/advchart/) | Advanced chart: the 244 options of the Apache ECharts example gallery, loaded as they are and sorted into the gallery's categories; edit an option on the right and it redraws, and anything it cannot draw yet is listed with the reason; save as PNG |
 | [antdesign](examples/antdesign/) | Ant Design Pro-style admin (sider + 6 pages), runtime theming |
-| [demo](examples/demo/) | Gallery: all controls + themes + language switching |
-| [grid](examples/grid/) | Data grid: freezing / million rows / sort-filter-group / 16 editors / undo-redo |
-| [treeview](examples/treeview/) | Virtual tree: million nodes / multi-column / checks / inline edit / drag-drop |
-| [dialogs](examples/dialogs/) | All custom-drawn dialogs |
-| [theming](examples/theming/) | A custom theme + runtime hot-swap |
-| [ribbon](examples/ribbon/) | The full Ribbon |
-| [containers](examples/containers/) | Layout containers |
-| [listview](examples/listview/) | List view: five views / grouping / 100k rows virtual |
-| [inputs](examples/inputs/) | Rich input controls |
-| [shapes](examples/shapes/) | Shape controls + `StyleOverride` |
-| [rtl](examples/rtl/) | Right-to-left mirroring and bidirectional text |
-| [icons](examples/icons/) | Icon fonts |
-| [transitions](examples/transitions/) | Slide / fade transitions |
-| [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
-| [dbcontrols](examples/dbcontrols/) | Data-aware controls: all 21 bound to an in-memory table; navigating, editing, NULLs, lookups, photos |
+| [dbcontrols](examples/dbcontrols/) | Data-aware controls: 21 of them bound to an in-memory table; navigating, editing, NULLs, lookups, photos |
 | [dbgrid](examples/dbgrid/) | Data grid: a thousand orders, design-time columns (check box, lookup, memo, formatted amount), sorting by title click, deleting a multiselection, a read-only switch |
+| [demo](examples/demo/) | Overview: fifty-odd everyday controls in one window; the toolbar switches theme, light/dark, accent colour and density, and can watch the theme file for changes |
+| [dialogs](examples/dialogs/) | All the custom-drawn dialogs: message, input, colour, font, find and replace, progress, about, icon browser and more |
+| [grid](examples/grid/) | Data grid: freezing / million rows / sort-filter-group / 15 editors / undo-redo |
+| [listview](examples/listview/) | List view: five views / grouping / 100k rows in virtual mode |
 | [propertygrid](examples/propertygrid/) | Property grid: click a control to inspect it (Ctrl+click for several) and edit it in place; a name filter, categories, writable-only and show-events switches, adding and deleting a string grid's columns |
+| [ribbon](examples/ribbon/) | A text editor built on the Ribbon: tabs, the application menu, the quick access toolbar, a contextual tab, Alt key tips |
+| [rtl](examples/rtl/) | Right-to-left mirroring and bidirectional text |
 | [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY / pipes), ZModem send and receive, skins, colour schemes, a key-code panel |
+| [theming](examples/theming/) | The theme system: a custom theme file, accent colour, following the OS, density, hot reload, an overlay style layer |
+| [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
+| [transitions](examples/transitions/) | Slide / fade transitions |
+| [treeview](examples/treeview/) | Virtual tree: million nodes / multi-column / checks / inline edit / drag-drop |
 
-Thirty-plus single-control examples live under [examples/](examples/).
+**Single controls**
+
+| Example | Contents |
+|---|---|
+| [button](examples/button/) | `TTyButton`: primary / danger / ghost variants, default and cancel keys, a numeric badge, AutoSize |
+| [buttons](examples/buttons/) | The other buttons: icon buttons, group toggles, split and menu buttons, the colour button, the segmented bar |
+| [calendar](examples/calendar/) | `TTyCalendar`: week numbers, read-only, a selectable date range |
+| [chart](examples/chart/) | `TTyChart`: line, bar, pie, donut; legend, value labels, hover tooltip, click hit-testing |
+| [checkbox](examples/checkbox/) | `TTyCheckBox`: tri-state, disabled, `OnClick` versus `OnChange`, mnemonics |
+| [combobox](examples/combobox/) | `TTyComboBox`: read-only list, editable with prefix autocomplete, opening and closing from code |
+| [containers](examples/containers/) | Layout containers: dividers, bevels, paint panel, group containers, scrolling and collapsible panels, grid panel, relative layout, cool bar and more |
+| [datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`: date, time, nullable, read-only, limited range, 12-hour clock, OS date format |
+| [edit](examples/edit/) | `TTyEdit`: text hint, password, case and length limits, digits only, alignment, undo/redo, clipboard, selection API |
+| [filedialog](examples/filedialog/) | The six file dialogs: plain, with picture preview, with a custom preview |
+| [gauge](examples/gauge/) | The gauge family: arc / ring / linear gauges, needle meter, level meter, knobs, clock, sparkline, rating, busy indicators |
+| [groupbox](examples/groupbox/) | `TTyGroupBox`: caption alignment, the untitled style, mnemonics |
+| [hint](examples/hint/) | Themed and balloon hints: four icons, fading out, a sticky popover, flipping at the screen edge |
+| [htmllabel](examples/htmllabel/) | `TTyHtmlLabel`: inline markup and links, word wrap, AutoSize |
+| [icons](examples/icons/) | Icons and images: icon fonts, the bundled Lucide icons, image lists, `TTyImage` scaling modes |
+| [imageview](examples/imageview/) | `TTyImageView`: pan and zoom, fit to window, non-destructive filters |
+| [inputs](examples/inputs/) | Rich inputs: numeric, currency, masked, URL, slider field, colour and font pickers, assorted dropdowns and lists, a value list editor |
+| [label](examples/label/) | `TTyLabel`: alignment, transparency, AutoSize, word wrap, vertical layout, mnemonics |
+| [labels](examples/labels/) | Link, shadow and glow labels |
+| [listbox](examples/listbox/) | `TTyListBox`: multiselect, sorting, row height, selecting and scrolling from code |
+| [memo](examples/memo/) | `TTyMemo`: word wrap, read-only, undo/redo, clipboard, Tab and Enter handling, a length cap, scroll bars |
+| [menu](examples/menu/) | Menu bar, enhanced context menu, plain themed menu, and rolling the window up by double-clicking the title bar |
+| [panel](examples/panel/) | `TTyPanel`: nesting, caption alignment, `StyleOverride`, hints and clicks |
+| [progressbar](examples/progressbar/) | `TTyProgressBar`: animation, vertical, any range, click to seek, disabled |
+| [radiobutton](examples/radiobutton/) | `TTyRadioButton`: grouping, `GroupIndex`, mnemonics, `StyleOverride` |
+| [scrollbar](examples/scrollbar/) | `TTyScrollBar`: every scrolling gesture, `OnScroll` overruling the target, thumb animation, fading out when idle |
+| [shapes](examples/shapes/) | Shape controls + `StyleOverride` |
+| [shell](examples/shell/) | A file browser: directory tree, file list, look-in dropdown, file-type filter |
+| [spinedit](examples/spinedit/) | Integer and decimal spin edits: range, step, alignment, read-only, what happens out of range |
+| [splitter](examples/splitter/) | `TTySplitter`: splits in four directions, capping a pane's size, resizing only on mouse-up |
+| [statusbar](examples/statusbar/) | `TTyStatusBar`: several panels, size grip, simple mode, adding and removing panels at run time |
+| [tabcontrol](examples/tabcontrol/) | `TTyPageControl`: adding and removing pages, close buttons, hiding the tab strip |
+| [tabset](examples/tabset/) | `TTyTabSet`: drag to reorder, closing, a tab that refuses selection, overflow scrolling, mnemonics |
+| [toggleswitch](examples/toggleswitch/) | `TTyToggleSwitch`: disabled, `OnChange` versus `OnClick`, no animation, keyboard use |
+| [toolbar](examples/toolbar/) | `TTyToolBar`: wrapping, flat and framed, the six tool button styles, dropdown menus, owner-drawn buttons |
+| [trackbar](examples/trackbar/) | Sliders: ticks, value display and keyboard use on the single slider, then the range slider, multi-value slider and gradient stop editor |
 
 ---
 
@@ -437,6 +480,7 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [controls/](docs/controls/) | Per-control API reference (Chinese) |
 | [themes.en.md](docs/themes.en.md) | Built-in themes and writing your own |
 | [tycss-reference.en.md](docs/tycss-reference.en.md) | The `.tycss` language reference |
+| [themebuilder.en.md](docs/themebuilder.en.md) | Using the theme editor |
 | [events.en.md](docs/events.en.md) | Common event conventions |
 | [subclassing.en.md](docs/subclassing.en.md) | Deriving your own controls from `TTyCustomXxx`; upgrading from 3.0 |
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |

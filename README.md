@@ -37,6 +37,11 @@ Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.t
 ## 特性
 
 - **195 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
+- **ECharts 式图表**:`TTyAdvanceChart` 的配置就是 Apache ECharts 的 option,ECharts 的文档可以直接参考,示例里的配置原样贴进来;能画折线、柱状、饼图、散点、雷达、热力图、树图、旭日图、桑基图等,坐标轴和文字跟着主题换肤
+- **数据感知控件**:单独的 `tycontrols_db` 包,22 个控件绑上 `TDataSource` 的字段就能用,其中数据表格 `TTyDBGrid` 的行为照 LCL `TDBGrid`
+- **属性表格**:`TTyPropertyGrid` 在程序运行时列出任意对象的 published 属性,改了直接写回,可多选、按名字过滤、分类显示
+- **终端**:`TTyTerminalView` 照 xterm.js 解析输出、编码按键;示例里接上 ConPTY / PTY 就是一个能用的 shell 窗口
+- **能派生**:大多数控件分成 `TTyCustomXxx`(实现,不发布属性)和 `TTyXxx`(面板上那个)两层,包装自己的控件时只露想露的属性;派生类自动沿用父类的主题样式,也能登记自己的主题键单独换肤,见 [subclassing.md](docs/subclassing.md)
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -44,7 +49,7 @@ Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.t
 - **设计器支持完整**:组件面板拖放、容器控件直接拖入、主题效果设计期可见、File → New 工程模板
 - **内置 2022 个矢量图标**(Lucide),按名字取用,不用则不占体积
 - **中英文界面**,gettext `.po` 翻译
-- **6000+ 单元测试**,全套无内存泄漏
+- **一万多个单元测试**,全套无内存泄漏
 
 ## 支持平台
 
@@ -298,8 +303,8 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 |---|---|
 | `TTyMenuBar` | 主菜单栏 |
 | `TTyPopupMenu` | 右键菜单 |
-| `TTyImagesMenu` | 带图标的菜单 |
-| `TTyMenuEx` | 扩展菜单 |
+| `TTyImagesMenu` | 带图标列的右键菜单,图标取自图像列表 |
+| `TTyMenuEx` | 增强右键菜单:在图标列之外加分节标题和侧边横幅 |
 
 ### Ribbon · `TyControls Ribbon`(7)
 
@@ -346,7 +351,7 @@ CharImage1.GlyphName := 'house';
 | `TTyStarShape` | 星形,角数可调 |
 | `TTyArrow` | 方向箭头 |
 | `TTyChart` | 图表:折线 / 柱状 / 饼图 |
-| `TTyAdvanceChart` | 高级图表:配置走 ECharts 形状的 option 树 |
+| `TTyAdvanceChart` | 高级图表:配置照 Apache ECharts 的 option 写,带缩放、视觉映射、提示框、工具栏 |
 
 ### 对话框 · `TyControls Dialogs`(20)
 
@@ -373,7 +378,7 @@ CharImage1.GlyphName := 'house';
 | `TTyNotification` | 角落通知,自动消失 |
 | `TTyIconBrowserDialog` | 图标浏览器 |
 
-`TTyStringGrid`、`TTyTreeView`、`TTyForm` 的完整能力见各自文档:[grid.md](docs/controls/grid.md) · [treeview.md](docs/controls/treeview.md) · [ttyform.md](docs/controls/ttyform.md)。
+几个大控件的完整能力见各自文档:[grid.md](docs/controls/grid.md)(`TTyStringGrid`)· [treeview.md](docs/controls/treeview.md)(`TTyTreeView`)· [ttyform.md](docs/controls/ttyform.md)(`TTyForm`)· [dbgrid.md](docs/controls/dbgrid.md)(`TTyDBGrid`)· [propertygrid.md](docs/controls/propertygrid.md)(`TTyPropertyGrid`)· [terminal.md](docs/controls/terminal.md)(`TTyTerminalView`)· [multitrackbar.md](docs/controls/multitrackbar.md)(多滑块)。
 
 ---
 
@@ -401,31 +406,69 @@ CharImage1.GlyphName := 'house';
 
 ## 示例
 
-每个示例都可独立构建:`lazbuild examples/<名称>/<工程>.lpi`。
+52 个示例,每个都可独立构建:`lazbuild examples/<名称>/<工程>.lpi`。界面跟随系统语言显示中文或英文,每个示例的标题栏上都能换主题、切亮暗。
+
+**综合示例**
 
 | 示例 | 内容 |
 |---|---|
+| [advchart](examples/advchart/) | 高级图表:Apache ECharts 官方示例库的 244 个配置原样载入,按类别分页;右侧的配置可以直接改了重画,画不了的部分照实列出原因;可存 PNG |
 | [antdesign](examples/antdesign/) | 仿 Ant Design Pro 后台(侧边导航 + 6 页),运行时换肤 |
-| [demo](examples/demo/) | 综合演示:全部控件 + 多主题 + 切换语言 |
-| [grid](examples/grid/) | 数据网格:冻结 / 百万行 / 排序筛选分组 / 16 种编辑器 / 撤销重做 |
-| [treeview](examples/treeview/) | 虚拟树:百万节点 / 多列 / 复选 / 内联编辑 / 拖放 |
-| [dialogs](examples/dialogs/) | 全部自绘对话框 |
-| [theming](examples/theming/) | 自定义主题 + 运行时热切换 |
-| [ribbon](examples/ribbon/) | Ribbon 全家桶 |
-| [containers](examples/containers/) | 布局容器 |
-| [listview](examples/listview/) | 列表视图:五视图 / 分组 / 10 万行虚拟 |
-| [inputs](examples/inputs/) | 富输入控件 |
-| [shapes](examples/shapes/) | 形状控件 + `StyleOverride` |
-| [rtl](examples/rtl/) | 从右往左镜像与双向文本 |
-| [icons](examples/icons/) | 图标字体 |
-| [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
-| [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
 | [dbcontrols](examples/dbcontrols/) | 数据感知控件:21 个控件绑一张内存表,导航、编辑、空值、查找、照片 |
 | [dbgrid](examples/dbgrid/) | 数据表格:一千条订单,设计期列(勾选、查找、备注、金额格式),标题点击排序,多选删除,只读开关 |
+| [demo](examples/demo/) | 综合演示:五十多种常用控件放在一个窗口里,工具栏切主题、亮暗、强调色、密度,可监视主题文件改动 |
+| [dialogs](examples/dialogs/) | 全部自绘对话框:消息、输入、取色、字体、查找替换、进度、关于、图标浏览器等 |
+| [grid](examples/grid/) | 数据网格:冻结 / 百万行 / 排序筛选分组 / 15 种编辑器 / 撤销重做 |
+| [listview](examples/listview/) | 列表视图:五种视图 / 分组 / 10 万行虚拟模式 |
 | [propertygrid](examples/propertygrid/) | 属性表格:点哪个控件就检查哪个,Ctrl+点击多选,改了直接写回;按名字过滤、分类、只看可写的、显示事件,给字符串表格增删列 |
+| [ribbon](examples/ribbon/) | 用 Ribbon 搭的文本编辑器:功能区、应用菜单、快速访问栏、上下文页、Alt 键提示 |
+| [rtl](examples/rtl/) | 从右往左镜像与双向文本 |
 | [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY / 管道)、ZModem 收发、换肤、配色方案、键码面板 |
+| [theming](examples/theming/) | 主题系统:自定义主题文件、强调色、跟随系统、密度、热重载、叠加样式层 |
+| [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
+| [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
+| [treeview](examples/treeview/) | 虚拟树:百万节点 / 多列 / 复选 / 内联编辑 / 拖放 |
 
-其余 30 多个单控件示例见 [examples/](examples/)。
+**单控件示例**
+
+| 示例 | 内容 |
+|---|---|
+| [button](examples/button/) | `TTyButton`:主按钮 / 危险 / 幽灵变体、默认与取消键、数字徽标、AutoSize |
+| [buttons](examples/buttons/) | 其他按钮:图标按钮、分组切换、分裂按钮与菜单按钮、取色按钮、分段按钮条 |
+| [calendar](examples/calendar/) | `TTyCalendar`:周数、只读、可选日期范围 |
+| [chart](examples/chart/) | `TTyChart`:折线、柱状、饼图、环形图,图例、数值标签、悬停提示、点击命中 |
+| [checkbox](examples/checkbox/) | `TTyCheckBox`:三态、禁用、`OnClick` 与 `OnChange` 的区别、助记符 |
+| [combobox](examples/combobox/) | `TTyComboBox`:只读下拉、可编辑前缀补全、程序控制展开收起 |
+| [containers](examples/containers/) | 布局容器:分隔线、凹凸线、自绘面板、分组容器、滚动与折叠面板、网格面板、相对布局、CoolBar 等 |
+| [datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`:日期、时间、可空、只读、限定范围、12 小时制、跟随系统格式 |
+| [edit](examples/edit/) | `TTyEdit`:提示文字、密码、大小写、长度和字符限制、对齐、撤销重做、剪贴板、选区 API |
+| [filedialog](examples/filedialog/) | 六个文件对话框:普通、带图片预览、自定义预览 |
+| [gauge](examples/gauge/) | 仪表一族:弧形 / 环形 / 线性仪表、指针表、电平表、旋钮、时钟、迷你趋势图、星级、忙碌指示 |
+| [groupbox](examples/groupbox/) | `TTyGroupBox`:标题对齐、无标题样式、助记符 |
+| [hint](examples/hint/) | 主题化提示与气球提示:四种图标、自动消失、常驻、贴屏幕边缘时翻转 |
+| [htmllabel](examples/htmllabel/) | `TTyHtmlLabel`:行内标记与链接、换行、AutoSize |
+| [icons](examples/icons/) | 图标与图片:图标字体、内置 Lucide 图标、图像列表、`TTyImage` 的缩放方式 |
+| [imageview](examples/imageview/) | `TTyImageView`:平移缩放、适应窗口、无损滤镜 |
+| [inputs](examples/inputs/) | 富输入控件:数值、货币、掩码、网址、滑块输入、颜色字体选择、各种下拉和列表、名值编辑器 |
+| [label](examples/label/) | `TTyLabel`:对齐、透明、AutoSize、自动换行、垂直位置、助记符 |
+| [labels](examples/labels/) | 链接标签、投影标签、发光标签 |
+| [listbox](examples/listbox/) | `TTyListBox`:多选、排序、行高、程序选择与滚动 |
+| [memo](examples/memo/) | `TTyMemo`:换行、只读、撤销重做、剪贴板、Tab 与回车键处理、长度上限、滚动条 |
+| [menu](examples/menu/) | 菜单栏、增强右键菜单、普通主题菜单,以及双击标题栏卷起窗口 |
+| [panel](examples/panel/) | `TTyPanel`:嵌套、标题对齐、`StyleOverride`、提示与点击 |
+| [progressbar](examples/progressbar/) | `TTyProgressBar`:动画、竖向、任意范围、点击定位、禁用 |
+| [radiobutton](examples/radiobutton/) | `TTyRadioButton`:分组、`GroupIndex`、助记符、`StyleOverride` |
+| [scrollbar](examples/scrollbar/) | `TTyScrollBar`:各种滚动手势、`OnScroll` 改写目标值、滑块动画、闲置自动隐藏 |
+| [shapes](examples/shapes/) | 形状控件 + `StyleOverride` |
+| [shell](examples/shell/) | 文件浏览器:目录树、文件列表、位置下拉、类型过滤 |
+| [spinedit](examples/spinedit/) | 整数与小数微调框:范围、步长、对齐、只读、超范围时的处理 |
+| [splitter](examples/splitter/) | `TTySplitter`:左右上下分隔、限制窗格尺寸、松开鼠标才落位 |
+| [statusbar](examples/statusbar/) | `TTyStatusBar`:多面板、尺寸手柄、简单模式、运行时增删面板 |
+| [tabcontrol](examples/tabcontrol/) | `TTyPageControl`:增删页、关闭按钮、隐藏页签条 |
+| [tabset](examples/tabset/) | `TTyTabSet`:拖动排序、关闭、禁选某页、溢出滚动、助记符 |
+| [toggleswitch](examples/toggleswitch/) | `TTyToggleSwitch`:禁用、`OnChange` 与 `OnClick`、关闭动画、键盘操作 |
+| [toolbar](examples/toolbar/) | `TTyToolBar`:自动折行、扁平与立体、六种工具按钮样式、下拉菜单、自绘按钮 |
+| [trackbar](examples/trackbar/) | 滑块:单滑块的刻度、数值和键盘操作,以及区间滑块、多值滑块、渐变色标编辑器 |
 
 ---
 
@@ -437,6 +480,7 @@ CharImage1.GlyphName := 'house';
 | [controls/](docs/controls/) | 逐控件 API 说明 |
 | [themes.md](docs/themes.md) | 写自己的主题 |
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 语言参考 |
+| [themebuilder.md](docs/themebuilder.md) | 主题编辑器的用法 |
 | [events.md](docs/events.md) | 通用事件约定 |
 | [subclassing.md](docs/subclassing.md) | 从 `TTyCustomXxx` 派生自己的控件；从 3.0 升级 |
 | [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
