@@ -2,8 +2,8 @@ unit test.gradient;
 { Theme-system v3 · Phase B1: multi-stop linear gradients. linear-gradient() grows from
   exactly two colours to N colour stops with optional CSS positions (normalised: first->0,
   last->1, interior interpolated, non-decreasing), and the painter renders >2 stops via a
-  BGRA multi-gradient scanner. Two-stop gradients keep the exact old GradFrom/GradTo path
-  (byte-identical golden), which the last test guards. }
+  BGRA multi-gradient scanner. Two stops at 0 and 1 take the cheaper two-colour scanner, and
+  every path blends in plain sRGB as CSS does, which the TestTwoColours* tests guard. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -14,6 +14,9 @@ type
   TGradientTest = class(TTestCase)
   private
     function GradFill(const ACss: string): TTyFill;
+    function Background(const AFill: TTyFill; AW, AH: Integer): TBGRABitmap;
+    function PathFill(const AFill: TTyFill; AW, AH: Integer): TBGRABitmap;
+    procedure CheckPlainMidpoint(const AWhat: string; ABmp: TBGRABitmap; AFrom, ATo: TTyColor);
   published
     procedure TestTwoStopStillFromTo;
     procedure TestThreeStopsEvenPositions;
@@ -25,6 +28,8 @@ type
     procedure TestPainterRendersMiddleStop;
     procedure TestTwoStopsKeepTheirPositions;
     procedure TestTheCentreColourHonoursTwoStopPositions;
+    procedure TestTwoColoursBlendInPlainSRGBOnTheBackground;
+    procedure TestTwoColoursBlendInPlainSRGBOnAPath;
   end;
 
 implementation
@@ -203,6 +208,183 @@ begin
   c := TyFillCentreColor(fill, Rect(0, 0, 20, 100));
   AssertTrue(Format('the centre is past the last stop: pure blue (got %d,%d,%d)',
     [TyRedOf(c), TyGreenOf(c), TyBlueOf(c)]), (TyRedOf(c) = 0) and (TyBlueOf(c) = 255));
+end;
+
+{ ---- one interpolation for every themed gradient ----
+
+  BGRA's two-colour scanner blends with gamma correction unless told otherwise (exponent 1.7,
+  a midpoint well above the average), while its multi-gradient was built without it. So the
+  same two colours used to meet in a different middle depending on whether a theme wrote them
+  as a plain pair or as stops, and neither path agreed with CSS on the pair. These pin the
+  CSS answer: a 1001px horizontal ramp, sampled at its middle column, is the per-channel
+  average of the ends (within the rounding of a byte), on the background and on a path. }
+
+function TGradientTest.Background(const AFill: TTyFill; AW, AH: Integer): TBGRABitmap;
+var
+  host: TBitmap;
+  p: TTyPainter;
+begin
+  host := TBitmap.Create;
+  p := TTyPainter.Create;
+  try
+    host.SetSize(AW, AH);
+    p.BeginPaint(host.Canvas, Rect(0, 0, AW, AH), 96);
+    p.FillBackground(Rect(0, 0, AW, AH), AFill, 0);
+    Result := p.Bitmap.Duplicate as TBGRABitmap;
+    p.EndPaint;
+  finally
+    p.Free;
+    host.Free;
+  end;
+end;
+
+function TGradientTest.PathFill(const AFill: TTyFill; AW, AH: Integer): TBGRABitmap;
+var
+  host: TBitmap;
+  p: TTyPainter;
+begin
+  host := TBitmap.Create;
+  p := TTyPainter.Create;
+  try
+    host.SetSize(AW, AH);
+    p.BeginPaint(host.Canvas, Rect(0, 0, AW, AH), 96);
+    p.BeginPath;
+    p.RectPath(0, 0, AW, AH);
+    p.FillPathWith(AFill, Rect(0, 0, AW, AH));
+    Result := p.Bitmap.Duplicate as TBGRABitmap;
+    p.EndPaint;
+  finally
+    p.Free;
+    host.Free;
+  end;
+end;
+
+procedure TGradientTest.CheckPlainMidpoint(const AWhat: string; ABmp: TBGRABitmap;
+  AFrom, ATo: TTyColor);
+var
+  m: TBGRAPixel;
+
+  procedure Channel(const AName: string; AGot, AA, AB: Integer);
+  begin
+    AssertTrue(Format('%s: the midpoint %s is the sRGB average %.1f (got %d)',
+      [AWhat, AName, (AA + AB) / 2, AGot]), Abs(AGot - (AA + AB) / 2) <= 1);
+  end;
+
+begin
+  m := ABmp.GetPixel(ABmp.Width div 2, ABmp.Height div 2);
+  Channel('red', m.red, TyRedOf(AFrom), TyRedOf(ATo));
+  Channel('green', m.green, TyGreenOf(AFrom), TyGreenOf(ATo));
+  Channel('blue', m.blue, TyBlueOf(AFrom), TyBlueOf(ATo));
+end;
+
+{ Count the pixels that differ by more than ATol in any channel; the first one is named. }
+function Mismatch(A, B: TBGRABitmap; ATol: Integer; out AFirst: string): Integer;
+var
+  x, y: Integer;
+  pa, pb: TBGRAPixel;
+begin
+  Result := 0;
+  AFirst := '';
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+    begin
+      pa := A.GetPixel(x, y);
+      pb := B.GetPixel(x, y);
+      if (Abs(pa.red - pb.red) > ATol) or (Abs(pa.green - pb.green) > ATol) or
+         (Abs(pa.blue - pb.blue) > ATol) or (Abs(pa.alpha - pb.alpha) > ATol) then
+      begin
+        if Result = 0 then
+          AFirst := Format(' first at (%d,%d): %d,%d,%d,%d vs %d,%d,%d,%d',
+            [x, y, pa.red, pa.green, pa.blue, pa.alpha, pb.red, pb.green, pb.blue, pb.alpha]);
+        Inc(Result);
+      end;
+    end;
+end;
+
+const
+  GradPairs: array[0..1, 0..1] of TTyColor = (
+    (TTyColor($FF000000), TTyColor($FFFFFFFF)),     // black to white
+    (TTyColor($FFFF8000), TTyColor($FF0040FF)));    // orange to blue: every channel moves
+
+{ The same colours three ways: a plain pair; two stops at 0 and 1, as the style model writes
+  them (the two-colour path); and three stops with the first one twice, which is the same ramp
+  through the multi-gradient path. }
+procedure SameRampThreeWays(AFrom, ATo: TTyColor; out APair, AStops, AMulti: TTyFill);
+begin
+  APair := Default(TTyFill);
+  APair.Kind := tfkLinearGradient;
+  APair.GradAngleDeg := 0;   // left to right
+  APair.GradFrom := AFrom;
+  APair.GradTo := ATo;
+  AStops := APair;
+  SetLength(AStops.GradStops, 2);
+  AStops.GradStops[0].Color := AFrom; AStops.GradStops[0].Pos := 0;
+  AStops.GradStops[1].Color := ATo;   AStops.GradStops[1].Pos := 1;
+  AMulti := APair;
+  SetLength(AMulti.GradStops, 3);
+  AMulti.GradStops[0] := AStops.GradStops[0];
+  AMulti.GradStops[1] := AStops.GradStops[0];
+  AMulti.GradStops[2] := AStops.GradStops[1];
+end;
+
+procedure TGradientTest.TestTwoColoursBlendInPlainSRGBOnTheBackground;
+var
+  k, n: Integer;
+  pair, stops, multi: TTyFill;
+  a, b, c: TBGRABitmap;
+  first, what: string;
+begin
+  for k := 0 to High(GradPairs) do
+  begin
+    what := Format('%.8x to %.8x', [GradPairs[k, 0], GradPairs[k, 1]]);
+    SameRampThreeWays(GradPairs[k, 0], GradPairs[k, 1], pair, stops, multi);
+    AssertFalse('fixture: two stops at 0 and 1 are the two-colour path', TyGradientNeedsStops(stops));
+    AssertTrue('fixture: the repeated stop is the multi-stop path', TyGradientNeedsStops(multi));
+    a := Background(pair, 1001, 3);
+    b := Background(stops, 1001, 3);
+    c := Background(multi, 1001, 3);
+    try
+      n := Mismatch(a, b, 0, first);
+      AssertEquals(what + ': two colours and two stops at 0/1 paint the same pixels' + first, 0, n);
+      { Not byte-identical: the two-colour scanner rounds, the multi-gradient truncates. }
+      n := Mismatch(a, c, 1, first);
+      AssertEquals(what + ': and the multi-stop path paints the same ramp' + first, 0, n);
+      CheckPlainMidpoint(what + ', two colours', a, pair.GradFrom, pair.GradTo);
+      CheckPlainMidpoint(what + ', multi-stop', c, pair.GradFrom, pair.GradTo);
+    finally
+      a.Free;
+      b.Free;
+      c.Free;
+    end;
+  end;
+end;
+
+procedure TGradientTest.TestTwoColoursBlendInPlainSRGBOnAPath;
+var
+  k, n: Integer;
+  pair, stops, multi: TTyFill;
+  a, b, c: TBGRABitmap;
+  first, what: string;
+begin
+  for k := 0 to High(GradPairs) do
+  begin
+    what := Format('path %.8x to %.8x', [GradPairs[k, 0], GradPairs[k, 1]]);
+    SameRampThreeWays(GradPairs[k, 0], GradPairs[k, 1], pair, stops, multi);
+    a := PathFill(pair, 1001, 3);
+    b := PathFill(stops, 1001, 3);
+    c := PathFill(multi, 1001, 3);
+    try
+      n := Mismatch(a, b, 0, first);
+      AssertEquals(what + ': two colours and two stops at 0/1 paint the same pixels' + first, 0, n);
+      n := Mismatch(a, c, 1, first);
+      AssertEquals(what + ': and three stops paint the same ramp' + first, 0, n);
+      CheckPlainMidpoint(what, a, pair.GradFrom, pair.GradTo);
+    finally
+      a.Free;
+      b.Free;
+      c.Free;
+    end;
+  end;
 end;
 
 initialization
