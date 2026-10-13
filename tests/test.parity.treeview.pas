@@ -1033,6 +1033,9 @@ procedure TTreeParityPaintTest.TestHideSelectionSuppressesFillWhenUnfocused;
 var
   px: TBGRAPixel;
 begin
+  { #71: probed past the caption, so across the row -- RowSelect's fill. Without it this
+    pixel is plain whatever HideSelection says, and the test would pass for no reason. }
+  FT.RowSelect := True;
   FT.NodeSelected[FT.RootNode^.FirstChild] := True;
   AssertTrue('HideSelection defaults True, like LCL', FT.HideSelection);
   AssertFalse('and a headless control is not focused', FT.Focused);
@@ -1045,6 +1048,7 @@ var
   px: TBGRAPixel;
 begin
   FT.HideSelection := False;
+  FT.RowSelect := True;   { #71: the fill across the row, where it is probed }
   FT.NodeSelected[FT.RootNode^.FirstChild] := True;
   px := RenderPixel(120, 8);
   AssertTrue('with HideSelection off the fill stays', px.blue > 150);

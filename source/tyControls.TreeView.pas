@@ -4981,6 +4981,11 @@ procedure TTyCustomTreeView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI:
 var
   P: TTyPainter;
   S, NodeStyle: TTyStyleSet;
+  { #71: the style of what stays OUTSIDE a caption highlight -- the row ground, the
+    expander, the check box, the other columns. The selection's style when the whole row
+    is highlighted (toFullRowSelect), the plain node style otherwise. }
+  ChromeStyle: TTyStyleSet;
+  fullRow: Boolean;
   W, H: Integer;
   CR: TRect;   // content rect (frame interior minus scrollbars)
   SBThick: Integer;
@@ -5024,6 +5029,36 @@ var
   colAlign: TAlignment;
   sortBandR: TRect;
   accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
+
+  { #71. Without toFullRowSelect a selected (or hovered) node highlights its caption, not
+    the row: the text the main column shows -- its first line, as DrawText draws it -- and
+    TextPad either side, from the side the text is drawn from (the far side mirrored).
+    AWhole: an owner-drawn cell, whose content is the application's, so the whole caption
+    region. Clipped to that region. Reads the current row's slots, rowTop and rowH. }
+  procedure FillCaptionHighlight(const ATextRect: TRect; const AText: string;
+    AWhole: Boolean);
+  var
+    box: TRect;
+    w: Integer;
+  begin
+    if fullRow or (nodeStates = []) or not (tpBackground in NodeStyle.Present) then Exit;
+    box := Rect(slots.CaptionX, rowTop, slots.CaptionRight, rowTop + rowH);
+    if not AWhole then
+    begin
+      w := 0;
+      if AText <> '' then
+        w := P.MeasureText(TySingleLineText(AText), NodeStyle.FontName,
+          ResolveFontSize(NodeStyle), NodeStyle.FontWeight).cx;
+      if P.RightToLeft then
+        box.Left := Max(box.Left, ATextRect.Right - w - slots.TextPad)
+      else
+        box.Right := Min(box.Right, ATextRect.Left + w + slots.TextPad);
+    end;
+    if box.Right > box.Left then
+      P.FillBackground(box, NodeStyle.Background, 0);
+  end;
+
+var
   mainColBase: Integer;
   { B2: checkbox APPEARANCE only -- the slot's x and width come from `slots`. }
   cbStyle: TTyStyleSet;        // resolved TyTreeCheckBox style
@@ -5392,11 +5427,19 @@ begin
         nodeStates := [tysHover];
 
       NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', nodeStates);
+      { #71: the row ground is the selection's only with toFullRowSelect, as treeview.md
+        says and LCL's RowSelect does; without it the caption carries the highlight
+        (FillCaptionHighlight) and everything else here is drawn plain. }
+      fullRow := toFullRowSelect in FOptions;
+      if fullRow or (nodeStates = []) then
+        ChromeStyle := NodeStyle
+      else
+        ChromeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
 
-      if tpBackground in NodeStyle.Present then
+      if tpBackground in ChromeStyle.Present then
       begin
         bgRect := rowRect;
-        P.FillBackground(bgRect, NodeStyle.Background, 0);
+        P.FillBackground(bgRect, ChromeStyle.Background, 0);
       end;
 
       { LCL parity (comctrls.pp:3703): a rule under each TOP-LEVEL row. The colour is
@@ -5532,9 +5575,9 @@ begin
                 reaches the tree too. Calling the painter straight bypassed an override
                 this library already supports everywhere else. }
               if nsExpanded in node^.States then
-                TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, 1, 2)
+                TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, ChromeStyle.TextColor, 1, 2)
               else
-                TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, 1, 2);
+                TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, ChromeStyle.TextColor, 1, 2);
             end;
 
             { B2: Checkbox slot (main column, after expand button, before image) }
@@ -5543,7 +5586,7 @@ begin
               { Resolve checkbox style — fall back gracefully if typeKey absent }
               if node^.CheckState = csChecked then
                 cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
-              else if nsSelected in node^.States then
+              else if (nsSelected in node^.States) and fullRow then   { #71: on the highlight }
                 cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
               else
                 cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
@@ -5577,7 +5620,7 @@ begin
                     if tpTextColor in cbStyle.Present then
                       P.DrawGlyph(cbBoxRect, tgCheck, cbStyle.TextColor, 2)
                     else
-                      P.DrawGlyph(cbBoxRect, tgCheck, NodeStyle.TextColor, 2);
+                      P.DrawGlyph(cbBoxRect, tgCheck, ChromeStyle.TextColor, 2);
                   end
                   else if node^.CheckState = csMixed then
                   begin
@@ -5611,7 +5654,7 @@ begin
                     if tpTextColor in cbStyle.Present then
                       P.DrawGlyph(cbBoxRect, tgRadioDot, cbStyle.TextColor, 2)
                     else
-                      P.DrawGlyph(cbBoxRect, tgRadioDot, NodeStyle.TextColor, 2);
+                      P.DrawGlyph(cbBoxRect, tgRadioDot, ChromeStyle.TextColor, 2);
                   end;
                 end;
               end; { case }
@@ -5663,6 +5706,8 @@ begin
 
             { Caption in main column — skipped for an owner-drawn cell (the app
               fully replaces the cell content via OnDrawNode post-EndPaint). }
+            if ownerDrawCell then
+              FillCaptionHighlight(Rect(0, 0, 0, 0), '', True);   { #71 }
             if not ownerDrawCell then
             begin
               colTxt := '';
@@ -5676,6 +5721,7 @@ begin
                 straight under the chrome. }
               textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
                                slots.CaptionRight - slots.TextPad, rowTop + rowH);
+              FillCaptionHighlight(textRect, colTxt, False);   { #71 }
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
                 P.DrawText(textRect, colTxt,
                   NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
@@ -5707,10 +5753,11 @@ begin
               colAlign := col.Alignment;
               textRect := Rect(colCaptionX, rowTop,
                                slots.CaptionRight - colMargin, rowTop + rowH);
+              { #71: not on the highlight unless the whole row is, so the chrome's style. }
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
                 P.DrawText(textRect, colTxt,
-                  NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-                  NodeStyle.TextColor, colAlign, tlCenter, True);
+                  ChromeStyle.FontName, ResolveFontSize(ChromeStyle), ChromeStyle.FontWeight,
+                  ChromeStyle.TextColor, colAlign, tlCenter, True);
 
               if Assigned(FOnPaintText) then
                 FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
@@ -5818,9 +5865,9 @@ begin
             the tree too. Calling the painter straight bypassed an override this library
             already supports everywhere else. }
           if nsExpanded in node^.States then
-            TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, 1, 2)
+            TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, ChromeStyle.TextColor, 1, 2)
           else
-            TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, 1, 2);
+            TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, ChromeStyle.TextColor, 1, 2);
         end;
 
         { ── B2: Checkbox slot (after expand button, before image) ──────── }
@@ -5829,7 +5876,7 @@ begin
           { Resolve checkbox style }
           if node^.CheckState = csChecked then
             cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
-          else if nsSelected in node^.States then
+          else if (nsSelected in node^.States) and fullRow then   { #71: on the highlight }
             cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
           else
             cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
@@ -5863,7 +5910,7 @@ begin
                 if tpTextColor in cbStyle.Present then
                   P.DrawGlyph(cbBoxRect, tgCheck, cbStyle.TextColor, 2)
                 else
-                  P.DrawGlyph(cbBoxRect, tgCheck, NodeStyle.TextColor, 2);
+                  P.DrawGlyph(cbBoxRect, tgCheck, ChromeStyle.TextColor, 2);
               end
               else if node^.CheckState = csMixed then
               begin
@@ -5895,7 +5942,7 @@ begin
                 if tpTextColor in cbStyle.Present then
                   P.DrawGlyph(cbBoxRect, tgRadioDot, cbStyle.TextColor, 2)
                 else
-                  P.DrawGlyph(cbBoxRect, tgRadioDot, NodeStyle.TextColor, 2);
+                  P.DrawGlyph(cbBoxRect, tgRadioDot, ChromeStyle.TextColor, 2);
               end;
             end;
           end; { case }
@@ -5962,10 +6009,13 @@ begin
         if not ownerDrawCell then
           DoGetText(node, txt);
 
+        if ownerDrawCell then
+          FillCaptionHighlight(Rect(0, 0, 0, 0), '', True);   { #71 }
         if not ownerDrawCell then
         begin
           textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
                            slots.CaptionRight, rowTop + rowH);
+          FillCaptionHighlight(textRect, txt, False);   { #71 }
           if (textRect.Left < textRect.Right) and (txt <> '') then
             P.DrawText(textRect, txt,
               NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,

@@ -3163,6 +3163,9 @@ begin
       This test is about the ACTIVE selection fill; the inactive behaviour has its own
       guards in test.parity.treeview.pas. }
     Tree.HideSelection := False;
+    { #71: a fill across the row is RowSelect's. The default highlights the caption only
+      (TTreeColumnPaintTest.TestByDefaultASelectedNodeHighlightsOnlyItsCaption). }
+    Tree.RowSelect := True;
     { Select node 0 }
     Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
 
@@ -4036,6 +4039,9 @@ type
       var InitStates: TTyNodeInitStates);
     procedure C0InitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
+    { #71: an owner-draw handler that draws nothing, so what shows is the tree's own. }
+    procedure DrawNothing(Sender: TTyCustomTreeView; ACanvas: TCanvas; Node: PTyTreeNode;
+      Column: Integer; const ACellRect: TRect);
 
     { Build a 3-column tree and render it.  Returns the BGRA bitmap (caller
       frees both Bgra and Bmp).
@@ -4067,6 +4073,14 @@ type
     { C0 regression: 0 columns → existing ① single-column paint is unchanged.
       The same pixel assertions as TestChildRowIndentedMoreThanTopLevel must still hold. }
     procedure TestC0_ZeroColumnsIdenticToIIIa;
+    procedure TestByDefaultASelectedNodeHighlightsOnlyItsCaption;
+    procedure TestRowSelectHighlightsTheWholeRow;
+    procedure TestByDefaultTheOtherColumnsOfASelectedRowStayPlain;
+    procedure TestByDefaultTheCheckBoxOfASelectedNodeLooksPlain;
+    procedure TestByDefaultTheHighlightHugsTheCaptionMirroredToo;
+    procedure TestByDefaultAnOwnerDrawnCaptionIsHighlightedWhole;
+    procedure TestByDefaultInColumnsTheCheckBoxLooksPlain;
+    procedure TestByDefaultInColumnsAnOwnerDrawnCaptionIsHighlightedWhole;
   end;
 
   { TTreeD1D2Test — D1 header/column hit-test + D2 column resize by drag }
@@ -4410,6 +4424,9 @@ begin
       control is never Focused, so the ACTIVE fill this test is about has to opt out
       of the inactive-selection rule. }
     Tree.HideSelection := False;
+    { #71: across the row, and into the other columns, is RowSelect's. The default stays
+      in the main caption (TestByDefaultTheOtherColumnsOfASelectedRowStayPlain). }
+    Tree.RowSelect := True;
     { Select the root node (row 0) }
     Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
 
@@ -9969,6 +9986,414 @@ begin
   AssertEquals('scrolled as far as it goes: the same place', HS_COUNT * HS_ROW - rowsH,
     t.ScrolledTop);
   AssertTrue('and the bottom item is the last node', t.BottomItem = last);
+end;
+
+{ #71. True when some pixel of the box [x0..x1] x [y0..y1] is the theme accent of the
+  selection fill (#3B82F6: blue-dominant). }
+function AccentInBox(Bgra: TBGRABitmap; x0, x1, y0, y1: Integer): Boolean;
+var
+  x, y: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for y := y0 to y1 do
+    for x := x0 to x1 do
+    begin
+      px := Bgra.GetPixel(x, y);
+      if (px.blue > 150) and (px.red < 120) then Exit(True);
+    end;
+end;
+
+{ #71. True when some pixel of the box is black ink -- all three channels low. Neither
+  the accent (blue 246) nor white ink on it passes, which a red-only test would let by. And
+  the pixel is painted: where nothing is drawn the painter leaves 0,0,0 with alpha 0, which
+  reads as black and made every ink check pass whatever colour the ink was. }
+function BlackInkInBox(Bgra: TBGRABitmap; x0, x1, y0, y1: Integer): Boolean;
+var
+  x, y: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for y := y0 to y1 do
+    for x := x0 to x1 do
+    begin
+      px := Bgra.GetPixel(x, y);
+      if (px.alpha > 0) and (px.red < 100) and (px.green < 100) and (px.blue < 100) then
+        Exit(True);
+    end;
+end;
+
+{ #71. True when some painted pixel of the box is darker than white in every channel: a
+  thin line, anti-aliased to grey, still counts -- the check box's own border is one. }
+function InkInBox(Bgra: TBGRABitmap; x0, x1, y0, y1: Integer): Boolean;
+var
+  x, y: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for y := y0 to y1 do
+    for x := x0 to x1 do
+    begin
+      px := Bgra.GetPixel(x, y);
+      if (px.alpha > 0) and (px.red < 200) and (px.green < 200) and (px.blue < 200) then
+        Exit(True);
+    end;
+end;
+
+{ #71. Without toFullRowSelect (RowSelect, default off) a selected node highlights its
+  caption, not the row: the indent, the tree lines and the expander stay on the plain ground
+  in their own colours -- treeview.md promises it, as LCL's TTreeView (RowSelect False) and
+  VirtualTreeView do. The highlight covered the whole row whatever the option said, and the
+  expander was drawn in the selection's white on it.
+  Fixture: rows of 20 px, Indent 16, ShowRoot; row 1 is "Node 0 L1" at level 1, so its
+  expander takes x 16..31 and its caption starts at x 32. }
+procedure TTreeColumnPaintTest.TestByDefaultASelectedNodeHighlightsOnlyItsCaption;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildPaintTree(Ctl, F, @C0GetText, @C0InitNode, @C0InitChildren);
+  try
+    Tree.ShowTreeLines := False;   // the lines' ink must not stand in for the expander's
+    Tree.HideSelection := False;   // a headless tree is never Focused
+    AssertFalse('setup: RowSelect is off by default', Tree.RowSelect);
+    Tree.NodeSelected[Tree.RootNode^.FirstChild^.FirstChild] := True;
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('the caption is highlighted', AccentInBox(Bgra, 32, 40, 30, 30));
+      AssertFalse('the indent and the expander are not', AccentInBox(Bgra, 0, 31, 21, 38));
+      AssertFalse('nor the row past the caption', AccentInBox(Bgra, 150, 195, 21, 38));
+      AssertTrue('the expander keeps its own ink on the plain ground',
+        BlackInkInBox(Bgra, 16, 31, 21, 38));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+
+    { An expanded node's expander, the other glyph: row 0, x 0..15. }
+    Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('setup: row 0 is selected', AccentInBox(Bgra, 16, 24, 10, 10));
+      AssertTrue('an expanded node''s expander keeps its ink too',
+        BlackInkInBox(Bgra, 0, 15, 1, 18));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #71. With RowSelect the whole row is highlighted, indent to edge. }
+procedure TTreeColumnPaintTest.TestRowSelectHighlightsTheWholeRow;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildPaintTree(Ctl, F, @C0GetText, @C0InitNode, @C0InitChildren);
+  try
+    Tree.ShowTreeLines := False;
+    Tree.HideSelection := False;
+    Tree.RowSelect := True;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild^.FirstChild] := True;
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('the indent is highlighted', AccentInBox(Bgra, 0, 15, 30, 30));
+      AssertTrue('and the row past the caption', AccentInBox(Bgra, 150, 195, 30, 30));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #71. In columns the caption is the main column's: the other cells of a selected row
+  stay on the plain ground, their text in its own colour -- the selection's white there was
+  white on white once the fill was gone. Row 0 (y 22..43) is the root, at level 0: expander
+  x 0..15, caption from x 16; column 1 spans x 120..199, column 2 x 200..299. }
+procedure TTreeColumnPaintTest.TestByDefaultTheOtherColumnsOfASelectedRowStayPlain;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Tree.HideSelection := False;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
+
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      AssertTrue('the main caption is highlighted', AccentInBox(Bgra, 16, 22, 33, 33));
+      AssertFalse('the expander is not', AccentInBox(Bgra, 0, 15, 23, 42));
+      AssertTrue('and keeps its own ink', BlackInkInBox(Bgra, 0, 15, 23, 42));
+      AssertFalse('nor column 1', AccentInBox(Bgra, COL1_LEFT, COL2_LEFT - 1, 23, 42));
+      AssertFalse('nor column 2', AccentInBox(Bgra, COL2_LEFT, COL2_LEFT + COL2_W - 1, 23, 42));
+      AssertTrue('column 1''s text is drawn in its own colour',
+        BlackInkInBox(Bgra, COL1_LEFT, COL2_LEFT - 1, 23, 42));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+
+    { A collapsed node's expander, the other glyph. }
+    Tree.Expanded[Tree.RootNode^.FirstChild] := False;
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      AssertTrue('a collapsed node''s expander keeps its ink too',
+        BlackInkInBox(Bgra, 0, 15, 23, 42));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeColumnPaintTest.DrawNothing(Sender: TTyCustomTreeView; ACanvas: TCanvas;
+  Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+begin
+end;
+
+{ #71. The check box of a selected node sits on the plain ground, so it takes its plain
+  look, not the one made for the highlight -- that one is an accent box, which on white
+  read as "checked". Row 1 (level 1): expander x 16..31, check box slot x 32..47, caption
+  from x 48. }
+procedure TTreeColumnPaintTest.TestByDefaultTheCheckBoxOfASelectedNodeLooksPlain;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  n: PTyTreeNode;
+begin
+  Tree := BuildPaintTree(Ctl, F, @C0GetText, @C0InitNode, @C0InitChildren);
+  try
+    Ctl.LoadThemeCss(
+      'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+      'TyTreeNode { background: none; color: #000000; } ' +
+      'TyTreeNode:selected { background: #3B82F6; color: #FFFFFF; } ' +
+      'TyTreeCheckBox { background: #FFFFFF; border-color: #000000; border-width: 1px; } ' +
+      'TyTreeCheckBox:selected { background: #3B82F6; border-color: #3B82F6; }');
+    Tree.ShowTreeLines := False;
+    Tree.HideSelection := False;
+    Tree.Options := Tree.Options + [toCheckSupport];
+    n := Tree.RootNode^.FirstChild^.FirstChild;
+    Tree.CheckType[n] := ctCheckBox;
+    Tree.CheckState[n] := csUnchecked;
+    Tree.NodeSelected[n] := True;
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('setup: the caption is highlighted', AccentInBox(Bgra, 48, 54, 30, 30));
+      AssertFalse('the check box is not', AccentInBox(Bgra, 32, 47, 21, 38));
+      AssertTrue('and has its plain border', InkInBox(Bgra, 32, 47, 21, 38));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+
+    { Checked, and as a radio button: a check box style that names no colour of its own
+      draws the glyph in the ink of what it sits on -- the selection's white would vanish
+      on the plain box. The box is x 34..45, y 24..35; inside it x 37..43, y 27..33, and the
+      radio button's dot, clear of its ring, x 38..42, y 28..32 -- a small one, grey once
+      anti-aliased, hence InkInBox. }
+    Tree.CheckState[n] := csChecked;
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('a checked box shows its check', BlackInkInBox(Bgra, 37, 43, 27, 33));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+    Tree.CheckType[n] := ctRadioButton;
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('a checked radio button shows its dot', InkInBox(Bgra, 38, 42, 28, 32));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #71. Right to left the caption is drawn against its far side, so that is where the
+  highlight sits; the mirrored indent and expander, at the right, stay plain. The tree is
+  200 wide: row 1's expander mirrors to x 168..183 and its caption ends at x 168. }
+procedure TTreeColumnPaintTest.TestByDefaultTheHighlightHugsTheCaptionMirroredToo;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildPaintTree(Ctl, F, @C0GetText, @C0InitNode, @C0InitChildren);
+  try
+    Tree.ShowTreeLines := False;
+    Tree.HideSelection := False;
+    Tree.BiDiMode := bdRightToLeft;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild^.FirstChild] := True;
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('the caption is highlighted, at its end', AccentInBox(Bgra, 160, 167, 30, 30));
+      AssertFalse('not the left of the row, past the caption', AccentInBox(Bgra, 0, 60, 21, 38));
+      AssertFalse('nor the mirrored indent and expander', AccentInBox(Bgra, 169, 199, 21, 38));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #71. An owner-drawn cell's content is the application's, and how wide it is the tree
+  cannot tell: the whole caption region is highlighted -- still not the indent. }
+procedure TTreeColumnPaintTest.TestByDefaultAnOwnerDrawnCaptionIsHighlightedWhole;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildPaintTree(Ctl, F, @C0GetText, @C0InitNode, @C0InitChildren);
+  try
+    Tree.ShowTreeLines := False;
+    Tree.HideSelection := False;
+    Tree.Options := Tree.Options + [toOwnerDraw];
+    Tree.OnDrawNode := @DrawNothing;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild^.FirstChild] := True;
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      AssertTrue('the caption region is highlighted to its end',
+        AccentInBox(Bgra, 150, 195, 30, 30));
+      AssertFalse('the indent and the expander are not', AccentInBox(Bgra, 0, 31, 21, 38));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #71, the columns' paint path: the same check box rule as
+  TestByDefaultTheCheckBoxOfASelectedNodeLooksPlain. Row 0 is the root at level 0:
+  expander x 0..15, check box slot x 16..31, caption from x 32. }
+procedure TTreeColumnPaintTest.TestByDefaultInColumnsTheCheckBoxLooksPlain;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  n: PTyTreeNode;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Ctl.LoadThemeCss(COLUMN_THEME_CSS +
+      ' TyTreeCheckBox { background: #FFFFFF; border-color: #000000; border-width: 1px; } ' +
+      'TyTreeCheckBox:selected { background: #3B82F6; border-color: #3B82F6; }');
+    Tree.HideSelection := False;
+    Tree.Options := Tree.Options + [toCheckSupport];
+    n := Tree.RootNode^.FirstChild;
+    Tree.CheckType[n] := ctCheckBox;
+    Tree.CheckState[n] := csUnchecked;
+    Tree.NodeSelected[n] := True;
+
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      AssertTrue('setup: the caption is highlighted', AccentInBox(Bgra, 32, 38, 33, 33));
+      AssertFalse('the check box is not', AccentInBox(Bgra, 16, 31, 23, 42));
+      AssertTrue('and has its plain border', InkInBox(Bgra, 16, 31, 23, 42));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+
+    { As in the single-column test: the box is x 18..29, y 27..38; inside x 21..27,
+      y 30..36; the dot, clear of the ring, x 22..26, y 31..35. }
+    Tree.CheckState[n] := csChecked;
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      AssertTrue('a checked box shows its check', BlackInkInBox(Bgra, 21, 27, 30, 36));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+    Tree.CheckType[n] := ctRadioButton;
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      AssertTrue('a checked radio button shows its dot', InkInBox(Bgra, 22, 26, 31, 35));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #71, the columns' paint path: an owner-drawn main cell is highlighted over its whole
+  caption region, to the cell's end; the other columns are not. }
+procedure TTreeColumnPaintTest.TestByDefaultInColumnsAnOwnerDrawnCaptionIsHighlightedWhole;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Tree.HideSelection := False;
+    Tree.Options := Tree.Options + [toOwnerDraw];
+    Tree.OnDrawNode := @DrawNothing;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
+
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      AssertTrue('the main caption region is highlighted to the cell''s end',
+        AccentInBox(Bgra, 100, COL1_LEFT - 2, 33, 33));
+      AssertFalse('not the expander', AccentInBox(Bgra, 0, 15, 23, 42));
+      AssertFalse('nor column 1', AccentInBox(Bgra, COL1_LEFT, COL2_LEFT - 1, 23, 42));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization
