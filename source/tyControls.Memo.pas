@@ -184,6 +184,10 @@ type
     // prefix path. Same content key + font-signature drop discipline as FLineWidthCache; the
     // total equals MeasureLineWidths(line)[High] exactly (both are TextSize of the whole line).
     FLineTotalWidthCache: specialize TDictionary<string, Integer>;
+    // Per-character width cache (one UTF-8 character -> its TextSize width), same font-signature
+    // drop discipline. WidestLineWidth sums it into a cheap per-line ESTIMATE so that only the few
+    // lines that could be the widest are measured whole; see WidestLineWidth for the bound.
+    FCharWidthCache: specialize TDictionary<string, Integer>;
     // Memoised widest logical-line width (px) + the font signature it was computed for. Cleared by
     // InvalidateVisualRows (every text mutation funnels through it), so a scroll/paint/scrollbar
     // pass does not re-scan all lines. FWidestWidthValid=False => recompute on next WidestLineWidth.
@@ -382,6 +386,8 @@ type
     // function entry, incl. cache hits). The perf-regression test asserts a bulk load + widest-width
     // scroll-range scan does NOT enter it once per line (WidestLineWidth uses the cheap total path).
     FMeasureLineWidthsCalls: Integer;
+    // diagnostic: whole-line TextSize calls made by MeasureLineTotalWidth (perf test)
+    FLineTotalMeasures: Integer;
     // Diagnostic: how many times the RTL gate actually SCANNED a line (memo misses only).
     // The perf guard asserts a thousand left-to-right lines cost the caret no more scans
     // than one line does -- i.e. that the gate is per line, not per document.
@@ -1113,11 +1119,13 @@ begin
   FMeasureBmp := nil;
   FLineWidthCache := specialize TDictionary<string, TTyIntArray>.Create;
   FLineTotalWidthCache := specialize TDictionary<string, Integer>.Create;
+  FCharWidthCache := specialize TDictionary<string, Integer>.Create;
   FWidthCacheSig := '';
   FWidestWidth := 0;
   FWidestWidthValid := False;
   FWidestWidthSig := '';
   FMeasureLineWidthsCalls := 0;
+  FLineTotalMeasures := 0;
   FBidiGateCalls := 0;
   FBidiRowLookups := 0;
   FBidiLayoutBuilds := 0;
@@ -1173,6 +1181,7 @@ begin
   FMeasureBmp.Free;
   FLineWidthCache.Free;
   FLineTotalWidthCache.Free;
+  FCharWidthCache.Free;
   FRowBidiCache.Free;
   FLines.Free;
   FreeAndNil(FOnChangeHandlers);
@@ -2295,15 +2304,41 @@ end;
 // stays byte-identical to today (FScrollX = 0 collapses every X term).
 
 function TTyCustomMemo.WidestLineWidth(APPI: Integer): Integer;
-// Widest logical line, in px. Only each line's TOTAL width is needed, so this uses the O(L) cheap
-// total-width path (one TextSize per line) instead of the O(L^2) per-character MeasureLineWidths —
-// loading N KB no longer re-measures every character-prefix of every line (the ~10s file-preview
-// stall). The scan result is memoised and cleared by InvalidateVisualRows on any text change, so
-// scroll/paint/scrollbar passes reuse it. Font-signature guarded so a theme/DPI change recomputes.
+// Widest logical line, in px, exactly as the old full scan found it, without measuring every line.
+// Each whole-line TextSize costs a fixed ~1 ms on top of its length (BGRA sets its font renderer up
+// per call), so measuring all of a 57 000-line option took ~50 s. Instead every line gets an
+// ESTIMATE, the sum of its characters' widths (each character measured once, cached), and lines are
+// measured whole only in falling-estimate order while they could still win: a line's real width is
+// within one pixel per character of its estimate (each per-character width is rounded on its own),
+// so once an estimate plus the LONGEST line's length (+2) falls below the widest measured so far,
+// no later line can beat it (later lines have smaller estimates; the slack must cover any length).
+// The scan result is memoised and cleared by InvalidateVisualRows on any text change, and
+// font-signature guarded so a theme/DPI change recomputes.
 var
-  i, W: Integer;
+  i, j, n, W, k, cnt, best, slack, chars: Integer;
   S: TTyStyleSet;
-  sig: string;
+  sig, line, ch: string;
+  est, order: array of Integer;
+
+  procedure SortByEstimate(L, R: Integer);
+  var a, b, pivot, tmp: Integer;
+  begin
+    repeat
+      a := L; b := R; pivot := est[order[(L + R) shr 1]];
+      repeat
+        while est[order[a]] > pivot do Inc(a);
+        while est[order[b]] < pivot do Dec(b);
+        if a <= b then
+        begin
+          tmp := order[a]; order[a] := order[b]; order[b] := tmp;
+          Inc(a); Dec(b);
+        end;
+      until a > b;
+      if L < b then SortByEstimate(L, b);
+      L := a;
+    until a >= R;
+  end;
+
 begin
   S := CurrentStyle;
   sig := S.FontName + '|' + IntToStr(EffectiveFontSize(S)) + '|'
@@ -2311,10 +2346,57 @@ begin
   if FWidestWidthValid and (sig = FWidestWidthSig) then
     Exit(FWidestWidth);
   Result := 0;
-  for i := 0 to FLines.Count - 1 do
+  n := FLines.Count;
+  if n > 0 then
   begin
-    W := MeasureLineTotalWidth(FLines[i], APPI);
-    if W > Result then Result := W;
+    if sig <> FWidthCacheSig then
+    begin
+      FLineWidthCache.Clear;
+      FLineTotalWidthCache.Clear;
+      FCharWidthCache.Clear;
+      FLastMeasuredLine := '';
+      FLastMeasuredWidths := nil;
+      FWidthCacheSig := sig;
+    end;
+    SetLength(est, n);
+    SetLength(order, n);
+    slack := 0;
+    for i := 0 to n - 1 do
+    begin
+      line := FLines[i];
+      W := 0;
+      chars := 0;
+      j := 1;
+      while j <= Length(line) do
+      begin
+        k := UTF8CodepointSize(@line[j]);
+        if k < 1 then k := 1;
+        ch := Copy(line, j, k);
+        if not FCharWidthCache.TryGetValue(ch, cnt) then
+        begin
+          if FMeasureBmp = nil then
+            FMeasureBmp := TBGRABitmap.Create(1, 1);
+          TyConfigureTextFont(FMeasureBmp, S.FontName, EffectiveFontSize(S), S.FontWeight, APPI);
+          cnt := FMeasureBmp.TextSize(ch).cx;
+          FCharWidthCache.Add(ch, cnt);
+        end;
+        Inc(W, cnt);
+        Inc(chars);
+        Inc(j, k);
+      end;
+      if chars + 2 > slack then slack := chars + 2;
+      est[i] := W;
+      order[i] := i;
+    end;
+    if n > 1 then SortByEstimate(0, n - 1);
+    best := 0;
+    for i := 0 to n - 1 do
+    begin
+      if est[order[i]] + slack < best then Break;
+      W := MeasureLineTotalWidth(FLines[order[i]], APPI);
+      if W > best then best := W;
+    end;
+    Result := best;
   end;
   FWidestWidth := Result;
   FWidestWidthValid := True;
@@ -3812,6 +3894,7 @@ begin
   begin
     FLineWidthCache.Clear;
     FLineTotalWidthCache.Clear;
+    FCharWidthCache.Clear;
     FLastMeasuredLine := '';
     FLastMeasuredWidths := nil;
     FWidthCacheSig := sig;
@@ -3886,6 +3969,7 @@ begin
     // Font changed: both caches are stale. Mirror MeasureLineWidths' reset so they stay coherent.
     FLineWidthCache.Clear;
     FLineTotalWidthCache.Clear;
+    FCharWidthCache.Clear;
     FLastMeasuredLine := '';
     FLastMeasuredWidths := nil;
     FWidthCacheSig := sig;
@@ -3904,6 +3988,7 @@ begin
       FMeasureBmp := TBGRABitmap.Create(1, 1);
     TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
     Result := FMeasureBmp.TextSize(ALine).cx;
+    Inc(FLineTotalMeasures);
   end;
   if FLineTotalWidthCache.Count > 4096 then
     FLineTotalWidthCache.Clear;
