@@ -712,7 +712,9 @@ begin
         if TyParseDateMs(AArg.Str, ms, False) then Result := ms else Result := NaN;
       end
       else
-        Result := AArg.Num;
+        { TimeScale.parse: a number is rounded -- it may come out of a
+          percent (Time.ts:273) [F1b: it was taken as it was] }
+        Result := TyJsRound(AArg.Num);
   else
     Result := AArg.Num;
   end;
