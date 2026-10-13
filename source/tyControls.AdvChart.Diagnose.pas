@@ -43,7 +43,12 @@ type
       panel that has not run yet look the same, and a developer shown nothing
       concludes the editor gave up. What it says depends on how much of the
       chart can actually be drawn -- see the end of TyOptDiagnose. }
-    odkAllClear);
+    odkAllClear,
+    { The last row of a list that hit its cap: "and N more like these". Not a
+      problem of its own, so a count of problems must not count it -- it says
+      how many were left out, in Hidden. [F1b: it was an odkBuild, and the
+      demo counted the cut-off list as a hundred problems.] }
+    odkTruncated);
 
   TTyOptDiag = record
     Kind: TTyOptDiagKind;
@@ -54,6 +59,8 @@ type
     Line, Col, Len: Integer;
     { Ready to show. Already carries the "did you mean" when there is one. }
     Text: string;
+    { odkTruncated only: how many rows were left out. 0 on every other row. }
+    Hidden: Integer;
   end;
   TTyOptDiagArray = array of TTyOptDiag;
 
@@ -101,6 +108,7 @@ begin
   C.Items[C.Count].Kind := AKind;
   C.Items[C.Count].Path := APath;
   C.Items[C.Count].Text := AText;
+  C.Items[C.Count].Hidden := 0;
   C.Items[C.Count].Line := 0;
   C.Items[C.Count].Col := 0;
   C.Items[C.Count].Len := 0;
@@ -382,13 +390,14 @@ begin
     stopping, which would read as "that is all of them". }
   if C.Count > cMaxRows then
   begin
-    C.Items[cMaxRows - 1].Kind := odkBuild;
+    C.Items[cMaxRows - 1].Kind := odkTruncated;
     C.Items[cMaxRows - 1].Path := '';
     C.Items[cMaxRows - 1].Line := 0;
     C.Items[cMaxRows - 1].Col := 0;
     C.Items[cMaxRows - 1].Len := 0;
+    C.Items[cMaxRows - 1].Hidden := C.Count - cMaxRows + 1;
     C.Items[cMaxRows - 1].Text :=
-      Format(rsTyOptDiagMoreRows, [C.Count - cMaxRows + 1]);
+      Format(rsTyOptDiagMoreRows, [C.Items[cMaxRows - 1].Hidden]);
     C.Count := cMaxRows;
   end;
 

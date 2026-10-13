@@ -39,6 +39,8 @@ type
     procedure TestTheListIsInTextOrder;
     procedure TestFormatTidiesAndRefusesWhatItCannotParse;
     procedure TestRepeatedDiagnosisDoesNotGrowTheHeap;
+    { ---- an empty chart is not an understood one [F1b] ---- }
+    procedure TestACutListSaysHowManyItHidAndIsNotAProblem;
   end;
 
 implementation
@@ -48,7 +50,7 @@ uses tyControls.StrConsts;
 function TAdvChartDiagnoseTest.Kinds(const AText: string): string;
 const
   cNames: array[TTyOptDiagKind] of string = (
-    'parse', 'unknown', 'enum', 'notype', 'build', 'ok');
+    'parse', 'unknown', 'enum', 'notype', 'build', 'ok', 'more');
 var
   all: TTyOptDiagArray;
   i: Integer;
@@ -476,6 +478,34 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over two hundred calls',
     [before, after]), after <= before + 65536);
+end;
+
+{ ---- an empty chart is not an understood one [F1b] ---- }
+
+procedure TAdvChartDiagnoseTest.TestACutListSaysHowManyItHidAndIsNotAProblem;
+var
+  txt: string;
+  all: TTyOptDiagArray;
+  i, n: Integer;
+begin
+  txt := '{ xAxis: { data: [''A''] }, yAxis: {}, series: [{ type: ''bar'', data: [1],';
+  for i := 1 to 150 do txt := txt + ' zz' + IntToStr(i) + ': 1,';
+  txt := txt + ' z: 1 }] }';
+  all := TyOptDiagnose(txt);
+  AssertEquals('capped', 100, Length(all));
+  n := 0;
+  for i := 0 to High(all) do
+    if all[i].Kind = odkTruncated then Inc(n);
+  AssertEquals('one row says what was cut', 1, n);
+  AssertTrue('and it is the last', all[99].Kind = odkTruncated);
+  AssertEquals('how many it hid', 51, all[99].Hidden);
+  AssertEquals(Format(rsTyOptDiagMoreRows, [51]), all[99].Text);
+  { every other row is a real one, carrying nothing hidden }
+  for i := 0 to 98 do
+  begin
+    AssertTrue('row ' + IntToStr(i), all[i].Kind = odkUnknownOption);
+    AssertEquals(0, all[i].Hidden);
+  end;
 end;
 
 initialization

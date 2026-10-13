@@ -322,10 +322,19 @@ begin
     "could not honour" above a single line saying nothing was wrong. When it is the only kind of row there
     is, it is shown on its own, without a header. The header itself says
     "note", not "failure": an option the catalog does not know is often one the
-    chart simply has no use for. }
+    chart simply has no use for.
+
+    A LONG LIST IS CUT, and its last row says how many were left out. That row
+    is not a note of its own; what it hides is counted instead, so the header
+    gives the real total rather than the hundred rows that fit. }
   notes := 0;
   for i := 0 to High(diags) do
-    if diags[i].Kind <> odkAllClear then Inc(notes);
+    case diags[i].Kind of
+      odkAllClear: ;
+      odkTruncated: Inc(notes, diags[i].Hidden);
+    else
+      Inc(notes);
+    end;
   if notes = 0 then
   begin
     s := '';
