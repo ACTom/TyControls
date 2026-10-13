@@ -191,6 +191,8 @@ type
     FMeasureCalls: Integer;
     procedure OnMeasureItem(Sender: TTyCustomTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; var ANodeHeight: Integer);
+    procedure OnMeasureZero(Sender: TTyCustomTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; var ANodeHeight: Integer);
     { Build a flat tree of AChildCount root children at APPI; optionally wire
       OnMeasureItem + toVariableNodeHeight. Caller frees F then Ctl. }
     function BuildFlatTree(out Ctl: TTyStyleController; out F: TForm;
@@ -218,6 +220,12 @@ type
     procedure TestHiDPILogicalInvariant;
     { OnMeasureItem returning 0 is ignored (height stays at default) }
     procedure TestZeroHeightIgnored;
+    procedure TestTurningTheOptionOnMeasuresTheNodesThatExist;
+    procedure TestTurningTheOptionOnLeavesTheRestToInitNode;
+    procedure TestAZeroFromAMeasureLaterIsIgnoredToo;
+    procedure TestTurningTheOptionOffDropsTheMeasuredHeights;
+    procedure TestDefaultNodeHeightReachesTheNodesThatExist;
+    procedure TestADensitySwitchReachesTheRowsThatExist;
   end;
 
   { ③d C1: incremental type-to-find search.
@@ -333,6 +341,9 @@ type
   end;
 
 implementation
+
+uses
+  tyControls.BuiltinThemes;
 
 type
   { C3/C4: hard-cast helper to call protected methods from tests. }
@@ -9657,6 +9668,207 @@ begin
     end;
   finally
     Bmp.Free;
+  end;
+end;
+
+{ A row's height was decided once -- when its node was made, or measured on its first
+  InitNode -- and nothing that changed later reached it. toVariableNodeHeight turned on
+  measured only the nodes initialised afterwards. }
+procedure TTreeB1VariableHeightTest.TestTurningTheOptionOnMeasuresTheNodesThatExist;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i: Integer;
+  n: PTyTreeNode;
+begin
+  t := BuildFlatTree(Ctl, F, 12, False);
+  try
+    t.OnMeasureItem := @OnMeasureItem;
+    ForceMeasureAll(t);
+    AssertEquals('setup: not measured', 18, t.NodeHeight[t.RootNode^.FirstChild^.NextSibling]);
+
+    t.Options := t.Options + [toVariableNodeHeight];
+    n := t.RootNode^.FirstChild; i := 0;
+    while n <> nil do
+    begin
+      AssertEquals('node ' + IntToStr(i), ExpectedH(i), t.NodeHeight[n]);
+      n := n^.NextSibling; Inc(i);
+    end;
+    AssertEquals('the content height follows', 288, t.ContentHeight);
+    AssertEquals('invariant', t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+    i := FMeasureCalls;
+    ForceMeasureAll(t);
+    AssertEquals('a repaint measures nothing again', i, FMeasureCalls);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.OnMeasureZero(Sender: TTyCustomTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; var ANodeHeight: Integer);
+begin
+  Inc(FMeasureCalls);
+  ANodeHeight := 0;
+end;
+
+{ As on InitNode, a measured height of 0 is ignored when the measure comes later. }
+procedure TTreeB1VariableHeightTest.TestAZeroFromAMeasureLaterIsIgnoredToo;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := BuildFlatTree(Ctl, F, 4, False);
+  try
+    t.OnMeasureItem := @OnMeasureZero;
+    ForceMeasureAll(t);
+    t.Options := t.Options + [toVariableNodeHeight];
+    AssertEquals('setup: measured', 4, FMeasureCalls);
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      AssertEquals('the default height', 18, t.NodeHeight[n]);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('content', 4 * 18, t.ContentHeight);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Only the initialised nodes are measured then: one not initialised yet is measured by
+  InitNode, after OnInitNode has set it up. }
+procedure TTreeB1VariableHeightTest.TestTurningTheOptionOnLeavesTheRestToInitNode;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i: Integer;
+  n: PTyTreeNode;
+begin
+  t := BuildFlatTree(Ctl, F, 12, False);
+  try
+    t.OnMeasureItem := @OnMeasureItem;
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 2 do
+    begin
+      t.InitNode(n);
+      n := n^.NextSibling;
+    end;
+    FMeasureCalls := 0;
+    t.Options := t.Options + [toVariableNodeHeight];
+    AssertEquals('the three initialised nodes', 3, FMeasureCalls);
+    AssertEquals('node 1', ExpectedH(1), t.NodeHeight[t.RootNode^.FirstChild^.NextSibling]);
+    n := n^.NextSibling;                 { node 4, not initialised }
+    AssertEquals('node 4 not yet', 18, t.NodeHeight[n]);
+    t.InitNode(n);
+    AssertEquals('node 4 by InitNode', ExpectedH(4), t.NodeHeight[n]);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ ...and turned off left the measured heights in place: "off: every node uses
+  DefaultNodeHeight" held only for a tree that never had it on. A height the app set
+  with NodeHeight[] is its own and stays. }
+procedure TTreeB1VariableHeightTest.TestTurningTheOptionOffDropsTheMeasuredHeights;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i, calls: Integer;
+  n, set5: PTyTreeNode;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+    set5 := t.RootNode^.FirstChild;
+    for i := 1 to 5 do set5 := set5^.NextSibling;
+    t.NodeHeight[set5] := 40;
+
+    t.Options := t.Options - [toVariableNodeHeight];
+    n := t.RootNode^.FirstChild; i := 0;
+    while n <> nil do
+    begin
+      if n = set5 then
+        AssertEquals('the height set on node 5 stays', 40, t.NodeHeight[n])
+      else
+        AssertEquals('node ' + IntToStr(i) + ' back to the default', 18, t.NodeHeight[n]);
+      n := n^.NextSibling; Inc(i);
+    end;
+    AssertEquals('the content height follows', 11 * 18 + 40, t.ContentHeight);
+    AssertEquals('invariant', t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+    calls := FMeasureCalls;
+    ForceMeasureAll(t);
+    AssertEquals('and nothing is measured again', calls, FMeasureCalls);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ DefaultNodeHeight set after the nodes were made reached none of them -- also not the
+  ones under a collapsed parent, which show up with the old height when it expands. }
+procedure TTreeB1VariableHeightTest.TestDefaultNodeHeightReachesTheNodesThatExist;
+var
+  t: TTyTreeView;
+  p, q: PTyTreeNode;
+  i: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.DefaultNodeHeight := 18;
+    p := t.AddChild(nil);
+    for i := 1 to 3 do t.AddChild(p);
+    q := t.AddChild(nil);
+    t.NodeHeight[q] := 40;
+    t.Expanded[p] := False;
+    AssertEquals('setup: content', 18 + 40, t.ContentHeight);
+
+    t.DefaultNodeHeight := 26;
+    AssertEquals('a row', 26, t.NodeHeight[p]);
+    AssertEquals('a row under a collapsed parent', 26, t.NodeHeight[p^.FirstChild]);
+    AssertEquals('a height set on the node stays', 40, t.NodeHeight[q]);
+    AssertEquals('content', 26 + 40, t.ContentHeight);
+    t.Expanded[p] := True;
+    AssertEquals('content, expanded', 4 * 26 + 40, t.ContentHeight);
+    AssertEquals('invariant', t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ The default row height follows the density (--item-height) unless the app pins it; a
+  density switch reached only the nodes made after it. So did pinning DefaultNodeHeight
+  to 18, the classic value: the setter compared with its stored 18 and returned early. }
+procedure TTreeB1VariableHeightTest.TestADensitySwitchReachesTheRowsThatExist;
+var
+  c: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  modern: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  F := TForm.CreateNew(nil);
+  try
+    c.ThemeName := 'default';
+    c.Density := tdClassic;
+    t := TTyTreeView.Create(F);
+    t.Parent := F;
+    t.Controller := c;
+    t.Font.PixelsPerInch := 96;
+    t.SetBounds(0, 0, 200, 400);
+    t.RootNodeCount := 3;
+    n := t.RootNode^.FirstChild;
+    AssertEquals('setup: classic rows', 18, t.NodeHeight[n]);
+
+    c.Density := tdModern;
+    modern := t.DefaultNodeHeight;
+    AssertTrue('setup: modern rows are taller', modern > 30);
+    ForceMeasureAll(t);   { the switch repaints }
+    AssertEquals('a row that exists', modern, t.NodeHeight[n]);
+    AssertEquals('content', 3 * modern, t.ContentHeight);
+
+    t.DefaultNodeHeight := 18;
+    AssertEquals('pinned to 18', 18, t.NodeHeight[n]);
+    AssertEquals('content, pinned', 3 * 18, t.ContentHeight);
+  finally
+    F.Free; c.Free;
   end;
 end;
 
