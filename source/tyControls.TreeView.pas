@@ -102,8 +102,10 @@ type
 type
   PTyTreeNode = ^TTyTreeNode;
 
+  { nsHeightExplicit: the height was set with NodeHeight[] -- the app's, kept when the
+    others are decided again (RestampNodeHeights). }
   TTyNodeState = (nsInitialized, nsHasChildren, nsExpanded, nsVisible, nsSelected,
-                  nsHeightMeasured, nsDeleting, nsClearing);
+                  nsHeightMeasured, nsDeleting, nsClearing, nsHeightExplicit);
   TTyNodeStates = set of TTyNodeState;
 
   TTyNodeInitState = (ivsHasChildren, ivsExpanded, ivsSelected, ivsReInit);
@@ -206,6 +208,8 @@ type
 
   { ③d B1: OnMeasureItem — fired once per node from InitNode (when
     toVariableNodeHeight is set) so the app can return a per-node row height.
+    Fired again for every initialised node when the option is turned on or the
+    default row height changes (RestampNodeHeights).
     ANodeHeight is seeded with the node's current height (DefaultNodeHeight for a
     fresh node); the app overwrites it. ACanvas is the control canvas (for text
     measurement). Heights are LOGICAL pixels — device scaling happens at paint. }
@@ -429,6 +433,8 @@ type
     FPendingConflict:  string;
     FDefaultNodeHeight: Integer;         { classic fallback (18); the density value comes
                                            from GetDefaultNodeHeight unless explicitly pinned }
+    FHeightsDefault: Integer;            { the default row height the nodes were last given;
+                                           RestampNodeHeights when GetDefaultNodeHeight moves }
     FDefaultNodeHeightExplicit: Boolean; { True once a host/.lfm sets DefaultNodeHeight; False =
                                            follow the theme's --item-height token (18 classic / 38 modern) }
     FOnFreeNode: TTyTreeNodeEvent;
@@ -608,6 +614,8 @@ type
     { density: stored-sentinel accessors for the default node/row height. Reading
       returns the pinned value when explicit, else the --item-height token. }
     function  GetDefaultNodeHeight: Integer;
+    procedure RestampNodeHeights;
+    procedure SyncNodeHeights;
     procedure SetDefaultNodeHeight(AValue: Integer);
     { ③d B1: per-node row-height accessors (variable height) }
     function  GetNodeHeight(Node: PTyTreeNode): Integer;
@@ -2624,6 +2632,7 @@ end;
 procedure TTyTreeView.SetOptions(AValue: TTyTreeOptions);
 var
   CheckSupportChanged:  Boolean;
+  HeightRuleChanged:    Boolean;
   MultiSelectRemoved:   Boolean;
   n:                    PTyTreeNode;
 begin
@@ -2636,6 +2645,7 @@ begin
     when not dragging. }
   if FDragActive and not (toNodeDrag in AValue) then EndNodeDrag;
   CheckSupportChanged := (toCheckSupport in AValue) <> (toCheckSupport in FOptions);
+  HeightRuleChanged   := (toVariableNodeHeight in AValue) <> (toVariableNodeHeight in FOptions);
   { FIX 5: detect toMultiSelect being removed while multiple nodes are selected }
   MultiSelectRemoved  := (toMultiSelect in FOptions) and
                          not (toMultiSelect in AValue) and
@@ -2671,6 +2681,9 @@ begin
       if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, n);
     end;
   end;
+  { #75: measure the nodes there are when the option comes on; back to the default row
+    height when it goes off ("off: every node uses DefaultNodeHeight"). }
+  if HeightRuleChanged then RestampNodeHeights;
   Invalidate;
 end;
 
@@ -3190,6 +3203,7 @@ begin
   FRoot^.NextSibling := FRoot;
   // Root is always "expanded" so its children contribute height
   Include(FRoot^.States, nsExpanded);
+  FHeightsDefault := GetDefaultNodeHeight;   { #75: spares the first paint a restamp }
   { C1 defaults }
   FIndent           := 16;
   FShowButtons      := True;
@@ -4173,9 +4187,65 @@ procedure TTyTreeView.SetDefaultNodeHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FDefaultNodeHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
-  if FDefaultNodeHeight = AValue then Exit;
   FDefaultNodeHeight := AValue;
-  Invalidate;
+  { The nodes there are carry the old default (#75): pinning the classic 18 under the
+    modern density moves it too, though the stored field was 18 already. }
+  SyncNodeHeights;
+end;
+
+{ #75. A row's height is decided when its node is made (the default row height) or first
+  initialised (OnMeasureItem, under toVariableNodeHeight), and kept in the node; nothing
+  that changed afterwards reached it. This decides it again for every node there is --
+  collapsed subtrees too, they count once expanded -- from the default row height and the
+  option as they are now. A height set with NodeHeight[] is the app's and stays. Then every
+  TotalHeight is rebuilt, which keeps the ③a invariant. }
+procedure TTyTreeView.RestampNodeHeights;
+var
+  def: Integer;
+
+  function Restamp(Node: PTyTreeNode): Cardinal;
+  var
+    child: PTyTreeNode;
+    h: Integer;
+    sub: Cardinal;
+  begin
+    if not (nsHeightExplicit in Node^.States) then
+    begin
+      h := def;
+      { a node not initialised yet is measured by InitNode, after OnInitNode }
+      if (nsInitialized in Node^.States)
+         and (toVariableNodeHeight in FOptions) and Assigned(FOnMeasureItem) then
+      begin
+        FOnMeasureItem(Self, Canvas, Node, h);
+        if h <= 0 then h := def;            { as InitNode: 0 or less is ignored }
+      end;
+      Node^.NodeHeight := Word(h);
+    end;
+    Result := Node^.NodeHeight;
+    child := Node^.FirstChild;
+    while child <> nil do
+    begin
+      sub := Restamp(child);
+      if nsExpanded in Node^.States then Inc(Result, sub);
+      child := child^.NextSibling;
+    end;
+    Node^.TotalHeight := Result;
+  end;
+
+begin
+  def := GetDefaultNodeHeight;
+  FHeightsDefault := def;
+  if FRoot = nil then Exit;
+  Restamp(FRoot);
+  InvalidateTreeLayout;
+end;
+
+{ #75. The default row height follows the density (--item-height) unless pinned, and a
+  theme or density switch reaches a control only as a repaint -- so the paint asks too. }
+procedure TTyTreeView.SyncNodeHeights;
+begin
+  if GetDefaultNodeHeight <> FHeightsDefault then
+    RestampNodeHeights;
 end;
 
 { ③d B1: per-node row-height accessors. }
@@ -4194,6 +4264,7 @@ begin
   if (Node = nil) or (Node = FRoot) then Exit;
   if AValue <= 0 then Exit;                              // guard: heights are positive
   Include(Node^.States, nsHeightMeasured);               // explicit set counts as measured
+  Include(Node^.States, nsHeightExplicit);               // #75: and outlives a restamp
   if AValue = Integer(Node^.NodeHeight) then Exit;       // no-op if unchanged
   AdjustTotalHeight(Node, AValue - Integer(Node^.NodeHeight));
   Node^.NodeHeight := Word(AValue);
@@ -5007,6 +5078,7 @@ var
   pendingAfterCount: Integer;
   iCb: Integer;
 begin
+  SyncNodeHeights;    // #75: a density or theme switch moved the default row height
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
   P := TTyPainter.Create;
