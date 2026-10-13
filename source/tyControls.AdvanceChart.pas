@@ -1149,6 +1149,11 @@ type
       that kind. }
     FDatumPicks: array of array of TTyPalettePick;
     FDatumAsked: array of array of Boolean;
+    { SeriesRowFills' object colours, by slot, read once a build: every row's
+      itemStyle read out of the option, which a tooltip's colour dot asked for
+      again on every pointer move. Dropped where FDatumPicks is rebuilt. }
+    FRowObjFills: array of TTyRowFillArray;
+    FRowObjDone: array of Boolean;
     { DECALS [Batch 131]. The series scope of the aria decal palette lives as
       long as upstream's GlobalModel: a merge keeps it (a renamed series picks
       on), a notMerge makes a new one. Per binding slot: the series' decal,
@@ -5857,6 +5862,8 @@ var
 begin
   FDatumPicks := nil;
   FDatumAsked := nil;
+  FRowObjFills := nil;
+  FRowObjDone := nil;
   SetLength(FDatumPicks, Length(FBindings));
   SetLength(FDatumAsked, Length(FBindings));
   if FOption = nil then Exit;
@@ -6029,6 +6036,28 @@ begin
   Result := nil;
   if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
   n := FStores[ASlot].RawCount;
+  { the rows' own object colours: the option's, so read once a build }
+  if Length(FRowObjDone) < Length(FStores) then
+  begin
+    SetLength(FRowObjDone, Length(FStores));
+    SetLength(FRowObjFills, Length(FStores));
+  end;
+  if not FRowObjDone[ASlot] or (Length(FRowObjFills[ASlot]) <> n) then
+  begin
+    SetLength(FRowObjFills[ASlot], n);
+    for k := 0 to n - 1 do
+    begin
+      FRowObjFills[ASlot][k] := Default(TTyRowFill);
+      if RowObjectFill(ASlot, k, oc) then
+      begin
+        FRowObjFills[ASlot][k].ObjSet := True;
+        FRowObjFills[ASlot][k].ObjSolid := oc.Color;
+        FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
+        FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
+      end;
+    end;
+    FRowObjDone[ASlot] := True;
+  end;
   SetLength(Result, n);
   any := False;
   for k := 0 to n - 1 do
@@ -6041,12 +6070,12 @@ begin
       Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
       any := True;
     end;
-    if RowObjectFill(ASlot, k, oc) then
+    if FRowObjFills[ASlot][k].ObjSet then
     begin
       Result[k].ObjSet := True;
-      Result[k].ObjSolid := oc.Color;
-      Result[k].ObjGradient := oc.Gradient;
-      Result[k].ObjPattern := oc.Pattern;
+      Result[k].ObjSolid := FRowObjFills[ASlot][k].ObjSolid;
+      Result[k].ObjGradient := FRowObjFills[ASlot][k].ObjGradient;
+      Result[k].ObjPattern := FRowObjFills[ASlot][k].ObjPattern;
       any := True;
     end;
   end;
