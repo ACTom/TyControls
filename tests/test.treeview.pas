@@ -6897,6 +6897,10 @@ type
     FCheckedLastNode: PTyTreeNode;
     procedure OnChecking(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
     procedure OnChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure LazyCheckInit(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure LazyCheckChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
 
     { Build a tree with toCheckSupport (PPI=96, NodeHeight=20, Indent=16, ShowRoot=True)
       ready for checkbox-slot hit tests.  Returns TTyTreeViewAccess.
@@ -6933,6 +6937,10 @@ type
     procedure TestClickWithCheckOffSelectsNode;
     { toAutoTristateTracking: ToggleCheck(parent) csChecked → all children csChecked }
     procedure TestAutoTriStateDownPropagatesToChildren;
+    procedure TestAutoTriStateReachesChildrenInitialisedLater;
+    procedure TestOnlyACheckedCheckBoxReachesChildrenInitialisedLater;
+    procedure TestAutoTriStateFollowsAStateSetFromCode;
+    procedure TestWithoutAutoTriStateNothingPropagates;
     { toAutoTristateTracking: uncheck one child → parent becomes csMixed }
     procedure TestAutoTriStateUpMixedOnOneUnchecked;
     { toAutoTristateTracking: uncheck all children → parent csUnchecked }
@@ -7200,6 +7208,198 @@ begin
     AssertTrue('C1 click-no-check: node is focused/selected',
       t.NodeSelected[n0]);
   finally F.Free; Ctl.Free; end;
+end;
+
+{ #73: a lazily built check tree, two children a node down to level 2. Every node is a check
+  box, except the children of the third root and the fourth root itself: radio buttons. The
+  second root's children come up checked (set on the record, as an app restoring its data
+  would, not through CheckState[] which tracks). }
+procedure TTreeC1CheckBehaviourTest.LazyCheckInit(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+var
+  lvl: Integer;
+  top: PTyTreeNode;
+begin
+  lvl := Sender.GetNodeLevel(Node);
+  top := Node;
+  while top^.Parent <> Sender.RootNode do top := top^.Parent;
+  if ((top^.Index = 2) and (lvl = 1)) or ((top^.Index = 3) and (lvl = 0)) then
+    Sender.CheckType[Node] := ctRadioButton
+  else
+    Sender.CheckType[Node] := ctCheckBox;
+  if (top^.Index = 1) and (lvl = 1) then
+    Node^.CheckState := csChecked;
+  if lvl < 2 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeC1CheckBehaviourTest.LazyCheckChildren(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+{ #73. "Checking a parent checks its children" held only for children that existed: a
+  virtual tree makes its nodes as they are needed, and one made after its parent was
+  checked came up unchecked -- the comment on PropagateCheckDown promised they would
+  inherit the state when initialised, and nothing did it. }
+procedure TTreeC1CheckBehaviourTest.TestAutoTriStateReachesChildrenInitialisedLater;
+var
+  t: TTyTreeView;
+  n, c, g: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport, toAutoTristateTracking];
+    t.OnInitNode := @LazyCheckInit;
+    t.OnInitChildren := @LazyCheckChildren;
+    t.RootNodeCount := 1;
+    n := t.RootNode^.FirstChild;
+    t.InitNode(n);
+    AssertEquals('setup: a check box', Ord(ctCheckBox), Ord(n^.CheckType));
+    t.ToggleCheck(n);
+    AssertEquals('setup: checked', Ord(csChecked), Ord(n^.CheckState));
+    AssertEquals('setup: no child made yet', 0, Integer(n^.ChildCount));
+
+    t.Expanded[n] := True;
+    c := n^.FirstChild;
+    t.InitNode(c);
+    AssertEquals('a child made afterwards is checked', Ord(csChecked), Ord(c^.CheckState));
+    t.InitNode(c^.NextSibling);
+    AssertEquals('its sibling too', Ord(csChecked), Ord(c^.NextSibling^.CheckState));
+    t.Expanded[c] := True;
+    g := c^.FirstChild;
+    t.InitNode(g);
+    AssertEquals('and a grandchild', Ord(csChecked), Ord(g^.CheckState));
+  finally
+    t.Free;
+  end;
+end;
+
+{ #73. The tracking followed only a click (ToggleCheck): CheckState[] and Checked[] set
+  from code changed the one node and left its children and parents as they were. }
+{ #73. Only a checked check box hands its state to children made later: not an unchecked one
+  (the children keep what they were initialised with), not to a radio button child, and not
+  from a radio button parent -- radio buttons take no part in the tracking. }
+procedure TTreeC1CheckBehaviourTest.TestOnlyACheckedCheckBoxReachesChildrenInitialisedLater;
+var
+  t: TTyTreeView;
+  r: array[0..3] of PTyTreeNode;
+  i: Integer;
+  c: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport, toAutoTristateTracking];
+    t.OnInitNode := @LazyCheckInit;
+    t.OnInitChildren := @LazyCheckChildren;
+    t.RootNodeCount := 4;
+    r[0] := t.RootNode^.FirstChild;
+    for i := 1 to 3 do r[i] := r[i - 1]^.NextSibling;
+    for i := 0 to 3 do t.InitNode(r[i]);
+    AssertEquals('setup: the fourth root is a radio button', Ord(ctRadioButton),
+      Ord(r[3]^.CheckType));
+    t.Expanded[r[3]] := True;
+    t.InitNode(r[3]^.FirstChild);       { one child before the radio button is checked }
+    t.ToggleCheck(r[2]);
+    t.ToggleCheck(r[3]);
+    AssertEquals('a radio button does not push its check down', Ord(csUnchecked),
+      Ord(r[3]^.FirstChild^.CheckState));
+    AssertEquals('setup: third root checked', Ord(csChecked), Ord(r[2]^.CheckState));
+    AssertEquals('setup: fourth root checked', Ord(csChecked), Ord(r[3]^.CheckState));
+
+    t.Expanded[r[1]] := True;
+    c := r[1]^.FirstChild;
+    t.InitNode(c);
+    AssertEquals('under an unchecked check box a child keeps the state it came up with',
+      Ord(csChecked), Ord(c^.CheckState));
+
+    t.Expanded[r[2]] := True;
+    c := r[2]^.FirstChild;
+    t.InitNode(c);
+    AssertEquals('setup: a radio button child', Ord(ctRadioButton), Ord(c^.CheckType));
+    AssertEquals('a radio button child', Ord(csUnchecked), Ord(c^.CheckState));
+
+    c := r[3]^.FirstChild^.NextSibling;   { the other one after }
+    t.InitNode(c);
+    AssertEquals('setup: a check box child', Ord(ctCheckBox), Ord(c^.CheckType));
+    AssertEquals('under a radio button', Ord(csUnchecked), Ord(c^.CheckState));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestAutoTriStateFollowsAStateSetFromCode;
+var
+  t: TTyTreeView;
+  parent, c1, c2, c3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport, toAutoTristateTracking];
+    parent := t.AddChild(nil);
+    parent^.CheckType := ctTriStateCheckBox;
+    c1 := t.AddChild(parent); c1^.CheckType := ctCheckBox;
+    c2 := t.AddChild(parent); c2^.CheckType := ctCheckBox;
+    c3 := t.AddChild(parent); c3^.CheckType := ctCheckBox;
+
+    t.CheckState[parent] := csChecked;
+    AssertEquals('down: c1', Ord(csChecked), Ord(c1^.CheckState));
+    AssertEquals('down: c2', Ord(csChecked), Ord(c2^.CheckState));
+    AssertEquals('down: c3', Ord(csChecked), Ord(c3^.CheckState));
+
+    t.Checked[c1] := False;
+    AssertEquals('up: one child unchecked, the parent mixed', Ord(csMixed),
+      Ord(parent^.CheckState));
+    t.CheckState[c2] := csUnchecked;
+    t.CheckState[c3] := csUnchecked;
+    AssertEquals('up: all unchecked, the parent unchecked', Ord(csUnchecked),
+      Ord(parent^.CheckState));
+    t.CheckState[parent] := csMixed;
+    AssertEquals('mixed is not pushed down', Ord(csUnchecked), Ord(c1^.CheckState));
+  finally
+    t.Free;
+  end;
+end;
+
+{ #73. Without toAutoTristateTracking a state stays where it is put. }
+procedure TTreeC1CheckBehaviourTest.TestWithoutAutoTriStateNothingPropagates;
+var
+  t: TTyTreeView;
+  parent, c1, n, c: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport];
+    parent := t.AddChild(nil);
+    parent^.CheckType := ctTriStateCheckBox;
+    c1 := t.AddChild(parent); c1^.CheckType := ctCheckBox;
+    t.CheckState[parent] := csChecked;
+    AssertEquals('not down', Ord(csUnchecked), Ord(c1^.CheckState));
+    t.CheckState[c1] := csChecked;
+    t.CheckState[parent] := csUnchecked;
+    AssertEquals('not down either way', Ord(csChecked), Ord(c1^.CheckState));
+  finally
+    t.Free;
+  end;
+
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport];
+    t.OnInitNode := @LazyCheckInit;
+    t.OnInitChildren := @LazyCheckChildren;
+    t.RootNodeCount := 1;
+    n := t.RootNode^.FirstChild;
+    t.InitNode(n);
+    t.ToggleCheck(n);
+    t.Expanded[n] := True;
+    c := n^.FirstChild;
+    t.InitNode(c);
+    AssertEquals('a child made afterwards keeps its own state', Ord(csUnchecked),
+      Ord(c^.CheckState));
+  finally
+    t.Free;
+  end;
 end;
 
 procedure TTreeC1CheckBehaviourTest.TestAutoTriStateDownPropagatesToChildren;

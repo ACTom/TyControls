@@ -980,6 +980,7 @@ type
     { A2: check-propagation pure helpers }
     procedure PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
     function  RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
+    procedure ApplyAutoTristate(Node: PTyTreeNode);
     { A3: range-selection helper + selection-count }
     procedure InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
     procedure SelectRange(AAnchor, ATarget: PTyTreeNode);
@@ -2037,8 +2038,8 @@ end;
 { PropagateCheckDown — sets every ALREADY-INITIALISED descendant whose
   CheckType is ctCheckBox or ctTriStateCheckBox to AState.  ctNone and
   ctRadioButton nodes are skipped.  Lazy (not-yet-initialised) subtrees are
-  intentionally untouched — they will inherit the right state when they are
-  eventually initialised in Phase B/C. }
+  untouched here: a node initialised later takes a checked parent's state in
+  InitNode (#73). }
 procedure TTyTreeView.PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
 var
   child: PTyTreeNode;
@@ -2092,6 +2093,35 @@ begin
   else if hasUnchecked and not hasChecked then
     Result := csUnchecked;
   // else: no check-children → leave Result as Node^.CheckState
+end;
+
+{ toAutoTristateTracking after Node's check state changed, by a click or from code (#73:
+  the tracking followed only a click). DOWN: push the state to the already-initialised
+  descendants -- a mixed state stays with Node, its children keep theirs. UP: walk the
+  ancestors toward FRoot, recompute each, and stop where one did not change (avoids
+  pointless upward sweeps). }
+procedure TTyTreeView.ApplyAutoTristate(Node: PTyTreeNode);
+var
+  anc:      PTyTreeNode;
+  newState: TTyCheckState;
+begin
+  if not (toAutoTristateTracking in FOptions) then Exit;
+  if not (Node^.CheckType in [ctCheckBox, ctTriStateCheckBox]) then Exit;
+
+  if Node^.CheckState <> csMixed then
+    PropagateCheckDown(Node, Node^.CheckState);
+
+  anc := Node^.Parent;
+  while (anc <> nil) and (anc <> FRoot) do
+  begin
+    if anc^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+    begin
+      newState := RecomputeParentCheckState(anc);
+      if anc^.CheckState = newState then Break;  { no change — stop }
+      anc^.CheckState := newState;
+    end;
+    anc := anc^.Parent;
+  end;
 end;
 
 { ── A3 ── range-selection pure helpers ───────────────────────────────────── }
@@ -2450,8 +2480,6 @@ procedure TTyTreeView.ToggleCheck(Node: PTyTreeNode);
 var
   Allowed:  Boolean;
   sib:      PTyTreeNode;
-  anc:      PTyTreeNode;
-  newState: TTyCheckState;
 begin
   { ── guards ── }
   if Node = nil then Exit;
@@ -2505,28 +2533,7 @@ begin
   end; { case }
 
   { ── toAutoTristateTracking ── }
-  if toAutoTristateTracking in FOptions then
-  begin
-    if Node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
-    begin
-      { DOWN: push the new state to all already-initialised descendants }
-      PropagateCheckDown(Node, Node^.CheckState);
-
-      { UP: walk ancestors toward FRoot; recompute each and stop early when
-        the state did not actually change (avoids pointless upward sweeps). }
-      anc := Node^.Parent;
-      while (anc <> nil) and (anc <> FRoot) do
-      begin
-        if anc^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
-        begin
-          newState := RecomputeParentCheckState(anc);
-          if anc^.CheckState = newState then Break;  { no change — stop }
-          anc^.CheckState := newState;
-        end;
-        anc := anc^.Parent;
-      end;
-    end;
-  end;
+  ApplyAutoTristate(Node);
 
   { ── OnChecked + repaint ── }
   if Assigned(FOnChecked) then FOnChecked(Self, Node);
@@ -2689,6 +2696,7 @@ begin
   if Node = nil then Exit;
   if Node^.CheckState = AValue then Exit;
   Node^.CheckState := AValue;
+  ApplyAutoTristate(Node);   { #73: from code too, not only a click }
   Invalidate;
 end;
 
@@ -4200,6 +4208,14 @@ begin
   DoInitNode(Node^.Parent, Node, initStates);
   if ivsHasChildren in initStates then
     Include(Node^.States, nsHasChildren);
+  { #73: a virtual tree makes its nodes as they are needed, so a child can come after its
+    parent was checked; it takes the check as the children that existed did. After
+    DoInitNode, which sets the check type. }
+  if (toAutoTristateTracking in FOptions)
+     and (Node^.CheckType in [ctCheckBox, ctTriStateCheckBox])
+     and (Node^.Parent^.CheckType in [ctCheckBox, ctTriStateCheckBox])
+     and (Node^.Parent^.CheckState = csChecked) then
+    Node^.CheckState := csChecked;
   if ivsSelected in initStates then
     SetSelected(Node, True);   // C1: full single-select semantics (fires OnChange)
   if ivsExpanded in initStates then
