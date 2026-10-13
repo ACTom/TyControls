@@ -1133,8 +1133,12 @@ type
   end;
 const
   CAllowed: array[0..3] of TAllowed = (
-    { TyConfigureMeasureFont itself: a pixel Height, the only measuring font there is. }
-    (Name: 'tyControls.Painter.pas'; Count: 1),
+    { TyConfigureMeasureFont itself: a pixel Height, the only measuring font there is.
+      And two copies of BGRA's own scratch-canvas steps on the surfaces the painter keeps
+      (measuring, and turned text): each sets the kept canvas's font Height to the Height
+      of a font TyConfigureMeasureFont already configured -- the same font, carried over,
+      not a second definition of it. }
+    (Name: 'tyControls.Painter.pas'; Count: 3),
     { ScaleFontsPPI, once per base class: puts "no size chosen" (Height 0) back after
       LCL's DPI pass latched a height into it. See test.dpi.fontlatch. }
     (Name: 'tyControls.Base.pas'; Count: 2),
