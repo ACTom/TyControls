@@ -597,6 +597,10 @@ resourcestring
   rsTyChartCustomNoRenderItem =
     'series[%d]: no renderItem is registered as "%s", so nothing is drawn';
   rsTyChartCustomRenderItemFailed = 'series[%d]: renderItem "%s" failed: %s';
+  { %s the component ('geo[0]', 'series[2]'), %s the map name it asks for
+    [F1b] }
+  rsTyChartMapNotRegistered =
+    '%s: no map is registered as "%s", so nothing is drawn';
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';

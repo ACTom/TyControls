@@ -85,7 +85,8 @@ implementation
 uses
   fpjson,
   tyControls.AdvChart.Catalog, tyControls.AdvChart.Builder,
-  tyControls.AdvChart.Series, tyControls.AdvChart.Marks, tyControls.StrConsts;
+  tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
+  tyControls.AdvChart.Custom, tyControls.AdvChart.Geo, tyControls.StrConsts;
 
 const
   { Enough that a real config's problems all fit, small enough that a pathological
@@ -250,6 +251,38 @@ begin
   end;
 end;
 
+{ WHAT A PAINT WOULD FIND AND THE BUILD ABOVE CANNOT. TyBuildGrids and
+  TyBindSeries place series; they never ask whether a custom series has a
+  renderItem to call or whether a geo's map exists, because the control only
+  finds that out while it paints. So an option that draws an empty chart was
+  told it was understood. [F1b: 13 gallery customs whose renderItem was a JS
+  function, and 15 maps the demo never registered.] }
+procedure NoteWhatCannotDraw(AOption: TTyChartOption; var C: TCollector);
+var
+  i: Integer;
+  d, r: TJSONData;
+  spec: string;
+  handler: TTyChartRenderItem;
+  missing: TTyGeoMissingMapArray;
+begin
+  for i := 0 to AOption.ComponentCount('series') - 1 do
+  begin
+    d := AOption.ComponentAt('series', i);
+    if not (d is TJSONObject) then Continue;
+    if TJSONObject(d).Get('type', '') <> TyCustomSeriesType then Continue;
+    spec := '';
+    r := TJSONObject(d).Find('renderItem');
+    if (r <> nil) and (r.JSONType = jtString) then spec := r.AsString;
+    if not TyChartFindRenderItem(spec, handler) then
+      Add(C, odkBuild, 'series[' + IntToStr(i) + '].renderItem',
+        Format(rsTyChartCustomNoRenderItem, [i, spec]));
+  end;
+  missing := TyGeoUnregisteredMaps(AOption);
+  for i := 0 to High(missing) do
+    Add(C, odkBuild, missing[i].Path + '.map',
+      Format(rsTyChartMapNotRegistered, [missing[i].Path, missing[i].MapName]));
+end;
+
 function TyOptDiagnose(const AText: string): TTyOptDiagArray;
 var
   C: TCollector;
@@ -328,6 +361,8 @@ begin
     finally
       build.Free;
     end;
+
+    NoteWhatCannotDraw(opt, C);
 
     { Nothing wrong -- which is worth saying, because a correct bar config
       draws axes and no bars today, and a developer told nothing concludes the

@@ -11137,8 +11137,18 @@ procedure TTyAdvanceChart.SolveGeos(APPI: Integer);
 var
   i, n: Integer;
   ref: TTyXYWH;
+  missing: TTyGeoMissingMapArray;
 begin
   FreeGeos;
+  { A MAP NOBODY REGISTERED draws an empty view, and upstream says so in its
+    console; here the build says so [F1b] }
+  if FBuild <> nil then
+  begin
+    missing := TyGeoUnregisteredMaps(FOption);
+    for i := 0 to High(missing) do
+      FBuild.Note(Format(rsTyChartMapNotRegistered,
+        [missing[i].Path, missing[i].MapName]));
+  end;
   n := 0;
   if FOption <> nil then n := FOption.ComponentCount('geo');
   { [Batch 148] a render makes new region elements: a hover found on the
