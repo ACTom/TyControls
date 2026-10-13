@@ -1,18 +1,23 @@
 unit umain;
 
-{ TTyPropertyGrid: the right half shows the published properties of whichever control on the
-  left was clicked last, and every change made there goes straight into that control.
+{ TTyPropertyGrid: the right half shows the published properties of the controls on the left that
+  were clicked, and every change made there goes straight into them.
 
   The window is designed in umain.lfm, the grid included: it starts on Button1 because its
   SelectedComponent says so, with Font expanded because ExpandedProperties lists it. The code
-  only answers the grid's events and the tool row.
+  only answers the grid's events and the tool rows.
 
   Things to try: click a control on the left; change Caption, Width or Font.Size and watch the
-  control follow; tick the box in the Font.Style row; open the grid's Header.Columns and rename a
-  column; type 99999999999 into Width (too big for an Integer: the grid refuses it, and the status
-  line says why, through OnPropertyError); turn on Show events (the handlers are listed by name, read-only);
-  type into Filter -- OnFilterProperty keeps the matching rows; click the check box while it is
-  inspected (the control changed itself, Refresh shows it). }
+  control follow; tick the box in the Font.Style row. Ctrl+click more controls (the title says how
+  many): only what they all have is listed, a value they do not share is an empty cell, and what
+  you type goes into every one of them. Type into Filter: the grid keeps the rows whose name holds
+  it -- 'size' opens Font for its Size -- and clearing it closes them again. Turn on Writable only
+  (OnFilterProperty drops what has no setter), Categories (Layout, Appearance, Behavior...), Show
+  events (the handlers by name, read-only). Inspect the string grid, open Header.Columns and press
+  Insert, or right-click a column: add, delete, move up and down; the string grid moves its cells
+  with the columns. Type 99999999999 into Width: too big for an Integer, the grid refuses it and the
+  status line says why (OnPropertyError). Click the check box while it is inspected: it changed
+  itself, and Refresh shows it. }
 
 {$mode objfpc}{$H+}
 
@@ -35,6 +40,8 @@ type
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     SwEvents: TTyToggleSwitch;
+    SwWritable: TTyToggleSwitch;
+    SwCategories: TTyToggleSwitch;
     LblFilter: TTyLabel;
     FilterEdit: TTyEdit;
     LblPick: TTyLabel;
@@ -52,6 +59,8 @@ type
     procedure ControlClick(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
     procedure SwEventsChange(Sender: TObject);
+    procedure SwWritableChange(Sender: TObject);
+    procedure SwCategoriesChange(Sender: TObject);
     procedure FilterEditChange(Sender: TObject);
     procedure GridFilterProperty(Sender: TObject; AInstance: TPersistent;
       const APropName: string; var AShow: Boolean);
@@ -59,6 +68,11 @@ type
       const APropName: string);
     procedure GridPropertyError(Sender: TObject; AInstance: TPersistent;
       const APropName: string; E: Exception);
+    procedure GridCollectionChanging(Sender: TObject; ACollection: TCollection;
+      AAction: TTyCollectionAction; AIndex, ANewIndex: Integer; var AAllow: Boolean);
+  private
+    function IsInspected(AObject: TPersistent): Boolean;
+    procedure ShowSelection;
   end;
 
 var
@@ -69,9 +83,13 @@ implementation
 {$R *.lfm}
 
 resourcestring
+  rsTitleOne   = 'Property grid  ·  %s';
+  rsTitleMany  = 'Property grid  ·  %d controls';
   rsInspecting = 'Inspecting %s';
+  rsInspectingMany = 'Inspecting %d controls: what they all have, written into each';
   rsChanged    = '%s.%s changed';
   rsRefused    = '%s was not changed: %s';
+  rsColumns    = 'The string grid did that itself, so its cells move with the columns';
 
 const
   CPeople: array[0..4, 0..2] of string = (
@@ -111,19 +129,70 @@ begin
   for r := 0 to High(CPeople) do
     for i := 0 to 2 do
       StringGrid1.Cells[i, r] := CPeople[r, i];
+  ShowSelection;
 end;
 
+{ A click inspects that control alone; Ctrl+click (Cmd+click on a Mac) adds it to the controls
+  being inspected, or takes it out again. }
 procedure TMainForm.ControlClick(Sender: TObject);
+var
+  objs: array of TPersistent;
+  i, n: Integer;
+  found: Boolean;
 begin
-  Grid.SelectedComponent := Sender as TComponent;
-  LblStatus.Caption := Format(rsInspecting, [NameOf(Grid.SelectedComponent)]);
+  if ssModifier in GetKeyShiftState then
+  begin
+    SetLength(objs, Grid.SelectedCount + 1);
+    n := 0;
+    found := False;
+    for i := 0 to Grid.SelectedCount - 1 do
+      if Grid.SelectedObjects[i] = Sender then
+        found := True
+      else
+      begin
+        objs[n] := Grid.SelectedObjects[i];
+        Inc(n);
+      end;
+    if not found then
+    begin
+      objs[n] := Sender as TPersistent;
+      Inc(n);
+    end;
+    SetLength(objs, n);
+    Grid.SelectObjects(objs);
+  end
+  else
+    Grid.SelectedComponent := Sender as TComponent;
+  ShowSelection;
+end;
+
+function TMainForm.IsInspected(AObject: TPersistent): Boolean;
+var i: Integer;
+begin
+  for i := 0 to Grid.SelectedCount - 1 do
+    if Grid.SelectedObjects[i] = AObject then Exit(True);
+  Result := False;
+end;
+
+procedure TMainForm.ShowSelection;
+begin
+  if Grid.SelectedCount > 1 then
+  begin
+    Bar.Caption := Format(rsTitleMany, [Grid.SelectedCount]);
+    LblStatus.Caption := Format(rsInspectingMany, [Grid.SelectedCount]);
+  end
+  else
+  begin
+    Bar.Caption := Format(rsTitleOne, [NameOf(Grid.SelectedObject)]);
+    LblStatus.Caption := Format(rsInspecting, [NameOf(Grid.SelectedObject)]);
+  end;
 end;
 
 { The check box changed itself (a click on it). The grid shows what it read last; Refresh reads
   the values again and keeps the expanded rows and the current row. }
 procedure TMainForm.CheckBox1Change(Sender: TObject);
 begin
-  if Grid.SelectedComponent = CheckBox1 then Grid.Refresh;
+  if IsInspected(CheckBox1) then Grid.Refresh;
 end;
 
 { Event handlers are left out by default (TypeFilter without tkMethod): there is no code to hook
@@ -136,24 +205,37 @@ begin
     Grid.TypeFilter := Grid.TypeFilter - [tkMethod];
 end;
 
-{ OnFilterProperty is asked while the rows are built, so a new filter needs a Rebuild. }
-procedure TMainForm.FilterEditChange(Sender: TObject);
+{ OnFilterProperty is asked while the rows are built, so a change to what it decides needs a
+  Rebuild. }
+procedure TMainForm.SwWritableChange(Sender: TObject);
 begin
   Grid.Rebuild;
 end;
 
+procedure TMainForm.SwCategoriesChange(Sender: TObject);
+begin
+  Grid.ShowCategories := SwCategories.Checked;
+end;
+
+{ The grid filters by name itself: the rows whose name holds the text stay, a sub-property's
+  parents open for it, and an empty filter puts the rows back as they were. }
+procedure TMainForm.FilterEditChange(Sender: TObject);
+begin
+  Grid.FilterText := FilterEdit.Text;
+end;
+
+{ Writable only: a property without a setter is left out -- except an object (Font,
+  Constraints), whose own properties can be written all the same. The grid asks this before it
+  applies FilterText, so the two work together. }
 procedure TMainForm.GridFilterProperty(Sender: TObject; AInstance: TPersistent;
   const APropName: string; var AShow: Boolean);
 var
-  f: string;
+  pi: PPropInfo;
 begin
-  { Only the control's own properties are filtered. A sub-property (Font.Size) is asked about
-    too, with the font as AInstance -- filtering those as well would hide Size whenever the
-    filter is 'Font', and Font whenever it is 'Size'. }
-  if AInstance <> Grid.SelectedObject then Exit;
-  f := Trim(FilterEdit.Text);
-  if f <> '' then
-    AShow := Pos(LowerCase(f), LowerCase(APropName)) > 0;
+  if not SwWritable.Checked then Exit;
+  pi := GetPropInfo(AInstance, APropName);
+  if (pi <> nil) and (pi^.SetProc = nil) and (pi^.PropType^.Kind <> tkClass) then
+    AShow := False;
 end;
 
 procedure TMainForm.GridPropertyChanged(Sender: TObject; AInstance: TPersistent;
@@ -168,6 +250,25 @@ procedure TMainForm.GridPropertyError(Sender: TObject; AInstance: TPersistent;
   const APropName: string; E: Exception);
 begin
   LblStatus.Caption := Format(rsRefused, [APropName, E.Message]);
+end;
+
+{ The grid adds, deletes and moves collection items through TCollection itself. A string grid
+  keeps its cells by column index, so a column added, deleted or moved that way would leave the
+  cells where they were. Here the grid is told no, and the string grid does it with its own
+  methods, which take the cells along (a moved column keeps its index: the string grid shows it
+  in another place). Refresh then shows the columns as they are now. }
+procedure TMainForm.GridCollectionChanging(Sender: TObject; ACollection: TCollection;
+  AAction: TTyCollectionAction; AIndex, ANewIndex: Integer; var AAllow: Boolean);
+begin
+  if ACollection <> StringGrid1.Header.Columns then Exit;
+  AAllow := False;
+  case AAction of
+    caAdd:    StringGrid1.InsertColumn(ANewIndex);
+    caDelete: StringGrid1.DeleteColumn(AIndex);
+    caMove:   StringGrid1.MoveColumn(AIndex, ANewIndex);
+  end;
+  Grid.Refresh;
+  LblStatus.Caption := rsColumns;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);

@@ -52,59 +52,79 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 48
-      Width = 150
+      Width = 130
       TabOrder = 1
       TabStop = True
       Caption = 'Show events'
       OnChange = SwEventsChange
     end
+    object SwWritable: TTyToggleSwitch
+      Left = 152
+      Height = 24
+      Top = 48
+      Width = 140
+      TabOrder = 2
+      TabStop = True
+      Caption = 'Writable only'
+      OnChange = SwWritableChange
+    end
+    object SwCategories: TTyToggleSwitch
+      Left = 300
+      Height = 24
+      Top = 48
+      Width = 136
+      TabOrder = 3
+      TabStop = True
+      Caption = 'Categories'
+      OnChange = SwCategoriesChange
+    end
     object LblFilter: TTyLabel
-      Left = 184
+      Left = 16
       Height = 22
-      Top = 49
+      Top = 87
       Width = 44
       Caption = 'Filter'
     end
     object FilterEdit: TTyEdit
-      Left = 232
+      Left = 64
       Height = 28
-      Top = 46
-      Width = 204
-      TabOrder = 2
+      Top = 84
+      Width = 372
+      TabOrder = 4
       TextHint = 'Part of a property name'
       OnChange = FilterEditChange
     end
     object LblPick: TTyLabel
       Left = 16
       Height = 22
-      Top = 92
+      Top = 124
       Width = 420
-      Caption = 'Click a control to inspect it:'
+      Caption = 'Click a control to inspect it, Ctrl+click to add it:'
     end
     object Button1: TTyButton
       Left = 16
       Height = 32
-      Top = 122
+      Top = 152
       Width = 120
-      TabOrder = 3
+      TabOrder = 5
       OnClick = ControlClick
       Caption = 'Button'
     end
     object Edit1: TTyEdit
       Left = 152
       Height = 28
-      Top = 124
+      Top = 154
       Width = 284
-      TabOrder = 4
+      TabOrder = 6
       Text = 'Some text'
       OnClick = ControlClick
     end
     object CheckBox1: TTyCheckBox
       Left = 16
       Height = 24
-      Top = 170
+      Top = 198
       Width = 200
-      TabOrder = 5
+      TabOrder = 7
       OnClick = ControlClick
       Caption = 'Check box'
       OnChange = CheckBox1Change
@@ -112,7 +132,7 @@ object MainForm: TMainForm
     object ProgressBar1: TTyProgressBar
       Left = 16
       Height = 20
-      Top = 210
+      Top = 236
       Width = 420
       OnClick = ControlClick
       Position = 40
@@ -120,18 +140,18 @@ object MainForm: TMainForm
     object Panel1: TTyPanel
       Left = 16
       Height = 64
-      Top = 246
+      Top = 268
       Width = 420
       Caption = 'Panel'
-      TabOrder = 6
+      TabOrder = 8
       OnClick = ControlClick
     end
     object StringGrid1: TTyStringGrid
       Left = 16
-      Height = 300
-      Top = 326
+      Height = 276
+      Top = 350
       Width = 420
-      TabOrder = 7
+      TabOrder = 9
       OnClick = ControlClick
       Header.Columns = <
         item
@@ -154,7 +174,7 @@ object MainForm: TMainForm
       Height = 580
       Top = 46
       Width = 528
-      TabOrder = 8
+      TabOrder = 10
       Anchors = [akTop, akLeft, akRight, akBottom]
       KeyColumnWidth = 180
       SelectedComponent = Button1
@@ -164,6 +184,7 @@ object MainForm: TMainForm
       OnFilterProperty = GridFilterProperty
       OnPropertyChanged = GridPropertyChanged
       OnPropertyError = GridPropertyError
+      OnCollectionChanging = GridCollectionChanging
     end
     object LblStatus: TTyLabel
       Left = 16

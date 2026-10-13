@@ -1020,6 +1020,7 @@ This block has **no state rules**. To fade a disabled image you must write
 | `TyRibbonGallery` | The ribbon gallery's in-ribbon row frame (shares a block with `TyListBox`) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
 | `TyListItem` | A single row: `background` sets the row fill, `color` the text | `TTyListBox`; the tiles of `TTyRibbonGallery` still resolve it too | `:hover` `:active` (= the selected row) |
 | `TyValueListEditorRow` | One property grid row (shares a block with `TyListItem`) | `TTyValueListEditor` | `:hover` `:active` |
+| `TyValueListEditorGroup` | A heading row of the property grid (`TTyValueRow.Heading`, the property grid's categories) at rest: its band, ink and weight; hung on `TyValueListEditorRow` | `TTyValueListEditor` | — (hovered or selected it is drawn as `TyValueListEditorRow`) |
 
 `TyValueListEditorKey` / `-Value` / `-Divider` / `-Expander` are resolved by code but **deliberately undefined** in the base layer; see §8.4.
 

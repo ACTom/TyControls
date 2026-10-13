@@ -27,6 +27,14 @@ msgstr "暗色"
 msgid "Show events"
 msgstr "显示事件"
 
+#: tmainform.swwritable.caption
+msgid "Writable only"
+msgstr "只看可写的"
+
+#: tmainform.swcategories.caption
+msgid "Categories"
+msgstr "分类"
+
 #: tmainform.lblfilter.caption
 msgid "Filter"
 msgstr "筛选"
@@ -36,8 +44,8 @@ msgid "Part of a property name"
 msgstr "属性名的一部分"
 
 #: tmainform.lblpick.caption
-msgid "Click a control to inspect it:"
-msgstr "点一个控件，右边就列出它的属性："
+msgid "Click a control to inspect it, Ctrl+click to add it:"
+msgstr "点一个控件，右边就列出它的属性；按住 Ctrl 点可以多选："
 
 #: tmainform.button1.caption
 msgid "Button"
@@ -73,10 +81,25 @@ msgstr "正在查看 Button1"
 
 # --- code resourcestrings (msgid=Pascal source) ---
 
+#: umain.rstitleone
+#, object-pascal-format
+msgid "Property grid  ·  %s"
+msgstr "属性表格  ·  %s"
+
+#: umain.rstitlemany
+#, object-pascal-format
+msgid "Property grid  ·  %d controls"
+msgstr "属性表格  ·  %d 个控件"
+
 #: umain.rsinspecting
 #, object-pascal-format
 msgid "Inspecting %s"
 msgstr "正在查看 %s"
+
+#: umain.rsinspectingmany
+#, object-pascal-format
+msgid "Inspecting %d controls: what they all have, written into each"
+msgstr "正在查看 %d 个控件：只列它们都有的属性，改了每个都写"
 
 #: umain.rschanged
 #, object-pascal-format
@@ -87,3 +110,7 @@ msgstr "已修改 %s.%s"
 #, object-pascal-format
 msgid "%s was not changed: %s"
 msgstr "%s 没有改：%s"
+
+#: umain.rscolumns
+msgid "The string grid did that itself, so its cells move with the columns"
+msgstr "这一步是字符串表格自己做的，单元格跟着列一起动"

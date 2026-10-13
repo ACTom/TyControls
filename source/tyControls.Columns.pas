@@ -124,6 +124,11 @@ type
     procedure NotifyOwner;
   protected
     function  GetDisplayName: string; override;
+    { #70. A move through Index -- the IDE's collection editor moves columns this way, and so
+      does a property grid -- went unheard: TCollectionItem.SetIndex calls Changed, which
+      reaches an Update that TTyColumns does not override, so the host's column geometry
+      went stale. See the implementation. }
+    procedure SetIndex(Value: Integer); override;
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
@@ -586,6 +591,26 @@ procedure TTyColumn.NotifyOwner;
 begin
   if Collection <> nil then
     GetOwnerColumns.DoChange;
+end;
+
+procedure TTyColumn.SetIndex(Value: Integer);
+var
+  old, i: Integer;
+  cols: TTyColumns;
+begin
+  old := Index;
+  inherited SetIndex(Value);
+  if (Collection = nil) or (Index = old) then Exit;
+  cols := GetOwnerColumns;
+  { The position map holds collection indices, so the visual order moved with the item.
+    Every column's Position is stamped again from it: Position is published, and a stale
+    one is what the next form file said -- loading it put the columns back where they had
+    stood. Then the left edges, and the header and its host hear of it, as for any other
+    change of order (AdjustPosition). }
+  for i := 0 to Length(cols.FPositionToIndex) - 1 do
+    cols.Items[cols.FPositionToIndex[i]].FPosition := Cardinal(i);
+  cols.UpdatePositions;
+  cols.DoChange;
 end;
 
 procedure TTyColumn.SetWidth(AValue: Integer);

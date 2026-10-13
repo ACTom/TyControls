@@ -129,7 +129,8 @@ const
     (U: 'tyControls.TyLabel'; K: 'TyLabel'),
     (U: 'tyControls.UpDown'; K: 'TyButton,TyUpDown'),
     (U: 'tyControls.ValueListEditor'; K: 'TyListBox,TyValueListEditor,TyValueListEditorDivider,' +
-      'TyValueListEditorExpander,TyValueListEditorKey,TyValueListEditorRow,TyValueListEditorValue'));
+      'TyValueListEditorExpander,TyValueListEditorGroup,TyValueListEditorKey,TyValueListEditorRow,' +
+      'TyValueListEditorValue'));
 
 { the position of AKey in AList, without case }
 function IndexOfKey(AList: TStrings; const AKey: string): Integer;
