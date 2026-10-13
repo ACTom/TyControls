@@ -29,6 +29,8 @@ Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.t
 | **`TTyStringGrid`** 按列指定编辑器:复选、星级、取色、按钮<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
 | **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **`TTyChart`** 折线、柱状、饼图、环形图<br>![图表](docs/images/chart.png) |
 | **`TTyRibbon`** 功能区、快速访问栏、Alt 键提示<br>![功能区](docs/images/ribbon.png) | **`TTyCalendar`** 周数、今日高亮、可选日期范围<br>![日历](docs/images/calendar.png) |
+| **`TTyAdvanceChart`** 直接读 ECharts 的配置,示例里是官方图库的例子<br>![ECharts 式图表](docs/images/advchart.png) | **`TTyDBGrid`** 绑数据集的表格:勾选、查找下拉、格式化金额、多选<br>![数据表格](docs/images/dbgrid.png) |
+| **`TTyPropertyGrid`** 属性表格:点哪个控件就检查哪个,改了直接写回<br>![属性表格](docs/images/propertygrid.png) | **多滑块 TrackBar** 区间、多值、渐变色标<br>![多滑块](docs/images/trackbar.png) |
 
 每个示例每个标签页的亮色、暗色截图都在[图库](docs/gallery.md)里。
 

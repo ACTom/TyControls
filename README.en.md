@@ -29,6 +29,8 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 | **`TTyStringGrid`** per-column editors: check box, rating, colour, button<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
 | **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **`TTyChart`** line, bar, pie, donut<br>![chart](docs/images/chart.png) |
 | **`TTyRibbon`** ribbon, quick access toolbar, Alt key tips<br>![ribbon](docs/images/ribbon.png) | **`TTyCalendar`** week numbers, today highlight, selectable range<br>![calendar](docs/images/calendar.png) |
+| **`TTyAdvanceChart`** reads ECharts options as they are; the example runs the official gallery's<br>![ECharts-style chart](docs/images/advchart.png) | **`TTyDBGrid`** a grid on a dataset: check boxes, lookup lists, formatted amounts, multiselect<br>![data-aware grid](docs/images/dbgrid.png) |
+| **`TTyPropertyGrid`** inspects whichever control you click and writes edits back<br>![property grid](docs/images/propertygrid.png) | **Multi-thumb track bars** ranges, several values, gradient stops<br>![multi-thumb track bars](docs/images/trackbar.png) |
 
 Every example, every tab page, in light and dark: see the [gallery](docs/gallery.en.md).
 
