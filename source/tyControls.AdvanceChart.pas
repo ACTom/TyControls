@@ -6938,6 +6938,47 @@ end;
 
 { ==================== paint ==================== }
 
+{ A TURNED NAME OF SEVERAL LINES. DrawTextRotated sets one line; a name with
+  a line break came out as one line with the break in it. zrender turns the
+  whole block about its anchor: the block's lines stack in the text's own
+  frame -- each one aligned on its own, the block aligned vertically as a
+  whole -- and the frame turns. ABlockH is the block's measured height, the
+  same number the layout reserved its box from. [F1b] }
+procedure DrawRotatedNameLines(APainter: TTyPainter; const AText, AFontName: string;
+  AFontSize, AWeight: Integer; AColor: TTyColor; AX, AY, ARot: Double;
+  AHAlign: TAlignment; AVAlign: TTextLayout; ABlockH: Double);
+var
+  lines: TStringArray;
+  i, n: Integer;
+  lineH, top, dy, sa, ca: Double;
+begin
+  if Pos(#10, AText) = 0 then
+  begin
+    APainter.DrawTextRotated(AText, AFontName, AFontSize, AWeight, AColor,
+      AX, AY, ARot, AHAlign, AVAlign);
+    Exit;
+  end;
+  lines := AText.Split([#10]);
+  n := Length(lines);
+  lineH := ABlockH / n;
+  case AVAlign of
+    tlCenter: top := -ABlockH / 2;
+    tlBottom: top := -ABlockH;
+  else
+    top := 0;
+  end;
+  sa := Sin(ARot);
+  ca := Cos(ARot);
+  for i := 0 to n - 1 do
+  begin
+    { (0, dy) in the text's frame, turned the way DrawTextRotated turns its
+      own offsets }
+    dy := top + i * lineH;
+    APainter.DrawTextRotated(lines[i], AFontName, AFontSize, AWeight, AColor,
+      AX + dy * sa, AY + dy * ca, ARot, AHAlign, tlTop);
+  end;
+end;
+
 procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
   const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean);
@@ -7514,12 +7555,15 @@ begin
         Pos(#10, spec^.NamePlacement.Text) > 0);
     end
     else
-      APainter.DrawTextRotated(spec^.NamePlacement.Text, nameS.FontName,
+    begin
+      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+      DrawRotatedNameLines(APainter, spec^.NamePlacement.Text, nameS.FontName,
         ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
         spec^.NamePlacement.X, spec^.NamePlacement.Y,
         spec^.NamePlacement.RotationRad,
         AnchorAlign(spec^.NamePlacement.AnchorH),
-        AnchorLayout(spec^.NamePlacement.AnchorV));
+        AnchorLayout(spec^.NamePlacement.AnchorV), lblH);
+    end;
   end;
 
   if not (tpTextColor in labelS.Present) then Exit;
@@ -16195,9 +16239,12 @@ begin
           nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
       end
       else
-        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
           nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+      end;
     end;
     if not (tpTextColor in labelS.Present) then Continue;
     for q := 0 to High(sp.Placements) do
@@ -16910,9 +16957,12 @@ var
           nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
       end
       else
-        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
           nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+      end;
     end;
     if not (tpTextColor in labelS.Present) then Exit;
     for q := 0 to High(sp.Placements) do
@@ -19466,9 +19516,12 @@ begin
             nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
         end
         else
-          APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
             nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+        end;
       end;
       if not (tpTextColor in labelS.Present) then Continue;
       for q := 0 to High(sp.Placements) do

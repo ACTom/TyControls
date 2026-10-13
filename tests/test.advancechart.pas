@@ -107,6 +107,7 @@ type
     procedure TestACrowdedValueAxisKeepsItsMinorTicks;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
+    procedure TestATurnedNameOfSeveralLinesSetsEveryLine;
     procedure TestAThickerThemeBorderDrawsAThickerAxis;
     procedure TestTheMinorTickLengthComesFromTheTheme;
     procedure TestHairlinesLandOnWholePixels;
@@ -910,6 +911,63 @@ begin
   AssertTrue(Format('moved by %.1f', [place.MovedY]), place.MovedY > 10);
   AssertTrue(Format('a middle name drew %d', [named]), named > 30);
   AssertEquals('in its box too', named, inBox);
+end;
+
+procedure TAdvanceChartTest.TestATurnedNameOfSeveralLinesSetsEveryLine;
+
+  { The red ink's extent across a y axis' middle name, which is turned a
+    quarter: its lines stack ACROSS the canvas, so two lines are about twice
+    as wide as one. Also how much of the ink is in the box the layout
+    reserved. }
+  function RedWidth(const AName: string; out AInBox, ATotal: Integer): Integer;
+  var
+    spec: PTyAxisLayoutSpec;
+    box: TTyXYWH;
+    x, y, x0, x1: Integer;
+    p: TBGRAPixel;
+  begin
+    FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { name: ''' + AName
+      + ''', nameLocation: ''middle'', nameGap: 40 },'
+      + ' series: [{ type: ''bar'', data: [1] }] }';
+    Draw;
+    spec := FChart.Build.Grid(0).SpecFor(FChart.Build.Axis('yAxis', 0));
+    AssertTrue('a placed name', (spec <> nil) and spec^.NamePlacement.Shown);
+    box := spec^.NamePlacement.Rect;
+    x0 := MaxInt;
+    x1 := -1;
+    AInBox := 0;
+    ATotal := 0;
+    for y := 0 to 299 do
+      for x := 0 to 399 do
+      begin
+        p := PixelAt(x, y);
+        if (p.red > p.green + 60) and (p.red > p.blue + 60) then
+        begin
+          Inc(ATotal);
+          if x < x0 then x0 := x;
+          if x > x1 then x1 := x;
+          if (x >= box.X - 1) and (x <= box.X + box.W + 1)
+            and (y >= box.Y - 1) and (y <= box.Y + box.H + 1) then
+            Inc(AInBox);
+        end;
+      end;
+    if x1 < 0 then Exit(0);
+    Result := x1 - x0 + 1;
+  end;
+
+var
+  one, two, inBox, total: Integer;
+begin
+  { [F1b] A turned name with a line break was set as ONE line, the break in
+    it: the level path drew a block, the turned one handed the whole text to
+    DrawTextRotated. zrender turns the block. }
+  FCtl.StyleOverride := 'TyAdvChartAxisName { color: #FF0000; }';
+  one := RedWidth('WWWW', inBox, total);
+  AssertTrue('one line draws', total > 20);
+  two := RedWidth('WWWW\nWWWW', inBox, total);
+  AssertTrue(Format('two lines are %d wide against one line''s %d', [two, one]),
+    two > one * 3 div 2);
+  AssertEquals('every line in the box the layout reserved', total, inBox);
 end;
 
 procedure TAdvanceChartTest.TestAThickerThemeBorderDrawsAThickerAxis;
