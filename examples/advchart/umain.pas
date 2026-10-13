@@ -9,12 +9,12 @@ unit umain;
   it is editable, because "paste an option from the web and it draws" is the
   claim being made.
 
-  IT IS ALSO A SCOREBOARD, and deliberately an honest one. Most of the gallery
-  needs series types that have no renderer yet, and those examples draw their
-  axes and say why underneath. The saying-why is not written here: it comes from
-  TyOptDiagnose, the same diagnostics the option editor shows, so the demo
-  cannot flatter the library by wording things more kindly than the library
-  does.
+  IT IS ALSO A SCOREBOARD, and deliberately an honest one. Whatever the chart
+  has to say about an option -- a key it does not know, a value outside its
+  list, a series it cannot place -- is shown underneath. The saying is not
+  written here: it comes from TyOptDiagnose, the same diagnostics the option
+  editor shows, so the demo cannot flatter the library by wording things more
+  kindly than the library does.
 
   WHY TyOptDiagnose AND NOT Chart.DiagnosticCount. The control's own
   diagnostics come from its build, and the build is only made during a PAINT --
@@ -101,7 +101,7 @@ resourcestring
   rsNoGallery = 'The gallery was not found. Run tools/advchart-gallery/harvest.js '
     + 'to build examples/advchart/gallery.';
   rsOptionOk = 'The option parsed and this chart draws.';
-  rsDiagnostics = '%d thing(s) the chart could not honour:';
+  rsDiagnostics = '%d note(s) on this option:';
   rsNotConverted = 'Not converted: %s';
   rsPickOne = 'Pick an example on the left.';
   rsSavedTo = 'Saved to %s';
@@ -298,7 +298,7 @@ end;
 procedure TMainForm.Apply;
 var
   diags: TTyOptDiagArray;
-  i: Integer;
+  i, notes: Integer;
   s: string;
 begin
   Chart.Option := OptionMemo.Text;
@@ -317,9 +317,30 @@ begin
     LblStatus.Caption := rsOptionOk;
     Exit;
   end;
-  s := Format(rsDiagnostics, [Length(diags)]);
+  { ONLY REAL NOTES ARE COUNTED. The all-clear row says the option is
+    understood; counting it under the header announced one thing the chart
+    "could not honour" above a single line saying nothing was wrong. When it is the only kind of row there
+    is, it is shown on its own, without a header. The header itself says
+    "note", not "failure": an option the catalog does not know is often one the
+    chart simply has no use for. }
+  notes := 0;
   for i := 0 to High(diags) do
-    s := s + LineEnding + '• ' + diags[i].Text;
+    if diags[i].Kind <> odkAllClear then Inc(notes);
+  if notes = 0 then
+  begin
+    s := '';
+    for i := 0 to High(diags) do
+    begin
+      if s <> '' then s := s + LineEnding;
+      s := s + diags[i].Text;
+    end;
+    LblStatus.Caption := s;
+    Exit;
+  end;
+  s := Format(rsDiagnostics, [notes]);
+  for i := 0 to High(diags) do
+    if diags[i].Kind <> odkAllClear then
+      s := s + LineEnding + '• ' + diags[i].Text;
   LblStatus.Caption := s;
 end;
 

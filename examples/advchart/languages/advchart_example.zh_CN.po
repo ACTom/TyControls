@@ -43,8 +43,8 @@ msgstr "option 解析成功。"
 
 #: umain.rsdiagnostics
 #, object-pascal-format
-msgid "%d thing(s) the chart could not honour:"
-msgstr "有 %d 项图表无法兑现 — 见下。"
+msgid "%d note(s) on this option:"
+msgstr "这份 option 有 %d 条提示："
 
 # --- code resourcestrings (msgid=Pascal source) ---
 
