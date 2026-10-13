@@ -22,8 +22,8 @@ unit test.danglingrefs;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Forms, Controls, fpcunit, testregistry, test.designregistry,
-  tyControls.IconFont, tyControls.ImageCollection;
+  Classes, SysUtils, TypInfo, Forms, Controls, Menus, LCLType, LMessages, fpcunit, testregistry,
+  test.designregistry, tyControls.IconFont, tyControls.ImageCollection, tyControls.Form;
 
 type
   TDanglingRefsTest = class(TTestCase)
@@ -34,6 +34,7 @@ type
     procedure TestAWatcherFreedBeforeTheImageListLeavesItsChangeList;
     procedure TestAWatchedIconFontCanBeFreedWhileItsFormLives;
     procedure TestAWatchedImageListCanBeFreedWhileItsFormLives;
+    procedure TestATyFormLetsGoOfAMenuItTookOver;
   end;
 
 { Poisoned frees, for any suite that has to prove nothing reads a freed object (see the
@@ -380,6 +381,50 @@ begin
   finally
     w.Free;
     form.Free;
+  end;
+end;
+
+type
+  TTyFormShortcutProbe = class(TTyForm)
+  public
+    function AltShortcut(AKey: Word): Boolean;
+  end;
+
+function TTyFormShortcutProbe.AltShortcut(AKey: Word): Boolean;
+var msg: TLMKey;
+begin
+  FillChar(msg, SizeOf(msg), 0);
+  msg.CharCode := AKey;
+  msg.KeyData := PtrInt(MK_ALT);
+  Result := IsShortcut(msg);
+end;
+
+{ #78. A TTyForm takes a menu that lands in Form.Menu out of it and keeps it to dispatch its
+  shortcuts. That kept reference is a reference like any other: freed, the menu must be let go
+  of, or the next key the form sees is tried against freed memory. }
+procedure TDanglingRefsTest.TestATyFormLetsGoOfAMenuItTookOver;
+var
+  f: TTyFormShortcutProbe;
+  mm: TMainMenu;
+  it: TMenuItem;
+begin
+  f := TTyFormShortcutProbe.CreateNew(nil);
+  try
+    mm := TMainMenu.Create(f);
+    it := TMenuItem.Create(mm);
+    it.ShortCut := ShortCut(Ord('S'), [ssAlt]);
+    mm.Items.Add(it);
+    AssertTrue('setup: taken out of Form.Menu', f.Menu = nil);
+    AssertTrue('setup: and serving its shortcut', f.AltShortcut(Ord('S')));
+    BeginPoison;
+    try
+      mm.Free;
+      AssertFalse('a freed menu is no longer tried', f.AltShortcut(Ord('S')));
+    finally
+      EndPoison;
+    end;
+  finally
+    f.Free;
   end;
 end;
 
