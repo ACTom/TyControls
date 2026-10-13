@@ -1694,7 +1694,7 @@ end;
 
 procedure TTyCustomTitleBar.CaptionSpanFor(AWidth, ATextWidth: Integer; out ALeft, ARight: Integer);
 var
-  i, bl, br, scan, g, best, k, kStep: Integer;
+  i, bl, br, scan, g, best, k, kStep, cx, lo, hi: Integer;
   c: TControl;
   edges, gapL, gapR: array of Integer;
   n, j, tmp: Integer;
@@ -1722,6 +1722,43 @@ begin
     if bl < ALeft then bl := ALeft;
     if br > ARight then br := ARight;
     edges[n] := bl; edges[n + 1] := br; Inc(n, 2);
+  end;
+
+  { A centred caption is centred on the whole bar, as macOS and GNOME centre a window title,
+    when it fits there: the widest span symmetric about the middle of the bar that stays clear of
+    the children, the icon and the caption buttons. Centred in a gap instead, it sat off the
+    middle of the window whenever what is on either side differs in width -- the icon on one side
+    and the buttons on the other already do. Only when it does not fit there (a child across the
+    middle, or one too close to it) does it fall back to the gaps below. }
+  if (ATextWidth > 0) and (FTitleAlignment = taCenter) then
+  begin
+    cx := AWidth div 2;
+    lo := ALeft;
+    hi := ARight;
+    i := 0;
+    while i < n do
+    begin
+      if edges[i + 1] <= cx then
+      begin
+        if edges[i + 1] > lo then lo := edges[i + 1];
+      end
+      else if edges[i] >= cx then
+      begin
+        if edges[i] < hi then hi := edges[i];
+      end
+      else
+      begin
+        lo := cx; hi := cx;       { a child across the middle }
+      end;
+      Inc(i, 2);
+    end;
+    if hi - cx < cx - lo then lo := cx - (hi - cx) else hi := cx + (cx - lo);
+    if hi - lo >= ATextWidth then
+    begin
+      ALeft := lo;
+      ARight := hi;
+      Exit;
+    end;
   end;
   if n = 0 then Exit;
 
