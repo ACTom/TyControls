@@ -21,6 +21,12 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 
 ## Examples
 
+### advchart
+
+| Light | Dark |
+|---|---|
+| ![advchart](gallery/advchart/main-light.png) | ![advchart](gallery/advchart/main-dark.png) |
+
 ### antdesign
 
 | Light | Dark |
@@ -79,6 +85,18 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 | Light | Dark |
 |---|---|
 | ![datetimepicker](gallery/datetimepicker/main-light.png) | ![datetimepicker](gallery/datetimepicker/main-dark.png) |
+
+### dbcontrols
+
+| Light | Dark |
+|---|---|
+| ![dbcontrols](gallery/dbcontrols/main-light.png) | ![dbcontrols](gallery/dbcontrols/main-dark.png) |
+
+### dbgrid
+
+| Light | Dark |
+|---|---|
+| ![dbgrid](gallery/dbgrid/main-light.png) | ![dbgrid](gallery/dbgrid/main-dark.png) |
 
 ### demo
 
@@ -210,6 +228,12 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 |---|---|
 | ![progressbar](gallery/progressbar/main-light.png) | ![progressbar](gallery/progressbar/main-dark.png) |
 
+### propertygrid
+
+| Light | Dark |
+|---|---|
+| ![propertygrid](gallery/propertygrid/main-light.png) | ![propertygrid](gallery/propertygrid/main-dark.png) |
+
 ### radiobutton
 
 | Light | Dark |
@@ -281,6 +305,12 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 |---|---|
 | ![tabset](gallery/tabset/main-light.png) | ![tabset](gallery/tabset/main-dark.png) |
 
+### terminal
+
+| Light | Dark |
+|---|---|
+| ![terminal](gallery/terminal/main-light.png) | ![terminal](gallery/terminal/main-dark.png) |
+
 ### theming
 
 | Light | Dark |
@@ -298,6 +328,12 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 | Light | Dark |
 |---|---|
 | ![toolbar](gallery/toolbar/main-light.png) | ![toolbar](gallery/toolbar/main-dark.png) |
+
+### toolwindows
+
+| Light | Dark |
+|---|---|
+| ![toolwindows](gallery/toolwindows/main-light.png) | ![toolwindows](gallery/toolwindows/main-dark.png) |
 
 ### trackbar
 

@@ -21,6 +21,12 @@
 
 ## 示例
 
+### advchart
+
+| 亮色 | 暗色 |
+|---|---|
+| ![advchart](gallery/advchart/main-light.png) | ![advchart](gallery/advchart/main-dark.png) |
+
 ### antdesign
 
 | 亮色 | 暗色 |
@@ -79,6 +85,18 @@
 | 亮色 | 暗色 |
 |---|---|
 | ![datetimepicker](gallery/datetimepicker/main-light.png) | ![datetimepicker](gallery/datetimepicker/main-dark.png) |
+
+### dbcontrols
+
+| 亮色 | 暗色 |
+|---|---|
+| ![dbcontrols](gallery/dbcontrols/main-light.png) | ![dbcontrols](gallery/dbcontrols/main-dark.png) |
+
+### dbgrid
+
+| 亮色 | 暗色 |
+|---|---|
+| ![dbgrid](gallery/dbgrid/main-light.png) | ![dbgrid](gallery/dbgrid/main-dark.png) |
 
 ### demo
 
@@ -210,6 +228,12 @@
 |---|---|
 | ![progressbar](gallery/progressbar/main-light.png) | ![progressbar](gallery/progressbar/main-dark.png) |
 
+### propertygrid
+
+| 亮色 | 暗色 |
+|---|---|
+| ![propertygrid](gallery/propertygrid/main-light.png) | ![propertygrid](gallery/propertygrid/main-dark.png) |
+
 ### radiobutton
 
 | 亮色 | 暗色 |
@@ -281,6 +305,12 @@
 |---|---|
 | ![tabset](gallery/tabset/main-light.png) | ![tabset](gallery/tabset/main-dark.png) |
 
+### terminal
+
+| 亮色 | 暗色 |
+|---|---|
+| ![terminal](gallery/terminal/main-light.png) | ![terminal](gallery/terminal/main-dark.png) |
+
 ### theming
 
 | 亮色 | 暗色 |
@@ -298,6 +328,12 @@
 | 亮色 | 暗色 |
 |---|---|
 | ![toolbar](gallery/toolbar/main-light.png) | ![toolbar](gallery/toolbar/main-dark.png) |
+
+### toolwindows
+
+| 亮色 | 暗色 |
+|---|---|
+| ![toolwindows](gallery/toolwindows/main-light.png) | ![toolwindows](gallery/toolwindows/main-dark.png) |
 
 ### trackbar
 
