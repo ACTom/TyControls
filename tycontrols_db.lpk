@@ -32,6 +32,10 @@
         <UnitName Value="tyControls.DB.Edits"/>
       </Item>
       <Item>
+        <Filename Value="source/db/tyControls.DB.Grid.pas"/>
+        <UnitName Value="tyControls.DB.Grid"/>
+      </Item>
+      <Item>
         <Filename Value="source/db/tyControls.DB.Image.pas"/>
         <UnitName Value="tyControls.DB.Image"/>
       </Item>

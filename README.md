@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。190 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -36,7 +36,7 @@ Lazarus 自绘控件库。190 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **190 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、21 个数据感知控件,一套配齐
+- **195 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -80,7 +80,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-190 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+195 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -145,7 +145,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyCheckGroup` | 带标题框的复选组 |
 | `TTySegmented` | 分段控制器 |
 
-### 列表与下拉 · `TyControls Lists`(14)
+### 列表与下拉 · `TyControls Lists`(15)
 
 | 控件 | 说明 |
 |---|---|
@@ -159,7 +159,8 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyAdvancedComboBox` | 每项两行(标题 + 副标题 + 图标)的下拉框 |
 | `TTyAdvancedListBox` | 每项两行的富列表 |
 | `TTyCheckComboBox` | 可多选的下拉框 |
-| `TTyValueListEditor` | 属性表:左键右值,每行可指定编辑器 |
+| `TTyValueListEditor` | 名/值编辑器:左键右值,每行可指定编辑器 |
+| `TTyPropertyGrid` | 属性表格:列出一个对象的 published 属性,改了直接写回 |
 | `TTyTransfer` | 双列表穿梭框 |
 | `TTyTreeSelect` | 树形下拉选择器 |
 | `TTyCascader` | 级联选择器(省 / 市 / 区) |
@@ -197,11 +198,14 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTySparkline` | 迷你趋势图 |
 | `TTyRating` | 星级评分 |
 
-### 条状控件 · `TyControls Bars`(15)
+### 条状控件 · `TyControls Bars`(18)
 
 | 控件 | 说明 |
 |---|---|
 | `TTyTrackBar` | 滑块 |
+| `TTyRangeTrackBar` | 区间滑块:一条轨道上一个或多个可拖动的区间 |
+| `TTyMultiTrackBar` | 多值滑块:每个滑块可单独设颜色、提示和样式,滑块之间可分段着色 |
+| `TTyGradientTrackBar` | 渐变色标编辑器:轨道画成渐变,点击加色标、拖出删除、双击改颜色 |
 | `TTyProgressBar` | 进度条 |
 | `TTyScrollBar` | 滚动条:可随主题或按控件设置闲置时自动淡出(`AutoHide`) |
 | `TTyStatusBar` | 状态栏 |
@@ -259,9 +263,9 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyImageView` | 图片查看器:平移、缩放、滤镜 |
 | `TTyPreviewBox` | 文件预览框 |
 
-### 数据感知 · `TyControls Data Controls`(21)
+### 数据感知 · `TyControls Data Controls`(22)
 
-单独的包 `tycontrols_db`,绑 `TDataSource` 的字段即用,外观跟随主题。说明见 [docs/controls/dbcontrols.md](docs/controls/dbcontrols.md)。
+单独的包 `tycontrols_db`,绑 `TDataSource` 的字段即用,外观跟随主题。说明见 [docs/controls/dbcontrols.md](docs/controls/dbcontrols.md),数据表格见 [docs/controls/dbgrid.md](docs/controls/dbgrid.md)。
 
 | 控件 | 说明 |
 |---|---|
@@ -286,6 +290,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyDBImage` | 绑 blob 字段的图片,与 LCL `TDBImage` 的存储格式互通 |
 | `TTyDBDateTimePicker` | 日期时间选择器,支持空值 |
 | `TTyDBCalendar` | 日历,选中的日期能写回字段 |
+| `TTyDBGrid` | 数据表格:一行一条记录,就地编辑、插入、删除、多选,行为照 LCL `TDBGrid` |
 
 ### 菜单 · `TyControls Menus`(4)
 
@@ -416,6 +421,8 @@ CharImage1.GlyphName := 'house';
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
 | [dbcontrols](examples/dbcontrols/) | 数据感知控件:21 个控件绑一张内存表,导航、编辑、空值、查找、照片 |
+| [dbgrid](examples/dbgrid/) | 数据表格:一千条订单,设计期列(勾选、查找、备注、金额格式),标题点击排序,多选删除,只读开关 |
+| [propertygrid](examples/propertygrid/) | 属性表格:点哪个控件就检查哪个,Ctrl+点击多选,改了直接写回;按名字过滤、分类、只看可写的、显示事件,给字符串表格增删列 |
 | [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY / 管道)、ZModem 收发、换肤、配色方案、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。

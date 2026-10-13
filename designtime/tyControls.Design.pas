@@ -27,7 +27,7 @@ uses
   tyControls.OfficeListBox, tyControls.OfficeComboBox,
   tyControls.ColorGrid, tyControls.LColorPicker, tyControls.HSColorPicker,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
-  tyControls.ValueListEditor, tyControls.Calculator, tyControls.CalcEdit,
+  tyControls.ValueListEditor, tyControls.PropertyGrid, tyControls.Calculator, tyControls.CalcEdit,
   tyControls.CalcCurrencyEdit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
@@ -45,7 +45,8 @@ uses
   tyControls.ButtonGroup, tyControls.Ribbon, tyControls.RibbonAppMenu,
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
+  tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.GroupBox, tyControls.PageControl,
+  tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.FloatSpinEdit,
   tyControls.Memo, tyControls.Terminal, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
@@ -72,7 +73,7 @@ uses
   tyControls.AdvanceChart,
   { The data-aware controls (the tycontrols_db package). }
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
-  tyControls.DB.DateTime, tyControls.DB.Navigator,
+  tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid,
   { The manager's registration needs its own unit (spec §16 step 7). }
   tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   { The vocabulary source of the theme dropdowns, published into the IDE process here. }
@@ -155,7 +156,7 @@ begin
     [TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
      TTyCheckComboBox,
      TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor,
-     TTyTransfer, TTyTreeSelect, TTyCascader]);
+     TTyPropertyGrid, TTyTransfer, TTyTreeSelect, TTyCascader]);
   // Rich pickers: colour / font / filter / shell selectors.
   RegisterComponents('TyControls Pickers',
     [TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
@@ -168,9 +169,9 @@ begin
      TTySparkline, TTyRating]);
   // Bars: sliders / progress / scroll / status / tool bars + header.
   RegisterComponents('TyControls Bars',
-    [TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-     TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar,
-     TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
+    [TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyGradientTrackBar, TTyProgressBar,
+     TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar,
+     TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
   // Containers & layout.
   RegisterComponents('TyControls Containers',
     [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
@@ -195,7 +196,8 @@ begin
     [TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
      TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
      TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
-     TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
+     TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar,
+     TTyDBGrid]);
   // Menus.
   RegisterComponents('TyControls Menus',
     [TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx]);

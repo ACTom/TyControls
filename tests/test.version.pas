@@ -20,7 +20,7 @@ uses
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
-  tyControls.DB.DateTime, tyControls.DB.Navigator,
+  tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -46,8 +46,10 @@ uses
   tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.ToggleSwitch,
   tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.TrackBar,
+  tyControls.MultiTrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
+  tyControls.PropertyGrid,
   { The property-editor base classes. None of them is ever dropped on a form, so nothing else
     in this uses list drags them in — but InheritsFromAnEditorBase resolves them by name, and
     an unresolvable base would make that check answer False for everything beneath it. }
@@ -441,13 +443,14 @@ initialization
     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox]);
   Reg([
     TTyAdvancedComboBox, TTyCheckComboBox, TTyListBox, TTyCheckListBox, TTyOfficeListBox,
-    TTyAdvancedListBox, TTyValueListEditor, TTyTransfer, TTyTreeSelect, TTyCascader,
+    TTyAdvancedListBox, TTyValueListEditor, TTyPropertyGrid, TTyTransfer, TTyTreeSelect, TTyCascader,
     TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
-    TTySparkline, TTyRating, TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-    TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
+    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar,
+    TTyGradientTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton,
+    TTyToolSeparator, TTyToolBarEx]);
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,
@@ -475,7 +478,8 @@ initialization
     TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
     TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
     TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
-    TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
+    TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar,
+    TTyDBGrid]);
   { The BASE classes the Version property editor is registered on. They are never dropped on
     a form, so nothing else registers them — but InheritsFromAnEditorBase resolves them by
     name, and an unresolvable base would make that check quietly answer False for everything
@@ -484,6 +488,11 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent,
     { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
     TTyCustomVirtualImageList]);
+  { The gradient track bar (#36 step 2). It reaches the palette with the design-time
+    registration (plan Task 5); until Design.pas registers it, it is not in the parse Reg() is
+    checked against, so it is registered plainly here -- form files read in the tests and the
+    custom-class guards resolve it by name. }
+  RegisterClasses([TTyGradientTrackBar]);
   RegisterTest(TVersionTest);
 
 finalization

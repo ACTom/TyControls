@@ -373,6 +373,7 @@ begin
     '  --toolwindow-strip-size: 36px;' + LineEnding +
     '  --toolwindow-tab-area-min: 50px;' + LineEnding +
     '  --toolwindow-tab-pad: 10px;' + LineEnding +
+    '  --track-remove-distance: 24px;' + LineEnding +
     '  --transfer-arrow-margin: 3px;' + LineEnding +
     '  --transfer-arrow-size: 12px;' + LineEnding +
     '  --transfer-button-gap: 6px;' + LineEnding +
@@ -585,6 +586,12 @@ begin
     '}' + LineEnding +
     'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
+    '/* A heading row of the value list editor (TTyValueRow.Heading: the property grid''s categories),' + LineEnding +
+    '   hung on TyValueListEditorRow. Only its REST look is read here -- the band, the ink, the' + LineEnding +
+    '   weight; hovered or selected it is drawn as the row''s :hover / :active, so the selection reads' + LineEnding +
+    '   the same on a heading as on any other row in every skin. The band is a wash of the ink, so it' + LineEnding +
+    '   stands out from whatever ground the skin gives the list, light or dark. */' + LineEnding +
+    'TyValueListEditorGroup { background: alpha(var(--on-surface), 0.08); color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +
@@ -698,6 +705,22 @@ begin
     '  background: var(--surface-track);' + LineEnding +
     '  border-radius: var(--radius-round);' + LineEnding +
     '}' + LineEnding +
+    '/* LCL''s selection range (SelStart..SelEnd): the groove filled between two values, under the' + LineEnding +
+    '   thumb, in the accent the thumb uses. */' + LineEnding +
+    'TyTrackSelection {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '}' + LineEnding +
+    '/* A stretch of groove between two thumbs of TTyMultiTrackBar, resolved with the StyleClass of' + LineEnding +
+    '   its Segments item. The plain key paints nothing -- a segment without a class shows the' + LineEnding +
+    '   groove -- and the three classes below are what a status scale (fine / getting there / too' + LineEnding +
+    '   much) needs; a theme adds its own the same way. */' + LineEnding +
+    'TyTrackSegment {' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '}' + LineEnding +
+    'TyTrackSegment.success { background: var(--success); }' + LineEnding +
+    'TyTrackSegment.warning { background: var(--warning); }' + LineEnding +
+    'TyTrackSegment.danger  { background: var(--danger); }' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyTrackBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
@@ -707,6 +730,20 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    '/* The thumb the arrow keys move, while the bar has the focus: a ring inside the thumb, in the' + LineEnding +
+    '   ink that sits on the accent. --focus-ring is the accent itself and would vanish on an' + LineEnding +
+    '   accent thumb; on a multi-thumb bar this ring is how Tab shows which thumb it is on. */' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
+    '/* A thumb of TTyMultiTrackBar dragged off the track far enough to be removed when it is' + LineEnding +
+    '   released (AllowUserThumbs; --track-remove-distance above says how far): faded, as a part' + LineEnding +
+    '   that is about to go. A class, not a state -- the cascade knows a fixed set of states --' + LineEnding +
+    '   added to whatever class the thumb has, so a theme can fade .big and .removing apart. */' + LineEnding +
+    'TyTrackThumb.removing { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* A colour stop of TTyGradientTrackBar is filled with the stop''s own colour, so a white stop' + LineEnding +
+    '   on a light surface, or a black one on a dark surface, would vanish into what is around it.' + LineEnding +
+    '   An edge in the surface''s ink keeps every stop in sight. Like .removing, a class the bar adds' + LineEnding +
+    '   to the stop''s own. */' + LineEnding +
+    'TyTrackThumb.stop { border-width: 1px; border-color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +
@@ -913,6 +950,17 @@ begin
     '  background: var(--chrome-bar-bg);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* The data-aware navigator''s strip takes the tool bar''s look through its type key chain, all' + LineEnding +
+    '   but the band itself: no frame and no fill, so the row of buttons sits on whatever surface it' + LineEnding +
+    '   is placed on. The buttons keep their own look (TyDBNavigatorButton > TyButton). Only the' + LineEnding +
+    '   width goes -- the bar''s border-color still reaches the strip, so a StyleOverride' + LineEnding +
+    '   ''border-width: 1px'' on one navigator brings its frame back. A rule in the base layer, so' + LineEnding +
+    '   every theme that does not name the key (the whole built-in pack) inherits it. */' + LineEnding +
+    'TyDBNavigator {' + LineEnding +
+    '  background: transparent;' + LineEnding +
+    '  border-width: 0;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +

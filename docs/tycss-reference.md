@@ -941,7 +941,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyToggleSwitch` | 开关的轨道(`Checked=True` 时追加 `:active`) | `TTyToggleSwitch` | `:hover` `:active` `:focus` `:disabled` |
 | `TyToggleKnob` | 开关旋钮(tier-a 着色面) | `TTyToggleSwitch` | 无状态 |
 | `TyTrackBar` | 滑杆轨道 | `TTyTrackBar` | `:focus` `:disabled` |
-| `TyTrackThumb` | 滑杆滑块(tier-a) | `TTyTrackBar`、`TTyTrackEdit` | `:hover` `:active` |
+| `TyRangeTrackBar` / `TyMultiTrackBar` / `TyGradientTrackBar` | 多滑块控件本体,父键 `TyTrackBar`(没写自己的规则时与 `TTyTrackBar` 一样) | `TTyRangeTrackBar` / `TTyMultiTrackBar` / `TTyGradientTrackBar` | `:focus` `:disabled` |
+| `TyTrackThumb` | 滑杆滑块(tier-a);`:focus` 的 `outline` 画在滑块**内侧**(`outline-offset` 往里缩),默认主题用 `--on-accent` 画一圈环。多滑块控件会在滑块自己的类后面再加两个变体:`.removing`(拖出轨道、松手就删的滑块;控件把它的 `opacity` 乘到这个滑块的颜色上,默认主题取 `--disabled-opacity`)、`.stop`(`TTyGradientTrackBar` 的色标;用色标自己的颜色填充,默认主题加 1px `--on-surface` 的边)。写了自己 `TyTrackThumb` 规则的主题要连这两个变体一起写(§8.1) | `TTyTrackBar`、`TTyRangeTrackBar`、`TTyMultiTrackBar`、`TTyGradientTrackBar`、`TTyTrackEdit` | `:hover` `:active` `:focus`(控件有焦点时方向键要动的那个滑块) |
+| `TyTrackSelection` | 滑杆选区(`SelStart..SelEnd`)和 `TTyRangeTrackBar` 的区间,读 `background`、`border-radius` | `TTyTrackBar`、`TTyRangeTrackBar` | 无 |
+| `TyTrackSegment` | `TTyMultiTrackBar` 两个滑块之间的一段,按 `Segments` 项的 `StyleClass` 解析,读 `background`、`border-radius`。不带类时不画;默认主题有 `.success` `.warning` `.danger` 三个变体 | `TTyMultiTrackBar` | 无 |
 | `TyProgressBar` | 进度条轨道 | `TTyProgressBar` | `:disabled` |
 | `TyProgressFill` | 进度条填充段(tier-a);部分填充时只圆起始角 | `TTyProgressBar` | 无状态 |
 
@@ -1001,6 +1004,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyRibbonGallery` | Ribbon 画廊的内嵌行外框(与 `TyListBox` 共块) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
 | `TyListItem` | 单行条目:`background` 决定行底、`color` 决定文字 | `TTyListBox`;`TTyRibbonGallery` 的图块也仍解析它 | `:hover` `:active`(=选中行) |
 | `TyValueListEditorRow` | 属性网格的一行(与 `TyListItem` 共块) | `TTyValueListEditor` | `:hover` `:active` |
+| `TyValueListEditorGroup` | 属性网格的标题行(`TTyValueRow.Heading`,属性表格的分类)平时的底色、文字色、字重;挂在 `TyValueListEditorRow` 下面 | `TTyValueListEditor` | —(悬停、选中时照 `TyValueListEditorRow` 画) |
 
 `TyValueListEditorKey` / `-Value` / `-Divider` / `-Expander` 由代码解析但**基础层刻意不定义**,见 §8.4。
 
@@ -1362,6 +1366,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     - `--checkbox-size` / `--checkbox-gap` — 复选框指示框边长 / 与标题的间距(默认 16 / 6);
     - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放);
     - `--groupbox-caption-height` — GroupBox 顶部标题带高度(默认 16)。
+    - `--track-remove-distance` — 多滑块控件里,滑块垂直于轨道拖出控件边缘多远算「拖出去了」,松手即删(默认 24)。
     - `--line-height` — **多行**标题的行框高度(logical px)。**没有内置常数**:未设时用字体
       自己的行框,所以加上这个令牌之前一切不动;设了就是 `行数 × 该值`,多出来的部分作为行距
       平分到每行上下。控件由此派生的**高度下限**(文字块高 + 上下 padding)也跟着走——

@@ -159,7 +159,7 @@ Grid.HScrollBar.LiveTracking := False;
 
 ### 键盘操作
 
-控件需获得焦点才响应（独立摆放的条 `TabStop` 默认 `True`，参见注意事项）。每个被处理的按键消费后不再传递（`Key := 0`）。
+滚动条从不拿焦点（4.0 起，见注意事项 5），这些按键不会直接送到它这儿。被滚动的控件或应用把自己收到的键转给 `ScrollByKey(var Key): Boolean`，就能复用同一套步长、`OnScroll` 和镜像规则：键被用掉时 `Key` 置 0 并返回 `True`；没用掉（不是下表里的键、条被禁用、或 `Key` 已经是 0）时返回 `False`，`Key` 原样留给调用方。
 
 | 按键 | 行为 |
 |------|------|
@@ -233,7 +233,7 @@ TTyScrollBar 继承 `TTyCustomControl` 的状态机制：
 | `tysNormal` | 正常 |
 | `tysHover` | 鼠标悬停在控件上 |
 | `tysActive` | 鼠标左键按下 |
-| `tysFocused` | 键盘焦点（独立摆放的条 `TabStop` 默认 `True`，参与 Tab 循环；宿主内嵌的条不拿焦点） |
+| `tysFocused` | 键盘焦点。滚动条从不拿焦点（4.0 起），所以这个状态只会出现在宿主身上：内嵌条替宿主画的焦点环跟着宿主的焦点走 |
 | `tysDisabled` | `Enabled = False` |
 
 ### 支持的伪类状态（TyScrollBar 轨道）
@@ -487,7 +487,7 @@ end;
 2. **SetMin/SetMax 自动夹紧 Position：** 修改 `Min` 或 `Max` 时若导致 `Position` 越界，会静默调整 `Position`（不触发 `OnChange`，仅触发 `Invalidate`）。
 3. **BeginThumbDrag 的坐标系：** `AGrabPosAlongTrack` 和 `APosAlongTrack` 均为**控件客户区坐标**，垂直时取鼠标 Y，水平时取鼠标 X，与控件的 `ClientRect` 基准一致。
 4. **退化情形：** 当 `Max <= Min` 或 `PageSize <= 0` 时，`TyScrollThumbRect` 返回整个轨道矩形（thumb 填满），此时拖动无意义。
-5. **TabStop：** 独立摆放的 `TTyScrollBar` 是个键盘控件（方向键 / PgUp / PgDn / Home / End），`TabStop` published 且默认 `True`，和原生 `TScrollBar` 一致。六个宿主内嵌的条在代码里把它设成 `False`，不参与焦点循环；点它也不拿焦点，焦点交给宿主（宿主本身不参与焦点时原地不动，焦点已在宿主的行内编辑器里时也不动），方向键照旧落在宿主上。
+5. **焦点（4.0 起）：** 滚动条从不拿焦点。滚动条是给鼠标用的，键盘滚动归被滚动的那个控件，WPF、Qt、GTK、macOS 和网页里的滚动条也都不拿焦点。`CanFocus` 恒为 `False`，所以 Tab、方向键导航、点击、代码里的 `SetFocus` 都给不了它焦点。点宿主内嵌的条，焦点交给宿主（宿主本身不参与焦点时原地不动，焦点已在宿主的行内编辑器里时也不动）；点独立摆放的条，焦点原地不动。`TabStop` 仍然 published，只为让存过它的窗体照常加载，默认 `False`，不起作用。想用键盘调独立的条，就把键转给 `ScrollByKey`。（3.0.2 是过渡：默认不拿焦点，`TabStop := True` 可以要回来；4.0 去掉了这个开关。）
 6. **水平时默认尺寸不自动翻转：** `Kind` 改变后，控件的宽/高不会自动对调，需手动交换 `Width` 和 `Height`。
 7. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（键盘/滚轮/翻页/箭头）时滑块缓动到新位置（约 120ms），**拖动则始终瞬时跟手**；headless / 设计器下瞬间吸附。六个宿主（`TTyStringGrid` / `TTyDrawGrid`、`TTyListBox`、`TTyListView`、`TTyMemo`、`TTyScrollBox`、`TTyTreeView`）的**内嵌滚动条按设计置为静态**（`AnimationsEnabled := False`）；这**只关滑块缓动，不关自动隐藏的淡入淡出**。详见上文「状态过渡动画」。
 8. **自动隐藏出厂是关的，但六个皮肤打开了它。** `win11` / `macos` / `fluent` / `material3` / `adwaita` / `ubuntu` 下滚动条闲 1200ms 就会淡掉，这是主题的决定，不是 bug。要按控件摁住它：`AutoHide := sbahNever`，或者宿主上的 `ScrollBarAutoHide := sbahNever`。详见 §7。

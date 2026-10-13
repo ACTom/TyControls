@@ -17,13 +17,14 @@ unit tyControls.RibbonQuickAccess;
       (the QAT sits on the ribbon/title band, so it should read as that
       surface). No new .tycss rule is introduced.
 
-  Children flow LEFT -> RIGHT. The simplest robust arrangement is to let each
-  child button carry Align=alLeft: the LCL alignment engine then packs them
-  against the left edge in child order, and no custom AlignControls is needed.
-  The convenience AddButton helper does exactly this (creates a TTyGlyphButton,
-  parents it, and sets Align=alLeft), so populating the QAT in code is a
-  one-liner. Callers may of course parent any small TTy control themselves and
-  give it Align=alLeft.
+  Children flow LEFT -> RIGHT. Each child button carries Align=alLeft and the
+  LCL alignment engine packs them against the left edge, ordered by their Left:
+  siblings that all sit at Left 0 come out in REVERSE creation order, so the
+  Left is what decides (#51). The convenience AddButton helper creates a
+  TTyGlyphButton, starts it past the children already there and sets
+  Align=alLeft, so populating the QAT in code is a one-liner and the buttons
+  read in the order they were added. A caller that parents its own controls
+  with Align=alLeft has to give them increasing Lefts the same way.
 
   A pure helper TyQatContentWidth computes the total packed width of a set of
   left-aligned items (indent + item widths + inter-item spacing) so a host can
@@ -56,9 +57,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     { Create a compact TTyGlyphButton, parent it to this QAT, set Align=alLeft
-      (so it packs against the left edge, flowing after any earlier children),
-      and return it. Grows ControlCount by one. The returned button is owned by
-      Self's Owner (this control), so it is freed with the QAT. }
+      (so it packs against the left edge, after every earlier child), and return
+      it. Grows ControlCount by one. The returned button is owned by this
+      control, so it is freed with the QAT. }
     function AddButton(const ACaption: string): TTyGlyphButton;
     { Left/top inset before the first item (logical px). Purely advisory for a
       host that sizes the strip via TyQatContentWidth; child Align=alLeft packs
@@ -192,12 +193,20 @@ begin
 end;
 
 function TTyCustomRibbonQuickAccess.AddButton(const ACaption: string): TTyGlyphButton;
+var
+  i, x: Integer;
 begin
+  { The align engine orders alLeft siblings by Left, and with every Left at 0 it packs them in
+    REVERSE creation order (#51). So start the new button past every child already here: the
+    number is only a sort key, the engine places it flush on its first pass. }
+  x := 0;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i].Left + Controls[i].Width > x then
+      x := Controls[i].Left + Controls[i].Width;
   Result := TTyGlyphButton.Create(Self);
+  Result.Left := x;
   Result.Parent := Self;
   Result.Caption := ACaption;
-  // Left-to-right flow: LCL packs alLeft children against the left edge in
-  // child order, so each AddButton lands after the previous one automatically.
   Result.Align := alLeft;
 end;
 

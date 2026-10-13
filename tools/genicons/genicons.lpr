@@ -97,6 +97,9 @@ procedure GAdvancedComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Fil
 procedure GCheckComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); RRect(b,5.5,9.5,9,13,0.6,Ink); PolyL(b,[PointF(6,11.2),PointF(6.9,12.1),PointF(8.4,10.3)],Acc,1.3); PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3); end;
 { TTyValueListEditor: a 2-column name/value grid — a divider + key tiles left, value lines right }
 procedure GValueListEditor(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); Line(b,10,5,10,19,Faint,1); FillRRect(b,5,7,8.5,8.8,0.3,Acc); Line(b,11.5,7.9,18,7.9,Faint,1.1); FillRRect(b,5,11,8.5,12.8,0.3,Faint); Line(b,11.5,11.9,16,11.9,Faint,1.1); FillRRect(b,5,15,8.5,16.8,0.3,Faint); Line(b,11.5,15.9,17,15.9,Faint,1.1); end;
+{ TTyPropertyGrid: a name/value grid whose first row is an expanded group (an accent chevron),
+  with a colour swatch among the values -- an object's properties, typed }
+procedure GPropertyGrid(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,10,4,10,20,Faint,1); FillPolyG(b,[PointF(4.8,6.8),PointF(8,6.8),PointF(6.4,8.8)],Acc); Line(b,11.5,7.8,18,7.8,Faint,1.1); FillRRect(b,6.5,11.1,9,12.7,0.3,Faint); FillRRect(b,11.5,10.8,14.6,13,0.5,Acc); Line(b,15.8,11.9,18.5,11.9,Faint,1.1); FillRRect(b,6.5,15.3,9,16.9,0.3,Faint); Line(b,11.5,16.1,17,16.1,Faint,1.1); end;
 { TTyCalculator: a calculator body — a display band over a grid of button dots (right col = ops) }
 procedure GCalculator(b: TBGRABitmap); begin RRect(b,5,3,19,21,2,Ink); FillRRect(b,6.5,4.5,17.5,8,0.6,Faint); FillCirc(b,8,11,0.9,Ink); FillCirc(b,10.5,11,0.9,Ink); FillCirc(b,13,11,0.9,Ink); FillCirc(b,15.5,11,0.9,Acc); FillCirc(b,8,14,0.9,Ink); FillCirc(b,10.5,14,0.9,Ink); FillCirc(b,13,14,0.9,Ink); FillCirc(b,15.5,14,0.9,Acc); FillCirc(b,8,17,0.9,Ink); FillCirc(b,10.5,17,0.9,Ink); FillCirc(b,13,17,0.9,Ink); FillCirc(b,15.5,17,0.9,Acc); end;
 { TTyCalcEdit: a numeric edit with a trailing 2x2 keypad (calculator) button }
@@ -118,6 +121,24 @@ procedure GRadio(b: TBGRABitmap); begin Circ(b,12,12,8,Ink); FillCirc(b,12,12,3.
 procedure GCombo(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[PointF(13.5,10.8),PointF(16,13.4),PointF(18.5,10.8)],Ink); end;
 procedure GToggle(b: TBGRABitmap); begin RRect(b,3,8,21,16,4,Ink); FillCirc(b,16.5,12,2.7,Acc); end;
 procedure GTrack(b: TBGRABitmap); begin Line(b,3,12,21,12,Ink); Line(b,6,10.4,6,13.6,Ink); Line(b,18,10.4,18,13.6,Ink); FillCirc(b,12,12,3,Acc); end;
+{ TTyRangeTrackBar: a track with two thumbs and the accent span between them }
+procedure GRangeTrack(b: TBGRABitmap); begin Line(b,3,12,21,12,Faint); Line(b,8,12,16,12,Acc,2.6); FillCirc(b,8,12,2.6,Acc); FillCirc(b,16,12,2.6,Acc); end;
+{ TTyMultiTrackBar: a track split into three coloured stretches by three thumbs }
+procedure GMultiTrack(b: TBGRABitmap); begin Line(b,3,12,7,12,Faint); Line(b,7,12,12,12,Acc,2.2); Line(b,12,12,17,12,Ink,2.2); Line(b,17,12,21,12,Faint); FillCirc(b,7,12,2.2,Acc); FillCirc(b,12,12,2.2,Ink); FillCirc(b,17,12,2.2,Acc); end;
+{ TTyGradientTrackBar: a strip shading from ink to accent, with three stop markers under it }
+procedure GGradientTrack(b: TBGRABitmap);
+var i: Integer; t: Single;
+begin
+  for i := 0 to 8 do
+  begin
+    t := i / 8;
+    FillRRect(b, 3 + i * 2, 7, 5.2 + i * 2, 13, 0, BGRA(Round(Ink.red + (Acc.red - Ink.red) * t),
+      Round(Ink.green + (Acc.green - Ink.green) * t), Round(Ink.blue + (Acc.blue - Ink.blue) * t), 255));
+  end;
+  FillPolyG(b, [PointF(4, 15), PointF(6.5, 19), PointF(1.5, 19)], Ink);
+  FillPolyG(b, [PointF(12, 15), PointF(14.5, 19), PointF(9.5, 19)], Faint);
+  FillPolyG(b, [PointF(20, 15), PointF(22.5, 19), PointF(17.5, 19)], Acc);
+end;
 procedure GProgress(b: TBGRABitmap); begin RRect(b,3,9,21,15,3,Ink); FillRRect(b,3,9,13,15,3,Acc); end;
 { TTyGauge: a speedometer — upper scale arc + accent needle + hub }
 procedure GGauge(b: TBGRABitmap); begin PolyL(b,[PointF(3.5,15),PointF(5,10.5),PointF(8.5,7.5),PointF(12,6.5),PointF(15.5,7.5),PointF(19,10.5),PointF(20.5,15)],Ink,1.8); Line(b,12,16,16.5,9,Acc,2); FillCirc(b,12,16,1.6,Acc); end;
@@ -964,6 +985,7 @@ procedure GDBLookupListBox(b: TBGRABitmap); begin GAdvancedListBox(b); DbBadge(b
 procedure GDBImage(b: TBGRABitmap); begin GImage(b); DbBadge(b); end;
 procedure GDBDateTimePicker(b: TBGRABitmap); begin GDateTimePicker(b); DbBadge(b); end;
 procedure GDBCalendar(b: TBGRABitmap); begin GCalendar(b); DbBadge(b); end;
+procedure GDBGrid(b: TBGRABitmap); begin GStringGrid(b); DbBadge(b); end;
 
 { TTyToolWindowBar: a window frame with an icon strip down its left edge (three small squares,
   the top one in the accent colour = the current page) and the content area to its right }
@@ -990,7 +1012,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..189] of TGlyph = (
+  Glyphs: array[0..194] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1013,6 +1035,7 @@ const
     (Name:'TTyAdvancedComboBox';Draw:@GAdvancedComboBox),
     (Name:'TTyCheckComboBox';   Draw:@GCheckComboBox),
     (Name:'TTyValueListEditor'; Draw:@GValueListEditor),
+    (Name:'TTyPropertyGrid'; Draw:@GPropertyGrid),
     (Name:'TTyCalculator';      Draw:@GCalculator),
     (Name:'TTyCalcEdit';        Draw:@GCalcEdit),
     (Name:'TTyCalcCurrencyEdit';Draw:@GCalcCurrencyEdit),
@@ -1026,6 +1049,9 @@ const
     (Name:'TTyComboBox';        Draw:@GCombo),
     (Name:'TTyToggleSwitch';    Draw:@GToggle),
     (Name:'TTyTrackBar';        Draw:@GTrack),
+    (Name:'TTyRangeTrackBar';   Draw:@GRangeTrack),
+    (Name:'TTyMultiTrackBar';   Draw:@GMultiTrack),
+    (Name:'TTyGradientTrackBar'; Draw:@GGradientTrack),
     (Name:'TTyProgressBar';     Draw:@GProgress),
     (Name:'TTyGauge';           Draw:@GGauge),
     (Name:'TTyCircularProgress'; Draw:@GCircularProgress),
@@ -1180,7 +1206,8 @@ const
     (Name:'TTyDBLookupListBox'; Draw:@GDBLookupListBox),
     (Name:'TTyDBImage'; Draw:@GDBImage),
     (Name:'TTyDBDateTimePicker'; Draw:@GDBDateTimePicker),
-    (Name:'TTyDBCalendar'; Draw:@GDBCalendar)
+    (Name:'TTyDBCalendar'; Draw:@GDBCalendar),
+    (Name:'TTyDBGrid'; Draw:@GDBGrid)
   );
 
 const

@@ -197,6 +197,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ValueListEditor"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.PropertyGrid.pas"/>
+        <UnitName Value="tyControls.PropertyGrid"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Calculator.pas"/>
         <UnitName Value="tyControls.Calculator"/>
       </Item>
@@ -387,6 +391,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
       <Item>
         <Filename Value="source/tyControls.TrackBar.pas"/>
         <UnitName Value="tyControls.TrackBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.MultiTrackBar.pas"/>
+        <UnitName Value="tyControls.MultiTrackBar"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.GroupBox.pas"/>

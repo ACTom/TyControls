@@ -256,6 +256,12 @@ TyTrackThumb {
 }
 TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
+TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }
+/* This skin writes its own TyTrackThumb, so the default theme's classes do not reach it:
+   a thumb dragged off far enough to be removed on release fades, and a gradient stop (filled
+   with its own colour) keeps an edge in the surface's ink. */
+TyTrackThumb.removing { background: var(--accent); opacity: var(--disabled-opacity); }
+TyTrackThumb.stop     { border-width: 1px; border-color: var(--on-surface); }
 
 TyGroupBox, TyToolGroupPanel {
   padding: 4px 12px;

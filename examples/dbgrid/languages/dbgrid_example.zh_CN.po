@@ -1,0 +1,100 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-dbgrid_example 4.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid=English source) ---
+
+#: tmainform.caption
+msgid "Data-aware grid example"
+msgstr "数据表格示例"
+
+#: tmainform.bar.caption
+msgid "Data-aware grid  ·  TyControls"
+msgstr "数据表格  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.btndeleteselected.caption
+msgid "Delete selected"
+msgstr "删除所选"
+
+#: tmainform.cbreadonly.caption
+msgid "Read only"
+msgstr "只读"
+
+#: tmainform.lblstatus.caption
+msgid "State: closed"
+msgstr "状态：已关闭"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsstatusfmt
+#, object-pascal-format
+msgid "State: %s  ·  order %d of %d  ·  %d selected  ·  sorted by %s"
+msgstr "状态：%s  ·  第 %d 单，共 %d 单  ·  已选 %d 单  ·  按“%s”排序"
+
+#: umain.rsstateinactive
+msgid "closed"
+msgstr "已关闭"
+
+#: umain.rsstatebrowse
+msgid "browsing"
+msgstr "浏览"
+
+#: umain.rsstateedit
+msgid "editing"
+msgstr "编辑中"
+
+#: umain.rsstateinsert
+msgid "inserting"
+msgstr "插入中"
+
+#: umain.rsstateother
+msgid "busy"
+msgstr "忙"
+
+#: umain.rstitleid
+msgid "No."
+msgstr "单号"
+
+#: umain.rstitlecustomer
+msgid "Customer"
+msgstr "客户"
+
+#: umain.rstitlecity
+msgid "City"
+msgstr "城市"
+
+#: umain.rstitledate
+msgid "Ordered"
+msgstr "下单日期"
+
+#: umain.rstitleamount
+msgid "Amount"
+msgstr "金额"
+
+#: umain.rstitlepaid
+msgid "Paid"
+msgstr "已付"
+
+#: umain.rstitlenote
+msgid "Note"
+msgstr "备注"
+
+#: umain.rsdeletefmt
+#, object-pascal-format
+msgid "Delete the %d selected orders?"
+msgstr "删除选中的 %d 张订单吗？"
+
+#: umain.rsnothingselected
+msgid "Select orders first: Ctrl+click, or Shift+Up / Shift+Down."
+msgstr "请先选择订单：Ctrl+单击，或 Shift+上 / Shift+下。"

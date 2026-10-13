@@ -996,6 +996,81 @@ type
 
 implementation
 
+// ---- The document ----
+
+{ #58. The memo's text is a byte-for-byte account of what was set, typed or loaded. TStrings
+  treats text as a list of TERMINATED lines: it writes a break after the last line on the way
+  out, swallows a final break on the way in, and uses the platform's break whatever the text
+  had. So 'abc' read back as 'abc'#13#10, 'abc'#13#10 lost the empty last line the caret
+  should be able to reach, and a file loaded and saved straight back was not the same file.
+
+  Here the lines are JOINED by the break: n breaks are n + 1 lines, a break at the very end is
+  an empty last line (the line the caret sits on after Enter), and nothing is added on the way
+  out -- for Text, Lines.Text, LoadFromFile and SaveToFile alike, since all of them go through
+  SetTextStr and the TrailingLineBreak switch. The break is taken from the text that is set,
+  so a file with LF line ends saves with LF; a text with no break at all keeps whatever break
+  the lines had. The BOM is TStrings' own soPreserveBOM business and already round-trips. }
+type
+  TTyMemoLines = class(TStringList)
+  protected
+    procedure SetTextStr(const Value: string); override;
+  public
+    constructor Create;
+    procedure Assign(Source: TPersistent); override;
+  end;
+
+constructor TTyMemoLines.Create;
+begin
+  inherited Create;
+  TrailingLineBreak := False;
+end;
+
+procedure TTyMemoLines.Assign(Source: TPersistent);
+begin
+  inherited Assign(Source);
+  { TStrings.Assign copies the source list's options, a trailing break among them. }
+  TrailingLineBreak := False;
+end;
+
+procedure TTyMemoLines.SetTextStr(const Value: string);
+var
+  i, n, start: Integer;
+  brk: string;
+begin
+  BeginUpdate;
+  try
+    Clear;
+    brk := '';
+    n := Length(Value);
+    if n > 0 then
+    begin
+      start := 1;
+      i := 1;
+      while i <= n do
+      begin
+        { CR and LF are single bytes in UTF-8 and never part of a longer sequence. }
+        if (Value[i] = #10) or (Value[i] = #13) then
+        begin
+          Add(Copy(Value, start, i - start));
+          if (Value[i] = #13) and (i < n) and (Value[i + 1] = #10) then
+          begin
+            if brk = '' then brk := #13#10;
+            Inc(i);
+          end
+          else if brk = '' then
+            brk := Value[i];
+          start := i + 1;
+        end;
+        Inc(i);
+      end;
+      Add(Copy(Value, start, n - start + 1));   // the last line, empty after a final break
+    end;
+    if brk <> '' then LineBreak := brk;
+  finally
+    EndUpdate;
+  end;
+end;
+
 constructor TTyCustomMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -1004,7 +1079,7 @@ begin
   ControlStyle := ControlStyle - [csSetCaption];
   TabStop := True;
   Cursor := crIBeam;
-  FLines := TStringList.Create;
+  FLines := TTyMemoLines.Create;
   { The one line TTyComboBox already had and this control did not. }
   TStringList(FLines).OnChange := @LinesChanged;
   FCaretLine := 0;
@@ -1557,7 +1632,8 @@ end;
 
 function TTyCustomMemo.GetText: TCaption;
 begin
-  // Whole-document string with platform line breaks (TStrings.Text semantics).
+  // The whole document exactly as set, typed or loaded: lines joined by the document's
+  // break, nothing added after the last one (TTyMemoLines, #58).
   Result := FLines.Text;
 end;
 
@@ -1584,8 +1660,8 @@ end;
 
 procedure TTyCustomMemo.SetText(const AValue: TCaption);
 begin
-  // Replace all lines from the string (split on line breaks by TStrings.Text),
-  // collapse the caret/selection to the origin, refresh layout + fire OnChange.
+  // Replace all lines from the string (n breaks are n + 1 lines, TTyMemoLines), collapse
+  // the caret/selection to the origin, refresh layout + fire OnChange.
   BeginUndoStep(uskNone);
   FLines.Text := ApplyCharCase(AValue);
   FCaretLine := 0;
@@ -1643,7 +1719,9 @@ begin
   // Capture a fresh (non-typing) undo step only when the assignment actually
   // changes the content, so a no-op reassign does not push a spurious step and
   // TestSetLinesClampsCaret (which never touches undo) is unaffected.
-  if (AValue = nil) or (AValue.Text <> FLines.Text) then
+  { By line, not by Text: AValue is an ordinary TStrings whose Text ends every line with a
+    break, and FLines' does not (#58), so the two texts never match. }
+  if (AValue = nil) or not FLines.Equals(AValue) then
     BeginUndoStep(uskNone);
   FInLinesChange := True;      // the notification would duplicate what follows
   try

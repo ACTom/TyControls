@@ -170,6 +170,22 @@ type
     procedure TestPaintSmoke;
   end;
 
+  { #50. Which gap the caption takes when the host's own children split the bar. It took the
+    WIDEST, so a left-justified caption with a strip glued right after it (the ribbon example's
+    quick access toolbar) jumped over the strip as soon as the window was widened enough for the
+    gap on the far side to win. }
+  TTitleBarCaptionGapTest = class(TTestCase)
+  private
+    function NewGapBar(out AForm: TForm; AW: Integer; const ACaption: string): TTyTitleBar;
+    procedure Kid(ABar: TTyTitleBar; AL, AW: Integer);
+  published
+    procedure TestALeftCaptionKeepsTheGapBeforeAStripGluedAfterIt;
+    procedure TestARightCaptionTakesTheLastGapThatHoldsIt;
+    procedure TestAMirroredLeftCaptionStartsFromTheRight;
+    procedure TestACaptionThatFitsNowhereTakesTheWidestGap;
+    procedure TestThePaintPutsTheCaptionWhereTheSpanSays;
+  end;
+
   { ===== a6256: the cross-monitor DPI contract for the title bar ==============
     Forum report (Antek, PerMonitorV2 manifest, real hardware): dragging a window
     from a 100% monitor to a 250% one made TyTitleBar "far too tall", and dragging
@@ -3595,6 +3611,180 @@ begin
   end;
 end;
 
+{ ===== TTitleBarCaptionGapTest ===== }
+
+type
+  TGapBarAccess = class(TTyTitleBar)
+  public
+    procedure Lay;
+    procedure Shoot(ACanvas: TCanvas; const ARect: TRect);
+  end;
+
+procedure TGapBarAccess.Lay;
+begin
+  LayoutButtons;   // the caption buttons are children too; put them in their band first
+end;
+
+procedure TGapBarAccess.Shoot(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+function TTitleBarCaptionGapTest.NewGapBar(out AForm: TForm; AW: Integer;
+  const ACaption: string): TTyTitleBar;
+begin
+  AForm := TForm.CreateNew(nil);
+  Result := TGapBarAccess.Create(AForm);
+  Result.Parent := AForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.Align := alNone;
+  Result.SetBounds(0, 0, AW, 34);
+  Result.Caption := ACaption;
+  TGapBarAccess(Result).Lay;
+end;
+
+procedure TTitleBarCaptionGapTest.Kid(ABar: TTyTitleBar; AL, AW: Integer);
+var
+  c: TControl;
+begin
+  c := TControl.Create(ABar.Owner);
+  c.Parent := ABar;
+  c.SetBounds(AL, 4, AW, 26);
+end;
+
+procedure TTitleBarCaptionGapTest.TestALeftCaptionKeepsTheGapBeforeAStripGluedAfterIt;
+{ The ribbon example's bar: the caption, then a strip placed right after it, and a wide window,
+  so the gap on the strip's far side is much the wider. 'Title' fits before the strip easily. }
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1400, 'Title');
+  try
+    Kid(T, 200, 148);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('the caption starts where the content does', T.CaptionLayout.Content.Left, l);
+    AssertEquals('and stops at the strip, not past it', 200, r);
+  finally F.Free; end;
+end;
+
+procedure TTitleBarCaptionGapTest.TestARightCaptionTakesTheLastGapThatHoldsIt;
+{ The same rule from the other end: a right-justified caption takes the last gap that holds it,
+  here the one between the last child and the caption buttons, though the middle one is wider. }
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, 'Title');
+  try
+    T.TitleAlignment := taRightJustify;
+    Kid(T, 100, 50);
+    Kid(T, 600, 100);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertTrue('fixture: the trailing gap holds the caption but is not the widest',
+      (T.CaptionLayout.Content.Right - 700 > 80) and (T.CaptionLayout.Content.Right - 700 < 450));
+    AssertEquals('the caption starts after the last child', 700, l);
+    AssertEquals('and runs to the end of the content', T.CaptionLayout.Content.Right, r);
+  finally F.Free; end;
+end;
+
+procedure TTitleBarCaptionGapTest.TestAMirroredLeftCaptionStartsFromTheRight;
+{ TitleAlignment is a reading-order alignment, so on a mirrored bar taLeftJustify starts from
+  the right: the first gap that holds the caption, scanning from the right. }
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, 'Title');
+  try
+    T.BiDiMode := bdRightToLeft;
+    TGapBarAccess(T).Lay;
+    Kid(T, 300, 100);
+    Kid(T, 800, 50);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('the caption starts after the rightmost child', 850, l);
+    AssertEquals('and runs to the content''s right end', T.CaptionLayout.Content.Right, r);
+  finally F.Free; end;
+end;
+
+procedure TTitleBarCaptionGapTest.TestACaptionThatFitsNowhereTakesTheWidestGap;
+{ When no gap holds the whole caption it is going to be cut anyway, and the widest gap shows
+  the most of it. }
+var
+  F: TForm;
+  T: TTyTitleBar;
+  l, r: Integer;
+begin
+  T := NewGapBar(F, 1000, StringOfChar('W', 200));
+  try
+    Kid(T, 100, 50);
+    Kid(T, 600, 100);
+    T.CaptionSpan(T.ClientWidth, l, r);
+    AssertEquals('the widest gap starts after the first child', 150, l);
+    AssertEquals('and ends at the second', 600, r);
+  finally F.Free; end;
+end;
+
+{ The span is an answer the paint has to keep. RenderTo measures the caption at the PPI it is
+  handed rather than asking CaptionSpan, so it is checked on its own: the caption's ink must land
+  before the strip, and none of it past the strip. The strip itself is a bare TControl, which
+  RenderTo does not draw, so any ink in either range is the caption's. }
+procedure TTitleBarCaptionGapTest.TestThePaintPutsTheCaptionWhereTheSpanSays;
+var
+  F: TForm;
+  T: TTyTitleBar;
+  bmp: TBitmap;
+  shot: TBGRABitmap;
+  bg, px: TBGRAPixel;
+  x, y, before, past: Integer;
+
+  function Ink(const A, B: TBGRAPixel): Boolean;
+  begin
+    Result := (Abs(A.red - B.red) > 40) or (Abs(A.green - B.green) > 40) or
+      (Abs(A.blue - B.blue) > 40);
+  end;
+
+begin
+  T := NewGapBar(F, 1400, 'Title');
+  try
+    Kid(T, 200, 148);
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(1400, 34);
+      TGapBarAccess(T).Shoot(bmp.Canvas, Rect(0, 0, 1400, 34));
+      shot := TBGRABitmap.Create(bmp);
+      try
+        bg := shot.GetPixel(2, 17);   // inside the left pad: the bar's own ground
+        before := 0;
+        past := 0;
+        for y := 4 to 29 do
+        begin
+          for x := 8 to 199 do
+          begin
+            px := shot.GetPixel(x, y);
+            if Ink(px, bg) then Inc(before);
+          end;
+          for x := 348 to 1200 do
+          begin
+            px := shot.GetPixel(x, y);
+            if Ink(px, bg) then Inc(past);
+          end;
+        end;
+        AssertTrue('the caption is drawn before the strip', before > 0);
+        AssertEquals('and nothing of it past the strip', 0, past);
+      finally
+        shot.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  finally F.Free; end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
@@ -3622,5 +3812,6 @@ initialization
   RegisterTest(TFormStyleOverrideTest);
   RegisterTest(TTitleBarDpiTest);   // a6256: cross-monitor DPI contract for the title bar
   RegisterTest(TControlDpiRoundTripTest);   // ac2363: the same contract for the CONTROLS
+  RegisterTest(TTitleBarCaptionGapTest);    // #50: which gap the caption takes
 
 end.

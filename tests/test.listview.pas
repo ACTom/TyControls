@@ -52,6 +52,9 @@ type
     { The inline rename editor (protected InlineEditor seam), so a headless test can
       set the text that EndEdit(True) will commit. }
     function XEditor: TTyEdit;
+    { What every LCL layout pass does to each visible control: call Resize, whether or
+      not its size changed (TControl.DoAllAutoSize -> CallAllOnResize). }
+    procedure XResize;
     { How far a flow cell's content shifts right to clear the checkbox. }
     function XFlowCheckShift(const ACell: TRect): Integer;
     { SP2b grouping seams. XItemToDisplay is the second index-space direction (item
@@ -375,6 +378,8 @@ type
     procedure TestShrinkItemCountPastEditedRowCancelsEdit;
     procedure TestSortWhileEditingCommitsFirst;
     procedure TestChangingViewStyleWhileEditingCommitsFirst;
+    procedure TestLayoutPassWithoutSizeChangeKeepsTheEdit;
+    procedure TestResizingWhileEditingCommitsFirst;
     procedure TestBeginEditOutOfRangeIsNoOp;
     procedure TestDestroyingControlMidEditDoesNotCommitOrCrash;
     procedure TestOnEditedBlankingTextAbandonsCommit;
@@ -548,6 +553,11 @@ end;
 function TTyListViewAccess.XEditor: TTyEdit;
 begin
   Result := InlineEditor;
+end;
+
+procedure TTyListViewAccess.XResize;
+begin
+  Resize;
 end;
 
 function TTyListViewAccess.XFlowCheckShift(const ACell: TRect): Integer;
@@ -1877,6 +1887,41 @@ begin
   FLV.ViewStyle := lvsIcon;
   AssertFalse('the view switch committed and closed the edit', FLV.Editing);
   AssertEquals('the edit was committed to item 2 first', 'VV', FLV.Items[2].Caption);
+end;
+
+procedure TListViewRenameTest.TestLayoutPassWithoutSizeChangeKeepsTheEdit;
+{ Issue #54. LCL runs Resize on every layout pass, size changed or not, and showing the
+  editor starts one, so in a real window a rename that closed on any Resize closed the
+  moment it opened. A headless control never gets that pass (LCL postpones it without a
+  window), so make the call here the way the layout pass does. }
+begin
+  Populate(['a', 'b', 'c']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  AssertTrue('editing started', FLV.Editing);
+  FLV.XEditor.Text := 'typed';
+  FLV.XResize;
+  AssertTrue('a layout pass that moved nothing keeps the edit open', FLV.Editing);
+  AssertEquals('and commits nothing', 0, FEditedEvents);
+  AssertEquals('the typed text is still in the editor', 'typed', FLV.XEditor.Text);
+end;
+
+procedure TListViewRenameTest.TestResizingWhileEditingCommitsFirst;
+{ A real resize moves the cells, so it commits the edit and closes the editor. Width and
+  height each count on their own. }
+begin
+  Populate(['a', 'b', 'c']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  FLV.XEditor.Text := 'WW';
+  FLV.SetBounds(0, 0, 300, 200);       { width only }
+  AssertFalse('a width change closed the edit', FLV.Editing);
+  AssertEquals('and committed it first', 'WW', FLV.Items[1].Caption);
+  FLV.BeginEdit(2);
+  FLV.XEditor.Text := 'HH';
+  FLV.SetBounds(0, 0, 300, 150);       { height only }
+  AssertFalse('a height change closed the edit', FLV.Editing);
+  AssertEquals('and committed it first', 'HH', FLV.Items[2].Caption);
 end;
 
 procedure TListViewRenameTest.TestBeginEditOutOfRangeIsNoOp;

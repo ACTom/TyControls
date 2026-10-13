@@ -340,6 +340,7 @@
   --toolwindow-strip-size: 36px;
   --toolwindow-tab-area-min: 50px;
   --toolwindow-tab-pad: 10px;
+  --track-remove-distance: 24px;
   --transfer-arrow-margin: 3px;
   --transfer-arrow-size: 12px;
   --transfer-button-gap: 6px;
@@ -552,6 +553,12 @@ TyListItem, TyValueListEditorRow {
 }
 TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }
 TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }
+/* A heading row of the value list editor (TTyValueRow.Heading: the property grid's categories),
+   hung on TyValueListEditorRow. Only its REST look is read here -- the band, the ink, the
+   weight; hovered or selected it is drawn as the row's :hover / :active, so the selection reads
+   the same on a heading as on any other row in every skin. The band is a wash of the ink, so it
+   stands out from whatever ground the skin gives the list, light or dark. */
+TyValueListEditorGroup { background: alpha(var(--on-surface), 0.08); color: var(--on-surface); font-weight: var(--font-weight-bold); }
 
 TyProgressBar {
   background: var(--surface-sunk);
@@ -665,6 +672,22 @@ TyTrackGroove {
   background: var(--surface-track);
   border-radius: var(--radius-round);
 }
+/* LCL's selection range (SelStart..SelEnd): the groove filled between two values, under the
+   thumb, in the accent the thumb uses. */
+TyTrackSelection {
+  background: var(--accent);
+  border-radius: var(--radius-round);
+}
+/* A stretch of groove between two thumbs of TTyMultiTrackBar, resolved with the StyleClass of
+   its Segments item. The plain key paints nothing -- a segment without a class shows the
+   groove -- and the three classes below are what a status scale (fine / getting there / too
+   much) needs; a theme adds its own the same way. */
+TyTrackSegment {
+  border-radius: var(--radius-round);
+}
+TyTrackSegment.success { background: var(--success); }
+TyTrackSegment.warning { background: var(--warning); }
+TyTrackSegment.danger  { background: var(--danger); }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 TyTrackBar:disabled { opacity: var(--disabled-opacity); }
 
@@ -674,6 +697,20 @@ TyTrackThumb {
 }
 TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
+/* The thumb the arrow keys move, while the bar has the focus: a ring inside the thumb, in the
+   ink that sits on the accent. --focus-ring is the accent itself and would vanish on an
+   accent thumb; on a multi-thumb bar this ring is how Tab shows which thumb it is on. */
+TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }
+/* A thumb of TTyMultiTrackBar dragged off the track far enough to be removed when it is
+   released (AllowUserThumbs; --track-remove-distance above says how far): faded, as a part
+   that is about to go. A class, not a state -- the cascade knows a fixed set of states --
+   added to whatever class the thumb has, so a theme can fade .big and .removing apart. */
+TyTrackThumb.removing { opacity: var(--disabled-opacity); }
+/* A colour stop of TTyGradientTrackBar is filled with the stop's own colour, so a white stop
+   on a light surface, or a black one on a dark surface, would vanish into what is around it.
+   An edge in the surface's ink keeps every stop in sight. Like .removing, a class the bar adds
+   to the stop's own. */
+TyTrackThumb.stop { border-width: 1px; border-color: var(--on-surface); }
 
 /* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme
    that restyles gauges must not repaint every link, and a theme that wants a different link
@@ -880,6 +917,17 @@ TyToolBar, TyToolSeparator {
   background: var(--chrome-bar-bg);
   border-color: var(--border);
   border-width: var(--input-border-width);
+}
+
+/* The data-aware navigator's strip takes the tool bar's look through its type key chain, all
+   but the band itself: no frame and no fill, so the row of buttons sits on whatever surface it
+   is placed on. The buttons keep their own look (TyDBNavigatorButton > TyButton). Only the
+   width goes -- the bar's border-color still reaches the strip, so a StyleOverride
+   'border-width: 1px' on one navigator brings its frame back. A rule in the base layer, so
+   every theme that does not name the key (the whole built-in pack) inherits it. */
+TyDBNavigator {
+  background: transparent;
+  border-width: 0;
 }
 
 /* ── Calendar + DateTimePicker ─────────────────────────────────────────── */

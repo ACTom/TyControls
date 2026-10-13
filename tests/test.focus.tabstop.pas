@@ -2,7 +2,7 @@ unit test.focus.tabstop;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, LCLType, LMessages,
+  Classes, SysUtils, DateUtils, TypInfo, Controls, Forms, LCLType, LCLIntf, LMessages,
   fpcunit, testregistry,
   test.designregistry,               // the runtime roster the completeness guard reads
   tyControls.Base, tyControls.ScrollBar,
@@ -10,7 +10,7 @@ uses
   tyControls.Button, tyControls.ColorButton, tyControls.DropButtons,
   tyControls.GlyphButtons, tyControls.ButtonGroup, tyControls.ColorGrid,
   tyControls.Calculator, tyControls.Grid, tyControls.HeaderControl, tyControls.HSColorPicker,
-  tyControls.LColorPicker, tyControls.ImageView, tyControls.Edit,
+  tyControls.LColorPicker, tyControls.ImageView, tyControls.Edit, tyControls.Columns,
   tyControls.ListBox, tyControls.CheckBox, tyControls.Segmented,
   tyControls.TreeView, tyControls.ListView, tyControls.ToggleSwitch,
   tyControls.Menu, tyControls.RibbonBackstage,
@@ -24,10 +24,12 @@ uses
   tyControls.MRUComboBox, tyControls.OfficeComboBox, tyControls.ShellComboBox,
   tyControls.AdvancedListBox, tyControls.CheckListBox, tyControls.ColorListBox,
   tyControls.FontListBox, tyControls.OfficeListBox, tyControls.ValueListEditor,
+  tyControls.PropertyGrid,
   tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
-  tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo, tyControls.Terminal,
+  tyControls.Rating, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.Pagination,
+  tyControls.Memo, tyControls.Terminal,
   tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
   tyControls.ListGroupPanel, tyControls.RibbonAppMenu,
   { non-focusable side }
@@ -43,7 +45,7 @@ uses
   tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form, tyControls.AdvanceChart,
   { the data-aware controls (tycontrols_db), both sides }
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.DateTime,
-  tyControls.DB.Navigator;
+  tyControls.DB.Navigator, tyControls.DB.Grid;
 
 type
   { Any windowed TyControl, as a class reference — TabStop is published on
@@ -81,6 +83,7 @@ type
     procedure TestEveryRegisteredWindowedControlIsOnATable;
     procedure TestPublishedDefaultAgreesWithTheConstructedValue;
     procedure TestEmbeddedScrollBarsNeverTakeFocusFromTheirHost;
+    procedure TestAScrollBarNeverTakesFocus;
     procedure TestTransferRailStaysOutOfTheTabOrder;
     procedure TestCalculatorKeypadIsNotTheTabOrder;
   end;
@@ -135,6 +138,25 @@ type
     { Build AClass on the visible form, park focus on FPark, click it, and report where
       focus ended up. Frees the control before returning. }
     function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean): string;
+    { #59: a grid whose one column edits in a pick list (apple, banana, cherry), the cells
+      of rows 1 and 2 holding apple and banana. }
+    function NewPickListGrid: TTyStringGrid;
+    { Open the pick list on row ARow of AGrid and check it holds the focus, system and form. }
+    function StartPickEdit(AGrid: TTyStringGrid; ARow: Integer): TTyComboBox;
+    procedure AssertTheGridHasTheFocus(AGrid: TTyStringGrid; const AAfter: string);
+    { A key as the system delivers it, to whatever window holds the focus. }
+    procedure PressKey(AKey: Word; AChar: Char = #0);
+    { A grid whose one column edits in AKind, row 1 holding AValue, the cursor on that cell
+      and the focus on the grid -- not editing. }
+    function NewEditorGrid(AKind: TTyGridEditorKind; const AValue: string): TTyStringGrid;
+    { A printable key as the system delivers it: down, the character, up. }
+    procedure TypeKey(AChar: Char);
+    { #67: a grid whose one column edits through the mask 000-0000, row 1 holding AValue,
+      the mask editor open on it with the focus. }
+    function StartMaskEdit(const AValue: string; out AGrid: TTyStringGrid): TTyMaskEdit;
+    { Fail unless the trap caught the mask's own "does not fill the mask" error -- the way
+      LCL reports an exception raised in a key or mouse handler -- and clear it. }
+    procedure AssertTheMaskWasReported(const AAfter: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -143,6 +165,22 @@ type
     procedure TestTheGuardIsNotVacuousForANonFocusableControl;
     procedure TestClickThenArrowWalksAClickableStepsRail;
     procedure TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
+    procedure TestArrowNavigationNeverLandsOnAControlsOwnBar;
+    procedure TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
+    procedure TestUpDownInAPickListCellMoveTheCursor;
+    procedure TestAPickInACellHandsTheFocusBackToTheGrid;
+    procedure TestASpinCellKeepsTheNumberTypedIntoIt;
+    procedure TestEscapeOnAnEditedMaskCellRaisesNothing;
+    procedure TestAnUnfilledMaskCellIsRefusedAndReported;
+    procedure TestAnUnfilledStoredValueIsRefusedUntouchedToo;
+    procedure TestAMaskCellWithNoMaskTakesAnyText;
+    procedure TestTypingOnASpinCellStartsTheNumberWithThatKey;
+    procedure TestTypingOnAMemoCellStartsTheTextWithThatKey;
+    procedure TestTypingOnACalculatorCellStartsTheNumberWithThatKey;
+    procedure TestTypingOnAMaskCellFillsTheFirstSlotWithThatKey;
+    procedure TestTypingOnADateCellStartsTheFirstFieldWithThatKey;
+    procedure TestTypingOnATimeCellStartsTheFirstFieldWithThatKey;
+    procedure TestTypingOnAPickListCellPicksByThatKey;
   end;
 
 implementation
@@ -152,6 +190,7 @@ implementation
   purely as a cast. }
 type
   TGridAccess = class(TTyCustomGrid);
+  TWinAccess = class(TWinControl);   // FindNextControl is protected
   TListViewAccess = class(TTyListView);
 
 function FocusableControls: TTyCtlClassArray; forward;
@@ -172,8 +211,8 @@ end;
 
 
 { Controls the user OPERATES: a click must land focus on them, and Tab must reach them.
-  Each one either handles keys itself (button: Space/Enter; scroll bar: arrows/page/Home/
-  End; grid, tree, list, edit: the lot) or is the direct target of a click that changes
+  Each one either handles keys itself (button: Space/Enter; grid, tree, list, edit: the
+  lot) or is the direct target of a click that changes
   its value (colour grid, hue/saturation pickers, header sections, segmented bars). }
 function FocusableControls: TTyCtlClassArray;
 begin
@@ -183,7 +222,7 @@ begin
     TTyGlyphButton, TTyGlyphContainerButton,
     { selection / picker / data controls fixed in this pass }
     TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
-    TTyHSColorPicker, TTyLColorPicker, TTyImageView, TTyScrollBar,
+    TTyHSColorPicker, TTyLColorPicker, TTyImageView,
     { already focusable before this pass — listed so a regression shows up as a failure,
       and because several of them only got their DECLARED default fixed in it }
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
@@ -224,10 +263,14 @@ begin
     { the list family: arrow keys move the selection, so the list itself must hold focus }
     TTyAdvancedListBox, TTyCheckListBox, TTyColorListBox, TTyFontListBox, TTyOfficeListBox,
     TTyValueListEditor,
+    { the property grid is a value list editor: the arrows move the row, F2 and Space edit it }
+    TTyPropertyGrid,
     { shell browsers — TTyListView / TTyTreeView with a directory behind them }
     TTyShellListView, TTyShellTreeView,
     { value pickers and data controls, each of which handles its own keys }
     TTyCalendar, TTyDateTimePicker, TTyMemo, TTyTrackBar, TTyDial, TTyGearDial,
+    { the multi-thumb track bars: the keys move the selected thumb, Tab steps between thumbs }
+    TTyRangeTrackBar, TTyMultiTrackBar, TTyGradientTrackBar,
     { 终端自己吞 Tab,焦点只经鼠标或宿主放行的键离开(spec §9.4) }
     TTyTerminalView,
     TTyRating, TTyPagination, TTyTreeSelect, TTyCascader, TTyRadioButton,
@@ -261,7 +304,9 @@ begin
     TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit,
     TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch, TTyDBSegmented,
     TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
-    TTyDBDateTimePicker, TTyDBCalendar);
+    TTyDBDateTimePicker, TTyDBCalendar,
+    { The data-aware grid is a grid: it takes the keys, as the string grid does. }
+    TTyDBGrid);
 end;
 
 { Containers and chrome. Every one of these either holds the real controls as children
@@ -318,6 +363,11 @@ begin
     { TTyPreviewBox displays a rendering; there is nothing to type into it and nothing its
       arrow keys would move. }
     TTyPreviewBox,
+    { TTyScrollBar is a pointer control: keyboard scrolling belongs to the control being
+      scrolled (#56), so a bar never takes the focus. TabStop is still published, so forms
+      that stored it load, but it has no effect; ScrollByKey is how a host reuses the bar's
+      keys. }
+    TTyScrollBar,
     { TTyAdvanceChart is a chart: it reads an option tree and draws it. Charts are pointed
       at, not typed into -- ECharts' own keyboard story is a screen-reader description, not
       a caret -- so it stays out of the tab order like every other display surface here.
@@ -515,10 +565,10 @@ begin
   for i := 0 to High(list) do CheckOne(list[i]);
 end;
 
-{ A standalone TTyScrollBar is focusable (it owns the arrow/page/Home/End keyboard), but
-  the bars EMBEDDED in a scrolling control must not be: dragging one would move focus off
-  the grid/tree/list it is scrolling, which would then drop its focus ring and its
-  keyboard navigation mid-drag, and Tab would stop three times inside one widget. }
+{ The bars EMBEDDED in a scrolling control must not be tab stops: dragging one would move
+  focus off the grid/tree/list it is scrolling, which would then drop its focus ring and its
+  keyboard navigation mid-drag, and Tab would stop three times inside one widget. A
+  standalone bar is not one either: in 4.0 no scroll bar takes the focus (#56). }
 procedure TTyFocusTabStopTest.TestEmbeddedScrollBarsNeverTakeFocusFromTheirHost;
 var
   standalone: TTyScrollBar;
@@ -529,7 +579,8 @@ var
   i, found: Integer;
 begin
   standalone := TTyScrollBar.Create(FForm);
-  AssertTrue('a scroll bar dropped on a form is a keyboard control', standalone.TabStop);
+  AssertFalse('a scroll bar dropped on a form is not a tab stop by default (#56)',
+    standalone.TabStop);
 
   grid := TTyStringGrid.Create(FForm);
   AssertFalse('the grid vertical bar must not steal the grid focus', TGridAccess(grid).VScrollBar.TabStop);
@@ -559,6 +610,31 @@ begin
     end;
   AssertEquals('the scroll box built both of its bars (the loop must not be vacuous)',
     2, found);
+end;
+
+{ #55/#56. TabStop used to keep a bar out of the Tab order and nothing more: LCL's arrow
+  navigation (TApplication.DoArrowKey -> SelectNext with CheckTabStop = False) ignores it. The
+  navigation list is built from CanFocus (TWinControl.GetTabOrderList), so CanFocus is where a
+  bar says no -- and in 4.0 every bar does, TabStop or not. LCL's CanFocus only asks that every
+  control up to the form is visible and enabled, so it answers here without the form ever
+  being shown. }
+procedure TTyFocusTabStopTest.TestAScrollBarNeverTakesFocus;
+var
+  bar: TTyScrollBar;
+  grid: TTyStringGrid;
+begin
+  bar := TTyScrollBar.Create(FForm);
+  bar.Parent := FForm;
+  AssertFalse('a standalone bar cannot take focus', bar.CanFocus);
+  bar.TabStop := True;
+  AssertFalse('TabStop does not change that (it is kept only so stored forms load)',
+    bar.CanFocus);
+
+  grid := TTyStringGrid.Create(FForm);
+  grid.Parent := FForm;
+  AssertTrue('setup: the grid itself can take focus', grid.CanFocus);
+  TGridAccess(grid).VScrollBar.Visible := True;
+  AssertFalse('the grid''s own bar cannot', TGridAccess(grid).VScrollBar.CanFocus);
 end;
 
 { TTyTransfer builds its four move arrows out of TTyButton, which IS a tab stop — the box
@@ -780,7 +856,7 @@ begin
     TTyButton, TTyColorButton, TTyDropDownButton, TTyMenuButton,
     TTyGlyphButton, TTyGlyphContainerButton,
     TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
-    TTyHSColorPicker, TTyLColorPicker, TTyImageView, TTyScrollBar,
+    TTyHSColorPicker, TTyLColorPicker, TTyImageView,
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
     TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage,
     { The numeric edit family, added with the teardown fix above. All five were run one at
@@ -797,7 +873,11 @@ begin
     TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit,
     TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch, TTyDBSegmented,
     TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
-    TTyDBDateTimePicker, TTyDBCalendar);
+    TTyDBDateTimePicker, TTyDBCalendar,
+    { The data-aware grid is a grid: it takes the keys, as the string grid does. }
+    TTyDBGrid,
+    { The property grid: a value list editor with an inline editor of its own (#65). }
+    TTyPropertyGrid);
 end;
 
 procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;
@@ -887,6 +967,763 @@ end;
   half of Clickable that is not the mouse -- were dead code. Both halves, end to end, on a
   real handle: nothing else in the suite joins them up. test.steps drives the protected
   PressAt/SendKey seams directly, which cannot see a focus failure at all. }
+function NewScrollingGrid(AForm: TForm): TTyStringGrid;
+var
+  c: TTyColumn;
+begin
+  Result := TTyStringGrid.Create(AForm);
+  Result.Parent := AForm;
+  Result.SetBounds(220, 60, 260, 150);
+  c := Result.Header.Columns.Add as TTyColumn;
+  c.Width := 120;
+  c.Text := 'C0';
+  Result.RowCount := 100;          // more rows than fit: the vertical bar shows
+  Result.HandleNeeded;
+  Forms.Application.ProcessMessages;
+end;
+
+{ #55: the path #52 took. Arrow navigation asks the parent for the next control with TabStop
+  not checked; inside a grid with its bar showing, nothing it can answer may be the bar.
+  FindNextControl skips what is not IsVisible, and that asks the form too -- which is why this
+  lives in the suite whose form is really shown: unshown, the bar is skipped for the wrong
+  reason and the test proves nothing. }
+procedure TTyClickFocusTest.TestArrowNavigationNeverLandsOnAControlsOwnBar;
+var
+  grid: TTyStringGrid;
+  next: TWinControl;
+begin
+  grid := NewScrollingGrid(FForm);
+  try
+    AssertTrue('setup: the vertical bar is showing', TGridAccess(grid).VScrollBar.IsVisible);
+    next := TWinAccess(grid).FindNextControl(nil, True, False, False);
+    AssertFalse('forward: not a scroll bar', next is TTyScrollBar);
+    next := TWinAccess(grid).FindNextControl(nil, False, False, False);
+    AssertFalse('backward: not a scroll bar', next is TTyScrollBar);
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #55: a click on a control's own bar used to focus the BAR -- the grid lost its focus ring and
+  its keys, and a cell being edited was committed and closed. The control gets the focus
+  instead, so the keyboard goes on scrolling what the click scrolled; and when the focus is
+  already inside the control (the editor of a cell) it stays where it is. A track click, not
+  the thumb, so no drag capture is left behind. }
+procedure TTyClickFocusTest.TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
+var
+  grid: TTyStringGrid;
+  bar: TTyScrollBar;
+  ed: TWinControl;
+
+  procedure ClickTheTrack;
+  var
+    y: Integer;
+  begin
+    y := bar.Height - bar.Width - 4;   // above the bottom arrow, below the thumb at the top
+    bar.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(bar.Width div 2, y));
+    bar.Perform(LM_LBUTTONUP, 0, MousePos(bar.Width div 2, y));
+    Forms.Application.ProcessMessages;
+  end;
+
+begin
+  grid := NewScrollingGrid(FForm);
+  try
+    bar := TGridAccess(grid).VScrollBar;
+    AssertTrue('setup: the vertical bar is showing', bar.IsVisible);
+    if FPark.CanFocus then FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertSame('setup: the focus is parked elsewhere', TWinControl(FPark),
+      TWinControl(FForm.ActiveControl));
+
+    ClickTheTrack;
+    AssertNothingRaised('a click on the grid''s bar');
+    AssertSame('the grid has the focus, not its bar', TWinControl(grid),
+      TWinControl(FForm.ActiveControl));
+
+    AssertTrue('setup: editing', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    ed := grid.EditorControl as TWinControl;
+    AssertSame('setup: the editor has the focus', ed, TWinControl(FForm.ActiveControl));
+    ClickTheTrack;
+    AssertTrue('a click on the bar does not end the edit', grid.Editing);
+    AssertSame('and the editor keeps the focus', ed, TWinControl(FForm.ActiveControl));
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #59. A pick list in a cell commits the moment its item changes, and that closed the editor
+  while it held the focus: the focus went to whatever the system picked next -- another
+  control on the form -- and the keys that followed went there. Down was the usual way in: a
+  closed pick list turned it into "the next item", so the cell's value changed as well, under
+  a key the user had pressed to move.
+
+  Real keys and clicks through the widgetset, on the shown form: only a shown form has a focus
+  to lose. }
+function TTyClickFocusTest.NewPickListGrid: TTyStringGrid;
+var
+  col: TTyGridColumn;
+begin
+  Result := NewScrollingGrid(FForm);
+  col := Result.Header.Columns[0] as TTyGridColumn;
+  col.EditorKind := gekPickList;
+  col.PickList.CommaText := 'apple,banana,cherry';
+  Result.Cells[0, 1] := 'apple';
+  Result.Cells[0, 2] := 'banana';
+end;
+
+function TTyClickFocusTest.StartPickEdit(AGrid: TTyStringGrid; ARow: Integer): TTyComboBox;
+begin
+  AssertTrue('setup: editing row ' + IntToStr(ARow), AGrid.BeginEdit(0, ARow));
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the cell edits in a pick list', AGrid.EditorControl is TTyComboBox);
+  Result := TTyComboBox(AGrid.EditorControl);
+  AssertSame('setup: the pick list is the active control', TWinControl(Result),
+    TWinControl(FForm.ActiveControl));
+  AssertTrue('setup: and holds the system focus', GetFocus = Result.Handle);
+end;
+
+procedure TTyClickFocusTest.AssertTheGridHasTheFocus(AGrid: TTyStringGrid;
+  const AAfter: string);
+begin
+  AssertFalse(AAfter + ': the edit is over', AGrid.Editing);
+  AssertSame(AAfter + ': the grid is the active control', TWinControl(AGrid),
+    TWinControl(FForm.ActiveControl));
+  AssertTrue(AAfter + ': and holds the system focus', GetFocus = AGrid.Handle);
+end;
+
+procedure TTyClickFocusTest.PressKey(AKey: Word; AChar: Char);
+var
+  h: HWND;
+begin
+  h := GetFocus;
+  SendMessage(h, LM_KEYDOWN, AKey, 0);
+  if AChar <> #0 then SendMessage(h, LM_CHAR, Ord(AChar), 0);
+  SendMessage(h, LM_KEYUP, AKey, 0);
+  Forms.Application.ProcessMessages;
+end;
+
+{ A closed pick list leaves Up/Down to the grid, as LCL's TPickListCellEditor does and as the
+  text editor has since #52: commit, move a row, the focus back on the grid -- and the value
+  left as it was. (Open, the list has the arrows; Alt+Down opens it.) }
+procedure TTyClickFocusTest.TestUpDownInAPickListCellMoveTheCursor;
+var
+  grid: TTyStringGrid;
+  pick: TTyComboBox;
+begin
+  grid := NewPickListGrid;
+  try
+    StartPickEdit(grid, 1);
+    PressKey(VK_DOWN);
+    AssertEquals('Down did not step the value', 'apple', grid.Cells[0, 1]);
+    AssertEquals('Down moved the cursor a row', 2, grid.Row);
+    AssertTheGridHasTheFocus(grid, 'after Down');
+
+    StartPickEdit(grid, 2);
+    PressKey(VK_UP);
+    AssertEquals('Up did not step the value', 'banana', grid.Cells[0, 2]);
+    AssertEquals('Up moved the cursor back a row', 1, grid.Row);
+    AssertTheGridHasTheFocus(grid, 'after Up');
+
+    { With a modifier the arrow is not navigation: Alt+Down still opens the list. lParam bit
+      29 is the system's "Alt is down", which is where LCL reads it from. }
+    StartPickEdit(grid, 1);
+    SendMessage(GetFocus, LM_SYSKEYDOWN, VK_DOWN, $20000000);
+    SendMessage(GetFocus, LM_SYSKEYUP, VK_DOWN, $20000000);
+    Forms.Application.ProcessMessages;
+    AssertTrue('Alt+Down opened the list', TTyComboBox(grid.EditorControl).DroppedDown);
+    AssertTrue('and the cell is still being edited', grid.Editing);
+    AssertEquals('on the same row', 1, grid.Row);
+    TTyComboBox(grid.EditorControl).CloseUp;
+    Forms.Application.ProcessMessages;
+
+    { An open list has the arrows. The default list takes the keyboard into its own window;
+      a key that reaches the field while it is open -- a list that does not take the
+      activation does that -- steps the item, as the list would, and the cursor stays. }
+    pick := StartPickEdit(grid, 1);
+    pick.DropDown;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the list is open', pick.DroppedDown);
+    SendMessage(pick.Handle, LM_KEYDOWN, VK_DOWN, 0);
+    SendMessage(pick.Handle, LM_KEYUP, VK_DOWN, 0);
+    Forms.Application.ProcessMessages;
+    AssertEquals('the open list stepped the item', 'banana', grid.Cells[0, 1]);
+    AssertEquals('and the cursor stayed on its row', 1, grid.Row);
+    pick.CloseUp;
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('Up/Down in a pick list');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A pick still commits at once -- and hands the focus back to the grid. From the keyboard (the
+  first letter of an item) at once; from the open list, a click on a row, once the list has
+  closed: the click is handled in the list's own window, and pulling the activation away under
+  it is what TTyComboBox.PopupListChange defers its close-up to avoid. }
+procedure TTyClickFocusTest.TestAPickInACellHandsTheFocusBackToTheGrid;
+var
+  grid: TTyStringGrid;
+  pick: TTyComboBox;
+  list: TTyCustomListBox;
+  r: TRect;
+begin
+  grid := NewPickListGrid;
+  try
+    StartPickEdit(grid, 2);
+    PressKey(Ord('C'), 'c');
+    AssertEquals('the first letter picked cherry, and that committed', 'cherry',
+      grid.Cells[0, 2]);
+    AssertTheGridHasTheFocus(grid, 'after a pick by its first letter');
+
+    pick := StartPickEdit(grid, 1);
+    pick.DropDown;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the list is open', pick.DroppedDown);
+    list := pick.PopupList;
+    r := list.ItemRect(2);
+    AssertTrue('setup: cherry''s row is on the list', r.Bottom > r.Top);
+    { Through the widgetset, as a real click comes: the list's own window proc. }
+    SendMessage(list.Handle, LM_LBUTTONDOWN, MK_LBUTTON, MousePos((r.Left + r.Right) div 2,
+      (r.Top + r.Bottom) div 2));
+    SendMessage(list.Handle, LM_LBUTTONUP, 0, MousePos((r.Left + r.Right) div 2,
+      (r.Top + r.Bottom) div 2));
+    AssertTrue('setup: the list is still open while its click is handled', pick.DroppedDown);
+    AssertFalse('the grid does not take the focus under the list''s click',
+      FForm.ActiveControl = grid);
+    Forms.Application.ProcessMessages;   // the deferred close-up
+    Forms.Application.ProcessMessages;
+    AssertFalse('the list closed', pick.DroppedDown);
+    AssertEquals('the clicked row was picked, and that committed', 'cherry', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after a pick from the list');
+
+    { Only a pick hands the focus to the grid. Opened, then left for another control: the
+      focus goes where the user sent it, and the grid does not pull it back when the list
+      closes. }
+    grid.Cells[0, 2] := 'banana';
+    pick := StartPickEdit(grid, 2);
+    pick.DropDown;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the list is open again', pick.DroppedDown);
+    FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    Forms.Application.ProcessMessages;
+    AssertFalse('leaving the cell closed the list', pick.DroppedDown);
+    AssertFalse('and ended the edit', grid.Editing);
+    { The form's own record only: with the list's window active, a test process in the
+      background cannot move the system's activation back to this form. }
+    AssertSame('the focus is where it was sent', TWinControl(FPark),
+      TWinControl(FForm.ActiveControl));
+    AssertNothingRaised('picks in a pick list');
+  finally
+    grid.Free;
+  end;
+end;
+
+function TTyClickFocusTest.NewEditorGrid(AKind: TTyGridEditorKind;
+  const AValue: string): TTyStringGrid;
+begin
+  Result := NewScrollingGrid(FForm);
+  (Result.Header.Columns[0] as TTyGridColumn).EditorKind := AKind;
+  Result.Cells[0, 1] := AValue;
+  Result.Col := 0;
+  Result.Row := 1;
+  Result.SetFocus;
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the grid holds the focus', GetFocus = Result.Handle);
+  AssertFalse('setup: and is not editing', Result.Editing);
+end;
+
+procedure TTyClickFocusTest.TypeKey(AChar: Char);
+begin
+  PressKey(Ord(UpCase(AChar)), AChar);
+end;
+
+{ #66. A number typed into a spin cell lived in the spin edit's text until the spin edit
+  committed it -- on Enter, or in its DoExit, which runs only after OnExit. The grid ends the
+  edit in OnExit, and read the spin edit's value there: the number from before the typing. So
+  typing a number into the cell and moving on left the old one. Real keys, a real change of
+  focus. }
+procedure TTyClickFocusTest.TestASpinCellKeepsTheNumberTypedIntoIt;
+var
+  grid: TTyStringGrid;
+  spin: TTySpinEdit;
+begin
+  grid := NewEditorGrid(gekSpin, '42');
+  try
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the cell edits in a spin edit', grid.EditorControl is TTySpinEdit);
+    spin := TTySpinEdit(grid.EditorControl);
+    AssertTrue('setup: which holds the focus', GetFocus = spin.Handle);
+    PressKey(VK_BACK);
+    PressKey(VK_BACK);
+    TypeKey('7');
+    TypeKey('5');
+    AssertEquals('setup: the number typed', '75', spin.Text);
+    FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertFalse('leaving the cell ended the edit', grid.Editing);
+    AssertEquals('and the cell holds the number typed', '75', grid.Cells[0, 1]);
+
+    { Ended from code, the same -- and clamped to the column's range, as the spin edit's own
+      commit clamps it. }
+    AssertTrue('setup: editing the cell again', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    spin := TTySpinEdit(grid.EditorControl);
+    PressKey(VK_BACK);
+    PressKey(VK_BACK);
+    TypeKey('3');
+    TypeKey('0');
+    TypeKey('0');
+    AssertEquals('setup: the number typed', '300', spin.Text);
+    grid.EndEdit(True);
+    AssertEquals('the cell holds it, clamped to the column''s maximum', '100',
+      grid.Cells[0, 1]);
+    AssertNothingRaised('typing into a spin cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #67. A mask editor checks itself when the focus leaves it, and raises when a required slot
+  is empty (maskedit.md 5.2) -- that is its job, and LCL's TMaskEdit does the same. The grid
+  ended an edit by hiding the editor while it held the focus, so that check ran on every edit
+  that ended: Escape on a cell with a slot emptied raised the error, for a value being thrown
+  away; and a commit raised it and then wrote the unfilled value into the cell anyway. }
+function TTyClickFocusTest.StartMaskEdit(const AValue: string;
+  out AGrid: TTyStringGrid): TTyMaskEdit;
+begin
+  AGrid := NewEditorGrid(gekMask, AValue);
+  (AGrid.Header.Columns[0] as TTyGridColumn).EditMask := '000-0000';
+  AssertTrue('setup: editing the cell', AGrid.BeginEdit(0, 1));
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the cell edits in a mask editor', AGrid.EditorControl is TTyMaskEdit);
+  Result := TTyMaskEdit(AGrid.EditorControl);
+  AssertTrue('setup: which holds the focus', GetFocus = Result.Handle);
+end;
+
+procedure TTyClickFocusTest.AssertTheMaskWasReported(const AAfter: string);
+begin
+  AssertTrue(AAfter + ': the mask''s own error was reported, got "' + FTrapped + '"',
+    Pos('ETyMaskError', FTrapped) = 1);
+  FTrapped := '';
+end;
+
+procedure TTyClickFocusTest.TestEscapeOnAnEditedMaskCellRaisesNothing;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+begin
+  mask := StartMaskEdit('021-1234', grid);
+  try
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+    PressKey(VK_ESCAPE);
+    AssertNothingRaised('Escape on a mask cell with a slot emptied');
+    AssertFalse('Escape ended the edit', grid.Editing);
+    AssertEquals('and left the cell as it was', '021-1234', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after Escape');
+
+    { The mask editor, hidden, still holds the unfilled text it was left with. That is no
+      business of the next edit, in a cell that is not a mask cell. }
+    (grid.Header.Columns[0] as TTyGridColumn).EditorKind := gekText;
+    grid.Row := 2;
+    TypeKey('x');
+    AssertTrue('setup: the text cell is being edited', grid.Editing);
+    PressKey(VK_RETURN);
+    AssertFalse('Enter ended the text edit', grid.Editing);
+    AssertEquals('and wrote it', 'x', grid.Cells[0, 2]);
+    AssertNothingRaised('a text edit after an abandoned mask edit');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A required slot left empty is refused the way OnValidateCell refuses a value: the editor
+  stays, nothing is written, the cursor does not move -- and the mask's own error is
+  reported, as it is when the focus leaves a mask editor anywhere else. }
+procedure TTyClickFocusTest.TestAnUnfilledMaskCellIsRefusedAndReported;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+  r: TRect;
+begin
+  mask := StartMaskEdit('021-1234', grid);
+  try
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+
+    PressKey(VK_RETURN);
+    AssertTheMaskWasReported('Enter');
+    AssertTrue('Enter left the edit open', grid.Editing);
+    AssertEquals('wrote nothing', '021-1234', grid.Cells[0, 1]);
+    AssertTrue('and the editor kept the focus', GetFocus = mask.Handle);
+
+    PressKey(VK_DOWN);
+    AssertTheMaskWasReported('Down');
+    AssertTrue('Down left the edit open', grid.Editing);
+    AssertEquals('and the cursor where it was', 1, grid.Row);
+
+    r := grid.CellRect(0, 2);
+    SendMessage(grid.Handle, LM_LBUTTONDOWN, MK_LBUTTON,
+      MousePos((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+    SendMessage(grid.Handle, LM_LBUTTONUP, 0,
+      MousePos((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+    Forms.Application.ProcessMessages;
+    AssertTheMaskWasReported('a click on another cell');
+    AssertTrue('the click left the edit open', grid.Editing);
+    AssertEquals('and the cursor where it was', 1, grid.Row);
+    AssertEquals('nothing written', '021-1234', grid.Cells[0, 1]);
+    AssertTrue('the editor has the focus again', GetFocus = mask.Handle);
+
+    { Filled, it commits. }
+    TypeKey('9');
+    AssertEquals('setup: the slot filled', '021-1239', mask.Text);
+    PressKey(VK_RETURN);
+    AssertNothingRaised('Enter on a filled mask');
+    AssertFalse('Enter ended the edit', grid.Editing);
+    AssertEquals('and wrote the value', '021-1239', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after Enter');
+
+    { Leaving the grid altogether with a slot empty drops the edit: leaving is the same
+      answer as Escape for a refused edit (TTyStringGrid.DoExit). Nothing is raised on the
+      way -- raised in the middle of LCL's focus change, the error stopped the grid ever
+      hearing that the focus had gone, and the editor stayed open on it. }
+    AssertTrue('setup: editing the cell again', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    mask := TTyMaskEdit(grid.EditorControl);
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+    { A click, through the widgetset, so a raise on the way is caught and reported as LCL
+      reports one rather than thrown into this test. }
+    SendMessage(FPark.Handle, LM_LBUTTONDOWN, MK_LBUTTON, MousePos(4, 4));
+    SendMessage(FPark.Handle, LM_LBUTTONUP, 0, MousePos(4, 4));
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('leaving the grid with a slot empty');
+    AssertFalse('leaving ended the edit', grid.Editing);
+    AssertEquals('without writing', '021-1239', grid.Cells[0, 1]);
+    AssertSame('the focus is where it was sent', TWinControl(FPark),
+      TWinControl(FForm.ActiveControl));
+
+    { Ended from code, an unfilled mask is not written either -- and nothing is raised into
+      the caller. }
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: editing the cell once more', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    mask := TTyMaskEdit(grid.EditorControl);
+    PressKey(VK_END);
+    PressKey(VK_BACK);
+    AssertEquals('setup: a slot emptied', '021-123_', mask.Text);
+    grid.EndEdit(True);
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('EndEdit(True) on an unfilled mask');
+    AssertFalse('EndEdit ended the edit', grid.Editing);
+    AssertEquals('without writing', '021-1239', grid.Cells[0, 1]);
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #69. A value that does not fill the mask is not written, typed now or stored that way -- it
+  came in from a file. #67 let an untouched cell through, and its commit wrote the mask's
+  display of the value back: 12 became 12_-____. Escape is the way out and leaves the cell as
+  it was; a close from code writes nothing. An empty cell under a mask with required slots
+  does not fill it either. }
+procedure TTyClickFocusTest.TestAnUnfilledStoredValueIsRefusedUntouchedToo;
+var
+  grid: TTyStringGrid;
+begin
+  StartMaskEdit('12', grid);
+  try
+    PressKey(VK_RETURN);
+    AssertTheMaskWasReported('Enter on an untouched cell');
+    AssertTrue('Enter left the edit open', grid.Editing);
+    AssertEquals('wrote nothing', '12', grid.Cells[0, 1]);
+    PressKey(VK_ESCAPE);
+    AssertNothingRaised('Escape on an untouched mask cell');
+    AssertFalse('Escape ended the edit', grid.Editing);
+    AssertEquals('and left the cell as it was', '12', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after Escape');
+
+    AssertTrue('setup: editing the cell again', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    grid.EndEdit(True);
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('EndEdit(True) on an untouched unfilled cell');
+    AssertFalse('EndEdit ended the edit', grid.Editing);
+    AssertEquals('without writing', '12', grid.Cells[0, 1]);
+
+    grid.Cells[0, 1] := '';
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: editing the empty cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    PressKey(VK_RETURN);
+    AssertTheMaskWasReported('Enter on an empty cell');
+    AssertTrue('Enter left the edit open', grid.Editing);
+    PressKey(VK_ESCAPE);
+    AssertFalse('Escape ended the edit', grid.Editing);
+    AssertEquals('and the cell is still empty', '', grid.Cells[0, 1]);
+    AssertNothingRaised('Escape on an empty mask cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A mask column with no EditMask is a plain text cell, and nothing it holds is "unfilled". }
+procedure TTyClickFocusTest.TestAMaskCellWithNoMaskTakesAnyText;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+begin
+  grid := NewEditorGrid(gekMask, 'abc');
+  try
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the cell edits in a mask editor', grid.EditorControl is TTyMaskEdit);
+    mask := TTyMaskEdit(grid.EditorControl);
+    PressKey(VK_END);
+    TypeKey('d');
+    AssertEquals('setup: the text typed', 'abcd', mask.Text);
+    PressKey(VK_RETURN);
+    AssertNothingRaised('Enter on a mask cell with no mask');
+    AssertFalse('Enter ended the edit', grid.Editing);
+    AssertEquals('and wrote the text', 'abcd', grid.Cells[0, 1]);
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #64. A key typed on a cell that is not being edited opens its editor, and the key is the
+  first character of what the cell will hold -- grid.md promises it, and the text editor has
+  always done it. Every other editor opened and the key was gone: the grid marked it handled
+  but gave it only to the text editor.
+
+  Real keys on the shown form: the editor takes the focus as it opens, and its own rules --
+  digits only, the mask's slots, the date's fields, the pick list's letters -- sit behind the
+  door a real key comes in by. }
+procedure TTyClickFocusTest.TestTypingOnASpinCellStartsTheNumberWithThatKey;
+var
+  grid: TTyStringGrid;
+  spin: TTySpinEdit;
+begin
+  grid := NewEditorGrid(gekSpin, '42');
+  try
+    TypeKey('7');
+    AssertTrue('the key opened the spin editor', grid.EditorControl is TTySpinEdit);
+    spin := TTySpinEdit(grid.EditorControl);
+    AssertTrue('which holds the focus', GetFocus = spin.Handle);
+    AssertEquals('the key is the first digit of the new number', '7', spin.Text);
+    TypeKey('5');
+    AssertEquals('the next key follows it', '75', spin.Text);
+    grid.EndEdit(True);
+    AssertEquals('and that is what the cell holds', '75', grid.Cells[0, 1]);
+
+    { A key a number cannot take still opens the editor -- the grid does not know which keys
+      a spin edit takes -- and must not leave the number emptied under it. }
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    TypeKey('x');
+    AssertTrue('the key opened the spin editor', grid.EditorControl is TTySpinEdit);
+    AssertEquals('the number is still there', '75', TTySpinEdit(grid.EditorControl).Text);
+    grid.EndEdit(True);
+    AssertEquals('and the cell kept it', '75', grid.Cells[0, 1]);
+    AssertNothingRaised('typing on a spin cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+procedure TTyClickFocusTest.TestTypingOnAMemoCellStartsTheTextWithThatKey;
+var
+  grid: TTyStringGrid;
+  memo: TTyMemo;
+begin
+  grid := NewEditorGrid(gekMemo, 'old text');
+  try
+    TypeKey('n');
+    AssertTrue('the key opened the memo editor', grid.EditorControl is TTyMemo);
+    memo := TTyMemo(grid.EditorControl);
+    AssertTrue('which holds the focus', GetFocus = memo.Handle);
+    AssertEquals('the key is the first character of the new text', 'n', memo.Text);
+    TypeKey('e');
+    AssertEquals('the next key follows it', 'ne', memo.Text);
+    grid.EndEdit(True);
+    AssertEquals('and that is what the cell holds', 'ne', grid.Cells[0, 1]);
+    AssertNothingRaised('typing on a memo cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+procedure TTyClickFocusTest.TestTypingOnACalculatorCellStartsTheNumberWithThatKey;
+var
+  grid: TTyStringGrid;
+  calc: TTyCalcEdit;
+  opened: string;
+begin
+  grid := NewEditorGrid(gekCalculator, '12');
+  try
+    TypeKey('3');
+    AssertTrue('the key opened the calculator editor', grid.EditorControl is TTyCalcEdit);
+    calc := TTyCalcEdit(grid.EditorControl);
+    AssertTrue('which holds the focus', GetFocus = calc.Handle);
+    AssertEquals('the key is the first digit of the new number', '3', calc.Text);
+    TypeKey('4');
+    AssertEquals('the next key follows it', '34', calc.Text);
+    grid.EndEdit(True);
+    AssertEquals('and that is what the cell holds', '34', grid.Cells[0, 1]);
+
+    { A key a number cannot take leaves the number as the editor opened with it (formatted
+      its own way: the calculator shows 34 as 34.00). }
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    opened := TTyCalcEdit(grid.EditorControl).Text;
+    grid.EndEdit(False);
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    TypeKey('x');
+    AssertTrue('the key opened the calculator editor', grid.EditorControl is TTyCalcEdit);
+    AssertEquals('a key a number cannot take leaves it as it was', opened,
+      TTyCalcEdit(grid.EditorControl).Text);
+    grid.EndEdit(False);
+    AssertNothingRaised('typing on a calculator cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+procedure TTyClickFocusTest.TestTypingOnAMaskCellFillsTheFirstSlotWithThatKey;
+var
+  grid: TTyStringGrid;
+  mask: TTyMaskEdit;
+begin
+  grid := NewEditorGrid(gekMask, '021-1234');
+  try
+    (grid.Header.Columns[0] as TTyGridColumn).EditMask := '000-0000';
+    TypeKey('9');
+    AssertTrue('the key opened the mask editor', grid.EditorControl is TTyMaskEdit);
+    mask := TTyMaskEdit(grid.EditorControl);
+    AssertTrue('which holds the focus', GetFocus = mask.Handle);
+    AssertEquals('the key fills the first slot and the old digits are gone', '9__-____',
+      mask.Text);
+    TypeKey('8');
+    AssertEquals('the next key fills the next slot', '98_-____', mask.Text);
+    grid.EndEdit(False);
+    AssertNothingRaised('typing on a mask cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ The date and time cells share one picker, and it keeps the field the last edit left it on.
+  Typing on a cell starts what the cell will hold, so the key goes into the first field
+  whatever field that was. The field order is pinned so the expectation does not ride on
+  this machine's locale. }
+procedure TTyClickFocusTest.TestTypingOnADateCellStartsTheFirstFieldWithThatKey;
+var
+  grid: TTyStringGrid;
+  dtp: TTyDateTimePicker;
+begin
+  grid := NewEditorGrid(gekDate, DateToStr(EncodeDate(2026, 10, 12)));
+  try
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the cell edits in a date picker',
+      grid.EditorControl is TTyDateTimePicker);
+    dtp := TTyDateTimePicker(grid.EditorControl);
+    dtp.DateFormat := 'yyyy-mm-dd';
+    PressKey(VK_RIGHT);
+    AssertEquals('setup: the last edit left the picker on its second field', 1, dtp.ActiveSeg);
+    grid.EndEdit(False);
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+
+    TypeKey('2');
+    AssertSame('the key opened the date picker', TControl(dtp), grid.EditorControl);
+    AssertTrue('which holds the focus', GetFocus = dtp.Handle);
+    AssertEquals('the key went into the first field', 0, dtp.ActiveSeg);
+    AssertEquals('as its first digit', '2', dtp.DigitBuffer);
+    TypeKey('0');
+    TypeKey('3');
+    TypeKey('0');
+    AssertEquals('the year typed straight through', 2030, YearOf(dtp.Date));
+    grid.EndEdit(True);
+    AssertEquals('and that is what the cell holds', DateToStr(EncodeDate(2030, 10, 12)),
+      grid.Cells[0, 1]);
+    AssertNothingRaised('typing on a date cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+procedure TTyClickFocusTest.TestTypingOnATimeCellStartsTheFirstFieldWithThatKey;
+var
+  grid: TTyStringGrid;
+  dtp: TTyDateTimePicker;
+begin
+  grid := NewEditorGrid(gekTime, '08:30');
+  try
+    AssertTrue('setup: editing the cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: the cell edits in a time picker',
+      grid.EditorControl is TTyDateTimePicker);
+    dtp := TTyDateTimePicker(grid.EditorControl);
+    dtp.TimeFormat := 'hh:nn:ss';
+    PressKey(VK_RIGHT);
+    AssertEquals('setup: the last edit left the picker on its second field', 1, dtp.ActiveSeg);
+    grid.EndEdit(False);
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+
+    TypeKey('1');
+    AssertSame('the key opened the time picker', TControl(dtp), grid.EditorControl);
+    AssertTrue('which holds the focus', GetFocus = dtp.Handle);
+    AssertEquals('the key went into the first field', 0, dtp.ActiveSeg);
+    AssertEquals('as its first digit', '1', dtp.DigitBuffer);
+    TypeKey('9');
+    AssertEquals('the hour typed straight through', 19, HourOf(dtp.Time));
+    grid.EndEdit(True);
+    { The grid writes a time as hh:nn (PendingEditText). }
+    AssertEquals('and that is what the cell holds', '19:30', grid.Cells[0, 1]);
+    AssertNothingRaised('typing on a time cell');
+  finally
+    grid.Free;
+  end;
+end;
+
+{ A pick list takes a typed letter as "the item that starts with it", and a pick commits at
+  once and hands the focus back to the grid (#59). Typing on, the letters run together into
+  one search -- the same search an open pick list runs -- so "bl" reaches blueberry past
+  banana. }
+procedure TTyClickFocusTest.TestTypingOnAPickListCellPicksByThatKey;
+var
+  grid: TTyStringGrid;
+begin
+  grid := NewEditorGrid(gekPickList, 'apple');
+  try
+    (grid.Header.Columns[0] as TTyGridColumn).PickList.CommaText :=
+      'apple,banana,blueberry,cherry';
+    TypeKey('b');
+    AssertEquals('the key picked the first item it starts, and that committed', 'banana',
+      grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after a pick by typing on the cell');
+    TypeKey('l');
+    AssertEquals('the next key went on with the same search', 'blueberry', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after typing on');
+    AssertNothingRaised('typing on a pick-list cell');
+  finally
+    grid.Free;
+  end;
+end;
+
 procedure TTyClickFocusTest.TestClickThenArrowWalksAClickableStepsRail;
 var
   s: TTySteps;

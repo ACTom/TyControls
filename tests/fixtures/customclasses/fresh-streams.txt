@@ -358,6 +358,13 @@
     TabOrder = 0
     Alignment = taRightJustify
   end
+# TTyDBGrid
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    TabOrder = 0
+  end
 # TTyDBImage
     Left = 0
     Height = 90
@@ -642,6 +649,22 @@
 # TTyGlyphImageList
     DefaultColor = -16777216
   end
+# TTyGradientTrackBar
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Thumbs = <    
+      item
+        Value = 0
+        Color = clBlack
+      end    
+      item
+        Value = 100
+        Color = clWhite
+      end>
+  end
 # TTyGridCell
     Left = 0
     Height = 0
@@ -862,6 +885,24 @@
     ItemIndex = -1
     Style = csDropDown
   end
+# TTyMultiTrackBar
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Thumbs = <    
+      item
+        Value = 25
+      end    
+      item
+        Value = 50
+      end    
+      item
+        Value = 75
+      end>
+    Segments = <>
+  end
 # TTyNativeStyler
   end
 # TTyNotification
@@ -940,6 +981,13 @@
   end
 # TTyProgressDialog
   end
+# TTyPropertyGrid
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
 # TTyRadioButton
     Left = 0
     Height = 22
@@ -955,6 +1003,18 @@
     Top = 0
     Width = 185
     TabOrder = 0
+  end
+# TTyRangeTrackBar
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Ranges = <    
+      item
+        Low = 25
+        High = 75
+      end>
   end
 # TTyRating
     Left = 0

@@ -256,6 +256,55 @@ type
   end;
 implementation
 
+{ The caption measurement the check box and the radio button share (each used to carry
+  its own copy).
+
+  The caption is drawn as ONE line (DrawText without AMultiLine), so what is wanted is the
+  width of the whole string as one line and the 'Ag' line box. For a caption without a
+  line break that is exactly what TyMeasureTextBlock returns -- one line, TextWidth plus
+  TyNaturalLineHeight, on the same TyConfigureMeasureFont -- and that one is memoised.
+  This is measured often: every Invalidate re-measures (that is how a theme switch reaches
+  the size floor), twenty-odd times per check box between the first streamed property and
+  the first paint (about 280 times for the eight check boxes and three radio buttons of the
+  containers example), and each time used to build a fresh TBitmap (a DIB, a DC, a font).
+  A caption WITH a line break stays off the memo: the block measure would take the widest
+  line and count the lines, while the control draws one line, so it is measured whole as
+  before. }
+procedure MeasureOneLineCaption(const ACaption, AFontName: string;
+  AFontSize, AWeight, APPI: Integer; out AWidth, AHeight: Integer);
+var
+  Meas: TBitmap;
+  disp: string;
+  mp, rw: Integer;
+begin
+  // The & marker is drawn as an underline, not a character: it adds no width.
+  TyParseMnemonic(ACaption, disp, mp);
+  if Pos(#10, disp) + Pos(#13, disp) = 0 then
+    TyMeasureTextBlock(disp, AFontName, AFontSize, AWeight, APPI, 0, 0, AWidth, AHeight)
+  else
+  begin
+    Meas := TBitmap.Create;
+    try
+      Meas.SetSize(1, 1);
+      TyConfigureMeasureFont(Meas.Canvas, AFontName, AFontSize, AWeight, APPI);
+      AWidth := Meas.Canvas.TextWidth(disp);
+      // The line box from a fixed reference pair: an empty caption is still one line tall.
+      AHeight := Meas.Canvas.TextHeight('Ag');
+    finally
+      Meas.Free;
+    end;
+  end;
+  { Ask the renderer too and keep the larger width. The canvas and the renderer are two
+    rasterisers and round differently; RenderTo ellipsises against the renderer's width, so
+    a renderer one or two pixels wider turns the caption AutoSize just measured into
+    "Try it in the previ...". TTyButton.MeasureCaption met the same problem and does the
+    same. }
+  rw := TyMeasureRenderedTextWidth(disp, AFontName, AFontSize, AWeight, APPI);
+  if rw > AWidth then AWidth := rw;
+  if AWidth < 0 then AWidth := 0;
+  if AHeight < 1 then AHeight := 1;
+end;
+
 { TTyCustomCheckBox }
 
 constructor TTyCustomCheckBox.Create(AOwner: TComponent);
@@ -455,32 +504,12 @@ end;
 procedure TTyCustomCheckBox.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
-  Meas: TBitmap;
-  disp: string;
-  mp, rw: Integer;
 begin
   // RenderTo 画标题用的是 S(盒子那份样式)的字体,CaptionS 只提供墨色 —— 所以这里也
   // 必须用 S 量,否则 :active 一旦带了自己的字体,量出来的和画出来的就对不上。
   S := CurrentStyle;
-  // & 标记画成下划线,不是字符,所以不能算进宽度里。
-  TyParseMnemonic(Caption, disp, mp);
-  Meas := TBitmap.Create;
-  try
-    Meas.SetSize(1, 1);
-    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
-    AWidth := Meas.Canvas.TextWidth(disp);
-    { 再问一次渲染器,取较大的那个。画布和渲染器是两套光栅化,取整不同;RenderTo 画标题时按
-      渲染器量的宽度决定要不要截断,渲染器只要多出一两个像素,AutoSize 刚量好的标题就被画成
-      "Try it in the previ..."。TTyButton.MeasureCaption 遇到过同一个问题,做法也一样。 }
-    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
-    if rw > AWidth then AWidth := rw;
-    // 用固定的参考字形取行高:标题为空时也仍然是一行的高度。
-    AHeight := Meas.Canvas.TextHeight('Ag');
-    if AWidth < 0 then AWidth := 0;
-    if AHeight < 1 then AHeight := 1;
-  finally
-    Meas.Free;
-  end;
+  MeasureOneLineCaption(Caption, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
+    AWidth, AHeight);
 end;
 
 procedure TTyCustomCheckBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -769,27 +798,11 @@ end;
 procedure TTyCustomRadioButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
-  Meas: TBitmap;
-  disp: string;
-  mp, rw: Integer;
 begin
   // 见 TTyCheckBox.MeasureCaption:字体取自 S(圆点那份样式),CaptionS 只给墨色。
   S := CurrentStyle;
-  TyParseMnemonic(Caption, disp, mp);   // & 画成下划线,不占宽度
-  Meas := TBitmap.Create;
-  try
-    Meas.SetSize(1, 1);
-    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
-    AWidth := Meas.Canvas.TextWidth(disp);
-    // 渲染器量出来更宽就按它算,理由见 TTyCheckBox.MeasureCaption。
-    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
-    if rw > AWidth then AWidth := rw;
-    AHeight := Meas.Canvas.TextHeight('Ag');
-    if AWidth < 0 then AWidth := 0;
-    if AHeight < 1 then AHeight := 1;
-  finally
-    Meas.Free;
-  end;
+  MeasureOneLineCaption(Caption, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
+    AWidth, AHeight);
 end;
 
 procedure TTyCustomRadioButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;

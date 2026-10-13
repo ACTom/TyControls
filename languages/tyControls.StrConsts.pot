@@ -284,6 +284,7 @@ msgid "Add Group"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlglgeadditem
+msgctxt "tycontrols.strconsts.rsdlglgeadditem"
 msgid "Add Item"
 msgstr ""
 
@@ -660,6 +661,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rspvcannotpreview
 msgid "Cannot preview this file"
+msgstr ""
+
+#: tycontrols.strconsts.rsribbonmoregroups
+msgid "More groups"
 msgstr ""
 
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
@@ -1489,6 +1494,78 @@ msgstr ""
 #: tycontrols.strconsts.rstyopttoodeep
 #, object-pascal-format
 msgid "The option is nested more than %d levels deep."
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridadditem
+msgctxt "tycontrols.strconsts.rstypropgridadditem"
+msgid "Add Item"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatappearance
+msgid "Appearance"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatbehavior
+msgid "Behavior"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatevents
+msgid "Events"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatlayout
+msgid "Layout"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatother
+msgid "Other"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgriddeleteitem
+msgid "Delete Item"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridinvalidvalue
+#, object-pascal-format
+msgid "'%s' is not a valid value for %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgriditems
+#, object-pascal-format
+msgid "(%d items)"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridmovedown
+msgctxt "tycontrols.strconsts.rstypropgridmovedown"
+msgid "Move Down"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridmoveup
+msgctxt "tycontrols.strconsts.rstypropgridmoveup"
+msgid "Move Up"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridnocomponent
+#, object-pascal-format
+msgid "There is no component named '%s' to choose"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridnone
+msgid "(none)"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridoutofrange
+#, object-pascal-format
+msgid "%s must be between %s and %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridstringsprompt
+msgid "One entry per line:"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridstringstitle
+#, object-pascal-format
+msgid "Edit %s"
 msgstr ""
 
 #: tycontrols.strconsts.rstyseredcaption

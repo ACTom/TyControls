@@ -69,7 +69,7 @@ end;
 | `AutoFillColumns` | 让**每一列**分掉多余的宽度,按各自的 `SizePriority` 加权。与 `hoAutoResize` + `AutoSizeIndex` 的区别:那一对只让**指定的一列**吸收剩余宽度 |
 | `ScrollBars` | `ssNone` / `ssHorizontal` / `ssVertical` / `ssBoth` / `ssAuto*`。存储仍是 `VertScrollBarMode` / `HorzScrollBarMode` 那一对(现已 published),这个是 LCL 同名同类型的视图 |
 | `ScrollBarAutoHide` | 两条内嵌滚动条闲下来之后要不要淡出。属性在 `TTyCustomGrid` 上,`TTyStringGrid` 与 `TTyDrawGrid` 都有。默认 `sbahDefault` = 跟主题走,三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
-| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
+| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。选区不止光标这一格时(整行/整列模式、拉出的范围、`Ctrl+点` 攒的块),光标格不铺选区底色,露出自己的底色和文字色;只选中光标这一格时,它就是选区本身,照选区画。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
 | `HideSelectionWhenInactive` / `FadeUnfocusedSelection` | 失去焦点时选区变淡(同上)。**现已 published** |
 | `Modified` | 自建表 / 上次装载以来有没有被改过。收口在 `Cells[]` 与结构性增删行,所以粘贴、填充柄、撤销、勾选框、CSV 装载都算数。存过盘之后宿主自己写 `False` 复位 |
 | `EditorMode` | 开/关编辑器的**一个布尔**(读 = `Editing`;写 `False` 是**提交**,不是丢弃)。工具栏按钮要绑的就是它 |
@@ -90,9 +90,9 @@ end;
 | `gekColor` | 弹取色对话框,值存 `#RRGGBB` |
 | `gekSpin` | 数值微调(带上下按钮),范围取列的 `MinValue` / `MaxValue` |
 | `gekSlider` | 滑动条,范围同上。编辑时自带数值读数,拖到哪儿一眼看得见 |
-| `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感) |
+| `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感);光标停在格上时直接敲 0–5 也行,0 清空,敲完按 Enter / ↓ 去下一行 |
 | `gekMemo` | 多行文本,编辑器向下撑开 |
-| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同) |
+| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同)。必填位还空着就不让提交,改没改过都一样(原值没填满、空格子也算):编辑器留着、不写回,按 Enter、↑↓ 或点别的格时报掩码框自己的那条错误,跟 `OnValidateCell` 拒绝一样;按 Esc 放弃,格子保持原样 |
 | `gekTime` | 只选时间 |
 | `gekPassword` | 输入时打点 |
 | `gekCalculator` | 带计算器的数值输入 |
@@ -132,7 +132,7 @@ end;
 ## 交互
 
 - **鼠标**:点选单元格;拖列头分隔条改列宽;滚轮纵向滚动(一格三行)
-- **键盘**:方向键 / `Home` / `End` / `PageUp` / `PageDown` 移动光标;`F2` 开始编辑
+- **键盘**:方向键 / `Home` / `End` / `PageUp` / `PageDown` 移动光标;`F2` 开始编辑。`PageUp` / `PageDown` 一次翻「完整可见的行数减一」(与 LCL 的 `TStringGrid` 相同):从屏幕顶行按 `PageDown` 先落到这一屏最后一个完整可见的行,之后每页留一行重叠;一屏放不下两整行时仍移一行。`PageRowStep` 给出这个步长
 - **区域多选**:`Shift+方向键` 或 `Shift+点击` 拉出矩形选区;普通方向键/点击收回一格
 - **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消。排序在**松开**时触发:按在分隔线上(改宽)、把列拖走、或松开在别的地方,都不算点了列头
 - **过滤**:`SetColumnFilter(列, 文本)` 做包含匹配(不区分大小写);`OnFilterRow` 可逐行否决
@@ -206,7 +206,7 @@ end;
   列宽/可见性/列序、冻结数)+ 内容(按数据行序,被筛掉的行也在里面)+ 位置
   (光标、滚动、选区)。**不含**逐格颜色/批注/只读/合并(与 LCL 默认的
   `SaveOptions` 一致)。喂进来的流认不出格式会**抛异常**而不是回退去当 CSV 读
-- **编辑**:`F2` 或双击进入;`Enter` 提交、`Esc` 丢弃;**光标一动就先自动提交**
+- **编辑**:`F2` 或双击进入;`Enter` 提交、`Esc` 丢弃;**光标一动就先自动提交**。编辑器自己不用的 `↑`/`↓`(单行文本框就不用)提交并移到上一行/下一行,焦点回到网格;校验没过就留在编辑器里。下拉选取格在列表收起时也是这样,不会拿 `↑`/`↓` 去换选项(`Alt+↓` 或 `F4` 展开列表,展开后 `↑`/`↓` 归列表);选中即提交,焦点同样回到网格
 - 光标走出视口时视口自动跟随(最小移动量)
 
 ## 主题 token
@@ -391,7 +391,9 @@ TyGridButton                按钮单元格(:hover / :active)
 - 走 `OnCreateEditLink` 的:省略号按钮弹任意对话框、子表格、图片选择器 ——
   这些的"编辑器"本体是宿主的业务 UI,内建反而限制人
 - 逐格 `CellReadOnly[c,r]`
-- 键盘手感:直接敲字进编辑(这一笔即第一个字符)、Enter 向下、Tab 按格推进折行
+- 键盘手感:直接敲字进编辑(这一笔即第一个字符,各编辑器按自己的规矩接:微调只收数字、
+  掩码填进第一个空位、日期时间从第一个字段输起、下拉按首字母选中;经 `OnCreateEditLink`
+  接入的宿主编辑器收不到这一笔)、Enter 向下、Tab 按格推进折行
 - 输入约束按键级过滤(非法字符**连编辑都不进**)
 - 宿主自带编辑器:`OnCreateEditLink` + `TTyGridEditLink`
 - 单元格类型:文本 / 数值 / 下拉 / 日期 / 颜色 / 勾选框 / 进度条 / 评分 / 图片 / 按钮
@@ -635,7 +637,7 @@ TyDefaultGridOptions =
 | `goFixedVertLine` | 不收 | — | — | 我们的列头/冻结带是**主题绘制的 chrome**,分隔线取自 `TyGridHeaderSection` 的 `border-color`,不是"固定单元格的格线"。真要拆开:`RenderGridLines` 的纵向循环已经以 `M.FrozenTop` 为界,那就是现成的 seam;列头带那一段还要在 `RenderHeaderSections` 再开一处 |
 | `goFixedHorzLine` | 不收 | — | — | 同上。今天顶部固定行走正文那条横线路径,而列头带的横线是无条件画的 |
 | `goRangeSelect` | 自有 | `goRangeSelect` | 开 | 关掉后拖动/Shift 仍移动光标,但选区收在当前格。只管**手势**,`SelectRange` 等 API 不受影响 |
-| `goDrawFocusSelected` | 视图 | `ShowFocusCell` / `FocusRectVisible` | 开 | 我们的选区**恒含光标格**(`ClearSelection` 收缩到光标),所以"焦点格总是画在选中格上",这个映射是精确的而非近似 |
+| `goDrawFocusSelected` | 视图 | `ShowFocusCell` / `FocusRectVisible` | 开 | 我们的选区**恒含光标格**(`ClearSelection` 收缩到光标)。开着时,选区一旦不止光标这一格,光标格就不按选中画、显示 `TyGridActiveCell`。⚠ 方向与 LCL 相反:LCL 打开这一位是"焦点格也按选中画",关着(它的默认)时焦点格画成未选中 —— 我们出厂开的样子,相当于 LCL 出厂关的样子 |
 | `goRowSizing` | 自有 | `goRowSizing` | 开 | 仍需 `ShowIndicator` —— 行分隔线只在行头槽里认(放在单元格上会和框选抢手势) |
 | `goColSizing` | 视图 | `Header.Options` 含 `hoColumnResize` | 开 | |
 | `goRowMoving` | 自有 | `goRowMoving` | 开 | 仍需 `ShowIndicator`,且排序/过滤生效时不可拖(显示序 ≠ 数据序) |

@@ -21,7 +21,16 @@ unit dbfixtures;
   Both tables are open and on their first row, and in dsBrowse, when NewDbFixture returns. The
   fixture owns the four components and frees them data sources first, then People (its lookup
   fields, when a suite adds some, point into Cities), then Cities. A test may free one of them
-  itself -- C7 frees the data source under a live control -- and the fixture forgets it. }
+  itself -- C7 frees the data source under a live control -- and the fixture forgets it.
+
+  Rows (the data-aware grid's record window, plan Task 2 of the DB grid): CFixRowCount numbered
+  rows, more than any grid in the suites has room for --
+
+    ID  ftInteger 1..   Name  ftString(20) 'Row 01'...   Amount  ftFloat ID * 1.25
+    Flag  ftBoolean (odd IDs True)   Note  ftMemo 'Note 01'...
+
+  Open, on row 1, in dsBrowse; the fixture owns the table and its data source, the source
+  freed first. }
 
 interface
 
@@ -59,8 +68,29 @@ const
   CFixCityIDs: array[1..2] of Integer = (1, 3);
   CFixCityNames: array[1..3] of string = ('Paris', 'Tokyo', 'Lima');
 
+type
+  TDbRowsFixture = class(TComponent)
+  private
+    FDS: TBufDataset;
+    FSrc: TDataSource;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    destructor Destroy; override;
+    property DS: TBufDataset read FDS;
+    property Src: TDataSource read FSrc;
+  end;
+
+const
+  CFixRowCount = 40;
+
 { The two tables, open, on row 1, owned by AOwner (nil is fine; then the caller frees it). }
 function NewDbFixture(AOwner: TComponent): TDbFixture;
+{ The numbered table, open, on row 1, owned by AOwner. }
+function NewRowsFixture(AOwner: TComponent): TDbRowsFixture;
+{ What numbered row ARow (1-based) holds. }
+function FixRowName(ARow: Integer): string;
+function FixRowAmount(ARow: Integer): Double;
 { Row ARow's Born / At (1 or 2). }
 function FixBorn(ARow: Integer): TDateTime;
 function FixAt(ARow: Integer): TDateTime;
@@ -109,6 +139,72 @@ begin
     w.Free;
     img.Free;
   end;
+end;
+
+function FixRowName(ARow: Integer): string;
+begin
+  Result := Format('Row %.2d', [ARow]);
+end;
+
+function FixRowAmount(ARow: Integer): Double;
+begin
+  Result := ARow * 1.25;
+end;
+
+{ TDbRowsFixture }
+
+procedure TDbRowsFixture.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if Operation <> opRemove then Exit;
+  if AComponent = FSrc then FSrc := nil;
+  if AComponent = FDS then FDS := nil;
+end;
+
+destructor TDbRowsFixture.Destroy;
+begin
+  FSrc.Free;
+  FDS.Free;
+  inherited Destroy;
+end;
+
+function NewRowsFixture(AOwner: TComponent): TDbRowsFixture;
+var
+  f: TDbRowsFixture;
+  r: Integer;
+begin
+  f := TDbRowsFixture.Create(AOwner);
+  try
+    f.FDS := TBufDataset.Create(f);
+    f.FDS.Name := 'Rows';
+    with f.FDS.FieldDefs do
+    begin
+      Add('ID', ftInteger);
+      Add('Name', ftString, 20);
+      Add('Amount', ftFloat);
+      Add('Flag', ftBoolean);
+      Add('Note', ftMemo);
+    end;
+    f.FDS.CreateDataset;                   { opens it }
+    for r := 1 to CFixRowCount do
+    begin
+      f.FDS.Append;
+      f.FDS.FieldByName('ID').AsInteger := r;
+      f.FDS.FieldByName('Name').AsString := FixRowName(r);
+      f.FDS.FieldByName('Amount').AsFloat := FixRowAmount(r);
+      f.FDS.FieldByName('Flag').AsBoolean := Odd(r);
+      f.FDS.FieldByName('Note').AsString := Format('Note %.2d', [r]);
+      f.FDS.Post;
+    end;
+    f.FDS.First;
+    f.FSrc := TDataSource.Create(f);
+    f.FSrc.Name := 'RowsSrc';
+    f.FSrc.DataSet := f.FDS;
+  except
+    f.Free;
+    raise;
+  end;
+  Result := f;
 end;
 
 { TDbFixture }

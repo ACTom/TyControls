@@ -124,6 +124,11 @@ type
     procedure NotifyOwner;
   protected
     function  GetDisplayName: string; override;
+    { #70. A move through Index -- the IDE's collection editor moves columns this way, and so
+      does a property grid -- went unheard: TCollectionItem.SetIndex calls Changed, which
+      reaches an Update that TTyColumns does not override, so the host's column geometry
+      went stale. See the implementation. }
+    procedure SetIndex(Value: Integer); override;
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
@@ -315,6 +320,12 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  { The collection class a header builds (TTyHeader.Create(AColumnClass, AColumnsClass)): a
+    descendant that adds typed accessors or reacts to items coming and going. It is created
+    through TTyColumns.Create(AOwnerHeader, AItemClass), so it declares no constructor of
+    its own. }
+  TTyColumnsClass = class of TTyColumns;
+
   { ===================================================================
     TTyHeader — header band descriptor (Phase B)
     Owned by TTyTreeView; painted by the tree (not a windowed control).
@@ -346,6 +357,9 @@ type
     constructor Create; overload;
     { See TTyColumns.Create(AOwnerHeader, AItemClass). }
     constructor Create(AColumnClass: TCollectionItemClass); overload;
+    { The same, with a TTyColumns descendant for the collection itself (nil: TTyColumns). }
+    constructor Create(AColumnClass: TCollectionItemClass;
+      AColumnsClass: TTyColumnsClass); overload;
     destructor  Destroy; override;
     procedure Assign(ASource: TPersistent); override;
 
@@ -577,6 +591,26 @@ procedure TTyColumn.NotifyOwner;
 begin
   if Collection <> nil then
     GetOwnerColumns.DoChange;
+end;
+
+procedure TTyColumn.SetIndex(Value: Integer);
+var
+  old, i: Integer;
+  cols: TTyColumns;
+begin
+  old := Index;
+  inherited SetIndex(Value);
+  if (Collection = nil) or (Index = old) then Exit;
+  cols := GetOwnerColumns;
+  { The position map holds collection indices, so the visual order moved with the item.
+    Every column's Position is stamped again from it: Position is published, and a stale
+    one is what the next form file said -- loading it put the columns back where they had
+    stood. Then the left edges, and the header and its host hear of it, as for any other
+    change of order (AdjustPosition). }
+  for i := 0 to Length(cols.FPositionToIndex) - 1 do
+    cols.Items[cols.FPositionToIndex[i]].FPosition := Cardinal(i);
+  cols.UpdatePositions;
+  cols.DoChange;
 end;
 
 procedure TTyColumn.SetWidth(AValue: Integer);
@@ -1282,7 +1316,14 @@ end;
 
 constructor TTyHeader.Create(AColumnClass: TCollectionItemClass);
 begin
+  Create(AColumnClass, TTyColumns);
+end;
+
+constructor TTyHeader.Create(AColumnClass: TCollectionItemClass;
+  AColumnsClass: TTyColumnsClass);
+begin
   inherited Create;
+  if AColumnsClass = nil then AColumnsClass := TTyColumns;
   FHeight        := 22;
   FHeightExplicit := False;
   FMainColumn    := 0;
@@ -1292,7 +1333,7 @@ begin
   FImages        := nil;
   FOptions       := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                      hoHeaderClickAutoSort, hoDrag];
-  FColumns       := TTyColumns.Create(Self, AColumnClass);
+  FColumns       := AColumnsClass.Create(Self, AColumnClass);
   FColumns.OnChange := @ColumnsChanged;
 end;
 

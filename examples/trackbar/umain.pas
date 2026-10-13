@@ -1,24 +1,45 @@
 unit umain;
 
-{ TTyTrackBar demo:
+{ TTyTrackBar demo, in two columns.
+
+  Left, one thumb (TTyTrackBar):
   - Horizontal track bar (0..100), OnChange updates the status label live
   - Custom-range track bar (-50..50, shows a negative range)
-  - Vertical track bar (Orientation = toVertical) with ticks and its own readout
+  - Vertical track bar (Orientation = toVertical) with ticks, tick labels and its own readout
   - Fine-stepping track bar (PageSize / Frequency demo, its own range and readout)
   - ShowValue: the bar paints its own number (right end horizontal, under the track vertical)
   - LineSize: a bar whose arrow-key / wheel step is 5 instead of 1
   - AnimationsEnabled toggled from code (it is public, not published, so no .lfm can set it)
-  The main form (a TTyForm + TTyTitleBar), every track bar and the live theme switcher are
-  designed in umain.lfm; the code here is event handlers + theme setup only. }
+
+  Right, several thumbs (TTyRangeTrackBar / TTyMultiTrackBar / TTyGradientTrackBar), with the
+  bars' own adding, removing and dragging switched on in umain.lfm:
+  - Two ranges, MinGap = 5, tick labels; a click on the bare track adds a range there
+    (AllowUserRanges), a range's highlight drags the whole range (DraggableRanges), an end
+    dragged off the track removes its range
+  - Gradient stops (TTyGradientTrackBar): a click on the track adds a stop in the colour the
+    gradient has there, a double-click on a stop changes its colour, a stop dragged off the
+    track goes; the first and last stops are pinned where they are but stay selectable
+    (OnThumbChanging) and cannot be removed (OnThumbRemoving), and a TTyPaintPanel below
+    paints the same gradient from GradientFill
+  - Three thresholds, the stretches between them coloured by segment class; a dragged thumb
+    pushes its neighbours along (Pushable)
+  - A range of months: the tick labels 1..12 become month names (OnFormatTickLabel)
+
+  Whatever a handler here does, it runs before the bar's own behaviour and can stop it: a stop
+  refused in OnThumbRemoving stays, a move refused in OnThumbChanging does not happen.
+
+  The main form (a TTyForm + TTyTitleBar), the column headings, every track bar and the live theme
+  switcher are designed in umain.lfm; the code here is event handlers + theme setup only. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.TrackBar, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
+  Classes, SysUtils, Types, Graphics, Forms, Controls,
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
+  tyControls.BuiltinThemes, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.TyLabel,
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Divider, tyControls.PaintPanel;
 
 type
   TMainForm = class(TTyForm)
@@ -26,6 +47,7 @@ type
     DarkSwitch: TTyToggleSwitch;
     Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
+    DivSingle: TTyDivider;
     LblVolume: TTyLabel;
     Track1: TTyTrackBar;
     LblBalance: TTyLabel;
@@ -45,6 +67,24 @@ type
     LblKeys1: TTyLabel;
     LblKeys2: TTyLabel;
     LblKeys3: TTyLabel;
+    DivMulti: TTyDivider;
+    LblRange: TTyLabel;
+    Range1: TTyRangeTrackBar;
+    LblRangeHint: TTyLabel;
+    LblRangeHint2: TTyLabel;
+    LblRangeHint3: TTyLabel;
+    LblStops: TTyLabel;
+    Stops: TTyGradientTrackBar;
+    StopsPreview: TTyPaintPanel;
+    LblStopsHint: TTyLabel;
+    LblStopsHint2: TTyLabel;
+    LblMulti: TTyLabel;
+    Multi1: TTyMultiTrackBar;
+    LblMultiHint: TTyLabel;
+    LblMultiHint2: TTyLabel;
+    LblMonths: TTyLabel;
+    Months: TTyRangeTrackBar;
+    LblMultiStatus: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -54,6 +94,15 @@ type
     procedure Track4Change(Sender: TObject);
     procedure Track5Change(Sender: TObject);
     procedure AnimSwitchChange(Sender: TObject);
+    procedure Range1Change(Sender: TObject);
+    procedure StopsChange(Sender: TObject);
+    procedure StopsPreviewPaint(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
+    procedure StopsThumbChanging(Sender: TObject; AIndex: Integer; var AValue: Integer;
+      var AAllow: Boolean);
+    procedure StopsThumbRemoving(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+    procedure Multi1Change(Sender: TObject);
+    procedure MonthsChange(Sender: TObject);
+    procedure MonthsFormatTickLabel(Sender: TObject; AValue: Integer; var AText: string);
   end;
 
 var
@@ -72,6 +121,31 @@ resourcestring
   rsFineFmt       = 'Fine: %d';
   rsAnimOn  = 'AnimationsEnabled = True (thumb eases)';
   rsAnimOff = 'AnimationsEnabled = False (thumb jumps)';
+  rsRangesFmt     = 'Ranges: %s';
+  rsThresholdsFmt = 'Thresholds: %d / %d / %d';
+  rsStopsFmt      = 'Gradient stops: %d';
+  rsMonthsFmt     = 'Months: %s to %s';
+  { The month names on the months bar, January first, comma-separated. }
+  rsShortMonths   = 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec';
+
+{ Month AValue (1..12) by the translated rsShortMonths; the number itself if the list is short. }
+function MonthName(AValue: Integer): string;
+var
+  rest: string;
+  i, p: Integer;
+begin
+  Result := IntToStr(AValue);
+  if AValue < 1 then Exit;
+  rest := rsShortMonths + ',';
+  for i := 1 to AValue - 1 do
+  begin
+    p := Pos(',', rest);
+    if p = 0 then Exit;
+    Delete(rest, 1, p);
+  end;
+  p := Pos(',', rest);
+  if p > 1 then Result := Trim(Copy(rest, 1, p - 1));
+end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -146,6 +220,71 @@ begin
     LblStatus.Caption := rsAnimOn
   else
     LblStatus.Caption := rsAnimOff;
+end;
+
+{ The thumbs run Low0, High0, Low1, High1, ..., and each item reads what its thumbs show. A
+  range the user adds, drags or removes fires OnChange as a moved end does. }
+procedure TMainForm.Range1Change(Sender: TObject);
+var
+  s: string;
+  i: Integer;
+begin
+  s := '';
+  for i := 0 to Range1.Ranges.Count - 1 do
+  begin
+    if i > 0 then s := s + ', ';
+    s := s + Format('%d..%d', [Range1.Ranges[i].Low, Range1.Ranges[i].High]);
+  end;
+  LblMultiStatus.Caption := Format(rsRangesFmt, [s]);
+end;
+
+{ A stop added, moved, removed or given another colour. }
+procedure TMainForm.StopsChange(Sender: TObject);
+begin
+  LblMultiStatus.Caption := Format(rsStopsFmt, [Stops.ThumbCount]);
+  StopsPreview.Invalidate;
+end;
+
+{ The very gradient the bar's track shows, Min at the left. }
+procedure TMainForm.StopsPreviewPaint(Sender: TObject; APainter: TTyPainter;
+  const AContent: TRect);
+begin
+  APainter.FillBackground(AContent, Stops.GradientFill(0), 0);
+end;
+
+{ The first and last stops say where the gradient starts and ends: they stay where they are.
+  Refusing the move (rather than Thumbs[i].Enabled := False) keeps them selectable -- they can
+  still be clicked, tabbed to and given another colour. }
+procedure TMainForm.StopsThumbChanging(Sender: TObject; AIndex: Integer; var AValue: Integer;
+  var AAllow: Boolean);
+begin
+  if (AIndex = 0) or (AIndex = Stops.ThumbCount - 1) then
+    AAllow := False;
+end;
+
+{ Nor can they be dragged off or deleted with the Delete key. }
+procedure TMainForm.StopsThumbRemoving(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+begin
+  if (AIndex = 0) or (AIndex = Stops.ThumbCount - 1) then
+    AAllow := False;
+end;
+
+procedure TMainForm.Multi1Change(Sender: TObject);
+begin
+  if Multi1.ThumbCount < 3 then Exit;
+  LblMultiStatus.Caption := Format(rsThresholdsFmt, [Multi1.ThumbValues[0],
+    Multi1.ThumbValues[1], Multi1.ThumbValues[2]]);
+end;
+
+procedure TMainForm.MonthsChange(Sender: TObject);
+begin
+  LblMultiStatus.Caption := Format(rsMonthsFmt, [MonthName(Months.LowValue),
+    MonthName(Months.HighValue)]);
+end;
+
+procedure TMainForm.MonthsFormatTickLabel(Sender: TObject; AValue: Integer; var AText: string);
+begin
+  AText := MonthName(AValue);
 end;
 
 end.

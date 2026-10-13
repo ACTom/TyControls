@@ -76,6 +76,7 @@ type
   private
     FForm: TForm;
     FCtl: TTyStyleController;
+    FRatingLog: string;
     FTakeOverCol: Integer;
     { 逐格钩子收到过的**最小**行号 —— 用来证明宿主永远见不到负的数据行。 }
     FMinHookRow: Integer;
@@ -272,6 +273,9 @@ type
     procedure TestSliderEditorRoundTrips;
     procedure TestMaskEditorUsesColumnMask;
     procedure TestRatingCellSetsValueByClickingAStar;
+    procedure TestRatingCellTakesADigit;
+    procedure TestRatingDigitsAndEnterFillAColumn;
+    procedure TestRatingDigitGoesThroughTheEditEvents;
     procedure TestRatingCellPaintsFilledAndEmptyStars;
     procedure TestPasswordTimeCalculatorAndCharCaseEditors;
     procedure TestHiddenColumnTakesNoSpaceAndIsNotPainted;
@@ -413,6 +417,9 @@ type
       var ADisplay: TTyGridCellDisplay);
     procedure HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
+    procedure LogRating(Sender: TObject; ACol, ARow, AValue: Integer);
+    procedure VetoRow2(Sender: TObject; ACol, ARow: Integer;
+      const AOldText, ANewText: string; var AAccept: Boolean);
     procedure HookEllipsis(Sender: TObject; ACol, ARow: Integer;
       var ANewText: string; var AAccept: Boolean);
     procedure HookSelectionChanged(Sender: TObject);
@@ -6548,6 +6555,89 @@ begin
 
   { 星级格不该弹出驻留编辑器。 }
   AssertTrue('星级不弹编辑器', not G.EditorVisible);
+end;
+
+procedure TTyStringGridTest.LogRating(Sender: TObject; ACol, ARow, AValue: Integer);
+begin
+  FRatingLog := FRatingLog + Format('%d,%d=%d;', [ACol, ARow, AValue]);
+end;
+
+procedure TTyStringGridTest.VetoRow2(Sender: TObject; ACol, ARow: Integer;
+  const AOldText, ANewText: string; var AAccept: Boolean);
+begin
+  if ARow = 2 then AAccept := False;
+end;
+
+{ #61: a rating cell takes its value from a digit typed on it -- 0 clears, above the star
+  count is ignored, and no editor opens. }
+procedure TTyStringGridTest.TestRatingCellTakesADigit;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  TTyGridColumn(G.Header.Columns.Items[3]).EditorKind := gekRating;
+  G.Cells[3, 1] := '2';
+  G.Col := 3; G.Row := 1;
+  G.TypeChar('4');
+  AssertEquals('4 typed = 4 stars', '4', G.Cells[3, 1]);
+  AssertTrue('no editor opened', not G.EditorVisible);
+  G.TypeChar('5');
+  AssertEquals('the top value', '5', G.Cells[3, 1]);
+  G.TypeChar('6');
+  AssertEquals('above the star count: left alone', '5', G.Cells[3, 1]);
+  G.TypeChar('x');
+  AssertEquals('not a digit: left alone', '5', G.Cells[3, 1]);
+  G.TypeChar('0');
+  AssertEquals('0 clears it', '0', G.Cells[3, 1]);
+  AssertEquals('the cursor stays on the cell', 1, G.Row);
+  AssertTrue('still no editor', not G.EditorVisible);
+end;
+
+{ #61, continuous entry: a digit, then Enter to the next row, as a text column is filled. }
+procedure TTyStringGridTest.TestRatingDigitsAndEnterFillAColumn;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  TTyGridColumn(G.Header.Columns.Items[3]).EditorKind := gekRating;
+  G.Col := 3; G.Row := 1;
+  G.TypeChar('3'); G.PressKey(VK_RETURN);
+  G.TypeChar('1'); G.PressKey(VK_RETURN);
+  G.TypeChar('5'); G.PressKey(VK_DOWN);
+  AssertEquals('row 1', '3', G.Cells[3, 1]);
+  AssertEquals('row 2', '1', G.Cells[3, 2]);
+  AssertEquals('row 3', '5', G.Cells[3, 3]);
+  AssertEquals('the cursor went on down', 4, G.Row);
+end;
+
+{ The digit is the same edit as a click on a star: OnCellEdited can refuse it, and
+  OnRatingChange hears it; a read-only grid takes nothing. }
+procedure TTyStringGridTest.TestRatingDigitGoesThroughTheEditEvents;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  TTyGridColumn(G.Header.Columns.Items[3]).EditorKind := gekRating;
+  G.OnRatingChange := @LogRating;
+  G.OnCellEdited := @VetoRow2;
+  FRatingLog := '';
+  G.Col := 3; G.Row := 1;
+  G.TypeChar('2');
+  AssertEquals('heard', '3,1=2;', FRatingLog);
+  G.TypeChar('2');
+  AssertEquals('the same value: no event', '3,1=2;', FRatingLog);
+  G.Row := 2;
+  G.Cells[3, 2] := '1';
+  G.TypeChar('4');
+  AssertEquals('refused by OnCellEdited', '1', G.Cells[3, 2]);
+  AssertEquals('and not announced', '3,1=2;', FRatingLog);
+  G.Row := 3;
+  G.ReadOnly := True;
+  G.TypeChar('4');
+  AssertEquals('a read-only grid takes nothing', '', G.Cells[3, 3]);
 end;
 
 { 星级要画**实心金星 + 空心星**:

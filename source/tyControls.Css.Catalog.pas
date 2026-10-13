@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (266 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (267 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (321 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (325 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..265] of string = (
+  TyCatalogTokens: array[0..266] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -276,6 +276,7 @@ const
     '--toolwindow-tab-ink',
     '--toolwindow-tab-ink-selected',
     '--toolwindow-tab-pad',
+    '--track-remove-distance',
     '--transfer-arrow-margin',
     '--transfer-arrow-size',
     '--transfer-button-gap',
@@ -286,7 +287,7 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..320] of string = (
+  TyCatalogTypeKeys: array[0..324] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -420,6 +421,7 @@ const
     'TyComboBox',
     'TyControlBar',
     'TyCoolBar',
+    'TyDBNavigator',
     'TyDateTimeButton',
     'TyDateTimePicker',
     'TyDial',
@@ -597,6 +599,8 @@ const
     'TyToolWindowTabRow',
     'TyTrackBar',
     'TyTrackGroove',
+    'TyTrackSegment',
+    'TyTrackSelection',
     'TyTrackThumb',
     'TyTransfer',
     'TyTransferTitle',
@@ -607,6 +611,7 @@ const
     'TyTreeView',
     'TyUpDown',
     'TyValueListEditor',
+    'TyValueListEditorGroup',
     'TyValueListEditorRow');
 
 implementation

@@ -88,6 +88,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyCheckListBox](checklistbox.md) | 每行带勾选框的列表（勾选状态存 Objects，排序不错位；空格 / 点框切换） |
 | [TTyCheckComboBox](checkcombobox.md) | 下拉勾选组合框（多选、弹层常开，字段显勾选汇总） |
 | [TTyValueListEditor](valuelisteditor.md) | 名/值两列编辑器（属性表；值列内联编辑，F2/点选） |
+| [TTyPropertyGrid](propertygrid.md) | 属性表格（列出一个对象的 published 属性，按类型配编辑器，改了直接写回） |
 | [TTyOfficeListBox](officelistbox.md) | 带不可选分组标题行的列表框（Office 风格分组） |
 | [TTyOfficeComboBox](officecombobox.md) | 带分组标题行的组合框（下拉按组分节，标题行不可选） |
 | [TTyAdvancedListBox](advancedlistbox.md) | 富行列表框（每行 图标 + 加粗标题 + 暗色副标题） |
@@ -153,13 +154,15 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 
 | 控件 | 说明 |
 |------|------|
-| [数据感知控件](dbcontrols.md) | `tycontrols_db` 包的 21 个控件：`TTyDBEdit`、`TTyDBNavigator`、查找下拉等，绑 `TDataSource` 的字段即用 |
+| [数据感知控件](dbcontrols.md) | `tycontrols_db` 包里绑字段的 21 个控件：`TTyDBEdit`、`TTyDBNavigator`、查找下拉等，绑 `TDataSource` 的字段即用 |
+| [TTyDBGrid](dbgrid.md) | 数据表格：一行一条记录，就地编辑、插入、删除、多选，行为照 LCL `TDBGrid` |
 
 ## 范围与进度
 
 | 控件 | 说明 |
 |------|------|
 | [TTyTrackBar](trackbar.md) | 滑块（连续取值） |
+| [TTyRangeTrackBar / TTyMultiTrackBar / TTyGradientTrackBar](multitrackbar.md) | 多滑块：一个或多个区间 / 多个值，每个滑块可单独设颜色与样式 / 渐变色标编辑器 |
 | [TTyScrollBar](scrollbar.md) | 滚动条 |
 | [TTyProgressBar](progressbar.md) | 进度条 |
 

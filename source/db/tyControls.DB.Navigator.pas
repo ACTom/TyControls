@@ -34,7 +34,8 @@ unit tyControls.DB.Navigator;
   LCL shows the button hints through the buttons' own ShowHint; here the buttons are the
   control, so the control is born with ShowHint True.
 
-  LOOK. The strip resolves 'TyDBNavigator', which falls back to 'TyToolBar'; each button
+  LOOK. The strip resolves 'TyDBNavigator', which falls back to 'TyToolBar' -- less the bar's
+  frame and fill, which the base theme (light.tycss) takes off the strip; each button
   resolves 'TyDBNavigatorButton' -- falling back to 'TyButton' -- in its own state (:hover,
   :active, :disabled) with the control's StyleClass as its variant, so `TyDBNavigator.ghost`
   buttons follow a theme's ghost buttons. A button's opacity (a theme's opacity for ':disabled')

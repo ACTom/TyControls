@@ -268,6 +268,11 @@ resourcestring
     application showed a Chinese tooltip and no catalogue could reach it. }
   rsToolBarMoreCommands = 'More commands';
 
+  { --- TTyRibbon ---------------------------------------------------------------
+    Hint on the overflow button a ribbon page shows when its groups do not fit. It was a
+    hardcoded Chinese literal, like the toolbar's above (#68). }
+  rsRibbonMoreGroups = 'More groups';
+
   { --- Text-edit context menu -----------------------------------------------
     The default right-click menu shared by TTyEdit and TTyMemo (tyControls.TextMenu).
     User-facing menu captions, so translated. No '&' mnemonic markers -- the other
@@ -375,6 +380,31 @@ resourcestring
   rsTyWindowMenuMinimize = 'Mi&nimize';
   rsTyWindowMenuMaximize = 'Ma&ximize';
   rsTyWindowMenuClose    = '&Close';
+
+  // --- Property grid: a value the grid could not write back ---
+  // %s = the text the user entered, %s = the property's name.
+  rsTyPropGridInvalidValue = '''%s'' is not a valid value for %s';
+  // %s = the property's name, then the lowest and highest value it takes.
+  rsTyPropGridOutOfRange   = '%s must be between %s and %s';
+  // A component-reference row: the "no component" entry, and a name that matches nothing.
+  rsTyPropGridNone         = '(none)';
+  rsTyPropGridNoComponent  = 'There is no component named ''%s'' to choose';
+  // A collection row's value: %d = how many items it has.
+  rsTyPropGridItems        = '(%d items)';
+  // The TStrings editor: %s = the property's path ('Lines', 'Memo.Lines').
+  rsTyPropGridStringsTitle  = 'Edit %s';
+  rsTyPropGridStringsPrompt = 'One entry per line:';
+  // The menu of a collection row and of its items (the keys are shown beside them).
+  rsTyPropGridAddItem    = 'Add Item';
+  rsTyPropGridDeleteItem = 'Delete Item';
+  rsTyPropGridMoveUp     = 'Move Up';
+  rsTyPropGridMoveDown   = 'Move Down';
+  // The built-in categories of ShowCategories (the headings; also '@Layout' in ExpandedProperties).
+  rsTyPropGridCatLayout     = 'Layout';
+  rsTyPropGridCatAppearance = 'Appearance';
+  rsTyPropGridCatBehavior   = 'Behavior';
+  rsTyPropGridCatEvents     = 'Events';
+  rsTyPropGridCatOther      = 'Other';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

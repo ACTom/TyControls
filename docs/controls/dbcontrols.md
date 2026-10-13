@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`tycontrols_db` 是一个单独的包，里面是 21 个绑定数据集字段的控件：把 `DataSource` 指向一个 `TDataSource`、`DataField` 填字段名，控件就显示当前记录的这个字段，用户改了值会写回去。用法和 LCL 的 `TDBEdit`、`TDBNavigator` 那一套一样，数据连接直接用的就是 LCL `DBCtrls` 单元里的 `TFieldDataLink` 和 `TDBLookup`；外观则和库里其他控件一样，由当前主题决定，现有主题不用改。
+`tycontrols_db` 是一个单独的包，里面是 22 个绑定数据集的控件：把 `DataSource` 指向一个 `TDataSource`、`DataField` 填字段名，控件就显示当前记录的这个字段，用户改了值会写回去。用法和 LCL 的 `TDBEdit`、`TDBNavigator` 那一套一样，数据连接直接用的就是 LCL `DBCtrls` 单元里的 `TFieldDataLink` 和 `TDBLookup`；外观则和库里其他控件一样，由当前主题决定，现有主题不用改。
 
 | 组 | 控件 | 建在 | LCL 对应 |
 |---|---|---|---|
@@ -11,8 +11,11 @@
 | 选择 | `TTyDBCheckBox`、`TTyDBRadioGroup`、`TTyDBToggleSwitch`、`TTyDBSegmented`、`TTyDBRating` | 同名基础控件 | `TDBCheckBox`、`TDBRadioGroup`；后三个 LCL 没有 |
 | 列表 | `TTyDBComboBox`、`TTyDBListBox`、`TTyDBLookupComboBox`、`TTyDBLookupListBox` | `TTyComboBox`、`TTyListBox`；查找控件建在前两个 DB 控件上 | `TDBComboBox`、`TDBListBox`、`TDBLookupComboBox`、`TDBLookupListBox` |
 | 其他 | `TTyDBImage`、`TTyDBDateTimePicker`、`TTyDBCalendar`、`TTyDBNavigator` | `TTyImage`、`TTyDateTimePicker`、`TTyCalendar`；导航条是独立的自绘控件 | `TDBImage`、`TDBDateTimePicker`、`TDBCalendar`、`TDBNavigator` |
+| 表格 | `TTyDBGrid` | `TTyStringGrid` | `TDBGrid` |
 
-完整的演示见 [examples/dbcontrols](../../examples/dbcontrols/)：21 个控件放在同一个窗体上，绑一张内存表（`TBufDataset`，不用数据库），旁边一列 `TTyDBText` 显示当前记录的原始字段值，方便对照。
+数据表格不绑单个字段，而是绑整个数据集，用法自成一套，单独写在 [dbgrid.md](dbgrid.md)；本页其余部分讲的是另外 21 个控件。
+
+完整的演示见 [examples/dbcontrols](../../examples/dbcontrols/)：21 个绑字段的控件放在同一个窗体上，绑一张内存表（`TBufDataset`，不用数据库），旁边一列 `TTyDBText` 显示当前记录的原始字段值，方便对照。
 
 ---
 
@@ -21,7 +24,7 @@
 | 项目 | 值 |
 |---|---|
 | 运行期包 | `tycontrols_db.lpk`（仓库根目录），依赖 `tycontrols`、`FCL`、`LCL` |
-| 单元 | `tyControls.DB.Edits`（文本与数值 8 个）、`tyControls.DB.Choices`（选择 5 个）、`tyControls.DB.Lists`（列表 4 个）、`tyControls.DB.Image`、`tyControls.DB.DateTime`（日期 2 个）、`tyControls.DB.Navigator`；另有 `tyControls.DB.Common`（共用的小函数）、`tyControls.DB.StrConsts`（导航条的提示文字） |
+| 单元 | `tyControls.DB.Edits`（文本与数值 8 个）、`tyControls.DB.Choices`（选择 5 个）、`tyControls.DB.Lists`（列表 4 个）、`tyControls.DB.Image`、`tyControls.DB.DateTime`（日期 2 个）、`tyControls.DB.Navigator`、`tyControls.DB.Grid`（数据表格）；另有 `tyControls.DB.Common`（共用的小函数）、`tyControls.DB.StrConsts`（导航条的提示文字） |
 | 组件面板 | `TyControls Data Controls` 页 |
 
 不用另外安装：设计期包 `tycontrols_dt.lpk` 依赖 `tycontrols_db`，装好设计期包，面板上就有这一页。往窗体上拖一个 DB 控件时，IDE 会把 `tycontrols_db` 加进工程的依赖；不用这些控件的工程照旧只依赖 `tycontrols`。
@@ -132,7 +135,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 
 ## 6. 主题
 
-每个 DB 控件有自己的 typeKey，并且登记了父键：主题里没写 `TyDBXxx` 规则时，DB 控件和它的基础控件长得一模一样。17 个内置主题都没有写 DB 专用的规则。
+每个 DB 控件有自己的 typeKey，并且登记了父键：主题里没写 `TyDBXxx` 规则时，DB 控件和它的基础控件长得一模一样，只有导航条例外（见本节最后一段）。17 个内置主题都没有写 DB 专用的规则。
 
 | typeKey | 父键 |
 |---|---|
@@ -148,6 +151,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 | `TyDBImage` | `TyImage` |
 | `TyDBDateTimePicker` / `TyDBCalendar` | `TyDateTimePicker` / `TyCalendar` |
 | `TyDBNavigator`（每个按钮 `TyDBNavigatorButton`） | `TyToolBar`（`TyButton`） |
+| `TyDBGrid` | `TyGrid` |
 
 想单独给 DB 控件换个样子，选择器直接写它的键，比如让所有数据感知编辑框带一点底色：
 
@@ -155,9 +159,11 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 TyDBEdit { background: mix(var(--surface), var(--accent), 6%); }
 ```
 
-只有 `TyDBEdit` 变，`TyEdit` 和其他控件不受影响；没写到的状态（`:hover`、`:focus`、`:disabled`）仍按 `TyEdit` 的规则来。链的合并规则见 [tycss 参考 §4.5](../tycss-reference.md)。这些键不在样式覆盖编辑器的补全列表里（补全只收 `themes/light.tycss` 里出现过的键），手写即可。
+只有 `TyDBEdit` 变，`TyEdit` 和其他控件不受影响；没写到的状态（`:hover`、`:focus`、`:disabled`）仍按 `TyEdit` 的规则来。链的合并规则见 [tycss 参考 §4.5](../tycss-reference.md)。除了 `TyDBNavigator`，这些键都不在样式覆盖编辑器的补全列表里（补全只收 `themes/light.tycss` 里出现过的键），手写即可。
 
 导航条按钮按各自的状态（`:hover`、`:active`、`:disabled`）解析 `TyDBNavigatorButton`，变体跟着导航条的 `StyleClass` 走（`StyleClass = 'ghost'` 时按钮用主题的 ghost 按钮样式）。按钮上的图标依次取：`Images` 里的图；主题令牌 `--glyph-db-first`、`--glyph-db-prior`、`--glyph-db-next`、`--glyph-db-last`、`--glyph-db-insert`、`--glyph-db-delete`、`--glyph-db-edit`、`--glyph-db-post`、`--glyph-db-cancel`、`--glyph-db-refresh` 指定的图标字体字形；都没有时用内置的矢量图形，颜色取按钮的文字色。图标大小是 `--dbnav-glyph-size`，按钮间距是 `--dbnav-gap`。
+
+导航条本身默认不画边框、不铺底色，按钮直接落在父控件的底面上（基础层 `themes/light.tycss` 里的 `TyDBNavigator { background: transparent; border-width: 0; }`，所有内置主题都沿用）；某个导航条想要边框，就在它的 `StyleOverride` 里写 `border-width: 1px;`，颜色沿用工具条的 `border-color`，要换色再加一句 `border-color: …;`。
 
 ---
 
@@ -172,6 +178,7 @@ TyDBEdit { background: mix(var(--surface), var(--accent), 6%); }
 - **空值**按第 5 节的表处理。
 - **刷新按钮**在数据集打开且不在编辑中时可用（LCL 普通按钮那一套要求 `CanModify`，可聚焦按钮那一套是这个规则，这里取后者：只读数据集同样需要刷新）。
 - **组合框打字立即进入编辑**，不像 LCL 那样投递一条消息延后处理。
+- 数据表格和 LCL `TDBGrid` 的差别单独列在 [dbgrid.md 第 13 节](dbgrid.md#13-和-lcl-的-tdbgrid-不一样的地方)。
 
 ---
 

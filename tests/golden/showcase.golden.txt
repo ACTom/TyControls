@@ -151,7 +151,7 @@ TyTrackGroove||4 => pres[0,4,] bg=k1/FFE1E0EB ut=0 txt=00000000 bd=00000000/0/0 
 TyTrackThumb||0 => pres[0,4,] bg=k2/FF894EEF>FF7C3AED@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTrackThumb||1 => pres[0,4,] bg=k2/FF915AF0>FF8142EE@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTrackThumb||2 => pres[0,4,] bg=k1/FF7034D5 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyTrackThumb||3 => pres[0,4,] bg=k2/FF894EEF>FF7C3AED@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTrackThumb||3 => pres[0,4,12,] bg=k2/FF894EEF>FF7C3AED@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FFFFFFFF/2/2
 TyTrackThumb||4 => pres[0,4,] bg=k2/FF894EEF>FF7C3AED@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyLinkLabelLink||0 => pres[1,] bg=k0 ut=0 txt=FF7C3AED bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyLinkLabelLink||1 => pres[1,] bg=k0 ut=0 txt=FF7C3AED bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

@@ -10,8 +10,8 @@ $classes = @(
   'TTyButton',
   'TTyGlyphButton','TTyGlyphContainerButton','TTySpeedButton','TTyDropDownButton','TTyMenuButton','TTyColorButton','TTyButtonGroup',
   'TTyRibbon','TTyRibbonPage','TTyRibbonGroup','TTyRibbonAppMenu','TTyRibbonQuickAccess','TTyRibbonGallery','TTyRibbonBackstage',
-  'TTyLabel','TTyEdit','TTyNumericEdit','TTyCurrencyEdit','TTyMaskEdit','TTyURLEdit','TTyComboEdit','TTyTrackEdit','TTyColorBox','TTyColorComboBox','TTyMRUComboBox','TTyComboBoxEx','TTyOfficeListBox','TTyOfficeComboBox','TTyColorGrid','TTyLColorPicker','TTyHSColorPicker','TTyAdvancedListBox','TTyAdvancedComboBox','TTyCheckComboBox','TTyValueListEditor','TTyCalculator','TTyCalcEdit','TTyCalcCurrencyEdit','TTyColorListBox','TTyFontComboBox','TTyFontListBox','TTyFontSizeComboBox','TTyCheckListBox','TTyCheckBox','TTyRadioButton',
-  'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyActivityBar','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyGearActivityIndicator','TTyUpDown','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
+  'TTyLabel','TTyEdit','TTyNumericEdit','TTyCurrencyEdit','TTyMaskEdit','TTyURLEdit','TTyComboEdit','TTyTrackEdit','TTyColorBox','TTyColorComboBox','TTyMRUComboBox','TTyComboBoxEx','TTyOfficeListBox','TTyOfficeComboBox','TTyColorGrid','TTyLColorPicker','TTyHSColorPicker','TTyAdvancedListBox','TTyAdvancedComboBox','TTyCheckComboBox','TTyValueListEditor','TTyPropertyGrid','TTyCalculator','TTyCalcEdit','TTyCalcCurrencyEdit','TTyColorListBox','TTyFontComboBox','TTyFontListBox','TTyFontSizeComboBox','TTyCheckListBox','TTyCheckBox','TTyRadioButton',
+  'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyRangeTrackBar','TTyMultiTrackBar','TTyGradientTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyActivityBar','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyGearActivityIndicator','TTyUpDown','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
   'TTyPageControl','TTyTabSheet','TTyTabSet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit','TTyFloatSpinEdit',
   'TTyMemo','TTyTerminalView','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu','TTyImagesMenu','TTyMenuEx',
   'TTyNativeStyler','TTyHint','TTyBalloonHint',
@@ -49,7 +49,7 @@ $classes = @(
   'TTyPagination','TTySteps','TTyBreadcrumb',
   'TTyTransfer','TTyTreeSelect','TTyCascader','TTyPopover',
   # Data-aware controls (tycontrols_db, 'TyControls Data Controls')
-  'TTyDBNavigator','TTyDBText','TTyDBEdit','TTyDBMaskEdit','TTyDBNumericEdit','TTyDBCurrencyEdit','TTyDBSpinEdit','TTyDBFloatSpinEdit','TTyDBMemo','TTyDBCheckBox','TTyDBToggleSwitch','TTyDBRadioGroup','TTyDBSegmented','TTyDBRating','TTyDBComboBox','TTyDBLookupComboBox','TTyDBListBox','TTyDBLookupListBox','TTyDBImage','TTyDBDateTimePicker','TTyDBCalendar'
+  'TTyDBNavigator','TTyDBText','TTyDBEdit','TTyDBMaskEdit','TTyDBNumericEdit','TTyDBCurrencyEdit','TTyDBSpinEdit','TTyDBFloatSpinEdit','TTyDBMemo','TTyDBCheckBox','TTyDBToggleSwitch','TTyDBRadioGroup','TTyDBSegmented','TTyDBRating','TTyDBComboBox','TTyDBLookupComboBox','TTyDBListBox','TTyDBLookupListBox','TTyDBImage','TTyDBDateTimePicker','TTyDBCalendar','TTyDBGrid'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY

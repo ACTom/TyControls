@@ -1,0 +1,116 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-propertygrid_example 4.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid=English source) ---
+
+#: tmainform.caption
+msgid "Property grid example"
+msgstr "属性表格示例"
+
+#: tmainform.bar.caption
+msgid "Property grid  ·  TyControls"
+msgstr "属性表格  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.swevents.caption
+msgid "Show events"
+msgstr "显示事件"
+
+#: tmainform.swwritable.caption
+msgid "Writable only"
+msgstr "只看可写的"
+
+#: tmainform.swcategories.caption
+msgid "Categories"
+msgstr "分类"
+
+#: tmainform.lblfilter.caption
+msgid "Filter"
+msgstr "筛选"
+
+#: tmainform.filteredit.texthint
+msgid "Part of a property name"
+msgstr "属性名的一部分"
+
+#: tmainform.lblpick.caption
+msgid "Click a control to inspect it, Ctrl+click to add it:"
+msgstr "点一个控件，右边就列出它的属性；按住 Ctrl 点可以多选："
+
+#: tmainform.button1.caption
+msgid "Button"
+msgstr "按钮"
+
+#: tmainform.edit1.text
+msgid "Some text"
+msgstr "一段文字"
+
+#: tmainform.checkbox1.caption
+msgid "Check box"
+msgstr "复选框"
+
+#: tmainform.panel1.caption
+msgid "Panel"
+msgstr "面板"
+
+#: tmainform.stringgrid1.header.columns.name
+msgid "Name"
+msgstr "姓名"
+
+#: tmainform.stringgrid1.header.columns.city
+msgid "City"
+msgstr "城市"
+
+#: tmainform.stringgrid1.header.columns.score
+msgid "Score"
+msgstr "得分"
+
+#: tmainform.lblstatus.caption
+msgid "Inspecting Button1"
+msgstr "正在查看 Button1"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rstitleone
+#, object-pascal-format
+msgid "Property grid  ·  %s"
+msgstr "属性表格  ·  %s"
+
+#: umain.rstitlemany
+#, object-pascal-format
+msgid "Property grid  ·  %d controls"
+msgstr "属性表格  ·  %d 个控件"
+
+#: umain.rsinspecting
+#, object-pascal-format
+msgid "Inspecting %s"
+msgstr "正在查看 %s"
+
+#: umain.rsinspectingmany
+#, object-pascal-format
+msgid "Inspecting %d controls: what they all have, written into each"
+msgstr "正在查看 %d 个控件：只列它们都有的属性，改了每个都写"
+
+#: umain.rschanged
+#, object-pascal-format
+msgid "%s.%s changed"
+msgstr "已修改 %s.%s"
+
+#: umain.rsrefused
+#, object-pascal-format
+msgid "%s was not changed: %s"
+msgstr "%s 没有改：%s"
+
+#: umain.rscolumns
+msgid "The string grid did that itself, so its cells move with the columns"
+msgstr "这一步是字符串表格自己做的，单元格跟着列一起动"

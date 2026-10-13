@@ -440,6 +440,9 @@ type
     property ValueUnchecked: string read FValueUnchecked write FValueUnchecked;
   end;
 
+  { The column class a grid's header creates (TTyCustomGrid.ColumnClass). }
+  TTyGridColumnClass = class of TTyGridColumn;
+
   { 一格显示成什么。放在这里(而不是 TTyStringGrid 那段)是因为基类要用它
     判断按钮格的命中矩形。 }
 
@@ -1543,6 +1546,21 @@ type
       而"那扇窗到底开不开"只能拿探针去数,数不到就没法判它是守卫还是死码
       (测量记录在实现处)。没有这个座,SyncScrollBars 那一条就只能靠读代码猜。 }
     procedure SyncScrollBars; virtual;
+    { The vertical bar moved under the user's hand (a drag, a click on the track or an
+      arrow, a wheel or key routed to the bar): APosition is the bar's new Position. The
+      default scrolls the grid there by pixels, which is all the grid ever did. A subclass
+      that scrolls by something else (a data-aware grid moving whole records) overrides it
+      and sets the bar's range and position itself in UpdateScrollBars / SyncScrollBars.
+      Not called while the grid itself is pushing a value into the bar; a subclass that
+      writes the bar's Position outside those two methods guards its own override. }
+    procedure DoVScroll(APosition: Integer); virtual;
+    { The column class the header is built with. Called once, from the constructor, before
+      any field of a subclass has been set up -- an override returns a class and touches
+      nothing else. }
+    function ColumnClass: TTyGridColumnClass; virtual;
+    { The collection class the header is built with -- a TTyColumns descendant with typed
+      accessors of its own (a data-aware grid's Columns). Same rules as ColumnClass. }
+    function ColumnsClass: TTyColumnsClass; virtual;
     procedure Resize; override;
     { An open in-place editor follows its cell after the layout moved: a scroll, a column
       or row size, the control's own size. Called where those settle (UpdateScrollBars,
@@ -1550,6 +1568,17 @@ type
       layout without passing through them is caught on the next frame. The base grid has
       no editor. }
     procedure EditorFollowCell; virtual;
+    { Header gestures that have finished, for a subclass to report in its own terms (a
+      data-aware grid's OnTitleClick, OnColumnSized, OnColumnMoved). The defaults do nothing;
+      the grid's own events are unchanged and fire as before.
+      HeaderSectionClicked: a left press on the body of section ACol (not on a divider) was
+      released on the same section without dragging the column away -- a click on the title.
+      ColumnSized: the user let go of a column's divider after dragging ACol's width.
+      ColumnMoved: the user's drag has just moved a column from display position AFromPos to
+      AToPos (Header.Columns' Position). }
+    procedure HeaderSectionClicked(ACol: Integer); virtual;
+    procedure ColumnSized(ACol: Integer); virtual;
+    procedure ColumnMoved(AFromPos, AToPos: Integer); virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1584,8 +1613,9 @@ type
     function DisplayRowCount: Integer; virtual;
 
     { How many rows the VIEWPORT currently holds -- a viewport metric, the same thing
-      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). This is
-      the number PageUp/PageDown maths is written against.
+      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). LCL's own
+      PageUp/PageDown do NOT page by it: they count only the rows FULLY on screen -- see
+      PageRowStep (#57).
 
       It is NOT "how many rows survived the filter". That is DisplayRowCount (or its
       alias FilteredRowCount), and it used to be what this name returned on
@@ -1601,6 +1631,13 @@ type
       overlap is dropped when the whole grid fits, exactly as LCL's
       `if GridHeight<=ClientHeight then inc(Result)` does. }
     function VisibleRowCount: Integer;
+    { How many rows PageUp/PageDown move: the rows FULLY on screen, minus one, exactly as
+      LCL's TCustomGrid pages (grids.pas VK_PRIOR/VK_NEXT: FullVisibleGrid.Bottom -
+      FullVisibleGrid.Top). From the top row of a screen, PageDown lands on its last full
+      row, and each page keeps one row of overlap. A partly shown row at either edge does
+      not count, so a page never jumps past what the user could read. At least 1: LCL moves
+      nothing when fewer than two rows fit, which leaves the key dead. (#57) }
+    function PageRowStep: Integer;
 
     { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
       (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
@@ -2153,6 +2190,11 @@ type
       没有批注的表不该为此每格建一个临时键(与 FAttrs.IsEmpty 同一条理由)。 }
     FHasComments:    Boolean;
     FPickEditor: TTyComboBox;
+    { A pick from the open list ended the edit: the grid takes the focus when the list has
+      closed (PickEditorChange / PickEditorCloseUp, #59). Only a pick: on win32 a list left
+      for another control closes before the edit ends, so "not editing" alone would hold
+      there, but the flag does not depend on the order a widgetset closes things in. }
+    FPickEndedTheEdit: Boolean;
     FOnGetPickList: TTyGridGetPickListEvent;
     FOnCreateEditLink: TTyGridCreateEditLinkEvent;
     FOnClipboardCopy:  TTyGridClipboardEvent;
@@ -2297,6 +2339,29 @@ type
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
     function WidenEditorRect(ACol, ARow: Integer; const ARect: TRect): TRect;
     function DoBeginEdit(ACol, ARow: Integer): Boolean;
+    { The value a cell EDITS as, and where an edit of it lands. Every editor opens with
+      GetEditText (text, pick list, date, time, spin, slider, memo, mask, calculator, a
+      host EditLink) and every user edit is written through SetEditText: the editor's
+      commit, the check box and colour toggles, the ellipsis and the rating stars, paste,
+      the fill handle, cut, find-and-replace, ClearRowContents / ClearColContents. The
+      defaults read and write Cells, so a plain string grid is exactly what it was.
+
+      A subclass that keeps its values elsewhere (a data-aware grid) overrides both and
+      never touches the cell store. Undo is still recorded against the store, through
+      Cells; such a subclass sets UndoLimit := 0. What stays on the store: ClearCells
+      (it empties the store as a whole), the row and column moves and swaps, a physical
+      sort, CSV loading and undo / redo themselves -- those ARE operations on the store. }
+    function GetEditText(ACol, ARow: Integer): string; virtual;
+    procedure SetEditText(ACol, ARow: Integer; const AText: string); virtual;
+    { The cursor has moved: MoveCursor changed Col or Row, from (AOldCol, AOldRow). Not
+      called when nothing moved, nor when OnSelectCell (or a refused edit) kept it where
+      it was. The default does nothing. }
+    procedure CursorMoved(AOldCol, AOldRow: Integer); virtual;
+    { May the user's toggle of a check box cell go ahead? Asked by ToggleCellChecked after
+      OnCanToggleCheck said yes, before anything is read or written; False drops the toggle
+      whole -- no OnCellEdited, no write, no OnCheckBoxChange. The default says yes. A
+      subclass whose values can refuse a change (a dataset that will not edit) answers it. }
+    function CanToggleCellCheck(ACol, ARow: Integer): Boolean; virtual;
     procedure RecordRowCountUndo(AOldCount: Integer); override;
     procedure OpenUndoGroup; override;
     procedure CloseUndoGroup; override;
@@ -2307,6 +2372,12 @@ type
     function SelectionBoundsRect: TRect;
     function ArithmeticStep(ACol, AFrom, ATo: Integer;
       out AFirst, AStep: Integer): Boolean;
+    { #67: the open edit is in the mask editor and leaves a required slot empty. }
+    function MaskUnfilled: Boolean;
+    { #67: report the mask's own error for an edit that was just refused because of it. It is
+      raised, so call it only from a key or mouse handler: LCL reports it from there as it
+      reports the mask editor's own -- or from a post the refusal stops (the DB grid). }
+    procedure ReportUnfilledMask;
   private
     FSkipReadOnly: Boolean;
     { 窗体文件里先于列 / 行数读到的 Col / Row,留给 Loaded 落位。见 SetCol。 }
@@ -2344,6 +2415,7 @@ type
     procedure DateEditorExit(Sender: TObject);
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
+    procedure PickEditorCloseUp(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     { Esc ONLY, for the editors that cannot share EditorKeyDown because they spend Enter on
       their own content: the memo (Enter is a newline), the spin/slider/calc/date pickers
@@ -2364,6 +2436,8 @@ type
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
+    { #52: an arrow one of the grid's own children leaves standing. See the implementation. }
+    function ChildKey(var Message: TLMKey): Boolean; override;
     function  EditorTargetRect: TRect;
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
@@ -2453,6 +2527,9 @@ type
     { 星级格里第 AStar 颗星(1-based)的矩形。绘制与命中共用它。 }
     function RatingStarRect(ACol, ARow, AStar: Integer): TRect;
     procedure SetRatingByPoint(ACol, ARow, X, Y: Integer); override;
+    { 星级格写成 AValue 分(0..TyGridRatingMax):点星和敲数字都走这里,
+      照常经 OnCellEdited(可否决)、SetEditText、OnRatingChange。 }
+    procedure SetRatingValue(ACol, ARow, AValue: Integer); virtual;
     { 触发省略号按钮:问宿主要新值,接受就写回(照常走 OnCellEdited)。 }
     procedure InvokeEllipsis(ACol, ARow: Integer); virtual;
     procedure DblClick; override;
@@ -2496,6 +2573,9 @@ type
       the grid is unfocused and HideSelectionWhenInactive is on. The fill and the ink read it
       from here, so they cannot come from two different states. }
     function  SelectionFillStyle: TTyStyleSet;
+    { #60: the cursor cell keeps its own look (TyGridActiveCell) instead of the selection's,
+      because the selection holds more than that one cell. }
+    function  CursorStandsOut(ACol, ARow: Integer): Boolean;
     procedure EditorFollowCell; override;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
@@ -3617,6 +3697,41 @@ const
   { 星级的满分。绘制与命中都用它,别各写一个 5。 }
   TyGridRatingMax = 5;
 
+type
+  { UTF8KeyPress is protected on TWinControl: TypeIntoCell hands the key that opened an
+    editor to it through this. }
+  TTyEditorKeyAccess = class(TWinControl);
+
+  { #67. The grid's mask editor. A mask editor checks itself when it loses the focus and
+    raises on a required slot left empty (maskedit.md 5.2) -- in a cell, at the wrong times.
+    Hiding the editor at the end of an edit ran the check: on a value being thrown away, or
+    one the grid had already refused. Leaving the grid raised it in the middle of LCL's focus
+    change, which then never told the grid the focus had gone, and an editor was left open on
+    a grid without the focus. Here the grid owns the check: ValidateEdit raises only when the
+    grid reports an edit it refused (Report). }
+  TTyGridMaskEdit = class(TTyMaskEdit)
+  private
+    FReporting: Boolean;
+  public
+    procedure ValidateEdit; override;
+    procedure Report;
+  end;
+
+procedure TTyGridMaskEdit.ValidateEdit;
+begin
+  if FReporting then inherited ValidateEdit;
+end;
+
+procedure TTyGridMaskEdit.Report;
+begin
+  FReporting := True;
+  try
+    ValidateEdit;
+  finally
+    FReporting := False;
+  end;
+end;
+
 { 过滤表达式的存储格式是 '<op序号>|<文本>' —— 一条字符串装下两样东西,
   沿用既有的 name=value 存储,不必再开一张表。 }
 function TyGridEncodeFilter(AOp: TTyGridFilterOp; const AText: string): string;
@@ -4173,7 +4288,7 @@ begin
     的点击取焦点是拿 TabStop 当闸门的。放到基类,两个派生网格一起对。 }
   TabStop := True;
   { 让表头造网格自己的列类。 }
-  FHeader := TTyHeader.Create(TTyGridColumn);
+  FHeader := TTyHeader.Create(ColumnClass, ColumnsClass);
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;
   FDefaultRowHeight := 22;              { fallback; unused while FDefaultRowHeightExplicit=False }
@@ -4557,7 +4672,22 @@ end;
 procedure TTyCustomGrid.VScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
-  ScrollY := FVScroll.Position;   { 走收口点,拿到脏区重绘 }
+  DoVScroll(FVScroll.Position);
+end;
+
+procedure TTyCustomGrid.DoVScroll(APosition: Integer);
+begin
+  ScrollY := APosition;   { 走收口点,拿到脏区重绘 }
+end;
+
+function TTyCustomGrid.ColumnClass: TTyGridColumnClass;
+begin
+  Result := TTyGridColumn;
+end;
+
+function TTyCustomGrid.ColumnsClass: TTyColumnsClass;
+begin
+  Result := TTyColumns;
 end;
 
 procedure TTyCustomGrid.HScrollChange(Sender: TObject);
@@ -4610,6 +4740,18 @@ begin
 end;
 
 procedure TTyCustomGrid.EditorFollowCell;
+begin
+end;
+
+procedure TTyCustomGrid.HeaderSectionClicked(ACol: Integer);
+begin
+end;
+
+procedure TTyCustomGrid.ColumnSized(ACol: Integer);
+begin
+end;
+
+procedure TTyCustomGrid.ColumnMoved(AFromPos, AToPos: Integer);
 begin
 end;
 
@@ -5102,6 +5244,10 @@ function TTyCustomGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   step: Integer;
 begin
+  { The application's OnMouseWheel, then OnMouseWheelUp/Down -- TControl fires them -- and a
+    handler that sets Handled keeps the notch, as in LCL's TCustomGrid. This override never
+    called inherited, so none of the three ever fired (#62). }
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   { 一格滚轮走三行 —— 与列表/树保持一致的手感。 }
   step := 3 * ScaleI(GetDefaultRowHeight);
   if WheelDelta > 0 then SetScrollY(FScrollY - step)
@@ -6514,6 +6660,30 @@ begin
   if Result < 0 then Result := 0;
 end;
 
+function TTyCustomGrid.PageRowStep: Integer;
+var
+  M: TTyGridMetrics;
+  first, last, rowTop, rowH, fixedTop, fixedH, viewTop, viewBottom: Integer;
+  body: TRect;
+begin
+  Result := 1;
+  M := GridMetrics;
+  if not TyGridVisibleRows(M, first, last) then Exit;
+  { The body pane's window in content coordinates, as TyGridVisibleRows reads it: the
+    scroll offset past the fixed rows, as tall as the pane. A row is fully on screen when
+    its whole extent lies inside. }
+  body := TyGridPaneRect(M, gpBody);
+  fixedTop := 0;
+  if M.FixedRows > 0 then TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
+  viewTop := M.ScrollY + fixedTop;
+  viewBottom := viewTop + (body.Bottom - body.Top);
+  TyGridRowExtent(first, M, rowTop, rowH);
+  if rowTop < viewTop then Inc(first);
+  TyGridRowExtent(last, M, rowTop, rowH);
+  if rowTop + rowH > viewBottom then Dec(last);
+  if last - first > Result then Result := last - first;
+end;
+
 function TTyCustomGrid.GetLeftCol: Integer;
 var
   i, l, w, frozen: Integer;
@@ -7074,7 +7244,7 @@ end;
 
 procedure TTyCustomGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  target, delta, newSize: Integer;
+  target, delta, newSize, fromPos: Integer;
   allow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
@@ -7152,10 +7322,12 @@ begin
       if Assigned(FOnColumnMove) then FOnColumnMove(Self, FDragCol, target, allow);
       if allow then
       begin
+        fromPos := TTyColumn(FHeader.Columns.Items[FDragCol]).Position;
         FHeader.Columns.AdjustPosition(TTyColumn(FHeader.Columns.Items[FDragCol]),
           TTyColumn(FHeader.Columns.Items[target]).Position);
         FDragStartX := X;
         Invalidate;
+        ColumnMoved(fromPos, TTyColumn(FHeader.Columns.Items[FDragCol]).Position);
       end;
     end;
   end;
@@ -7163,7 +7335,20 @@ end;
 
 procedure TTyCustomGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
+var
+  clicked, sized: Integer;
+  hit: TTyGridHit;
 begin
+  { What a subclass hears about (HeaderSectionClicked / ColumnSized), worked out before the
+    gesture's state is reset below; told after it, so the grid is at rest again. }
+  clicked := -1;
+  if (Button = mbLeft) and (FPressedHeaderCol >= 0) and not FHeaderDragMoved then
+  begin
+    hit := CellAt(X, Y);
+    if (hit.Part = ghpHeader) and (hit.Col = FPressedHeaderCol) then
+      clicked := FPressedHeaderCol;
+  end;
+  sized := FResizeCol;
   { 拖完了才发"结束"事件 —— 宿主拿它保存列宽偏好,拖动过程中发是噪音。 }
   if (FResizeCol >= 0) and Assigned(FOnEndColumnSize) then
     FOnEndColumnSize(Self, FResizeCol,
@@ -7184,6 +7369,8 @@ begin
     if goHeaderPushedLook in Options then Invalidate;
   end;
   inherited MouseUp(Button, Shift, X, Y);
+  if sized >= 0 then ColumnSized(sized);
+  if clicked >= 0 then HeaderSectionClicked(clicked);
 end;
 
 function TTyCustomGrid.ShowsFilterButton(ACol: Integer): Boolean;
@@ -8373,7 +8560,7 @@ begin
   FCalcEditor.OnKeyDown := @EditorCancelKeyDown;
   FCalcEditor.OnExit := @EditorExit;
 
-  FMaskEditor := TTyMaskEdit.Create(Self);
+  FMaskEditor := TTyGridMaskEdit.Create(Self);   { #67: the grid owns its exit check }
   FMaskEditor.Parent := Self;
   FMaskEditor.Visible := False;
   FMaskEditor.ControlStyle := FMaskEditor.ControlStyle + [csNoDesignVisible];
@@ -8388,6 +8575,7 @@ begin
   FPickEditor.OnKeyDown := @PickEditorKeyDown;
   FPickEditor.OnChange := @PickEditorChange;
   FPickEditor.OnExit := @PickEditorExit;
+  FPickEditor.OnCloseUp := @PickEditorCloseUp;
 
   { 第三个复用编辑器:日期选择器。 }
   FDateEditor := TTyDateTimePicker.Create(Self);
@@ -8415,6 +8603,7 @@ begin
   FPickEditor.OnKeyDown := nil;
   FPickEditor.OnChange := nil;
   FPickEditor.OnExit := nil;
+  FPickEditor.OnCloseUp := nil;
   FDateEditor.OnKeyDown := nil;
   FDateEditor.OnExit := nil;
   FFilterEditor.OnKeyDown := nil;
@@ -9140,7 +9329,7 @@ begin
   try
     for r := AFrom to AFrom + ACount - 1 do
       for c := 0 to Header.Columns.Count - 1 do
-        Cells[c, r] := '';
+        SetEditText(c, r, '');
   finally
     EndUpdate;
   end;
@@ -9160,7 +9349,7 @@ begin
   try
     for c := AFrom to AFrom + ACount - 1 do
       for r := 0 to RowCount - 1 do
-        Cells[c, r] := '';
+        SetEditText(c, r, '');
   finally
     EndUpdate;
   end;
@@ -9312,6 +9501,20 @@ begin
     Result := GetCells(ACol, ARow);
 end;
 
+function TTyCustomStringGrid.GetEditText(ACol, ARow: Integer): string;
+begin
+  Result := GetCells(ACol, ARow);
+end;
+
+procedure TTyCustomStringGrid.SetEditText(ACol, ARow: Integer; const AText: string);
+begin
+  Cells[ACol, ARow] := AText;
+end;
+
+procedure TTyCustomStringGrid.CursorMoved(AOldCol, AOldRow: Integer);
+begin
+end;
+
 procedure TTyCustomStringGrid.SetSelectionMode(AValue: TTyGridSelectionMode);
 begin
   if FSelectionMode = AValue then Exit;
@@ -9383,6 +9586,7 @@ end;
 procedure TTyCustomStringGrid.MoveCursor(ACol, ARow: Integer);
 var
   canSel: Boolean;
+  oldCol, oldRow: Integer;
 begin
   { 钳制到合法范围 —— 越界的光标会让绘制与命中都失去参照。 }
   if ACol < 0 then ACol := 0;
@@ -9418,6 +9622,8 @@ begin
   if Assigned(FOnSelectCell) then FOnSelectCell(Self, ACol, ARow, canSel);
   if not canSel then Exit;
 
+  oldCol := FCol;
+  oldRow := FRow;
   FCol := ACol;
   FRow := ARow;
 
@@ -9433,6 +9639,8 @@ begin
   { 光标走到哪,视口跟到哪 —— 除非这一次是被 goDontScrollPartCell 摁住的点击。 }
   if not FSuppressScrollIntoView then ScrollIntoView(FCol, FRow);
   Invalidate;
+  { The hidden-column and read-only skips above can land the cursor back where it was. }
+  if (FCol <> oldCol) or (FRow <> oldRow) then CursorMoved(oldCol, oldRow);
 end;
 
 procedure TTyCustomStringGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -9452,6 +9660,7 @@ begin
   begin
     FGestureRefused := True;
     RefocusEditor;
+    ReportUnfilledMask;   { #67 }
     Exit;
   end;
   inherited MouseDown(Button, Shift, X, Y);
@@ -9726,6 +9935,16 @@ begin
   if Key < #32 then Exit;             { 控制字符不算录入 }
   if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
 
+  { 星级格:敲数字就是几分(#61),0 清空,超过 TyGridRatingMax 的不理。不开编辑器,
+    光标也不动 —— 连着录入时和文本格一样,敲完按 Enter / ↓ 去下一行。 }
+  if EditorKindFor(FCol, FRow) = gekRating then
+  begin
+    if (Key >= '0') and (Key <= Chr(Ord('0') + TyGridRatingMax)) then
+      SetRatingValue(FCol, FRow, Ord(Key) - Ord('0'));
+    Key := #0;
+    Exit;
+  end;
+
   { 按键级过滤:非法字符连编辑都不进,而不是等提交时再退回 ——
     "敲进去了又被弹回来"比"根本敲不进去"更让人困惑。 }
   vc := ValidCharsFor(FCol, FRow);
@@ -9740,9 +9959,14 @@ begin
 end;
 
 function TTyCustomStringGrid.TypeIntoCell(const AChar: string): Boolean;
+var
+  key: TUTF8Char;
+  was: string;
+  home: Word;
 begin
   Result := BeginEdit;
   if not Result then Exit;
+  key := AChar;
   { 这一笔就是新内容的第一个字符 —— 覆盖原值,与 Excel 一致。 }
   if FEditor.Visible then
   begin
@@ -9751,7 +9975,54 @@ begin
     { AChar 按约定就是**一个**字符,所以光标位置是 1 —— TTyEdit 的 SelStart 数的是
       码点不是字节,一个汉字在这里同样只算 1。 }
     FEditor.SelStart := 1;
-  end;
+  end
+  { #64. Every other editor opened and never saw the key. It now gets it through its own
+    UTF8KeyPress -- the way a real key arrives -- so its own rules decide what the key does:
+    the spin and calculator edits take digits, the mask fills its first slot, the date picker
+    types into a field, the pick list finds the item by its letter (and commits, #59). LCL's
+    grid does the same (grids.pas EditorShowChar -> SendCharToEditor).
+    The key replaces what was there, as above: an editor with a selection selects everything
+    first. (The calculator and the mask, both TTyEdits, have done so already when the focus
+    came from the keyboard, as it did here -- AutoSelect; said again so the replacing does not
+    hang on how the focus arrived. The memo has no AutoSelect.) The spin edit has no
+    selection, so it is emptied -- and given its number back when it does not take the key,
+    or a key it refuses would leave the cell blank.
+    A host editor (OnCreateEditLink) is none of these and keeps the key out: there is no way
+    to hand it one. Neither do the cells with nothing to type into (check box, rating, slider,
+    colour) -- none of these editors is showing for them. }
+  else if FSpinEditor.Visible then
+  begin
+    was := FSpinEditor.Text;
+    FSpinEditor.Text := '';
+    TTyEditorKeyAccess(FSpinEditor).UTF8KeyPress(key);
+    if FSpinEditor.Text = '' then FSpinEditor.Text := was;
+  end
+  else if FMemoEditor.Visible then
+  begin
+    FMemoEditor.SelectAll;
+    TTyEditorKeyAccess(FMemoEditor).UTF8KeyPress(key);
+  end
+  else if FCalcEditor.Visible then
+  begin
+    FCalcEditor.SelectAll;
+    TTyEditorKeyAccess(FCalcEditor).UTF8KeyPress(key);
+  end
+  else if FMaskEditor.Visible then
+  begin
+    FMaskEditor.SelectAll;
+    TTyEditorKeyAccess(FMaskEditor).UTF8KeyPress(key);
+  end
+  else if FDateEditor.Visible then
+  begin
+    { Every date and time cell shares this one picker, and it keeps the field the last edit
+      left it on. The key starts what the cell will hold, so it goes where Home and then the
+      key would put it: into the first field. }
+    home := VK_HOME;
+    TTyEditorKeyAccess(FDateEditor).KeyDown(home, []);
+    TTyEditorKeyAccess(FDateEditor).UTF8KeyPress(key);
+  end
+  else if FPickEditor.Visible then
+    TTyEditorKeyAccess(FPickEditor).UTF8KeyPress(key);
 end;
 
 procedure TTyCustomStringGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
@@ -9811,8 +10082,9 @@ begin
     VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
     VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
     VK_END:   begin MoveCursor(LastVisibleCol, FRow); Key := 0; end;
-    VK_PRIOR: begin MoveCursor(FCol, FRow - 10); Key := 0; end;
-    VK_NEXT:  begin MoveCursor(FCol, FRow + 10); Key := 0; end;
+    { A page, as LCL turns it: the rows fully on screen, minus one (#57). }
+    VK_PRIOR: begin MoveCursor(FCol, FRow - PageRowStep); Key := 0; end;
+    VK_NEXT:  begin MoveCursor(FCol, FRow + PageRowStep); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
     { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
       停在原地会让用户每敲一格都得再按一次方向键。 }
@@ -11332,6 +11604,29 @@ begin
     Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
 end;
 
+{ #60. The selection always holds the cursor cell, and its fill went over that cell with the
+  rest, after the cell backgrounds -- TyGridActiveCell's included. With an opaque fill (the
+  shipped themes have one) a row-select grid showed a band and no cursor, while Left/Right, F2
+  and typing went on working on a cell nobody could see. So whenever the selection holds more
+  than the cursor cell -- a row or column band, a dragged range, cells gathered with Ctrl -- the
+  cursor cell takes no selection layer and keeps its own background and ink. A selection that
+  IS the cursor cell is painted as the selection: there is nothing to tell apart. Off with
+  ShowFocusCell, like the focus background itself. }
+function TTyCustomStringGrid.CursorStandsOut(ACol, ARow: Integer): Boolean;
+var
+  r: TRect;
+begin
+  Result := False;
+  if not FShowFocusCell or not IsActiveCell(ACol, ARow) then Exit;
+  if Length(FSelRects) > 0 then Exit(True);
+  r := ActiveSelectionRect;
+  case FSelectionMode of
+    gsmRow:    Result := (r.Bottom > r.Top) or (Header.Columns.Count > 1);
+    gsmColumn: Result := (r.Right > r.Left) or (DisplayRowCount > 1);
+  else         Result := (r.Bottom > r.Top) or (r.Right > r.Left);
+  end;
+end;
+
 function TTyCustomStringGrid.SelectionInk(ACol, ARow: Integer;
   const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
 var
@@ -11343,6 +11638,7 @@ begin
     还透得出来 —— 文字也保持它自己的。 }
   if AAppearance.HasExplicitBackground then Exit;
   if not IsCellSelected(ACol, ARow) then Exit;
+  if CursorStandsOut(ACol, ARow) then Exit;   { #60: no selection layer, so its own ink }
   selS := SelectionFillStyle;
   { 没有选区底色就没有可配的文字色:主题没定义就什么都不换。 }
   if not ((tpBackground in selS.Present) and (tpTextColor in selS.Present)) then Exit;
@@ -11439,32 +11735,39 @@ begin
   accept := True;
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
-  if accept then Cells[ACol, ARow] := newTxt;
+  if accept then SetEditText(ACol, ARow, newTxt);
 end;
 
 procedure TTyCustomStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
 var
   i: Integer;
+begin
+  for i := 1 to TyGridRatingMax do
+    if PtInRect(RatingStarRect(ACol, ARow, i), Point(X, Y)) then
+    begin
+      SetRatingValue(ACol, ARow, i);
+      Exit;
+    end;
+end;
+
+procedure TTyCustomStringGrid.SetRatingValue(ACol, ARow, AValue: Integer);
+var
   oldTxt, newTxt: string;
   accept: Boolean;
 begin
   if FReadOnly then Exit;
-  for i := 1 to TyGridRatingMax do
-    if PtInRect(RatingStarRect(ACol, ARow, i), Point(X, Y)) then
-    begin
-      oldTxt := GetCellText(ACol, ARow);
-      newTxt := IntToStr(i);
-      if newTxt = oldTxt then Exit;
-      accept := True;
-      if Assigned(FOnCellEdited) then
-        FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
-      if accept then
-      begin
-        Cells[ACol, ARow] := newTxt;
-        if Assigned(FOnRatingChange) then FOnRatingChange(Self, ACol, ARow, i);
-      end;
-      Exit;
-    end;
+  if (AValue < 0) or (AValue > TyGridRatingMax) then Exit;
+  oldTxt := GetCellText(ACol, ARow);
+  newTxt := IntToStr(AValue);
+  if newTxt = oldTxt then Exit;
+  accept := True;
+  if Assigned(FOnCellEdited) then
+    FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+  if accept then
+  begin
+    SetEditText(ACol, ARow, newTxt);
+    if Assigned(FOnRatingChange) then FOnRatingChange(Self, ACol, ARow, AValue);
+  end;
 end;
 
 function TTyCustomStringGrid.RatingStarRect(ACol, ARow, AStar: Integer): TRect;
@@ -11584,6 +11887,11 @@ begin
   Result := cbUnchecked;
 end;
 
+function TTyCustomStringGrid.CanToggleCellCheck(ACol, ARow: Integer): Boolean;
+begin
+  Result := True;
+end;
+
 procedure TTyCustomStringGrid.ToggleCellChecked(ACol, ARow: Integer);
 var
   accept: Boolean;
@@ -11595,6 +11903,7 @@ begin
   accept := True;
   if Assigned(FOnCanToggleCheck) then FOnCanToggleCheck(Self, ACol, ARow, accept);
   if not accept then Exit;
+  if not CanToggleCellCheck(ACol, ARow) then Exit;
 
   oldTxt := GetCellText(ACol, ARow);
   { 写回收敛成本列的词汇;列没定义就还是从前那套 '1'/'2'/''。
@@ -11618,7 +11927,7 @@ begin
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
   if accept then
   begin
-    Cells[ACol, ARow] := newTxt;
+    SetEditText(ACol, ARow, newTxt);
     { 切换成功了才通知 —— 让宿主不用自己再判一次有没有真的变。
       判据是"不等于**未勾的那个词**",不是"不等于空串":列词汇里未勾写成 'N' 时
       空串判法会把 'N' 当成勾上了。词汇没设时 wordU 就是 '',与从前一模一样
@@ -11642,7 +11951,7 @@ begin
   accept := True;
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
-  if accept then Cells[ACol, ARow] := newTxt;
+  if accept then SetEditText(ACol, ARow, newTxt);
 end;
 
 { 省略号按钮:贴在格的右缘,方形。与绘制同源 —— 画在哪就点在哪。 }
@@ -12801,7 +13110,7 @@ begin
       for colIdx := 0 to Header.Columns.Count - 1 do
         if IsCellSelected(colIdx, dataRow)
            and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
-          Cells[colIdx, dataRow] := '';
+          SetEditText(colIdx, dataRow, '');
     end;
   finally
     EndUpdate;
@@ -13644,7 +13953,7 @@ begin
         for r := tgt.Top to tgt.Bottom do
         begin
           if EditorKindFor(c, r) <> gekNone then
-            Cells[c, r] := IntToStr(first + (srcH - 1 + n) * step);
+            SetEditText(c, r, IntToStr(first + (srcH - 1 + n) * step));
           Inc(n);
         end;
       end
@@ -13655,7 +13964,7 @@ begin
         for r := tgt.Top to tgt.Bottom do
         begin
           if EditorKindFor(c, r) <> gekNone then
-            Cells[c, r] := GetCellText(c, src.Top + (idx mod srcH));
+            SetEditText(c, r, GetCellText(c, src.Top + (idx mod srcH)));
           Inc(idx);
         end;
       end;
@@ -14171,8 +14480,8 @@ begin
         cur := GetCellText(c, dataRow);
         if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
         if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
-        if AWholeCell then Cells[c, dataRow] := AReplace
-        else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
+        if AWholeCell then SetEditText(c, dataRow, AReplace)
+        else SetEditText(c, dataRow, StringReplace(cur, AFind, AReplace, flags));
         Inc(Result);
         if not AAll then Exit;
       end;
@@ -14355,7 +14664,7 @@ begin
           FOnBeforePasteCell(Self, FCol + j, targetRow, cellTxt, allow);
         if not allow then Continue;
 
-        Cells[FCol + j, targetRow] := cellTxt;
+        SetEditText(FCol + j, targetRow, cellTxt);
         if Assigned(FOnAfterPasteCell) then
           FOnAfterPasteCell(Self, FCol + j, targetRow);
       end;
@@ -15748,7 +16057,7 @@ begin
       Exit;
     end;
     FEditLink.SetBounds(r);
-    FEditLink.SetValue(Cells[FCol, FRow]);
+    FEditLink.SetValue(GetEditText(FCol, FRow));
     FEditLink.FocusEditor;
     FEditing := True;
     Result := True;
@@ -15769,7 +16078,7 @@ begin
       日期列会永远弹出时间选择器(dtkDate 从前全文件一次都没被赋过)。
       与 PasswordChar 那处是同一条教训。 }
     FDateEditor.Kind := dtkDate;
-    FDateEditor.Date := StrToDateDef(Cells[FCol, FRow], SysUtils.Date);
+    FDateEditor.Date := StrToDateDef(GetEditText(FCol, FRow), SysUtils.Date);
     FDateEditor.BoundsRect := r;
     FDateEditor.Visible := True;
     if HandleAllocated and FDateEditor.CanFocus then FDateEditor.SetFocus;
@@ -15785,7 +16094,7 @@ begin
     { 列级候选项打底,宿主事件可以再改 —— 不接事件也能在设计期把下拉配好。 }
     if GridColumn(FCol) <> nil then FPickEditor.Items.Assign(GridColumn(FCol).PickList);
     if Assigned(FOnGetPickList) then FOnGetPickList(Self, FCol, FRow, FPickEditor.Items);
-    FPickEditor.ItemIndex := FPickEditor.Items.IndexOf(Cells[FCol, FRow]);
+    FPickEditor.ItemIndex := FPickEditor.Items.IndexOf(GetEditText(FCol, FRow));
     FPickEditor.BoundsRect := r;
     FPickEditor.Visible := True;
     if HandleAllocated and FPickEditor.CanFocus then FPickEditor.SetFocus;
@@ -15800,7 +16109,7 @@ begin
     FSpinEditor.Controller := Self.Controller;
     FSpinEditor.MinValue := EditorMinFor(FCol);
     FSpinEditor.MaxValue := EditorMaxFor(FCol);
-    FSpinEditor.Value := StrToIntDef(Trim(Cells[FCol, FRow]), FSpinEditor.MinValue);
+    FSpinEditor.Value := StrToIntDef(Trim(GetEditText(FCol, FRow)), FSpinEditor.MinValue);
     FSpinEditor.BoundsRect := r;
     FSpinEditor.Visible := True;
     if HandleAllocated and FSpinEditor.CanFocus then FSpinEditor.SetFocus;
@@ -15817,7 +16126,7 @@ begin
     FSliderEditor.ShowValue := True;
     FSliderEditor.Min := EditorMinFor(FCol);
     FSliderEditor.Max := EditorMaxFor(FCol);
-    FSliderEditor.Position := StrToIntDef(Trim(Cells[FCol, FRow]), FSliderEditor.Min);
+    FSliderEditor.Position := StrToIntDef(Trim(GetEditText(FCol, FRow)), FSliderEditor.Min);
     FSliderEditor.BoundsRect := r;
     FSliderEditor.Visible := True;
     if HandleAllocated and FSliderEditor.CanFocus then FSliderEditor.SetFocus;
@@ -15830,7 +16139,7 @@ begin
   if EditorKindFor(FCol, FRow) = gekMemo then
   begin
     FMemoEditor.Controller := Self.Controller;
-    FMemoEditor.Text := Cells[FCol, FRow];
+    FMemoEditor.Text := GetEditText(FCol, FRow);
     { 多行编辑器往下撑开一些,否则一行高的格里根本看不出是多行。 }
     FMemoEditor.BoundsRect := Rect(r.Left, r.Top, r.Right,
       Max(r.Bottom, r.Top + ScaleI(72)));
@@ -15846,7 +16155,7 @@ begin
   begin
     FDateEditor.Controller := Self.Controller;
     FDateEditor.Kind := dtkTime;
-    FDateEditor.DateTime := StrToTimeDef(Cells[FCol, FRow], SysUtils.Time);
+    FDateEditor.DateTime := StrToTimeDef(GetEditText(FCol, FRow), SysUtils.Time);
     FDateEditor.BoundsRect := r;
     FDateEditor.Visible := True;
     if HandleAllocated and FDateEditor.CanFocus then FDateEditor.SetFocus;
@@ -15859,7 +16168,7 @@ begin
   if EditorKindFor(FCol, FRow) = gekCalculator then
   begin
     FCalcEditor.Controller := Self.Controller;
-    FCalcEditor.Text := Cells[FCol, FRow];
+    FCalcEditor.Text := GetEditText(FCol, FRow);
     FCalcEditor.BoundsRect := r;
     FCalcEditor.Visible := True;
     if HandleAllocated and FCalcEditor.CanFocus then FCalcEditor.SetFocus;
@@ -15873,7 +16182,7 @@ begin
   begin
     FMaskEditor.Controller := Self.Controller;
     FMaskEditor.Mask := EditMaskFor(FCol);
-    FMaskEditor.Text := Cells[FCol, FRow];
+    FMaskEditor.Text := GetEditText(FCol, FRow);
     FMaskEditor.BoundsRect := r;
     FMaskEditor.Visible := True;
     if HandleAllocated and FMaskEditor.CanFocus then FMaskEditor.SetFocus;
@@ -15894,7 +16203,7 @@ begin
     FEditor.Alignment := taRightJustify
   else
     FEditor.Alignment := taLeftJustify;
-  FEditor.Text := Cells[FCol, FRow];
+  FEditor.Text := GetEditText(FCol, FRow);
   FEditor.MaxLength := MaxEditLengthFor(FCol, FRow);
   FEditor.BoundsRect := r;
   FEditor.Visible := True;
@@ -15908,7 +16217,10 @@ begin
   { 一次只会有一个编辑器可见,所以按可见性挑;日期与时间共用一个控件,得看开编辑时记下的种类
     (从前一律当日期提交,时间格被写成 1899-12-30 —— 见旧 EndEdit 里的注释)。 }
   if FEditLink <> nil then Exit(FEditLink.GetValue);
-  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.Value));
+  { #66. Not Value: the number being typed sits in the spin edit's text until the spin edit
+    commits it -- on Enter, or in its DoExit, which runs after the OnExit that ends the edit
+    here. Read it the way that commit will, clamped to the range. }
+  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.StrToValue(FSpinEditor.Text)));
   if FSliderEditor.Visible then Exit(IntToStr(FSliderEditor.Position));
   if FMemoEditor.Visible   then Exit(FMemoEditor.Text);
   if FMaskEditor.Visible   then Exit(FMaskEditor.Text);
@@ -15923,7 +16235,7 @@ begin
   if FPickEditor.Visible then
   begin
     if FPickEditor.ItemIndex >= 0 then Exit(FPickEditor.Items[FPickEditor.ItemIndex]);
-    Exit(Cells[FEditCol, FEditRow]);   { 没选 = 没改 }
+    Exit(GetEditText(FEditCol, FEditRow));   { 没选 = 没改 }
   end;
   Result := FEditor.Text;
 end;
@@ -15937,9 +16249,12 @@ begin
   if not FEditing then Exit;
   if FEndingEdit then Exit;
   if not ACommit then begin EndEdit(False); Exit; end;   { 放弃从不被否决 }
+  { #67. A required slot left empty is refused the way OnValidateCell refuses a value. The
+    gesture that asked reports it (ReportUnfilledMask); this only answers. }
+  if MaskUnfilled then Exit(False);
   if Assigned(FOnValidateCell) then
   begin
-    oldTxt := Cells[FEditCol, FEditRow];
+    oldTxt := GetEditText(FEditCol, FEditRow);
     newTxt := PendingEditText;
     if newTxt <> oldTxt then          { 没改过的格永远可以离开 —— 不为文件里带来的旧脏值困住用户 }
     begin
@@ -15962,7 +16277,7 @@ end;
 procedure TTyCustomStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
-  accept, valid, preValidated: Boolean;
+  accept, valid, preValidated, maskRefused: Boolean;
 begin
   { 先收旗子再过守卫:TryEndEdit 举了旗又被守卫弹回来的话,旗不能留到下一次。 }
   preValidated := FValidatedPending;
@@ -15975,8 +16290,10 @@ begin
   try
     { **先取值,再拆**。宿主 EditLink 的控件一释放值就没了;其它编辑器也没理由等隐藏之后才读。
       取值走 PendingEditText —— 校验时宿主看到的字符串和这里写回的是同一个。 }
-    oldTxt := Cells[FEditCol, FEditRow];
+    oldTxt := GetEditText(FEditCol, FEditRow);
     if ACommit then newTxt := PendingEditText else newTxt := oldTxt;
+    { #67. Not written, even by a close that nothing can refuse. }
+    maskRefused := ACommit and MaskUnfilled;
     FEditing := False;
     if FEditLink <> nil then
     begin
@@ -15994,7 +16311,7 @@ begin
     FEditor.Visible := False;
     if ACommit and (newTxt <> oldTxt) then
     begin
-      accept := True;
+      accept := not maskRefused;
       { 数值列:非法值一律不写回(总比把 'abc' 存进金额列强)。 }
       if (EditorKindFor(FEditCol, FEditRow) = gekNumeric)
          and (newTxt <> '') and (StrToFloatDef(newTxt, MaxDouble) = MaxDouble) then
@@ -16009,7 +16326,7 @@ begin
       end;
       if Assigned(FOnCellEdited) then
         FOnCellEdited(Self, FEditCol, FEditRow, oldTxt, newTxt, accept);
-      if accept then Cells[FEditCol, FEditRow] := newTxt;
+      if accept then SetEditText(FEditCol, FEditRow, newTxt);
     end;
     Invalidate;
   finally
@@ -16044,6 +16361,25 @@ begin
     父窗体上抛 "Can not focus"(无头运行的窗体从没 Show 过)。与 DoBeginEdit 给编辑器
     SetFocus 时的守卫一字不差。 }
   if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
+end;
+
+function TTyCustomStringGrid.MaskUnfilled: Boolean;
+begin
+  { Changed or not (#69): a value that does not fill the mask is not written, whether typed
+    now or stored that way -- it came in from a file, or the cell is empty. #67 let an
+    untouched one through, and its commit wrote the mask's display of it back (12 became
+    12_-____). Escape is the way out.
+    The mask is asked for first: with none, IsComplete answers False (no slot is filled),
+    and every edit would be refused with nothing to report -- ValidateEdit has no mask to
+    report against. The editor shows only while an edit is open, and never beside a host's. }
+  Result := FMaskEditor.Visible and (FMaskEditor.Mask <> '')
+    and not FMaskEditor.IsComplete;
+end;
+
+procedure TTyCustomStringGrid.ReportUnfilledMask;
+begin
+  { The mask editor's own error, the one it raises when the focus leaves it unfilled. }
+  if MaskUnfilled then TTyGridMaskEdit(FMaskEditor).Report;
 end;
 
 { Where the open editor belongs now: on its cell's visible part, widened as BeginEdit
@@ -16096,14 +16432,73 @@ begin
 end;
 
 procedure TTyCustomStringGrid.PickEditorChange(Sender: TObject);
+var
+  fromList: Boolean;
 begin
   { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。被拦下就留在下拉里。 }
-  if FEditing then TryEndEdit(True);
+  if not FEditing then Exit;
+  fromList := FPickEditor.DroppedDown;
+  if not TryEndEdit(True) then Exit;
+  { #59. The pick just hid the editor that held the focus, and LCL clears the form's active
+    control with it: left alone, the focus went wherever the system sent it next -- another
+    control on the form. Give it back to the grid. A pick from the open list is made inside
+    the list's click, in the list's own window, so take the focus once the list has closed
+    rather than under that click (TTyComboBox.PopupListChange defers its close-up for the same
+    reason). Whether the list was open is read while the editor still shows, before the
+    edit ends and hides it. }
+  if fromList then FPickEndedTheEdit := True
+  else if HandleAllocated and CanFocus then SetFocus;
+end;
+
+procedure TTyCustomStringGrid.PickEditorCloseUp(Sender: TObject);
+begin
+  if not FPickEndedTheEdit then Exit;
+  FPickEndedTheEdit := False;
+  { #59: a pick from the list ended the edit (PickEditorChange); the list is closed now. }
+  if not FEditing and HandleAllocated and CanFocus then SetFocus;
 end;
 
 procedure TTyCustomStringGrid.PickEditorExit(Sender: TObject);
 begin
   TryEndEdit(True);
+end;
+
+{ #52. A key a child leaves standing is offered to its parents before LCL's own navigation
+  (TWinControl.DoRemainingKeyDown asks ChildKey first). An unmodified arrow nobody used goes on
+  to TApplication.DoArrowKey, which moves the focus to the child's next sibling -- and inside
+  the grid that sibling is the scroll bar. The single-line editor has no use for Up/Down, so
+  Up or Down while editing took the focus to the scroll bar; the editor lost it, committed and
+  closed, and the user was left with the keyboard on a scroll bar.
+
+  So the grid claims those arrows. While a cell is being edited, Up/Down commit and move the
+  cursor, as the grid's own arrows do (MoveCursor commits first and, when validation refuses,
+  stays put and hands the focus back to the editor), and when the edit did end the focus comes
+  back to the grid, since the control that held it just closed. Any other arrow its children
+  decline -- Left/Right at a pick list, Up/Down in the filter box -- goes nowhere: the focus
+  stays where it is. Arrows with a modifier are not navigation, and are left alone. }
+function TTyCustomStringGrid.ChildKey(var Message: TLMKey): Boolean;
+var
+  wasEditing, refused: Boolean;
+begin
+  if (Message.CharCode in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN]) and
+     (GetKeyShiftState * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    wasEditing := FEditing;
+    if FEditing then
+      case Message.CharCode of
+        VK_UP:   MoveCursor(FCol, FRow - 1);
+        VK_DOWN: MoveCursor(FCol, FRow + 1);
+      end;
+    if wasEditing and not FEditing and HandleAllocated and CanFocus then SetFocus;
+    { #67: an Up/Down the edit turned down. Only Up/Down reach here from the mask editor --
+      it takes Left/Right itself, even at either end of its text -- and for any other editor
+      ReportUnfilledMask has nothing to say, so the edit still being open is enough. }
+    refused := FEditing;
+    Message.CharCode := VK_UNKNOWN;
+    if refused then ReportUnfilledMask;
+    Exit(True);
+  end;
+  Result := inherited ChildKey(Message);
 end;
 
 procedure TTyCustomStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
@@ -16114,7 +16509,13 @@ begin
       本文件其余十来处 SetFocus 都带着它,只有这两处漏了。 }
     VK_RETURN: begin Key := 0;
                  { 被拦下就把焦点留给编辑器 —— 不然用户看着编辑器还在,键却敲进了网格。 }
-                 if TryEndEdit(True) and HandleAllocated and CanFocus then SetFocus; end;
+                 if TryEndEdit(True) then
+                 begin
+                   if HandleAllocated and CanFocus then SetFocus;
+                 end
+                 else
+                   ReportUnfilledMask;   { #67 }
+               end;
     VK_ESCAPE: begin EndEdit(False); Key := 0;
                  if HandleAllocated and CanFocus then SetFocus; end;
   end;
@@ -16147,6 +16548,20 @@ end;
 procedure TTyCustomStringGrid.PickEditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
+  { #59. A closed pick list leaves Up/Down to the grid, as LCL's TPickListCellEditor does:
+    commit and move a row, as the text editor's arrows do through ChildKey (#52). The list
+    took them as "the next item" -- and a pick commits at once, so the cell's value changed
+    under a key pressed to move, and the editor closed under the focus. Open, the list has the
+    arrows; Alt+Down, a modifier, still opens it. }
+  if ((Key = VK_UP) or (Key = VK_DOWN)) and not FPickEditor.DroppedDown and
+     (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    if Key = VK_UP then MoveCursor(FCol, FRow - 1)
+    else MoveCursor(FCol, FRow + 1);
+    if not FEditing and HandleAllocated and CanFocus then SetFocus;
+    Key := 0;
+    Exit;
+  end;
   if Key <> VK_ESCAPE then Exit;
   { An open dropdown owns the key -- Esc there means "close the list", not "abandon the cell",
     and swallowing it would make the two gestures indistinguishable. }
@@ -16272,6 +16687,7 @@ begin
         for colIdx := 0 to Header.Columns.Count - 1 do
         begin
           if not IsCellSelected(colIdx, dataRow) then Continue;
+          if CursorStandsOut(colIdx, dataRow) then Continue;   { #60 }
           vis := CellVisibleRect(colIdx, dataRow);
           if IsRectEmpty(vis) then Continue;
           if CellAppearance(colIdx, dataRow, pos, AFrame).HasExplicitBackground
@@ -16483,6 +16899,9 @@ end;
 initialization
   { 设计器与 .lfm 流式化按类名查类,必须登记。 }
   RegisterClasses([TTyCustomGrid, TTyDrawGrid, TTyStringGrid]);
+  { #67: the grid's own mask editor. A grid streamed as the root writes the editors it owns
+    along with it, and reading them back looks each class up by name. }
+  RegisterClass(TTyGridMaskEdit);
   { 这里**没有** `TyGridCheckedWord := rsGridCheckedWord;`,并且不能加回来:
     语言目录装载晚于单元初始化,那份拷贝抓到的永远是英文 —— 判定在 CellChecked
     里实时读 resourcestring(见 TyGridCheckedWord 声明处)。 }
