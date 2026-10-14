@@ -24,6 +24,41 @@ type
     both name it without either depending on the other. Only GTK3 acts on it. }
   TTyPopupAnchorMode = (pamBelow, pamRightOf, pamLeftOf);
 
+  { What the platform's own window frame does for a TTyForm (macOS frame spec 2026-10-14). The
+    chrome engine and the title bar ask tyControls.PlatformWS.TyFrameTraits rather than testing
+    for a widgetset. }
+  TTyFrameTrait = (
+    { The system window move is a loop that runs until the button comes up (Win32's caption
+      move, Cocoa's performWindowDrag). It is started past a drag threshold, never on the press,
+      and it carries a window the system maximized along by itself. }
+    ftrModalMove,
+    { The system resizes the window from its edges, so the engine's own edge resize stays off. }
+    ftrNativeResize,
+    { Maximize is the system's zoom (Cocoa), not the engine's work-area fill. }
+    ftrNativeZoom,
+    { The system draws its own caption buttons (the macOS traffic lights); a title bar leaves
+      them a slot instead of showing its own. }
+    ftrSystemButtons);
+  TTyFrameTraits = set of TTyFrameTrait;
+
+  { The frame TTyForm asks the platform for (tyControls.PlatformWS.TyApplyWindowFrame). }
+  TTyWindowFrame = record
+    Resizable: Boolean;      // the edges resize the window
+    CanClose: Boolean;       // each system button's ENABLED state: one the window does not
+    CanMinimize: Boolean;    // offer is greyed, not hidden, as macOS shows it
+    CanMaximize: Boolean;
+    SystemButtons: Boolean;  // whether the system's caption buttons show at all
+  end;
+
+  { The system's caption buttons taken as one group, device px. }
+  TTySystemButtonGroup = record
+    Size: TSize;      // the three buttons with the system's own spacing between them; 0 x 0 = none
+    Inset: Integer;   // how far the system's own title bar keeps the group from the window edge
+  end;
+
+  { What a double-click on the title bar does, where the platform has a setting for it. }
+  TTyTitleDoubleClick = (tdcMaximize, tdcMinimize, tdcNone);
+
   // tysSelected is APPENDED last so existing ordinals (and the golden baseline)
   // are unchanged; the cascade application order is set by cStateOrder in StyleModel,
   // not by this enum order. Driven by TTyButton.Down; matched by the ':selected'
