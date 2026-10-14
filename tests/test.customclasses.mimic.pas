@@ -10279,6 +10279,7 @@ type
     property ShowClose;
     property ShowIcon;
     property Icon;
+    property MacTrafficLights;
   end;
 
   TGenToggleSwitch = class(TTyCustomToggleSwitch)
