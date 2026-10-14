@@ -5,6 +5,9 @@
 
 > **注意：** 这只是视觉上的近似，并非原生 macOS 标准窗口控件。原生 traffic-light
 > 按钮集成了系统级动画和可访问性支持，本方案不提供这些特性。
+>
+> **macOS 上：** 默认显示的就是系统原生的红黄绿按钮（`TTyTitleBar.MacTrafficLights = True`），
+> 标题栏自己的按钮是隐藏的。要在 macOS 上用本配方的样式，把 `MacTrafficLights` 设为 `False`。
 
 ---
 
