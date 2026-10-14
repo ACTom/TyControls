@@ -110,6 +110,8 @@ type
     procedure TestCaptionActionStillDecides;
     procedure TestOurMinimizeSendsThisWindowToTheDock;
     procedure TestAMaximizedWindowStateIsLeftForTheSystem;
+    procedure TestToggleGoesByWhetherTheWindowIsZoomed;
+    procedure TestDoubleClickMinimizesOnlyAMinimizableWindow;
   end;
 
   TWindowAppearanceTest = class(TTestCase)
@@ -962,6 +964,52 @@ begin
     F.WindowState := wsMaximized;
     F.InjectDoShow;
     AssertEquals('a fixed window still cannot maximize', Ord(wsNormal), Ord(F.WindowState));
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMacChromeEngineTest.TestToggleGoesByWhetherTheWindowIsZoomed;
+var F: TFrameFormAccess;
+begin
+  { The system can leave the zoom without a resize the chrome hears of -- a move is not a
+    resize, and performWindowDrag need not block until the drag is over. The next toggle must
+    go by the window, not by what the chrome last heard, or it is a dead double-click. }
+  F := NewMacForm;
+  try
+    F.InjectResizing(wsMaximized);   // the chrome heard of a zoom...
+    TyTestPlatform.Zoomed := False;  // ...which the window has since left
+    F.Engine.ToggleMaximize;
+    AssertTrue('zoomed again, not a dead toggle', TyTestPlatform.Zoomed);
+    AssertEquals('one request', 1, TyTestPlatform.ZoomRequests);
+  finally
+    F.Free;
+  end;
+  F := NewMacForm;
+  try
+    TyTestPlatform.ZoomRequests := 0;
+    TyTestPlatform.Zoomed := True;   // zoomed without the chrome having heard of it
+    F.Engine.ToggleMaximize;
+    AssertFalse('zoomed out', TyTestPlatform.Zoomed);
+    AssertEquals('one request', 1, TyTestPlatform.ZoomRequests);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMacChromeEngineTest.TestDoubleClickMinimizesOnlyAMinimizableWindow;
+var F: TFrameFormAccess;
+begin
+  { The system's own title bar does not minimize a window that has no minimize button. }
+  F := NewMacForm;
+  try
+    TyTestPlatform.DoubleClick := tdcMinimize;
+    F.BorderIcons := [biSystemMenu];
+    TFrameBarAccess(F.TitleBar).InjectDblClick;
+    AssertEquals('a window without a minimize button stays', 0, TyTestPlatform.Minimizes);
+    F.BorderIcons := [biSystemMenu, biMinimize];
+    TFrameBarAccess(F.TitleBar).InjectDblClick;
+    AssertEquals('one with it goes to the Dock', 1, TyTestPlatform.Minimizes);
   finally
     F.Free;
   end;
