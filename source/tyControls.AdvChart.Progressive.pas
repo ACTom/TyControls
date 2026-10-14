@@ -141,7 +141,8 @@ implementation
 {$IFDEF WINDOWS}
 uses Windows;
 {$ELSE}
-uses BaseUnix;
+{ BaseUnix has TTimeVal; fpgettimeofday is declared in Unix }
+uses BaseUnix, Unix;
 {$ENDIF}
 
 function TyProgNowMs: Double;
