@@ -47,6 +47,11 @@ type
     MinBtn, MaxBtn, CloseBtn: TRect;   // per-button box; empty (zero width) when that one is hidden
     Band: TRect;                       // the whole strip the cluster reserves, both margins included
     Content: TRect;                    // what is left for the caption and the host's own children
+    { Where the SYSTEM's own caption buttons go (the macOS traffic lights), at the reading
+      start; empty when the platform draws none or the bar does not use them. In this record for
+      the same reason as everything above: the slot, the caption and the host's children must
+      give way to each other from ONE answer, mirrored in ONE step. }
+    SystemButtons: TRect;
   end;
 
   TTyChromeEngine = class;
@@ -104,6 +109,16 @@ type
       into the bar: the .lfm said hide, the form said show, and the form spoke last. }
     FShowMinimize, FShowMaximize, FShowClose: Boolean;
     FOffered: TTyCaptionButtonFlags;
+    { macOS: whether the window's own traffic lights stand in for the three buttons below. }
+    FMacTrafficLights: Boolean;
+    { The system's button group as last read from the window (SyncSystemButtons); all zero while
+      the bar does not use it. The layout reads this copy, never the window, so one pass cannot
+      see two different answers -- and the bar re-aligns its children exactly when it changes. }
+    FSystemGroup: TTySystemButtonGroup;
+    function WantsButton(AFlag: TTyCaptionButtonFlag): Boolean;
+    function UsesSystemButtons: Boolean;
+    procedure SyncSystemButtons;
+    procedure SetMacTrafficLights(AValue: Boolean);
     procedure ApplyButtonVisibility;
     procedure SetOfferedButtons(AValue: TTyCaptionButtonFlags);
     procedure SetCaption(const AValue: TCaption);
@@ -196,6 +211,11 @@ type
     property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
     property ShowClose: Boolean read GetShowClose write SetShowClose default True;
+    { macOS only, ignored elsewhere. True (the default) shows the window's own red / yellow /
+      green buttons in a slot at the reading start and hides the three above; False hides the
+      system's and keeps these, which then minimize into the Dock and zoom the way the system's
+      would. Only on the bar a TTyForm is associated with: the buttons belong to its window. }
+    property MacTrafficLights: Boolean read FMacTrafficLights write SetMacTrafficLights default True;
   end;
 
   TTyChromeEngine = class(TObject)
@@ -227,9 +247,10 @@ type
       three conditions that put the maximize button on the bar. Default True for a
       non-TTyForm host. Gates the way IN only: a maximized window may always restore. }
     function FormMaximizable: Boolean;
-    { Whether the engine's MANUAL (BoundsRect-drag) edge resize is active. False on Windows —
-      there the native WS_THICKFRAME + WM_NCHITTEST own resize, so the manual path is disabled
-      to avoid double-handling (see tyControls.Win32WS); elsewhere it follows FormResizable.
+    { Whether the engine's MANUAL (BoundsRect-drag) edge resize is active. False where the system
+      resizes from the edges itself (ftrNativeResize: Windows' WS_THICKFRAME + WM_NCHITTEST, see
+      tyControls.Win32WS, and macOS's titled window), so the two never double-handle it;
+      elsewhere it follows FormResizable.
       Distinct from FormResizable so the maximize gate (which uses FormResizable) is unaffected. }
     function ManualResizeEnabled: Boolean;
     { Push a maximize state onto the WHOLE chrome, not just the flag: the caption button's
@@ -241,7 +262,7 @@ type
       move, Qt startSystemMove, GTK begin_move_drag — so the drag gets Aero Snap / the snap
       preview / free monitor crossing, none of which a hand-written Left/Top move can offer.
       FDragging is cleared BEFORE the handoff because the Win32 loop is modal and blocking: any
-      mouse move it delivers must not re-enter here. Widgetsets with no system move (Cocoa, Qt5)
+      mouse move it delivers must not re-enter here. Widgetsets with no system move (Qt5)
       keep the manual drag, re-seeded at ACursor so it continues from the current position. }
     procedure StartPlatformDrag(const ACursor: TPoint);
   public
@@ -375,6 +396,16 @@ type
       Cocoa, gutter re-align on GTK/Qt). Stub for Phase A — the bodies land in later
       phases; the call sites (SetResizable + post-handle-creation) are wired now. }
     procedure ApplyResizeStrategy;
+    { The frame the platform draws for this window (TyApplyWindowFrame), from the window's own
+      answers: Resizable (a rolled-up window does not resize), the buttons BorderIcons and the
+      bar's switches offer -- one it does not offer shows greyed, as macOS shows it -- and
+      whether the bar uses the system's buttons at all. }
+    function WindowFrame: TTyWindowFrame;
+    { Apply it, then let the bar re-read the system's buttons. ApplyResizeStrategy ends with it,
+      so every path that re-asserts the Win32 frame (first show, Resizable, BorderIcons,
+      maximize, roll-up, theme) re-asserts this one too. }
+    procedure ApplyWindowFrame;
+    procedure MinimizeWindow;
     procedure DoMinimizeClick(Sender: TObject);
     procedure DoMaxRestoreClick(Sender: TObject);
     procedure DoCloseClick(Sender: TObject);
@@ -591,6 +622,20 @@ function TyResolveCaptionButtons(ABorderIcons: TBorderIcons; AResizable: Boolean
 function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
   ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
   ALeadPadPx: Integer; ARightToLeft: Boolean = False): TTyCaptionLayout;
+{ The same layout with a slot for the SYSTEM's caption buttons at the reading start (the macOS
+  traffic lights; macOS frame spec 2026-10-14). The group, ASystemWidthPx x ASystemHeightPx,
+  sits one margin in and is centred vertically; the content zone starts one margin after it,
+  then the usual lead pad. The margin is AMarginXPx (--caption-button-margin, the one the bar's
+  own cluster uses) but never less than ASystemInsetPx, the inset the system's own title bar
+  gives the group: the built-in themes keep that margin at 0, which suits square buttons and
+  would put round ones against the window edge.
+  ASystemWidthPx = 0 is exactly TyCaptionLayoutFor -- which is how that function is implemented,
+  so the two cannot drift. A separate name rather than three more parameters on
+  TyCaptionLayoutFor: adding parameters changes a public signature, defaults or not. }
+function TySystemCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+  ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
+  ALeadPadPx, ASystemWidthPx, ASystemHeightPx, ASystemInsetPx: Integer;
+  ARightToLeft: Boolean): TTyCaptionLayout;
 
 const
   { Win32 WM_NCHITTEST result codes, declared platform-neutrally so TyNcHitTest (a pure
@@ -757,11 +802,12 @@ begin
   if (biMaximize in ABorderIcons) and AResizable then Include(Result, cbfMaximize);
 end;
 
-function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+function TySystemCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
   ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
-  ALeadPadPx: Integer; ARightToLeft: Boolean): TTyCaptionLayout;
+  ALeadPadPx, ASystemWidthPx, ASystemHeightPx, ASystemInsetPx: Integer;
+  ARightToLeft: Boolean): TTyCaptionLayout;
 var
-  n, h, y, x, span: Integer;
+  n, h, y, x, span, lead, m, sy: Integer;
   bar: TRect;
 
   { One slot, taken off the running x. The cluster PACKS: a hidden button consumes neither a
@@ -792,7 +838,19 @@ begin
     // both margins + N buttons + (N-1) gaps: the left margin is the caption's gap before the group
     span := 2 * AMarginXPx + n * AButtonWidthPx + (n - 1) * AGapPx;
   Result.Band := Rect(ABarWidth - span, 0, ABarWidth, ABarHeight);
-  Result.Content := Rect(ALeadPadPx, 0, ABarWidth - span, ABarHeight);
+  { The system's group, when there is one, takes the reading start: margin, group, margin, then
+    the lead pad the caption always had. }
+  lead := ALeadPadPx;
+  if ASystemWidthPx > 0 then
+  begin
+    m := AMarginXPx;
+    if m < ASystemInsetPx then m := ASystemInsetPx;
+    sy := (ABarHeight - ASystemHeightPx) div 2;
+    if sy < 0 then sy := 0;
+    Result.SystemButtons := Rect(m, sy, m + ASystemWidthPx, sy + ASystemHeightPx);
+    lead := m + ASystemWidthPx + m + ALeadPadPx;
+  end;
+  Result.Content := Rect(lead, 0, ABarWidth - span, ABarHeight);
   if Result.Content.Right < Result.Content.Left then
     Result.Content.Right := Result.Content.Left;
 
@@ -808,7 +866,16 @@ begin
     Result.CloseBtn := BidiFlipRect(Result.CloseBtn, bar, True);
     Result.Band     := BidiFlipRect(Result.Band, bar, True);
     Result.Content  := BidiFlipRect(Result.Content, bar, True);
+    Result.SystemButtons := BidiFlipRect(Result.SystemButtons, bar, True);
   end;
+end;
+
+function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+  ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
+  ALeadPadPx: Integer; ARightToLeft: Boolean): TTyCaptionLayout;
+begin
+  Result := TySystemCaptionLayoutFor(AShowMin, AShowMax, AShowClose, ABarWidth, ABarHeight,
+    AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx, ALeadPadPx, 0, 0, 0, ARightToLeft);
 end;
 
 function TyResizeGutterRect(const AClient: TRect; AZone: Integer;
@@ -1086,6 +1153,7 @@ begin
   FShowMaximize := True;
   FShowClose := True;
   FOffered := [cbfMinimize, cbfMaximize, cbfClose];
+  FMacTrafficLights := True;
   SetBounds(0, 0, 200, TyTitleBarHeightFor(ActiveController));
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -1174,6 +1242,9 @@ begin
   if FShowMinimize = AValue then Exit;
   FShowMinimize := AValue;
   ApplyButtonVisibility;
+  { The window's own button greys with this switch (TTyForm.WindowFrame). }
+  if (FEngine <> nil) and (FEngine.Form is TTyForm) then
+    TTyForm(FEngine.Form).ApplyWindowFrame;
 end;
 
 procedure TTyTitleBar.SetShowMaximize(AValue: Boolean);
@@ -1193,6 +1264,9 @@ begin
   if FShowClose = AValue then Exit;
   FShowClose := AValue;
   ApplyButtonVisibility;
+  { The window's own button greys with this switch (TTyForm.WindowFrame). }
+  if (FEngine <> nil) and (FEngine.Form is TTyForm) then
+    TTyForm(FEngine.Form).ApplyWindowFrame;
 end;
 
 procedure TTyTitleBar.SetOfferedButtons(AValue: TTyCaptionButtonFlags);
@@ -1202,11 +1276,71 @@ begin
   ApplyButtonVisibility;
 end;
 
+{ Whether the window wants this button: the bar's switch AND the window offering it. }
+function TTyTitleBar.WantsButton(AFlag: TTyCaptionButtonFlag): Boolean;
+begin
+  case AFlag of
+    cbfMinimize: Result := FShowMinimize;
+    cbfMaximize: Result := FShowMaximize;
+  else
+    Result := FShowClose;
+  end;
+  Result := Result and (AFlag in FOffered);
+end;
+
+{ The window's own buttons stand in for this bar's: the platform draws them, the developer has
+  not switched them off, and this is the bar of a live TTyForm -- FEngine is set only while one
+  is associated and armed, which never happens at design time. }
+function TTyTitleBar.UsesSystemButtons: Boolean;
+begin
+  Result := FMacTrafficLights and (FEngine <> nil) and (FEngine.Form is TTyForm)
+    and (ftrSystemButtons in TyFrameTraits);
+end;
+
+{ Re-read the window's button group and give our buttons, the slot and the host's children
+  their places again. Called whenever the answer may have changed: the bar is (un)associated,
+  the switch flips, or the form applies a frame. Off macOS it finds nothing to do and costs one
+  visibility pass. }
+procedure TTyTitleBar.SyncSystemButtons;
+var
+  group: TTySystemButtonGroup;
+  regrouped: Boolean;   { not "changed": that name is already taken up the inheritance chain }
+begin
+  if UsesSystemButtons then
+    group := TySystemButtonGroup(FEngine.Form)
+  else
+    group := Default(TTySystemButtonGroup);
+  ApplyButtonVisibility;
+  regrouped := (group.Size.cx <> FSystemGroup.Size.cx) or (group.Size.cy <> FSystemGroup.Size.cy)
+    or (group.Inset <> FSystemGroup.Inset);
+  if regrouped then
+  begin
+    FSystemGroup := group;
+    ReAlign;       // the host's children start after the slot (AdjustClientRect)
+    Invalidate;    // and so does the caption
+  end;
+  if regrouped or UsesSystemButtons then
+    LayoutButtons;   // which also puts the system's buttons into the slot
+end;
+
+procedure TTyTitleBar.SetMacTrafficLights(AValue: Boolean);
+begin
+  if FMacTrafficLights = AValue then Exit;
+  FMacTrafficLights := AValue;
+  { On a live TTyForm the window shows or hides its own buttons, and the form then re-syncs
+    this bar; anywhere else there is only the bar. }
+  if (FEngine <> nil) and (FEngine.Form is TTyForm) then
+    TTyForm(FEngine.Form).ApplyWindowFrame
+  else
+    SyncSystemButtons;
+end;
+
 { visible = switch AND offered, for each button; the cluster is re-laid only when something
   actually changed (a re-sync with the same answer must not cost a layout pass). }
 procedure TTyTitleBar.ApplyButtonVisibility;
 var
   touched: Boolean;   { not "changed": that name is already taken up the inheritance chain }
+  systemDraws: Boolean;
 
   procedure Put(ABtn: TTyCaptionButton; AWanted: Boolean);
   begin
@@ -1218,9 +1352,11 @@ var
 
 begin
   touched := False;
-  Put(FMinButton,   FShowMinimize and (cbfMinimize in FOffered));
-  Put(FMaxButton,   FShowMaximize and (cbfMaximize in FOffered));
-  Put(FCloseButton, FShowClose    and (cbfClose    in FOffered));
+  { The window's own buttons stand in for all three of ours when it draws them. }
+  systemDraws := UsesSystemButtons;
+  Put(FMinButton,   WantsButton(cbfMinimize) and not systemDraws);
+  Put(FMaxButton,   WantsButton(cbfMaximize) and not systemDraws);
+  Put(FCloseButton, WantsButton(cbfClose) and not systemDraws);
   if touched then LayoutButtons;
 end;
 
@@ -1271,9 +1407,10 @@ begin
     sMax := FMaxButton.Visible;
     sClose := FCloseButton.Visible;
   end;
-  Result := TyCaptionLayoutFor(sMin, sMax, sClose,
+  Result := TySystemCaptionLayoutFor(sMin, sMax, sClose,
     AWidth, AHeight, EffectiveButtonWidthPx,
-    CapMarginPx, CapMarginYPx, CapGapPx, LeftInsetPx, IsRightToLeft);
+    CapMarginPx, CapMarginYPx, CapGapPx, LeftInsetPx,
+    FSystemGroup.Size.cx, FSystemGroup.Size.cy, FSystemGroup.Inset, IsRightToLeft);
 end;
 
 function TTyTitleBar.CaptionLayout: TTyCaptionLayout;
@@ -1284,6 +1421,8 @@ end;
 procedure TTyTitleBar.LayoutButtons;
 var
   lay: TTyCaptionLayout;
+  org: TPoint;
+  c: TControl;
 
   procedure Place(ABtn: TTyCaptionButton; const R: TRect);
   begin
@@ -1301,6 +1440,25 @@ begin
   Place(FCloseButton, lay.CloseBtn);
   Place(FMaxButton, lay.MaxBtn);
   Place(FMinButton, lay.MinBtn);
+  { The system's own buttons go into the slot. The platform puts them back where its own title
+    bar keeps them whenever the window resizes, so every layout pass hands the slot over again,
+    in the window's coordinates. The bar's offset is summed up its parent chain rather than
+    asked of the widgetset, which a window without a handle yet could not answer. }
+  if (FSystemGroup.Size.cx > 0) and UsesSystemButtons then
+  begin
+    org := lay.SystemButtons.TopLeft;
+    c := Self;
+    while (c <> nil) and (c <> FEngine.Form) do
+    begin
+      Inc(org.X, c.Left);
+      Inc(org.Y, c.Top);
+      c := c.Parent;
+    end;
+    if c <> nil then   // a bar off its form's tree has no window buttons to place
+      TyPlaceSystemButtons(FEngine.Form, Rect(org.X, org.Y,
+        org.X + lay.SystemButtons.Right - lay.SystemButtons.Left,
+        org.Y + lay.SystemButtons.Bottom - lay.SystemButtons.Top));
+  end;
 end;
 
 procedure TTyTitleBar.Resize;
@@ -1588,11 +1746,10 @@ end;
 
 function TTyChromeEngine.ManualResizeEnabled: Boolean;
 begin
-  {$IFDEF LCLWin32}
-  Result := False;   // native NC resize (WS_THICKFRAME + WM_NCHITTEST) owns it on the Win32 widgetset
-  {$ELSE}
-  Result := FormResizable;   // Qt6/GTK (any OS): drive resize manually via the edge gutter + FormMouse*
-  {$ENDIF}
+  { Off where the system resizes from the window edges itself -- Win32's WS_THICKFRAME +
+    WM_NCHITTEST (see tyControls.Win32WS), macOS's titled window. Elsewhere (Qt, GTK) the
+    engine drives it through the edge gutter + FormMouse*. }
+  Result := FormResizable and not (ftrNativeResize in TyFrameTraits);
 end;
 
 procedure TTyChromeEngine.CaptureInstalledPPI;
@@ -1613,6 +1770,11 @@ begin
   if TyStartSystemMove(FForm) then
   begin
     SetCaptureControl(nil);   // don't let LCL's capture fight the WM's move grab
+    { A modal move has run to the button coming up by now. On macOS it can leave a zoomed window
+      no longer zoomed without any resize for the chrome to hear of (a move is not a resize), so
+      ask. }
+    if ftrNativeZoom in TyFrameTraits then
+      SyncNativeMaximized(TyIsWindowZoomed(FForm));
     Exit;
   end;
   // No system move on this widgetset: keep dragging by hand from where we are now.
@@ -1685,17 +1847,17 @@ begin
     if not Moved then Exit;
     if FNativeMaximize then
     begin
-      {$IFDEF LCLWin32}
-      // The OS owns this maximize AND its restore rect, and its caption-move loop already
-      // implements restore-under-the-cursor-then-keep-dragging for a zoomed window. Hand the
-      // gesture over untouched rather than second-guessing the geometry; the SIZE_RESTORED it
-      // produces syncs the engine back through TTyForm.Resizing.
-      {$ELSE}
-      // No such loop here: put the window back through the WM (which holds the restore rect)
-      // first, then drag the restored window.
-      FForm.WindowState := wsNormal;
-      ApplyMaximizedState(False, False);
-      {$ENDIF}
+      if not (ftrModalMove in TyFrameTraits) then
+      begin
+        // No system move loop to carry it: put the window back through the WM (which holds the
+        // restore rect) first, then drag the restored window.
+        FForm.WindowState := wsNormal;
+        ApplyMaximizedState(False, False);
+      end;
+      // Otherwise the system's move loop owns this maximize AND its restore rect -- Win32
+      // restores a zoomed window under the cursor and keeps dragging, macOS moves it -- so the
+      // gesture is handed over untouched; the chrome hears back through TTyForm.Resizing and
+      // StartPlatformDrag.
     end
     else
     begin
@@ -1707,21 +1869,23 @@ begin
     StartPlatformDrag(ACursor);
     Exit;
   end;
-  {$IFDEF LCLWin32}
-  // Win32: once the pointer has actually moved (so a plain click / double-click never triggers it),
-  // hand the rest of the drag to the OS caption-move loop -> native Aero Snap + snap preview.
-  // A sub-threshold jiggle keeps the window still (no manual move).
-  if Moved then
-    StartPlatformDrag(ACursor);
-  {$ELSE}
-  // Cocoa/Qt5, and a MODAL GTK2 dialog (the WM refuses to interactively move its managed dialog),
-  // reposition by hand each move. Qt6 and a NON-modal GTK2 window never reach here (they took the
-  // async WM move on the press -> FDragging stayed False). TyDragMoveForm keeps the widgetset detail
-  // in the facade: it moves immediately everywhere except GTK2, where it rate-limits the moves so an
-  // animating compositor doesn't crawl; TyDragMoveFlush (on MouseUp) lands the final position.
-  TyDragMoveForm(FForm, FDragFormStart.X + (ACursor.X - FDragStart.X),
-                        FDragFormStart.Y + (ACursor.Y - FDragStart.Y));
-  {$ENDIF}
+  if ftrModalMove in TyFrameTraits then
+  begin
+    // Win32 / macOS: once the pointer has actually moved (so a plain click / double-click never
+    // triggers it), hand the rest of the drag to the system's move loop -> snapping and tiling.
+    // A sub-threshold jiggle keeps the window still (no manual move).
+    if Moved then
+      StartPlatformDrag(ACursor);
+  end
+  else
+    // Qt5, and a MODAL GTK2 dialog (the WM refuses to interactively move its managed dialog),
+    // reposition by hand each move. Qt6 and a NON-modal GTK2 window never reach here (they took
+    // the async WM move on the press -> FDragging stayed False). TyDragMoveForm keeps the
+    // widgetset detail in the facade: it moves immediately everywhere except GTK2, where it
+    // rate-limits the moves so an animating compositor doesn't crawl; TyDragMoveFlush (on
+    // MouseUp) lands the final position.
+    TyDragMoveForm(FForm, FDragFormStart.X + (ACursor.X - FDragStart.X),
+                          FDragFormStart.Y + (ACursor.Y - FDragStart.Y));
 end;
 
 procedure TTyChromeEngine.TitleBarMouseUp(Button: TMouseButton;
@@ -1739,6 +1903,19 @@ begin
       tcaRollUp: begin TTyForm(FForm).ToggleRollUp; Exit; end;
       tcaNone:   Exit;
     end;
+  { tcaMaximize is "what the platform's own title bar does": Windows and Linux maximize, macOS
+    follows the user's "Double-click a window's title bar to" setting. }
+  case TyTitleDoubleClickAction of
+    tdcMinimize:
+      begin
+        if FForm is TTyForm then
+          TTyForm(FForm).MinimizeWindow
+        else if not TyMinimizeWindow(FForm) then
+          FForm.WindowState := wsMinimized;
+        Exit;
+      end;
+    tdcNone: Exit;
+  end;
   ToggleMaximize;
 end;
 
@@ -1968,7 +2145,12 @@ begin
       // animation), which no rect we could invent would match. The chrome is reconciled first so
       // the size change this triggers finds SyncNativeMaximized with nothing left to do.
       ApplyMaximizedState(False, False);
-      FForm.WindowState := wsNormal;
+      { On macOS the way back is the zoom itself: LCL-Cocoa's normal window state only brings
+        the window to the front (cocoawinapi.inc, SW_SHOWNORMAL). }
+      if ftrNativeZoom in TyFrameTraits then
+        TySetWindowZoomed(FForm, False)
+      else
+        FForm.WindowState := wsNormal;
     end
     else
     begin
@@ -1976,6 +2158,10 @@ begin
       ApplyMaximizedState(False, False);
     end;
   end
+  else if ftrNativeZoom in TyFrameTraits then
+    { The system's zoom, with its animation and its own restore frame. The chrome hears of it
+      through TTyForm.Resizing, as it does of a green-button zoom, so nothing is reconciled here. }
+    TySetWindowZoomed(FForm, True)
   else
     MaximizeToWorkArea;
 end;
@@ -2068,6 +2254,9 @@ begin
     if FTitleBar.MinButton <> nil then FTitleBar.MinButton.OnClick := nil;
     if FTitleBar.MaxButton <> nil then FTitleBar.MaxButton.OnClick := nil;
     if FTitleBar.CloseButton <> nil then FTitleBar.CloseButton.OnClick := nil;
+    { The window's buttons stood in for this bar's; without an engine it shows its own again. }
+    if not (csDestroying in FTitleBar.ComponentState) then
+      FTitleBar.SyncSystemButtons;
   end;
   FTitleBar := AValue;
   if FEngine <> nil then FEngine.TitleBar := AValue;
@@ -2083,6 +2272,9 @@ begin
     if not (csDesigning in ComponentState) and not (csLoading in ComponentState) then
       ArmEngine;
   end;
+  // An unassigned bar takes the system's buttons with it; an assigned one gets them through
+  // ArmEngine -> ApplyResizeStrategy.
+  if AValue = nil then ApplyWindowFrame;
 end;
 
 { Designate (or clear) the primary application menu bar. The cross-platform split:
@@ -2233,6 +2425,11 @@ procedure TTyForm.WireTitleBarButtons;
 begin
   if FTitleBar = nil then Exit;
   SyncCaptionButtons;                               // visibility: design-time too
+  { The window's own buttons, where it has them: the whole frame, not just the bar. A bar
+    created in code is armed from Notification before its constructor body has set its
+    switches, so the frame applied then saw every button off; this call, from the end of that
+    constructor, is the first that sees them. }
+  ApplyWindowFrame;
   if csDesigning in ComponentState then Exit;       // click handlers: runtime only
   if FTitleBar.MinButton <> nil then FTitleBar.MinButton.OnClick := @DoMinimizeClick;
   if FTitleBar.MaxButton <> nil then FTitleBar.MaxButton.OnClick := @DoMaxRestoreClick;
@@ -2250,6 +2447,8 @@ begin
   begin
     FTitleBar := nil;
     if FEngine <> nil then FEngine.TitleBar := nil;
+    // the window's own buttons go with the bar (a window without a bar shows none)
+    if not (csDestroying in ComponentState) then ApplyWindowFrame;
   end
   else if (Operation = opRemove) and (AComponent = FMenuBar) then
   begin
@@ -2315,8 +2514,12 @@ begin
   inherited CreateWnd;
 end;
 
-procedure TTyForm.DoMinimizeClick(Sender: TObject);
+{ The minimize button's action, and the double-click's when the platform says minimize. }
+procedure TTyForm.MinimizeWindow;
 begin
+  { The platform's own minimize first: macOS sends THIS window to the Dock. (LCL-Cocoa's
+    Application.Minimize is NSApp.hide -- the whole application.) }
+  if TyMinimizeWindow(Self) then Exit;
   // A borderless (bsNone) window minimized via WindowState shrinks to the legacy bottom-left
   // desktop box, NOT the taskbar. For the main form, minimize the whole app (LCL routes it to the
   // taskbar button); a secondary form falls back to the plain window state.
@@ -2324,6 +2527,11 @@ begin
     Application.Minimize
   else
     WindowState := wsMinimized;
+end;
+
+procedure TTyForm.DoMinimizeClick(Sender: TObject);
+begin
+  MinimizeWindow;
 end;
 
 procedure TTyForm.DoMaxRestoreClick(Sender: TObject);
@@ -2556,8 +2764,38 @@ begin
       TyNcSetEdgePassthrough(FSurface, zone, noFrame and resiz and not maxed);
   end;
   {$ENDIF}
-  // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask
-  // (Phase C). Those bodies land later; the call sites (SetResizable + DoShow) are wired.
+  // Every platform: the frame the system draws, where it draws one for us -- on macOS a titled
+  // window with a transparent, full-size title bar (TyApplyWindowFrame). GTK/Qt draw none; the
+  // AdjustClientRect gutter + WM handoff cover them.
+  ApplyWindowFrame;
+end;
+
+function TTyForm.WindowFrame: TTyWindowFrame;
+var
+  offered: TTyCaptionButtonFlags;
+begin
+  Result := Default(TTyWindowFrame);
+  Result.Resizable := FResizable and not FRolledUp;
+  if FTitleBar <> nil then
+  begin
+    Result.CanClose := FTitleBar.WantsButton(cbfClose);
+    Result.CanMinimize := FTitleBar.WantsButton(cbfMinimize);
+    Result.SystemButtons := FTitleBar.UsesSystemButtons;
+  end
+  else
+  begin
+    offered := TyResolveCaptionButtons(BorderIcons, FResizable);
+    Result.CanClose := cbfClose in offered;
+    Result.CanMinimize := cbfMinimize in offered;
+  end;
+  Result.CanMaximize := CanMaximize and not FRolledUp;
+end;
+
+procedure TTyForm.ApplyWindowFrame;
+begin
+  if csDesigning in ComponentState then Exit;   // never restyle the IDE's design surface
+  TyApplyWindowFrame(Self, WindowFrame);
+  if FTitleBar <> nil then FTitleBar.SyncSystemButtons;
 end;
 
 function TTyForm.GlassBackdrop: TBGRABitmap;
@@ -2957,6 +3195,16 @@ begin
   if csDesigning in ComponentState then Exit;
   if WindowState <> wsMaximized then Exit;
   if FEngine = nil then Exit;
+  if ftrNativeZoom in TyFrameTraits then
+  begin
+    { macOS zooms a titled window itself. Leave wsMaximized for the widgetset's ShowHide, which
+      runs right after DoShow (customform.inc:585): by then the ApplyResizeStrategy at the end
+      of DoShow has made the window titled and resizable, so its zoom (cocoawinapi.inc,
+      SW_MAXIMIZE) is the system's real one, heard back through Resizing like any other. A
+      fixed window still cannot maximize. }
+    if not FResizable then WindowState := wsNormal;
+    Exit;
+  end;
   { WHY THE ENGINE. This is a borderless window, and the maximize the widgetset would do
     (ShowHide -> ShowWindow(SW_SHOWMAXIMIZED); TCustomForm.Show repeats it) is aimed at a
     plain WS_POPUP at this moment -- the thick frame only arrives in ApplyResizeStrategy.

@@ -5,7 +5,7 @@ unit tyControls.PlatformWS;
 
   A control that has to do something platform-specific asks THIS unit, never a widgetset helper
   directly. Every function here dispatches, with conditional compilation, to the one widgetset
-  helper that implements it (tyControls.Win32WS / .QtWS / .Gtk2WS / .Gtk3WS); on every other
+  helper that implements it (tyControls.Win32WS / .QtWS / .Gtk2WS / .Gtk3WS / .CocoaWS); on every other
   build the branch folds away and the call is inert. So all the {$IFDEF LCL...} lives in exactly
   ONE place -- here -- and control code stays free of widgetset names, and each widgetset unit
   carries only its own real code (no empty cross-platform stubs).
@@ -68,7 +68,8 @@ procedure TyPreparePopupWindow(AForm: TCustomForm);
 
   AIncludeBlocking=False excludes Win32's caption move (WM_NCLBUTTONDOWN), which is a BLOCKING modal
   loop that would swallow a double-click's second press: on the mouse-DOWN a caller wants only the
-  NON-blocking WM handoffs (Qt/GTK) and defers Win32's to the drag-threshold path. }
+  NON-blocking WM handoffs (Qt/GTK) and defers Win32's to the drag-threshold path. Cocoa's
+  performWindowDrag is modal too, so it is excluded with Win32's when AIncludeBlocking is False. }
 function TyStartSystemMove(AForm: TCustomForm; AIncludeBlocking: Boolean = True): Boolean;
 
 { Reposition a form during a MANUAL title-bar drag -- the non-WM path taken off Win32 (Cocoa/Qt5,
@@ -112,6 +113,76 @@ procedure TyClearPopupWindowMask(AForm: TCustomForm; AContentCtl: TWinControl);
   elsewhere. Call before Show. }
 procedure TySetPopupNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
 
+{ ---- the system's window frame (macOS frame spec 2026-10-14, #80) --------------------------- }
+
+{ What the platform's own frame does for a TTyForm -- see TTyFrameTrait. Win32: a modal move and
+  native edge resize. Cocoa: all four. Everything else: none. }
+function TyFrameTraits: TTyFrameTraits;
+
+{ Give AForm's window the frame the system draws, where it draws one for a TTyForm: on macOS a
+  titled window whose title bar is transparent and whose content covers the whole window, so it
+  gets the system's corners, shadow, edge resize, tiling and zoom while TTyTitleBar keeps drawing
+  the bar. Safe to call repeatedly -- LCL-Cocoa rewrites the style mask whenever BorderIcons
+  changes -- and before the handle exists (then a no-op). No-op off Cocoa. }
+procedure TyApplyWindowFrame(AForm: TCustomForm; const AFrame: TTyWindowFrame);
+
+{ The system's caption buttons on AForm's window; all zero when it has none. }
+function TySystemButtonGroup(AForm: TCustomForm): TTySystemButtonGroup;
+
+{ Put the system's caption buttons into ARect -- AForm client px, which on macOS is the whole
+  window -- centred vertically. The system puts them back where its own title bar keeps them on
+  every resize, so the title bar calls this from every layout pass. No-op off Cocoa. }
+procedure TyPlaceSystemButtons(AForm: TCustomForm; const ARect: TRect);
+
+{ What a title-bar double-click does here: macOS has a user setting for it
+  (AppleActionOnDoubleClick); everywhere else it maximizes. }
+function TyTitleDoubleClickAction: TTyTitleDoubleClick;
+
+{ The system's zoom (macOS). False / no-op elsewhere. }
+function TyIsWindowZoomed(AForm: TCustomForm): Boolean;
+procedure TySetWindowZoomed(AForm: TCustomForm; AZoomed: Boolean);
+
+{ Minimize THIS window the platform's way (macOS: into the Dock). False when the platform has no
+  such call, and the caller falls back to its own. }
+function TyMinimizeWindow(AForm: TCustomForm): Boolean;
+
+{ The window's shadow and its light/dark system appearance -- on macOS hasShadow and an aqua /
+  darkAqua NSAppearance, so the frame the system draws (the hairline border, the traffic lights)
+  matches the theme. No-op elsewhere. }
+procedure TyApplyWindowAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
+
+type
+  { TEST SEAM. While Active, the functions in the section above (and TyStartSystemMove) answer
+    from here instead of the widgetset, and the ones that act record what they were asked. It
+    sits on the platform boundary only: the title bar, the chrome engine and the form run their
+    own code against it, which is how the macOS behaviour is tested on Windows. Library code must
+    never read it. }
+  TTyTestPlatform = record
+    Active: Boolean;
+    Traits: TTyFrameTraits;
+    ButtonGroup: TTySystemButtonGroup;
+    DoubleClick: TTyTitleDoubleClick;
+    Zoomed: Boolean;            // TyIsWindowZoomed answers it; TySetWindowZoomed writes it
+    SystemMoveStarts: Boolean;  // TyStartSystemMove starts a move (a modal one only past the threshold)
+    FrameApplies: Integer;
+    LastFrame: TTyWindowFrame;
+    LastFrameForm: TCustomForm;
+    Placements: Integer;
+    LastPlacement: TRect;
+    LastPlacementForm: TCustomForm;
+    ZoomRequests: Integer;
+    Minimizes: Integer;
+    SystemMoves: Integer;
+    AppearanceApplies: Integer;
+    LastShadow, LastDark: Boolean;
+  end;
+
+var
+  TyTestPlatform: TTyTestPlatform;
+
+{ Back to the real platform, every recorder cleared. }
+procedure TyResetTestPlatform;
+
 { ---- input method (IME) ------------------------------------------------------------------ }
 
 { Attach an own-context IME so a control receives FULL composed CJK commits (Qt intercepts the
@@ -140,6 +211,7 @@ uses
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}, tyControls.QtWS {$IFEND}
   {$IFDEF LCLGTK2}, tyControls.Gtk2WS {$ENDIF}
   {$IFDEF LCLGTK3}, tyControls.Gtk3WS {$ENDIF}
+  {$IFDEF LCLCocoa}, tyControls.CocoaWS {$ENDIF}
   ;
 
 function TyIsWayland: Boolean;
@@ -183,6 +255,13 @@ end;
 
 function TyStartSystemMove(AForm: TCustomForm; AIncludeBlocking: Boolean): Boolean;
 begin
+  if TyTestPlatform.Active then
+  begin
+    Result := TyTestPlatform.SystemMoveStarts
+      and (AIncludeBlocking or not (ftrModalMove in TyTestPlatform.Traits));
+    if Result then Inc(TyTestPlatform.SystemMoves);
+    Exit;
+  end;
   {$IFDEF LCLWin32}
   if AIncludeBlocking then Result := TyWin32StartSystemMove(AForm) else Result := False;
   {$ELSE}{$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
@@ -191,9 +270,12 @@ begin
   Result := TyGtk2StartSystemMove(AForm);
   {$ELSE}{$IFDEF LCLGTK3}
   Result := TyGtk3StartSystemMove(AForm);
+  {$ELSE}{$IFDEF LCLCocoa}
+  // performWindowDrag is a modal loop like Win32's caption move: past the threshold only
+  if AIncludeBlocking then Result := TyCocoaStartSystemMove(AForm) else Result := False;
   {$ELSE}
   Result := False;
-  {$ENDIF}{$ENDIF}{$IFEND}{$ENDIF}
+  {$ENDIF}{$ENDIF}{$ENDIF}{$IFEND}{$ENDIF}
 end;
 
 {$IFDEF LCLGTK2}
@@ -337,6 +419,124 @@ end;
 procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
 begin
   {$IFDEF LCLWin32} TyWin32SetImeCaretPos(AControl, AClientX, AClientY); {$ENDIF}
+end;
+
+{ ---- the system's window frame --------------------------------------------------------------- }
+
+procedure TyResetTestPlatform;
+begin
+  TyTestPlatform := Default(TTyTestPlatform);
+end;
+
+function TyFrameTraits: TTyFrameTraits;
+begin
+  if TyTestPlatform.Active then Exit(TyTestPlatform.Traits);
+  {$IFDEF LCLWin32}
+  Result := [ftrModalMove, ftrNativeResize];
+  {$ELSE}{$IFDEF LCLCocoa}
+  Result := [ftrModalMove, ftrNativeResize, ftrNativeZoom, ftrSystemButtons];
+  {$ELSE}
+  Result := [];
+  {$ENDIF}{$ENDIF}
+end;
+
+procedure TyApplyWindowFrame(AForm: TCustomForm; const AFrame: TTyWindowFrame);
+begin
+  if TyTestPlatform.Active then
+  begin
+    Inc(TyTestPlatform.FrameApplies);
+    TyTestPlatform.LastFrame := AFrame;
+    TyTestPlatform.LastFrameForm := AForm;
+    Exit;
+  end;
+  {$IFDEF LCLCocoa}
+  TyCocoaApplyWindowFrame(AForm, AFrame);
+  {$ENDIF}
+end;
+
+function TySystemButtonGroup(AForm: TCustomForm): TTySystemButtonGroup;
+begin
+  if TyTestPlatform.Active then Exit(TyTestPlatform.ButtonGroup);
+  {$IFDEF LCLCocoa}
+  Result := TyCocoaSystemButtonGroup(AForm);
+  {$ELSE}
+  Result := Default(TTySystemButtonGroup);
+  {$ENDIF}
+end;
+
+procedure TyPlaceSystemButtons(AForm: TCustomForm; const ARect: TRect);
+begin
+  if TyTestPlatform.Active then
+  begin
+    Inc(TyTestPlatform.Placements);
+    TyTestPlatform.LastPlacement := ARect;
+    TyTestPlatform.LastPlacementForm := AForm;
+    Exit;
+  end;
+  {$IFDEF LCLCocoa}
+  TyCocoaPlaceSystemButtons(AForm, ARect);
+  {$ENDIF}
+end;
+
+function TyTitleDoubleClickAction: TTyTitleDoubleClick;
+begin
+  if TyTestPlatform.Active then Exit(TyTestPlatform.DoubleClick);
+  {$IFDEF LCLCocoa}
+  Result := TyCocoaTitleDoubleClick;
+  {$ELSE}
+  Result := tdcMaximize;
+  {$ENDIF}
+end;
+
+function TyIsWindowZoomed(AForm: TCustomForm): Boolean;
+begin
+  if TyTestPlatform.Active then Exit(TyTestPlatform.Zoomed);
+  {$IFDEF LCLCocoa}
+  Result := TyCocoaIsZoomed(AForm);
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
+end;
+
+procedure TySetWindowZoomed(AForm: TCustomForm; AZoomed: Boolean);
+begin
+  if TyTestPlatform.Active then
+  begin
+    Inc(TyTestPlatform.ZoomRequests);
+    TyTestPlatform.Zoomed := AZoomed;
+    Exit;
+  end;
+  {$IFDEF LCLCocoa}
+  TyCocoaSetZoomed(AForm, AZoomed);
+  {$ENDIF}
+end;
+
+function TyMinimizeWindow(AForm: TCustomForm): Boolean;
+begin
+  if TyTestPlatform.Active then
+  begin
+    Inc(TyTestPlatform.Minimizes);
+    Exit(True);
+  end;
+  {$IFDEF LCLCocoa}
+  Result := TyCocoaMinimize(AForm);
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
+end;
+
+procedure TyApplyWindowAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
+begin
+  if TyTestPlatform.Active then
+  begin
+    Inc(TyTestPlatform.AppearanceApplies);
+    TyTestPlatform.LastShadow := AShadow;
+    TyTestPlatform.LastDark := ADark;
+    Exit;
+  end;
+  {$IFDEF LCLCocoa}
+  TyCocoaApplyAppearance(AForm, AShadow, ADark);
+  {$ENDIF}
 end;
 
 end.

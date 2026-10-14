@@ -1,10 +1,9 @@
 unit tyControls.WindowEffects;
 {$mode objfpc}{$H+}
-{$IFDEF LCLCOCOA}{$modeswitch objectivec1}{$ENDIF}
 
 { Cross-platform window chrome effects for the borderless TTyForm: OS-level rounded
-  corners + a native drop shadow. All platform/widgetset code is isolated here so
-  Form.pas stays clean.
+  corners + a native drop shadow. Form.pas never touches the platform for them: the Windows
+  code lives here, everything else goes through tyControls.PlatformWS.
 
   - Windows: dwmapi.dll loaded DYNAMICALLY (GetProcAddress) so the binary still launches
     on XP/7 (no static import). Win11 -> DWM corner preference (anti-aliased) + free shadow +
@@ -15,7 +14,9 @@ unit tyControls.WindowEffects;
     window-shadow: false -> DWMWA_NCRENDERING_POLICY=DISABLED, because on a RESIZABLE form the
     shadow is the STANDARD DWM frame shadow (left/right/bottom stay real frame under the
     top-only WM_NCCALCSIZE) and no margins call can remove that one — see ApplyWindows.
-  - macOS (Cocoa): contentView.layer cornerRadius (anti-aliased) + NSWindow.hasShadow.
+  - macOS (Cocoa): the window is a titled one with the system's own corners and shadow
+    (TTyForm.ApplyWindowFrame), so only NSWindow.hasShadow and the light/dark NSAppearance
+    are set, by tyControls.CocoaWS through TyApplyWindowAppearance.
   - Linux: documented no-op extension point (see TyApplyWindowEffects). }
 
 interface
@@ -32,6 +33,9 @@ type
     // background colour so the hairline blends into the client; $FFFFFFFE (COLOR_NONE) when neither
     // applies (image/gradient background). Theme-driven so the border is themeable, not hard-hidden.
     BorderColorRGB: Cardinal;
+    { Whether the window's own background is dark, so the frame the system draws around it (on
+      macOS the hairline border and the traffic lights) is drawn for a dark window too. }
+    DarkAppearance: Boolean;
   end;
 
 const
@@ -98,12 +102,31 @@ function TyStartNativeResize(AControl: TControl; AEdge: Integer): Boolean;
 
 implementation
 
-{$IFDEF LCLWin32}uses Windows;{$ENDIF}
-{$IFDEF LCLCOCOA}uses CocoaAll;{$ENDIF}
+uses
+  {$IFDEF LCLWin32}Windows,{$ENDIF}
+  tyControls.Css.Values,   // TyLuminance
+  tyControls.PlatformWS;   // TyApplyWindowAppearance
 
 function TyToColorRef(c: TTyColor): Cardinal;   // TTyColor $AARRGGBB -> COLORREF 0x00BBGGRR
 begin
   Result := Cardinal(TyRedOf(c)) or (Cardinal(TyGreenOf(c)) shl 8) or (Cardinal(TyBlueOf(c)) shl 16);
+end;
+
+{ Dark by what the window is painted with: a solid colour, or a gradient's two ends, by luma; an
+  image has no one colour, so it goes by the text colour the theme puts on it -- light text means
+  a dark picture. Rec.601 luma, the measure on() uses to pick ink. }
+function DarkStyle(const AStyle: TTyStyleSet): Boolean;
+begin
+  Result := False;
+  if tpBackground in AStyle.Present then
+    case AStyle.Background.Kind of
+      tfkSolid:
+        Exit(TyLuminance(AStyle.Background.Color) < 0.5);
+      tfkLinearGradient:
+        Exit((TyLuminance(AStyle.Background.GradFrom) + TyLuminance(AStyle.Background.GradTo)) / 2 < 0.5);
+    end;
+  if tpTextColor in AStyle.Present then
+    Result := TyLuminance(AStyle.TextColor) > 0.5;
 end;
 
 function TyResolveWindowEffect(const AStyle: TTyStyleSet; AMaximized: Boolean): TTyWindowEffect;
@@ -124,6 +147,7 @@ begin
     Result.BorderColorRGB := TyToColorRef(AStyle.Background.Color)
   else
     Result.BorderColorRGB := TyDwmColorNone;
+  Result.DarkAppearance := DarkStyle(AStyle);
 end;
 
 function TyNcFullFrameEat(AShadowWanted, ALegacyNonClient: Boolean): Boolean;
@@ -263,29 +287,6 @@ begin
 end;
 {$ENDIF}
 
-{$IFDEF LCLCOCOA}
-procedure ApplyCocoa(AForm: TCustomForm; const E: TTyWindowEffect);
-// r is Double (not CGFloat): CocoaAll doesn't surface CGFloat in all FPC versions, and the
-// CALayer binding's setCornerRadius takes Double — which CGFloat already is on 64-bit macOS.
-var v, content: NSView; win: NSWindow; r: Double;
-begin
-  v := NSView(AForm.Handle);          // LCL-Cocoa: Form.Handle is a TCocoaWindowContent (NSView)
-  if v = nil then Exit;
-  win := v.window;
-  if win = nil then Exit;
-  content := win.contentView;
-  if content = nil then Exit;
-  content.setWantsLayer(True);
-  if E.Maximized then r := 0 else r := E.RadiusPx;     // points (logical) == css px
-  if content.layer <> nil then
-  begin
-    content.layer.setCornerRadius(r);
-    content.layer.setMasksToBounds(r > 0);
-  end;
-  win.setHasShadow(E.Shadow);
-end;
-{$ENDIF}
-
 procedure TyApplyWindowEffects(AForm: TCustomForm; const AEffect: TTyWindowEffect);
 begin
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
@@ -293,7 +294,10 @@ begin
   Inc(TyWindowEffectApplies);      // after the guard, before the platform branches
   try
     {$IFDEF LCLWin32}ApplyWindows(AForm, AEffect);{$ENDIF}
-    {$IFDEF LCLCOCOA}ApplyCocoa(AForm, AEffect);{$ENDIF}
+    { Every platform asks; only macOS answers (tyControls.CocoaWS): its corners are the titled
+      window's own (TTyForm.ApplyWindowFrame), so what is left here is the shadow switch and
+      the window's light/dark appearance. }
+    TyApplyWindowAppearance(AForm, AEffect.Shadow, AEffect.DarkAppearance);
     { Linux extension point — documented no-ops for now:
       LCLQT5/LCLQT6: translucent window + AA paint + custom shadow (Qt composites
         lightweight children, so no Win32-HWND blocker) -- the promising future path.
