@@ -119,9 +119,11 @@ end;
 
 | 按钮 | 行为 |
 |------|------|
-| 最小化（Min） | `WindowState := wsMinimized` |
-| 最大化/还原（Max） | 引擎 `ToggleMaximize`（自绘无边框最大化/还原，避让任务栏工作区） |
+| 最小化（Min） | macOS：把这个窗口收进 Dock。其他平台：主窗体最小化整个程序（任务栏按钮），其他窗体 `WindowState := wsMinimized` |
+| 最大化/还原（Max） | 引擎 `ToggleMaximize`。Windows、Linux：自绘无边框最大化/还原，避让任务栏工作区；macOS：系统的缩放（zoom） |
 | 关闭（Close） | `Close`（走标准 `OnCloseQuery` → `OnClose` 流程） |
+
+macOS 上默认显示的是窗口自己的红黄绿按钮（`TTyTitleBar.MacTrafficLights = True`），行为由系统负责：绿灯默认全屏、按住 Option 是缩放。设 `MacTrafficLights := False` 才显示上面这三个按钮。
 
 ### 右到左（`BiDiMode = bdRightToLeft`）
 
@@ -191,18 +193,30 @@ Form1.StyleOverride := '';                                         // 恢复主�
 | Windows 11 | 抗锯齿（DWM 圆角偏好） | DWM 标准窗框阴影 | 关闭 per-window DWM 非客户区渲染（**待 Win11 真机验证**：预计连带失去 DWM 圆角与 1px 边框） |
 | Windows Vista–10 | 方角（不上锯齿 region） | 可缩放窗口=DWM **标准窗框阴影**；固定尺寸窗口=玻璃扩展阴影（`DWMNCRP_ENABLED` + `DwmExtendFrameIntoClientArea` 顶部 1px） | 关闭 per-window DWM 非客户区渲染 + 全窗框吞并（Win10 19044 实测：干净直角边缘，无阴影无残框） |
 | Windows XP | 方角 | 无（无 DWM 合成器） | 本来就无 |
-| macOS | 抗锯齿（`CALayer.cornerRadius`） | 原生（`NSWindow.hasShadow`） | `NSWindow.hasShadow := false` |
+| macOS | 系统窗口圆角（随系统版本，对话框一样；`border-radius` 在 macOS 上不起作用） | 系统阴影，形状跟着圆角 | `NSWindow.hasShadow := false` |
 | Linux（GTK / Qt） | 由桌面环境决定 | 由桌面环境决定 | 由桌面环境决定 |
 
 ### 实现要点
 
-- **抗锯齿优先：** 只在能做出**平滑**圆角的平台圆角（Win11、macOS）；老版 Windows 保持方角，但仍可加原生阴影。这是经过权衡的取舍——锯齿圆角比方角更难看。
+- **抗锯齿优先：** 只在能做出**平滑**圆角的平台圆角（Win11；macOS 的圆角是系统窗口自带的）；老版 Windows 保持方角，但仍可加原生阴影。这是经过权衡的取舍——锯齿圆角比方角更难看。
 - **不限定 Win10+：** Windows 路径通过运行期 `GetProcAddress` 动态加载 `dwmapi.dll`（绝不静态 `external`），因此可执行文件在 Win7/XP 上**照常启动**，查不到 DWM 函数时优雅降级。
-- **半径映射：** Win11 的 DWM 只接受枚举（round≈8px / small≈4px / none），无法精确到任意像素，`border-radius` 据此映射到 round/small；macOS 使用精确逻辑像素。
+- **半径映射：** Win11 的 DWM 只接受枚举（round≈8px / small≈4px / none），无法精确到任意像素，`border-radius` 据此映射到 round/small。macOS 的圆角由系统决定，不读 `border-radius`。
 - **阴影开关的真实机制（Windows）：** 可缩放的 `TTyForm` 是 `WS_CAPTION|WS_THICKFRAME` 窗口，其阴影是 DWM 为"有窗框的窗口"画的**标准窗框阴影**，与 `DwmExtendFrameIntoClientArea` 的 margins 完全无关——这正是 3.0-alpha 里 `window-shadow: false` 曾经完全无效的根因（margins 清零根本删不掉标准阴影）。现在关阴影 = `DWMWA_NCRENDERING_POLICY := DISABLED`（per-window 关掉 DWM 非客户区渲染）；同时由于关渲染后左/右/下三条真实窗框带会被旧式 GDI 画成一圈经典残框，`WM_NCCALCSIZE` 在关阴影期间改为**全窗框吞并**（client = 整个窗口矩形），残框带不复存在，边缘缩放照常（命中测试自带边带映射）。开阴影 = `ENABLED`（显式设置，同一 HWND 上可反复实时翻转）；`ENABLED` 而非默认值还顺带修好了固定尺寸窗口（`WS_POPUP`）从未有过阴影的老缺口——弹出式窗框不渲染非客户区，玻璃扩展在默认策略下是死的。
 - **最大化变方角：** 最大化时圆角自动关闭（否则四角会露出桌面），还原时恢复——由 chrome 引擎的 `ToggleMaximize` 触发重新应用。
 - **应用时机：** 首次显示（`DoShow`）、`Loaded`、主题切换（`ApplyChromeTheme`）、`StyleOverride` 赋值、最大化/还原时各应用一次。半径为逻辑像素，故 DPI 变化无需重新应用。
-- **架构隔离：** 所有平台/widgetset 代码集中在 `tyControls.WindowEffects` 单元，对外只暴露 `TyApplyWindowEffects` 一个入口；Linux 各 widgetset 留有 widgetset-aware 扩展口（Qt 透明窗 + 自绘抗锯齿圆角 + 自定义阴影是未来最有希望的路径）。
+- **架构隔离：** 窗体只调 `TyApplyWindowEffects` 一个入口。Windows 的 DWM 代码在 `tyControls.WindowEffects`；macOS 的代码在 `tyControls.CocoaWS`，经 `tyControls.PlatformWS` 的门面调用（`TyApplyWindowAppearance`）。Linux 各 widgetset 留有 widgetset-aware 扩展口（Qt 透明窗 + 自绘抗锯齿圆角 + 自定义阴影是未来最有希望的路径）。
+
+### macOS 上的窗口外框
+
+macOS 上 `TTyForm` 不是无边框窗口：LCL 照常创建窗口后，它被改成带标题栏的系统窗口，标题栏透明、不显示标题文字，内容铺满整个窗口。标题栏仍然由 `TTyTitleBar` 画，所以外观和别的平台一致；窗口本身的这些事交给系统：
+
+- **圆角和阴影**：系统窗口自带，对话框一样，全屏时系统去掉圆角。`window-shadow: false` 照样关阴影。
+- **窗口外观**：窗口的浅色/深色外观跟着主题背景的明暗走，深色主题下系统画的那圈细边框不会发亮。换主题时一起换。
+- **缩放和拖动**：四边四角拖拽缩放（`Resizable = False` 时不能缩放）；拖标题栏走系统的拖动，能拖到屏幕边缘平铺、跨显示器。
+- **最大化**：系统的缩放（zoom）。用户点绿灯或双击造成的缩放，最大化/还原图标会跟着变。
+- **双击标题栏**：`CaptionAction = tcaMaximize`（默认）时跟随系统设置（「桌面与程序坞」里的「连按窗口标题栏以」：缩放 / 最小化 / 不执行任何操作）；设成 `tcaRollUp` 或 `tcaNone` 时以你的设置为准。
+- **最小化**：把这个窗口收进 Dock。
+- **系统按钮**：见 [titlebar.md](titlebar.md) 的「macOS 的系统按钮槽位」。没有关联标题栏的 `TTyForm` 不显示系统按钮；`BorderIcons`、`Resizable` 和标题栏的 `ShowMinimize` / `ShowMaximize` / `ShowClose` 关掉的按钮显示为灰色（macOS 的惯例），不隐藏。
 
 ## 9. 未来条带（bands）与 ribbon —— 仅锁定命名/设计
 

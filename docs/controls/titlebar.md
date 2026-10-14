@@ -33,6 +33,7 @@
 | `Align` | `TAlign` | `alNone` | 对齐方式（继承自 LCL，现 published）。作为 `TTyForm` 子组件时由窗体设为 `alTop`。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚定（继承自 LCL，现 published）。 |
 | `ButtonWidth` | `Integer` | `46` | 每个系统按钮的宽度（逻辑像素）。写入时重排按钮并刷新右侧内缩（`RightInset`）。 |
+| `MacTrafficLights` | `Boolean` | `True` | 仅 macOS 起作用，其他平台忽略。True：用窗口自己的红黄绿按钮，标题栏在起始侧给它们留出槽位，自己的三个按钮隐藏；False：隐藏系统按钮，用标题栏自己的按钮，最小化把窗口收进 Dock，最大化是系统的缩放。只对关联了 `TTyForm` 的标题栏有效（按钮属于那个窗口）。默认值不写进 .lfm。 |
 
 ### public 只读属性 / 方法（non-published）
 
@@ -41,7 +42,7 @@
 | `MinButton` | `TTyCaptionButton` | 最小化按钮（`Kind = cbkMin`），由构造函数创建。 |
 | `MaxButton` | `TTyCaptionButton` | 最大化/还原按钮（`Kind = cbkMax`，最大化后切换为 `cbkRestore`）。 |
 | `CloseButton` | `TTyCaptionButton` | 关闭按钮（`Kind = cbkClose`）。 |
-| `CaptionLayout` | `function: TTyCaptionLayout` | 系统按钮簇与内容区当前的几何（`MinBtn`/`MaxBtn`/`CloseBtn`/`Band`/`Content`，均为客户区设备像素）。**这是按钮 x 的唯一权威**：`LayoutButtons`、`AdjustClientRect`、`CaptionSpan` 全部读它。宿主要在标题栏上放东西时，问它按钮在哪一侧，别自己算。 |
+| `CaptionLayout` | `function: TTyCaptionLayout` | 系统按钮簇与内容区当前的几何（`MinBtn`/`MaxBtn`/`CloseBtn`/`Band`/`Content`/`SystemButtons`，均为客户区设备像素；`SystemButtons` 是 macOS 系统按钮的槽位，没有时为空）。**这是按钮 x 的唯一权威**：`LayoutButtons`、`AdjustClientRect`、`CaptionSpan` 全部读它。宿主要在标题栏上放东西时，问它按钮在哪一侧，别自己算。 |
 | `CaptionSpan(AWidth, out ALeft, out ARight)` | `procedure` | 标题文字可用的横向区间：`CaptionLayout.Content` 再避开宿主放在栏上的子控件。子控件把内容区切成几段空隙时，按 `TitleAlignment` 选一段：左对齐取从起始侧数**第一段放得下标题**的空隙，右对齐取最后一段，居中取最宽的一段；哪段都放不下（或标题为空）时取最宽的。所以标题后面紧跟一条工具栏时，窗口再拉宽，标题也不会跳到工具栏右边去。 |
 | `RightInset` | `function: Integer` | 系统按钮簇占用的总**宽度**（= `CaptionLayout.Band` 的宽度）。宽度没有方向，所以镜像不改变它的值——但镜像后它量的那条带在**左**边，名字会骗人。保留原名是因为改公开成员名属破坏性变更，收益不抵成本（见 `plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 6 条）。 |
 
@@ -119,7 +120,22 @@ TyTitleBar {
 [  标题文本  ...  ] [ Min ] [ Max ] [ Close ]
 ```
 
-文本区域：`Left + 8px` 到 `Right - RightInset`，其中 `RightInset = VisibleButtonCount × ButtonWidth`（三个全可见时为 138px = 3 × 46；隐藏最小化/最大化按钮会相应缩小内缩）。
+文本区域从左侧内边距（`--titlebar-padding`，默认 8px）开始，到按钮簇占用的那条带（`RightInset`）为止。`RightInset` = 两侧边距（`--caption-button-margin`）+ 可见按钮数 × `ButtonWidth` + 按钮间距（`--caption-button-gap`）；内置主题边距和间距都是 0，三个按钮全可见时就是 138px = 3 × 46。隐藏的按钮不占位，内缩相应变小。
+
+### macOS 的系统按钮槽位
+
+macOS 上 `TTyForm` 是带标题栏的系统窗口，红黄绿按钮由系统画。标题栏（`MacTrafficLights = True` 时）不显示自己的三个按钮，而是在起始侧给系统按钮留出一个槽位：
+
+```
+[ ● ● ● ] [  图标  标题文本  ...                          ]
+```
+
+- 槽位宽度 = 系统按钮组的宽度 + 两侧边距。边距取 `--caption-button-margin`，但不小于系统自己标题栏里按钮离窗口边的距离（约 7 点）——内置主题的这个边距是 0，适合方形按钮，照搬会让圆按钮贴着窗口边。
+- 系统按钮在标题栏高度内垂直居中；标题栏比系统默认的高，按钮也跟着居中。
+- 图标、标题、靠左停靠的子控件都从槽位后面（再加 `--titlebar-padding`）开始排。
+- 槽位的背景照常由标题栏画，和整条标题栏一样是主题的背景色、渐变或图片。
+- 从右到左（`BiDiMode = bdRightToLeft`）时槽位在右侧。
+- 其他平台、`MacTrafficLights = False`、或标题栏没有关联 `TTyForm` 时没有槽位，布局和以前完全一样。
 
 ### 右到左（`BiDiMode = bdRightToLeft`）
 
@@ -211,3 +227,4 @@ end;
 3. **Caption 与窗体 Caption 不同步：** `TTyTitleBar.Caption` 与窗体 `Caption` 是独立属性，修改窗体 `Caption` 不会自动更新标题栏，需手动赋值 `TitleBar.Caption := Caption`。
 4. **子按钮 StyleClass 自动设置：** 三个 `TTyCaptionButton` 子控件的 `StyleClass` 由其 `Kind` 属性自动设置（`'min'`、`'max'`/`'restore'`、`'close'`），无需手动干预。
 5. **设计期皮肤未换肤：** 与全库一致，标题栏自绘**皮肤**在 Lazarus 设计器中以内置默认外观呈现（设计器无运行期主题），布局/几何则是 WYSIWYG 的。详见 [ttyform.md](ttyform.md) 第 6 节。
+6. **macOS 的设计期与运行期：** 设计器里标题栏显示的是自己的三个按钮，没有系统按钮的槽位；运行时（`MacTrafficLights = True`）换成窗口的红黄绿按钮，标题和左侧子控件会右移一个槽位的宽度。在 macOS 上布置靠左的标题栏子控件时，留意运行时这段位移。

@@ -773,7 +773,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 | 状态 / 变体 |
 |---|---|---|---|
-| `TyForm` | 窗体背景;经 `ApplyChromeTheme` 写进窗体 `Color`。内置 `background: var(--form-bg)`,比内容表面略深 | `TTyForm` | — |
+| `TyForm` | 窗体背景;经 `ApplyChromeTheme` 写进窗体 `Color`。内置 `background: var(--form-bg)`,比内容表面略深。窗口圆角 `border-radius`、阴影 `window-shadow` 见 [ttyform.md](controls/ttyform.md) §8;macOS 上窗口圆角由系统决定,`border-radius` 不起作用,`window-shadow` 照样生效 | `TTyForm` | — |
 | `TyFormSurface` | **刻意不定义**(§8.4) | `TTyFormSurface` | — |
 | `TyTitleBar` | 自绘标题栏条带(与 `TyRibbonQuickAccess` 共用一个规则块) | `TTyTitleBar` | — |
 | `TyCaptionButton` | 标题栏系统按钮 | `TTyCaptionButton` | `:hover` `:active`;变体 `.close`(`:hover`/`:active`)、`.min`(`:hover`)、`.max`(`:hover`) |

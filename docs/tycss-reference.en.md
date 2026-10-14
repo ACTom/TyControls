@@ -781,7 +781,7 @@ entry, and covers every stylesheet under `themes/` and `examples/theming/`. Home
 
 | typeKey | What it paints | Resolved by | States / variants |
 |---|---|---|---|
-| `TyForm` | Form background; written into the form's `Color` via `ApplyChromeTheme`. Built-in `background: var(--form-bg)`, slightly darker than content surfaces | `TTyForm` | — |
+| `TyForm` | Form background; written into the form's `Color` via `ApplyChromeTheme`. Built-in `background: var(--form-bg)`, slightly darker than content surfaces. Window corners (`border-radius`) and shadow (`window-shadow`): see [ttyform.md](controls/ttyform.md) §8. On macOS the system draws the window's corners and `border-radius` has no effect there; `window-shadow` still applies | `TTyForm` | — |
 | `TyFormSurface` | **Deliberately undefined** (§8.4) | `TTyFormSurface` | — |
 | `TyTitleBar` | The self-drawn title bar strip (shares one rule block with `TyRibbonQuickAccess`) | `TTyTitleBar` | — |
 | `TyCaptionButton` | Title bar system buttons | `TTyCaptionButton` | `:hover` `:active`; variants `.close` (`:hover`/`:active`), `.min` (`:hover`), `.max` (`:hover`) |
