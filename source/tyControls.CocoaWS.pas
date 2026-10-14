@@ -230,11 +230,12 @@ begin
   SetButton(win, NSWindowCloseButton, AFrame.CanClose, AFrame.SystemButtons);
   SetButton(win, NSWindowMiniaturizeButton, AFrame.CanMinimize, AFrame.SystemButtons);
   SetButton(win, NSWindowZoomButton, AFrame.CanMaximize, AFrame.SystemButtons);
-  { LCL decides at first show whether the green button goes full screen: FullScreenPrimary for
-    a resizable window outside a modal session (cocoawsforms.pas, doSetCollectionBehavior). A
-    window that cannot maximize must not go full screen either. }
-  if not AFrame.CanMaximize then
-    win.setCollectionBehavior(win.collectionBehavior and not NSWindowCollectionBehaviorFullScreenPrimary);
+  { Whether the green button goes full screen is left to LCL: one run-loop pass after
+    CreateHandle it sets FullScreenPrimary for a window that is resizable by then, outside a modal
+    session (cocoawsforms.pas, delaySetCollectionBehavior). Taking it away here when the window
+    cannot maximize would race that pass, and nothing would put it back once the window could
+    maximize again (after a roll-up, say); a window that cannot maximize has the button greyed
+    above instead. }
 end;
 
 function TyCocoaSystemButtonGroup(AForm: TCustomForm): TTySystemButtonGroup;

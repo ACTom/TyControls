@@ -2615,7 +2615,11 @@ begin
     tdcMinimize:
       begin
         if FForm is TTyForm then
-          TTyForm(FForm).MinimizeWindow
+        begin
+          { as the system's own title bar does: a window without a minimize button stays put }
+          if TTyForm(FForm).WindowFrame.CanMinimize then
+            TTyForm(FForm).MinimizeWindow;
+        end
         else if not TyMinimizeWindow(FForm) then
           FForm.WindowState := wsMinimized;
         Exit;
@@ -2842,6 +2846,25 @@ begin
   // get stuck maximized.
   if (not FormMaximizable) and (not FMaximized) then
     Exit;
+  if ftrNativeZoom in TyFrameTraits then
+  begin
+    { The system's zoom (macOS). The WINDOW knows whether it is zoomed, the chrome only what it
+      last heard: the system can leave the zoom without a resize report -- a move is not a
+      resize, and performWindowDrag need not block until the drag is over -- and a toggle that
+      went by FMaximized would then be a dead click. The chrome is reconciled first; the
+      system's own resize report (TTyForm.Resizing) brings the rest. }
+    if TyIsWindowZoomed(FForm) then
+    begin
+      ApplyMaximizedState(False, False);
+      TySetWindowZoomed(FForm, False);
+    end
+    else
+    begin
+      if FMaximized then ApplyMaximizedState(False, False);   // the way out the chrome missed
+      if FormMaximizable then TySetWindowZoomed(FForm, True);
+    end;
+    Exit;
+  end;
   if FMaximized then
   begin
     if FNativeMaximize then
@@ -2851,12 +2874,7 @@ begin
       // animation), which no rect we could invent would match. The chrome is reconciled first so
       // the size change this triggers finds SyncNativeMaximized with nothing left to do.
       ApplyMaximizedState(False, False);
-      { On macOS the way back is the zoom itself: LCL-Cocoa's normal window state only brings
-        the window to the front (cocoawinapi.inc, SW_SHOWNORMAL). }
-      if ftrNativeZoom in TyFrameTraits then
-        TySetWindowZoomed(FForm, False)
-      else
-        FForm.WindowState := wsNormal;
+      FForm.WindowState := wsNormal;
     end
     else
     begin
@@ -2864,10 +2882,6 @@ begin
       ApplyMaximizedState(False, False);
     end;
   end
-  else if ftrNativeZoom in TyFrameTraits then
-    { The system's zoom, with its animation and its own restore frame. The chrome hears of it
-      through TTyForm.Resizing, as it does of a green-button zoom, so nothing is reconciled here. }
-    TySetWindowZoomed(FForm, True)
   else
     MaximizeToWorkArea;
 end;
