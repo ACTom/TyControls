@@ -81,6 +81,7 @@ type
   TMacTitleBarAlignTest = class(TMacSeamCase)
   published
     procedure TestLeftAlignedChildrenStartAfterTheSlot;
+    procedure TestTheWindowCannotGetNarrowerThanItsTitleBar;
   end;
 
   TMacWindowFrameTest = class(TMacSeamCase)
@@ -96,6 +97,7 @@ type
     procedure TestTakingTheBarAwayHidesThem;
     procedure TestFreeingTheBarHidesThem;
     procedure TestTheDesignSurfaceGetsNoFrame;
+    procedure TestFullScreenGivesTheSystemTitleBarBack;
   end;
 
   TMacChromeEngineTest = class(TMacSeamCase)
@@ -561,6 +563,48 @@ end;
 
 { TMacTitleBarAlignTest }
 
+procedure TMacTitleBarAlignTest.TestTheWindowCannotGetNarrowerThanItsTitleBar;
+var
+  F: TFrameFormAccess;
+  bar: TTyTitleBar;
+  l, r: TPanel;
+  want: Integer;
+begin
+  { LCL keeps an aligned child's width and lets it run out of the space it is given: a window
+    narrower than the bar's content pushes the right-aligned children under the traffic lights.
+    So the window may not get that narrow -- the slot and lead pad, then every left- and
+    right-aligned child -- unless Constraints ask for more. }
+  NeedWidgetSet;
+  F := NewMacForm;
+  try
+    bar := F.TitleBar;
+    bar.Align := alTop;
+    l := TPanel.Create(F);
+    l.Parent := bar;
+    l.Align := alLeft;
+    l.Width := 50;
+    r := TPanel.Create(F);
+    r.Parent := bar;
+    r.Align := alRight;
+    r.Width := 120;
+    F.Show;
+    Application.ProcessMessages;
+    want := bar.CaptionLayout.Content.Left + 50 + 120;
+    AssertEquals('the slot, the lead pad and both children', want, TyTestPlatform.LastFrame.MinSize.cx);
+    TyTestPlatform.FrameApplies := 0;
+    r.Width := 200;
+    Application.ProcessMessages;
+    AssertTrue('re-applied when a child grows', TyTestPlatform.FrameApplies > 0);
+    AssertEquals('and follows it', want + 80, TyTestPlatform.LastFrame.MinSize.cx);
+    F.Constraints.MinWidth := 900;
+    AssertEquals('a larger Constraints.MinWidth wins', 900, TyTestPlatform.LastFrame.MinSize.cx);
+    F.Constraints.MinHeight := 300;
+    AssertEquals('Constraints.MinHeight goes through too', 300, TyTestPlatform.LastFrame.MinSize.cy);
+  finally
+    F.Free;
+  end;
+end;
+
 procedure TMacTitleBarAlignTest.TestLeftAlignedChildrenStartAfterTheSlot;
 var
   F: TFrameFormAccess;
@@ -774,6 +818,30 @@ begin
     F.Resizable := False;    // through ApplyResizeStrategy
     F.TitleBar := nil;       // straight to ApplyWindowFrame
     AssertEquals('the IDE''s window is never touched', 0, TyTestPlatform.FrameApplies);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMacWindowFrameTest.TestFullScreenGivesTheSystemTitleBarBack;
+var
+  F: TFrameFormAccess;
+  before: TTyCaptionLayout;
+begin
+  { In full screen the system slides its own title bar in when the pointer reaches the top. It
+    gets its own look back there (opaque, titled); our bar is still there underneath and does
+    not change at all. }
+  F := NewMacForm;
+  try
+    before := F.TitleBar.CaptionLayout;
+    TyTestPlatform.FrameApplies := 0;
+    F.InjectResizing(wsFullScreen);
+    AssertTrue('entering full screen re-applies the frame', TyTestPlatform.FrameApplies > 0);
+    AssertTrue('as a full-screen one', TyTestPlatform.LastFrame.FullScreen);
+    AssertRectEq('our bar keeps its slot', before.SystemButtons, F.TitleBar.CaptionLayout.SystemButtons);
+    AssertFalse('and its own buttons stay hidden', F.TitleBar.MinButton.Visible);
+    F.InjectResizing(wsNormal);
+    AssertFalse('leaving it puts the transparent title bar back', TyTestPlatform.LastFrame.FullScreen);
   finally
     F.Free;
   end;

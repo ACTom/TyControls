@@ -225,8 +225,18 @@ begin
     win.setStyleMask(mask);
   if (old and NSTitledWindowMask) = 0 then
     NoteSystemInset(win);
-  win.setTitlebarAppearsTransparent(True);
-  win.setTitleVisibility(NSWindowTitleHidden);
+  { Transparent and untitled, so TTyTitleBar shows through -- except in full screen, where the
+    system slides its own title bar in over the content when the pointer reaches the top, and
+    that bar gets its own look back: opaque, with the window's title. }
+  win.setTitlebarAppearsTransparent(not AFrame.FullScreen);
+  if AFrame.FullScreen then
+    win.setTitleVisibility(NSWindowTitleVisible)
+  else
+    win.setTitleVisibility(NSWindowTitleHidden);
+  { The smallest the user may drag the window to. LCL-Cocoa sets none, and only snaps a window
+    back to its Constraints after the drag; with full-size content the content size is the
+    window size. }
+  win.setContentMinSize(NSMakeSize(AFrame.MinSize.cx, AFrame.MinSize.cy));
   SetButton(win, NSWindowCloseButton, AFrame.CanClose, AFrame.SystemButtons);
   SetButton(win, NSWindowMiniaturizeButton, AFrame.CanMinimize, AFrame.SystemButtons);
   SetButton(win, NSWindowZoomButton, AFrame.CanMaximize, AFrame.SystemButtons);
