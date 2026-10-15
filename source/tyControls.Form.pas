@@ -1834,19 +1834,24 @@ begin
   LayoutButtons;
 end;
 
-{ LCL keeps an aligned child's width and lets it run out of the room it is given: on a bar
-  narrower than its content, the right-aligned children are pushed past the start of the
-  content zone -- on macOS, under the traffic lights. So the window is what has to stop. Its
-  narrowest is both strips the bar reserves (measured on a bar wide enough that nothing in the
-  layout clamps), every visible left- or right-aligned child with its spacing, and whatever the
-  window has beside the bar. }
+{ How narrow the host window may get. Shrinking it, everything on the bar that is fixed to the
+  RIGHT edge (alRight, or anchored right only -- the way the examples place their pickers)
+  slides left, and LCL lets it run on past whatever is on the left: the left-hand controls and,
+  on macOS, the traffic lights. So the window stops where the two groups would meet: the left
+  group's reach (the reserved strip at that edge, then each control fixed to the left edge, by
+  its right edge) plus the right group's (the strip at that edge, then each control fixed to the
+  right edge, by its distance from it). A control fixed to both edges (alClient, or anchored
+  left and right) shrinks instead, down to its own Constraints.MinWidth. The strips are measured
+  on a bar wide enough that nothing in the layout clamps, so this holds in either reading
+  direction; whatever the window has beside the bar is added on top. }
 function TTyCustomTitleBar.MinFormWidth: Integer;
 const
   Wide = 100000;
 var
   lay: TTyCaptionLayout;
-  i: Integer;
+  i, leftReach, rightReach, w, around: Integer;
   c: TControl;
+  toLeft, toRight: Boolean;
 begin
   { A bar owned by its form is associated and armed from the form's Notification, which runs
     inside TComponent.Create -- before TControl.Create has even made the Font this layout
@@ -1854,14 +1859,40 @@ begin
   Result := 0;
   if (FMinButton = nil) or (FMaxButton = nil) or (FCloseButton = nil) then Exit;
   lay := CaptionLayoutAt(Wide, ClientHeight);
-  Result := Wide - (lay.Content.Right - lay.Content.Left);
+  leftReach := lay.Content.Left;
+  rightReach := Wide - lay.Content.Right;
+  w := ClientWidth;
   for i := 0 to ControlCount - 1 do
   begin
     c := Controls[i];
-    if (c = FMinButton) or (c = FMaxButton) or (c = FCloseButton) then Continue;
-    if (not c.Visible) or not (c.Align in [alLeft, alRight]) then Continue;
-    Inc(Result, c.Width + c.BorderSpacing.Left + c.BorderSpacing.Right + 2 * c.BorderSpacing.Around);
+    if (c = FMinButton) or (c = FMaxButton) or (c = FCloseButton) or not c.Visible then Continue;
+    case c.Align of
+      alLeft:  begin toLeft := True;  toRight := False; end;
+      alRight: begin toLeft := False; toRight := True;  end;
+      alNone, alCustom:
+        begin
+          toRight := akRight in c.Anchors;
+          toLeft := (akLeft in c.Anchors) or not toRight;
+        end;
+    else
+      begin toLeft := True; toRight := True; end;   // alClient, alTop, alBottom span the bar
+    end;
+    if c.Align = alNone then around := 0
+    else around := c.BorderSpacing.Around;
+    if toLeft and toRight then
+    begin
+      if c.Left + c.Constraints.MinWidth > leftReach then leftReach := c.Left + c.Constraints.MinWidth;
+      if w - (c.Left + c.Width) > rightReach then rightReach := w - (c.Left + c.Width);
+    end
+    else if toRight then
+    begin
+      if w - c.Left + c.BorderSpacing.Left + around > rightReach then
+        rightReach := w - c.Left + c.BorderSpacing.Left + around;
+    end
+    else if c.Left + c.Width + c.BorderSpacing.Right + around > leftReach then
+      leftReach := c.Left + c.Width + c.BorderSpacing.Right + around;
   end;
+  Result := leftReach + rightReach;
   if (FEngine <> nil) and (FEngine.Form <> nil) and (FEngine.Form.ClientWidth > Width) then
     Inc(Result, FEngine.Form.ClientWidth - Width);
 end;
