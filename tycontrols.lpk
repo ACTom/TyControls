@@ -9,6 +9,7 @@
         <OtherUnitFiles Value="source"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
+      <Conditionals Value="if not (GetIDEValue(&apos;LAZ_FULLVERSION&apos;) &gt;= 4000000) then CustomOptions += &apos; -dTY_LCL_BEFORE_4&apos;;"/>
     </CompilerOptions>
     <Description Value="A Lazarus component library with skin/style support: all controls are fully custom-drawn via BGRABitmap, their appearances are uniformly styled by lightweight CSS text themes (.tycss), delivering pixel-perfect identical UI rendering across Windows, Linux and macOS.
 

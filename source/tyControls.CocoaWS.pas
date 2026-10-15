@@ -32,7 +32,13 @@ interface
 uses
   Types, Controls, Forms,
   CocoaAll,
-  CocoaFullControlEdit,      // ICocoaIMEControl + TCocoaIMEParameters
+  { ICocoaIMEControl + TCocoaIMEParameters. Lazarus 4.0 moved them from CocoaPrivate to
+    CocoaFullControlEdit, and a uses clause cannot ask which Lazarus it is compiled with (FPC
+    does not see a constant from an earlier unit of the same clause), so tycontrols.lpk asks:
+    its Conditionals define TY_LCL_BEFORE_4 when GetIDEValue('LAZ_FULLVERSION') -- which only
+    4.0 and later answer -- is not 4.0 or later (#81). Without the package (the source path
+    added to a project by hand) this takes the 4.x unit. }
+  {$IFDEF TY_LCL_BEFORE_4}CocoaPrivate,{$ELSE}CocoaFullControlEdit,{$ENDIF}
   tyControls.Types,          // TTyWindowFrame & co.
   tyControls.TextMenu;       // ITyImeEditable
 
