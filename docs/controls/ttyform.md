@@ -217,7 +217,7 @@ macOS 上 `TTyForm` 不是无边框窗口：LCL 照常创建窗口后，它被�
 - **双击标题栏**：`CaptionAction = tcaMaximize`（默认）时跟随系统设置（「桌面与程序坞」里的「连按窗口标题栏以」：缩放 / 最小化 / 不执行任何操作）；设成 `tcaRollUp` 或 `tcaNone` 时以你的设置为准。
 - **最小化**：把这个窗口收进 Dock。
 - **全屏**：指针移到屏幕顶端时系统滑下来的标题栏是系统原样（不透明、显示窗口标题）；我们的标题栏照常在下面，不变。
-- **最小宽度**：窗口拖不到比标题栏内容更窄——红黄绿槽位、起始内边距、标题栏上左右停靠的控件都要放得下，否则右停靠的控件会被挤到红黄绿底下。`Constraints.MinWidth` 更大时以它为准；`Constraints` 在 macOS 上拖动时直接停住，不再拖过头再弹回。
+- **最小宽度**：窗口拖不到比标题栏内容更窄——左边是红黄绿槽位、起始内边距和固定在左边的控件，右边是固定在右边的控件（`alRight`，或只锚定右边），两组碰头就停住，否则右边的控件会被挤到左边的控件和红黄绿底下。两边都锚定的控件（比如占满空位的搜索框）会先缩到它自己的 `Constraints.MinWidth`。`Constraints.MinWidth` 更大时以它为准；`Constraints` 在 macOS 上拖动时直接停住，不再拖过头再弹回。
 - **系统按钮**：见 [titlebar.md](titlebar.md) 的「macOS 的系统按钮槽位」。没有关联标题栏的 `TTyForm` 不显示系统按钮；`BorderIcons`、`Resizable` 和标题栏的 `ShowMinimize` / `ShowMaximize` / `ShowClose` 关掉的按钮显示为灰色（macOS 的惯例），不隐藏。
 
 ## 9. 未来条带（bands）与 ribbon —— 仅锁定命名/设计

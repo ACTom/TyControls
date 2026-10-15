@@ -82,6 +82,9 @@ type
   published
     procedure TestLeftAlignedChildrenStartAfterTheSlot;
     procedure TestTheWindowCannotGetNarrowerThanItsTitleBar;
+    procedure TestAnchoredChildrenCountToo;
+    procedure TestAStretchingChildShrinksToItsOwnMinimum;
+    procedure TestRightControlsAloneStopAtTheTrafficLights;
   end;
 
   TMacWindowFrameTest = class(TMacSeamCase)
@@ -562,6 +565,101 @@ begin
 end;
 
 { TMacTitleBarAlignTest }
+
+procedure TMacTitleBarAlignTest.TestRightControlsAloneStopAtTheTrafficLights;
+var
+  F: TFrameFormAccess;
+  bar: TTyTitleBar;
+  picker: TPanel;
+begin
+  { Nothing on the left of the bar: the traffic lights' slot (and the lead pad) is all that
+    stops a right-anchored control. }
+  NeedWidgetSet;
+  F := NewMacForm;
+  try
+    bar := F.TitleBar;
+    bar.Align := alTop;
+    picker := TPanel.Create(F);
+    picker.Parent := bar;
+    picker.SetBounds(600, 2, 150, 20);
+    picker.Anchors := [akTop, akRight];
+    F.Show;
+    Application.ProcessMessages;
+    AssertEquals('the slot, then the picker''s distance from the right edge',
+      bar.CaptionLayout.Content.Left + (bar.ClientWidth - picker.Left), TyTestPlatform.LastFrame.MinSize.cx);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMacTitleBarAlignTest.TestAStretchingChildShrinksToItsOwnMinimum;
+var
+  F: TFrameFormAccess;
+  bar: TTyTitleBar;
+  search: TPanel;
+  start: Integer;
+begin
+  { A control anchored to both edges (a search box that takes the free room) does not slide, it
+    shrinks: the window stops when it is down to its own Constraints.MinWidth. }
+  NeedWidgetSet;
+  F := NewMacForm;
+  try
+    bar := F.TitleBar;
+    bar.Align := alTop;
+    start := bar.CaptionLayout.Content.Left;
+    search := TPanel.Create(F);
+    search.Parent := bar;
+    search.SetBounds(start, 2, 300, 20);
+    search.Anchors := [akTop, akLeft, akRight];
+    search.Constraints.MinWidth := 120;
+    F.Show;
+    Application.ProcessMessages;
+    AssertEquals('its left edge, its minimum, and the gap it keeps on its right',
+      start + 120 + (bar.ClientWidth - (search.Left + search.Width)), TyTestPlatform.LastFrame.MinSize.cx);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMacTitleBarAlignTest.TestAnchoredChildrenCountToo;
+var
+  F: TFrameFormAccess;
+  bar: TTyTitleBar;
+  menu, picker: TPanel;
+  start: Integer;
+begin
+  { How the examples actually lay a title bar out: controls left at alNone, the menu bar where
+    it was dropped (left-anchored), the pickers anchored to the right edge. A right-anchored
+    control keeps its distance from the right edge, so as the window narrows it slides left --
+    into the left-hand controls and the traffic lights -- unless the window stops first. }
+  NeedWidgetSet;
+  F := NewMacForm;
+  try
+    bar := F.TitleBar;
+    bar.Align := alTop;
+    start := bar.CaptionLayout.Content.Left;
+    menu := TPanel.Create(F);
+    menu.Parent := bar;
+    menu.SetBounds(start, 2, 100, 20);            // default anchors: left, top
+    picker := TPanel.Create(F);
+    picker.Parent := bar;
+    picker.SetBounds(600, 2, 150, 20);
+    picker.Anchors := [akTop, akRight];           // 200 px from the right edge, whatever the width
+    F.Show;
+    Application.ProcessMessages;
+    AssertEquals('the left group''s reach plus the right group''s',
+      (start + 100) + (bar.ClientWidth - picker.Left), TyTestPlatform.LastFrame.MinSize.cx);
+    AssertEquals('which is the menu''s right edge plus the picker''s 200 px', start + 100 + 200,
+      TyTestPlatform.LastFrame.MinSize.cx);
+    TyTestPlatform.FrameApplies := 0;
+    picker.Left := 500;                           // further from the right edge
+    Application.ProcessMessages;
+    AssertTrue('re-applied when a control moves', TyTestPlatform.FrameApplies > 0);
+    AssertEquals('and follows it', start + 100 + (bar.ClientWidth - 500), TyTestPlatform.LastFrame.MinSize.cx);
+  finally
+    F.Free;
+  end;
+end;
 
 procedure TMacTitleBarAlignTest.TestTheWindowCannotGetNarrowerThanItsTitleBar;
 var
