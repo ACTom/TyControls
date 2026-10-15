@@ -204,6 +204,12 @@ type
       the bar does not use it. The layout reads this copy, never the window, so one pass cannot
       see two different answers -- and the bar re-aligns its children exactly when it changes. }
     FSystemGroup: TTySystemButtonGroup;
+    { The window width MinFormWidth last reported to the form, so a layout pass that changes
+      nothing does not re-apply the frame. }
+    FMinWidthReported: Integer;
+    { The narrowest the host window may get before the bar's aligned children would be pushed
+      into the strips the bar reserves -- see the implementation. }
+    function MinFormWidth: Integer;
     function WantsButton(AFlag: TTyCaptionButtonFlag): Boolean;
     function UsesSystemButtons: Boolean;
     procedure SyncSystemButtons;
@@ -245,6 +251,9 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Resize; override;
     procedure AdjustClientRect(var ARect: TRect); override;
+    { Every layout pass: a child that grew, shrank, came or went changes how narrow the window
+      may get (MinFormWidth), and the form's frame carries that to the platform. }
+    procedure AlignControls(AControl: TControl; var RemainingClientRect: TRect); override;
     procedure Paint; override;
     { Window-drag / double-click-maximize are wired via these METHOD OVERRIDES
       (each calls inherited first, so a user-assigned published OnMouseDown/Move/
@@ -541,6 +550,7 @@ type
     FDidInitialClamp: Boolean;        // macOS: clamp the window onto a visible monitor on first show only
     FCaptionAction: TTyCaptionAction; // what caption double-click does (maximize / roll-up / none)
     FRolledUp: Boolean;               // window-shade state (rolled to the title bar)
+    FFullScreen: Boolean;             // in the system's full screen, as the widgetset last reported (Resizing)
     FUnrolledHeight: Integer;         // full height saved while rolled up
     FSavedMinHeight: Integer;         // Constraints.MinHeight saved while rolled up
     { A9 per-instance StyleOverride for the window chrome (the TyForm typeKey), mirroring
@@ -639,6 +649,8 @@ type
       chrome did not perform — Aero Snap to the top edge, Win+Up, the taskbar's system menu —
       reaches the engine; see TTyChromeEngine.SyncNativeMaximized for what it does with it. }
     procedure Resizing(State: TWindowState); override;
+    { The minimum size goes into the frame (TTyWindowFrame.MinSize). }
+    procedure DoConstraintsChange(Sender: TObject); override;
     {$IF DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
     { GTK/Qt resize-reception gutter: inset the client rect by FBorderZone so alClient
       children stop short of the edge and the form's edge strip receives the mouse.
@@ -1820,6 +1832,50 @@ procedure TTyCustomTitleBar.Resize;
 begin
   inherited Resize;
   LayoutButtons;
+end;
+
+{ LCL keeps an aligned child's width and lets it run out of the room it is given: on a bar
+  narrower than its content, the right-aligned children are pushed past the start of the
+  content zone -- on macOS, under the traffic lights. So the window is what has to stop. Its
+  narrowest is both strips the bar reserves (measured on a bar wide enough that nothing in the
+  layout clamps), every visible left- or right-aligned child with its spacing, and whatever the
+  window has beside the bar. }
+function TTyCustomTitleBar.MinFormWidth: Integer;
+const
+  Wide = 100000;
+var
+  lay: TTyCaptionLayout;
+  i: Integer;
+  c: TControl;
+begin
+  { A bar owned by its form is associated and armed from the form's Notification, which runs
+    inside TComponent.Create -- before TControl.Create has even made the Font this layout
+    reads. Nothing to report until the constructor has built the buttons. }
+  Result := 0;
+  if (FMinButton = nil) or (FMaxButton = nil) or (FCloseButton = nil) then Exit;
+  lay := CaptionLayoutAt(Wide, ClientHeight);
+  Result := Wide - (lay.Content.Right - lay.Content.Left);
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if (c = FMinButton) or (c = FMaxButton) or (c = FCloseButton) then Continue;
+    if (not c.Visible) or not (c.Align in [alLeft, alRight]) then Continue;
+    Inc(Result, c.Width + c.BorderSpacing.Left + c.BorderSpacing.Right + 2 * c.BorderSpacing.Around);
+  end;
+  if (FEngine <> nil) and (FEngine.Form <> nil) and (FEngine.Form.ClientWidth > Width) then
+    Inc(Result, FEngine.Form.ClientWidth - Width);
+end;
+
+procedure TTyCustomTitleBar.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
+var
+  w: Integer;
+begin
+  inherited AlignControls(AControl, RemainingClientRect);
+  if (FEngine = nil) or not (FEngine.Form is TTyForm) then Exit;
+  w := MinFormWidth;
+  if w = FMinWidthReported then Exit;
+  FMinWidthReported := w;
+  TTyForm(FEngine.Form).ApplyWindowFrame;
 end;
 
 procedure TTyCustomTitleBar.AdjustClientRect(var ARect: TRect);
@@ -3324,6 +3380,19 @@ begin
     wsMaximized: FEngine.SyncNativeMaximized(True);
     wsNormal:    FEngine.SyncNativeMaximized(False);
   end;
+  { The system's full screen gives its own title bar its own look back (TyApplyWindowFrame).
+    The widgetset reports going in and coming out here and nowhere else. }
+  if (State = wsFullScreen) <> FFullScreen then
+  begin
+    FFullScreen := State = wsFullScreen;
+    ApplyWindowFrame;
+  end;
+end;
+
+procedure TTyForm.DoConstraintsChange(Sender: TObject);
+begin
+  inherited DoConstraintsChange(Sender);
+  if not (csLoading in ComponentState) then ApplyWindowFrame;   // Loaded applies it once streaming is done
 end;
 
 {$IF DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
@@ -3530,6 +3599,12 @@ begin
     Result.CanMinimize := cbfMinimize in offered;
   end;
   Result.CanMaximize := CanMaximize and not FRolledUp;
+  Result.FullScreen := FFullScreen;
+  { No narrower than the title bar's content needs -- or than Constraints ask, if that is more. }
+  Result.MinSize.cx := Constraints.MinWidth;
+  Result.MinSize.cy := Constraints.MinHeight;
+  if (FTitleBar <> nil) and (FTitleBar.MinFormWidth > Result.MinSize.cx) then
+    Result.MinSize.cx := FTitleBar.MinFormWidth;
 end;
 
 procedure TTyForm.ApplyWindowFrame;

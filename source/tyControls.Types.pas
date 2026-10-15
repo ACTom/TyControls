@@ -48,6 +48,11 @@ type
     CanMinimize: Boolean;    // offer is greyed, not hidden, as macOS shows it
     CanMaximize: Boolean;
     SystemButtons: Boolean;  // whether the system's caption buttons show at all
+    { The window is in the system's full screen, where the system slides its own title bar in
+      over the content: that bar gets its own look back (opaque, titled). }
+    FullScreen: Boolean;
+    { The smallest the user may drag the window to, px; 0 = no minimum. }
+    MinSize: TSize;
   end;
 
   { The system's caption buttons taken as one group, device px. }
