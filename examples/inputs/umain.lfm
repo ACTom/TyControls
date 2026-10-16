@@ -160,6 +160,7 @@ object MainForm: TMainForm
       Width = 180
       MinValue = 0
       MaxValue = 255
+      SliderWidth = 110
     end
     object L9: TTyLabel
       Left = 24
