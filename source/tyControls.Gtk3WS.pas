@@ -56,7 +56,7 @@ implementation
 
 {$IFDEF LCLGTK3}
 uses
-  LazGtk3, LazGdk3, LazGLib2, LazGObject2, gtk3int, gtk3procs, gtk3widgets;
+  SysUtils, LazGtk3, LazGdk3, LazGLib2, LazGObject2, gtk3int, gtk3procs, gtk3widgets;
 
 { The native GtkWidget behind an LCL handle. This is the whole of tier 3: under GTK3 the Handle is a
   TGtk3Widget INSTANCE that owns the widget, so a raw cast would read an object header as a widget. }
@@ -67,10 +67,24 @@ begin
   Result := TGtk3Widget(AControl.Handle).Widget;
 end;
 
+{ TGtk3WidgetSet.IsWayland and .IMCommitStr exist only from Lazarus 4.99 (trunk) on; tycontrols.lpk
+  defines TY_LCL_FROM_4_99 there (#82), and every released Lazarus takes the other branch. }
 function TyGtk3IsWayland: Boolean;
+{$IFNDEF TY_LCL_FROM_4_99}
+var
+  d: PGdkDisplay;
+{$ENDIF}
 begin
+  {$IFDEF TY_LCL_FROM_4_99}
   { The backend already knows, and it is the same answer its own window-creation code branches on. }
   Result := (GTK3WidgetSet <> nil) and GTK3WidgetSet.IsWayland;
+  {$ELSE}
+  { A released backend does not say, so ask GDK what the trunk backend asks: under Wayland the
+    default display is a GdkWaylandDisplay. }
+  d := gdk_display_get_default;
+  Result := (d <> nil)
+    and (CompareText(g_type_name(PGTypeInstance(d)^.g_class^.g_type), 'GdkWaylandDisplay') = 0);
+  {$ENDIF}
 end;
 
 function TyGtk3StartSystemMove(AForm: TCustomForm): Boolean;
@@ -94,10 +108,13 @@ begin
 end;
 
 function TyGtk3TakeImeCommit(const ATruncated: string): string;
+{$IFDEF TY_LCL_FROM_4_99}
 var
   pending: string;
+{$ENDIF}
 begin
   Result := '';
+  {$IFDEF TY_LCL_FROM_4_99}
   if GTK3WidgetSet = nil then Exit;
   { Copy out first: the backend passes this same field BY REFERENCE into DeliverIMCommit, so blanking
     the property while a caller still holds a reference would cut the string out from under them. }
@@ -110,6 +127,9 @@ begin
   if Copy(pending, 1, Length(ATruncated)) <> ATruncated then Exit;
   GTK3WidgetSet.IMCommitStr := '';   // consumed: never let the same commit arrive twice
   Result := pending;
+  {$ELSE}
+  { A released backend keeps no copy of the full commit: the control has what LCL delivered. }
+  {$ENDIF}
 end;
 
 procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParent: TRect;

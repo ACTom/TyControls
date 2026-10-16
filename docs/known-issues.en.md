@@ -15,6 +15,12 @@ GTK3 is fully functional under X11. The following issues appear only in **Waylan
 
 **Recommendation:** use an X11 session with GTK3, or use Qt5 / Qt6.
 
+## GTK3 (built with Lazarus before 4.99)
+
+**A long input-method commit is cut short.** When an input method commits a whole phrase at once, the control receives only its first character or two. LCL-GTK3 passes each commit through a character parameter of at most 7 bytes; only the GTK3 backend of Lazarus trunk (4.99) also keeps the whole string, which the library reads back from there. Released versions before it keep no copy, so the library has nothing to read. X11 and Wayland alike.
+
+**Recommendation:** for Chinese and other input methods under GTK3, build with Lazarus 4.99 or later, or use GTK2 / Qt5 / Qt6.
+
 ## GTK2 / GTK3 (following the OS appearance)
 
 `Controller.Follow := tfFollowSystem` cannot read the desktop's light/dark or accent colour under GTK: the theme keeps its current mode and the `system` theme falls back to its built-in neutral blue. This applies to X11 and Wayland alike.

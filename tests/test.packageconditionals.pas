@@ -19,6 +19,9 @@ type
   TPackageConditionalsTest = class(TTestCase)
   published
     procedure TestTheCocoaImeUnitFollowsTheLazarusVersion;
+    { #82: LCL-GTK3's IsWayland and IMCommitStr exist only from Lazarus 4.99 (trunk) on, so the
+      package defines TY_LCL_FROM_4_99 there and tyControls.Gtk3WS reads them only under it. }
+    procedure TestTheGtk3TrunkMembersFollowTheLazarusVersion;
   end;
 
 implementation
@@ -46,6 +49,19 @@ begin
     Pos('-dTY_LCL_BEFORE_4', lpk) > 0);
   AssertTrue('the unit takes the IME types from CocoaPrivate under that define, else from CocoaFullControlEdit',
     Pos('{$IFDEF TY_LCL_BEFORE_4}CocoaPrivate,{$ELSE}CocoaFullControlEdit,{$ENDIF}', unitText) > 0);
+end;
+
+procedure TPackageConditionalsTest.TestTheGtk3TrunkMembersFollowTheLazarusVersion;
+var lpk, unitText: string;
+begin
+  lpk := FileText('tycontrols.lpk');
+  unitText := FileText('source' + PathDelim + 'tyControls.Gtk3WS.pas');
+  AssertTrue('the package defines TY_LCL_FROM_4_99 from Lazarus 4.99 on',
+    Pos('GetIDEValue(&apos;LAZ_FULLVERSION&apos;) &gt;= 4990000 then CustomOptions += &apos; -dTY_LCL_FROM_4_99&apos;', lpk) > 0);
+  AssertTrue('IsWayland is read only under it',
+    Pos('{$IFDEF TY_LCL_FROM_4_99}' + LineEnding + '  { The backend already knows', unitText) > 0);
+  AssertTrue('and so is IMCommitStr',
+    Pos('{$IFDEF TY_LCL_FROM_4_99}' + LineEnding + '  if GTK3WidgetSet = nil then Exit;', unitText) > 0);
 end;
 
 initialization
