@@ -23,6 +23,7 @@ type
     FDragging: Boolean;
     procedure TrackSpan(out ALeft, ARight, AMidY: Integer);
     procedure SetFromX(AX: Integer);
+    procedure SetSliderWidth(AValue: Integer);
   protected
     function RightReserve(APPI: Integer): Integer; override;
     procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet); override;
@@ -31,6 +32,12 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
+    { The width of the slider zone at the right, in logical px (96-DPI pixels, scaled with the
+      control's DPI like every other size here). The number gets the rest of the width, so a
+      wider control widens the number and leaves the slider as it is. 74 is the width the
+      slider always had. 0 hides the slider and leaves a plain numeric edit; below 0 reads
+      as 0. }
+    property SliderWidth: Integer read FSliderWidth write SetSliderWidth default 74;
   end;
 
   { TTyTrackEdit publishes TTyCustomTrackEdit's properties; everything lives in TTyCustomTrackEdit. }
@@ -104,6 +111,7 @@ type
     property UseThousands;
     property MinValue;
     property MaxValue;
+    property SliderWidth;
   end;
 
 implementation
@@ -133,6 +141,17 @@ begin
   MinValue := 0;
   MaxValue := 100;
   Decimals := 0;    // track values read as whole numbers by default
+end;
+
+procedure TTyCustomTrackEdit.SetSliderWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FSliderWidth = AValue then Exit;
+  FSliderWidth := AValue;
+  { The number's width and the slider's both come from RightReserve at paint and hit-test
+    time, so a repaint is all a new width needs -- the way a skin change moves TTyComboEdit's
+    button. }
+  Invalidate;
 end;
 
 function TTyCustomTrackEdit.RightReserve(APPI: Integer): Integer;

@@ -11016,6 +11016,7 @@ type
     property UseThousands;
     property MinValue;
     property MaxValue;
+    property SliderWidth;
   end;
 
   TGenTransfer = class(TTyCustomTransfer)

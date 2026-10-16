@@ -37,6 +37,10 @@ uses tyControls.TrackEdit;
 
 继承 [TTyCustomNumericEdit](numericedit.md) 的 `Value` / `Decimals`(TrackEdit 默认 `0`)/ `MinValue`(默认 `0`)/ `MaxValue`(默认 `100`)/ `UseThousands`,以及 TTyCustomEdit 的全部已发布属性。
 
+| 属性 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `SliderWidth` | `Integer` | `74` | 右侧滑块区的宽度，单位是逻辑像素(96 DPI 下的像素，随 DPI 缩放)。数字部分占其余宽度，所以控件拉宽时变宽的是数字部分。设为 `0` 隐藏滑块，就是普通的数值编辑框;小于 0 按 0 处理。4.0 起提供 |
+
 滑块把 `Value` 映射到 `[MinValue, MaxValue]`——所以这两个要设成一个有意义的区间(默认已给 0..100)。
 
 ---
