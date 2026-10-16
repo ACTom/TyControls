@@ -44,6 +44,7 @@ uses tyControls.TrackEdit;
 ## 4. 行为
 
 - 尾部滑块区(`RightReserve` 预留、`PaintTrailing` 画轨+滑块)按下 / 拖动 → 按 X 位置算出 `Value` 并回显。
+- 鼠标在滑块区上是箭头，在数字上是 I 形光标;从滑块开始拖动时一直保持箭头，拖出滑块区也一样。
 - 纯函数 `TyTrackEditValueAt`(x→值)/ `TyTrackEditThumbX`(值→x)承载映射,已单元测试。
 
 ---

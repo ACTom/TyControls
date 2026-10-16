@@ -45,6 +45,10 @@ type
     FCaretAfterPrev: Boolean;
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
     FMouseSelecting: Boolean;  // true while left button held for drag-select
+    // The arrow over the trailing widget (#84): set while the pointer is over TrailingZone,
+    // with the control's own cursor kept to be put back when it leaves.
+    FTrailingArrow: Boolean;
+    FCursorBeforeTrailing: TCursor;
     // Multi-click sequence tracking (LCL has no native triple-click): the last press's
     // client position + tick and the running count, advanced by TyAdvanceClickCount.
     // 1 = caret, 2 = word, 3 = line.
@@ -173,6 +177,7 @@ type
     // Scroll helpers
     procedure EnsureCaretVisible(APPI: Integer);
     procedure ClampScrollX(APPI: Integer);
+    procedure SetTrailingArrow(AOn: Boolean);
     // Pin the Windows IME composition window to the on-screen caret
     procedure UpdateImeCaret;
     // Word-classifier helper (pure codepoint logic; no widget dependency)
@@ -218,6 +223,12 @@ type
     function RightReserve(APPI: Integer): Integer; virtual;
     procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet); virtual;
     function TrailingZone(APPI: Integer): TRect;
+    { Whether TTyEdit shows the arrow while the pointer is over TrailingZone (#84). The zone
+      holds a button or a slider, not text, so the I-beam would say the wrong thing there; the
+      control's own cursor comes back when the pointer leaves the zone or the control. False for
+      a descendant that manages the cursor over its widget itself (TTyFloatSpinEdit, whose spin
+      buttons run the field's full height and keep their own arrow). }
+    function TrailingShowsArrow: Boolean; virtual;
     // Filter text about to be inserted (typing / paste / IME). Default returns AText unchanged so
     // plain edits are byte-identical. Called at the single insertion chokepoints (InjectKey after
     // any selected text is deleted, and InjectStringAt), so a subclass sees the residual FText +
@@ -257,6 +268,7 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
     // Clipboard virtual hooks (override in tests to avoid real clipboard)
     function ReadClipboardText: string; virtual;
     procedure WriteClipboardText(const S: string); virtual;
@@ -1326,6 +1338,26 @@ begin
     MulDiv(S.Padding.Top, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96));
 end;
 
+function TTyCustomEdit.TrailingShowsArrow: Boolean;
+begin
+  Result := True;
+end;
+
+{ Swap in the arrow over the trailing widget and put the control's own cursor back on the way
+  out -- the way TTySpinButtons does over the spin buttons. }
+procedure TTyCustomEdit.SetTrailingArrow(AOn: Boolean);
+begin
+  if AOn = FTrailingArrow then Exit;
+  if AOn then
+  begin
+    FCursorBeforeTrailing := Cursor;
+    Cursor := crArrow;
+  end
+  else
+    Cursor := FCursorBeforeTrailing;
+  FTrailingArrow := AOn;
+end;
+
 function TTyCustomEdit.DisplayText: string;
 var
   i, n: Integer;
@@ -2164,7 +2196,19 @@ begin
     FCaret := CaretIndexAtX(X, FCaretAfterPrev);
     EnsureCaretVisible(Font.PixelsPerInch);
     Invalidate;
-  end;
+  end
+  else
+    { Not while a text selection is being dragged: that gesture began on text and keeps the
+      I-beam until the release, even out over the widget. A drag that began on the widget
+      (TTyTrackEdit's slider) does not reach here, so it keeps the arrow the same way. }
+    SetTrailingArrow(TrailingShowsArrow and (RightReserve(Font.PixelsPerInch) > 0)
+      and PtInRect(TrailingZone(Font.PixelsPerInch), Point(X, Y)));
+end;
+
+procedure TTyCustomEdit.MouseLeave;
+begin
+  inherited MouseLeave;
+  SetTrailingArrow(False);
 end;
 
 procedure TTyCustomEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
