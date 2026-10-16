@@ -58,6 +58,10 @@ type
     function RightReserve(APPI: Integer): Integer; override;
     procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect;
       const AStyle: TTyStyleSet); override;
+    { False: the spin buttons keep their own arrow (TTySpinButtons), over the field's full
+      height, where TTyEdit's would stop a padding short of the top and bottom -- and two
+      owners swapping the same Cursor would each put back the other's arrow. }
+    function TrailingShowsArrow: Boolean; override;
     { The last net for EditorEnabled: every insertion in TTyEdit — typing, paste and an IME
       commit — funnels through here. }
     function FilterInsert(const AText: string): string; override;
@@ -183,6 +187,11 @@ begin
   Cmd := (ssCtrl in AShift) or (ssMeta in AShift);
   Result := (AKey = VK_BACK) or (AKey = VK_DELETE)
     or (Cmd and ((AKey = VK_X) or (AKey = VK_V) or (AKey = VK_Z) or (AKey = VK_Y)));
+end;
+
+function TTyFloatSpinEdit.TrailingShowsArrow: Boolean;
+begin
+  Result := False;
 end;
 
 function TTyFloatSpinEdit.RightReserve(APPI: Integer): Integer;

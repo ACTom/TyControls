@@ -56,3 +56,4 @@ C.OnDropDown := @MyDrop;   // 在 MyDrop 里弹颜色格 / 计算器,选完 C.Te
 
 - **基座控件:** `TTyColorComboBox` / `TTyCalcEdit` 等会在此之上内置具体 popup;直接用它时自己接 `OnDropDown`。
 - **尾部钩子:** 与 [TTyURLEdit](urledit.md) 共用 `TTyEdit` 的 `RightReserve` / `PaintTrailing`(默认 0/空 → 普通编辑框字节一致)。
+- **尾部区域的光标:** 鼠标在 `TrailingZone` 上时 `TTyEdit` 显示箭头，离开后恢复控件自己的 `Cursor`;正在拖选文字时保持 I 形光标直到松开。子类自己管理这块的光标时，重写 `TrailingShowsArrow` 返回 `False`(`TTyFloatSpinEdit` 就是这样)。
