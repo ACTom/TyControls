@@ -2071,7 +2071,7 @@ begin
                          Max(FScrollLeftRect.Left,  FScrollRightRect.Left),  Band.Bottom)
     else
       ClipBand := Band;
-    P.Bitmap.ClipRect := ClipBand;
+    P.Bitmap.ClipRect := P.Dev(ClipBand);   // the layer counts device pixels (#83)
 
     for I := 0 to GetTabCount - 1 do
     begin

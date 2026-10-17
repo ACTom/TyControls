@@ -16,6 +16,8 @@ uses
   tyControls.IconFont, tyControls.Image, tyControls.ImageView, tyControls.GlyphButtons,
   tyControls.CharImage, tyControls.ComboBoxEx, Menus, tyControls.HtmlLabel, tyControls.GlowLabel,
   tyControls.Menu, tyControls.Chart, tyControls.HeaderControl, tyControls.Dialogs.Color,
+  tyControls.ListView, tyControls.ListBox, tyControls.AdvancedListBox, tyControls.TabSet,
+  tyControls.ListGroupPanel, tyControls.ValueListEditor, tyControls.ListView.Layout,
   tyControls.Types, test.devicescale.support, test.devicescale.sweep;
 
 type
@@ -39,6 +41,14 @@ type
     function BuildHeader(AParent: TWinControl; APPI: Integer): TControl;
     function BuildHsvSquare(AParent: TWinControl; APPI: Integer): TControl;
     function BuildHueBar(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildListViewReport(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildListViewMarquee(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildListBoxScrolled(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildAdvancedListBox(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildTabSetOverflow(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildListGroupPanel(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildValueListEditor(AParent: TWinControl; APPI: Integer): TControl;
+    procedure TabImage(Sender: TObject; AIndex: Integer; var AImageIndex: Integer);
   protected
     procedure TearDown; override;
   published
@@ -59,6 +69,19 @@ type
     procedure TestHeaderDividers;
     procedure TestColourSquare;
     procedure TestHueBar;
+    { Task 11: lists and their clips. }
+    procedure TestListViewReport;
+    procedure TestListViewMarquee;
+    { A 1-px rule drawn in layout coordinates hardly moves the comparison: half its length at
+      half its strength, on a field the same colour. The header's dividers are such rules, so
+      they are looked for as rules: the columns that are a rule across the header band, the
+      same at S = 2 averaged down as at S = 1. }
+    procedure TestListViewHeaderRules;
+    procedure TestListBoxScrolled;
+    procedure TestAdvancedListBoxIcons;
+    procedure TestTabSetOverflow;
+    procedure TestListGroupPanelIcons;
+    procedure TestValueListEditorImage;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -68,6 +91,19 @@ implementation
 
 type
   TControlAccess = class(TControl);
+  TListViewAccess = class(TTyListView);
+
+function RulesText(const A: TTyIntArray): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(A) do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + IntToStr(A[i]);
+  end;
+end;
 
 procedure TyFillTestPicture(ABmp: TBitmap; AW, AH: Integer);
 var
@@ -128,15 +164,21 @@ var
   a, b, d: TBGRABitmap;
   score, ink, blocks: Integer;
   dir: string;
+  log: TextFile;
 begin
   score := TyDeviceScaleMismatchPictures(ABuild, AW, AH, a, b, ink, blocks);
   try
     dir := GetEnvironmentVariable('TY_SWEEP_DIR');
-    if (score > CMaxMismatch) and (dir <> '') then
+    if ((score > CMaxMismatch) or (GetEnvironmentVariable('TY_SWEEP_ALL') <> '')) and (dir <> '') then
     begin
+      { Every score, passing or not, for measuring the threshold against. }
+      AssignFile(log, IncludeTrailingPathDelimiter(dir) + 'scores.txt');
+      if FileExists(IncludeTrailingPathDelimiter(dir) + 'scores.txt') then Append(log) else Rewrite(log);
+      WriteLn(log, Format('%-28s %5d  (ink %d, blocks %d)', [AName, score, ink, blocks]));
+      CloseFile(log);
       a.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-s2.png');
       b.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-ref.png');
-      d := TyInkMismatchImage(a, b, CFuzzyRadius);
+      d := TyInkMismatchImage(a, b);
       d.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-diff.png');
       d.Free;
     end;
@@ -421,6 +463,190 @@ end;
 procedure TDeviceScaleControlsTest.TestHueBar;
 begin
   CheckScale('TTyHueBar', @BuildHueBar, 18, 120);
+end;
+
+{ ---- Task 11 ---- }
+
+function TDeviceScaleControlsTest.BuildListViewReport(AParent: TWinControl; APPI: Integer): TControl;
+var
+  lv: TTyListView;
+  i: Integer;
+  it: TTyListItem;
+begin
+  lv := TTyListView.Create(AParent);
+  lv.Parent := AParent;
+  TControlAccess(lv).Font.PixelsPerInch := APPI;
+  lv.ViewStyle := lvsReport;
+  lv.GridLines := True;
+  lv.SmallImages := Images;
+  lv.MultiSelect := True;
+  lv.Columns.Add.Text := 'Name';
+  lv.Columns.Add.Text := 'Size';
+  lv.Columns.Add.Text := 'Kind';
+  for i := 0 to 3 do
+  begin
+    it := lv.Items.Add;
+    it.Caption := 'Item ' + IntToStr(i);
+    it.ImageIndex := 0;
+    it.SubItems.Add(IntToStr(i * 10) + ' KB');
+    it.SubItems.Add('File');
+  end;
+  Result := lv;
+end;
+
+function TDeviceScaleControlsTest.BuildListViewMarquee(AParent: TWinControl; APPI: Integer): TControl;
+begin
+  { A rubber band in progress: pressed on the empty area below the rows, dragged up-left. }
+  Result := BuildListViewReport(AParent, APPI);
+  TControlAccess(Result).MouseDown(mbLeft, [ssLeft], 220, 140);
+  TControlAccess(Result).MouseMove([ssLeft], 40, 50);
+end;
+
+function TDeviceScaleControlsTest.BuildListBoxScrolled(AParent: TWinControl; APPI: Integer): TControl;
+var
+  lb: TTyListBox;
+  i: Integer;
+begin
+  lb := TTyListBox.Create(AParent);
+  lb.Parent := AParent;
+  TControlAccess(lb).Font.PixelsPerInch := APPI;
+  for i := 0 to 29 do lb.Items.Add('Row number ' + IntToStr(i));
+  lb.TopIndex := 5;
+  Result := lb;
+end;
+
+function TDeviceScaleControlsTest.BuildAdvancedListBox(AParent: TWinControl; APPI: Integer): TControl;
+var
+  lb: TTyAdvancedListBox;
+begin
+  lb := TTyAdvancedListBox.Create(AParent);
+  lb.Parent := AParent;
+  TControlAccess(lb).Font.PixelsPerInch := APPI;
+  lb.Images := Images;
+  lb.AddItem('First', 'with a subtitle', 0);
+  lb.AddItem('Second', 'another one', 0);
+  Result := lb;
+end;
+
+procedure TDeviceScaleControlsTest.TabImage(Sender: TObject; AIndex: Integer; var AImageIndex: Integer);
+begin
+  AImageIndex := 0;
+end;
+
+function TDeviceScaleControlsTest.BuildTabSetOverflow(AParent: TWinControl; APPI: Integer): TControl;
+var
+  ts: TTyTabSet;
+  i: Integer;
+begin
+  ts := TTyTabSet.Create(AParent);
+  ts.Parent := AParent;
+  TControlAccess(ts).Font.PixelsPerInch := APPI;
+  ts.Images := Images;
+  ts.OnGetImageIndex := @TabImage;
+  for i := 0 to 9 do ts.Tabs.Add('Tab number ' + IntToStr(i));
+  ts.TabIndex := 1;
+  Result := ts;
+end;
+
+function TDeviceScaleControlsTest.BuildListGroupPanel(AParent: TWinControl; APPI: Integer): TControl;
+var
+  g: TTyListGroupPanel;
+  gi: Integer;
+begin
+  g := TTyListGroupPanel.Create(AParent);
+  g.Parent := AParent;
+  TControlAccess(g).Font.PixelsPerInch := APPI;
+  g.Images := Images;
+  gi := g.AddGroup('Documents', 0);
+  g.AddItem(gi, 'Report', 0);
+  g.AddItem(gi, 'Letter', 0);
+  gi := g.AddGroup('Pictures', 0);
+  g.AddItem(gi, 'Holiday', 0);
+  Result := g;
+end;
+
+function TDeviceScaleControlsTest.BuildValueListEditor(AParent: TWinControl; APPI: Integer): TControl;
+var
+  v: TTyValueListEditor;
+begin
+  v := TTyValueListEditor.Create(AParent);
+  v.Parent := AParent;
+  TControlAccess(v).Font.PixelsPerInch := APPI;
+  v.Images := Images;
+  v.AddRow('Name', 'Value').ImageIndex := 0;
+  v.AddRow('Other', 'Thing');
+  Result := v;
+end;
+
+procedure TDeviceScaleControlsTest.TestListViewReport;
+begin
+  CheckScale('TTyListView-report', @BuildListViewReport, 280, 140);
+end;
+
+procedure TDeviceScaleControlsTest.TestListViewMarquee;
+begin
+  CheckScale('TTyListView-marquee', @BuildListViewMarquee, 280, 160);
+end;
+
+procedure TDeviceScaleControlsTest.TestListViewHeaderRules;
+const
+  W = 280;
+  H = 140;
+var
+  f: TForm;
+  c: TControl;
+  headerH, ink, blocks: Integer;
+  a, b: TBGRABitmap;
+  ra, rb: TTyIntArray;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(0, 0, W + 40, H + 40);
+    c := BuildListViewReport(f, 96);
+    c.SetBounds(0, 0, W, H);
+    headerH := TListViewAccess(c).CurrentMetrics.HeaderH;
+  finally
+    f.Free;
+  end;
+  AssertTrue('the report view has a header', headerH > 4);
+  TyDeviceScaleMismatchPictures(@BuildListViewReport, W, H, a, b, ink, blocks);
+  try
+    ra := TyVerticalRules(a, 0, headerH, 4);
+    rb := TyVerticalRules(b, 0, headerH, 4);
+  finally
+    a.Free;
+    b.Free;
+  end;
+  { Three 100-px columns in 280: two dividers inside the control. A band that is all "rule"
+    would make the comparison say nothing. }
+  AssertTrue('the header has its dividers at S = 1: ' + RulesText(rb),
+    (Length(rb) >= 2) and (Length(rb) <= 8));
+  AssertEquals('the header dividers at S = 2, averaged down', RulesText(rb), RulesText(ra));
+end;
+
+procedure TDeviceScaleControlsTest.TestListBoxScrolled;
+begin
+  CheckScale('TTyListBox-scrolled', @BuildListBoxScrolled, 160, 120);
+end;
+
+procedure TDeviceScaleControlsTest.TestAdvancedListBoxIcons;
+begin
+  CheckScale('TTyAdvancedListBox-icons', @BuildAdvancedListBox, 200, 120);
+end;
+
+procedure TDeviceScaleControlsTest.TestTabSetOverflow;
+begin
+  CheckScale('TTyTabSet-overflow', @BuildTabSetOverflow, 240, 32);
+end;
+
+procedure TDeviceScaleControlsTest.TestListGroupPanelIcons;
+begin
+  CheckScale('TTyListGroupPanel-icons', @BuildListGroupPanel, 200, 160);
+end;
+
+procedure TDeviceScaleControlsTest.TestValueListEditorImage;
+begin
+  CheckScale('TTyValueListEditor-image', @BuildValueListEditor, 200, 80);
 end;
 
 initialization

@@ -1364,8 +1364,8 @@ begin
       rect that runs PAST the box on the trailing side (out to ScrollWidth), and this is
       what stops the overflow being painted. Its bottom also gives up the horizontal bar's
       band, so a partially-scrolled row does not bleed under it. }
-    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset,
-      R.Bottom - inset - SBHeight);
+    P.Bitmap.ClipRect := P.Dev(Rect(R.Left + inset, R.Top + inset, R.Right - inset,
+      R.Bottom - inset - SBHeight));   // the layer counts device pixels (#83)
 
     { Asked ONCE, not once per row: with per-row heights the answer is a walk, and inside the
       loop it would turn one screenful of paint into a walk per row. It cannot change

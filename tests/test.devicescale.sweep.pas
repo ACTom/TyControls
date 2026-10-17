@@ -41,17 +41,18 @@ type
 
 const
   { The score (unmatched ink + mismatched blocks, test.devicescale.support) above which a
-    control counts as not drawing at the device scale. Measured when this was set (2026-10-17):
-    every control that draws only through the painter's methods scored at most 6 (TTyCalendar,
-    all blocks); the lowest-scoring control still drawing in layout coordinates was TTyBevel
-    at 144 (two 1-px lines). 20 sits clear of both. }
-  CMaxMismatch = 20;
+    control counts as not drawing at the device scale. Measured when this was set (2026-10-17,
+    the comparison as test.devicescale.support has it): every correct picture, palette and
+    stateful checks together, scored at most 20 (a bold title in TTyAdvancedListBox; the next
+    was 2); of 21 porting mistakes put back one at a time, the lowest still caught scored 28
+    (the menu banner drawn at its layout position). 24 sits between them. }
+  CMaxMismatch = 24;
 
   { Classes known not to draw at the device scale yet. Each porting task removes its own:
-    the colour and font list boxes (ListBox's clip), the shell tree (TreeView), and the
-    panels whose paint cache is still one-times (TTyPaintCache). }
-  CKnownUnported: array of string = ('TTyColorListBox', 'TTyFontListBox', 'TTyShellTreeView',
-    'TTyPanel', 'TTyRelativePanel', 'TTyCoolBar', 'TTyControlBar');
+    the shell tree (TreeView), and the panels whose paint cache is still one-times
+    (TTyPaintCache). }
+  CKnownUnported: array of string = ('TTyShellTreeView', 'TTyPanel', 'TTyRelativePanel',
+    'TTyCoolBar', 'TTyControlBar');
 
 implementation
 
@@ -145,7 +146,7 @@ begin
             names[i] + '-s2.png');
           picB.SaveToFile(IncludeTrailingPathDelimiter(GetEnvironmentVariable('TY_SWEEP_DIR')) +
             names[i] + '-ref.png');
-          diff := TyInkMismatchImage(picA, picB, CFuzzyRadius);
+          diff := TyInkMismatchImage(picA, picB);
           diff.SaveToFile(IncludeTrailingPathDelimiter(GetEnvironmentVariable('TY_SWEEP_DIR')) +
             names[i] + '-diff.png');
           diff.Free;

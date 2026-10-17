@@ -1121,10 +1121,10 @@ begin
     // MaxScrollOffset grants the same height back so the last row stays fully reachable.
     trigH := EffTriggerHPx(APPI);
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
+    P.Bitmap.ClipRect := P.Dev(Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
       R.Top + P.Scale(BoxStyle.BorderWidth),
       R.Right - P.Scale(BoxStyle.BorderWidth),
-      R.Bottom - P.Scale(BoxStyle.BorderWidth) - trigH);
+      R.Bottom - P.Scale(BoxStyle.BorderWidth) - trigH));   // layer px (#83)
 
     for i := 0 to High(parts) do
     begin
@@ -1260,10 +1260,10 @@ begin
     // when expanded, back over it when collapsed — mirrored for a right-docked sider.
     if trigH > 0 then
     begin
-      P.Bitmap.ClipRect := Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
+      P.Bitmap.ClipRect := P.Dev(Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
         R.Top + P.Scale(BoxStyle.BorderWidth),
         R.Right - P.Scale(BoxStyle.BorderWidth),
-        R.Bottom - P.Scale(BoxStyle.BorderWidth));
+        R.Bottom - P.Scale(BoxStyle.BorderWidth)));   // layer px (#83)
       trigR := Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
         R.Bottom - P.Scale(BoxStyle.BorderWidth) - trigH,
         R.Right - P.Scale(BoxStyle.BorderWidth),
