@@ -30,7 +30,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, ImgList, GraphType, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.ImageCollection;
+  tyControls.ImageCollection, tyControls.Painter;
 
 const
   { LCL's EffectMap (imglist.inc) written BACKWARDS: it indexes by Enabled, this library carries
@@ -80,6 +80,11 @@ function TyPutImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer
   Centres in the ASizePx slot; guards everything; never raises. }
 procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
   AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+{ TyBlitImage onto a painter's layer, with the position and size in LAYOUT pixels: they are
+  mapped by the painter's device scale and the icon is taken at its raster PPI, so it stays
+  sharp on a Retina layer (#83). At S = 1 it is TyBlitImage(P.Bitmap, ..., P.PPI, ...). }
+procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Integer;
+  AX, AY, ASizePx: Integer; AGhosted: Boolean);
 
 { A fresh, CALLER-OWNED BGRABitmap of item AIndex at ASizePx, for a control that owns its own
   compositing (scales the image to fit, tiles it, ...) rather than blitting at a slot. Our list
@@ -87,8 +92,15 @@ procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integ
   caller frees it. }
 function TyRenderImage(AList: TCustomImageList; AIndex, ASizePx, APPI: Integer;
   AGhosted: Boolean): TBGRABitmap;
+{ TyRenderImage for a painter's layer: ASizePx in LAYOUT pixels, the result in raster pixels --
+  DeviceScale times the size the image has at S = 1 (#83). Our list renders the vector at that
+  size; a foreign list hands its resolution for that size when it has one, else its S = 1
+  bitmap stretched (the right size, if not the sharpest). The caller frees it. }
+function TyRenderImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex, ASizePx: Integer;
+  AGhosted: Boolean): TBGRABitmap;
 
 implementation
+
 
 function TyImageIsBaked(AList: TCustomImageList): Boolean;
 begin
@@ -350,6 +362,87 @@ begin
   finally
     tmp.Free;
   end;
+end;
+
+{ ---- On a painter's layer at a device scale (#83) ------------------------------------------ }
+
+{ Item AIndex of a FOREIGN list as a caller-owned bitmap for a layer at AScale: S times the size
+  the list gives at S = 1 for ASizePx at APPI (returned as ALogicalW/H). The list's own
+  resolution for the raster size when it has one at exactly that size (a list carrying 2x
+  bitmaps, or a Scaled one); otherwise the S = 1 bitmap stretched -- an unscaled 16 px list must
+  still show 16 points, not 16 device pixels. nil when there is nothing to draw. }
+function ForeignScaled(AList: TCustomImageList; AIndex, ASizePx, APPI, AScale: Integer;
+  AGhosted: Boolean; out ALogicalW, ALogicalH: Integer): TBGRABitmap;
+var
+  res1, res2: TScaledImageListResolution;
+  tmp: TBitmap;
+  one: TBGRABitmap;
+begin
+  Result := nil;
+  ALogicalW := 0;
+  ALogicalH := 0;
+  if (AList = nil) or (AIndex < 0) or (AIndex >= AList.Count) or (ASizePx < 1) then Exit;
+  if APPI <= 0 then APPI := 96;
+  res1 := AList.ResolutionForPPI[TyLclWidth96(AList, ASizePx, APPI), APPI, 1];
+  if not res1.Valid then Exit;
+  ALogicalW := res1.Width;
+  ALogicalH := res1.Height;
+  res2 := AList.ResolutionForPPI[TyLclWidth96(AList, ASizePx * AScale, APPI * AScale),
+    APPI * AScale, 1];
+  if not (res2.Valid and (res2.Width = res1.Width * AScale) and (res2.Height = res1.Height * AScale)) then
+    res2 := res1;
+  tmp := TBitmap.Create;
+  try
+    tmp.PixelFormat := pf32bit;
+    tmp.SetSize(res2.Width, res2.Height);
+    res2.GetBitmap(AIndex, tmp, TyGhostEffect[AGhosted]);
+    one := TBGRABitmap.Create(tmp);
+  finally
+    tmp.Free;
+  end;
+  if (one.Width = res1.Width * AScale) and (one.Height = res1.Height * AScale) then
+    Result := one
+  else
+  begin
+    Result := one.Resample(res1.Width * AScale, res1.Height * AScale, rmSimpleStretch) as TBGRABitmap;
+    one.Free;
+  end;
+end;
+
+procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Integer;
+  AX, AY, ASizePx: Integer; AGhosted: Boolean);
+var
+  bmp: TBGRABitmap;
+  lw, lh: Integer;
+begin
+  if (P.DeviceScale <= 1) or (AList is TTyVirtualImageList) then
+  begin
+    { S = 1 is TyBlitImage exactly; our own list renders the vector at the raster size. }
+    TyBlitImage(P.Bitmap, AList, AIndex, P.Dev(AX), P.Dev(AY), P.Dev(ASizePx), P.RasterPPI,
+      AGhosted);
+    Exit;
+  end;
+  if P.Bitmap = nil then Exit;
+  bmp := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);
+  if bmp = nil then Exit;
+  try
+    { Centred in the ASizePx slot by its S = 1 size, as TyBlitImage centres it -- never
+      stretched to the slot. }
+    P.Bitmap.PutImage(P.Dev(AX + (ASizePx - lw) div 2), P.Dev(AY + (ASizePx - lh) div 2), bmp,
+      dmDrawWithTransparency);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TyRenderImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex, ASizePx: Integer;
+  AGhosted: Boolean): TBGRABitmap;
+var
+  lw, lh: Integer;
+begin
+  if (P.DeviceScale <= 1) or (AList is TTyVirtualImageList) then
+    Exit(TyRenderImage(AList, AIndex, P.Dev(ASizePx), P.RasterPPI, AGhosted));
+  Result := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);
 end;
 
 end.

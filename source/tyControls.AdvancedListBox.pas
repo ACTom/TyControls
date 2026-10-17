@@ -114,8 +114,7 @@ begin
   begin
     sz := rowH - P.Scale(8);
     if sz < P.Scale(8) then sz := P.Scale(8);
-    TyBlitImage(P.Bitmap, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz,
-      P.Scale(96), False);
+    TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, False);
     x := x + sz + pad;
   end;
   textLeft := x;

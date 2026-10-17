@@ -604,22 +604,33 @@ begin
         src := TBGRABitmap.Create(tmp);
       end
       else
-        src := TyRenderImage(FImages, GetImageIndex, GetImageSize, APPI, False);
+        { An image-list icon is rendered for the layer: DeviceScale times its S = 1 size (#83). }
+        src := TyRenderImageScaled(P, FImages, GetImageIndex, GetImageSize, False);
       if (src = nil) or (src.Width <= 0) or (src.Height <= 0) then
       begin
         P.EndPaint;
         Exit;
       end;
 
-      FitR := TyImageFitRect(src.Width, src.Height, cw, ch,
-        FStretch, FProportional, FCenter,
-        FStretchInEnabled, FStretchOutEnabled,
-        FKeepOriginXWhenClipped, FKeepOriginYWhenClipped);
+      { The fit is decided in LAYOUT pixels: a picture's own pixels count as layout pixels (it
+        is the user's image, drawn at its size), a rendered icon's are DeviceScale times as many.
+        The result is then mapped onto the layer, which counts device pixels (#83). }
+      if hasPic then
+        FitR := TyImageFitRect(src.Width, src.Height, cw, ch,
+          FStretch, FProportional, FCenter,
+          FStretchInEnabled, FStretchOutEnabled,
+          FKeepOriginXWhenClipped, FKeepOriginYWhenClipped)
+      else
+        FitR := TyImageFitRect(src.Width div P.DeviceScale, src.Height div P.DeviceScale, cw, ch,
+          FStretch, FProportional, FCenter,
+          FStretchInEnabled, FStretchOutEnabled,
+          FKeepOriginXWhenClipped, FKeepOriginYWhenClipped);
       if (FitR.Right <= FitR.Left) or (FitR.Bottom <= FitR.Top) then
       begin
         P.EndPaint;
         Exit;
       end;
+      FitR := P.Dev(FitR);
 
       if ((FitR.Right - FitR.Left) = src.Width)
          and ((FitR.Bottom - FitR.Top) = src.Height) then

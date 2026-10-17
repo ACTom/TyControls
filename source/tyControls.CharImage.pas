@@ -228,11 +228,11 @@ begin
           glyphCol := FGlyphColor;
         // RenderGlyph never returns nil — an empty transparent bitmap when the
         // glyph is unmapped or the font is unset, still safe to PutImage + free.
-        glyph := FIconFont.RenderGlyph(FGlyphName, glyphPx, glyphCol);
+        { Rendered for the layer and centred by the painter (#83). }
+        glyph := FIconFont.RenderGlyph(FGlyphName, P.Dev(glyphPx), glyphCol);
         try
-          x := ContentRect.Left + (cw - glyph.Width) div 2;
-          y := ContentRect.Top + (ch - glyph.Height) div 2;
-          P.Bitmap.PutImage(x, y, glyph, dmDrawWithTransparency);
+          P.DrawGlyphBitmap(Rect(ContentRect.Left, ContentRect.Top, ContentRect.Left + cw,
+            ContentRect.Top + ch), glyph);
         finally
           glyph.Free;
         end;

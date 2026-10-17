@@ -20,7 +20,7 @@ unit test.devicescale.support;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, LMessages, LCLType,
+  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LMessages, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Painter;
 
@@ -36,6 +36,8 @@ const
     between ink and background and counting as drawn in only one picture. }
   CStrongInk = 15;
   CWeakInk = 5;
+  CBlock = 4;
+  CBlockTolerance = 48;
 
 { The control's OWN surface (no children), painted the way test.dpi.support's PaintOne paints it:
   at S = AScale through the seam with DeviceUnits, into a W*S x H*S bitmap that starts white.
@@ -46,8 +48,15 @@ function TyPaintOwnSurface(AControl: TControl; AScale: Integer): TBGRABitmap;
   pixel of ARef within ARadius, plus the same the other way round. Pictures of different sizes
   count every pixel. }
 function TyInkMismatch(A, ARef: TBGRABitmap; ARadius: Integer): Integer;
+{ COLOUR, coarsely: ABlock x ABlock blocks whose mean colour differs between A and ARef by more
+  than ATolerance in some channel. Catches what ink cannot -- a picture that covers the whole
+  control is ink everywhere in both pictures wherever it was drawn -- while a one-pixel shift
+  or a different antialiasing hardly moves a block's mean. }
+function TyBlockMismatch(A, ARef: TBGRABitmap; ABlock, ATolerance: Integer): Integer;
 { Builds at 96 sized AW x AH twice: paints one at S = 2 and averages it down 2:1, paints the
-  other at S = 1; returns TyInkMismatch of the two (both directions). }
+  other at S = 1. The score is the unmatched ink (TyInkMismatch, both directions) plus the
+  mismatched CBlock-pixel blocks (TyBlockMismatch). Measured noise: 0 ink and at most 6 blocks
+  (TTyCalendar) for every control drawing correctly. }
 { For looking at a failure: ARef in grey, ink of A that ARef does not have in red, ink of ARef
   that A does not have in blue. The caller frees it. }
 function TyInkMismatchImage(A, ARef: TBGRABitmap; ARadius: Integer): TBGRABitmap;
@@ -55,7 +64,7 @@ function TyDeviceScaleMismatch(ABuild: TTyBuildForScale; AW, AH: Integer): Integ
 { The same, keeping both pictures (the caller frees them; AScaled is the averaged-down one) --
   for saving them when a check fails. }
 function TyDeviceScaleMismatchPictures(ABuild: TTyBuildForScale; AW, AH: Integer;
-  out AScaled, ARef: TBGRABitmap): Integer;
+  out AScaled, ARef: TBGRABitmap; out AInk, ABlocks: Integer): Integer;
 
 implementation
 
@@ -215,6 +224,42 @@ begin
     end;
 end;
 
+{ Blocks of ABlock x ABlock pixels whose mean colour differs between A and ARef by more than
+  ATolerance in some channel. }
+function TyBlockMismatch(A, ARef: TBGRABitmap; ABlock, ATolerance: Integer): Integer;
+var
+  bx, by, x, y, n: Integer;
+  ra, ga, ba, rb, gb, bb: Integer;
+  pa, pb: PBGRAPixel;
+begin
+  if (A.Width <> ARef.Width) or (A.Height <> ARef.Height) then Exit(A.Width * A.Height);
+  Result := 0;
+  by := 0;
+  while by < A.Height do
+  begin
+    bx := 0;
+    while bx < A.Width do
+    begin
+      ra := 0; ga := 0; ba := 0; rb := 0; gb := 0; bb := 0; n := 0;
+      for y := by to Min(by + ABlock, A.Height) - 1 do
+      begin
+        pa := A.ScanLine[y];
+        pb := ARef.ScanLine[y];
+        for x := bx to Min(bx + ABlock, A.Width) - 1 do
+        begin
+          ra := ra + pa[x].red; ga := ga + pa[x].green; ba := ba + pa[x].blue;
+          rb := rb + pb[x].red; gb := gb + pb[x].green; bb := bb + pb[x].blue;
+          Inc(n);
+        end;
+      end;
+      if (Abs(ra - rb) > ATolerance * n) or (Abs(ga - gb) > ATolerance * n) or
+        (Abs(ba - bb) > ATolerance * n) then Inc(Result);
+      Inc(bx, ABlock);
+    end;
+    Inc(by, ABlock);
+  end;
+end;
+
 function TyInkMismatch(A, ARef: TBGRABitmap; ARadius: Integer): Integer;
 var
   bg: TBGRAPixel;
@@ -255,7 +300,7 @@ begin
 end;
 
 function TyDeviceScaleMismatchPictures(ABuild: TTyBuildForScale; AW, AH: Integer;
-  out AScaled, ARef: TBGRABitmap): Integer;
+  out AScaled, ARef: TBGRABitmap; out AInk, ABlocks: Integer): Integer;
 var
   f1, f2: TForm;
   c1, c2: TControl;
@@ -279,7 +324,9 @@ begin
     c2 := ABuild(f2, 96);
     c2.SetBounds(0, 0, AW, AH);
     ARef := TyPaintOwnSurface(c2, 1);
-    Result := TyInkMismatch(AScaled, ARef, CFuzzyRadius);
+    AInk := TyInkMismatch(AScaled, ARef, CFuzzyRadius);
+    ABlocks := TyBlockMismatch(AScaled, ARef, CBlock, CBlockTolerance);
+    Result := AInk + ABlocks;
   finally
     f2.Free;
     f1.Free;
@@ -289,8 +336,9 @@ end;
 function TyDeviceScaleMismatch(ABuild: TTyBuildForScale; AW, AH: Integer): Integer;
 var
   a, b: TBGRABitmap;
+  ink, blocks: Integer;
 begin
-  Result := TyDeviceScaleMismatchPictures(ABuild, AW, AH, a, b);
+  Result := TyDeviceScaleMismatchPictures(ABuild, AW, AH, a, b, ink, blocks);
   a.Free;
   b.Free;
 end;

@@ -166,10 +166,11 @@ begin
   begin
     sz := rowH - P.Scale(8);
     if sz < P.Scale(8) then sz := P.Scale(8);
-    bmp := AImages.CachedIndex(AGlyphIndex, sz);   { borrowed; do NOT free }
+    { Borrowed, do NOT free. Rendered for the layer (Dev(sz)), placed in its sz layout square. }
+    bmp := AImages.CachedIndex(AGlyphIndex, P.Dev(sz));
     if bmp <> nil then
-      P.Bitmap.PutImage(x, ARect.Top + ((rowH - bmp.Height) div 2), bmp,
-        dmDrawWithTransparency);
+      P.DrawGlyphBitmap(Rect(x, ARect.Top + (rowH - sz) div 2, x + sz,
+        ARect.Top + (rowH - sz) div 2 + sz), bmp);
     x := x + sz + pad;
   end;
   textR := Rect(x, ARect.Top, ARect.Right - pad, ARect.Bottom);

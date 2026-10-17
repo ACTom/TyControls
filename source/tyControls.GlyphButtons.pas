@@ -867,11 +867,11 @@ begin
     APainter.DrawGlyph(glyphRect, FGlyphKind, glyphCol, 2, 1)
   else
   begin
-    glyph := ResolveGlyphBitmap(GetGlyphSource(CurrentStates), renderPx, glyphCol);
+    { Rendered for the layer (Dev(renderPx) raster pixels) and centred in the slot by the
+      painter, which places a glyph bitmap 1:1 on its layer (#83). }
+    glyph := ResolveGlyphBitmap(GetGlyphSource(CurrentStates), APainter.Dev(renderPx), glyphCol);
     try
-      gx := glyphRect.Left + ((glyphRect.Right - glyphRect.Left) - glyph.Width) div 2;
-      gy := glyphRect.Top  + ((glyphRect.Bottom - glyphRect.Top) - glyph.Height) div 2;
-      APainter.Bitmap.PutImage(gx, gy, glyph, dmDrawWithTransparency);
+      APainter.DrawGlyphBitmap(glyphRect, glyph);
     finally
       glyph.Free;
     end;
