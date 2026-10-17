@@ -48,9 +48,9 @@ const
     (the menu banner drawn at its layout position). 24 sits between them. }
   CMaxMismatch = 24;
 
-  { Classes known not to draw at the device scale yet. Each porting task removes its own:
-    the shell tree (TreeView), and the panels whose paint cache is still one-times
-    (TTyPaintCache). }
+  { Classes known not to draw at the device scale yet. Each porting task removes its own: the
+    shell tree, whose drive icons are drawn on the canvas after the layer (TyDrawImage, Task 16),
+    and the panels whose paint cache is still one-times (TTyPaintCache). }
   CKnownUnported: array of string = ('TTyShellTreeView', 'TTyPanel', 'TTyRelativePanel',
     'TTyCoolBar', 'TTyControlBar');
 

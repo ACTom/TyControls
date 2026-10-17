@@ -18,7 +18,9 @@ unit test.devicescale.support;
   21 porting mistakes put back one at a time (the signal).
   - INK, not colour: a 2:1 average and a direct rasterisation differ in antialiasing wherever a
     line or a glyph runs, while both are right. A pixel counts when it is clearly ink and the
-    other picture has not even faint ink near it.
+    other picture has no ink near it at least a quarter as strong: faint antialiasing covers
+    faint antialiasing, but a light box outline does not cover the dark mark missing inside it
+    (a tree's "mixed" check scored 4 with any ink covering, 40 with this).
   - NEAR is wider across than down (CRadiusX, CRadiusY): text laid out at 96 and drawn at 192
     drifts along its run under GDI hinting, a few pixels by the end of a short line; a glyph
     drawn at the wrong SIZE differs in height too, and that stays caught.
@@ -29,8 +31,9 @@ unit test.devicescale.support;
     everywhere in both pictures wherever it was drawn.
   Measured when set (2026-10-17): every correct picture scored at most 20 (a bold title in
   TTyAdvancedListBox; the next was 2); the weakest mistake still caught scored 28. Two kinds are
-  not seen at all and get their own assertions: a rule drawn at the right place with half its
-  weight, and a faint vertical rule (TyVerticalRules). }
+  not seen: a rule drawn at the right place with half its weight, and a faint 1-px rule drawn
+  at the wrong place. Rules get their own assertion: found as rules (TyRules) on the S = 2
+  raster itself, each must be the S = 1 rule doubled (TyDoubledRules). }
 
 interface
 
@@ -52,6 +55,8 @@ const
     rasterisation from flipping between ink and background. }
   CStrongInk = 15;
   CWeakInk = 5;
+  { Ink near a pixel covers it only when stronger than 1/CCoverFraction of the pixel's own. }
+  CCoverFraction = 4;
   CLocalTile = 16;
   CBlock = 4;
   CBlockTolerance = 64;
@@ -70,10 +75,18 @@ function TyBlockMismatch(A, ARef: TBGRABitmap): Integer;
 { For looking at a failure: ARef in grey, A's unmatched ink in red, ARef's in blue (global
   background). The caller frees it. }
 function TyInkMismatchImage(A, ARef: TBGRABitmap): TBGRABitmap;
-{ The x of every column of B where, between rows AY0 and AY1 (exclusive), at least 80% of the
-  pixels differ from the band's most frequent colour by more than ATolerance: the vertical rules
-  of a band, which text never spans. }
-function TyVerticalRules(B: TBGRABitmap; AY0, AY1, ATolerance: Integer): TTyIntArray;
+{ The rules of a band: the x of every column (AVertical) or the y of every row of ABand where at
+  least 80% of the band's pixels differ from its most frequent colour by more than ATolerance --
+  lines across the whole band, which text never makes. Keep the band inside a frame: its
+  antialiased sides come out a shade apart at the two scales. }
+function TyRules(B: TBGRABitmap; const ABand: TRect; AVertical: Boolean;
+  ATolerance: Integer): TTyIntArray;
+{ What a rule one layout pixel wide is on a 2x raster: every coordinate x of A as 2x and 2x + 1. }
+function TyDoubledRules(const A: TTyIntArray): TTyIntArray;
+{ Builds at 96 sized AW x AH twice and paints one at S = 2 (ARaster, 2AW x 2AH, as painted) and
+  the other at S = 1 (ARef). The caller frees both. }
+procedure TyPaintAtBothScales(ABuild: TTyBuildForScale; AW, AH: Integer;
+  out ARaster, ARef: TBGRABitmap);
 { Builds at 96 sized AW x AH twice: paints one at S = 2 and averages it down 2:1, paints the
   other at S = 1. Score = TyInkMismatch + TyBlockMismatch. }
 function TyDeviceScaleMismatch(ABuild: TTyBuildForScale; AW, AH: Integer): Integer;
@@ -85,7 +98,7 @@ implementation
 
 type
   TWinControlAccess = class(TWinControl);
-  TInkMask = array of array of Boolean;
+  TInkLevel = array of array of Integer;
   TBgMap = array of array of TBGRAPixel;
 
 function TyPaintOwnSurface(AControl: TControl; AScale: Integer): TBGRABitmap;
@@ -213,7 +226,8 @@ begin
   end;
 end;
 
-function InkMask(B: TBGRABitmap; const ABg: TBgMap; AThreshold: Integer): TInkMask;
+{ Every pixel's ink: its farthest channel's distance from the background under it. }
+function InkLevel(B: TBGRABitmap; const ABg: TBgMap): TInkLevel;
 var
   x, y, r, g, bl: Integer;
   p: PBGRAPixel;
@@ -225,44 +239,65 @@ begin
     for x := 0 to B.Width - 1 do
     begin
       r := p[x].red;
+      r := Abs(r - ABg[y][x].red);
       g := p[x].green;
+      g := Abs(g - ABg[y][x].green);
       bl := p[x].blue;
-      Result[y][x] := (Abs(r - ABg[y][x].red) > AThreshold) or
-        (Abs(g - ABg[y][x].green) > AThreshold) or (Abs(bl - ABg[y][x].blue) > AThreshold);
+      bl := Abs(bl - ABg[y][x].blue);
+      Result[y][x] := Max(r, Max(g, bl));
     end;
   end;
 end;
 
-function Covered(const AOther: TInkMask; AX, AY, AW, AH: Integer): Boolean;
+{ The strongest ink within CRadiusX across and CRadiusY down of every pixel. }
+function NearMax(const L: TInkLevel; AW, AH: Integer): TInkLevel;
 var
-  dx, dy: Integer;
+  across: TInkLevel;
+  x, y, d, m: Integer;
 begin
-  for dy := -CRadiusY to CRadiusY do
-    if (AY + dy >= 0) and (AY + dy < AH) then
-      for dx := -CRadiusX to CRadiusX do
-        if (AX + dx >= 0) and (AX + dx < AW) and AOther[AY + dy][AX + dx] then Exit(True);
-  Result := False;
+  SetLength(across, AH, AW);
+  for y := 0 to AH - 1 do
+    for x := 0 to AW - 1 do
+    begin
+      m := 0;
+      for d := Max(0, x - CRadiusX) to Min(AW - 1, x + CRadiusX) do
+        if L[y][d] > m then m := L[y][d];
+      across[y][x] := m;
+    end;
+  SetLength(Result, AH, AW);
+  for y := 0 to AH - 1 do
+    for x := 0 to AW - 1 do
+    begin
+      m := 0;
+      for d := Max(0, y - CRadiusY) to Min(AH - 1, y + CRadiusY) do
+        if across[d][x] > m then m := across[d][x];
+      Result[y][x] := m;
+    end;
 end;
 
-function Unmatched(const AStrong, AOtherWeak: TInkMask; AW, AH: Integer): Integer;
+function Uncovered(AOwn, ANear: Integer): Boolean; inline;
+begin
+  Result := (AOwn > CStrongInk) and not ((ANear > CWeakInk) and (ANear * CCoverFraction > AOwn));
+end;
+
+function Unmatched(const AOwn, AOtherNear: TInkLevel; AW, AH: Integer): Integer;
 var
   x, y: Integer;
 begin
   Result := 0;
   for y := 0 to AH - 1 do
     for x := 0 to AW - 1 do
-      if AStrong[y][x] and not Covered(AOtherWeak, x, y, AW, AH) then Inc(Result);
+      if Uncovered(AOwn[y][x], AOtherNear[y][x]) then Inc(Result);
 end;
 
 function InkAgainst(A, ARef: TBGRABitmap; const ABg: TBgMap): Integer;
 var
-  sa, wa, sb, wb: TInkMask;
+  la, lb: TInkLevel;
 begin
-  sa := InkMask(A, ABg, CStrongInk);
-  wa := InkMask(A, ABg, CWeakInk);
-  sb := InkMask(ARef, ABg, CStrongInk);
-  wb := InkMask(ARef, ABg, CWeakInk);
-  Result := Unmatched(sa, wb, A.Width, A.Height) + Unmatched(sb, wa, A.Width, A.Height);
+  la := InkLevel(A, ABg);
+  lb := InkLevel(ARef, ABg);
+  Result := Unmatched(la, NearMax(lb, A.Width, A.Height), A.Width, A.Height) +
+    Unmatched(lb, NearMax(la, A.Width, A.Height), A.Width, A.Height);
 end;
 
 function TyInkMismatch(A, ARef: TBGRABitmap): Integer;
@@ -309,68 +344,90 @@ end;
 function TyInkMismatchImage(A, ARef: TBGRABitmap): TBGRABitmap;
 var
   bg: TBgMap;
-  sa, wa, sb, wb: TInkMask;
+  la, lb, na, nb: TInkLevel;
   x, y, v: Integer;
 begin
   Result := TBGRABitmap.Create(ARef.Width, ARef.Height, BGRAWhite);
   if (A.Width <> ARef.Width) or (A.Height <> ARef.Height) then Exit;
   bg := GlobalBackground(ARef);
-  sa := InkMask(A, bg, CStrongInk);
-  wa := InkMask(A, bg, CWeakInk);
-  sb := InkMask(ARef, bg, CStrongInk);
-  wb := InkMask(ARef, bg, CWeakInk);
+  la := InkLevel(A, bg);
+  lb := InkLevel(ARef, bg);
+  na := NearMax(la, A.Width, A.Height);
+  nb := NearMax(lb, A.Width, A.Height);
   for y := 0 to ARef.Height - 1 do
     for x := 0 to ARef.Width - 1 do
     begin
       v := ARef.GetPixel(x, y).green;
       v := 128 + v div 2;
       Result.SetPixel(x, y, BGRA(v, v, v, 255));
-      if sa[y][x] and not Covered(wb, x, y, A.Width, A.Height) then
+      if Uncovered(la[y][x], nb[y][x]) then
         Result.SetPixel(x, y, BGRA(255, 0, 0, 255))
-      else if sb[y][x] and not Covered(wa, x, y, A.Width, A.Height) then
+      else if Uncovered(lb[y][x], na[y][x]) then
         Result.SetPixel(x, y, BGRA(0, 0, 255, 255));
     end;
 end;
 
-function TyVerticalRules(B: TBGRABitmap; AY0, AY1, ATolerance: Integer): TTyIntArray;
+function TyRules(B: TBGRABitmap; const ABand: TRect; AVertical: Boolean;
+  ATolerance: Integer): TTyIntArray;
 var
-  bg: TBGRAPixel;
-  x, y, n, r, g, bl: Integer;
-  p: TBGRAPixel;
+  bg, p: TBGRAPixel;
+  a, c, n, r, g, bl, x0, y0, x1, y1, a0, a1, c0, c1: Integer;
 begin
   Result := nil;
-  if AY0 < 0 then AY0 := 0;
-  if AY1 > B.Height then AY1 := B.Height;
-  if AY1 <= AY0 then Exit;
-  bg := BackgroundIn(B, 0, AY0, B.Width, AY1);
-  for x := 0 to B.Width - 1 do
+  x0 := Max(ABand.Left, 0);
+  y0 := Max(ABand.Top, 0);
+  x1 := Min(ABand.Right, B.Width);
+  y1 := Min(ABand.Bottom, B.Height);
+  if (x1 <= x0) or (y1 <= y0) then Exit;
+  bg := BackgroundIn(B, x0, y0, x1, y1);
+  { a runs along the axis the rules are found on, c across the band. }
+  if AVertical then
+  begin
+    a0 := x0; a1 := x1; c0 := y0; c1 := y1;
+  end
+  else
+  begin
+    a0 := y0; a1 := y1; c0 := x0; c1 := x1;
+  end;
+  for a := a0 to a1 - 1 do
   begin
     n := 0;
-    for y := AY0 to AY1 - 1 do
+    for c := c0 to c1 - 1 do
     begin
-      p := B.GetPixel(x, y);
+      if AVertical then p := B.GetPixel(a, c) else p := B.GetPixel(c, a);
       r := p.red;
       g := p.green;
       bl := p.blue;
       if (Abs(r - bg.red) > ATolerance) or (Abs(g - bg.green) > ATolerance) or
         (Abs(bl - bg.blue) > ATolerance) then Inc(n);
     end;
-    if n * 5 >= (AY1 - AY0) * 4 then
+    if n * 5 >= (c1 - c0) * 4 then
     begin
       SetLength(Result, Length(Result) + 1);
-      Result[High(Result)] := x;
+      Result[High(Result)] := a;
     end;
   end;
 end;
 
-function TyDeviceScaleMismatchPictures(ABuild: TTyBuildForScale; AW, AH: Integer;
-  out AScaled, ARef: TBGRABitmap; out AInk, ABlocks: Integer): Integer;
+function TyDoubledRules(const A: TTyIntArray): TTyIntArray;
+var
+  i: Integer;
+begin
+  SetLength(Result, 2 * Length(A));
+  for i := 0 to High(A) do
+  begin
+    Result[2 * i] := 2 * A[i];
+    Result[2 * i + 1] := 2 * A[i] + 1;
+  end;
+end;
+
+procedure TyPaintAtBothScales(ABuild: TTyBuildForScale; AW, AH: Integer;
+  out ARaster, ARef: TBGRABitmap);
 var
   f1, f2: TForm;
   c1, c2: TControl;
-  raster: TBGRABitmap;
 begin
-  AScaled := nil;
+  ARaster := nil;
   ARef := nil;
   f1 := TForm.CreateNew(nil);
   f2 := TForm.CreateNew(nil);
@@ -379,22 +436,30 @@ begin
     f2.SetBounds(0, 0, AW + 40, AH + 40);
     c1 := ABuild(f1, 96);
     c1.SetBounds(0, 0, AW, AH);
-    raster := TyPaintOwnSurface(c1, 2);
-    try
-      AScaled := TyHalve(raster);
-    finally
-      raster.Free;
-    end;
+    ARaster := TyPaintOwnSurface(c1, 2);
     c2 := ABuild(f2, 96);
     c2.SetBounds(0, 0, AW, AH);
     ARef := TyPaintOwnSurface(c2, 1);
-    AInk := TyInkMismatch(AScaled, ARef);
-    ABlocks := TyBlockMismatch(AScaled, ARef);
-    Result := AInk + ABlocks;
   finally
     f2.Free;
     f1.Free;
   end;
+end;
+
+function TyDeviceScaleMismatchPictures(ABuild: TTyBuildForScale; AW, AH: Integer;
+  out AScaled, ARef: TBGRABitmap; out AInk, ABlocks: Integer): Integer;
+var
+  raster: TBGRABitmap;
+begin
+  TyPaintAtBothScales(ABuild, AW, AH, raster, ARef);
+  try
+    AScaled := TyHalve(raster);
+  finally
+    raster.Free;
+  end;
+  AInk := TyInkMismatch(AScaled, ARef);
+  ABlocks := TyBlockMismatch(AScaled, ARef);
+  Result := AInk + ABlocks;
 end;
 
 function TyDeviceScaleMismatch(ABuild: TTyBuildForScale; AW, AH: Integer): Integer;
