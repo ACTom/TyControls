@@ -2139,8 +2139,8 @@ begin
          (FIconRects[I].Right > FIconRects[I].Left) then
       begin
         IconRect := ToScreenRect(FIconRects[I]);
-        TyBlitImage(P.Bitmap, FImages, IconIdx, IconRect.Left, IconRect.Top,
-          IconRect.Right - IconRect.Left, P.Scale(96), False);
+        TyBlitImageScaled(P, FImages, IconIdx, IconRect.Left, IconRect.Top,
+          IconRect.Right - IconRect.Left, False);
         if Rtl then
         begin
           if IconRect.Left < TextRect.Right then TextRect.Right := IconRect.Left;

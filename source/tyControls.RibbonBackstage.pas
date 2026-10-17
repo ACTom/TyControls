@@ -522,7 +522,7 @@ procedure TTyCustomRibbonBackstage.RenderTo(ACanvas: TCanvas; const ARect: TRect
 var
   P: TTyPainter;
   ContentS, SideS, RowS: TTyStyleSet;
-  W, H, sbW, backH, rowH, cy, fs, gsz: Integer;
+  W, H, sbW, backH, rowH, cy, fs, gsz, gx, gy: Integer;
   nt, nb, k, divY, lineH: Integer;
   rr: TRect;
   arrowCx, arrowCy: Integer;
@@ -607,17 +607,21 @@ begin
         gsz := P.Scale(ActiveController.Metric('--backstage-icon-size', TyBackstageIconSize));
         if FImages <> nil then
         begin
-          glyph := FImages.GetBitmap(glyphName, gsz);
+          glyph := FImages.GetBitmap(glyphName, P.Dev(gsz));
           TyTintBitmapAlpha(glyph, SideS.TextColor);
         end
         else if FIconFont <> nil then
-          glyph := FIconFont.RenderGlyph(glyphName, gsz, SideS.TextColor)
+          glyph := FIconFont.RenderGlyph(glyphName, P.Dev(gsz), SideS.TextColor)
         else
           glyph := nil;
         if glyph <> nil then
         try
-          P.Bitmap.PutImage(P.Scale(ActiveController.Metric('--backstage-icon-x', TyBackstageIconX)),
-            rr.Top + (rowH - glyph.Height) div 2, glyph, dmDrawWithTransparency);
+        begin
+          { Rendered for the layer (Dev(gsz)); placed in its gsz layout square (#83). }
+          gx := P.Scale(ActiveController.Metric('--backstage-icon-x', TyBackstageIconX));
+          gy := rr.Top + (rowH - gsz) div 2;
+          P.DrawGlyphBitmap(Rect(gx, gy, gx + gsz, gy + gsz), glyph);
+        end;
         finally
           glyph.Free;
         end;

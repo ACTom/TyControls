@@ -294,7 +294,7 @@ begin
   end;
   dst := Rect(0, 0, dw, dh);
   OffsetRect(dst, AContent.Left + (w - dw) div 2, AContent.Top + (h - dh) div 2);
-  APainter.Bitmap.StretchPutImage(dst, m, dmDrawWithTransparency);
+  APainter.Bitmap.StretchPutImage(APainter.Dev(dst), m, dmDrawWithTransparency);   // layer px (#83)
 end;
 
 { ---- actions ---- }

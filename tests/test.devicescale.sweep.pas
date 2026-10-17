@@ -40,19 +40,18 @@ type
   end;
 
 const
-  { Unmatched ink pixels (test.devicescale.support, both directions) above which a control
-    counts as not drawing at the device scale. Measured when this was set (2026-10-17): every
-    control that draws only through the painter's methods scored 0; the lowest-scoring
-    control still drawing in layout coordinates was TTyBevel at 144 (two 1-px lines). 20 sits
-    well clear of both. }
+  { The score (unmatched ink + mismatched blocks, test.devicescale.support) above which a
+    control counts as not drawing at the device scale. Measured when this was set (2026-10-17):
+    every control that draws only through the painter's methods scored at most 6 (TTyCalendar,
+    all blocks); the lowest-scoring control still drawing in layout coordinates was TTyBevel
+    at 144 (two 1-px lines). 20 sits clear of both. }
   CMaxMismatch = 20;
 
   { Classes known not to draw at the device scale yet. Each porting task removes its own:
-    Bevel and Empty (direct lines), the colour and font list boxes (ListBox's clip), the shell
-    tree (TreeView), and the panels whose paint cache is still one-times (TTyPaintCache). }
-  CKnownUnported: array of string = ('TTyBevel', 'TTyEmpty', 'TTyColorListBox',
-    'TTyFontListBox', 'TTyShellTreeView', 'TTyPanel', 'TTyRelativePanel', 'TTyCoolBar',
-    'TTyControlBar');
+    the colour and font list boxes (ListBox's clip), the shell tree (TreeView), and the
+    panels whose paint cache is still one-times (TTyPaintCache). }
+  CKnownUnported: array of string = ('TTyColorListBox', 'TTyFontListBox', 'TTyShellTreeView',
+    'TTyPanel', 'TTyRelativePanel', 'TTyCoolBar', 'TTyControlBar');
 
 implementation
 
@@ -99,6 +98,7 @@ var
   c: TControl;
   newFails, staleListed, errors: string;
   picA, picB, diff: TBGRABitmap;
+  inkScore, blocks: Integer;
   k: Integer;
   ink: Integer;
   s: string;
@@ -134,7 +134,7 @@ begin
       w := w and not 1;
       h := h and not 1;
       try
-        score := TyDeviceScaleMismatchPictures(@BuildCurrent, w, h, picA, picB);
+        score := TyDeviceScaleMismatchPictures(@BuildCurrent, w, h, picA, picB, inkScore, blocks);
         ink := InkOf(picB);
         { TY_SWEEP_DIR set: keep both pictures of a failing class (of every class with
           TY_SWEEP_ALL), and the ink difference, to look at. }
@@ -163,7 +163,8 @@ begin
           Continue;
         end;
       end;
-      report.Add(Format('%-28s %4dx%-4d %8d  ink %d', [names[i], w, h, score, ink]));
+      report.Add(Format('%-28s %4dx%-4d %8d  (ink %d, blocks %d)  drawn %d', [names[i], w, h, score,
+        inkScore, blocks, ink]));
       if score > CMaxMismatch then
       begin
         failing.Add(names[i]);

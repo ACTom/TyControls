@@ -305,13 +305,16 @@ var
 
   { Draw a 1px-thick device line from (x1,y1) to (x2,y2). BGRA FillRect is exact
     for horizontal/vertical runs (all our edges are axis-aligned). }
+  { Layout coordinates in, layer (device) pixels out (#83). }
   procedure HLine(ax1, ay, ax2: Integer; APx: TBGRAPixel);
   begin
-    P.Bitmap.FillRect(ax1, ay, ax2 + 1, ay + th, APx, dmDrawWithTransparency);
+    P.Bitmap.FillRect(P.Dev(ax1), P.Dev(ay), P.Dev(ax2 + 1), P.Dev(ay + th), APx,
+      dmDrawWithTransparency);
   end;
   procedure VLine(ax, ay1, ay2: Integer; APx: TBGRAPixel);
   begin
-    P.Bitmap.FillRect(ax, ay1, ax + th, ay2 + 1, APx, dmDrawWithTransparency);
+    P.Bitmap.FillRect(P.Dev(ax), P.Dev(ay1), P.Dev(ax + th), P.Dev(ay2 + 1), APx,
+      dmDrawWithTransparency);
   end;
 
 begin

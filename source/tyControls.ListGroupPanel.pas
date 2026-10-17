@@ -907,7 +907,7 @@ begin
   if sz < 1 then sz := 1;
   { In-layer, both branches: our list renders the vector at sz, a foreign list is materialised.
     APPI: this control composites at device px, so P's PPI is the device PPI. }
-  TyBlitImage(P.Bitmap, FImages, AIndex, AX, ATop + (ARowH - sz) div 2, sz, P.Scale(96), False);
+  TyBlitImageScaled(P, FImages, AIndex, AX, ATop + (ARowH - sz) div 2, sz, False);
   Result := AX + sz + P.Scale(ActiveController.Metric(TyListGroupIconGapVar, TyListGroupDefaultIconGap));
 end;
 

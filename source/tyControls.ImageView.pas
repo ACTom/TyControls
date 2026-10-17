@@ -787,6 +787,8 @@ begin
         if (dst.Right > dst.Left) and (dst.Bottom > dst.Top) then
         begin
           // StretchPutImage/PutImage clip to the target bitmap bounds automatically.
+          { dst is in layout pixels; the layer counts device pixels (#83). }
+          dst := P.Dev(dst);
           if ((dst.Right - dst.Left) = FProcessed.Width)
              and ((dst.Bottom - dst.Top) = FProcessed.Height) then
             P.Bitmap.PutImage(dst.Left, dst.Top, FProcessed, dmDrawWithTransparency)

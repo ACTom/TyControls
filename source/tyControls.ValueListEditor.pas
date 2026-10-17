@@ -2015,8 +2015,8 @@ begin
     begin
       imgSz := (ARowRect.Bottom - ARowRect.Top) - P.Scale(6);
       if imgSz < 8 then imgSz := 8;
-      TyBlitImage(P.Bitmap, FImages, r.ImageIndex, valR.Left,
-        ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top - imgSz) div 2), imgSz, P.Scale(96), False);
+      TyBlitImageScaled(P, FImages, r.ImageIndex, valR.Left,
+        ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top - imgSz) div 2), imgSz, False);
       valR.Left := valR.Left + imgSz + P.Scale(4);
     end;
     { The per-row override still wins over the theme -- an app that colours one value red
