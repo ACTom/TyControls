@@ -88,6 +88,9 @@ type
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRectAt(const ARect: TRect);
+    procedure FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
+      ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
+      AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
     procedure NineSliceAt(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
     procedure DrawImageFillAt(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure FillImageSliceAt(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
@@ -1654,6 +1657,11 @@ procedure TTyPainter.PresetCanvas2D;
 begin
   FBmp.Canvas2D.resetTransform;
   FBmp.Canvas2D.scale(FScale, FScale);
+  { BGRA keeps the stroke geometry apart from the path transform: lineWidth is taken in device
+    pixels through strokeMatrix, not through the matrix above. Scale it too, so a lineWidth set
+    in layout pixels strokes S times as wide, as it would on an HTML canvas. }
+  FBmp.Canvas2D.strokeResetTransform;
+  FBmp.Canvas2D.strokeScale(FScale, FScale);
 end;
 
 procedure TTyPainter.BlitScaled(ABmp: TBGRABitmap; AOpaque: Boolean);
@@ -1913,6 +1921,55 @@ end;
 procedure TTyPainter.FillPointerShape(const ABody: TRect; const ACorners: TTyCorners;
   ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
   AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
+{ Canvas2D, but in the raster scope like the rect methods, not through the preset scale(S,S):
+  the outline follows the pixel-index convention of StrokeBorder (Right - 1, a half-line
+  inset), which a matrix would double along with everything else. So the geometry is mapped
+  here and drawn with the Canvas2D transforms set aside for the call. }
+var
+  body: TRect;
+  tip, halfBase, height: Integer;
+  ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  if RasterEnter then
+  begin
+    body := Dev(ABody);
+    tip := Dev(ATipPos);
+    halfBase := Dev(AHalfBase);
+    height := Dev(AHeight);
+  end
+  else
+  begin
+    body := ABody;
+    tip := ATipPos;
+    halfBase := AHalfBase;
+    height := AHeight;
+  end;
+  try
+    if FScale > 1 then
+    begin
+      ctx := FBmp.Canvas2D;
+      ctx.save;
+      try
+        ctx.resetTransform;
+        ctx.strokeResetTransform;
+        FillPointerShapeAt(body, ACorners, ASide, tip, halfBase, height, AFillColor,
+          ABorderColor, ABorderWidthLogical);
+      finally
+        ctx.restore;
+      end;
+    end
+    else
+      FillPointerShapeAt(body, ACorners, ASide, tip, halfBase, height, AFillColor,
+        ABorderColor, ABorderWidthLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
+  ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
+  AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
 var
   ctx: TBGRACanvas2D;
   w: Integer;
@@ -2150,6 +2207,10 @@ begin
   end;
 end;
 
+{ StarPath and DrawStar stay OUTSIDE the raster scope on purpose: their geometry is pure (a
+  centre and radii, no pixel-index convention), so the scale(S,S) BeginPaint presets on the
+  Canvas2D draws them at the device scale from layout coordinates -- which is also what lets a
+  control trace StarPath and then fill or clip with its own Canvas2D calls (TTyRating). }
 procedure TTyPainter.StarPath(ACx, ACy, AOuter, AInner: Double);
 var
   ctx: TBGRACanvas2D;
