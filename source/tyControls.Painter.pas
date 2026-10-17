@@ -850,7 +850,8 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText;
+  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText,
+  tyControls.PlatformWS;
 
 { Canvas2D's own fill, stroke and clip with the generator pinned. }
 procedure CtxFill(ACtx: TBGRACanvas2D);
@@ -4331,8 +4332,10 @@ begin
     Result.DeviceUnits := True;
     Exit;
   end;
+  { The system is asked through the platform facade, never here: a widgetset that needs its own
+    query gets it in PlatformWS and its WS unit, and this unit stays free of widgetset IFDEFs. }
   if (ACanvas is TControlCanvas) and (TControlCanvas(ACanvas).Control <> nil) then
-    Result.Scale := TyDeviceScaleOf(TControlCanvas(ACanvas).Control.GetCanvasScaleFactor);
+    Result.Scale := TyDeviceScaleOf(TyControlDeviceScale(TControlCanvas(ACanvas).Control));
 end;
 
 procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
