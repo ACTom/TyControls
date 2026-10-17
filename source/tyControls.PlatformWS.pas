@@ -151,6 +151,15 @@ function TyMinimizeWindow(AForm: TCustomForm): Boolean;
   matches the theme. No-op elsewhere. }
 procedure TyApplyWindowAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
 
+{ ---- the device scale (#83) -------------------------------------------------------------- }
+
+{ How many device pixels one LCL pixel of AControl covers: 2 on a Retina Mac, 1 elsewhere. LCL
+  says it through TControl.GetCanvasScaleFactor, and today only LCL-Cocoa answers anything but 1
+  (the window's backingScaleFactor; a graphic control takes its parent's). A widgetset that
+  scales a window without saying so -- Qt6, GTK3 at an integer scale -- gets its own query here,
+  in its WS unit, and the painter and the controls never see it. nil = 1. }
+function TyControlDeviceScale(AControl: TControl): Double;
+
 type
   { TEST SEAM. While Active, the functions in the section above (and TyStartSystemMove) answer
     from here instead of the widgetset, and the ones that act record what they were asked. It
@@ -175,6 +184,7 @@ type
     SystemMoves: Integer;
     AppearanceApplies: Integer;
     LastShadow, LastDark: Boolean;
+    DeviceScale: Double;        // TyControlDeviceScale answers it when > 0
   end;
 
 var
@@ -426,6 +436,14 @@ end;
 procedure TyResetTestPlatform;
 begin
   TyTestPlatform := Default(TTyTestPlatform);
+end;
+
+function TyControlDeviceScale(AControl: TControl): Double;
+begin
+  if TyTestPlatform.Active and (TyTestPlatform.DeviceScale > 0) then
+    Exit(TyTestPlatform.DeviceScale);
+  if AControl = nil then Exit(1);
+  Result := AControl.GetCanvasScaleFactor;
 end;
 
 function TyFrameTraits: TTyFrameTraits;

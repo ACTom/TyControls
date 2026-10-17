@@ -617,7 +617,7 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText;
+  LCLIntf, BGRAText, tyControls.PlatformWS;
 
 function TyEffectiveFontName(const AName: string): string;
 begin
@@ -3288,8 +3288,10 @@ begin
     Result.DeviceUnits := True;
     Exit;
   end;
+  { The system is asked through the platform facade, never here: a widgetset that needs its own
+    query gets it in PlatformWS and its WS unit, and this unit stays free of widgetset IFDEFs. }
   if (ACanvas is TControlCanvas) and (TControlCanvas(ACanvas).Control <> nil) then
-    Result.Scale := TyDeviceScaleOf(TControlCanvas(ACanvas).Control.GetCanvasScaleFactor);
+    Result.Scale := TyDeviceScaleOf(TyControlDeviceScale(TControlCanvas(ACanvas).Control));
 end;
 
 procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);

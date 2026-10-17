@@ -13,7 +13,7 @@ interface
 
 uses
   Classes, SysUtils, Math, Graphics, Forms, Controls, fpcunit, testregistry,
-  tyControls.Painter, tyControls.Button;
+  tyControls.Painter, tyControls.PlatformWS, tyControls.Button;
 
 type
   TDeviceScaleSourceTest = class(TTestCase)
@@ -26,6 +26,9 @@ type
     procedure TestSeamWinsOverEverything;
     procedure TestRegisteredCanvas;
     procedure TestSwitchOffForcesOne;
+    { The painter asks the platform facade, not LCL directly: the one place a widgetset that
+      scales without saying so (Qt6, GTK3) will get its own query. }
+    procedure TestControlScaleComesFromThePlatform;
   end;
 
 implementation
@@ -41,6 +44,7 @@ procedure TDeviceScaleSourceTest.TearDown;
 begin
   TyForceDeviceScaleForTest(0, False);
   TyDeviceScaleRendering := True;
+  TyResetTestPlatform;
   inherited TearDown;
 end;
 
@@ -154,6 +158,29 @@ begin
   finally
     TyUnregisterRasterCanvas(bmp.Canvas);
     bmp.Free;
+  end;
+end;
+
+procedure TDeviceScaleSourceTest.TestControlScaleComesFromThePlatform;
+var
+  f: TForm;
+  b: TTyButton;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    b := TTyButton.Create(f);
+    b.Parent := f;
+    AssertEquals('the facade answers 1 off Cocoa', 1.0, TyControlDeviceScale(b), 0);
+    AssertEquals('and 1 for no control', 1.0, TyControlDeviceScale(nil), 0);
+    TyResetTestPlatform;
+    TyTestPlatform.Active := True;
+    TyTestPlatform.DeviceScale := 2;
+    AssertEquals('the platform seam answers for the facade', 2.0, TyControlDeviceScale(b), 0);
+    AssertScale(Self, 'and the painter takes it from there', TyCanvasDeviceScale(b.Canvas), 2, False);
+    TyTestPlatform.DeviceScale := 0;
+    AssertScale(Self, 'an unset seam scale leaves LCL''s answer', TyCanvasDeviceScale(b.Canvas), 1, False);
+  finally
+    f.Free;
   end;
 end;
 
