@@ -54,6 +54,13 @@ type
     procedure DrawImageSlice(P: TTyPainter; K: Integer);
     procedure DrawGlassPane(P: TTyPainter; K: Integer);
     procedure DrawNineSliceFill(P: TTyPainter; K: Integer);
+    procedure DrawPointerShapes(P: TTyPainter; K: Integer);
+    procedure DrawStars(P: TTyPainter; K: Integer);
+    procedure DrawFillThenPointer(P: TTyPainter; K: Integer);
+    { As CheckSame, but each channel may differ by up to ATolerance: Canvas2D drawn through
+      the preset scale(2,2) and Canvas2D given doubled coordinates rasterise the same path, but
+      not necessarily to the last bit of antialiasing. }
+    procedure CheckClose(const AMsg: string; ADraw: TPainterDraw; ATolerance: Integer);
     function TestImagePath: string;
     function Backdrop: TBGRABitmap;
   protected
@@ -96,6 +103,10 @@ type
     procedure TestDrawGlyphBitmapCentersRasterGlyph;
     procedure TestGlyphOverrideRendersAtDeviceSize;
     procedure TestNestedCallMapsOnce;
+    { Task 6: the painter's own Canvas2D shapes follow the preset device scale. }
+    procedure TestFillPointerShape;
+    procedure TestDrawStar;
+    procedure TestCanvas2DKeepsTransformAcrossPainterCalls;
   end;
 
 const
@@ -940,6 +951,87 @@ begin
   AssertTrue(Format('and twice as tall (S = 1: %d, S = 2: %d)',
     [one.Bottom - one.Top, two.Bottom - two.Top]),
     Abs((two.Bottom - two.Top) - 2 * (one.Bottom - one.Top)) <= 2);
+end;
+
+{ ---- Task 6: the painter's Canvas2D shapes ---- }
+
+procedure TDeviceScalePainterTest.CheckClose(const AMsg: string; ADraw: TPainterDraw;
+  ATolerance: Integer);
+var
+  a, b: TBGRABitmap;
+  x, y, n, worst, d: Integer;
+  pa, pb: TBGRAPixel;
+begin
+  a := nil;
+  b := nil;
+  try
+    DrawBoth(ADraw, 60, 40, a, b);
+    AssertEquals(AMsg + ': width', b.Width, a.Width);
+    n := 0;
+    worst := 0;
+    for y := 0 to a.Height - 1 do
+      for x := 0 to a.Width - 1 do
+      begin
+        pa := a.GetPixel(x, y);
+        pb := b.GetPixel(x, y);
+        d := Abs(pa.red - pb.red);
+        if Abs(pa.green - pb.green) > d then d := Abs(pa.green - pb.green);
+        if Abs(pa.blue - pb.blue) > d then d := Abs(pa.blue - pb.blue);
+        if Abs(pa.alpha - pb.alpha) > d then d := Abs(pa.alpha - pb.alpha);
+        if d > worst then worst := d;
+        if d > ATolerance then Inc(n);
+      end;
+    if n > 0 then
+      Fail(Format('%s: %d pixels differ by more than %d (worst %d)', [AMsg, n, ATolerance, worst]));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.DrawPointerShapes(P: TTyPainter; K: Integer);
+begin
+  P.FillPointerShape(Rect(4 * K, 8 * K, 26 * K, 18 * K), TyUniformCorners(4), tpsTop,
+    14 * K, 4 * K, 5 * K, TyRGBA(250, 250, 220, 255), TyRGBA(80, 80, 80, 255), 1);
+  P.FillPointerShape(Rect(34 * K, 2 * K, 56 * K, 12 * K), TyUniformCorners(3), tpsBottom,
+    44 * K, 3 * K, 4 * K, TyRGBA(220, 240, 255, 255), TyRGBA(0, 90, 200, 255), 1);
+  P.FillPointerShape(Rect(10 * K, 24 * K, 28 * K, 36 * K), TyUniformCorners(2), tpsLeft,
+    30 * K, 3 * K, 4 * K, TyRGBA(255, 230, 230, 255), TyRGBA(200, 0, 0, 255), 2);
+  P.FillPointerShape(Rect(34 * K, 24 * K, 52 * K, 36 * K), TyUniformCorners(0), tpsRight,
+    30 * K, 3 * K, 4 * K, TyRGBA(230, 255, 230, 255), TyRGBA(0, 120, 0, 255), 0);
+end;
+
+procedure TDeviceScalePainterTest.DrawStars(P: TTyPainter; K: Integer);
+begin
+  P.DrawStar(Rect(4 * K, 4 * K, 28 * K, 28 * K), TyRGBA(250, 180, 0, 255), True);
+  P.DrawStar(Rect(32 * K, 4 * K, 56 * K, 28 * K), TyRGBA(120, 120, 120, 255), False);
+end;
+
+procedure TDeviceScalePainterTest.DrawFillThenPointer(P: TTyPainter; K: Integer);
+begin
+  { A scoped call (FillBackground maps and switches the PPI) before an unscoped Canvas2D one:
+    the scope must leave the Canvas2D transform as BeginPaint set it. }
+  P.FillBackground(Rect(0, 0, 60 * K, 40 * K), SolidFill(TyRGBA(240, 240, 240, 255)), 6);
+  P.FillPointerShape(Rect(10 * K, 10 * K, 40 * K, 26 * K), TyUniformCorners(4), tpsTop,
+    25 * K, 4 * K, 6 * K, TyRGBA(255, 255, 255, 255), TyRGBA(60, 60, 60, 255), 1);
+  { FillPointerShape set the Canvas2D transforms aside for its own call; a star drawn through
+    them afterwards shows they came back. }
+  P.DrawStar(Rect(42 * K, 8 * K, 58 * K, 24 * K), TyRGBA(90, 90, 90, 255), False);
+end;
+
+procedure TDeviceScalePainterTest.TestFillPointerShape;
+begin
+  CheckSame('pointer shapes, four sides', @DrawPointerShapes);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawStar;
+begin
+  CheckClose('stars, filled and stroked', @DrawStars, 2);
+end;
+
+procedure TDeviceScalePainterTest.TestCanvas2DKeepsTransformAcrossPainterCalls;
+begin
+  CheckClose('a scoped fill, a pointer shape, then a star', @DrawFillThenPointer, 2);
 end;
 
 initialization
