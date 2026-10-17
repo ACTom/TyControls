@@ -88,6 +88,7 @@ type
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRectAt(const ARect: TRect);
+    procedure DrawTextAt(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean; AMultiLine: Boolean; ALineHeightLogical: Integer);
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -1756,6 +1757,8 @@ begin
   Result := MulDiv(ADevice, 96, FPPI);
 end;
 
+{ Measuring: deliberately OUTSIDE the raster scope, so the font is configured at the layout
+  PPI and the answer is in layout pixels however large the layer is (#83). }
 function TTyPainter.MeasureText(const AText, AFontName: string; AFontSizeLogical, AWeight: Integer): TSize;
 begin
   Result := Size(0, 0);
@@ -2191,6 +2194,23 @@ begin
 end;
 
 procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False; AMultiLine: Boolean = False; ALineHeightLogical: Integer = 0);
+var
+  R: TRect;
+begin
+  { The only way text gets onto the layer: DrawTextLine, DrawTextLineBidi and
+    DrawTextSupersampled are reached from here alone, so they receive the raster rect and
+    configure their fonts at the raster PPI. The measuring side (MeasureText, TextCaretX,
+    TextCharIndexAtX) stays out of the scope on purpose: it answers in layout pixels. }
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawTextAt(R, AText, AFontName, AFontSizeLogical, AWeight, AColor, AHAlign, AVAlign,
+      AEllipsis, AMnemonicPos, ASmallCrisp, AMultiLine, ALineHeightLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawTextAt(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean; AMultiLine: Boolean; ALineHeightLogical: Integer);
 var
   Lines: TStringList;
   i, lineH, blockH, yOff, boxH: Integer;

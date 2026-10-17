@@ -22,6 +22,7 @@ type
   private
     FCanvasBmp: TBitmap;
     FDegRect, FDegMethod: Integer;
+    FRtl: Boolean;   // DrawBoth begins its painters right-to-left
     function NewCanvas(AW, AH: Integer): TCanvas;
     function PixelAt(AX, AY: Integer): TBGRAPixel;
     { Draw the same thing twice and keep both layers. Scaled: S = 2 through the seam, layout
@@ -42,6 +43,11 @@ type
     procedure DrawCornerGaps(P: TTyPainter; K: Integer);
     procedure DrawErase(P: TTyPainter; K: Integer);
     procedure DrawDegenerate(P: TTyPainter; K: Integer);
+    procedure DrawTextAligns(P: TTyPainter; K: Integer);
+    procedure DrawTextEllipsis(P: TTyPainter; K: Integer);
+    procedure DrawTextMultiLine(P: TTyPainter; K: Integer);
+    procedure DrawTextMnemonic(P: TTyPainter; K: Integer);
+    procedure DrawTextRtl(P: TTyPainter; K: Integer);
   protected
     procedure TearDown; override;
   published
@@ -67,6 +73,13 @@ type
     procedure TestEraseRect;
     procedure TestDegenerateRectsInScope;
     procedure TestScaleAfterDrawingIsLayout;
+    { Task 4: text drawn in the raster scope, measured outside it. }
+    procedure TestDrawTextSingleLine;
+    procedure TestDrawTextEllipsis;
+    procedure TestDrawTextMultiLine;
+    procedure TestDrawTextMnemonic;
+    procedure TestDrawTextRtl;
+    procedure TestMeasuringStaysLayout;
   end;
 
 const
@@ -383,12 +396,12 @@ begin
   P := TTyPainter.Create;
   try
     TyForceDeviceScaleForTest(2, True);
-    P.BeginPaint(nil, Rect(0, 0, AW, AH), 96);
+    P.BeginPaint(nil, Rect(0, 0, AW, AH), 96, FRtl);
     ADraw(P, 1);
     AScaled := P.Bitmap.Duplicate as TBGRABitmap;
     P.EndPaint;
     TyForceDeviceScaleForTest(0, False);
-    P.BeginPaint(nil, Rect(0, 0, 2 * AW, 2 * AH), 192);
+    P.BeginPaint(nil, Rect(0, 0, 2 * AW, 2 * AH), 192, FRtl);
     ADraw(P, 2);
     ARef := P.Bitmap.Duplicate as TBGRABitmap;
     P.EndPaint;
@@ -617,6 +630,124 @@ begin
   finally
     P.Free;
   end;
+end;
+
+{ ---- Task 4: text ---- }
+
+const
+  CInk: TTyColor = $FF202020;
+
+procedure TDeviceScalePainterTest.DrawTextAligns(P: TTyPainter; K: Integer);
+const
+  CH: array[0..2] of TAlignment = (taLeftJustify, taCenter, taRightJustify);
+  CV: array[0..2] of TTextLayout = (tlTop, tlCenter, tlBottom);
+var
+  i, j: Integer;
+begin
+  for i := 0 to 2 do
+    for j := 0 to 2 do
+      P.DrawText(Rect(i * 20 * K, j * 13 * K, (i + 1) * 20 * K, (j + 1) * 13 * K), 'Ag', '', 9,
+        400, CInk, CH[i], CV[j], False);
+end;
+
+procedure TDeviceScalePainterTest.DrawTextEllipsis(P: TTyPainter; K: Integer);
+begin
+  P.DrawText(Rect(2 * K, 2 * K, 42 * K, 18 * K), 'A long English caption that will not fit', '',
+    9, 400, CInk, taLeftJustify, tlCenter, True);
+  P.DrawText(Rect(2 * K, 20 * K, 58 * K, 38 * K), 'Bold, too', '', 11, 700, CInk, taCenter,
+    tlCenter, True);
+end;
+
+procedure TDeviceScalePainterTest.DrawTextMultiLine(P: TTyPainter; K: Integer);
+begin
+  P.DrawText(Rect(0, 0, 30 * K, 40 * K), '第一行'#13#10'second', '', 9, 400, CInk, taLeftJustify,
+    tlCenter, False, 0, False, True);
+  P.DrawText(Rect(30 * K, 0, 60 * K, 40 * K), '第一行'#13#10'second', '', 9, 400, CInk, taCenter,
+    tlTop, False, 0, False, True, 20);
+end;
+
+procedure TDeviceScalePainterTest.DrawTextMnemonic(P: TTyPainter; K: Integer);
+begin
+  P.DrawText(Rect(2 * K, 2 * K, 58 * K, 20 * K), 'Open', '', 10, 400, CInk, taLeftJustify,
+    tlCenter, False, 1);
+  P.DrawText(Rect(2 * K, 20 * K, 58 * K, 38 * K), 'Save as', '', 10, 400, CInk, taCenter,
+    tlCenter, False, 6);
+end;
+
+procedure TDeviceScalePainterTest.DrawTextRtl(P: TTyPainter; K: Integer);
+begin
+  P.DrawText(Rect(2 * K, 2 * K, 58 * K, 20 * K), 'שלום world', '', 10, 400, CInk,
+    taLeftJustify, tlCenter, False);
+  P.DrawText(Rect(2 * K, 20 * K, 58 * K, 38 * K), 'שלום abc', '', 10, 400, CInk,
+    taLeftJustify, tlCenter, False, 1);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawTextSingleLine;
+begin
+  CheckSame('single-line text, nine alignments', @DrawTextAligns);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawTextEllipsis;
+begin
+  CheckSame('ellipsised and bold text', @DrawTextEllipsis);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawTextMultiLine;
+begin
+  CheckSame('multi-line text', @DrawTextMultiLine);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawTextMnemonic;
+begin
+  CheckSame('mnemonic underlines', @DrawTextMnemonic);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawTextRtl;
+begin
+  FRtl := True;
+  try
+    CheckSame('right-to-left text', @DrawTextRtl);
+  finally
+    FRtl := False;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestMeasuringStaysLayout;
+var
+  P: TTyPainter;
+  m1, m2, m3: TSize;
+  c1, c2, c3, i1, i2, i3: Integer;
+  r: TRect;
+begin
+  r := Rect(4, 2, 120, 20);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(nil, Rect(0, 0, 130, 24), 96);
+    m1 := P.MeasureText('Measure me', '', 10, 400);
+    c1 := P.TextCaretX(r, 'Measure me', '', 10, 400, taLeftJustify, 4);
+    i1 := P.TextCharIndexAtX(r, 'Measure me', '', 10, 400, taLeftJustify, 40);
+    P.EndPaint;
+    TyForceDeviceScaleForTest(2, True);
+    P.BeginPaint(nil, Rect(0, 0, 130, 24), 96);
+    m2 := P.MeasureText('Measure me', '', 10, 400);
+    c2 := P.TextCaretX(r, 'Measure me', '', 10, 400, taLeftJustify, 4);
+    i2 := P.TextCharIndexAtX(r, 'Measure me', '', 10, 400, taLeftJustify, 40);
+    P.DrawText(r, 'Measure me', '', 10, 400, CInk, taLeftJustify, tlCenter, False);
+    m3 := P.MeasureText('Measure me', '', 10, 400);
+    c3 := P.TextCaretX(r, 'Measure me', '', 10, 400, taLeftJustify, 4);
+    i3 := P.TextCharIndexAtX(r, 'Measure me', '', 10, 400, taLeftJustify, 40);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  AssertEquals('S = 2 measures the width S = 1 measures', m1.cx, m2.cx);
+  AssertEquals('and the height', m1.cy, m2.cy);
+  AssertEquals('caret x', c1, c2);
+  AssertEquals('char index at x', i1, i2);
+  AssertEquals('after drawing: width', m1.cx, m3.cx);
+  AssertEquals('after drawing: height', m1.cy, m3.cy);
+  AssertEquals('after drawing: caret x', c1, c3);
+  AssertEquals('after drawing: char index', i1, i3);
 end;
 
 initialization
