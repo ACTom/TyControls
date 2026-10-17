@@ -18,6 +18,7 @@ uses
   tyControls.Menu, tyControls.Chart, tyControls.HeaderControl, tyControls.Dialogs.Color,
   tyControls.ListView, tyControls.ListBox, tyControls.AdvancedListBox, tyControls.TabSet,
   tyControls.ListGroupPanel, tyControls.ValueListEditor, tyControls.ListView.Layout,
+  tyControls.Columns, tyControls.TreeView,
   tyControls.Types, test.devicescale.support, test.devicescale.sweep;
 
 type
@@ -29,6 +30,12 @@ type
     function IconFont: TTyIconFont;
     function Images: TImageList;
     procedure CheckScale(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer);
+    { The rules across ABand (layout pixels) at S = 1 -- between AMin and AMax of them, so the
+      band is not all "rule" -- must be on the S = 2 raster, as painted, exactly those rules one
+      layout pixel wide: at twice their place, two device pixels each. Catches what the picture
+      comparison cannot see: a rule at the wrong place, or at half its weight. }
+    procedure CheckRules(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer;
+      const ABand: TRect; AVertical: Boolean; AMin, AMax: Integer);
     function BuildImage(AParent: TWinControl; APPI: Integer): TControl;
     function BuildImageView(AParent: TWinControl; APPI: Integer): TControl;
     function BuildGlyphButton(AParent: TWinControl; APPI: Integer): TControl;
@@ -49,6 +56,13 @@ type
     function BuildListGroupPanel(AParent: TWinControl; APPI: Integer): TControl;
     function BuildValueListEditor(AParent: TWinControl; APPI: Integer): TControl;
     procedure TabImage(Sender: TObject; AIndex: Integer; var AImageIndex: Integer);
+    function NewTree(AParent: TWinControl; APPI: Integer; AColumns: Boolean): TTyTreeView;
+    function BuildTreeLines(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildTreeSeparators(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildTreeMixedCheck(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildTreeColumns(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildTreeColumnDrag(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildTreeDropMark(AParent: TWinControl; APPI: Integer): TControl;
   protected
     procedure TearDown; override;
   published
@@ -74,14 +88,24 @@ type
     procedure TestListViewMarquee;
     { A 1-px rule drawn in layout coordinates hardly moves the comparison: half its length at
       half its strength, on a field the same colour. The header's dividers are such rules, so
-      they are looked for as rules: the columns that are a rule across the header band, the
-      same at S = 2 averaged down as at S = 1. }
+      they are checked as rules (CheckRules). }
     procedure TestListViewHeaderRules;
     procedure TestListBoxScrolled;
     procedure TestAdvancedListBoxIcons;
     procedure TestTabSetOverflow;
     procedure TestListGroupPanelIcons;
     procedure TestValueListEditorImage;
+    { Task 12: the tree's lines, marks and clips. }
+    procedure TestTreeLines;
+    procedure TestTreeSeparators;
+    procedure TestTreeMixedCheck;
+    procedure TestTreeColumnsWithLines;
+    procedure TestTreeHeaderRules;
+    procedure TestTreeSeparatorRules;
+    procedure TestTreeColumnDrag;
+    procedure TestTreeDropAbove;
+    procedure TestTreeDropBelow;
+    procedure TestTreeDropOn;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -92,6 +116,11 @@ implementation
 type
   TControlAccess = class(TControl);
   TListViewAccess = class(TTyListView);
+  TTreeAccess = class(TTyTreeView);
+
+const
+  CTreeW = 240;
+  CTreeH = 160;
 
 function RulesText(const A: TTyIntArray): string;
 var
@@ -188,6 +217,27 @@ begin
   end;
   AssertTrue(Format('%s draws at the device scale (score %d > %d: ink %d, blocks %d)',
     [AName, score, CMaxMismatch, ink, blocks]), score <= CMaxMismatch);
+end;
+
+procedure TDeviceScaleControlsTest.CheckRules(const AName: string; ABuild: TTyBuildForScale;
+  AW, AH: Integer; const ABand: TRect; AVertical: Boolean; AMin, AMax: Integer);
+var
+  raster, ref: TBGRABitmap;
+  rr, rs: TTyIntArray;
+begin
+  TyPaintAtBothScales(ABuild, AW, AH, raster, ref);
+  try
+    rs := TyRules(ref, ABand, AVertical, 4);
+    rr := TyRules(raster, Rect(2 * ABand.Left, 2 * ABand.Top, 2 * ABand.Right, 2 * ABand.Bottom),
+      AVertical, 4);
+  finally
+    raster.Free;
+    ref.Free;
+  end;
+  AssertTrue(Format('%s at S = 1: %d to %d rules, found %s', [AName, AMin, AMax, RulesText(rs)]),
+    (Length(rs) >= AMin) and (Length(rs) <= AMax));
+  AssertEquals(AName + ' at S = 2: the S = 1 rules, one layout pixel wide',
+    RulesText(TyDoubledRules(rs)), RulesText(rr));
 end;
 
 { ---- builders ---- }
@@ -595,9 +645,7 @@ const
 var
   f: TForm;
   c: TControl;
-  headerH, ink, blocks: Integer;
-  a, b: TBGRABitmap;
-  ra, rb: TTyIntArray;
+  headerH: Integer;
 begin
   f := TForm.CreateNew(nil);
   try
@@ -609,19 +657,9 @@ begin
     f.Free;
   end;
   AssertTrue('the report view has a header', headerH > 4);
-  TyDeviceScaleMismatchPictures(@BuildListViewReport, W, H, a, b, ink, blocks);
-  try
-    ra := TyVerticalRules(a, 0, headerH, 4);
-    rb := TyVerticalRules(b, 0, headerH, 4);
-  finally
-    a.Free;
-    b.Free;
-  end;
-  { Three 100-px columns in 280: two dividers inside the control. A band that is all "rule"
-    would make the comparison say nothing. }
-  AssertTrue('the header has its dividers at S = 1: ' + RulesText(rb),
-    (Length(rb) >= 2) and (Length(rb) <= 8));
-  AssertEquals('the header dividers at S = 2, averaged down', RulesText(rb), RulesText(ra));
+  { Three 100-px columns in 280: two dividers inside the control. }
+  CheckRules('the list view header dividers', @BuildListViewReport, W, H,
+    Rect(0, 0, W, headerH), True, 2, 8);
 end;
 
 procedure TDeviceScaleControlsTest.TestListBoxScrolled;
@@ -647,6 +685,194 @@ end;
 procedure TDeviceScaleControlsTest.TestValueListEditorImage;
 begin
   CheckScale('TTyValueListEditor-image', @BuildValueListEditor, 200, 80);
+end;
+
+{ ---- Task 12 ---- }
+
+function TDeviceScaleControlsTest.NewTree(AParent: TWinControl; APPI: Integer;
+  AColumns: Boolean): TTyTreeView;
+var
+  a, b: TTyTreeNodeItem;
+  col: TTyColumn;
+begin
+  Result := TTyTreeView.Create(AParent);
+  Result.Parent := AParent;
+  TControlAccess(Result).Font.PixelsPerInch := APPI;
+  { Sized here as well: the drag states below are set up with the mouse, on this layout. }
+  Result.SetBounds(0, 0, CTreeW, CTreeH);
+  Result.ShowTreeLines := False;
+  Result.ShowSeparators := False;
+  if AColumns then
+  begin
+    col := Result.Header.Columns.Add as TTyColumn;
+    col.Text := 'Name';
+    col.Width := 100;
+    col := Result.Header.Columns.Add as TTyColumn;
+    col.Text := 'Size';
+    col.Width := 70;
+    col := Result.Header.Columns.Add as TTyColumn;
+    col.Text := 'Kind';
+    col.Width := 70;
+  end;
+  a := Result.Items.AddChild(nil, 'Documents');
+  b := Result.Items.AddChild(a, 'Reports');
+  Result.Items.AddChild(b, 'First quarter');
+  Result.Items.AddChild(b, 'Second quarter');
+  Result.Items.AddChild(a, 'Letters');
+  b := Result.Items.AddChild(nil, 'Pictures');
+  Result.Items.AddChild(b, 'Holiday');
+  Result.FullExpand;
+end;
+
+function TDeviceScaleControlsTest.BuildTreeLines(AParent: TWinControl; APPI: Integer): TControl;
+var
+  t: TTyTreeView;
+begin
+  t := NewTree(AParent, APPI, False);
+  t.ShowTreeLines := True;
+  Result := t;
+end;
+
+function TDeviceScaleControlsTest.BuildTreeSeparators(AParent: TWinControl; APPI: Integer): TControl;
+var
+  t: TTyTreeView;
+begin
+  t := NewTree(AParent, APPI, False);
+  t.ShowSeparators := True;
+  Result := t;
+end;
+
+function TDeviceScaleControlsTest.BuildTreeMixedCheck(AParent: TWinControl; APPI: Integer): TControl;
+var
+  t: TTyTreeView;
+  i: Integer;
+begin
+  t := NewTree(AParent, APPI, False);
+  t.Options := t.Options + [toCheckSupport];
+  for i := 0 to t.Items.Count - 1 do
+  begin
+    t.Items[i].CheckType := ctTriStateCheckBox;
+    if i mod 2 = 0 then t.Items[i].CheckState := csMixed;
+  end;
+  t.FullExpand;   // switching the check support on folds the tree back
+  Result := t;
+end;
+
+function TDeviceScaleControlsTest.BuildTreeColumns(AParent: TWinControl; APPI: Integer): TControl;
+var
+  t: TTyTreeView;
+begin
+  t := NewTree(AParent, APPI, True);
+  t.ShowTreeLines := True;
+  Result := t;
+end;
+
+function TDeviceScaleControlsTest.BuildTreeColumnDrag(AParent: TWinControl; APPI: Integer): TControl;
+var
+  t: TTyTreeView;
+  y: Integer;
+begin
+  { "Name" pressed in the header and dragged over "Size": the ghost over Name, the drop caret at
+    Size's left edge. }
+  t := NewTree(AParent, APPI, True);
+  y := t.ContentRect.Top div 2;
+  TControlAccess(t).MouseDown(mbLeft, [ssLeft], 40, y);
+  TControlAccess(t).MouseMove([ssLeft], 130, y);
+  Result := t;
+end;
+
+function TDeviceScaleControlsTest.BuildTreeDropMark(AParent: TWinControl; APPI: Integer): TControl;
+var
+  t: TTyTreeView;
+  target: PTyTreeNode;
+begin
+  t := NewTree(AParent, APPI, False);
+  target := t.Items[2].Node;   // "First quarter", a level-2 row in the middle
+  TTreeAccess(t).SetActiveDragState(target, target, TTyTreeDropMode(FMode));
+  Result := t;
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeLines;
+begin
+  CheckScale('TTyTreeView-lines', @BuildTreeLines, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeSeparators;
+begin
+  CheckScale('TTyTreeView-separators', @BuildTreeSeparators, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeMixedCheck;
+begin
+  CheckScale('TTyTreeView-mixed-check', @BuildTreeMixedCheck, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeColumnsWithLines;
+begin
+  CheckScale('TTyTreeView-columns', @BuildTreeColumns, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeHeaderRules;
+var
+  f: TForm;
+  c: TControl;
+  band: TRect;
+begin
+  { As TestListViewHeaderRules. The band is the header above the content, between the
+    content's sides (inside the frame). }
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(0, 0, CTreeW + 40, CTreeH + 40);
+    c := BuildTreeColumns(f, 96);
+    band := TTyTreeView(c).ContentRect;
+    band := Rect(band.Left, 0, band.Right, band.Top);
+  finally
+    f.Free;
+  end;
+  AssertTrue('the tree has a header', band.Bottom > 8);
+  { Two dividers between three sections. }
+  CheckRules('the tree header dividers', @BuildTreeColumns, CTreeW, CTreeH, band, True, 2, 8);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeSeparatorRules;
+var
+  f: TForm;
+  c: TControl;
+  band: TRect;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(0, 0, CTreeW + 40, CTreeH + 40);
+    c := BuildTreeSeparators(f, 96);
+    band := TTyTreeView(c).ContentRect;
+  finally
+    f.Free;
+  end;
+  { A rule under each of the two top-level rows. }
+  CheckRules('the tree row separators', @BuildTreeSeparators, CTreeW, CTreeH, band, False, 2, 8);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeColumnDrag;
+begin
+  CheckScale('TTyTreeView-column-drag', @BuildTreeColumnDrag, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeDropAbove;
+begin
+  FMode := Ord(dmAbove);
+  CheckScale('TTyTreeView-drop-above', @BuildTreeDropMark, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeDropBelow;
+begin
+  FMode := Ord(dmBelow);
+  CheckScale('TTyTreeView-drop-below', @BuildTreeDropMark, CTreeW, CTreeH);
+end;
+
+procedure TDeviceScaleControlsTest.TestTreeDropOn;
+begin
+  FMode := Ord(dmOn);
+  CheckScale('TTyTreeView-drop-on', @BuildTreeDropMark, CTreeW, CTreeH);
 end;
 
 initialization
