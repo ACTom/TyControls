@@ -78,6 +78,16 @@ type
       return False, so a method that calls another never maps twice. At S = 1 it never maps. }
     function RasterEnter: Boolean;
     procedure RasterLeave;
+    { The bodies of the drawing methods that map their rect in the raster scope: the public
+      method of the same name enters the scope and calls these with the mapped rect. }
+    procedure FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+    procedure StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
+    procedure DrawEdgeAt(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
+    procedure DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
+    procedure DrawGlyphAt(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer);
+    procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+    procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+    procedure EraseRectAt(const ARect: TRect);
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -1801,6 +1811,18 @@ end;
 
 procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    FillBackgroundAt(R, AFill, ACorners);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+var
   r: Integer;
   opts: TRoundRectangleOptions;
   px: TBGRAPixel;
@@ -1978,6 +2000,18 @@ end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    StrokeBorderAt(R, ACorners, AWidthLogical, AColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
+var
   w, r: Integer;
   opts: TRoundRectangleOptions;
   half: Single;
@@ -2011,6 +2045,18 @@ begin
 end;
 
 procedure TTyPainter.DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawEdgeAt(R, AWidthLogical, ATLColor, ABRColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawEdgeAt(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
 var w: Integer; tl, br: TBGRAPixel;
 begin
   if FBmp = nil then Exit;
@@ -2036,6 +2082,18 @@ begin
 end;
 
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DropShadowAt(R, ARadiusLogical, AColor, ABlurLogical, AOffsetLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
 var
   r, blur, ox, oy: Integer;
   shadow, blurred: TBGRABitmap;
@@ -2507,6 +2565,18 @@ end;
 
 procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawGlyphAt(R, AGlyph, AColor, AThicknessLogical, APadLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawGlyphAt(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer);
+var
   px: TBGRAPixel;
   th: Single;
   pad: Integer;
@@ -2649,6 +2719,18 @@ begin
 end;
 
 procedure TTyPainter.DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(AZoneRect) else R := AZoneRect;
+  try
+    DrawDropChevronAt(R, AColor, ASizeLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
 var
   w, h, cx, cy, l, r, top, bot, th: Single;
   px: TBGRAPixel;
@@ -2847,6 +2929,18 @@ end;
 
 procedure TTyPainter.FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    FillCornerGapsAt(R, ACorners, AColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+var
   temp: TBGRABitmap;
   w, h, r: Integer;
   opts: TRoundRectangleOptions;
@@ -2880,6 +2974,18 @@ begin
 end;
 
 procedure TTyPainter.EraseRect(const ARect: TRect);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    EraseRectAt(R);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.EraseRectAt(const ARect: TRect);
 begin
   if FBmp = nil then Exit;
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, BGRA(0,0,0,0), dmSet);
