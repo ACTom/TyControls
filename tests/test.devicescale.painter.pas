@@ -16,11 +16,32 @@ uses
   tyControls.Types, tyControls.Painter;
 
 type
+  TPainterDraw = procedure(P: TTyPainter; K: Integer) of object;
+
   TDeviceScalePainterTest = class(TTestCase)
   private
     FCanvasBmp: TBitmap;
+    FDegRect, FDegMethod: Integer;
     function NewCanvas(AW, AH: Integer): TCanvas;
     function PixelAt(AX, AY: Integer): TBGRAPixel;
+    { Draw the same thing twice and keep both layers. Scaled: S = 2 through the seam, layout
+      Rect(0, 0, AW, AH) at PPI 96, ADraw(P, 1). Reference: S = 1, Rect(0, 0, 2AW, 2AH) at PPI
+      192, ADraw(P, 2) -- ADraw multiplies every device coordinate it passes by K and passes
+      logical values unchanged. The raster scope turns the first into exactly the second. }
+    procedure DrawBoth(ADraw: TPainterDraw; AW, AH: Integer; out AScaled, ARef: TBGRABitmap);
+    procedure AssertSamePixels(const AMsg: string; A, B: TBGRABitmap);
+    procedure CheckSame(const AMsg: string; ADraw: TPainterDraw);
+    procedure DrawFillSolid(P: TTyPainter; K: Integer);
+    procedure DrawFillGradient(P: TTyPainter; K: Integer);
+    procedure DrawFillPerCorner(P: TTyPainter; K: Integer);
+    procedure DrawStrokes(P: TTyPainter; K: Integer);
+    procedure DrawEdges(P: TTyPainter; K: Integer);
+    procedure DrawShadow(P: TTyPainter; K: Integer);
+    procedure DrawGlyphs(P: TTyPainter; K: Integer);
+    procedure DrawChevron(P: TTyPainter; K: Integer);
+    procedure DrawCornerGaps(P: TTyPainter; K: Integer);
+    procedure DrawErase(P: TTyPainter; K: Integer);
+    procedure DrawDegenerate(P: TTyPainter; K: Integer);
   protected
     procedure TearDown; override;
   published
@@ -33,6 +54,19 @@ type
     procedure TestNilCanvasIsScaleOne;
     procedure TestBeginPaintOnResizesToRaster;
     procedure TestScaleOneEndPaintUnchanged;
+    { Task 3: fills, borders, glyphs and shadows inside the raster scope. }
+    procedure TestFillBackgroundSolidRounded;
+    procedure TestFillBackgroundGradient;
+    procedure TestFillBackgroundPerCorner;
+    procedure TestStrokeBorderWidths;
+    procedure TestDrawEdge;
+    procedure TestDropShadow;
+    procedure TestDrawGlyphKinds;
+    procedure TestDrawDropChevron;
+    procedure TestFillCornerGaps;
+    procedure TestEraseRect;
+    procedure TestDegenerateRectsInScope;
+    procedure TestScaleAfterDrawingIsLayout;
   end;
 
 const
@@ -336,6 +370,252 @@ begin
   finally
     direct.Free;
     ref.Free;
+  end;
+end;
+
+{ ---- Task 3: equivalence at S = 2 ---- }
+
+procedure TDeviceScalePainterTest.DrawBoth(ADraw: TPainterDraw; AW, AH: Integer;
+  out AScaled, ARef: TBGRABitmap);
+var
+  P: TTyPainter;
+begin
+  P := TTyPainter.Create;
+  try
+    TyForceDeviceScaleForTest(2, True);
+    P.BeginPaint(nil, Rect(0, 0, AW, AH), 96);
+    ADraw(P, 1);
+    AScaled := P.Bitmap.Duplicate as TBGRABitmap;
+    P.EndPaint;
+    TyForceDeviceScaleForTest(0, False);
+    P.BeginPaint(nil, Rect(0, 0, 2 * AW, 2 * AH), 192);
+    ADraw(P, 2);
+    ARef := P.Bitmap.Duplicate as TBGRABitmap;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.AssertSamePixels(const AMsg: string; A, B: TBGRABitmap);
+var
+  x, y, n, fx, fy: Integer;
+begin
+  AssertEquals(AMsg + ': width', B.Width, A.Width);
+  AssertEquals(AMsg + ': height', B.Height, A.Height);
+  n := 0;
+  fx := -1;
+  fy := -1;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then
+      begin
+        if n = 0 then begin fx := x; fy := y; end;
+        Inc(n);
+      end;
+  if n > 0 then
+    Fail(Format('%s: %d pixels differ; first at (%d,%d): scaled %s, reference %s',
+      [AMsg, n, fx, fy, PxStr(A.GetPixel(fx, fy)), PxStr(B.GetPixel(fx, fy))]));
+end;
+
+procedure TDeviceScalePainterTest.CheckSame(const AMsg: string; ADraw: TPainterDraw);
+var
+  a, b: TBGRABitmap;
+begin
+  a := nil;
+  b := nil;
+  try
+    DrawBoth(ADraw, 60, 40, a, b);
+    AssertSamePixels(AMsg, a, b);
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+function SolidFill(AColor: TTyColor): TTyFill;
+begin
+  Result := Default(TTyFill);
+  Result.Kind := tfkSolid;
+  Result.Color := AColor;
+end;
+
+procedure TDeviceScalePainterTest.DrawFillSolid(P: TTyPainter; K: Integer);
+begin
+  P.FillBackground(Rect(4 * K, 3 * K, 50 * K, 35 * K), SolidFill(TyRGBA(30, 120, 220, 255)), 6);
+  P.FillBackground(Rect(20 * K, 10 * K, 58 * K, 30 * K), SolidFill(TyRGBA(220, 40, 40, 150)), 0);
+end;
+
+procedure TDeviceScalePainterTest.DrawFillGradient(P: TTyPainter; K: Integer);
+var
+  f: TTyFill;
+begin
+  f := Default(TTyFill);
+  f.Kind := tfkLinearGradient;
+  f.GradFrom := TyRGBA(255, 200, 0, 255);
+  f.GradTo := TyRGBA(0, 80, 200, 255);
+  SetLength(f.GradStops, 2);
+  f.GradStops[0].Color := f.GradFrom;
+  f.GradStops[0].Pos := 0;
+  f.GradStops[1].Color := f.GradTo;
+  f.GradStops[1].Pos := 1;
+  f.GradAngleDeg := 30;
+  P.FillBackground(Rect(2 * K, 2 * K, 58 * K, 38 * K), f, 4);
+end;
+
+procedure TDeviceScalePainterTest.DrawFillPerCorner(P: TTyPainter; K: Integer);
+begin
+  P.FillBackground(Rect(5 * K, 5 * K, 55 * K, 35 * K), SolidFill(TyRGBA(10, 150, 90, 255)),
+    TyCorners(0, 4, 9, 2));
+end;
+
+procedure TDeviceScalePainterTest.DrawStrokes(P: TTyPainter; K: Integer);
+begin
+  P.StrokeBorder(Rect(2 * K, 2 * K, 30 * K, 20 * K), 0, 1, TyRGBA(0, 0, 0, 255));
+  P.StrokeBorder(Rect(32 * K, 2 * K, 58 * K, 20 * K), 5, 1, TyRGBA(200, 0, 0, 255));
+  P.StrokeBorder(Rect(2 * K, 22 * K, 30 * K, 38 * K), 0, 2, TyRGBA(0, 120, 0, 255));
+  P.StrokeBorder(Rect(32 * K, 22 * K, 58 * K, 38 * K), TyCorners(5, 0, 3, 7), 2, TyRGBA(0, 0, 200, 255));
+end;
+
+procedure TDeviceScalePainterTest.DrawEdges(P: TTyPainter; K: Integer);
+begin
+  P.DrawEdge(Rect(2 * K, 2 * K, 28 * K, 38 * K), 1, TyRGBA(255, 255, 255, 255), TyRGBA(60, 60, 60, 255));
+  P.DrawEdge(Rect(30 * K, 2 * K, 58 * K, 38 * K), 2, TyRGBA(60, 60, 60, 255), TyRGBA(255, 255, 255, 255));
+end;
+
+procedure TDeviceScalePainterTest.DrawShadow(P: TTyPainter; K: Integer);
+begin
+  P.DropShadow(Rect(10 * K, 8 * K, 40 * K, 28 * K), 4, TyRGBA(0, 0, 0, 120), 6, Point(2, 3));
+end;
+
+procedure TDeviceScalePainterTest.DrawGlyphs(P: TTyPainter; K: Integer);
+begin
+  P.DrawGlyph(Rect(0, 0, 14 * K, 14 * K), tgClose, TyRGBA(0, 0, 0, 255), 1);
+  P.DrawGlyph(Rect(15 * K, 0, 29 * K, 14 * K), tgCheck, TyRGBA(0, 100, 0, 255), 2);
+  P.DrawGlyph(Rect(30 * K, 0, 44 * K, 14 * K), tgChevronDown, TyRGBA(0, 0, 150, 255), 1);
+  P.DrawGlyph(Rect(45 * K, 0, 59 * K, 14 * K), tgTriangleUp, TyRGBA(150, 0, 0, 255), 1);
+  P.DrawGlyph(Rect(0, 16 * K, 20 * K, 36 * K), tgInfo, TyRGBA(30, 30, 30, 255), 1, 2);
+end;
+
+procedure TDeviceScalePainterTest.DrawChevron(P: TTyPainter; K: Integer);
+begin
+  P.DrawDropChevron(Rect(10 * K, 5 * K, 30 * K, 35 * K), TyRGBA(20, 20, 20, 255), 9);
+  P.DrawDropChevron(Rect(35 * K, 5 * K, 55 * K, 35 * K), TyRGBA(20, 20, 120, 255), 13);
+end;
+
+procedure TDeviceScalePainterTest.DrawCornerGaps(P: TTyPainter; K: Integer);
+begin
+  P.FillCornerGaps(Rect(4 * K, 4 * K, 56 * K, 36 * K), TyUniformCorners(6), TyRGBA(250, 250, 250, 255));
+end;
+
+procedure TDeviceScalePainterTest.DrawErase(P: TTyPainter; K: Integer);
+begin
+  P.FillBackground(Rect(0, 0, 60 * K, 40 * K), SolidFill(TyRGBA(80, 80, 80, 255)), 0);
+  P.EraseRect(Rect(5 * K, 5 * K, 20 * K, 20 * K));
+end;
+
+procedure TDeviceScalePainterTest.TestFillBackgroundSolidRounded;
+begin
+  CheckSame('solid fills', @DrawFillSolid);
+end;
+
+procedure TDeviceScalePainterTest.TestFillBackgroundGradient;
+begin
+  CheckSame('gradient fill', @DrawFillGradient);
+end;
+
+procedure TDeviceScalePainterTest.TestFillBackgroundPerCorner;
+begin
+  CheckSame('per-corner fill', @DrawFillPerCorner);
+end;
+
+procedure TDeviceScalePainterTest.TestStrokeBorderWidths;
+begin
+  CheckSame('borders', @DrawStrokes);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawEdge;
+begin
+  CheckSame('3D edges', @DrawEdges);
+end;
+
+procedure TDeviceScalePainterTest.TestDropShadow;
+begin
+  CheckSame('drop shadow', @DrawShadow);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawGlyphKinds;
+begin
+  CheckSame('vector glyphs', @DrawGlyphs);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawDropChevron;
+begin
+  CheckSame('drop chevrons', @DrawChevron);
+end;
+
+procedure TDeviceScalePainterTest.TestFillCornerGaps;
+begin
+  CheckSame('corner gaps', @DrawCornerGaps);
+end;
+
+procedure TDeviceScalePainterTest.TestEraseRect;
+begin
+  CheckSame('erase', @DrawErase);
+end;
+
+procedure TDeviceScalePainterTest.DrawDegenerate(P: TTyPainter; K: Integer);
+var
+  r: TRect;
+  red: TTyColor;
+begin
+  if FDegRect = 0 then r := Rect(0, 0, 0, 0) else r := Rect(5 * K, 5 * K, 3 * K, 3 * K);
+  red := TyRGBA(255, 0, 0, 255);
+  case FDegMethod of
+    0: P.FillBackground(r, SolidFill(red), 4);
+    1: P.StrokeBorder(r, 4, 2, red);
+    2: P.DrawEdge(r, 1, red, red);
+    3: P.DropShadow(r, 4, red, 3, Point(1, 1));
+    4: P.DrawGlyph(r, tgClose, red, 1);
+    5: P.DrawDropChevron(r, red, 9);
+    6: P.FillCornerGaps(r, TyUniformCorners(4), red);
+    7: P.EraseRect(r);
+  end;
+end;
+
+{ An empty or inverted rect at S = 2 raises nothing and draws what the same call draws at
+  S = 1 on the doubled geometry -- which for most methods is nothing, and for StrokeBorder is
+  the dot it has always left on an empty rect: the device scale must not change either. }
+procedure TDeviceScalePainterTest.TestDegenerateRectsInScope;
+const
+  CNames: array[0..7] of string = ('FillBackground', 'StrokeBorder', 'DrawEdge', 'DropShadow',
+    'DrawGlyph', 'DrawDropChevron', 'FillCornerGaps', 'EraseRect');
+var
+  i, m: Integer;
+begin
+  for i := 0 to 1 do
+    for m := 0 to High(CNames) do
+    begin
+      FDegRect := i;
+      FDegMethod := m;
+      CheckSame(Format('%s on empty rect #%d', [CNames[m], i]), @DrawDegenerate);
+    end;
+end;
+
+procedure TDeviceScalePainterTest.TestScaleAfterDrawingIsLayout;
+var
+  P: TTyPainter;
+begin
+  TyForceDeviceScaleForTest(2, True);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(nil, Rect(0, 0, 40, 30), 96);
+    P.FillBackground(Rect(0, 0, 40, 30), SolidFill(TyRGBA(1, 2, 3, 255)), 4);
+    AssertEquals('Scale is back in layout px after a drawing call', 10, P.Scale(10));
+    AssertEquals('and PPI is the layout PPI', 96, P.PPI);
+    P.EndPaint;
+  finally
+    P.Free;
   end;
 end;
 
