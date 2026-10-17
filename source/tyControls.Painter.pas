@@ -117,6 +117,11 @@ type
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRectAt(const ARect: TRect);
+    procedure NineSliceAt(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
+    procedure DrawImageFillAt(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
+    procedure FillImageSliceAt(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
+    procedure FillGlassAt(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+    procedure DrawGlyphBitmapAt(const ARect: TRect; ABmp: TBGRABitmap);
     procedure DrawTextAt(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean; AMultiLine: Boolean; ALineHeightLogical: Integer);
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
@@ -249,7 +254,8 @@ type
       light L-shape wins the shared corners. AWidthLogical is the (logical-px) edge width. }
     procedure DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
     { v3/C5: blit a pre-rendered glyph bitmap centered in ARect (used for icon-font glyph
-      overrides; a nil/empty bitmap draws nothing). }
+      overrides; a nil/empty bitmap draws nothing). ABmp is in RASTER pixels: render it at
+      Dev(size) so it stays sharp on a scaled layer (#83); it is placed 1:1. }
     procedure DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     { AMultiLine (default False = every existing caller, byte-identical) opts into honouring
@@ -2985,6 +2991,18 @@ begin
 end;
 
 procedure TTyPainter.DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawGlyphBitmapAt(R, ABmp);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawGlyphBitmapAt(const ARect: TRect; ABmp: TBGRABitmap);
 var x, y: Integer;
 begin
   if (FBmp = nil) or (ABmp = nil) then Exit;
@@ -3845,6 +3863,18 @@ function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap; fo
 
 procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    NineSliceAt(R, AImagePath, AInsets, ATile);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.NineSliceAt(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
+var
   src: TBGRABitmap;
   iw, ih: Integer;
   sl, st, sr, sb: Integer;
@@ -3888,6 +3918,30 @@ end;
 
 procedure TTyPainter.FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap;
   const ASrcOffset: TPoint);
+var
+  R: TRect;
+  O: TPoint;
+begin
+  { The backdrop is kept at the device scale too (TTyForm.RebuildBackdrop), so the
+    offset into it is mapped with the rect. }
+  if RasterEnter then
+  begin
+    R := Dev(ARect);
+    O := Dev(ASrcOffset);
+  end
+  else
+  begin
+    R := ARect;
+    O := ASrcOffset;
+  end;
+  try
+    FillImageSliceAt(R, ASrc, O);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillImageSliceAt(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
 { Blit a (clamped) slice of a backdrop bitmap 1:1 into ARect — used as the opaque
   base behind ANY control on an image-backed form, so its corners read as the same
   photo the form shows instead of a flat solid fill. }
@@ -3929,6 +3983,30 @@ end;
 
 procedure TTyPainter.FillGlass(const ARect: TRect; AGlass: TBGRABitmap;
   const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+var
+  R: TRect;
+  O: TPoint;
+begin
+  { The backdrop is kept at the device scale too (TTyForm.RebuildBackdrop), so the
+    offset into it is mapped with the rect. }
+  if RasterEnter then
+  begin
+    R := Dev(ARect);
+    O := Dev(ASrcOffset);
+  end
+  else
+  begin
+    R := ARect;
+    O := ASrcOffset;
+  end;
+  try
+    FillGlassAt(R, AGlass, O, ATint, ACorners);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillGlassAt(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
 { The glass pane itself: the BLURRED backdrop slice + tint, round-clipped to the
   control's corners and laid over the sharp base FillImageSlice already painted. }
 var
@@ -4093,6 +4171,18 @@ end;
 
 procedure TTyPainter.DrawImageFill(const ARect: TRect; const AImagePath: string;
   AMode: TTyImageMode; ABlurLogical: Integer);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawImageFillAt(R, AImagePath, AMode, ABlurLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawImageFillAt(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
 var
   src: TBGRABitmap;
   iw, ih, dw, dh, sw, sh, ox, oy: Integer;
