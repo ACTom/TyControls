@@ -43,6 +43,12 @@ type
     target looks like. }
   TTyPointerSide = (tpsTop, tpsBottom, tpsLeft, tpsRight);
 
+  { How many device pixels one unit of a canvas covers -- see TyCanvasDeviceScale below. }
+  TTyCanvasScale = record
+    Scale: Integer;        // device pixels per canvas unit, 1..4
+    DeviceUnits: Boolean;  // the canvas's own coordinates are device pixels (an S-times cache)
+  end;
+
   TTyPainter = class
   private
     FBmp: TBGRABitmap;
@@ -51,6 +57,27 @@ type
     FPPI: Integer;
     FOwnsBmp: Boolean;
     FRightToLeft: Boolean;
+    { #83: the layer holds FScale device pixels per layout pixel. FLayoutPPI is the PPI callers
+      paint at; FPPI is the PPI the drawing code scales by, which is the layout PPI except
+      inside a raster scope (RasterEnter), where it is FLayoutPPI * FScale. FDeviceUnits: the
+      canvas counts device pixels, so EndPaint lands the layer 1:1 instead of stretching it. }
+    FScale: Integer;
+    FDeviceUnits: Boolean;
+    FLayoutPPI: Integer;
+    FRasterDepth: Integer;
+    function GetRasterPPI: Integer;
+    { The canvas2D of a scaled layer works in layout pixels: BeginPaint presets scale(S, S). }
+    procedure PresetCanvas2D;
+    { Draw ABmp (layer-sized) onto the canvas at the device scale: into the layout rect, or 1:1 at
+      S times its position when the canvas counts device pixels. }
+    procedure BlitScaled(ABmp: TBGRABitmap; AOpaque: Boolean);
+    { THE RASTER SCOPE. A drawing method enters it first and leaves it last. The OUTERMOST entry
+      of a scaled painter switches FPPI to the raster PPI and returns True: the method then maps
+      its own geometry (rects, points, device lengths) with Dev, and every Scale inside it --
+      and inside the painter methods it calls -- comes out in raster pixels. Nested entries
+      return False, so a method that calls another never maps twice. At S = 1 it never maps. }
+    function RasterEnter: Boolean;
+    procedure RasterLeave;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -126,6 +153,20 @@ type
       给需要跨帧复用表面的调用方用(网格的滚动脏区重绘)。 }
     procedure BeginPaintOn(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
       ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+    { BeginPaint at a device scale the caller already knows -- a painter with no canvas that
+      still has to draw for one (TTyForm's glass backdrop). BeginPaint asks TyCanvasDeviceScale. }
+    procedure BeginPaintScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+      const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
+    { Device pixels per layout pixel in this frame (1 outside BeginPaint and off a Retina canvas). }
+    property DeviceScale: Integer read FScale;
+    { The PPI the layer is drawn at: PPI * DeviceScale. Code that configures a font or renders an
+      icon for Bitmap directly uses this, not PPI. }
+    property RasterPPI: Integer read GetRasterPPI;
+    { Layout pixels to the layer's raster pixels, for code that draws on Bitmap directly with
+      anything but its Canvas2D. }
+    function Dev(AValue: Integer): Integer; overload;
+    function Dev(const ARect: TRect): TRect; overload;
+    function Dev(const APoint: TPoint): TPoint; overload;
     { Which way this frame reads. Exposed because a DrawContent override receives the
       painter but not the control (TTyGlyphButtonBase.DrawContent), and asking the painter
       guarantees the slot it lays out agrees with the direction the text was armed with. }
@@ -232,7 +273,8 @@ type
     procedure DrawStar(const ARect: TRect; AColor: TTyColor; AFilled: Boolean);
     { 本次绘制的 PPI。调用方要自己往别的位图上排文字时(网格的单元格文本缓存)
       必须用同一个 PPI 配字体,否则缓存出来的字号与直接画的不一致。 }
-    property PPI: Integer read FPPI;
+    property PPI: Integer read FLayoutPPI;
+    constructor Create;
   end;
 
 { ===== The device scale (#83) ================================================
@@ -242,12 +284,6 @@ type
   answers 1). A painter that draws its layer at the size of the control's bounds in points
   gets stretched by the system and comes out blurred, so the painter asks how many device
   pixels a canvas unit covers and draws its layer that many times larger. }
-type
-  TTyCanvasScale = record
-    Scale: Integer;        // device pixels per canvas unit, 1..4
-    DeviceUnits: Boolean;  // the canvas's own coordinates are device pixels (an S-times cache)
-  end;
-
 var
   { False puts every painter back at one times, as before #83: the way back for code that draws
     on TTyPainter.Bitmap in layout coordinates and has not been taught the device scale. }
@@ -1532,8 +1568,20 @@ begin
   Result := BGRA(TyRedOf(c), TyGreenOf(c), TyBlueOf(c), TyAlphaOf(c));
 end;
 
+constructor TTyPainter.Create;
+begin
+  inherited Create;
+  FScale := 1;
+end;
+
 procedure TTyPainter.BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
   ARightToLeft: Boolean = False);
+begin
+  BeginPaintScaled(ACanvas, ARect, APPI, TyCanvasDeviceScale(ACanvas), ARightToLeft);
+end;
+
+procedure TTyPainter.BeginPaintScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+  const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
 begin
   FCanvas := ACanvas;
   FRect := ARect;
@@ -1542,25 +1590,98 @@ begin
     FPPI := 96
   else
     FPPI := APPI;
+  FLayoutPPI := FPPI;
+  FScale := AScale.Scale;
+  if FScale < 1 then FScale := 1;
+  FDeviceUnits := AScale.DeviceUnits;
+  FRasterDepth := 0;
   Opacity := 1.0;
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
-  FBmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
   FBmp.Fill(BGRAPixelTransparent);
+  if FScale > 1 then PresetCanvas2D;
 end;
 
 procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+var
+  sc: TTyCanvasScale;
+  w, h: Integer;
 begin
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
   if APPI <= 0 then FPPI := 96 else FPPI := APPI;
+  FLayoutPPI := FPPI;
+  sc := TyCanvasDeviceScale(ACanvas);
+  FScale := sc.Scale;
+  if FScale < 1 then FScale := 1;
+  FDeviceUnits := sc.DeviceUnits;
+  FRasterDepth := 0;
   Opacity := 1.0;
   OpacityBase := 0;
   FBmp := ABmp;
-  { **不清空** —— 上一帧的像素正是要复用的东西;清哪一块由调用方决定。 }
+  { **不清空** —— 上一帧的像素正是要复用的东西;清哪一块由调用方决定。
+    The caller keeps the surface at the raster size; one that does not is given it here (a
+    resized surface holds nothing the frame can reuse anyway). }
+  w := (ARect.Right - ARect.Left) * FScale;
+  h := (ARect.Bottom - ARect.Top) * FScale;
+  if (FBmp <> nil) and ((FBmp.Width <> w) or (FBmp.Height <> h)) then
+    FBmp.SetSize(w, h);
   FOwnsBmp := False;
+  if (FBmp <> nil) and (FScale > 1) then PresetCanvas2D;
+end;
+
+procedure TTyPainter.PresetCanvas2D;
+begin
+  FBmp.Canvas2D.resetTransform;
+  FBmp.Canvas2D.scale(FScale, FScale);
+end;
+
+procedure TTyPainter.BlitScaled(ABmp: TBGRABitmap; AOpaque: Boolean);
+begin
+  if FDeviceUnits then
+    ABmp.Draw(FCanvas, FRect.Left * FScale, FRect.Top * FScale, AOpaque)
+  else
+    ABmp.Draw(FCanvas, FRect, AOpaque);
+end;
+
+function TTyPainter.GetRasterPPI: Integer;
+begin
+  Result := FLayoutPPI * FScale;
+end;
+
+function TTyPainter.Dev(AValue: Integer): Integer;
+begin
+  Result := AValue * FScale;
+end;
+
+function TTyPainter.Dev(const ARect: TRect): TRect;
+begin
+  Result := Rect(ARect.Left * FScale, ARect.Top * FScale, ARect.Right * FScale, ARect.Bottom * FScale);
+end;
+
+function TTyPainter.Dev(const APoint: TPoint): TPoint;
+begin
+  Result := Point(APoint.X * FScale, APoint.Y * FScale);
+end;
+
+function TTyPainter.RasterEnter: Boolean;
+begin
+  Inc(FRasterDepth);
+  Result := (FRasterDepth = 1) and (FScale > 1);
+  if Result then FPPI := FLayoutPPI * FScale;
+end;
+
+procedure TTyPainter.RasterLeave;
+begin
+  Dec(FRasterDepth);
+  if FRasterDepth <= 0 then
+  begin
+    FRasterDepth := 0;
+    FPPI := FLayoutPPI;
+  end;
 end;
 
 procedure TTyPainter.EndPaint;
@@ -1585,21 +1706,32 @@ begin
         c.alpha := 255;
         baseBmp := TBGRABitmap.Create(FBmp.Width, FBmp.Height, c);
         try
-          baseBmp.Draw(FCanvas, FRect.Left, FRect.Top, True);
+          if FScale = 1 then
+            baseBmp.Draw(FCanvas, FRect.Left, FRect.Top, True)
+          else
+            BlitScaled(baseBmp, True);
         finally
           baseBmp.Free;
         end;
         FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
-        FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
+        if FScale = 1 then
+          FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False)
+        else
+          BlitScaled(FBmp, False);
         if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
+        FScale := 1;
         Exit;
       end;
       if Opacity < 1.0 then
         FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
-      FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
+      if FScale = 1 then
+        FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False)
+      else
+        BlitScaled(FBmp, False);
     end;
     if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
   end;
+  FScale := 1;
 end;
 
 function TTyPainter.Scale(ALogical: Integer): Integer;
