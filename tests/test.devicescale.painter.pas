@@ -107,6 +107,8 @@ type
     procedure TestFillPointerShape;
     procedure TestDrawStar;
     procedure TestCanvas2DKeepsTransformAcrossPainterCalls;
+    { Task 7: TyDeviceScaleRendering := False is the way back to one times. }
+    procedure TestSwitchOffDrawsAtOne;
   end;
 
 const
@@ -1032,6 +1034,27 @@ end;
 procedure TDeviceScalePainterTest.TestCanvas2DKeepsTransformAcrossPainterCalls;
 begin
   CheckClose('a scoped fill, a pointer shape, then a star', @DrawFillThenPointer, 2);
+end;
+
+procedure TDeviceScalePainterTest.TestSwitchOffDrawsAtOne;
+var
+  P: TTyPainter;
+  m: TAffineMatrix;
+begin
+  TyForceDeviceScaleForTest(2, True);
+  TyDeviceScaleRendering := False;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(nil, Rect(0, 0, 40, 30), 96);
+    AssertEquals('switched off: DeviceScale 1 despite the seam', 1, P.DeviceScale);
+    AssertEquals('a layout-sized layer', 40, P.Bitmap.Width);
+    AssertEquals('RasterPPI = PPI', 96, P.RasterPPI);
+    m := P.Bitmap.Canvas2D.matrix;
+    AssertTrue('and no Canvas2D scale', (m[1, 1] = 1) and (m[2, 2] = 1));
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
 end;
 
 initialization
