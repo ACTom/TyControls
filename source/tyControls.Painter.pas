@@ -415,6 +415,38 @@ type
       AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
   end;
 
+{ ===== The device scale (#83) ================================================
+
+  On a Retina Mac one LCL pixel is one POINT and covers two device pixels. LCL-Cocoa says how
+  many through TControl.GetCanvasScaleFactor (there since Lazarus 3.0; every other widgetset
+  answers 1). A painter that draws its layer at the size of the control's bounds in points
+  gets stretched by the system and comes out blurred, so the painter asks how many device
+  pixels a canvas unit covers and draws its layer that many times larger. }
+type
+  TTyCanvasScale = record
+    Scale: Integer;        // device pixels per canvas unit, 1..4
+    DeviceUnits: Boolean;  // the canvas's own coordinates are device pixels (an S-times cache)
+  end;
+
+var
+  { False puts every painter back at one times, as before #83: the way back for code that draws
+    on TTyPainter.Bitmap in layout coordinates and has not been taught the device scale. }
+  TyDeviceScaleRendering: Boolean = True;
+
+{ A widgetset's scale factor as a whole number of device pixels per unit: rounded, at least 1,
+  at most 4. Only whole factors are drawn at (macOS has 1 and 2); NaN and <= 0 read as 1. }
+function TyDeviceScaleOf(AFactor: Double): Integer;
+{ How many device pixels one unit of ACanvas covers, asked in this order: the switch above
+  (off = 1); the test seam; the canvases an S-times offscreen cache registered (DeviceUnits);
+  the scale factor of the control a TControlCanvas belongs to; else 1. nil = 1. }
+function TyCanvasDeviceScale(ACanvas: TCanvas): TTyCanvasScale;
+{ An offscreen cache whose bitmap holds AScale device pixels per layout pixel registers its
+  canvas, so a painter drawing onto it draws at that scale and lands 1:1 (DeviceUnits).
+  Registering again replaces the scale; unregistering a canvas that is not there does nothing. }
+procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
+procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
+{ FOR THE TESTS: answer (AScale, ADeviceUnits) for every canvas; AScale = 0 turns it off. }
+procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean);
 function TyVecPoint(AX, AY: Double): TTyVecPoint;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
@@ -3840,6 +3872,92 @@ begin
   end;
 end;
 
+{ ===== The device scale (#83) ================================================ }
+
+type
+  TTyRasterCanvasEntry = record
+    Canvas: TCanvas;
+    Scale: Integer;
+  end;
+
+var
+  GRasterCanvases: array of TTyRasterCanvasEntry;
+  GForcedScale: Integer = 0;
+  GForcedDeviceUnits: Boolean = False;
+
+function RasterCanvasIndex(ACanvas: TCanvas): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to High(GRasterCanvases) do
+    if GRasterCanvases[i].Canvas = ACanvas then Exit(i);
+  Result := -1;
+end;
+
+function TyDeviceScaleOf(AFactor: Double): Integer;
+begin
+  if IsNan(AFactor) or (AFactor <= 0) then Exit(1);
+  if AFactor > 4 then Exit(4);
+  Result := Round(AFactor);
+  if Result < 1 then Result := 1;
+end;
+
+function TyCanvasDeviceScale(ACanvas: TCanvas): TTyCanvasScale;
+var
+  i: Integer;
+begin
+  Result.Scale := 1;
+  Result.DeviceUnits := False;
+  if not TyDeviceScaleRendering then Exit;
+  if GForcedScale > 0 then
+  begin
+    Result.Scale := GForcedScale;
+    Result.DeviceUnits := GForcedDeviceUnits;
+    Exit;
+  end;
+  if ACanvas = nil then Exit;
+  i := RasterCanvasIndex(ACanvas);
+  if i >= 0 then
+  begin
+    Result.Scale := GRasterCanvases[i].Scale;
+    Result.DeviceUnits := True;
+    Exit;
+  end;
+  if (ACanvas is TControlCanvas) and (TControlCanvas(ACanvas).Control <> nil) then
+    Result.Scale := TyDeviceScaleOf(TControlCanvas(ACanvas).Control.GetCanvasScaleFactor);
+end;
+
+procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
+var
+  i: Integer;
+begin
+  if ACanvas = nil then Exit;
+  i := RasterCanvasIndex(ACanvas);
+  if i < 0 then
+  begin
+    i := Length(GRasterCanvases);
+    SetLength(GRasterCanvases, i + 1);
+    GRasterCanvases[i].Canvas := ACanvas;
+  end;
+  GRasterCanvases[i].Scale := AScale;
+end;
+
+procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
+var
+  i: Integer;
+begin
+  i := RasterCanvasIndex(ACanvas);
+  if i < 0 then Exit;
+  GRasterCanvases[i] := GRasterCanvases[High(GRasterCanvases)];
+  SetLength(GRasterCanvases, Length(GRasterCanvases) - 1);
+end;
+
+procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean);
+begin
+  GForcedScale := AScale;
+  GForcedDeviceUnits := ADeviceUnits;
+end;
+
 { ============================ VECTOR PATH API ============================
   See the declaration block in the interface for the units convention and for
   why this lives on the painter instead of each caller reaching for Canvas2D.
@@ -4729,5 +4847,6 @@ finalization
   { a painter still alive at exit would have let go of its entries already: the
     pool's masks are no state's now }
   ClipPoolFreeAll;
+  GRasterCanvases := nil;
 
 end.
