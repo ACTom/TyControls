@@ -1425,11 +1425,13 @@ begin
       P.FillBackground(Banner, BannerStyle.Background, 0);
       if FBannerCaption <> '' then
       begin
-        TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600, APPI);
+        { Drawn straight on the layer, which counts device pixels (#83). }
+        TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600,
+          P.RasterPPI);
         // 90° CCW: reads bottom-to-top up the strip, anchored near the bottom, centered across it.
         // The ROTATION is not mirrored -- a vertical banner reads bottom-to-top in either
         // direction; only which end of the popup it decorates changes.
-        P.Bitmap.TextOutAngle(Banner.Left + bannerPx div 2, R.Bottom - P.Scale(8), 900,
+        P.Bitmap.TextOutAngle(P.Dev(Banner.Left + bannerPx div 2), P.Dev(R.Bottom - P.Scale(8)), 900,
           FBannerCaption, TyColorToBGRA(BannerStyle.TextColor), taLeftJustify);
       end;
     end;
@@ -1561,9 +1563,9 @@ begin
         if iconSz < P.Scale(8) then iconSz := P.Scale(8);
         { In-layer, both branches: our own list renders the vector exactly at iconSz, a foreign
           list is materialised. Centred in the iconSz slot the check glyph would have used. }
-        TyBlitImage(P.Bitmap, FImages, FRows[i].ImageIndex,
+        TyBlitImageScaled(P, FImages, FRows[i].ImageIndex,
           Slot.Left + ((Slot.Right - Slot.Left) - iconSz) div 2,
-          RowRect.Top + (rowH - iconSz) div 2, iconSz, APPI, False);
+          RowRect.Top + (rowH - iconSz) div 2, iconSz, False);
       end
       else if FRows[i].GlyphVisible and FRows[i].HasThemeGlyph then
       begin

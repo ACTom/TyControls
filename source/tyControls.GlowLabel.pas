@@ -315,19 +315,21 @@ begin
       glowLayer := TBGRABitmap.Create(P.Bitmap.Width, P.Bitmap.Height, BGRAPixelTransparent);
       try
         glowPx := TyColorToBGRA(FGlowColor);
-        TyConfigureTextFont(glowLayer, S.FontName, fontSize, S.FontWeight, APPI);
+        { The halo layer is the size of the painter's layer, which counts device pixels:
+          its text, its box and its blur are taken at the device scale (#83). }
+        TyConfigureTextFont(glowLayer, S.FontName, fontSize, S.FontWeight, P.RasterPPI);
         style := Default(TTextStyle);
         style.Alignment := FAlignment;
         style.Layout := FLayout;
         style.SingleLine := True;
         style.Clipping := True;
-        glowLayer.TextRect(ContentRect, ContentRect.Left, ContentRect.Top,
+        glowLayer.TextRect(P.Dev(ContentRect), P.Dev(ContentRect.Left), P.Dev(ContentRect.Top),
           dispCap, style, glowPx);
 
         blurDev := P.Scale(FGlowRadius);
         if blurDev > 0 then
         begin
-          blurred := glowLayer.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap;
+          blurred := glowLayer.FilterBlurRadial(P.Dev(blurDev), rbFast) as TBGRABitmap;
           try
             // Stamp the blurred halo a few times to intensify the glow (radial blur
             // spreads the alpha thin). More stamps for a bigger radius; crash-safe
