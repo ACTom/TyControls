@@ -508,11 +508,12 @@ begin
                 taCenter, tlCenter, False, 0, True);
             end;
           end;
-          bmp := GlyphFor(idx, gsz, IfThen(idx = FSelected, Int64(selInk), Int64(ink)));
+          { The glyph is rendered for the layer (raster pixels) and placed in the gsz-square
+            layout cell centre (#83). }
+          bmp := GlyphFor(idx, P.Dev(gsz), IfThen(idx = FSelected, Int64(selInk), Int64(ink)));
           if bmp <> nil then
-            P.DrawGlyphBitmap(Rect(x + (cell - bmp.Width) div 2, y + (cell - bmp.Height) div 2,
-              x + (cell - bmp.Width) div 2 + bmp.Width,
-              y + (cell - bmp.Height) div 2 + bmp.Height), bmp);
+            P.DrawGlyphBitmap(Rect(x + (cell - gsz) div 2, y + (cell - gsz) div 2,
+              x + (cell - gsz) div 2 + gsz, y + (cell - gsz) div 2 + gsz), bmp);
         end;
     { Nothing to show is a STATE, not a blank panel: an empty grid with no message reads as
       "the dialog is broken". }

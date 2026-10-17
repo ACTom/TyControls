@@ -1488,7 +1488,8 @@ begin
   if token = '' then Exit;
   sz := ARect.Right - ARect.Left;
   if ARect.Bottom - ARect.Top < sz then sz := ARect.Bottom - ARect.Top;
-  bmp := TyRenderGlyphToken(token, sz, AColor);   // nil when the token is malformed
+  { Rendered for the layer: Dev(sz) raster pixels, which DrawGlyphBitmap places 1:1 (#83). }
+  bmp := TyRenderGlyphToken(token, APainter.Dev(sz), AColor);   // nil when the token is malformed
   if bmp = nil then Exit;
   try
     APainter.DrawGlyphBitmap(ARect, bmp);

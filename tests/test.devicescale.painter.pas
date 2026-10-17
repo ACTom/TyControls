@@ -13,7 +13,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes, BGRATransform,
-  tyControls.Types, tyControls.Painter;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base;
 
 type
   TPainterDraw = procedure(P: TTyPainter; K: Integer) of object;
@@ -23,6 +23,7 @@ type
     FCanvasBmp: TBitmap;
     FDegRect, FDegMethod: Integer;
     FRtl: Boolean;   // DrawBoth begins its painters right-to-left
+    FBackdrop: TBGRABitmap;   // a raster-sized backdrop for the glass/slice tests
     function NewCanvas(AW, AH: Integer): TCanvas;
     function PixelAt(AX, AY: Integer): TBGRAPixel;
     { Draw the same thing twice and keep both layers. Scaled: S = 2 through the seam, layout
@@ -48,6 +49,13 @@ type
     procedure DrawTextMultiLine(P: TTyPainter; K: Integer);
     procedure DrawTextMnemonic(P: TTyPainter; K: Integer);
     procedure DrawTextRtl(P: TTyPainter; K: Integer);
+    procedure DrawNineSlices(P: TTyPainter; K: Integer);
+    procedure DrawImageFills(P: TTyPainter; K: Integer);
+    procedure DrawImageSlice(P: TTyPainter; K: Integer);
+    procedure DrawGlassPane(P: TTyPainter; K: Integer);
+    procedure DrawNineSliceFill(P: TTyPainter; K: Integer);
+    function TestImagePath: string;
+    function Backdrop: TBGRABitmap;
   protected
     procedure TearDown; override;
   published
@@ -80,6 +88,14 @@ type
     procedure TestDrawTextMnemonic;
     procedure TestDrawTextRtl;
     procedure TestMeasuringStaysLayout;
+    { Task 5: images, glass and glyph bitmaps. }
+    procedure TestNineSlice;
+    procedure TestDrawImageFillModes;
+    procedure TestFillImageSlice;
+    procedure TestFillGlass;
+    procedure TestDrawGlyphBitmapCentersRasterGlyph;
+    procedure TestGlyphOverrideRendersAtDeviceSize;
+    procedure TestNestedCallMapsOnce;
   end;
 
 const
@@ -140,6 +156,7 @@ begin
   TyForceDeviceScaleForTest(0, False);
   TyDeviceScaleRendering := True;
   FreeAndNil(FCanvasBmp);
+  FreeAndNil(FBackdrop);
   inherited TearDown;
 end;
 
@@ -748,6 +765,181 @@ begin
   AssertEquals('after drawing: height', m1.cy, m3.cy);
   AssertEquals('after drawing: caret x', c1, c3);
   AssertEquals('after drawing: char index', i1, i3);
+end;
+
+{ ---- Task 5: images, glass, glyph bitmaps ---- }
+
+function TDeviceScalePainterTest.TestImagePath: string;
+var
+  b: TBGRABitmap;
+  x, y: Integer;
+begin
+  { A 16x16 picture with structure in every direction, so a nine-slice cut, a stretch or a
+    centre placement that lands one pixel off shows up. }
+  Result := GetTempDir(False) + 'tydevicescale16.png';
+  if FileExists(Result) then Exit;
+  b := TBGRABitmap.Create(16, 16);
+  try
+    for y := 0 to 15 do
+      for x := 0 to 15 do
+        b.SetPixel(x, y, BGRA(x * 16, y * 16, ((x + y) mod 4) * 60, 255));
+    b.SaveToFile(Result);
+  finally
+    b.Free;
+  end;
+end;
+
+function TDeviceScalePainterTest.Backdrop: TBGRABitmap;
+var
+  x, y: Integer;
+begin
+  { The form's backdrop, kept at the raster size (120 x 80 for the 60 x 40 layout at S = 2). }
+  if FBackdrop = nil then
+  begin
+    FBackdrop := TBGRABitmap.Create(120, 80);
+    for y := 0 to 79 do
+      for x := 0 to 119 do
+        FBackdrop.SetPixel(x, y, BGRA(x * 2, y * 3, (x * y) mod 256, 255));
+  end;
+  Result := FBackdrop;
+end;
+
+procedure TDeviceScalePainterTest.DrawNineSlices(P: TTyPainter; K: Integer);
+begin
+  P.NineSlice(Rect(2 * K, 2 * K, 28 * K, 38 * K), TestImagePath, Rect(4, 4, 4, 4), False);
+  P.NineSlice(Rect(32 * K, 2 * K, 58 * K, 38 * K), TestImagePath, Rect(4, 4, 4, 4), True);
+end;
+
+procedure TDeviceScalePainterTest.DrawImageFills(P: TTyPainter; K: Integer);
+begin
+  P.DrawImageFill(Rect(0, 0, 20 * K, 40 * K), TestImagePath, timStretch, 0);
+  P.DrawImageFill(Rect(20 * K, 0, 40 * K, 40 * K), TestImagePath, timCenter, 0);
+  P.DrawImageFill(Rect(40 * K, 0, 60 * K, 40 * K), TestImagePath, timCover, 2);
+end;
+
+procedure TDeviceScalePainterTest.DrawImageSlice(P: TTyPainter; K: Integer);
+begin
+  P.FillImageSlice(Rect(5 * K, 5 * K, 40 * K, 30 * K), Backdrop, Point(3 * K, 5 * K));
+end;
+
+procedure TDeviceScalePainterTest.DrawGlassPane(P: TTyPainter; K: Integer);
+begin
+  P.FillGlass(Rect(5 * K, 5 * K, 50 * K, 35 * K), Backdrop, Point(4 * K, 2 * K),
+    TyRGBA(255, 255, 255, 90), TyUniformCorners(6));
+end;
+
+procedure TDeviceScalePainterTest.DrawNineSliceFill(P: TTyPainter; K: Integer);
+var
+  f: TTyFill;
+begin
+  f := Default(TTyFill);
+  f.Kind := tfkNineSlice;
+  f.ImagePath := TestImagePath;
+  f.SliceInsets := Rect(4, 4, 4, 4);
+  P.FillBackground(Rect(3 * K, 3 * K, 57 * K, 37 * K), f, 0);
+end;
+
+procedure TDeviceScalePainterTest.TestNineSlice;
+begin
+  CheckSame('nine-slice, stretched and tiled', @DrawNineSlices);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawImageFillModes;
+begin
+  CheckSame('image fill: stretch, centre, cover with blur', @DrawImageFills);
+end;
+
+procedure TDeviceScalePainterTest.TestFillImageSlice;
+begin
+  CheckSame('backdrop slice', @DrawImageSlice);
+end;
+
+procedure TDeviceScalePainterTest.TestFillGlass;
+begin
+  CheckSame('glass pane', @DrawGlassPane);
+end;
+
+procedure TDeviceScalePainterTest.TestNestedCallMapsOnce;
+begin
+  { FillBackground with a nine-slice fill calls NineSlice from inside its own scope: the rect
+    must be mapped once, at the outer call. }
+  CheckSame('nine-slice background (nested scope)', @DrawNineSliceFill);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawGlyphBitmapCentersRasterGlyph;
+var
+  P: TTyPainter;
+  g: TBGRABitmap;
+begin
+  TyForceDeviceScaleForTest(2, True);
+  g := TBGRABitmap.Create(20, 20, BGRA(255, 0, 0, 255));
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(nil, Rect(0, 0, 30, 30), 96);
+    { A glyph rendered for the layer (raster pixels) into a 30 x 30 layout cell: centred in the
+      60 x 60 raster cell, at 1:1. }
+    P.DrawGlyphBitmap(Rect(0, 0, 30, 30), g);
+    AssertTrue('glyph starts at raster (20,20), got ' + PxStr(P.Bitmap.GetPixel(20, 20)),
+      IsRed(P.Bitmap.GetPixel(20, 20)));
+    AssertEquals('nothing at (19,19)', 0, P.Bitmap.GetPixel(19, 19).alpha);
+    AssertTrue('glyph ends at raster (39,39), got ' + PxStr(P.Bitmap.GetPixel(39, 39)),
+      IsRed(P.Bitmap.GetPixel(39, 39)));
+    AssertEquals('nothing at (40,40)', 0, P.Bitmap.GetPixel(40, 40).alpha);
+    P.EndPaint;
+  finally
+    P.Free;
+    g.Free;
+  end;
+end;
+
+function InkBox(B: TBGRABitmap): TRect;
+var
+  x, y: Integer;
+begin
+  Result := Rect(MaxInt, MaxInt, -1, -1);
+  for y := 0 to B.Height - 1 do
+    for x := 0 to B.Width - 1 do
+      if B.GetPixel(x, y).alpha > 128 then
+      begin
+        if x < Result.Left then Result.Left := x;
+        if y < Result.Top then Result.Top := y;
+        if x + 1 > Result.Right then Result.Right := x + 1;
+        if y + 1 > Result.Bottom then Result.Bottom := y + 1;
+      end;
+end;
+
+procedure TDeviceScalePainterTest.TestGlyphOverrideRendersAtDeviceSize;
+var
+  ctl: TTyStyleController;
+  P: TTyPainter;
+  one, two: TRect;
+begin
+  ctl := TTyStyleController.Create(nil);
+  P := TTyPainter.Create;
+  try
+    ctl.LoadThemeCss(':root { --glyph-test: "Arial" "\4D"; }');   // U+004D, 'M'
+    P.BeginPaint(nil, Rect(0, 0, 40, 40), 96);
+    AssertTrue('S = 1: the override draws', TyTryDrawGlyphOverride(P, ctl, Rect(0, 0, 40, 40),
+      '--glyph-test', TyRGBA(0, 0, 0, 255)));
+    one := InkBox(P.Bitmap);
+    P.EndPaint;
+    TyForceDeviceScaleForTest(2, True);
+    P.BeginPaint(nil, Rect(0, 0, 40, 40), 96);
+    AssertTrue('S = 2: the override draws', TyTryDrawGlyphOverride(P, ctl, Rect(0, 0, 40, 40),
+      '--glyph-test', TyRGBA(0, 0, 0, 255)));
+    two := InkBox(P.Bitmap);
+    P.EndPaint;
+  finally
+    P.Free;
+    ctl.Free;
+  end;
+  AssertTrue('S = 1 has ink', one.Right > one.Left);
+  AssertTrue(Format('S = 2 ink is twice as wide (S = 1: %d, S = 2: %d)',
+    [one.Right - one.Left, two.Right - two.Left]),
+    Abs((two.Right - two.Left) - 2 * (one.Right - one.Left)) <= 2);
+  AssertTrue(Format('and twice as tall (S = 1: %d, S = 2: %d)',
+    [one.Bottom - one.Top, two.Bottom - two.Top]),
+    Abs((two.Bottom - two.Top) - 2 * (one.Bottom - one.Top)) <= 2);
 end;
 
 initialization
