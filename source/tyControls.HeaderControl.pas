@@ -3,7 +3,7 @@ unit tyControls.HeaderControl;
 {$modeswitch advancedrecords}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, BGRACanvas2D,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, BGRACanvas2D, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 const
@@ -849,8 +849,10 @@ begin
       begin
         if IsRightToLeft then dividerX := cellRect.Left
         else dividerX := cellRect.Right - 1;
-        P.Bitmap.DrawLine(dividerX, cellRect.Top,
-          dividerX, cellRect.Bottom, TyColorToBGRA(dividerColor), False);
+        { One layout pixel column, which on a layer at a device scale is DeviceScale device
+          pixels wide (#83). }
+        P.Bitmap.FillRect(P.Dev(Rect(dividerX, cellRect.Top, dividerX + 1, cellRect.Bottom)),
+          TyColorToBGRA(dividerColor), dmDrawWithTransparency);
       end;
     end;
 

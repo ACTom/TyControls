@@ -1336,7 +1336,8 @@ begin
   h := P.Scale(20);
   { Left is the horizontal margin, NOT ATop (the running Y cursor) -- they coincide only
     when the title is the first thing drawn. }
-  P.DrawText(Rect(P.Scale(8), ATop, P.Bitmap.Width - P.Scale(8), ATop + h),
+  { The layer's width in LAYOUT pixels (it counts device pixels, #83). }
+  P.DrawText(Rect(P.Scale(8), ATop, P.Bitmap.Width div P.DeviceScale - P.Scale(8), ATop + h),
     FTitle, Font.Name, 11, 700, S.TextColor, taCenter, tlCenter, True);
   Inc(ATop, h);
 end;
@@ -1369,8 +1370,8 @@ begin
       nm := SeriesDisplayName(i);
       swatch := SeriesColor(FSeries.Items[i], i);
     end;
-    P.Bitmap.FillRect(x, cy - boxSz div 2, x + boxSz, cy + boxSz div 2,
-      ColorToBGRA(swatch), dmSet);
+    P.Bitmap.FillRect(P.Dev(Rect(x, cy - boxSz div 2, x + boxSz, cy + boxSz div 2)),
+      ColorToBGRA(swatch), dmSet);   // layer px (#83)
     Inc(x, boxSz + P.Scale(4));
     tw := P.MeasureText(nm, Font.Name, 9, 400).cx;
     P.DrawText(Rect(x, ARect.Top, x + tw + P.Scale(2), ARect.Bottom),
@@ -1461,7 +1462,7 @@ begin
       begin
         // The SAME rect the hit-test scans -- neither can drift from the other.
         barR := TyChartBarRect(ci, catCount, si, seriesCount, APlot, vals[ci], niceMin, niceMax);
-        P.Bitmap.FillRect(barR.Left, barR.Top, barR.Right, barR.Bottom, seriesPx, dmSet);
+        P.Bitmap.FillRect(P.Dev(barR), seriesPx, dmSet);   // layer px (#83)
         if FShowValues then
         begin
           // Anchored on the VALUE's y, not the bar's top: for a negative bar those differ,
@@ -1639,7 +1640,7 @@ begin
       swR.Top := box.Top + padT + (tipLines.Count - 1) * lineH + (lineH - swSz) div 2;
       if swR.Top < box.Top then swR.Top := box.Top;
       swR.Bottom := swR.Top + swSz;
-      P.Bitmap.FillRect(swR.Left, swR.Top, swR.Right, swR.Bottom, ColorToBGRA(ASwatch), dmSet);
+      P.Bitmap.FillRect(P.Dev(swR), ColorToBGRA(ASwatch), dmSet);   // layer px (#83)
     end;
 
     for i := 0 to tipLines.Count - 1 do

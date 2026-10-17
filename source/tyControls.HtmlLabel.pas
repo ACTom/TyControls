@@ -625,11 +625,12 @@ var
   S, ov: TTyStyleSet;
   fb: TBGRABitmap;
   contentRect: TRect;
-  cl, ct, cw, ew, eh, baseSize, ii, th, ly: Integer;
+  cl, ct, cw, ew, eh, baseSize, ii, th, ly, thd: Integer;
   fontName: string;
   linkColor, col: TTyColor;
   run: TTyHtmlRun;
   isLink: Boolean;
+  rr: TRect;
 begin
   P := TTyPainter.Create;
   try
@@ -656,27 +657,32 @@ begin
     th := P.Scale(1);
     if th < 1 then th := 1;
 
+    { The runs are laid out in layout pixels (BuildLayout measures at APPI) and drawn straight
+      on the layer, which counts device pixels: each run's box and the rule thickness are
+      mapped, and its font is set at the raster PPI (#83). }
     fb := P.Bitmap;
+    thd := P.Dev(th);
     for ii := 0 to High(FLayout) do
     begin
       run := FLayout[ii].Run;
       isLink := run.Href <> '';
-      ConfigRunFont(fb, run, fontName, baseSize, APPI);
+      ConfigRunFont(fb, run, fontName, baseSize, P.RasterPPI);
+      rr := P.Dev(FLayout[ii].Rect);
       if isLink then col := linkColor
       else if run.HasColor then col := LclColorToTy(run.Color)
       else col := S.TextColor;
-      fb.TextOut(FLayout[ii].Rect.Left, FLayout[ii].Rect.Top, run.Text, TyColorToBGRA(col));
+      fb.TextOut(rr.Left, rr.Top, run.Text, TyColorToBGRA(col));
       // Links are underlined for affordance; <u> underlines any run; <s> strikes it.
       if run.Underline or isLink then
       begin
-        ly := FLayout[ii].Rect.Bottom - th;
-        fb.FillRect(FLayout[ii].Rect.Left, ly, FLayout[ii].Rect.Right, ly + th,
+        ly := rr.Bottom - thd;
+        fb.FillRect(rr.Left, ly, rr.Right, ly + thd,
           TyColorToBGRA(col), dmDrawWithTransparency);
       end;
       if run.Strike then
       begin
-        ly := (FLayout[ii].Rect.Top + FLayout[ii].Rect.Bottom) div 2;
-        fb.FillRect(FLayout[ii].Rect.Left, ly, FLayout[ii].Rect.Right, ly + th,
+        ly := (rr.Top + rr.Bottom) div 2;
+        fb.FillRect(rr.Left, ly, rr.Right, ly + thd,
           TyColorToBGRA(col), dmDrawWithTransparency);
       end;
     end;

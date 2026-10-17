@@ -169,20 +169,23 @@ begin sv := TyHSVAreaToSV(Point(X, Y), ClientRect); FSat := sv.X; FVal := sv.Y; 
   the same two properties, so this reads the same way they do. }
 procedure TTyHSVSquare.Paint;
 var
-  P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, ix, iy, mw: Integer; s, v: Single;
+  P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, bw, bh, ix, iy, mw: Integer; s, v: Single;
   bodyS: TTyStyleSet;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
     bodyS := CurrentStyle;
-    bmp := P.Bitmap; w := bmp.Width; h := bmp.Height;
+    { The field is data, filled per pixel of the LAYER (bw x bh, device pixels); the border and
+      the ring are chrome, placed in layout pixels (w x h) like every painter call (#83). }
+    bmp := P.Bitmap; bw := bmp.Width; bh := bmp.Height;
+    w := ClientWidth; h := ClientHeight;
     if (w > 0) and (h > 0) then
     begin
-      for yy := 0 to h - 1 do
-        for xx := 0 to w - 1 do
+      for yy := 0 to bh - 1 do
+        for xx := 0 to bw - 1 do
         begin
-          s := xx / Max(1, w - 1); v := 1 - yy / Max(1, h - 1);
+          s := xx / Max(1, bw - 1); v := 1 - yy / Max(1, bh - 1);
           bmp.SetPixel(xx, yy, TyColorToBGRA(TyHSVToRGB(FHue, s, v)));
         end;
       { Field border, when the theme asks for one. }
@@ -223,20 +226,22 @@ procedure TTyHueBar.ApplyY(Y: Integer); begin SetHue(TyHueBarToH(Y, ClientRect))
 
 procedure TTyHueBar.Paint;
 var
-  P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, iy: Integer; px: TBGRAPixel;
+  P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, bw, bh, iy: Integer; px: TBGRAPixel;
   bodyS: TTyStyleSet;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
     bodyS := CurrentStyle;
-    bmp := P.Bitmap; w := bmp.Width; h := bmp.Height;
+    { As TTyHSVSquare.Paint: the ramp per layer pixel, the chrome in layout pixels (#83). }
+    bmp := P.Bitmap; bw := bmp.Width; bh := bmp.Height;
+    w := ClientWidth; h := ClientHeight;
     if (w > 0) and (h > 0) then
     begin
-      for yy := 0 to h - 1 do
+      for yy := 0 to bh - 1 do
       begin
-        px := TyColorToBGRA(TyHSVToRGB(TyHueBarToH(yy, Rect(0, 0, w, h)), 1, 1));
-        for xx := 0 to w - 1 do
+        px := TyColorToBGRA(TyHSVToRGB(TyHueBarToH(yy, Rect(0, 0, bw, bh)), 1, 1));
+        for xx := 0 to bw - 1 do
           bmp.SetPixel(xx, yy, px);
       end;
       { Same reasoning as TTyHSVSquare.Paint: the hue ramp is data, the cursor and the

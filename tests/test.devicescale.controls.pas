@@ -14,8 +14,9 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, ImgList, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.IconFont, tyControls.Image, tyControls.ImageView, tyControls.GlyphButtons,
-  tyControls.CharImage, tyControls.ComboBoxEx,
-  test.devicescale.support, test.devicescale.sweep;
+  tyControls.CharImage, tyControls.ComboBoxEx, Menus, tyControls.HtmlLabel, tyControls.GlowLabel,
+  tyControls.Menu, tyControls.Chart, tyControls.HeaderControl, tyControls.Dialogs.Color,
+  tyControls.Types, test.devicescale.support, test.devicescale.sweep;
 
 type
   TDeviceScaleControlsTest = class(TTestCase)
@@ -31,6 +32,13 @@ type
     function BuildGlyphButton(AParent: TWinControl; APPI: Integer): TControl;
     function BuildCharImage(AParent: TWinControl; APPI: Integer): TControl;
     function BuildComboBoxEx(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildHtmlLabel(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildGlowLabel(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildMenuView(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildBarChart(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildHeader(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildHsvSquare(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildHueBar(AParent: TWinControl; APPI: Integer): TControl;
   protected
     procedure TearDown; override;
   published
@@ -43,6 +51,14 @@ type
     procedure TestGlyphButtonIcon;
     procedure TestCharImage;
     procedure TestComboBoxExImage;
+    { Task 10: text laid out on the layer, and the rest of that family. }
+    procedure TestHtmlLabelRichText;
+    procedure TestGlowLabel;
+    procedure TestMenuViewBannerAndIcons;
+    procedure TestBarChartWithLegend;
+    procedure TestHeaderDividers;
+    procedure TestColourSquare;
+    procedure TestHueBar;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -268,6 +284,143 @@ end;
 procedure TDeviceScaleControlsTest.TestComboBoxExImage;
 begin
   CheckScale('TTyComboBoxEx-image', @BuildComboBoxEx, 160, 28);
+end;
+
+{ ---- Task 10 ---- }
+
+function TDeviceScaleControlsTest.BuildHtmlLabel(AParent: TWinControl; APPI: Integer): TControl;
+var
+  h: TTyHtmlLabel;
+begin
+  h := TTyHtmlLabel.Create(AParent);
+  h.Parent := AParent;
+  TControlAccess(h).Font.PixelsPerInch := APPI;
+  h.Html := 'Plain <b>bold</b> <u>under</u> <s>struck</s> <a href="x">link</a>';
+  Result := h;
+end;
+
+function TDeviceScaleControlsTest.BuildGlowLabel(AParent: TWinControl; APPI: Integer): TControl;
+var
+  g: TTyGlowLabel;
+begin
+  g := TTyGlowLabel.Create(AParent);
+  g.Parent := AParent;
+  TControlAccess(g).Font.PixelsPerInch := APPI;
+  g.Caption := 'Glowing';
+  g.GlowRadius := 6;
+  g.GlowColor := TyRGBA(255, 0, 0, 255);   // a halo strong enough to show where it lands
+  Result := g;
+end;
+
+function TDeviceScaleControlsTest.BuildMenuView(AParent: TWinControl; APPI: Integer): TControl;
+var
+  v: TTyMenuView;
+  mm: TMainMenu;
+  top, it: TMenuItem;
+begin
+  mm := TMainMenu.Create(AParent);   // freed with the form
+  top := TMenuItem.Create(mm);
+  top.Caption := 'File';
+  mm.Items.Add(top);
+  it := NewItem('Open', 0, False, True, nil, 0, '');
+  it.ImageIndex := 0;
+  top.Add(it);
+  top.Add(NewItem('Save as', 0, False, True, nil, 0, ''));
+  v := TTyMenuView.Create(AParent);
+  v.Parent := AParent;
+  TControlAccess(v).Font.PixelsPerInch := APPI;
+  v.Images := Images;
+  v.BannerCaption := 'Tools';
+  v.BannerWidth := 22;
+  v.SetRows(TyBuildMenuRows(top));
+  Result := v;
+end;
+
+function TDeviceScaleControlsTest.BuildBarChart(AParent: TWinControl; APPI: Integer): TControl;
+var
+  c: TTyChart;
+begin
+  c := TTyChart.Create(AParent);
+  c.Parent := AParent;
+  TControlAccess(c).Font.PixelsPerInch := APPI;
+  c.ChartType := ctBar;
+  c.Title := 'Sales';
+  c.Categories.Add('Q1');
+  c.Categories.Add('Q2');
+  c.Categories.Add('Q3');
+  c.Series.Add.Values := '3,5,2';
+  c.Series.Add.Values := '4,1,6';
+  Result := c;
+end;
+
+function TDeviceScaleControlsTest.BuildHeader(AParent: TWinControl; APPI: Integer): TControl;
+var
+  h: TTyHeaderControl;
+begin
+  h := TTyHeaderControl.Create(AParent);
+  h.Parent := AParent;
+  TControlAccess(h).Font.PixelsPerInch := APPI;
+  h.AddSection('Name', 80);
+  h.AddSection('Size', 60);
+  h.AddSection('Date', 70);
+  Result := h;
+end;
+
+function TDeviceScaleControlsTest.BuildHsvSquare(AParent: TWinControl; APPI: Integer): TControl;
+var
+  q: TTyHSVSquare;
+begin
+  q := TTyHSVSquare.Create(AParent);
+  q.Parent := AParent;
+  TControlAccess(q).Font.PixelsPerInch := APPI;
+  q.Hue := 200;
+  Result := q;
+end;
+
+function TDeviceScaleControlsTest.BuildHueBar(AParent: TWinControl; APPI: Integer): TControl;
+var
+  b: TTyHueBar;
+begin
+  b := TTyHueBar.Create(AParent);
+  b.Parent := AParent;
+  TControlAccess(b).Font.PixelsPerInch := APPI;
+  b.Hue := 120;
+  Result := b;
+end;
+
+procedure TDeviceScaleControlsTest.TestHtmlLabelRichText;
+begin
+  CheckScale('TTyHtmlLabel-rich', @BuildHtmlLabel, 260, 26);
+end;
+
+procedure TDeviceScaleControlsTest.TestGlowLabel;
+begin
+  CheckScale('TTyGlowLabel', @BuildGlowLabel, 140, 40);
+end;
+
+procedure TDeviceScaleControlsTest.TestMenuViewBannerAndIcons;
+begin
+  CheckScale('TTyMenuView-banner-icons', @BuildMenuView, 180, 80);
+end;
+
+procedure TDeviceScaleControlsTest.TestBarChartWithLegend;
+begin
+  CheckScale('TTyChart-bars', @BuildBarChart, 260, 180);
+end;
+
+procedure TDeviceScaleControlsTest.TestHeaderDividers;
+begin
+  CheckScale('TTyHeaderControl-sections', @BuildHeader, 240, 26);
+end;
+
+procedure TDeviceScaleControlsTest.TestColourSquare;
+begin
+  CheckScale('TTyHSVSquare', @BuildHsvSquare, 120, 120);
+end;
+
+procedure TDeviceScaleControlsTest.TestHueBar;
+begin
+  CheckScale('TTyHueBar', @BuildHueBar, 18, 120);
 end;
 
 initialization
