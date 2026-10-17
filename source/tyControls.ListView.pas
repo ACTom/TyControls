@@ -2979,7 +2979,7 @@ begin
   { Both branches in-layer. Our list is the hot path (HotTrack repaints on every mouse move),
     borrowed from the collection cache with no per-icon allocation; a foreign list is
     materialised. }
-  TyBlitImage(P.Bitmap, AList, AImageIndex, AX, AY, ASizePx, P.Scale(96), False);
+  TyBlitImageScaled(P, AList, AImageIndex, AX, AY, ASizePx, False);
 end;
 
 function TTyCustomListView.CheckRectForCell(const ACell: TRect): TRect;
@@ -3382,12 +3382,14 @@ begin
       DetermineSplitterIndex grabs (its right reading rightward, its left when mirrored),
       so the line a user aims at is the line that resizes. }
     if IsRightToLeft then divX := colLeft else divX := colRight - 1;
+    { Rules are one LAYOUT pixel thick: DeviceScale device pixels on the layer (#83). }
     if (divX >= 0) and (divX < M.ViewportW) then
-      P.Bitmap.DrawLine(divX, 0, divX, M.HeaderH, border, False);
+      P.Bitmap.FillRect(P.Dev(Rect(divX, 0, divX + 1, M.HeaderH)), border, dmDrawWithTransparency);
   end;
 
   { bottom border of the header band }
-  P.Bitmap.DrawLine(0, M.HeaderH - 1, M.ViewportW, M.HeaderH - 1, border, False);
+  P.Bitmap.FillRect(P.Dev(Rect(0, M.HeaderH - 1, M.ViewportW, M.HeaderH)), border,
+    dmDrawWithTransparency);
 end;
 
 procedure TTyCustomListView.RenderGridLines(P: TTyPainter; const M: TTyListMetrics;
@@ -3413,7 +3415,8 @@ begin
     for pos := first to last do
     begin
       cell := TyListItemRect(pos, GetItemCount, M, FOffsetX, FOffsetY);
-      P.Bitmap.DrawLine(0, cell.Bottom - 1, M.ViewportW, cell.Bottom - 1, border, False);
+      P.Bitmap.FillRect(P.Dev(Rect(0, cell.Bottom - 1, M.ViewportW, cell.Bottom)), border,
+        dmDrawWithTransparency);   // one layout pixel (#83)
     end;
   { vertical lines at each column's right edge }
   for posIdx := 0 to FHeader.Columns.Count - 1 do
@@ -3428,7 +3431,8 @@ begin
     span := col.Span(ColumnAxis);
     if RtlLayout then x := span.Left else x := span.Right - 1;
     if (x >= 0) and (x < M.ViewportW) then
-      P.Bitmap.DrawLine(x, M.HeaderH, x, M.ViewportH, border, False);
+      P.Bitmap.FillRect(P.Dev(Rect(x, M.HeaderH, x + 1, M.ViewportH)), border,
+        dmDrawWithTransparency);   // one layout pixel (#83)
   end;
 end;
 
@@ -3438,6 +3442,7 @@ var
   mq, sel: TTyStyleSet;
   acc: TTyColor;
   t: Integer;
+  edge: TBGRAPixel;
 begin
   box.Left   := FMarqueeStart.X; box.Right  := FMarqueeCur.X;
   box.Top    := FMarqueeStart.Y; box.Bottom := FMarqueeCur.Y;
@@ -3459,12 +3464,25 @@ begin
     a rubber band is a transient overlay, not a surface, and the style set has no alpha
     token -- the same deviation TTyOfficeListBox makes when it derives its header band from
     the text colour at a fixed alpha. A theme change still recolours the band. }
-  P.Bitmap.FillRect(box.Left, box.Top, box.Right, box.Bottom,
+  { The band is in layout pixels, the layer counts device pixels (#83): the fill is mapped, and
+    the one-pixel edge is four layout-pixel strips -- the pixels Rectangle draws, each corner
+    once -- so it keeps its weight. }
+  edge := BGRA(TyRedOf(acc), TyGreenOf(acc), TyBlueOf(acc), TyLvMarqueeEdgeAlpha);
+  P.Bitmap.FillRect(P.Dev(box),
     BGRA(TyRedOf(acc), TyGreenOf(acc), TyBlueOf(acc), TyLvMarqueeFillAlpha),
     dmDrawWithTransparency);
-  P.Bitmap.Rectangle(box.Left, box.Top, box.Right, box.Bottom,
-    BGRA(TyRedOf(acc), TyGreenOf(acc), TyBlueOf(acc), TyLvMarqueeEdgeAlpha),
-    dmDrawWithTransparency);
+  P.Bitmap.FillRect(P.Dev(Rect(box.Left, box.Top, box.Right, box.Top + 1)), edge, dmDrawWithTransparency);
+  if box.Bottom - box.Top > 1 then
+    P.Bitmap.FillRect(P.Dev(Rect(box.Left, box.Bottom - 1, box.Right, box.Bottom)), edge,
+      dmDrawWithTransparency);
+  if box.Bottom - box.Top > 2 then
+  begin
+    P.Bitmap.FillRect(P.Dev(Rect(box.Left, box.Top + 1, box.Left + 1, box.Bottom - 1)), edge,
+      dmDrawWithTransparency);
+    if box.Right - box.Left > 1 then
+      P.Bitmap.FillRect(P.Dev(Rect(box.Right - 1, box.Top + 1, box.Right, box.Bottom - 1)), edge,
+        dmDrawWithTransparency);
+  end;
 end;
 
 { The on-screen index-in-group window, bounded by the viewport (never the whole group). It
@@ -3633,7 +3651,7 @@ begin
 
     { Clip the item region (below the header, inside the scrollbars). }
     saved := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(0, m.HeaderH, m.ViewportW, m.ViewportH);
+    P.Bitmap.ClipRect := P.Dev(Rect(0, m.HeaderH, m.ViewportW, m.ViewportH));   // layer px (#83)
 
     if UseGroupedLayout then
       RenderGrouped(P, m)

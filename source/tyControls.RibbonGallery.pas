@@ -329,7 +329,7 @@ begin
     if insetLogical > 0 then Inc(insetLogical);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+    P.Bitmap.ClipRect := P.Dev(Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset));
 
     for i := 0 to cnt - 1 do
     begin
@@ -704,7 +704,7 @@ begin
     capR := BoxStyle.BorderRadius - insetLogical;
     if capR < 0 then capR := 0;
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+    P.Bitmap.ClipRect := P.Dev(Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset));
 
     // Inline cells: up to VisibleColumns, left->right, in the space left of the arrow.
     visN := FVisibleColumns;
