@@ -653,6 +653,29 @@ function chartCases() {
   // ---- interrupted ----
   add('bar-pict.inflight', '200 ms into bars -> glyphs, the bars again: each bar combines the glyphs where they are',
     [s(cart([barS()])), s(cart([pictS()])), s(cart([barS()]), 200)]);
+  // [fin] a symbol caught in its update's tween: the morph starts where it is
+  const scS = (vals, dx) => ({ type: 'scatter', id: 'k', universalTransition: true, symbolSize: 20,
+    data: NAMES.map((n, i) => ({ name: n, value: [i + 0.5 + dx, vals[i]] })) });
+  add('scatter-bar.inflight', '200 ms into a scatter update (its symbols move across and up), bars: the symbols morph '
+    + 'from where they are', [s(vcart([scS(VALS, 0)])), s(vcart([scS([2, 9, 6, 1], 0.3)])), s(cart([barS()]), 200)]);
+  // (A and D hold the graph's bounds in both: its view keeps its transform)
+  const GY1 = [0, 7, 2, 10];
+  const GY2 = [0, 3, 8, 10];
+  const GX2 = [0, 16, 6, 30];
+  const grS = (ys, names, extra, xs) => Object.assign({ type: 'graph', id: 'k', layout: 'none', universalTransition: true,
+    data: names.map(n => {
+      const i = NAMES.indexOf(n);
+      return { name: n, x: xs ? xs[i] : i * 10, y: ys[i], value: ys[i] };
+    }),
+    links: [] }, extra || {});
+  add('graph-bar.inflight', '200 ms into a graph update (B and C move), bars: the nodes off the disposed view morph from '
+    + 'where they are in its group', [s(solo(grS(GY1, NAMES))), s(solo(grS(GY2, NAMES, null, GX2))), s(cart([barS()]), 200)]);
+  const GK = { id: 'g', universalTransition: { enabled: true, seriesKey: 'kk' } };
+  add('graph-bar.kept.inflight', '200 ms into a graph update, the graph keeps A and D and B and C go to bars of its '
+    + 'seriesKey: the moving nodes leave the kept view from where they are on the canvas',
+    [s(solo(grS(GY1, NAMES, GK))), s(solo(grS(GY2, NAMES, GK, GX2))),
+      s(cart([grS(GY2, ['A', 'D'], GK, GX2), barS({ id: 'b', universalTransition: { enabled: true, seriesKey: 'kk' } },
+        [{ name: 'B', value: 8 }, { name: 'C', value: 3 }])]), 200)]);
   // ---- the other types (each against bars of the same names, both ways) ----
   const pair = (tid, note, other, opts) => {
     add('bar-' + tid, 'bars into ' + note, [s(cart([barS()])), s(other())], opts);

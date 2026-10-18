@@ -8051,15 +8051,27 @@ var
   end;
 
   procedure Detach(const AEl: TTyChartElement; P: TTyChartAnimProxy; var S: TTyUtOldSnap);
+  var gx, gy: Double;
   begin
     if (AEl.Anim.Role = carSymbol) and (AEl.Anim.G[10] = 1) then
+    begin
       { a graph node: its symbol group (the node's place, the compensation
-        scale) and its path, no view }
+        scale) and its path, no view. ON A VIEW the place is where the
+        group is now -- its proxy's x / y are in the main group, what
+        SymbolDraw's update tweens; removeEl stops that tween where it is }
+      gx := AEl.Anim.G[7];
+      gy := AEl.Anim.G[8];
+      if AEl.Anim.InView then
+      begin
+        gx := NumOr(P, 'x', gx);
+        gy := NumOr(P, 'y', gy);
+      end;
       UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
         NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
         AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
-        AEl.Anim.G[7], AEl.Anim.G[8], AEl.Anim.G[9], AEl.Anim.G[9],
-        S.Data, S.HasM, S.M, S.HasLocal, S.Local)
+        gx, gy, AEl.Anim.G[9], AEl.Anim.G[9],
+        S.Data, S.HasM, S.M, S.HasLocal, S.Local);
+    end
     else if AEl.Anim.Role = carMapRegion then
       { a region: no roam }
       S.HasM := False;
