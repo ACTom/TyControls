@@ -63,7 +63,12 @@ hex, index, extra), point, axes[]:
   lextent [2] hex (a log axis: intervalStub's extent),
   ticks[] {v, b}, rawTicks[], lineTicks[], minor (as axis-breaks.js),
   labels[] {v, b, text, x, y, shown, rot hex},
-  splitLines, axisTicks, axisLine, breakAreas (as axis-breaks.js).
+  splitLines, axisTicks, axisLine, breakAreas (as axis-breaks.js),
+  singleSplit[] [x1, y1, x2, y2] hex (a single axis: the lines its split
+    lines merged into one path per colour -- SingleAxisView.splitLine's
+    mergePath, no anid -- in the order merged).
+An anim case with action2 dispatches it right after the sample at at2 (a
+second transition starting while the first moves).
 series[] {index, type, items [[x, y] hex]}.
 */
 'use strict';
@@ -125,6 +130,21 @@ const pts = a => a.map(p => [hex(p[0]), hex(p[1])]);
 function walk(e, f) {
   f(e);
   if (e.childrenRef) e.childrenRef().forEach(x => walk(x, f));
+}
+
+// ---------- the lines mergePath merges ----------
+// SingleAxisView.splitLine merges its lines into one path per colour, which
+// keeps them only as a Float32 path proxy: the lines are caught as mergePath
+// reads them (getUpdatedPathProxy(true) on a Line no group holds).
+let MERGED = [];
+{
+  const L = echarts.graphic.Line.prototype;
+  const orig = L.getUpdatedPathProxy;
+  must(typeof orig === 'function', 'no getUpdatedPathProxy');
+  L.getUpdatedPathProxy = function (inBatch) {
+    if (inBatch && !this.parent) MERGED.push(this);
+    return orig.apply(this, arguments);
+  };
 }
 
 // ---------- the formatter ----------
@@ -234,6 +254,7 @@ function recordAxis(chart, key) {
     });
   });
   rec.splitLines = splitLines;
+  if (key[0] === 's') rec.singleSplit = MERGED.map(l => [hex(l.shape.x1), hex(l.shape.y1), hex(l.shape.x2), hex(l.shape.y2)]);
   rec.axisTicks = axisTicks;
   rec.axisLine = axisLine;
   rec.breakAreas = breakAreas;
@@ -344,7 +365,24 @@ add('rotate', 'r-x90', 'labels turned 90 on an x axis', { yAxis: { type: 'catego
 add('rotate', 'r-x-inverse', 'an inverse x axis, labels turned -40', { yAxis: { type: 'category', data: C5 },
   xAxis: { type: 'value', inverse: true, axisLabel: { rotate: -40 }, breaks: [{ start: 50, end: 900, gap: '1%' }] },
   series: [{ type: 'bar', data: [10, 30, 950, 40, 1000] }] }, { axes: ['x0'] });
-add('rotate', 'r-x30-wide', 'turned 30 with a wide gap: the boxes meet the rect test but not the oriented one',
+// two labels of very different widths: the oriented boxes' centres no longer
+// follow their anchors, so which one of the two MTVs along a box axis is the
+// shorter turns on the widths (calcDirMTV's two candidates)
+add('rotate', 'r-x-inverse-wide-end', 'an inverse x axis turned -40, the break end\'s label far wider than its start\'s',
+  { yAxis: { type: 'category', data: C5 },
+    xAxis: { type: 'value', inverse: true, axisLabel: { rotate: -40 }, breaks: [{ start: 5, end: 900000, gap: '1%' }] },
+    series: [{ type: 'bar', data: [1, 3, 950000, 4, 1000000] }] }, { axes: ['x0'] });
+add('rotate', 'r-x45-wide-start', 'an x axis turned 45, the break start\'s label far wider than its end\'s',
+  { yAxis: { type: 'category', data: C5 },
+    xAxis: { type: 'value', min: -1000000, axisLabel: { rotate: 45 }, breaks: [{ start: -900000, end: -5, gap: '1%' }] },
+    series: [{ type: 'bar', data: [-1, -3, -950000, -4, -1000000] }] }, { axes: ['x0'] });
+add('rotate', 'r-y30-wide-end', 'a y axis turned 30, the break end\'s label far wider than its start\'s',
+  barY({ axisLabel: { rotate: 30 }, breaks: [{ start: 5, end: 900000, gap: '1%' }] }, [1, 3, 950000, 4, 1000000]));
+add('rotate', 'r-x-60-wide-start', 'an x axis turned -60, the break start\'s label far wider than its end\'s',
+  { yAxis: { type: 'category', data: C5 },
+    xAxis: { type: 'value', min: -1000000, axisLabel: { rotate: -60 }, breaks: [{ start: -900000, end: -5, gap: '1%' }] },
+    series: [{ type: 'bar', data: [-1, -3, -950000, -4, -1000000] }] }, { axes: ['x0'] });
+add('rotate', 'r-x30-wide','turned 30 with a wide gap: the boxes meet the rect test but not the oriented one',
   { yAxis: { type: 'category', data: C5 }, xAxis: { type: 'value', axisLabel: { rotate: 30, fontSize: 16 }, breaks: [{ start: 50, end: 900, gap: '4%' }] },
     series: [{ type: 'bar', data: [10, 30, 950, 40, 1000] }] }, { axes: ['x0'] });
 
@@ -362,8 +400,8 @@ add('params', 'p-event', 'triggerEvent: a click on a break label: params.break {
 
 // ---- the break areas in a transition
 const ANIM = [];
-function addAnim(id, note, option, action, axis) {
-  ANIM.push({ group: 'anim', id, note, option, action, axis: axis || 'y0' });
+function addAnim(id, note, option, action, axis, more) {
+  ANIM.push(Object.assign({ group: 'anim', id, note, option, action, axis: axis || 'y0' }, more || {}));
 }
 addAnim('t-zoom', 'a dataZoom over a broken y axis: the break area moves from its old points to its new by anid',
   barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
@@ -376,6 +414,10 @@ addAnim('t-legend', 'a legend toggle: the area is drawn again where it was, no m
   barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { legend: {}, series: [{ type: 'bar', name: 'A', data: [10, 30, 950, 40, 1000] },
     { type: 'bar', name: 'B', data: [5, 40, 920, 30, 990] }] }),
   { type: 'legendToggleSelect', name: 'B' });
+addAnim('t-zoom-twice', 'a second dataZoom while the first transition moves: the new one starts from the leaves as they are now',
+  barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
+  { type: 'dataZoom', start: 0, end: 70 }, 'y0',
+  { action2: { type: 'dataZoom', start: 0, end: 40 }, at2: 250, samples: [0, 16, 100, 250, 266, 400, 500, 600, 749, 750, 751, 1000] });
 
 // =====================================================================
 // Running a case
@@ -429,6 +471,7 @@ function runCase(c) {
   });
   try {
     CALLS = [];
+    MERGED = [];
     chart.setOption(materialize(c.option));
     chart.renderToSVGString();
     const renders = [recordRender(chart, c, DRAWS, [], [], CALLS.slice(), null)];
@@ -437,6 +480,7 @@ function runCase(c) {
       CALLS = [];
       events.length = 0;
       clicks.length = 0;
+      MERGED = [];
       let point = null;
       if (st.type === 'click') {
         point = st.at.kind === 'break' ? breakPoint(chart, st.at) : labelPoint(chart, st.at);
@@ -489,11 +533,12 @@ function runAnim(c) {
     NOW = T1;
     chart.dispatchAction(JSON.parse(JSON.stringify(c.action)));
     const frames = [];
-    for (const t of SAMPLES) {
+    for (const t of c.samples || SAMPLES) {
       NOW = T1 + t;
       zr.animation.update();
       zr.storage.getDisplayList(true);
       frames.push({ t, leaves: breakLeaves(chart, c.axis) });
+      if (c.action2 && t === c.at2) chart.dispatchAction(JSON.parse(JSON.stringify(c.action2)));
     }
     return { before, draws: DRAWS, frames };
   } finally {
@@ -522,6 +567,7 @@ function generate() {
   for (const c of ANIM) {
     const r = runAnim(c);
     out.anim.push({ id: c.id, group: c.group, note: c.note, option: J(c.option), action: J(c.action), axis: c.axis,
+      action2: c.action2 ? J(c.action2) : undefined, at2: c.action2 ? c.at2 : undefined,
       before: r.before, draws: r.draws, frames: r.frames });
   }
   return out;
@@ -549,6 +595,12 @@ function checks(out) {
   const zf = out.anim.find(a => a.id === 't-zoom').frames;
   anchor('t-zoom: the area moves in between', JSON.stringify(zf[3].leaves) !== JSON.stringify(zf[0].leaves)
     && JSON.stringify(zf[3].leaves) !== JSON.stringify(zf[zf.length - 1].leaves));
+  const tw = out.anim.find(a => a.id === 't-zoom-twice').frames;
+  const at = t => JSON.stringify(tw.find(f => f.t === t).leaves);
+  const once = t => JSON.stringify(zf.find(f => f.t === t).leaves);
+  anchor('t-zoom-twice: the second transition starts where the first one is (266 is its first frame) and leaves its path',
+    at(266) === at(250) && at(250) !== once(500) && at(400) !== once(400));
+  anchor('s-value: the single\'s split lines are caught',ax0('s-value').singleSplit.length > 2);
   return anchors;
 }
 

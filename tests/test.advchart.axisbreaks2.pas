@@ -500,6 +500,7 @@ var
   geom: TTyBreakAreaGeom;
   isSingle: Boolean;
   sv: TTySingleAxisView;
+  order: TTyIntegerArray;
   dim: string;
   furn: TTyAxisFurniture;
 
@@ -708,6 +709,38 @@ begin
         if spec^.SplitLineMarks[i].Drawn then
           got := got + JsNum(spec^.SplitLineMarks[i].Value) + ' ';
     SameStr(ATag + ' split lines', got, want);
+  end;
+  { A SINGLE AXIS' SPLIT LINES: upstream merges them into one path per
+    colour (no anid); the lines it merged, in that order, against the
+    view's, colour by colour }
+  if isSingle then
+  begin
+    sub := AAxis.Find('singleSplit') as TJSONArray;
+    if sub = nil then Miss(ATag + ': no singleSplit in the fixture')
+    else
+    begin
+      n := 0;
+      for k := 0 to High(sv.SplitLines) do
+        if sv.SplitLines[k].ColourIndex > n then n := sv.SplitLines[k].ColourIndex;
+      order := nil;
+      for i := 0 to n do
+        for k := 0 to High(sv.SplitLines) do
+          if sv.SplitLines[k].ColourIndex = i then
+          begin
+            SetLength(order, Length(order) + 1);
+            order[High(order)] := k;
+          end;
+      SameInt(ATag + ' single split line count', Length(order), sub.Count);
+      if Length(order) = sub.Count then
+        for i := 0 to High(order) do
+        begin
+          k := order[i];
+          Same(Format('%s single split %d x1', [ATag, i]), sv.SplitLines[k].X1, TJSONArray(sub.Items[i]).Items[0]);
+          Same(Format('%s single split %d y1', [ATag, i]), sv.SplitLines[k].Y1, TJSONArray(sub.Items[i]).Items[1]);
+          Same(Format('%s single split %d x2', [ATag, i]), sv.SplitLines[k].X2, TJSONArray(sub.Items[i]).Items[2]);
+          Same(Format('%s single split %d y2', [ATag, i]), sv.SplitLines[k].Y2, TJSONArray(sub.Items[i]).Items[3]);
+        end;
+    end;
   end;
   arr := AAxis.Arrays['axisTicks'];
   want := '';
@@ -1023,6 +1056,7 @@ var
   v: TTyAnimValue;
   akey, anid: string;
   t1: Double;
+  act2: TJSONObject;
 begin
   FFrames := 0;
   anims := TJSONObject(FRoot).Arrays['anim'];
@@ -1055,6 +1089,7 @@ begin
       AssertTrue(FName + ' zooms', FChart.DispatchDataZoom(0, act.Floats['start'], act.Floats['end']))
     else
       AssertTrue(FName + ' acts', FChart.DispatchAction(act.AsJSON));
+    act2 := an.Find('action2') as TJSONObject;
     akey := an.Strings['axis'];
     if akey[1] = 'y' then akey := 'yAxis' + Copy(akey, 2, MaxInt)
     else akey := 'xAxis' + Copy(akey, 2, MaxInt);
@@ -1095,6 +1130,11 @@ begin
             v.Arr[2 * q + 1], TJSONArray(pts.Items[q]).Items[1]);
         end;
       end;
+      { the second action right after the sample at at2: a transition that
+        starts while the first one moves }
+      if (act2 <> nil) and (fr.Floats['t'] = an.Floats['at2']) then
+        AssertTrue(FName + ' zooms again', FChart.DispatchDataZoom(0, act2.Floats['start'],
+          act2.Floats['end']));
     end;
   end;
   Report;
