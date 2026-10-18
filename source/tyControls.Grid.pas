@@ -8189,8 +8189,11 @@ begin
     else
       FSurface.Fill(BGRAPixelTransparent);
 
-    if not canFast then DrawFrame(P, R, S)
-    else FillRegion(P, band, GetStyleTypeKey);   { 露出的带先铺回本体底色 }
+    { The frame first, on the fast path too: there the clip holds the strip that came into
+      view, so the full repaint's own call repaints just that strip, pixel for pixel. Filling
+      the strip with the body colour instead covered the frame's left edge across the view's
+      width and never drew it back -- a gap in the border after every scroll (#86). }
+    DrawFrame(P, R, S);
 
     { 背景图铺在本体底色**之上**、任何内容之下。 }
     RenderBackgroundBitmap(P, M, R);
