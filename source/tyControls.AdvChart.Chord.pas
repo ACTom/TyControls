@@ -199,7 +199,7 @@ implementation
 
 uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Pie,
-  tyControls.AdvChart.LabelOpt;
+  tyControls.AdvChart.LabelOpt, tyControls.AdvChart.LabelGuide;
 
 const
   cRadian = Pi / 180;
@@ -1219,6 +1219,7 @@ var
   mask: TFPUExceptionMask;
   n1, n2, nd: Integer;
   noInk: Boolean;
+  sec: TTyPolarSector;
 
   procedure Tag(var AEl: TTyChartElement);
   begin
@@ -1275,6 +1276,17 @@ begin
       el.Datum := TyChartDatum(ASeriesIndex, S.Nodes[i].DataIndex, i);
       el.Silent := False;
       Tag(el);
+      { [F3c] the piece's Sector for the universal transition (the view
+        group's transform an identity once its scale has run -- upstream keeps
+        that identity matrix or none, by the group's history: the same
+        numbers either way) }
+      el.Anim.UtTag := 1;
+      el.Anim.UtRow := S.Nodes[i].DataIndex;
+      el.Anim.UtOrder := 0;
+      el.Anim.UtData := TyGuidePathData(TyChordSectorPath(S, i));
+      sec := NodeSector(S, i);
+      el.Anim.UtBase := TTyDoubleArray.Create(2, sec.CX, sec.CY, sec.R0, sec.R, sec.SA,
+        sec.EA, Ord(sec.CW));
       if S.Nodes[i].HasLabel and Finite([S.Nodes[i].LabelX, S.Nodes[i].LabelY]) then
       begin
         el.Caption.Text := S.Nodes[i].LabelText;
@@ -1385,6 +1397,9 @@ begin
       el.Datum := TyChartEdgeDatum(ASeriesIndex, i);
       el.Silent := False;
       Tag(el);
+      { [F3c] a ribbon fades in where a universal transition morphs }
+      el.Anim.UtTag := 2;
+      el.Anim.UtRow := -2 - i;
       AList.Add(el);
       Inc(Result);
     end;

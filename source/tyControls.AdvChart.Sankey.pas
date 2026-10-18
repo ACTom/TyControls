@@ -177,7 +177,8 @@ procedure TySankeyNodeRect(const S: TTySankeySolved; ANode: Integer;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers, tyControls.AdvChart.ZrPath,
+  tyControls.AdvChart.LabelGuide;
 
 const
   cEps = 5e-5;
@@ -1694,6 +1695,37 @@ begin
   end;
 end;
 
+{ [F3c] a node's Rect (rounded by its radius) in the main group, under the
+  group's transform, for the universal transition }
+procedure UtNodePath(var AEl: TTyChartElement; const S: TTySankeySolved; ARow: Integer;
+  AX, AY, AW, AH, AR: Double);
+var
+  path: TTyZrPath;
+  r1, r2, r3, r4: Double;
+begin
+  AEl.Anim.UtTag := 1;
+  AEl.Anim.UtRow := ARow;
+  AEl.Anim.UtOrder := 0;
+  path := nil;
+  if AR > 0 then
+  begin
+    TyZrRadii([AR], r1, r2, r3, r4);
+    TyZrRoundRect(path, AX, AY, AW, AH, r1, r2, r3, r4);
+  end
+  else
+    TyZrRect(path, AX, AY, AW, AH);
+  AEl.Anim.UtData := TyGuidePathData(path);
+  AEl.Anim.UtBase := TTyDoubleArray.Create(1, AX, AY, AW, AH);
+  AEl.Anim.UtHasM := (S.M0 <> 1) or (S.M3 <> 1) or (S.M4 <> 0) or (S.M5 <> 0);
+  if AEl.Anim.UtHasM then
+  begin
+    AEl.Anim.UtM[0] := S.M0;
+    AEl.Anim.UtM[3] := S.M3;
+    AEl.Anim.UtM[4] := S.M4;
+    AEl.Anim.UtM[5] := S.M5;
+  end;
+end;
+
 function TyBuildSankeyMarks(ASeriesIndex: Integer; const ASolved: TTySankeySolved;
   const AInk: TTySankeyInk; AList: TTyPaintList): Integer;
 var
@@ -1991,6 +2023,10 @@ begin
       el.Z := ASolved.Z;
       el.Z2 := 0;
       el.Datum := TyChartEdgeDatum(ASeriesIndex, i);
+      { [F3c] a band is a path of the view no item's: it fades in where a
+        universal transition morphs }
+      el.Anim.UtTag := 2;
+      el.Anim.UtRow := -2 - i;
       { a link takes the pointer -- its ECData has a dataIndex, so upstream
         hovers it and shows its tooltip [Batch 100] }
       el.Silent := False;
@@ -2050,6 +2086,9 @@ begin
       el.Z := ASolved.Z;
       el.Z2 := 10;
       el.Datum := TyChartDatum(ASeriesIndex, i, i);
+      { [F3c] the node's Rect in the main group, for the universal
+        transition }
+      UtNodePath(el, ASolved, i, x, y, w, h, r);
       { and so does a node [Batch 100] }
       el.Silent := False;
       if ASolved.Nodes[i].HasLabel and Finite([ASolved.Nodes[i].LabelX, ASolved.Nodes[i].LabelY]) then

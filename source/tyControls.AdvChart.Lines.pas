@@ -1373,6 +1373,9 @@ begin
         sym.Anim.Series := ASolved.SeriesIndex;
         sym.Anim.Index := g.Row;
         if e = 0 then sym.Anim.Role := carLinesFrom else sym.Anim.Role := carLinesTo;
+        { [F3c] the symbol createSymbol makes, for the universal transition }
+        sym.Caption.LgSymbol := ink.Sym[e].Name;
+        sym.Caption.LgKeepAspect := False;
         PutGeom(sym, g);
         sym.Anim.G[7] := Ord(kind);
         sym.Anim.G[8] := ink.Sym[e].W;

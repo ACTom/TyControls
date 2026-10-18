@@ -442,15 +442,22 @@ type
       first setOption, as upstream's initBase ignores it.
     LazyUpdate: the update -- and its `updated` event -- waits for the next
       render; the merge itself happens now, as upstream's does.
-    Silent: no `updated` event for this update. }
+    Silent: no `updated` event for this update.
+    Transition [F3c]: `transition` -- the series the update's universal
+      transition takes, `{from, to}` finders (seriesIndex / seriesId) or a
+      list of them, instead of the series' own keys (HasTransition: given
+      and truthy). }
   TTySetOptionOpts = record
     NotMerge, LazyUpdate, Silent: Boolean;
     ReplaceMerge: TTyStringArray;
+    HasTransition: Boolean;
+    Transition: TTyUtTransitionArray;
   end;
 
 { The options object as JSON text -- `{notMerge, replaceMerge, lazyUpdate,
-  silent}`, replaceMerge a main type or an array of them, the flags read for
-  their JavaScript truthiness, other keys (`transition`) ignored. '' is no
+  silent, transition}`, replaceMerge a main type or an array of them, the
+  flags read for their JavaScript truthiness, `transition` as
+  TyUtParseTransition reads it [F3c], other keys ignored. '' is no
   options. False when the text is no object. }
 function TySetOptionOptsOf(const AJson: string; out AOpts: TTySetOptionOpts): Boolean;
 
@@ -1537,6 +1544,11 @@ type
     { AN ACTION RENDERED A LAZY setOption still waiting: armed with the
       action's render, not at the next paint [milestone D1-D4] }
     FAnimLazyTaken: Boolean;
+    { [F3c] THE LAST setOption's `transition`, for the update it starts:
+      handed to the old render's record when the update arms, read by a
+      custom series' build (the series it names make their items anew) }
+    FAnimUtHas: Boolean;
+    FAnimUtTrans: TTyUtTransitionArray;
     { A MERGE setOption waiting for its arming [Batch 99, AN6]: the models it
       maps onto are the old ones, so are their views -- a series kept as a
       full update keeps it, the axes groupTransition, the markers update }
@@ -1701,6 +1713,9 @@ type
     { the series' universal transition keys now, as FAnimOldUtKeys keeps
       them [Batch 136, 137] }
     function AnimUtKeys: TTyUtSeriesKeysArray;
+    { [F3c] the pending transition option's `to` names series ASeries
+      (series:beforeupdate's __universalTransitionEnabled) }
+    function AnimUtNamed(ASeries: Integer): Boolean;
     { the axis views of the option now: 'xAxis0=' + id + #1 + subtype [Batch 99] }
     function AxisViewKeys: TTyStringArray;
     { the view of every series model now, shown or not: view key + #1 + type
@@ -4939,6 +4954,8 @@ begin
     AOpts.NotMerge := Truthy(o.Find('notMerge'));
     AOpts.LazyUpdate := Truthy(o.Find('lazyUpdate'));
     AOpts.Silent := Truthy(o.Find('silent'));
+    { [F3c] the universal transition's series }
+    TyUtParseTransition(o.Find('transition'), AOpts.HasTransition, AOpts.Transition);
     r := o.Find('replaceMerge');
     if r <> nil then
     begin
@@ -4955,9 +4972,57 @@ begin
   Result := True;
 end;
 
+{ [F3c] the paths a series' view drew from AFrom on (no text): its view's,
+  no item's -- faded in where a universal transition morphs }
+procedure UtTagFade(AList: TTyPaintList; AFrom, ASeries: Integer);
+var
+  k, n: Integer;
+  el: TTyChartElement;
+begin
+  n := 0;
+  for k := AFrom to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if (el.Caption.Text <> '') or (el.Anim.Role <> carNone) or (el.Anim.UtTag <> 0) then Continue;
+    el.Anim.Series := ASeries;
+    el.Anim.UtTag := 2;
+    el.Anim.UtRow := -2 - n;
+    Inc(n);
+    AList.SetElement(k, el);
+  end;
+end;
+
+{ [F3c] the graph nodes AList has from AFrom on: G[7..8] the node's layout
+  place, G[9] the compensation scale, G[10] 1 }
+procedure UtTagGraphNodes(AList: TTyPaintList; AFrom: Integer;
+  const ANodes: TTyGraphNodeArray; ANodeScale: Double);
+var
+  k, q: Integer;
+  el: TTyChartElement;
+begin
+  for k := AFrom to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if el.Anim.Role <> carSymbol then Continue;
+    for q := 0 to High(ANodes) do
+      if ANodes[q].Row = el.Anim.Index then
+      begin
+        el.Anim.G[7] := ANodes[q].X;
+        el.Anim.G[8] := ANodes[q].Y;
+        el.Anim.G[9] := ANodeScale;
+        el.Anim.G[10] := 1;
+        AList.SetElement(k, el);
+        Break;
+      end;
+  end;
+end;
+
 procedure TTyAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
+  { [F3c] a setOption with no transition option }
+  FAnimUtHas := False;
+  FAnimUtTrans := nil;
   ApplyNotMerge(AValue);
   AfterSetOption(False, False);
 end;
@@ -5145,7 +5210,13 @@ begin
   end
   else
     Result := DoMerge(AJson, AOpts.ReplaceMerge);
-  if Result then AfterSetOption(AOpts.LazyUpdate, AOpts.Silent);
+  if Result then
+  begin
+    { [F3c] the update's transition option: this setOption's }
+    FAnimUtHas := AOpts.HasTransition;
+    FAnimUtTrans := AOpts.Transition;
+    AfterSetOption(AOpts.LazyUpdate, AOpts.Silent);
+  end;
 end;
 
 function TTyAdvanceChart.SetOption(const AJson, AOptsJson: string): Boolean;
@@ -17926,6 +17997,20 @@ begin
     el.Anim.G[2] := pg.Box.W;
     el.Anim.G[3] := pg.Box.H;
     el.Anim.G[4] := gy;
+    { [F3c] THE LAYER'S PATH for the universal transition -- at the layer's
+      index among the data's items (setItemGraphicEl(idx), upstream's) --
+      in the group, which sits at its y }
+    el.Anim.UtTag := 1;
+    el.Anim.UtRow := k;
+    el.Anim.UtOrder := 0;
+    el.Anim.UtData := TyUtCmdsData(pg.Cmds);
+    el.Anim.UtHasM := gy <> 0;
+    if el.Anim.UtHasM then
+    begin
+      el.Anim.UtM[0] := 1;
+      el.Anim.UtM[3] := 1;
+      el.Anim.UtM[5] := gy;
+    end;
     AList.Add(el);
     Inc(Result);
   end;
@@ -23568,6 +23653,7 @@ var
   pk, gk, gq: Integer;
   tmOrder: TTyIntegerArray;
   gfxCount: Integer;
+  utAt: Integer;
 begin
   Result := 0;
   gfxCount := 0;
@@ -23719,11 +23805,18 @@ begin
           { ON A VIEW THE SYMBOLS ARE SCALED as zrender composes them: the
             view's overall scale times the compensation scale. }
           if (i <= High(FGraphs)) and (FGraphs[i] <> nil) then
+          begin
+            utAt := list.Count;
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
               gi, FStores[i], list,
               FGraphs[i].OverallScaleX * FGraphNodeScale[i],
-              FGraphs[i].OverallScaleY * FGraphNodeScale[i]))
+              FGraphs[i].OverallScaleY * FGraphNodeScale[i]));
+            { [F3c] a node's symbol group in the main group: its place and
+              the compensation scale, which a universal transition reads off
+              a disposed view }
+            UtTagGraphNodes(list, utAt, FGraphNodes[i], FGraphNodeScale[i]);
+          end
           else
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
@@ -23856,8 +23949,12 @@ begin
         if i <= High(FGauges) then
         begin
           gv := GaugeVisual(i);
+          utAt := list.Count;
           Inc(drawn, TyBuildGaugeAxis(FBindings[i], FGauges[i],
             FGaugeSpecs[i], gv, AMeasurer, APPI, list));
+          { [F3c] the dial's paths (no text): its view's, faded in where a
+            universal transition morphs }
+          UtTagFade(list, utAt, FBindings[i].SeriesIndex);
           Inc(drawn, TyBuildGaugeValue(FBindings[i], FGauges[i],
             FGaugeSpecs[i], FGaugeItems[i], gv, FStores[i],
             FStores[i].DimIndexOf(TyGaugeValueDim), AMeasurer, APPI, list));
@@ -41600,6 +41697,19 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.AnimUtNamed(ASeries: Integer): Boolean;
+var
+  i, k: Integer;
+  id: string;
+begin
+  Result := False;
+  if not FAnimUtHas then Exit;
+  id := FOption.ComponentId('series', ASeries);
+  for i := 0 to High(FAnimUtTrans) do
+    for k := 0 to High(FAnimUtTrans[i].To_) do
+      if TyUtFinderMatches(FAnimUtTrans[i].To_[k], ASeries, id) then Exit(True);
+end;
+
 function TTyAdvanceChart.AxisViewKeys: TTyStringArray;
 var
   t, i, n: Integer;
@@ -41836,6 +41946,10 @@ begin
       r.UtDivide := FAnimOldUtKeys[si].Divide;
       r.UtGroupIds := TyUtRowGroups(FAnimOldUtKeys[si], r.Raws);
       r.UtChildGroupIds := TyUtRowChildGroups(FAnimOldUtKeys[si], r.Raws);
+      { [F3c] the model id and the groups a transition option reads }
+      r.UtModelId := FAnimOldUtKeys[si].ModelId;
+      r.UtGroupOwn := TyUtRowGroupsOwn(FAnimOldUtKeys[si], r.Raws);
+      r.UtDataGroup := FAnimOldUtKeys[si].DataGroup;
     end;
     FAnimPrev.Series[si] := r;
   end;
@@ -41844,7 +41958,8 @@ begin
   for i := 0 to FPaintList.Count - 1 do
   begin
     el := FPaintList.Element(i);
-    if el.Anim.Role = carNone then Continue;
+    { [F3c] an item path a universal transition reads, whatever its role }
+    if (el.Anim.Role = carNone) and (el.Anim.UtTag = 0) then Continue;
     FAnimPrev.Elements[n] := el;
     Inc(n);
   end;
@@ -41996,6 +42111,12 @@ begin
     utk := TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t, FOption.ComponentId('series', si));
     r.UtGroupIds := TyUtRowGroups(utk, r.Raws);
     r.UtChildGroupIds := TyUtRowChildGroups(utk, r.Raws);
+    { [F3c] the model id, the groups a transition option reads, and
+      whether that option's `to` names the series }
+    r.UtModelId := utk.ModelId;
+    r.UtGroupOwn := TyUtRowGroupsOwn(utk, r.Raws);
+    r.UtDataGroup := utk.DataGroup;
+    r.UtNamed := AnimUtNamed(si);
     if t = TyPieSeriesTypeName then
     begin
       v := TyAnimGetShallow(r.Model, 'animationTypeUpdate');
@@ -42033,6 +42154,9 @@ begin
         { the views alive after it: an old one that is not among them was
           disposed [Batch 99] }
         FAnimPrev.AliveKeys := AnimAliveKeys;
+        { [F3c] the setOption's transition option }
+        FAnimPrev.UtHasTransition := FAnimUtHas;
+        FAnimPrev.UtTransition := FAnimUtTrans;
         FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev);
       end
       else
@@ -42040,6 +42164,9 @@ begin
         FAnimSet.Clear;
         FAnimSet.Arm(FPaintList, AnimSeriesInfo);
       end;
+      { series:transition resets the flag of the series it named }
+      FAnimUtHas := False;
+      FAnimUtTrans := nil;
       { THE AXES: a full update of the same option renders the same axis
         views again and groupTransitions them; a new option's are new views,
         which never do (probed: under notMerge only the series move)
@@ -48119,6 +48246,8 @@ begin
     anim.Model.HasPayload := FAnimHasPayload;
     anim.Enabled := AnimAllowed and TyAnimIsEnabled(anim.Model);
     anim.Driver := FCuAnim;
+    { [F3c] a series that transitions makes its items anew }
+    view.UtRecreate := TyUtEnabled(node) or AnimUtNamed(si);
     try
       view.Render(ids, raws, @CustomCall, z, zl, anim);
     finally
@@ -48195,10 +48324,62 @@ begin
   end;
 end;
 
+{ [F3c] a custom series' path tagged for the universal transition: the
+  item's row, its place among the item's paths, its PathProxy data in its own
+  frame and its computed transform (the device scale over it), its rect's or
+  sector's shape for the dividers }
+procedure CustomUtPath(var APe: TTyChartElement; AEl: TTyGfxEl; ASeries, ARow: Integer;
+  var APlace: Integer; AScale: Double);
+
+  function Sh(const AKey: string; ADefault: Double): Double;
+  var d: TJSONData;
+  begin
+    d := AEl.Shape.Find(AKey);
+    if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat else Result := ADefault;
+  end;
+
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  APe.Anim.Role := carCustomPath;
+  APe.Anim.Series := ASeries;
+  APe.Anim.Index := ARow;
+  APe.Anim.Sub := APlace;
+  Inc(APlace);
+  APe.Anim.Pts := TyGuidePathData(TyGfxPath(AEl));
+  { the item's element itself (no group above it in the item) }
+  if (AEl.Parent <> nil) and (AEl.Parent.Parent = nil) then APe.Anim.G[7] := 1;
+  if AEl.HasTransform then
+  begin
+    for k := 0 to 5 do APe.Anim.G[k] := AEl.Transform[k] * AScale;
+    APe.Anim.G[6] := 1;
+  end
+  else if AScale <> 1 then
+  begin
+    APe.Anim.G[0] := AScale;
+    APe.Anim.G[3] := AScale;
+    APe.Anim.G[6] := 1;
+  end;
+  case AEl.Kind of
+    gkRect:
+      APe.Anim.Base := TTyDoubleArray.Create(1, Sh('x', 0), Sh('y', 0), Sh('width', 0),
+        Sh('height', 0));
+    gkSector:
+      begin
+        { the Sector's default shape under what the option wrote }
+        d := AEl.Shape.Find('clockwise');
+        if (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean then k := 0 else k := 1;
+        APe.Anim.Base := TTyDoubleArray.Create(2, Sh('cx', 0), Sh('cy', 0), Sh('r0', 0),
+          Sh('r', 0), Sh('startAngle', 0), Sh('endAngle', Pi * 2), k);
+      end;
+  end;
+end;
+
 function TTyAdvanceChart.CustomBuild(ASlot: Integer; AList: TTyPaintList;
   APPI: Integer): Integer;
 var
-  si, i, inside, raw: Integer;
+  si, i, inside, raw, upath: Integer;
   view: TTyCustomView;
   root, el: TTyGfxEl;
   meas: ITyTextMeasurer;
@@ -48265,6 +48446,12 @@ var
       pe.HasClip := True;
       pe.ClipRect := clip;
     end;
+    { [F3c] AN ITEM'S PATH as getPathList finds it (no text, no image, not
+      invisible, not `morph: false`), for the universal transition }
+    if (AEl.Kind in [gkRect, gkCircle, gkEllipse, gkRing, gkSector, gkArc, gkPolygon,
+      gkPolyline, gkLine, gkBezier, gkPath]) and not AEl.Invisible
+      and not ((AEl.Custom is TTyCustomElInfo) and TTyCustomElInfo(AEl.Custom).NoMorph) then
+      CustomUtPath(pe, AEl, si, inside, upath, scale);
     k := AList.Add(pe);
     if Length(FCustomPaintEls) <= k then SetLength(FCustomPaintEls, k + 1);
     FCustomPaintEls[k] := AEl;
@@ -48334,6 +48521,7 @@ begin
     datum := TyChartDatum(si, inside, raw);
     maxZ2 := NegInfinity;
     UpdZ(root);
+    upath := 0;
     Walk(root, False);
   end;
 end;

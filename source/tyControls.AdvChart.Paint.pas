@@ -691,7 +691,18 @@ type
                          shape from its source on the proxy 'treeEdge' }
     carSankeyClip, carPictorialGlyph, carPictorialClip, carGraphEdge,
     carGraphEdgeFrom, carGraphEdgeTo, carGraphEdgeLabel, carTreeNode,
-    carTreeEdge);
+    carTreeEdge,
+    { [F3c] ITEM PATHS NO ANIMATION OF THEIR OWN DRIVES, for the universal
+      transition (AdvChart.AnimView):
+      carMapRegion   a map series' region path (Index its row, Sub 0 the
+                     polygons' compound, 1 the lines'): Pts its PathProxy
+                     data before the roam, G[0..5] the roam's matrix, G[6] 1
+                     where there is one
+      carCustomPath  a custom series' path (Index the item's row, Sub its
+                     place among the item's paths): Pts its PathProxy data in
+                     its own frame, G[0..5] its computed transform, G[6] 1
+                     where there is one, Base its shape for the dividers }
+    carMapRegion, carCustomPath);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
@@ -727,6 +738,23 @@ type
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
+    { [F3c] WHAT A UNIVERSAL TRANSITION READS OF AN ELEMENT whose role says
+      nothing of it (AdvChart.AnimView), the role and its numbers left as
+      they are. UtTag 0 none; 1 an item path: UtRow the item's row (where
+      Index is the series'), UtOrder its place in the item's getPathList,
+      UtData its PathProxy data in its own frame and UtM its computed
+      transform (UtHasM), UtBase what the dividers read -- [1, x, y, w, h]
+      a rect, [2, cx, cy, r0, r, startAngle, endAngle, clockwise] a sector,
+      [3] a symbol made from Caption.LgSymbol / LgKeepAspect / LgG as a
+      scatter's (createSymbol(-1, -1, 2, 2) under its size over two, turned,
+      at its place) instead of UtData; UtNoScale its strokeNoScale. 2 a path
+      of a series' view that is no item's: it fades in where a transition
+      morphs (UtRow a number of its own, below -1). }
+    UtTag: Integer;
+    UtRow, UtOrder: Integer;
+    UtData, UtBase: TTyDoubleArray;
+    UtHasM, UtNoScale: Boolean;
+    UtM: TTyMat2D;
   end;
 
   { [F6b] zrender's own contain over an element of an SVG map, in the

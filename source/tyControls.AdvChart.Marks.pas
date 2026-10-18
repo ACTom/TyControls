@@ -2323,6 +2323,15 @@ begin
       rip.Anim.Series := ABinding.SeriesIndex;
       rip.Anim.Index := ARow;
       rip.Anim.Sub := k - 1;
+      { [F3c] the symbol it is made of, the ripple group's size, offset and
+        turn, for the universal transition }
+      rip.Caption.LgSymbol := TyGuideSymbolName(rs);
+      rip.Caption.LgKeepAspect := rs.KeepAspect;
+      rip.Caption.LgG[0] := rs.WidthPx;
+      rip.Caption.LgG[1] := rs.HeightPx;
+      rip.Caption.LgG[2] := rs.RotateDeg;
+      rip.Caption.LgG[3] := rs.OffsetX;
+      rip.Caption.LgG[4] := rs.OffsetY;
       rip.Anim.G[0] := AP.X + rs.OffsetX;
       rip.Anim.G[1] := AP.Y + rs.OffsetY;
       rip.Anim.G[2] := k - 1;
@@ -2522,6 +2531,30 @@ begin
   if valCol > 0 then ;
 end;
 
+{ [F3c] A RECT FOR THE UNIVERSAL TRANSITION: the row's item path, the Rect
+  upstream makes (rounded where the element is), the dividers' rect }
+procedure UtTagRect(var AEl: TTyChartElement; ASeries, ARow: Integer; AX, AY, AW, AH: Double);
+var
+  path: TTyZrPath;
+  r1, r2, r3, r4: Double;
+begin
+  AEl.Anim.Series := ASeries;
+  AEl.Anim.UtTag := 1;
+  AEl.Anim.UtRow := ARow;
+  AEl.Anim.UtOrder := 0;
+  path := nil;
+  if AEl.Shape.Kind = cskRoundRect then
+  begin
+    TyZrRadii([AEl.Shape.Radii[0], AEl.Shape.Radii[1], AEl.Shape.Radii[2],
+      AEl.Shape.Radii[3]], r1, r2, r3, r4);
+    TyZrRoundRect(path, AX, AY, AW, AH, r1, r2, r3, r4);
+  end
+  else
+    TyZrRect(path, AX, AY, AW, AH);
+  AEl.Anim.UtData := TyGuidePathData(path);
+  AEl.Anim.UtBase := TTyDoubleArray.Create(1, AX, AY, AW, AH);
+end;
+
 { ONE HEATMAP CELL over its rect, on either coordinate system: the row's
   visual, the item's own border over the series', the item's corners over
   the series', and the row's caption. }
@@ -2577,6 +2610,7 @@ var
   it: TTyRawItem;
   cell: TTyDataValue;
   r: TTyRectF;
+  el: TTyChartElement;
 begin
   Result := 0;
   if (AStore = nil) or (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
@@ -2608,7 +2642,10 @@ begin
     l := p.X - w / 2;
     t := p.Y - h / 2;
     r := TyRectF(l, t, l + w, t + h);
-    AList.Add(HeatCell(ABinding, AStore, AVisual, i, r));
+    el := HeatCell(ABinding, AStore, AVisual, i, r);
+    { [F3c] the cell's Rect for the universal transition }
+    UtTagRect(el, ABinding.SeriesIndex, i, l, t, w, h);
+    AList.Add(el);
     Inc(Result);
   end;
 end;
@@ -2951,6 +2988,16 @@ begin
       if v.StrokeWidthLogical > 0 then el.HitSlopLogical := v.StrokeWidthLogical / 2;
       el.Anim := anim;
       el.Anim.Role := carCandleBody;
+      { [F3c] THE ONE PATH upstream draws a candle with (NormalBoxPath): the
+        body closed, then the two wicks -- for the universal transition }
+      el.Anim.UtTag := 1;
+      el.Anim.UtRow := i;
+      el.Anim.UtOrder := 0;
+      el.Anim.UtData := TTyDoubleArray.Create(1, ce.Ends[0].X, ce.Ends[0].Y,
+        2, ce.Ends[1].X, ce.Ends[1].Y, 2, ce.Ends[2].X, ce.Ends[2].Y,
+        2, ce.Ends[3].X, ce.Ends[3].Y, 6,
+        1, ce.Ends[4].X, ce.Ends[4].Y, 2, ce.Ends[5].X, ce.Ends[5].Y,
+        1, ce.Ends[6].X, ce.Ends[6].Y, 2, ce.Ends[7].X, ce.Ends[7].Y);
       Clip(el);
       { NO CAPTION. Upstream's candlestick view never builds a label, whatever
         label.show says -- the option is accepted and draws nothing. }
@@ -3143,7 +3190,7 @@ var
   i, k, idx, valCol, n: Integer;
   baseHoriz, stacked, haveCol, mirror, pxUp, empty: Boolean;
   x, y, own, baseline, zeroPx, floorPx, valuePx: Double;
-  cutLen, boundLen, pxSign, categorySize, acrossCentre: Double;
+  cutLen, boundLen, pxSign, categorySize, acrossCentre, bundleAcross: Double;
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
   offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
   lay: TTyCoordLayout;
@@ -3262,6 +3309,9 @@ begin
     categorySize := Abs(col.Width);
     if baseHoriz then acrossCentre := pt.X + col.Offset + col.Width / 2
     else acrossCentre := pt.Y + col.Offset + col.Width / 2;
+    { [F3c] the bundle's place across: layout[xy] }
+    if baseHoriz then bundleAcross := pt.X + col.Offset
+    else bundleAcross := pt.Y + col.Offset;
     { A COLLAPSED COLUMN DRAWS NOTHING, the same answer a bar gives: every
       percentage across the bar would be a percentage of nothing. }
     if categorySize <= 0 then Continue;
@@ -3545,6 +3595,37 @@ begin
         one is turned at once }
       el.Anim.Series := ABinding.SeriesIndex;
       el.Anim.Index := i;
+      { [F3c] THE PATH createPath MAKES, for the universal transition: the
+        symbol at the pattern size about nought, symbolScale (signed as the
+        glyph is mirrored), symbolRotate, its place in the bundle (the run's
+        along the value axis, half the column and the offset across it) and
+        the bundle's (the bar's corner) -- composed as zrender does, the
+        bundle a translation over it }
+      el.Anim.Sub := k;
+      if spec.SymbolName <> '' then el.Caption.LgSymbol := spec.SymbolName
+      else el.Caption.LgSymbol := 'circle';
+      el.Caption.LgKeepAspect := False;
+      el.Caption.LgG[2] := glyphW / spec.PatternSize;
+      el.Caption.LgG[3] := glyphH / spec.PatternSize;
+      if baseHoriz then el.Caption.LgG[3] := el.Caption.LgG[3] * (-1 * pxSign)
+      else el.Caption.LgG[2] := el.Caption.LgG[2] * (1 * pxSign);
+      el.Caption.LgG[4] := spec.PatternSize;
+      el.Caption.LgG[5] := spec.RotateDeg * Pi / 180;
+      if IsNan(el.Caption.LgG[5]) then el.Caption.LgG[5] := 0;
+      if baseHoriz then
+      begin
+        el.Caption.LgG[0] := col.Width / 2 + offAcross;
+        el.Caption.LgG[1] := along;
+        el.Caption.LgG[6] := bundleAcross;
+        el.Caption.LgG[7] := floorPx;
+      end
+      else
+      begin
+        el.Caption.LgG[0] := along;
+        el.Caption.LgG[1] := col.Width / 2 + offAcross;
+        el.Caption.LgG[6] := floorPx;
+        el.Caption.LgG[7] := bundleAcross;
+      end;
       if spec.Clip then
       begin
         el.Anim.Role := carPictorialClip;
@@ -3693,6 +3774,8 @@ begin
     if L.IsRadial then el.Anim.G[7] := 1 else el.Anim.G[7] := 0;
     if sausage then el.Anim.G[8] := 1 else el.Anim.G[8] := 0;
     if zero then el.Anim.G[9] := 1 else el.Anim.G[9] := 0;
+    { [F3c] the corner radii the Sector's shape holds (its path's) }
+    el.Anim.Pts := Copy(corners, 0, Length(corners));
     ItemCaption(AVisual, AStore, i, el.Caption);
     { a clipped bar's label is not drawn: its host is ignored }
     if clipped then el.Caption.Text := '';

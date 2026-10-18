@@ -1867,6 +1867,12 @@ begin
           el.Anim.G[1] := ALayout.CY;
           el.Anim.G[2] := angle;
           el.Anim.G[3] := ALayout.StartRad;
+          { [F3c] the PointerPath's width, length and offset }
+          el.Caption.LgSymbol := '';
+          el.Caption.LgG[0] := halfW;
+          el.Caption.LgG[1] := len;
+          el.Caption.LgG[2] := ox;
+          el.Caption.LgG[3] := oy;
           AList.Add(el);
           Inc(Result);
         end;
@@ -1921,6 +1927,13 @@ begin
         el.Anim.G[1] := ALayout.CY;
         el.Anim.G[2] := angle;
         el.Anim.G[3] := ALayout.StartRad;
+        { [F3c] the icon over the width and the length, at the offset }
+        el.Caption.LgSymbol := ASpec.Needle.Icon;
+        el.Caption.LgKeepAspect := ASpec.Needle.KeepAspect;
+        el.Caption.LgG[0] := halfW;
+        el.Caption.LgG[1] := len;
+        el.Caption.LgG[2] := ox;
+        el.Caption.LgG[3] := oy;
         AList.Add(el);
         Inc(Result);
       end;
