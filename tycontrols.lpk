@@ -66,6 +66,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Painter"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.CanvasText.pas"/>
+        <UnitName Value="tyControls.CanvasText"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Accel.pas"/>
         <UnitName Value="tyControls.Accel"/>
       </Item>
