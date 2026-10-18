@@ -325,7 +325,7 @@ type
       text — either way the overlay is simply not drawn. }
     function HoverTooltip(const ALayout: TTyChartLayout; APPI: Integer;
       out AX, AY: Integer; out ASwatch: TColor; out AText: string): Boolean;
-    procedure DrawTitle(P: TTyPainter; const S: TTyStyleSet; var ATop: Integer);
+    procedure DrawTitle(P: TTyPainter; const S: TTyStyleSet; AWidth: Integer; var ATop: Integer);
     procedure DrawAxesChart(P: TTyPainter; const S: TTyStyleSet; const APlot: TRect);
     procedure DrawPie(P: TTyPainter; const S: TTyStyleSet; const AArea: TRect; APPI: Integer);
     procedure DrawLegend(P: TTyPainter; const S: TTyStyleSet; const ARect: TRect; ARadial: Boolean);
@@ -1328,7 +1328,7 @@ begin
   Result := AText <> '';
 end;
 
-procedure TTyChart.DrawTitle(P: TTyPainter; const S: TTyStyleSet; var ATop: Integer);
+procedure TTyChart.DrawTitle(P: TTyPainter; const S: TTyStyleSet; AWidth: Integer; var ATop: Integer);
 var
   h: Integer;
 begin
@@ -1336,8 +1336,7 @@ begin
   h := P.Scale(20);
   { Left is the horizontal margin, NOT ATop (the running Y cursor) -- they coincide only
     when the title is the first thing drawn. }
-  { The layer's width in LAYOUT pixels (it counts device pixels, #83). }
-  P.DrawText(Rect(P.Scale(8), ATop, P.Bitmap.Width div P.DeviceScale - P.Scale(8), ATop + h),
+  P.DrawText(Rect(P.Scale(8), ATop, AWidth - P.Scale(8), ATop + h),
     FTitle, Font.Name, 11, 700, S.TextColor, taCenter, tlCenter, True);
   Inc(ATop, h);
 end;
@@ -1680,7 +1679,7 @@ begin
     DrawFrame(P, R, S);   // panel background + border (themed)
 
     topY := P.Scale(8);
-    DrawTitle(P, S, topY);   // still the running cursor: the title owns the top band
+    DrawTitle(P, S, R.Right - R.Left, topY);   // still the running cursor: the title owns the top band
 
     // The SAME bands the hit-test measured against; empty rects are already degenerate-safe.
     lay := LayoutFor(R.Right - R.Left, R.Bottom - R.Top, APPI);
