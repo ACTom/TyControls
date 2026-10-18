@@ -84,7 +84,7 @@ type
     function VerticesAbove(const AElement: TTyChartElement): Integer;
   published
     procedure TestOneGlyphAndOneRectPerDatum;
-    procedure TestTheRectIsTheOnlyThingAPointerCanLandOn;
+    procedure TestTheGlyphsAreWhatAPointerLandsOn;
     procedure TestTheRectCarriesNoInkAtAll;
     procedure TestTheGlyphStartsOnTheBaselineRatherThanOnTheBarsMiddle;
     procedure TestPositionEndHangsItOffTheFarEnd;
@@ -725,7 +725,7 @@ var i: Integer;
 begin
   Result := 0;
   for i := 0 to FList.Count - 1 do
-    if FList.Element(i).Silent then Inc(Result);
+    if not FList.Element(i).Caption.HostTransparent then Inc(Result);
 end;
 
 function TAdvChartPictorialMarksTest.GlyphAt(AIndex: Integer): TTyChartElement;
@@ -734,7 +734,7 @@ begin
   n := 0;
   Result := Default(TTyChartElement);
   for i := 0 to FList.Count - 1 do
-    if FList.Element(i).Silent then
+    if not FList.Element(i).Caption.HostTransparent then
     begin
       if n = AIndex then Exit(FList.Element(i));
       Inc(n);
@@ -748,7 +748,7 @@ begin
   n := 0;
   Result := Default(TTyChartElement);
   for i := 0 to FList.Count - 1 do
-    if not FList.Element(i).Silent then
+    if FList.Element(i).Caption.HostTransparent then
     begin
       if n = AIndex then Exit(FList.Element(i));
       Inc(n);
@@ -783,7 +783,7 @@ begin
   AssertEquals('three of them glyphs', 3, GlyphCount);
 end;
 
-procedure TAdvChartPictorialMarksTest.TestTheRectIsTheOnlyThingAPointerCanLandOn;
+procedure TAdvChartPictorialMarksTest.TestTheGlyphsAreWhatAPointerLandsOn;
 var i, hittable: Integer;
 begin
   Given([10, 20, 30], 0, 100);
@@ -791,12 +791,16 @@ begin
   hittable := 0;
   for i := 0 to FList.Count - 1 do
     if not FList.Element(i).Silent then Inc(hittable);
-  { ONE TARGET PER DATUM. Two would report the same datum twice on a hover,
-    and a glyph cut in half by the clip is the worse of the two targets --
-    upstream keeps the same transparent rect for the same reason. }
+  { THE GLYPHS, as drawn and clipped: upstream's bar rect is silent
+    (PictorialBarView.ts:692-696) and zrender finds the glyph paths of the
+    bar group, its dispatcher [F2b; the rect was the target before] }
   AssertEquals(3, hittable);
-  AssertEquals('and it is the rect', Ord(cskRect),
-    Ord(BarRectAt(0).Shape.Kind));
+  for i := 0 to 2 do
+  begin
+    AssertTrue('the bar rect is silent', BarRectAt(i).Silent);
+    AssertFalse('the glyph is not', GlyphAt(i).Silent);
+    AssertTrue('and is hit as clipped', GlyphAt(i).ClipHits);
+  end;
 end;
 
 procedure TAdvChartPictorialMarksTest.TestTheRectCarriesNoInkAtAll;

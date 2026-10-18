@@ -636,7 +636,11 @@ type
       (one proxy per series, row -1), G[0..3] the parallel's rect, G[4] 1 on
       a horizontal layout (the width grows, else the height), G[5] 1 on the
       view's first render (only then does the clip start) }
-    carParallelLine);
+    carParallelLine,
+    { [F2a] a treemap's breadcrumb item (Series its series, Index its place
+      from the root): a highDownDispatcher of no data -- its own emphasis and
+      mouse events (selfType 'breadcrumb'), no tooltip }
+    carTmCrumb);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

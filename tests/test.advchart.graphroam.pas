@@ -36,6 +36,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Graph, tyControls.AdvChart.Color,
+     tyControls.AdvChart.States,
      tyControls.AdvanceChart;
 type
   TGraphRoamProbe = class(TTyAdvanceChart)
@@ -82,6 +83,8 @@ type
     FChart: TGraphRoamProbe;
     FRoot: TJSONData;
     FBad, FCompared, FCases, FStates, FGestures: Integer;
+    { nodes a gesture's pointer left in emphasis, their half not compared }
+    FEmphSkipped: Integer;
     FReport, FName: string;
     FTol: Double;
     procedure Miss(const AWhat: string);
@@ -555,6 +558,7 @@ var
   ends: TTyPointFArray;
   mid: TTyPointF;
   sd: TJSONData;
+  st: TTyStItem;
 begin
   si := ASeries.Integers['index'];
   seriesLabel := False;
@@ -759,7 +763,13 @@ begin
     SameNum(Format('%s node %d px', [tag, i]), nodes[i].PX, o, 'px', 0);
     SameNum(Format('%s node %d py', [tag, i]), nodes[i].PY, o, 'px', 1);
     row := nodes[i].Row;
-    if NodeShape(FChart.List, si, row, sh) then
+    { THE REST GEOMETRY: the oracle runs no frame, so no state ever reaches
+      upstream's elements -- a node the gesture's pointer hovers is grown by
+      its emphasis here (the shared state model [F2a]); its half is not
+      compared }
+    if FChart.ItemStates(si, row, st) and (stnEmphasis in st.Host.States) then
+      Inc(FEmphSkipped)
+    else if NodeShape(FChart.List, si, row, sh) then
     begin
       if sh.Kind = cskCircle then
       begin

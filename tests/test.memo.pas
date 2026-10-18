@@ -157,6 +157,7 @@ type
     procedure TestTotalWidthEqualsLastPrefix;
     procedure TestWidestScanMeasuresOnlyLinesThatCouldWin;
     procedure TestWidestScanMeasuresAShapedLineWhole;
+    procedure TestWidestScanCountsAShapedLineThatIsTheWidest;
     procedure TestTheWidestScanStaysShortAfterAFontChange;
   end;
 
@@ -1474,6 +1475,41 @@ begin
   AssertEquals('the widest line is the one an exhaustive scan finds', exhaustive, widest);
   AssertEquals('the Latin line and every shaped line measured whole, the plain ones not',
     1 + Length(cShaped), measured);
+end;
+
+procedure TTyMemoTest.TestWidestScanCountsAShapedLineThatIsTheWidest;
+// A shaped line is measured whole up front and kept out of the estimate order -- and what it
+// measured still counts. In the test above the Latin line is the widest, so a scan that measured
+// the shaped lines and dropped their widths would have passed; here the shaped line is the
+// widest by far, among short plain ones.
+var
+  L: TStringList;
+  i, widest, exhaustive: Integer;
+  arabic: string;
+begin
+  SetUpWithCss('TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }');
+  FMemo.WordWrap := False;
+  arabic := '';
+  for i := 1 to 12 do
+    arabic := arabic + #$D9#$85#$D8#$B1#$D8#$AD#$D8#$A8#$D8#$A7' ';  // Arabic: joining
+  L := TStringList.Create;
+  try
+    L.Add('abc');
+    L.Add(arabic);
+    L.Add('short line');
+    L.Add('x');
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  widest := FMemo.ProbeWidestLineWidth(96);
+  exhaustive := 0;
+  for i := 0 to FMemo.Lines.Count - 1 do
+    if FMemo.ProbeMeasureLineTotalWidth(FMemo.Lines[i], 96) > exhaustive then
+      exhaustive := FMemo.ProbeMeasureLineTotalWidth(FMemo.Lines[i], 96);
+  AssertEquals('the shaped line is the widest', FMemo.ProbeMeasureLineTotalWidth(arabic, 96),
+    exhaustive);
+  AssertEquals('and the scan finds it', exhaustive, widest);
 end;
 
 procedure TTyMemoTest.TestWidestScanMeasuresOnlyLinesThatCouldWin;

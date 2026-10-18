@@ -439,6 +439,15 @@ begin
       idx := (idx + 1) mod 7;
     end;
   end;
+  { a copy that learns a name sorting before all the others moves every entry of its
+    index along: the original must not see that, or its last name drops out of reach }
+  cp := sc;
+  TyPaletteFrom(pal, layers, '!first of all', cp, 3000);
+  for j := 0 to High(names) do
+  begin
+    p := TyPaletteFrom(pal, layers, names[j], sc, 3000);
+    AssertEquals('the original still knows ' + names[j], pal.Colors[slots[j]], p.Color);
+  end;
   cp := sc;
   p := TyPaletteFrom(pal, layers, 'only the copy', cp, 3000);
   AssertEquals('the copy takes the next slot', pal.Colors[idx], p.Color);

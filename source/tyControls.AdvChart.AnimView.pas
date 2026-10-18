@@ -3623,7 +3623,7 @@ end;
 
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
-  x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh: Double;
+  x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh, rest: Double;
   r: TTyRectF;
   v: TTyAnimValue;
   i, n, ah, av, ah1, av1, flags: Integer;
@@ -3872,7 +3872,13 @@ begin
         else
         begin
           TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
-          AEl.Style.Alpha := Min(1.0, a);
+          { the fade over what the list holds: the symbol's own opacity at
+            rest, a blurred series' marker a tenth of it [F2b] }
+          rest := Max(0.0, Min(1.0, AEl.Anim.G[4]));
+          if rest > 0 then
+            AEl.Style.Alpha := Min(1.0, a) * (AEl.Style.Alpha / rest)
+          else
+            AEl.Style.Alpha := Min(1.0, a);
           { the group's place, where a kept view moves it [Batch 99] }
           TyShapeMove(AEl.Shape, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
             NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);

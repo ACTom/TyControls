@@ -741,6 +741,13 @@ function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
   const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
   ADistX, ADistY: Double; out AX, AY, ARot: Double;
   out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+{ [F2a] with the label's own `rotate` (radians) and `offset` (NaN: none):
+  zrender's updateInnerText -- the rotation replaces the one beforeUpdate
+  set, the offset is added to the place and becomes the origin (-offset) }
+function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
+  ADistX, ADistY, ARotate, AOffX, AOffY: Double; out AX, AY, ARot: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean; overload;
 
 { JavaScript's String() of an option value. }
 function TyGraphJsText(AData: TJSONData): string;
@@ -973,6 +980,13 @@ type
     Frame: TTyGraphLabelFrame;
     { the edge labels' specs, for the expansion's item spec row }
     EdgeLabelSpecs: TTyLabelSpecArray;
+    { [F2a] per edge: the label's own turn (radians, NaN: none) and offset
+      (device px, NaN: none) }
+    EdgeLabelRot, EdgeLabelOffX, EdgeLabelOffY: TTyDoubleArray;
+    { [F2a] per node: its opacity, and its own label spec (the item spec row
+      after the edges': ItemSpec = Length(EdgeLabelSpecs) + node + 1) }
+    NodeOpacity: TTyDoubleArray;
+    NodeLabels: TTyLabelSpecArray;
   end;
 
 { WHAT ONE EDGE IS DRAWN IN -- the builder's own answer, and the one the
@@ -5247,6 +5261,15 @@ function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
   const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
   ADistX, ADistY: Double; out AX, AY, ARot: Double;
   out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+begin
+  Result := TyGraphEdgeLabelPlace(AP1, AP2, ACP, ACurved, AFrame, APos, ADistX,
+    ADistY, NaN, NaN, NaN, AX, AY, ARot, AAH, AAV);
+end;
+
+function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
+  ADistX, ADistY, ARotate, AOffX, AOffY: Double; out AX, AY, ARot: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
 var
   fromX, fromY, toX, toY, midX, midY, dvx, dvy, tgx, tgy, distX, distY,
     dy, x, y, ox, oy, dir, sx, sy, st, ct: Double;
@@ -5369,6 +5392,15 @@ begin
           ox := distX * dir;
           oy := -dy;
         end;
+    end;
+    { textConfig.rotation and textConfig.offset over what beforeUpdate set }
+    if not IsNan(ARotate) then ARot := ARotate;
+    if not (IsNan(AOffX) or IsNan(AOffY)) then
+    begin
+      x := x + AOffX;
+      y := y + AOffY;
+      ox := -AOffX;
+      oy := -AOffY;
     end;
     { getLocalTransform: the scale invScale about the origin, the rotation,
       then the position; every zero term kept, as zrender keeps it }
@@ -5819,6 +5851,7 @@ var
   empty: Boolean;
   path: string;
   fill: TTyChartColor;
+  nspec: TTyLabelSpec;
 
   function EdgeColour(AAt: Integer): TTyChartColor;
   begin
@@ -5879,8 +5912,13 @@ var
       q2 := p2;
       qc := cp;
     end;
-    TyGraphEdgeLabelPlace(q1, q2, qc, curved, fr, AInk.EdgeLabelPos[AAt],
-      AInk.EdgeLabelDistX[AAt], AInk.EdgeLabelDistY[AAt], ax, ay, rot, ah, av);
+    if AAt <= High(AInk.EdgeLabelRot) then
+      TyGraphEdgeLabelPlace(q1, q2, qc, curved, fr, AInk.EdgeLabelPos[AAt],
+        AInk.EdgeLabelDistX[AAt], AInk.EdgeLabelDistY[AAt], AInk.EdgeLabelRot[AAt],
+        AInk.EdgeLabelOffX[AAt], AInk.EdgeLabelOffY[AAt], ax, ay, rot, ah, av)
+    else
+      TyGraphEdgeLabelPlace(q1, q2, qc, curved, fr, AInk.EdgeLabelPos[AAt],
+        AInk.EdgeLabelDistX[AAt], AInk.EdgeLabelDistY[AAt], ax, ay, rot, ah, av);
     if IsNan(ax) or IsNan(ay) or IsInfinite(ax) or IsInfinite(ay) then Exit;
     AEl.Caption.Text := AInk.EdgeLabelText[AAt];
     AEl.Caption.ItemSpec := AAt + 1;
@@ -6063,7 +6101,9 @@ begin
     el := TyChartElement(shape);
     el.Style.HasFill := fill <> 0;
     el.Style.FillColor := fill;
+    { the node's style.opacity [F2a] }
     el.Style.Alpha := 1;
+    if i <= High(AInk.NodeOpacity) then el.Style.Alpha := AInk.NodeOpacity[i];
     el.Z := ASpec.Z;
     { ABOVE ITS OWN EDGES, by upstream's hundred -- far enough that a hovered
       edge, lifted by ten, still passes under every node. [Revised in batch
@@ -6074,11 +6114,19 @@ begin
       and what a datum reports is the author's numbering. }
     el.Datum := TyChartDatum(ASeriesIndex, ANodes[i].Row, ANodes[i].RawRow);
     el.HitSlopLogical := 4;
-    if AInk.Label_.Show and (AInk.Label_.Position <> tlpNone) then
-      el.Caption.Text := TyLabelText(AInk.Label_.Formatter,
-        AInk.Label_.HasFormatter, AInk.Label_.DefaultText, AStore,
+    { THE NODE'S OWN LABEL [F2a]: its spec in the item row after the edges';
+      built hidden when only a state shows it }
+    if i <= High(AInk.NodeLabels) then nspec := AInk.NodeLabels[i]
+    else nspec := AInk.Label_;
+    if (nspec.Show or nspec.StateShow) and (nspec.Position <> tlpNone) then
+    begin
+      el.Caption.Text := TyLabelText(nspec.Formatter,
+        nspec.HasFormatter, nspec.DefaultText, AStore,
         ANodes[i].Row, AInk.SeriesName, AInk.LabelValueDim, 0, False,
         ASeriesIndex, TyGraphSeriesTypeName);
+      if i <= High(AInk.NodeLabels) then
+        el.Caption.ItemSpec := Length(AInk.EdgeLabelSpecs) + i + 1;
+    end;
     AList.Add(el);
     Inc(Result);
   end;

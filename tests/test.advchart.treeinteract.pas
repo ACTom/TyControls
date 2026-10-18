@@ -519,7 +519,18 @@ begin
       text := cs.Objects['option'].AsJSON;
       W := states.Objects[0].Get('W', 800);
       H := states.Objects[0].Get('H', 600);
-      FChart.Option := '';
+      { A NEW CHART PER CASE, as the oracle makes one [F2a]: a notMerge
+        option on the same control keeps the reused rows' hover and blur
+        flags -- upstream's notMerge, which no case of this fixture is }
+      FChart.Events.Free;
+      FChart.Events := nil;
+      FChart.Free;
+      FChart := TTiProbe.Create(FForm);
+      FChart.Parent := FForm;
+      FChart.Controller := FCtl;
+      FChart.Events := TStringList.Create;
+      FChart.OnTreeExpandAndCollapse := @FChart.Toggled;
+      FChart.OnTreeRoam := @FChart.Roamed;
       FChart.Option := text;
       FChart.Events.Clear;
       try

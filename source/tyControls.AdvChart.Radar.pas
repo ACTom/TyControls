@@ -231,6 +231,11 @@ type
     AreaAuthored: Boolean;
     Area: TTyChartColor;
     AreaOpacity: Double;
+    { A STATE WRITES AN areaStyle [F2b]: `emphasis`, `select` or `blur` --
+      upstream's polygon is always there, ignored at rest without an
+      areaStyle and shown in a state that has one (RadarView.ts:212-218);
+      it is built, ignored, for the states to show }
+    StateArea: Boolean;
     Symbol: TTySymbolSpec;
     { per raw row: a visualMap's symbolSize, NaN where none }
     Sizes: TTyDoubleArray;
@@ -1416,10 +1421,12 @@ begin
     ring[m] := pts[0];
 
     { THE AREA FIRST, so the ring is drawn over its own fill. Equal z and z2,
-      so the order in the list is the order on the screen. }
-    if AVisual.HasArea then
+      so the order in the list is the order on the screen. Without an
+      areaStyle it is built ignored when a state has one [F2b]. }
+    if AVisual.HasArea or AVisual.StateArea then
     begin
       el := TyChartElement(TyShapePolygon(Copy(ring, 0, m)));
+      el.Ignore := not AVisual.HasArea;
       el.Style.HasFill := True;
       if AVisual.AreaAuthored then
         el.Style.FillColor := AVisual.Area
@@ -1483,7 +1490,9 @@ begin
         else
           el.Style.FillColor := rowColour;
         el.Z := AVisual.Z;
-        el.Z2 := AVisual.Z2 + 1;
+        { z2 100 (RadarView.ts:67): above every item's ring even when one
+          is lifted by an emphasis or a select [F2b] }
+        el.Z2 := AVisual.Z2 + 100;
         el.Silent := False;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
         el.HitSlopLogical := 4;

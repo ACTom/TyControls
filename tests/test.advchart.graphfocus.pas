@@ -746,7 +746,14 @@ begin
     FName := cs.Strings['name'];
     if cs.Get('documentary', False) or cs.Get('deferred', False) then Continue;
     Inc(FCases);
-    FChart.Option := '';
+    { A NEW CHART PER CASE, as the oracle makes one [F2a]: a notMerge option
+      on the same control keeps a reused node's hover (upstream's notMerge)
+      and the pointer's target with it, and the case's own first hover of
+      that node would then be no mouseover }
+    FChart.Free;
+    FChart := TGraphFocusProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
     FChart.Option := cs.Objects['option'].AsJSON;
     FChart.SetBounds(0, 0, cs.Integers['W'], cs.Integers['H']);
     FChart.Leave;
