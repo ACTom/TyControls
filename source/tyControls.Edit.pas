@@ -93,7 +93,7 @@ type
     FSuspendUndo: Boolean;   // true while a composite op pushes its own step
     FReadOnly: Boolean;
     {$IFDEF LCLCocoa}
-    // macOS IME handler (TTyCocoaImeHandler): created in Create, freed in Destroy, returned from the
+    // macOS IME handler (TyCocoaNewImeHandler): created in Create, freed in Destroy, returned from the
     // LM_IM_COMPOSITION message so LCL-Cocoa gives us the caret-following IME view. See tyControls.CocoaWS.
     FCocoaIme: TObject;
     {$ENDIF}
@@ -492,7 +492,7 @@ begin
   {$IFDEF LCLCocoa}
   // Create BEFORE the handle exists: LCL-Cocoa queries LM_IM_COMPOSITION inside CreateHandle. Self is
   // passed as ITyImeEditable; the handler holds it as a COM field whose _AddRef is a no-op (no cycle).
-  FCocoaIme := TTyCocoaImeHandler.Create(Self);
+  FCocoaIme := TyCocoaNewImeHandler(Self);
   {$ENDIF}
   FCaretVisible := True;       // solid caret until a real timer toggles it
   FBlinkTimer := nil;          // lazy: created only when HandleAllocated
