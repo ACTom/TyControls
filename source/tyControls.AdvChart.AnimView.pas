@@ -270,6 +270,9 @@ type
       oldLayoutSelect }
     FStSelX, FStSelY: Double;
     FStHasSel: Boolean;
+    { [F3a] a label's state proxy of its own: its opacity is upstream's, not
+      a factor over the rest (no fade shares the key) }
+    FStAbs: Boolean;
     { A LINES EFFECT SYMBOL'S RUN [Batch 121]: where the clip's during has
       moved it, and whether a clip that does not loop has finished (the
       symbol removed) }
@@ -337,6 +340,10 @@ type
     { a full update's prevStates: the list clearStates took away, to be put
       back at once after the render (echarts.ts:2667-2748) }
     property StPrev: string read FStPrev write FStPrev;
+    { [F3a] a label's state opacity as upstream has it (a proxy of the
+      states' own); False: a factor over the rest, as a fade on the same
+      proxy has it }
+    property StAbsOpacity: Boolean read FStAbs write FStAbs;
     { a label's place under its select state, kept for the next update's
       move (LabelManager's oldLayoutSelect) }
     procedure StNoteSelect(AX, AY: Double);
@@ -4473,8 +4480,9 @@ begin
     begin
       if RoleHas(key) then Continue;
       if not Off(key, v, rest) or (v.Kind <> avkNumber) then Continue;
-      { a label's is a factor over its own, as its fade's is }
-      if AEl.Caption.FontSizeLogical > 0 then
+      { a label's is a factor over its own, as its fade's is -- unless no
+        fade shares its proxy [F3a] }
+      if (AEl.Caption.FontSizeLogical > 0) and not AProxy.FStAbs then
         AEl.Style.Alpha := AEl.Style.Alpha * v.Num
       else
         AEl.Style.Alpha := v.Num;
