@@ -2924,7 +2924,7 @@ end;
 
 procedure TTyPainter.NineSliceAt(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
-  src: TBGRABitmap;
+  src, big: TBGRABitmap;
   iw, ih: Integer;
   sl, st, sr, sb: Integer;
   dl, dt, dr, db: Integer;
@@ -2936,12 +2936,25 @@ begin
     Exit;
   src := TBGRABitmap.Create(AImagePath);
   try
-    iw := src.Width;
-    ih := src.Height;
     sl := AInsets.Left;
     st := AInsets.Top;
     sr := AInsets.Right;
     sb := AInsets.Bottom;
+    { A theme image is a one-times asset, its pixels layout pixels (#83). On a layer at a device
+      scale it is taken S times as large, insets too, so a frame keeps its thickness in layout
+      pixels; each image pixel lands on S x S device pixels, as the system would have put it. }
+    if FScale > 1 then
+    begin
+      big := src.Resample(src.Width * FScale, src.Height * FScale, rmSimpleStretch) as TBGRABitmap;
+      src.Free;
+      src := big;
+      sl := sl * FScale;
+      st := st * FScale;
+      sr := sr * FScale;
+      sb := sb * FScale;
+    end;
+    iw := src.Width;
+    ih := src.Height;
     sxL := sl;
     sxR := iw - sr;
     syT := st;
@@ -3255,9 +3268,12 @@ var
   oldClip: TRect;
 begin
   if FBmp = nil then Exit;
-  src := GetCachedImage(AImagePath, Scale(ABlurLogical));
+  { The image is a one-times asset whose pixels are layout pixels (#83): blurred at the LAYOUT
+    radius, then stretched onto the raster with the rest of the picture; centred, it is drawn S
+    times its size. At S = 1 the layout PPI is the PPI. }
+  src := GetCachedImage(AImagePath, MulDiv(ABlurLogical, FLayoutPPI, 96));
   if src = nil then Exit;
-  iw := src.Width; ih := src.Height;
+  iw := src.Width * FScale; ih := src.Height * FScale;
   dw := ARect.Right - ARect.Left; dh := ARect.Bottom - ARect.Top;
   if (iw <= 0) or (ih <= 0) or (dw <= 0) or (dh <= 0) then Exit;
   oldClip := FBmp.ClipRect;
@@ -3267,8 +3283,12 @@ begin
       timStretch:
         FBmp.StretchPutImage(ARect, src, dmDrawWithTransparency);
       timCenter:
-        FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
-          src, dmDrawWithTransparency);
+        if FScale = 1 then
+          FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+            src, dmDrawWithTransparency)
+        else
+          FBmp.StretchPutImage(Bounds(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+            iw, ih), src, dmDrawWithTransparency);
       timCover:
         begin
           scW := dw / iw; scH := dh / ih;

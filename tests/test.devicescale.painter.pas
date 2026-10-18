@@ -13,7 +13,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes, BGRATransform,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base,
+  test.devicescale.support;
 
 type
   TPainterDraw = procedure(P: TTyPainter; K: Integer) of object;
@@ -33,6 +34,14 @@ type
     procedure DrawBoth(ADraw: TPainterDraw; AW, AH: Integer; out AScaled, ARef: TBGRABitmap);
     procedure AssertSamePixels(const AMsg: string; A, B: TBGRABitmap);
     procedure CheckSame(const AMsg: string; ADraw: TPainterDraw);
+    { A theme image is a one-times asset: its pixels are layout pixels at any scale. So the
+      reference here is the SAME layout rect at S = 1, and the S = 2 raster averaged down 2:1
+      must match it to within ATolerance (mean channel distance). The 192-PPI reference of
+      CheckSame takes image pixels as device pixels and cannot see an image drawn at half size. }
+    procedure CheckLikeOneTimes(const AMsg: string; ADraw: TPainterDraw; ATolerance: Double);
+    { Draws ADraw at S = 2 and at S = 1 on the same 60 x 40 layout rect; AHalf is the S = 2
+      raster averaged down. The caller frees both. }
+    procedure DrawAtBothScales(ADraw: TPainterDraw; out AHalf, ARef: TBGRABitmap);
     procedure DrawFillSolid(P: TTyPainter; K: Integer);
     procedure DrawFillGradient(P: TTyPainter; K: Integer);
     procedure DrawFillPerCorner(P: TTyPainter; K: Integer);
@@ -51,6 +60,7 @@ type
     procedure DrawTextRtl(P: TTyPainter; K: Integer);
     procedure DrawNineSlices(P: TTyPainter; K: Integer);
     procedure DrawImageFills(P: TTyPainter; K: Integer);
+    procedure DrawBlurredFill(P: TTyPainter; K: Integer);
     procedure DrawImageSlice(P: TTyPainter; K: Integer);
     procedure DrawGlassPane(P: TTyPainter; K: Integer);
     procedure DrawNineSliceFill(P: TTyPainter; K: Integer);
@@ -97,6 +107,12 @@ type
     procedure TestMeasuringStaysLayout;
     { Task 5: images, glass and glyph bitmaps. }
     procedure TestNineSlice;
+    { The nine-slice's corners are drawn 1:1 from the image at S = 1; at S = 2 they are the same
+      image pixels, each on S x S device pixels. }
+    procedure TestNineSliceCornersAreImagePixelsDoubled;
+    { A blurred image fill: the blur acts on the one-times image at the layout radius, so the
+      frost is as wide in layout pixels at S = 2 as at S = 1. }
+    procedure TestImageFillBlurIsLayoutWide;
     procedure TestDrawImageFillModes;
     procedure TestFillImageSlice;
     procedure TestFillGlass;
@@ -118,6 +134,12 @@ type
 
 const
   CSentinel = TColor($00FF00);   // lime: what the canvas held before the painter came
+  { Mean channel distance allowed between an image drawn at S = 2 and averaged down, and the same
+    image at S = 1. Measured when set (2026-10-18): 0.00 for the nine-slices and the image fills,
+    0.95 for the nine-slice background, 0.11 for the blurred fill; with the image taken as device
+    pixels (drawn at half its size) 22.16, 13.72 and 10.99, and 3.97 with the blur at the raster
+    radius. }
+  CImageApart = 2.0;
 
 function IsRed(const C: TBGRAPixel): Boolean;
 function IsBlue(const C: TBGRAPixel): Boolean;
@@ -835,6 +857,11 @@ begin
   P.DrawImageFill(Rect(40 * K, 0, 60 * K, 40 * K), TestImagePath, timCover, 2);
 end;
 
+procedure TDeviceScalePainterTest.DrawBlurredFill(P: TTyPainter; K: Integer);
+begin
+  P.DrawImageFill(Rect(0, 0, 60 * K, 40 * K), TestImagePath, timStretch, 3);
+end;
+
 procedure TDeviceScalePainterTest.DrawImageSlice(P: TTyPainter; K: Integer);
 begin
   P.FillImageSlice(Rect(5 * K, 5 * K, 40 * K, 30 * K), Backdrop, Point(3 * K, 5 * K));
@@ -857,14 +884,99 @@ begin
   P.FillBackground(Rect(3 * K, 3 * K, 57 * K, 37 * K), f, 0);
 end;
 
+procedure TDeviceScalePainterTest.DrawAtBothScales(ADraw: TPainterDraw; out AHalf, ARef: TBGRABitmap);
+var
+  P: TTyPainter;
+  raster: TBGRABitmap;
+begin
+  P := TTyPainter.Create;
+  try
+    TyForceDeviceScaleForTest(2, True);
+    try
+      P.BeginPaint(nil, Rect(0, 0, 60, 40), 96, FRtl);
+      ADraw(P, 1);
+      raster := P.Bitmap.Duplicate as TBGRABitmap;
+      P.EndPaint;
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+    try
+      AHalf := TyHalve(raster);
+    finally
+      raster.Free;
+    end;
+    P.BeginPaint(nil, Rect(0, 0, 60, 40), 96, FRtl);
+    ADraw(P, 1);
+    ARef := P.Bitmap.Duplicate as TBGRABitmap;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.CheckLikeOneTimes(const AMsg: string; ADraw: TPainterDraw;
+  ATolerance: Double);
+var
+  half, ref: TBGRABitmap;
+  x, y, d: Integer;
+  sum: Int64;
+  pa, pb: TBGRAPixel;
+  mean: Double;
+begin
+  DrawAtBothScales(ADraw, half, ref);
+  try
+    AssertEquals(AMsg + ': width', ref.Width, half.Width);
+    sum := 0;
+    for y := 0 to ref.Height - 1 do
+      for x := 0 to ref.Width - 1 do
+      begin
+        pa := half.GetPixel(x, y);
+        pb := ref.GetPixel(x, y);
+        d := pa.red; d := Abs(d - pb.red); Inc(sum, d);
+        d := pa.green; d := Abs(d - pb.green); Inc(sum, d);
+        d := pa.blue; d := Abs(d - pb.blue); Inc(sum, d);
+        d := pa.alpha; d := Abs(d - pb.alpha); Inc(sum, d);
+      end;
+    mean := sum / (4.0 * ref.Width * ref.Height);
+    AssertTrue(Format('%s: S = 2 averaged down is S = 1 (mean %.2f apart, at most %.2f)',
+      [AMsg, mean, ATolerance]), mean <= ATolerance);
+  finally
+    half.Free;
+    ref.Free;
+  end;
+end;
+
 procedure TDeviceScalePainterTest.TestNineSlice;
 begin
-  CheckSame('nine-slice, stretched and tiled', @DrawNineSlices);
+  CheckLikeOneTimes('nine-slice, stretched and tiled', @DrawNineSlices, CImageApart);
+end;
+
+procedure TDeviceScalePainterTest.TestNineSliceCornersAreImagePixelsDoubled;
+var
+  half, ref: TBGRABitmap;
+  x, y: Integer;
+begin
+  { DrawNineSlices: the first frame at (2, 2), insets 4: its top-left corner is image pixels
+    (0..3, 0..3) at layout (2..5, 2..5). }
+  DrawAtBothScales(@DrawNineSlices, half, ref);
+  try
+    for y := 2 to 5 do
+      for x := 2 to 5 do
+        AssertTrue(Format('corner pixel (%d, %d)', [x, y]), half.GetPixel(x, y) = ref.GetPixel(x, y));
+  finally
+    half.Free;
+    ref.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestImageFillBlurIsLayoutWide;
+begin
+  CheckLikeOneTimes('blurred image fill', @DrawBlurredFill, CImageApart);
 end;
 
 procedure TDeviceScalePainterTest.TestDrawImageFillModes;
 begin
-  CheckSame('image fill: stretch, centre, cover with blur', @DrawImageFills);
+  CheckLikeOneTimes('image fill: stretch, centre, cover with blur', @DrawImageFills, CImageApart);
 end;
 
 procedure TDeviceScalePainterTest.TestFillImageSlice;
@@ -881,7 +993,7 @@ procedure TDeviceScalePainterTest.TestNestedCallMapsOnce;
 begin
   { FillBackground with a nine-slice fill calls NineSlice from inside its own scope: the rect
     must be mapped once, at the outer call. }
-  CheckSame('nine-slice background (nested scope)', @DrawNineSliceFill);
+  CheckLikeOneTimes('nine-slice background (nested scope)', @DrawNineSliceFill, CImageApart);
 end;
 
 procedure TDeviceScalePainterTest.TestDrawGlyphBitmapCentersRasterGlyph;
