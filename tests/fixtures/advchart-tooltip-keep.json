@@ -5244,6 +5244,335 @@
      ]
     }
    ]
+  },
+  {
+   "id": "keep-axis-to-item",
+   "note": "an axis tooltip, then a setOption that makes it an item tooltip: _keepShow drops the last dataByCoordSys (axis only), so the keep timer tries the element at the last point -- the bar, as an item",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 259,
+        "y": 256,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "tooltip": {
+       "trigger": "item"
+      }
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -5336,6 +5665,11 @@
    "id": "kp-kept",
    "ok": true,
    "what": "the showTip point is kept: what is under it now (the bar) is shown"
+  },
+  {
+   "id": "kti-item",
+   "ok": true,
+   "what": "trigger now item: the last dataByCoordSys is dropped, the bar at the point is shown as an item"
   },
   {
    "id": "ka-notmerge-drops",

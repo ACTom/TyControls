@@ -452,6 +452,17 @@ const CASES = [
       { op: 'idle', ms: 0 },
     ],
   },
+  {
+    id: 'keep-axis-to-item', note: 'an axis tooltip, then a setOption that makes it an item tooltip: _keepShow drops the last '
+      + 'dataByCoordSys (axis only), so the keep timer tries the element at the last point -- the bar, as an item',
+    charts: [barLine({ trigger: 'axis' })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'setOption', chart: 0, option: { tooltip: { trigger: 'item' } } },
+      { op: 'idle', ms: 0 },
+      { op: 'idle', ms: 150 },
+    ],
+  },
 ];
 // =====================================================================
 const TYPES = ['updateaxispointer', 'showtip', 'hidetip', 'updated'];
@@ -576,6 +587,10 @@ function anchors(cases) {
   const kp = cs('keep-showtip-point');
   guard('kp-kept', ev(kp.steps[2], 'showtip').length === 1 && tip(kp.steps[2]).anchor[0] === tip(kp.steps[0]).anchor[0]
     && tip(kp.steps[2]).which === 'item:0:2', 'the showTip point is kept: what is under it now (the bar) is shown');
+  const kti = cs('keep-axis-to-item');
+  guard('kti-item', tip(kti.steps[0]).which.indexOf('axis:') === 0 && ev(kti.steps[2], 'updateaxispointer').length === 1
+    && ev(kti.steps[2], 'showtip').length === 1 && ev(kti.steps[2], 'showtip')[0][2].dataIndex === 1
+    && tip(kti.steps[3]).which === 'item:0:1', 'trigger now item: the last dataByCoordSys is dropped, the bar at the point is shown as an item');
   guard('ka-notmerge-drops', ka.steps[4].newView && !tip(ka.steps[4]).visible && ka.steps[5].events.length === 0,
     'a notMerge setOption: a new view, the box gone, nothing kept');
   return guards;

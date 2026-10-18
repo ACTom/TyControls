@@ -4158,6 +4158,14 @@ begin
   tipSpec := TyTooltipSpecOf(FOption, -1, -1);
   crossType := TyTooltipAxisPointerType(FOption) = aptCross;
   FTipHits := nil;
+  { the axes the new models collect a pointer on (collectAxesInfo, the gate
+    ResolveAxisPointers has): a setOption that made the tooltip an item one, with no
+    cross, took the pointers with their axisInfo }
+  if not tipSpec.Show or ((tipSpec.Trigger <> tttAxis) and not crossType) then
+  begin
+    FTipKeepPtr := nil;
+    Exit;
+  end;
   for i := 0 to High(FTipKeepPtr) do
   begin
     ax := TipAxisAt(FTipKeepPtr[i].Dim, FTipKeepPtr[i].Index, plot, pol, sgl);

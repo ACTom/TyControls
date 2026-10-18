@@ -63,6 +63,7 @@ type
     procedure TestAHiddenBoxKeepsNothingAsUpstream;
     procedure TestTheKeptShowWaitsOutShowDelayAsUpstream;
     procedure TestAShowTipPointIsKeptAsUpstream;
+    procedure TestAnAxisTipTurnedItemKeepsNoDataByCoordSysAsUpstream;
   end;
 
 implementation
@@ -518,6 +519,11 @@ end;
 procedure TAdvChartTooltipKeepOracleTest.TestAShowTipPointIsKeptAsUpstream;
 begin
   RunCase('keep-showtip-point');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestAnAxisTipTurnedItemKeepsNoDataByCoordSysAsUpstream;
+begin
+  RunCase('keep-axis-to-item');
 end;
 
 initialization
