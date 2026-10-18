@@ -92,6 +92,10 @@ procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Inte
   place on one in device units (#83). }
 procedure TyDrawResolutionScaled(ACanvas: TCanvas; const ARes: TScaledImageListResolution;
   AIndex: Integer; const ADst: TRect; AEffect: TGraphicsDrawEffect);
+{ FOR THE TESTS: how many LCL-list icons have been scaled for a device scale, and how many are
+  kept now. }
+function TyForeignScaledBuildCount: Integer;
+function TyForeignScaledCacheCount: Integer;
 
 { A fresh, CALLER-OWNED BGRABitmap of item AIndex at ASizePx, for a control that owns its own
   compositing (scales the image to fit, tiles it, ...) rather than blitting at a slot. Our list
@@ -213,6 +217,8 @@ begin
   Result := ADim;
 end;
 
+{ Item AIndex of a foreign list for a layer or canvas at AScale -- BORROWED, kept by the cache
+  below: do not free it. }
 function ForeignScaled(AList: TCustomImageList; AIndex, ASizePx, APPI, AScale: Integer;
   AGhosted: Boolean; out ALogicalW, ALogicalH: Integer): TBGRABitmap; forward;
 
@@ -257,8 +263,7 @@ begin
     end
     else
     begin
-      bmp := ForeignScaled(AList, AIndex, ASizePx, APPI, sc.Scale, AGhosted, lw, lh);
-      dim := bmp;   // ours to free
+      bmp := ForeignScaled(AList, AIndex, ASizePx, APPI, sc.Scale, AGhosted, lw, lh);   // borrowed
     end;
     try
       if bmp <> nil then
@@ -423,13 +428,67 @@ end;
   resolution for the raster size when it has one at exactly that size (a list carrying 2x
   bitmaps, or a Scaled one); otherwise the S = 1 bitmap stretched -- an unscaled 16 px list must
   still show 16 points, not 16 device pixels. nil when there is nothing to draw. }
-function ForeignScaled(AList: TCustomImageList; AIndex, ASizePx, APPI, AScale: Integer;
+type
+  TTyForeignIcon = class
+    Bmp: TBGRABitmap;
+    LW, LH: Integer;
+    destructor Destroy; override;
+  end;
+
+const
+  CForeignIconCap = 512;
+
+var
+  GForeignBuilds: Integer = 0;
+  { The LCL-list icons scaled for a device scale, kept so a repaint does not scale them again
+    (#83). Keyed by the picture itself -- a checksum of the list's pixels for the item -- not by
+    the list: TCustomImageList.Replace notifies nobody, and a freed list's address goes to the
+    next one. key -> TTyForeignIcon, owned. }
+  GForeignIcons: TStringList = nil;
+
+destructor TTyForeignIcon.Destroy;
+begin
+  Bmp.Free;
+  inherited Destroy;
+end;
+
+{ FNV-1a over ARes's pixels for item AIndex, in hex, with the size: the picture, not its owner. }
+function ForeignPictureKey(const ARes: TScaledImageListResolution; AIndex: Integer): string;
+var
+  raw: TRawImage;
+  h: QWord;
+  p: PByte;
+  i: PtrUInt;
+begin
+  ARes.Resolution.GetRawImage(AIndex, raw);
+  h := QWord($CBF29CE484222325);
+  p := PByte(raw.Data);
+  if p <> nil then
+    for i := 0 to raw.DataSize - 1 do
+    begin
+      h := (h xor p[i]) * QWord($100000001B3);
+    end;
+  Result := IntToStr(ARes.Width) + 'x' + IntToStr(ARes.Height) + ':' + IntToHex(h, 16);
+end;
+
+function TyForeignScaledBuildCount: Integer;
+begin
+  Result := GForeignBuilds;
+end;
+
+function TyForeignScaledCacheCount: Integer;
+begin
+  if GForeignIcons = nil then Result := 0 else Result := GForeignIcons.Count;
+end;
+
+function BuildForeignScaled(AList: TCustomImageList; AIndex, ASizePx, APPI, AScale: Integer;
   AGhosted: Boolean; out ALogicalW, ALogicalH: Integer): TBGRABitmap;
 var
   res1, res2: TScaledImageListResolution;
   tmp: TBitmap;
   one: TBGRABitmap;
 begin
+  Inc(GForeignBuilds);
   Result := nil;
   ALogicalW := 0;
   ALogicalH := 0;
@@ -461,6 +520,55 @@ begin
   end;
 end;
 
+{ BuildForeignScaled, kept: the bitmap is BORROWED -- do not free it, do not change it. }
+function ForeignScaled(AList: TCustomImageList; AIndex, ASizePx, APPI, AScale: Integer;
+  AGhosted: Boolean; out ALogicalW, ALogicalH: Integer): TBGRABitmap;
+var
+  res1, res2: TScaledImageListResolution;
+  key: string;
+  i: Integer;
+  icon: TTyForeignIcon;
+begin
+  Result := nil;
+  ALogicalW := 0;
+  ALogicalH := 0;
+  if (AList = nil) or (AIndex < 0) or (AIndex >= AList.Count) or (ASizePx < 1) then Exit;
+  if APPI <= 0 then APPI := 96;
+  { The same two resolutions BuildForeignScaled picks: the key is what it would draw from. }
+  res1 := AList.ResolutionForPPI[TyLclWidth96(AList, ASizePx, APPI), APPI, 1];
+  if not res1.Valid then Exit;
+  res2 := AList.ResolutionForPPI[TyLclWidth96(AList, ASizePx * AScale, APPI * AScale),
+    APPI * AScale, 1];
+  key := ForeignPictureKey(res1, AIndex);
+  if res2.Valid and (res2.Width = res1.Width * AScale) and (res2.Height = res1.Height * AScale) then
+    key := key + '|' + ForeignPictureKey(res2, AIndex);
+  key := key + '|' + IntToStr(AScale) + '|' + IntToStr(Ord(AGhosted));
+  if GForeignIcons = nil then
+  begin
+    GForeignIcons := TStringList.Create;
+    GForeignIcons.Sorted := True;
+    GForeignIcons.OwnsObjects := True;
+  end;
+  i := GForeignIcons.IndexOf(key);
+  if i >= 0 then
+    icon := TTyForeignIcon(GForeignIcons.Objects[i])
+  else
+  begin
+    icon := TTyForeignIcon.Create;
+    icon.Bmp := BuildForeignScaled(AList, AIndex, ASizePx, APPI, AScale, AGhosted, icon.LW, icon.LH);
+    if icon.Bmp = nil then
+    begin
+      icon.Free;
+      Exit;
+    end;
+    if GForeignIcons.Count >= CForeignIconCap then GForeignIcons.Clear;
+    GForeignIcons.AddObject(key, icon);
+  end;
+  ALogicalW := icon.LW;
+  ALogicalH := icon.LH;
+  Result := icon.Bmp;
+end;
+
 procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Integer;
   AX, AY, ASizePx: Integer; AGhosted: Boolean);
 var
@@ -475,16 +583,12 @@ begin
     Exit;
   end;
   if P.Bitmap = nil then Exit;
-  bmp := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);
+  bmp := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);   // borrowed
   if bmp = nil then Exit;
-  try
-    { Centred in the ASizePx slot by its S = 1 size, as TyBlitImage centres it -- never
-      stretched to the slot. }
-    P.Bitmap.PutImage(P.Dev(AX + (ASizePx - lw) div 2), P.Dev(AY + (ASizePx - lh) div 2), bmp,
-      dmDrawWithTransparency);
-  finally
-    bmp.Free;
-  end;
+  { Centred in the ASizePx slot by its S = 1 size, as TyBlitImage centres it -- never stretched to
+    the slot. }
+  P.Bitmap.PutImage(P.Dev(AX + (ASizePx - lw) div 2), P.Dev(AY + (ASizePx - lh) div 2), bmp,
+    dmDrawWithTransparency);
 end;
 
 procedure TyDrawResolutionScaled(ACanvas: TCanvas; const ARes: TScaledImageListResolution;
@@ -535,6 +639,10 @@ begin
   if (P.DeviceScale <= 1) or (AList is TTyVirtualImageList) then
     Exit(TyRenderImage(AList, AIndex, P.Dev(ASizePx), P.RasterPPI, AGhosted));
   Result := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);
+  if Result <> nil then Result := Result.Duplicate as TBGRABitmap;   // the caller's to free
 end;
+
+finalization
+  FreeAndNil(GForeignIcons);
 
 end.
