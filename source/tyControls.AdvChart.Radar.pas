@@ -242,6 +242,19 @@ type
     EmptyFill: TTyChartColor;
     Z: Integer;
     Z2: Integer;
+    { per RAW row, the item's decal: the area polygon takes it through
+      defaults(areaStyle, {decal}) and every point -- createSymbol's, which
+      keeps it -- through the item's style [F4a] }
+    Decals: TTyChartDecalArray;
+    { AN ITEM'S OWN areaStyle, per RAW row [F4a]: RadarView reads the area
+      through the item's model, whose parent is the series' -- an item that
+      writes one shows its polygon though the series writes none, and its
+      colour and opacity sit over the series' }
+    RowArea: TTyBoolArray;
+    RowAreaColourSet: TTyBoolArray;
+    RowAreaColour: TTyChartColorArray;
+    RowAreaOpacitySet: TTyBoolArray;
+    RowAreaOpacity: TTyDoubleArray;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -1379,6 +1392,7 @@ var
   el: TTyChartElement;
   sym: TTyChartShape;
   rowSym: TTySymbolSpec;
+  rowArea: Boolean;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or (ARadar = nil) then Exit;
@@ -1422,17 +1436,30 @@ begin
 
     { THE AREA FIRST, so the ring is drawn over its own fill. Equal z and z2,
       so the order in the list is the order on the screen. Without an
-      areaStyle it is built ignored when a state has one [F2b]. }
-    if AVisual.HasArea or AVisual.StateArea then
+      areaStyle it is built ignored when a state has one [F2b]. An item's
+      own areaStyle shows it too [F4a]. }
+    rowArea := AVisual.HasArea;
+    if (raw >= 0) and (raw <= High(AVisual.RowArea)) and AVisual.RowArea[raw] then
+      rowArea := True;
+    if rowArea or AVisual.StateArea then
     begin
       el := TyChartElement(TyShapePolygon(Copy(ring, 0, m)));
-      el.Ignore := not AVisual.HasArea;
+      el.Ignore := not rowArea;
       el.Style.HasFill := True;
-      if AVisual.AreaAuthored then
+      if (raw >= 0) and (raw <= High(AVisual.RowAreaColourSet))
+        and AVisual.RowAreaColourSet[raw] then
+        el.Style.FillColor := AVisual.RowAreaColour[raw]
+      else if AVisual.AreaAuthored then
         el.Style.FillColor := AVisual.Area
       else
         el.Style.FillColor := rowColour;
-      el.Style.Alpha := AVisual.AreaOpacity;
+      if (raw >= 0) and (raw <= High(AVisual.RowAreaOpacitySet))
+        and AVisual.RowAreaOpacitySet[raw] then
+        el.Style.Alpha := AVisual.RowAreaOpacity[raw]
+      else
+        el.Style.Alpha := AVisual.AreaOpacity;
+      if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+        el.Style.Decal := AVisual.Decals[raw];
       el.Z := AVisual.Z;
       el.Z2 := AVisual.Z2;
       el.Silent := False;
@@ -1489,6 +1516,8 @@ begin
         end
         else
           el.Style.FillColor := rowColour;
+        if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+          el.Style.Decal := AVisual.Decals[raw];
         el.Z := AVisual.Z;
         { z2 100 (RadarView.ts:67): above every item's ring even when one
           is lifted by an emphasis or a select [F2b] }

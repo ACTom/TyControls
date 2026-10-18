@@ -114,6 +114,9 @@ type
     ItemLabels: TTyLabelSpecArray;
     { the link's default fill (upstream's neutral50) }
     LinkColour: TTyChartColor;
+    { one per node, its decal: the node's rect takes it, and a link
+      coloured 'source' / 'target' that node's (applyCurveStyle) [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -1859,6 +1862,7 @@ begin
         fillS := d.AsString;
         if fillS = 'source' then
         begin
+          if n1 <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[n1];
           el.Style.HasFill := ASolved.Nodes[n1].HasColour;
           el.Style.FillColor := ASolved.Nodes[n1].Colour;
           if ASolved.Nodes[n1].HasGradient then
@@ -1866,6 +1870,7 @@ begin
         end
         else if fillS = 'target' then
         begin
+          if n2 <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[n2];
           el.Style.HasFill := ASolved.Nodes[n2].HasColour;
           el.Style.FillColor := ASolved.Nodes[n2].Colour;
           if ASolved.Nodes[n2].HasGradient then
@@ -1970,6 +1975,7 @@ begin
       d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth,
         'itemStyle', 'opacity');
       if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 1;
+      if i <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[i];
       el.Z := ASolved.Z;
       el.Z2 := 10;
       el.Datum := TyChartDatum(ASeriesIndex, i, i);

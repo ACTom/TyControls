@@ -2527,6 +2527,8 @@ begin
     Result := MarkElement(TyShapeRoundRect(ARect, radii), v, ABinding.SeriesIndex, ARow)
   else
     Result := MarkElement(TyShapeRect(ARect), v, ABinding.SeriesIndex, ARow);
+  { the item's decal: HeatmapView's rect takes the item's style [F4a] }
+  Result.Style.Decal := RowDecal(AVisual, AStore, ARow);
   ItemCaption(AVisual, AStore, ARow, Result.Caption);
 end;
 
@@ -2918,6 +2920,8 @@ begin
         [Batch 108: it was given a whole pixel, which upstream's sub-pixel
         pass does not do -- the value coordinate is never snapped.] }
       el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
+      { NormalBoxPath.useStyle(the item's style): its decal with it [F4a] }
+      el.Style.Decal := RowDecal(AVisual, AStore, i);
       if v.StrokeWidthLogical > 0 then el.HitSlopLogical := v.StrokeWidthLogical / 2;
       el.Anim := anim;
       el.Anim.Role := carCandleBody;
@@ -3059,6 +3063,8 @@ begin
     end;
 
     el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+    { BoxPath.useStyle(the item's style): its decal with it [F4a] }
+    el.Style.Decal := RowDecal(AVisual, AStore, i);
     { THE WHISKERS AND CAPS ANSWER TOO, within half the pen of their
       segments (the box by its inside as well) }
     if v.StrokeWidthLogical > 0 then el.HitSlopLogical := v.StrokeWidthLogical / 2;
@@ -3489,6 +3495,9 @@ begin
       if mirror then
         shape := TyMirrorShape(shape, pt.X, pt.Y, not baseHoriz, baseHoriz);
       el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+      { a glyph is createSymbol's, not Symbol.ts': the item's style keeps
+        its decal, an empty glyph's white fill too [F4a] }
+      el.Style.Decal := RowDecal(AVisual, AStore, i);
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
       { THE TARGET: the bar group is the dispatcher and its glyphs are what
@@ -3979,6 +3988,9 @@ begin
   v := AVisual;
   v.StrokeWidthLogical := 0;
   el := LargeElement(AGeom, v, ABinding.SeriesIndex);
+  { LargePath.useStyle(data.getVisual('style')): the series' decal over
+    the whole batch -- every chunk of a progressive one too [F4a] }
+  el.Style.Decal := AVisual.Decal;
   el.Style.DashLogical := nil;
   el.Z2 := AVisual.Z2 + 1;
   if col.Clip then

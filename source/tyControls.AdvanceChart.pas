@@ -1206,6 +1206,11 @@ type
     FSeriesDecals: TTyChartDecalArray;
     FRowDecals: array of TTyChartDecalArray;
     FRowDecalSet: array of TTyBoolArray;
+    { [F4a] the same decals as objects, before the defaults: what a custom
+      series' api.visual('decal') hands its renderItem (nodes not owned:
+      the option's, or the built-in palette's) }
+    FSeriesDecalRaws: array of TTyDecalRaw;
+    FRowDecalRaws: array of array of TTyDecalRaw;
     { aria.enabled as the setOptions left it: initBase turns an aria object
       on, the preprocessor copies the legacy `show` [Batch 131] }
     FAriaEnabled: Boolean;
@@ -2020,6 +2025,19 @@ type
     procedure SolveDecals;
     { the decal a slot's raw row is drawn with: its own, else the series' }
     function RowDecalOf(ASlot, ARaw: Integer): TTyChartDecal;
+    { [F4a] the decal object a slot's raw row takes (api.visual('decal')),
+      as JSON; nil for none }
+    function RowDecalJson(ASlot, ARaw: Integer): TJSONData;
+    { [F4a] every raw row's decal, by raw index }
+    function RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+    { [F4a] aria.decal on: the palette, else False }
+    function AriaDecalPalette(out APal: TJSONData; out APalN: Integer): Boolean;
+    { [F4a] a treemap's or a sunburst's node decals by row: the node's own
+      itemStyle.decal, else the series'; with aria.decal on,
+      enableAriaDecalForTree's -- every node the palette decal of its
+      depth-1 ancestor's name, AOrder the tree's eachNode order }
+    function TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarchy;
+      const AOrder: TTyIntegerArray): TTyChartDecalArray;
     { a legend item's decal: the legend's itemStyle.decal over the series' }
     function LegendDecalOf(ALegend: Integer; const AName: string;
       const ASeries: TTyChartDecal): TTyChartDecal;
@@ -10121,6 +10139,118 @@ begin
     Result := FRowDecals[ASlot][ARaw];
 end;
 
+function TTyAdvanceChart.RowDecalJson(ASlot, ARaw: Integer): TJSONData;
+var
+  r: TTyDecalRaw;
+  k: TTyDecalKey;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FSeriesDecalRaws)) then Exit;
+  r := FSeriesDecalRaws[ASlot];
+  if (ARaw >= 0) and (ARaw <= High(FRowDecalSet[ASlot])) and FRowDecalSet[ASlot][ARaw]
+    and (ARaw <= High(FRowDecalRaws[ASlot])) then
+    r := FRowDecalRaws[ASlot][ARaw];
+  if not r.Present then Exit;
+  Result := TJSONObject.Create;
+  for k := Low(TTyDecalKey) to High(TTyDecalKey) do
+    if r.Keys[k] <> nil then
+      TJSONObject(Result).Add(TyDecalKeyNames[k], r.Keys[k].Clone);
+end;
+
+function TTyAdvanceChart.RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+var k, n: Integer;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  n := FStores[ASlot].RawCount;
+  SetLength(Result, n);
+  for k := 0 to n - 1 do Result[k] := RowDecalOf(ASlot, k);
+end;
+
+function TTyAdvanceChart.AriaDecalPalette(out APal: TJSONData;
+  out APalN: Integer): Boolean;
+var aria, d: TJSONData;
+begin
+  APal := nil;
+  APalN := 0;
+  Result := False;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  aria := TJSONObject(FOption.Root).Find('aria');
+  if not (FAriaEnabled and (aria is TJSONObject)) then Exit;
+  d := TJSONObject(aria).Find('decal');
+  if not ((d is TJSONObject) and TyDecalTruthy(TJSONObject(d).Find('show'))) then Exit;
+  APal := TyDecalPaletteOf(aria);
+  APalN := TyDecalPaletteCount(APal);
+  Result := True;
+end;
+
+{ THE TREES' DECALS [F4a]. decalVisual gives every node its item decal --
+  dataStyleTask's own itemStyle.decal, else (getItemVisual's fallback) the
+  series'. With aria.decal.show, setDecal leaves a treemap and a sunburst to
+  enableAriaDecalForTree: over a scope new every call, every node in the
+  tree's eachNode (pre-)order asks getDecalFromPalette for its depth-1
+  ancestor's name, or that ancestor's data index -- the root asks for its
+  own, the series' name as written -- and setVisual('decal') puts the
+  palette's object in place of the node's, the node's own not merged. }
+function TTyAdvanceChart.TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarchy;
+  const AOrder: TTyIntegerArray): TTyChartDecalArray;
+var
+  n, r, k, cur, pick, palN: Integer;
+  skin: TTyChartColor;
+  pal, d, node: TJSONData;
+  scope: TTyDecalScope;
+  nm: string;
+begin
+  Result := nil;
+  n := Length(AHier.Nodes);
+  SetLength(Result, n);
+  if (ASlot < 0) or (ASlot > High(FBindings)) or FBindings[ASlot].Hidden then Exit;
+  skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).TextColor);
+  if AriaDecalPalette(pal, palN) then
+  begin
+    scope := Default(TTyDecalScope);
+    for k := 0 to High(AOrder) do
+    begin
+      r := AOrder[k];
+      if (r < 0) or (r >= n) then Continue;
+      cur := r;
+      while (cur >= 0) and (AHier.Nodes[cur].Depth > 1) do cur := AHier.Nodes[cur].Parent;
+      if cur < 0 then Continue;
+      { convertOptionIdName(name, ''): a string, a number's text, else '' }
+      if cur = 0 then node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex)
+      else node := AHier.Nodes[cur].Item;
+      nm := '';
+      if node is TJSONObject then
+      begin
+        d := TJSONObject(node).Find('name');
+        if d <> nil then
+          case d.JSONType of
+            jtString: nm := d.AsString;
+            jtNumber: nm := TyJsonJsString(d);
+          end;
+      end;
+      if nm = '' then nm := IntToStr(cur);
+      pick := TyDecalFromPalette(scope, palN, nm);
+      Result[r] := TyDecalResolve(TyDecalRawOf(TyDecalPaletteItem(pal, pick)), skin);
+    end;
+    Exit;
+  end;
+  for r := 0 to n - 1 do
+  begin
+    Result[r] := DecalOfSeries(FBindings[ASlot].SeriesIndex);
+    { a sunburst ignores the style on its data [F4a] }
+    if FBindings[ASlot].SeriesType = TySunburstSeriesTypeName then Continue;
+    node := AHier.Nodes[r].Item;
+    if not (node is TJSONObject) then Continue;
+    d := TJSONObject(node).Find('itemStyle');
+    if not (d is TJSONObject) then Continue;
+    d := TJSONObject(d).Find('decal');
+    if TyDecalTruthy(d) and not TyDecalIsPrimitive(d) then
+      Result[r] := TyDecalResolve(TyDecalRawOf(d), skin);
+  end;
+end;
+
 procedure TTyAdvanceChart.AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
 var
   aria, d: TJSONData;
@@ -10171,7 +10301,7 @@ var
   scopes: array of TTypeScope;
   aria, pal, d: TJSONData;
   palN, si, slot, n, k, rawN, pick, t: Integer;
-  useDecal: Boolean;
+  useDecal, noItems: Boolean;
   skin: TTyChartColor;
   node, item: TJSONObject;
   typ, path, nm: string;
@@ -10198,9 +10328,13 @@ begin
   FSeriesDecals := nil;
   FRowDecals := nil;
   FRowDecalSet := nil;
+  FSeriesDecalRaws := nil;
+  FRowDecalRaws := nil;
   SetLength(FSeriesDecals, n);
   SetLength(FRowDecals, n);
   SetLength(FRowDecalSet, n);
+  SetLength(FSeriesDecalRaws, n);
+  SetLength(FRowDecalRaws, n);
   if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
   skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).TextColor);
@@ -10223,6 +10357,9 @@ begin
     typ := FBindings[slot].SeriesType;
     path := TyStyleAccessPath(typ);
     seriesRaw := OwnDecal(node);
+    { a sunburst and a tree say ignoreStyleOnData: dataStyleTask reads no
+      item's style, so no item's decal [F4a] }
+    noItems := (typ = TySunburstSeriesTypeName) or (typ = TyTreeSeriesTypeName);
     st := nil;
     if slot <= High(FStores) then st := FStores[slot];
     rows := nil;
@@ -10233,7 +10370,7 @@ begin
     SetLength(rowSet, rawN);
     { dataStyleTask: the view's rows only }
     for k := 0 to rawN - 1 do
-      if st.IndexOfRawIndex(k) >= 0 then
+      if (not noItems) and (st.IndexOfRawIndex(k) >= 0) then
       begin
         item := RawItemNode(slot, k);
         if item = nil then Continue;
@@ -10283,13 +10420,16 @@ begin
     { decalVisual: nothing for a series the legend filtered }
     if FBindings[slot].Hidden then Continue;
     FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin);
+    FSeriesDecalRaws[slot] := seriesRaw;
     SetLength(FRowDecals[slot], rawN);
     SetLength(FRowDecalSet[slot], rawN);
+    SetLength(FRowDecalRaws[slot], rawN);
     for k := 0 to rawN - 1 do
       if rowSet[k] then
       begin
         FRowDecalSet[slot][k] := True;
         FRowDecals[slot][k] := TyDecalResolve(rows[k], skin);
+        FRowDecalRaws[slot][k] := rows[k];
       end;
   end;
 end;
@@ -16796,6 +16936,8 @@ begin
       el.Style.StrokeColor := v.Stroke;
       el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
     end;
+    { and that row's decal [F4a] }
+    el.Style.Decal := RowDecalOf(ASlot, raw);
     { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
     if k < st.Count then
       el.Datum := TyChartDatum(si, k, st.GetRawIndex(k))
@@ -20226,6 +20368,7 @@ var
 begin
   Result := TyRadarVisual(SeriesColor(ASlot));
   Result.Fills := PerDatumColours(ASlot);
+  Result.Decals := RawRowDecals(ASlot);
   { a visualMap's symbolSize per ring }
   if (ASlot <= High(FVisualRows)) and (FVisualRows[ASlot] <> nil) then
   begin
@@ -20273,6 +20416,38 @@ begin
     d := ar.Find('opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.AreaOpacity := Max(Double(0), Min(Double(1), d.AsFloat));
+  end;
+  { AN ITEM'S OWN areaStyle [F4a]: Model.isEmpty is `option == null`, so any
+    object an item writes shows its polygon; its colour and opacity over the
+    series' }
+  d := node.Find('data');
+  if d is TJSONArray then
+  begin
+    SetLength(Result.RowArea, d.Count);
+    SetLength(Result.RowAreaColourSet, d.Count);
+    SetLength(Result.RowAreaColour, d.Count);
+    SetLength(Result.RowAreaOpacitySet, d.Count);
+    SetLength(Result.RowAreaOpacity, d.Count);
+    for k := 0 to d.Count - 1 do
+    begin
+      if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
+      ar := nil;
+      if TJSONObject(TJSONArray(d).Items[k]).Find('areaStyle') is TJSONObject then
+        ar := TJSONObject(TJSONObject(TJSONArray(d).Items[k]).Find('areaStyle'));
+      if ar = nil then Continue;
+      Result.RowArea[k] := True;
+      if (ar.Find('color') <> nil) and (ar.Find('color').JSONType = jtString)
+        and TyTryParseChartColor(ar.Find('color').AsString, c) then
+      begin
+        Result.RowAreaColourSet[k] := True;
+        Result.RowAreaColour[k] := c;
+      end;
+      if (ar.Find('opacity') <> nil) and (ar.Find('opacity').JSONType = jtNumber) then
+      begin
+        Result.RowAreaOpacitySet[k] := True;
+        Result.RowAreaOpacity[k] := Max(Double(0), Min(Double(1), ar.Find('opacity').AsFloat));
+      end;
+    end;
   end;
   { a state's areaStyle shows the polygon in that state [F2b] }
   for k := 0 to 2 do
@@ -20324,6 +20499,7 @@ var
 begin
   Result := TyGaugeVisual;
   Result.Fills := PerDatumColours(ASlot);
+  Result.Decals := RawRowDecals(ASlot);
   model := ActiveController.Model;
   { THE TRACK IS THE RING A PIE DRAWS WITH NO DATA. Upstream writes a literal
     pale grey, which is a pale grey ring on a dark skin; the same key the empty
@@ -20840,8 +21016,8 @@ begin
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
       { the series' style decal under the legend's own [Batch 131]; an icon
-        the series draws itself (a line's) takes none here }
-      if not Result[i].OwnIcon then
+        the series draws itself (a line's) takes it too: getLegendIcon sets
+        the legend style on its symbol, decal and all [F4a] }
       begin
         if j <= High(FSeriesDecals) then
           Result[i].Decal := LegendDecalOf(ALegend, AEntries[i].Name, FSeriesDecals[j])
@@ -22396,6 +22572,7 @@ var
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
   pk, gk, gq: Integer;
+  tmOrder: TTyIntegerArray;
   gfxCount: Integer;
 begin
   Result := 0;
@@ -22586,6 +22763,7 @@ begin
       begin
         if (i <= High(FSankeys)) and FSankeys[i].Valid then
         begin
+          FSankeyInks[i].NodeDecals := RawRowDecals(i);
           Inc(drawn, TyBuildSankeyMarks(FBindings[i].SeriesIndex, FSankeys[i],
             FSankeyInks[i], list));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -22602,6 +22780,7 @@ begin
       begin
         if (i <= High(FChords)) and FChords[i].Valid then
         begin
+          FChordInks[i].NodeDecals := RawRowDecals(i);
           Inc(drawn, TyBuildChordMarks(FBindings[i].SeriesIndex, FChords[i],
             FChordInks[i], list));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -22617,6 +22796,10 @@ begin
       begin
         if (i <= High(FTreemaps)) and FTreemaps[i].Valid then
         begin
+          { eachNode's pre-order: the rows' own, as written }
+          SetLength(tmOrder, Length(FTreemaps[i].Hier.Nodes));
+          for gq := 0 to High(tmOrder) do tmOrder[gq] := gq;
+          FTreemapInks[i].NodeDecals := TreeNodeDecals(i, FTreemaps[i].Hier, tmOrder);
           Inc(drawn, TyBuildTreemapMarks(FBindings[i].SeriesIndex, FTreemaps[i],
             FTreemapInks[i], list));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -22633,6 +22816,9 @@ begin
         if (i <= High(FSunbursts)) and FSunbursts[i].Valid then
         begin
           si2 := SunburstInk(i);
+          { the layout sorted the children in place: eachNode walks them so }
+          si2.NodeDecals := TreeNodeDecals(i, FSunbursts[i].Hier,
+            TySunburstSubtree(FSunbursts[i], 0));
           Inc(drawn, TyBuildSunburstMarks(FBindings[i].SeriesIndex, FSunbursts[i], si2,
             FStores[i], list, APPI));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -43297,8 +43483,8 @@ begin
 end;
 
 { the style visual's fill and stroke; the item visuals a visualMap sets --
-  symbol, symbolSize, liftZ [Batch 124]; the rest a custom series has none
-  of }
+  symbol, symbolSize, liftZ [Batch 124]; the item's decal, a copy of the
+  object (F4a); the rest a custom series has none of }
 function TTyChartCustomApi.Visual(const AType: string; ADataIndexInside: Integer): TJSONData;
 var
   r: Integer;
@@ -43311,6 +43497,13 @@ begin
   begin
     Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
     if Result <> nil then Result := Result.Clone;
+  end
+  else if AType = 'decal' then
+  begin
+    { the item's decal visual, through getItemVisual's fallback to the
+      series' [F4a] }
+    if r >= 0 then Result := Chart.RowDecalJson(Slot, Store.GetRawIndex(r))
+    else Result := Chart.RowDecalJson(Slot, -1);
   end
   else if Chart.CustomVisualRow(Slot, r, vr) then
   begin
@@ -43931,6 +44124,7 @@ var
   clipOn: Boolean;
   clip: TTyRectF;
   all: TTyGfxElArray;
+  decalSkin: TTyChartColor;
 
   { doUpdateZ over one item's tree: the running greatest z2 lifts each
     textContent to it + 2 }
@@ -43967,6 +44161,16 @@ var
         Exit;
     end;
     if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
+    { A PATH'S style.decal [F4a]: CustomView turns the decal object
+      renderItem returned into its pattern -- api.visual('decal') or one
+      written there; a text or an image takes none (isPath). A primitive
+      (`'none'`) is no pattern here: upstream sets `dirty` on it and throws. }
+    if not (AEl.Kind in [gkUnknown, gkGroup, gkImage, gkText]) and (AEl.Style <> nil) then
+    begin
+      d := AEl.Style.Find('decal');
+      if d is TJSONObject then
+        pe.Style.Decal := TyDecalResolve(TyDecalRawOf(d), decalSkin);
+    end;
     pe.Silent := ASilent;
     pe.Datum := datum;
     pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
@@ -44005,6 +44209,8 @@ begin
   if APPI <= 0 then APPI := 96;
   scale := APPI / 96;
   meas := NewTextMeasurer(96);
+  decalSkin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).TextColor);
   { the transforms and the textContents' places }
   TyGfxUpdateTransforms(view.Root);
   MarkerGround(ground.Background, ground.IsDark);

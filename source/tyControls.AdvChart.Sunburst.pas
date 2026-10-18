@@ -94,6 +94,8 @@ type
     ItemLabels: TTyLabelSpecArray;
     SeriesName: string;
     LabelValueDim: Integer;
+    { by row, the node's decal (SunburstPiece: node.getVisual('decal')) [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 function TySunburstSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -813,6 +815,7 @@ begin
     d := ChainFind(ASolved, row, 'itemStyle', 'opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then el.Style.Alpha := d.AsFloat
     else el.Style.Alpha := 1;
+    if row <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[row];
     el.Z := ASolved.Z;
     el.Z2 := 2;
     el.Datum := TyChartDatum(ASeriesIndex, row, row);

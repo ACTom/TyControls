@@ -126,6 +126,9 @@ type
     Label_: TTyLabelSpec;
     { one per RAW node: item -> series }
     ItemLabels: TTyLabelSpecArray;
+    { one per RAW node, its decal: the piece's sector useStyle's it, and an
+      edge coloured 'source' / 'target' takes that node's [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 { The graph and the layout. AKept: the legend's verdict per raw node (nil:
@@ -1266,6 +1269,7 @@ begin
       end;
       d := TyChordNodeFind(S, i, 'itemStyle', 'opacity');
       if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 1;
+      if i <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[i];
       el.Z := S.Z;
       el.Z2 := 2;
       el.Datum := TyChartDatum(ASeriesIndex, S.Nodes[i].DataIndex, i);
@@ -1330,6 +1334,8 @@ begin
       if (w = 'source') or (w = 'target') then
       begin
         if w = 'source' then nd := n1 else nd := n2;
+        { edgeStyle.decal = that node's style decal [F4a] }
+        if nd <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[nd];
         el.Style.HasFill := S.Nodes[nd].HasColour;
         el.Style.FillColor := S.Nodes[nd].Colour;
         if S.Nodes[nd].HasGradient then

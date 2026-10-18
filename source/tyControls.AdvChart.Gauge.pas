@@ -288,6 +288,9 @@ type
     AnchorFill: TTyChartColor;
     AnchorBorder: TTyChartColor;
     Z: Integer;
+    { per RAW row, the item's decal: the pointer and the progress useStyle
+      the item's style [F4a] }
+    Decals: TTyChartDecalArray;
   end;
 
 function TyGaugeSpecDefault: TTyGaugeSpec;
@@ -1792,6 +1795,8 @@ begin
         else
           el.Z2 := 0;
         el.Silent := False;
+        if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+          el.Style.Decal := AVisual.Decals[raw];
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
         { its end angle grows from the start (GaugeView.ts:477-483) }
         el.Anim.Role := carGaugeProgress;
@@ -1833,6 +1838,8 @@ begin
           el.Z := AVisual.Z;
           el.Z2 := 0;
           el.Silent := False;
+          if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+            el.Style.Decal := AVisual.Decals[raw];
           el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
           { it turns from the start angle (GaugeView.ts:464-472) [Batch 89] }
           el.Anim.Role := carGaugePointer;
@@ -1882,6 +1889,8 @@ begin
         el.Z := AVisual.Z;
         el.Z2 := 0;
         el.Silent := False;
+        if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+          el.Style.Decal := AVisual.Decals[raw];
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
         el.Anim.Role := carGaugePointer;
         el.Anim.Series := ABinding.SeriesIndex;
