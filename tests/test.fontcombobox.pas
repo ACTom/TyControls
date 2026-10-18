@@ -421,11 +421,14 @@ procedure TFontComboBoxTest.TestEveryFontPickerListsThroughTheOneFilter;
     end;
   end;
 
+const
+  cExts: array[0..1] of string = ('*.pas', '*.inc');
 var
   dir, code: string;
   sr: TSearchRec;
   L: TStringList;
   readers: TStringList;
+  ext: Integer;
   scanned: Integer;
 begin
   dir := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'source' + PathDelim;
@@ -433,7 +436,9 @@ begin
   L := TStringList.Create;
   try
     scanned := 0;
-    if FindFirst(dir + '*.pas', faAnyFile, sr) = 0 then
+    { the include files too: a unit split into them [S1] keeps its code there }
+    for ext := 0 to 1 do
+    if FindFirst(dir + cExts[ext], faAnyFile, sr) = 0 then
     try
       repeat
         L.LoadFromFile(dir + sr.Name);

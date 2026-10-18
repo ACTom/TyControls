@@ -175,6 +175,7 @@ begin
     begin
       fn := ExtractFileName(files[i]);
       if SameText(fn, 'tyControls.Icons.Lucide.pas') then Continue;   { itself }
+      if SameText(fn, 'tyControls.Icons.Lucide.License.inc') then Continue;   { its own include }
       src.LoadFromFile(files[i]);
       { COMMENT-BLIND. A dependency can only come from a uses clause; naming the
         unit in a comment creates none, and a plain substring scan cannot tell

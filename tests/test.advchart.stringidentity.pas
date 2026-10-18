@@ -270,6 +270,14 @@ begin
       FindClose(sr);
     end;
     files.Add('tyControls.AdvanceChart.pas');
+    { and the include files the control's unit is split into [S1] }
+    if FindFirst(dir + 'tyControls.AdvanceChart.*.inc', faAnyFile, sr) = 0 then
+    begin
+      repeat
+        files.Add(sr.Name);
+      until FindNext(sr) <> 0;
+      FindClose(sr);
+    end;
     AssertTrue('the sources are found', files.Count > 20);
     for f := 0 to files.Count - 1 do
     begin

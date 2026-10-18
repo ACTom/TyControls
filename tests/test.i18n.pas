@@ -638,7 +638,7 @@ var
   name, found: string;
 begin
   files := FindAllFiles(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'source',
-    '*.pas', True);
+    '*.pas;*.inc', True);
   try
     found := '';
     scanned := 0;
