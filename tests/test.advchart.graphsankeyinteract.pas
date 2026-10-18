@@ -76,6 +76,11 @@ type
   protected
     procedure SetUp; override;
     procedure TearDown; override;
+    { [F3b] the fixture, and how much it must reach: a subclass replays
+      another oracle's with the same rules }
+    function FixtureName: string; virtual;
+    function MinCases: Integer; virtual;
+    function MinCompared: Integer; virtual;
   published
     procedure TestEveryDragLabelAndRoamLandsWhereUpstreamPutsIt;
   end;
@@ -163,10 +168,9 @@ end;
 
 { ==================== the fixture's numbers ==================== }
 
-function FixturePath: string;
+function FixtureDir: string;
 begin
-  Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
-    + 'advchart-graph-sankey-interact.json';
+  Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim;
 end;
 
 function HexNum(AData: TJSONData): Double;
@@ -246,10 +250,10 @@ begin
   FCtl.Mode := 'light';
   FCtl.ThemeName := 'default';
   FChart := nil;
-  AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
+  AssertTrue('the fixture is where the suite expects it', FileExists(FixtureDir + FixtureName));
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(FixturePath);
+    sl.LoadFromFile(FixtureDir + FixtureName);
     FRoot := GetJSON(sl.Text);
   finally
     sl.Free;
@@ -259,6 +263,21 @@ begin
   FCases := 0;
   FStates := 0;
   FReport := '';
+end;
+
+function TAdvChartGraphSankeyInteractOracleTest.FixtureName: string;
+begin
+  Result := 'advchart-graph-sankey-interact.json';
+end;
+
+function TAdvChartGraphSankeyInteractOracleTest.MinCases: Integer;
+begin
+  Result := 30;
+end;
+
+function TAdvChartGraphSankeyInteractOracleTest.MinCompared: Integer;
+begin
+  Result := 3000;
 end;
 
 procedure TAdvChartGraphSankeyInteractOracleTest.TearDown;
@@ -322,7 +341,7 @@ end;
 
 procedure TAdvChartGraphSankeyInteractOracleTest.Step(AStep: TJSONObject;
   var AW, AH: Integer);
-var a: TJSONArray; d: TJSONData;
+var a: TJSONArray; d: TJSONData; i: Integer;
 begin
   d := AStep.Find('down');
   if d is TJSONArray then
@@ -370,6 +389,13 @@ begin
     AW := a.Integers[0];
     AH := a.Integers[1];
     FChart.SetBounds(0, 0, AW, AH);
+    Exit;
+  end;
+  { [F3b] the force iterations' timer, frame by frame }
+  d := AStep.Find('frames');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    for i := 1 to d.AsInteger do FChart.GraphForceFrame;
     Exit;
   end;
   Miss('an unknown step ' + AStep.AsJSON);
@@ -986,8 +1012,8 @@ begin
       CheckState(cs, TJSONObject(states.Items[k + 1]), k + 1);
     end;
   end;
-  AssertTrue(Format('every case ran (%d)', [FCases]), FCases >= 30);
-  AssertTrue(Format('and a great deal was compared (%d)', [FCompared]), FCompared > 3000);
+  AssertTrue(Format('every case ran (%d)', [FCases]), FCases >= MinCases);
+  AssertTrue(Format('and a great deal was compared (%d)', [FCompared]), FCompared > MinCompared);
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' disagree with upstream:' + FReport, 0, FBad);
 end;

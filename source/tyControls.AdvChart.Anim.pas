@@ -56,8 +56,27 @@ unit tyControls.AdvChart.Anim;
   animateTo on the element's keys does not stop it, and it is never one an
   additive animateTo adds to.
 
-  WHAT IS NOT HERE: gradients, pause/resume (ECharts never pauses a
-  series). A numeric STRING is
+  GRADIENTS [F3b]: a linear or a radial gradient object is a value of its own
+  kind (avkGradient: its geometry, its colour stops parsed to rgba, and the
+  raw object as JSON for a discrete step). Two of the same type interpolate
+  as Animator.ts does -- x, y, then x2, y2 or r, every stop's offset and its
+  colour channel by channel into a new object whose stop colours are
+  'rgba(r,g,b,a)' strings with r, g, b floored; prepare pads the shorter
+  stop list of each keyframe and the last one with its last stop
+  (fillColorStops, in place, either side). A linear against a radial, or a
+  colour against a gradient, is discrete. A gradient is never additive
+  (upstream's additive linear gradient reads an additiveValue it never
+  computed and throws).
+
+  PAUSE [F3b]: Animation.pause / resume -- the driver's clock is the wall
+  clock less every paused stretch, counted from pause() to resume(); the
+  host's frame loop does not step a paused driver, but a flush still does
+  (zrender's refreshImmediately calls update whatever the loop does). An
+  animator's own pause holds its clip: each step of the paused clip adds the
+  frame's delta to its paused time and writes nothing (Clip.ts); a loop's
+  restart forgets it.
+
+  A numeric STRING is
   interpolated as its number; upstream classifies it as a number too but then
   concatenates, which no chart relies on.
 
@@ -88,7 +107,9 @@ interface
 uses SysUtils, Classes, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Easing;
 
 type
-  TTyAnimValueKind = (avkNull, avkNumber, avkBool, avkString, avkArray);
+  TTyAnimValueKind = (avkNull, avkNumber, avkBool, avkString, avkArray,
+    { a gradient object [F3b] }
+    avkGradient);
 
   TTyAnimValue = record
     Kind: TTyAnimValueKind;
@@ -100,8 +121,15 @@ type
     Stride: Integer;
     { avkArray, 1D: a Float32Array -- every store rounds to a single }
     Float32: Boolean;
-    { avkString }
+    { avkString; avkGradient: the raw object as JSON text ('' for one an
+      interpolation made) [F3b] }
     Str: string;
+    { avkGradient [F3b]: Arr is the geometry -- x, y, x2, y2 (Stride 4, a
+      linear one) or x, y, r (Stride 3, a radial one; Stride 0 is neither,
+      which interpolates nothing); a number the object lacks is NaN. Num is
+      `global` (NaN when the object has none). Stops: five numbers a stop --
+      offset, r, g, b, a -- the colour parsed (NaN when it does not parse) }
+    Stops: TTyDoubleArray;
   end;
 
   TTyAnimProp = record
@@ -121,7 +149,7 @@ type
   TTyAnimClip = class
   private
     FLife, FDelay, FStartTime, FPausedTime: Double;
-    FInited, FLoop: Boolean;
+    FInited, FLoop, FPaused: Boolean;
     FEasing: TTyEasing;
     FNext, FPrev: TTyAnimClip;
     FAnimation: TTyAnimation;
@@ -136,6 +164,12 @@ type
       start at AGlobalTime + delay. }
     function Step(AGlobalTime, ADeltaTime: Double): Boolean;
     procedure SetEasing(const AEasing: TTyEasing);
+    { Clip.pause / resume: a paused clip's steps count the frames' deltas
+      as paused time and write nothing [F3b] }
+    procedure Pause;
+    procedure Resume;
+    property Paused: Boolean read FPaused;
+    property PausedTime: Double read FPausedTime;
     property Life: Double read FLife;
     property Delay: Double read FDelay;
     property Loop: Boolean read FLoop;
@@ -145,7 +179,9 @@ type
     property Animation: TTyAnimation read FAnimation;
   end;
 
-  TTyAnimValType = (vtNumber, vt1DArray, vt2DArray, vtColor, vtUnknown);
+  TTyAnimValType = (vtNumber, vt1DArray, vt2DArray, vtColor,
+    { [F3b] }
+    vtLinearGradient, vtRadialGradient, vtUnknown);
 
   TTyAnimKeyframe = record
     Time, Percent: Double;
@@ -229,6 +265,8 @@ type
     FFromState: string;
     { made by Element.animate(''): targetName undefined [Batch 139] }
     FNoTarget: Boolean;
+    { Animator.pause [F3b] }
+    FPaused: Boolean;
     { ADDITIVE [Batch 116]: the element's running animators of the same
       nested object when this one was made, and the animators made additive
       to this one (so a freed animator leaves no track pointing at it) }
@@ -268,6 +306,11 @@ type
     procedure Start(const AEasing: TTyEasing); overload;
     procedure Start(const AEasing: string); overload;
     procedure Stop(AForwardToLast: Boolean = False);
+    { Animator.pause / resume / isPaused: its clip held where it is (an
+      animator with no clip only remembers the word) [F3b] }
+    procedure Pause;
+    procedure Resume;
+    function IsPaused: Boolean;
     { True when the animator can no longer be used (every track finished,
       or it has no clip). A track stopped before the animator ever stepped
       (started, not run: setToFinal left the element at its final values)
@@ -308,6 +351,9 @@ type
     FHead, FTail: TTyAnimClip;
     FCount: Integer;
     FTime, FPausedTime: Double;
+    { Animation.pause / resume [F3b] }
+    FPaused: Boolean;
+    FPauseStart: Double;
     FElements: TFPList;
     FOnWake: TNotifyEvent;
     FOnFrame: TTyAnimFrameEvent;
@@ -327,6 +373,17 @@ type
     procedure Update(ANow: Double; ANoFrame: Boolean = False);
     procedure Clear;
     function IsFinished: Boolean;
+    { Animation.pause at ANow: the clock stops counting from here (a second
+      pause does nothing); resume adds the stretch to the paused time. The
+      host does not step a paused driver from its frame loop; Update itself
+      still steps (a flush) [F3b] }
+    procedure Pause(ANow: Double);
+    procedure Resume(ANow: Double);
+    { take another driver's pause: its paused time, whether it is paused
+      and since when -- a driver made during a chart's pause [F3b] }
+    procedure AdoptPause(AFrom: TTyAnimation);
+    property Paused: Boolean read FPaused;
+    property PausedTime: Double read FPausedTime;
     { zrender's wakeUp: an animator was added -- the host's timer should run }
     procedure WakeUp;
     function ClipAt(AIndex: Integer): TTyAnimClip;
@@ -655,6 +712,7 @@ function TyAnimClone(const AValue: TTyAnimValue): TTyAnimValue;
 begin
   Result := AValue;
   Result.Arr := Copy(AValue.Arr);
+  Result.Stops := Copy(AValue.Stops);
 end;
 
 function TyAnimProp(const AKey: string; const AValue: TTyAnimValue): TTyAnimProp;
@@ -692,6 +750,8 @@ begin
           if not (A.Arr[i] = B.Arr[i]) then Exit;
         Result := True;
       end;
+    { avkGradient: an object, === only to itself -- never a value read
+      again [F3b] }
   end;
 end;
 
@@ -732,6 +792,15 @@ begin
   Result := GClockBase + Double(Int64(t - GClockTick));
 end;
 
+{ Math.floor(v) || 0: NaN and minus nought are 0 [F3b] }
+function JsFloorOr0(AV: Double): Double;
+begin
+  if IsNan(AV) then Exit(0);
+  if IsInfinite(AV) then Exit(AV);
+  Result := Floor(AV);
+  if Result = 0 then Result := 0;
+end;
+
 { ==================== Clip ==================== }
 
 constructor TTyAnimClip.Create(ALife, ADelay: Double; ALoop: Boolean);
@@ -748,6 +817,16 @@ begin
   FEasing := AEasing;
 end;
 
+procedure TTyAnimClip.Pause;
+begin
+  FPaused := True;
+end;
+
+procedure TTyAnimClip.Resume;
+begin
+  FPaused := False;
+end;
+
 function TTyAnimClip.Step(AGlobalTime, ADeltaTime: Double): Boolean;
 var
   elapsed, percent, schedule, remainder: Double;
@@ -756,6 +835,13 @@ begin
   begin
     FStartTime := AGlobalTime + FDelay;
     FInited := True;
+  end;
+  { a paused clip: the frame's delta is paused time, nothing written (the
+    `return;` is undefined: not finished) [F3b] }
+  if FPaused then
+  begin
+    FPausedTime := FPausedTime + ADeltaTime;
+    Exit(False);
   end;
   elapsed := AGlobalTime - FStartTime - FPausedTime;
   percent := elapsed / FLife;
@@ -846,6 +932,14 @@ begin
           value := TyAnimArr([r, g, b, a]);
         end;
       end;
+    avkGradient:
+      begin
+        { isGradientObject: parsed (the stops' colours already are); a type
+          that is neither stays unknown [F3b] }
+        if ARaw.Stride = 4 then vt := vtLinearGradient
+        else if ARaw.Stride = 3 then vt := vtRadialGradient;
+        value.Str := '';
+      end;
   end;
   if len = 0 then
     FValType := vt
@@ -902,6 +996,40 @@ begin
   end;
 end;
 
+{ fillColorStops: the shorter of two stop lists padded, in place, with its
+  last stop (a list with none: offset 0, colour [0, 0, 0, 0]) [F3b] }
+procedure FillColorStops(var AS0, AS1: TTyDoubleArray);
+var
+  len0, len1: Integer;
+
+  procedure Pad(var AList: TTyDoubleArray; AShort, ALong: Integer);
+  var
+    i, k, base: Integer;
+    last: array[0..4] of Double;
+  begin
+    if AShort > 0 then
+    begin
+      base := (AShort - 1) * 5;
+      for k := 0 to 4 do last[k] := AList[base + k];
+    end
+    else
+    begin
+      for k := 0 to 4 do last[k] := 0;
+    end;
+    SetLength(AList, ALong * 5);
+    for i := AShort to ALong - 1 do
+      for k := 0 to 4 do AList[i * 5 + k] := last[k];
+  end;
+
+begin
+  len0 := Length(AS0) div 5;
+  len1 := Length(AS1) div 5;
+  { len0 > len1 ? val1 : val0 -- the first one when equal, padded with
+    nothing }
+  if len0 > len1 then Pad(AS1, len1, len0)
+  else if len1 > len0 then Pad(AS0, len0, len1);
+end;
+
 procedure TTyAnimTrack.Prepare(AMaxTime: Double; AAdditive: TTyAnimTrack);
 var
   i, j, n: Integer;
@@ -931,12 +1059,18 @@ begin
     begin
       if FValType = vt1DArray then FillArray(FKeyframes[i].Value, last, 1)
       else FillArray(FKeyframes[i].Value, last, 2);
-    end;
+    end
+    else if (not FDiscrete) and (FValType in [vtLinearGradient, vtRadialGradient]) then
+      { the last keyframe's own list may be the padded one [F3b] }
+      FillColorStops(FKeyframes[i].Value.Stops, FKeyframes[n - 1].Value.Stops);
   end;
   { ONLY ON INTERPOLABLE VALUES OF THE SAME TYPE, both tracks animating and
     the other not yet finished: each keyframe's difference from the first }
   if (not FDiscrete) and (AAdditive <> nil) and NeedsAnimate and AAdditive.NeedsAnimate
-    and (FValType = AAdditive.FValType) and not AAdditive.FFinished then
+    and (FValType = AAdditive.FValType) and not AAdditive.FFinished
+    { a gradient is not added to (upstream lets a linear one through and
+      then throws) [F3b] }
+    and not (FValType in [vtLinearGradient, vtRadialGradient]) then
   begin
     FAdditive := AAdditive;
     start := TyAnimClone(FKeyframes[0].Value);
@@ -957,6 +1091,35 @@ begin
       end;
     end;
   end;
+end;
+
+{ the gradient between two keyframes at w (Animator.ts step's gradient
+  branch): interpolateNumber on each number, a stop's colour through
+  interpolate1DArray and rgba2String (r, g, b floored, NaN 0) [F3b] }
+function GradientAt(const A, B: TTyAnimValue; W: Double): TTyAnimValue;
+var i, k, n: Integer;
+begin
+  Result := Default(TTyAnimValue);
+  Result.Kind := avkGradient;
+  Result.Stride := A.Stride;
+  SetLength(Result.Arr, Length(A.Arr));
+  for i := 0 to High(A.Arr) do
+    if i <= High(B.Arr) then Result.Arr[i] := (B.Arr[i] - A.Arr[i]) * W + A.Arr[i]
+    else Result.Arr[i] := NaN;
+  n := Length(A.Stops) div 5;
+  SetLength(Result.Stops, n * 5);
+  for i := 0 to n - 1 do
+    for k := 0 to 4 do
+      if i * 5 + k <= High(B.Stops) then
+        Result.Stops[i * 5 + k] := (B.Stops[i * 5 + k] - A.Stops[i * 5 + k]) * W
+          + A.Stops[i * 5 + k]
+      else
+        Result.Stops[i * 5 + k] := NaN;
+  { rgba2String floors r, g, b (`|| 0`); a stays }
+  for i := 0 to n - 1 do
+    for k := 1 to 3 do
+      Result.Stops[i * 5 + k] := JsFloorOr0(Result.Stops[i * 5 + k]);
+  Result.Num := B.Num;
 end;
 
 procedure TTyAnimTrack.Step(AAnimator: TTyAnimator; APercent: Double);
@@ -1112,6 +1275,10 @@ begin
     AAnimator.PutValue(FPropName,
       TyAnimStr(TyAnimRgbaString(tmp[0], tmp[1], tmp[2], tmp[3])));
   end
+  else if FValType in [vtLinearGradient, vtRadialGradient] then
+    { A NEW OBJECT each frame: x, y, every stop (by the from list's length),
+      global the next frame's, then x2, y2 or r [F3b] }
+    AAnimator.PutValue(FPropName, GradientAt(frame^.Value, next^.Value, w))
   else
   begin
     v := (next^.Value.Num - frame^.Value.Num) * w + frame^.Value.Num;
@@ -1507,6 +1674,25 @@ begin
   end;
 end;
 
+procedure TTyAnimator.Pause;
+begin
+  { this._clip.pause(): upstream throws before start, when there is no
+    clip; here the word is kept and nothing held [F3b] }
+  if FClip <> nil then FClip.Pause;
+  FPaused := True;
+end;
+
+procedure TTyAnimator.Resume;
+begin
+  if FClip <> nil then FClip.Resume;
+  FPaused := False;
+end;
+
+function TTyAnimator.IsPaused: Boolean;
+begin
+  Result := FPaused;
+end;
+
 function TTyAnimator.StopTracks(const AKeys: array of string; AForwardToLast: Boolean): Boolean;
 var
   i: Integer;
@@ -1665,6 +1851,28 @@ procedure TTyAnimation.Start(ANow: Double);
 begin
   FTime := ANow;
   FPausedTime := 0;
+end;
+
+procedure TTyAnimation.Pause(ANow: Double);
+begin
+  if FPaused then Exit;
+  FPauseStart := ANow;
+  FPaused := True;
+end;
+
+procedure TTyAnimation.Resume(ANow: Double);
+begin
+  if not FPaused then Exit;
+  FPausedTime := FPausedTime + (ANow - FPauseStart);
+  FPaused := False;
+end;
+
+procedure TTyAnimation.AdoptPause(AFrom: TTyAnimation);
+begin
+  if AFrom = nil then Exit;
+  FPausedTime := AFrom.FPausedTime;
+  FPaused := AFrom.FPaused;
+  FPauseStart := AFrom.FPauseStart;
 end;
 
 procedure TTyAnimation.Update(ANow: Double; ANoFrame: Boolean);

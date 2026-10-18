@@ -40,17 +40,28 @@ unit tyControls.AdvChart.AnimAxis;
                                        of a length the render decides, cut
                                        or padded by zrender's fillArray;
                                        id the break's identity [F4a]
-  Minor ticks ('minorticks_'), minor split lines ('minor_line_'), split
-  areas ('area_') and the axis name ('name') are not modelled: they are
-  drawn where the layout puts them. }
+    minor ticks  'minorticks_' + i      (coord, 0) and (coord, tickDirection
+                 + '_' + value         * minorTick.length) through the axis
+                                       group's matrix, subPixelOptimizeLine
+                                       on the minor pen; i the major interval
+                                       the tick subdivides [F3b]
+    minor split  'minor_line_' + value across the grid rect, as a split line,
+    lines                              on the minor split pen [F3b]
+    split areas  'area_' + value       a Rect from the previous edge to this
+                                       one (x = prev, width = coord - x,
+                                       prev = x + width), the value the
+                                       band's first edge's [F3b]
+    the name     'name'                its decomposed x, y and rotation, after
+                                       nameMoveOverlap [F3b] }
 interface
 uses SysUtils, Math,
   tyControls.AdvChart.Types, tyControls.AdvChart.Layout, tyControls.AdvChart.Anim;
 
 type
   TTyAxisAnimKind = (aakLine, aakTick, aakLabel, aakSplitLine,
-    { [F4a] a break area's polyline A, B and its polygon }
-    aakBreakA, aakBreakB, aakBreakC);
+    { [F4a] a break area's polyline A, B and its polygon; [F3b] the minor
+      ticks, minor split lines, split areas and the name }
+    aakBreakA, aakBreakB, aakBreakC, aakMinorTick, aakMinorSplit, aakSplitArea, aakName);
 
   { one leaf of an axis group: a Text (X, Y, Rotation) or a Line (X1 .. Y2),
     and where it came from in the spec }
@@ -66,6 +77,17 @@ type
   end;
   TTyAxisAnimElArray = array of TTyAxisAnimEl;
 
+  { a minor tick as Axis.getMinorTicksCoords gives it: its value, its place
+    in the axis' own frame (coord) and on the canvas (toGlobalCoord), and
+    the major interval it subdivides [F3b] }
+  TTyAxisMinorTick = record
+    Value: Double;
+    Local: Double;
+    Global: Double;
+    Interval: Integer;
+  end;
+  TTyAxisMinorTickArray = array of TTyAxisMinorTick;
+
   { what the spec does not carry: which parts the axis builds, the tick's
     length and the three pens' widths in device px, and the grid's rect as
     upstream's gridRect }
@@ -78,6 +100,12 @@ type
     { a sorted category axis' ordinals by tick (getRawOrdinalNumber); empty
       for none [Batch 135] }
     ByTick: TTyIntegerArray;
+    { [F3b] the minor ticks and minor split lines (their ticks, the minor
+      tick's length and the two pens' widths, device px), the split areas,
+      the name }
+    ShowMinorTicks, ShowMinorSplitLine, ShowSplitArea, ShowName: Boolean;
+    MinorTickLength, MinorTickWidth, MinorSplitWidth: Double;
+    MinorTicks: TTyAxisMinorTickArray;
   end;
 
 { zrender's subPixelOptimize: a position put on the half pixel (an odd
@@ -91,7 +119,7 @@ procedure TySubPixelOptimizeLine(var AX1, AY1, AX2, AY2: Double; ALineWidth: Dou
 function TyAxisAnimElements(const ASpec: TTyAxisLayoutSpec;
   const AIn: TTyAxisAnimInput): TTyAxisAnimElArray;
 { the props groupTransition moves: x / y / rotation of a Text, the four
-  ends of a Line, a break leaf's points }
+  ends of a Line, a break leaf's points, a Rect's x, y, width and height }
 function TyAxisAnimProps(const AEl: TTyAxisAnimEl): TTyAnimProps;
 { a proxy key: the axis' ('xAxis0') and the anid }
 function TyAxisAnimKey(const AAxisKey, AAnid: string): string;
@@ -179,7 +207,9 @@ var
     Push := n - 1;
   end;
 
-var k: Integer;
+var
+  k: Integer;
+  minorEnd, prev: Double;
 begin
   Result := nil;
   els := nil;
@@ -268,6 +298,78 @@ begin
     k := Push(aakBreakC, 'break_c_' + ASpec.BreakAreas[i].Id, i);
     els[k].Pts := FlatPoints(ASpec.BreakAreas[i].A, ASpec.BreakAreas[i].B);
   end;
+  { [F3b] the minor ticks: createTicks with the minor length, on the minor
+    pen }
+  if AIn.ShowMinorTicks then
+  begin
+    minorEnd := fr.NameDirection * AIn.MinorTickLength;
+    if AIn.TickInside then minorEnd := -minorEnd;
+    for i := 0 to High(AIn.MinorTicks) do
+    begin
+      k := Push(aakMinorTick, 'minorticks_' + IntToStr(AIn.MinorTicks[i].Interval) + '_'
+        + TyJsNumberToString(AIn.MinorTicks[i].Value), i);
+      Apply(g, AIn.MinorTicks[i].Local, 0, els[k].X1, els[k].Y1);
+      Apply(g, AIn.MinorTicks[i].Local, minorEnd, els[k].X2, els[k].Y2);
+      TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
+        AIn.MinorTickWidth);
+    end;
+  end;
+  { [F3b] the minor split lines across the grid rect }
+  if AIn.ShowMinorSplitLine then
+    for i := 0 to High(AIn.MinorTicks) do
+    begin
+      k := Push(aakMinorSplit, 'minor_line_' + TyJsNumberToString(AIn.MinorTicks[i].Value), i);
+      if AIn.Horizontal then
+      begin
+        els[k].X1 := AIn.MinorTicks[i].Global;
+        els[k].Y1 := AIn.Plot.Y;
+        els[k].X2 := AIn.MinorTicks[i].Global;
+        els[k].Y2 := AIn.Plot.Y + AIn.Plot.H;
+      end
+      else
+      begin
+        els[k].X1 := AIn.Plot.X;
+        els[k].Y1 := AIn.MinorTicks[i].Global;
+        els[k].X2 := AIn.Plot.X + AIn.Plot.W;
+        els[k].Y2 := AIn.MinorTicks[i].Global;
+      end;
+      TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
+        AIn.MinorSplitWidth);
+    end;
+  { [F3b] the split areas: rectCoordAxisBuildSplitArea's rects, every band
+    whatever its colour; the edge carried as x + width }
+  if AIn.ShowSplitArea and (Length(ASpec.SplitAreaMarks) > 0) then
+  begin
+    prev := ASpec.SplitAreaMarks[0].Coord;
+    for i := 1 to High(ASpec.SplitAreaMarks) do
+    begin
+      k := Push(aakSplitArea, 'area_' + TyJsNumberToString(ASpec.SplitAreaMarks[i - 1].Value), i - 1);
+      if AIn.Horizontal then
+      begin
+        els[k].X1 := prev;
+        els[k].Y1 := AIn.Plot.Y;
+        els[k].X2 := ASpec.SplitAreaMarks[i].Coord - els[k].X1;
+        els[k].Y2 := AIn.Plot.H;
+        prev := els[k].X1 + els[k].X2;
+      end
+      else
+      begin
+        els[k].X1 := AIn.Plot.X;
+        els[k].Y1 := prev;
+        els[k].X2 := AIn.Plot.W;
+        els[k].Y2 := ASpec.SplitAreaMarks[i].Coord - els[k].Y1;
+        prev := els[k].Y1 + els[k].Y2;
+      end;
+    end;
+  end;
+  { [F3b] the name: a Text on the axis group, decomposed }
+  if AIn.ShowName and ASpec.NamePlacement.Shown then
+  begin
+    k := Push(aakName, 'name', -1);
+    els[k].X := ASpec.NamePlacement.X;
+    els[k].Y := ASpec.NamePlacement.Y;
+    els[k].Rotation := ASpec.NamePlacement.RotationRad;
+  end;
   SetLength(els, n);
   Result := els;
 end;
@@ -287,7 +389,12 @@ function TyAxisAnimProps(const AEl: TTyAxisAnimEl): TTyAnimProps;
 begin
   if AEl.Kind in [aakBreakA, aakBreakB, aakBreakC] then
     Result := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(AEl.Pts, 2))])
-  else if AEl.Kind = aakLabel then
+  { a split area's Rect: x, y, width, height in X1 .. Y2 [F3b] }
+  else if AEl.Kind = aakSplitArea then
+    Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AEl.X1)),
+      TyAnimProp('shape.y', TyAnimNum(AEl.Y1)), TyAnimProp('shape.width', TyAnimNum(AEl.X2)),
+      TyAnimProp('shape.height', TyAnimNum(AEl.Y2))])
+  else if AEl.Kind in [aakLabel, aakName] then
     Result := TyAnimProps([TyAnimProp('x', TyAnimNum(AEl.X)),
       TyAnimProp('y', TyAnimNum(AEl.Y)), TyAnimProp('rotation', TyAnimNum(AEl.Rotation))])
   else

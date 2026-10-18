@@ -1484,6 +1484,14 @@ type
     FAnimFrame: TTyPaintList;
     FAnimNow: Double;
     FAnimTimer: TTimer;
+    { THE PAUSE [F3b]: a driver with no clips that is paused and resumed
+      with the chart's -- a driver made later takes its pause from it }
+    FPauseClock: TTyAnimation;
+    { LineView's init branch, per line view of the last render [F3b]:
+      'viewKey #1 step/polar|init' -- rolled once per render, at the first
+      list built after a relayout }
+    FLineHist: TStringList;
+    FLineHistDue: Boolean;
     FAnimMode: TTyChartAnimationMode;
     FAnimPending: Boolean;
     FAnimLive: Boolean;
@@ -1732,6 +1740,18 @@ type
     procedure AnimArmTimer;
     procedure AnimTimerFired(Sender: TObject);
     procedure AnimTickBody(ANowMs: Double);
+    { a driver that takes the chart's pause [F3b] }
+    function NewAnimDriver: TTyAnimation;
+    { the line views of the list just built: whether each took LineView's
+      init branch -- no view of its key in the render before, or one of
+      another step or coordinate system [F3b] }
+    procedure LineHistRoll;
+    function LineHistInit(const AViewKey: string): Boolean;
+    { every driver of the chart, the nil ones left out }
+    function AnimDrivers: TFPList;
+    { a flush while paused steps every driver, as upstream's one animation
+      steps every clip [F3b] }
+    procedure AnimFlushOthers(AOwn: TTyAnimation);
     { every live clip loops }
     function AnimLoopOnly: Boolean;
     { the pointer's slide: synced to the hover, dropped with the build }
@@ -3360,6 +3380,8 @@ type
     { the graph's edge data as the selection reads it, by inner index: the
       edge data's name, its raw index [F2a] }
     function SelEdgeData(ASlot: Integer): TTySelData;
+    { [F3b] the slot holds a solved chord }
+    function StChordSlot(ASlot: Integer): Boolean;
     function StSankeySlot(ASlot: Integer): Boolean;
     { queryDataIndex on a graph's edge data: solved edge indices }
     function QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
@@ -3474,6 +3496,8 @@ type
     { the node drags [Batch 114] }
     procedure GraphDragMove(AX, AY: Integer);
     procedure GraphDragEnd;
+    { [F3b] some force graph's iteration runs (layoutAnimation) }
+    function GraphForceLive: Boolean;
     function SankeyDragStart(ASlot, ANode, AX, AY: Integer): Boolean;
     procedure SankeyDragMove(AX, AY: Integer);
     procedure SankeyViewOf(ASlot: Integer);
@@ -3878,6 +3902,12 @@ type
     function EdgeStates(ASeriesIndex, AIndex: Integer; out AItem: TTyStItem): Boolean;
     { a force graph's preserved state and running instance [Batch 114] }
     function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
+    { [F3b] ONE FRAME OF EVERY RUNNING FORCE ITERATION (a graph's
+      `force.layoutAnimation`, true by default): GraphView's 16 ms timer step
+      -- each instance stepped once, its nodes and edges laid out from it,
+      the picture redrawn. The animation timer calls it every tick while one
+      runs; a test steps it by hand. True when any graph stepped. }
+    function GraphForceFrame: Boolean;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
       out AItem: TTyStItem): Boolean;
     { [F2b] a gauge's progress arc, by inner row }
@@ -3919,6 +3949,18 @@ type
     { ms; NaN (the default) is the machine's clock -- and only then does the
       timer run }
     property AnimNow: Double read FAnimNow write FAnimNow;
+    { ---- pause [F3b] ---- }
+    { zrender's animation.pause / resume (chart.getZr().animation): at the
+      chart's clock every driver stops counting time; while paused no frame
+      steps (AnimTick does nothing: no clip moves, no progressive chunk is
+      drawn, no `rendered`), though a setOption's flush still steps every
+      clip once, as upstream's refreshImmediately does. resume adds the
+      stretch to each driver's paused time, so a clip goes on from where it
+      stood. A second pause, or a resume while running, does nothing. A
+      single animator pauses with TTyAnimator.Pause. }
+    procedure AnimPause;
+    procedure AnimResume;
+    function AnimPaused: Boolean;
     { ---- the tooltip's box [Batch 100] ---- }
     { ms; NaN (the default) is the machine's clock -- and only then does the
       timer run. A test sets it and steps TooltipTick. }
@@ -4634,11 +4676,14 @@ begin
   FAnimNow := NaN;
   FAnimMode := camAuto;
   FProgStepCost := NaN;
-  FGfxAnim := TTyAnimation.Create;
+  FPauseClock := TTyAnimation.Create;
+  FLineHist := TStringList.Create;
+  FLineHist.NameValueSeparator := #1;
+  FGfxAnim := NewAnimDriver;
   FGfxView := TTyGfxView.Create;
   FGfxView.Animation := FGfxAnim;
   FGfxUnder := TTyPaintList.Create;
-  FCuAnim := TTyAnimation.Create;
+  FCuAnim := NewAnimDriver;
   FGfxW := NaN;
   FGfxH := NaN;
   FTbStatus := TStringList.Create;
@@ -4740,6 +4785,8 @@ begin
   FreeAndNil(FGfxAnim);
   { after the custom views, whose elements' animators it drives [Batch 124] }
   FreeAndNil(FCuAnim);
+  FreeAndNil(FPauseClock);
+  FreeAndNil(FLineHist);
   FreeAndNil(FGfxUnder);
   inherited Destroy;
 end;
@@ -6943,6 +6990,8 @@ begin
   { a new option's data: the pieces the old one still named go with it
     [milestone D5-D8] }
   if FAnimPending and not FAnimFull then FUtStale := nil;
+  { a render: the next list rolls the lines' history [F3b] }
+  if not FStreamRelayout and not FExporting then FLineHistDue := True;
   Rebuild;
   { THE PIPELINES, from the counts the filters left -- before the bars ask
     which of them are large [Batch 119] }
@@ -7078,6 +7127,8 @@ begin
     if FBrushActDepth = 0 then BrushFlush;
   end;
   FDirty := False;
+  { [F3b] a force graph's iteration the render started runs on the timer }
+  if GraphForceLive then AnimArmTimer;
   { [F4b] the axis pointers a re-render kept }
   TipKeepRestore;
   { the update's flush: `rendered` once it is painted [Batch 119] }
@@ -7619,6 +7670,10 @@ var
   areaFill: TTyFill;
   inkStyle: TTyStyleSet;
   view: TTyChartView;
+  { [F3b] the proxied areas, minor ticks and name }
+  areaR: TRect;
+  majors: Integer;
+  nx, ny, nrot: Double;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -7808,6 +7863,32 @@ var
     Result := True;
   end;
 
+  { ... a split area's rect [F3b] }
+  function ProxArea(const AAnid: string; out ARect: TRect): Boolean;
+  var p: TTyChartAnimProxy;
+  begin
+    Result := False;
+    if not AProxied then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(akey, AAnid));
+    if p = nil then Exit;
+    ARect := Rect(Round(p.Num('shape.x')), Round(p.Num('shape.y')),
+      Round(p.Num('shape.x') + p.Num('shape.width')),
+      Round(p.Num('shape.y') + p.Num('shape.height')));
+    Result := True;
+  end;
+
+  { ... the name's anchor and turn [F3b] }
+  procedure ProxName(var AX, AY, ARot: Double);
+  var p: TTyChartAnimProxy;
+  begin
+    if not AProxied then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(akey, 'name'));
+    if p = nil then Exit;
+    AX := p.Num('x');
+    AY := p.Num('y');
+    ARot := p.Num('rotation');
+  end;
+
   { ... and a label's anchor }
   procedure ProxLabel(AIndex: Integer; var AX, AY: Double);
   var p: TTyChartAnimProxy;
@@ -7969,7 +8050,10 @@ begin
         Continue;
       bandLo := spec^.SplitAreaMarks[i].Coord;
       bandHi := spec^.SplitAreaMarks[i + 1].Coord;
-      if horiz then
+      { where its groupTransition has it now [F3b] }
+      if ProxArea('area_' + TyJsNumberToString(spec^.SplitAreaMarks[i].Value), areaR) then
+        APainter.FillBackground(areaR, areaFill, 0)
+      else if horiz then
         APainter.FillBackground(
           Rect(Round(bandLo), Round(APlot.Top),
                Round(bandHi), Round(APlot.Bottom)), areaFill, 0)
@@ -7990,6 +8074,8 @@ begin
     for i := 0 to High(scaleTicks) do
     begin
       if scaleTicks[i].Level = 0 then Continue;
+      { [F3b] }
+      if ProxLine('minor_line_' + TyJsNumberToString(scaleTicks[i].Value)) then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
         BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(minorSplitS))
@@ -8122,9 +8208,17 @@ begin
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
+    majors := 0;
     for i := 0 to High(scaleTicks) do
     begin
-      if scaleTicks[i].Level = 0 then Continue;
+      if scaleTicks[i].Level = 0 then
+      begin
+        Inc(majors);
+        Continue;
+      end;
+      { [F3b] the interval it subdivides names it }
+      if ProxLine('minorticks_' + IntToStr(majors - 1) + '_'
+        + TyJsNumberToString(scaleTicks[i].Value)) then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
       begin
@@ -8154,20 +8248,24 @@ begin
   if (spec <> nil) and spec^.NamePlacement.Shown
     and (tpTextColor in nameS.Present) then
   begin
+    { where its groupTransition has it now [F3b] }
+    nx := spec^.NamePlacement.X;
+    ny := spec^.NamePlacement.Y;
+    nrot := spec^.NamePlacement.RotationRad;
+    ProxName(nx, ny, nrot);
     { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
       [Batch 86] }
     if Length(spec^.NamePlacement.Rt) > 0 then
-      TyRenderRtPieces(APainter, spec^.NamePlacement.Rt, spec^.NamePlacement.X,
-        spec^.NamePlacement.Y, spec^.NamePlacement.RotationRad, spec^.RtScale, 1,
+      TyRenderRtPieces(APainter, spec^.NamePlacement.Rt, nx, ny, nrot, spec^.RtScale, 1,
         True, nameS.TextColor)
     { LEVEL IS LEVEL: a y axis' end name comes out of the matrices a few
       hundred quadrillionths of a radian off, and the flat path is the one
       that sets a name of several lines }
-    else if Abs(spec^.NamePlacement.RotationRad) < 1e-9 then
+    else if Abs(nrot) < 1e-9 then
     begin
       TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
       APainter.DrawText(
-        AnchorBox(spec^.NamePlacement.X, spec^.NamePlacement.Y, lblW, lblH,
+        AnchorBox(nx, ny, lblW, lblH,
           spec^.NamePlacement.AnchorH, spec^.NamePlacement.AnchorV),
         spec^.NamePlacement.Text, nameS.FontName, ResolveFontSize(nameS),
         nameS.FontWeight, nameS.TextColor, taCenter, tlCenter, False, 0, False,
@@ -8178,8 +8276,7 @@ begin
       TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
       DrawRotatedNameLines(APainter, spec^.NamePlacement.Text, nameS.FontName,
         ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
-        spec^.NamePlacement.X, spec^.NamePlacement.Y,
-        spec^.NamePlacement.RotationRad,
+        nx, ny, nrot,
         AnchorAlign(spec^.NamePlacement.AnchorH),
         AnchorLayout(spec^.NamePlacement.AnchorV), lblH);
     end;
@@ -14679,9 +14776,10 @@ procedure TTyAdvanceChart.GraphDragMove(AX, AY: Integer);
 var
   st: TTyGraphDragStep;
   slot, si: Integer;
+  was: Boolean;
 begin
   slot := FGraphDragSlot;
-  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil)
+  if (slot < 0) or (slot > High(FGraphs))
     or (slot > High(FGraphNodes)) or (FGraphDragNode > High(FGraphNodes[slot])) then
   begin
     FGraphDragSlot := -1;
@@ -14699,10 +14797,61 @@ begin
   FGraphDragY := AY;
   FGraphDragFirst := False;
   if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
-  TyGraphDragStep(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
-    FGraphs[slot], FGraphForce[si], st, FGraphNodeScale[slot]);
+  { [F3b] a graph off a view: the drift on the canvas, the edges again }
+  if FGraphs[slot] = nil then
+    TyGraphDragOffView(FGraphNodes[slot], FGraphEdges[slot], st)
+  else
+  begin
+    was := FGraphForce[si].Layouting;
+    TyGraphDragStep(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
+      FGraphs[slot], FGraphForce[si], st, FGraphNodeScale[slot]);
+    { [F3b] an iteration the drag started: its first step renders the
+      thumbnail, and the timer runs it on }
+    if FGraphForce[si].Layouting and not was then
+    begin
+      FThumbSnapDue := True;
+      AnimArmTimer;
+    end;
+  end;
   { A NEW PICTURE, NOT A NEW LAYOUT -- as a roam step }
   TipReset;
+  DropStatic;
+  FZrDirty := True;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.GraphForceLive: Boolean;
+var slot, si: Integer;
+begin
+  Result := False;
+  for slot := 0 to Min(High(FBindings), High(FGraphs)) do
+  begin
+    if FGraphs[slot] = nil then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if (si >= 0) and (si <= High(FGraphForce)) and FGraphForce[si].Layouting then
+      Exit(True);
+  end;
+end;
+
+function TTyAdvanceChart.GraphForceFrame: Boolean;
+var slot, si: Integer;
+begin
+  Result := False;
+  for slot := 0 to Min(High(FBindings), High(FGraphs)) do
+  begin
+    if (FGraphs[slot] = nil) or (slot > High(FGraphNodes)) then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if (si < 0) or (si > High(FGraphForce)) or not FGraphForce[si].Layouting then Continue;
+    if TyGraphForceFrame(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
+      FGraphs[slot], FGraphForce[si]) then
+    begin
+      Result := True;
+      { _renderThumbnail once the iteration stops }
+      if not FGraphForce[si].Layouting then FThumbSnapDue := True;
+    end;
+  end;
+  if not Result then Exit;
+  { A NEW PICTURE, NOT A NEW LAYOUT -- as a drag step }
   DropStatic;
   FZrDirty := True;
   inherited Invalidate;
@@ -15011,8 +15160,10 @@ begin
         if (FGraphNodes[slot][k].Row = d.DataIndex)
           and FGraphNodes[slot][k].Draggable then
         begin
-          { only a graph on a view is dragged here [Batch 114] }
-          if (slot <= High(FGraphs)) and (FGraphs[slot] <> nil) then
+          { a graph on a view, and [F3b] one off a view (cartesian2d, a
+            calendar, a matrix, a geo): Draggable drifts the symbol on the
+            canvas there }
+          if slot <= High(FGraphs) then
           begin
             FGraphDragSlot := slot;
             FGraphDragNode := k;
@@ -16274,7 +16425,7 @@ begin
     and TyAnimOptTruthy(TyAnimGetShallow(model, 'animation'));
   labelsOn := TyAnimIsEnabled(model);
   if not (wrapOn or labelsOn) then Exit;
-  if FAnim = nil then FAnim := TTyAnimation.Create;
+  if FAnim = nil then FAnim := NewAnimDriver;
   A := Default(TTyTmAnim);
   SetLength(A.Groups, nn);
   SetLength(A.Rects, nn);
@@ -23788,6 +23939,11 @@ begin
     Inc(drawn, BuildThumbnails(list));
     Result := drawn + gfxCount;
     UtStaleHarvest;
+    if FLineHistDue then
+    begin
+      FLineHistDue := False;
+      LineHistRoll;
+    end;
   end;
 end;
 
@@ -29609,7 +29765,7 @@ var
   threshold: Double;
 begin
   if not FStProxied or (FPaintList = nil) then Exit;
-  if FAnim = nil then FAnim := TTyAnimation.Create;
+  if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
@@ -30185,6 +30341,12 @@ begin
     and FSankeys[ASlot].Valid and (FBindings[ASlot].SeriesType = TySankeySeriesTypeName);
 end;
 
+function TTyAdvanceChart.StChordSlot(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FBindings)) and (ASlot <= High(FChords))
+    and FChords[ASlot].Valid and (FBindings[ASlot].SeriesType = TyChordSeriesTypeName);
+end;
+
 function TTyAdvanceChart.SelEdgeData(ASlot: Integer): TTySelData;
 var
   j, n, s: Integer;
@@ -30193,6 +30355,27 @@ var
   has: Boolean;
 begin
   Result := Default(TTySelData);
+  { [F3b] A CHORD'S EDGE DATA: every link the graph took, keyed by its name
+    (createGraphFromNodeEdge's: the id, else 'source > target'), its index
+    its own }
+  if StChordSlot(ASlot) then
+  begin
+    s := FBindings[ASlot].SeriesIndex;
+    sNode := StSeriesNode(s);
+    n := Length(FChords[ASlot].Edges);
+    SetLength(Result.Keys, n);
+    SetLength(Result.Raws, n);
+    SetLength(Result.Disabled, n);
+    for j := 0 to n - 1 do
+    begin
+      Result.Keys[j] := FChords[ASlot].Edges[j].Name;
+      if Result.Keys[j] = '' then Result.Keys[j] := 'e'#0#0 + IntToStr(j);
+      Result.Raws[j] := j;
+      Result.Disabled[j] := TyStReadBool([FChords[ASlot].Edges[j].Item, sNode],
+        ['select', 'disabled'], has);
+    end;
+    Exit;
+  end;
   { [F3a] A SANKEY'S EDGE DATA: every link of the solve, keyed by its name
     (the link's id, else 'source > target'), its raw index its own }
   if StSankeySlot(ASlot) then
@@ -30273,6 +30456,21 @@ var
       if (j >= 0) and (j <= High(FSankeys[ASlot].Edges)) then Result := j;
       Exit;
     end;
+    { [F3b] a chord's too }
+    if StChordSlot(ASlot) then
+    begin
+      if mode = 2 then
+      begin
+        if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
+        for j := 0 to High(FChords[ASlot].Edges) do
+          if FChords[ASlot].Edges[j].Name = AItem.AsString then Exit(j);
+        Exit;
+      end;
+      if (AItem.JSONType <> jtNumber) or (Frac(AItem.AsFloat) <> 0) then Exit;
+      j := Trunc(AItem.AsFloat);
+      if (j >= 0) and (j <= High(FChords[ASlot].Edges)) then Result := j;
+      Exit;
+    end;
     if mode = 2 then
     begin
       if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
@@ -30291,7 +30489,8 @@ var
 begin
   AEdges := nil;
   Result := False;
-  if not StSankeySlot(ASlot) and ((ASlot < 0) or (ASlot > High(FGraphEdges))) then Exit;
+  if not (StSankeySlot(ASlot) or StChordSlot(ASlot))
+    and ((ASlot < 0) or (ASlot > High(FGraphEdges))) then Exit;
   mode := 0;
   d := APayload.Find('dataIndexInside');
   if (d = nil) or (d.JSONType = jtNull) then
@@ -31372,14 +31571,15 @@ begin
     for k := 0 to High(FSt[s].Rows[raw].Parts) do
       FSt[s].Rows[raw].Parts[k].Selected := FSt[s].Rows[raw].Host.Selected;
   end;
-  { a graph's edges, from the same map [F2a]; a sankey's [F3a] }
-  if FSt[s].Kind in [sskGraph, sskSankey] then
+  { a graph's edges, from the same map [F2a]; a sankey's [F3a]; a chord's
+    [F3b] }
+  if FSt[s].Kind in [sskGraph, sskSankey, sskChord] then
   begin
     data := SelEdgeData(ASlot);
     for raw := 0 to High(FSt[s].EdgeRows) do
     begin
       if not FSt[s].EdgeRows[raw].Host.Exists then Continue;
-      if FSt[s].Kind = sskSankey then inner := raw
+      if FSt[s].Kind in [sskSankey, sskChord] then inner := raw
       else inner := StGraphEdgeInner(ASlot, raw);
       was := FSt[s].EdgeRows[raw].Host.Selected;
       FSt[s].EdgeRows[raw].Host.Selected := (inner >= 0)
@@ -31700,7 +31900,8 @@ begin
     d := APayload.Find('dataType');
     if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge') then
     begin
-      if not ((s <= High(FSt)) and (FSt[s].Kind in [sskGraph, sskSankey])) then Continue;
+      { [F3b] and a chord's }
+      if not ((s <= High(FSt)) and (FSt[s].Kind in [sskGraph, sskSankey, sskChord])) then Continue;
       if not QueryEdgeIndex(slot, APayload, inner) then Continue;
       if FSt[s].Kind = sskGraph then
         for k := 0 to High(inner) do inner[k] := StGraphEdgeInner(slot, inner[k]);
@@ -31751,9 +31952,11 @@ begin
     { getAllSelectedIndices: one entry per data of getAllData -- a graph's
       node and edge data (the same indices, the map is one), a tree's and a
       treemap's 'main' [F2a] }
-    { [F3a] a sankey's too: its node and edge data }
+    { [F3a] a sankey's too: its node and edge data; [F3b] and a chord's
+      (createGraphFromNodeEdge links them) }
     if (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
-      or (FBindings[slot].SeriesType = TySankeySeriesTypeName) then
+      or (FBindings[slot].SeriesType = TySankeySeriesTypeName)
+      or (FBindings[slot].SeriesType = TyChordSeriesTypeName) then
     begin
       dts[0] := 'node';
       dts[1] := 'edge';
@@ -32362,7 +32565,7 @@ begin
   end;
   { the indicator as _createIndicator makes it: at half the item, at 0,
     zrender's default fill; its label at the origin }
-  if FVmAnim = nil then FVmAnim := TTyAnimation.Create;
+  if FVmAnim = nil then FVmAnim := NewAnimDriver;
   FVmIndBag[AIndex] := TTyAnimBag.Create;
   FVmIndBag[AIndex].Animation := FVmAnim;
   FVmIndBag[AIndex].Attr(TyAnimProps([TyAnimProp('x', TyAnimNum(L.ItemW / 2)),
@@ -36097,7 +36300,7 @@ begin
     p := FLegProxies[i];
     if p = nil then
     begin
-      if FLegAnim = nil then FLegAnim := TTyAnimation.Create;
+      if FLegAnim = nil then FLegAnim := NewAnimDriver;
       p := TTyChartAnimProxy.Create(-1, i, 'legend.scroll');
       p.Animation := FLegAnim;
       { THE FIRST RENDER: the content group stands unscrolled }
@@ -40789,6 +40992,35 @@ begin
   Result := FAnimLive and not FAnimContinuous and (AnimAxisProxyCount > 0);
 end;
 
+{ Axis.getMinorTicksCoords, flat: each minor tick with the major interval
+  it subdivides (the count of majors before it, less one) [F3b] }
+function AxisMinorTicks(AAxis: TTyAxis): TTyAxisMinorTickArray;
+var
+  ticks: TTyScaleTickArray;
+  i, n, majors: Integer;
+begin
+  Result := nil;
+  if AAxis = nil then Exit;
+  ticks := TyDrawnTicks(AAxis.Scale);
+  SetLength(Result, Length(ticks));
+  n := 0;
+  majors := 0;
+  for i := 0 to High(ticks) do
+  begin
+    if ticks[i].Level = 0 then
+    begin
+      Inc(majors);
+      Continue;
+    end;
+    Result[n].Value := ticks[i].Value;
+    Result[n].Local := AAxis.DataToLocal(ticks[i].Value);
+    Result[n].Global := AAxis.DataToCoord(ticks[i].Value);
+    Result[n].Interval := majors - 1;
+    Inc(n);
+  end;
+  SetLength(Result, n);
+end;
+
 function TTyAdvanceChart.AxisAnimElementsOf(ABuild: TTyChartBuild; APPI: Integer;
   out AKeys: TTyStringArray; out AAxisKeys: TTyStringArray): TTyAxisAnimElArray;
 var
@@ -40834,6 +41066,21 @@ var
     inp.Horizontal := AAxis.Horizontal;
     inp.Plot := gb.PlotXYWH;
     inp.ByTick := AxisByTick(AAxis);
+    { [F3b] the minor ticks (not on a blank scale), the minor split lines,
+      the split areas, the name }
+    inp.ShowMinorTicks := furn.ShowMinorTick and not AAxis.Scale.Blank;
+    inp.ShowMinorSplitLine := furn.ShowMinorSplitLine;
+    inp.ShowSplitArea := furn.ShowSplitArea;
+    inp.ShowName := True;
+    if not IsNan(furn.MinorTickLengthLogical) then
+      inp.MinorTickLength := furn.MinorTickLengthLogical * scale
+    else
+      inp.MinorTickLength := ActiveController.Metric(TyAdvChartMinorTickLenVar,
+        TyAdvChartMinorTickLen) * scale;
+    inp.MinorTickWidth := PenWidth('TyAdvChartMinorTick');
+    inp.MinorSplitWidth := PenWidth('TyAdvChartMinorSplitLine');
+    if inp.ShowMinorTicks or inp.ShowMinorSplitLine then
+      inp.MinorTicks := AxisMinorTicks(AAxis);
     els := TyAxisAnimElements(spec^, inp);
     akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
     SetLength(all_, n + Length(els));
@@ -41274,6 +41521,8 @@ begin
     end;
     if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]
     else r.ViewKey := 'x:' + IntToStr(si);
+    { the line's last render, init or update [F3b] }
+    r.LineInit := LineHistInit(r.ViewKey);
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
     { its universal transition, read off the old option [Batch 136]: the
@@ -41475,7 +41724,7 @@ begin
     if AnimAllowed then
     begin
       FAnimPending := False;
-      if FAnim = nil then FAnim := TTyAnimation.Create;
+      if FAnim = nil then FAnim := NewAnimDriver;
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }
@@ -41547,6 +41796,7 @@ begin
   FAnimFlush := False;
   if FAnim = nil then Exit;
   FAnim.Update(AnimClock, True);
+  AnimFlushOthers(FAnim);
   FAnimLive := FAnim.ClipCount > 0;
   FAnimContinuous := FAnimLive and AnimLoopOnly;
   AnimArmTimer;
@@ -41554,8 +41804,10 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
-    or CuLive or TlLive)
+  if (((FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
+    or CuLive or TlLive) and not AnimPaused)
+    { [F3b] a force iteration is a timer of its own, which no pause holds }
+    or GraphForceLive)
     and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
@@ -41574,7 +41826,155 @@ end;
 
 procedure TTyAdvanceChart.AnimTimerFired(Sender: TObject);
 begin
+  { [F3b] the force iterations' 16 ms step }
+  if GraphForceLive then
+  begin
+    GraphForceFrame;
+    if not GraphForceLive then AnimArmTimer;
+  end;
   AnimTick(AnimClock);
+end;
+
+{ ==================== the pause [F3b] ====================
+
+  Animation.pause / resume (zrender/src/animation/Animation.ts): the clock a
+  driver steps its clips at is the wall clock less every paused stretch;
+  the frame loop skips update() while paused, and only a flush steps. The
+  chart has one driver upstream; here each part has its own, so they pause
+  together and a flush while paused steps them all. }
+
+function TTyAdvanceChart.NewAnimDriver: TTyAnimation;
+begin
+  Result := TTyAnimation.Create;
+  Result.AdoptPause(FPauseClock);
+end;
+
+function TTyAdvanceChart.AnimDrivers: TFPList;
+
+  procedure Put(A: TTyAnimation);
+  begin
+    if A <> nil then Result.Add(A);
+  end;
+
+begin
+  Result := TFPList.Create;
+  Put(FAnim);
+  Put(FPtrAnim);
+  Put(FLegAnim);
+  Put(FLoadAnim);
+  Put(FGfxAnim);
+  Put(FCuAnim);
+  Put(FTlAnim);
+  Put(FVmAnim);
+end;
+
+procedure TTyAdvanceChart.AnimFlushOthers(AOwn: TTyAnimation);
+var
+  list: TFPList;
+  i: Integer;
+  now_: Double;
+begin
+  if not AnimPaused then Exit;
+  now_ := AnimClock;
+  list := AnimDrivers;
+  try
+    for i := 0 to list.Count - 1 do
+      if TTyAnimation(list[i]) <> AOwn then TTyAnimation(list[i]).Update(now_, True);
+  finally
+    list.Free;
+  end;
+  InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.AnimPause;
+var
+  list: TFPList;
+  i: Integer;
+  now_: Double;
+begin
+  if AnimPaused then Exit;
+  now_ := AnimClock;
+  FPauseClock.Pause(now_);
+  list := AnimDrivers;
+  try
+    for i := 0 to list.Count - 1 do TTyAnimation(list[i]).Pause(now_);
+  finally
+    list.Free;
+  end;
+  AnimArmTimer;
+end;
+
+procedure TTyAdvanceChart.AnimResume;
+var
+  list: TFPList;
+  i: Integer;
+  now_: Double;
+begin
+  if not AnimPaused then Exit;
+  now_ := AnimClock;
+  FPauseClock.Resume(now_);
+  list := AnimDrivers;
+  try
+    for i := 0 to list.Count - 1 do TTyAnimation(list[i]).Resume(now_);
+  finally
+    list.Free;
+  end;
+  AnimArmTimer;
+end;
+
+function TTyAdvanceChart.AnimPaused: Boolean;
+begin
+  Result := (FPauseClock <> nil) and FPauseClock.Paused;
+end;
+
+{ ==================== a line view's history [F3b] ====================
+
+  LineView.render takes its INIT branch when it has no polyline yet (its
+  first render, or the first after remove() -- a legend switched it off),
+  or the coordinate system's type or the step changed; there a step line
+  turns its local points into steps before it saves them as _points and
+  _stackedOnPoints. The next update reads those. }
+
+procedure TTyAdvanceChart.LineHistRoll;
+var
+  hist: TStringList;
+  i, k: Integer;
+  el: TTyChartElement;
+  key, sig, old: string;
+  init: Boolean;
+begin
+  if FPaintList = nil then Exit;
+  hist := TStringList.Create;
+  hist.NameValueSeparator := #1;
+  try
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(i);
+      if not (el.Anim.Role in [carLineRun, carLineArea]) then Continue;
+      key := SeriesViewKey(el.Anim.Series);
+      if hist.IndexOfName(key) >= 0 then Continue;
+      sig := IntToStr(Round(el.Anim.G[7])) + '/' + IntToStr(Round(el.Anim.G[5]) and 8);
+      k := FLineHist.IndexOfName(key);
+      if k >= 0 then old := FLineHist.ValueFromIndex[k] else old := '';
+      init := Copy(old, 1, Length(sig) + 1) <> sig + '|';
+      if init then hist.Add(key + #1 + sig + '|1') else hist.Add(key + #1 + sig + '|0');
+    end;
+    FLineHist.Clear;
+    FLineHist.AddStrings(hist);
+  finally
+    hist.Free;
+  end;
+end;
+
+function TTyAdvanceChart.LineHistInit(const AViewKey: string): Boolean;
+var k: Integer; v: string;
+begin
+  Result := False;
+  if FLineHist = nil then Exit;
+  k := FLineHist.IndexOfName(AViewKey);
+  if k < 0 then Exit;
+  v := FLineHist.ValueFromIndex[k];
+  Result := Copy(v, Length(v), 1) = '1';
 end;
 
 { ==================== the bar race (realtimeSort) [Batch 135] ==================== }
@@ -42046,6 +42446,9 @@ end;
 procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
 var ran, was: Boolean;
 begin
+  { THE LOOP OF A PAUSED ANIMATION steps nothing (`!self._paused &&
+    self.update()`): no clip, no chunk, no frame event [F3b] }
+  if AnimPaused then Exit;
   { ONE FRAME: zrender's clips step, then the chart's _onframe draws its
     chunks, then the flush -- `rendered` once for the frame, and `finished`
     when nothing is left moving or to draw [Batch 119] }
@@ -42315,7 +42718,7 @@ begin
     key := PtrKeyOf(hit.Axis);
     props := PtrProps(hit, at);
     if FPtrProxies = nil then FPtrProxies := TFPList.Create;
-    if FPtrAnim = nil then FPtrAnim := TTyAnimation.Create;
+    if FPtrAnim = nil then FPtrAnim := NewAnimDriver;
     p := nil;
     for k := 0 to FPtrProxies.Count - 1 do
       if TTyChartAnimProxy(FPtrProxies[k]).Role = key then
@@ -45782,6 +46185,7 @@ begin
     FGfxH := h;
     { the flush that steps every new clip at the setOption instant }
     FGfxAnim.Update(AnimClock, True);
+    AnimFlushOthers(FGfxAnim);
     AnimArmTimer;
   end
   { NOT BEFORE THE FIRST RENDER: the size is NaN until then, and comparing
@@ -47452,6 +47856,7 @@ begin
   if CuLive then
   begin
     FCuAnim.Update(AnimClock, True);
+    AnimFlushOthers(FCuAnim);
     AnimArmTimer;
   end;
 end;
@@ -48036,7 +48441,7 @@ begin
   FLoadShown := True;
   if FLoadCfg.ShowSpinner then
   begin
-    if FLoadAnim = nil then FLoadAnim := TTyAnimation.Create;
+    if FLoadAnim = nil then FLoadAnim := NewAnimDriver;
     FLoadArc := TTyAnimBag.Create;
     FLoadArc.Animation := FLoadAnim;
     { the clips start at their first step: the next tick, upstream's next
@@ -48413,7 +48818,7 @@ begin
     TlArmTimer;
     Exit;
   end;
-  if FTlAnim = nil then FTlAnim := TTyAnimation.Create;
+  if FTlAnim = nil then FTlAnim := NewAnimDriver;
   if FTlView = nil then
   begin
     Inc(FTlUidSeq);

@@ -1,0 +1,561 @@
+{
+ "source": "D:/Projects/echarts/dist/echarts.js",
+ "version": "6.1.0",
+ "cases": [
+  {
+   "id": "chord-multiple",
+   "note": "selectedMode multiple: select node 1, then node 3 too, an edge (dataType 'edge', index 0), toggle node 1 off, unselect everything named -- each selectchanged lists the node indices twice, as node and as edge",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "chord",
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       },
+       {
+        "source": "D",
+        "target": "A",
+        "value": 1
+       }
+      ],
+      "selectedMode": "multiple"
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataIndex": 1
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataIndex": 3
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1,
+           3
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           1,
+           3
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataIndex": 3
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataType": "edge",
+      "dataIndex": 0
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataType": "edge",
+        "dataIndex": 0
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1,
+           3,
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           1,
+           3,
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataType": "edge",
+         "dataIndex": 0
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "toggleSelect",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "events": [
+      {
+       "type": "toggleselect",
+       "payload": {
+        "type": "toggleselect",
+        "seriesIndex": 0,
+        "dataIndex": 1
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           3,
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           3,
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "seriesIndex": 0,
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "unselect",
+      "seriesIndex": 0,
+      "dataIndex": [
+       1,
+       3
+      ]
+     },
+     "events": [
+      {
+       "type": "unselect",
+       "payload": {
+        "type": "unselect",
+        "seriesIndex": 0,
+        "dataIndex": [
+         1,
+         3
+        ]
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "unselect",
+        "fromActionPayload": {
+         "type": "unselect",
+         "seriesIndex": 0,
+         "dataIndex": [
+          1,
+          3
+         ]
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "chord-single",
+   "note": "selectedMode single beside a pie: select chord node 2, then node 0 (the first leaves); the pie selects too -- one entry per data of each series",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "chord",
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       },
+       {
+        "source": "D",
+        "target": "A",
+        "value": 1
+       }
+      ],
+      "selectedMode": "single",
+      "center": [
+       "30%",
+       "50%"
+      ],
+      "radius": [
+       "20%",
+       "25%"
+      ]
+     },
+     {
+      "type": "pie",
+      "selectedMode": true,
+      "center": [
+       "75%",
+       "50%"
+      ],
+      "radius": "20%",
+      "data": [
+       {
+        "name": "p",
+        "value": 1
+       },
+       {
+        "name": "q",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataIndex": 2
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 1,
+      "dataIndex": 1
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 1,
+        "dataIndex": 1
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         },
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 1
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 1,
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataIndex": 0
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           0
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         },
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 1
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataIndex": 0
+        },
+        "escapeConnect": true
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "a chord selection is listed as node and as edge",
+   "ok": true
+  },
+  {
+   "name": "an edge selected by an action adds its own index",
+   "ok": true
+  },
+  {
+   "name": "the nodes unselected: the edge is still listed",
+   "ok": true
+  },
+  {
+   "name": "beside a pie: three entries",
+   "ok": true
+  }
+ ]
+}
