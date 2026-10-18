@@ -228,6 +228,11 @@ type
     HdGen: Integer;
     HdSeries, HdRow: Integer;
     HdEdge: Boolean;
+    { [F2b] with HdKind 1: the item's second dispatcher (a gauge's progress
+      arc), a select dispatcher never flagged selected.
+      [F2b] HdKind 15: a row of a large batch -- the row its handler found
+      (HdSeries, HdRow inner): a select dispatcher, no highlight one }
+    HdPeer: Boolean;
     HdName: string;
     HdLegendSeries: Boolean;
   end;
@@ -25483,7 +25488,10 @@ begin
       begin
         Result := SeriesEventTarget(TyChartDatum(d.SeriesIndex, k,
           FStores[slot].GetRawIndex(k)), idx);
-        Result.HdKind := 0;
+        { a select dispatcher, no highlight one [F2b] }
+        Result.HdKind := 15;
+        Result.HdSeries := d.SeriesIndex;
+        Result.HdRow := k;
       end;
       Exit;
     end;
@@ -32652,7 +32660,9 @@ var
   selected: Boolean;
   p: string;
 begin
-  if not (ATarget.HdKind in [1, 3]) then Exit;
+  { [F2b] a large batch's row too: its ECData carries the row its handler
+    found (BarView largePathUpdateDataIndex, LargeSymbolDraw) }
+  if not (ATarget.HdKind in [1, 3, 15]) then Exit;
   s := ATarget.HdSeries;
   slot := SlotOfSeries(s);
   if slot < 0 then Exit;
