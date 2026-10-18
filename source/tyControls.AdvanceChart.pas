@@ -292,6 +292,9 @@ type
 const
   { [Batch 152] a roam host index past this is a map series group's geo }
   cMapRoamBase = 1000000;
+  { [F4a] a break area's axis key past this is a singleAxis (the index
+    after it); below it a grid's (grid * 1000 + axis) }
+  cBreakSingleKey = 900000;
 
 type
   { [Batch 152, D14 GE4] A MAP_SERIES_GROUP: the map series on one geo
@@ -6698,6 +6701,13 @@ var g, a: Integer;
 begin
   Result := nil;
   AGrid := nil;
+  { a singleAxis [F4a]: cBreakSingleKey + its index, no grid }
+  if AAxisKey >= cBreakSingleKey then
+  begin
+    a := AAxisKey - cBreakSingleKey;
+    if (a <= High(FSingles)) and (FSingles[a] <> nil) then Result := FSingles[a].Axis;
+    Exit;
+  end;
   if FBuild = nil then Exit;
   g := AAxisKey div 1000;
   a := AAxisKey mod 1000;
@@ -6768,6 +6778,24 @@ begin
   Result := False;
   AAxisKey := -1;
   AArea := -1;
+  { THE SINGLES' first: drawn after the grids' [F4a] }
+  for a := High(FSingles) downto 0 do
+  begin
+    if (FSingles[a] = nil) or (Length(FSingles[a].View.Spec.BreakAreas) = 0) then Continue;
+    axo := FSingles[a].Axis;
+    opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
+    if not opt.ExpandOnClick then Continue;
+    spec := @FSingles[a].View.Spec;
+    for q := High(spec^.BreakAreas) downto 0 do
+      if (spec^.BreakAreas[q].HasB and InPolygon(spec^.BreakAreas[q].A, spec^.BreakAreas[q].B))
+        or NearLine(spec^.BreakAreas[q].A)
+        or (spec^.BreakAreas[q].HasB and NearLine(spec^.BreakAreas[q].B)) then
+      begin
+        AAxisKey := cBreakSingleKey + a;
+        AArea := q;
+        Exit(True);
+      end;
+  end;
   if FBuild = nil then Exit;
   { the x axes' areas are drawn over the y axes' (their views render
     later): asked first }
@@ -6806,7 +6834,10 @@ var
 begin
   ax := BreakAxisOf(AAxisKey, gb);
   if ax = nil then Exit;
-  spec := gb.SpecFor(ax);
+  if AAxisKey >= cBreakSingleKey then
+    spec := @FSingles[AAxisKey - cBreakSingleKey].View.Spec
+  else
+    spec := gb.SpecFor(ax);
   if (spec = nil) or (AArea < 0) or (AArea > High(spec^.BreakAreas)) then Exit;
   BreakExpandClick(AAxisKey, spec^.BreakAreas[AArea].BreakIndex);
 end;
@@ -6832,7 +6863,7 @@ var
   t, evBreaks, payloadJson: string;
   m: Integer;
   idx: TTyIntegerArray;
-  mains: array[0..1] of string;
+  mains: array[0..2] of string;
   i, k, j: Integer;
   node, bo, inp: TJSONObject;
   arr, inputs: TJSONData;
@@ -6927,8 +6958,10 @@ begin
   evBreaks := '';
   mains[0] := 'xAxis';
   mains[1] := 'yAxis';
+  { and the singles' [F4a] }
+  mains[2] := 'singleAxis';
   inputs := APayload.Find('breaks');
-  for m := 0 to 1 do
+  for m := 0 to 2 do
   begin
     idx := Query(mains[m]);
     for i := 0 to High(idx) do
@@ -6984,16 +7017,37 @@ end;
 
 procedure TTyAdvanceChart.PaintBreakAreas(APainter: TTyPainter);
 var
-  pass, g, a, q, i: Integer;
+  pass, g, a, si: Integer;
   gb: TTyGridBuild;
   axo: TTyAxis;
   spec: PTyAxisLayoutSpec;
+  prox_: Boolean;
+  pa, pb, pc: TTyBreakPointArray;
   opt: TTyBreakAreaOpt;
   st: TTyStyleSet;
   stroke, fill: TTyColor;
   cc: TTyChartColor;
   lw, op: Double;
   hasStroke, hasFill: Boolean;
+
+  { A BREAK LEAF IN ITS groupTransition [F4a]: its points where the axis
+    proxy of its anid has them now, while the axes move }
+  function Prox(const AAnid: string; const ADef: TTyBreakPointArray): TTyBreakPointArray;
+  var
+    p: TTyChartAnimProxy;
+    v: TTyAnimValue;
+    z: Integer;
+  begin
+    Result := ADef;
+    if not prox_ then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(axo.MainType + IntToStr(axo.ComponentIndex), AAnid));
+    if p = nil then Exit;
+    v := p.GetAnimProp('shape.points');
+    if (v.Kind <> avkArray) or (v.Stride <> 2) then Exit;
+    SetLength(Result, Length(v.Arr) div 2);
+    for z := 0 to High(Result) do
+      Result[z] := TyPointF(v.Arr[2 * z], v.Arr[2 * z + 1]);
+  end;
 
   procedure Line(const P: TTyBreakPointArray);
   var z: Integer;
@@ -7007,71 +7061,97 @@ var
     APainter.SetLineDash([]);
   end;
 
-begin
-  if (FBuild = nil) or (FOption = nil) then Exit;
-  st := ActiveController.Model.ResolveStyle('TyAdvChartBreakArea', '', []);
-  { the y axes' views first, as upstream renders them }
-  for pass := 0 to 1 do
-    for g := 0 to FBuild.GridCount - 1 do
+  procedure Areas;
+  var q, i: Integer;
+  begin
+    opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
+    { THE SKIN'S COLOURS unless the option writes its own; the skin's fill
+      carries its opacity, an author's colour takes the option's (0.6
+      unless written) }
+    hasStroke := tpBorderColor in st.Present;
+    stroke := st.BorderColor;
+    if opt.HasBorderColor and TyTryParseChartColor(opt.BorderColor, cc) then
     begin
-      gb := FBuild.Grid(g);
-      for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+      stroke := TTyColor(cc);
+      hasStroke := True;
+    end;
+    if not IsNan(opt.BorderWidth) then lw := opt.BorderWidth
+    else if tpBorderWidth in st.Present then lw := st.BorderWidth
+    else lw := 1;
+    if lw <= 0 then hasStroke := False;
+    hasFill := tpBackground in st.Present;
+    fill := st.Background.Color;
+    op := opt.Opacity;
+    if opt.HasColor and TyTryParseChartColor(opt.Color, cc) then
+    begin
+      fill := TTyColor(cc);
+      hasFill := True;
+      if IsNan(op) then op := 0.6;
+    end;
+    if not IsNan(op) then
+    begin
+      if op < 0 then op := 0;
+      if op > 1 then op := 1;
+      fill := TTyColor((Cardinal(fill) and $00FFFFFF)
+        or (Cardinal(Round(((Cardinal(fill) shr 24) and $FF) * op)) shl 24));
+    end;
+    for q := 0 to High(spec^.BreakAreas) do
+    begin
+      pa := Prox('break_a_' + spec^.BreakAreas[q].Id, spec^.BreakAreas[q].A);
+      Line(pa);
+      if not spec^.BreakAreas[q].HasB then Continue;
+      pb := Prox('break_b_' + spec^.BreakAreas[q].Id, spec^.BreakAreas[q].B);
+      Line(pb);
+      { from A's end back along B: the band between them -- the polygon's
+        own points while it moves }
+      pc := nil;
+      SetLength(pc, Length(spec^.BreakAreas[q].A) + Length(spec^.BreakAreas[q].B));
+      for i := 0 to High(spec^.BreakAreas[q].A) do pc[i] := spec^.BreakAreas[q].A[i];
+      for i := 0 to High(spec^.BreakAreas[q].B) do
+        pc[Length(spec^.BreakAreas[q].A) + i] :=
+          spec^.BreakAreas[q].B[High(spec^.BreakAreas[q].B) - i];
+      pc := Prox('break_c_' + spec^.BreakAreas[q].Id, pc);
+      if hasFill and (Length(pc) > 0) then
       begin
-        if (pass = 0) <> (a >= gb.XAxisCount) then Continue;
-        if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
-        if axo = nil then Continue;
-        spec := gb.SpecFor(axo);
-        if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
-        opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
-        { THE SKIN'S COLOURS unless the option writes its own; the skin's fill
-          carries its opacity, an author's colour takes the option's (0.6
-          unless written) }
-        hasStroke := tpBorderColor in st.Present;
-        stroke := st.BorderColor;
-        if opt.HasBorderColor and TyTryParseChartColor(opt.BorderColor, cc) then
-        begin
-          stroke := TTyColor(cc);
-          hasStroke := True;
-        end;
-        if not IsNan(opt.BorderWidth) then lw := opt.BorderWidth
-        else if tpBorderWidth in st.Present then lw := st.BorderWidth
-        else lw := 1;
-        if lw <= 0 then hasStroke := False;
-        hasFill := tpBackground in st.Present;
-        fill := st.Background.Color;
-        op := opt.Opacity;
-        if opt.HasColor and TyTryParseChartColor(opt.Color, cc) then
-        begin
-          fill := TTyColor(cc);
-          hasFill := True;
-          if IsNan(op) then op := 0.6;
-        end;
-        if not IsNan(op) then
-        begin
-          if op < 0 then op := 0;
-          if op > 1 then op := 1;
-          fill := TTyColor((Cardinal(fill) and $00FFFFFF)
-            or (Cardinal(Round(((Cardinal(fill) shr 24) and $FF) * op)) shl 24));
-        end;
-        for q := 0 to High(spec^.BreakAreas) do
-        begin
-          Line(spec^.BreakAreas[q].A);
-          if not spec^.BreakAreas[q].HasB then Continue;
-          Line(spec^.BreakAreas[q].B);
-          if hasFill and (Length(spec^.BreakAreas[q].A) > 0) then
-          begin
-            { from A's end back along B: the band between them }
-            APainter.BeginPath;
-            APainter.MoveTo(spec^.BreakAreas[q].A[0].X, spec^.BreakAreas[q].A[0].Y);
-            for i := 1 to High(spec^.BreakAreas[q].A) do
-              APainter.LineTo(spec^.BreakAreas[q].A[i].X, spec^.BreakAreas[q].A[i].Y);
-            for i := High(spec^.BreakAreas[q].B) downto 0 do
-              APainter.LineTo(spec^.BreakAreas[q].B[i].X, spec^.BreakAreas[q].B[i].Y);
-            APainter.FillPath(fill);
-          end;
-        end;
+        APainter.BeginPath;
+        APainter.MoveTo(pc[0].X, pc[0].Y);
+        for i := 1 to High(pc) do APainter.LineTo(pc[i].X, pc[i].Y);
+        APainter.FillPath(fill);
       end;
     end;
+  end;
+
+begin
+  if FOption = nil then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartBreakArea', '', []);
+  { the grids' break leaves from their proxies while the axes move }
+  prox_ := AxesDynamic and not FExporting;
+  { the y axes' views first, as upstream renders them }
+  if FBuild <> nil then
+    for pass := 0 to 1 do
+      for g := 0 to FBuild.GridCount - 1 do
+      begin
+        gb := FBuild.Grid(g);
+        for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+        begin
+          if (pass = 0) <> (a >= gb.XAxisCount) then Continue;
+          if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
+          if axo = nil then Continue;
+          spec := gb.SpecFor(axo);
+          if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
+          Areas;
+        end;
+      end;
+  { the singles' [F4a]: in the view's group, out of the groupTransition }
+  prox_ := False;
+  for si := 0 to High(FSingles) do
+  begin
+    if FSingles[si] = nil then Continue;
+    axo := FSingles[si].Axis;
+    spec := @FSingles[si].View.Spec;
+    if Length(spec^.BreakAreas) = 0 then Continue;
+    Areas;
+  end;
 end;
 
 { ==================== paint ==================== }
@@ -7896,8 +7976,10 @@ begin
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
   PaintSeries(APainter, AMeasurer, APPI);
-  { THE BREAK AREAS, zigzagZ over the series [Batch 132] }
-  PaintBreakAreas(APainter);
+  { THE BREAK AREAS, zigzagZ over the series [Batch 132] -- the dynamic
+    layer's while the series move there, over them and in their axes'
+    groupTransition [F4a] }
+  if FExporting or not FAnimLive or FAnimContinuous then PaintBreakAreas(APainter);
   { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
     2 [Batch 128] }
   PaintParallels(APainter, APPI, AMeasurer);
@@ -16535,8 +16617,22 @@ begin
       and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
     begin
       APainter.BeginPath;
-      APainter.MoveTo(v.Line.X1, v.Line.Y1);
-      APainter.LineTo(v.Line.X2, v.Line.Y2);
+      { cut at the breaks: a segment between each two [F4a] }
+      if sp.HasBreakLine then
+      begin
+        for q := 0 to High(sp.BreakLineSegs) do
+          if Finite(sp.BreakLineSegs[q].X1, sp.BreakLineSegs[q].Y1)
+            and Finite(sp.BreakLineSegs[q].X2, sp.BreakLineSegs[q].Y2) then
+          begin
+            APainter.MoveTo(sp.BreakLineSegs[q].X1, sp.BreakLineSegs[q].Y1);
+            APainter.LineTo(sp.BreakLineSegs[q].X2, sp.BreakLineSegs[q].Y2);
+          end;
+      end
+      else
+      begin
+        APainter.MoveTo(v.Line.X1, v.Line.Y1);
+        APainter.LineTo(v.Line.X2, v.Line.Y2);
+      end;
       APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
       for q := 0 to High(sp.Arrows) do
         if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
@@ -26230,6 +26326,14 @@ begin
         { A BREAK'S LABEL expands its break on a click [Batch 132] }
         if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
         begin
+          { eventData.break: the break's start and end [F4a] }
+          if spec^.LabelBreakKind[q] = 1 then Result.Params.BreakType := 'start'
+          else Result.Params.BreakType := 'end';
+          if q <= High(spec^.LabelBreakLo) then
+          begin
+            Result.Params.BreakStart := spec^.LabelBreakLo[q];
+            Result.Params.BreakEnd := spec^.LabelBreakHi[q];
+          end;
           Result.HdKind := 13;
           Result.HdSeries := g * 1000 + a;
           Result.HdRow := spec^.LabelBreakIndex[q];
@@ -26240,8 +26344,12 @@ begin
           Result.Params.DataIndex := Round(TTyOrdinalScale(axObj.Scale).TickToOrdinal(spec^.TickValues[q]));
           Result.Params.RawDataIndex := Result.Params.DataIndex;
         end
+        { eventData.value is the label's rawLabel: scale.getLabel(tick),
+          grouped as the label is [F4a] }
+        else if axObj.Scale is TTyTimeScale then
+          Result.Params.ValueText := TTyTimeScale(axObj.Scale).GetLabel(spec^.TickValues[q])
         else
-          Result.Params.ValueText := TyChartValueText(spec^.TickValues[q]);
+          Result.Params.ValueText := TyAxisTickLabel(axObj, spec^.TickValues[q], False, '');
         Exit;
       end;
       Result.Model := Default(TTyEventModel);
@@ -39341,8 +39449,10 @@ begin
       q := TTyChartAnimProxy(oldMap.Find(newKeys[i]));
       if q <> nil then
         for k := 0 to High(from) do
-          if q.GetAnimProp(from[k].Key).Kind = avkNumber then
-            from[k].Value := q.GetAnimProp(from[k].Key);
+          { a break leaf's points too: getAnimatableProps clones the shape
+            as it is now [F4a] }
+          if q.GetAnimProp(from[k].Key).Kind in [avkNumber, avkArray] then
+            from[k].Value := TyAnimClone(q.GetAnimProp(from[k].Key));
       p.Attr(from);
       p.SetFinal(props);
       { updateProps on the axis model, at no data index }
@@ -41075,6 +41185,8 @@ begin
       layer draws them [Batch 96] }
     if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
     TyRenderPaintList(APainter, AnimFrame);
+    { the break areas over the series in motion [F4a] }
+    PaintBreakAreas(APainter);
     { the parallel axes over the lines in motion [Batch 128] }
     PaintParallels(APainter, APPI, AMeasurer);
     PaintTitles(APainter);

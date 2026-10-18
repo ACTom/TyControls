@@ -374,6 +374,14 @@ procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   cache and the chart's random numbers. }
 procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
   AMemory: TTyAxisMemoryStore);
+{ [F4a] one axis' break areas into ASpec, across ARect (a grid's plot, a
+  singleAxis' rect): rectCoordBuildBreakAxis for any coordinate system }
+procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore);
+{ [F4a] buildAxisBreakLine into ASpec: the axis line cut at the breaks'
+  clamped ends, the ends snapped for a line ALineWidthPx wide }
+procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  AOption: TTyChartOption; ALineWidthPx: Double);
 
 { ---- the finishing touches [Batch 101] ---- }
 
@@ -1143,13 +1151,19 @@ begin
     (createScaleByModel's coordSysSupportAxisBreaks), parsed through the
     scale's parse and wrapped round its mapper -- only when one survives
     the parse, as upstream mounts the break mapper only then. A category
-    axis ignores them. (A log axis takes them upstream; not here yet.) }
-  if ((AMainType = 'xAxis') or (AMainType = 'yAxis'))
-    and (t in [atValue, atTime]) and TyAxisBreaksWritten(nd) then
+    axis ignores them. [F4a: a log axis takes them -- parsed with
+    noNegative, into LogScale's two stubs -- and so does a singleAxis.] }
+  if ((AMainType = 'xAxis') or (AMainType = 'yAxis') or (AMainType = 'singleAxis'))
+    and (t in [atValue, atTime, atLog]) and TyAxisBreaksWritten(nd) then
   begin
-    brks := TyParseAxisBreaks(nd.Find('breaks'), t = atTime);
+    brks := TyParseAxisBreaks(nd.Find('breaks'), t = atTime, t = atLog);
     if Length(brks) > 0 then
-      a.Scale.Mapper := TTyBreakScaleMapper.Create(a.Scale.Mapper, brks);
+    begin
+      if t = atLog then
+        a.Scale.Mapper := TTyLogBreakScaleMapper.Create(a.Scale.Mapper, brks)
+      else
+        a.Scale.Mapper := TTyBreakScaleMapper.Create(a.Scale.Mapper, brks);
+    end;
   end;
   a.MainType := AMainType;
   a.ComponentIndex := AIndex;
@@ -1646,13 +1660,43 @@ begin
   end;
 end;
 
-function TyAxisTickLabelAt(AAxis: TTyAxis; AValue: Double; AIndex: Integer;
-  AHasFormatter: Boolean; const AFormatter: string): string;
+{ [F4a] makeAxisLabelFormatterParamBreak: a break end's tick hands the
+  formatter its break -- the type 'start' or 'end', the start vmin and the
+  end vmax }
+procedure AxisLabelParamsBreak(var AParams: TTyChartCallbackParams;
+  const ATick: TTyScaleTick);
+begin
+  case ATick.BreakKind of
+    btkVMin: AParams.BreakType := 'start';
+    btkVMax: AParams.BreakType := 'end';
+  else
+    Exit;
+  end;
+  AParams.BreakStart := ATick.BreakVMin;
+  AParams.BreakEnd := ATick.BreakVMax;
+end;
+
+function TyAxisTickLabelAt(AAxis: TTyAxis; const ATick: TTyScaleTick; AIndex: Integer;
+  AHasFormatter: Boolean; const AFormatter: string): string; overload;
+var prm: TTyChartCallbackParams;
 begin
   if AHasFormatter and TyChartIsHandlerRef(AFormatter) then
-    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(AxisLabelParams(AAxis,
-      AValue, AIndex, TyAxisTickLabel(AAxis, AValue, False, ''), False, 0))));
-  Result := TyAxisTickLabel(AAxis, AValue, AHasFormatter, AFormatter);
+  begin
+    prm := AxisLabelParams(AAxis, ATick.Value, AIndex,
+      TyAxisTickLabel(AAxis, ATick.Value, False, ''), False, 0);
+    AxisLabelParamsBreak(prm, ATick);
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(prm)));
+  end;
+  Result := TyAxisTickLabel(AAxis, ATick.Value, AHasFormatter, AFormatter);
+end;
+
+function TyAxisTickLabelAt(AAxis: TTyAxis; AValue: Double; AIndex: Integer;
+  AHasFormatter: Boolean; const AFormatter: string): string; overload;
+var tick: TTyScaleTick;
+begin
+  tick := Default(TTyScaleTick);
+  tick.Value := AValue;
+  Result := TyAxisTickLabelAt(AAxis, tick, AIndex, AHasFormatter, AFormatter);
 end;
 
 function TyAxisTickLabel(AAxis: TTyAxis; AValue: Double;
@@ -2706,13 +2750,8 @@ begin
   Result := @FRandomState;
 end;
 
-procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  AMemory: TTyAxisMemoryStore);
-var
-  pass, g, i, cnt, idx, n, comp, maxComp: Integer;
-  gb: TTyGridBuild;
-
-  procedure One(AGrid: TTyGridBuild; AAxis: TTyAxis);
+procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore);
   var
     spec: PTyAxisLayoutSpec;
     opt: TTyBreakAreaOpt;
@@ -2728,8 +2767,7 @@ var
     geom: TTyBreakAreaGeom;
     a, b: TTyBreakPointArray;
   begin
-    spec := AGrid.SpecFor(AAxis);
-    if spec = nil then Exit;
+    spec := @ASpec;
     spec^.BreakAreas := nil;
     if (AAxis.Scale.BreakMapper = nil) or not AAxis.Visible
       or AAxis.Scale.Blank then Exit;
@@ -2746,7 +2784,7 @@ var
     if m = 0 then Exit;
     if AMemory = nil then Exit;
     mem := AMemory.Find(AAxis.MainType + IntToStr(AAxis.ComponentIndex), True);
-    rect := AGrid.PlotXYWH;
+    rect := ARect;
     if AAxis.Horizontal then
     begin
       zMin := rect.Y;
@@ -2803,6 +2841,60 @@ var
     { the cache: what this render drew from, and nothing else }
     mem^.BreakIds := ids;
     mem^.BreakRands := rands;
+  end;
+
+{ buildAxisBreakLine [Batch 132; F4a: any axis with a frame] }
+procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  AOption: TTyChartOption; ALineWidthPx: Double);
+  var
+    brkTicks: TTyScaleTickArray;
+    pairs: array of TTyRange;
+    ids: TTyStringArray;
+    brks: TTyAxisBreakArray;
+    q, n: Integer;
+    lw: Double;
+  begin
+    ASpec.HasBreakLine := False;
+    ASpec.BreakLineSegs := nil;
+    if (AAxis = nil) or (AAxis.Scale.BreakMapper = nil) or not ASpec.HasNameFrame then Exit;
+    { hasBreaks(scale) reads the scale's own break mapper: a log axis keeps
+      its breaks in its stubs, and its line is never cut [F4a] }
+    if Supports(AAxis.Scale.Mapper, ITyLogBreakScaleMapper) then Exit;
+    if not TyAxisBreakLineOn(ObjOf(AOption.ComponentAt(AAxis.MainType,
+      AAxis.ComponentIndex))) then Exit;
+    ASpec.HasBreakLine := True;
+    brks := AAxis.Scale.BreakMapper.BreakList;
+    { the break pairs: getTicks({breakTicks: 'only_break'}) }
+    brkTicks := AAxis.Scale.GetTicksOpt(TyTicksOpt(tbmOnly, tpmAuto));
+    pairs := nil;
+    ids := nil;
+    n := 0;
+    for q := 0 to High(brkTicks) do
+      if brkTicks[q].BreakKind = btkVMin then
+      begin
+        SetLength(pairs, n + 1);
+        SetLength(ids, n + 1);
+        pairs[n].Start := AAxis.DataToLocal(brkTicks[q].BreakVMin, True);
+        pairs[n].Stop := AAxis.DataToLocal(brkTicks[q].BreakVMax, True);
+        ids[n] := brks[brkTicks[q].BreakIndex].Id;
+        Inc(n);
+      end;
+    lw := ALineWidthPx;
+    ASpec.BreakLineSegs := TyAxisBreakLineSegs(ASpec.NameFrame, pairs, ids, lw);
+  end;
+
+procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
+  AMemory: TTyAxisMemoryStore);
+var
+  pass, g, i, cnt, idx, n, comp, maxComp: Integer;
+  gb: TTyGridBuild;
+
+  procedure One(AGrid: TTyGridBuild; AAxis: TTyAxis);
+  var spec: PTyAxisLayoutSpec;
+  begin
+    spec := AGrid.SpecFor(AAxis);
+    if spec = nil then Exit;
+    TyLayoutAxisBreakAreas(spec^, AAxis, AGrid.PlotXYWH, AOption, AMemory);
   end;
 
 begin
@@ -3274,6 +3366,7 @@ var
   tfmt: TTyTimeLabelFormatter;
   cv: TTyDoubleArray;
   v: Double;
+  prm: TTyChartCallbackParams;
 begin
   ASpec := Default(TTyAxisLayoutSpec);
   ASpec.Side := AAxis.Side;
@@ -3429,6 +3522,8 @@ begin
   begin
     SetLength(ASpec.LabelBreakKind, Length(ticks));
     SetLength(ASpec.LabelBreakIndex, Length(ticks));
+    SetLength(ASpec.LabelBreakLo, Length(ticks));
+    SetLength(ASpec.LabelBreakHi, Length(ticks));
   end;
   SetLength(ASpec.Labels, Length(ticks));
   SetLength(ASpec.Positions, Length(ticks));
@@ -3458,10 +3553,14 @@ begin
         `{primary|Feb}` among the days, where nobody wrote a unit.
         [Batch 104] }
       if tfmt.Kind = tfkHandler then
+      begin
+        { leveledFormat's extra: the level, and a break end's break [F4a] }
+        prm := AxisLabelParams(AAxis, ticks[q].Value, q, '', True, ticks[q].TimeLevel);
+        AxisLabelParamsBreak(prm, ticks[q]);
         ASpec.Labels[kept] := TyFormatTime(ticks[q].Value,
-          TyChartRunHandler(tfmt.Template, TyChartOneParams(
-            AxisLabelParams(AAxis, ticks[q].Value, q, '', True,
-            ticks[q].TimeLevel))), TTyTimeScale(AAxis.Scale).UTC)
+          TyChartRunHandler(tfmt.Template, TyChartOneParams(prm)),
+          TTyTimeScale(AAxis.Scale).UTC);
+      end
       { a break's end reads the dictionary at the unit it ends at under the
         coarsest unit the break crosses [Batch 132] }
       else if (ticks[q].BreakKind <> btkNone) and (tfmt.Kind = tfkDict) then
@@ -3484,7 +3583,7 @@ begin
         '1,400,000', '0.0000001', '1e+21' -- and the one routine the paint
         pass calls too, so the width measured here is the width of the string
         drawn. Locale-free: no FormatFloat anywhere on the way. }
-      ASpec.Labels[kept] := TyAxisTickLabelAt(AAxis, ticks[q].Value, q,
+      ASpec.Labels[kept] := TyAxisTickLabelAt(AAxis, ticks[q], q,
         AFurn.HasLabelFormatter, AFurn.LabelFormatter);
     { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
       renderer cannot disagree about where a label goes. }
@@ -3501,6 +3600,8 @@ begin
     begin
       ASpec.LabelBreakKind[kept] := Ord(ticks[q].BreakKind);
       ASpec.LabelBreakIndex[kept] := ticks[q].BreakIndex;
+      ASpec.LabelBreakLo[kept] := ticks[q].BreakVMin;
+      ASpec.LabelBreakHi[kept] := ticks[q].BreakVMax;
     end;
     { on the raw rect, which is what the estimate lays out on; the final
       pass takes them again once the rect is final }
@@ -3528,6 +3629,8 @@ begin
   begin
     SetLength(ASpec.LabelBreakKind, kept);
     SetLength(ASpec.LabelBreakIndex, kept);
+    SetLength(ASpec.LabelBreakLo, kept);
+    SetLength(ASpec.LabelBreakHi, kept);
   end;
   { axisLabel.customValues [Batch 110]: createAxisLabels' first branch --
     the values listed, in the extent, deduplicated and ascending, each a
@@ -3541,6 +3644,8 @@ begin
     { a custom label is no break's end }
     ASpec.LabelBreakKind := nil;
     ASpec.LabelBreakIndex := nil;
+    ASpec.LabelBreakLo := nil;
+    ASpec.LabelBreakHi := nil;
     if ASpec.LabelKind = lakCategory then
     begin
       ASpec.CatLabels := Copy(ASpec.Labels);
@@ -3674,41 +3779,13 @@ var
   { buildAxisBreakLine: the breaks' ends in the axis' own frame (clamped),
     the line between them in segments [Batch 132] }
   procedure BreakLine(AAxis: TTyAxis; var ASpec: TTyAxisLayoutSpec);
-  var
-    brkTicks: TTyScaleTickArray;
-    pairs: array of TTyRange;
-    ids: TTyStringArray;
-    brks: TTyAxisBreakArray;
-    q, n: Integer;
-    lw: Double;
+  var lw: Double;
   begin
-    ASpec.HasBreakLine := False;
-    ASpec.BreakLineSegs := nil;
-    if (AAxis = nil) or (AAxis.Scale.BreakMapper = nil) or not ASpec.HasNameFrame then Exit;
-    if not TyAxisBreakLineOn(ObjOf(AOption.ComponentAt(AAxis.MainType,
-      AAxis.ComponentIndex))) then Exit;
-    ASpec.HasBreakLine := True;
-    brks := AAxis.Scale.BreakMapper.BreakList;
-    { the break pairs: getTicks({breakTicks: 'only_break'}) }
-    brkTicks := AAxis.Scale.GetTicksOpt(TyTicksOpt(tbmOnly, tpmAuto));
-    pairs := nil;
-    ids := nil;
-    n := 0;
-    for q := 0 to High(brkTicks) do
-      if brkTicks[q].BreakKind = btkVMin then
-      begin
-        SetLength(pairs, n + 1);
-        SetLength(ids, n + 1);
-        pairs[n].Start := AAxis.DataToLocal(brkTicks[q].BreakVMin, True);
-        pairs[n].Stop := AAxis.DataToLocal(brkTicks[q].BreakVMax, True);
-        ids[n] := brks[brkTicks[q].BreakIndex].Id;
-        Inc(n);
-      end;
     { the axis line's own width, the skin's: the ends are snapped as it is }
     lw := AText.AxisLineWidthLogical;
     if lw <= 0 then lw := 1;
     lw := AxisScaleF(lw, APPI);
-    ASpec.BreakLineSegs := TyAxisBreakLineSegs(ASpec.NameFrame, pairs, ids, lw);
+    TyAxisBreakLineOf(ASpec, AAxis, AOption, lw);
   end;
 
   { THE FURNITURE ON THE FINAL RECT. A category axis' tick marks, split
