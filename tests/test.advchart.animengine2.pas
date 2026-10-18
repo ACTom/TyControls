@@ -111,8 +111,8 @@ end;
 
 function SameBits(A, B: Double): Boolean;
 begin
-  Result := (HexOf(A) = HexOf(B)) or (IsNan(A) and IsNan(B))
-    or ((A = 0) and (B = 0));
+  if IsNan(A) or IsNan(B) then Exit(IsNan(A) and IsNan(B));
+  Result := (HexOf(A) = HexOf(B)) or ((A = 0) and (B = 0));
 end;
 
 function IsNull(AData: TJSONData): Boolean;

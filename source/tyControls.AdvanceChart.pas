@@ -1441,6 +1441,11 @@ type
     { THE PAUSE [F3b]: a driver with no clips that is paused and resumed
       with the chart's -- a driver made later takes its pause from it }
     FPauseClock: TTyAnimation;
+    { LineView's init branch, per line view of the last render [F3b]:
+      'viewKey #1 step/polar|init' -- rolled once per render, at the first
+      list built after a relayout }
+    FLineHist: TStringList;
+    FLineHistDue: Boolean;
     FAnimMode: TTyChartAnimationMode;
     FAnimPending: Boolean;
     FAnimLive: Boolean;
@@ -1691,6 +1696,11 @@ type
     procedure AnimTickBody(ANowMs: Double);
     { a driver that takes the chart's pause [F3b] }
     function NewAnimDriver: TTyAnimation;
+    { the line views of the list just built: whether each took LineView's
+      init branch -- no view of its key in the render before, or one of
+      another step or coordinate system [F3b] }
+    procedure LineHistRoll;
+    function LineHistInit(const AViewKey: string): Boolean;
     { every driver of the chart, the nil ones left out }
     function AnimDrivers: TFPList;
     { a flush while paused steps every driver, as upstream's one animation
@@ -4500,6 +4510,8 @@ begin
   FAnimMode := camAuto;
   FProgStepCost := NaN;
   FPauseClock := TTyAnimation.Create;
+  FLineHist := TStringList.Create;
+  FLineHist.NameValueSeparator := #1;
   FGfxAnim := NewAnimDriver;
   FGfxView := TTyGfxView.Create;
   FGfxView.Animation := FGfxAnim;
@@ -4607,6 +4619,7 @@ begin
   { after the custom views, whose elements' animators it drives [Batch 124] }
   FreeAndNil(FCuAnim);
   FreeAndNil(FPauseClock);
+  FreeAndNil(FLineHist);
   FreeAndNil(FGfxUnder);
   inherited Destroy;
 end;
@@ -6810,6 +6823,8 @@ begin
   { a new option's data: the pieces the old one still named go with it
     [milestone D5-D8] }
   if FAnimPending and not FAnimFull then FUtStale := nil;
+  { a render: the next list rolls the lines' history [F3b] }
+  if not FStreamRelayout and not FExporting then FLineHistDue := True;
   Rebuild;
   { THE PIPELINES, from the counts the filters left -- before the bars ask
     which of them are large [Batch 119] }
@@ -7409,6 +7424,10 @@ var
   areaFill: TTyFill;
   inkStyle: TTyStyleSet;
   view: TTyChartView;
+  { [F3b] the proxied areas, minor ticks and name }
+  areaR: TRect;
+  majors: Integer;
+  nx, ny, nrot: Double;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -7598,6 +7617,32 @@ var
     Result := True;
   end;
 
+  { ... a split area's rect [F3b] }
+  function ProxArea(const AAnid: string; out ARect: TRect): Boolean;
+  var p: TTyChartAnimProxy;
+  begin
+    Result := False;
+    if not AProxied then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(akey, AAnid));
+    if p = nil then Exit;
+    ARect := Rect(Round(p.Num('shape.x')), Round(p.Num('shape.y')),
+      Round(p.Num('shape.x') + p.Num('shape.width')),
+      Round(p.Num('shape.y') + p.Num('shape.height')));
+    Result := True;
+  end;
+
+  { ... the name's anchor and turn [F3b] }
+  procedure ProxName(var AX, AY, ARot: Double);
+  var p: TTyChartAnimProxy;
+  begin
+    if not AProxied then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(akey, 'name'));
+    if p = nil then Exit;
+    AX := p.Num('x');
+    AY := p.Num('y');
+    ARot := p.Num('rotation');
+  end;
+
   { ... and a label's anchor }
   procedure ProxLabel(AIndex: Integer; var AX, AY: Double);
   var p: TTyChartAnimProxy;
@@ -7759,7 +7804,10 @@ begin
         Continue;
       bandLo := spec^.SplitAreaMarks[i].Coord;
       bandHi := spec^.SplitAreaMarks[i + 1].Coord;
-      if horiz then
+      { where its groupTransition has it now [F3b] }
+      if ProxArea('area_' + TyJsNumberToString(spec^.SplitAreaMarks[i].Value), areaR) then
+        APainter.FillBackground(areaR, areaFill, 0)
+      else if horiz then
         APainter.FillBackground(
           Rect(Round(bandLo), Round(APlot.Top),
                Round(bandHi), Round(APlot.Bottom)), areaFill, 0)
@@ -7780,6 +7828,8 @@ begin
     for i := 0 to High(scaleTicks) do
     begin
       if scaleTicks[i].Level = 0 then Continue;
+      { [F3b] }
+      if ProxLine('minor_line_' + TyJsNumberToString(scaleTicks[i].Value)) then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
         BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(minorSplitS))
@@ -7912,9 +7962,17 @@ begin
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
+    majors := 0;
     for i := 0 to High(scaleTicks) do
     begin
-      if scaleTicks[i].Level = 0 then Continue;
+      if scaleTicks[i].Level = 0 then
+      begin
+        Inc(majors);
+        Continue;
+      end;
+      { [F3b] the interval it subdivides names it }
+      if ProxLine('minorticks_' + IntToStr(majors - 1) + '_'
+        + TyJsNumberToString(scaleTicks[i].Value)) then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
       begin
@@ -7944,20 +8002,24 @@ begin
   if (spec <> nil) and spec^.NamePlacement.Shown
     and (tpTextColor in nameS.Present) then
   begin
+    { where its groupTransition has it now [F3b] }
+    nx := spec^.NamePlacement.X;
+    ny := spec^.NamePlacement.Y;
+    nrot := spec^.NamePlacement.RotationRad;
+    ProxName(nx, ny, nrot);
     { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
       [Batch 86] }
     if Length(spec^.NamePlacement.Rt) > 0 then
-      TyRenderRtPieces(APainter, spec^.NamePlacement.Rt, spec^.NamePlacement.X,
-        spec^.NamePlacement.Y, spec^.NamePlacement.RotationRad, spec^.RtScale, 1,
+      TyRenderRtPieces(APainter, spec^.NamePlacement.Rt, nx, ny, nrot, spec^.RtScale, 1,
         True, nameS.TextColor)
     { LEVEL IS LEVEL: a y axis' end name comes out of the matrices a few
       hundred quadrillionths of a radian off, and the flat path is the one
       that sets a name of several lines }
-    else if Abs(spec^.NamePlacement.RotationRad) < 1e-9 then
+    else if Abs(nrot) < 1e-9 then
     begin
       TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
       APainter.DrawText(
-        AnchorBox(spec^.NamePlacement.X, spec^.NamePlacement.Y, lblW, lblH,
+        AnchorBox(nx, ny, lblW, lblH,
           spec^.NamePlacement.AnchorH, spec^.NamePlacement.AnchorV),
         spec^.NamePlacement.Text, nameS.FontName, ResolveFontSize(nameS),
         nameS.FontWeight, nameS.TextColor, taCenter, tlCenter, False, 0, False,
@@ -7968,8 +8030,7 @@ begin
       TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
       DrawRotatedNameLines(APainter, spec^.NamePlacement.Text, nameS.FontName,
         ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
-        spec^.NamePlacement.X, spec^.NamePlacement.Y,
-        spec^.NamePlacement.RotationRad,
+        nx, ny, nrot,
         AnchorAlign(spec^.NamePlacement.AnchorH),
         AnchorLayout(spec^.NamePlacement.AnchorV), lblH);
     end;
@@ -23338,6 +23399,11 @@ begin
     Inc(drawn, BuildThumbnails(list));
     Result := drawn + gfxCount;
     UtStaleHarvest;
+    if FLineHistDue then
+    begin
+      FLineHistDue := False;
+      LineHistRoll;
+    end;
   end;
 end;
 
@@ -40307,6 +40373,35 @@ begin
   Result := FAnimLive and not FAnimContinuous and (AnimAxisProxyCount > 0);
 end;
 
+{ Axis.getMinorTicksCoords, flat: each minor tick with the major interval
+  it subdivides (the count of majors before it, less one) [F3b] }
+function AxisMinorTicks(AAxis: TTyAxis): TTyAxisMinorTickArray;
+var
+  ticks: TTyScaleTickArray;
+  i, n, majors: Integer;
+begin
+  Result := nil;
+  if AAxis = nil then Exit;
+  ticks := TyDrawnTicks(AAxis.Scale);
+  SetLength(Result, Length(ticks));
+  n := 0;
+  majors := 0;
+  for i := 0 to High(ticks) do
+  begin
+    if ticks[i].Level = 0 then
+    begin
+      Inc(majors);
+      Continue;
+    end;
+    Result[n].Value := ticks[i].Value;
+    Result[n].Local := AAxis.DataToLocal(ticks[i].Value);
+    Result[n].Global := AAxis.DataToCoord(ticks[i].Value);
+    Result[n].Interval := majors - 1;
+    Inc(n);
+  end;
+  SetLength(Result, n);
+end;
+
 function TTyAdvanceChart.AxisAnimElementsOf(ABuild: TTyChartBuild; APPI: Integer;
   out AKeys: TTyStringArray; out AAxisKeys: TTyStringArray): TTyAxisAnimElArray;
 var
@@ -40352,6 +40447,21 @@ var
     inp.Horizontal := AAxis.Horizontal;
     inp.Plot := gb.PlotXYWH;
     inp.ByTick := AxisByTick(AAxis);
+    { [F3b] the minor ticks (not on a blank scale), the minor split lines,
+      the split areas, the name }
+    inp.ShowMinorTicks := furn.ShowMinorTick and not AAxis.Scale.Blank;
+    inp.ShowMinorSplitLine := furn.ShowMinorSplitLine;
+    inp.ShowSplitArea := furn.ShowSplitArea;
+    inp.ShowName := True;
+    if not IsNan(furn.MinorTickLengthLogical) then
+      inp.MinorTickLength := furn.MinorTickLengthLogical * scale
+    else
+      inp.MinorTickLength := ActiveController.Metric(TyAdvChartMinorTickLenVar,
+        TyAdvChartMinorTickLen) * scale;
+    inp.MinorTickWidth := PenWidth('TyAdvChartMinorTick');
+    inp.MinorSplitWidth := PenWidth('TyAdvChartMinorSplitLine');
+    if inp.ShowMinorTicks or inp.ShowMinorSplitLine then
+      inp.MinorTicks := AxisMinorTicks(AAxis);
     els := TyAxisAnimElements(spec^, inp);
     akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
     SetLength(all_, n + Length(els));
@@ -40790,6 +40900,8 @@ begin
     end;
     if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]
     else r.ViewKey := 'x:' + IntToStr(si);
+    { the line's last render, init or update [F3b] }
+    r.LineInit := LineHistInit(r.ViewKey);
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
     { its universal transition, read off the old option [Batch 136]: the
@@ -41185,6 +41297,56 @@ end;
 function TTyAdvanceChart.AnimPaused: Boolean;
 begin
   Result := (FPauseClock <> nil) and FPauseClock.Paused;
+end;
+
+{ ==================== a line view's history [F3b] ====================
+
+  LineView.render takes its INIT branch when it has no polyline yet (its
+  first render, or the first after remove() -- a legend switched it off),
+  or the coordinate system's type or the step changed; there a step line
+  turns its local points into steps before it saves them as _points and
+  _stackedOnPoints. The next update reads those. }
+
+procedure TTyAdvanceChart.LineHistRoll;
+var
+  hist: TStringList;
+  i, k: Integer;
+  el: TTyChartElement;
+  key, sig, old: string;
+  init: Boolean;
+begin
+  if FPaintList = nil then Exit;
+  hist := TStringList.Create;
+  hist.NameValueSeparator := #1;
+  try
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(i);
+      if not (el.Anim.Role in [carLineRun, carLineArea]) then Continue;
+      key := SeriesViewKey(el.Anim.Series);
+      if hist.IndexOfName(key) >= 0 then Continue;
+      sig := IntToStr(Round(el.Anim.G[7])) + '/' + IntToStr(Round(el.Anim.G[5]) and 8);
+      k := FLineHist.IndexOfName(key);
+      if k >= 0 then old := FLineHist.ValueFromIndex[k] else old := '';
+      init := Copy(old, 1, Length(sig) + 1) <> sig + '|';
+      if init then hist.Add(key + #1 + sig + '|1') else hist.Add(key + #1 + sig + '|0');
+    end;
+    FLineHist.Clear;
+    FLineHist.AddStrings(hist);
+  finally
+    hist.Free;
+  end;
+end;
+
+function TTyAdvanceChart.LineHistInit(const AViewKey: string): Boolean;
+var k: Integer; v: string;
+begin
+  Result := False;
+  if FLineHist = nil then Exit;
+  k := FLineHist.IndexOfName(AViewKey);
+  if k < 0 then Exit;
+  v := FLineHist.ValueFromIndex[k];
+  Result := Copy(v, Length(v), 1) = '1';
 end;
 
 { ==================== the bar race (realtimeSort) [Batch 135] ==================== }

@@ -1653,7 +1653,15 @@ var
     AEl.Anim.Base := animBase;
     AEl.Anim.Vals := animVals;
     AEl.Anim.G[6] := startV;
-    if spec.Step <> lstNone then AEl.Anim.G[7] := 1 else AEl.Anim.G[7] := 0;
+    { the step: 0 none, 1 start, 2 middle, 3 end -- an update tweens the
+      stepped points when old and new turn alike [F3b] }
+    case spec.Step of
+      lstStart: AEl.Anim.G[7] := 1;
+      lstMiddle: AEl.Anim.G[7] := 2;
+      lstEnd: AEl.Anim.G[7] := 3;
+    else
+      AEl.Anim.G[7] := 0;
+    end;
     AEl.Anim.G[8] := spec.Smooth;
     AEl.Anim.G[9] := spec.StackedOnSmooth;
     if spec.ConnectNulls then AEl.Anim.G[10] := 1 else AEl.Anim.G[10] := 0;
@@ -1960,8 +1968,20 @@ var
         base coordinate the row's own -- legal under a null value too }
       lv := NaN;
       if AStack.Stacked and (AStack.OverCol >= 0) then lv := AStore.Get(AStack.OverCol, k);
-      animPts[k * 2] := pp.X;
-      animPts[k * 2 + 1] := pp.Y;
+      { THE LAYOUT'S POINT of a gap (points.ts): dataToPoint leaves the
+        fast path and maps each axis alone -- a category's x stays beside a
+        null value's NaN y; an update's diff reads it [F3b] }
+      if IsNan(pp.X) or IsNan(pp.Y) then
+      begin
+        qq := SysPoint(ABinding, [px, py]);
+        animPts[k * 2] := TyJsFround(qq.X);
+        animPts[k * 2 + 1] := TyJsFround(qq.Y);
+      end
+      else
+      begin
+        animPts[k * 2] := pp.X;
+        animPts[k * 2 + 1] := pp.Y;
+      end;
       animVals[k * 3] := px;
       animVals[k * 3 + 1] := py;
       animVals[k * 3 + 2] := lv;

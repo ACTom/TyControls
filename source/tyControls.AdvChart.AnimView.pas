@@ -420,6 +420,12 @@ type
       (the axis tween's -- Present False where the series does not
       animate) }
     RtSort: Boolean;
+    { A LINE'S LAST RENDER TOOK LineView's INIT BRANCH (its first, or one
+      after its step or its coordinate system changed) [F3b]: a step line
+      then kept its STEPPED points and stacked-on points as _points /
+      _stackedOnPoints -- the next update's isPointsSame compares those, and
+      lineAnimationDiff reads the stacked-on ones by the raw indices }
+    LineInit: Boolean;
     RtAxis: TTyAnimModel;
     { THE RENDER IS changeAxisOrder's: 1, 2 for the init sort (isInitSort);
       0 for any other -- every bar series reads it }
@@ -802,8 +808,10 @@ var
   pts: TTyAnimValue;
 begin
   { LineView._doUpdateAnimation: el.x = points[ptIdx * 2], el.y = ... --
-    `__points`, which without a step is the very array `points` is }
-  pts := GetAnimProp('shape.points');
+    `__points`, which without a step is the very array `points` is (a step
+    line's own, the diff beside the stepped points [F3b]) }
+  pts := GetAnimProp('shape.__points');
+  if pts.Kind <> avkArray then pts := GetAnimProp('shape.points');
   if pts.Kind <> avkArray then Exit;
   for i := 0 to High(FFollow) do
   begin
@@ -3019,6 +3027,33 @@ var
     cmds: TTyDataDiffCmdArray;
     poly, area, sym: TTyChartAnimProxy;
     horiz: Boolean;
+    { [F3b] the stepped points }
+    stepCode: Integer;
+    turn: TTyStepTurn;
+    cn: Boolean;
+    tCur, tNxt, tCurS, tNxtS: TTyDoubleArray;
+    { the old render's _points and _stackedOnPoints: stepped after its
+      init branch [F3b] }
+    keptPts, keptBase: TTyDoubleArray;
+    oldTurn: TTyStepTurn;
+
+    function Pts2(const A: TTyDoubleArray): TTyPointFArray;
+    var z: Integer;
+    begin
+      SetLength(Result, Length(A) div 2);
+      for z := 0 to High(Result) do Result[z] := TyPointF(A[z * 2], A[z * 2 + 1]);
+    end;
+
+    function Flat(const A: TTyPointFArray): TTyDoubleArray;
+    var z: Integer;
+    begin
+      SetLength(Result, Length(A) * 2);
+      for z := 0 to High(A) do
+      begin
+        Result[z * 2] := A[z].X;
+        Result[z * 2 + 1] := A[z].Y;
+      end;
+    end;
 
     function At(const A: TTyDoubleArray; AI: Integer): Double;
     begin
@@ -3062,18 +3097,40 @@ var
     end;
     hasO := OldEl(AOld, -1, 'lineClip', orr) and (Length(orr.Anim.Pts) > 0);
     { NOTHING TO TWEEN without both polylines, or with the series' own
-      `animation` off (setShape); a STEP line is set, not tweened (a
-      deviation: its stepped points are not ported) }
+      `animation` off (setShape). A STEP that changed (`step !==
+      this._step`) is a new polyline upstream, which enters; here it is set
+      [F3b: a step kept is tweened below] }
     if not (hasN and hasO) then Exit;
     if not AC.On_ then Exit;
-    if (nr.Anim.G[7] <> 0) or (orr.Anim.G[7] <> 0) then Exit;
+    if Round(nr.Anim.G[7]) <> Round(orr.Anim.G[7]) then Exit;
+    stepCode := Round(nr.Anim.G[7]);
     oldPts := orr.Anim.Pts;
     newPts := nr.Anim.Pts;
     oldBase := orr.Anim.Base;
     newBase := nr.Anim.Base;
+    { THE OLD RENDER'S _points / _stackedOnPoints: a step line whose last
+      render took the init branch kept them stepped (render turns its local
+      points before it saves them); after an update render they are the
+      layout's [F3b] }
+    keptPts := oldPts;
+    keptBase := oldBase;
+    if APrev.Series[AOld].LineInit and (stepCode <> 0) then
+    begin
+      case stepCode of
+        2: oldTurn := sttMiddle;
+        3: oldTurn := sttEnd;
+      else
+        oldTurn := sttStart;
+      end;
+      if oldBase <> nil then
+        keptBase := Flat(TyTurnPointsIntoStep(Pts2(oldBase), Pts2(oldPts), True,
+          (Round(orr.Anim.G[5]) and 2) <> 0, oldTurn, orr.Anim.G[10] <> 0));
+      keptPts := Flat(TyTurnPointsIntoStep(Pts2(oldPts), nil, False,
+        (Round(orr.Anim.G[5]) and 2) <> 0, oldTurn, orr.Anim.G[10] <> 0));
+    end;
     { UNCHANGED: the polyline is not touched, a tween in flight goes on }
-    if Same(oldBase, newBase, oldBase <> nil, newBase <> nil)
-      and Same(oldPts, newPts, True, True) then
+    if Same(keptBase, newBase, keptBase <> nil, newBase <> nil)
+      and Same(keptPts, newPts, True, True) then
     begin
       poly := OldProxy(AOld, -1, 'linePoly');
       if poly <> nil then Carry(poly, ASer, -1);
@@ -3113,7 +3170,9 @@ var
             end;
             Push2(cur, len, cx, cy);
             Push2(nxt, len, nx, ny);
-            Push2(curS, len, At(oldBase, oi), At(oldBase, oi + 1));
+            { oldStackedOnPoints[oldIdx * 2]: the kept array, stepped or
+              not, by the raw index [F3b] }
+            Push2(curS, len, At(keptBase, oi), At(keptBase, oi + 1));
             Push2(nxtS, len, At(newBase, ni), At(newBase, ni + 1));
             Inc(len, 2);
             raws[m] := AC.Raws[cmds[j].NewIdx];
@@ -3186,30 +3245,72 @@ var
       sEq[j] := statEq[sorted[j]];
       sNew[j] := statNew[sorted[j]];
     end;
+    { A STEP LINE TWEENS ITS STEPPED POINTS (LineView._doUpdateAnimation,
+      `if (step)`): the Float32 diff turned into steps -- plain number
+      arrays -- the stacked-on points filtered by the line's own; the
+      polyline's `__points` (the diff itself) tween beside them, and the
+      symbols follow those [F3b] }
+    if stepCode <> 0 then
+    begin
+      case stepCode of
+        2: turn := sttMiddle;
+        3: turn := sttEnd;
+      else
+        turn := sttStart;
+      end;
+      cn := nr.Anim.G[10] <> 0;
+      tCurS := Flat(TyTurnPointsIntoStep(Pts2(sCurS), Pts2(sCur), True, horiz, turn, cn));
+      tCur := Flat(TyTurnPointsIntoStep(Pts2(sCur), nil, False, horiz, turn, cn));
+      tNxtS := Flat(TyTurnPointsIntoStep(Pts2(sNxtS), Pts2(sNxt), True, horiz, turn, cn));
+      tNxt := Flat(TyTurnPointsIntoStep(Pts2(sNxt), nil, False, horiz, turn, cn));
+    end
+    else
+    begin
+      tCur := sCur;
+      tNxt := sNxt;
+      tCurS := sCurS;
+      tNxtS := sNxtS;
+    end;
     { DON'T TWEEN A DIFF THIS LARGE: set the line (LineView.ts:1358-1376) }
-    if (TyLineBoundingDiff(sCur, sNxt) > 3000)
-      or ((newBase <> nil) and (TyLineBoundingDiff(sCurS, sNxtS) > 3000)) then
+    if (TyLineBoundingDiff(tCur, tNxt) > 3000)
+      or ((newBase <> nil) and (TyLineBoundingDiff(tCurS, tNxtS) > 3000)) then
       Exit;
     poly := OldProxy(AOld, -1, 'linePoly');
     if poly <> nil then Carry(poly, ASer, -1)
     else poly := Make(ASer, -1, 'linePoly');
-    poly.SetAnimProp('shape.points', TyAnimArr(sCur, 0, True));
-    poly.StopAnimation;
     poly.FFollow := nil;
-    TyUpdateProps(poly, TyAnimProps([TyAnimProp('shape.points',
-      TyAnimArr(sNxt, 0, True))]), AC.Model, TyAnimCallNoIndex);
-    poly.SetFinal(TyAnimProps([TyAnimProp('shape.points', TyAnimArr(sNxt, 0, True))]));
+    if stepCode <> 0 then
+    begin
+      { shape.__points = diff.current; shape.points = current; the target
+        {points: next, __points: diff.next} }
+      poly.SetAnimProp('shape.__points', TyAnimArr(sCur, 0, True));
+      poly.SetAnimProp('shape.points', TyAnimArr(tCur, 0, False));
+      poly.StopAnimation;
+      TyUpdateProps(poly, TyAnimProps([TyAnimProp('shape.points', TyAnimArr(tNxt, 0, False)),
+        TyAnimProp('shape.__points', TyAnimArr(sNxt, 0, True))]), AC.Model, TyAnimCallNoIndex);
+      poly.SetFinal(TyAnimProps([TyAnimProp('shape.points', TyAnimArr(tNxt, 0, False)),
+        TyAnimProp('shape.__points', TyAnimArr(sNxt, 0, True))]));
+    end
+    else
+    begin
+      poly.SetAnimProp('shape.points', TyAnimArr(sCur, 0, True));
+      poly.StopAnimation;
+      TyUpdateProps(poly, TyAnimProps([TyAnimProp('shape.points',
+        TyAnimArr(sNxt, 0, True))]), AC.Model, TyAnimCallNoIndex);
+      poly.SetFinal(TyAnimProps([TyAnimProp('shape.points', TyAnimArr(sNxt, 0, True))]));
+    end;
     if newBase <> nil then
     begin
       area := OldProxy(AOld, -1, 'lineArea');
       if area <> nil then Carry(area, ASer, -1)
       else area := Make(ASer, -1, 'lineArea');
-      area.SetAnimProp('shape.stackedOnPoints', TyAnimArr(sCurS, 0, True));
+      { a step's stacked-on points are plain numbers [F3b] }
+      area.SetAnimProp('shape.stackedOnPoints', TyAnimArr(tCurS, 0, stepCode = 0));
       area.StopAnimation;
       TyUpdateProps(area, TyAnimProps([TyAnimProp('shape.stackedOnPoints',
-        TyAnimArr(sNxtS, 0, True))]), AC.Model, TyAnimCallNoIndex);
+        TyAnimArr(tNxtS, 0, stepCode = 0))]), AC.Model, TyAnimCallNoIndex);
       area.SetFinal(TyAnimProps([TyAnimProp('shape.stackedOnPoints',
-        TyAnimArr(sNxtS, 0, True))]));
+        TyAnimArr(tNxtS, 0, stepCode = 0))]));
     end;
     { THE KEPT SYMBOLS FOLLOW the points, by their place in the sorted list }
     for j := 0 to m - 1 do
