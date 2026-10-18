@@ -121,10 +121,12 @@ function TyPictorialSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPictoria
   port that read only the series level draws the same circle nine times and
   looks like it lost the option rather than the row.
 
-  ONLY THE SCALAR FORMS ARRIVE HERE. The store parks scalar leaves under their
-  dotted path and skips arrays, so a row's `symbolSize: [10, 20]` is not
-  readable and keeps the series'. Said out loud rather than left as a silent
-  gap: the pair form on a ROW is genuinely unsupported, not merely untested. }
+  THE PAIR FORM ON A ROW [F3d]: the store keeps a row's short array item by
+  item (`symbolSize.0`, `symbolSize.1`), and a row's `symbolSize: [20,
+  '100%']` or `symbolOffset: [5, '-50%']` is read the way the series' is --
+  upstream's visual takes the row's own array (visual/symbol.ts, getShallow),
+  whole, over the series'. [Was: only the scalar forms arrived, and a row's
+  pair kept the series' size.] }
 function TyPictorialRowSpec(const ASpec: TTyPictorialSpec;
   AStore: TTyDataStore; ARow: Integer): TTyPictorialSpec;
 
@@ -244,7 +246,10 @@ begin
     begin
       a := TJSONArray(d);
       if a.Count > 0 then Result.SizeW := TyBoxDataOf(a.Items[0], Result.SizeW);
-      if a.Count > 1 then Result.SizeH := TyBoxDataOf(a.Items[1], Result.SizeH);
+      if a.Count > 1 then Result.SizeH := TyBoxDataOf(a.Items[1], Result.SizeH)
+      { [F3d] `[16]`: the second is parsePercent(undefined) -- not a number,
+        and no glyph is drawn (was: the default 100%) }
+      else if a.Count = 1 then Result.SizeH := TyBoxPx(NaN);
     end
     else
     begin
@@ -425,6 +430,20 @@ begin
     Result.HasSize := True;
     Result.SizeW := TyBoxStrOf(s, Result.SizeW);
     Result.SizeH := Result.SizeW;
+  end
+  else
+  begin
+    { [F3d] the row's array, whole: its first and its second -- a second
+      it lacks is parsePercent(undefined), not a number }
+    s := RowText(AStore, ARow, TyOverrideKey('symbolSize.0'));
+    if s <> '' then
+    begin
+      Result.HasSize := True;
+      Result.SizeW := TyBoxStrOf(s, TyBoxPx(NaN));
+      Result.SizeH := TyBoxPx(NaN);
+      s := RowText(AStore, ARow, TyOverrideKey('symbolSize.1'));
+      if s <> '' then Result.SizeH := TyBoxStrOf(s, TyBoxPx(NaN));
+    end;
   end;
 
   s := RowText(AStore, ARow, TyOverrideKey('symbolRotate'));
@@ -445,6 +464,20 @@ begin
     Result.HasOffset := True;
     Result.OffsetX := TyBoxStrOf(s, Result.OffsetX);
     Result.OffsetY := Result.OffsetX;
+  end
+  else
+  begin
+    { [F3d] the row's array: a one-element one falls back to its own first
+      (normalizeSymbolOffset's retrieve2(off[1], off[0])) }
+    s := RowText(AStore, ARow, TyOverrideKey('symbolOffset.0'));
+    if s <> '' then
+    begin
+      Result.HasOffset := True;
+      Result.OffsetX := TyBoxStrOf(s, ASpec.OffsetX);
+      Result.OffsetY := Result.OffsetX;
+      s := RowText(AStore, ARow, TyOverrideKey('symbolOffset.1'));
+      if s <> '' then Result.OffsetY := TyBoxStrOf(s, ASpec.OffsetY);
+    end;
   end;
 
   s := RowText(AStore, ARow, TyOverrideKey('symbolMargin'));

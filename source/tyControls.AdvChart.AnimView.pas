@@ -628,6 +628,16 @@ function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy):
 { a packed colour as the state machine hands it to the engine: lifted (or
   not opaque) as zrender's rgba() string, else as '#rrggbb' }
 function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
+{ [F3d] A STATE'S GRADIENT. liftColor of a gradient value: every stop's
+  r, g and b times (1 - -0.1), truncated and clamped (zrender's lift), its
+  offset and alpha as they are (util/color.ts liftColor) }
+function TyAnimLiftGradient(const AValue: TTyAnimValue): TTyAnimValue;
+{ ... a gradient value (an interpolated one too) as the painter draws it: the
+  kind by its geometry (four numbers linear, three radial), a number it lacks
+  the reader's default (TyTryReadGradient), each stop's colour packed (alpha
+  rounded to a byte); False for a value that is no gradient or has no stop }
+function TyAnimGradientOfValue(const AValue: TTyAnimValue;
+  out AGrad: TTyChartGradient): Boolean;
 { ADest := ASource with every bound element applied and every following label
   moved with its host, then every ghost still leaving. Insertion indices are
   kept, so a hit on the frame names the same element as a hit on the list
@@ -4604,6 +4614,88 @@ begin
       + IntToHex((AColor shr 8) and $FF, 2) + IntToHex(AColor and $FF, 2)));
 end;
 
+function TyAnimLiftGradient(const AValue: TTyAnimValue): TTyAnimValue;
+const
+  { `1 - level` for liftColor's level -0.1, a Double }
+  cLift: Double = 1.1;
+var
+  i, k: Integer;
+  v: Double;
+begin
+  Result := AValue;
+  if AValue.Kind <> avkGradient then Exit;
+  Result.Stops := Copy(AValue.Stops, 0, Length(AValue.Stops));
+  { a new object: the discrete write takes no raw text }
+  Result.Str := '';
+  for i := 0 to Length(Result.Stops) div 5 - 1 do
+    for k := 1 to 3 do
+    begin
+      v := Result.Stops[i * 5 + k];
+      if IsNan(v) then Continue;
+      v := Trunc(v * cLift);
+      if v > 255 then v := 255
+      else if v < 0 then v := 0;
+      Result.Stops[i * 5 + k] := v;
+    end;
+end;
+
+function TyAnimGradientOfValue(const AValue: TTyAnimValue;
+  out AGrad: TTyChartGradient): Boolean;
+
+  function Num(AIndex: Integer; ADefault: Double): Double;
+  begin
+    if (AIndex <= High(AValue.Arr)) and not IsNan(AValue.Arr[AIndex]) then
+      Result := AValue.Arr[AIndex]
+    else
+      Result := ADefault;
+  end;
+
+  function Byte_(V: Double): Cardinal;
+  begin
+    if IsNan(V) or (V <= 0) then Exit(0);
+    if V >= 255 then Exit(255);
+    Result := Cardinal(Round(V));
+  end;
+
+var i, n: Integer;
+begin
+  AGrad := Default(TTyChartGradient);
+  Result := False;
+  if AValue.Kind <> avkGradient then Exit;
+  if AValue.Stride = 3 then
+  begin
+    AGrad.Kind := cgkRadial;
+    AGrad.X := Num(0, 0.5);
+    AGrad.Y := Num(1, 0.5);
+    AGrad.R := Num(2, 0.5);
+  end
+  else
+  begin
+    AGrad.Kind := cgkLinear;
+    AGrad.X := Num(0, 0);
+    AGrad.Y := Num(1, 0);
+    AGrad.X2 := Num(2, 1);
+    AGrad.Y2 := Num(3, 0);
+  end;
+  AGrad.Global := (not IsNan(AValue.Num)) and (AValue.Num <> 0);
+  n := Length(AValue.Stops) div 5;
+  SetLength(AGrad.Stops, n);
+  for i := 0 to n - 1 do
+  begin
+    AGrad.Stops[i].Offset := AValue.Stops[i * 5];
+    if IsNan(AGrad.Stops[i].Offset) then AGrad.Stops[i].Offset := 0;
+    AGrad.Stops[i].Color := TTyChartColor((Byte_(AValue.Stops[i * 5 + 4] * 255) shl 24)
+      or (Byte_(AValue.Stops[i * 5 + 1]) shl 16) or (Byte_(AValue.Stops[i * 5 + 2]) shl 8)
+      or Byte_(AValue.Stops[i * 5 + 3]));
+  end;
+  if n = 0 then
+  begin
+    AGrad.Kind := cgkNone;
+    Exit;
+  end;
+  Result := True;
+end;
+
 { a colour value as the canvas paints it: AOk False for null or 'none' }
 function StColourOf(const AV: TTyAnimValue; out AColor: TTyChartColor): Boolean;
 begin
@@ -4612,10 +4704,24 @@ begin
     and TyTryParseChartColor(AV.Str, AColor);
 end;
 
-{ the same value as far as the drawing goes: a colour by its parse }
+{ the same value as far as the drawing goes: a colour by its parse, a
+  gradient by its numbers [F3d] }
 function StSameValue(const A, B: TTyAnimValue): Boolean;
-var ca, cb: TTyChartColor; oa, ob: Boolean;
+var ca, cb: TTyChartColor; oa, ob: Boolean; i: Integer;
 begin
+  if (A.Kind = avkGradient) and (B.Kind = avkGradient) then
+  begin
+    if (A.Stride <> B.Stride) or (Length(A.Arr) <> Length(B.Arr))
+      or (Length(A.Stops) <> Length(B.Stops)) then Exit(False);
+    if not (SameBitsD(A.Num, B.Num) or (IsNan(A.Num) and IsNan(B.Num))) then Exit(False);
+    for i := 0 to High(A.Arr) do
+      if not (SameBitsD(A.Arr[i], B.Arr[i]) or (IsNan(A.Arr[i]) and IsNan(B.Arr[i]))) then
+        Exit(False);
+    for i := 0 to High(A.Stops) do
+      if not (SameBitsD(A.Stops[i], B.Stops[i]) or (IsNan(A.Stops[i]) and IsNan(B.Stops[i]))) then
+        Exit(False);
+    Exit(True);
+  end;
   if (A.Kind = avkString) or (B.Kind = avkString) then
   begin
     oa := StColourOf(A, ca);
@@ -4635,6 +4741,7 @@ var
   key: string;
   v, rest, vx, vy, rx, ry: TTyAnimValue;
   c: TTyChartColor;
+  g: TTyChartGradient;
   fx, fy, cx, cy: Double;
   b: TTyRectF;
 
@@ -4666,6 +4773,12 @@ begin
         AEl.Style.FillColor := c;
         AEl.Style.FillGradient := Default(TTyChartGradient);
       end
+      { [F3d] a gradient, as its track has it now }
+      else if TyAnimGradientOfValue(v, g) then
+      begin
+        AEl.Style.HasFill := True;
+        AEl.Style.FillGradient := g;
+      end
       else
         AEl.Style.HasFill := False;
     end
@@ -4676,6 +4789,14 @@ begin
       begin
         AEl.Style.StrokeColor := c;
         AEl.Style.StrokeGradient := Default(TTyChartGradient);
+        if not (AEl.Style.StrokeWidthLogical > 0) then
+          AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
+      end
+      { [F3d] a gradient stroke }
+      else if TyAnimGradientOfValue(v, g) then
+      begin
+        AEl.Style.StrokeColor := g.Stops[0].Color;
+        AEl.Style.StrokeGradient := g;
         if not (AEl.Style.StrokeWidthLogical > 0) then
           AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
       end

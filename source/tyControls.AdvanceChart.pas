@@ -27575,6 +27575,17 @@ begin
   TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
 end;
 
+{ [F3d] the rest colour of AKey as the option's gradient object at APath,
+  when that is one }
+procedure StRestGradient(var ARest: TTyStObject; const ANodes: array of TJSONObject;
+  const APath: array of string; AKey: TTyStKey);
+var d: TJSONData;
+begin
+  d := TyStFind(ANodes, APath);
+  if TyStIsGradient(d) then
+    TyStSetGradient(ARest, AKey, d.AsJSON, ARest.Color[AKey]);
+end;
+
 { a label's: its anchor (the Text's own x / y), its paint order, whether it
   shows; its fill stays absent -- the automatic ink is the port's }
 function StLabelRestOf(const AEl: TTyChartElement): TTyStObject;
@@ -27663,7 +27674,20 @@ end;
 function SameColourKey(const A, B: TTyStObject; AKey: TTyStKey): Boolean;
 begin
   Result := (A.Has[AKey] = B.Has[AKey]) and (A.None[AKey] = B.None[AKey])
-    and (A.None[AKey] or (A.Color[AKey] = B.Color[AKey]));
+    and (A.None[AKey] or ((A.Color[AKey] = B.Color[AKey])
+      { [F3d] a gradient is the same only as itself, lifted or not }
+      and (A.GradJson[AKey] = B.GradJson[AKey])
+      and ((A.GradJson[AKey] = '') or (A.Lifted[AKey] = B.Lifted[AKey]))));
+end;
+
+function StColourValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue; forward;
+
+{ [F3d] a state object's gradient key as the painter draws it }
+function StGradientOf(const AObj: TTyStObject; AKey: TTyStKey;
+  out AGrad: TTyChartGradient): Boolean;
+begin
+  Result := (AObj.GradJson[AKey] <> '') and not AObj.None[AKey]
+    and TyAnimGradientOfValue(StColourValue(AObj, AKey), AGrad);
 end;
 
 { THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
@@ -27671,7 +27695,7 @@ end;
   gradient fill leaves the gradient too (the port does not lift a ramp). }
 procedure StWriteHost(var AEl: TTyChartElement; const AState: TTyStElement;
   AProxied: Boolean);
-var c, r: TTyStObject;
+var c, r: TTyStObject; g: TTyChartGradient;
 begin
   c := AState.Cur;
   r := AState.Rest;
@@ -27687,6 +27711,13 @@ begin
   if not SameColourKey(c, r, stkFill) then
   begin
     if c.None[stkFill] then AEl.Style.HasFill := False
+    { [F3d] a state's gradient -- declared, inherited or lifted }
+    else if StGradientOf(c, stkFill, g) then
+    begin
+      AEl.Style.HasFill := True;
+      AEl.Style.FillColor := c.Color[stkFill];
+      AEl.Style.FillGradient := g;
+    end
     else if not (c.Lifted[stkFill] and (AEl.Style.FillGradient.Kind <> cgkNone)) then
     begin
       AEl.Style.HasFill := True;
@@ -27697,6 +27728,11 @@ begin
   if not SameColourKey(c, r, stkStroke) then
   begin
     if c.None[stkStroke] then AEl.Style.StrokeColor := 0
+    else if StGradientOf(c, stkStroke, g) then
+    begin
+      AEl.Style.StrokeColor := c.Color[stkStroke];
+      AEl.Style.StrokeGradient := g;
+    end
     else if not (c.Lifted[stkStroke] and (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
     begin
       AEl.Style.StrokeColor := c.Color[stkStroke];
@@ -28055,6 +28091,16 @@ begin
     TyStReadStyle(nodes, 'select', blk, bolder));
   item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', blk, bolder);
   item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', blk, bolder);
+  { [F3d] A GRADIENT AT REST is the option's object (the element's
+    style.fill is it): the state's tween starts from it, and the emphasis
+    lifts it }
+  if blk = 'itemStyle' then
+  begin
+    if host.Style.FillGradient.Kind <> cgkNone then
+      StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'color'], stkFill);
+    if host.Style.StrokeGradient.Kind <> cgkNone then
+      StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'borderColor'], stkStroke);
+  end;
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
   { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
     emphasis.itemStyle); its shadow is not drawn here [Batch 108] }
@@ -29468,11 +29514,25 @@ end;
 { a colour key of a state object as the engine takes it: 'none', null for
   no stroke, a lifted colour as liftColor's rgba() string }
 function StColourValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue;
+var d: TJSONData;
 begin
   if AObj.None[AKey] then
   begin
     if AKey = stkStroke then Result := TyAnimNull
     else Result := TyAnimStr('none');
+  end
+  { [F3d] A GRADIENT: the object as written -- its track interpolates it
+    against another gradient, and against a colour it is discrete (set at
+    once); lifted, every stop (liftColor) }
+  else if AObj.GradJson[AKey] <> '' then
+  begin
+    d := GetJSON(AObj.GradJson[AKey]);
+    try
+      Result := TyGfxAnimOf(d);
+    finally
+      d.Free;
+    end;
+    if AObj.Lifted[AKey] then Result := TyAnimLiftGradient(Result);
   end
   else
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);

@@ -2157,13 +2157,21 @@ end;
   collapses almost the whole surface into scalars and nothing needs a list of
   which keys are supported. A non-scalar leaf (a gradient object, a dash array)
   is SKIPPED rather than stored as no-data: absent and present-but-empty have to
-  stay distinguishable, which is the entire point of the table. }
+  stay distinguishable, which is the entire point of the table.
+
+  [F3d] A SHORT ARRAY OF SCALARS -- one to four of them, `symbolSize:
+  [20, '100%']`, `symbolOffset: [5, '-50%']` -- is kept item by item under
+  the path and its position (`symbolSize.0`, `symbolSize.1`), never under the
+  path itself: a reader of the scalar form still finds nothing, and one that
+  knows the pair form asks for the positions. Upstream's visual reads the
+  row's own array through getShallow (visual/symbol.ts). }
 procedure CollectOverrides(AObj: TJSONObject; AStore: TTyDataStore;
   ARawIndex: Integer; const APrefix: string; ADepth: Integer);
 var
-  i: Integer;
+  i, k: Integer;
   key, path: string;
   child: TJSONData;
+  scalars: Boolean;
 begin
   if (AObj = nil) or (ADepth > 4) then Exit;
   for i := 0 to AObj.Count - 1 do
@@ -2179,6 +2187,18 @@ begin
         CollectOverrides(TJSONObject(child), AStore, ARawIndex, path, ADepth + 1);
       jtNumber, jtString, jtBoolean:
         AStore.SetOverride(ARawIndex, TyOverrideKey(path), CellValue(child));
+      jtArray:
+        begin
+          { [F3d] one to four scalars, item by item }
+          scalars := (child.Count >= 1) and (child.Count <= 4);
+          for k := 0 to child.Count - 1 do
+            if not (child.Items[k].JSONType in [jtNumber, jtString, jtBoolean]) then
+              scalars := False;
+          if scalars then
+            for k := 0 to child.Count - 1 do
+              AStore.SetOverride(ARawIndex, TyOverrideKey(path + '.' + IntToStr(k)),
+                CellValue(child.Items[k]));
+        end;
     end;
   end;
 end;
