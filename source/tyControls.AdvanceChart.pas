@@ -3248,6 +3248,8 @@ type
     { the graph's edge data as the selection reads it, by inner index: the
       edge data's name, its raw index [F2a] }
     function SelEdgeData(ASlot: Integer): TTySelData;
+    { [F3b] the slot holds a solved chord }
+    function StChordSlot(ASlot: Integer): Boolean;
     function StSankeySlot(ASlot: Integer): Boolean;
     { queryDataIndex on a graph's edge data: solved edge indices }
     function QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
@@ -29787,6 +29789,12 @@ begin
     and FSankeys[ASlot].Valid and (FBindings[ASlot].SeriesType = TySankeySeriesTypeName);
 end;
 
+function TTyAdvanceChart.StChordSlot(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FBindings)) and (ASlot <= High(FChords))
+    and FChords[ASlot].Valid and (FBindings[ASlot].SeriesType = TyChordSeriesTypeName);
+end;
+
 function TTyAdvanceChart.SelEdgeData(ASlot: Integer): TTySelData;
 var
   j, n, s: Integer;
@@ -29795,6 +29803,27 @@ var
   has: Boolean;
 begin
   Result := Default(TTySelData);
+  { [F3b] A CHORD'S EDGE DATA: every link the graph took, keyed by its name
+    (createGraphFromNodeEdge's: the id, else 'source > target'), its index
+    its own }
+  if StChordSlot(ASlot) then
+  begin
+    s := FBindings[ASlot].SeriesIndex;
+    sNode := StSeriesNode(s);
+    n := Length(FChords[ASlot].Edges);
+    SetLength(Result.Keys, n);
+    SetLength(Result.Raws, n);
+    SetLength(Result.Disabled, n);
+    for j := 0 to n - 1 do
+    begin
+      Result.Keys[j] := FChords[ASlot].Edges[j].Name;
+      if Result.Keys[j] = '' then Result.Keys[j] := 'e'#0#0 + IntToStr(j);
+      Result.Raws[j] := j;
+      Result.Disabled[j] := TyStReadBool([FChords[ASlot].Edges[j].Item, sNode],
+        ['select', 'disabled'], has);
+    end;
+    Exit;
+  end;
   { [F3a] A SANKEY'S EDGE DATA: every link of the solve, keyed by its name
     (the link's id, else 'source > target'), its raw index its own }
   if StSankeySlot(ASlot) then
@@ -29875,6 +29904,21 @@ var
       if (j >= 0) and (j <= High(FSankeys[ASlot].Edges)) then Result := j;
       Exit;
     end;
+    { [F3b] a chord's too }
+    if StChordSlot(ASlot) then
+    begin
+      if mode = 2 then
+      begin
+        if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
+        for j := 0 to High(FChords[ASlot].Edges) do
+          if FChords[ASlot].Edges[j].Name = AItem.AsString then Exit(j);
+        Exit;
+      end;
+      if (AItem.JSONType <> jtNumber) or (Frac(AItem.AsFloat) <> 0) then Exit;
+      j := Trunc(AItem.AsFloat);
+      if (j >= 0) and (j <= High(FChords[ASlot].Edges)) then Result := j;
+      Exit;
+    end;
     if mode = 2 then
     begin
       if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
@@ -29893,7 +29937,8 @@ var
 begin
   AEdges := nil;
   Result := False;
-  if not StSankeySlot(ASlot) and ((ASlot < 0) or (ASlot > High(FGraphEdges))) then Exit;
+  if not (StSankeySlot(ASlot) or StChordSlot(ASlot))
+    and ((ASlot < 0) or (ASlot > High(FGraphEdges))) then Exit;
   mode := 0;
   d := APayload.Find('dataIndexInside');
   if (d = nil) or (d.JSONType = jtNull) then
@@ -30974,14 +31019,15 @@ begin
     for k := 0 to High(FSt[s].Rows[raw].Parts) do
       FSt[s].Rows[raw].Parts[k].Selected := FSt[s].Rows[raw].Host.Selected;
   end;
-  { a graph's edges, from the same map [F2a]; a sankey's [F3a] }
-  if FSt[s].Kind in [sskGraph, sskSankey] then
+  { a graph's edges, from the same map [F2a]; a sankey's [F3a]; a chord's
+    [F3b] }
+  if FSt[s].Kind in [sskGraph, sskSankey, sskChord] then
   begin
     data := SelEdgeData(ASlot);
     for raw := 0 to High(FSt[s].EdgeRows) do
     begin
       if not FSt[s].EdgeRows[raw].Host.Exists then Continue;
-      if FSt[s].Kind = sskSankey then inner := raw
+      if FSt[s].Kind in [sskSankey, sskChord] then inner := raw
       else inner := StGraphEdgeInner(ASlot, raw);
       was := FSt[s].EdgeRows[raw].Host.Selected;
       FSt[s].EdgeRows[raw].Host.Selected := (inner >= 0)
@@ -31302,7 +31348,8 @@ begin
     d := APayload.Find('dataType');
     if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge') then
     begin
-      if not ((s <= High(FSt)) and (FSt[s].Kind in [sskGraph, sskSankey])) then Continue;
+      { [F3b] and a chord's }
+      if not ((s <= High(FSt)) and (FSt[s].Kind in [sskGraph, sskSankey, sskChord])) then Continue;
       if not QueryEdgeIndex(slot, APayload, inner) then Continue;
       if FSt[s].Kind = sskGraph then
         for k := 0 to High(inner) do inner[k] := StGraphEdgeInner(slot, inner[k]);
@@ -31353,9 +31400,11 @@ begin
     { getAllSelectedIndices: one entry per data of getAllData -- a graph's
       node and edge data (the same indices, the map is one), a tree's and a
       treemap's 'main' [F2a] }
-    { [F3a] a sankey's too: its node and edge data }
+    { [F3a] a sankey's too: its node and edge data; [F3b] and a chord's
+      (createGraphFromNodeEdge links them) }
     if (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
-      or (FBindings[slot].SeriesType = TySankeySeriesTypeName) then
+      or (FBindings[slot].SeriesType = TySankeySeriesTypeName)
+      or (FBindings[slot].SeriesType = TyChordSeriesTypeName) then
     begin
       dts[0] := 'node';
       dts[1] := 'edge';
