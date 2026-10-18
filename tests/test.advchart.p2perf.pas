@@ -66,6 +66,8 @@ type
     procedure TestAWriteAfterTheSessionTaintsIt;
     procedure TestClearForgetsTheJournal;
     procedure TestAnElementAddedInTheSessionIsJournaledToo;
+    procedure TestARecordedWriteAfterTheSessionTaintsItToo;
+    procedure TestARefPastTheEndIsTheSharedEmptyElement;
   end;
 
   TAdvChartStDeclareMemoTest = class(TTestCase)
@@ -550,6 +552,46 @@ begin
     l.JournalRewind;
     AssertEquals('put back as added', 'marker', l.Element(1).Caption.Text);
     AssertEquals('both still there', 2, l.Count);
+  finally
+    l.Free;
+  end;
+end;
+
+{ Recording switched on outside a session records nothing: the write
+  taints the journal, as an unrecorded one would (MapApplyChanged writes
+  the regions so, between builds). [fin: recording outside a session
+  survived] }
+procedure TAdvChartPaintJournalTest.TestARecordedWriteAfterTheSessionTaintsItToo;
+var l: TTyPaintList;
+begin
+  l := TTyPaintList.Create;
+  try
+    l.Add(El(1, 'a'));
+    l.JournalOpen;
+    l.JournalClose;
+    AssertTrue('closed: ready', l.JournalReady);
+    l.JournalRecord(True);
+    l.SetElement(0, El(1, 'late'));
+    l.JournalRecord(False);
+    AssertFalse('a recorded write after the session taints it too', l.JournalReady);
+  finally
+    l.Free;
+  end;
+end;
+
+{ Ref out of range on either side: the one shared empty element, never a
+  slot of the list's spare capacity. [fin: an unbounded Ref survived] }
+procedure TAdvChartPaintJournalTest.TestARefPastTheEndIsTheSharedEmptyElement;
+var l: TTyPaintList;
+begin
+  l := TTyPaintList.Create;
+  try
+    l.Add(El(1, 'a'));
+    AssertTrue('in range: the element itself', l.Ref(0) <> l.Ref(-1));
+    AssertEquals('a', l.Ref(0)^.Caption.Text);
+    AssertTrue('just past the end: the shared empty element', l.Ref(1) = l.Ref(-1));
+    AssertTrue('far past it: the same', l.Ref(1000) = l.Ref(-1));
+    AssertEquals('empty', '', l.Ref(1)^.Caption.Text);
   finally
     l.Free;
   end;

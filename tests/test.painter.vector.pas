@@ -67,6 +67,7 @@ type
     { ---- BGRA's edge sort takes its pivots from the global Random ---- }
     procedure TestALongPathPaintsTheSameWhateverTheGlobalRandomHolds;
     procedure TestPaintingNeverRestartsTheApplicationsRandomStream;
+    procedure TestAPaintThatDrawsNoRandomLeavesTheStreamAlone;
     procedure TestRestoreStateRestoresTheDash;
     procedure TestRestoreStateRestoresElementAlpha;
     procedure TestElementAlphaDimsTheFill;
@@ -740,6 +741,16 @@ begin
       for x := 0 to 199 do
         if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then
           Fail(Format('pixel %d,%d differs from building every clip', [x, y]));
+    { the test switch starts from an empty pool, so the first count above
+      never rests on what an earlier test left [fin: a switch that kept the
+      spares survived] }
+    FPainter.EndPaint;
+    FreePainter;
+    TyPainterClipReuseForTest(True);
+    MakePainter(200, 100, 96);
+    built := TyPainterClipMasksBuiltForTest;
+    Paint;
+    AssertEquals('after the switch the box is built again', 1, TyPainterClipMasksBuiltForTest - built);
   finally
     ref.Free;
   end;
@@ -821,6 +832,36 @@ begin
   end;
 end;
 
+{ Two zigzags round the same bottom edge, one path: below both the winding is
+  two, so the non-zero merge -- where the order of tied crossings tells --
+  runs on every row. A simple polygon (one zigzag closed) fills alike in any
+  order and never shows the pivots. The seed is one whose clip came out
+  differently under different global seeds unpinned (a scratch probe). }
+procedure ZigzagLoops(P: TTyPainter; ASeed: LongWord);
+var
+  i, lp: Integer;
+  st: LongWord;
+  x, y: Double;
+begin
+  P.BeginPath;
+  for lp := 0 to 1 do
+  begin
+    st := ASeed + LongWord(lp) * 1000;
+    for i := 0 to 299 do
+    begin
+      {$push}{$R-}{$Q-}
+      st := st * 1103515245 + 12345;
+      {$pop}
+      x := 40 + i * 2.4;
+      y := 100 + (st shr 8) mod 300 + ((st shr 3) mod 37) / 100;
+      if (i = 0) and (lp = 0) then P.MoveTo(x, y) else P.LineTo(x, y);
+    end;
+    P.LineTo(40 + 299 * 2.4, 480);
+    P.LineTo(40, 480);
+  end;
+  P.ClosePath;
+end;
+
 procedure TPainterVectorTest.TestALongPathPaintsTheSameWhateverTheGlobalRandomHolds;
 { BGRA's one-pass polygon filler sorts the edges by y with a quicksort that
   picks its pivots with the global Random. Edges on the same y come out in a
@@ -848,7 +889,9 @@ var
     ZigzagPath(FPainter, 2, True);
     FPainter.FillPath(TyRGBA(200, 60, 40, 110));
     FPainter.SaveState;
-    ZigzagPath(FPainter, 5, True);
+    { a clip that winds twice: one zigzag closed is a simple polygon and
+      clipped alike unpinned [fin: the CtxClip pin survived] }
+    ZigzagLoops(FPainter, 9);
     FPainter.ClipPath;
     FPainter.BeginPath;
     FPainter.RectPath(0, 0, 800, 500);
@@ -916,6 +959,41 @@ begin
   Cycle(b);
   for k := 0 to 2 do
     AssertEquals('draw ' + IntToStr(k) + ' again from the same seed', a[k], b[k]);
+end;
+
+procedure TPainterVectorTest.TestAPaintThatDrawsNoRandomLeavesTheStreamAlone;
+{ A short path is sorted without Random (BGRA's insertion sort below ten
+  points), so the pin hands the seed back as it was: the application's next
+  draw is the one it would have made without the paint -- not a draw from a
+  reseeded generator. [fin: an unpin that always reseeded survived] }
+var
+  want, got: LongInt;
+begin
+  RandSeed := 4242;
+  Random(MaxInt);
+  want := Random(MaxInt);
+  RandSeed := 4242;
+  Random(MaxInt);
+  MakePainter(200, 100, 96);
+  FPainter.BeginPath;
+  FPainter.MoveTo(10, 10);
+  FPainter.LineTo(90, 20);
+  FPainter.LineTo(40, 80);
+  FPainter.ClosePath;
+  FPainter.FillPath(TyRGBA(200, 60, 40, 255));
+  FPainter.BeginPath;
+  FPainter.MoveTo(100, 10);
+  FPainter.LineTo(190, 90);
+  FPainter.StrokePath(TyRGBA(20, 160, 60, 255), 2);
+  FPainter.SaveState;
+  FPainter.ClipRect(Rect(13, 7, 171, 83));
+  FPainter.BeginPath;
+  FPainter.RectPath(0, 0, 200, 100);
+  FPainter.FillPath(TyRGBA(30, 60, 200, 140));
+  FPainter.RestoreState;
+  FreePainter;
+  got := Random(MaxInt);
+  AssertEquals('the next draw is the one the paint never touched', want, got);
 end;
 
 procedure TPainterVectorTest.TestRestoreStateRestoresTheDash;

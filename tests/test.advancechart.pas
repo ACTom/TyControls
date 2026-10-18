@@ -114,6 +114,7 @@ type
     procedure TestHairlinesLandOnWholePixels;
     procedure TestRepeatedRendersDoNotGrowTheHeap;
     procedure TestALongLinePaintsTheSameWhateverTheGlobalRandomHolds;
+    procedure TestALargeLinesBatchPaintsTheSameWhateverTheGlobalRandomHolds;
   end;
 implementation
 
@@ -843,6 +844,67 @@ begin
   opt := '{ animation: false, xAxis: { data: [' + cats + '] }, yAxis: {},'
     + ' series: [{ type: ''line'', symbol: ''none'', data: [' + vals + '] },'
     + ' { type: ''line'', symbol: ''none'', areaStyle: {}, data: [' + vals + '] }] }';
+  FChart.Option := opt;
+  ref := nil;
+  try
+    for k := 0 to High(cSeeds) do
+    begin
+      RandSeed := cSeeds[k];
+      Draw(800, 500);
+      if ref = nil then
+        ref := FBmp.Duplicate as TBGRABitmap
+      else
+      begin
+        diff := 0;
+        for y := 0 to 499 do
+          for x := 0 to 799 do
+            if PixelAt(x, y) <> ref.GetPixel(x, y) then Inc(diff);
+        AssertEquals('pixels that differ under global seed ' + IntToStr(cSeeds[k]),
+          0, diff);
+      end;
+    end;
+  finally
+    ref.Free;
+  end;
+end;
+
+procedure TAdvanceChartTest.TestALargeLinesBatchPaintsTheSameWhateverTheGlobalRandomHolds;
+{ A large lines batch is drawn straight on a BGRA layer (PaintLargeOnLayer),
+  not through the painter: its polylines are pinned there. Two rows of 300
+  points, the same option under six global seeds. The data seeds are ones
+  whose rows came out differently unpinned (a scratch probe). [fin: the
+  large batch's pin survived] }
+const
+  cSeeds: array[0..5] of LongWord = (1, 2, 3, 12345, $DEADBEEF, 99);
+var
+  opt, rows, pts: string;
+  ref: TBGRABitmap;
+  ds, i, k, x, y, diff: Integer;
+  st: LongWord;
+begin
+  rows := '';
+  for ds := 1 to 2 do
+  begin
+    pts := '';
+    st := ds;
+    for i := 0 to 299 do
+    begin
+      {$push}{$R-}{$Q-}
+      st := st * 1103515245 + 12345;
+      {$pop}
+      if i > 0 then pts := pts + ',';
+      pts := pts + '[' + IntToStr(40 + i * 12 div 5) + '.' + IntToStr((i * 12) mod 5 * 2) + ','
+        + IntToStr(100 + (st shr 8) mod 300) + '.' + IntToStr((st shr 3) mod 37) + ']';
+    end;
+    if rows <> '' then rows := rows + ',';
+    rows := rows + '{ coords: [' + pts + '] }';
+  end;
+  opt := '{ animation: false, grid: { left: 0, right: 0, top: 0, bottom: 0 },'
+    + ' xAxis: { type: ''value'', min: 0, max: 800, show: false },'
+    + ' yAxis: { type: ''value'', min: 0, max: 500, show: false },'
+    + ' series: [{ type: ''lines'', coordinateSystem: ''cartesian2d'', polyline: true,'
+    + ' large: true, largeThreshold: 1, lineStyle: { width: 2, opacity: 1 },'
+    + ' data: [' + rows + '] }] }';
   FChart.Option := opt;
   ref := nil;
   try
