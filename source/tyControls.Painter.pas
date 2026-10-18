@@ -3939,6 +3939,8 @@ begin
 end;
 
 function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap; forward;
+function GetCachedScaledImage(const APath: string; APicture: TBGRABitmap;
+  AScale: Integer): TBGRABitmap; forward;
 
 procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
@@ -3968,12 +3970,25 @@ begin
   if src = nil then
     Exit;
   begin
-    iw := src.Width;
-    ih := src.Height;
     sl := AInsets.Left;
     st := AInsets.Top;
     sr := AInsets.Right;
     sb := AInsets.Bottom;
+    { A theme image is a one-times asset, its pixels layout pixels (#83). On a layer at a device
+      scale it is taken S times as large, insets too, so a frame keeps its thickness in layout
+      pixels; each image pixel lands on S x S device pixels, as the system would have put it. }
+    if FScale > 1 then
+    begin
+      { the cache owns src (main's GetCachedImage): the S-times picture is kept beside it under
+        its own key, made once, and src is neither freed nor replaced in the cache }
+      src := GetCachedScaledImage(AImagePath, src, FScale);
+      sl := sl * FScale;
+      st := st * FScale;
+      sr := sr * FScale;
+      sb := sb * FScale;
+    end;
+    iw := src.Width;
+    ih := src.Height;
     sxL := sl;
     sxR := iw - sr;
     syT := st;
@@ -4243,6 +4258,25 @@ end;
 var
   GImgCache: TStringList = nil;  // key 'path|blurDev' -> TBGRABitmap (OwnsObjects)
 
+{ APicture -- GetCachedImage's picture for APath -- AScale times as large, each pixel on
+  AScale x AScale (#83: a theme image is a one-times asset, NineSlice at a device scale). Kept
+  in the same cache under its own key ('path|xS'), made once: the original stays the cache's,
+  untouched. }
+function GetCachedScaledImage(const APath: string; APicture: TBGRABitmap;
+  AScale: Integer): TBGRABitmap;
+var
+  key: string;
+  idx: Integer;
+begin
+  key := APath + '|x' + IntToStr(AScale);
+  idx := GImgCache.IndexOf(key);   // there: APicture came from it
+  if idx >= 0 then
+    Exit(TBGRABitmap(GImgCache.Objects[idx]));
+  Result := APicture.Resample(APicture.Width * AScale, APicture.Height * AScale,
+    rmSimpleStretch) as TBGRABitmap;
+  GImgCache.AddObject(key, Result);
+end;
+
 { Load (and optionally blur) an image once, cached by path + device-px blur radius.
   The returned bitmap is owned by the cache — callers must not free it. }
 function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap;
@@ -4299,9 +4333,12 @@ var
   oldClip: TRect;
 begin
   if FBmp = nil then Exit;
-  src := GetCachedImage(AImagePath, Scale(ABlurLogical));
+  { The image is a one-times asset whose pixels are layout pixels (#83): blurred at the LAYOUT
+    radius, then stretched onto the raster with the rest of the picture; centred, it is drawn S
+    times its size. At S = 1 the layout PPI is the PPI. }
+  src := GetCachedImage(AImagePath, MulDiv(ABlurLogical, FLayoutPPI, 96));
   if src = nil then Exit;
-  iw := src.Width; ih := src.Height;
+  iw := src.Width * FScale; ih := src.Height * FScale;
   dw := ARect.Right - ARect.Left; dh := ARect.Bottom - ARect.Top;
   if (iw <= 0) or (ih <= 0) or (dw <= 0) or (dh <= 0) then Exit;
   oldClip := FBmp.ClipRect;
@@ -4311,8 +4348,12 @@ begin
       timStretch:
         FBmp.StretchPutImage(ARect, src, dmDrawWithTransparency);
       timCenter:
-        FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
-          src, dmDrawWithTransparency);
+        if FScale = 1 then
+          FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+            src, dmDrawWithTransparency)
+        else
+          FBmp.StretchPutImage(Bounds(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+            iw, ih), src, dmDrawWithTransparency);
       timCover:
         begin
           scW := dw / iw; scH := dh / ih;
