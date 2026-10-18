@@ -35,6 +35,12 @@ type
     procedure TestResolutionAtScaleTwoFillsTheLayoutRect;
     { The menu's LCL-list icons: the raster resolution, at the place the row gives them. }
     procedure TestMenuIconTakesTheRasterResolution;
+    { An LCL-list icon scaled for the device scale is kept: drawn again, it is not scaled again. }
+    procedure TestForeignIconIsScaledOnce;
+    { ... and is never handed out for another picture: not after Replace (which notifies
+      nobody), not to the next list at a freed list's address. }
+    procedure TestForeignIconFollowsTheList;
+    procedure TestForeignIconIsNotTakenForAnotherList;
   end;
 
 implementation
@@ -328,6 +334,108 @@ begin
     s2.Free;
     f2.Free;
     f1.Free;
+  end;
+end;
+
+procedure TDeviceScaleCanvasImagesTest.TestForeignIconIsScaledOnce;
+var
+  il: TImageList;
+  a, target: TBitmap;
+  n: Integer;
+begin
+  { A picture no other check draws: the kept icons are keyed by the picture, process-wide. }
+  il := TImageList.Create(nil);
+  a := Solid(16, 16, TColor($3A5C7E));
+  target := NewTarget(40, 40);
+  try
+    il.Width := 16;
+    il.Height := 16;
+    il.Add(a, nil);
+    TyForceDeviceScaleForTest(2, False);
+    try
+      n := TyForeignScaledBuildCount;
+      TyDrawImage(target.Canvas, il, 0, 4, 4, 16, 96, False);
+      AssertEquals('scaled for the first draw', n + 1, TyForeignScaledBuildCount);
+      TyDrawImage(target.Canvas, il, 0, 4, 4, 16, 96, False);
+      AssertEquals('drawn again: not scaled again', n + 1, TyForeignScaledBuildCount);
+      TyDrawImage(target.Canvas, il, 0, 4, 4, 16, 96, True);
+      AssertEquals('ghosted is another picture', n + 2, TyForeignScaledBuildCount);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  finally
+    target.Free;
+    a.Free;
+    il.Free;
+  end;
+end;
+
+procedure TDeviceScaleCanvasImagesTest.TestForeignIconFollowsTheList;
+var
+  il: TImageList;
+  a, b, target: TBitmap;
+begin
+  il := TImageList.Create(nil);
+  a := Solid(16, 16, CRed);
+  b := Solid(16, 16, CBlue);
+  target := NewTarget(40, 40);
+  try
+    il.Width := 16;
+    il.Height := 16;
+    il.Add(a, nil);
+    TyForceDeviceScaleForTest(2, False);
+    try
+      TyDrawImage(target.Canvas, il, 0, 4, 4, 16, 96, False);
+      AssertEquals('the first picture', CRed, PixelOf(target, 12, 12));
+      il.Replace(0, b, nil);
+      TyDrawImage(target.Canvas, il, 0, 4, 4, 16, 96, False);
+      AssertEquals('the list''s new picture, not the kept one', CBlue, PixelOf(target, 12, 12));
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  finally
+    target.Free;
+    b.Free;
+    a.Free;
+    il.Free;
+  end;
+end;
+
+procedure TDeviceScaleCanvasImagesTest.TestForeignIconIsNotTakenForAnotherList;
+var
+  il: TImageList;
+  a, target: TBitmap;
+  colour: Integer;
+  colours: array[0..1] of TColor;
+begin
+  colours[0] := CRed;
+  colours[1] := CBlue;
+  target := NewTarget(40, 40);
+  try
+    { A red list, drawn and freed; then a blue one -- the heap hands it the same address more
+      often than not. }
+    for colour := 0 to 1 do
+    begin
+      il := TImageList.Create(nil);
+      a := Solid(16, 16, colours[colour]);
+      try
+        il.Width := 16;
+        il.Height := 16;
+        il.Add(a, nil);
+        TyForceDeviceScaleForTest(2, False);
+        try
+          TyDrawImage(target.Canvas, il, 0, 4, 4, 16, 96, False);
+        finally
+          TyForceDeviceScaleForTest(0, False);
+        end;
+        AssertEquals('each list draws its own picture', colours[colour], PixelOf(target, 12, 12));
+      finally
+        a.Free;
+        il.Free;
+      end;
+    end;
+  finally
+    target.Free;
   end;
 end;
 
