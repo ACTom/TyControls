@@ -1,0 +1,42 @@
+{
+  "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+  "W": 600,
+  "H": 400,
+  "seed": 2463534242,
+  "notes": ["Names are JavaScript strings: two names are one only when every UTF-16 code unit agrees. SeriesData.makeIdFromName counts repeats in a plain object (`_nameRepeatCount[name] = (... || 0) + 1`, the second is name + '__ec__2'); OrdinalMeta.parseAndCollect interns categories in a createHashMap.","The JSON escapes every non-ASCII code unit (\\uXXXX), so the fixture reads back the same code units on any platform."],
+  "cases": [
+    {
+      "id": "treemap-lookalikes",
+      "kind": "hier",
+      "note": "a treemap whose names a locale compare finds equal from their first differing code point: A-ring / Angstrom, BOM / soft hyphen, precomposed / combining e-acute; each is its own name, the real repeats count among their own",
+      "option": {"animation":false,"series":[{"type":"treemap","name":"tm","data":[{"name":"\u00c5a","value":6},{"name":"\u212bb","value":5},{"name":"\u212bb","value":4},{"name":"\ufeffx","value":3,"children":[{"name":"\u00ady","value":2},{"name":"\u00ady","value":1}]},{"name":"\u00ady","value":3},{"name":"\u00e9","value":2},{"name":"e\u0301","value":2},{"name":"\u00c5a","value":1}]}]},
+      "seriesType": "treemap",
+      "ids": ["tm","\u00c5a","\u212bb","\u212bb__ec__2","\ufeffx","\u00ady","\u00ady__ec__2","\u00ady__ec__3","\u00e9","e\u0301","\u00c5a__ec__2"]
+    },
+    {
+      "id": "sunburst-lookalikes",
+      "kind": "hier",
+      "note": "the same names in a sunburst",
+      "option": {"animation":false,"series":[{"type":"sunburst","name":"sb","data":[{"name":"\u00c5a","value":6},{"name":"\u212bb","value":5},{"name":"\u212bb","value":4},{"name":"\ufeffx","value":3,"children":[{"name":"\u00ady","value":2},{"name":"\u00ady","value":1}]},{"name":"\u00ady","value":3},{"name":"\u00e9","value":2},{"name":"e\u0301","value":2},{"name":"\u00c5a","value":1}]}]},
+      "seriesType": "sunburst",
+      "ids": ["sb","\u00c5a","\u212bb","\u212bb__ec__2","\ufeffx","\u00ady","\u00ady__ec__2","\u00ady__ec__3","\u00e9","e\u0301","\u00c5a__ec__2"]
+    },
+    {
+      "id": "treemap-root-named-alike",
+      "kind": "hier",
+      "note": "the series named A-ring 'a', a child named Angstrom 'a' and one named A-ring 'a': the root's name counts too (the child named as the root is its second)",
+      "option": {"animation":false,"series":[{"type":"treemap","name":"\u00c5a","data":[{"name":"\u212ba","value":2},{"name":"\u00c5a","value":1}]}]},
+      "seriesType": "treemap",
+      "ids": ["\u00c5a","\u212ba","\u00c5a__ec__2"]
+    },
+    {
+      "id": "category-lookalikes",
+      "kind": "category",
+      "note": "a collecting category axis: the names each their own category, in the order the data brings them",
+      "option": {"animation":false,"xAxis":{"type":"category"},"yAxis":{},"series":[{"type":"bar","data":[["\u00c5a",3],["\u212bb",5],["\ufeffx",2],["\u00ady",4],["\u00e9",1],["e\u0301",6]]},{"type":"line","data":[["\u00ady",1],["\u212bb",2],["\u00c5a",3],["q",4]]}]},
+      "categories": ["\u00c5a","\u212bb","\ufeffx","\u00ady","\u00e9","e\u0301","q"],
+      "ordinals": [[0,1,2,3,4,5],[3,1,0,6]]
+    }
+  ],
+  "checks": {"expectations":15}
+}

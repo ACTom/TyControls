@@ -1159,6 +1159,9 @@ begin
     seen := TStringList.Create;
     kept := TJSONArray.Create;
     try
+      { by bytes, as upstream keys a name: the locale compare took
+        U+00C5 and U+212B for one letter, and whatever came after [P2] }
+      seen.UseLocale := False;
       seen.Sorted := True;
       seen.CaseSensitive := True;
       for k := 0 to types.Count - 1 do

@@ -890,6 +890,7 @@ type
       then. }
     ZrHit: TTyZrHit;
   end;
+  PTyChartElement = ^TTyChartElement;
 
   TTyPaintList = class
   private
@@ -897,6 +898,12 @@ type
     FCount: Integer;
     FOrder: array of Integer;
     FOrdered: Boolean;
+    { [P2] the journal: what SetElement overwrote while it recorded }
+    FJrOn, FJrSession, FJrOpened, FJrTainted: Boolean;
+    FJrIdx: array of Integer;
+    FJrOld: array of TTyChartElement;
+    FJrN: Integer;
+    FJrMark: array of Boolean;
     procedure EnsureOrder;
     function Less(A, B: Integer): Boolean;
     procedure MergeSortOrder;
@@ -906,6 +913,30 @@ type
     function Add(const AElement: TTyChartElement): Integer;
     { The element at its INSERTION index. }
     function Element(AIndex: Integer): TTyChartElement;
+    { The same element BY REFERENCE, for a loop that only reads it [P2]:
+      Element copies the whole record -- the shape's arrays, the caption's
+      strings, through the RTTI -- and a list of a few thousand paid that on
+      every pass that looked at it. Valid until the next Add or Clear. Z and
+      Z2 are never written through it -- SetElement is what re-sorts the
+      paint order -- and nothing is written through the shared empty element
+      it answers out of range, as Element does. }
+    function Ref(AIndex: Integer): PTyChartElement; inline;
+    { THE JOURNAL [P2]. A build opens a session (JournalOpen) and closes it
+      when it is done (JournalClose); inside it, while Record is on, the
+      first SetElement of each index keeps what it overwrote. Writes inside
+      the session with Record off are the build's own and are not kept. A
+      SetElement after the session closed taints it: the list then holds a
+      write a rewind would not know to replay. Rewind puts every kept
+      element back and opens a new session. Clear forgets it all; a write
+      through Ref is never journaled. What it is for: a frame whose states
+      alone changed puts the list back to what the states were written over
+      and writes them again, instead of building the whole list. }
+    procedure JournalOpen;
+    procedure JournalClose;
+    procedure JournalRecord(AOn: Boolean);
+    procedure JournalRewind;
+    { a session closed since the last Clear, and not tainted }
+    function JournalReady: Boolean;
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
@@ -1174,6 +1205,53 @@ begin
   FOrder := nil;
   FCount := 0;
   FOrdered := True;
+  FJrOn := False;
+  FJrSession := False;
+  FJrOpened := False;
+  FJrTainted := False;
+  FJrN := 0;
+  FJrOld := nil;
+  FJrMark := nil;
+end;
+
+procedure TTyPaintList.JournalOpen;
+begin
+  FJrOn := False;
+  FJrSession := True;
+  FJrOpened := False;
+  FJrTainted := False;
+  FJrN := 0;
+  FJrOld := nil;
+  FJrIdx := nil;
+  FJrMark := nil;
+  SetLength(FJrMark, FCount);
+end;
+
+procedure TTyPaintList.JournalClose;
+begin
+  if not FJrSession then Exit;
+  FJrOn := False;
+  FJrSession := False;
+  FJrOpened := True;
+end;
+
+procedure TTyPaintList.JournalRecord(AOn: Boolean);
+begin
+  FJrOn := AOn and FJrSession;
+end;
+
+procedure TTyPaintList.JournalRewind;
+var k: Integer;
+begin
+  for k := FJrN - 1 downto 0 do
+    FItems[FJrIdx[k]] := FJrOld[k];
+  if FJrN > 0 then FOrdered := False;
+  JournalOpen;
+end;
+
+function TTyPaintList.JournalReady: Boolean;
+begin
+  Result := FJrOpened and not FJrSession and not FJrTainted;
 end;
 
 function TTyPaintList.Add(const AElement: TTyChartElement): Integer;
@@ -1190,8 +1268,36 @@ procedure TTyPaintList.SetElement(AIndex: Integer;
   const AElement: TTyChartElement);
 begin
   if (AIndex < 0) or (AIndex >= FCount) then Exit;
+  if FJrOn then
+  begin
+    { an element added after the journal opened is journaled too }
+    if AIndex >= Length(FJrMark) then SetLength(FJrMark, FCount);
+    if not FJrMark[AIndex] then
+    begin
+      FJrMark[AIndex] := True;
+      if FJrN = Length(FJrIdx) then
+      begin
+        SetLength(FJrIdx, Max(16, FJrN * 2));
+        SetLength(FJrOld, Length(FJrIdx));
+      end;
+      FJrIdx[FJrN] := AIndex;
+      FJrOld[FJrN] := FItems[AIndex];
+      Inc(FJrN);
+    end;
+  end
+  else if FJrOpened and not FJrSession then
+    FJrTainted := True;
   FItems[AIndex] := AElement;
   FOrdered := False;
+end;
+
+var
+  GNoElement: TTyChartElement;
+
+function TTyPaintList.Ref(AIndex: Integer): PTyChartElement;
+begin
+  if (AIndex < 0) or (AIndex >= FCount) then Exit(@GNoElement);
+  Result := @FItems[AIndex];
 end;
 
 function TTyPaintList.Element(AIndex: Integer): TTyChartElement;
@@ -1511,5 +1617,8 @@ begin
   AY2 := SafeNum(AY2, 0);
   AR := 0;
 end;
+
+initialization
+  GNoElement.Datum := TyChartNoDatum;
 
 end.

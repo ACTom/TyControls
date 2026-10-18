@@ -1770,6 +1770,10 @@ var
       clipW := 0;
       clipH := 0;
       clipEx := 0;
+      { no rect either: the symbols' G[4] / G[5] (read only off a polar)
+        were whatever the stack held, a list never equal to the next build's
+        [P2] }
+      symbolArea := Default(TTyXYWH);
       Exit;
     end;
     area := ABinding.Cart.GetArea;

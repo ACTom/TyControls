@@ -62,6 +62,11 @@ type
     procedure TestAKeptBitmapIsNotLeftSharingAFreedClip;
     procedure TestAKeptMaskIsOnlyTheRequestItWasBuiltFor;
     procedure TestAnEvictedMaskASavedStateSharesIsCopiedFirst;
+    procedure TestAKeptMaskOutlivesItsPainter;
+    procedure TestAMaskAnotherLivePainterHoldsIsNeitherTakenNorEvicted;
+    { ---- BGRA's edge sort takes its pivots from the global Random ---- }
+    procedure TestALongPathPaintsTheSameWhateverTheGlobalRandomHolds;
+    procedure TestPaintingNeverRestartsTheApplicationsRandomStream;
     procedure TestRestoreStateRestoresTheDash;
     procedure TestRestoreStateRestoresElementAlpha;
     procedure TestElementAlphaDimsTheFill;
@@ -687,6 +692,230 @@ begin
   AssertEquals('painted inside the saved clip', 255, AlphaAt(25, 50));
   AssertEquals('not outside it', 0, AlphaAt(120, 50));
   FPainter.RestoreState;
+end;
+
+{ [P2] THE POOL OUTLIVES THE PAINTER: a mask one painter built is the next painter's,
+  and draws what building it would. }
+procedure TPainterVectorTest.TestAKeptMaskOutlivesItsPainter;
+var
+  ref: TBGRABitmap;
+  x, y, built: Integer;
+
+  procedure Paint;
+  var k: Integer;
+  begin
+    for k := 0 to 9 do
+    begin
+      FPainter.SaveState;
+      FPainter.ClipRect(Rect(13, 7, 171, 83));
+      FPainter.BeginPath;
+      FPainter.RectPath(k * 17 - 5, k * 9 - 4, 40.5, 30.25);
+      FPainter.FillPath(TyRGBA(30, k * 20, 200, 140));
+      FPainter.RestoreState;
+    end;
+  end;
+
+begin
+  TyPainterClipReuseForTest(False);
+  try
+    MakePainter(200, 100, 96);
+    Paint;
+    ref := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    FreePainter;
+  finally
+    TyPainterClipReuseForTest(True);
+  end;
+  try
+    MakePainter(200, 100, 96);
+    built := TyPainterClipMasksBuiltForTest;
+    Paint;
+    AssertEquals('the first painter builds the box once', 1, TyPainterClipMasksBuiltForTest - built);
+    FPainter.EndPaint;
+    FreePainter;
+    MakePainter(200, 100, 96);
+    built := TyPainterClipMasksBuiltForTest;
+    Paint;
+    AssertEquals('the next painter builds nothing', 0, TyPainterClipMasksBuiltForTest - built);
+    for y := 0 to 99 do
+      for x := 0 to 199 do
+        if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then
+          Fail(Format('pixel %d,%d differs from building every clip', [x, y]));
+  finally
+    ref.Free;
+  end;
+end;
+
+{ [P2] Two painters at once: the one that holds an entry (its canvas may share it) keeps
+  it -- the other builds its own, and its own first clips never push the first painter's
+  out. The frees are poisoned, so a state left on an evicted mask reads garbage. }
+procedure TPainterVectorTest.TestAMaskAnotherLivePainterHoldsIsNeitherTakenNorEvicted;
+var
+  other: TTyPainter;
+  host: TBitmap;
+  i, built: Integer;
+begin
+  TyPainterClipReuseForTest(True);
+  MakePainter(200, 100, 96);
+  FPainter.SaveState;
+  FPainter.ClipRect(Rect(0, 0, 50, 100));
+  host := TBitmap.Create;
+  other := TTyPainter.Create;
+  try
+    host.SetSize(200, 100);
+    other.BeginPaint(host.Canvas, Rect(0, 0, 200, 100), 96);
+    built := TyPainterClipMasksBuiltForTest;
+    other.SaveState;
+    other.ClipRect(Rect(0, 0, 50, 100));
+    other.RestoreState;
+    AssertEquals('the other painter builds its own', 1, TyPainterClipMasksBuiltForTest - built);
+    BeginPoison;
+    try
+      for i := 1 to 6 do
+      begin
+        other.SaveState;
+        other.ClipRect(Rect(60 + i * 10, 0, 90 + i * 10, 100));
+        other.RestoreState;
+      end;
+      FPainter.BeginPath;
+      FPainter.RectPath(0, 0, 200, 100);
+      FPainter.FillPath(Red);
+    finally
+      EndPoison;
+    end;
+    AssertEquals('painted inside the first painter''s clip', 255, AlphaAt(25, 50));
+    AssertEquals('not outside it', 0, AlphaAt(120, 50));
+    other.EndPaint;
+  finally
+    other.Free;
+    host.Free;
+  end;
+  FPainter.RestoreState;
+end;
+
+{ A long line series' outline, 300 points 2.4 px apart that jump about.
+  Generated here, not with Random -- the global generator is the thing under
+  test. The data seeds are ones whose stroke came out differently under
+  different global seeds before the pin (found with a scratch probe). }
+procedure ZigzagPath(P: TTyPainter; ASeed: LongWord; AClosed: Boolean);
+var
+  i: Integer;
+  st: LongWord;
+  x, y: Double;
+begin
+  st := ASeed;
+  P.BeginPath;
+  for i := 0 to 299 do
+  begin
+    {$push}{$R-}{$Q-}
+    st := st * 1103515245 + 12345;
+    {$pop}
+    x := 40 + i * 2.4;
+    y := 100 + (st shr 8) mod 300 + ((st shr 3) mod 37) / 100;
+    if i = 0 then P.MoveTo(x, y) else P.LineTo(x, y);
+  end;
+  if AClosed then
+  begin
+    P.LineTo(40 + 299 * 2.4, 480);
+    P.LineTo(40, 480);
+    P.ClosePath;
+  end;
+end;
+
+procedure TPainterVectorTest.TestALongPathPaintsTheSameWhateverTheGlobalRandomHolds;
+{ BGRA's one-pass polygon filler sorts the edges by y with a quicksort that
+  picks its pivots with the global Random. Edges on the same y come out in a
+  pivot-dependent order, and on a scanline where that order matters the
+  antialiased coverage differs by a step or two -- so line-aqi and
+  area-rainfall painted differently from one run of the same exe to the next.
+  The painter pins the generator around each fill: whatever the application's
+  generator holds, a path paints the same. A stroke, a fill and a clip, each
+  under eight different global seeds. }
+const
+  cSeeds: array[0..7] of LongWord = (1, 2, 3, 99, 12345, $DEADBEEF, 7, 31337);
+var
+  ref: TBGRABitmap;
+  k, x, y, diff: Integer;
+
+  procedure Paint;
+  begin
+    FPainter.SetLineJoin(tljBevel);
+    ZigzagPath(FPainter, 1, False);
+    FPainter.StrokePath(TyRGBA(84, 112, 198, 255), 2);
+    ZigzagPath(FPainter, 3, False);
+    FPainter.StrokePath(TyRGBA(200, 60, 40, 255), 2);
+    ZigzagPath(FPainter, 4, False);
+    FPainter.StrokePath(TyRGBA(20, 160, 60, 255), 2);
+    ZigzagPath(FPainter, 2, True);
+    FPainter.FillPath(TyRGBA(200, 60, 40, 110));
+    FPainter.SaveState;
+    ZigzagPath(FPainter, 5, True);
+    FPainter.ClipPath;
+    FPainter.BeginPath;
+    FPainter.RectPath(0, 0, 800, 500);
+    FPainter.FillPath(TyRGBA(20, 160, 60, 90));
+    FPainter.RestoreState;
+  end;
+
+begin
+  ref := nil;
+  try
+    for k := 0 to High(cSeeds) do
+    begin
+      RandSeed := cSeeds[k];
+      MakePainter(800, 500, 96);
+      Paint;
+      if ref = nil then
+        ref := FPainter.Bitmap.Duplicate as TBGRABitmap
+      else
+      begin
+        diff := 0;
+        for y := 0 to ref.Height - 1 do
+          for x := 0 to ref.Width - 1 do
+            if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then Inc(diff);
+        AssertEquals('pixels that differ under global seed ' + IntToStr(cSeeds[k]),
+          0, diff);
+      end;
+      FreePainter;
+    end;
+  finally
+    ref.Free;
+  end;
+end;
+
+procedure TPainterVectorTest.TestPaintingNeverRestartsTheApplicationsRandomStream;
+{ The pin must not cost the application its stream. Restoring the saved
+  RandSeed would make FPC's generator reseed from that value at the next
+  call -- after every paint the application would draw the same numbers it
+  drew after the previous one. Paint, draw, three times over: the draws all
+  differ, and an application that seeds its own generator still gets the
+  same draws on a second go (the pin is deterministic too). }
+var
+  a, b: array[0..2] of LongInt;
+  k: Integer;
+
+  procedure Cycle(var AOut: array of LongInt);
+  var
+    i: Integer;
+  begin
+    RandSeed := 4242;
+    for i := 0 to 2 do
+    begin
+      MakePainter(800, 500, 96);
+      ZigzagPath(FPainter, 1, False);
+      FPainter.StrokePath(TyRGBA(84, 112, 198, 255), 2);
+      FreePainter;
+      AOut[i] := Random(MaxInt);
+    end;
+  end;
+
+begin
+  Cycle(a);
+  AssertTrue('the first and second draws differ', a[0] <> a[1]);
+  AssertTrue('the second and third draws differ', a[1] <> a[2]);
+  AssertTrue('the first and third draws differ', a[0] <> a[2]);
+  Cycle(b);
+  for k := 0 to 2 do
+    AssertEquals('draw ' + IntToStr(k) + ' again from the same seed', a[k], b[k]);
 end;
 
 procedure TPainterVectorTest.TestRestoreStateRestoresTheDash;

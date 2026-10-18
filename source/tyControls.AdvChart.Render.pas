@@ -265,6 +265,9 @@ begin
   begin
     GDecalCache := TStringList.Create;
     GDecalCache.OwnsObjects := True;
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    GDecalCache.UseLocale := False;
     GDecalCache.Sorted := True;
     GDecalCache.CaseSensitive := True;
   end;
@@ -1677,6 +1680,25 @@ var
     c: TBGRAPixel;
     sub: TTyChartShape;
     pts: ArrayOfTPointF;
+
+    { a row's polygon with BGRA's generator pinned (TyPinBgraRandom) }
+    procedure PinnedPoly(AKind: Integer);
+    var
+      saved: LongWord;
+    begin
+      saved := TyPinBgraRandom;
+      try
+        case AKind of
+          0: layer.DrawPolyLineAntialias(pts, c, pen);
+          1: layer.DrawPolygonAntialias(pts, c, pen);
+        else
+          layer.FillPolyAntialias(pts, c);
+        end;
+      finally
+        TyUnpinBgraRandom(saved);
+      end;
+    end;
+
   begin
     g := AElement.Shape.Large;
     spec := LargeSymbolSpec(g);
@@ -1747,7 +1769,7 @@ var
           if AStroke then
           begin
             pts := LinesRowPoints(g, i, ox, oy);
-            if Length(pts) >= 2 then layer.DrawPolyLineAntialias(pts, c, pen);
+            if Length(pts) >= 2 then PinnedPoly(0);
           end;
           Continue;
         end;
@@ -1795,11 +1817,11 @@ var
                 pts[j] := PointF(sub.Points[j].X - ox, sub.Points[j].Y - oy);
               if AStroke then
               begin
-                if sub.Kind = cskPolyline then layer.DrawPolyLineAntialias(pts, c, pen)
-                else layer.DrawPolygonAntialias(pts, c, pen);
+                if sub.Kind = cskPolyline then PinnedPoly(0)
+                else PinnedPoly(1);
               end
               else if sub.Kind = cskPolygon then
-                layer.FillPolyAntialias(pts, c);
+                PinnedPoly(2);
             end;
           end;
         end;
@@ -1989,15 +2011,18 @@ end;
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
 var
   i: Integer;
+  pe: PTyChartElement;
 begin
   if (P = nil) or (AList = nil) then Exit;
   { Paint order, back to front. The hit test walks the same order in reverse, so
-    what the eye sees on top is what the pointer gets. }
+    what the eye sees on top is what the pointer gets. By reference: drawing
+    adds nothing to the list [P2]. }
   for i := 0 to AList.Count - 1 do
-    if not AList.Element(AList.PaintOrder(i)).Ignore
-      and not AList.Element(AList.PaintOrder(i)).ProgHidden
-      and not AList.Element(AList.PaintOrder(i)).GfxUnder then
-      TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
+  begin
+    pe := AList.Ref(AList.PaintOrder(i));
+    if not pe^.Ignore and not pe^.ProgHidden and not pe^.GfxUnder then
+      TyRenderElement(P, pe^);
+  end;
 end;
 
 finalization
