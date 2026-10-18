@@ -1,0 +1,423 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "cases": [
+  {
+   "id": "dashed",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3,
+       "textBorderType": "dashed"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4028000000000000",
+      "4018000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "dotted",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 2,
+       "textBorderType": "dotted"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4000000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4000000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "number",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3,
+       "textBorderType": 5
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": 5,
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4014000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "array",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3,
+       "textBorderType": [
+        2,
+        3
+       ]
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": [
+      2,
+      3
+     ],
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4000000000000000",
+      "4008000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "solid",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3,
+       "textBorderType": "solid"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": "solid",
+     "lineDashOffset": "0000000000000000",
+     "pattern": null
+    }
+   ]
+  },
+  {
+   "id": "none",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "pattern": null
+    }
+   ]
+  },
+  {
+   "id": "offset",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3,
+       "textBorderType": "dashed",
+       "textBorderDashOffset": 4
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4010000000000000",
+     "pattern": [
+      "4028000000000000",
+      "4018000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "global",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3
+      }
+     }
+    ],
+    "textStyle": {
+     "textBorderType": "dotted"
+    }
+   },
+   "texts": [
+    {
+     "text": "5",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4008000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rich",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "textBorderColor": "#ff0000",
+       "textBorderWidth": 3,
+       "formatter": "{a|A}{b|B}",
+       "rich": {
+        "a": {
+         "textBorderType": "dashed"
+        },
+        "b": {}
+       }
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "A",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4028000000000000",
+      "4018000000000000"
+     ]
+    },
+    {
+     "text": "B",
+     "stroke": "#ff0000",
+     "lineWidth": "4008000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "pattern": null
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "dashed [12, 6]",
+   "ok": true
+  },
+  {
+   "name": "solid none",
+   "ok": true
+  },
+  {
+   "name": "global dotted",
+   "ok": true
+  },
+  {
+   "name": "rich: the token a dashed, b not",
+   "ok": true
+  }
+ ]
+}

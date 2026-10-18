@@ -401,7 +401,7 @@ implementation
 
 uses
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.AnimView;
+  tyControls.AdvChart.AnimView, tyControls.AdvChart.Color;
 
 { ==================== JSON ==================== }
 
@@ -871,7 +871,7 @@ begin
   else
     Result := 'rgba(' + IntToStr((AColor shr 16) and $FF) + ','
       + IntToStr((AColor shr 8) and $FF) + ',' + IntToStr(AColor and $FF) + ','
-      + TyJsNumberToString(a / 255) + ')';
+      + TyJsNumberToString(TyChartColorAlpha(AColor)) + ')';
 end;
 
 { ==================== the element info ==================== }

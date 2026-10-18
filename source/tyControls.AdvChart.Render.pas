@@ -59,6 +59,13 @@ procedure TyDecalMatrix(const ADecal: TTyChartDecal; AScale: Double;
 { Draw the whole list in paint order. }
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
 
+{ [F4c] zrender's normalizeLineDash: a textBorderType as written ('dashed'
+  [4w, 2w], 'dotted' [w], a number [n], a JSON array its numbers) against
+  the stroke's width; False -- a solid line -- for 'solid', '' or a width
+  that is not above nought. }
+function TyNormalizeLineDash(const AType: string; AWidth: Double;
+  out APattern: TTyDoubleArray): Boolean;
+
 { ZRENDER'S TEXT BLOCK, piece by piece in its paint order: each rect (its
   border first where it has both, as zrender doubles and underlays it) and
   each text, hung at (AX, AY), turned counter-clockwise by ARotationRad and
@@ -651,6 +658,365 @@ begin
   end;
 end;
 
+
+{ ==================== the halo: the glyphs' outlines, stroked [F4c] ==================== }
+
+function TyNormalizeLineDash(const AType: string; AWidth: Double;
+  out APattern: TTyDoubleArray): Boolean;
+var
+  s, item: string;
+  v: Double;
+  fs: TFormatSettings;
+  i, n: Integer;
+begin
+  APattern := nil;
+  Result := False;
+  s := Trim(AType);
+  if (s = '') or (s = 'solid') or not (AWidth > 0) then Exit;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  if s = 'dashed' then
+  begin
+    SetLength(APattern, 2);
+    APattern[0] := 4 * AWidth;
+    APattern[1] := 2 * AWidth;
+  end
+  else if s = 'dotted' then
+  begin
+    SetLength(APattern, 1);
+    APattern[0] := AWidth;
+  end
+  else if s[1] = '[' then
+  begin
+    { a JSON array of numbers, as written }
+    s := Copy(s, 2, Length(s) - 2);
+    n := 0;
+    while s <> '' do
+    begin
+      i := Pos(',', s);
+      if i = 0 then i := Length(s) + 1;
+      item := Trim(Copy(s, 1, i - 1));
+      Delete(s, 1, i);
+      if not TryStrToFloat(item, v, fs) then Continue;
+      SetLength(APattern, n + 1);
+      APattern[n] := v;
+      Inc(n);
+    end;
+  end
+  else if TryStrToFloat(s, v, fs) then
+  begin
+    SetLength(APattern, 1);
+    APattern[0] := v;
+  end
+  else
+    Exit;
+  Result := Length(APattern) > 0;
+end;
+
+{ THE GLYPHS' OUTLINES from their coverage: marching squares over the mask's
+  alpha at half coverage, each crossing placed by linear interpolation
+  between the pixel centres, the segments chained into closed contours and
+  traced on P in DEVICE px (the mask's (0, 0) at (AOX, AOY)). A contour is a
+  glyph's outline as the painter drew the glyph -- which is what zrender
+  strokes: the text's own path. }
+procedure TraceMaskOutline(P: TTyPainter; AMask: TBGRABitmap; AOX, AOY: Integer;
+  const ADashDevice: TTyDoubleArray);
+const
+  cT = 127.5;
+var
+  w, h, gw, gh, nKeys, cx, cy, i, k, cur, seg, startKey, key, nSeg: Integer;
+  ex, ey: array of Double;
+  segA, segB: array of Integer;
+  adj: array of Integer;     // two segment slots per key
+  used: array of Boolean;
+  v0, v1, v2, v3, centre: Double;
+  b0, b1, b2, b3: Boolean;
+  kTop, kRight, kBottom, kLeft: Integer;
+  px, py: array of Double;
+  np: Integer;
+
+  function A(AX, AY: Integer): Double;
+  begin
+    if (AX < 0) or (AY < 0) or (AX >= w) or (AY >= h) then Exit(0);
+    Result := AMask.GetPixel(AX, AY).alpha;
+  end;
+
+  { an edge's key: the horizontal edge from sample (AX, AY) to (AX + 1, AY),
+    or the vertical one down to (AX, AY + 1) }
+  function KeyH(AX, AY: Integer): Integer;
+  begin
+    Result := ((AY + 1) * gw + (AX + 1)) * 2;
+  end;
+
+  function KeyV(AX, AY: Integer): Integer;
+  begin
+    Result := ((AY + 1) * gw + (AX + 1)) * 2 + 1;
+  end;
+
+  procedure Cross(AKey: Integer; AX0, AY0, AV0, AX1, AY1, AV1: Double);
+  var t: Double;
+  begin
+    if AV1 = AV0 then t := 0.5 else t := (cT - AV0) / (AV1 - AV0);
+    ex[AKey] := AX0 + (AX1 - AX0) * t + 0.5;
+    ey[AKey] := AY0 + (AY1 - AY0) * t + 0.5;
+  end;
+
+  { THE DASHES, laid along the closed contour by its length -- the
+    pattern's phase starting afresh on each contour, as a canvas starts it
+    on each subpath (an odd pattern is said twice); each dash an open
+    subpath of its own }
+  procedure DashContour(ACount: Integer);
+  var
+    pat: array of Double;
+    j, di, n: Integer;
+    x0, y0, x1, y1, segLen, pos, left, t: Double;
+    on, open: Boolean;
+  begin
+    n := Length(ADashDevice);
+    if Odd(n) then
+    begin
+      SetLength(pat, 2 * n);
+      for j := 0 to n - 1 do
+      begin
+        pat[j] := ADashDevice[j];
+        pat[n + j] := ADashDevice[j];
+      end;
+    end
+    else
+      pat := Copy(ADashDevice, 0, n);
+    { a pattern that never advances draws the contour whole }
+    t := 0;
+    for j := 0 to High(pat) do t := t + Max(Double(0), pat[j]);
+    if not (t > 0) then
+    begin
+      P.MoveTo(px[0], py[0]);
+      for j := 1 to ACount - 1 do P.LineTo(px[j], py[j]);
+      P.ClosePath;
+      Exit;
+    end;
+    di := 0;
+    left := pat[0];
+    on := True;
+    open := False;
+    for j := 0 to ACount - 1 do
+    begin
+      x0 := px[j];
+      y0 := py[j];
+      x1 := px[(j + 1) mod ACount];
+      y1 := py[(j + 1) mod ACount];
+      segLen := Sqrt(Sqr(x1 - x0) + Sqr(y1 - y0));
+      pos := 0;
+      while pos < segLen do
+      begin
+        if on and not open then
+        begin
+          P.MoveTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
+          open := True;
+        end;
+        if segLen - pos <= left then
+        begin
+          left := left - (segLen - pos);
+          pos := segLen;
+          if on then P.LineTo(x1, y1);
+        end
+        else
+        begin
+          pos := pos + left;
+          if on then
+          begin
+            P.LineTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
+            open := False;
+          end;
+          di := (di + 1) mod Length(pat);
+          left := pat[di];
+          on := not Odd(di);
+        end;
+      end;
+    end;
+  end;
+
+  procedure Seg2(AK0, AK1: Integer);
+  begin
+    if nSeg > High(segA) then
+    begin
+      SetLength(segA, Length(segA) * 2 + 16);
+      SetLength(segB, Length(segA));
+    end;
+    segA[nSeg] := AK0;
+    segB[nSeg] := AK1;
+    if adj[AK0 * 2] < 0 then adj[AK0 * 2] := nSeg else adj[AK0 * 2 + 1] := nSeg;
+    if adj[AK1 * 2] < 0 then adj[AK1 * 2] := nSeg else adj[AK1 * 2 + 1] := nSeg;
+    Inc(nSeg);
+  end;
+
+begin
+  if AMask = nil then Exit;
+  w := AMask.Width;
+  h := AMask.Height;
+  gw := w + 2;
+  gh := h + 2;
+  nKeys := gw * gh * 2;
+  SetLength(ex, nKeys);
+  SetLength(ey, nKeys);
+  SetLength(adj, nKeys * 2);
+  for i := 0 to High(adj) do adj[i] := -1;
+  segA := nil;
+  segB := nil;
+  nSeg := 0;
+  for cy := -1 to h - 1 do
+    for cx := -1 to w - 1 do
+    begin
+      v0 := A(cx, cy);
+      v1 := A(cx + 1, cy);
+      v2 := A(cx + 1, cy + 1);
+      v3 := A(cx, cy + 1);
+      b0 := v0 >= cT;
+      b1 := v1 >= cT;
+      b2 := v2 >= cT;
+      b3 := v3 >= cT;
+      if (b0 = b1) and (b1 = b2) and (b2 = b3) then Continue;
+      kTop := KeyH(cx, cy);
+      kBottom := KeyH(cx, cy + 1);
+      kLeft := KeyV(cx, cy);
+      kRight := KeyV(cx + 1, cy);
+      if b0 <> b1 then Cross(kTop, cx, cy, v0, cx + 1, cy, v1);
+      if b1 <> b2 then Cross(kRight, cx + 1, cy, v1, cx + 1, cy + 1, v2);
+      if b3 <> b2 then Cross(kBottom, cx, cy + 1, v3, cx + 1, cy + 1, v2);
+      if b0 <> b3 then Cross(kLeft, cx, cy, v0, cx, cy + 1, v3);
+      if (b0 = b2) and (b1 = b3) and (b0 <> b1) then
+      begin
+        { a saddle: the centre decides which corners join }
+        centre := (v0 + v1 + v2 + v3) / 4;
+        if (centre >= cT) = b0 then
+        begin
+          Seg2(kTop, kRight);     // b1's corner cut off
+          Seg2(kBottom, kLeft);   // b3's
+        end
+        else
+        begin
+          Seg2(kLeft, kTop);      // b0's
+          Seg2(kRight, kBottom);  // b2's
+        end;
+        Continue;
+      end;
+      { two crossings: one segment }
+      k := -1;
+      cur := -1;
+      if b0 <> b1 then begin if k < 0 then k := kTop else cur := kTop; end;
+      if b1 <> b2 then begin if k < 0 then k := kRight else cur := kRight; end;
+      if b3 <> b2 then begin if k < 0 then k := kBottom else cur := kBottom; end;
+      if b0 <> b3 then begin if k < 0 then k := kLeft else cur := kLeft; end;
+      if (k >= 0) and (cur >= 0) then Seg2(k, cur);
+    end;
+  if nSeg = 0 then Exit;
+  SetLength(used, nSeg);
+  for i := 0 to nSeg - 1 do used[i] := False;
+  for i := 0 to nSeg - 1 do
+  begin
+    if used[i] then Continue;
+    used[i] := True;
+    startKey := segA[i];
+    np := 1;
+    SetLength(px, 16);
+    SetLength(py, 16);
+    px[0] := ex[startKey] + AOX;
+    py[0] := ey[startKey] + AOY;
+    key := segB[i];
+    { follow the contour round to where it began }
+    while key <> startKey do
+    begin
+      if np > High(px) then
+      begin
+        SetLength(px, Length(px) * 2);
+        SetLength(py, Length(px));
+      end;
+      px[np] := ex[key] + AOX;
+      py[np] := ey[key] + AOY;
+      Inc(np);
+      seg := adj[key * 2];
+      if (seg < 0) or used[seg] then seg := adj[key * 2 + 1];
+      if (seg < 0) or used[seg] then Break;
+      used[seg] := True;
+      if segA[seg] = key then key := segB[seg] else key := segA[seg];
+    end;
+    if Length(ADashDevice) = 0 then
+    begin
+      P.MoveTo(px[0], py[0]);
+      for k := 1 to np - 1 do P.LineTo(px[k], py[k]);
+      P.ClosePath;
+    end
+    else
+      DashContour(np);
+  end;
+end;
+
+{ A PAINTER ON A MASK of AW x AH at P's PPI: the glyphs are drawn on it
+  exactly as on P, only moved by whole pixels }
+function MaskPainter(P: TTyPainter; AW, AH: Integer; out AMask: TBGRABitmap): TTyPainter;
+begin
+  AMask := TBGRABitmap.Create(AW, AH, BGRAPixelTransparent);
+  Result := TTyPainter.Create;
+  Result.BeginPaintOn(nil, Rect(0, 0, AW, AH), P.PPI, AMask);
+end;
+
+{ the stroke along the mask's contours, under the glyphs: one path, so
+  where two strokes meet the ink is laid once and a translucent halo does
+  not darken; dashed as the type says }
+procedure StrokeMaskHalo(P: TTyPainter; AMask: TBGRABitmap; AOX, AOY: Integer;
+  AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
+var
+  pat: TTyDoubleArray;
+  k: Integer;
+begin
+  P.SaveState;
+  try
+    P.ResetTransform;
+    P.SetLineDash([]);
+    { the dashes are laid by length here, in device px: the painter's pen
+      restarts its pattern on every segment, and a contour is all short
+      segments }
+    if TyNormalizeLineDash(ADashType, AWidthLogical, pat) then
+      for k := 0 to High(pat) do pat[k] := pat[k] * P.PPI / 96
+    else
+      pat := nil;
+    P.BeginPath;
+    TraceMaskOutline(P, AMask, AOX, AOY, pat);
+    P.StrokePath(AColour, AWidthLogical);
+    P.BeginPath;
+  finally
+    P.RestoreState;
+  end;
+end;
+
+{ a rotated or anchored text's halo: its glyphs as DrawTextRotated puts them }
+procedure HaloRotated(P: TTyPainter; const AText, AFont: string; ASize, AWeight: Integer;
+  AX, AY, ARotationRad: Double; AH: TAlignment; AV: TTextLayout;
+  AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
+var
+  sz: TSize;
+  r, ox, oy, mw, mh: Integer;
+  mp: TTyPainter;
+  mask: TBGRABitmap;
+begin
+  sz := P.MeasureText(AText, AFont, ASize, AWeight);
+  { round the anchor, any turn: the text's diagonal, and the stroke }
+  r := sz.cx + sz.cy + Ceil(AWidthLogical * P.PPI / 96) + 4;
+  ox := Floor(AX) - r;
+  oy := Floor(AY) - r;
+  mw := 2 * r + 2;
+  mh := 2 * r + 2;
+  mp := MaskPainter(P, mw, mh, mask);
+  try
+    mp.DrawTextRotated(AText, AFont, ASize, AWeight, TTyColor($FFFFFFFF),
+      AX - ox, AY - oy, ARotationRad, AH, AV);
+    mp.EndPaint;
+    StrokeMaskHalo(P, mask, ox, oy, AColour, AWidthLogical, ADashType);
+  finally
+    mp.Free;
+    mask.Free;
+  end;
+end;
+
 { The ink a caption is drawn in, with the element's alpha baked in.
 
   BAKED RATHER THAN SET, because the painter's two text entries write straight
@@ -818,16 +1184,14 @@ begin
       one-run caption dilates it }
     if pc.HasStroke and (pc.LineWidth > 0) and ((pc.Stroke shr 24) <> 0) then
     begin
+      { [F4c] A STROKE ALONG THE GLYPHS' OUTLINES, lineWidth wide and centred
+        on them (zrender's strokeText), dashed as textBorderType says --
+        where the halo used to be the glyphs stamped at whole-pixel offsets,
+        whose overlaps darkened a translucent one }
       halo := CaptionInk(pc.Stroke, a);
-      r := pc.LineWidth / 2 * P.PPI / 96;
-      reach := Ceil(r);
-      rr := r * r + r;
-      for dy := -reach to reach do
-        for dx := -reach to reach do
-          if ((dx <> 0) or (dy <> 0)) and (dx * dx + dy * dy <= rr) then
-            P.DrawTextRotated(TyInkText(pc.Text), pc.FontFamily,
-              TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, halo,
-              gx + dx, gy + dy, ARotationRad, RtAlign(pc.TextAlign), tlCenter);
+      HaloRotated(P, TyInkText(pc.Text), pc.FontFamily,
+        TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
+        RtAlign(pc.TextAlign), tlCenter, halo, pc.LineWidth, pc.LineDash);
     end;
     if not hasInk then Continue;
     s := a;
@@ -837,11 +1201,53 @@ begin
   end;
 end;
 
+{ [F4c] a caption's halo: its glyphs drawn on a mask exactly as
+  DrawCaptionAt draws them, moved by whole pixels, and a stroke along their
+  outlines -- StrokeWidthLogical wide, centred on them (zrender's
+  strokeText), dashed per StrokeType }
+procedure HaloCaption(P: TTyPainter; const AElement: TTyChartElement; AHalo: TTyColor);
+var
+  b: TTyRectF;
+  sz: TSize;
+  m, ox, oy, mw, mh: Integer;
+  mp: TTyPainter;
+  mask: TBGRABitmap;
+begin
+  m := Ceil(AElement.Caption.StrokeWidthLogical * P.PPI / 96) + 4;
+  b := AElement.Shape.Bounds;
+  if (AElement.Caption.RotationRad <> 0) or not TyRectFIsValid(b) then
+  begin
+    { round the anchor, any turn or alignment: the text's diagonal }
+    sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
+      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
+    ox := Floor(AElement.Caption.X) - (sz.cx + sz.cy + m);
+    oy := Floor(AElement.Caption.Y) - (sz.cx + sz.cy + m);
+    mw := 2 * (sz.cx + sz.cy + m) + 2;
+    mh := mw;
+  end
+  else
+  begin
+    ox := Round(b.Left) - m;
+    oy := Round(b.Top) - m;
+    mw := Round(b.Right) - Round(b.Left) + 2 * m;
+    mh := Round(b.Bottom) - Round(b.Top) + 2 * m;
+  end;
+  if (mw <= 0) or (mh <= 0) or (mw > 8192) or (mh > 8192) then Exit;
+  mp := MaskPainter(P, mw, mh, mask);
+  try
+    DrawCaptionAt(mp, AElement, TTyColor($FFFFFFFF), -ox, -oy);
+    mp.EndPaint;
+    StrokeMaskHalo(P, mask, ox, oy, AHalo, AElement.Caption.StrokeWidthLogical,
+      AElement.Caption.StrokeType);
+  finally
+    mp.Free;
+    mask.Free;
+  end;
+end;
+
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
   ink, halo: TTyColor;
-  r, rr: Double;
-  dx, dy, reach: Integer;
 begin
   if (P = nil) or (AElement.Caption.Text = '') then Exit;
   { A BLOCK DRAWS ITS PIECES, and nothing of the one-run caption }
@@ -853,22 +1259,15 @@ begin
     Exit;
   end;
   ink := CaptionInk(AElement.Caption.Colour, AElement.Style.Alpha);
-  { THE HALO FIRST, then the glyphs over it -- `paint-order: stroke`. A
-    stroke w wide and centred on the outline shows w/2 outside the glyph, so
-    the glyphs are stamped in the halo's colour at every whole-pixel offset
-    within that reach: a dilation, which is what the stroke amounts to at
-    these sizes. It never widens the caption's box. }
+  { THE HALO FIRST, then the glyphs over it -- `paint-order: stroke`: a
+    stroke w wide centred on the glyphs' outlines [F4c: it was the glyphs
+    stamped at every whole-pixel offset within w/2]. It never widens the
+    caption's box. }
   if (AElement.Caption.StrokeWidthLogical > 0)
     and ((AElement.Caption.StrokeColour shr 24) <> 0) then
   begin
     halo := CaptionInk(AElement.Caption.StrokeColour, AElement.Style.Alpha);
-    r := AElement.Caption.StrokeWidthLogical / 2 * P.PPI / 96;
-    reach := Ceil(r);
-    rr := r * r + r;
-    for dy := -reach to reach do
-      for dx := -reach to reach do
-        if ((dx <> 0) or (dy <> 0)) and (dx * dx + dy * dy <= rr) then
-          DrawCaptionAt(P, AElement, halo, dx, dy);
+    HaloCaption(P, AElement, halo);
   end;
   DrawCaptionAt(P, AElement, ink, 0, 0);
 end;

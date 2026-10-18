@@ -62,6 +62,14 @@ type
 
 implementation
 
+{ A case the generator deferred that the port does now: the alpha tie
+  (rgba(255,255,255,0.5), lum exactly 0.5) -- the alpha is read as written,
+  not as its byte [F4c] }
+function StillDeferred(ACase: TJSONObject): Boolean;
+begin
+  Result := ACase.Booleans['deferred'] and (ACase.Strings['id'] <> 'deferred-alpha-tie');
+end;
+
 procedure TInsideLabelProbe.Render(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 begin
@@ -215,7 +223,7 @@ begin
   for c := 0 to cases.Count - 1 do
   begin
     cs := TJSONObject(cases.Items[c]);
-    if cs.Booleans['documentary'] or cs.Booleans['deferred'] then Continue;
+    if cs.Booleans['documentary'] or StillDeferred(cs) then Continue;
     FName := cs.Strings['id'];
     spec := BaseSpec(cs);
     labels := cs.Arrays['labels'];
@@ -293,7 +301,7 @@ begin
     for c := 0 to cases.Count - 1 do
     begin
       cs := TJSONObject(cases.Items[c]);
-      if cs.Booleans['documentary'] or cs.Booleans['deferred']
+      if cs.Booleans['documentary'] or StillDeferred(cs)
         or cs.Booleans['isDark'] then Continue;
       FName := cs.Strings['id'];
       chart.Option := '';

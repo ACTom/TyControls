@@ -10199,7 +10199,7 @@ begin
     Result := '#' + LowerCase(IntToHex(c and $FFFFFF, 6))
   else
     Result := 'rgba(' + IntToStr((c shr 16) and $FF) + ',' + IntToStr((c shr 8) and $FF)
-      + ',' + IntToStr(c and $FF) + ',' + TyJsNumberToString((c shr 24) / 255) + ')';
+      + ',' + IntToStr(c and $FF) + ',' + TyJsNumberToString(TyChartColorAlpha(c)) + ')';
 end;
 
 { the author's series colour when it is not a string: a gradient, used by a
@@ -36543,7 +36543,7 @@ begin
       StyleClass, [tysNormal]).Background.Color);
   { zrender's lum with a background of ONE: what shows through a translucent
     ground counts as white. Dark under 0.4. }
-  a := ((AGround shr 24) and $FF) / 255;
+  a := TyChartColorAlpha(AGround);
   l := TyLabelLuminance(AGround) + (1 - a);
   ADark := l < 0.4;
   { darkMode FORCES THE ANSWER when it is a boolean: upstream's
@@ -36567,7 +36567,7 @@ begin
   if not authored and forced then AGround := 0;
   if authored or forced then
   begin
-    a := ((AGround shr 24) and $FF) / 255;
+    a := TyChartColorAlpha(AGround);
     ch[0] := (AGround shr 16) and $FF;
     ch[1] := (AGround shr 8) and $FF;
     ch[2] := AGround and $FF;
@@ -45835,7 +45835,7 @@ function TlCss(AColour: TTyChartColor): string;
 begin
   Result := 'rgba(' + IntToStr((AColour shr 16) and $FF) + ','
     + IntToStr((AColour shr 8) and $FF) + ',' + IntToStr(AColour and $FF) + ','
-    + TyJsNumberToString(((AColour shr 24) and $FF) / 255) + ')';
+    + TyJsNumberToString(TyChartColorAlpha(AColour)) + ')';
 end;
 
 function TTyAdvanceChart.TlInk: TTyTimelineInk;

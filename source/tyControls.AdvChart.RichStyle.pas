@@ -155,6 +155,18 @@ begin
 end;
 
 { Model.get over the chain: the first node whose value is not null }
+{ [F4c] a textBorderType as written: a word as itself, a number or an array
+  as its JSON text, anything else '' }
+function TyDashTextOf(AData: TJSONData): string;
+begin
+  Result := '';
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtString: Result := AData.AsString;
+    jtNumber, jtArray: Result := AData.AsJSON;
+  end;
+end;
+
 function Get(const AChain: array of TJSONObject; const AKey: string): TJSONData;
 var i: Integer;
 begin
@@ -309,6 +321,7 @@ begin
     Result.HasLineWidth := True;
     Result.LineWidth := x;
   end;
+  Result.LineDash := TyDashTextOf(ts.Find('textBorderType'));
   if NumOf(ts.Find('opacity'), x) then
   begin
     Result.HasOpacity := True;
@@ -405,6 +418,9 @@ begin
     S.HasLineWidth := True;
     S.LineWidth := AGlobal.LineWidth;
   end;
+  { textBorderType: retrieve2(the style's own, the global's) [F4c] }
+  S.LineDash := TyDashTextOf(Get(AOwn, 'textBorderType'));
+  if S.LineDash = '' then S.LineDash := AGlobal.LineDash;
   if NumOf(Get(AOwn, 'opacity'), x) then
   begin
     S.HasOpacity := True;

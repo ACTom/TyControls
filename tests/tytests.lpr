@@ -169,6 +169,7 @@ uses
   test.advchart.rootinherit,
   test.advchart.axistooltip,
   test.advchart.visualmaptext,
+  test.advchart.labelhalo,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

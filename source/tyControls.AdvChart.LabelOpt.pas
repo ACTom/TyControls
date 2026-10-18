@@ -256,13 +256,29 @@ end;
 
 function TyLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyLabelSpec): TTyLabelSpec;
-var series: TJSONObject;
+var
+  series: TJSONObject;
+  d: TJSONData;
 begin
   Result := ABase;
   if AOption = nil then Exit;
   series := ObjOf(AOption.ComponentAt('series', ASlot));
   if series = nil then Exit;
   Result := TyLabelSpecOfNode(ObjOf(series.Find('label')), series, ABase);
+  { textBorderType: retrieve2(the label's, the global textStyle's) [F4c] }
+  if (Result.BorderType = '') and (AOption.Root is TJSONObject) then
+  begin
+    d := ObjOf(TJSONObject(AOption.Root).Find('textStyle'));
+    if d <> nil then
+    begin
+      d := TJSONObject(d).Find('textBorderType');
+      if d <> nil then
+        case d.JSONType of
+          jtString: Result.BorderType := d.AsString;
+          jtNumber, jtArray: Result.BorderType := d.AsJSON;
+        end;
+    end;
+  end;
 end;
 
 function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
@@ -522,6 +538,13 @@ begin
       else if TyTryParseChartColor(s, c) then ASpec.BorderColour := c
       else ASpec.BorderColourNone := True;
     end;
+    { textBorderType as written [F4c] }
+    d := ALabel.Find('textBorderType');
+    if d <> nil then
+      case d.JSONType of
+        jtString: ASpec.BorderType := d.AsString;
+        jtNumber, jtArray: ASpec.BorderType := d.AsJSON;
+      end;
     d := ALabel.Find('textBorderWidth');
     if (d <> nil) and (d.JSONType = jtNumber) then
     begin

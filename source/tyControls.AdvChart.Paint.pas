@@ -241,6 +241,8 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [F4c] textBorderType as written ('' none) }
+    LineDash: string;
     Align: TTyRtAlign;
     VAlign: TTyRtVAlign;
     HasLineHeight: Boolean;
@@ -310,6 +312,8 @@ type
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     LineWidth: Double;
+    { [F4c] a text's textBorderType as written ('' a solid halo) }
+    LineDash: string;
     StrokeFirst: Boolean;
     Radius: array[0..3] of Double;
     Opacity: Double;
@@ -359,6 +363,8 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [F4c] the global textStyle's textBorderType ('' none) }
+    LineDash: string;
     HasOpacity: Boolean;
     Opacity: Double;
     HasShadowColor: Boolean;
@@ -488,6 +494,10 @@ type
       widen the caption's box. }
     StrokeColour: TTyChartColor;
     StrokeWidthLogical: Double;
+    { [F4c] textBorderType as written -- 'dashed', 'dotted', a number or a
+      JSON array of numbers; '' (or 'solid') a solid halo. normalizeLineDash
+      turns it into a pattern against the halo's width when it is drawn. }
+    StrokeType: string;
     { THE SAME THREE UNDER A HOVER, worked out when the caption is: the host's
       fill lifted (or the emphasis colour it declares) can land in another
       band, and the halo is the lifted fill. HasEmph False keeps the normal
