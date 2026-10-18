@@ -86,6 +86,12 @@ type
     BoundHas: Integer;          { 0, 1 or 2 }
     BoundA, BoundB: Double;
     KeepAspect: Boolean;
+    { [F3a] `symbolPatternSize` (400): the glyph path is made at this size
+      and scaled to its own -- what the enter animation scales up to; and a
+      row's `animation: false` (ItemModel.isAnimationEnabled: the series'
+      and the item's own) }
+    PatternSize: Double;
+    AnimOff: Boolean;
   end;
 
   { What a repeat comes to, in device px along the bar. }
@@ -172,6 +178,8 @@ begin
   Result.Clip := False;
   Result.BoundHas := 0;
   Result.KeepAspect := False;
+  Result.PatternSize := 400;
+  Result.AnimOff := False;
 end;
 
 { A plain number out of a string, decimal point regardless of the locale. }
@@ -370,6 +378,14 @@ begin
 
   d := node.Find('symbolKeepAspect');
   if (d <> nil) and (d.JSONType = jtBoolean) then Result.KeepAspect := d.AsBoolean;
+
+  { [F3a] `itemModel.get('symbolPatternSize') || 2` }
+  d := node.Find('symbolPatternSize');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.PatternSize := d.AsFloat;
+    if (Result.PatternSize = 0) or IsNan(Result.PatternSize) then Result.PatternSize := 2;
+  end;
 end;
 
 { One row's scalar leaf, as text -- '' when the row did not write that key.
@@ -474,6 +490,17 @@ begin
     Result.BoundHas := 1;
     Result.BoundA := v;
   end;
+
+  { [F3a] the row's own pattern size, and its own `animation` (falsy: the
+    glyphs and the clip are set, not tweened) }
+  s := RowText(AStore, ARow, TyOverrideKey('symbolPatternSize'));
+  if (s <> '') and NumOf(s, v) then
+  begin
+    Result.PatternSize := v;
+    if (v = 0) or IsNan(v) then Result.PatternSize := 2;
+  end;
+  s := RowText(AStore, ARow, TyOverrideKey('animation'));
+  if s <> '' then Result.AnimOff := (s = 'false') or (s = '0');
 end;
 
 function TyPictorialTimes(AValue: Double): Integer;

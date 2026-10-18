@@ -3228,6 +3228,7 @@ type
     { the graph's edge data as the selection reads it, by inner index: the
       edge data's name, its raw index [F2a] }
     function SelEdgeData(ASlot: Integer): TTySelData;
+    function StSankeySlot(ASlot: Integer): Boolean;
     { queryDataIndex on a graph's edge data: solved edge indices }
     function QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
       out AEdges: TTyIntegerArray): Boolean;
@@ -28476,13 +28477,22 @@ begin
     for raw := 0 to High(FSt[s].Rows) do
       if FSt[s].Rows[raw].Host.Exists then TyStApplyItem(FSt[s].Rows[raw]);
     if FSt[s].IsLine then StDeclareLine(slot, AList);
-    { a sankey's links [Batch 114] }
+    { a sankey's links [Batch 114]; their selection from the series' one
+      map [F3a] }
     if FSt[s].Kind = sskSankey then
+    begin
+      ed := SelEdgeData(slot);
       for raw := 0 to High(FSt[s].EdgeRows) do
         if (raw > High(FSt[s].EdgeHostIdx)) or (FSt[s].EdgeHostIdx[raw] < 0) then
           FSt[s].EdgeRows[raw] := Default(TTyStItem)
         else
+        begin
           StDeclareEdge(slot, raw, AList);
+          FSt[s].EdgeRows[raw].Host.Selected := (s <= High(FSel)) and FSelInit[s]
+            and TySelIsSelected(FSel[s], ed, raw);
+          TyStApplyItem(FSt[s].EdgeRows[raw]);
+        end;
+    end;
     { a chord's ribbons [Batch 120] }
     if FSt[s].Kind = sskChord then
       for raw := 0 to High(FSt[s].EdgeRows) do
@@ -28837,11 +28847,13 @@ begin
   Result.HasStyle := True;
   if AKind = cStPxLabel then
   begin
-    { a label's opacity is a factor over its own (as its fade's) }
+    { a label's opacity is a factor over its own (as its fade's) -- or, on a
+      proxy of the states' own, upstream's [F3a] }
     if AM.Has[stkOpacity] then
     begin
       f := AM.Num[stkOpacity];
-      if StPositive(AEl.Rest.Num[stkOpacity]) then f := f / AEl.Rest.Num[stkOpacity];
+      if StPositive(AEl.Rest.Num[stkOpacity]) and not P.StAbsOpacity then
+        f := f / AEl.Rest.Num[stkOpacity];
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(f));
     end;
   end
@@ -28986,7 +28998,12 @@ begin
     its polyline) a proxy of the states' own }
   if (role <> nil) and (el.Anim.Role in [carBar, carPolarBar, carSymbol, carSector, carFunnel,
     carCandleBody, carCandleWickHigh, carCandleWickLow, carLabel, carGuide,
-    carBoxplot]) then
+    carBoxplot, carTreeNode,
+    { [F3a] a gauge's pointer and arc, a radar's polyline and polygon: the
+      paths their enter turns and grows }
+    carGaugePointer, carGaugeProgress, carRadarLine, carRadarArea,
+    { and a graph edge's label, the text its fade runs on }
+    carGraphEdgeLabel]) then
     p := role
   else
   begin
@@ -28996,11 +29013,16 @@ begin
   FAnimStBind[AListIdx] := p;
   { a Text's style animates only its opacity }
   p.StatePath := AKind <> cStPxLabel;
+  { [F3a] a label on a proxy of the states' own: no fade shares its
+    opacity, which is upstream's own }
+  p.StAbsOpacity := (AKind = cStPxLabel)
+    and ((p <> role) or (el.Anim.Role = carGraphEdgeLabel));
   isPie := FSt[ASeries].Kind = sskPie;
   { ---- the rest values ---- }
   if AKind = cStPxLabel then
   begin
-    Seed('style.opacity', TyAnimNum(1));
+    if p.StAbsOpacity then Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]))
+    else Seed('style.opacity', TyAnimNum(1));
     { a pie's label is placed by its layout: x / y are its anchor }
     if isPie then
     begin
@@ -29027,7 +29049,9 @@ begin
     { a symbol path's scale is half its size; a pictorial glyph's its own }
     if AKind = cStPxPath then
       case el.Anim.Role of
-        carSymbol, carEffectSymbol:
+        { [F3a] a graph's node is a carSymbol, a tree's a carTreeNode: the
+          Symbol path's own scale, its half size }
+        carSymbol, carEffectSymbol, carTreeNode:
           begin
             Seed('scaleX', TyAnimNum(el.Anim.G[2]));
             Seed('scaleY', TyAnimNum(el.Anim.G[3]));
@@ -29149,6 +29173,20 @@ begin
         hostP := FAnimStBind[FSt[s].PeerHostIdx[raw]];
         for k := 0 to High(FSt[s].PeerFollowIdx[raw]) do
           FAnimStBind[FSt[s].PeerFollowIdx[raw][k]] := hostP;
+      end;
+    { [F3a] A SANKEY'S BANDS and their labels: states of their own, each its
+      own proxy (the main group's clip is their role) }
+    if FSt[s].Kind = sskSankey then
+      for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
+      begin
+        if (FSt[s].EdgeHostIdx[raw] < 0) or not FSt[s].EdgeRows[raw].Host.Exists then Continue;
+        item := @FSt[s].EdgeRows[raw];
+        StAnimEl(item^.Host, FSt[s].EdgeHostIdx[raw], s, raw, 'edge', cStPxPath,
+          cfg, hasCfg, over);
+        if (raw <= High(FSt[s].EdgeLabelIdx)) and (FSt[s].EdgeLabelIdx[raw] >= 0)
+          and item^.Label_.Exists then
+          StAnimEl(item^.Label_, FSt[s].EdgeLabelIdx[raw], s, raw, 'edgelabel', cStPxLabel,
+            cfg, hasCfg, over);
       end;
     { A CHORD'S RIBBONS have states of their own, each its own proxy
       (the series' view group is their role) [Batch 120] }
@@ -29652,6 +29690,13 @@ begin
     end;
 end;
 
+{ [F3a] the slot holds a solved sankey }
+function TTyAdvanceChart.StSankeySlot(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FBindings)) and (ASlot <= High(FSankeys))
+    and FSankeys[ASlot].Valid and (FBindings[ASlot].SeriesType = TySankeySeriesTypeName);
+end;
+
 function TTyAdvanceChart.SelEdgeData(ASlot: Integer): TTySelData;
 var
   j, n, s: Integer;
@@ -29660,6 +29705,26 @@ var
   has: Boolean;
 begin
   Result := Default(TTySelData);
+  { [F3a] A SANKEY'S EDGE DATA: every link of the solve, keyed by its name
+    (the link's id, else 'source > target'), its raw index its own }
+  if StSankeySlot(ASlot) then
+  begin
+    s := FBindings[ASlot].SeriesIndex;
+    sNode := StSeriesNode(s);
+    n := Length(FSankeys[ASlot].Edges);
+    SetLength(Result.Keys, n);
+    SetLength(Result.Raws, n);
+    SetLength(Result.Disabled, n);
+    for j := 0 to n - 1 do
+    begin
+      Result.Keys[j] := FSankeys[ASlot].Edges[j].DataName;
+      if Result.Keys[j] = '' then Result.Keys[j] := 'e'#0#0 + IntToStr(j);
+      Result.Raws[j] := j;
+      Result.Disabled[j] := TyStReadBool([FSankeys[ASlot].Edges[j].Item, sNode],
+        ['select', 'disabled'], has);
+    end;
+    Exit;
+  end;
   if (ASlot < 0) or (ASlot > High(FGraphEdges)) then Exit;
   s := FBindings[ASlot].SeriesIndex;
   sNode := StSeriesNode(s);
@@ -29705,6 +29770,21 @@ var
   var j: Integer;
   begin
     Result := -1;
+    { [F3a] a sankey's edge data is every link: an index as it is }
+    if StSankeySlot(ASlot) then
+    begin
+      if mode = 2 then
+      begin
+        if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
+        for j := 0 to High(FSankeys[ASlot].Edges) do
+          if FSankeys[ASlot].Edges[j].DataName = AItem.AsString then Exit(j);
+        Exit;
+      end;
+      if (AItem.JSONType <> jtNumber) or (Frac(AItem.AsFloat) <> 0) then Exit;
+      j := Trunc(AItem.AsFloat);
+      if (j >= 0) and (j <= High(FSankeys[ASlot].Edges)) then Result := j;
+      Exit;
+    end;
     if mode = 2 then
     begin
       if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
@@ -29723,7 +29803,7 @@ var
 begin
   AEdges := nil;
   Result := False;
-  if (ASlot < 0) or (ASlot > High(FGraphEdges)) then Exit;
+  if not StSankeySlot(ASlot) and ((ASlot < 0) or (ASlot > High(FGraphEdges))) then Exit;
   mode := 0;
   d := APayload.Find('dataIndexInside');
   if (d = nil) or (d.JSONType = jtNull) then
@@ -30804,14 +30884,15 @@ begin
     for k := 0 to High(FSt[s].Rows[raw].Parts) do
       FSt[s].Rows[raw].Parts[k].Selected := FSt[s].Rows[raw].Host.Selected;
   end;
-  { a graph's edges, from the same map [F2a] }
-  if FSt[s].Kind = sskGraph then
+  { a graph's edges, from the same map [F2a]; a sankey's [F3a] }
+  if FSt[s].Kind in [sskGraph, sskSankey] then
   begin
     data := SelEdgeData(ASlot);
     for raw := 0 to High(FSt[s].EdgeRows) do
     begin
       if not FSt[s].EdgeRows[raw].Host.Exists then Continue;
-      inner := StGraphEdgeInner(ASlot, raw);
+      if FSt[s].Kind = sskSankey then inner := raw
+      else inner := StGraphEdgeInner(ASlot, raw);
       was := FSt[s].EdgeRows[raw].Host.Selected;
       FSt[s].EdgeRows[raw].Host.Selected := (inner >= 0)
         and TySelIsSelected(FSel[s], data, inner);
@@ -31131,9 +31212,10 @@ begin
     d := APayload.Find('dataType');
     if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge') then
     begin
-      if not ((s <= High(FSt)) and (FSt[s].Kind = sskGraph)) then Continue;
+      if not ((s <= High(FSt)) and (FSt[s].Kind in [sskGraph, sskSankey])) then Continue;
       if not QueryEdgeIndex(slot, APayload, inner) then Continue;
-      for k := 0 to High(inner) do inner[k] := StGraphEdgeInner(slot, inner[k]);
+      if FSt[s].Kind = sskGraph then
+        for k := 0 to High(inner) do inner[k] := StGraphEdgeInner(slot, inner[k]);
       data := SelEdgeData(slot);
     end
     else
@@ -31181,7 +31263,9 @@ begin
     { getAllSelectedIndices: one entry per data of getAllData -- a graph's
       node and edge data (the same indices, the map is one), a tree's and a
       treemap's 'main' [F2a] }
-    if FBindings[slot].SeriesType = TyGraphSeriesTypeName then
+    { [F3a] a sankey's too: its node and edge data }
+    if (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+      or (FBindings[slot].SeriesType = TySankeySeriesTypeName) then
     begin
       dts[0] := 'node';
       dts[1] := 'edge';
@@ -35078,17 +35162,21 @@ begin
   { A GRAPH'S EDGE: the edge data's own inner index, selected by the one
     map [F2a] }
   if (ATarget.HdKind = 1) and ATarget.HdEdge
-    and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+    and ((FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+      or (FBindings[slot].SeriesType = TySankeySeriesTypeName)) then
   begin
-    inner := StGraphEdgeInner(slot, StGraphEdgeOfRow(slot, ATarget.HdRow));
+    { [F3a] a sankey's link: its index is the edge data's }
+    if FBindings[slot].SeriesType = TySankeySeriesTypeName then inner := ATarget.HdRow
+    else inner := StGraphEdgeInner(slot, StGraphEdgeOfRow(slot, ATarget.HdRow));
     SelEnsure(slot);
     if (s <= High(FSel)) and FSelInit[s] and (inner >= 0) then
       selected := TySelIsSelected(FSel[s], SelEdgeData(slot), inner);
   end;
   if selected then p := '{"type":"unselect"' else p := '{"type":"select"';
-  { a graph's data type rides along; a tree's and a treemap's data is
-    'main' [F2a] }
-  if (ATarget.HdKind = 1) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+  { a graph's data type rides along (and a sankey's [F3a]); a tree's and a
+    treemap's data is 'main' [F2a] }
+  if (ATarget.HdKind = 1) and ((FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+    or (FBindings[slot].SeriesType = TySankeySeriesTypeName)) then
   begin
     if ATarget.HdEdge then p := p + ',"dataType":"edge"'
     else p := p + ',"dataType":"node"';
@@ -40779,7 +40867,12 @@ begin
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
       or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName)
       { a chord's node labels [Batch 120] }
-      or (t = TyChordSeriesTypeName);
+      or (t = TyChordSeriesTypeName)
+      { [F3a] a sunburst's, a treemap's (its first render: its own wrap
+        fades a drill's), a pictorial bar's, a graph's nodes' and a tree's }
+      or (t = TySunburstSeriesTypeName) or (t = TyTreemapSeriesTypeName)
+      or (t = TyPictorialSeriesTypeName) or (t = TyGraphSeriesTypeName)
+      or (t = TyTreeSeriesTypeName);
     { A SUNBURST'S DRILL-DOWN: its pieces transition, its new labels fade
       [Batch 115] }
     r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];
@@ -41939,6 +42032,20 @@ begin
     if not PeerStates(ASeries, ARow, item) then Exit;
     AEl := item.Host;
     Exit(True);
+  end;
+  { [F3a] the second set of rows: an edge, its label, its k-th part }
+  if Copy(APart, 1, 4) = 'edge' then
+  begin
+    if not EdgeStates(ASeries, ARow, item) then Exit;
+    if APart = 'edge' then AEl := item.Host
+    else if APart = 'edgelabel' then AEl := item.Label_
+    else if Copy(APart, 1, 8) = 'edgepart' then
+    begin
+      k := StrToIntDef(Copy(APart, 9, MaxInt), -1);
+      if (k < 0) or (k > High(item.Parts)) then Exit;
+      AEl := item.Parts[k];
+    end;
+    Exit(AEl.Exists);
   end;
   if not ItemStates(ASeries, ARow, item) then Exit;
   if APart = 'host' then AEl := item.Host

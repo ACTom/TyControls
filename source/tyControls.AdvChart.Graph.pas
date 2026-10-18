@@ -748,6 +748,39 @@ function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
   const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
   ADistX, ADistY, ARotate, AOffX, AOffY: Double; out AX, AY, ARot: Double;
   out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean; overload;
+{ [F3a] ... with the line drawn to APercent (Line._createLine's enter: the
+  shape's percent), as beforeUpdate places it every frame: toPos the point
+  at the percent, the tangent and the middle at half of it. ALX, ALY: the
+  label's own x / y in the line's frame (what beforeUpdate writes) }
+function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
+  ADistX, ADistY, ARotate, AOffX, AOffY, APercent: Double; out AX, AY, ALX, ALY,
+  ARot: Double; out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean; overload;
+{ [F3a] The line's point at AT in its frame: LinePath.pointAt -- a
+  straight line's lerp, a curve's quadraticAt }
+function TyGraphLinePointAt(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  AT: Double): TTyPointF;
+{ [F3a] THE LINE DRAWN TO APercent, as a polyline in its frame: a straight
+  line's two ends (ECLinePath's buildPath: x1 * (1 - p) + x2 * p), a curve's
+  first part (quadraticSubdivide at the percent) sampled as the static
+  edge is }
+function TyGraphLinePrefix(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  APercent: Double): TTyPointFArray;
+{ [F3a] WHAT Line.beforeUpdate WRITES at APercent, from an edge element's
+  enter tag (carGraphEdge and its kin in AdvChart.Paint), in the line's
+  frame: an end symbol's x, y and scale (invScale * percent); the label's
+  x, y and rotation. The canvas point of a frame point: TyGraphEdgeDev. }
+procedure TyGraphEdgeEnds(const AEl: TTyChartElement; APercent: Double;
+  AToEnd: Boolean; out AX, AY, AScale: Double);
+procedure TyGraphEdgeLabelLocal(const AEl: TTyChartElement; APercent: Double;
+  out AX, AY, ARot: Double);
+{ ... the label's anchor on the canvas, its rotation and alignment }
+procedure TyGraphEdgeLabelAt(const AEl: TTyChartElement; APercent: Double;
+  out AX, AY, ARot: Double; out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
+function TyGraphEdgeDev(const AEl: TTyChartElement; const P: TTyPointF): TTyPointF;
+{ the edge's line in its frame: its two ends and control point, curved }
+procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
+  out ACurved: Boolean);
 
 { JavaScript's String() of an option value. }
 function TyGraphJsText(AData: TJSONData): string;
@@ -5270,7 +5303,65 @@ function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
   const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
   ADistX, ADistY, ARotate, AOffX, AOffY: Double; out AX, AY, ARot: Double;
   out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+var lx, ly: Double;
+begin
+  Result := TyGraphEdgeLabelPlace(AP1, AP2, ACP, ACurved, AFrame, APos, ADistX,
+    ADistY, ARotate, AOffX, AOffY, 1, AX, AY, lx, ly, ARot, AAH, AAV);
+end;
+
+function TyGraphLinePointAt(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  AT: Double): TTyPointF;
+begin
+  if ACurved then
+    Result := TyPointF(ZrQuadAt(AP1.X, ACP.X, AP2.X, AT), ZrQuadAt(AP1.Y, ACP.Y, AP2.Y, AT))
+  else
+    Result := TyPointF(ZrLineAt(AP1.X, AP2.X, AT), ZrLineAt(AP1.Y, AP2.Y, AT));
+end;
+
+function TyGraphLinePrefix(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  APercent: Double): TTyPointFArray;
+const cSteps = 16;
 var
+  k: Integer;
+  p01x, p01y, p12x, p12y, ex, ey: Double;
+  c: TTyPointF;
+begin
+  if not ACurved then
+  begin
+    SetLength(Result, 2);
+    Result[0] := AP1;
+    if APercent < 1 then
+      Result[1] := TyPointF(AP1.X * (1 - APercent) + AP2.X * APercent,
+        AP1.Y * (1 - APercent) + AP2.Y * APercent)
+    else
+      Result[1] := AP2;
+    Exit;
+  end;
+  { quadraticSubdivide: the first part's control point and end }
+  c := ACP;
+  ex := AP2.X;
+  ey := AP2.Y;
+  if APercent < 1 then
+  begin
+    p01x := (ACP.X - AP1.X) * APercent + AP1.X;
+    p01y := (ACP.Y - AP1.Y) * APercent + AP1.Y;
+    p12x := (AP2.X - ACP.X) * APercent + ACP.X;
+    p12y := (AP2.Y - ACP.Y) * APercent + ACP.Y;
+    ex := (p12x - p01x) * APercent + p01x;
+    ey := (p12y - p01y) * APercent + p01y;
+    c := TyPointF(p01x, p01y);
+  end;
+  SetLength(Result, cSteps + 1);
+  for k := 0 to cSteps do
+    Result[k] := TyGraphPointAt(AP1, TyPointF(ex, ey), c, True, k / cSteps);
+end;
+
+function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
+  ADistX, ADistY, ARotate, AOffX, AOffY, APercent: Double; out AX, AY, ALX, ALY,
+  ARot: Double; out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+var
+  half: Double;
   fromX, fromY, toX, toY, midX, midY, dvx, dvy, tgx, tgy, distX, distY,
     dy, x, y, ox, oy, dir, sx, sy, st, ct: Double;
   d, tg: TTyPointF;
@@ -5294,11 +5385,13 @@ begin
   Result := True;
   mask := MaskFP;
   try
-    { percent is 1: the line is whole }
+    { the line drawn to the percent: toPos is pointAt(percent), the
+      tangent and the middle are taken at half of it [F3a] }
+    half := APercent / 2;
     fromX := PointAtX(0);
     fromY := PointAtY(0);
-    toX := PointAtX(1);
-    toY := PointAtY(1);
+    toX := PointAtX(APercent);
+    toY := PointAtY(APercent);
     d := ZrNormalize(toX - fromX, toY - fromY);
     distX := ADistX * AFrame.InvScale;
     distY := ADistY * AFrame.InvScale;
@@ -5306,8 +5399,8 @@ begin
       derivative for a curve -- normalised either way }
     if ACurved then
     begin
-      tgx := ZrQuadDerivAt(AP1.X, ACP.X, AP2.X, 0.5);
-      tgy := ZrQuadDerivAt(AP1.Y, ACP.Y, AP2.Y, 0.5);
+      tgx := ZrQuadDerivAt(AP1.X, ACP.X, AP2.X, half);
+      tgy := ZrQuadDerivAt(AP1.Y, ACP.Y, AP2.Y, half);
     end
     else
     begin
@@ -5315,8 +5408,8 @@ begin
       tgy := AP2.Y - AP1.Y;
     end;
     tg := ZrNormalize(tgx, tgy);
-    midX := PointAtX(0.5);
-    midY := PointAtY(0.5);
+    midX := PointAtX(half);
+    midY := PointAtY(half);
     if tg.X < 0 then dir := -1 else dir := 1;
     ARot := 0;
     if not (APos in [glpStart, glpEnd]) then
@@ -5402,6 +5495,8 @@ begin
       ox := -AOffX;
       oy := -AOffY;
     end;
+    ALX := x;
+    ALY := y;
     { getLocalTransform: the scale invScale about the origin, the rotation,
       then the position; every zero term kept, as zrender keeps it }
     sx := AFrame.InvScale;
@@ -5457,6 +5552,94 @@ begin
     Result := TyJsNumberToString(TyJsToFixed(ANodeNumber, 10))
   else
     Result := ANodeValueText;
+end;
+
+{ ==================== the edge's enter [F3a] ==================== }
+
+procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
+  out ACurved: Boolean);
+begin
+  AP1 := TyPointF(AEl.Anim.G[0], AEl.Anim.G[1]);
+  AP2 := TyPointF(AEl.Anim.G[2], AEl.Anim.G[3]);
+  ACP := TyPointF(AEl.Anim.G[4], AEl.Anim.G[5]);
+  ACurved := AEl.Anim.G[6] <> 0;
+end;
+
+function TyGraphEdgeDev(const AEl: TTyChartElement; const P: TTyPointF): TTyPointF;
+begin
+  Result := TyPointF(AEl.Anim.G[7] * P.X + 0 * P.Y + AEl.Anim.G[9],
+    0 * P.X + AEl.Anim.G[8] * P.Y + AEl.Anim.G[10]);
+end;
+
+function EdgeFrameOf(const AEl: TTyChartElement): TTyGraphLabelFrame;
+begin
+  Result.SX := AEl.Anim.G[7];
+  Result.SY := AEl.Anim.G[8];
+  Result.X := AEl.Anim.G[9];
+  Result.Y := AEl.Anim.G[10];
+  Result.InvScale := AEl.Anim.G[11];
+end;
+
+procedure TyGraphEdgeEnds(const AEl: TTyChartElement; APercent: Double;
+  AToEnd: Boolean; out AX, AY, AScale: Double);
+var
+  p, q1, q2, qc: TTyPointF;
+  cv: Boolean;
+  mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+    { fromPos = pointAt(0), toPos = pointAt(percent) }
+    if AToEnd then p := TyGraphLinePointAt(q1, q2, qc, cv, APercent)
+    else p := TyGraphLinePointAt(q1, q2, qc, cv, 0);
+    AX := p.X;
+    AY := p.Y;
+    { symbol.scaleX = invScale * percent }
+    AScale := AEl.Anim.G[11] * APercent;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyGraphEdgeLabelLocal(const AEl: TTyChartElement; APercent: Double;
+  out AX, AY, ARot: Double);
+var
+  gx, gy: Double;
+  q1, q2, qc: TTyPointF;
+  cv: Boolean;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  AX := NaN;
+  AY := NaN;
+  ARot := NaN;
+  if Length(AEl.Anim.Vals) < 6 then Exit;
+  TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+  TyGraphEdgeLabelPlace(q1, q2, qc, cv, EdgeFrameOf(AEl),
+    TTyGraphLabelPos(Round(AEl.Anim.Vals[0])), AEl.Anim.Vals[1], AEl.Anim.Vals[2],
+    AEl.Anim.Vals[3], AEl.Anim.Vals[4], AEl.Anim.Vals[5], APercent, gx, gy, AX, AY,
+    ARot, ah, av);
+end;
+
+procedure TyGraphEdgeLabelAt(const AEl: TTyChartElement; APercent: Double;
+  out AX, AY, ARot: Double; out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
+var
+  lx, ly: Double;
+  q1, q2, qc: TTyPointF;
+  cv: Boolean;
+begin
+  AX := NaN;
+  AY := NaN;
+  ARot := NaN;
+  AAH := tahLeft;
+  AAV := tavMiddle;
+  if Length(AEl.Anim.Vals) < 6 then Exit;
+  TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+  TyGraphEdgeLabelPlace(q1, q2, qc, cv, EdgeFrameOf(AEl),
+    TTyGraphLabelPos(Round(AEl.Anim.Vals[0])), AEl.Anim.Vals[1], AEl.Anim.Vals[2],
+    AEl.Anim.Vals[3], AEl.Anim.Vals[4], AEl.Anim.Vals[5], APercent, AX, AY, lx, ly,
+    ARot, AAH, AAV);
 end;
 
 { ==================== dragging [Batch 114] ==================== }
@@ -5852,6 +6035,74 @@ var
   path: string;
   fill: TTyChartColor;
   nspec: TTyLabelSpec;
+  { [F3a] the edge's enter tag, its arrows' too; a node's half size before
+    the compensation }
+  edgeAnim: TTyChartAnim;
+  hw, hh: Double;
+
+  { THE EDGE'S ENTER TAG [F3a]: its line in the frame beforeUpdate works
+    in -- the trimmed ends in data space and the view's frame on a view,
+    the pixels and no frame on axes -- and its label's placing }
+  procedure EdgeAnimOf(AAt: Integer; out A: TTyChartAnim);
+  var
+    fr: TTyGraphLabelFrame;
+    q1, q2, qc: TTyPointF;
+  begin
+    A := Default(TTyChartAnim);
+    A.Role := carGraphEdge;
+    A.Series := ASeriesIndex;
+    A.Index := AAt;
+    if AInk.HasFrame and AEdges[AAt].HasEnds then
+    begin
+      fr := AInk.Frame;
+      q1 := TyPointF(AEdges[AAt].TX1, AEdges[AAt].TY1);
+      q2 := TyPointF(AEdges[AAt].TX2, AEdges[AAt].TY2);
+      qc := TyPointF(AEdges[AAt].TCPX, AEdges[AAt].TCPY);
+    end
+    else
+    begin
+      fr.SX := 1;
+      fr.SY := 1;
+      fr.X := 0;
+      fr.Y := 0;
+      fr.InvScale := 1;
+      q1 := p1;
+      q2 := p2;
+      qc := cp;
+    end;
+    A.G[0] := q1.X;
+    A.G[1] := q1.Y;
+    A.G[2] := q2.X;
+    A.G[3] := q2.Y;
+    A.G[4] := qc.X;
+    A.G[5] := qc.Y;
+    A.G[6] := Ord(curved);
+    A.G[7] := fr.SX;
+    A.G[8] := fr.SY;
+    A.G[9] := fr.X;
+    A.G[10] := fr.Y;
+    A.G[11] := fr.InvScale;
+    { the label: [position, distance x, y, rotate, offset x, y] }
+    SetLength(A.Vals, 6);
+    A.Vals[0] := -1;
+    A.Vals[1] := 0;
+    A.Vals[2] := 0;
+    A.Vals[3] := NaN;
+    A.Vals[4] := NaN;
+    A.Vals[5] := NaN;
+    if AAt <= High(AInk.EdgeLabelPos) then
+    begin
+      A.Vals[0] := Ord(AInk.EdgeLabelPos[AAt]);
+      A.Vals[1] := AInk.EdgeLabelDistX[AAt];
+      A.Vals[2] := AInk.EdgeLabelDistY[AAt];
+      if AAt <= High(AInk.EdgeLabelRot) then
+      begin
+        A.Vals[3] := AInk.EdgeLabelRot[AAt];
+        A.Vals[4] := AInk.EdgeLabelOffX[AAt];
+        A.Vals[5] := AInk.EdgeLabelOffY[AAt];
+      end;
+    end;
+  end;
 
   function EdgeColour(AAt: Integer): TTyChartColor;
   begin
@@ -5964,6 +6215,9 @@ var
       arrowhead, but a blur or an emphasis of the edge takes its arrowheads
       with it. [Revised in batch 46: the datum was (series, -1).] }
     e.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[edgeAt].Row);
+    { it rides the line's percent (Line.beforeUpdate) [F3a] }
+    e.Anim := edgeAnim;
+    if AAtEnd then e.Anim.Role := carGraphEdgeTo else e.Anim.Role := carGraphEdgeFrom;
     AList.Add(e);
     Inc(Result);
   end;
@@ -6050,6 +6304,9 @@ begin
 
     { THE LABEL, at the place Line.beforeUpdate gives it [Batch 114] }
     EdgeLabel(i, el);
+    { THE ENTER ANIMATION: the line draws out (its percent) [F3a] }
+    EdgeAnimOf(i, edgeAnim);
+    el.Anim := edgeAnim;
     AList.Add(el);
     Inc(Result);
 
@@ -6076,6 +6333,10 @@ begin
       sym.WidthPx := ANodes[i].SizeW;
       sym.HeightPx := ANodes[i].SizeH;
     end;
+    { Symbol's _sizeX / _sizeY: the half size the path is scaled to, before
+      any compensation [F3a] }
+    hw := sym.WidthPx / 2;
+    hh := sym.HeightPx / 2;
     sz := Min(sym.WidthPx, sym.HeightPx);
     if IsNan(sz) or (sz <= 0) then Continue;
     { THE SYMBOL'S HALF-EXTENTS as zrender composes them: the group's scale
@@ -6114,6 +6375,20 @@ begin
       and what a datum reports is the author's numbering. }
     el.Datum := TyChartDatum(ASeriesIndex, ANodes[i].Row, ANodes[i].RawRow);
     el.HitSlopLogical := 4;
+    { A SYMBOL'S POP-IN, the scatter's (Symbol.ts:184-200): the path scales
+      from nothing to its half size about its place and fades in, at the
+      node's row; G[2..3] that half size, which is also what a state's
+      scale multiplies (emphasisState.scaleX = this._sizeX * ratio) [F3a] }
+    el.Anim.Role := carSymbol;
+    el.Anim.Series := ASeriesIndex;
+    el.Anim.Index := ANodes[i].Row;
+    el.Anim.G[0] := ANodes[i].PX + sym.OffsetX;
+    el.Anim.G[1] := ANodes[i].PY + sym.OffsetY;
+    el.Anim.G[2] := hw;
+    el.Anim.G[3] := hh;
+    el.Anim.G[4] := el.Style.Alpha;
+    el.Anim.G[5] := ANodes[i].PX;
+    el.Anim.G[6] := ANodes[i].PY;
     { THE NODE'S OWN LABEL [F2a]: its spec in the item row after the edges';
       built hidden when only a state shows it }
     if i <= High(AInk.NodeLabels) then nspec := AInk.NodeLabels[i]

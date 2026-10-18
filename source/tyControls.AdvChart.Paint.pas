@@ -640,7 +640,39 @@ type
     { [F2a] a treemap's breadcrumb item (Series its series, Index its place
       from the root): a highDownDispatcher of no data -- its own emphasis and
       mouse events (selfType 'breadcrumb'), no tooltip }
-    carTmCrumb);
+    carTmCrumb,
+    { [F3a] THE ENTER ANIMATIONS OF THE REST:
+      carSankeyClip      every node rect, band and their labels of a
+                         sankey: the main group's clip, one proxy per series
+                         (Index -1); G[0..3] the group's bounding rect in its
+                         own frame (x, y, width, height), G[4..7] the frame
+                         (M0, M3, M4, M5: device = M0 * x + M4, M3 * y + M5)
+      carPictorialGlyph  a pictorial bar's glyph path (Index its row, Sub
+                         which glyph of the row, in the order upstream makes
+                         them): G[0..1] the path's position (the pivot of
+                         its scale), G[2..3] symbolScale -- upstream's scale
+                         at rest
+      carPictorialClip   a symbolClip glyph: the bundle's clip rect, one
+                         proxy per row; G[0..3] the clip shape in the
+                         bundle's frame, G[4..5] the bundle's position,
+                         G[6] 1 where the plot clips too, G[7..10] the plot
+      carGraphEdge       a graph edge's line, and its two end symbols and
+      carGraphEdgeFrom   its label: one proxy per edge, the line's
+      carGraphEdgeTo     shape.percent (Line.ts _createLine); the ends and
+      carGraphEdgeLabel  the label are placed from it every frame
+                         (Line.beforeUpdate). G[0..5] the trimmed ends and
+                         control point in the line's frame, G[6] curved,
+                         G[7..10] the frame (SX, SY, X, Y), G[11] the
+                         inverse scale. The label fades on a proxy of its own
+      carTreeNode        a tree node's symbol path: a symbol's pop-in
+                         (G as carSymbol's, G[5..6] the group's place in the
+                         view's frame, G[7..8] the view's scale); its group
+                         slides from its source on a proxy of its own
+      carTreeEdge        a tree edge (Index the node it belongs to): its
+                         shape from its source on the proxy 'treeEdge' }
+    carSankeyClip, carPictorialGlyph, carPictorialClip, carGraphEdge,
+    carGraphEdgeFrom, carGraphEdgeTo, carGraphEdgeLabel, carTreeNode,
+    carTreeEdge);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
@@ -667,6 +699,12 @@ type
     { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
       element itself) [Batch 137] }
     UtPiece: Integer;
+    { A LABEL LabelManager never fades: its host set disableLabelAnimation
+      (a treemap's breadcrumb) [F3a] }
+    NoFade: Boolean;
+    { A LABEL PLACED ON ITS OWN THAT RIDES A TREE NODE'S GROUP (a radial
+      tree's): G[5..9] the node's, as carTreeNode has them [F3a] }
+    RideTree: Boolean;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
