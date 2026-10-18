@@ -1633,6 +1633,24 @@ begin
   Inc(Result);
 end;
 
+{ [F6a] points turned clockwise on screen by ARad about (ACX, ACY) -- the
+  canvas' turn, which the painter gives a path's RotationRad }
+procedure TurnAbout(var AShape: TTyChartShape; ARad, ACX, ACY: Double);
+var
+  i: Integer;
+  c, s, x, y: Double;
+begin
+  c := Cos(ARad);
+  s := Sin(ARad);
+  AShape.Points := Copy(AShape.Points, 0, Length(AShape.Points));
+  for i := 0 to High(AShape.Points) do
+  begin
+    x := AShape.Points[i].X - ACX;
+    y := AShape.Points[i].Y - ACY;
+    AShape.Points[i] := TyPointF(ACX + x * c - y * s, ACY + x * s + y * c);
+  end;
+end;
+
 function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
@@ -1874,7 +1892,11 @@ begin
           tilted. }
         if el.Shape.Kind = cskPath then
           el.Shape := TyShapePath(el.Shape.PathData, el.Shape.Bounds,
-            angle + Pi / 2, ALayout.CX, ALayout.CY);
+            angle + Pi / 2, ALayout.CX, ALayout.CY)
+        else if el.Shape.Kind in [cskPolygon, cskPolyline] then
+          { [F6a] a built-in icon or a picture is points: they turn about
+            the hub the same way (a picture's corners carry its turn) }
+          TurnAbout(el.Shape, angle + Pi / 2, ALayout.CX, ALayout.CY);
         el.Style.HasFill := True;
         if ASpec.Needle.HasColour then el.Style.FillColor := ASpec.Needle.Colour
         else if ASpec.Needle.Auto then el.Style.FillColor := autoC

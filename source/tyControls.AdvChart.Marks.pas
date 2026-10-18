@@ -2073,9 +2073,11 @@ var
         { The area's opacity REPLACES the series' -- it is a key on its own
           block, not a second multiplier on the item's. }
         el.Style.Alpha := spec.AreaOpacity;
-        { SILENT: the fill is decoration behind the line, and a pointer landing
-          on it should find the line, not the shading. }
-        el.Silent := True;
+        { [F6a] NOT SILENT, as upstream's polygon is not: a pointer on the
+          shading hovers the series (the line's emphasis, its cursor) like
+          the polyline does. [Was silent: "a pointer landing on it should
+          find the line, not the shading" -- upstream finds the shading.] }
+        el.Silent := False;
         SetClip(el);
         TagClip(el, carLineArea);
         AList.Add(el);
@@ -3435,6 +3437,9 @@ begin
     sym.WidthPx := glyphW;
     sym.HeightPx := glyphH;
     sym.KeepAspect := spec.KeepAspect;
+    { [F6a] createPath (PictorialBarView) hands createSymbol no keepAspect:
+      a picture glyph covers its box }
+    if sym.Kind = tsyImage then sym.KeepAspect := False;
     { THE OFFSET IS ALREADY IN THE ANCHOR and in acrossCentre. Leaving it on
       the spec as well would move every glyph twice. }
     sym.OffsetX := 0;

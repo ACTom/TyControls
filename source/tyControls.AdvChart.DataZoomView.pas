@@ -1358,11 +1358,30 @@ var
     empty: Boolean;
     path: string;
     cx, cy, ssx, ssy: Double;
+    ib: TTyRectF;
+    q: array[0..3] of TTyPointF;
   begin
     spec := Default(TTySymbolSpec);
     spec.Kind := TySymbolKindOf(AIcon, empty, path);
     if spec.Kind = tsyNone then Exit;
     spec.PathData := path;
+    { [F6a] createSymbol(icon, ..., null, true): an image icon is centred
+      to its own aspect in its box (makeImage 'center'), its corners through
+      the element's whole matrix -- the slider group's flip included }
+    if spec.Kind = tsyImage then
+    begin
+      ib := TyImageCenterBox(path, TyRectF(AE.PathRect.X, AE.PathRect.Y,
+        AE.PathRect.X + AE.PathRect.W, AE.PathRect.Y + AE.PathRect.H));
+      TyZrApply(M, ib.Left, ib.Top, q[0].X, q[0].Y);
+      TyZrApply(M, ib.Right, ib.Top, q[1].X, q[1].Y);
+      TyZrApply(M, ib.Right, ib.Bottom, q[2].X, q[2].Y);
+      TyZrApply(M, ib.Left, ib.Bottom, q[3].X, q[3].Y);
+      el.Shape := TyShapePolygon(q);
+      el.Shape.Image := path;
+      AList.Add(el);
+      Inc(Result);
+      Exit;
+    end;
     ssx := Sqrt(M[0] * M[0] + M[1] * M[1]);
     ssy := Sqrt(M[2] * M[2] + M[3] * M[3]);
     spec.WidthPx := AE.PathRect.W * ssx;

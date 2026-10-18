@@ -2428,7 +2428,10 @@ begin
         Corner(3, box.X, box.Y + h);
         AOut.Shape := TyShapePolygon(q);
         AOut.Shape.HitNonZero := True;
-        if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 5) = 'data:')
+        { [F6a] any string: the renderer draws what AdvChart.Images resolves
+          -- a data URL, an image list's `name/index` -- and nothing for the
+          rest (upstream's image not loaded) }
+        if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
           and not AEl.Invisible and (w > 0) and (h > 0) then
         begin
           AOut.Style.HasFill := True;
@@ -2545,6 +2548,8 @@ begin
     end;
   end;
   AOut.Silent := False;
+  { [F6a] the element's own cursor, 'pointer' by the prototype }
+  if AEl.Cursor <> 'pointer' then AOut.Cursor := AEl.Cursor;
   Result := True;
 end;
 

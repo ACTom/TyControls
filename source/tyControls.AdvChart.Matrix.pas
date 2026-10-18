@@ -2199,6 +2199,8 @@ var
   z, outerZ2, added: Integer;
   node: TJSONObject;
   triggerEv, tipShow: Boolean;
+  { [F6a] the next cell rect's cursor ('' the prototype's pointer) }
+  rectCursor: string;
 
   { a new cell's serial in AMatrix's table }
   function NewInfo(const ATarget: string; ALocX, ALocY: Integer): Integer;
@@ -2249,6 +2251,7 @@ var
     el.Silent := ASilent;
     if AInfo >= 0 then el.Datum := TyChartComponentDatum(ctkMatrix, AMatrix.Index, AInfo);
     el.HitStrokeBand := ABand;
+    el.Cursor := rectCursor;
     AList.Add(el);
     Inc(added);
   end;
@@ -2552,7 +2555,14 @@ var
       if ((s.Stroke shr 24) <> 0) and (s.LineWidth > 0) then band := Max(s.LineWidth, 5)
       else rectSilent := True;
     end;
+    { [F6a] `cursor`: the cell's, its parent's (_tmpCellModel.get) }
+    d := nil;
+    if ACell <> nil then d := ACell.Find('cursor');
+    if JNull(d) and (AParent <> nil) then d := AParent.Find('cursor');
+    if (d <> nil) and (d.JSONType = jtString) then rectCursor := d.AsString
+    else rectCursor := '';
     sh := AddRect(AShape, s, z2, rectSilent, info, band);
+    rectCursor := '';
     if AHasText then
       AddLabel(AText, AValue, ALocX, ALocY, ObjIn(ACell, 'label'), ObjIn(AParent, 'label'),
         sh, s.LineWidth, z2, info);

@@ -58,6 +58,10 @@ type
     HandleSize: TTyBoxRaw;
     { the handle icon's path body, `path://` taken off }
     HandleIcon: string;
+    { [F6a] an `image://` handle icon, as written ('' none): the thumb is
+      the picture, centred to its aspect in the icon box (createSymbol
+      with keepAspect), hit over its rect }
+    HandleImage: string;
     { handleStyle.borderWidth, doubled as upstream draws it }
     HandleLineWidth: Double;
     BorderWidth: Double;
@@ -545,6 +549,8 @@ begin
   d := node.Find('handleIcon');
   if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 7) = 'path://') then
     Result.HandleIcon := Copy(d.AsString, 8, MaxInt);
+  if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 8) = 'image://') then
+    Result.HandleImage := d.AsString;
   hs := ObjOf(node.Find('handleStyle'));
   if hs <> nil then
   begin
@@ -1560,6 +1566,7 @@ var
   align: TTyTextAnchorH;
   dir: string;
   iconBox, r: TTyXYWH;
+  ib: TTyRectF;
 begin
   if not AView.Calculable then Exit;
   i0 := L.ItemW;
@@ -1584,7 +1591,15 @@ begin
     th[5] := AEnds[h];
     L.Handles[h].Local := th;
     L.Handles[h].Thumb := MatMul(L.Bar, th);
-    L.Handles[h].PathRect := TyVmIconRect(AView.HandleIcon, iconBox);
+    if AView.HandleImage <> '' then
+    begin
+      { [F6a] the picture's own box: no path, no pen }
+      ib := TyImageCenterBox(AView.HandleImage, TyRectF(iconBox.X, iconBox.Y,
+        iconBox.X + iconBox.W, iconBox.Y + iconBox.H));
+      L.Handles[h].PathRect := XYWH(ib.Left, ib.Top, ib.Right - ib.Left, ib.Bottom - ib.Top);
+    end
+    else
+      L.Handles[h].PathRect := TyVmIconRect(AView.HandleIcon, iconBox);
     { Path.getBoundingRect with the pen: strokeNoScale divides by the line
       scale of the thumb's whole transform, which is 1 at scale 1 }
     lw := AView.HandleLineWidth;
@@ -1597,7 +1612,7 @@ begin
       lineScale := Sqrt(Abs(L.Handles[h].Thumb[0] * L.Handles[h].Thumb[3]
         - L.Handles[h].Thumb[2] * L.Handles[h].Thumb[1]));
     r := L.Handles[h].PathRect;
-    if (lw > 0) and (lineScale > 1e-10) then
+    if (lw > 0) and (lineScale > 1e-10) and (AView.HandleImage = '') then
     begin
       r.W := r.W + lw / lineScale;
       r.H := r.H + lw / lineScale;
@@ -1790,6 +1805,9 @@ begin
   if not TyMatInvert(M, inv) then Exit;
   MatApply(inv, AGX, AGY, px, py);
   pr := L.Handles[AHandle].PathRect;
+  { [F6a] a picture: its rect, edges in (rectContain) }
+  if AView.HandleImage <> '' then
+    Exit((px >= pr.X) and (px <= pr.X + pr.W) and (py >= pr.Y) and (py <= pr.Y + pr.H));
   { the pen: strokeNoScale divides by the line scale; a thumb without a fill
     is its pen alone, at least strokeContainThreshold (5) wide }
   lw := AView.HandleLineWidth;
@@ -2169,6 +2187,7 @@ var
   T: TTyMat2D;
   bg: TTyXYWH;
   pr: TTyXYWH;
+  ix, iy: array[0..3] of Double;
   cxl, cyl, cx, cy, sw, sh: Double;
   fill: TTyVisualColor;
 
@@ -2275,6 +2294,20 @@ begin
     MatApply(MatMul(T, ALayout.Handles[h].Thumb), cxl, cyl, cx, cy);
     sw := pr.W;
     sh := pr.H;
+    if AView.HandleImage <> '' then
+    begin
+      { [F6a] the picture's corners through the thumb's whole transform }
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X, pr.Y, ix[0], iy[0]);
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X + pr.W, pr.Y, ix[1], iy[1]);
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X + pr.W, pr.Y + pr.H, ix[2], iy[2]);
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X, pr.Y + pr.H, ix[3], iy[3]);
+      el.Shape := TyShapePolygon([TyPointF(ix[0], iy[0]), TyPointF(ix[1], iy[1]),
+        TyPointF(ix[2], iy[2]), TyPointF(ix[3], iy[3])]);
+      el.Shape.Image := AView.HandleImage;
+      AList.Add(el);
+      Inc(Result);
+      Continue;
+    end;
     el.Shape := TyShapePath(AView.HandleIcon,
       TyRectF(cx - sw / 2, cy - sh / 2, cx + sw / 2, cy + sh / 2),
       -TyJsAtan2(ALayout.Handles[h].Thumb[1], ALayout.Handles[h].Thumb[0]),

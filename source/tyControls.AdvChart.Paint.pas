@@ -767,6 +767,13 @@ type
       says so (a geo region and its text). Everything else keeps the
       rule above: the hit test ignores the clip. }
     ClipHits: Boolean;
+    { [F6a] zrender's Displayable.cursor, the CSS name the canvas takes
+      while the pointer is over the element (Handler.mousemove's
+      setCursor): '' is the prototype's 'pointer'. Set where upstream sets
+      one -- an item's or its series' `cursor` option, 'move' on a node a
+      drag takes, 'default' on a large batch or a pager button that cannot
+      turn the page. Meaningless on a silent element, which is no target. }
+    Cursor: string;
   end;
 
   TTyPaintList = class

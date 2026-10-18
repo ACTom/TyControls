@@ -484,8 +484,9 @@ begin
           for k := 0 to FChart.List.Count - 1 do
           begin
             e := FChart.List.Element(k);
+            { the area by its role: [F6a] it is no longer silent }
             if (e.Datum.SeriesIndex = si) and (e.Shape.Kind = cskPolygon)
-              and e.Silent and not got then
+              and (e.Anim.Role = carLineArea) and not got then
             begin
               CheckEl(Format('series %d area', [si]), e,
                 se.Objects['line'].Objects['area']);

@@ -1100,9 +1100,10 @@ begin
     AssertEquals(Format('bottom %d is on the baseline', [i]),
       base, poly[i].Y, 0.001);
 
-  { THE FILL IS NOT HIT-TESTABLE. A pointer over the shading should find the
-    line, not the decoration behind it. }
-  AssertTrue('the area is silent', FList.Element(0).Silent);
+  { [F6a] THE FILL IS A TARGET, as upstream's polygon is: a pointer over the
+    shading hovers the series. (It was silent: "a pointer over the shading
+    should find the line" -- upstream finds the shading.) }
+  AssertFalse('the area is not silent', FList.Element(0).Silent);
   AssertFalse('the line is not', FList.Element(1).Silent);
 end;
 
