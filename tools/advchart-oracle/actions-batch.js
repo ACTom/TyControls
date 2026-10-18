@@ -35,7 +35,9 @@
 //                                       zrender's Handler, as tooltip-actions.js
 //     {op: 'idle', ms}                  the clock only
 //     handlers [{on, times, dispatch}]  registered after the listeners: the
-//               first `times` events `on` dispatch `dispatch` on the chart
+//               first `times` events `on` dispatch `dispatch` on the chart --
+//               or, with `flush: true` instead, run zrender's own frame
+//               (animation.update(), _flush(false)) inside the handler
 //     each step records events [[0, type, payload]] in the order the
 //     handlers heard them (`rendered` as {elapsedTime}); with `flush` set on
 //     the case, a frame after the step is zrender's own: animation.update()
@@ -357,6 +359,12 @@ const CASES = [
       { op: 'action', payload: { type: 'hideTip' } },
       { op: 'leave' },
     ] },
+  { id: 'r-pending', note: 'a flush inside the handler of pietoggleselect, while the toggleSelect it dispatched still waits: '
+      + 'rendered, no finished (bindRenderedEvent: _pendingActions not empty); the step\'s own frame after the flush: both',
+    flush: true,
+    option: { animation: false, series: [{ type: 'pie', selectedMode: 'single', data: [{ name: 'p', value: 1 }, { name: 'q', value: 2 }] }] },
+    handlers: [{ on: 'pietoggleselect', times: 1, flush: true }],
+    steps: [{ op: 'action', payload: { type: 'pieToggleSelect', seriesIndex: 0, dataIndex: 1 } }] },
   { id: 'r-plain', note: 'no tooltip: a move inside the same bar marks nothing', flush: true,
     option: barLine(undefined),
     steps: [
@@ -467,7 +475,8 @@ function runCase(def) {
       chart.on(h.on, () => {
         if (left <= 0) return;
         left--;
-        chart.dispatchAction(clone(h.dispatch));
+        if (h.flush) frame(chart, true);
+        if (h.dispatch) chart.dispatchAction(clone(h.dispatch));
       });
     }
     for (const st of def.pre || []) {
@@ -553,6 +562,9 @@ function anchors(cases) {
   guard('rh-box-moves', evs(rh, 2, 'rendered').length === 1, 'the box moved with the pointer: rendered');
   const rp = cs('r-plain');
   guard('rp-same-bar', evs(rp, 1, 'rendered').length === 0, 'no tooltip, the same bar: nothing flushed');
+  const rpe = cs('r-pending');
+  guard('rpe-order', types(rpe, 0) === 'pietoggleselect,rendered,toggleselect,selectchanged,brushselected,updated,rendered,finished',
+    'a flush while an action waits: rendered without finished; finished once the queue is empty');
   guard('rp-elapsed', evs(rp, 0, 'rendered').every(e => e[2].elapsedTime === 0), 'elapsedTime on the frozen clock');
   return guards;
 }

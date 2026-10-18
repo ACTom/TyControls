@@ -4302,6 +4302,128 @@
    ]
   },
   {
+   "id": "r-pending",
+   "note": "a flush inside the handler of pietoggleselect, while the toggleSelect it dispatched still waits: rendered, no finished (bindRenderedEvent: _pendingActions not empty); the step's own frame after the flush: both",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "selectedMode": "single",
+      "data": [
+       {
+        "name": "p",
+        "value": 1
+       },
+       {
+        "name": "q",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": true,
+   "handlers": [
+    {
+     "on": "pietoggleselect",
+     "times": 1,
+     "flush": true
+    }
+   ],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "pieToggleSelect",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "events": [
+      [
+       0,
+       "pietoggleselect",
+       {
+        "type": "pietoggleselect",
+        "seriesIndex": 0,
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "seriesIndex": [
+         0
+        ],
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "seriesIndex": [
+          0
+         ],
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "r-plain",
    "note": "no tooltip: a move inside the same bar marks nothing",
    "option": {
@@ -4626,6 +4748,11 @@
    "id": "rp-same-bar",
    "ok": true,
    "what": "no tooltip, the same bar: nothing flushed"
+  },
+  {
+   "id": "rpe-order",
+   "ok": true,
+   "what": "a flush while an action waits: rendered without finished; finished once the queue is empty"
   },
   {
    "id": "rp-elapsed",

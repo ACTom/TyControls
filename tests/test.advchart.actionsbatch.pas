@@ -42,6 +42,7 @@ type
     FHandOn: string;
     FHandLeft: Integer;
     FHandDispatch: string;
+    FHandFlush: Boolean;
     FListen: TStringList;
     procedure Bad(const AWhat: string);
     procedure Finish(const AWhat: string);
@@ -86,6 +87,7 @@ type
     procedure TestAHandlersDispatchRunsAtOnceAsUpstream;
     procedure TestRenderedOnEveryFlushAsUpstream;
     procedure TestRenderedWithoutATooltipAsUpstream;
+    procedure TestNoFinishedWhileAnActionWaitsAsUpstream;
   end;
 
 implementation
@@ -256,7 +258,9 @@ begin
   if (AEvent.EventType = FHandOn) and (FHandLeft > 0) then
   begin
     Dec(FHandLeft);
-    FChart.DispatchAction(FHandDispatch);
+    { a flush inside the handler: the frame zrender would run there }
+    if FHandFlush then FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+    if FHandDispatch <> '' then FChart.DispatchAction(FHandDispatch);
   end;
 end;
 
@@ -386,11 +390,16 @@ begin
     hands := cs.Arrays['handlers'];
     FHandLeft := 0;
     FHandOn := '';
+    FHandDispatch := '';
+    FHandFlush := False;
     if hands.Count > 0 then
     begin
       FHandOn := hands.Objects[0].Strings['on'];
       FHandLeft := hands.Objects[0].Integers['times'];
-      FHandDispatch := hands.Objects[0].Objects['dispatch'].AsJSON;
+      if hands.Objects[0].Find('dispatch') <> nil then
+        FHandDispatch := hands.Objects[0].Objects['dispatch'].AsJSON;
+      FHandFlush := (hands.Objects[0].Find('flush') <> nil)
+        and hands.Objects[0].Booleans['flush'];
     end;
     now_ := 0;
     now2 := 0;
@@ -595,6 +604,11 @@ end;
 procedure TAdvChartActionsBatchOracleTest.TestRenderedWithoutATooltipAsUpstream;
 begin
   RunCase('r-plain');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestNoFinishedWhileAnActionWaitsAsUpstream;
+begin
+  RunCase('r-pending');
 end;
 
 initialization
