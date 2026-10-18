@@ -132,6 +132,9 @@ type
     procedure TestDrawRuleIsDrawLineAtOne;
     { At S = 2 it is one LAYOUT pixel wide: two device pixels, at twice the place. }
     procedure TestDrawRuleIsOneLayoutPixelWide;
+    { A run that is neither horizontal nor vertical is Bitmap.DrawLine(…, False) with its ends
+      mapped -- in a release build too, where an assertion would be compiled out. }
+    procedure TestDrawRuleSlantedIsTheLine;
   end;
 
 const
@@ -1299,6 +1302,40 @@ begin
   finally
     P.Free;
     ref.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestDrawRuleSlantedIsTheLine;
+var
+  a, b: TTyPainter;
+  red: TBGRAPixel;
+begin
+  red := BGRA(255, 0, 0, 255);
+  a := TTyPainter.Create;
+  b := TTyPainter.Create;
+  try
+    a.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+    b.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+    a.DrawRule(5, 5, 40, 20, red);
+    b.Bitmap.DrawLine(5, 5, 40, 20, red, False);
+    AssertSamePixels('slanted, S = 1', a.Bitmap, b.Bitmap);
+    a.EndPaint;
+    b.EndPaint;
+    TyForceDeviceScaleForTest(2, True);
+    try
+      a.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+      b.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+      a.DrawRule(5, 5, 40, 20, red);
+      b.Bitmap.DrawLine(10, 10, 80, 40, red, False);
+      AssertSamePixels('slanted, S = 2: the ends mapped', a.Bitmap, b.Bitmap);
+      a.EndPaint;
+      b.EndPaint;
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  finally
+    a.Free;
+    b.Free;
   end;
 end;
 

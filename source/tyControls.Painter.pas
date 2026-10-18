@@ -317,7 +317,7 @@ type
     { Bitmap.DrawLine(AX1, AY1, AX2, AY2, AColor, False) for a horizontal or vertical run, in
       layout pixels: the same pixels -- from the first point up to, not including, the second --
       one LAYOUT pixel wide at any device scale. Bitmap.DrawLine is one DEVICE pixel wide: half
-      the weight on a 2x layer (#83). }
+      the weight on a 2x layer (#83). A slanted run is Bitmap.DrawLine itself, ends mapped. }
     procedure DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
     { The layer, DeviceScale times the layout size (#83). Two conventions on it:
       - Bitmap.Canvas2D takes LAYOUT pixels: BeginPaint presets scale(S) and strokeScale(S).
@@ -4228,21 +4228,29 @@ end;
 procedure TTyPainter.DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
 var
   R: TRect;
+  mapped: Boolean;
 begin
-  if AY1 = AY2 then
-  begin
-    if AX1 = AX2 then Exit;
-    if AX2 > AX1 then R := Rect(AX1, AY1, AX2, AY1 + 1)
-    else R := Rect(AX2 + 1, AY1, AX1 + 1, AY1 + 1);
-  end
-  else
-  begin
-    Assert(AX1 = AX2, 'TTyPainter.DrawRule: horizontal or vertical runs only');
-    if AY2 > AY1 then R := Rect(AX1, AY1, AX1 + 1, AY2)
-    else R := Rect(AX1, AY2 + 1, AX1 + 1, AY1 + 1);
-  end;
-  if RasterEnter then R := Dev(R);
+  mapped := RasterEnter;
   try
+    if (AX1 <> AX2) and (AY1 <> AY2) then
+    begin
+      { Slanted: there is no "one layout pixel wide" for it to keep, so it is the plain line. }
+      if FBmp = nil then Exit;
+      if mapped then
+        FBmp.DrawLine(Dev(AX1), Dev(AY1), Dev(AX2), Dev(AY2), AColor, False)
+      else
+        FBmp.DrawLine(AX1, AY1, AX2, AY2, AColor, False);
+      Exit;
+    end;
+    if AY1 = AY2 then
+    begin
+      if AX1 = AX2 then Exit;
+      if AX2 > AX1 then R := Rect(AX1, AY1, AX2, AY1 + 1)
+      else R := Rect(AX2 + 1, AY1, AX1 + 1, AY1 + 1);
+    end
+    else if AY2 > AY1 then R := Rect(AX1, AY1, AX1 + 1, AY2)
+    else R := Rect(AX1, AY2 + 1, AX1 + 1, AY1 + 1);
+    if mapped then R := Dev(R);
     DrawRuleAt(R, AColor);
   finally
     RasterLeave;
