@@ -907,7 +907,7 @@ begin
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
       TyAnchorToAlignment(AElement.Caption.AnchorH),
       TyAnchorToLayout(AElement.Caption.AnchorV),
-      AElement.Caption.Truncate)
+      AElement.Caption.Truncate, 0, False, AElement.Caption.MultiLine)
   else
   begin
     box := CaptionBox(AElement.Caption, 0, 0);
@@ -1367,8 +1367,22 @@ begin
       this costs one line: the alternative was a second stack here that had to
       stay in step with that one. }
     if AElement.HasClip then
+    begin
       P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
         Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+      { [F4c] a rounded clip: the rect's own path with its corners }
+      if AElement.ClipRadius > 0 then
+      begin
+        P.BeginPath;
+        TraceRtRect(P, AElement.ClipRect.Left, AElement.ClipRect.Top,
+          AElement.ClipRect.Right - AElement.ClipRect.Left,
+          AElement.ClipRect.Bottom - AElement.ClipRect.Top,
+          [AElement.ClipRadius, AElement.ClipRadius, AElement.ClipRadius,
+           AElement.ClipRadius]);
+        P.ClipPath(tfrNonZero);
+        P.BeginPath;
+      end;
+    end;
     { A POLAR LINE'S SECTOR, traced as zrender's arc takes it [Batch 113] }
     if AElement.HasClipSector then
     begin

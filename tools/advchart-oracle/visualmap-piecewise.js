@@ -1905,6 +1905,12 @@ const CASES = [
     omitOption: true },
   { id: 'G-calendar-heatmap', groups: ['gallery'], note: 'calendar-heatmap (gallery), verbatim: the component only (the heatmap series is not recorded)',
     gallery: 'calendar-heatmap', componentOnly: true },
+  // [F4c] a piece's symbolSize as a pair (kept as written: the symbol is w x h)
+  // and as a word that is no number (set all the same: normalizeSymbolSize
+  // makes it nought)
+  { id: 'P20', groups: ['P20'], note: "a piece's symbolSize [16, 8] (the pair) and a piece's 'abc' (no number: nought)",
+    option: { xAxis: {}, yAxis: {}, visualMap: { pieces: [{ lt: 10, symbolSize: [16, 8] }, { gte: 10, symbolSize: 'abc' }], dimension: 1 },
+      series: [{ type: 'scatter', data: [[0, 5], [1, 15]] }] } },
 ];
 
 // ---------- the guards ----------

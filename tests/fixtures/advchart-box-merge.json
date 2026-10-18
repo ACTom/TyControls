@@ -611,6 +611,75 @@
    "verticalAlign": "top",
    "bg": {"x":"4064c947ae147ae2","y":"402e000000000000","width":"4050dae147ae147a","height":"4049000000000000"},
    "bgText": {"x":"166.29000000000002","y":"15","width":"67.41999999999999","height":"50"}
+  },
+  {
+   "name": "T24 top:bottom",
+   "input": {"text":"Title","subtext":"Sub","top":"bottom"},
+   "padding": [5,5,5,5],
+   "itemGap": 10,
+   "merged": {"left":{"kind":"value","type":"string","value":"center"},"right":{"kind":"absent"},"top":{"kind":"value","type":"string","value":"bottom"},"bottom":{"kind":"null"},"width":{"kind":"absent"},"height":{"kind":"absent"}},
+   "parsed": {"left":"4069000000000000","right":"7ff8000000000000","top":"4072c00000000000","bottom":"7ff8000000000000","width":"7ff8000000000000","height":"7ff8000000000000"},
+   "parsedText": {"left":"200","right":"NaN","top":"300","bottom":"NaN","width":"NaN","height":"NaN"},
+   "wordH": "center",
+   "wordV": "bottom",
+   "text": {"string":"Title","font":"normal bold 18px Microsoft YaHei","width":"4041028f5c28f5c4","widthText":"34.02000000000001","height":"4032000000000000","heightText":"18"},
+   "subtext": {"string":"Sub","font":"normal normal 12px Microsoft YaHei","width":"40357ae147ae147c","widthText":"21.480000000000004","height":"4028000000000000","heightText":"12"},
+   "block": {"width":"4041028f5c28f5c4","height":"4044000000000000"},
+   "blockText": {"width":"34.02000000000001","height":"40"},
+   "layoutRect": {"x":"4066dfae147ae148","y":"406fe00000000000","width":"4041028f5c28f5c4","height":"4044000000000000"},
+   "layoutRectText": {"x":"182.99","y":"255","width":"34.02000000000001","height":"40"},
+   "group": {"x":"4069000000000000","y":"4072700000000000"},
+   "groupText": {"x":"200","y":"295"},
+   "align": "center",
+   "verticalAlign": "bottom",
+   "bg": {"x":"40663fae147ae148","y":"4071000000000000","width":"4046028f5c28f5c4","height":"404c000000000000"},
+   "bgText": {"x":"177.99","y":"272","width":"44.02000000000001","height":"56"}
+  },
+  {
+   "name": "T25 bottom:middle,text:Quarterly",
+   "input": {"text":"Quarterly","subtext":"Sub","bottom":"middle"},
+   "padding": [5,5,5,5],
+   "itemGap": 10,
+   "merged": {"left":{"kind":"value","type":"string","value":"center"},"right":{"kind":"absent"},"top":{"kind":"null"},"bottom":{"kind":"value","type":"string","value":"middle"},"width":{"kind":"absent"},"height":{"kind":"absent"}},
+   "parsed": {"left":"4069000000000000","right":"7ff8000000000000","top":"7ff8000000000000","bottom":"4062c00000000000","width":"7ff8000000000000","height":"7ff8000000000000"},
+   "parsedText": {"left":"200","right":"NaN","top":"NaN","bottom":"150","width":"NaN","height":"NaN"},
+   "wordH": "center",
+   "wordV": "middle",
+   "text": {"string":"Quarterly","font":"normal bold 18px Microsoft YaHei","width":"40528a3d70a3d70a","widthText":"74.16","height":"4032000000000000","heightText":"18"},
+   "subtext": {"string":"Sub","font":"normal normal 12px Microsoft YaHei","width":"40357ae147ae147c","widthText":"21.480000000000004","height":"4028000000000000","heightText":"12"},
+   "block": {"width":"40528a3d70a3d70a","height":"4044000000000000"},
+   "blockText": {"width":"74.16","height":"40"},
+   "layoutRect": {"x":"40645d70a3d70a3e","y":"4060400000000000","width":"40528a3d70a3d70a","height":"4044000000000000"},
+   "layoutRectText": {"x":"162.92000000000002","y":"130","width":"74.16","height":"40"},
+   "group": {"x":"4069000000000000","y":"4062c00000000000"},
+   "groupText": {"x":"200","y":"150"},
+   "align": "center",
+   "verticalAlign": "middle",
+   "bg": {"x":"4063bd70a3d70a3e","y":"4061000000000000","width":"40550a3d70a3d70a","height":"404a800000000000"},
+   "bgText": {"x":"157.92000000000002","y":"136","width":"84.16","height":"53"}
+  },
+  {
+   "name": "T26 top:bottom,itemGap:30",
+   "input": {"text":"Title","subtext":"Sub","top":"bottom","itemGap":30},
+   "padding": [5,5,5,5],
+   "itemGap": 30,
+   "merged": {"left":{"kind":"value","type":"string","value":"center"},"right":{"kind":"absent"},"top":{"kind":"value","type":"string","value":"bottom"},"bottom":{"kind":"null"},"width":{"kind":"absent"},"height":{"kind":"absent"}},
+   "parsed": {"left":"4069000000000000","right":"7ff8000000000000","top":"4072c00000000000","bottom":"7ff8000000000000","width":"7ff8000000000000","height":"7ff8000000000000"},
+   "parsedText": {"left":"200","right":"NaN","top":"300","bottom":"NaN","width":"NaN","height":"NaN"},
+   "wordH": "center",
+   "wordV": "bottom",
+   "text": {"string":"Title","font":"normal bold 18px Microsoft YaHei","width":"4041028f5c28f5c4","widthText":"34.02000000000001","height":"4032000000000000","heightText":"18"},
+   "subtext": {"string":"Sub","font":"normal normal 12px Microsoft YaHei","width":"40357ae147ae147c","widthText":"21.480000000000004","height":"4028000000000000","heightText":"12"},
+   "block": {"width":"4041028f5c28f5c4","height":"404e000000000000"},
+   "blockText": {"width":"34.02000000000001","height":"60"},
+   "layoutRect": {"x":"4066dfae147ae148","y":"406d600000000000","width":"4041028f5c28f5c4","height":"404e000000000000"},
+   "layoutRectText": {"x":"182.99","y":"235","width":"34.02000000000001","height":"60"},
+   "group": {"x":"4069000000000000","y":"4072700000000000"},
+   "groupText": {"x":"200","y":"295"},
+   "align": "center",
+   "verticalAlign": "bottom",
+   "bg": {"x":"40663fae147ae148","y":"4071000000000000","width":"4046028f5c28f5c4","height":"4053000000000000"},
+   "bgText": {"x":"177.99","y":"272","width":"44.02000000000001","height":"76"}
   }
  ],
  "legends": [
@@ -1321,9 +1390,9 @@
    "named": ["T01 right:10","T02 bottom:10","T07 right:right","L01 right:10","LV0 vertical top:10"],
    "changed": [
     "T01 right:10","T02 bottom:10","T03 left:10,right:10","T04 left:auto,right:10","T07 right:right","T08 left:0,right:10","T10 right:20%","T11 bottom:10%","T12 top:10,bottom:10","T13 left:foo,right:right","T14 left:centre","T15 left:\" center\"",
-    "T16 left:10px","T17 left:true","T18 left:leafDepth","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T21 top:center","T22 right:\"20% \"","L01 right:10","L02 left:10,right:200","L03 right:10,width:100",
-    "L05 left:auto,right:10","L06 left:foo","L07 right:right","L08 right:center","LV0 vertical top:10","LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom","LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right",
-    "LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
+    "T16 left:10px","T17 left:true","T18 left:leafDepth","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T21 top:center","T22 right:\"20% \"","T24 top:bottom","T25 bottom:middle,text:Quarterly","T26 top:bottom,itemGap:30",
+    "L01 right:10","L02 left:10,right:200","L03 right:10,width:100","L05 left:auto,right:10","L06 left:foo","L07 right:right","L08 right:center","LV0 vertical top:10","LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom",
+    "LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right","LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
    ],
    "ok": true
   },
@@ -1332,9 +1401,9 @@
    "named": ["T01 right:10","L02 left:10,right:200"],
    "changed": [
     "T01 right:10","T02 bottom:10","T03 left:10,right:10","T04 left:auto,right:10","T07 right:right","T08 left:0,right:10","T10 right:20%","T11 bottom:10%","T12 top:10,bottom:10","T13 left:foo,right:right","T14 left:centre","T15 left:\" center\"",
-    "T16 left:10px","T17 left:true","T18 left:leafDepth","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T21 top:center","T22 right:\"20% \"","L01 right:10","L02 left:10,right:200","L03 right:10,width:100",
-    "L05 left:auto,right:10","L06 left:foo","L07 right:right","L08 right:center","LV0 vertical top:10","LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom","LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right",
-    "LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
+    "T16 left:10px","T17 left:true","T18 left:leafDepth","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T21 top:center","T22 right:\"20% \"","T24 top:bottom","T25 bottom:middle,text:Quarterly","T26 top:bottom,itemGap:30",
+    "L01 right:10","L02 left:10,right:200","L03 right:10,width:100","L05 left:auto,right:10","L06 left:foo","L07 right:right","L08 right:center","LV0 vertical top:10","LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom",
+    "LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right","LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
    ],
    "ok": true
   },
@@ -1361,8 +1430,9 @@
    "changed": [
     "T00 default","T01 right:10","T02 bottom:10","T03 left:10,right:10","T04 left:auto,right:10","T05 left:auto","T06 top:auto","T07 right:right","T08 left:0,right:10","T09 left:null,right:0","T10 right:20%","T11 bottom:10%","T12 top:10,bottom:10",
     "T13 left:foo,right:right","T14 left:centre","T15 left:\" center\"","T16 left:10px","T17 left:true","T18 left:leafDepth","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T21 top:center","T22 right:\"20% \"",
-    "T23 frame order,text:Budget","L00 default","L01 right:10","L02 left:10,right:200","L03 right:10,width:100","L04 bottom:auto","L05 left:auto,right:10","L06 left:foo","L07 right:right","L08 right:center","LV0 vertical top:10",
-    "LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom","LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right","LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
+    "T23 frame order,text:Budget","T24 top:bottom","T25 bottom:middle,text:Quarterly","T26 top:bottom,itemGap:30","L00 default","L01 right:10","L02 left:10,right:200","L03 right:10,width:100","L04 bottom:auto","L05 left:auto,right:10","L06 left:foo",
+    "L07 right:right","L08 right:center","LV0 vertical top:10","LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom","LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right","LV6 vertical right:right",
+    "LS0 scroll vertical right:10,top:20,bottom:20"
    ],
    "ok": true
   },
@@ -1370,8 +1440,8 @@
    "mutation": "M7 null the edge but keep its word",
    "named": ["T01 right:10"],
    "changed": [
-    "T01 right:10","T04 left:auto,right:10","T07 right:right","T10 right:20%","T11 bottom:10%","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T22 right:\"20% \"","L01 right:10","L03 right:10,width:100",
-    "L05 left:auto,right:10","L07 right:right","LV4 vertical right:10","LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
+    "T01 right:10","T04 left:auto,right:10","T07 right:right","T10 right:20%","T11 bottom:10%","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T22 right:\"20% \"","T25 bottom:middle,text:Quarterly","L01 right:10",
+    "L03 right:10,width:100","L05 left:auto,right:10","L07 right:right","LV4 vertical right:10","LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
    ],
    "ok": true
   },
@@ -1381,8 +1451,9 @@
    "changed": [
     "T00 default","T01 right:10","T02 bottom:10","T03 left:10,right:10","T04 left:auto,right:10","T05 left:auto","T06 top:auto","T07 right:right","T08 left:0,right:10","T09 left:null,right:0","T10 right:20%","T11 bottom:10%","T12 top:10,bottom:10",
     "T13 left:foo,right:right","T14 left:centre","T15 left:\" center\"","T16 left:10px","T17 left:true","T18 left:leafDepth","T19 right:10,padding:[5,20,5,20]","T20 right:10,text:Sales by Region","T21 top:center","T22 right:\"20% \"",
-    "T23 frame order,text:Budget","L00 default","L01 right:10","L02 left:10,right:200","L03 right:10,width:100","L04 bottom:auto","L05 left:auto,right:10","L06 left:foo","L07 right:right","L08 right:center","LV0 vertical top:10",
-    "LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom","LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right","LV6 vertical right:right","LS0 scroll vertical right:10,top:20,bottom:20"
+    "T23 frame order,text:Budget","T24 top:bottom","T25 bottom:middle,text:Quarterly","T26 top:bottom,itemGap:30","L00 default","L01 right:10","L02 left:10,right:200","L03 right:10,width:100","L04 bottom:auto","L05 left:auto,right:10","L06 left:foo",
+    "L07 right:right","L08 right:center","LV0 vertical top:10","LV1 vertical top:10,bottom:100","LV2 vertical bottom:bottom","LV3 vertical bottom:middle","LV4 vertical right:10","LV5 vertical left:right","LV6 vertical right:right",
+    "LS0 scroll vertical right:10,top:20,bottom:20"
    ],
    "ok": true
   },

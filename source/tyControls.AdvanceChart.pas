@@ -2263,6 +2263,19 @@ type
     function GeoTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
     function GeoTipText(const ADatum: TTyChartDatumRef;
       const ASpec: TTyTooltipSpec): string;
+    { [F4c] AN AXIS' NAME AND LABELS AS TOOLTIP TARGETS (AxisBuilder's
+      setTooltipConfig, TooltipView._showComponentItemTooltip): the text
+      under a point on an axis whose texts are not silent (isLabelSilent:
+      silent, or neither triggerEvent nor tooltip.show), its cascade, its
+      formatter params and its text }
+    function IsAxisTextDatum(const ADatum: TTyChartDatumRef): Boolean;
+    function AxisTextAt(AX, AY: Integer; out ADatum: TTyChartDatumRef): Boolean;
+    function AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType, AName,
+      AValue: string; out AIndex: Integer): Boolean;
+    function AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+    function AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    function AxisTipText(const ADatum: TTyChartDatumRef;
+      const ASpec: TTyTooltipSpec): string;
     { [Batch 150] roam on the geos: the geo whose RoamController a gesture
       at (AX, AY) reaches first (-1: none); onIrrelevantElement for it;
       the geo or the series a gesture goes to (geos are added before series:
@@ -10102,11 +10115,12 @@ begin
         end;
       end;
     end;
-    nd := TJSONObject(node).Find('silent');
-    ctx.SeriesSilent := (nd <> nil) and (((nd.JSONType = jtBoolean) and nd.AsBoolean)
-      or ((nd.JSONType = jtNumber) and (nd.AsFloat <> 0))
-      or ((nd.JSONType = jtString) and (nd.AsString <> ''))
-      or (nd.JSONType in [jtArray, jtObject]));
+    { seriesModel.get('silent'): a null or unwritten one climbs to the
+      option root [F4c] }
+    nd := TyGetShallowRoot(node, FOption.Root, 'silent');
+    ctx.SeriesSilent := TyOptTruthy(nd);
+    if FOption.Root is TJSONObject then ctx.Root := TJSONObject(FOption.Root)
+    else ctx.Root := nil;
     ctx.Scale := scale;
     ctx.OriginX := FLastRect.Left;
     ctx.OriginY := FLastRect.Top;
@@ -13798,6 +13812,255 @@ begin
   end;
   tpl := TyJsReplaceFirst(ASpec.Formatter, '{a}', '{a0}');
   Result := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(nm));
+end;
+
+{ ==================== an axis' texts as tooltip targets [F4c] ==================== }
+
+function TTyAdvanceChart.IsAxisTextDatum(const ADatum: TTyChartDatumRef): Boolean;
+begin
+  Result := (ADatum.Kind = ctkAxisText) and (FBuild <> nil)
+    and (ADatum.ComponentIndex >= 0);
+end;
+
+{ isLabelSilent: `axisModel.get('silent')` (the axis defaults have
+  `silent: false`, so the root is never reached) or neither triggerEvent
+  nor a tooltip with show }
+function AxisTextSilent(ANode, ARoot: TJSONData): Boolean;
+var tip: TJSONData;
+begin
+  Result := TyOptTruthy(TyGetShallowRoot(ANode, nil, 'silent'));
+  if Result then Exit;
+  if TyOptTruthy(TyGetShallowRoot(ANode, nil, 'triggerEvent')) then Exit(False);
+  tip := nil;
+  if ANode is TJSONObject then tip := TJSONObject(ANode).Find('tooltip');
+  Result := not ((tip is TJSONObject) and TyOptTruthy(TJSONObject(tip).Find('show')));
+end;
+
+function TTyAdvanceChart.AxisTextAt(AX, AY: Integer;
+  out ADatum: TTyChartDatumRef): Boolean;
+var
+  g, a, q: Integer;
+  gb: TTyGridBuild;
+  axObj: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  meas: ITyTextMeasurer;
+  lblS, nameS: TTyStyleSet;
+  fw, fh: Double;
+  mainT: string;
+  r: TTyRectF;
+
+  function Inside(const AR: TTyRectF): Boolean;
+  begin
+    Result := (AX >= AR.Left) and (AX <= AR.Right) and (AY >= AR.Top)
+      and (AY <= AR.Bottom);
+  end;
+
+  function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
+    AAV: TTyTextAnchorV): TTyRectF;
+  var l, t: Double;
+  begin
+    case AAH of
+      tahLeft: l := AXa;
+      tahRight: l := AXa - AW;
+    else
+      l := AXa - AW / 2;
+    end;
+    case AAV of
+      tavTop: t := AYa;
+      tavBottom: t := AYa - AH;
+    else
+      t := AYa - AH / 2;
+    end;
+    Result := TyRectF(l, t, l + AW, t + AH);
+  end;
+
+begin
+  ADatum := TyChartNoDatum;
+  Result := False;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  meas := nil;
+  { the same boxes the chart's mouse events find (EventTargetAt) }
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+    begin
+      if a < gb.XAxisCount then axObj := gb.XAxis(a)
+      else axObj := gb.YAxis(a - gb.XAxisCount);
+      if axObj = nil then Continue;
+      mainT := axObj.MainType;
+      if mainT = '' then mainT := axObj.Dim + 'Axis';
+      if AxisTextSilent(FOption.ComponentAt(mainT, axObj.ComponentIndex),
+        FOption.Root) then Continue;
+      spec := gb.SpecFor(axObj);
+      if spec = nil then Continue;
+      AxisTextStyles(spec, lblS, nameS);
+      if spec^.NamePlacement.Shown then
+      begin
+        r := TyRectF(spec^.NamePlacement.Rect.X, spec^.NamePlacement.Rect.Y,
+          spec^.NamePlacement.Rect.X + spec^.NamePlacement.Rect.W,
+          spec^.NamePlacement.Rect.Y + spec^.NamePlacement.Rect.H);
+        if Inside(r) then
+        begin
+          ADatum.Kind := ctkAxisText;
+          ADatum.ComponentIndex := g * 1000 + a;
+          ADatum.DataIndex := -1;
+          Exit(True);
+        end;
+      end;
+      for q := 0 to High(spec^.Placements) do
+      begin
+        if not spec^.Placements[q].Shown then Continue;
+        if Length(spec^.Placements[q].Rt) > 0 then
+          r := TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
+            spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)
+        else
+        begin
+          if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+          fw := 0;
+          fh := 0;
+          if meas <> nil then
+            meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
+              ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
+          r := Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
+            spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV);
+        end;
+        if not Inside(r) then Continue;
+        ADatum.Kind := ctkAxisText;
+        ADatum.ComponentIndex := g * 1000 + a;
+        ADatum.DataIndex := q;
+        Exit(True);
+      end;
+    end;
+  end;
+end;
+
+{ the axis of the datum: its main type and index, the text (the name, or
+  the label as drawn -- the formattedLabel) and the label's rawLabel
+  (scale.getLabel of its tick) }
+function TTyAdvanceChart.AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType,
+  AName, AValue: string; out AIndex: Integer): Boolean;
+var
+  g, a: Integer;
+  gb: TTyGridBuild;
+  axObj: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+begin
+  Result := False;
+  AMainType := '';
+  AName := '';
+  AValue := '';
+  AIndex := -1;
+  if not IsAxisTextDatum(ADatum) then Exit;
+  g := ADatum.ComponentIndex div 1000;
+  a := ADatum.ComponentIndex mod 1000;
+  if g >= FBuild.GridCount then Exit;
+  gb := FBuild.Grid(g);
+  if a >= gb.XAxisCount + gb.YAxisCount then Exit;
+  if a < gb.XAxisCount then axObj := gb.XAxis(a)
+  else axObj := gb.YAxis(a - gb.XAxisCount);
+  if axObj = nil then Exit;
+  spec := gb.SpecFor(axObj);
+  if spec = nil then Exit;
+  AMainType := axObj.MainType;
+  if AMainType = '' then AMainType := axObj.Dim + 'Axis';
+  AIndex := axObj.ComponentIndex;
+  if ADatum.DataIndex < 0 then
+  begin
+    if not spec^.NamePlacement.Shown then Exit;
+    AName := spec^.NamePlacement.Text;
+  end
+  else
+  begin
+    if ADatum.DataIndex > High(spec^.Placements) then Exit;
+    AName := spec^.Placements[ADatum.DataIndex].Text;
+    if (axObj.Scale is TTyOrdinalScale) and (ADatum.DataIndex <= High(spec^.TickValues)) then
+      AValue := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[ADatum.DataIndex])
+    else
+      AValue := AName;
+  end;
+  Result := True;
+end;
+
+function TTyAdvanceChart.AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+var
+  mainT, nm, v: string;
+  idx: Integer;
+  node, tip: TJSONData;
+begin
+  if not AxisTextOf(ADatum, mainT, nm, v, idx) then
+    Exit(TyTooltipSpecOf(FOption, -1, -1));
+  Result := TyTooltipSpecOfItem(FOption, mainT, idx, nil, nm);
+  { the axis' defaults: `tooltip: {show: false}` under what it writes -- a
+    show it does not write is false, before the global's is asked (a null
+    one is no value, and the global's stands) }
+  node := FOption.ComponentAt(mainT, idx);
+  tip := nil;
+  if node is TJSONObject then tip := TJSONObject(node).Find('tooltip');
+  if not ((tip is TJSONObject) and (TJSONObject(tip).IndexOfName('show') >= 0)) then
+    Result.Show := False;
+end;
+
+{ setTooltipConfig's formatterParams: componentType, name, <mainType>Index;
+  a label's value (rawLabel) and tickIndex besides }
+function TTyAdvanceChart.AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+var
+  mainT, nm, v: string;
+  idx: Integer;
+begin
+  Result := TyChartBlankParams;
+  if not AxisTextOf(ADatum, mainT, nm, v, idx) then Exit;
+  Result.ComponentType := mainT;
+  Result.ComponentIndex := idx;
+  Result.AxisIndex := idx;
+  Result.Name := nm;
+  if ADatum.DataIndex >= 0 then
+  begin
+    Result.ValueText := v;
+    Result.TickIndex := ADatum.DataIndex;
+    Result.TargetType := 'axisLabel';
+  end
+  else
+    Result.TargetType := 'axisName';
+end;
+
+{ the formatter through formatTpl with the item's $vars -- the name's
+  ['name'], a label's ['name', 'isTruncated', 'value', 'tickIndex'],
+  HTML-encoded -- else the content (the text) }
+function TTyAdvanceChart.AxisTipText(const ADatum: TTyChartDatumRef;
+  const ASpec: TTyTooltipSpec): string;
+var
+  mainT, nm, v, tpl: string;
+  idx: Integer;
+  params: TTyChartParams;
+begin
+  Result := '';
+  if not AxisTextOf(ADatum, mainT, nm, v, idx) then Exit;
+  if not ASpec.HasFormatter then Exit(nm);
+  if TyChartIsHandlerRef(ASpec.Formatter) then
+  begin
+    SetLength(params, 1);
+    params[0] := AxisTipParams(ADatum);
+    TyChartResolveText(ASpec.Formatter, params, Result);
+    Exit;
+  end;
+  tpl := TyJsReplaceFirst(ASpec.Formatter, '{a}', '{a0}');
+  if ADatum.DataIndex >= 0 then
+  begin
+    tpl := TyJsReplaceFirst(tpl, '{b}', '{b0}');
+    tpl := TyJsReplaceFirst(tpl, '{c}', '{c0}');
+    tpl := TyJsReplaceFirst(tpl, '{d}', '{d0}');
+  end;
+  tpl := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(nm));
+  if ADatum.DataIndex >= 0 then
+  begin
+    { isTruncated is a function upstream: its text is not modelled -- the
+      port's labels are never truncated, so `false` }
+    tpl := TyJsReplaceFirst(tpl, '{b0}', 'false');
+    tpl := TyJsReplaceFirst(tpl, '{c0}', GeoEncodeHtml(v));
+    tpl := TyJsReplaceFirst(tpl, '{d0}', IntToStr(ADatum.DataIndex));
+  end;
+  Result := tpl;
 end;
 
 procedure TTyAdvanceChart.SolveCalendars(APPI: Integer);
@@ -20385,7 +20648,13 @@ begin
   begin
     SetLength(Result.Sizes, Length(FVisualRows[ASlot]));
     for k := 0 to High(FVisualRows[ASlot]) do
-      if FVisualRows[ASlot][k].SizeSet then Result.Sizes[k] := FVisualRows[ASlot][k].Size
+      if FVisualRows[ASlot][k].SizeSet then
+      begin
+        { a size that is no number is nought, as normalizeSymbolSize has it
+          [F4c]; a pair's width (the radar's symbols are round) }
+        Result.Sizes[k] := FVisualRows[ASlot][k].Size;
+        if IsNan(Result.Sizes[k]) then Result.Sizes[k] := 0;
+      end
       else Result.Sizes[k] := NaN;
   end;
   Result.EmptyFill := TTyChartColor(
@@ -24099,7 +24368,12 @@ begin
   Result.SeriesType := st;
   d := FOption.ComponentAt('series', Result.Series);
   if d is TJSONObject then node := TJSONObject(d) else node := nil;
-  Result.Spec := TyProgSpecOf(st, node);
+  { the option root: a progressive the series and its type do not set is
+    the root's (the global default 400 under it) [F4c] }
+  if FOption.Root is TJSONObject then
+    Result.Spec := TyProgSpecOf(st, node, TJSONObject(FOption.Root))
+  else
+    Result.Spec := TyProgSpecOf(st, node);
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then n := FStores[ASlot].Count
   else n := 0;
   Result.Count := n;
@@ -24776,6 +25050,8 @@ begin
     the global -- never the host series' }
   { [Batch 148] a geo region's: the component item's cascade }
   if IsGeoDatum(ADatum) then Exit(GeoTipSpec(ADatum));
+  { [F4c] an axis' name or label: the axis' cascade }
+  if IsAxisTextDatum(ADatum) then Exit(AxisTipSpec(ADatum));
   if TipIsMarker(ADatum) then
   begin
     opt := -1;
@@ -25700,9 +25976,10 @@ begin
   for i := 0 to High(silent) do
   begin
     n := FOption.ComponentAt('series', i);
-    d := nil;
-    if n is TJSONObject then d := TJSONObject(n).Find('silent');
-    silent[i] := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
+    { `!!seriesModel.get('silent')`: the series' own, or -- null or not
+      written -- the option root's, through the model's parent [F4c] }
+    d := TyGetShallowRoot(n, FOption.Root, 'silent');
+    silent[i] := TyOptTruthy(d);
     any := any or silent[i];
   end;
   if not any then Exit;
@@ -25810,7 +26087,8 @@ end;
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
-    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo');
+    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo',
+    'axis');
 var
   i, k, g, a, q, idx, slot, nth: Integer;
   lay: TTyTitleLayout;
@@ -36951,7 +37229,7 @@ end;
 function TTyAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum) or TipIsMatrix(ADatum)
-    or IsGeoDatum(ADatum);
+    or IsGeoDatum(ADatum) or IsAxisTextDatum(ADatum);
 end;
 
 function TTyAdvanceChart.MatrixCellOf(const ADatum: TTyChartDatumRef;
@@ -37473,6 +37751,9 @@ begin
         begin
           ev.Datum := ADatum;
           ev.Element := AElement;
+          { [F4c] no item: an axis' name or label that is not silent }
+          if not TipTargetValid(ADatum) and AxisTextAt(AX, AY, ev.Datum) then
+            ev.Element := -1;
         end;
         TipTryShowEvent(ev, True);
       end
@@ -38134,7 +38415,7 @@ begin
   { a component's tooltip config: _showComponentItemTooltip -- whatever the
     trigger says -- and a showTip from the view; a matrix cell's, a geo
     region's }
-  if TipIsMatrix(AEv.Datum) or IsGeoDatum(AEv.Datum) then
+  if TipIsMatrix(AEv.Datum) or IsGeoDatum(AEv.Datum) or IsAxisTextDatum(AEv.Datum) then
   begin
     TipTryShow(snap, TipSpecOf(snap));
     TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
@@ -38861,7 +39142,7 @@ end;
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
-    'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo');
+    'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo', 'axis');
 var block: TTyTooltipBlock;
 begin
   Result := '';
@@ -38883,7 +39164,8 @@ begin
   if IsGeoDatum(FTipSnap.Datum) then
     Result := 'geo:' + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + FGeos[FTipSnap.Datum.ComponentIndex].GroupName(FTipSnap.Datum.DataIndex)
-  else if TipIsMarker(FTipSnap.Datum) or TipIsMatrix(FTipSnap.Datum) then
+  else if TipIsMarker(FTipSnap.Datum) or TipIsMatrix(FTipSnap.Datum)
+    or IsAxisTextDatum(FTipSnap.Datum) then
     Result := cMk[FTipSnap.Datum.Kind] + ':'
       + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + IntToStr(FTipSnap.Datum.DataIndex)
@@ -39376,7 +39658,8 @@ begin
   { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's SHAPE --
     if a coordinate system reported axes, the axis path runs and the item
     trigger is never consulted. }
-  if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum) then Exit;
+  if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
+    and not IsAxisTextDatum(snap.Datum) then Exit;
   ink := TooltipInk(spec);
 
   st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
@@ -39394,6 +39677,17 @@ begin
       { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
         with the component's params, else the content (the name) }
       tipText := GeoTipText(snap.Datum, spec);
+      FTipFormatterText := tipText;
+      if tipText = '' then Exit;
+      block := TTyTooltipBlock.CreateSection('', True);
+      block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+        '', True));
+    end
+    else if (not onAxis) and IsAxisTextDatum(snap.Datum) then
+    begin
+      { [F4c] AN AXIS' NAME OR LABEL: its formatter through formatTpl, else
+        the content -- the text itself }
+      tipText := AxisTipText(snap.Datum, spec);
       FTipFormatterText := tipText;
       if tipText = '' then Exit;
       block := TTyTooltipBlock.CreateSection('', True);
@@ -39514,6 +39808,8 @@ begin
       if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
       else if IsGeoDatum(snap.Datum) then
         pin.Params := TyChartOneParams(GeoTipParams(snap.Datum))
+      else if IsAxisTextDatum(snap.Datum) then
+        pin.Params := TyChartOneParams(AxisTipParams(snap.Datum))
       else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
     end;
     at := TyTooltipPlace(spec, pin);
@@ -39564,7 +39860,8 @@ begin
       fallback for an AXIS tooltip, and an item tooltip takes the datum's own
       colour. A written borderColor still wins over both. }
     if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
-    else if not onAxis and not IsGeoDatum(snap.Datum) and (DatumColour(snap.Datum) <> 0) then
+    else if not onAxis and not IsGeoDatum(snap.Datum) and not IsAxisTextDatum(snap.Datum)
+      and (DatumColour(snap.Datum) <> 0) then
       borderCol := TTyColor(DatumColour(snap.Datum))
     else
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
@@ -44190,6 +44487,8 @@ begin
   else if Chart.CustomVisualRow(Slot, r, vr) then
   begin
     if (AType = 'symbol') and vr.SymbolSet then Result := TJSONString.Create(vr.Symbol)
+    else if (AType = 'symbolSize') and vr.SizeSet and vr.SizePair then
+      Result := TJSONArray.Create([vr.Size, vr.SizeH])
     else if (AType = 'symbolSize') and vr.SizeSet then Result := TJSONFloatNumber.Create(vr.Size)
     else if (AType = 'liftZ') and vr.LiftZSet then Result := TJSONFloatNumber.Create(vr.LiftZ);
   end;

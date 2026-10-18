@@ -54,6 +54,10 @@ type
     Precision: Integer;
     Formatter: string;
     Box: TTyRawBox;
+    { positionGroup's getBoxLayoutParams: Box with a null or undefined key
+      read from the option root -- getItemAlign reads the option itself and
+      keeps Box [F4c] }
+    PosBox: TTyRawBox;
     { `handleSize`: a percentage of the item width or a length }
     HandleSize: TTyBoxRaw;
     { the handle icon's path body, `path://` taken off }
@@ -540,6 +544,8 @@ begin
   def.Top.Kind := brNull;
   def.Bottom := TyBoxRawNum(0);
   Result.Box := TyMergeBoxIgnoreSize(node, def);
+  Result.PosBox := Result.Box;
+  TyBoxClimbRoot(Result.PosBox, AOption.Root);
   d := node.Find('handleSize');
   if d <> nil then Result.HandleSize := TyBoxRawOf(d);
   d := node.Find('handleIcon');
@@ -1537,7 +1543,7 @@ begin
   L.BBoxPosition := bb;
 
   { positionGroup, as the continuous view }
-  box := AView.Box;
+  box := AView.PosBox;
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -1881,7 +1887,7 @@ var
   props: TTyTransformProps;
   vertical, left, bottom: Boolean;
   k: Integer;
-  word: string;
+  word, hw, vw: string;
   inStops: TTyVisualGradStopArray;
 
   { Group.getBoundingRect of the view group }
@@ -2012,12 +2018,21 @@ begin
       else MatApply(L.Bar, i0 / 2, i1 + gap, ex, ey);
       if k = 0 then word := TyVmTransformDirection('bottom', L.Bar)
       else word := TyVmTransformDirection('top', L.Bar);
+      { _renderEndsText: the text style's own verticalAlign and align
+        before the ones the bar's turn gives [F4c]; a text with a line break
+        is measured as its block }
       if AView.Horizontal then
-        L.Texts[k] := MakeText(AView.Text[1 - k], ex, ey, WordH(word),
-          tavMiddle, AMeasurer, AInk)
+      begin
+        if AView.TextAlign <> '' then hw := AView.TextAlign else hw := word;
+        if AView.TextVAlign <> '' then vw := AView.TextVAlign else vw := 'middle';
+      end
       else
-        L.Texts[k] := MakeText(AView.Text[1 - k], ex, ey, tahCentre,
-          WordV(word), AMeasurer, AInk);
+      begin
+        if AView.TextAlign <> '' then hw := AView.TextAlign else hw := 'center';
+        if AView.TextVAlign <> '' then vw := AView.TextVAlign else vw := word;
+      end;
+      L.Texts[k] := MakeText(AView.Text[1 - k], ex, ey, WordH(hw),
+        WordV(vw), AMeasurer, AInk);
     end;
   end;
 
@@ -2047,7 +2062,7 @@ begin
   L.BBoxPosition := bb;
 
   { positionGroup: the box with the drawn size, on the canvas, no margin }
-  box := AView.Box;
+  box := AView.PosBox;
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -2115,9 +2130,11 @@ var
         pts[i] := TyPointF(x, y);
       end;
       el.Shape := TyShapePolygon(pts);
-      { the round clip of a partial bar is its rectangle here }
+      { the gradient group's clip: the bar's rect with r 3 [F4c: it was the
+        square rectangle] }
       el.HasClip := True;
       el.ClipRect := GlobalRect(XYWH(0, 0, ALayout.ItemW, ALayout.ItemH), G);
+      el.ClipRadius := 3;
     end;
     { LinearGradient(0, 0, 0, 1) over the element's own rect, turned with
       it: from the rect's (x, y) to (x, y + h), both through the matrix }
@@ -2153,6 +2170,13 @@ var
     el.Caption.FontSizeLogical := AInk.FontSizeLogical;
     el.Caption.FontWeight := AInk.FontWeight;
     el.Caption.Colour := AInk.Text;
+    { THE ELEMENT'S OPACITY, which the caption's ink is multiplied by: Blank
+      leaves it nought, and every text of the view was drawn in no ink at
+      all -- in the control and in every export [F4c: the T1 harvest's
+      missing visualMap texts] }
+    el.Style.Alpha := 1;
+    { a block of lines (a text with a line break) is drawn line by line }
+    el.Caption.MultiLine := Pos(#10, AText.Text) > 0;
     { an out-of-range item's label at half: the opacity on the colour }
     if AOpacity <> 1 then
       el.Caption.Colour := (AInk.Text and $00FFFFFF)
@@ -2259,7 +2283,8 @@ begin
   end;
   G := MatMul(T, ALayout.Bar);
   { A RECTANGLE over the whole length is the clip itself, rounded; anything
-    else -- a partial range, a trapezoid -- is the polygon, clipped square }
+    else -- a partial range, a trapezoid -- is the polygon under the rounded
+    clip [F4c] }
   Bar(ALayout.OutPoints, ALayout.OutRect, ALayout.OutStops,
     (ALayout.OutPoints[0].X = 0) and (ALayout.OutPoints[3].X = 0));
   Bar(ALayout.InPoints, ALayout.InRect, ALayout.InStops,

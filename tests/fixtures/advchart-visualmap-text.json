@@ -1,0 +1,692 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "cases": [
+  {
+   "id": "c-lines",
+   "note": "a continuous view's end texts with a line break: a block of two lines",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "text": [
+      "High\nValue",
+      "Low"
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        2,
+        3,
+        6
+       ],
+       [
+        3,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "string": "Low",
+     "align": "center",
+     "verticalAlign": "top",
+     "x": "403e6b851eb851ec",
+     "y": "4077500000000000",
+     "rect": {
+      "x": "40336147ae147ae2",
+      "y": "4077500000000000",
+      "width": "4036147ae147ae14",
+      "height": "4028000000000000",
+      "text": "19.380000000000003,373,22.08,12"
+     }
+    },
+    {
+     "string": "High\nValue",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "x": "403e6b851eb851ec",
+     "y": "406aa00000000000",
+     "rect": {
+      "x": "402e000000000000",
+      "y": "4067a00000000000",
+      "width": "403ed70a3d70a3d8",
+      "height": "4038000000000000",
+      "text": "15,189,30.840000000000003,24"
+     }
+    }
+   ]
+  },
+  {
+   "id": "c-align",
+   "note": "the text style's align and verticalAlign before the bar's",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "text": [
+      "High",
+      "Low"
+     ],
+     "textStyle": {
+      "align": "left",
+      "verticalAlign": "top"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        2,
+        3,
+        6
+       ],
+       [
+        3,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "string": "Low",
+     "align": "left",
+     "verticalAlign": "top",
+     "x": "4039000000000000",
+     "y": "4077500000000000",
+     "rect": {
+      "x": "4039000000000000",
+      "y": "4077500000000000",
+      "width": "4036147ae147ae14",
+      "height": "4028000000000000",
+      "text": "25,373,22.08,12"
+     }
+    },
+    {
+     "string": "High",
+     "align": "left",
+     "verticalAlign": "top",
+     "x": "4039000000000000",
+     "y": "406aa00000000000",
+     "rect": {
+      "x": "4039000000000000",
+      "y": "406aa00000000000",
+      "width": "4038b851eb851eb8",
+      "height": "4028000000000000",
+      "text": "25,213,24.72,12"
+     }
+    }
+   ]
+  },
+  {
+   "id": "c-horizontal",
+   "note": "horizontal: the text style's verticalAlign bottom, the align from the turn",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "orient": "horizontal",
+     "left": "center",
+     "text": [
+      "High",
+      "Low"
+     ],
+     "textStyle": {
+      "verticalAlign": "bottom"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        2,
+        3,
+        6
+       ],
+       [
+        3,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "string": "Low",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "x": "406b55c28f5c28f6",
+     "y": "4077700000000000",
+     "rect": {
+      "x": "4068933333333334",
+      "y": "4076b00000000000",
+      "width": "4036147ae147ae15",
+      "height": "4028000000000000",
+      "text": "196.60000000000002,363,22.080000000000002,12"
+     }
+    },
+    {
+     "string": "High",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "x": "4077aae147ae147b",
+     "y": "4077700000000000",
+     "rect": {
+      "x": "4077aae147ae147b",
+      "y": "4076b00000000000",
+      "width": "4038b851eb851eb8",
+      "height": "4028000000000000",
+      "text": "378.68,363,24.72,12"
+     }
+    }
+   ]
+  },
+  {
+   "id": "c-usa",
+   "note": "map-usa's view on a scatter: left 'right', text ['High', 'Low'], calculable (the handle labels too)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "left": "right",
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "text": [
+      "High",
+      "Low"
+     ],
+     "calculable": true
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        2,
+        3,
+        6
+       ],
+       [
+        3,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "string": "0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "x": "4081200000000000",
+     "y": "4076b00000000000",
+     "rect": {
+      "x": "4080ea3d70a3d70a",
+      "y": "4076500000000000",
+      "width": "401ae147ae147ae0",
+      "height": "4028000000000000",
+      "text": "541.28,357,6.719999999999999,12"
+     }
+    },
+    {
+     "string": "10",
+     "align": "right",
+     "verticalAlign": "middle",
+     "x": "4081200000000000",
+     "y": "406be00000000000",
+     "rect": {
+      "x": "4080b47ae147ae14",
+      "y": "406b200000000000",
+      "width": "402ae147ae147ae0",
+      "height": "4028000000000000",
+      "text": "534.56,217,13.439999999999998,12"
+     }
+    },
+    {
+     "string": "Low",
+     "align": "center",
+     "verticalAlign": "top",
+     "x": "4081e00000000000",
+     "y": "4077500000000000",
+     "rect": {
+      "x": "408187ae147ae148",
+      "y": "4077500000000000",
+      "width": "4036147ae147ae15",
+      "height": "4028000000000000",
+      "text": "560.96,373,22.080000000000002,12"
+     }
+    },
+    {
+     "string": "High",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "x": "4081e00000000000",
+     "y": "406aa00000000000",
+     "rect": {
+      "x": "40817d1eb851eb85",
+      "y": "4069200000000000",
+      "width": "4038b851eb851eb8",
+      "height": "4028000000000000",
+      "text": "559.64,201,24.72,12"
+     }
+    }
+   ]
+  },
+  {
+   "id": "p-clustering",
+   "note": "scatter-clustering's piecewise view: the six item labels",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "type": "piecewise",
+     "top": "middle",
+     "min": 0,
+     "max": 6,
+     "left": 10,
+     "splitNumber": 6,
+     "dimension": 2,
+     "pieces": [
+      {
+       "value": 0,
+       "label": "cluster 0"
+      },
+      {
+       "value": 1,
+       "label": "cluster 1"
+      },
+      {
+       "value": 2,
+       "label": "cluster 2"
+      },
+      {
+       "value": 3,
+       "label": "cluster 3"
+      },
+      {
+       "value": 4,
+       "label": "cluster 4"
+      },
+      {
+       "value": 5,
+       "label": "cluster 5"
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        2,
+        3,
+        6
+       ],
+       [
+        3,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "string": "cluster 5",
+     "align": "left",
+     "verticalAlign": "middle",
+     "x": "404b800000000000",
+     "y": "4061800000000000",
+     "rect": {
+      "x": "404b800000000000",
+      "y": "4060c00000000000",
+      "width": "4046bd70a3d70a3c",
+      "height": "4028000000000000",
+      "text": "55,134,45.47999999999999,12"
+     }
+    },
+    {
+     "string": "cluster 4",
+     "align": "left",
+     "verticalAlign": "middle",
+     "x": "404b800000000000",
+     "y": "4064800000000000",
+     "rect": {
+      "x": "404b800000000000",
+      "y": "4063c00000000000",
+      "width": "4046bd70a3d70a3c",
+      "height": "4028000000000000",
+      "text": "55,158,45.47999999999999,12"
+     }
+    },
+    {
+     "string": "cluster 3",
+     "align": "left",
+     "verticalAlign": "middle",
+     "x": "404b800000000000",
+     "y": "4067800000000000",
+     "rect": {
+      "x": "404b800000000000",
+      "y": "4066c00000000000",
+      "width": "4046bd70a3d70a3c",
+      "height": "4028000000000000",
+      "text": "55,182,45.47999999999999,12"
+     }
+    },
+    {
+     "string": "cluster 2",
+     "align": "left",
+     "verticalAlign": "middle",
+     "x": "404b800000000000",
+     "y": "406a800000000000",
+     "rect": {
+      "x": "404b800000000000",
+      "y": "4069c00000000000",
+      "width": "4046bd70a3d70a3c",
+      "height": "4028000000000000",
+      "text": "55,206,45.47999999999999,12"
+     }
+    },
+    {
+     "string": "cluster 1",
+     "align": "left",
+     "verticalAlign": "middle",
+     "x": "404b800000000000",
+     "y": "406d800000000000",
+     "rect": {
+      "x": "404b800000000000",
+      "y": "406cc00000000000",
+      "width": "4046bd70a3d70a3c",
+      "height": "4028000000000000",
+      "text": "55,230,45.47999999999999,12"
+     }
+    },
+    {
+     "string": "cluster 0",
+     "align": "left",
+     "verticalAlign": "middle",
+     "x": "404b800000000000",
+     "y": "4070400000000000",
+     "rect": {
+      "x": "404b800000000000",
+      "y": "406fc00000000000",
+      "width": "4046bd70a3d70a3c",
+      "height": "4028000000000000",
+      "text": "55,254,45.47999999999999,12"
+     }
+    }
+   ]
+  },
+  {
+   "id": "p-ends",
+   "note": "a piecewise view with end texts",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "type": "piecewise",
+     "min": 0,
+     "max": 9,
+     "dimension": 2,
+     "splitNumber": 3,
+     "text": [
+      "High",
+      "Low"
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        2,
+        3,
+        6
+       ],
+       [
+        3,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "string": "High",
+     "align": "center",
+     "verticalAlign": "middle",
+     "x": "403b5c28f5c28f5c",
+     "y": "4071d00000000000",
+     "rect": {
+      "x": "402e000000000000",
+      "y": "4071700000000000",
+      "width": "4038b851eb851eb8",
+      "height": "4028000000000000",
+      "text": "15,279,24.72,12"
+     }
+    },
+    {
+     "string": "Low",
+     "align": "center",
+     "verticalAlign": "middle",
+     "x": "403b5c28f5c28f5c",
+     "y": "4077b00000000000",
+     "rect": {
+      "x": "403051eb851eb852",
+      "y": "4077500000000000",
+      "width": "4036147ae147ae14",
+      "height": "4028000000000000",
+      "text": "16.32,373,22.08,12"
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "c-lines: a two-line block",
+   "ok": true
+  },
+  {
+   "name": "c-align: left / top",
+   "ok": true
+  },
+  {
+   "name": "c-horizontal: bottom",
+   "ok": true
+  },
+  {
+   "name": "p-clustering: six labels",
+   "ok": true
+  }
+ ]
+}

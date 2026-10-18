@@ -1220,6 +1220,14 @@ add('axisLine colour reaches the name', bar({ name: 'Day', axisLine: { lineStyle
 add('nameLocation "foo": middle anchor, end layout', bar({ name: 'Day', nameLocation: 'foo' }, { name: 'Value', nameLocation: 'foo' }),
   deferred('an unknown nameLocation is read as \'end\' by the port'));
 
+// [F4c] the port has the oriented-box move and axisLabel.minMargin now: a case
+// whose only deferral is an OBB test is compared by the Pascal suite
+add('x labels rotate 30, end x name at gap 0: the turned label rects miss it',
+  bar({ name: 'Day', nameGap: 0, data: DAYS.map(d => d + 'nesday'), axisLabel: { rotate: 30, interval: 0 } }, VALUE));
+add('axisLabel minMargin 24 widens each label rect by 12 after the turn; the y name meets turned labels: an OBB move',
+  bar({ name: 'Day', axisLabel: { minMargin: 24 } }, { name: 'Value', axisLabel: { minMargin: 24, rotate: 20 } }),
+  deferred('an OBB move (y labels rotate 20) is not done'));
+
 // ---------- run, check and write ----------
 
 {

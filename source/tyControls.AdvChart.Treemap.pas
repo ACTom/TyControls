@@ -1045,6 +1045,9 @@ begin
         else target[k].V := TyBoxRawNum(50);
       end;
     TyCalMergeLayoutParam(target, raw, False, False);
+    { getBoxLayoutParams: a null or undefined key reads the option root
+      [F4c] }
+    for k := 0 to 5 do TyRawClimbRoot(target[k].V, AOption.Root, cBoxKey[k]);
     box.Width := Scaled(target[0].V);
     box.Left := Scaled(target[1].V);
     box.Right := Scaled(target[2].V);

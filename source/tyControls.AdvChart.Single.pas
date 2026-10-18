@@ -468,14 +468,18 @@ end;
 { ==================== building ==================== }
 
 { resize's box params: 5% on every side by default, merged as
-  mergeLayoutParam merges the option's own over them }
-function SingleBoxSpec(ANode: TJSONObject): TTyBoxSpec;
+  mergeLayoutParam merges the option's own over them, raw; a key left null
+  or undefined read from the option root (getBoxLayoutParams' getShallow)
+  [F4c] }
+function SingleBoxRaw(ANode: TJSONObject; ARoot: TJSONData): TTyRawBox;
 begin
-  Result := TyBoxSpec;
-  TyMergedBoxDim(ANode, 'left', 'right', 'width', TyBoxPercent(5),
-    TyBoxPercent(5), TyBoxAuto, Result.Left, Result.Right, Result.Width);
-  TyMergedBoxDim(ANode, 'top', 'bottom', 'height', TyBoxPercent(5),
-    TyBoxPercent(5), TyBoxAuto, Result.Top, Result.Bottom, Result.Height);
+  Result := Default(TTyRawBox);
+  Result.Left := TyBoxRawStr('5%');
+  Result.Top := TyBoxRawStr('5%');
+  Result.Right := TyBoxRawStr('5%');
+  Result.Bottom := TyBoxRawStr('5%');
+  Result := TyMergeBoxLayout(ANode, Result);
+  TyBoxClimbRoot(Result, ARoot);
 end;
 
 { _adjustAxis: [0, width] along x, [0, height] along y -- by the position's
@@ -494,7 +498,7 @@ var
 begin
   if (AOption = nil) or (ASingle = nil) then Exit;
   node := ObjOf(AOption.ComponentAt(TySingleCoordSysName, ASingle.Index));
-  box := TyGetLayoutRect(TyBoxSpecRaw(SingleBoxSpec(node)), ARef.X, ARef.Y,
+  box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), ARef.X, ARef.Y,
     ARef.W, ARef.H, []);
   if not TyXYWHIsValid(box) then
     box := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
@@ -510,7 +514,6 @@ var
   ax: TTyAxis;
   s: TTySingle;
   u, pos: string;
-  spec: TTyBoxSpec;
   box: TTyXYWH;
   vertical: Boolean;
 begin
@@ -547,12 +550,10 @@ begin
     s.InverseFlag := ax.Inverse;
     { resize: getLayoutRect of the box params, 5% on every side by default,
       merged as mergeLayoutParam merges the option's own over them }
-    spec := TyBoxSpec;
-    TyMergedBoxDim(node, 'left', 'right', 'width', TyBoxPercent(5),
-      TyBoxPercent(5), TyBoxAuto, spec.Left, spec.Right, spec.Width);
-    TyMergedBoxDim(node, 'top', 'bottom', 'height', TyBoxPercent(5),
-      TyBoxPercent(5), TyBoxAuto, spec.Top, spec.Bottom, spec.Height);
-    box := TySolveBoxXYWH(spec, TyFixedContainer(AViewport));
+    { [F4c] getLayoutRect itself: the keywords and the flip }
+    box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), AViewport.Left,
+      AViewport.Top, AViewport.Right - AViewport.Left,
+      AViewport.Bottom - AViewport.Top, []);
     s.Rect := box;
     { _adjustAxis: [0, width] along x, [0, height] along y -- by the
       position's isHorizontal -- the base the rect's left or top }
