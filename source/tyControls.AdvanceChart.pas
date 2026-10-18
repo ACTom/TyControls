@@ -3364,6 +3364,8 @@ type
     { the node drags [Batch 114] }
     procedure GraphDragMove(AX, AY: Integer);
     procedure GraphDragEnd;
+    { [F3b] some force graph's iteration runs (layoutAnimation) }
+    function GraphForceLive: Boolean;
     function SankeyDragStart(ASlot, ANode, AX, AY: Integer): Boolean;
     procedure SankeyDragMove(AX, AY: Integer);
     procedure SankeyViewOf(ASlot: Integer);
@@ -3746,6 +3748,12 @@ type
     function EdgeStates(ASeriesIndex, AIndex: Integer; out AItem: TTyStItem): Boolean;
     { a force graph's preserved state and running instance [Batch 114] }
     function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
+    { [F3b] ONE FRAME OF EVERY RUNNING FORCE ITERATION (a graph's
+      `force.layoutAnimation`, true by default): GraphView's 16 ms timer step
+      -- each instance stepped once, its nodes and edges laid out from it,
+      the picture redrawn. The animation timer calls it every tick while one
+      runs; a test steps it by hand. True when any graph stepped. }
+    function GraphForceFrame: Boolean;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
       out AItem: TTyStItem): Boolean;
     { [F2b] a gauge's progress arc, by inner row }
@@ -6962,6 +6970,8 @@ begin
     if FBrushActDepth = 0 then BrushFlush;
   end;
   FDirty := False;
+  { [F3b] a force graph's iteration the render started runs on the timer }
+  if GraphForceLive then AnimArmTimer;
   { [F4b] the axis pointers a re-render kept }
   TipKeepRestore;
   { the update's flush: `rendered` once it is painted [Batch 119] }
@@ -14375,9 +14385,10 @@ procedure TTyAdvanceChart.GraphDragMove(AX, AY: Integer);
 var
   st: TTyGraphDragStep;
   slot, si: Integer;
+  was: Boolean;
 begin
   slot := FGraphDragSlot;
-  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil)
+  if (slot < 0) or (slot > High(FGraphs))
     or (slot > High(FGraphNodes)) or (FGraphDragNode > High(FGraphNodes[slot])) then
   begin
     FGraphDragSlot := -1;
@@ -14395,10 +14406,61 @@ begin
   FGraphDragY := AY;
   FGraphDragFirst := False;
   if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
-  TyGraphDragStep(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
-    FGraphs[slot], FGraphForce[si], st, FGraphNodeScale[slot]);
+  { [F3b] a graph off a view: the drift on the canvas, the edges again }
+  if FGraphs[slot] = nil then
+    TyGraphDragOffView(FGraphNodes[slot], FGraphEdges[slot], st)
+  else
+  begin
+    was := FGraphForce[si].Layouting;
+    TyGraphDragStep(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
+      FGraphs[slot], FGraphForce[si], st, FGraphNodeScale[slot]);
+    { [F3b] an iteration the drag started: its first step renders the
+      thumbnail, and the timer runs it on }
+    if FGraphForce[si].Layouting and not was then
+    begin
+      FThumbSnapDue := True;
+      AnimArmTimer;
+    end;
+  end;
   { A NEW PICTURE, NOT A NEW LAYOUT -- as a roam step }
   TipReset;
+  DropStatic;
+  FZrDirty := True;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.GraphForceLive: Boolean;
+var slot, si: Integer;
+begin
+  Result := False;
+  for slot := 0 to Min(High(FBindings), High(FGraphs)) do
+  begin
+    if FGraphs[slot] = nil then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if (si >= 0) and (si <= High(FGraphForce)) and FGraphForce[si].Layouting then
+      Exit(True);
+  end;
+end;
+
+function TTyAdvanceChart.GraphForceFrame: Boolean;
+var slot, si: Integer;
+begin
+  Result := False;
+  for slot := 0 to Min(High(FBindings), High(FGraphs)) do
+  begin
+    if (FGraphs[slot] = nil) or (slot > High(FGraphNodes)) then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if (si < 0) or (si > High(FGraphForce)) or not FGraphForce[si].Layouting then Continue;
+    if TyGraphForceFrame(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
+      FGraphs[slot], FGraphForce[si]) then
+    begin
+      Result := True;
+      { _renderThumbnail once the iteration stops }
+      if not FGraphForce[si].Layouting then FThumbSnapDue := True;
+    end;
+  end;
+  if not Result then Exit;
+  { A NEW PICTURE, NOT A NEW LAYOUT -- as a drag step }
   DropStatic;
   FZrDirty := True;
   inherited Invalidate;
@@ -14707,8 +14769,10 @@ begin
         if (FGraphNodes[slot][k].Row = d.DataIndex)
           and FGraphNodes[slot][k].Draggable then
         begin
-          { only a graph on a view is dragged here [Batch 114] }
-          if (slot <= High(FGraphs)) and (FGraphs[slot] <> nil) then
+          { a graph on a view, and [F3b] one off a view (cartesian2d, a
+            calendar, a matrix, a geo): Draggable drifts the symbol on the
+            canvas there }
+          if slot <= High(FGraphs) then
           begin
             FGraphDragSlot := slot;
             FGraphDragNode := k;
@@ -41232,10 +41296,11 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
-    or CuLive or TlLive)
+  if (((FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
+    or CuLive or TlLive) and not AnimPaused)
+    { [F3b] a force iteration is a timer of its own, which no pause holds }
+    or GraphForceLive)
     and IsNan(FAnimNow)
-    and not AnimPaused
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -41253,6 +41318,12 @@ end;
 
 procedure TTyAdvanceChart.AnimTimerFired(Sender: TObject);
 begin
+  { [F3b] the force iterations' 16 ms step }
+  if GraphForceLive then
+  begin
+    GraphForceFrame;
+    if not GraphForceLive then AnimArmTimer;
+  end;
   AnimTick(AnimClock);
 end;
 

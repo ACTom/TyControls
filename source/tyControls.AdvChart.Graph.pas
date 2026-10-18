@@ -612,6 +612,14 @@ type
     InstE1, InstE2: TTyIntegerArray;
     InstFriction0, InstGravity, InstCX, InstCY: Double;
     InstRng: LongWord;
+    { [F3b] layoutAnimation (the default): the instance's friction NOW, and
+      whether its iteration is running -- a step every 16 ms
+      (TyGraphForceFrame) until the friction is under a hundredth; the
+      steps it has taken, against the ceiling a friction that never cools
+      would loop past }
+    InstFriction: Double;
+    Layouting: Boolean;
+    InstSteps: Integer;
   end;
 
 { How many steps upstream's driver runs from a given starting friction: until
@@ -834,6 +842,24 @@ procedure TyGraphDragStep(var ANodes: TTyGraphNodeArray;
 
 { dragend: a force node is unfixed (setUnfixed -- even one the option fixed). }
 procedure TyGraphDragEnd(var AForce: TTyGraphForceState; ANode: Integer);
+
+{ [F3b] ONE FRAME OF A RUNNING FORCE ITERATION (layoutAnimation, the
+  default): GraphView's timer step -- the instance stepped once at the
+  friction it has (beforeStep, the forces, afterStep), the friction cooled,
+  the iteration stopped once it is under a hundredth; the nodes from their
+  layouts and every edge laid out again and trimmed with the compensation
+  scale now (updateLayout). False, and nothing done, when no iteration
+  runs. }
+function TyGraphForceFrame(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
+  AView: TTyGraphView; var AForce: TTyGraphForceState): Boolean;
+
+{ [F3b] A DRAG STEP ON A GRAPH OFF A VIEW (cartesian2d, a calendar, a
+  matrix, a geo): Draggable's drift moves the symbol on the canvas, the
+  drag handler writes the layout from it, simpleLayoutEdge lays every edge
+  out again. }
+procedure TyGraphDragOffView(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const AStep: TTyGraphDragStep);
 
 { A ROAM STEP'S REDRAW, with no layout: every node through the view again,
   sanitised, and every edge's trimmed ends mapped. AZoomed is a step that
@@ -4004,12 +4030,19 @@ begin
       the same not-a-numbers, only slower. A mutant that deletes it survives,
       and that is the reason. }
     if IsNan(friction) or IsInfinite(friction) then total := 2;
+    { [F3b] LAYOUT ANIMATION (the default): the layout stage's step and the
+      view's first, then a step a frame on a timer (TyGraphForceFrame) --
+      the iteration runs while the friction is not under a hundredth }
+    if ASpec.Force.LayoutAnimation then total := 2;
 
     for steps := 1 to total do
     begin
       ForceStep(AState, friction);
       friction := friction * 0.992;
     end;
+    AState.InstFriction := friction;
+    AState.InstSteps := total;
+    AState.Layouting := ASpec.Force.LayoutAnimation and not (friction < 0.01);
 
     { THE ANSWER. A free node takes where the solver left it; a pinned one keeps
       its layout, which the solver never writes back. What the next pass starts
@@ -5699,11 +5732,65 @@ begin
   AForce.InstFixed[ANode] := False;
 end;
 
+function TyGraphForceFrame(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
+  AView: TTyGraphView; var AForce: TTyGraphForceState): Boolean;
+var
+  ns: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := False;
+  if (AView = nil) or not AForce.Layouting or not AForce.HasInst
+    or (Length(AForce.InstPX) <> Length(ANodes)) then Exit;
+  mask := MaskFP;
+  try
+    ForceStep(AForce, AForce.InstFriction);
+    AForce.InstFriction := AForce.InstFriction * 0.992;
+    Inc(AForce.InstSteps);
+    { `friction < 0.01` finishes; a friction that never cools runs until the
+      ceiling (upstream's never stops) }
+    AForce.Layouting := not (AForce.InstFriction < 0.01)
+      and (AForce.InstSteps < cForceMaxSteps);
+    ForceAnswer(ANodes, AForce, AView);
+    { updateLayout: adjustEdge with the scale now, the lines drawn again }
+    ns := AView.NodeScale(ASpec.NodeScaleRatio);
+    TyGraphEdgeGeometry(AEdges, ANodes, AView, False);
+    TyGraphSanitiseView(ANodes, AView);
+    TyGraphTrimInView(AEdges, ANodes, ASpec, ns);
+    TyGraphMapEdges(AEdges, AView);
+    Result := True;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyGraphDragOffView(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const AStep: TTyGraphDragStep);
+var
+  k: Integer;
+  mask: TFPUExceptionMask;
+begin
+  k := AStep.Node;
+  if (k < 0) or (k > High(ANodes)) then Exit;
+  mask := MaskFP;
+  try
+    { drift on a parent with no transform: the translation moves, the
+      decomposed scale is the same one }
+    ANodes[k].PX := ANodes[k].PX + AStep.DX;
+    ANodes[k].PY := ANodes[k].PY + AStep.DY;
+    TyGraphEdgeGeometry(AEdges, ANodes, nil, False);
+    TyGraphSanitise(ANodes);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
 procedure TyGraphDragStep(var ANodes: TTyGraphNodeArray;
   var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
   AView: TTyGraphView; var AForce: TTyGraphForceState;
   const AStep: TTyGraphDragStep; ANodeScale: Double);
 var
+  keepEdges: Boolean;
   k, n: Integer;
   ns, cx, cy, r, vx, vy, len_, friction: Double;
   rect: TTyRectF;
@@ -5713,6 +5800,7 @@ begin
   if AView = nil then Exit;
   k := AStep.Node;
   if (k < 0) or (k > High(ANodes)) then Exit;
+  keepEdges := False;
   mask := MaskFP;
   try
     { THE COMPENSATION SCALE NOW -- getNodeGlobalScale, which updateLayout's
@@ -5752,7 +5840,37 @@ begin
           TyGraphLayoutCircular(ANodes, AView, ASpec, ns);
         end;
       glForce:
-        if AForce.HasInst and (Length(AForce.InstPX) = Length(ANodes)) then
+        if AForce.HasInst and (Length(AForce.InstPX) = Length(ANodes))
+          and ASpec.Force.LayoutAnimation then
+        begin
+          { [F3b] LAYOUT ANIMATION (the default): warmUp; an iteration
+            started only when none runs -- its first step now, the node still
+            free, and updateLayout puts every symbol on its layout; then
+            setFixed, and the layout from where the symbol is: the drift
+            itself while the iteration runs, so the node follows the
+            pointer and the timer's steps settle the rest around it }
+          AForce.InstFriction := AForce.InstFriction0 * 0.8;
+          if not AForce.Layouting then
+          begin
+            ForceStep(AForce, AForce.InstFriction);
+            AForce.InstFriction := AForce.InstFriction * 0.992;
+            AForce.InstSteps := 1;
+            AForce.Layouting := not (AForce.InstFriction < 0.01);
+            ForceAnswer(ANodes, AForce, AView);
+          end
+          else
+          begin
+            { NO updateLayout in the drag handler: the symbol is where the
+              drift put it, the edges wait for the timer's next step }
+            AForce.InstSteps := 0;
+            keepEdges := True;
+          end;
+          AForce.InstFixed[k] := True;
+          AForce.InstLX[k] := ANodes[k].X;
+          AForce.InstLY[k] := ANodes[k].Y;
+          TyGraphLayoutNone(ANodes, AView);
+        end
+        else if AForce.HasInst and (Length(AForce.InstPX) = Length(ANodes)) then
         begin
           { warmUp, then the iteration -- synchronous, as upstream's with
             layoutAnimation false: stepped until the friction is under a
@@ -5778,6 +5896,7 @@ begin
       TyGraphLayoutNone(ANodes, AView);
     end;
     { the edges laid out again from the nodes, trimmed with the scale now }
+    if keepEdges then Exit;
     TyGraphEdgeGeometry(AEdges, ANodes, AView, ASpec.Layout = glCircular);
     TyGraphSanitiseView(ANodes, AView);
     TyGraphTrimInView(AEdges, ANodes, ASpec, ns);
