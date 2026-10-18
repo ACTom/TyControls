@@ -591,7 +591,7 @@ begin
         end;
       until False;
     end;
-    AssertTrue('the units name their include files (' + IntToStr(found) + ')', found >= 15);
+    AssertTrue('the units name their include files (' + IntToStr(found) + ')', found >= 40);
     AssertEquals('include files a packaged unit needs that the release does not ship:' + bad,
       '', bad);
   finally

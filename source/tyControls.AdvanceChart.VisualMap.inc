@@ -2,6 +2,9 @@
   their solve, views, interaction and actions. Moved out of the unit only to keep it
   readable; what the control is and why it is built the way it is, see the unit header. }
 
+{ [Batch 116] below, by the visualMap interaction }
+procedure VmApplySel(var ASpec: TTyVisualMapSpec; const AJson: string); forward;
+
 procedure TTyAdvanceChart.SolveVisualMaps;
 var
   i, k, n, raw, col, dimIndex: Integer;

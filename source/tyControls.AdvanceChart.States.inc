@@ -13,9 +13,6 @@ begin
   Result := A = B;
 end;
 
-{ an element's values at rest, as the state machine keeps them: zrender's
-  default lineWidth 1 where the port draws no stroke, so a state that only
-  names a border colour draws a one-pixel border as upstream does }
 procedure StPush(var AArr: TTyIntegerArray; AValue: Integer);
 begin
   SetLength(AArr, Length(AArr) + 1);
@@ -126,6 +123,8 @@ begin
       and (A.GradJson[AKey] = B.GradJson[AKey])
       and ((A.GradJson[AKey] = '') or (A.Lifted[AKey] = B.Lifted[AKey]))));
 end;
+
+function StColourValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue; forward;
 
 { [F3d] a state object's gradient key as the painter draws it }
 function StGradientOf(const AObj: TTyStObject; AKey: TTyStKey;
