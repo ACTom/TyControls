@@ -907,6 +907,14 @@ begin
       coordinate system is the geo it names or one of its own
       (buildAllMapSeriesGroups takes every map series) }
     if b.SeriesType = TyMapSeriesTypeName then sys := 'geo';
+    { A CUSTOM SERIES THAT WRITES coordinateSystem AS NO WORD -- null, or
+      undefined as a harvested option holds it [F4c]: zrender's merge keeps
+      the key the option has, so the default 'cartesian2d' never arrives,
+      no creator claims the series and it renders with no coordinate system
+      (CustomView: coordSys undefined), saying nothing }
+    if (b.SeriesType = 'custom') and (node <> nil)
+      and (node.Find('coordinateSystem') <> nil)
+      and (node.Find('coordinateSystem').JSONType <> jtString) then sys := 'none';
     b.CoordSysName := sys;
     b.Usage := info.Usage;
     b.RadarIndex := -1;

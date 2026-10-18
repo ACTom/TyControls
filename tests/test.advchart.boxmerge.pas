@@ -384,17 +384,14 @@ begin
     Inc(FCompared);
     if VAlignName(lay.VAlign) <> want then
       Miss(Format('verticalAlign %s, upstream %s', [VAlignName(lay.VAlign), want]));
-    { THE BACKGROUND, where the block is aligned as a whole: upstream aligns
-      each line by itself for middle and bottom, which is not ported. }
+    { THE BACKGROUND: for middle and bottom each line hangs off its own
+      anchor and the frame is the union of the two [F4c] }
     Same('bg x', lay.FrameX, cs.Objects['bg'].Find('x'));
     Same('bg width', lay.FrameW, cs.Objects['bg'].Find('width'));
-    if want = 'top' then
-    begin
-      Same('bg y', lay.FrameY, cs.Objects['bg'].Find('y'));
-      Same('bg height', lay.FrameH, cs.Objects['bg'].Find('height'));
-    end;
+    Same('bg y', lay.FrameY, cs.Objects['bg'].Find('y'));
+    Same('bg height', lay.FrameH, cs.Objects['bg'].Find('height'));
   end;
-  Verdict(24 * 6);
+  Verdict(24 * 8);
 end;
 
 function LegendSpec(AOpt: TTyChartOption; ACase: TJSONObject): TTyLegendSpec;

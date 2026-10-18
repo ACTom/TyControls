@@ -784,6 +784,9 @@ var
       if found and ts.HasLineWidth then p.LineWidth := ts.LineWidth
       else if AStyle.HasLineWidth then p.LineWidth := AStyle.LineWidth
       else p.LineWidth := 2;
+      { [F4c] the token's textBorderType, else the block's }
+      if found and (ts.LineDash <> '') then p.LineDash := ts.LineDash
+      else p.LineDash := AStyle.LineDash;
     end;
     if found and ts.HasOpacity then p.Opacity := ts.Opacity
     else if AStyle.HasOpacity then p.Opacity := AStyle.Opacity
@@ -943,6 +946,7 @@ var
       if p.HasStroke then
       begin
         if AStyle.HasLineWidth then p.LineWidth := AStyle.LineWidth else p.LineWidth := 2;
+        p.LineDash := AStyle.LineDash;
       end;
       if AStyle.HasOpacity then p.Opacity := AStyle.Opacity else p.Opacity := 1;
       p.ShadowBlur := AStyle.ShadowBlur;

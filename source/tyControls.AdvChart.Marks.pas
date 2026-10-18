@@ -1025,10 +1025,14 @@ begin
     Result.Empty := e;
     Result.PathData := p;
   end;
-  if vr.SizeSet and not IsNan(vr.Size) then
+  { normalizeSymbolSize: a number is both sides, a pair its two; each
+    `|| 0`, so a size that is no number is nought, not the series' [F4c] }
+  if vr.SizeSet then
   begin
     Result.WidthPx := vr.Size;
-    Result.HeightPx := vr.Size;
+    if vr.SizePair then Result.HeightPx := vr.SizeH else Result.HeightPx := vr.Size;
+    if IsNan(Result.WidthPx) then Result.WidthPx := 0;
+    if IsNan(Result.HeightPx) then Result.HeightPx := 0;
   end;
   if vr.LiftZSet and not IsNan(vr.LiftZ) then ALift := vr.LiftZ;
 end;

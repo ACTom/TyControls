@@ -1083,6 +1083,8 @@ begin
   FBox.Height := target[3].V;
   FBox.Top := target[4].V;
   FBox.Bottom := target[5].V;
+  { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
+  if AOption <> nil then TyBoxClimbRoot(FBox, AOption.Root);
   FRect := TyXYWH(NaN, NaN, NaN, NaN);
   FScale := 1;
 end;

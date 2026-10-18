@@ -965,6 +965,9 @@ begin
     the second layout pass overwrites both with what the items measured. The
     comment saying so is at LegendModel.ts:251-254. }
   Result.Box := TyMergeBoxIgnoreSize(node, DefaultBox);
+  { a key the merge left null or undefined reads the option root: the
+    layout's getBoxLayoutParams and itemAlign's get('left') [F4c] }
+  TyBoxClimbRoot(Result.Box, AOption.Root);
 
   ReadPadding(node, Result.Padding);
   if StrIn(node, 'orient') = 'vertical' then

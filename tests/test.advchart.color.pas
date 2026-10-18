@@ -42,6 +42,7 @@ type
     procedure OneBar(const AOption: string; out AL, AR, AY: Integer);
     function PixelAt(AX, AY: Integer): TBGRAPixel;
   published
+    procedure TestTheAlphaIsReadAsWritten;
     { the grammar }
     procedure TestHexInAllFourLengths;
     procedure TestTheShortHexIsTheLongOneDoubled;
@@ -1373,6 +1374,33 @@ begin
   mid := PixelAt((l + r) div 2, y);
   AssertTrue(Format('the midpoint of black to white is 128, not 170'
     + ' (%d)', [mid.red]), (mid.red > 112) and (mid.red < 150));
+end;
+
+{ [F4c] a packed colour keeps a byte of alpha; the alpha it was parsed
+  from comes back for every author's alpha of two places, so a luminance or
+  an rgba() text reads upstream's number }
+procedure TAdvChartColorTest.TestTheAlphaIsReadAsWritten;
+const
+  cA: array[0..7] of Double = (0.5, 0.3, 0.85, 0.05, 0.99, 0.01, 0.2, 0.75);
+  cT: array[0..7] of string = ('0.5', '0.3', '0.85', '0.05', '0.99', '0.01', '0.2', '0.75');
+var
+  c: TTyChartColor;
+  k: Integer;
+begin
+  for k := 0 to High(cA) do
+  begin
+    AssertTrue('parses', TyTryParseChartColor('rgba(1,2,3,' + cT[k] + ')', c));
+    AssertEquals(Format('alpha %g', [cA[k]]), cA[k], TyChartColorAlpha(c), 0);
+  end;
+  AssertTrue(TyTryParseChartColor('rgba(1,2,3,0)', c));
+  AssertEquals('nought', 0, TyChartColorAlpha(c), 0);
+  AssertTrue(TyTryParseChartColor('#010203', c));
+  AssertEquals('opaque', 1, TyChartColorAlpha(c), 0);
+  { every byte comes back to itself, packed as a parse packs it (Math.round:
+    0.3 is 76.5, and that is 77) }
+  for k := 1 to 254 do
+    AssertEquals(Format('byte %d', [k]), k,
+      Integer(Floor(TyChartColorAlpha(TTyChartColor(Cardinal(k) shl 24)) * 255 + 0.5)));
 end;
 
 initialization

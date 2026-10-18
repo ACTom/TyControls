@@ -1418,6 +1418,8 @@ begin
   box.Bottom := TyBoxRawOf(fo.Find('bottom'));
   box.Width := TyBoxRawOf(fo.Find('width'));
   box.Height := TyBoxRawOf(fo.Find('height'));
+  { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
+  TyBoxClimbRoot(box, ARoot);
   { normalizeCssArray(padding || 0) }
   d := fo.Find('padding');
   if not TyTlTruthy(d) then

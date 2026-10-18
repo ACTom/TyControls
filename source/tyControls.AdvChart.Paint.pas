@@ -181,7 +181,12 @@ type
     { [Batch 148] a geo component's region: ComponentIndex the geo,
       DataIndex its region group (one per distinct name, MapDraw's order)
       -- a path or its text; the eventData of the group }
-    ctkGeo);
+    ctkGeo,
+    { [F4c] an axis' name or one of its labels, as a tooltip target
+      (AxisBuilder's setTooltipConfig): ComponentIndex the grid * 1000 plus
+      the axis among the grid's x then y axes, DataIndex the label's
+      placement (-1 the name). Never in a paint list. }
+    ctkAxisText);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -237,6 +242,8 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [F4c] textBorderType as written ('' none) }
+    LineDash: string;
     Align: TTyRtAlign;
     VAlign: TTyRtVAlign;
     HasLineHeight: Boolean;
@@ -306,6 +313,8 @@ type
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     LineWidth: Double;
+    { [F4c] a text's textBorderType as written ('' a solid halo) }
+    LineDash: string;
     StrokeFirst: Boolean;
     Radius: array[0..3] of Double;
     Opacity: Double;
@@ -355,6 +364,8 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [F4c] the global textStyle's textBorderType ('' none) }
+    LineDash: string;
     HasOpacity: Boolean;
     Opacity: Double;
     HasShadowColor: Boolean;
@@ -397,6 +408,9 @@ type
 
   TTyElementCaption = record
     Text: string;
+    { [F4c] a text of several lines drawn line by line in its rect, each
+      line aligned on its own (a visualMap's end text with a line break) }
+    MultiLine: Boolean;
     { Set by the mark alongside Text, and read only for `position: outside`. }
     Outside: TTyCaptionOutside;
     { THE ITEM'S OWN LABEL: 1 + the raw row whose data item wrote a `label`
@@ -481,6 +495,10 @@ type
       widen the caption's box. }
     StrokeColour: TTyChartColor;
     StrokeWidthLogical: Double;
+    { [F4c] textBorderType as written -- 'dashed', 'dotted', a number or a
+      JSON array of numbers; '' (or 'solid') a solid halo. normalizeLineDash
+      turns it into a pattern against the halo's width when it is drawn. }
+    StrokeType: string;
     { THE SAME THREE UNDER A HOVER, worked out when the caption is: the host's
       fill lifted (or the emphasis colour it declares) can land in another
       band, and the halo is the lifted fill. HasEmph False keeps the normal
@@ -783,6 +801,9 @@ type
       half of a glyph survived the cut. }
     HasClip: Boolean;
     ClipRect: TTyRectF;
+    { [F4c] the clip's corner radius, device px: a rounded rectangle where
+      it is above nought (a visualMap bar's `r: 3` clip) }
+    ClipRadius: Double;
     { A SECTOR CLIP, a polar line's (createPolarClipPath) [Batch 113]: the
       ink is cut to the ring between ClipR0 and ClipR1 over the sweep from
       ClipSA to ClipEA (radians clockwise on screen; ClipCW zrender's

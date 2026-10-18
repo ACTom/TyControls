@@ -684,6 +684,12 @@ const TITLES = [
   // g.x + (-w/2 - 5) is 166.29000000000002 where (g.x - w/2) - 5 gives 166.29
   // (w = 57.42, found by trying ordinary words; 'Title' does not split them)
   ['T23 frame order,text:Budget', {}, 'Budget'],
+  // [F4c] the vertical align is set on each line: bottom and middle hang the
+  // 18px title and the 12px subtext off their own anchors, and the frame is
+  // the union of the two boxes, not the block moved as a whole
+  ['T24 top:bottom', { top: 'bottom' }],
+  ['T25 bottom:middle,text:Quarterly', { bottom: 'middle' }, 'Quarterly'],
+  ['T26 top:bottom,itemGap:30', { top: 'bottom', itemGap: 30 }],
 ];
 const LEGENDS = [
   ['L00 default', {}, 13],

@@ -225,7 +225,7 @@ type
       cell or calendar day the grid names with `coordinateSystem` + `coord`.
       The outer bounds and the names' margin level are measured on it too
       [Batch 151]. }
-    FBoxSpec: TTyBoxSpec;
+    FBoxRaw: TTyRawBox;
     FRefXYWH: TTyXYWH;
     FBoxed: Boolean;
     FSpecs: TTyAxisLayoutSpecArray;
@@ -615,6 +615,17 @@ const
   GridDefaultRight  = 10.0;   // per cent
   GridDefaultTop    = 65.0;   // px
   GridDefaultBottom = 80.0;   // px
+
+{ GridModel.defaultOption's box, raw: left '15%', top 65, right '10%',
+  bottom 80; no width, no height }
+function GridDefaultBox: TTyRawBox;
+begin
+  Result := Default(TTyRawBox);
+  Result.Left := TyBoxRawStr('15%');
+  Result.Top := TyBoxRawNum(65);
+  Result.Right := TyBoxRawStr('10%');
+  Result.Bottom := TyBoxRawNum(80);
+end;
 
 { ==================== small option helpers ==================== }
 
@@ -1193,7 +1204,7 @@ var
   gridCount, xCount, yCount, i, j, k, gi: Integer;
   gridIds: TTyStringArray;
   node: TJSONObject;
-  spec: TTyBoxSpec;
+  box: TTyRawBox;
   ax: TTyAxis;
   synth: Boolean;
   usedBottom, usedLeft: Boolean;
@@ -1274,16 +1285,20 @@ begin
     build.FGrids[i] := TTyGridBuild.Create(i);
     if synth then node := nil else node := ObjOf(AOption.ComponentAt('grid', i));
 
-    spec := TyBoxSpec;
-    MergedBoxDim(node, 'left', 'right', 'width', TyBoxPercent(GridDefaultLeft),
-      TyBoxPercent(GridDefaultRight), TyBoxAuto, spec.Left, spec.Right, spec.Width);
-    MergedBoxDim(node, 'top', 'bottom', 'height', TyBoxPx(GridDefaultTop),
-      TyBoxPx(GridDefaultBottom), TyBoxAuto, spec.Top, spec.Bottom, spec.Height);
-    { AS UPSTREAM'S getLayoutRect GIVES IT: a width that was given is the
-      width, and the right edge is x + width }
-    build.FGrids[i].FOuterXYWH := TySolveBoxXYWH(spec, TyFixedContainer(AViewport));
+    { THE BOX AS UPSTREAM HOLDS IT [F4c]: mergeLayoutParam's box branch
+      over the defaults, raw; a key it leaves null or undefined read from
+      the option root (getBoxLayoutParams' getShallow); then getLayoutRect
+      itself -- the keywords ('right', 'bottom', 'center' on either edge)
+      and BoundingRect's flip of a negative size -- where the shared solver
+      knew only centre and collapsed an inverted box to nothing }
+    box := GridDefaultBox;
+    box := TyMergeBoxLayout(node, box);
+    TyBoxClimbRoot(box, AOption.Root);
+    build.FGrids[i].FOuterXYWH := TyGetLayoutRect(box, AViewport.Left,
+      AViewport.Top, AViewport.Right - AViewport.Left,
+      AViewport.Bottom - AViewport.Top, []);
     build.FGrids[i].FOuterRect := TyRectOfXYWH(build.FGrids[i].FOuterXYWH);
-    build.FGrids[i].FBoxSpec := spec;
+    build.FGrids[i].FBoxRaw := box;
     build.FGrids[i].FRefXYWH := TyXYWHOfRect(AViewport);
     build.FViewport := AViewport;
     build.FGrids[i].FPlotXYWH := build.FGrids[i].FOuterXYWH;
@@ -1389,7 +1404,7 @@ begin
   { getLayoutRect on the raw box, the cell's x and y added as upstream adds
     them -- not the shared solver's edge arithmetic, which a cell's
     fractional edges would round differently }
-  gb.FOuterXYWH := TyGetLayoutRect(TyBoxSpecRaw(gb.FBoxSpec), ARef.X, ARef.Y,
+  gb.FOuterXYWH := TyGetLayoutRect(gb.FBoxRaw, ARef.X, ARef.Y,
     ARef.W, ARef.H, []);
   if not TyXYWHIsValid(gb.FOuterXYWH) then
   begin
@@ -3485,11 +3500,22 @@ begin
     sides, or [vertical, horizontal] }
   ASpec.TextMarginVLogical := 0;
   ASpec.TextMarginHLogical := 3;
+  ASpec.LabelMinMargin := False;
+  ASpec.LabelMinMarginLogical := 0;
   if ANode <> nil then
   begin
     lbl := FindIn(ANode, 'axisLabel');
     if (lbl <> nil) and (lbl.JSONType = jtObject) then
     begin
+      { minMargin first: it wins, and only a number is one -- anything
+        else written is nought (labelStyle.ts:465-472) [F4c] }
+      wd := FindIn(TJSONObject(lbl), 'minMargin');
+      if (wd <> nil) and (wd.JSONType <> jtNull) then
+      begin
+        ASpec.LabelMinMargin := True;
+        if wd.JSONType = jtNumber then ASpec.LabelMinMarginLogical := wd.AsFloat / 2
+        else ASpec.LabelMinMarginLogical := 0;
+      end;
       wd := FindIn(TJSONObject(lbl), 'textMargin');
       if (wd <> nil) and (wd.JSONType = jtNumber) then
       begin

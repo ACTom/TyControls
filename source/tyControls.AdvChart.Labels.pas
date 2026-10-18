@@ -152,6 +152,8 @@ type
     { `textBorderWidth`, LOGICAL px. }
     HasBorderWidth: Boolean;
     BorderWidthLogical: Double;
+    { [F4c] textBorderType as written ('' a solid halo) }
+    BorderType: string;
     { A label with its own `backgroundColor` gets no automatic halo. }
     HasBackground: Boolean;
     { A FUNNEL'S `inherit`, which upstream does not route through
@@ -359,7 +361,7 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 implementation
 
 uses tyControls.AdvChart.Style, tyControls.AdvChart.RichStyle,
-  tyControls.AdvChart.LabelLayout;
+  tyControls.AdvChart.LabelLayout, tyControls.AdvChart.Color;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
@@ -601,7 +603,9 @@ function TyLabelLuminance(AColour: TTyChartColor): Double;
 var
   a, r, g, b: Double;
 begin
-  a := ((AColour shr 24) and $FF) / 255;
+  { the alpha as written, not the byte's [F4c]: rgba(255,255,255,0.5) is
+    lum 0.5 exactly, which lands in the light band as upstream's does }
+  a := TyChartColorAlpha(AColour);
   r := (AColour shr 16) and $FF;
   g := (AColour shr 8) and $FF;
   b := AColour and $FF;
@@ -1147,6 +1151,7 @@ begin
     cap.Caption.Colour := ink;
     cap.Caption.StrokeColour := stroke;
     cap.Caption.StrokeWidthLogical := strokeW;
+    cap.Caption.StrokeType := spec.BorderType;
     TyLabelStampEmphasis(spec, hostFill, hostHasFill,
       host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
       LabelInside(host, pos), cap.Caption);

@@ -831,6 +831,12 @@ add('hover', 'tooltip', "tooltipDisabled: on a root, on one child of a group (it
   { tooltip: {}, xAxis: { type: 'category', data: ['p', 'q', 'r', 's'] }, yAxis: { type: 'value', min: 0, max: 10 },
     series: [{ type: 'custom', name: 'T', renderItem: '@tipRI', data: [[0, 4], [1, 6], [2, 3], [3, 5]] }] },
   { steps: [{ move: 's0:2' }, { move: 's0:0' }, { move: 's0:1/0' }, { move: 's0:1/1' }, { move: 's0:3/0' }, { leave: true }] });
+// [F4c] coordinateSystem written null (a harvested `undefined`): the merge
+// keeps the key, the default 'cartesian2d' never arrives, no creator claims
+// the series -- it renders with no coordSys, as 'none' does, and says nothing
+add('coords', 'none-null', "coordinateSystem null: no coordSys (the key the option has keeps the default out), as 'none'; a hover",
+  { series: [{ type: 'custom', coordinateSystem: null, renderItem: '@free', data: [[50, 60, 120], [200, 100, 80], [320, 240, 40]] }] },
+  { steps: [{ move: 's0:1' }] });
 
 // ---------------------------------------------------------------------------
 // one case

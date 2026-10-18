@@ -27,6 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
      tyControls.AdvChart.Layout, tyControls.AdvChart.AxisName,
+     tyControls.AdvChart.AxisLabels,
      tyControls.AdvChart.JsMath,
      test.advchart.gridbounds;
 type
@@ -51,7 +52,7 @@ type
     procedure TestEveryDrawnNameAsUpstreamPlacesIt;
     procedure TestEveryGridAsUpstreamSolvesIt;
     { ---- what the fixture's cases do not reach ---- }
-    procedure TestATurnedNameThatMeetsALabelIsLeftWhereItIs;
+    procedure TestATurnedNameThatMeetsALabelIsMovedByItsOrientedBox;
     procedure TestTheNameIsMeasuredInItsOwnFont;
     procedure TestTheNameOptionsAreReadAsUpstreamReadsThem;
     procedure TestTheTextLayoutsTurnAsUpstreamTurnsThem;
@@ -112,9 +113,27 @@ begin
   Result := FloatToStrF(A, ffGeneral, 17, 0, DefaultFormatSettings);
 end;
 
+{ A case the generator deferred because the port had no oriented-box move
+  is compared since F4c: deferred only when some reason is not an OBB one. }
 function IsDeferred(ACase: TJSONObject): Boolean;
+var
+  parts: TStringList;
+  i: Integer;
 begin
   Result := (ACase.Find('deferred') <> nil) and ACase.Booleans['deferred'];
+  if not Result then Exit;
+  if (ACase.Find('why') = nil) or (ACase.Find('why').JSONType <> jtString) then Exit;
+  parts := TStringList.Create;
+  try
+    parts.Delimiter := ';';
+    parts.StrictDelimiter := True;
+    parts.DelimitedText := ACase.Strings['why'];
+    for i := 0 to parts.Count - 1 do
+      if Pos('OBB', parts[i]) = 0 then Exit(True);
+    Result := False;
+  finally
+    parts.Free;
+  end;
 end;
 
 { Bit for bit: NaN matches NaN, and nought matches nought of either sign
@@ -438,6 +457,8 @@ var
   own: TTyLabelGeomArray;
   perp: array of TTyLabelGeomArray;
   perpRot, sx, sy: Double;
+  obbMove: Boolean;
+  nMoves: Integer;
   got: TTyAxisNamePlacement;
   want: TTyMat2D;
   report, why: string;
@@ -518,17 +539,32 @@ begin
         { every move, summed in upstream's order }
         tr := nm.Arrays['translations'];
         if tr.Count > 0 then Inc(moved);
-        if got.Moves <> tr.Count then
-          Miss(Format('%d moves, upstream %d', [got.Moves, tr.Count]));
+        { the generator records an OBB test wherever the rects met, as the
+          anchor's difference: one that left the name where it was is a
+          test the oriented boxes passed, not a move [F4c] }
+        nMoves := 0;
+        for k := 0 to tr.Count - 1 do
+          if not ((tr.Objects[k].Find('obb') <> nil) and tr.Objects[k].Booleans['obb']
+            and (Num(tr.Objects[k], 'x') = 0) and (Num(tr.Objects[k], 'y') = 0)) then
+            Inc(nMoves);
+        if got.Moves <> nMoves then
+          Miss(Format('%d moves, upstream %d', [got.Moves, nMoves]));
         sx := 0;
         sy := 0;
+        obbMove := False;
         for k := 0 to tr.Count - 1 do
         begin
           sx := sx + Num(tr.Objects[k], 'x');
           sy := sy + Num(tr.Objects[k], 'y');
+          if (tr.Objects[k].Find('obb') <> nil) and tr.Objects[k].Booleans['obb'] then
+            obbMove := True;
         end;
-        if not (Same(got.MovedX, sx) and Same(got.MovedY, sy)) then
-          Miss('moved ' + Fmt(got.MovedX) + ', ' + Fmt(got.MovedY));
+        { an oriented-box move is recorded as the anchor's difference, which
+          need not round back to the translation applied: the final
+          transform, anchor and rect below hold it to the bit [F4c] }
+        if not obbMove then
+          if not (Same(got.MovedX, sx) and Same(got.MovedY, sy)) then
+            Miss('moved ' + Fmt(got.MovedX) + ', ' + Fmt(got.MovedY));
         want := MatOf(nm.Arrays['finalTransform']);
         for k := 0 to 5 do
           if not Same(got.M[k], want[k]) then Miss('final transform ' + IntToStr(k));
@@ -769,17 +805,18 @@ end;
 
 { ==================== 4. what the cases do not reach ==================== }
 
-procedure TAdvChartAxisNamesOracleTest.TestATurnedNameThatMeetsALabelIsLeftWhereItIs;
+procedure TAdvChartAxisNamesOracleTest.TestATurnedNameThatMeetsALabelIsMovedByItsOrientedBox;
 var
   spec: TTyAxisLayoutSpec;
   frame: TTyAxisNameFrame;
   own: TTyLabelGeomArray;
   level, turned: TTyAxisNamePlacement;
+  a, b: TTyLabelBox;
 begin
   { AN OVERLAP WITH SOMETHING TURNED OFF THE AXES is upstream's oriented-box
-    test, which the port does not have: the name stays where it was put. The
-    same name level, on the same label, is moved -- so what decides is the
-    turn and nothing else. }
+    test: the boxes' rects meet, so the turned boxes are tested and the move
+    is theirs [F4c: the name used to be left where it was put]. The same
+    name level, on the same label, is moved by the rects. }
   spec := Default(TTyAxisLayoutSpec);
   spec.Side := asBottom;
   spec.Name := 'Name';
@@ -813,8 +850,20 @@ begin
     and (own[0].Rect.X < turned.Rect.X + turned.Rect.W)
     and (turned.Rect.Y < own[0].Rect.Y + own[0].Rect.H)
     and (own[0].Rect.Y < turned.Rect.Y + turned.Rect.H));
-  AssertEquals('and it is left where it was', 0, turned.Moves);
-  AssertTrue('exactly', Same(turned.X, turned.AnchorX) and Same(turned.Y, turned.AnchorY));
+  AssertEquals('it is moved once, by the oriented boxes', 1, turned.Moves);
+  AssertTrue('outwards along the axis', turned.MovedX > 0);
+  { and where it went, the turned box no longer meets the label's }
+  a.LocalRect := own[0].LocalRect;
+  a.M := own[0].M;
+  a.Rect := own[0].Rect;
+  a.AxisAligned := True;
+  b.LocalRect := turned.LocalRect;
+  b.M := turned.M;
+  b.Rect := turned.Rect;
+  b.AxisAligned := False;
+  { touching within the threshold counts as meeting (the move is to the
+    threshold-shrunk extents' edge): apart past it }
+  AssertFalse('the oriented boxes are apart', TyObbIntersect(a, b, 0.1));
 end;
 
 procedure TAdvChartAxisNamesOracleTest.TestTheNameIsMeasuredInItsOwnFont;

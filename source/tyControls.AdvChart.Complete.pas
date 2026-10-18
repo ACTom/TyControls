@@ -1281,6 +1281,24 @@ begin
   Result := TyOptChild(v, AKey);
 end;
 
+{ A ROOT KEY THAT REACHES THE MODELS through their parent [F4c]: the
+  GlobalModel is every component's and series' parent model, so get() and
+  getShallow() of a key a model's option and defaults leave null or
+  undefined read the option root. Upstream reads these there:
+  getBoxLayoutParams' six (util/layout.ts:173, every box-laid component and
+  series), `silent` (core/echarts.ts:2508 per series; the markers,
+  MarkLineView.ts:437), `progressive` / `progressiveThreshold` (model/
+  Series.ts:591 getProgressive and its threshold, the global defaults sit
+  there) and `progressiveChunkMode` (Scheduler.ts). The port reads every
+  one of them there too. }
+function RootInheritedKey(const AKey: string): Boolean;
+begin
+  Result := (AKey = 'left') or (AKey = 'top') or (AKey = 'right')
+    or (AKey = 'bottom') or (AKey = 'width') or (AKey = 'height')
+    or (AKey = 'silent') or (AKey = 'progressive')
+    or (AKey = 'progressiveThreshold') or (AKey = 'progressiveChunkMode');
+end;
+
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -1293,6 +1311,9 @@ begin
     if APath = '' then sub := key else sub := APath + '.' + key;
     child := TyOptChild(ANode, key);
     if (child < 0) and (APath = '') then child := RootMarkerNode(key);
+    { read through the models' parent chain: known, and a scalar -- no
+      subtree to walk [F4c] }
+    if (child < 0) and (APath = '') and RootInheritedKey(key) then Continue;
     if child < 0 then
     begin
       { known to the runtime though not to the documentation: accepted, and

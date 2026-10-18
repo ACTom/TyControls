@@ -1,0 +1,771 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "cases": [
+  {
+   "id": "name-trigger",
+   "note": "triggerEvent alone: the name answers the pointer, but the axis' tooltip defaults to show false",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "triggerEvent": true
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": null
+  },
+  {
+   "id": "name-show",
+   "note": "tooltip.show: the content is the name",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "tooltip": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": {
+    "text": "Value"
+   }
+  },
+  {
+   "id": "name-formatter",
+   "note": "the axis' own tooltip.show and a template: {a} is the name",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "tooltip": {
+      "show": true,
+      "formatter": "N:{a}"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": {
+    "text": "N:Value"
+   }
+  },
+  {
+   "id": "name-encoded",
+   "note": "the name HTML-encoded into the template",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "A<B",
+     "tooltip": {
+      "show": true,
+      "formatter": "[{a}]"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "40539eb851eb8520",
+    "y": "4043000000000000",
+    "width": "40370a3d70a3d70a",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": {
+    "text": "[A&lt;B]"
+   }
+  },
+  {
+   "id": "name-global-formatter",
+   "note": "the global formatter is never reached: the content's level has one",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "formatter": "GLOBAL",
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "tooltip": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": {
+    "text": "Value"
+   }
+  },
+  {
+   "id": "name-silent",
+   "note": "neither triggerEvent nor tooltip.show: the name is silent, no tooltip",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": null
+  },
+  {
+   "id": "name-axis-silent",
+   "note": "triggerEvent but silent: silent wins",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "triggerEvent": true,
+     "silent": true
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": null
+  },
+  {
+   "id": "name-no-component",
+   "note": "triggerEvent and no tooltip component: no tooltip",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "triggerEvent": true
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": null
+  },
+  {
+   "id": "name-show-false",
+   "note": "the axis' tooltip.show false with triggerEvent: the text answers, the box does not show",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Value",
+     "triggerEvent": true,
+     "tooltip": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "yAxis",
+   "target": "name",
+   "rect": {
+    "x": "4052a51eb851eb86",
+    "y": "4043000000000000",
+    "width": "403ed70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    90,
+    44
+   ],
+   "tip": null
+  },
+  {
+   "id": "label-show",
+   "note": "a category label under tooltip.show: its formatted text",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     "tooltip": {
+      "show": true
+     },
+     "axisLabel": {
+      "formatter": "{value}!"
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "xAxis",
+   "target": 2,
+   "rect": {
+    "x": "4072cf5c28f5c28f",
+    "y": "4074800000000000",
+    "width": "403c147ae147ae14",
+    "height": "4028000000000000"
+   },
+   "point": [
+    315,
+    334
+   ],
+   "tip": {
+    "text": "Wed!"
+   }
+  },
+  {
+   "id": "label-template",
+   "note": "a label's {a} (the text), {c} (rawLabel) and {d} (tickIndex)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     "tooltip": {
+      "show": true,
+      "formatter": "{a}|{c}|{d}"
+     },
+     "axisLabel": {
+      "formatter": "<{value}>"
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "xAxis",
+   "target": 3,
+   "rect": {
+    "x": "40783a8f5c28f5c3",
+    "y": "4074800000000000",
+    "width": "4041570a3d70a3d7",
+    "height": "4028000000000000"
+   },
+   "point": [
+    405,
+    334
+   ],
+   "tip": {
+    "text": "&lt;Thu&gt;|Thu|3"
+   }
+  }
+ ],
+ "guards": [
+  {
+   "name": "triggerEvent alone shows nothing",
+   "ok": true
+  },
+  {
+   "name": "the name is the content",
+   "ok": true
+  },
+  {
+   "name": "a template",
+   "ok": true
+  },
+  {
+   "name": "encoded",
+   "ok": true
+  },
+  {
+   "name": "the global formatter is not reached",
+   "ok": true
+  },
+  {
+   "name": "silent: none",
+   "ok": true
+  },
+  {
+   "name": "axis silent: none",
+   "ok": true
+  },
+  {
+   "name": "no component: none",
+   "ok": true
+  },
+  {
+   "name": "show false: none",
+   "ok": true
+  },
+  {
+   "name": "a label",
+   "ok": true
+  }
+ ]
+}
