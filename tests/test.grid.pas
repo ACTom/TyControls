@@ -97,6 +97,9 @@ type
     FLinkCount, FLinkCol, FLinkRow: Integer;
     FColCalcCount: Integer;
     FFormatCount: Integer;
+    { The fast-path guard below, with AGridRule as the theme's TyGrid rule; ALeftChrome puts the
+      row header slot and a fixed column down the left side, over the frame's left edge. }
+    procedure CheckScrollFastPath(const AGridRule: string; ALeftChrome: Boolean);
     procedure HandleGetFormat(Sender: TObject; ACol, ARow: Integer;
       var AText: string);
     procedure HandleGetFilterValues(Sender: TObject; ACol: Integer;
@@ -279,6 +282,9 @@ type
     procedure TestRowNumbersFollowDisplayOrder;
     procedure TestEllipsisButtonHandsControlToHost;
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
+    { #86: with a border. The strip that scrolls in was filled across the frame's left edge and
+      the frame was not drawn again -- the guard above runs with border-width: 0. }
+    procedure TestScrollFastPathKeepsTheBorder;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
     procedure TestPhysicalSortCarriesCellAttributes;
@@ -6870,6 +6876,19 @@ end;
   没被正确失效,就会留下陈旧像素;而陈旧像素是那种"偶尔看到一下、
   截图又复现不了"的 bug,靠肉眼根本守不住。 }
 procedure TTyStringGridTest.TestScrollFastPathIsPixelIdenticalToFullRepaint;
+begin
+  CheckScrollFastPath('TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }', True);
+end;
+
+procedure TTyStringGridTest.TestScrollFastPathKeepsTheBorder;
+begin
+  { No row header slot and no fixed column: the frame's left edge shows beside the body, as in a
+    grid with the default theme. }
+  CheckScrollFastPath('TyGrid { background: #FFFFFF; color: #000000; border-width: 2px; ' +
+    'border-color: #B03030; border-radius: 6px; }', False);
+end;
+
+procedure TTyStringGridTest.CheckScrollFastPath(const AGridRule: string; ALeftChrome: Boolean);
 const
   W = 420; H = 300;
 var
@@ -6926,7 +6945,7 @@ begin
   full := TBitmap.Create;
   try
     Ctl.LoadThemeCss(
-      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      AGridRule +
       'TyGridCell { background: none; color: #000000; }' +
       'TyGridCellAlt { background: #F0F0F0; }' +
       'TyGridHeader { background: #EEEEEE; color: #000000; }' +
@@ -6945,11 +6964,11 @@ begin
     { 故意把容易出错的元素都放进来:表头、行头槽、斑马纹、格线、固定行列。 }
     G.Header.Options := G.Header.Options + [hoVisible];
     G.Header.Height := 22;
-    G.ShowIndicator := True;
+    G.ShowIndicator := ALeftChrome;
     G.IndicatorWidth := 36;
-    G.ShowRowNumbers := True;
+    G.ShowRowNumbers := ALeftChrome;
     G.AlternateRows := True;
-    G.FixedCols := 1;
+    if ALeftChrome then G.FixedCols := 1;
     G.FixedRows := 1;
     { **底部冻结行也要在这张表里** —— 脏区快路径平移的是正文带,平移带的下沿
       必须停在正文窗格下沿而不是视口下沿,否则底部冻结带会跟着一起跑。
