@@ -108,6 +108,7 @@ type
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
     procedure TestATurnedNameOfSeveralLinesSetsEveryLine;
+    procedure TestATurnedNameOfSeveralLinesOnEveryAxisKind;
     procedure TestAThickerThemeBorderDrawsAThickerAxis;
     procedure TestTheMinorTickLengthComesFromTheTheme;
     procedure TestHairlinesLandOnWholePixels;
@@ -968,6 +969,88 @@ begin
   AssertTrue(Format('two lines are %d wide against one line''s %d', [two, one]),
     two > one * 3 div 2);
   AssertEquals('every line in the box the layout reserved', total, inBox);
+end;
+
+{ [Section 197] The turned block on every axis that names itself: a single
+  axis, a polar's radius axis and a parallel axis draw their names through
+  their own paint paths, each handing the block height on; turned a quarter,
+  two lines stack across the canvas. And a middle-aligned block (the y axis'
+  name with verticalAlign 'middle') is centred on its anchor, inside the box
+  the layout reserved -- the test above only reaches the bottom-aligned one. }
+procedure TAdvanceChartTest.TestATurnedNameOfSeveralLinesOnEveryAxisKind;
+const
+  cKinds: array[0..2] of string = (
+    '{ singleAxis: { name: ''%s'', nameRotate: 90, nameLocation: ''middle'', nameGap: 30, top: 40, height: 60 },'
+      + ' series: [{ type: ''scatter'', coordinateSystem: ''singleAxis'', data: [1, 2] }] }',
+    '{ polar: {}, angleAxis: {}, radiusAxis: { name: ''%s'', nameRotate: 90 },'
+      + ' series: [{ type: ''bar'', coordinateSystem: ''polar'', data: [1, 2] }] }',
+    '{ parallelAxis: [{ dim: 0, name: ''%s'', nameRotate: 90 }, { dim: 1 }],'
+      + ' series: [{ type: ''parallel'', data: [[1, 2], [2, 1]] }] }');
+  cNames: array[0..2] of string = ('single', 'polar', 'parallel');
+
+  { the red ink's horizontal extent, and how much of it lies in ABox when
+    one is given }
+  function RedWidth(const AOption: string; out AInBox, ATotal: Integer;
+    AYName: Boolean): Integer;
+  var
+    spec: PTyAxisLayoutSpec;
+    box: TTyXYWH;
+    x, y, x0, x1: Integer;
+    p: TBGRAPixel;
+  begin
+    FChart.Option := AOption;
+    Draw;
+    box.X := -1000; box.Y := -1000; box.W := 3000; box.H := 3000;
+    if AYName then
+    begin
+      spec := FChart.Build.Grid(0).SpecFor(FChart.Build.Axis('yAxis', 0));
+      AssertTrue('a placed name', (spec <> nil) and spec^.NamePlacement.Shown);
+      box := spec^.NamePlacement.Rect;
+    end;
+    x0 := MaxInt;
+    x1 := -1;
+    AInBox := 0;
+    ATotal := 0;
+    for y := 0 to 299 do
+      for x := 0 to 399 do
+      begin
+        p := PixelAt(x, y);
+        if (p.red > p.green + 60) and (p.red > p.blue + 60) then
+        begin
+          Inc(ATotal);
+          if x < x0 then x0 := x;
+          if x > x1 then x1 := x;
+          if (x >= box.X - 1) and (x <= box.X + box.W + 1)
+            and (y >= box.Y - 1) and (y <= box.Y + box.H + 1) then
+            Inc(AInBox);
+        end;
+      end;
+    if x1 < 0 then Exit(0);
+    Result := x1 - x0 + 1;
+  end;
+
+var
+  k, one, two, inBox, total: Integer;
+begin
+  FCtl.StyleOverride := 'TyAdvChartAxisName { color: #FF0000; }';
+  for k := 0 to High(cKinds) do
+  begin
+    one := RedWidth(Format(cKinds[k], ['WWWW']), inBox, total, False);
+    AssertTrue(cNames[k] + ': one line draws', total > 20);
+    two := RedWidth(Format(cKinds[k], ['WWWW\nWWWW']), inBox, total, False);
+    AssertTrue(Format('%s: two lines are %d wide against one line''s %d',
+      [cNames[k], two, one]), two > one * 3 div 2);
+  end;
+  one := RedWidth('{ xAxis: { data: [''A''] }, yAxis: { name: ''WWWW'','
+    + ' nameLocation: ''middle'', nameGap: 40, nameTextStyle: { verticalAlign: ''middle'' } },'
+    + ' series: [{ type: ''bar'', data: [1] }] }', inBox, total, True);
+  AssertTrue('middle-aligned: one line draws', total > 20);
+  two := RedWidth('{ xAxis: { data: [''A''] }, yAxis: { name: ''WWWW\nWWWW'','
+    + ' nameLocation: ''middle'', nameGap: 40, nameTextStyle: { verticalAlign: ''middle'' } },'
+    + ' series: [{ type: ''bar'', data: [1] }] }', inBox, total, True);
+  AssertTrue(Format('middle-aligned: two lines are %d wide against one line''s %d',
+    [two, one]), two > one * 3 div 2);
+  AssertEquals('middle-aligned: every line in the box the layout reserved', total, inBox);
 end;
 
 procedure TAdvanceChartTest.TestAThickerThemeBorderDrawsAThickerAxis;

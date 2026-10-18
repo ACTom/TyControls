@@ -59,6 +59,12 @@ type
     procedure TestTheKeptMeasuringDcAnswersAsBgraDoes;
     procedure TestATurnedRunOnTheKeptDibIsBgrasOwn;
     procedure TestAKeptRunPaintsAsAFreshOne;
+    procedure TestBgrasOwnPathsTouchNoKeptSurface;
+    procedure TestATurnedRunOnAHalfPixelIsBgrasOwn;
+    procedure TestAPrefixedOrRightToLeftRunIsMeasuredForItself;
+    procedure TestTheKeptSurfacesAnswerAsBgraAtAnotherScreenPpi;
+    procedure TestKeptRunsAreDroppedPastTheirCap;
+    procedure TestARegisteredFontIsMeasuredAfresh;
     procedure TestTheKeptBitmapGrowsForATallerRun;
     procedure TestATallRunAfterAWideOneKeepsTheWidth;
     procedure TestARunTooBigForTheKeptBitmapGetsItsOwn;
@@ -1130,6 +1136,320 @@ begin
   finally
     ref.Free;
   end;
+end;
+
+{ The comparisons above hold the kept surfaces to BGRA's own path, switched on by
+  TyGdiTextBgraPathsForTest. If the switch stopped reaching the measuring branch or the
+  turned branch, both sides of those comparisons would be the kept surfaces and every one
+  of them would pass for nothing. So: after a reset, BGRA's own measuring and turned
+  drawing make no kept surface; the same calls with the switch off make the two. }
+procedure TPainterTest.TestBgrasOwnPathsTouchNoKeptSurface;
+var
+  bmp: TBGRABitmap;
+  made: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets measure through BGRA');
+  {$ENDIF}
+  bmp := TBGRABitmap.Create(200, 200);
+  try
+    TyConfigureTextFont(bmp, 'Segoe UI', 12, 400, 96);
+    TyGdiTextResetForTest;
+    made := TyGdiTextKeptSurfacesMadeForTest;
+    TyGdiTextBgraPathsForTest(True);
+    try
+      AssertTrue('measured', bmp.TextSize('Axis label 12.5').cx > 0);
+      bmp.TextOutAngle(100, 100, 450, 'Turned label', BGRA(0, 0, 0, 255), taLeftJustify, False);
+    finally
+      TyGdiTextBgraPathsForTest(False);
+    end;
+    AssertEquals('BGRA''s own paths made no kept surface', 0,
+      TyGdiTextKeptSurfacesMadeForTest - made);
+    bmp.TextSize('Axis label 12.5');
+    AssertEquals('the kept DC, with the switch off', 1, TyGdiTextKeptSurfacesMadeForTest - made);
+    bmp.TextOutAngle(100, 100, 450, 'Turned label', BGRA(0, 0, 0, 255), taLeftJustify, False);
+    AssertEquals('and the kept DIB', 2, TyGdiTextKeptSurfacesMadeForTest - made);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ BGRA places a turned run's sub-pixel offset with HalfUp, and widens the box by a column
+  when there is one. The test above draws at positions whose fractions are never exactly
+  a half, so Round would have passed for HalfUp. Here the fraction IS a half (a quarter
+  and three quarters turn and a half turn, whose sines and cosines leave x + 0.5 exactly),
+  and a slightly turned italic run whose last letter leans past its advance reaches the
+  column the offset added. }
+procedure TPainterTest.TestATurnedRunOnAHalfPixelIsBgrasOwn;
+const
+  cAngles: array[0..4] of Integer = (1800, 900, 2700, 10, 3590);
+var
+  a, b: TBGRABitmap;
+  k, x, y, n: Integer;
+
+  procedure DrawOn(ABmp: TBGRABitmap; ABgra: Boolean);
+  begin
+    ABmp.Fill(BGRA(250, 250, 250, 255));
+    TyConfigureTextFont(ABmp, 'Segoe UI', 40, 400, 96);
+    ABmp.FontStyle := [fsItalic];
+    TyGdiTextBgraPathsForTest(ABgra);
+    try
+      ABmp.TextOutAngle(200.5, 200.5, cAngles[k], 'Wff', BGRA(0, 0, 0, 255), taLeftJustify, False);
+    finally
+      TyGdiTextBgraPathsForTest(False);
+    end;
+  end;
+
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw turned text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  a := TBGRABitmap.Create(400, 400);
+  b := TBGRABitmap.Create(400, 400);
+  try
+    for k := 0 to High(cAngles) do
+    begin
+      DrawOn(a, False);
+      DrawOn(b, True);
+      n := 0;
+      for y := 0 to 399 do
+        for x := 0 to 399 do
+        begin
+          if a.GetPixel(x, y) <> b.GetPixel(x, y) then
+            Fail(Format('at %d tenths: pixel %d,%d differs', [cAngles[k], x, y]));
+          if a.GetPixel(x, y) <> BGRA(250, 250, 250, 255) then Inc(n);
+        end;
+      AssertTrue(Format('at %d tenths something was drawn (%d)', [cAngles[k], n]), n > 200);
+    end;
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+{ A run drawn with its prefixes shown, or right to left, is measured with its own flags:
+  the measurement kept for '&Prefixed && run' drawn plainly is not the one for the same
+  text with its prefixes shown (the ampersands are gone), so a right-aligned run lands
+  where BGRA lands it. Every combination, after the others, against BGRA's own path. }
+procedure TPainterTest.TestAPrefixedOrRightToLeftRunIsMeasuredForItself;
+const
+  cRuns: array[0..2] of string = ('&Prefixed && run', 'AV, To. (1.5%) Wa', 'مرحبا (1) abc.');
+var
+  a, b: TBGRABitmap;
+  x, y: Integer;
+
+  procedure DrawOn(ABmp: TBGRABitmap; ABgra: Boolean);
+  var
+    i, k: Integer;
+    st: TTextStyle;
+  begin
+    ABmp.Fill(BGRA(250, 250, 250, 255));
+    TyConfigureTextFont(ABmp, 'Segoe UI', 14, 400, 96);
+    TyGdiTextBgraPathsForTest(ABgra);
+    try
+      for i := 0 to High(cRuns) do
+        for k := 0 to 3 do
+        begin
+          FillChar(st, SizeOf(st), 0);
+          st.SingleLine := True;
+          st.Alignment := taRightJustify;
+          st.Layout := tlTop;
+          st.ShowPrefix := (k and 1) <> 0;
+          st.RightToLeft := (k and 2) <> 0;
+          ABmp.TextRect(Rect(0, (i * 4 + k) * 24, 380, (i * 4 + k) * 24 + 24), 0, 0,
+            cRuns[i], st, BGRA(0, 0, 0, 255));
+        end;
+    finally
+      TyGdiTextBgraPathsForTest(False);
+    end;
+  end;
+
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets measure through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  a := TBGRABitmap.Create(400, 300);
+  b := TBGRABitmap.Create(400, 300);
+  try
+    DrawOn(a, False);
+    DrawOn(b, True);
+    for y := 0 to 299 do
+      for x := 0 to 399 do
+        if a.GetPixel(x, y) <> b.GetPixel(x, y) then
+          Fail(Format('row %d: pixel %d,%d differs', [y div 24, x, y]));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+{ The kept surfaces copy BGRA's steps for the font: the canvas font back to the screen's
+  PPI, Assign, then the pixel height set outright. The last step is the one that matters
+  when the font being copied was born at another PPI than the screen's now -- Assign then
+  carries the point size across, not the pixel height. With the renderer's font made at
+  one screen PPI and the measuring and turning done at another, the kept surfaces must
+  still answer as BGRA's fresh ones do. The kept runs are off: they would answer from
+  before the change. }
+procedure TPainterTest.TestTheKeptSurfacesAnswerAsBgraAtAnotherScreenPpi;
+var
+  a, b: TBGRABitmap;
+  sx, sy, x, y: Integer;
+  ka, kb: TSize;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets measure through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  TyGdiTextRunCacheForTest(False);
+  sx := ScreenInfo.PixelsPerInchX;
+  sy := ScreenInfo.PixelsPerInchY;
+  a := TBGRABitmap.Create(300, 300);
+  b := TBGRABitmap.Create(300, 300);
+  try
+    TyConfigureTextFont(a, 'Segoe UI', 13, 400, 96);
+    TyConfigureTextFont(b, 'Segoe UI', 13, 400, 96);
+    a.TextSize('x');
+    b.TextSize('x');
+    ScreenInfo.PixelsPerInchX := sx * 3 div 2;
+    ScreenInfo.PixelsPerInchY := sy * 3 div 2;
+    try
+      a.Fill(BGRA(250, 250, 250, 255));
+      b.Fill(BGRA(250, 250, 250, 255));
+      TyGdiTextBgraPathsForTest(True);
+      try
+        kb := b.TextSize('Axis label 12.5');
+        b.TextOutAngle(150.3, 150.6, 450, 'Turned label', BGRA(0, 0, 0, 255), taLeftJustify, False);
+      finally
+        TyGdiTextBgraPathsForTest(False);
+      end;
+      ka := a.TextSize('Axis label 12.5');
+      a.TextOutAngle(150.3, 150.6, 450, 'Turned label', BGRA(0, 0, 0, 255), taLeftJustify, False);
+    finally
+      ScreenInfo.PixelsPerInchX := sx;
+      ScreenInfo.PixelsPerInchY := sy;
+    end;
+    AssertEquals('as wide as BGRA measures it', kb.cx, ka.cx);
+    AssertEquals('as high', kb.cy, ka.cy);
+    for y := 0 to 299 do
+      for x := 0 to 299 do
+        if a.GetPixel(x, y) <> b.GetPixel(x, y) then
+          Fail(Format('turned: pixel %d,%d differs', [x, y]));
+  finally
+    a.Free;
+    b.Free;
+    TyGdiTextRunCacheForTest(True);
+    TyGdiTextResetForTest;
+  end;
+end;
+
+{ What the runs keep is capped: past the byte cap everything kept is dropped (the memo's
+  clear-not-evict), so a stream of big distinct runs never holds more than the cap. }
+procedure TPainterTest.TestKeptRunsAreDroppedPastTheirCap;
+var
+  bmp: TBGRABitmap;
+  i, n: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  bmp := TBGRABitmap.Create(100, 100);
+  try
+    TyConfigureTextFont(bmp, 'Segoe UI', 200, 400, 96);
+    for i := 0 to 19 do
+      bmp.TextOut(0, 0, StringOfChar('W', 30) + IntToStr(i), BGRA(0, 0, 0, 255));
+    n := TyGdiTextRunsKeptForTest;
+    AssertTrue(Format('some kept, and fewer than the 20 drawn (%d)', [n]), (n > 0) and (n < 20));
+  finally
+    bmp.Free;
+    TyGdiTextResetForTest;
+  end;
+end;
+
+{$IFDEF WINDOWS}
+function AddFontMemResourceExForTest(pbFont: Pointer; cbFont: LongWord; pdv: Pointer;
+  pcFonts: PLongWord): THandle; stdcall; external 'gdi32' name 'AddFontMemResourceEx';
+function RemoveFontMemResourceExForTest(h: THandle): LongBool; stdcall;
+  external 'gdi32' name 'RemoveFontMemResourceEx';
+{$ENDIF}
+
+{ Registering a font changes what its name measures, and TyInvalidateTextMeasureCache is
+  how the library is told so: it must drop the kept measurements with everything else.
+  The face is the bundled Lucide font under a name no other test registers (its name
+  table rewritten in memory), so the name falls back to a default face before and is the
+  icon font after. }
+procedure TPainterTest.TestARegisteredFontIsMeasuredAfresh;
+const
+  cFace = 'tyq197';
+var
+  bmp: TBGRABitmap;
+  ms: TMemoryStream;
+  p: PByte;
+  i, j, hits: Integer;
+  h: THandle;
+  count: LongWord;
+  before, after, ref: TSize;
+  s: string;
+  wide: UnicodeString;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets measure through BGRA');
+  {$ELSE}
+  ms := TMemoryStream.Create;
+  bmp := TBGRABitmap.Create(10, 10);
+  try
+    ms.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'assets' + PathDelim
+      + 'lucide' + PathDelim + 'lucide.ttf');
+    { the family name, in its one-byte and its UTF-16BE spellings }
+    p := ms.Memory;
+    hits := 0;
+    wide := UnicodeString(cFace);
+    for i := 0 to ms.Size - 12 do
+    begin
+      if CompareMem(p + i, PChar('lucide'), 6) then
+      begin
+        Move(PChar(cFace)^, (p + i)^, 6);
+        Inc(hits);
+      end
+      else if (p[i] = 0) and (p[i + 1] = Ord('l')) and (p[i + 3] = Ord('u'))
+        and (p[i + 5] = Ord('c')) and (p[i + 7] = Ord('i')) and (p[i + 9] = Ord('d'))
+        and (p[i + 11] = Ord('e')) then
+      begin
+        for j := 0 to 5 do p[i + 1 + j * 2] := Ord(wide[j + 1]);
+        Inc(hits);
+      end;
+    end;
+    AssertTrue('the family name was found to rename', hits >= 2);
+    TyGdiTextResetForTest;
+    TyConfigureTextFont(bmp, cFace, 20, 400, 96);
+    s := 'abc ' + #$EE#$96#$85;
+    before := bmp.TextSize(s);
+    count := 0;
+    h := AddFontMemResourceExForTest(ms.Memory, ms.Size, nil, @count);
+    AssertTrue('the face registered', h <> 0);
+    try
+      TyInvalidateTextMeasureCache;
+      after := bmp.TextSize(s);
+      TyGdiTextBgraPathsForTest(True);
+      try
+        ref := bmp.TextSize(s);
+      finally
+        TyGdiTextBgraPathsForTest(False);
+      end;
+      AssertTrue(Format('registering the face changed what it measures (%d -> %d)',
+        [before.cx, ref.cx]), before.cx <> ref.cx);
+      AssertEquals('measured afresh, as BGRA measures it', ref.cx, after.cx);
+    finally
+      RemoveFontMemResourceExForTest(h);
+      TyInvalidateTextMeasureCache;
+    end;
+  finally
+    bmp.Free;
+    ms.Free;
+  end;
+  {$ENDIF}
 end;
 
 { The kept bitmap grows in each direction on its own: a wide run of small text first
