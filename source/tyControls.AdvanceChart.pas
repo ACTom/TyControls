@@ -36574,8 +36574,11 @@ begin
     for k := 0 to 2 do
       if ADark then ch[k] := ch[k] * a
       else ch[k] := ch[k] * a + 255 * (1 - a);
-    AGround := TTyChartColor($FF000000 or (Cardinal(Round(ch[0])) shl 16)
-      or (Cardinal(Round(ch[1])) shl 8) or Cardinal(Round(ch[2])));
+    { the channels as zrender's parse reads the rgba() text the blend makes:
+      parseInt, so 127.5 is 127 -- with the alpha as written a half-grey
+      ground gives a half channel [F4c] }
+    AGround := TTyChartColor($FF000000 or (Cardinal(Trunc(ch[0])) shl 16)
+      or (Cardinal(Trunc(ch[1])) shl 8) or Cardinal(Trunc(ch[2])));
   end;
 end;
 
