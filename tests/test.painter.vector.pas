@@ -62,6 +62,8 @@ type
     procedure TestAKeptBitmapIsNotLeftSharingAFreedClip;
     procedure TestAKeptMaskIsOnlyTheRequestItWasBuiltFor;
     procedure TestAnEvictedMaskASavedStateSharesIsCopiedFirst;
+    procedure TestAKeptMaskOutlivesItsPainter;
+    procedure TestAMaskAnotherLivePainterHoldsIsNeitherTakenNorEvicted;
     { ---- BGRA's edge sort takes its pivots from the global Random ---- }
     procedure TestALongPathPaintsTheSameWhateverTheGlobalRandomHolds;
     procedure TestPaintingNeverRestartsTheApplicationsRandomStream;
@@ -689,6 +691,104 @@ begin
   end;
   AssertEquals('painted inside the saved clip', 255, AlphaAt(25, 50));
   AssertEquals('not outside it', 0, AlphaAt(120, 50));
+  FPainter.RestoreState;
+end;
+
+{ [P2] THE POOL OUTLIVES THE PAINTER: a mask one painter built is the next painter's,
+  and draws what building it would. }
+procedure TPainterVectorTest.TestAKeptMaskOutlivesItsPainter;
+var
+  ref: TBGRABitmap;
+  x, y, built: Integer;
+
+  procedure Paint;
+  var k: Integer;
+  begin
+    for k := 0 to 9 do
+    begin
+      FPainter.SaveState;
+      FPainter.ClipRect(Rect(13, 7, 171, 83));
+      FPainter.BeginPath;
+      FPainter.RectPath(k * 17 - 5, k * 9 - 4, 40.5, 30.25);
+      FPainter.FillPath(TyRGBA(30, k * 20, 200, 140));
+      FPainter.RestoreState;
+    end;
+  end;
+
+begin
+  TyPainterClipReuseForTest(False);
+  try
+    MakePainter(200, 100, 96);
+    Paint;
+    ref := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    FreePainter;
+  finally
+    TyPainterClipReuseForTest(True);
+  end;
+  try
+    MakePainter(200, 100, 96);
+    built := TyPainterClipMasksBuiltForTest;
+    Paint;
+    AssertEquals('the first painter builds the box once', 1, TyPainterClipMasksBuiltForTest - built);
+    FPainter.EndPaint;
+    FreePainter;
+    MakePainter(200, 100, 96);
+    built := TyPainterClipMasksBuiltForTest;
+    Paint;
+    AssertEquals('the next painter builds nothing', 0, TyPainterClipMasksBuiltForTest - built);
+    for y := 0 to 99 do
+      for x := 0 to 199 do
+        if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then
+          Fail(Format('pixel %d,%d differs from building every clip', [x, y]));
+  finally
+    ref.Free;
+  end;
+end;
+
+{ [P2] Two painters at once: the one that holds an entry (its canvas may share it) keeps
+  it -- the other builds its own, and its own first clips never push the first painter's
+  out. The frees are poisoned, so a state left on an evicted mask reads garbage. }
+procedure TPainterVectorTest.TestAMaskAnotherLivePainterHoldsIsNeitherTakenNorEvicted;
+var
+  other: TTyPainter;
+  host: TBitmap;
+  i, built: Integer;
+begin
+  TyPainterClipReuseForTest(True);
+  MakePainter(200, 100, 96);
+  FPainter.SaveState;
+  FPainter.ClipRect(Rect(0, 0, 50, 100));
+  host := TBitmap.Create;
+  other := TTyPainter.Create;
+  try
+    host.SetSize(200, 100);
+    other.BeginPaint(host.Canvas, Rect(0, 0, 200, 100), 96);
+    built := TyPainterClipMasksBuiltForTest;
+    other.SaveState;
+    other.ClipRect(Rect(0, 0, 50, 100));
+    other.RestoreState;
+    AssertEquals('the other painter builds its own', 1, TyPainterClipMasksBuiltForTest - built);
+    BeginPoison;
+    try
+      for i := 1 to 6 do
+      begin
+        other.SaveState;
+        other.ClipRect(Rect(60 + i * 10, 0, 90 + i * 10, 100));
+        other.RestoreState;
+      end;
+      FPainter.BeginPath;
+      FPainter.RectPath(0, 0, 200, 100);
+      FPainter.FillPath(Red);
+    finally
+      EndPoison;
+    end;
+    AssertEquals('painted inside the first painter''s clip', 255, AlphaAt(25, 50));
+    AssertEquals('not outside it', 0, AlphaAt(120, 50));
+    other.EndPaint;
+  finally
+    other.Free;
+    host.Free;
+  end;
   FPainter.RestoreState;
 end;
 

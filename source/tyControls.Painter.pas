@@ -78,17 +78,8 @@ type
       ctx.save/restore cannot carry it, hence the parallel stack. }
     FVecDash: TTyDashPattern;
     FVecDashStack: array of TTyDashPattern;
-    { Rect clip masks this frame has already built, by everything the mask depends on:
-      see ClipRect. Mask is a TGrayscaleMask (TObject here: the unit's interface does not
-      use BGRAGrayscaleMask). }
-    FClipMasks: array[0..3] of record
-      Mask: TObject;
-      R: TRect;
-      M: TAffineMatrix;
-      W, H: Integer;
-      AA, PC: Boolean;
-    end;
-    FClipNext: Integer;
+    { The rect clip masks it holds in the kept pool (GClipPool) are the entries that
+      name it as their owner: see ClipRect. }
     procedure ReleaseClipMasks;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
@@ -4331,7 +4322,7 @@ end;
   graph of 2,000 nodes on an 800 x 500 layer built 4,000 masks of 400 KB per frame --
   five seconds of a first frame, nearly all of it. The mask a clip gives a state with no
   clip yet depends only on the rect, the matrix it is traced under, the surface's size,
-  antialiasing and pixel centring; ClipRect keeps the masks it built (FClipMasks) and
+  antialiasing and pixel centring; ClipRect keeps the masks it built (GClipPool) and
   hands an identical request the kept one, shared, as Canvas2D's own save shares a
   parent's mask with the saved state (not owned: a later clip on the state copies it
   first, and restore does not free it). The pixels are the ones the clip would have
@@ -4343,10 +4334,52 @@ end;
   another, and the probe accepts the slot only if the three hold the surface, a TList and
   a TBGRACanvasState2D. A BGRA that lays them out otherwise is not recognised and every
   clip is built as before. }
+{ [P2] THE KEPT MASKS OUTLIVE THE PAINTER. A chart paints every frame with a new painter
+  (the static layer, the dynamic one, an animation's every tick), and every one of them
+  built its series' box masks again -- a seventh of a long line's animation frame. So the
+  masks sit in one pool for the process. An entry is owned by the painter whose canvas
+  may share it, or spare: a painter takes a spare entry (or one of its own) on a hit, and
+  evicts only those; one another live painter owns is neither handed out nor evicted.
+  When a painter lets go (EndPaint, BeginPaint*, its destructor) the states of its canvas
+  that share its entries get copies, as before, and the entries become spare -- a mask
+  larger than cClipPoolKeepPx is freed then rather than kept. Main thread only, like the
+  rest of the painter's caches. }
+const
+  cClipPool = 4;
+  cClipPoolKeepPx = 2 * 1024 * 1024;
+
 var
   GStateSlot: Integer = -2;   // -2: not probed yet; -1: layout not recognised
   GClipMasksBuilt: Integer = 0;
   GClipReuseOff: Boolean = False;
+  { Mask is a TGrayscaleMask (TObject: the interface does not use BGRAGrayscaleMask) }
+  GClipPool: array[0..cClipPool - 1] of record
+    Mask: TObject;
+    R: TRect;
+    M: TAffineMatrix;
+    W, H: Integer;
+    AA, PC: Boolean;
+    Owner: TObject;
+  end;
+  GClipPoolNext: Integer = 0;
+
+procedure ClipPoolFreeAll;
+var i: Integer;
+begin
+  for i := 0 to cClipPool - 1 do
+  begin
+    FreeAndNil(GClipPool[i].Mask);
+    GClipPool[i].Owner := nil;
+  end;
+end;
+
+{ the spare entries freed: a switch of the reuse starts from an empty pool }
+procedure ClipPoolDropSpares;
+var i: Integer;
+begin
+  for i := 0 to cClipPool - 1 do
+    if GClipPool[i].Owner = nil then FreeAndNil(GClipPool[i].Mask);
+end;
 
 function TyPainterClipMasksBuiltForTest: Integer;
 begin
@@ -4382,6 +4415,7 @@ end;
 procedure TyPainterClipReuseForTest(AOn: Boolean);
 begin
   GClipReuseOff := not AOn;
+  ClipPoolDropSpares;
 end;
 
 function CanvasStateSlot(ACtx: TBGRACanvas2D): Integer;
@@ -4451,14 +4485,16 @@ procedure TTyPainter.ReleaseClipMasks;
 var
   i: Integer;
 begin
-  for i := 0 to High(FClipMasks) do
-    if FClipMasks[i].Mask <> nil then
-    begin
-      if FBmp <> nil then
-        CanvasDisownMask(FBmp.Canvas2D, TGrayscaleMask(FClipMasks[i].Mask));
-      FreeAndNil(FClipMasks[i].Mask);
-    end;
-  FClipNext := 0;
+  for i := 0 to cClipPool - 1 do
+    with GClipPool[i] do
+      if Owner = Self then
+      begin
+        Owner := nil;
+        if Mask = nil then Continue;
+        if FBmp <> nil then
+          CanvasDisownMask(FBmp.Canvas2D, TGrayscaleMask(Mask));
+        if Int64(W) * H > cClipPoolKeepPx then FreeAndNil(Mask);
+      end;
 end;
 
 destructor TTyPainter.Destroy;
@@ -4472,7 +4508,7 @@ var
   ctx: TBGRACanvas2D;
   st: TBGRACanvasState2D;
   cur: TAffineMatrix;
-  i: Integer;
+  i, slot: Integer;
   fresh: Boolean;
 begin
   if FBmp = nil then Exit;
@@ -4484,12 +4520,14 @@ begin
   if fresh then
   begin
     cur := ctx.matrix;
-    for i := 0 to High(FClipMasks) do
-      with FClipMasks[i] do
-        if (Mask <> nil) and CompareMem(@R, @ARect, SizeOf(TRect))
+    for i := 0 to cClipPool - 1 do
+      with GClipPool[i] do
+        if (Mask <> nil) and ((Owner = nil) or (Owner = Self))
+          and CompareMem(@R, @ARect, SizeOf(TRect))
           and CompareMem(@M, @cur, SizeOf(cur)) and (W = FBmp.Width) and (H = FBmp.Height)
           and (AA = ctx.antialiasing) and (PC = ctx.pixelCenteredCoordinates) then
         begin
+          Owner := Self;
           { what the clip below leaves behind besides the mask }
           ctx.fillMode := fmWinding;
           ctx.beginPath;
@@ -4504,26 +4542,39 @@ begin
   ctx.fillMode := fmWinding;
   CtxClip(ctx);
   ctx.beginPath;   // leave no half-built path behind for the caller to trip on
-  if fresh and (st.clipMaskReadOnly <> nil) then
-    with FClipMasks[FClipNext] do
+  if not (fresh and (st.clipMaskReadOnly <> nil)) then Exit;
+  Inc(GClipMasksBuilt);
+  { a slot that is spare or this painter's own, round the pool from where the last
+    one went; none -- every entry another live painter's -- keeps nothing }
+  slot := -1;
+  for i := 0 to cClipPool - 1 do
+    if (GClipPool[(GClipPoolNext + i) mod cClipPool].Owner = nil)
+      or (GClipPool[(GClipPoolNext + i) mod cClipPool].Owner = Self) then
     begin
-      Inc(GClipMasksBuilt);
-      if Mask <> nil then
-      begin
-        CanvasDisownMask(ctx, TGrayscaleMask(Mask));
-        FreeAndNil(Mask);
-      end;
-      Mask := st.clipMaskReadOnly.Duplicate as TGrayscaleMask;
-      R := ARect;
-      M := cur;
-      W := FBmp.Width;
-      H := FBmp.Height;
-      AA := ctx.antialiasing;
-      PC := ctx.pixelCenteredCoordinates;
-      { the state shares the kept copy, as a hit would }
-      st.SetClipMask(TGrayscaleMask(Mask), False);
-      FClipNext := (FClipNext + 1) mod Length(FClipMasks);
+      slot := (GClipPoolNext + i) mod cClipPool;
+      Break;
     end;
+  if slot < 0 then Exit;
+  with GClipPool[slot] do
+  begin
+    if Mask <> nil then
+    begin
+      { a spare one nobody shares; this painter's own its canvas may }
+      if Owner = Self then CanvasDisownMask(ctx, TGrayscaleMask(Mask));
+      FreeAndNil(Mask);
+    end;
+    Mask := st.clipMaskReadOnly.Duplicate as TGrayscaleMask;
+    R := ARect;
+    M := cur;
+    W := FBmp.Width;
+    H := FBmp.Height;
+    AA := ctx.antialiasing;
+    PC := ctx.pixelCenteredCoordinates;
+    Owner := Self;
+    { the state shares the kept copy, as a hit would }
+    st.SetClipMask(TGrayscaleMask(Mask), False);
+  end;
+  GClipPoolNext := (slot + 1) mod cClipPool;
 end;
 
 procedure TTyPainter.SetElementAlpha(AAlpha: Double);
@@ -4593,5 +4644,8 @@ finalization
   TyInvalidateTextMeasureCache;   // frees the boxed block measurements
   FreeAndNil(GBlockCache);
   FreeAndNil(GRenderCache);
+  { a painter still alive at exit would have let go of its entries already: the
+    pool's masks are no state's now }
+  ClipPoolFreeAll;
 
 end.
