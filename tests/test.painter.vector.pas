@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, test.danglingrefs;
+  BGRACanvas2D, tyControls.Types, tyControls.Painter, test.danglingrefs;
 type
   TPainterVectorTest = class(TTestCase)
   private
@@ -60,6 +60,8 @@ type
     procedure TestRestoreStateRestoresTheClip;
     procedure TestARepeatedClipIsBuiltOnceAndPaintsTheSame;
     procedure TestAKeptBitmapIsNotLeftSharingAFreedClip;
+    procedure TestAKeptMaskIsOnlyTheRequestItWasBuiltFor;
+    procedure TestAnEvictedMaskASavedStateSharesIsCopiedFirst;
     procedure TestRestoreStateRestoresTheDash;
     procedure TestRestoreStateRestoresElementAlpha;
     procedure TestElementAlphaDimsTheFill;
@@ -520,6 +522,10 @@ begin
       end;
       bmp.Canvas2D.fillStyle(BGRA(255, 0, 0, 255));
       bmp.Canvas2D.fillRect(0, 0, 100, 60);
+      { and the saved state under it, which shared the kept mask too }
+      bmp.Canvas2D.restore;
+      bmp.Canvas2D.fillStyle(BGRA(0, 0, 255, 255));
+      bmp.Canvas2D.fillRect(0, 0, 100, 60);
       EndPoison;
     except
       EndPoison;
@@ -531,6 +537,156 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ The key of a kept mask is everything the mask depends on. The test above varies the rect
+  and, now and then, the transform -- but its translated clips happened to fall where a
+  kept untranslated one made no visible difference. Here each request is made twice in a
+  row, the second time with ONE input changed, and the fill after each covers the whole
+  surface, so a mask handed back for the wrong request shows: another transform, another
+  antialiasing, other pixel centring, a surface resized in the frame. And a hit leaves the
+  canvas as building the clip leaves it: the fill rule set to nonzero winding (a caller
+  filling on the canvas directly after a clip would otherwise fill by the rule it had
+  set before). Each frame is compared pixel for pixel with the same frame built with the
+  reuse off. }
+procedure TPainterVectorTest.TestAKeptMaskIsOnlyTheRequestItWasBuiltFor;
+var
+  ref, refBefore, before: TBGRABitmap;
+  x, y: Integer;
+
+  { ABefore: the frame as it stands before the resize, which starts the surface over }
+  procedure Paint(out ABefore: TBGRABitmap);
+  var
+    ctx: TBGRACanvas2D;
+
+    procedure ClipAndFill(AColor: TTyColor);
+    begin
+      FPainter.ClipRect(Rect(20, 10, 130, 70));
+      FPainter.BeginPath;
+      FPainter.RectPath(0, 0, 300, 150);
+      FPainter.FillPath(AColor);
+    end;
+
+  begin
+    ctx := FPainter.Bitmap.Canvas2D;
+    FPainter.SaveState;
+    ClipAndFill(TyRGBA(200, 0, 0, 120));
+    FPainter.RestoreState;
+    { a hit leaves nonzero winding: two overlapping rects filled on the canvas itself }
+    FPainter.SaveState;
+    ctx.fillMode := fmAlternate;
+    FPainter.ClipRect(Rect(20, 10, 130, 70));
+    ctx.beginPath;
+    ctx.rect(10, 20, 80, 30);
+    ctx.rect(40, 30, 80, 30);
+    ctx.fillStyle(BGRA(120, 0, 160, 200));
+    ctx.fill;
+    FPainter.RestoreState;
+    { another transform }
+    FPainter.SaveState;
+    FPainter.Translate(13, 7);
+    ClipAndFill(TyRGBA(0, 160, 0, 120));
+    FPainter.RestoreState;
+    { another antialiasing, on a fractional transform so the edges differ }
+    FPainter.SaveState;
+    FPainter.Translate(0.3, 0.6);
+    ClipAndFill(TyRGBA(0, 0, 200, 90));
+    FPainter.RestoreState;
+    ctx.antialiasing := False;
+    FPainter.SaveState;
+    FPainter.Translate(0.3, 0.6);
+    ClipAndFill(TyRGBA(200, 200, 0, 90));
+    FPainter.RestoreState;
+    ctx.antialiasing := True;
+    { other pixel centring }
+    ctx.pixelCenteredCoordinates := not ctx.pixelCenteredCoordinates;
+    FPainter.SaveState;
+    FPainter.Translate(0.3, 0.6);
+    ClipAndFill(TyRGBA(0, 200, 200, 90));
+    FPainter.RestoreState;
+    ctx.pixelCenteredCoordinates := not ctx.pixelCenteredCoordinates;
+    { the surface resized inside the frame: a mask the old size is no clip for it }
+    FPainter.SaveState;
+    ClipAndFill(TyRGBA(60, 60, 200, 60));
+    FPainter.RestoreState;
+    ABefore := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    FPainter.Bitmap.SetSize(300, 150);
+    FPainter.Bitmap.Fill(BGRAPixelTransparent);
+    FPainter.SaveState;
+    ClipAndFill(TyRGBA(90, 90, 90, 200));
+    FPainter.RestoreState;
+  end;
+
+begin
+  TyPainterClipReuseForTest(False);
+  try
+    MakePainter(200, 100, 96);
+    Paint(refBefore);
+    ref := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    FreePainter;
+  finally
+    TyPainterClipReuseForTest(True);
+  end;
+  before := nil;
+  try
+    MakePainter(200, 100, 96);
+    Paint(before);
+    for y := 0 to refBefore.Height - 1 do
+      for x := 0 to refBefore.Width - 1 do
+        if before.GetPixel(x, y) <> refBefore.GetPixel(x, y) then
+          Fail(Format('pixel %d,%d differs from building every clip', [x, y]));
+    AssertEquals('the same size', ref.Width, FPainter.Bitmap.Width);
+    for y := 0 to ref.Height - 1 do
+      for x := 0 to ref.Width - 1 do
+        if FPainter.Bitmap.GetPixel(x, y) <> ref.GetPixel(x, y) then
+          Fail(Format('resized: pixel %d,%d differs from building every clip', [x, y]));
+  finally
+    ref.Free;
+    refBefore.Free;
+    before.Free;
+  end;
+end;
+
+{ A kept mask a saved state still shares outlives the painter's slot for it only as a
+  copy. The state that clipped is saved, the canvas's own unclip lets the current state
+  go of the clip (so later clips are first clips again), four more first clips push the
+  kept mask out of its slot -- and the saved state, restored, still clips as it did. The
+  frees are poisoned, so a state left pointing at the evicted mask reads garbage. }
+procedure TPainterVectorTest.TestAnEvictedMaskASavedStateSharesIsCopiedFirst;
+var
+  ctx: TBGRACanvas2D;
+  i, built: Integer;
+begin
+  MakePainter(200, 100, 96);
+  ctx := FPainter.Bitmap.Canvas2D;
+  FPainter.SaveState;
+  FPainter.ClipRect(Rect(0, 0, 50, 100));
+  FPainter.SaveState;
+  ctx.beginPath;
+  ctx.rect(0, 0, 200, 100);
+  ctx.unclip;
+  ctx.beginPath;
+  built := TyPainterClipMasksBuiltForTest;
+  BeginPoison;
+  try
+    for i := 1 to 4 do
+    begin
+      FPainter.SaveState;
+      FPainter.ClipRect(Rect(60 + i * 10, 0, 90 + i * 10, 100));
+      FPainter.RestoreState;
+    end;
+    AssertEquals('four first clips built, the oldest kept mask pushed out', 4,
+      TyPainterClipMasksBuiltForTest - built);
+    FPainter.RestoreState;
+    FPainter.BeginPath;
+    FPainter.RectPath(0, 0, 200, 100);
+    FPainter.FillPath(Red);
+  finally
+    EndPoison;
+  end;
+  AssertEquals('painted inside the saved clip', 255, AlphaAt(25, 50));
+  AssertEquals('not outside it', 0, AlphaAt(120, 50));
+  FPainter.RestoreState;
 end;
 
 procedure TPainterVectorTest.TestRestoreStateRestoresTheDash;
