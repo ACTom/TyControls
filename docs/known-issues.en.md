@@ -35,6 +35,12 @@ With the desktop scaled by a whole factor such as 200%, the interface looks soft
 
 **Recommendation:** keep the desktop scaling at 100% and enlarge the interface with a higher font DPI instead.
 
+## macOS (compiling the library from source)
+
+A project that puts `source/` on its own search path and asks for DWARF3 debug information does not build on macOS: `tyControls.CocoaWS.pas ... Internal error 200609171`. This is an FPC 3.2 bug: its DWARF3 writer does not handle Objective-C classes. Projects that use the package are not affected.
+
+**Recommendation:** use the `tycontrols` package, or set the project's debug information to DWARF2 or Automatic.
+
 ## Windows (several monitors at different scaling)
 
 A form dragged onto a monitor with different scaling lays itself out again for that monitor's DPI. Popups (dropdown lists, menus, hint balloons) do not follow: they are drawn at the DPI of the form they belong to, and come out too large or too small when they open on the other monitor.
