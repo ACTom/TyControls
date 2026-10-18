@@ -228,6 +228,11 @@ type
     HdGen: Integer;
     HdSeries, HdRow: Integer;
     HdEdge: Boolean;
+    { [F2b] with HdKind 1: the item's second dispatcher (a gauge's progress
+      arc), a select dispatcher never flagged selected.
+      [F2b] HdKind 16: a row of a large batch -- the row its handler found
+      (HdSeries, HdRow inner): a select dispatcher, no highlight one }
+    HdPeer: Boolean;
     HdName: string;
     HdLegendSeries: Boolean;
   end;
@@ -272,7 +277,16 @@ type
       node's onHoverStateChange (TreeView.ts:464-477). A TREEMAP: a leaf's
       node group dispatches (its content hosts, its background is a part),
       a parent's background alone. }
-    sskGraph, sskTree, sskTreemap);
+    sskGraph, sskTree, sskTreemap,
+    { [F2b] a gauge: its pointer the row's host (the item graphic element:
+      the actions and the selection reach it), its progress arc a PEER --
+      a highDownDispatcher of its own that blurSeries reaches too; both
+      with z2EmphasisLift 0 (GaugeView.ts:526-574) }
+    sskGauge,
+    { [F2b] a radar item: its polyline the host, its polygon and symbols
+      parts with states of their own, one dispatcher for the item group
+      (RadarView.ts:181-268) }
+    sskRadar);
   TTyStNodeArray = array of TJSONObject;
 
 const
@@ -325,6 +339,22 @@ type
     { getComponentStates(series).isBlured: blurSeries reached it, so the next
       allLeaveBlur walks it [Batch 90] }
     IsBlured: Boolean;
+    { A SECOND DISPATCHER OF THE SAME DATA ITEM [F2b]: a gauge's progress
+      arc beside its pointer -- its own flags, reached by its own hover and
+      by blurSeries, never by the actions or the selection (only the
+      pointer is the item's graphic element); by raw index, its round caps
+      following it }
+    PeerRows: array of TTyStItem;
+    PeerHostIdx: TTyIntegerArray;
+    PeerFollowIdx: array of TTyIntegerArray;
+    { THE SERIES' MARKERS [F2b]: every markPoint / markLine / markArea
+      element whose host this series is, each with a blur state
+      (MarkerView.toggleBlurSeries: they enter blur with the series and
+      leave it in allLeaveBlur); MarkPart names it as the oracle does
+      (mp0, ml0, ml0.from, ma0, ...#label) }
+    Marks: array of TTyStElement;
+    MarkIdx: TTyIntegerArray;
+    MarkPart: TTyStringArray;
   end;
 
   { WHAT A notMerge OPTION CARRIES OVER of a series' state records
@@ -3013,11 +3043,25 @@ type
     procedure StDeclareLine(ASlot: Integer; AList: TTyPaintList);
     procedure StDeclareCandle(ASlot, ARaw: Integer;
       const ANodes: array of TJSONObject; var AHost: TTyStElement);
+    { [F2b] a gauge's progress arc, the row's second dispatcher }
+    procedure StDeclarePeer(ASlot, ARaw: Integer; AList: TTyPaintList);
+    { [F2b] the series' marker elements: their blur state, their flag the
+      series' isBlured (MarkerView.toggleBlurSeries) }
+    procedure StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
+    function StMarkNode(ASeriesIndex: Integer; AKind: TTyChartTargetKind): TJSONObject;
+    { the marks' flags from the series' isBlured, then their lists: True
+      when a list changed }
+    function StApplyMarks(ASeriesIndex: Integer): Boolean;
+    { after the markers are built: every marker element by its host series,
+      its state declared, applied and written into the list }
+    procedure StSyncMarks(AList: TTyPaintList);
     procedure StWrite(AList: TTyPaintList);
     { upstream's frame: every flag that changed since the last one becomes a
       state list. True when an element changed. }
     function StApplyChanged: Boolean;
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+    { [F2b] the row's second dispatcher (a gauge's arc), nil for none }
+    function StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
     { ---- focus and blur [Batch 90] ---- }
     { a line's polyline state, -1 for any other series; and setting it (the
       area follows the polyline, _changePolyState) }
@@ -3555,6 +3599,13 @@ type
     function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
       out AItem: TTyStItem): Boolean;
+    { [F2b] a gauge's progress arc, by inner row }
+    function PeerStates(ASeriesIndex, ADataIndex: Integer;
+      out AItem: TTyStItem): Boolean;
+    { [F2b] a marker element of series ASeriesIndex by its name (mp0,
+      ml0.from, ma0#label ...): its state record and its index in the list }
+    function MarkerStates(ASeriesIndex: Integer; const APart: string;
+      out AEl: TTyStElement; out AListIndex: Integer): Boolean;
     { a line's polyline and area }
     function LineStates(ASeriesIndex: Integer; out ARun, AArea: TTyStItem): Boolean;
     { THE POINTER, as the mouse handlers feed it: device px on this control.
@@ -3634,6 +3685,12 @@ type
       inner row ARow, the part 'host', 'label', 'guide' (the row's), 'poly'
       or 'area' (a line's, ARow ignored); nil when none is bound }
     function AnimStateProxy(ASeries, ARow: Integer; const APart: string): TTyChartAnimProxy;
+    { [F2b] the list index of that part (AnimStateProxy's), -1 for none }
+    function StatePartIndex(ASeries, ARow: Integer; const APart: string): Integer;
+    { [F2b] that part's state record: its flags, lists, rest and current
+      values }
+    function StatePartRecord(ASeries, ARow: Integer; const APart: string;
+      out AEl: TTyStElement): Boolean;
     { THE AXES' groupTransition [Batch 96]: the proxy of the leaf AAnid
       ('label_20', 'ticks_5', 'line_10', 'line') of axis AAxisKey ('xAxis0',
       'yAxis1'); nil when there is none -- a full update makes them }
@@ -20217,6 +20274,19 @@ begin
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.AreaOpacity := Max(Double(0), Min(Double(1), d.AsFloat));
   end;
+  { a state's areaStyle shows the polygon in that state [F2b] }
+  for k := 0 to 2 do
+  begin
+    case k of
+      0: d := node.Find('emphasis');
+      1: d := node.Find('select');
+    else
+      d := node.Find('blur');
+    end;
+    if (d is TJSONObject) and (TJSONObject(d).Find('areaStyle') <> nil)
+      and (TJSONObject(d).Find('areaStyle').JSONType <> jtNull) then
+      Result.StateArea := True;
+  end;
 end;
 
 procedure TTyAdvanceChart.SolveGauges(APPI: Integer);
@@ -22906,6 +22976,8 @@ begin
     { MARKERS arrive as answers too: their labels are placed by Line.ts's own
       table, not by the expansion }
     Inc(drawn, BuildMarkers(AMeasurer, list));
+    { the markers' blur, with their series' [F2b] }
+    StSyncMarks(list);
     if not ViewHidden(cvLegend) then
     begin
       n := BuildLegends(APPI, list, AMeasurer);
@@ -25703,7 +25775,10 @@ begin
       begin
         Result := SeriesEventTarget(TyChartDatum(d.SeriesIndex, k,
           FStores[slot].GetRawIndex(k)), idx);
-        Result.HdKind := 0;
+        { a select dispatcher, no highlight one [F2b] }
+        Result.HdKind := 16;
+        Result.HdSeries := d.SeriesIndex;
+        Result.HdRow := k;
       end;
       Exit;
     end;
@@ -25716,6 +25791,8 @@ begin
           Result.HdSeries := d.SeriesIndex;
           Result.HdRow := d.DataIndex;
           Result.HdEdge := d.IsEdge;
+          { a gauge's arc is a dispatcher of its own [F2b] }
+          Result.HdPeer := el.Anim.Role = carGaugeProgress;
           if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
         end;
       ctkMarkPoint, ctkMarkLine, ctkMarkArea:
@@ -26326,6 +26403,24 @@ begin
   TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
 end;
 
+{ A MARKER ELEMENT'S NAME [F2b], as states-misc.js names it: mp<k> a
+  markPoint's symbol, ml<k> a markLine's segment and ml<k>.from / .to its
+  end symbols, ma<k> a markArea's polygon; '#label' after the item's name for
+  its words. k is the marker's data index. }
+function StMarkPartOf(const AEl: TTyChartElement): string;
+begin
+  case AEl.Datum.Kind of
+    ctkMarkPoint: Result := 'mp';
+    ctkMarkLine: Result := 'ml';
+  else
+    Result := 'ma';
+  end;
+  Result := Result + IntToStr(AEl.Datum.DataIndex);
+  if AEl.Caption.FontSizeLogical > 0 then Result := Result + '#label'
+  else if AEl.Anim.Role = carMarkLineFrom then Result := Result + '.from'
+  else if AEl.Anim.Role = carMarkLineTo then Result := Result + '.to';
+end;
+
 procedure StShiftShape(var AShape: TTyChartShape; ADX, ADY: Double);
 var i: Integer;
 begin
@@ -26506,15 +26601,51 @@ begin
     AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
 
+{ AN ITEM'S emphasis.label.show AS THE MODEL HOLDS IT [F2b]: the first
+  node that writes it, a data item that writes a label.show of its own
+  having it copied (Series.fillDataTextStyle's defaultEmphasis); the series'
+  default its type's (ADefault: a funnel's true) or else its normal show
+  (mergeDefaultAndTheme's defaultEmphasis -- the same as normal, so no
+  change). AHas False when nothing says. }
+function StEmphLabelShow(const ANodes: array of TJSONObject; ADefaultTrue: Boolean;
+  out AHas: Boolean): Boolean;
+var i: Integer; d: TJSONData;
+begin
+  Result := False;
+  AHas := False;
+  for i := 0 to High(ANodes) do
+  begin
+    if ANodes[i] = nil then Continue;
+    d := TyStFind([ANodes[i]], ['emphasis', 'label', 'show']);
+    if d <> nil then
+    begin
+      AHas := True;
+      Exit(TyStReadBool([ANodes[i]], ['emphasis', 'label', 'show'], AHas));
+    end;
+    { a data item's own label.show is its emphasis one too }
+    if (i = 0) and (High(ANodes) > 0) and (TyStFind([ANodes[i]], ['label', 'show']) <> nil) then
+      Exit(TyStReadBool([ANodes[i]], ['label', 'show'], AHas));
+  end;
+  if ADefaultTrue then
+  begin
+    AHas := True;
+    Result := True;
+  end;
+end;
+
 function TTyAdvanceChart.StKindOf(ASlot: Integer): TTyStKind;
 var t: string;
 begin
   Result := sskNone;
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
-  { a radar's polygons are drawn by a builder of its own, still on the
-    overlay; a calendar's scatter and heatmap are the cartesian ones'
+  { a radar's items, drawn by a builder of its own [F2b; on the overlay
+    before]; a calendar's scatter and heatmap are the cartesian ones'
     elements [Batch 90] }
-  if FBindings[ASlot].RadarIndex >= 0 then Exit;
+  if FBindings[ASlot].RadarIndex >= 0 then
+  begin
+    if FBindings[ASlot].SeriesType = 'radar' then Result := sskRadar;
+    Exit;
+  end;
   t := FBindings[ASlot].SeriesType;
   if t = 'bar' then Result := sskBar
   else if t = TyPieSeriesTypeName then Result := sskPie
@@ -26547,7 +26678,10 @@ begin
   else if (t = TyTreeSeriesTypeName) and (ASlot <= High(FTrees)) and FTrees[ASlot].Valid then
     Result := sskTree
   else if (t = TyTreemapSeriesTypeName) and (ASlot <= High(FTreemaps))
-    and FTreemaps[ASlot].Valid then Result := sskTreemap;
+    and FTreemaps[ASlot].Valid then Result := sskTreemap
+  { a gauge's pointers and arcs [F2b; on the overlay before] }
+  else if t = TyGaugeSeriesTypeName then
+    Result := sskGauge;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -26632,9 +26766,9 @@ procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
 var
   blk: string;
   s, idx, labIdx: Integer;
-  lineShow, labRest, labIgn, ownLine: Boolean;
+  lineShow, labRest, labIgn, ownLine, emphLine, seriesLine, labShow, emphLab: Boolean;
   item: PTyStItem;
-  host, cap, guide: TTyChartElement;
+  host, cap, guide, part: TTyChartElement;
   nodes: TTyStNodeArray;
   scale, off, mid, dx, dy, ss, half: Double;
   has, bolder, disabled, was, normalShow, stShow, doScale: Boolean;
@@ -26680,6 +26814,8 @@ begin
   { a symbol (a line's, a scatter's): the group dispatches, the path draws
     [Batch 90] }
   item^.HasGroup := FSt[s].Kind in [sskSymbol, sskGraph, sskTree];
+  { a gauge's pointer: z2EmphasisLift 0 [F2b] }
+  item^.Host.NoEmphLift := FSt[s].Kind = sskGauge;
   { emphasis.disabled: no hover dispatcher and no default proxy }
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
@@ -26707,7 +26843,10 @@ begin
       TyStSetColor(base, stkStroke, StPrimaryInk);
   end;
   { a lines row's: its lineStyle's (Line._updateCommonStl) [Batch 121] }
-  if FSt[s].Kind in [sskLines, sskParallel] then blk := 'lineStyle' else blk := 'itemStyle';
+  { [F2b] a radar's polyline: setStatesStylesFromModel(polyline, itemModel,
+    'lineStyle') }
+  if FSt[s].Kind in [sskLines, sskParallel, sskRadar] then blk := 'lineStyle'
+  else blk := 'itemStyle';
   item^.Host.Decl[stnSelect] := TyStOverlay(base,
     TyStReadStyle(nodes, 'select', blk, bolder));
   item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', blk, bolder);
@@ -26838,6 +26977,24 @@ begin
           TyStSetNum(obj, stkOpacity, item^.Host.Decl[n].Num[stkOpacity]);
         item^.Parts[k].Decl[n] := obj;
       end;
+    { A RADAR ITEM'S OTHER PATHS [F2b] (RadarView.ts:212-229): the polygon
+      reads areaStyle and every state its own ignore -- hidden only where
+      the polygon is at rest and the state's areaStyle is written nowhere
+      (item, series); a symbol reads itemStyle }
+    if FSt[s].Kind = sskRadar then
+    begin
+      part := AList.Element(FSt[s].PartIdx[ARaw][k]);
+      for n := Low(TTyStName) to High(TTyStName) do
+        if part.Anim.Role = carRadarArea then
+        begin
+          obj := TyStReadStyle(nodes, cStNames[n], 'areaStyle', bolder);
+          TyStSetNum(obj, stkIgnore, Ord(part.Ignore
+            and (TyStFind(nodes, [cStNames[n], 'areaStyle']) = nil)));
+          item^.Parts[k].Decl[n] := obj;
+        end
+        else
+          item^.Parts[k].Decl[n] := TyStReadStyle(nodes, cStNames[n], 'itemStyle', bolder);
+    end;
     if not was then
     begin
       item^.Parts[k].Cur := item^.Parts[k].Rest;
@@ -26909,18 +27066,18 @@ begin
       { ignore = !show only when the state's show differs from the normal one }
       stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
       { a themeRiver's model shows the emphasis label unless told
-        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118]; a graph's
-        too (GraphSeries.ts emphasis.label.show) [F2a] }
-      if (n = stnEmphasis) and (FSt[s].Kind = sskRiver) and not has then
-      begin
-        stShow := True;
-        has := True;
-      end;
-      if (n = stnEmphasis) and (FSt[s].Kind = sskGraph) then
+        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118]; a funnel's
+        too (FunnelSeries.defaultOption) [F2b]; a graph's by
+        GraphSeries.ts emphasis.label.show [F2a] }
+      if (n = stnEmphasis) and (FSt[s].Kind in [sskRiver, sskFunnel]) then
+        stShow := StEmphLabelShow(nodes, True, has)
+      else if (n = stnEmphasis) and (FSt[s].Kind = sskGraph) then
       begin
         stShow := GraphEmLabelShow(nodes[0], nodes[1], nodes[2]);
         has := True;
-      end;
+      end
+      else if n = stnEmphasis then
+        stShow := StEmphLabelShow(nodes, False, has);
       if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
       { hideOverlap's hideEl: a label it hid shows again under emphasis,
         unless that state already says (LabelLayoutHelper.ts hideOverlap)
@@ -26979,6 +27136,29 @@ begin
     ownLine := FSt[s].Kind in [sskPie, sskFunnel];
     lineShow := TyStReadBool(nodes, ['labelLine', 'show'], has);
     if not has then lineShow := ownLine;
+    { PieSeries / FunnelSeries _defaultLabelLine [F2b]: the series'
+      labelLine.show is ANDed with its label.show, and the emphasis one --
+      the normal one unless written -- with its emphasis label.show }
+    emphLine := lineShow;
+    if ownLine then
+    begin
+      seriesLine := TyStReadBool([nodes[High(nodes)]], ['labelLine', 'show'], has);
+      if not has then seriesLine := True;
+      emphLine := TyStReadBool([nodes[High(nodes)]], ['emphasis', 'labelLine', 'show'], has);
+      if not has then emphLine := seriesLine;
+      labShow := TyStReadBool([nodes[High(nodes)]], ['label', 'show'], has);
+      if not has then labShow := True;
+      { the series' emphasis label.show: written, the funnel's default, else
+        the normal one (defaultEmphasis) }
+      emphLab := StEmphLabelShow([nodes[High(nodes)]], FSt[s].Kind = sskFunnel, has);
+      if not has then emphLab := labShow;
+      emphLine := emphLine and emphLab;
+      seriesLine := seriesLine and labShow;
+      lineShow := TyStReadBool([nodes[0]], ['labelLine', 'show'], has);
+      if not has then lineShow := seriesLine;
+      stShow := TyStReadBool([nodes[0]], ['emphasis', 'labelLine', 'show'], has);
+      if has then emphLine := stShow;
+    end;
     labIdx := FSt[s].LabelIdx[ARaw];
     if labIdx >= 0 then
     begin
@@ -26995,6 +27175,7 @@ begin
       obj := TyStNoObject;
       stShow := TyStReadBool(nodes, [cStNames[n], 'labelLine', 'show'], has);
       if not has then stShow := lineShow;
+      if ownLine and (n = stnEmphasis) then stShow := emphLine;
       if item^.Label_.Exists and item^.Label_.Decl[n].Has[stkIgnore] then
         labIgn := item^.Label_.Decl[n].Num[stkIgnore] <> 0
       else
@@ -27078,6 +27259,204 @@ begin
   end;
   if not AHost.Decl[stnEmphasis].Has[stkLineWidth] then
     TyStSetNum(AHost.Decl[stnEmphasis], stkLineWidth, 2);
+end;
+
+{ A GAUGE'S PROGRESS ARC [F2b]: setStatesStylesFromModel(progress,
+  itemModel) and toggleHoverEmphasis with the item's emphasis, z2EmphasisLift
+  0 (GaugeView.ts:566-573) -- the pointer's own states, on a dispatcher of
+  its own. A render makes it anew: no flag survives a full update. }
+procedure TTyAdvanceChart.StDeclarePeer(ASlot, ARaw: Integer; AList: TTyPaintList);
+var
+  s: Integer;
+  item: PTyStItem;
+  nodes: TTyStNodeArray;
+  has, bolder, was: Boolean;
+  n: TTyStName;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].PeerRows[ARaw];
+  nodes := StNodes(s, ARaw);
+  was := item^.Host.Exists;
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  item^.Host.NoEmphLift := True;
+  item^.Host.Proxy := not TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  for n := Low(TTyStName) to High(TTyStName) do
+  begin
+    item^.Host.HasState[n] := True;
+    item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'itemStyle', bolder);
+  end;
+  item^.Host.Rest := StRestOf(AList.Element(FSt[s].PeerHostIdx[ARaw]));
+  item^.Label_ := Default(TTyStElement);
+  item^.Guide := Default(TTyStElement);
+  if not was or FStRerender then
+  begin
+    TyStClearItem(item^);
+    item^.Host.Cur := item^.Host.Rest;
+    item^.Host.States := [];
+    item^.Host.HoverState := TyStHoverNormal;
+    item^.Host.HighByOuter := 0;
+    item^.Host.Selected := False;
+  end;
+  TyStApplyItem(item^);
+end;
+
+function TTyAdvanceChart.StMarkNode(ASeriesIndex: Integer;
+  AKind: TTyChartTargetKind): TJSONObject;
+var s: TJSONObject; d: TJSONData;
+begin
+  Result := nil;
+  s := StSeriesNode(ASeriesIndex);
+  if s = nil then Exit;
+  case AKind of
+    ctkMarkPoint: d := s.Find('markPoint');
+    ctkMarkLine: d := s.Find('markLine');
+  else
+    d := s.Find('markArea');
+  end;
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ THE MARKERS OF A SERIES [F2b] (MarkerView.ts:77-92, util/states.ts):
+  blurSeries hands the series it blurred to every component view, and a
+  marker view enters blur on all its elements of those series -- the
+  markPoint's Symbol (its path and its words), the markLine's Line (the
+  segment, the end symbols, the words), the markArea's polygon and words;
+  allLeaveBlur takes them out again. Each element's blur state is its
+  model's (`blur.itemStyle`, a markLine's `blur.lineStyle`, the end symbols
+  taking that line's stroke and opacity, `blur.label`), under the default
+  proxy's tenth of its opacity -- unless the marker's emphasis is disabled:
+  no proxy, the declared state alone. Markers have no stateTransition
+  (MarkerModel.isAnimationEnabled is false here): the list is written. Their
+  own hover and the select / emphasis states stay as they were. }
+procedure TTyAdvanceChart.StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
+var
+  k: Integer;
+  el: TTyChartElement;
+  node: TJSONObject;
+  nodes: array[0..0] of TJSONObject;
+  has, bolder, proxy: Boolean;
+  line, obj: TTyStObject;
+  ss: Double;
+  m: ^TTyStElement;
+begin
+  SetLength(FSt[ASeriesIndex].Marks, Length(FSt[ASeriesIndex].MarkIdx));
+  for k := 0 to High(FSt[ASeriesIndex].MarkIdx) do
+  begin
+    el := AList.Element(FSt[ASeriesIndex].MarkIdx[k]);
+    node := StMarkNode(ASeriesIndex, el.Datum.Kind);
+    nodes[0] := node;
+    proxy := not TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+    m := @FSt[ASeriesIndex].Marks[k];
+    begin
+      m^ := Default(TTyStElement);
+      m^.Exists := True;
+      m^.Proxy := proxy;
+      m^.HasState[stnBlur] := True;
+      obj := TyStNoObject;
+      if el.Caption.FontSizeLogical > 0 then
+      begin
+        m^.IsPath := False;
+        m^.Rest := StLabelRestOf(el);
+        ss := TyStReadNumber(nodes, ['blur', 'label', 'opacity'], has);
+        if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
+      end
+      else
+      begin
+        m^.IsPath := True;
+        m^.Rest := StRestOf(el);
+        if el.Datum.Kind = ctkMarkLine then
+        begin
+          line := TyStReadStyle(nodes, 'blur', 'lineStyle', bolder);
+          if el.Anim.Role in [carMarkLineFrom, carMarkLineTo] then
+          begin
+            { Line.ts:267-290: the line's stroke as the symbol's fill (its
+              stroke for an empty one), the line's opacity }
+            if line.Has[stkStroke] then
+            begin
+              if el.Style.HasFill then
+              begin
+                obj.Has[stkFill] := True;
+                obj.Color[stkFill] := line.Color[stkStroke];
+                obj.None[stkFill] := line.None[stkStroke];
+              end
+              else
+              begin
+                obj.Has[stkStroke] := True;
+                obj.Color[stkStroke] := line.Color[stkStroke];
+                obj.None[stkStroke] := line.None[stkStroke];
+              end;
+            end;
+            if line.Has[stkOpacity] then TyStSetNum(obj, stkOpacity, line.Num[stkOpacity]);
+          end
+          else
+            obj := line;
+        end
+        else
+          obj := TyStReadStyle(nodes, 'blur', 'itemStyle', bolder);
+      end;
+      m^.Decl[stnBlur] := obj;
+      m^.Cur := m^.Rest;
+      m^.States := [];
+    end;
+  end;
+  StApplyMarks(ASeriesIndex);
+end;
+
+procedure TTyAdvanceChart.StSyncMarks(AList: TTyPaintList);
+var
+  s, k: Integer;
+  el: TTyChartElement;
+begin
+  if AList = nil then Exit;
+  for s := 0 to High(FSt) do
+  begin
+    FSt[s].MarkIdx := nil;
+    FSt[s].MarkPart := nil;
+  end;
+  for k := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if not (el.Datum.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea]) then Continue;
+    s := el.Datum.ComponentIndex;
+    if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    StPush(FSt[s].MarkIdx, k);
+    SetLength(FSt[s].MarkPart, Length(FSt[s].MarkIdx));
+    FSt[s].MarkPart[High(FSt[s].MarkPart)] := StMarkPartOf(el);
+  end;
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].Kind = sskNone then
+    begin
+      FSt[s].Marks := nil;
+      Continue;
+    end;
+    StDeclareMarks(s, AList);
+    { no transition: the list itself }
+    for k := 0 to Min(High(FSt[s].MarkIdx), High(FSt[s].Marks)) do
+    begin
+      if FSt[s].Marks[k].States = [] then Continue;
+      el := AList.Element(FSt[s].MarkIdx[k]);
+      if FSt[s].Marks[k].IsPath then StWriteHost(el, FSt[s].Marks[k], False)
+      else StWriteLabel(el, FSt[s].Marks[k], False);
+      AList.SetElement(FSt[s].MarkIdx[k], el);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.StApplyMarks(ASeriesIndex: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to High(FSt[ASeriesIndex].Marks) do
+  begin
+    if FSt[ASeriesIndex].IsBlured then
+      FSt[ASeriesIndex].Marks[k].HoverState := TyStHoverBlur
+    else
+      FSt[ASeriesIndex].Marks[k].HoverState := TyStHoverNormal;
+    if TyStUseStates(FSt[ASeriesIndex].Marks[k],
+      TyStTargetStates(FSt[ASeriesIndex].Marks[k])) then Result := True;
+  end;
 end;
 
 procedure TTyAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
@@ -27184,6 +27563,8 @@ begin
     FSt[s].EdgeHostIdx := nil;
     FSt[s].EdgeLabelIdx := nil;
     FSt[s].EdgePartIdx := nil;
+    FSt[s].PeerHostIdx := nil;
+    FSt[s].PeerFollowIdx := nil;
   end;
   for slot := 0 to High(FBindings) do
   begin
@@ -27263,6 +27644,14 @@ begin
       FSt[s].LabelIdx[i] := -1;
       FSt[s].GuideIdx[i] := -1;
     end;
+    { a gauge's arcs [F2b] }
+    if FSt[s].Kind = sskGauge then
+    begin
+      if Length(FSt[s].PeerRows) < k then SetLength(FSt[s].PeerRows, k);
+      SetLength(FSt[s].PeerHostIdx, k);
+      SetLength(FSt[s].PeerFollowIdx, k);
+      for i := 0 to k - 1 do FSt[s].PeerHostIdx[i] := -1;
+    end;
   end;
   { A SERIES NOT DRAWN HAS NO ELEMENTS: a legend that switched it off took
     its view's group away, and switched back on it is drawn by new elements
@@ -27275,6 +27664,8 @@ begin
       FSt[s].Run := Default(TTyStItem);
       FSt[s].Area := Default(TTyStItem);
       FSt[s].IsBlured := False;
+      FSt[s].PeerRows := nil;
+      FSt[s].Marks := nil;
     end;
   { WHICH ELEMENT IS WHICH: the mark, its label (a placed caption), its
     label line, and a line's polyline and area }
@@ -27354,6 +27745,43 @@ begin
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
     raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
+    { A GAUGE: the pointer hosts, the progress arc is the peer, its round
+      caps (added just before it) follow it; the title and the reading are
+      no label of either -- they have no states [F2b] }
+    if FSt[s].Kind = sskGauge then
+    begin
+      if el.Anim.Role = carGaugePointer then
+      begin
+        if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
+      end
+      else if (el.Anim.Role = carGaugeProgress) and (FSt[s].PeerHostIdx[raw] < 0) then
+      begin
+        FSt[s].PeerHostIdx[raw] := k;
+        { the end cap rides the arc's end, the start cap is before it }
+        if (k >= 1) and (AList.Element(k - 1).Anim.Role = carGaugeCap) then
+        begin
+          StPush(FSt[s].PeerFollowIdx[raw], k - 1);
+          if (k >= 2) and (AList.Element(k - 2).Anim.Role = carNone)
+            and (AList.Element(k - 2).Shape.Kind = cskCircle)
+            and AList.Element(k - 2).Silent then
+            StPush(FSt[s].PeerFollowIdx[raw], k - 2);
+        end;
+      end;
+      Continue;
+    end;
+    { A RADAR ITEM: its polyline hosts, its polygon and its symbols are
+      parts of the same dispatcher, in the order they were built [F2b] }
+    if FSt[s].Kind = sskRadar then
+    begin
+      if el.Caption.FontSizeLogical > 0 then Continue;
+      if el.Anim.Role = carRadarLine then
+      begin
+        if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
+      end
+      else
+        StPush(FSt[s].PartIdx[raw], k);
+      Continue;
+    end;
     { A MAP REGION: the first path of the group is the row's; the geo keeps
       the paths' and the texts' states [Batch 152] }
     if FSt[s].Kind = sskMap then
@@ -27415,9 +27843,9 @@ begin
     end
     else if FSt[s].Kind = sskPictorial then
     begin
-      { THE GLYPHS ARE THE PATHS (silent here: the inkless bar rect is the
-        target), the first the host, the rest parts [Batch 90] }
-      if not el.Silent then Continue;
+      { THE GLYPHS ARE THE PATHS, the first the host, the rest parts; the
+        inkless bar rect has no states [Batch 90] }
+      if el.Caption.HostTransparent then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end
@@ -27474,7 +27902,9 @@ begin
         { A MAP'S REGION GROUPS ARE NEW after a render (MapDraw removes
           them all): no hover is carried, the selection comes back from the
           model below [Batch 152] }
-        if FSt[s].Kind = sskMap then
+        { [F2b] nor a gauge's: GaugeView makes its pointers and arcs anew
+          on every render (createPointer / createProgress in the update) }
+        if FSt[s].Kind in [sskMap, sskGauge] then
         begin
           item^.Host.HoverState := TyStHoverNormal;
           item^.Host.HighByOuter := 0;
@@ -27523,6 +27953,12 @@ begin
           TyStApplyItem(FSt[s].EdgeRows[raw]);
         end;
     end;
+    { a gauge's arcs [F2b] }
+    for raw := 0 to High(FSt[s].PeerRows) do
+      if (raw > High(FSt[s].PeerHostIdx)) or (FSt[s].PeerHostIdx[raw] < 0) then
+        FSt[s].PeerRows[raw] := Default(TTyStItem)
+      else
+        StDeclarePeer(slot, raw, AList);
   end;
   FStDirty := False;
   StWrite(AList);
@@ -27704,6 +28140,22 @@ begin
         StWriteHost(el, FSt[s].Area.Host, FStProxied);
         AList.SetElement(FSt[s].AreaIdx[k], el);
       end;
+    { a gauge's arcs and their caps [F2b] }
+    for raw := 0 to Min(High(FSt[s].PeerHostIdx), High(FSt[s].PeerRows)) do
+    begin
+      if FSt[s].PeerHostIdx[raw] < 0 then Continue;
+      item := @FSt[s].PeerRows[raw];
+      if item^.Host.States = [] then Continue;
+      el := AList.Element(FSt[s].PeerHostIdx[raw]);
+      StWriteHost(el, item^.Host, FStProxied);
+      AList.SetElement(FSt[s].PeerHostIdx[raw], el);
+      for k := 0 to High(FSt[s].PeerFollowIdx[raw]) do
+      begin
+        el := AList.Element(FSt[s].PeerFollowIdx[raw][k]);
+        StWriteFollower(el, item^.Host, FStProxied);
+        AList.SetElement(FSt[s].PeerFollowIdx[raw][k], el);
+      end;
+    end;
     { a sankey's links and their labels [Batch 114] }
     for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
     begin
@@ -27762,6 +28214,11 @@ begin
     for raw := 0 to High(FSt[s].EdgeRows) do
       if FSt[s].EdgeRows[raw].Host.Exists and TyStApplyItem(FSt[s].EdgeRows[raw]) then
         Result := True;
+    { a gauge's arcs and the markers [F2b] }
+    for raw := 0 to High(FSt[s].PeerRows) do
+      if FSt[s].PeerRows[raw].Host.Exists and TyStApplyItem(FSt[s].PeerRows[raw]) then
+        Result := True;
+    if StApplyMarks(s) then Result := True;
   end;
 end;
 
@@ -28124,6 +28581,16 @@ begin
         StAnimEl(item^.Guide, FSt[s].GuideIdx[raw], s, raw, 'guide', cStPxGuide,
           cfg, hasCfg, over);
     end;
+    { A GAUGE'S ARC: its own proxy, its caps drawn from it [F2b] }
+    for raw := 0 to Min(High(FSt[s].PeerHostIdx), High(FSt[s].PeerRows)) do
+      if (FSt[s].PeerHostIdx[raw] >= 0) and FSt[s].PeerRows[raw].Host.Exists then
+      begin
+        StAnimEl(FSt[s].PeerRows[raw].Host, FSt[s].PeerHostIdx[raw], s, raw,
+          'peer', cStPxPath, cfg, hasCfg, over);
+        hostP := FAnimStBind[FSt[s].PeerHostIdx[raw]];
+        for k := 0 to High(FSt[s].PeerFollowIdx[raw]) do
+          FAnimStBind[FSt[s].PeerFollowIdx[raw][k]] := hostP;
+      end;
     { A CHORD'S RIBBONS have states of their own, each its own proxy
       (the series' view group is their role) [Batch 120] }
     if FSt[s].Kind = sskChord then
@@ -28173,6 +28640,16 @@ begin
     FAnimContinuous := AnimLoopOnly;
     AnimArmTimer;
   end;
+end;
+
+function TTyAdvanceChart.StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+var raw: Integer;
+begin
+  Result := nil;
+  raw := StInnerRaw(ASeriesIndex, AInnerRow);
+  if (raw < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  if (raw > High(FSt[ASeriesIndex].PeerRows)) or not FSt[ASeriesIndex].PeerRows[raw].Host.Exists then Exit;
+  Result := @FSt[ASeriesIndex].PeerRows[raw];
 end;
 
 function TTyAdvanceChart.StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
@@ -29325,12 +29802,19 @@ begin
       if FSt[s].Rows[raw].Host.Exists then
         TyStItemEnterBlur(FSt[s].Rows[raw], spare, poly);
     if poly >= 0 then StPolyTo(s, poly);
-    { the view group holds the links as well [Batch 114] }
+    { the view group holds the links as well [Batch 114], a gauge's arcs
+      too [F2b] }
     for raw := 0 to High(FSt[s].EdgeRows) do
       if FSt[s].EdgeRows[raw].Host.Exists then
       begin
         poly := -1;
         TyStItemEnterBlur(FSt[s].EdgeRows[raw], spare, poly);
+      end;
+    for raw := 0 to High(FSt[s].PeerRows) do
+      if FSt[s].PeerRows[raw].Host.Exists then
+      begin
+        poly := -1;
+        TyStItemEnterBlur(FSt[s].PeerRows[raw], spare, poly);
       end;
     if AFocus.Kind = sfkIndices then
     begin
@@ -29383,6 +29867,12 @@ begin
           poly := -1;
           TyStItemLeaveBlur(FSt[s].EdgeRows[raw], poly);
         end;
+      for raw := 0 to High(FSt[s].PeerRows) do
+        if FSt[s].PeerRows[raw].Host.Exists then
+        begin
+          poly := -1;
+          TyStItemLeaveBlur(FSt[s].PeerRows[raw], poly);
+        end;
       { the area on its own, should it be blurred apart from the polyline }
       if FSt[s].Area.Host.HoverState = TyStHoverBlur then
         FSt[s].Area.Host.HoverState := TyStHoverNormal;
@@ -29426,6 +29916,14 @@ begin
       if (k < 0) or (k > High(FSt[s].EdgeRows)) then Exit;
       AItem := @FSt[s].EdgeRows[k];
       if not TyStItemDispatches(AItem^) then Exit;
+      APart := 0;
+      Exit(True);
+    end;
+    { a gauge's progress arc: the row's second dispatcher [F2b] }
+    if ATarget.HdPeer then
+    begin
+      AItem := StPeerAt(s, ATarget.HdRow);
+      if (AItem = nil) or not AItem^.Host.Proxy then Exit;
       APart := 0;
       Exit(True);
     end;
@@ -33773,14 +34271,18 @@ var
   selected: Boolean;
   p: string;
 begin
-  if not (ATarget.HdKind in [1, 3]) then Exit;
+  { [F2b] a large batch's row too: its ECData carries the row its handler
+    found (BarView largePathUpdateDataIndex, LargeSymbolDraw) }
+  if not (ATarget.HdKind in [1, 3, 16]) then Exit;
   s := ATarget.HdSeries;
   slot := SlotOfSeries(s);
   if slot < 0 then Exit;
   selected := False;
   inner := ATarget.HdRow;
-  { a marker's element is never flagged selected: always select }
-  if (ATarget.HdKind = 1) and not ATarget.HdEdge then
+  { a marker's element is never flagged selected: always select; nor is a
+    large batch, nor a gauge's arc (updateSeriesElementSelection reaches
+    the item graphic elements only) [F2b] }
+  if (ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer then
   begin
     SelEnsure(slot);
     if (s <= High(FSel)) and FSelInit[s] then
@@ -34265,6 +34767,7 @@ begin
   Result.HdSeries := d.SeriesIndex;
   Result.HdRow := d.DataIndex;
   Result.HdEdge := d.IsEdge;
+  Result.HdPeer := FPaintList.Element(AIndex).Anim.Role = carGaugeProgress;
   if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
 end;
 
@@ -34393,6 +34896,33 @@ begin
   item := StItemAt(ASeriesIndex, ADataIndex);
   Result := item <> nil;
   if Result then AItem := item^;
+end;
+
+function TTyAdvanceChart.PeerStates(ASeriesIndex, ADataIndex: Integer;
+  out AItem: TTyStItem): Boolean;
+var item: PTyStItem;
+begin
+  AItem := Default(TTyStItem);
+  item := StPeerAt(ASeriesIndex, ADataIndex);
+  Result := item <> nil;
+  if Result then AItem := item^;
+end;
+
+function TTyAdvanceChart.MarkerStates(ASeriesIndex: Integer; const APart: string;
+  out AEl: TTyStElement; out AListIndex: Integer): Boolean;
+var k: Integer;
+begin
+  AEl := Default(TTyStElement);
+  AListIndex := -1;
+  Result := False;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  for k := 0 to Min(High(FSt[ASeriesIndex].MarkPart), High(FSt[ASeriesIndex].Marks)) do
+    if FSt[ASeriesIndex].MarkPart[k] = APart then
+    begin
+      AEl := FSt[ASeriesIndex].Marks[k];
+      AListIndex := FSt[ASeriesIndex].MarkIdx[k];
+      Exit(True);
+    end;
 end;
 
 function TTyAdvanceChart.SankeyEdgeStates(ASeriesIndex, AEdge: Integer;
@@ -40194,9 +40724,54 @@ end;
 
 function TTyAdvanceChart.AnimStateProxy(ASeries, ARow: Integer;
   const APart: string): TTyChartAnimProxy;
-var slot, raw, idx: Integer;
+var idx: Integer;
 begin
   Result := nil;
+  idx := StatePartIndex(ASeries, ARow, APart);
+  if (idx >= 0) and (idx <= High(FAnimStBind)) then Result := FAnimStBind[idx];
+end;
+
+function TTyAdvanceChart.StatePartRecord(ASeries, ARow: Integer;
+  const APart: string; out AEl: TTyStElement): Boolean;
+var
+  item: TTyStItem;
+  idx, k: Integer;
+begin
+  AEl := Default(TTyStElement);
+  Result := False;
+  if APart = 'peer' then
+  begin
+    if not PeerStates(ASeries, ARow, item) then Exit;
+    AEl := item.Host;
+    Exit(True);
+  end;
+  if not ItemStates(ASeries, ARow, item) then Exit;
+  if APart = 'host' then AEl := item.Host
+  else if APart = 'label' then AEl := item.Label_
+  else if APart = 'guide' then AEl := item.Guide
+  else
+  begin
+    { a part: the one whose list index is the part's }
+    idx := StatePartIndex(ASeries, ARow, APart);
+    if idx < 0 then Exit;
+    k := StInnerRaw(ASeries, ARow);
+    if (k < 0) or (k > High(FSt[ASeries].PartIdx)) then Exit;
+    for k := 0 to Min(High(FSt[ASeries].PartIdx[StInnerRaw(ASeries, ARow)]), High(item.Parts)) do
+      if FSt[ASeries].PartIdx[StInnerRaw(ASeries, ARow)][k] = idx then
+      begin
+        AEl := item.Parts[k];
+        Exit(True);
+      end;
+    Exit;
+  end;
+  Result := AEl.Exists;
+end;
+
+function TTyAdvanceChart.StatePartIndex(ASeries, ARow: Integer;
+  const APart: string): Integer;
+var slot, raw, idx, k, j, n: Integer;
+begin
+  Result := -1;
   if (ASeries < 0) or (ASeries > High(FSt)) or (FSt[ASeries].Kind = sskNone) then Exit;
   idx := -1;
   if APart = 'poly' then
@@ -40231,15 +40806,36 @@ begin
     if APart = 'host' then idx := FSt[ASeries].HostIdx[raw]
     else if APart = 'label' then idx := FSt[ASeries].LabelIdx[raw]
     else if APart = 'guide' then idx := FSt[ASeries].GuideIdx[raw]
-    { a part with states of its own, 'part<k>' [F2a] }
+    { [F2b] a gauge's arc; the k-th other path; a radar's polygon and its
+      j-th symbol }
+    else if APart = 'peer' then
+    begin
+      if raw <= High(FSt[ASeries].PeerHostIdx) then idx := FSt[ASeries].PeerHostIdx[raw];
+    end
     else if (Copy(APart, 1, 4) = 'part') and (raw <= High(FSt[ASeries].PartIdx)) then
     begin
-      slot := StrToIntDef(Copy(APart, 5, MaxInt), -1);
-      if (slot >= 0) and (slot <= High(FSt[ASeries].PartIdx[raw])) then
-        idx := FSt[ASeries].PartIdx[raw][slot];
+      k := StrToIntDef(Copy(APart, 5, MaxInt), -1);
+      if (k >= 0) and (k <= High(FSt[ASeries].PartIdx[raw])) then
+        idx := FSt[ASeries].PartIdx[raw][k];
+    end
+    else if ((APart = 'rarea') or (Copy(APart, 1, 4) = 'rsym'))
+      and (raw <= High(FSt[ASeries].PartIdx)) and (FPaintList <> nil) then
+    begin
+      j := StrToIntDef(Copy(APart, 5, MaxInt), -1);
+      n := 0;
+      for k := 0 to High(FSt[ASeries].PartIdx[raw]) do
+        if FPaintList.Element(FSt[ASeries].PartIdx[raw][k]).Anim.Role = carRadarArea then
+        begin
+          if APart = 'rarea' then idx := FSt[ASeries].PartIdx[raw][k];
+        end
+        else
+        begin
+          if n = j then idx := FSt[ASeries].PartIdx[raw][k];
+          Inc(n);
+        end;
     end;
   end;
-  if (idx >= 0) and (idx <= High(FAnimStBind)) then Result := FAnimStBind[idx];
+  Result := idx;
 end;
 
 function TTyAdvanceChart.AnimGhostCount: Integer;

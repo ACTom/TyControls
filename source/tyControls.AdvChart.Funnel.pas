@@ -123,6 +123,14 @@ type
 
   TTyFunnelLabelSpec = record
     Show: Boolean;
+    { A STATE SHOWS IT [F2b]: the series' `emphasis.label.show` -- true by
+      FunnelSeries' default -- or a `select` / `blur` label.show true. The
+      label is then built and ignored at rest (labelStyle needsCreateText). }
+    StateShow: Boolean;
+    { labelLine.show as written (true by default), before the AND below,
+      and whether a state's labelLine.show is true: the line is built for
+      the states that show it [F2b] }
+    LineRaw, StateLineShow: Boolean;
     Position: TTyFunnelLabelPosition;
     { labelLine. `show` is ANDed with the label's own at option-normalisation
       time upstream, not at draw time -- a series that hides its labels has
@@ -704,6 +712,9 @@ begin
   { Automatic, not a literal nought -- see the pie's. }
   Result.Ink := TyLabelSpecNone;
   Result.Show := True;
+  { FunnelSeries.defaultOption: emphasis.label.show true [F2b] }
+  Result.StateShow := True;
+  Result.LineRaw := True;
   Result.Position := flpOuter;
   Result.LineShow := True;
   Result.LineLengthLogical := 20;
@@ -716,6 +727,7 @@ var
   node, lbl, line, ls: TJSONObject;
   d: TJSONData;
   s: string;
+  k: Integer;
 begin
   Result := ABase;
   if AOption = nil then Exit;
@@ -785,6 +797,48 @@ begin
     end;
   end;
 
+  { the states [F2b]: emphasis' written show, true when none; select and
+    blur only when they say true }
+  Result.LineRaw := Result.LineShow;
+  d := node.Find('emphasis');
+  if d is TJSONObject then
+  begin
+    lbl := TJSONObject(d);
+    d := lbl.Find('label');
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) then Result.StateShow := d.AsBoolean;
+    end;
+    d := lbl.Find('labelLine');
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        Result.StateLineShow := True;
+    end;
+  end;
+  for k := 0 to 1 do
+  begin
+    if k = 0 then d := node.Find('select') else d := node.Find('blur');
+    if not (d is TJSONObject) then Continue;
+    lbl := TJSONObject(d);
+    d := lbl.Find('label');
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        Result.StateShow := True;
+    end;
+    d := lbl.Find('labelLine');
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        Result.StateLineShow := True;
+    end;
+  end;
+
   { THE AND HAPPENS HERE, at option time, not at draw time. Upstream bakes
     `labelLine.show := labelLine.show and label.show` into the resolved series
     option during init, so a series that hid its labels has already had its
@@ -851,7 +905,8 @@ var
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or not ALayout.Valid then Exit;
-  if not ASpec.Show then Exit;
+  { built when a state shows it, ignored at rest [F2b] }
+  if not (ASpec.Show or ASpec.StateShow) then Exit;
   lineLen := ASpec.LineLengthLogical * APPI / 96;
   percents := TyFunnelPercents(ALayout);
 
@@ -976,10 +1031,14 @@ begin
         textY := y2;
       end;
 
-      if ASpec.LineShow and (ASpec.LineWidthLogical > 0) then
+      if (ASpec.LineShow or ((ASpec.LineRaw or ASpec.StateLineShow)
+        and ASpec.StateShow)) and (ASpec.LineWidthLogical > 0) then
       begin
         el := TyChartElement(TyShapePolyline([TyPointF(x1, y1),
           TyPointF(x2, y2)]));
+        { at rest where the label or the line is hidden; the states decide
+          the rest [F2b] }
+        el.Ignore := not ASpec.LineShow;
         el.Style.StrokeColor := fill;
         el.Style.StrokeWidthLogical := ASpec.LineWidthLogical;
         { UNDER THE BANDS. Upstream's updateZ puts a label line at
@@ -1073,6 +1132,8 @@ begin
     el.Z := 2;
     el.Z2 := 2;
     el.Silent := False;
+    { only a state shows it [F2b] }
+    el.Ignore := not ASpec.Show;
     el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Items[i].Index,
       raw);
     el.Anim.Role := carLabel;
