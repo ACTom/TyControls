@@ -96,7 +96,8 @@ end;
 
 - **同一遍绘制，不是叠加控件：** `OnPaintSurface` 在面板自身的 `TTyPainter` 绘制过程内触发，绘制内容与面板背景一起合成——不存在额外的子控件或第二次绘制开销。
 - **绘制器生命周期由面板管理：** 回调里拿到的 `APainter` 归面板所有，**切勿**释放它或调用它的 `BeginPaint`/`EndPaint`；只使用其绘制方法。回调返回后面板会自行 `EndPaint`。
-- **内容区已内缩 padding：** `AContent` 已按主题 `TyPanel { padding }` 内缩（设备像素）。若要画到边框边缘，请自行从 `AContent` 反推或改用主题去掉 padding；库的 `FillBackground` 等方法会把绘制裁剪在你给定的矩形内。
+- **内容区已内缩 padding：** `AContent` 已按主题 `TyPanel { padding }` 内缩（控件坐标）。若要画到边框边缘，请自行从 `AContent` 反推或改用主题去掉 padding；库的 `FillBackground` 等方法会把绘制裁剪在你给定的矩形内。
+- **Retina 屏：** 绘制器的方法和 `Bitmap.Canvas2D` 照旧用控件坐标；直接操作 `APainter.Bitmap` 时要换算，见[事件与属性约定](../events.md)里的「在 Retina 屏上直接画图层」。
 - **未接管即等价 TTyPanel：** 不赋值 `OnPaintSurface` 时逐字节兼容普通 `TTyPanel`（仍绘制 `Caption`），可安全地作为普通容器使用。
 - **默认落点尺寸 105 × 105（不再继承 `TTyPanel` 的 185 × 41）：** `TTyPanel` 是一条标题带，而绘图面没有天然的长宽比；185 × 41 这种信箱条里画什么都被裁，用户拖出来第一件事就是改尺寸。105 × 105 与 LCL `TPaintBox` 出于同样理由选的值一致（`include/paintbox.inc:50-54`）。
 - **仍是真容器：** 继承 `TTyPanel` 的 `csAcceptsControls`，子控件可将其设为 `Parent`；自绘表面与子控件可并存（自绘在下，windowed 子控件叠加在上）。LCL 的 `TPaintBox` 是 `TGraphicControl`，没有句柄、也**根本不能**接子控件；把本控件改基类去换那份透明性，等于删掉一个它已经在提供的能力，所以基类保持不变。

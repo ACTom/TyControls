@@ -29,6 +29,12 @@ The cause is in LCL. GTK2 does read the real GTK style, but only once, when the 
 
 **Recommendation:** use Qt5 / Qt6 if you need the app to follow the OS appearance — there the values come from the live Qt palette and track a desktop colour-scheme change.
 
+## Qt6 / GTK3 (integer desktop scaling)
+
+With the desktop scaled by a whole factor such as 200%, the interface looks soft: controls are drawn at one times and the system enlarges them. macOS Retina screens are already drawn at their real pixels; Qt6 / GTK3 are not wired up yet.
+
+**Recommendation:** keep the desktop scaling at 100% and enlarge the interface with a higher font DPI instead.
+
 ## Windows (several monitors at different scaling)
 
 A form dragged onto a monitor with different scaling lays itself out again for that monitor's DPI. Popups (dropdown lists, menus, hint balloons) do not follow: they are drawn at the DPI of the form they belong to, and come out too large or too small when they open on the other monitor.

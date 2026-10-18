@@ -125,6 +125,34 @@ TyControls' hard rule is that visuals belong to the theme (`.tycss`): colors, fo
 
 > **`OnPaint` is an overlay, not a takeover.** It fires after the control has painted and been composited, handing you the LCL `Canvas` — you draw on top of the finished control and cannot alter the themed layer. That is why it does not violate the themes-own-visuals rule. It differs from `TTyPaintPanel.OnPaintSurface` / `TTyPreviewBox.OnPaintPreview`, which fire before composition and hand you a `TTyPainter` for theme-token-aware drawing.
 
+### Drawing on the layer on a Retina screen
+
+On a macOS Retina screen the painter draws at the screen's real pixels: its layer is S times the control's size (usually S = 2) and is put back at the control's size when done. Wherever you get a `TTyPainter` (`OnPaintSurface`, `OnPaintPreview`, the grid's `OnDrawCell`, a subclass overriding `RenderTo`), keep the following in mind.
+
+No change needed:
+
+- The painter's own methods (`FillBackground`, `StrokeBorder`, `DrawText`, `DrawGlyph`, …) take control coordinates as before.
+- `Bitmap.Canvas2D` comes with an S-times transform already set: control coordinates and line widths as before.
+
+Calls that work on `Bitmap` directly (`FillRect`, `PutImage`, `ClipRect`, `DrawLine`, …) count layer pixels, so convert:
+
+| Use | What it does |
+|---|---|
+| `P.Dev(x)` / `P.Dev(R)` / `P.Dev(Pt)` | control coordinates to layer pixels |
+| `P.DeviceScale` | this frame's S; 1 on Windows and Linux, where `Dev` returns its argument |
+| `P.RasterPPI` | the PPI to give a font on the bitmap, instead of `P.PPI` |
+| `P.DrawRule(x1, y1, x2, y2, c)` | a horizontal or vertical 1-px line, one control pixel wide at any S; `Bitmap.DrawLine` is half as thick on Retina |
+| `P.DrawGlyphBitmap` | takes a bitmap in layer pixels |
+
+```pascal
+// Before: half the position and half the size on Retina
+APainter.Bitmap.FillRect(R.Left, R.Top, R.Right, R.Bottom, BGRA(255, 0, 0), dmSet);
+// After: right at any S
+APainter.Bitmap.FillRect(APainter.Dev(R), BGRA(255, 0, 0), dmSet);
+```
+
+To go back to one-times drawing everywhere (to rule it out while debugging, say), set `TyDeviceScaleRendering := False` (unit `tyControls.Painter`) at startup.
+
 ---
 
 ## 4. Event behavior conventions
