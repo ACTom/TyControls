@@ -354,7 +354,14 @@ begin
     the second line would be. }
   gw := Max(Result.TextW, Result.SubW);
   gh := Result.TextH;
-  if Result.HasSub then gh := gh + gap + Result.SubH;
+  { THE GROUP'S BOUNDING RECT, the union of the two: a negative itemGap
+    lifts the subtext over the title's bottom or above its top, and the box
+    spans the higher top to the lower bottom [fin: it was the title's height
+    plus the gap plus the subtext's, nought or less there, and the title
+    was dropped] }
+  if Result.HasSub then
+    gh := Max(Result.TextH, Result.TextH + gap + Result.SubH)
+      - Min(Double(0), Result.TextH + gap);
   if (gw <= 0) or (gh <= 0) then Exit;
 
   { getLayoutRect on the merged option with the measured block as the size }
