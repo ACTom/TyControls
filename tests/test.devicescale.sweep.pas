@@ -40,10 +40,10 @@ type
   end;
 
 const
-  { Classes known not to draw at the device scale yet. Each porting task removes its own: the
-    shell tree, whose drive icons are drawn on the canvas after the layer (TyDrawImage, Task 16). }
-  CKnownUnported: array of string = ('TTyShellTreeView',
-    'TTyAdvanceChart');   // main: its static cache and layers, plan B Task 10
+  { Classes known not to draw at the device scale yet: on the 3.0 line none since #83 was ported;
+    on main the AdvanceChart until plan B's Task 10. The list and the assertion stay -- a new
+    failure must be fixed or listed here on purpose. }
+  CKnownUnported: array of string = ('TTyAdvanceChart');
 
 implementation
 

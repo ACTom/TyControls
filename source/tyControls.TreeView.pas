@@ -6301,9 +6301,9 @@ begin
     begin
       ACanvas.SaveHandleState;
       try
-        IntersectClipRect(ACanvas.Handle,
-          ARect.Left + CR.Left,  ARect.Top + CR.Top,
-          ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+        with TyCanvasRect(ACanvas, Rect(ARect.Left + CR.Left, ARect.Top + CR.Top,
+          ARect.Left + CR.Right, ARect.Top + CR.Bottom)) do
+          IntersectClipRect(ACanvas.Handle, Left, Top, Right, Bottom);
         for iIcon := 0 to pendingCount - 1 do
           { One helper, both branches, Ghosted in the honest polarity. The old code passed
             `not Ghost` straight to LCL's Draw (whose flag is Enabled) -- which compiled and

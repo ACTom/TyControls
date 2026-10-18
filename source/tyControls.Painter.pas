@@ -506,6 +506,9 @@ function TyCanvasDeviceScale(ACanvas: TCanvas): TTyCanvasScale;
   Registering again replaces the scale; unregistering a canvas that is not there does nothing. }
 procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
 procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
+{ ALayout in ACanvas's own units: S times it on a canvas in device units (a raster cache), as it is
+  on one in layout units. For code that draws on the canvas outside a painter (#83). }
+function TyCanvasRect(ACanvas: TCanvas; const ALayout: TRect): TRect;
 { The scale ACanvas is registered with, 0 when it is not. Compares the pointer only, so it may be
   asked about a canvas that is already freed. }
 function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
@@ -4400,6 +4403,18 @@ begin
   if i < 0 then Exit;
   GRasterCanvases[i] := GRasterCanvases[High(GRasterCanvases)];
   SetLength(GRasterCanvases, Length(GRasterCanvases) - 1);
+end;
+
+function TyCanvasRect(ACanvas: TCanvas; const ALayout: TRect): TRect;
+var
+  sc: TTyCanvasScale;
+begin
+  sc := TyCanvasDeviceScale(ACanvas);
+  if sc.DeviceUnits and (sc.Scale > 1) then
+    Result := Rect(ALayout.Left * sc.Scale, ALayout.Top * sc.Scale,
+      ALayout.Right * sc.Scale, ALayout.Bottom * sc.Scale)
+  else
+    Result := ALayout;
 end;
 
 function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
