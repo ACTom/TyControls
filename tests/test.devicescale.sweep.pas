@@ -41,10 +41,8 @@ type
 
 const
   { Classes known not to draw at the device scale yet. Each porting task removes its own: the
-    shell tree, whose drive icons are drawn on the canvas after the layer (TyDrawImage, Task 16),
-    and the panels whose paint cache is still one-times (TTyPaintCache). }
-  CKnownUnported: array of string = ('TTyShellTreeView', 'TTyPanel', 'TTyRelativePanel',
-    'TTyCoolBar', 'TTyControlBar',
+    shell tree, whose drive icons are drawn on the canvas after the layer (TyDrawImage, Task 16). }
+  CKnownUnported: array of string = ('TTyShellTreeView',
     'TTyAdvanceChart');   // main: its static cache and layers, plan B Task 10
 
 implementation

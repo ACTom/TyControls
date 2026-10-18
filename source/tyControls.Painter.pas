@@ -506,6 +506,9 @@ function TyCanvasDeviceScale(ACanvas: TCanvas): TTyCanvasScale;
   Registering again replaces the scale; unregistering a canvas that is not there does nothing. }
 procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
 procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
+{ The scale ACanvas is registered with, 0 when it is not. Compares the pointer only, so it may be
+  asked about a canvas that is already freed. }
+function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
 { FOR THE TESTS: answer (AScale, ADeviceUnits) for every canvas; AScale = 0 turns it off. }
 procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean);
 function TyVecPoint(AX, AY: Double): TTyVecPoint;
@@ -4397,6 +4400,14 @@ begin
   if i < 0 then Exit;
   GRasterCanvases[i] := GRasterCanvases[High(GRasterCanvases)];
   SetLength(GRasterCanvases, Length(GRasterCanvases) - 1);
+end;
+
+function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
+var
+  i: Integer;
+begin
+  i := RasterCanvasIndex(ACanvas);
+  if i < 0 then Result := 0 else Result := GRasterCanvases[i].Scale;
 end;
 
 procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean);

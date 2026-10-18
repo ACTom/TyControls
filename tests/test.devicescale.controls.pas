@@ -18,7 +18,7 @@ uses
   tyControls.Menu, tyControls.Chart, tyControls.HeaderControl, tyControls.Dialogs.Color,
   tyControls.ListView, tyControls.ListBox, tyControls.AdvancedListBox, tyControls.TabSet,
   tyControls.ListGroupPanel, tyControls.ValueListEditor, tyControls.ListView.Layout,
-  tyControls.Columns, tyControls.TreeView,
+  tyControls.Columns, tyControls.TreeView, tyControls.TabSheet, tyControls.Controller,
   tyControls.Types, test.devicescale.support;
 
 type
@@ -27,6 +27,7 @@ type
     FIconFont: TTyIconFont;
     FImages: TImageList;
     FMode: Integer;
+    FSheetTheme: TTyStyleController;
     function IconFont: TTyIconFont;
     function Images: TImageList;
     function BuildImage(AParent: TWinControl; APPI: Integer): TControl;
@@ -50,6 +51,7 @@ type
     function BuildValueListEditor(AParent: TWinControl; APPI: Integer): TControl;
     procedure TabImage(Sender: TObject; AIndex: Integer; var AImageIndex: Integer);
     function NewTree(AParent: TWinControl; APPI: Integer; AColumns: Boolean): TTyTreeView;
+    function BuildTabSheet(AParent: TWinControl; APPI: Integer): TControl;
     function BuildTreeLines(AParent: TWinControl; APPI: Integer): TControl;
     function BuildTreeSeparators(AParent: TWinControl; APPI: Integer): TControl;
     function BuildTreeMixedCheck(AParent: TWinControl; APPI: Integer): TControl;
@@ -99,6 +101,10 @@ type
     procedure TestTreeDropAbove;
     procedure TestTreeDropBelow;
     procedure TestTreeDropOn;
+    { Task 14: a tab sheet paints through its cache, like a panel; the palette sweep sees it at
+      8 x 8. Drawn with a coloured, bordered, rounded theme: on the default white it would look
+      the same in any quarter. }
+    procedure TestTabSheetThroughItsCache;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -131,6 +137,7 @@ procedure TDeviceScaleControlsTest.TearDown;
 begin
   FreeAndNil(FIconFont);
   FreeAndNil(FImages);
+  FreeAndNil(FSheetTheme);
   inherited TearDown;
 end;
 
@@ -801,6 +808,30 @@ procedure TDeviceScaleControlsTest.TestTreeDropOn;
 begin
   FMode := Ord(dmOn);
   CheckScale('TTyTreeView-drop-on', @BuildTreeDropMark, CTreeW, CTreeH);
+end;
+
+{ ---- Task 14 ---- }
+
+function TDeviceScaleControlsTest.BuildTabSheet(AParent: TWinControl; APPI: Integer): TControl;
+var
+  s: TTyTabSheet;
+begin
+  if FSheetTheme = nil then
+  begin
+    FSheetTheme := TTyStyleController.Create(nil);
+    FSheetTheme.LoadThemeCss('TyTabSheet { background: #DCE6F0; border-width: 2px; ' +
+      'border-color: #506070; border-radius: 8px; }');
+  end;
+  s := TTyTabSheet.Create(AParent);
+  s.Parent := AParent;
+  TControlAccess(s).Font.PixelsPerInch := APPI;
+  s.Controller := FSheetTheme;
+  Result := s;
+end;
+
+procedure TDeviceScaleControlsTest.TestTabSheetThroughItsCache;
+begin
+  CheckScale('TTyTabSheet', @BuildTabSheet, 160, 100);
 end;
 
 initialization
