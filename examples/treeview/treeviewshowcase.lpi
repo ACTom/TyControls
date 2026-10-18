@@ -44,9 +44,6 @@
       <SyntaxMode Value="ObjFPC"/>
     </SyntaxOptions>
     <Linking>
-      <Debugging>
-        <DebugInfoType Value="dsDwarf3"/>
-      </Debugging>
       <Options>
         <Win32>
           <GraphicApplication Value="True"/>
