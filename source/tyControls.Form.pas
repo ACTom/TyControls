@@ -3672,6 +3672,7 @@ var
   P: TTyPainter;
   blurDev: Integer;
   newKey: string;
+  sc: TTyCanvasScale;
 begin
   // Non-image (or no controller): no photo backdrop -> drop any stale snapshot and bail.
   if FController = nil then
@@ -3696,8 +3697,14 @@ begin
   // dev-px is in the key, so an image->image switch that drops glass rebuilds + frees the old
   // blurred backdrop). When the key is unchanged the snapshot is already current — skip.
   blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
+  { The controls sample the backdrops in DEVICE pixels, at S times their layout offset (#83), so
+    the snapshot is taken at the device scale of the form's own canvas -- the screen it is on --
+    and the blur is S times as wide, for the same frost in layout pixels. A change of S (the
+    window moved to another screen) is in the key. }
+  sc := TyCanvasDeviceScale(Canvas);
+  if sc.Scale < 1 then sc.Scale := 1;
   newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
-    + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
+    + IntToStr(ClientHeight) + '|' + IntToStr(blurDev) + '|' + IntToStr(sc.Scale);
   if (FSharpBackdrop <> nil) and (newKey = FGlassKey) then Exit;
   // Build the snapshot OFFSCREEN. CRITICAL: pass a NIL canvas so EndPaint does NOT blit to
   // any DC (the form is WS_CLIPCHILDREN — drawing the photo here, outside a WM_PAINT, would
@@ -3706,7 +3713,7 @@ begin
   // Duplicate the composited image BEFORE EndPaint frees P.Bitmap.
   P := TTyPainter.Create;
   try
-    P.BeginPaint(nil, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+    P.BeginPaintScaled(nil, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch, sc);
     P.FillBackground(Rect(0, 0, ClientWidth, ClientHeight), bg.Background, 0);
     FreeAndNil(FSharpBackdrop);
     FreeAndNil(FGlassBackdrop);
@@ -3714,7 +3721,7 @@ begin
     if FGlassBlurLogical > 0 then
     begin
       if blurDev > 0 then
-        FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap
+        FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev * sc.Scale, rbFast) as TBGRABitmap
       else
         FGlassBackdrop := FSharpBackdrop.Duplicate as TBGRABitmap;
     end;
