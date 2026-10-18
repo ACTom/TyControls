@@ -868,16 +868,16 @@ msgstr ""
 msgid "Mark area"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartaccmarkers
+msgid "Markers"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartaccmarkline
 msgid "Mark line"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartaccmarkpoint
 msgid "Mark point"
-msgstr ""
-
-#: tycontrols.strconsts.rstychartaccmarkers
-msgid "Markers"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartaccpercentrange
