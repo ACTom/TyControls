@@ -7125,6 +7125,29 @@ begin
   Result.CW := AEl.Anim.G[6] <> 0;
 end;
 
+{ [x1] A SYMBOL'S GROUP ON THE CANVAS NOW, as its computed transform places
+  it: its proxy's x / y, or its layout's. A graph node on a view keeps its
+  proxy's x / y in its main (roam) group (G[5..6], what SymbolDraw's update
+  tweens) -- on the canvas it is its layout's place (LgG[5..6]) moved by
+  the group's scale times its move there, the frame's own reading
+  (GroupDX / GroupDY); read as a canvas place the morph would start or end
+  at the node's data units. }
+function UtSymbolPlaceX(const AEl: TTyChartElement; P: TTyChartAnimProxy): Double;
+begin
+  if AEl.Anim.InView then
+    Result := AEl.Caption.LgG[5] + GroupDX(AEl, NumOr(P, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5])
+  else
+    Result := NumOr(P, 'x', AEl.Caption.LgG[5]);
+end;
+
+function UtSymbolPlaceY(const AEl: TTyChartElement; P: TTyChartAnimProxy): Double;
+begin
+  if AEl.Anim.InView then
+    Result := AEl.Caption.LgG[6] + GroupDY(AEl, NumOr(P, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6])
+  else
+    Result := NumOr(P, 'y', AEl.Caption.LgG[6]);
+end;
+
 { THE PATH AN ITEM ELEMENT DRAWS NOW, as getUpdatedPathProxy and
   getComputedTransform give it: its proxy's values where it has one (an
   animation in flight), the layout's otherwise; a morph in flight draws its
@@ -7196,7 +7219,7 @@ begin
       UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
         NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
         AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
-        NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]), 1, 1,
+        UtSymbolPlaceX(AEl, P), UtSymbolPlaceY(AEl, P), 1, 1,
         AData, AHasM, AM, AHasLocal, ALocal);
     carLineSymbol:
       UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
