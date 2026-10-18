@@ -2821,6 +2821,11 @@ type
     { the series an action's query names (none: every one of the type) }
     function HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
     function DoSunAction(APayload: TJSONObject): Boolean;
+    { [F3d] treeExpandAndCollapse as an action: the queried trees' node
+      flipped, then the update (update: 'update') }
+    function DoTreeToggleAction(APayload: TJSONObject): Boolean;
+    { flip one tree's node (no render); False for a row it has not }
+    function TreeFlip(ASlot, ADataIndex: Integer): Boolean;
     function DoTreemapAction(const AType: string; APayload: TJSONObject;
       const AEventJson: string = ''): Boolean;
     { the render an action asks for, then its event }
@@ -18611,33 +18616,62 @@ begin
   Result := TreeDispatchRoam(p);
 end;
 
+function TTyAdvanceChart.TreeFlip(ASlot, ADataIndex: Integer): Boolean;
+var s: Integer;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].SeriesType <> TyTreeSeriesTypeName then Exit;
+  s := FBindings[ASlot].SeriesIndex;
+  if (ASlot > High(FTrees)) or not FTrees[ASlot].Hier.Valid then Exit;
+  if (ADataIndex <= 0) or (ADataIndex > High(FTrees[ASlot].Hier.Nodes)) then Exit;
+  if s > High(FTreeToggled) then SetLength(FTreeToggled, s + 1);
+  if ADataIndex > High(FTreeToggled[s]) then
+    SetLength(FTreeToggled[s], Length(FTrees[ASlot].Hier.Nodes));
+  FTreeToggled[s][ADataIndex] := not FTreeToggled[s][ADataIndex];
+  { the solved flag too, so TreeExpanded answers before the relayout }
+  FTrees[ASlot].Hier.Nodes[ADataIndex].Expanded :=
+    not FTrees[ASlot].Hier.Nodes[ADataIndex].Expanded;
+  Result := True;
+  if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
+end;
+
 function TTyAdvanceChart.TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
-var i, s: Integer;
+var i: Integer;
 begin
   Result := False;
   for i := 0 to High(FBindings) do
   begin
-    if FBindings[i].SeriesType <> TyTreeSeriesTypeName then Continue;
-    s := FBindings[i].SeriesIndex;
-    if (ASeriesIndex >= 0) and (s <> ASeriesIndex) then Continue;
-    if (i > High(FTrees)) or not FTrees[i].Hier.Valid then Continue;
-    if (ADataIndex <= 0) or (ADataIndex > High(FTrees[i].Hier.Nodes)) then Continue;
-    if s > High(FTreeToggled) then SetLength(FTreeToggled, s + 1);
-    if ADataIndex > High(FTreeToggled[s]) then
-      SetLength(FTreeToggled[s], Length(FTrees[i].Hier.Nodes));
-    FTreeToggled[s][ADataIndex] := not FTreeToggled[s][ADataIndex];
-    { the solved flag too, so TreeExpanded answers before the relayout }
-    FTrees[i].Hier.Nodes[ADataIndex].Expanded :=
-      not FTrees[i].Hier.Nodes[ADataIndex].Expanded;
-    Result := True;
-    if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
+    if (ASeriesIndex >= 0) and (FBindings[i].SeriesIndex <> ASeriesIndex) then Continue;
+    if TreeFlip(i, ADataIndex) then Result := True;
   end;
   if Result then
   begin
-    Invalidate;
+    { [F3d] THE ACTION'S UPDATE (update: 'update'): a full update of the
+      same option -- the kept nodes slide, the shown ones grow out of their
+      parent, the hidden ones shrink into it. [Was: a relayout that snapped.] }
+    FullUpdate;
     { the dispatch's triggerUpdatedEvent [Batch 97] }
     EmitUpdated;
   end;
+end;
+
+function TTyAdvanceChart.DoTreeToggleAction(APayload: TJSONObject): Boolean;
+var
+  slots: TTyIntegerArray;
+  k: Integer;
+  d: TJSONData;
+  di: Integer;
+begin
+  Result := True;
+  d := APayload.Find('dataIndex');
+  if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+  di := Round(d.AsFloat);
+  slots := HierQuery(APayload, TyTreeSeriesTypeName);
+  for k := 0 to High(slots) do
+    if TreeFlip(slots[k], di) then Result := True;
+  FullUpdate;
+  EmitUpdated;
 end;
 
 function TTyAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
@@ -34999,7 +35033,9 @@ begin
       or (t = 'treemapRootToNode') or (t = 'treemapMove') or (t = 'treemapRender')
       or (t = 'expandAxisBreak') or (t = 'collapseAxisBreak') or (t = 'toggleAxisBreak')
       or (t = 'mapToggleSelect') or (t = 'pieToggleSelect') or (t = 'mapSelect')
-      or (t = 'pieSelect') or (t = 'mapUnSelect') or (t = 'pieUnSelect') then
+      or (t = 'pieSelect') or (t = 'mapUnSelect') or (t = 'pieUnSelect')
+      { [F3d] }
+      or (t = 'treeExpandAndCollapse') then
       FBrushPayload := True;
     { A BATCH -- `if (payload.batch)`, a truthy one -- of highlight /
       downplay [Batch 116]: each item over the payload, one event; of the
@@ -35095,6 +35131,9 @@ begin
     else if t = 'sunburstRootToNode' then
       { [Batch 115] }
       Result := DoSunAction(p)
+    { [F3d] the tree's expand and collapse }
+    else if t = 'treeExpandAndCollapse' then
+      Result := DoTreeToggleAction(p)
     else if (t = 'treemapZoomToNode') or (t = 'treemapRootToNode')
       or (t = 'treemapMove') or (t = 'treemapRender') then
       Result := DoTreemapAction(t, p)
@@ -41733,6 +41772,9 @@ begin
     { THE TYPES WHOSE LABELS FADE IN HERE: the ones this batch animates,
       and the heatmap, whose cells never move but whose labels upstream's
       LabelManager fades all the same }
+    { [F3d] a force graph's iteration stops its groups' and lines' tweens }
+    if (t = 'graph') and (slot <= High(FGraphSpecs)) and FGraphLaidOut[slot] then
+      r.GraphForce := FGraphSpecs[slot].Layout = glForce;
     r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
       or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName)

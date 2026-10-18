@@ -50,6 +50,8 @@ type
     { a circular layout's case: the ring's cos / sin are not correctly
       rounded in either runtime -- its numbers to 1e-9 }
     FTol: Double;
+    { [F3d] a sample past the case's placeFrom: places not compared }
+    FNoPlace: Boolean;
     procedure Bad(const AWhat: string);
     procedure SameNum(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure NearNum(const AWhat: string; AGot: Double; AWant: TJSONData; ATol: Double);
@@ -63,6 +65,7 @@ type
       out AEl: TTyChartElement; ASub: Integer = -1): Boolean;
     procedure ProbeGraph(ARec: TJSONObject);
     procedure ProbeTree(ARec: TJSONObject);
+    procedure DrawnCentre(const AWhat: string; ASeries, AIndex: Integer; ALeaf: TJSONObject);
     procedure ProbePictorial(ARec: TJSONObject);
     procedure ProbeState(ARec: TJSONObject);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
@@ -400,22 +403,32 @@ begin
       end
       else
       begin
-        SameKey(name, p, 'x', leaf.Find('x'));
-        SameKey(name, p, 'y', leaf.Find('y'));
+        if not FNoPlace then
+        begin
+          SameKey(name, p, 'x', leaf.Find('x'));
+          SameKey(name, p, 'y', leaf.Find('y'));
+        end
+        else if leaf.Integers['n'] = 0 then
+        begin
+          { the place not compared: still, nothing of it moves here either }
+          Inc(FCompared);
+          if not (SameBits(p.Num('x'), p.FinalOf('x').Num) and SameBits(p.Num('y'), p.FinalOf('y').Num)) then
+            Bad(name + ': the group slides here, upstream sets it');
+        end;
         SameKey(name, p, 'scaleX', leaf.Find('sx'));
         SameKey(name, p, 'scaleY', leaf.Find('sy'));
         SameKey(name, p, 'style.opacity', leaf.Find('op'));
       end;
       { THE FRAME: the node's path on the canvas -- its centre, the group's
         global place }
-      if FrameEl(s, idx, carSymbol, el)
+      if not FNoPlace and FrameEl(s, idx, carSymbol, el)
         and TyRectFIsValid(el.Shape.Bounds) and (WantNum(leaf.Find('op')) > 0)
         and (WantNum(leaf.Find('sx')) > 0) then
       begin
         cx := (el.Shape.Bounds.Left + el.Shape.Bounds.Right) / 2;
         cy := (el.Shape.Bounds.Top + el.Shape.Bounds.Bottom) / 2;
-        NearNum(name + ' drawn x', cx, leaf.Find('gx'), 1e-6);
-        NearNum(name + ' drawn y', cy, leaf.Find('gy'), 1e-6);
+        NearNum(name + ' drawn x', cx, leaf.Find('wx'), 1e-6);
+        NearNum(name + ' drawn y', cy, leaf.Find('wy'), 1e-6);
       end;
     end
     else if Copy(rest, 1, 5) = 'ghost' then
@@ -450,17 +463,21 @@ begin
         else
         begin
           SameKey(name, p, 'shape.percent', leaf.Find('percent'));
-          SameKey(name, p, 'shape.x1', leaf.Find('x1'));
-          SameKey(name, p, 'shape.y1', leaf.Find('y1'));
-          SameKey(name, p, 'shape.x2', leaf.Find('x2'));
-          SameKey(name, p, 'shape.y2', leaf.Find('y2'));
-          SameKey(name, p, 'shape.cpx1', leaf.Find('cpx1'));
-          SameKey(name, p, 'shape.cpy1', leaf.Find('cpy1'));
+          if not FNoPlace then
+          begin
+            SameKey(name, p, 'shape.x1', leaf.Find('x1'));
+            SameKey(name, p, 'shape.y1', leaf.Find('y1'));
+            SameKey(name, p, 'shape.x2', leaf.Find('x2'));
+            SameKey(name, p, 'shape.y2', leaf.Find('y2'));
+            SameKey(name, p, 'shape.cpx1', leaf.Find('cpx1'));
+            SameKey(name, p, 'shape.cpy1', leaf.Find('cpy1'));
+          end;
         end;
       end;
       { THE FRAME: a whole straight line's two ends on the canvas -- the
         shape through the main group as it is now }
-      if (sub = '') and (WantNum(leaf.Find('percent')) = 1) and IsNan(WantNum(leaf.Find('cpx1')))
+      if FNoPlace then
+      else if (sub = '') and (WantNum(leaf.Find('percent')) = 1) and IsNan(WantNum(leaf.Find('cpx1')))
         and FrameEl(s, idx, carGraphEdge, el) and (Length(el.Shape.Points) = 2) then
       begin
         vw := TJSONObject(ARec.Find('g' + IntToStr(s) + '/view'));
@@ -488,8 +505,8 @@ begin
       else if (sub = 'label') and (WantNum(leaf.Find('op')) > 0)
         and FrameEl(s, idx, carGraphEdgeLabel, el) then
       begin
-        NearNum(name + ' drawn x', el.Caption.X, leaf.Find('gx'), 1e-6);
-        NearNum(name + ' drawn y', el.Caption.Y, leaf.Find('gy'), 1e-6);
+        NearNum(name + ' drawn x', el.Caption.X, leaf.Find('wx'), 1e-6);
+        NearNum(name + ' drawn y', el.Caption.Y, leaf.Find('wy'), 1e-6);
       end;
     end;
   end;
@@ -497,6 +514,26 @@ end;
 
 { ---- a tree: the view group, the nodes and their groups, the ghosts, the
   edges, the labels ---- }
+procedure TAdvChartAnimUpdate3OracleTest.DrawnCentre(const AWhat: string;
+  ASeries, AIndex: Integer; ALeaf: TJSONObject);
+var el: TTyChartElement;
+begin
+  { THE FRAME: the path's centre on the canvas against its global place --
+    a live node's, or (none live) its ghost's }
+  if (WantNum(ALeaf.Find('op')) <= 0) or not (WantNum(ALeaf.Find('sx')) > 0) then Exit;
+  if not FrameEl(ASeries, AIndex, carTreeNode, el) then
+  begin
+    Inc(FCompared);
+    Bad(AWhat + ': not drawn');
+    Exit;
+  end;
+  if not TyRectFIsValid(el.Shape.Bounds) then Exit;
+  NearNum(AWhat + ' drawn x', (el.Shape.Bounds.Left + el.Shape.Bounds.Right) / 2,
+    ALeaf.Find('wx'), 1e-6);
+  NearNum(AWhat + ' drawn y', (el.Shape.Bounds.Top + el.Shape.Bounds.Bottom) / 2,
+    ALeaf.Find('wy'), 1e-6);
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.ProbeTree(ARec: TJSONObject);
 var
   i, s, idx, slash: Integer;
@@ -532,6 +569,7 @@ begin
       idx := StrToInt(Copy(rest, 5, MaxInt));
       p := FChart.AnimFindProxy(s, idx, 'symbol');
       g := FChart.AnimFindProxy(s, idx, 'treeGroup');
+      DrawnCentre(name, s, idx, leaf);
       if (p = nil) and (g = nil) then
       begin
         if leaf.Integers['n'] > 0 then Bad(name + ': upstream animates the node, the port has no proxy');
@@ -569,6 +607,8 @@ begin
         Bad(name + ': upstream still removes it, the port has no ghost');
         Continue;
       end;
+      if ARec.Find('tr' + IntToStr(s) + '/node' + IntToStr(idx)) = nil then
+        DrawnCentre(name, s, idx, leaf);
       SameKey(name, p, 'x', leaf.Find('x'));
       SameKey(name, p, 'y', leaf.Find('y'));
       SameKey(name, p, 'scaleX', leaf.Find('sx'));
@@ -591,6 +631,9 @@ begin
       else
       begin
         p := FChart.AnimFindProxy(s, StrToInt(Copy(rest, 5, MaxInt)), 'treeEdge');
+        { a kept node's TreePath a collapse takes away: the node's __edge,
+          a ghost here }
+        if p = nil then p := FChart.AnimFindGhost(s, StrToInt(Copy(rest, 5, MaxInt)), 'treeEdge');
         if p = nil then
         begin
           if leaf.Integers['n'] > 0 then Bad(name + ': upstream tweens the edge, the port has no proxy');
@@ -616,10 +659,18 @@ begin
         SameKey(name, p, 'shape.y2', leaf.Find('y2'));
       end;
     end
-    else if Copy(rest, 1, 5) = 'label' then
+    else if (Copy(rest, 1, 5) = 'label') or (Copy(rest, 1, 6) = 'glabel') then
     begin
       { THE FRAME: the text's origin on the canvas, where updateInnerText
-        placed it from the host's rect as it is now }
+        placed it from the host's rect as it is now -- a removed node's
+        label too, where no live one has the row }
+      if rest[1] = 'g' then
+      begin
+        num := Copy(rest, 7, MaxInt);
+        if Pos('_', num) > 0 then Continue;
+        if ARec.Find('tr' + IntToStr(s) + '/label' + num) <> nil then Continue;
+        rest := 'label' + num;
+      end;
       idx := StrToInt(Copy(rest, 6, MaxInt));
       if WantNum(leaf.Find('op')) <= 0 then Continue;
       if not FrameEl(s, idx, carLabel, el) then
@@ -839,10 +890,18 @@ begin
     FChart.AnimNow := now_;
     if act = 'sample' then
     begin
+      FNoPlace := (ACase.Find('placeFrom') <> nil) and (ACase.Find('placeFrom').JSONType = jtNumber)
+        and (ev.Floats['t'] >= ACase.Floats['placeFrom']);
       FChart.AnimTick(now_);
       RenderNow;
       Inc(FSamples);
       CheckSample(ACase.Arrays['probes'], ev.Objects['rec']);
+    end
+    else if act = 'frame' then
+    begin
+      { a frame upstream runs and the fixture does not record }
+      FChart.AnimTick(now_);
+      RenderNow;
     end
     else if act = 'merge' then
     begin

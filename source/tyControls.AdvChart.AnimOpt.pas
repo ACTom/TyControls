@@ -525,6 +525,30 @@ begin
   else TyAnimGlobalDefault(AKey, Result);
 end;
 
+{ [F3d] GraphSeriesModel.isAnimationEnabled: not while a force layout
+  animates its own iteration -- `layout === 'force' &&
+  get(['force', 'layoutAnimation'])` (true by default) }
+function GraphForceAnimates(AOwn: TJSONData): Boolean;
+var d, fo: TJSONData;
+begin
+  Result := False;
+  if not (AOwn is TJSONObject) then Exit;
+  d := TJSONObject(AOwn).Find('layout');
+  if (d = nil) or (d.JSONType <> jtString) or (d.AsString <> 'force') then Exit;
+  fo := TJSONObject(AOwn).Find('force');
+  d := nil;
+  if fo is TJSONObject then d := TJSONObject(fo).Find('layoutAnimation');
+  { absent or null: the default, true }
+  if (d = nil) or (d.JSONType = jtNull) then Exit(True);
+  case d.JSONType of
+    jtBoolean: Result := d.AsBoolean;
+    jtNumber: Result := (d.AsFloat <> 0) and not IsNan(d.AsFloat);
+    jtString: Result := d.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
 function TyAnimIsEnabled(const AModel: TTyAnimModel): Boolean;
 var v: TTyAnimOptValue;
 begin
@@ -536,6 +560,8 @@ begin
   if Result and AModel.IsSeries then
     if Double(AModel.DataCount) > OptToNumber(TyAnimGetShallow(AModel, 'animationThreshold')) then
       Result := False;
+  if Result and AModel.IsSeries and (AModel.TypeKey = 'graph') and GraphForceAnimates(AModel.Own) then
+    Result := False;
 end;
 
 { ==================== the config ==================== }

@@ -47,10 +47,14 @@ Top level: source, version, seed, measure {firstCode, ratio[] (hex)}, clock
 
 A case: id, group, note, W, H, option, probes[], events[] (ring: a circular
 layout -- the ring's cos / sin are not correctly rounded in either runtime,
-compared to 1e-9). The first
+compared to 1e-9; placeFrom: from this t on the places -- node x / y, edge
+shapes, what is drawn -- are not compared, only the scales, the opacities,
+the percents and whether things move: a force layout laid out again after a
+legend filter is not the port's yet). The first
 setOption is at T0. An event, in order, at t ms after T0:
   {t, do: 'sample', rec}       zr.animation.update(), then what the probes
                                read
+  {t, do: 'frame'}             zr.animation.update(), nothing recorded
   {t, do: 'merge', option}     setOption(option)        (its flush steps)
   {t, do: 'notMerge', option}  setOption(option, true)
   {t, do: 'action', action}    dispatchAction(action)
@@ -62,7 +66,8 @@ A sample's rec, by probe:
          'g<s>/view' {x, y, scaleX, scaleY, n} the main group (a view only);
          'g<s>/node<i>' per data index i: {raw, x, y, gs (the group's
          scale: setSymbolScale), sx, sy (the path's scale), op (the path's
-         opacity), n (clips on the group and the path)};
+         opacity), n (clips on the group and the path), wx, wy, ws (the
+         path's global transform: its place and scale on the canvas)};
          'g<s>/ghost<i>' a removed node still fading, by its OLD data index
          (its ECData): {x, y, sx, sy, op, n};
          'g<s>/edge<i>' per edge data index: {x1, y1, x2, y2, cpx1, cpy1,
@@ -217,18 +222,19 @@ function paint(v) {
 // ---------------------------------------------------------------------------
 // the probes
 // ---------------------------------------------------------------------------
-// the global transform's translation and scale (after the frame's update)
-const glob = (o, el, pre) => {
+// the global transform's translation and scale (after the frame's update):
+// wx, wy, ws
+const glob = (o, el) => {
   const m = el.transform || [1, 0, 0, 1, el.x, el.y];
-  o[pre + 'x'] = hx(m[4]);
-  o[pre + 'y'] = hx(m[5]);
-  o[pre + 's'] = hx(m[0]);
+  o.wx = hx(m[4]);
+  o.wy = hx(m[5]);
+  o.ws = hx(m[0]);
   return o;
 };
 function symbolRec(el) {
   const p = el.childAt(0);
   return glob({ x: hx(el.x), y: hx(el.y), gs: hx(el.scaleX), sx: hx(p.scaleX), sy: hx(p.scaleY),
-    op: hx(p.style.opacity), n: nClip(el) + nClip(p) }, p, 'g');
+    op: hx(p.style.opacity), n: nClip(el) + nClip(p) }, p);
 }
 const PROBES = {
   graph(chart, rec) {
@@ -268,13 +274,13 @@ const PROBES = {
           const sym = g.childOfName(nm);
           if (sym) {
             rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'from' : 'to')] = glob({ x: hx(sym.x), y: hx(sym.y),
-              scale: hx(sym.scaleX), rotation: hx(sym.rotation) }, sym, 'g');
+              scale: hx(sym.scaleX), rotation: hx(sym.rotation) }, sym);
           }
         }
         const label = g.getTextContent();
         if (label && !label.ignore) {
           rec[key + '/edge' + i + '/label'] = glob({ x: hx(label.x), y: hx(label.y), rotation: hx(label.rotation),
-            scale: hx(label.scaleX), op: hx(label.style.opacity) }, label, 'g');
+            scale: hx(label.scaleX), op: hx(label.style.opacity) }, label);
         }
       });
     });
@@ -420,6 +426,14 @@ add('graph', 'graph-enter-update', "an update while the enter still runs (at 150
       { name: 'c', x: 50, y: 100 }, { name: 'd', x: 150, y: 120 }, { name: 'e', x: 80, y: 190 }] }] } },
     ...after([0, 1, 50, 200, 500, 849, 850, 851, 1000, 1149, 1150, 1151, 1500], 150)]);
 
+add('graph', 'graph-force', "a force layout without layoutAnimation (layoutAnimation true turns the series' animation off altogether, GraphSeriesModel.isAnimationEnabled): its iteration runs synchronously in the render and updateLayout stops the node groups' and the lines' tweens -- the paths pop in and scale, nothing slides or draws out; the legend switches category B off (the nodes' x / y written: the iteration starts from them, no random numbers)",
+  { animation: true, legend: { data: ['A', 'B'] },
+    series: [{ type: 'graph', layout: 'force', force: { layoutAnimation: false, repulsion: 80 }, categories: GCATS, symbolSize: 16,
+      edgeSymbol: ['none', 'arrow'], data: GN, links: GL }] },
+  ['graph'],
+  [{ t: 0, do: 'sample' }, { t: 100, do: 'sample' }, { t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_UPD, T1)], { placeFrom: T1 });
+
 add('graph', 'graph-cartesian', "a graph on cartesian2d: no view, the nodes' groups slide in pixels, the edges tween in pixels; a value changes",
   { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
     series: [Object.assign({ type: 'graph', coordinateSystem: 'cartesian2d', symbolSize: 14, edgeSymbol: ['none', 'arrow'],
@@ -434,20 +448,32 @@ const TREE = [{ name: 'root', children: [
   { name: 'b', children: [{ name: 'b1' }, { name: 'b2' }] },
   { name: 'c' }] }];
 const S_TREE = [0, 1, 16, 100, 250, 499, 500, 501, 750, 999, 1000, 1001, 1500];
+// A REMOVAL'S END STARVES THE FRAME: zrender's Animation.update saves the
+// next clip before it steps one, and a removal's done (group.remove) takes
+// that next clip off the list -- the loop ends there, and every clip after
+// it waits for a later frame (as many frames as there are removals ending
+// at once). Upstream's kept nodes stand still for those frames; the port
+// steps every clip. So after a collapse the samples stop short of the
+// removal's end, a few frames run unrecorded, and the next sample is when
+// everything has caught up.
+const S_TREE_RM = [0, 1, 16, 100, 250, 499, 500, 501, 750, 999];
+const afterRm = from => [...after(S_TREE_RM, from),
+  ...[1000, 1016, 1032, 1048, 1064, 1080, 1096, 1112, 1128, 1144].map(t => ({ t: from + t, do: 'frame' })),
+  ...after([1500], from)];
 const TLIN = { animationDurationUpdate: 1000, animationEasingUpdate: 'linear', expandAndCollapse: true };
 
 add('tree', 'tree-collapse', "orthogonal LR, curve edges, 1000 ms linear: collapsing 'a' (data index 2) -- its children go to a's place + 1 and fade (removeNode, the update timing), their edges shrink into a's place and fade, the kept nodes slide (the layout changed), the view group tweens to the new rect; then expanding it again -- the children grow out of a's OLD place (sourceOldLayout: __oldX / __oldY)",
   { animation: true, series: [Object.assign({ type: 'tree', data: TREE, initialTreeDepth: -1 }, TLIN)] },
   ['tree'],
   [{ t: T1 - 1, do: 'sample' },
-    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } }, ...after(S_TREE, T1),
+    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } }, ...afterRm(T1),
     { t: T1 + 2000, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } }, ...after(S_TREE, T1 + 2000)]);
 
 add('tree', 'tree-polyline', "orient TB, polyline edges: collapsing 'b' removes its TreePath (to the source's place, no opacity) and its children; expanding it builds a TreePath from one child point on b",
   { animation: true, series: [Object.assign({ type: 'tree', orient: 'TB', edgeShape: 'polyline', data: TREE, initialTreeDepth: -1 }, TLIN)] },
   ['tree'],
   [{ t: T1 - 1, do: 'sample' },
-    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after(S_TREE, T1),
+    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...afterRm(T1),
     { t: T1 + 2000, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after(S_TREE, T1 + 2000)]);
 
 add('tree', 'tree-midway', "collapse 'a' and expand it again 300 ms in, before the removal ends: the removed elements are not given back -- new ones are made from the source's old place while the old ones still fade",
@@ -457,6 +483,12 @@ add('tree', 'tree-midway', "collapse 'a' and expand it again 300 ms in, before t
     { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } }, ...after([0, 1, 300], T1),
     { t: T1 + 300, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } },
     ...after([300, 301, 500, 999], T1)]);
+
+add('tree', 'tree-zoom', "a tree zoomed by its option (zoom 1.6): the view group is not the identity, and collapsing 'a' (its a21 the deepest node) changes the nodes' bounding rect -- the view group tweens (update timing, no row) under the nodes' own slides, and the compensation scale is set at once",
+  { animation: true, series: [Object.assign({ type: 'tree', data: TREE, initialTreeDepth: -1, zoom: 1.6, roam: true }, TLIN)] },
+  ['tree'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } }, ...afterRm(T1)]);
 
 add('tree', 'tree-default-timing', "the default update timing (300 ms cubicInOut) and the initial depth: expanding a collapsed 'a2' (data index 4) whose child was never drawn",
   { animation: true, series: [{ type: 'tree', data: TREE, initialTreeDepth: 2, expandAndCollapse: true }] },
@@ -475,7 +507,7 @@ add('radial', 'radial-toggle', "a radial tree, collapsing 'b' (data index 6) and
   { animation: true, series: [Object.assign({ type: 'tree', layout: 'radial', data: TREE, initialTreeDepth: -1, symbolSize: 12 }, TLIN)] },
   ['tree'],
   [{ t: T1 - 1, do: 'sample' },
-    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after(S_TREE, T1),
+    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...afterRm(T1),
     { t: T1 + 2000, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after(S_TREE, T1 + 2000)]);
 
 // ---- a data item's array symbolSize ----
@@ -555,7 +587,8 @@ function pointer(chart, ev, type) {
 function runCase(c) {
   const chart = mk(c.W, c.H);
   try {
-    const out = { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, ring: !!c.ring, option: clone(c.option),
+    const out = { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, ring: !!c.ring,
+      placeFrom: c.placeFrom == null ? null : c.placeFrom, option: clone(c.option),
       probes: c.probes, events: [] };
     // a copy: echarts stores its inner records on the objects it is given
     quiet(() => chart.setOption(clone(c.option)));
@@ -567,6 +600,7 @@ function runCase(c) {
         refresh(chart);
         o.rec = readRec(chart, c.probes);
       }
+      else if (ev.do === 'frame') zr(chart).animation.update();
       else if (ev.do === 'merge') quiet(() => chart.setOption(clone(ev.option)));
       else if (ev.do === 'notMerge') quiet(() => chart.setOption(clone(ev.option), true));
       else if (ev.do === 'action') quiet(() => chart.dispatchAction(clone(ev.action)));

@@ -428,6 +428,18 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { [F3d] A FIXED ANCHOR HUNG ON THE HOST'S BOX (a radial tree's label):
+      the position and the distance (device px) it was placed by, so a
+      frame can place it again on the box as drawn }
+    HasFixedPos: Boolean;
+    FixedPos: Integer;
+    FixedDist: Double;
+    { ... and what the host's box is made of: the path's half width at rest
+      (its scale on the canvas) and the stroke's half margin around it --
+      strokeNoScale divides the line width by the line scale, so the margin
+      stays while the path scales, and goes when the scale is nought
+      (Path.getBoundingRect) }
+    FixedHalfW, FixedInfl: Double;
     { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
       text position (sectorLabel.ts) -- SecAnchor: one of the sector
       positions, its anchor and the alignment it implies; else a built-in
