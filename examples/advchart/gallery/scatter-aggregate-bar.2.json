@@ -1,0 +1,33 @@
+{
+ "xAxis": {
+  "type": "category",
+  "data": [
+   "Female",
+   "Male"
+  ]
+ },
+ "yAxis": {},
+ "series": [
+  {
+   "type": "bar",
+   "id": "total",
+   "data": [
+    {
+     "value": 177.74534412955484,
+     "groupId": "male"
+    },
+    {
+     "value": 164.8723076923075,
+     "groupId": "female"
+    }
+   ],
+   "universalTransition": {
+    "enabled": true,
+    "seriesKey": [
+     "female",
+     "male"
+    ]
+   }
+  }
+ ]
+}

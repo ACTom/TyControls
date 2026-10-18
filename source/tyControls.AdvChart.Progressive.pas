@@ -96,7 +96,8 @@ function TyProgWalksNext(const AType: string): Boolean;
 
 { getProgressive / getProgressiveThreshold / progressiveChunkMode of a
   series of type AType written as ANode (nil: every default). }
-function TyProgSpecOf(const AType: string; ANode: TJSONObject): TTyProgSpec;
+function TyProgSpecOf(const AType: string; ANode: TJSONObject;
+  ARoot: TJSONObject = nil): TTyProgSpec;
 { progressiveRender: enabled, an incremental view, and ACount at least the
   threshold }
 function TyProgRenderOn(const ASpec: TTyProgSpec; const AType: string;
@@ -224,22 +225,52 @@ begin
   Result := Floor(A + 0.5);
 end;
 
-function TyProgSpecOf(const AType: string; ANode: TJSONObject): TTyProgSpec;
+function TyProgSpecOf(const AType: string; ANode: TJSONObject;
+  ARoot: TJSONObject): TTyProgSpec;
 var
   prog, th, d: TJSONData;
-  defProg, defTh, n: Double;
-  progOn: Boolean;
+  ownProg, ownTh, n, thV: Double;
+  hasOwnProg, hasOwnTh, progOn, rootOn: Boolean;
+
+  { model.get(AKey) past the series' own option and its type's defaults:
+    the option root, where the global defaults (progressive 400,
+    progressiveThreshold 3000) sit under what the author wrote [F4c] }
+  procedure RootOf(const AKey: string; ADefault: Double; out AOn: Boolean;
+    out AN: Double);
+  var r: TJSONData;
+  begin
+    r := nil;
+    if ARoot <> nil then r := ARoot.Find(AKey);
+    if r = nil then
+    begin
+      AOn := ADefault <> 0;
+      AN := ADefault;
+    end
+    else
+    begin
+      AOn := JsTruthy(r);
+      AN := JsNum(r);
+    end;
+  end;
+
 begin
   Result := Default(TTyProgSpec);
-  { the defaultOption chain: Series 400 / 3000; a bar's (BaseBarSeries) and
-    a candlestick's 3000 in 'mod', a candlestick's threshold 1e4; the
-    series that switch it off }
+  { the defaultOption chain: a type's own progressive (0 for the series that
+    switch it off, 3000 for a bar's (BaseBarSeries) and a candlestick's, in
+    'mod'; 300 for parallel) and a candlestick's threshold 1e4; every other
+    series has none, and get() climbs to the option root }
+  hasOwnProg := True;
   if (AType = 'line') or (AType = 'effectScatter') or (AType = 'pictorialBar')
-    or (AType = 'treemap') then defProg := 0
-  else if (AType = 'bar') or (AType = 'candlestick') then defProg := 3000
-  else if AType = 'parallel' then defProg := 300
-  else defProg := 400;
-  if AType = 'candlestick' then defTh := 1e4 else defTh := 3000;
+    or (AType = 'treemap') then ownProg := 0
+  else if (AType = 'bar') or (AType = 'candlestick') then ownProg := 3000
+  else if AType = 'parallel' then ownProg := 300
+  else
+  begin
+    hasOwnProg := False;
+    ownProg := 0;
+  end;
+  hasOwnTh := AType = 'candlestick';
+  if hasOwnTh then ownTh := 1e4 else ownTh := 0;
   prog := nil;
   th := nil;
   if ANode <> nil then
@@ -247,35 +278,47 @@ begin
     prog := ANode.Find('progressive');
     th := ANode.Find('progressiveThreshold');
   end;
-  { getProgressive: the option, else the default -- a written null stays
-    null and reads falsy }
-  if prog <> nil then
+  { getProgressive: the option's own value; unwritten, the type's default;
+    null, or no default, the root's }
+  if (prog <> nil) and (prog.JSONType <> jtNull) then
   begin
     progOn := JsTruthy(prog);
     n := JsNum(prog);
   end
-  else
+  else if (prog = nil) and hasOwnProg then
   begin
-    progOn := defProg <> 0;
-    n := defProg;
-  end;
+    progOn := ownProg <> 0;
+    n := ownProg;
+  end
+  else
+    RootOf('progressive', 400, progOn, n);
+  { getProgressiveThreshold, the same chain }
+  if (th <> nil) and (th.JSONType <> jtNull) then thV := JsNum(th)
+  else if (th = nil) and hasOwnTh then thV := ownTh
+  else RootOf('progressiveThreshold', 3000, rootOn, thV);
   if AType = 'scatter' then
   begin
-    { `this.option.progressive == null`: the large default 5000, else the
-      model's }
+    { `this.option.progressive == null`: the large default 5000, else
+      get('progressive') -- which, a scatter having no default, is the
+      root's }
     if (prog = nil) or (prog.JSONType = jtNull) then
     begin
       d := nil;
       if ANode <> nil then d := ANode.Find('large');
-      if JsTruthy(d) then n := 5000 else n := defProg;
-      progOn := n <> 0;
+      if JsTruthy(d) then
+      begin
+        n := 5000;
+        progOn := True;
+      end
+      else
+        RootOf('progressive', 400, progOn, n);
     end;
     if (th = nil) or (th.JSONType = jtNull) then
     begin
       d := nil;
       if ANode <> nil then d := ANode.Find('large');
-      if JsTruthy(d) then defTh := 1e4;
-      th := nil;
+      if JsTruthy(d) then thV := 1e4
+      else RootOf('progressiveThreshold', 3000, rootOn, thV);
     end;
   end
   else if AType = 'bar' then
@@ -285,7 +328,7 @@ begin
     if ANode <> nil then d := ANode.Find('large');
     if not JsTruthy(d) then progOn := False;
   end;
-  if th <> nil then Result.Threshold := JsNum(th) else Result.Threshold := defTh;
+  Result.Threshold := thV;
   Result.Enabled := progOn;
   { Math.round(progressive || 700): a step that is no positive number would
     never end a chunk -- the port leaves such a series unchunked }
@@ -295,13 +338,21 @@ begin
     if IsNan(n) or (n < 1) or (n > MaxInt) then Result.Enabled := False
     else Result.Step := Trunc(n);
   end;
+  { progressiveChunkMode: the option's own, else a type's default 'mod',
+    else the root's }
   d := nil;
   if ANode <> nil then d := ANode.Find('progressiveChunkMode');
-  if d <> nil then
+  if (d <> nil) and (d.JSONType <> jtNull) then
     Result.ModMode := (d.JSONType = jtString) and (d.AsString = 'mod')
+  else if (d = nil) and ((AType = 'bar') or (AType = 'candlestick')
+    or (AType = 'pictorialBar')) then
+    Result.ModMode := True
   else
-    Result.ModMode := (AType = 'bar') or (AType = 'candlestick')
-      or (AType = 'pictorialBar');
+  begin
+    d := nil;
+    if ARoot <> nil then d := ARoot.Find('progressiveChunkMode');
+    Result.ModMode := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'mod');
+  end;
 end;
 
 function TyProgRenderOn(const ASpec: TTyProgSpec; const AType: string;

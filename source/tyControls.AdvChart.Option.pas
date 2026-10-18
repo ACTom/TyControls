@@ -212,6 +212,17 @@ function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
   not positive. [Batch 83] }
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 
+{ Model.getShallow(key) on a component or series model whose option has no
+  default for AKey [F4c]: its own value unless that is null or undefined,
+  then the option ROOT's -- the GlobalModel is every component's parent, so
+  a root `silent` or `progressive` reaches every series. nil when neither
+  has a value. }
+function TyGetShallowRoot(ANode: TJSONData; ARoot: TJSONData;
+  const AKey: string): TJSONData;
+{ JavaScript truthiness of an option value: nil, null, false, 0, NaN and ''
+  are false. }
+function TyOptTruthy(AData: TJSONData): Boolean;
+
 { THE NESTING GUARD every JSON text a host hands the chart passes before
   fpjson recurses into it -- the option, a merge, the setOption opts, an
   action payload, an event query. See TyJsonNestingExceeds. }
@@ -248,6 +259,30 @@ uses
     UnicodeToUTF8, used by the escape decoder below. }
   tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
   tyControls.AdvChart.Scale, tyControls.AdvChart.Data;
+
+function TyGetShallowRoot(ANode: TJSONData; ARoot: TJSONData;
+  const AKey: string): TJSONData;
+begin
+  Result := nil;
+  if ANode is TJSONObject then Result := TJSONObject(ANode).Find(AKey);
+  if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+  if ARoot is TJSONObject then Result := TJSONObject(ARoot).Find(AKey)
+  else Result := nil;
+  if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+end;
+
+function TyOptTruthy(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (not IsNan(AData.AsFloat)) and (AData.AsFloat <> 0);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
 
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 var
@@ -1124,6 +1159,9 @@ begin
     seen := TStringList.Create;
     kept := TJSONArray.Create;
     try
+      { by bytes, as upstream keys a name: the locale compare took
+        U+00C5 and U+212B for one letter, and whatever came after [P2] }
+      seen.UseLocale := False;
       seen.Sorted := True;
       seen.CaseSensitive := True;
       for k := 0 to types.Count - 1 do

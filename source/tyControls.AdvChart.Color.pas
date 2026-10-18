@@ -34,6 +34,15 @@ type
 function TyTryParseChartColor(const AText: string;
   out AColor: TTyChartColor): Boolean;
 
+{ [F4c] THE ALPHA A PACKED COLOUR WAS PARSED FROM, as near as the byte
+  allows: the shortest decimal (up to six places) that packs back to the
+  same byte (Math.round of a * 255), the nearest to byte / 255 among those of
+  its length. An author's alpha of two places or fewer -- 0.5, 0.3, 0.85 --
+  comes back exactly (two such alphas never share a byte), so a luminance or
+  an rgba() text reads upstream's number where byte / 255 read 0.50196...
+  0 and 255 are 0 and 1. }
+function TyChartColorAlpha(AColor: TTyChartColor): Double;
+
 { The same grammar, answering zrender's own four numbers rather than a packed
   colour: what `parse()` hands a visual mapping. The ALPHA STAYS A DOUBLE --
   `rgba(0,0,180,0.4)` packed is 102/255, and a ramp between two such colours
@@ -464,6 +473,41 @@ begin
   if AValue < 0 then AValue := 0;
   if AValue > 255 then AValue := 255;
   Result := Cardinal(Trunc(AValue));
+end;
+
+function TyChartColorAlpha(AColor: TTyChartColor): Double;
+var
+  b: Cardinal;
+  digits: Integer;
+  scale, k, v, best, bestDist, target: Double;
+  found: Boolean;
+begin
+  b := (AColor shr 24) and $FF;
+  if b = 0 then Exit(0);
+  if b = 255 then Exit(1);
+  target := b / 255;
+  for digits := 1 to 6 do
+  begin
+    scale := IntPower(10, digits);
+    found := False;
+    best := target;
+    bestDist := Infinity;
+    k := Floor(target * scale) - 1;
+    while k <= Ceil(target * scale) + 1 do
+    begin
+      v := k / scale;
+      if (v > 0) and (v < 1) and (ClampByte(v * 255) = b)
+        and (Abs(v - target) < bestDist) then
+      begin
+        best := v;
+        bestDist := Abs(v - target);
+        found := True;
+      end;
+      k := k + 1;
+    end;
+    if found then Exit(best);
+  end;
+  Result := target;
 end;
 
 function ClampUnit(AValue: Double): Double;

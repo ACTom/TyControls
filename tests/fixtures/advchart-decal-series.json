@@ -1,0 +1,8122 @@
+{
+ "source": "decal-series.js: ECharts 6.1 dist, SSR svg, 600 x 400",
+ "W": 600,
+ "H": 400,
+ "notes": [
+  "tiles: the decal symbols decal-aria.js left out -- empty, path://, image:// -- as the SVG painter received them",
+  "scenarios: every displayable whose decal element fills, by series / dataType / dataIndex, and the legend icons"
+ ],
+ "tiles": [
+  {
+   "id": "empty-circle",
+   "decal": {
+    "symbol": "emptyCircle",
+    "dashArrayX": [
+     8,
+     4
+    ],
+    "dashArrayY": [
+     8,
+     4
+    ]
+   },
+   "tile": {
+    "w": 12,
+    "h": 12,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "circle",
+      "empty": true,
+      "x": "0000000000000000",
+      "y": "c028000000000000",
+      "w": "4020000000000000",
+      "h": "4020000000000000",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "circle",
+      "empty": true,
+      "x": "4028000000000000",
+      "y": "c028000000000000",
+      "w": "4020000000000000",
+      "h": "4020000000000000",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "circle",
+      "empty": true,
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "w": "4020000000000000",
+      "h": "4020000000000000",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "circle",
+      "empty": true,
+      "x": "4028000000000000",
+      "y": "0000000000000000",
+      "w": "4020000000000000",
+      "h": "4020000000000000",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     }
+    ]
+   }
+  },
+  {
+   "id": "empty-mixed",
+   "decal": {
+    "symbol": [
+     "emptyRect",
+     "diamond",
+     "emptyTriangle"
+    ],
+    "dashArrayX": [
+     6,
+     2
+    ],
+    "dashArrayY": [
+     6,
+     2
+    ],
+    "color": "blue"
+   },
+   "tile": {
+    "w": 24,
+    "h": 8,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "rect",
+      "empty": true,
+      "x": "0000000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "diamond",
+      "empty": false,
+      "x": "4020000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "blue",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "triangle",
+      "empty": true,
+      "x": "4030000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "rect",
+      "empty": true,
+      "x": "4038000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "diamond",
+      "empty": false,
+      "x": "4040000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "blue",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "triangle",
+      "empty": true,
+      "x": "4044000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "rect",
+      "empty": true,
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "diamond",
+      "empty": false,
+      "x": "4020000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "blue",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "triangle",
+      "empty": true,
+      "x": "4030000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "rect",
+      "empty": true,
+      "x": "4038000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "diamond",
+      "empty": false,
+      "x": "4040000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "blue",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "triangle",
+      "empty": true,
+      "x": "4044000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#fff",
+      "stroke": "blue",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     }
+    ]
+   }
+  },
+  {
+   "id": "empty-roundrect",
+   "decal": {
+    "symbol": "emptyRoundRect",
+    "symbolSize": 0.8,
+    "dashArrayX": 10,
+    "dashArrayY": 6
+   },
+   "tile": {
+    "w": 20,
+    "h": 12,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "roundRect",
+      "empty": true,
+      "x": "3feffffffffffffe",
+      "y": "c026cccccccccccd",
+      "w": "4020000000000000",
+      "h": "4013333333333334",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "roundRect",
+      "empty": true,
+      "x": "4035000000000000",
+      "y": "c026cccccccccccd",
+      "w": "4020000000000000",
+      "h": "4013333333333334",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "roundRect",
+      "empty": true,
+      "x": "3feffffffffffffe",
+      "y": "3fe3333333333332",
+      "w": "4020000000000000",
+      "h": "4013333333333334",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     },
+     {
+      "type": "roundRect",
+      "empty": true,
+      "x": "4035000000000000",
+      "y": "3fe3333333333332",
+      "w": "4020000000000000",
+      "h": "4013333333333334",
+      "fill": "#fff",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "4000000000000000",
+      "bbox": null
+     }
+    ]
+   }
+  },
+  {
+   "id": "path-keep",
+   "decal": {
+    "symbol": "path://M0,0L10,0L10,20L0,20Z",
+    "dashArrayX": [
+     12,
+     4
+    ],
+    "dashArrayY": [
+     8,
+     4
+    ]
+   },
+   "tile": {
+    "w": 16,
+    "h": 12,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4010000000000000",
+       "c028000000000000",
+       "4010000000000000",
+       "4020000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4034000000000000",
+       "c028000000000000",
+       "4010000000000000",
+       "4020000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4010000000000000",
+       "0000000000000000",
+       "4010000000000000",
+       "4020000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4034000000000000",
+       "0000000000000000",
+       "4010000000000000",
+       "4020000000000000"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "path-cover",
+   "decal": {
+    "symbol": "path://M0,0L10,0L5,10Z",
+    "symbolKeepAspect": false,
+    "dashArrayX": [
+     12,
+     4
+    ],
+    "dashArrayY": [
+     8,
+     4
+    ]
+   },
+   "tile": {
+    "w": 16,
+    "h": 12,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "0000000000000000",
+       "c028000000000000",
+       "4028000000000000",
+       "4020000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4030000000000000",
+       "c028000000000000",
+       "4028000000000000",
+       "4020000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "0000000000000000",
+       "0000000000000000",
+       "4028000000000000",
+       "4020000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4030000000000000",
+       "0000000000000000",
+       "4028000000000000",
+       "4020000000000000"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "path-wide",
+   "decal": {
+    "symbol": "path://M0,5L40,5L40,15L0,15Z",
+    "symbolSize": 0.5,
+    "dashArrayX": [
+     8,
+     8
+    ],
+    "dashArrayY": [
+     16,
+     0
+    ]
+   },
+   "tile": {
+    "w": 16,
+    "h": 16,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4000000000000000",
+       "c021000000000000",
+       "4010000000000000",
+       "3ff0000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4032000000000000",
+       "c021000000000000",
+       "4010000000000000",
+       "3ff0000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4000000000000000",
+       "401e000000000000",
+       "4010000000000000",
+       "3ff0000000000000"
+      ]
+     },
+     {
+      "type": "path",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": [
+       "4032000000000000",
+       "401e000000000000",
+       "4010000000000000",
+       "3ff0000000000000"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "image",
+   "decal": {
+    "symbol": "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8AAQv8BD/kD/YURmXYAAAAASUVORK5CYII=",
+    "dashArrayX": [
+     6,
+     2
+    ],
+    "dashArrayY": [
+     6,
+     2
+    ]
+   },
+   "tile": {
+    "w": 8,
+    "h": 8,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "0000000000000000",
+       "c020000000000000",
+       "4018000000000000",
+       "4018000000000000"
+      ]
+     },
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "4020000000000000",
+       "c020000000000000",
+       "4018000000000000",
+       "4018000000000000"
+      ]
+     },
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "0000000000000000",
+       "0000000000000000",
+       "4018000000000000",
+       "4018000000000000"
+      ]
+     },
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "4020000000000000",
+       "0000000000000000",
+       "4018000000000000",
+       "4018000000000000"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "image-mixed",
+   "decal": {
+    "symbol": [
+     "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8AAQv8BD/kD/YURmXYAAAAASUVORK5CYII=",
+     "circle"
+    ],
+    "symbolKeepAspect": false,
+    "dashArrayX": [
+     4,
+     4
+    ],
+    "dashArrayY": [
+     5,
+     3
+    ]
+   },
+   "tile": {
+    "w": 16,
+    "h": 8,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "0000000000000000",
+       "c020000000000000",
+       "4010000000000000",
+       "4014000000000000"
+      ]
+     },
+     {
+      "type": "circle",
+      "empty": false,
+      "x": "4020000000000000",
+      "y": "c020000000000000",
+      "w": "4010000000000000",
+      "h": "4014000000000000",
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "4030000000000000",
+       "c020000000000000",
+       "4010000000000000",
+       "4014000000000000"
+      ]
+     },
+     {
+      "type": "circle",
+      "empty": false,
+      "x": "4038000000000000",
+      "y": "c020000000000000",
+      "w": "4010000000000000",
+      "h": "4014000000000000",
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "0000000000000000",
+       "0000000000000000",
+       "4010000000000000",
+       "4014000000000000"
+      ]
+     },
+     {
+      "type": "circle",
+      "empty": false,
+      "x": "4020000000000000",
+      "y": "0000000000000000",
+      "w": "4010000000000000",
+      "h": "4014000000000000",
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "image",
+      "empty": false,
+      "x": null,
+      "y": null,
+      "w": null,
+      "h": null,
+      "fill": null,
+      "stroke": null,
+      "lineWidth": null,
+      "bbox": [
+       "4030000000000000",
+       "0000000000000000",
+       "4010000000000000",
+       "4014000000000000"
+      ]
+     },
+     {
+      "type": "circle",
+      "empty": false,
+      "x": "4038000000000000",
+      "y": "0000000000000000",
+      "w": "4010000000000000",
+      "h": "4014000000000000",
+      "fill": "rgba(0, 0, 0, 0.2)",
+      "stroke": null,
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     }
+    ]
+   }
+  },
+  {
+   "id": "line",
+   "decal": {
+    "symbol": "line",
+    "dashArrayX": [
+     6,
+     2
+    ],
+    "dashArrayY": [
+     6,
+     2
+    ]
+   },
+   "tile": {
+    "w": 8,
+    "h": 8,
+    "rotation": "0000000000000000",
+    "symbols": [
+     {
+      "type": "line",
+      "empty": false,
+      "x": "0000000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#000",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "line",
+      "empty": false,
+      "x": "4020000000000000",
+      "y": "c020000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#000",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "line",
+      "empty": false,
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#000",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     },
+     {
+      "type": "line",
+      "empty": false,
+      "x": "4020000000000000",
+      "y": "0000000000000000",
+      "w": "4018000000000000",
+      "h": "4018000000000000",
+      "fill": "#000",
+      "stroke": "rgba(0, 0, 0, 0.2)",
+      "lineWidth": "3ff0000000000000",
+      "bbox": null
+     }
+    ]
+   }
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "radar",
+   "note": "a radar area takes the item decal through its area style; a series without an area draws none; the points are symbols",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "radar": {
+       "indicator": [
+        {
+         "name": "x",
+         "max": 10
+        },
+        {
+         "name": "y",
+         "max": 10
+        },
+        {
+         "name": "z",
+         "max": 10
+        }
+       ]
+      },
+      "series": [
+       {
+        "type": "radar",
+        "areaStyle": {},
+        "data": [
+         {
+          "name": "r1",
+          "value": [
+           3,
+           5,
+           7
+          ]
+         },
+         {
+          "name": "r2",
+          "value": [
+           6,
+           2,
+           4
+          ],
+          "itemStyle": {
+           "decal": {
+            "symbol": "circle"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "type": "radar",
+        "name": "plain",
+        "data": [
+         {
+          "name": "r3",
+          "value": [
+           8,
+           8,
+           2
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "radar",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "polygon",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "polygon",
+          "p": 1
+         }
+        ]
+       },
+       {
+        "index": 1,
+        "type": "radar",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 2
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "radar": {
+       "indicator": [
+        {
+         "name": "x",
+         "max": 10
+        },
+        {
+         "name": "y",
+         "max": 10
+        },
+        {
+         "name": "z",
+         "max": 10
+        }
+       ]
+      },
+      "series": [
+       {
+        "type": "radar",
+        "itemStyle": {
+         "decal": {
+          "symbol": "rect",
+          "dashArrayX": 3
+         }
+        },
+        "data": [
+         {
+          "name": "r1",
+          "value": [
+           3,
+           5,
+           7
+          ],
+          "areaStyle": {}
+         },
+         {
+          "name": "r2",
+          "value": [
+           6,
+           2,
+           4
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 6,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4008000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "c024000000000000",
+          "w": "4008000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4008000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "4008000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "radar",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "polygon",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "sunburst",
+   "note": "aria: every node the decal of its depth-1 ancestor, a scope of its own; without aria the series' and the nodes' own",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "sunburst",
+        "radius": [
+         0,
+         150
+        ],
+        "data": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1",
+            "value": 4
+           },
+           {
+            "name": "A2",
+            "value": 2,
+            "children": [
+             {
+              "name": "A2x",
+              "value": 2
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "value": 3
+         },
+         {
+          "name": "C",
+          "children": [
+           {
+            "name": "C1",
+            "value": 2
+           },
+           {
+            "name": "C2",
+            "value": 1
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "sunburst",
+        "center": [
+         "85%",
+         "50%"
+        ],
+        "radius": 60,
+        "data": [
+         {
+          "name": "B",
+          "value": 1
+         },
+         {
+          "name": "Q",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 12,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4032000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "sunburst",
+        "drawn": [
+         {
+          "t": "",
+          "i": 1,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 4,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 5,
+          "k": "sector",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 6,
+          "k": "sector",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 7,
+          "k": "sector",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 8,
+          "k": "sector",
+          "p": 2
+         }
+        ]
+       },
+       {
+        "index": 1,
+        "type": "sunburst",
+        "drawn": [
+         {
+          "t": "",
+          "i": 1,
+          "k": "sector",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "sector",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "series": [
+       {
+        "type": "sunburst",
+        "radius": [
+         0,
+         150
+        ],
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle",
+          "dashArrayX": 4
+         }
+        },
+        "data": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1",
+            "value": 4
+           },
+           {
+            "name": "A2",
+            "value": 2,
+            "children": [
+             {
+              "name": "A2x",
+              "value": 2
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "value": 3,
+          "itemStyle": {
+           "decal": {
+            "symbol": "triangle",
+            "dashArrayX": 6
+           }
+          }
+         },
+         {
+          "name": "C",
+          "children": [
+           {
+            "name": "C1",
+            "value": 2,
+            "itemStyle": {
+             "decal": {
+              "symbol": "diamond"
+             }
+            }
+           },
+           {
+            "name": "C2",
+            "value": 1
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 8,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "c024000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "sunburst",
+        "drawn": [
+         {
+          "t": "",
+          "i": 1,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 4,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 5,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 6,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 7,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 8,
+          "k": "sector",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 2,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "sunburst",
+        "name": "B",
+        "radius": [
+         0,
+         150
+        ],
+        "itemStyle": {
+         "decal": {
+          "symbol": "pin"
+         }
+        },
+        "data": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1",
+            "value": 4
+           },
+           {
+            "name": "A2",
+            "value": 2,
+            "children": [
+             {
+              "name": "A2x",
+              "value": 2
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "value": 3,
+          "itemStyle": {
+           "decal": {
+            "symbol": "triangle",
+            "dashArrayX": 6
+           }
+          }
+         },
+         {
+          "name": "C",
+          "children": [
+           {
+            "name": "C1",
+            "value": 2,
+            "itemStyle": {
+             "decal": {
+              "symbol": "diamond"
+             }
+            }
+           },
+           {
+            "name": "C2",
+            "value": 1
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "sunburst",
+        "drawn": [
+         {
+          "t": "",
+          "i": 1,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 4,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 5,
+          "k": "sector",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 6,
+          "k": "sector",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 7,
+          "k": "sector",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 8,
+          "k": "sector",
+          "p": 2
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "treemap",
+   "note": "the content rects: aria by the depth-1 ancestor; without aria the series' and the nodes' own",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "treemap",
+        "breadcrumb": {
+         "show": false
+        },
+        "data": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1",
+            "value": 4
+           },
+           {
+            "name": "A2",
+            "value": 2,
+            "children": [
+             {
+              "name": "A2x",
+              "value": 2
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "value": 3
+         },
+         {
+          "name": "C",
+          "children": [
+           {
+            "name": "C1",
+            "value": 2
+           },
+           {
+            "name": "C2",
+            "value": 1
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 12,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4032000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "treemap",
+        "drawn": [
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 4,
+          "k": "rect",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 5,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 7,
+          "k": "rect",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 8,
+          "k": "rect",
+          "p": 2
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "series": [
+       {
+        "type": "treemap",
+        "breadcrumb": {
+         "show": false
+        },
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle",
+          "dashArrayX": 4
+         }
+        },
+        "data": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1",
+            "value": 4
+           },
+           {
+            "name": "A2",
+            "value": 2,
+            "children": [
+             {
+              "name": "A2x",
+              "value": 2
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "value": 3,
+          "itemStyle": {
+           "decal": {
+            "symbol": "triangle",
+            "dashArrayX": 6
+           }
+          }
+         },
+         {
+          "name": "C",
+          "children": [
+           {
+            "name": "C1",
+            "value": 2,
+            "itemStyle": {
+             "decal": {
+              "symbol": "diamond"
+             }
+            }
+           },
+           {
+            "name": "C2",
+            "value": 1
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 12,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c024000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 8,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "c024000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "treemap",
+        "drawn": [
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 4,
+          "k": "rect",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 5,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 7,
+          "k": "rect",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 8,
+          "k": "rect",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 2,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "treemap",
+        "name": "A",
+        "breadcrumb": {
+         "show": false
+        },
+        "leafDepth": 1,
+        "data": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1",
+            "value": 4
+           },
+           {
+            "name": "A2",
+            "value": 2,
+            "children": [
+             {
+              "name": "A2x",
+              "value": 2
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "value": 3
+         },
+         {
+          "name": "C",
+          "children": [
+           {
+            "name": "C1",
+            "value": 2
+           },
+           {
+            "name": "C2",
+            "value": 1
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "treemap",
+        "drawn": [
+         {
+          "t": "",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 5,
+          "k": "rect",
+          "p": 2
+         },
+         {
+          "t": "",
+          "i": 6,
+          "k": "rect",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "candle-box",
+   "note": "candlestick bodies and boxplot boxes wear the item's decal",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "candlestick",
+        "data": [
+         [
+          2,
+          4,
+          1,
+          5
+         ],
+         [
+          4,
+          3,
+          2,
+          5
+         ],
+         [
+          3,
+          3,
+          2,
+          4
+         ],
+         [
+          3,
+          5,
+          2,
+          6
+         ]
+        ]
+       },
+       {
+        "type": "boxplot",
+        "data": [
+         [
+          1,
+          2,
+          3,
+          4,
+          5
+         ],
+         [
+          2,
+          3,
+          4,
+          5,
+          6
+         ],
+         [
+          1,
+          3,
+          4,
+          6,
+          7
+         ],
+         [
+          2,
+          2.5,
+          3,
+          4,
+          5
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "candlestick",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "normalCandlestickBox",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "normalCandlestickBox",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "normalCandlestickBox",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "normalCandlestickBox",
+          "p": 0
+         }
+        ]
+       },
+       {
+        "index": 1,
+        "type": "boxplot",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "boxplotBoxPath",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "boxplotBoxPath",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "boxplotBoxPath",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "boxplotBoxPath",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "candlestick",
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle"
+         }
+        },
+        "data": [
+         [
+          2,
+          4,
+          1,
+          5
+         ],
+         {
+          "value": [
+           4,
+           3,
+           2,
+           5
+          ],
+          "itemStyle": {
+           "decal": {
+            "symbol": "diamond"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "type": "boxplot",
+        "data": [
+         [
+          1,
+          2,
+          3,
+          4,
+          5
+         ],
+         {
+          "value": [
+           2,
+           3,
+           4,
+           5,
+           6
+          ],
+          "itemStyle": {
+           "decal": {
+            "symbol": "triangle"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "candlestick",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "normalCandlestickBox",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "normalCandlestickBox",
+          "p": 1
+         }
+        ]
+       },
+       {
+        "index": 1,
+        "type": "boxplot",
+        "drawn": [
+         {
+          "t": "",
+          "i": 1,
+          "k": "boxplotBoxPath",
+          "p": 2
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "heatmap",
+   "note": "a heatmap's cells on a grid and on a calendar",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "data": [
+        "p",
+        "q"
+       ]
+      },
+      "visualMap": {
+       "min": 0,
+       "max": 5,
+       "show": false
+      },
+      "series": [
+       {
+        "type": "heatmap",
+        "data": [
+         [
+          0,
+          0,
+          1
+         ],
+         [
+          1,
+          0,
+          2
+         ],
+         [
+          2,
+          0,
+          3
+         ],
+         [
+          0,
+          1,
+          4
+         ],
+         [
+          1,
+          1,
+          5
+         ],
+         [
+          2,
+          1,
+          "-"
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "heatmap",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 4,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "calendar": {
+       "range": [
+        "2024-01-01",
+        "2024-01-14"
+       ],
+       "cellSize": 20
+      },
+      "visualMap": {
+       "min": 0,
+       "max": 5,
+       "show": false
+      },
+      "series": [
+       {
+        "type": "heatmap",
+        "coordinateSystem": "calendar",
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle",
+          "dashArrayX": 3,
+          "dashArrayY": 3
+         }
+        },
+        "data": [
+         [
+          "2024-01-02",
+          1
+         ],
+         [
+          "2024-01-05",
+          3
+         ],
+         [
+          "2024-01-09",
+          5
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 6,
+        "h": 6,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c018000000000000",
+          "w": "4008000000000000",
+          "h": "4008000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "c018000000000000",
+          "w": "4008000000000000",
+          "h": "4008000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4008000000000000",
+          "h": "4008000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "4008000000000000",
+          "h": "4008000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "heatmap",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "pictorial",
+   "note": "a pictorial bar's symbols, repeated or not",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "pictorialBar",
+        "symbol": "rect",
+        "data": [
+         2,
+         4,
+         3,
+         1
+        ]
+       },
+       {
+        "type": "pictorialBar",
+        "symbol": "circle",
+        "symbolRepeat": true,
+        "symbolSize": 14,
+        "data": [
+         1,
+         3,
+         2,
+         4
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "pictorialBar",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 0
+         }
+        ]
+       },
+       {
+        "index": 1,
+        "type": "pictorialBar",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "path",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "graph",
+   "note": "a graph's nodes are symbols, its edges do not fill: nothing",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "graph",
+        "layout": "none",
+        "itemStyle": {
+         "decal": {
+          "symbol": "rect"
+         }
+        },
+        "data": [
+         {
+          "name": "a",
+          "x": 100,
+          "y": 100
+         },
+         {
+          "name": "b",
+          "x": 300,
+          "y": 200,
+          "symbolSize": 40
+         },
+         {
+          "name": "c",
+          "x": 200,
+          "y": 300
+         }
+        ],
+        "links": [
+         {
+          "source": "a",
+          "target": "b"
+         },
+         {
+          "source": "b",
+          "target": "c"
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "graph",
+        "drawn": []
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "sankey",
+   "note": "sankey nodes; edges coloured by their source or target take that node's decal",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "sankey",
+        "data": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c"
+         },
+         {
+          "name": "d"
+         }
+        ],
+        "links": [
+         {
+          "source": "a",
+          "target": "b",
+          "value": 5
+         },
+         {
+          "source": "a",
+          "target": "c",
+          "value": 3
+         },
+         {
+          "source": "b",
+          "target": "d",
+          "value": 4
+         },
+         {
+          "source": "c",
+          "target": "d",
+          "value": 2
+         }
+        ],
+        "lineStyle": {
+         "color": "source"
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "sankey",
+        "drawn": [
+         {
+          "t": "edge",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 2,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 3,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 3,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "sankey",
+        "data": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c"
+         },
+         {
+          "name": "d"
+         }
+        ],
+        "links": [
+         {
+          "source": "a",
+          "target": "b",
+          "value": 5
+         },
+         {
+          "source": "a",
+          "target": "c",
+          "value": 3
+         },
+         {
+          "source": "b",
+          "target": "d",
+          "value": 4
+         },
+         {
+          "source": "c",
+          "target": "d",
+          "value": 2
+         }
+        ],
+        "lineStyle": {
+         "color": "target"
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "sankey",
+        "drawn": [
+         {
+          "t": "edge",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 2,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 3,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 3,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 2,
+     "merge": false,
+     "option": {
+      "series": [
+       {
+        "type": "sankey",
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle"
+         }
+        },
+        "data": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c"
+         },
+         {
+          "name": "d"
+         }
+        ],
+        "links": [
+         {
+          "source": "a",
+          "target": "b",
+          "value": 5
+         },
+         {
+          "source": "a",
+          "target": "c",
+          "value": 3
+         },
+         {
+          "source": "b",
+          "target": "d",
+          "value": 4
+         },
+         {
+          "source": "c",
+          "target": "d",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "sankey",
+        "drawn": [
+         {
+          "t": "node",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 3,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "chord",
+   "note": "chord pieces; edges coloured by their source take that node's decal",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "chord",
+        "data": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c"
+         },
+         {
+          "name": "d"
+         }
+        ],
+        "links": [
+         {
+          "source": "a",
+          "target": "b",
+          "value": 5
+         },
+         {
+          "source": "a",
+          "target": "c",
+          "value": 3
+         },
+         {
+          "source": "b",
+          "target": "d",
+          "value": 4
+         },
+         {
+          "source": "c",
+          "target": "d",
+          "value": 2
+         }
+        ],
+        "lineStyle": {
+         "color": "source"
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 12,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4032000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "chord",
+        "drawn": [
+         {
+          "t": "edge",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 2,
+          "k": "path",
+          "p": 1
+         },
+         {
+          "t": "edge",
+          "i": 3,
+          "k": "path",
+          "p": 2
+         },
+         {
+          "t": "node",
+          "i": 0,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 1,
+          "k": "sector",
+          "p": 1
+         },
+         {
+          "t": "node",
+          "i": 2,
+          "k": "sector",
+          "p": 2
+         },
+         {
+          "t": "node",
+          "i": 3,
+          "k": "sector",
+          "p": 3
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "series": [
+       {
+        "type": "chord",
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle"
+         }
+        },
+        "data": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c"
+         },
+         {
+          "name": "d"
+         }
+        ],
+        "links": [
+         {
+          "source": "a",
+          "target": "b",
+          "value": 5
+         },
+         {
+          "source": "a",
+          "target": "c",
+          "value": 3
+         },
+         {
+          "source": "b",
+          "target": "d",
+          "value": 4
+         },
+         {
+          "source": "c",
+          "target": "d",
+          "value": 2
+         }
+        ],
+        "lineStyle": {
+         "color": "target"
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "chord",
+        "drawn": [
+         {
+          "t": "edge",
+          "i": 0,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 1,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 2,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "edge",
+          "i": 3,
+          "k": "path",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 0,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 1,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 2,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "node",
+          "i": 3,
+          "k": "sector",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "river",
+   "note": "a themeRiver layer takes the style of its last row",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "singleAxis": {
+       "type": "time"
+      },
+      "series": [
+       {
+        "type": "themeRiver",
+        "data": [
+         [
+          "2024/01/01",
+          3,
+          "p"
+         ],
+         [
+          "2024/01/02",
+          4,
+          "p"
+         ],
+         [
+          "2024/01/03",
+          2,
+          "p"
+         ],
+         [
+          "2024/01/01",
+          2,
+          "q"
+         ],
+         [
+          "2024/01/02",
+          1,
+          "q"
+         ],
+         [
+          "2024/01/03",
+          5,
+          "q"
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "themeRiver",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "ec-polygon",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "ec-polygon",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "gauge",
+   "note": "a gauge's pointer and progress take the item's decal",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "gauge",
+        "progress": {
+         "show": true
+        },
+        "data": [
+         {
+          "name": "g",
+          "value": 40
+         },
+         {
+          "name": "h",
+          "value": 70
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "gauge",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "pointer",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 0,
+          "k": "sector",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "pointer",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "sector",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "series": [
+       {
+        "type": "gauge",
+        "itemStyle": {
+         "decal": {
+          "symbol": "circle"
+         }
+        },
+        "data": [
+         {
+          "value": 40
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "gauge",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "pointer",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "custom",
+   "note": "a renderItem's path with api.visual('decal'); a decal written in renderItem; a text and a stroke-only path take none",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "custom",
+        "renderItem": "@decalBar",
+        "data": [
+         [
+          0,
+          2
+         ],
+         [
+          1,
+          4
+         ],
+         [
+          2,
+          3
+         ]
+        ]
+       },
+       {
+        "type": "custom",
+        "renderItem": "@decalLit",
+        "data": [
+         [
+          3,
+          5
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 8,
+        "h": 8,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c020000000000000",
+          "w": "4010000000000000",
+          "h": "4010000000000000",
+          "fill": "red",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "c020000000000000",
+          "w": "4010000000000000",
+          "h": "4010000000000000",
+          "fill": "red",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4010000000000000",
+          "fill": "red",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4010000000000000",
+          "fill": "red",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "custom",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       },
+       {
+        "index": 1,
+        "type": "custom",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "circle",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "custom",
+        "renderItem": "@decalBar",
+        "itemStyle": {
+         "decal": {
+          "symbol": "triangle"
+         }
+        },
+        "data": [
+         [
+          0,
+          2
+         ],
+         {
+          "value": [
+           1,
+           4
+          ],
+          "itemStyle": {
+           "decal": {
+            "symbol": "circle"
+           }
+          }
+         },
+         [
+          2,
+          3
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "custom",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "rect",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "rect",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "large",
+   "note": "a large bar's batch path wears the series' decal",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "xAxis": {
+       "type": "category"
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "large": true,
+        "largeThreshold": 20,
+        "data": [
+         1,
+         8,
+         4,
+         11,
+         7,
+         3,
+         10,
+         6,
+         2,
+         9,
+         5,
+         1,
+         8,
+         4,
+         11,
+         7,
+         3,
+         10,
+         6,
+         2,
+         9,
+         5,
+         1,
+         8,
+         4,
+         11,
+         7,
+         3,
+         10,
+         6,
+         2,
+         9,
+         5,
+         1,
+         8,
+         4,
+         11,
+         7,
+         3,
+         10
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "drawn": [
+         {
+          "t": "",
+          "i": -1,
+          "k": "largeBar",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "legend-line",
+   "note": "a line's own legend icon: the marker wears the decal, an empty marker too; a bar's default icon",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "legend": {},
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "line",
+        "name": "L1",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L2",
+        "symbol": "emptyCircle",
+        "data": [
+         2,
+         3,
+         1,
+         2
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L3",
+        "symbol": "none",
+        "data": [
+         3,
+         1,
+         2,
+         4
+        ]
+       },
+       {
+        "type": "scatter",
+        "name": "S",
+        "symbol": "emptyRect",
+        "data": [
+         1,
+         3,
+         2,
+         1
+        ]
+       },
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         1,
+         1,
+         2,
+         2
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 16,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "c01599999999999a",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "402199999999999a",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030000000000000",
+          "y": "3fe3333333333332",
+          "w": "0000000000000000",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4038cccccccccccd",
+          "y": "3fe3333333333332",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "3fe9999999999998",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4030cccccccccccd",
+          "y": "401a666666666666",
+          "w": "401999999999999a",
+          "h": "4013333333333334",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "bfe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4010000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 12,
+        "h": 12,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "0000000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4032000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "4018000000000000",
+          "w": "4018000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 7,
+        "h": 14,
+        "rotation": "3fe921fb54442d18",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4008000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4010000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4014000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "401c000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4022000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4026000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "402a000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c018000000000000",
+          "w": "3ff0000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "401c000000000000",
+          "y": "c018000000000000",
+          "w": "3ff0000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4008000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4010000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4014000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "401c000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4022000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4026000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "402a000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "3ff0000000000000",
+          "w": "3ff0000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "401c000000000000",
+          "y": "3ff0000000000000",
+          "w": "3ff0000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4000000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4008000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4010000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4014000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4018000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "401c000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4022000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4026000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "402a000000000000",
+          "y": "401c000000000000",
+          "w": "3ff0000000000000",
+          "h": "3ff0000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "4020000000000000",
+          "w": "3ff0000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "401c000000000000",
+          "y": "4020000000000000",
+          "w": "3ff0000000000000",
+          "h": "4018000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "line",
+        "drawn": []
+       },
+       {
+        "index": 1,
+        "type": "line",
+        "drawn": []
+       },
+       {
+        "index": 2,
+        "type": "line",
+        "drawn": []
+       },
+       {
+        "index": 3,
+        "type": "scatter",
+        "drawn": []
+       },
+       {
+        "index": 4,
+        "type": "bar",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "rect",
+          "p": 4
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "rect",
+          "p": 4
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "rect",
+          "p": 4
+         },
+         {
+          "t": "",
+          "i": 3,
+          "k": "rect",
+          "p": 4
+         }
+        ]
+       }
+      ],
+      "legend": [
+       {
+        "name": "L1",
+        "els": [
+         {
+          "k": "path",
+          "sym": "circle",
+          "p": 0
+         }
+        ]
+       },
+       {
+        "name": "L2",
+        "els": [
+         {
+          "k": "path",
+          "sym": "circle",
+          "p": 1
+         }
+        ]
+       },
+       {
+        "name": "L3",
+        "els": [
+         {
+          "k": "path",
+          "sym": "circle",
+          "p": 2
+         }
+        ]
+       },
+       {
+        "name": "S",
+        "els": [
+         {
+          "k": "path",
+          "sym": "rect",
+          "p": 3
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "els": [
+         {
+          "k": "path",
+          "sym": "roundRect",
+          "p": 4
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "anchors": [
+  {
+   "name": "radar: an area per item of the area series, none on the other; the points wear it either way (createSymbol)",
+   "ok": true
+  },
+  {
+   "name": "radar: the own areaStyle of an item shows its area",
+   "ok": true
+  },
+  {
+   "name": "graph: nothing",
+   "ok": true
+  },
+  {
+   "name": "large: one batch path",
+   "ok": true
+  },
+  {
+   "name": "legend-line: the empty marker wears one",
+   "ok": true
+  },
+  {
+   "name": "custom: the text and the polyline take none",
+   "ok": true
+  },
+  {
+   "name": "sunburst: the second sunburst starts its own scope, walking its sorted children",
+   "ok": true
+  },
+  {
+   "name": "tiles: an empty symbol is filled white and stroked 2",
+   "ok": true
+  }
+ ]
+}

@@ -437,6 +437,16 @@ function runLinkCase(def) {
 // =====================================================================
 // connect, batch
 // =====================================================================
+// a value y axis with two breaks (the axis break actions' shape)
+function breakBar() {
+  return {
+    animation: false,
+    xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'] },
+    yAxis: { breaks: [{ start: 60, end: 400, gap: '6%' }, { start: 450, end: 900, gap: '6%' }] },
+    series: [{ type: 'bar', data: [20, 420, 950, 55] }],
+  };
+}
+
 function barLine(extra) {
   return Object.assign({
     animation: false,
@@ -604,6 +614,16 @@ const BATCH_CASES = [
       // milestone D5-D8: a toggleSelect batch of three, its event's items (the first one's copy, typed 'toggleselect') as A is
       // sent them -- an item whose type is no select type changes nothing
       { op: 'action', chart: 1, payload: { type: 'toggleSelect', batch: [{ seriesIndex: 0, dataIndex: 1 }, { seriesIndex: 0, dataIndex: 3 }, { seriesIndex: 0, dataIndex: 4 }] } },
+    ],
+  },
+  {
+    id: 'batch-axisbreak-connect', note: 'expandAxisBreak (a refined action) batched in a connected group: its non-refined batch event goes to connect only, every item a copy of the FIRST item (refineEvent keeps eventObj) -- so B is sent the first break twice and expands only that one; collapseAxisBreak back the same way',
+    charts: [{ option: breakBar() }, { option: breakBar() }],
+    steps: [
+      { op: 'connectList', charts: [0, 1] },
+      { op: 'action', chart: 0, payload: { type: 'expandAxisBreak', yAxisIndex: 0, batch: [{ breaks: [{ start: 60, end: 400 }] }, { breaks: [{ start: 450, end: 900 }] }] } },
+      { op: 'action', chart: 1, payload: { type: 'expandAxisBreak', yAxisIndex: 0, batch: [{ breaks: [{ start: 450, end: 900 }] }, { breaks: [{ start: 60, end: 400 }] }] } },
+      { op: 'action', chart: 0, payload: { type: 'collapseAxisBreak', yAxisIndex: 0, batch: [{ breaks: [{ start: 450, end: 900 }] }, { breaks: [{ start: 60, end: 400 }] }] } },
     ],
   },
 ];
@@ -905,6 +925,10 @@ function anchors(g) {
   guard('batch-one-updated', bl.steps[0].events.filter(e => e[1] === 'updated').length === 1, 'one update');
   const bd = cn('batch-datazoom');
   guard('batch-dz-silent', bd.steps[2].events.length === 0 && bd.steps[2].state[0].dz[0][1] === hex(100), 'silent: applied, nothing published');
+  const bb = cn('batch-axisbreak-connect');
+  const bbB = bb.steps[1].events.find(e => e[0] === 1 && e[1] === 'axisbreakchanged');
+  guard('batch-break-first-item', bbB && bbB[2].breaks.length === 2 && bbB[2].breaks.every(b => b.start === 60 && b.end === 400)
+    && bbB[2].fromActionPayload.batch.every(it => it.breaks[0].start === 60), 'B is sent the first item twice (refineEvent keeps eventObj)');
   // export: the transcription
   for (const c of g.exportCases) {
     if (!c.connect) {

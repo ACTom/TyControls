@@ -288,6 +288,9 @@ type
     AnchorFill: TTyChartColor;
     AnchorBorder: TTyChartColor;
     Z: Integer;
+    { per RAW row, the item's decal: the pointer and the progress useStyle
+      the item's style [F4a] }
+    Decals: TTyChartDecalArray;
   end;
 
 function TyGaugeSpecDefault: TTyGaugeSpec;
@@ -1633,6 +1636,24 @@ begin
   Inc(Result);
 end;
 
+{ [F6a] points turned clockwise on screen by ARad about (ACX, ACY) -- the
+  canvas' turn, which the painter gives a path's RotationRad }
+procedure TurnAbout(var AShape: TTyChartShape; ARad, ACX, ACY: Double);
+var
+  i: Integer;
+  c, s, x, y: Double;
+begin
+  c := Cos(ARad);
+  s := Sin(ARad);
+  AShape.Points := Copy(AShape.Points, 0, Length(AShape.Points));
+  for i := 0 to High(AShape.Points) do
+  begin
+    x := AShape.Points[i].X - ACX;
+    y := AShape.Points[i].Y - ACY;
+    AShape.Points[i] := TyPointF(ACX + x * c - y * s, ACY + x * s + y * c);
+  end;
+end;
+
 function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
@@ -1792,6 +1813,8 @@ begin
         else
           el.Z2 := 0;
         el.Silent := False;
+        if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+          el.Style.Decal := AVisual.Decals[raw];
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
         { its end angle grows from the start (GaugeView.ts:477-483) }
         el.Anim.Role := carGaugeProgress;
@@ -1833,6 +1856,8 @@ begin
           el.Z := AVisual.Z;
           el.Z2 := 0;
           el.Silent := False;
+          if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+            el.Style.Decal := AVisual.Decals[raw];
           el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
           { it turns from the start angle (GaugeView.ts:464-472) [Batch 89] }
           el.Anim.Role := carGaugePointer;
@@ -1842,6 +1867,12 @@ begin
           el.Anim.G[1] := ALayout.CY;
           el.Anim.G[2] := angle;
           el.Anim.G[3] := ALayout.StartRad;
+          { [F3c] the PointerPath's width, length and offset }
+          el.Caption.LgSymbol := '';
+          el.Caption.LgG[0] := halfW;
+          el.Caption.LgG[1] := len;
+          el.Caption.LgG[2] := ox;
+          el.Caption.LgG[3] := oy;
           AList.Add(el);
           Inc(Result);
         end;
@@ -1874,7 +1905,11 @@ begin
           tilted. }
         if el.Shape.Kind = cskPath then
           el.Shape := TyShapePath(el.Shape.PathData, el.Shape.Bounds,
-            angle + Pi / 2, ALayout.CX, ALayout.CY);
+            angle + Pi / 2, ALayout.CX, ALayout.CY)
+        else if el.Shape.Kind in [cskPolygon, cskPolyline] then
+          { [F6a] a built-in icon or a picture is points: they turn about
+            the hub the same way (a picture's corners carry its turn) }
+          TurnAbout(el.Shape, angle + Pi / 2, ALayout.CX, ALayout.CY);
         el.Style.HasFill := True;
         if ASpec.Needle.HasColour then el.Style.FillColor := ASpec.Needle.Colour
         else if ASpec.Needle.Auto then el.Style.FillColor := autoC
@@ -1882,6 +1917,8 @@ begin
         el.Z := AVisual.Z;
         el.Z2 := 0;
         el.Silent := False;
+        if (raw >= 0) and (raw <= High(AVisual.Decals)) then
+          el.Style.Decal := AVisual.Decals[raw];
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
         el.Anim.Role := carGaugePointer;
         el.Anim.Series := ABinding.SeriesIndex;
@@ -1890,6 +1927,13 @@ begin
         el.Anim.G[1] := ALayout.CY;
         el.Anim.G[2] := angle;
         el.Anim.G[3] := ALayout.StartRad;
+        { [F3c] the icon over the width and the length, at the offset }
+        el.Caption.LgSymbol := ASpec.Needle.Icon;
+        el.Caption.LgKeepAspect := ASpec.Needle.KeepAspect;
+        el.Caption.LgG[0] := halfW;
+        el.Caption.LgG[1] := len;
+        el.Caption.LgG[2] := ox;
+        el.Caption.LgG[3] := oy;
         AList.Add(el);
         Inc(Result);
       end;

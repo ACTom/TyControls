@@ -17914,6 +17914,548 @@
     }
    ],
    "fails": []
+  },
+  {
+   "id": "none-null",
+   "group": "coords",
+   "note": "coordinateSystem null: no coordSys (the key the option has keeps the default out), as 'none'; a hover",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "series": [
+     {
+      "type": "custom",
+      "coordinateSystem": null,
+      "renderItem": "@free",
+      "data": [
+       [
+        50,
+        60,
+        120
+       ],
+       [
+        200,
+        100,
+        80
+       ],
+       [
+        320,
+        240,
+        40
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "move": "s0:1"
+    }
+   ],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "free",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": null,
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4049000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "404e000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "405e000000000000"
+        },
+        {
+         "fn": "getHeight",
+         "args": [],
+         "ret": "4079000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4049000000000000",
+         "y": "404e000000000000",
+         "width": "405e000000000000",
+         "height": "4034000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "info": {
+         "cs": "none"
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "free",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": null,
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4069000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4059000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4054000000000000"
+        },
+        {
+         "fn": "getHeight",
+         "args": [],
+         "ret": "4079000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4069000000000000",
+         "y": "4059000000000000",
+         "width": "4054000000000000",
+         "height": "4034000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "info": {
+         "cs": "none"
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "free",
+       "params": {
+        "dataIndex": 2,
+        "dataIndexInside": 2,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": null,
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4074000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "406e000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4044000000000000"
+        },
+        {
+         "fn": "getHeight",
+         "args": [],
+         "ret": "4079000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4074000000000000",
+         "y": "406e000000000000",
+         "width": "4044000000000000",
+         "height": "4034000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "info": {
+         "cs": "none"
+        }
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4049000000000000",
+        "y": "404e000000000000",
+        "width": "405e000000000000",
+        "height": "4034000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4049000000000000",
+        "404e000000000000",
+        "405e000000000000",
+        "4034000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": "{\"cs\":\"none\"}"
+      },
+      {
+       "key": "s0:1",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4069000000000000",
+        "y": "4059000000000000",
+        "width": "4054000000000000",
+        "height": "4034000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4069000000000000",
+        "4059000000000000",
+        "4054000000000000",
+        "4034000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": "{\"cs\":\"none\"}"
+      },
+      {
+       "key": "s0:2",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4074000000000000",
+        "y": "406e000000000000",
+        "width": "4044000000000000",
+        "height": "4034000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4074000000000000",
+        "406e000000000000",
+        "4044000000000000",
+        "4034000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       },
+       "info": "{\"cs\":\"none\"}"
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s0:2"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:2",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [
+        "emphasis"
+       ],
+       "fill": [
+        92,
+        123,
+        217,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 1
+      },
+      {
+       "key": "s0:2",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": [
+      240,
+      110
+     ],
+     "hover": {
+      "key": "s0:1",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "tooltip": null
+    }
+   ],
+   "fails": []
   }
  ],
  "guards": [
@@ -17966,6 +18508,10 @@
    "ok": true
   },
   {
+   "name": "none-null: every record matches its recipe",
+   "ok": true
+  },
+  {
    "name": "polar state 1: a pointer step renders nothing",
    "ok": true
   },
@@ -18015,6 +18561,10 @@
   },
   {
    "name": "tooltip state 6: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "none-null state 1: a pointer step renders nothing",
    "ok": true
   },
   {

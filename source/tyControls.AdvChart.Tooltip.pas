@@ -317,6 +317,12 @@ function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
   option's `tooltip` (nil: none). }
 function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
   ARegionTip: TJSONData; const AName: string): TTyTooltipSpec;
+{ [F4c] THE SAME CASCADE FOR ANY COMPONENT'S ITEM (setTooltipConfig): the
+  item's own tooltip (nil: none; a string a formatter), the component's
+  `tooltip`, the content (AName) as the formatter, the global component.
+  An axis' name and labels have no item tooltip of their own. }
+function TyTooltipSpecOfItem(AOption: TTyChartOption; const AMainType: string;
+  AIndex: Integer; AItemTip: TJSONData; const AName: string): TTyTooltipSpec;
 
 { ---- content ---- }
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
@@ -1057,6 +1063,12 @@ end;
 
 function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
   ARegionTip: TJSONData; const AName: string): TTyTooltipSpec;
+begin
+  Result := TyTooltipSpecOfItem(AOption, 'geo', AGeoIndex, ARegionTip, AName);
+end;
+
+function TyTooltipSpecOfItem(AOption: TTyChartOption; const AMainType: string;
+  AIndex: Integer; AItemTip: TJSONData; const AName: string): TTyTooltipSpec;
 var
   seen: TTyStringArray;
   geoNode, item, gt: TJSONData;
@@ -1089,11 +1101,11 @@ begin
   Result := TyTooltipSpecDefault;
   seen := nil;
   if AOption = nil then Exit;
-  geoNode := AOption.ComponentAt('geo', AGeoIndex);
+  geoNode := AOption.ComponentAt(AMainType, AIndex);
   gt := nil;
   if geoNode is TJSONObject then gt := TJSONObject(geoNode).Find('tooltip');
   if (gt <> nil) and (gt.JSONType = jtNull) then gt := nil;
-  item := ARegionTip;
+  item := AItemTip;
   if (item <> nil) and (item.JSONType = jtNull) then item := nil;
   if item = nil then item := gt;
   Level(item);

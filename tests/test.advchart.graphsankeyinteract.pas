@@ -76,6 +76,11 @@ type
   protected
     procedure SetUp; override;
     procedure TearDown; override;
+    { [F3b] the fixture, and how much it must reach: a subclass replays
+      another oracle's with the same rules }
+    function FixtureName: string; virtual;
+    function MinCases: Integer; virtual;
+    function MinCompared: Integer; virtual;
   published
     procedure TestEveryDragLabelAndRoamLandsWhereUpstreamPutsIt;
   end;
@@ -163,10 +168,9 @@ end;
 
 { ==================== the fixture's numbers ==================== }
 
-function FixturePath: string;
+function FixtureDir: string;
 begin
-  Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
-    + 'advchart-graph-sankey-interact.json';
+  Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim;
 end;
 
 function HexNum(AData: TJSONData): Double;
@@ -246,10 +250,10 @@ begin
   FCtl.Mode := 'light';
   FCtl.ThemeName := 'default';
   FChart := nil;
-  AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
+  AssertTrue('the fixture is where the suite expects it', FileExists(FixtureDir + FixtureName));
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(FixturePath);
+    sl.LoadFromFile(FixtureDir + FixtureName);
     FRoot := GetJSON(sl.Text);
   finally
     sl.Free;
@@ -259,6 +263,21 @@ begin
   FCases := 0;
   FStates := 0;
   FReport := '';
+end;
+
+function TAdvChartGraphSankeyInteractOracleTest.FixtureName: string;
+begin
+  Result := 'advchart-graph-sankey-interact.json';
+end;
+
+function TAdvChartGraphSankeyInteractOracleTest.MinCases: Integer;
+begin
+  Result := 30;
+end;
+
+function TAdvChartGraphSankeyInteractOracleTest.MinCompared: Integer;
+begin
+  Result := 3000;
 end;
 
 procedure TAdvChartGraphSankeyInteractOracleTest.TearDown;
@@ -322,7 +341,7 @@ end;
 
 procedure TAdvChartGraphSankeyInteractOracleTest.Step(AStep: TJSONObject;
   var AW, AH: Integer);
-var a: TJSONArray; d: TJSONData;
+var a: TJSONArray; d: TJSONData; i: Integer;
 begin
   d := AStep.Find('down');
   if d is TJSONArray then
@@ -370,6 +389,13 @@ begin
     AW := a.Integers[0];
     AH := a.Integers[1];
     FChart.SetBounds(0, 0, AW, AH);
+    Exit;
+  end;
+  { [F3b] the force iterations' timer, frame by frame }
+  d := AStep.Find('frames');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    for i := 1 to d.AsInteger do FChart.GraphForceFrame;
     Exit;
   end;
   Miss('an unknown step ' + AStep.AsJSON);
@@ -616,6 +642,31 @@ begin
       begin
         SameNum(Format('%s edge %d cpx', [tag, e]), edges[e].TCPX, ed, 'cp', 0);
         SameNum(Format('%s edge %d cpy', [tag, e]), edges[e].TCPY, ed, 'cp', 1);
+      end;
+    end
+    else
+    begin
+      { [F3d] A GRAPH OFF A VIEW: the line in pixels -- the ends the
+        builder trimmed off the nodes (adjustEdge), and the control point --
+        as the drawn edge carries them (its enter tag, G[0..5]) }
+      k := FindEl(si, edges[e].Row, True, False);
+      Inc(FCompared);
+      if k < 0 then Miss(Format('%s edge %d is not drawn', [tag, e]))
+      else
+      begin
+        el := FChart.List.Element(k);
+        SameNum(Format('%s edge %d x1', [tag, e]), el.Anim.G[0], ed, 'shape', 0);
+        SameNum(Format('%s edge %d y1', [tag, e]), el.Anim.G[1], ed, 'shape', 1);
+        SameNum(Format('%s edge %d x2', [tag, e]), el.Anim.G[2], ed, 'shape', 2);
+        SameNum(Format('%s edge %d y2', [tag, e]), el.Anim.G[3], ed, 'shape', 3);
+        Inc(FCompared);
+        if curved <> (el.Anim.G[6] <> 0) then
+          Miss(Format('%s edge %d curved is %s upstream', [tag, e, BoolToStr(curved, True)]))
+        else if curved then
+        begin
+          SameNum(Format('%s edge %d cpx', [tag, e]), el.Anim.G[4], ed, 'cp', 0);
+          SameNum(Format('%s edge %d cpy', [tag, e]), el.Anim.G[5], ed, 'cp', 1);
+        end;
       end;
     end;
     FTol := 0;
@@ -986,8 +1037,8 @@ begin
       CheckState(cs, TJSONObject(states.Items[k + 1]), k + 1);
     end;
   end;
-  AssertTrue(Format('every case ran (%d)', [FCases]), FCases >= 30);
-  AssertTrue(Format('and a great deal was compared (%d)', [FCompared]), FCompared > 3000);
+  AssertTrue(Format('every case ran (%d)', [FCases]), FCases >= MinCases);
+  AssertTrue(Format('and a great deal was compared (%d)', [FCompared]), FCompared > MinCompared);
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' disagree with upstream:' + FReport, 0, FBad);
 end;

@@ -1905,6 +1905,18 @@ const CASES = [
     omitOption: true },
   { id: 'G-calendar-heatmap', groups: ['gallery'], note: 'calendar-heatmap (gallery), verbatim: the component only (the heatmap series is not recorded)',
     gallery: 'calendar-heatmap', componentOnly: true },
+  // [F4c] a piece's symbolSize as a pair (kept as written: the symbol is w x h)
+  // and as a word that is no number (set all the same: normalizeSymbolSize
+  // makes it nought)
+  { id: 'P20', groups: ['P20'], note: "a piece's symbolSize [16, 8] (the pair) and a piece's 'abc' (no number: nought)",
+    option: { xAxis: {}, yAxis: {}, visualMap: { pieces: [{ lt: 10, symbolSize: [16, 8] }, { gte: 10, symbolSize: 'abc' }], dimension: 1 },
+      series: [{ type: 'scatter', data: [[0, 5], [1, 15]] }] } },
+  // [fin] the category method's symbolSize: a written value is set whatever it is -- a number,
+  // a word that is no number (nought), a pair
+  { id: 'C5', groups: ['C5'], note: "categories with inRange symbolSize [12, 'abc', [16, 8]]: the category method sets the word (nought) and the pair as written; the controller's own size a number",
+    option: scatterCat(P({ categories: ['a', 'c', 'e'], dimension: 2, inRange: { symbolSize: [12, 'abc', [16, 8]] },
+      controller: { inRange: { symbolSize: 14 }, outOfRange: { symbolSize: 14 } } }),
+      [[1, 2, 'a'], [2, 3, 'c'], [3, 4, 'e']]) },
 ];
 
 // ---------- the guards ----------

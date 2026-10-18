@@ -551,6 +551,14 @@ var
 begin
   Inc(FSnaps);
   t := ASnap.Strings['t'];
+  { [F4b] A POINTER STEP'S FLUSH: the oracle runs _onframe without the
+    frame's _flush there (no rendered can be recorded), the port's paint
+    after a hover says rendered when it marked something -- not compared
+    at pointer steps (the spec records it) }
+  if (t = 'move') or (t = 'leave') then
+    for j := FChart.Events.Count - 1 downto 0 do
+      if (FChart.Events[j] = 'rendered') or (FChart.Events[j] = 'finished') then
+        FChart.Events.Delete(j);
   { the events, in order }
   ev := ASnap.Arrays['events'];
   SameInt('events', FChart.Events.Count, ev.Count);
@@ -824,12 +832,17 @@ begin
   AssertFalse('line 0', s.Enabled);
   s := Spec('heatmap', '{"progressive": "50.5"}');
   AssertEquals('a string rounds', 51, s.Step);
+  { [F4c] a null is no value: get() climbs to the option root, where the
+    global default 400 sits (root-inherit.js p-line-null) -- it used to be
+    read as off }
   s := Spec('heatmap', '{"progressive": null}');
-  AssertFalse('a null is off', s.Enabled);
+  AssertTrue('a null is the root''s', s.Enabled);
+  AssertEquals('the global 400', 400, s.Step);
   s := Spec('heatmap', '{"progressive": -3}');
   AssertFalse('a step that never ends a chunk is left off', s.Enabled);
   s := Spec('heatmap', '{"progressiveThreshold": null}');
-  AssertTrue('a null threshold is 0', TyProgRenderOn(s, 'heatmap', 0));
+  AssertEquals('a null threshold is the root''s 3000', 3000, Trunc(s.Threshold));
+  AssertFalse('so nought rows do not pass it', TyProgRenderOn(s, 'heatmap', 0));
   s := Spec('heatmap', '{"progressiveThreshold": "x"}');
   AssertFalse('a threshold that is no number never passes', TyProgRenderOn(s, 'heatmap', 99999));
   AssertFalse('a line view is not incremental', TyProgRenderOn(Spec('line', '{"progressive": 5, "progressiveThreshold": 1}'), 'line', 10));

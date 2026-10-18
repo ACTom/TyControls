@@ -1,0 +1,4763 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "clock": {
+  "start": 1700000000000,
+  "stepDt": 10
+ },
+ "size": [
+  80,
+  40
+ ],
+ "maps": [
+  {
+   "name": "mab_sq",
+   "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"C\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,10],[10,10],[10,20],[0,20],[0,10]]]}}]}"
+  }
+ ],
+ "listen": [
+  "highlight",
+  "downplay",
+  "select",
+  "unselect",
+  "toggleselect",
+  "selectchanged",
+  "globalcursortaken",
+  "restore",
+  "pietoggleselect",
+  "pieselect",
+  "pieunselect",
+  "pieselectchanged",
+  "pieselected",
+  "pieunselected",
+  "geoselectchanged",
+  "geoselected",
+  "geounselected",
+  "georoam",
+  "treemapzoomtonode",
+  "treemaprender",
+  "treemapmove",
+  "treemaproottonode",
+  "graphroam",
+  "axisareaselected",
+  "parallelaxisexpand",
+  "dragnode",
+  "sankeyroam",
+  "sunburstroottonode",
+  "updateaxispointer",
+  "datazoom",
+  "showtip",
+  "hidetip",
+  "brush",
+  "brushselected",
+  "brushend",
+  "timelinechanged",
+  "timelineplaychanged",
+  "legendselectchanged",
+  "legendselectall",
+  "legendinverseselect",
+  "legendselected",
+  "legendunselected",
+  "legendscroll",
+  "datarangeselected",
+  "axisbreakchanged",
+  "updated",
+  "rendered",
+  "finished"
+ ],
+ "notes": [
+  "The axis pointer's own highlight / downplay batches (notBlur) are not recorded.",
+  "Pointer steps: zrender Handler mousemove / mousedown + mouseup + click / mouseout from outside; each 10 ms after the last.",
+  "A frame after every step; a `flush` case's frames are zrender's own loop (animation.update, then _flush(false)) and record rendered / finished.",
+  "TooltipRichContent.getSize answers 80 x 40."
+ ],
+ "cases": [
+  {
+   "id": "b-legendscroll",
+   "note": "legendScroll: one event, each item a copy; escapeConnect in the head",
+   "option": {
+    "animation": false,
+    "legend": {
+     "type": "scroll",
+     "width": 200
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y",
+      "z"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "series 0",
+      "data": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 1",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 2",
+      "data": [
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 3",
+      "data": [
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 4",
+      "data": [
+       4,
+       5,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 5",
+      "data": [
+       5,
+       6,
+       7
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 6",
+      "data": [
+       6,
+       7,
+       8
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 7",
+      "data": [
+       7,
+       8,
+       9
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 8",
+      "data": [
+       8,
+       9,
+       10
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 9",
+      "data": [
+       9,
+       10,
+       11
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 10",
+      "data": [
+       10,
+       11,
+       12
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 11",
+      "data": [
+       11,
+       12,
+       13
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "legendScroll",
+      "escapeConnect": true,
+      "batch": [
+       {
+        "scrollDataIndex": 3
+       },
+       {
+        "scrollDataIndex": 6
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "legendscroll",
+       {
+        "type": "legendscroll",
+        "escapeConnect": true,
+        "batch": [
+         {
+          "scrollDataIndex": 3,
+          "type": "legendscroll",
+          "escapeConnect": true,
+          "batch": null
+         },
+         {
+          "scrollDataIndex": 6,
+          "type": "legendscroll",
+          "escapeConnect": true,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "legendScroll",
+       "escapeConnect": true,
+       "scrollDataIndex": 3
+      },
+      {
+       "type": "legendScroll",
+       "escapeConnect": true,
+       "scrollDataIndex": 6
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-legendscroll-object",
+   "note": "a batch that is no list maps to no items: an event with an empty batch",
+   "option": {
+    "animation": false,
+    "legend": {
+     "type": "scroll",
+     "width": 200
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y",
+      "z"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "series 0",
+      "data": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 1",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 2",
+      "data": [
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 3",
+      "data": [
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 4",
+      "data": [
+       4,
+       5,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 5",
+      "data": [
+       5,
+       6,
+       7
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 6",
+      "data": [
+       6,
+       7,
+       8
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 7",
+      "data": [
+       7,
+       8,
+       9
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 8",
+      "data": [
+       8,
+       9,
+       10
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 9",
+      "data": [
+       9,
+       10,
+       11
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 10",
+      "data": [
+       10,
+       11,
+       12
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 11",
+      "data": [
+       11,
+       12,
+       13
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "legendScroll",
+      "scrollDataIndex": 4,
+      "batch": {
+       "scrollDataIndex": 2
+      }
+     },
+     "events": [
+      [
+       0,
+       "legendscroll",
+       {
+        "type": "legendscroll",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-legendscroll-silent",
+   "note": "a silent batch publishes nothing",
+   "option": {
+    "animation": false,
+    "legend": {
+     "type": "scroll",
+     "width": 200
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y",
+      "z"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "series 0",
+      "data": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 1",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 2",
+      "data": [
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 3",
+      "data": [
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 4",
+      "data": [
+       4,
+       5,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 5",
+      "data": [
+       5,
+       6,
+       7
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 6",
+      "data": [
+       6,
+       7,
+       8
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 7",
+      "data": [
+       7,
+       8,
+       9
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 8",
+      "data": [
+       8,
+       9,
+       10
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 9",
+      "data": [
+       9,
+       10,
+       11
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 10",
+      "data": [
+       10,
+       11,
+       12
+      ]
+     },
+     {
+      "type": "line",
+      "name": "series 11",
+      "data": [
+       11,
+       12,
+       13
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "legendScroll",
+      "batch": [
+       {
+        "scrollDataIndex": 5
+       }
+      ]
+     },
+     "silent": true,
+     "events": [],
+     "items": [
+      {
+       "type": "legendScroll",
+       "scrollDataIndex": 5
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-selectdatarange",
+   "note": "selectDataRange on a continuous visualMap: the action returns nothing, each item a copy",
+   "option": {
+    "animation": false,
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "calculable": true
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "selectDataRange",
+      "visualMapIndex": 0,
+      "batch": [
+       {
+        "selected": [
+         1,
+         8
+        ]
+       },
+       {
+        "selected": [
+         2,
+         5
+        ]
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "datarangeselected",
+       {
+        "type": "datarangeselected",
+        "batch": [
+         {
+          "selected": [
+           1,
+           8
+          ],
+          "type": "datarangeselected",
+          "visualMapIndex": 0,
+          "batch": null
+         },
+         {
+          "selected": [
+           2,
+           5
+          ],
+          "type": "datarangeselected",
+          "visualMapIndex": 0,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "selectDataRange",
+       "visualMapIndex": 0,
+       "selected": [
+        1,
+        8
+       ]
+      },
+      {
+       "type": "selectDataRange",
+       "visualMapIndex": 0,
+       "selected": [
+        2,
+        5
+       ]
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-pietoggleselect",
+   "note": "the legacy pieToggleSelect: its event, then the toggleSelect each item dispatched waits and runs after",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "selectedMode": "multiple",
+      "data": [
+       {
+        "name": "p",
+        "value": 1
+       },
+       {
+        "name": "q",
+        "value": 2
+       },
+       {
+        "name": "r",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "pieToggleSelect",
+      "seriesIndex": 0,
+      "batch": [
+       {
+        "dataIndex": 1
+       },
+       {
+        "dataIndex": 2
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "pietoggleselect",
+       {
+        "type": "pietoggleselect",
+        "batch": [
+         {
+          "dataIndex": 1,
+          "type": "pietoggleselect",
+          "seriesIndex": 0,
+          "batch": null
+         },
+         {
+          "dataIndex": 2,
+          "type": "pietoggleselect",
+          "seriesIndex": 0,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "dataIndex": 1,
+        "type": "toggleselect",
+        "seriesIndex": [
+         0
+        ],
+        "batch": null
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "dataIndex": 1,
+         "type": "toggleSelect",
+         "seriesIndex": [
+          0
+         ],
+         "batch": null
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "dataIndex": 2,
+        "type": "toggleselect",
+        "seriesIndex": [
+         0
+        ],
+        "batch": null
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1,
+           2
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "dataIndex": 2,
+         "type": "toggleSelect",
+         "seriesIndex": [
+          0
+         ],
+         "batch": null
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "pieToggleSelect",
+       "seriesIndex": 0,
+       "dataIndex": 1
+      },
+      {
+       "type": "pieToggleSelect",
+       "seriesIndex": 0,
+       "dataIndex": 2
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-geotoggleselect",
+   "note": "geoToggleSelect: each item's event is the action's result",
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "mab_sq",
+     "selectedMode": "multiple"
+    }
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "geoToggleSelect",
+      "geoIndex": 0,
+      "batch": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "C"
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "geoselectchanged",
+       {
+        "type": "geoselectchanged",
+        "batch": [
+         {
+          "selected": {
+           "A": true,
+           "B": false,
+           "C": false
+          },
+          "allSelected": [
+           {
+            "geoIndex": 0,
+            "name": [
+             "A"
+            ]
+           }
+          ],
+          "name": "A",
+          "type": "geoselectchanged"
+         },
+         {
+          "selected": {
+           "A": true,
+           "B": false,
+           "C": true
+          },
+          "allSelected": [
+           {
+            "geoIndex": 0,
+            "name": [
+             "A",
+             "C"
+            ]
+           }
+          ],
+          "name": "C",
+          "type": "geoselectchanged"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "geoToggleSelect",
+       "geoIndex": 0,
+       "name": "A"
+      },
+      {
+       "type": "geoToggleSelect",
+       "geoIndex": 0,
+       "name": "C"
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-georoam",
+   "note": "geoRoam: the update is none, the event per item",
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "mab_sq",
+     "roam": true
+    }
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "geoRoam",
+      "geoIndex": 0,
+      "batch": [
+       {
+        "dx": 10,
+        "dy": 5
+       },
+       {
+        "zoom": 2,
+        "originX": 300,
+        "originY": 200
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "georoam",
+       {
+        "type": "georoam",
+        "batch": [
+         {
+          "dx": 10,
+          "dy": 5,
+          "type": "georoam",
+          "geoIndex": 0,
+          "batch": null,
+          "animation": {
+           "duration": 0
+          }
+         },
+         {
+          "zoom": 2,
+          "originX": 300,
+          "originY": 200,
+          "type": "georoam",
+          "geoIndex": 0,
+          "batch": null,
+          "animation": {
+           "duration": 0
+          }
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "geoRoam",
+       "geoIndex": 0,
+       "dx": 10,
+       "dy": 5
+      },
+      {
+       "type": "geoRoam",
+       "geoIndex": 0,
+       "zoom": 2,
+       "originX": 300,
+       "originY": 200
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-sunburst",
+   "note": "sunburstRootToNode: updateView once, each item a copy",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sunburst",
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1",
+            "value": 4
+           },
+           {
+            "name": "a2",
+            "value": 2
+           }
+          ]
+         },
+         {
+          "name": "b",
+          "children": [
+           {
+            "name": "b1",
+            "value": 3
+           },
+           {
+            "name": "b2",
+            "value": 5
+           }
+          ]
+         },
+         {
+          "name": "c",
+          "value": 6
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "sunburstRootToNode",
+      "batch": [
+       {
+        "targetNode": "a"
+       },
+       {
+        "targetNode": "b"
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "sunburstroottonode",
+       {
+        "type": "sunburstroottonode",
+        "batch": [
+         {
+          "targetNode": "a",
+          "type": "sunburstroottonode",
+          "batch": null,
+          "direction": "drillDown"
+         },
+         {
+          "targetNode": "b",
+          "type": "sunburstroottonode",
+          "batch": null,
+          "direction": "drillDown"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "sunburstRootToNode",
+       "targetNode": "a"
+      },
+      {
+       "type": "sunburstRootToNode",
+       "targetNode": "b"
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-treemap",
+   "note": "treemapRootToNode: each item a copy",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "treemap",
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1",
+            "value": 4
+           },
+           {
+            "name": "a2",
+            "value": 2
+           }
+          ]
+         },
+         {
+          "name": "b",
+          "children": [
+           {
+            "name": "b1",
+            "value": 3
+           },
+           {
+            "name": "b2",
+            "value": 5
+           }
+          ]
+         },
+         {
+          "name": "c",
+          "value": 6
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "treemapRootToNode",
+      "seriesIndex": 0,
+      "batch": [
+       {
+        "targetNodeId": "a"
+       },
+       {
+        "targetNodeId": "b"
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "treemaproottonode",
+       {
+        "type": "treemaproottonode",
+        "batch": [
+         {
+          "targetNodeId": "a",
+          "type": "treemaproottonode",
+          "seriesIndex": 0,
+          "batch": null,
+          "direction": "drillDown"
+         },
+         {
+          "targetNodeId": "b",
+          "type": "treemaproottonode",
+          "seriesIndex": 0,
+          "batch": null,
+          "direction": "drillDown"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "treemapRootToNode",
+       "seriesIndex": 0,
+       "targetNodeId": "a"
+      },
+      {
+       "type": "treemapRootToNode",
+       "seriesIndex": 0,
+       "targetNodeId": "b"
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-graphroam",
+   "note": "graphRoam on a graph with no layout",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "roam": true,
+      "data": [
+       {
+        "name": "u",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "v",
+        "x": 10,
+        "y": 10
+       }
+      ],
+      "links": [
+       {
+        "source": "u",
+        "target": "v"
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "graphRoam",
+      "seriesIndex": 0,
+      "batch": [
+       {
+        "dx": 12,
+        "dy": -7
+       },
+       {
+        "zoom": 2,
+        "originX": 150,
+        "originY": 100
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "graphroam",
+       {
+        "type": "graphroam",
+        "batch": [
+         {
+          "dx": 12,
+          "dy": -7,
+          "type": "graphroam",
+          "seriesIndex": 0,
+          "batch": null,
+          "animation": {
+           "duration": 0
+          }
+         },
+         {
+          "zoom": 2,
+          "originX": 150,
+          "originY": 100,
+          "type": "graphroam",
+          "seriesIndex": 0,
+          "batch": null,
+          "animation": {
+           "duration": 0
+          }
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "graphRoam",
+       "seriesIndex": 0,
+       "dx": 12,
+       "dy": -7
+      },
+      {
+       "type": "graphRoam",
+       "seriesIndex": 0,
+       "zoom": 2,
+       "originX": 150,
+       "originY": 100
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-dragnode",
+   "note": "dragNode on a sankey: update once, each item a copy",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sankey",
+      "data": [
+       {
+        "name": "n0"
+       },
+       {
+        "name": "n1"
+       },
+       {
+        "name": "n2"
+       },
+       {
+        "name": "n3"
+       }
+      ],
+      "links": [
+       {
+        "source": "n0",
+        "target": "n1",
+        "value": 5
+       },
+       {
+        "source": "n0",
+        "target": "n2",
+        "value": 3
+       },
+       {
+        "source": "n1",
+        "target": "n3",
+        "value": 4
+       },
+       {
+        "source": "n2",
+        "target": "n3",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "dragNode",
+      "seriesIndex": 0,
+      "batch": [
+       {
+        "dataIndex": 1,
+        "localX": 0.25,
+        "localY": 0.125
+       },
+       {
+        "dataIndex": 2,
+        "localX": 0.5,
+        "localY": 0.75
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "dragnode",
+       {
+        "type": "dragnode",
+        "batch": [
+         {
+          "dataIndex": 1,
+          "localX": 0.25,
+          "localY": 0.125,
+          "type": "dragnode",
+          "seriesIndex": 0,
+          "batch": null
+         },
+         {
+          "dataIndex": 2,
+          "localX": 0.5,
+          "localY": 0.75,
+          "type": "dragnode",
+          "seriesIndex": 0,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "dragNode",
+       "seriesIndex": 0,
+       "dataIndex": 1,
+       "localX": 0.25,
+       "localY": 0.125
+      },
+      {
+       "type": "dragNode",
+       "seriesIndex": 0,
+       "dataIndex": 2,
+       "localX": 0.5,
+       "localY": 0.75
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-takecursor",
+   "note": "takeGlobalCursor: each item a copy; the update reads the outer payload (an item brushOption alone would leave it none)",
+   "option": {
+    "animation": false,
+    "brush": {},
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "takeGlobalCursor",
+      "key": "brush",
+      "brushOption": {
+       "brushType": "lineX"
+      },
+      "batch": [
+       {
+        "brushOption": {
+         "brushType": "rect"
+        }
+       },
+       {}
+      ]
+     },
+     "events": [
+      [
+       0,
+       "globalcursortaken",
+       {
+        "type": "globalcursortaken",
+        "batch": [
+         {
+          "brushOption": {
+           "brushType": "rect"
+          },
+          "type": "globalcursortaken",
+          "key": "brush",
+          "batch": null
+         },
+         {
+          "type": "globalcursortaken",
+          "key": "brush",
+          "brushOption": {
+           "brushType": "lineX"
+          },
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀series␀0␀0",
+            "seriesIndex": 0,
+            "seriesName": "series␀0",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "takeGlobalCursor",
+       "key": "brush",
+       "brushOption": {
+        "brushType": "rect"
+       }
+      },
+      {
+       "type": "takeGlobalCursor",
+       "key": "brush",
+       "brushOption": {
+        "brushType": "lineX"
+       }
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-brush",
+   "note": "brush: updateVisual once, each item a copy; the brushSelect its update dispatched comes after",
+   "option": {
+    "animation": false,
+    "brush": {
+     "xAxisIndex": 0,
+     "brushStyle": {
+      "borderWidth": 1,
+      "color": "rgba(120,140,180,0.3)",
+      "borderColor": "rgba(120,140,180,0.8)"
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "brush",
+      "batch": [
+       {
+        "areas": [
+         {
+          "brushType": "lineX",
+          "coordRange": [
+           0,
+           1
+          ],
+          "xAxisIndex": 0
+         }
+        ]
+       },
+       {
+        "areas": [
+         {
+          "brushType": "lineX",
+          "coordRange": [
+           1,
+           3
+          ],
+          "xAxisIndex": 0
+         }
+        ]
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "brush",
+       {
+        "type": "brush",
+        "batch": [
+         {
+          "areas": [
+           {
+            "brushType": "lineX",
+            "coordRange": [
+             0,
+             1
+            ],
+            "xAxisIndex": 0
+           }
+          ],
+          "type": "brush",
+          "batch": null
+         },
+         {
+          "areas": [
+           {
+            "brushType": "lineX",
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0
+           }
+          ],
+          "type": "brush",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(120,140,180,0.3)",
+             "stroke": "rgba(120,140,180,0.8)",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             258.75,
+             483.75
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀series␀0␀0",
+            "seriesIndex": 0,
+            "seriesName": "series␀0",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "brush",
+       "areas": [
+        {
+         "brushType": "lineX",
+         "coordRange": [
+          0,
+          1
+         ],
+         "xAxisIndex": 0
+        }
+       ]
+      },
+      {
+       "type": "brush",
+       "areas": [
+        {
+         "brushType": "lineX",
+         "coordRange": [
+          1,
+          3
+         ],
+         "xAxisIndex": 0
+        }
+       ]
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-brushend",
+   "note": "brushEnd: no update, each item a copy",
+   "option": {
+    "animation": false,
+    "brush": {},
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "brushEnd",
+      "batch": [
+       {
+        "areas": []
+       },
+       {
+        "areas": []
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "brushend",
+       {
+        "type": "brushend",
+        "batch": [
+         {
+          "areas": [],
+          "type": "brushend",
+          "batch": null
+         },
+         {
+          "areas": [],
+          "type": "brushend",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "brushEnd",
+       "areas": []
+      },
+      {
+       "type": "brushEnd",
+       "areas": []
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-timeline",
+   "note": "timelineChange: the action's results, the update once",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "timeline": {
+      "data": [
+       "t0",
+       "t1",
+       "t2"
+      ]
+     },
+     "xAxis": {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ]
+     },
+     "yAxis": {}
+    },
+    "options": [
+     {
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         4,
+         3,
+         2,
+         1
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         2,
+         2,
+         2,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "timelineChange",
+      "batch": [
+       {
+        "currentIndex": 2
+       },
+       {
+        "currentIndex": 1
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "timelinechanged",
+       {
+        "type": "timelinechanged",
+        "batch": [
+         {
+          "currentIndex": 2,
+          "type": "timelinechanged",
+          "batch": null
+         },
+         {
+          "currentIndex": 1,
+          "type": "timelinechanged",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "timelineChange",
+       "currentIndex": 2
+      },
+      {
+       "type": "timelineChange",
+       "currentIndex": 1
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-timelineplay",
+   "note": "timelinePlayChange: each item a copy",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "timeline": {
+      "data": [
+       "t0",
+       "t1",
+       "t2"
+      ]
+     },
+     "xAxis": {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ]
+     },
+     "yAxis": {}
+    },
+    "options": [
+     {
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         4,
+         3,
+         2,
+         1
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         2,
+         2,
+         2,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "timelinePlayChange",
+      "batch": [
+       {
+        "playState": true
+       },
+       {
+        "playState": false
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "timelineplaychanged",
+       {
+        "type": "timelineplaychanged",
+        "batch": [
+         {
+          "playState": true,
+          "type": "timelineplaychanged",
+          "batch": null
+         },
+         {
+          "playState": false,
+          "type": "timelineplaychanged",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "timelinePlayChange",
+       "playState": true
+      },
+      {
+       "type": "timelinePlayChange",
+       "playState": false
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-axisareaselect",
+   "note": "axisAreaSelect on two parallel axes: each item a copy",
+   "option": {
+    "animation": false,
+    "parallelAxis": [
+     {
+      "dim": 0,
+      "name": "p"
+     },
+     {
+      "dim": 1,
+      "name": "q"
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        4,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "axisAreaSelect",
+      "batch": [
+       {
+        "parallelAxisIndex": 0,
+        "intervals": [
+         [
+          1,
+          2
+         ]
+        ]
+       },
+       {
+        "parallelAxisIndex": 1,
+        "intervals": [
+         [
+          3,
+          5
+         ]
+        ]
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "axisareaselected",
+       {
+        "type": "axisareaselected",
+        "batch": [
+         {
+          "parallelAxisIndex": 0,
+          "intervals": [
+           [
+            1,
+            2
+           ]
+          ],
+          "type": "axisareaselected",
+          "batch": null
+         },
+         {
+          "parallelAxisIndex": 1,
+          "intervals": [
+           [
+            3,
+            5
+           ]
+          ],
+          "type": "axisareaselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "axisAreaSelect",
+       "parallelAxisIndex": 0,
+       "intervals": [
+        [
+         1,
+         2
+        ]
+       ]
+      },
+      {
+       "type": "axisAreaSelect",
+       "parallelAxisIndex": 1,
+       "intervals": [
+        [
+         3,
+         5
+        ]
+       ]
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-axisexpand",
+   "note": "parallelAxisExpand: each item a copy",
+   "option": {
+    "animation": false,
+    "parallel": {
+     "axisExpandable": true,
+     "axisExpandWidth": 60,
+     "axisExpandCount": 2
+    },
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     },
+     {
+      "dim": 2
+     },
+     {
+      "dim": 3
+     },
+     {
+      "dim": 4
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        5,
+        4,
+        3,
+        2,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "parallelAxisExpand",
+      "batch": [
+       {
+        "axisExpandWindow": [
+         0,
+         120
+        ]
+       },
+       {
+        "axisExpandWindow": [
+         60,
+         180
+        ]
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "parallelaxisexpand",
+       {
+        "type": "parallelaxisexpand",
+        "batch": [
+         {
+          "axisExpandWindow": [
+           0,
+           120
+          ],
+          "type": "parallelaxisexpand",
+          "batch": null
+         },
+         {
+          "axisExpandWindow": [
+           60,
+           180
+          ],
+          "type": "parallelaxisexpand",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "parallelAxisExpand",
+       "axisExpandWindow": [
+        0,
+        120
+       ]
+      },
+      {
+       "type": "parallelAxisExpand",
+       "axisExpandWindow": [
+        60,
+        180
+       ]
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-axisbreak",
+   "note": "expandAxisBreak (a refined event): the non-refined event goes to connect only; one axisbreakchanged with every item's breaks",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "breaks": [
+      {
+       "start": 60,
+       "end": 400,
+       "gap": "6%"
+      },
+      {
+       "start": 450,
+       "end": 900,
+       "gap": "6%"
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       20,
+       420,
+       950,
+       55
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "expandAxisBreak",
+      "yAxisIndex": 0,
+      "batch": [
+       {
+        "breaks": [
+         {
+          "start": 60,
+          "end": 400
+         }
+        ]
+       },
+       {
+        "breaks": [
+         {
+          "start": 450,
+          "end": 900
+         }
+        ]
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 60,
+          "end": 400,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": false
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": false
+          }
+         }
+        ],
+        "fromAction": "expandAxisBreak",
+        "fromActionPayload": {
+         "type": "expandAxisBreak",
+         "yAxisIndex": 0,
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 60,
+             "end": 400
+            }
+           ]
+          },
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ]
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "expandAxisBreak",
+       "yAxisIndex": 0,
+       "breaks": [
+        {
+         "start": 60,
+         "end": 400
+        }
+       ]
+      },
+      {
+       "type": "expandAxisBreak",
+       "yAxisIndex": 0,
+       "breaks": [
+        {
+         "start": 450,
+         "end": 900
+        }
+       ]
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-showtip",
+   "note": "showTip (tooltip:manuallyShowTip per item): one showtip event; the updateAxisPointer each item dispatched waits",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "showTip",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "showtip",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 2,
+          "type": "showtip",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 258.75,
+        "y": 192.5,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 371.25,
+        "y": 269,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 2,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "showTip",
+       "seriesIndex": 0,
+       "dataIndex": 1
+      },
+      {
+       "type": "showTip",
+       "seriesIndex": 0,
+       "dataIndex": 2
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-showtip-item",
+   "note": "showTip under an item trigger: each item shows its element",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "showTip",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       {
+        "seriesIndex": 1,
+        "dataIndex": 3
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "showtip",
+          "batch": null
+         },
+         {
+          "seriesIndex": 1,
+          "dataIndex": 3,
+          "type": "showtip",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "seriesIndex": 1,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "showTip",
+       "seriesIndex": 0,
+       "dataIndex": 1
+      },
+      {
+       "type": "showTip",
+       "seriesIndex": 1,
+       "dataIndex": 3
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-hidetip",
+   "note": "hideTip: one hidetip event; the hideTip each _hide dispatched waits",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [
+    {
+     "op": "move",
+     "at": [
+      250,
+      200
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "hideTip",
+      "batch": [
+       {},
+       {}
+      ]
+     },
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "batch": [
+         {
+          "type": "hidetip",
+          "batch": null
+         },
+         {
+          "type": "hidetip",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "hideTip"
+      },
+      {
+       "type": "hideTip"
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "b-updateaxispointer",
+   "note": "updateAxisPointer (an update of its own per item): its event the outputPayloads; the showTips wait",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": true,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "updateAxisPointer",
+      "batch": [
+       {
+        "x": 250,
+        "y": 200
+       },
+       {
+        "x": 370,
+        "y": 200
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "type": "updateaxispointer",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndexInside": 1,
+          "dataIndex": 1,
+          "axesInfo": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "value": 1
+           }
+          ],
+          "type": "updateaxispointer"
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndexInside": 2,
+          "dataIndex": 2,
+          "axesInfo": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "value": 2
+           }
+          ],
+          "type": "updateaxispointer"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 370,
+        "y": 200,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 2,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "items": [
+      {
+       "type": "updateAxisPointer",
+       "x": 250,
+       "y": 200
+      },
+      {
+       "type": "updateAxisPointer",
+       "x": 370,
+       "y": 200
+      }
+     ],
+     "sameAsItems": true
+    }
+   ]
+  },
+  {
+   "id": "p-legacy",
+   "note": "pieToggleSelect alone: its event, its update, then the toggleSelect it dispatched (pending) with selectchanged",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "selectedMode": "single",
+      "data": [
+       {
+        "name": "p",
+        "value": 1
+       },
+       {
+        "name": "q",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "pieToggleSelect",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "events": [
+      [
+       0,
+       "pietoggleselect",
+       {
+        "type": "pietoggleselect",
+        "seriesIndex": 0,
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "seriesIndex": [
+         0
+        ],
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "seriesIndex": [
+          0
+         ],
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-nested",
+   "note": "a handler of the first hidetip dispatches a legendToggleSelect: it runs at once and its own flush takes the hideTip the outer one left waiting, before its updated",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "twin": false,
+   "flush": false,
+   "handlers": [
+    {
+     "on": "hidetip",
+     "times": 1,
+     "dispatch": {
+      "type": "legendToggleSelect",
+      "name": "L"
+     }
+    }
+   ],
+   "pre": [],
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "hideTip"
+     },
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "legendselectchanged",
+       {
+        "name": "L",
+        "selected": {
+         "B": true,
+         "L": false
+        },
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": []
+    }
+   ]
+  },
+  {
+   "id": "p-silent",
+   "note": "a silent hideTip: nothing published, the pending hideTip either",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "hideTip"
+     },
+     "silent": true,
+     "events": []
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": []
+    }
+   ]
+  },
+  {
+   "id": "p-handler-later",
+   "note": "a handler of legendselectchanged dispatches a highlight: it runs at once, between the outer event and its updated",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "twin": false,
+   "flush": false,
+   "handlers": [
+    {
+     "on": "legendselectchanged",
+     "times": 1,
+     "dispatch": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     }
+    }
+   ],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "L"
+     },
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "name": "L",
+        "selected": {
+         "B": true,
+         "L": false
+        },
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       0,
+       "highlight",
+       {
+        "type": "highlight",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-hover",
+   "note": "zrender flushes when something was marked: a hover that changes a state, a tooltip box that moves; nothing changed, nothing flushed",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": true,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 10,
+     "events": []
+    },
+    {
+     "op": "move",
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      260,
+      257
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      6,
+      6
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "events": [
+      [
+       0,
+       "highlight",
+       {
+        "type": "highlight",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "nothing"
+     },
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "name": "nothing",
+        "selected": {},
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "hideTip"
+     },
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "leave",
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-pending",
+   "note": "a flush inside the handler of pietoggleselect, while the toggleSelect it dispatched still waits: rendered, no finished (bindRenderedEvent: _pendingActions not empty); the step's own frame after the flush: both",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "selectedMode": "single",
+      "data": [
+       {
+        "name": "p",
+        "value": 1
+       },
+       {
+        "name": "q",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": true,
+   "handlers": [
+    {
+     "on": "pietoggleselect",
+     "times": 1,
+     "flush": true
+    }
+   ],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "pieToggleSelect",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "events": [
+      [
+       0,
+       "pietoggleselect",
+       {
+        "type": "pietoggleselect",
+        "seriesIndex": 0,
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "seriesIndex": [
+         0
+        ],
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "seriesIndex": [
+          0
+         ],
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-plain",
+   "note": "no tooltip: a move inside the same bar marks nothing",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       1,
+       4,
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": true,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      260,
+      257
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "rendered",
+       {
+        "elapsedTime": 0
+       }
+      ],
+      [
+       0,
+       "finished",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      6,
+      6
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "events": [
+      [
+       0,
+       "downplay",
+       {
+        "type": "downplay",
+        "seriesIndex": 0,
+        "dataIndex": 1
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "ls-one-event",
+   "ok": true,
+   "what": "legendScroll: one event of two items, escapeConnect, one updated"
+  },
+  {
+   "id": "ls-same",
+   "ok": true,
+   "what": "the batch ends where the items one by one do"
+  },
+  {
+   "id": "lo-empty",
+   "ok": true,
+   "what": "a batch that is no list: no items"
+  },
+  {
+   "id": "silent-nothing",
+   "ok": true,
+   "what": "a silent batch publishes nothing"
+  },
+  {
+   "id": "pt-order",
+   "ok": true,
+   "what": "pieToggleSelect batch: its event, then the two pending toggleSelects, then updated"
+  },
+  {
+   "id": "ab-refined-once",
+   "ok": true,
+   "what": "one axisbreakchanged with both items' breaks"
+  },
+  {
+   "id": "tl-results",
+   "ok": true,
+   "what": "timelineChange: each entry the action's result"
+  },
+  {
+   "id": "st-one",
+   "ok": true,
+   "what": "one batched showtip"
+  },
+  {
+   "id": "st-pending-after",
+   "ok": true,
+   "what": "the updateAxisPointers the items dispatched come after the batch event"
+  },
+  {
+   "id": "ua-results",
+   "ok": true,
+   "what": "updateAxisPointer: entries are the outputPayloads"
+  },
+  {
+   "id": "pl-order",
+   "ok": true,
+   "what": "the legacy action's own event first, the select after"
+  },
+  {
+   "id": "pn-order",
+   "ok": true,
+   "what": "the nested dispatch flushes the outer's pending hideTip before its updated"
+  },
+  {
+   "id": "ps-nothing",
+   "ok": true,
+   "what": "silent: nothing"
+  },
+  {
+   "id": "ph-order",
+   "ok": true,
+   "what": "a handler's dispatch runs at once"
+  },
+  {
+   "id": "rh-idle-none",
+   "ok": true,
+   "what": "nothing marked: no rendered"
+  },
+  {
+   "id": "rh-hover",
+   "ok": true,
+   "what": "a hover: rendered and finished"
+  },
+  {
+   "id": "rh-box-moves",
+   "ok": true,
+   "what": "the box moved with the pointer: rendered"
+  },
+  {
+   "id": "rp-same-bar",
+   "ok": true,
+   "what": "no tooltip, the same bar: nothing flushed"
+  },
+  {
+   "id": "rpe-order",
+   "ok": true,
+   "what": "a flush while an action waits: rendered without finished; finished once the queue is empty"
+  },
+  {
+   "id": "rp-elapsed",
+   "ok": true,
+   "what": "elapsedTime on the frozen clock"
+  }
+ ]
+}

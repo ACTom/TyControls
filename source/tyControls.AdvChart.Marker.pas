@@ -78,6 +78,9 @@ type
     { axisTick.alignWithLabel of the x and the y axis }
     AlignWithLabel: array[0..1] of Boolean;
     SeriesSilent: Boolean;
+    { the option root: the master marker's parent, where a key neither the
+      marker nor the master has is read [F4c] }
+    Root: TJSONObject;
     Scale, OriginX, OriginY, Width, Height: Double;
   end;
 
@@ -1204,8 +1207,15 @@ begin
   if Truthy(d) then ABlock.Z := JsNumberOf(d) else ABlock.Z := 0;
   d := TyMkChainGet(nil, FOwn, FTop, FKind, 'zlevel', False);
   if Truthy(d) then ABlock.ZLevel := JsNumberOf(d) else ABlock.ZLevel := 0;
-  ABlock.Silent := Truthy(TyMkChainGet(nil, FOwn, FTop, FKind, 'silent', False))
-    or C.SeriesSilent;
+  { mlModel.get('silent'): the marker, the master, then -- neither has a
+    default -- the option root [F4c] }
+  d := TyMkChainGet(nil, FOwn, FTop, FKind, 'silent', False);
+  if (d = nil) and (C.Root <> nil) then
+  begin
+    d := C.Root.Find('silent');
+    if (d <> nil) and (d.JSONType = jtNull) then d := nil;
+  end;
+  ABlock.Silent := Truthy(d) or C.SeriesSilent;
 end;
 
 { ---- markPoint ---- }

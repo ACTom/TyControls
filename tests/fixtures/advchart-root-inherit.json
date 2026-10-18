@@ -1,0 +1,1939 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "group": "grid",
+   "id": "g-left-right",
+   "note": "left: 'right' with a width: the switch puts it at the right edge",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "left": "right",
+     "width": 200
+    }
+   },
+   "gridBox": {
+    "left": "right",
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": "<undef>",
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": {
+     "n": "4069000000000000",
+     "t": "200"
+    },
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "4079000000000000",
+    "y": "4050400000000000",
+    "width": "4069000000000000",
+    "height": "406fe00000000000",
+    "text": "400,65,200,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-left-center",
+   "note": "left: 'center' with a width",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "left": "center",
+     "width": 200
+    }
+   },
+   "gridBox": {
+    "left": "center",
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": "<undef>",
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": {
+     "n": "4069000000000000",
+     "t": "200"
+    },
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "4069000000000000",
+    "y": "4050400000000000",
+    "width": "4069000000000000",
+    "height": "406fe00000000000",
+    "text": "200,65,200,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-top-bottom",
+   "note": "top: 'bottom' with a height",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "top": "bottom",
+     "height": 100
+    }
+   },
+   "gridBox": {
+    "left": "15%",
+    "top": "bottom",
+    "right": "10%",
+    "bottom": "<undef>",
+    "width": "<undef>",
+    "height": {
+     "n": "4059000000000000",
+     "t": "100"
+    }
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4072c00000000000",
+    "width": "407c200000000000",
+    "height": "4059000000000000",
+    "text": "90,300,450,100"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-right-right",
+   "note": "right: 'right' alone: the default left goes, the word is right's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "right": "right",
+     "width": 150
+    }
+   },
+   "gridBox": {
+    "left": "<undef>",
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": "right",
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": {
+     "n": "4062c00000000000",
+     "t": "150"
+    },
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "407c200000000000",
+    "y": "4050400000000000",
+    "width": "4062c00000000000",
+    "height": "406fe00000000000",
+    "text": "450,65,150,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-bottom-middle",
+   "note": "bottom: 'middle' with a height",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "bottom": "middle",
+     "height": 120
+    }
+   },
+   "gridBox": {
+    "left": "15%",
+    "top": "<undef>",
+    "right": "10%",
+    "bottom": "middle",
+    "width": "<undef>",
+    "height": {
+     "n": "405e000000000000",
+     "t": "120"
+    }
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4061800000000000",
+    "width": "407c200000000000",
+    "height": "405e000000000000",
+    "text": "90,140,450,120"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-left-left",
+   "note": "left: 'left' is 0%, top: 'top' 0%",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "left": "left",
+     "top": "top"
+    }
+   },
+   "gridBox": {
+    "left": "left",
+    "top": "top",
+    "right": "10%",
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "0000000000000000",
+    "y": "0000000000000000",
+    "width": "4080e00000000000",
+    "height": "4074000000000000",
+    "text": "0,0,540,320"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-flip-v",
+   "note": "top 300 and bottom 300 on 400: the height is -200 and BoundingRect flips it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "top": 300,
+     "bottom": 300
+    }
+   },
+   "gridBox": {
+    "left": "15%",
+    "top": {
+     "n": "4072c00000000000",
+     "t": "300"
+    },
+    "right": "10%",
+    "bottom": {
+     "n": "4072c00000000000",
+     "t": "300"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4059000000000000",
+    "width": "407c200000000000",
+    "height": "4069000000000000",
+    "text": "90,100,450,200"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-flip-h",
+   "note": "left 400 and right 400 on 600: the width flips",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "left": 400,
+     "right": 400
+    }
+   },
+   "gridBox": {
+    "left": {
+     "n": "4079000000000000",
+     "t": "400"
+    },
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": {
+     "n": "4079000000000000",
+     "t": "400"
+    },
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "4069000000000000",
+    "y": "4050400000000000",
+    "width": "4069000000000000",
+    "height": "406fe00000000000",
+    "text": "200,65,200,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-three",
+   "note": "left, width and right all written: the merge keeps the three, the width wins",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "left": 10,
+     "width": 100,
+     "right": 30
+    }
+   },
+   "gridBox": {
+    "left": {
+     "n": "4024000000000000",
+     "t": "10"
+    },
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": {
+     "n": "403e000000000000",
+     "t": "30"
+    },
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": {
+     "n": "4059000000000000",
+     "t": "100"
+    },
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "4024000000000000",
+    "y": "4050400000000000",
+    "width": "4059000000000000",
+    "height": "406fe00000000000",
+    "text": "10,65,100,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-auto-left",
+   "note": "left: 'auto' with a right: the merge keeps the default left out, auto is NaN",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "grid": {
+     "outerBoundsMode": "none",
+     "left": "auto",
+     "right": 50
+    }
+   },
+   "gridBox": {
+    "left": "auto",
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": {
+     "n": "4049000000000000",
+     "t": "50"
+    },
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "0000000000000000",
+    "y": "4050400000000000",
+    "width": "4081300000000000",
+    "height": "406fe00000000000",
+    "text": "0,65,550,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-root-default",
+   "note": "no grid component: the default grid, its width and height the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "left": 50,
+    "top": 40,
+    "width": 300,
+    "height": 200
+   },
+   "gridBox": {
+    "left": "15%",
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": "10%",
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": {
+     "n": "4072c00000000000",
+     "t": "300"
+    },
+    "height": {
+     "n": "4069000000000000",
+     "t": "200"
+    }
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "4072c00000000000",
+    "height": "4069000000000000",
+    "text": "90,65,300,200"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-root-null",
+   "note": "a grid right written null reads the root right",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "right": 20,
+    "grid": {
+     "outerBoundsMode": "none",
+     "right": null
+    }
+   },
+   "gridBox": {
+    "left": "15%",
+    "top": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "right": {
+     "n": "4034000000000000",
+     "t": "20"
+    },
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407ea00000000000",
+    "height": "406fe00000000000",
+    "text": "90,65,490,255"
+   }
+  },
+  {
+   "group": "grid",
+   "id": "g-root-middle",
+   "note": "a grid top written null reads the root's 'middle', its height the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "top": "middle",
+    "height": 100,
+    "grid": {
+     "outerBoundsMode": "none",
+     "top": null
+    }
+   },
+   "gridBox": {
+    "left": "15%",
+    "top": "middle",
+    "right": "10%",
+    "bottom": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "width": "<undef>",
+    "height": {
+     "n": "4059000000000000",
+     "t": "100"
+    }
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4062c00000000000",
+    "width": "407c200000000000",
+    "height": "4059000000000000",
+    "text": "90,150,450,100"
+   }
+  },
+  {
+   "group": "single",
+   "id": "s-keywords",
+   "note": "a single axis with left 'center' and top 'bottom'",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "value",
+     "left": "center",
+     "width": 200,
+     "top": "bottom",
+     "height": 30
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "singleBox": {
+    "left": "center",
+    "top": "bottom",
+    "right": "<undef>",
+    "bottom": "<undef>",
+    "width": {
+     "n": "4069000000000000",
+     "t": "200"
+    },
+    "height": {
+     "n": "403e000000000000",
+     "t": "30"
+    }
+   },
+   "single": {
+    "x": "4069000000000000",
+    "y": "4077200000000000",
+    "width": "4069000000000000",
+    "height": "403e000000000000",
+    "text": "200,370,200,30"
+   }
+  },
+  {
+   "group": "single",
+   "id": "s-root",
+   "note": "a single axis with the root height under it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "height": 50,
+    "singleAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "singleBox": {
+    "left": "5%",
+    "top": "5%",
+    "right": "5%",
+    "bottom": "5%",
+    "width": "<undef>",
+    "height": {
+     "n": "4049000000000000",
+     "t": "50"
+    }
+   },
+   "single": {
+    "x": "403e000000000000",
+    "y": "4034000000000000",
+    "width": "4080e00000000000",
+    "height": "4049000000000000",
+    "text": "30,20,540,50"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-title",
+   "note": "a title whose left is null: the root's 'right'",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "left": "right",
+    "title": {
+     "text": "Title",
+     "left": null
+    }
+   },
+   "titleBox": {
+    "left": "right",
+    "top": {
+     "n": "402e000000000000",
+     "t": "15"
+    },
+    "right": "<undef>",
+    "bottom": "<undef>",
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "title": {
+    "x": "4082980000000000",
+    "y": "4034000000000000",
+    "text": "595,20",
+    "align": "right",
+    "verticalAlign": "top",
+    "measured": {
+     "width": "4041028f5c28f5c4",
+     "height": "4032000000000000"
+    },
+    "bg": {
+     "x": "40815fd70a3d70a4",
+     "y": "402e000000000000",
+     "width": "4046028f5c28f5c4",
+     "height": "403c000000000000",
+     "text": "555.98,15,44.02000000000001,28"
+    }
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-title-top",
+   "note": "a title with the root top 'bottom' (its own top a default, the merge nulls nothing)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "top": "bottom",
+    "title": {
+     "text": "Title",
+     "top": null
+    }
+   },
+   "titleBox": {
+    "left": "center",
+    "top": "bottom",
+    "right": "<undef>",
+    "bottom": "<undef>",
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "title": {
+    "x": "4072c00000000000",
+    "y": "4078b00000000000",
+    "text": "300,395",
+    "align": "center",
+    "verticalAlign": "bottom",
+    "measured": {
+     "width": "4041028f5c28f5c4",
+     "height": "4032000000000000"
+    },
+    "bg": {
+     "x": "40715fd70a3d70a4",
+     "y": "4077400000000000",
+     "width": "4046028f5c28f5c4",
+     "height": "403c000000000000",
+     "text": "277.99,372,44.02000000000001,28"
+    }
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-legend",
+   "note": "a legend whose left is null: both edges read the root, right 10",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "right": 10,
+    "legend": {
+     "left": null,
+     "data": [
+      "a"
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "p",
+      "data": [
+       {
+        "name": "a",
+        "value": 1
+       }
+      ]
+     }
+    ]
+   },
+   "legendBox": {
+    "left": "<undef>",
+    "top": "<undef>",
+    "right": {
+     "n": "4024000000000000",
+     "t": "10"
+    },
+    "bottom": {
+     "n": "402e000000000000",
+     "t": "15"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "pieBox": {
+    "left": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "top": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "right": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "bottom": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "pie": {
+    "cx": "4072c00000000000",
+    "cy": "4069000000000000",
+    "r": "4059000000000000",
+    "text": "300,200,100"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-pie",
+   "note": "a pie with no width: the root width 300 boxes it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 300,
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "pieBox": {
+    "left": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "top": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "right": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "bottom": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "width": {
+     "n": "4072c00000000000",
+     "t": "300"
+    },
+    "height": "<undef>"
+   },
+   "pie": {
+    "cx": "4062c00000000000",
+    "cy": "4069000000000000",
+    "r": "4052c00000000000",
+    "text": "150,200,75"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-funnel",
+   "note": "a funnel with the root width and a top written null",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 200,
+    "top": 30,
+    "series": [
+     {
+      "type": "funnel",
+      "top": null,
+      "data": [
+       {
+        "value": 3
+       },
+       {
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "funnelBox": {
+    "left": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "top": {
+     "n": "403e000000000000",
+     "t": "30"
+    },
+    "right": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "bottom": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "width": {
+     "n": "4069000000000000",
+     "t": "200"
+    },
+    "height": "<undef>"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-tree",
+   "note": "a tree whose width the root gives",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 250,
+    "series": [
+     {
+      "type": "tree",
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "treeBox": {
+    "left": "12%",
+    "top": "12%",
+    "right": "12%",
+    "bottom": "12%",
+    "width": {
+     "n": "406f400000000000",
+     "t": "250"
+    },
+    "height": "<undef>"
+   },
+   "tree": {
+    "x": "4052000000000000",
+    "y": "4048000000000000",
+    "width": "406f400000000000",
+    "height": "4073000000000000",
+    "text": "72,48,250,304"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-treemap",
+   "note": "a treemap with the root height and top null",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "height": 150,
+    "top": 20,
+    "series": [
+     {
+      "type": "treemap",
+      "top": null,
+      "data": [
+       {
+        "value": 3
+       },
+       {
+        "value": 1
+       }
+      ]
+     }
+    ]
+   },
+   "treemapBox": {
+    "left": {
+     "n": "4034000000000000",
+     "t": "20"
+    },
+    "top": {
+     "n": "4034000000000000",
+     "t": "20"
+    },
+    "right": {
+     "n": "4034000000000000",
+     "t": "20"
+    },
+    "bottom": {
+     "n": "4049000000000000",
+     "t": "50"
+    },
+    "width": "<undef>",
+    "height": {
+     "n": "4062c00000000000",
+     "t": "150"
+    }
+   },
+   "treemap": {
+    "x": "4034000000000000",
+    "y": "4034000000000000",
+    "width": "4081800000000000",
+    "height": "4062c00000000000",
+    "text": "20,20,560,150"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-sankey",
+   "note": "a sankey with the root width",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 300,
+    "series": [
+     {
+      "type": "sankey",
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 1
+       }
+      ]
+     }
+    ]
+   },
+   "sankeyBox": {
+    "left": "5%",
+    "top": "5%",
+    "right": "20%",
+    "bottom": "5%",
+    "width": {
+     "n": "4072c00000000000",
+     "t": "300"
+    },
+    "height": "<undef>"
+   },
+   "sankey": {
+    "x": "403e000000000000",
+    "y": "4034000000000000",
+    "width": "4072c00000000000",
+    "height": "4076800000000000",
+    "text": "30,20,300,360"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-calendar",
+   "note": "a calendar with the root width and its top null",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 400,
+    "top": 120,
+    "calendar": {
+     "range": "2017-01",
+     "top": null
+    }
+   },
+   "calendarBox": {
+    "left": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "top": {
+     "n": "405e000000000000",
+     "t": "120"
+    },
+    "right": "<undef>",
+    "bottom": "<undef>",
+    "width": {
+     "n": "4079000000000000",
+     "t": "400"
+    },
+    "height": "<undef>"
+   },
+   "calendar": {
+    "x": "4054000000000000",
+    "y": "405e000000000000",
+    "width": "4059000000000000",
+    "height": "4061800000000000",
+    "text": "80,120,100,140"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-parallel",
+   "note": "a parallel with the root width and height",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 300,
+    "height": 200,
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "parallelBox": {
+    "left": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "top": {
+     "n": "404e000000000000",
+     "t": "60"
+    },
+    "right": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "bottom": {
+     "n": "404e000000000000",
+     "t": "60"
+    },
+    "width": {
+     "n": "4072c00000000000",
+     "t": "300"
+    },
+    "height": {
+     "n": "4069000000000000",
+     "t": "200"
+    }
+   },
+   "parallel": {
+    "x": "4054000000000000",
+    "y": "404e000000000000",
+    "width": "4072c00000000000",
+    "height": "4069000000000000",
+    "text": "80,60,300,200"
+   }
+  },
+  {
+   "group": "silent",
+   "id": "sil-root",
+   "note": "the root's silent: true makes the bar series silent",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "silent": true,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "seriesSilent": true,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   }
+  },
+  {
+   "group": "silent",
+   "id": "sil-own-false",
+   "note": "the series' own silent: false wins over the root's true",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "silent": true,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "silent": false,
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "seriesSilent": false,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   }
+  },
+  {
+   "group": "silent",
+   "id": "sil-own-null",
+   "note": "a series silent written null reads the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "silent": true,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "silent": null,
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "seriesSilent": true,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   }
+  },
+  {
+   "group": "silent",
+   "id": "sil-root-1",
+   "note": "the root's silent 1 is truthy (`!!`)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "silent": 1,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "seriesSilent": true,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   }
+  },
+  {
+   "group": "silent",
+   "id": "sil-marker",
+   "note": "a markLine with the root's silent: true, on a series that says false",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "silent": true,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "silent": false,
+      "data": [
+       3,
+       5
+      ],
+      "markLine": {
+       "data": [
+        {
+         "yAxis": 4
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "seriesSilent": false,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   },
+   "markerSilent": true,
+   "markLine": {
+    "x1": "4056800000000000",
+    "y1": "405d000000000000",
+    "x2": "4080e00000000000",
+    "y2": "405d000000000000",
+    "text": "90,116,540,116"
+   }
+  },
+  {
+   "group": "silent",
+   "id": "sil-marker-loud",
+   "note": "the markLine of sil-marker with no silent anywhere: not silent, it answers the pointer",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5
+      ],
+      "markLine": {
+       "data": [
+        {
+         "yAxis": 4
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "seriesSilent": false,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   },
+   "markerSilent": false,
+   "markLine": {
+    "x1": "4056800000000000",
+    "y1": "405d000000000000",
+    "x2": "4080e00000000000",
+    "y2": "405d000000000000",
+    "text": "90,116,540,116"
+   }
+  },
+  {
+   "group": "prog",
+   "id": "p-scatter",
+   "note": "a scatter has no progressive of its own: the root's 1000 and threshold 500",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressive": 1000,
+    "progressiveThreshold": 500,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "scatter",
+     "progressive": {
+      "n": "408f400000000000",
+      "t": "1000"
+     },
+     "threshold": {
+      "n": "407f400000000000",
+      "t": "500"
+     },
+     "chunkMode": "<undef>"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-scatter-default",
+   "note": "a scatter with nothing written: the global defaults 400 / 3000",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "scatter",
+     "progressive": {
+      "n": "4079000000000000",
+      "t": "400"
+     },
+     "threshold": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "chunkMode": "<undef>"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-scatter-large",
+   "note": "a large scatter: 5e3 / 1e4 whatever the root says",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressive": 1000,
+    "progressiveThreshold": 500,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "large": true,
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "scatter",
+     "progressive": {
+      "n": "40b3880000000000",
+      "t": "5000"
+     },
+     "threshold": {
+      "n": "40c3880000000000",
+      "t": "10000"
+     },
+     "chunkMode": "<undef>"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-line",
+   "note": "a line's own 0 keeps the root's out",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressive": 1000,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "line",
+     "progressive": {
+      "n": "0000000000000000",
+      "t": "0"
+     },
+     "threshold": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "chunkMode": "<undef>"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-line-null",
+   "note": "a line's progressive written null reads the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressive": 1000,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "progressive": null,
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "line",
+     "progressive": {
+      "n": "408f400000000000",
+      "t": "1000"
+     },
+     "threshold": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "chunkMode": "<undef>"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-bar-large",
+   "note": "a large bar's own 3000; its threshold the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressive": 1000,
+    "progressiveThreshold": 700,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "large": true,
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "bar",
+     "progressive": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "threshold": {
+      "n": "4085e00000000000",
+      "t": "700"
+     },
+     "chunkMode": "mod"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-candle",
+   "note": "a candlestick's own threshold 1e4 and chunk mode 'mod'",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressiveThreshold": 700,
+    "progressiveChunkMode": "sequential",
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "candlestick",
+     "progressive": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "threshold": {
+      "n": "40c3880000000000",
+      "t": "10000"
+     },
+     "chunkMode": "mod"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-scatter-chunk",
+   "note": "a scatter's chunk mode is the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressiveChunkMode": "mod",
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "scatter",
+     "progressive": {
+      "n": "4079000000000000",
+      "t": "400"
+     },
+     "threshold": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "chunkMode": "mod"
+    }
+   ]
+  },
+  {
+   "group": "prog",
+   "id": "p-root-null",
+   "note": "a root progressive written null: getShallow's end, null",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "progressive": null,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "prog": [
+    {
+     "type": "scatter",
+     "progressive": "<undef>",
+     "threshold": {
+      "n": "40a7700000000000",
+      "t": "3000"
+     },
+     "chunkMode": "<undef>"
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "g-left-right: the switch puts x at W - width",
+   "ok": true
+  },
+  {
+   "name": "g-flip-v: the flipped height is positive",
+   "ok": true
+  },
+  {
+   "name": "g-flip-h: the flipped width is positive",
+   "ok": true
+  },
+  {
+   "name": "g-root-default: the root's width reaches the default grid",
+   "ok": true
+  },
+  {
+   "name": "g-root-null: the root's right replaces a null",
+   "ok": true
+  },
+  {
+   "name": "s-root: the root's height reaches a single axis",
+   "ok": true
+  },
+  {
+   "name": "b-title: the root's left reaches the title",
+   "ok": true
+  },
+  {
+   "name": "b-pie: the root's width reaches the pie",
+   "ok": true
+  },
+  {
+   "name": "sil-root: silent",
+   "ok": true
+  },
+  {
+   "name": "sil-own-false: not silent",
+   "ok": true
+  },
+  {
+   "name": "sil-own-null: silent",
+   "ok": true
+  },
+  {
+   "name": "sil-marker: the marker silent through the root",
+   "ok": true
+  },
+  {
+   "name": "sil-marker-loud: the marker answers",
+   "ok": true
+  },
+  {
+   "name": "p-scatter: the root's progressive",
+   "ok": true
+  },
+  {
+   "name": "p-line: the line's own 0",
+   "ok": true
+  },
+  {
+   "name": "p-line-null: a null climbs",
+   "ok": true
+  },
+  {
+   "name": "p-candle: the candlestick's own chunk mode",
+   "ok": true
+  }
+ ]
+}

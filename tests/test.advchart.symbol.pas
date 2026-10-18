@@ -72,10 +72,11 @@ begin
   AssertEquals(Ord(tsyPath), Ord(TySymbolKindOf('path://M0,0L10,10', empty, path)));
   AssertEquals('the body comes through', 'M0,0L10,10', path);
 
-  { `image://` is refused rather than half-honoured: there is nowhere for an
-    image to live in a pure unit, and drawing a stand-in shape would be a
-    picture the author did not ask for. }
-  AssertEquals(Ord(tsyNone), Ord(TySymbolKindOf('image://x.png', empty, path)));
+  { [F6a] `image://` is a picture: the shape carries its source (the rest
+    of the string) and the renderer draws it. It was refused, "nowhere for
+    an image to live in a pure unit". }
+  AssertEquals(Ord(tsyImage), Ord(TySymbolKindOf('image://x.png', empty, path)));
+  AssertEquals('the source comes through', 'x.png', path);
   { AN UNRECOGNISED NAME IS A RECT, and this assertion used to say the
     opposite -- it pinned the port's own first answer rather than
     upstream's. SymbolClz.buildPath looks the name up in symbolBuildProxies

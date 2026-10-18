@@ -181,6 +181,9 @@ type
     CrumbEmphFill: TTyChartColor;
     CrumbEmphHasText: Boolean;
     CrumbEmphText: TTyChartColor;
+    { by row, the node's decal: the content rect's normalStyle.decal is the
+      node style's [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 { Layout and pruning over the container, device px at APPI. AView is what
@@ -779,6 +782,9 @@ var
 begin
   counts := TStringList.Create;
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    counts.UseLocale := False;
     counts.Sorted := True;
     counts.CaseSensitive := True;
     SetLength(Result, Length(AHier.Nodes));
@@ -1045,6 +1051,9 @@ begin
         else target[k].V := TyBoxRawNum(50);
       end;
     TyCalMergeLayoutParam(target, raw, False, False);
+    { getBoxLayoutParams: a null or undefined key reads the option root
+      [F4c] }
+    for k := 0 to 5 do TyRawClimbRoot(target[k].V, AOption.Root, cBoxKey[k]);
     box.Width := Scaled(target[0].V);
     box.Left := Scaled(target[1].V);
     box.Right := Scaled(target[2].V);
@@ -1520,6 +1529,9 @@ begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    ids.UseLocale := False;
     ids.Sorted := True;
     ids.CaseSensitive := True;
     Travel(ASolved, 0, none, APalette, ABorder, ids);
@@ -2437,6 +2449,7 @@ var
         (bw + cw) + nd.TX, (bw + ch) + nd.TY)));
       el.Style.HasFill := nd.HasFill;
       el.Style.FillColor := nd.Fill;
+      if ARow <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[ARow];
       el.Z := ASolved.Z;
       el.Z2 := z2;
       el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);

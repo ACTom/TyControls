@@ -943,7 +943,7 @@ const
     A key upstream does NOT read stays out of here and stays reported --
     toolbox.feature.mark, the root `calculable`, an inside dataZoom's
     `realtime` -- because saying nothing about it would be the lie. }
-  cRuntimeKeys: array[0..46] of TRuntimeKey = (
+  cRuntimeKeys: array[0..50] of TRuntimeKey = (
     { model/mixin/palette.ts:53 -- a series' own palette }
     (Parent: 'series-scatter'; Key: 'color'),
     { label/labelStyle.ts:551 }
@@ -954,6 +954,16 @@ const
     (Parent: 'series-tree'; Key: 'animationDuration'),
     { chart/tree/TreeSeries.ts:315 }
     (Parent: 'series-tree'; Key: 'animationDurationUpdate'),
+    { animation/basicTransition.ts:90 -- getAnimationConfig, for any series;
+      the map's regions are updated through it (map-bar-morph) }
+    (Parent: 'series-map'; Key: 'animationDurationUpdate'),
+    { chart/treemap/TreemapSeries.ts:279 -- in the series' own defaults }
+    (Parent: 'series-treemap'; Key: 'animationDurationUpdate'),
+    { model/Series.ts:671 isUniversalTransitionEnabled -- any series
+      (treemap-sunburst-transition) }
+    (Parent: 'series-treemap'; Key: 'universalTransition'),
+    { model/Series.ts:671 }
+    (Parent: 'series-sunburst'; Key: 'universalTransition'),
     { chart/chord/ChordSeries.ts:146 -- the node labels }
     (Parent: 'series-chord'; Key: 'label'),
     { chart/custom/CustomView.ts:126/712 -- deprecated, still read }
@@ -1271,6 +1281,24 @@ begin
   Result := TyOptChild(v, AKey);
 end;
 
+{ A ROOT KEY THAT REACHES THE MODELS through their parent [F4c]: the
+  GlobalModel is every component's and series' parent model, so get() and
+  getShallow() of a key a model's option and defaults leave null or
+  undefined read the option root. Upstream reads these there:
+  getBoxLayoutParams' six (util/layout.ts:173, every box-laid component and
+  series), `silent` (core/echarts.ts:2508 per series; the markers,
+  MarkLineView.ts:437), `progressive` / `progressiveThreshold` (model/
+  Series.ts:591 getProgressive and its threshold, the global defaults sit
+  there) and `progressiveChunkMode` (Scheduler.ts). The port reads every
+  one of them there too. }
+function RootInheritedKey(const AKey: string): Boolean;
+begin
+  Result := (AKey = 'left') or (AKey = 'top') or (AKey = 'right')
+    or (AKey = 'bottom') or (AKey = 'width') or (AKey = 'height')
+    or (AKey = 'silent') or (AKey = 'progressive')
+    or (AKey = 'progressiveThreshold') or (AKey = 'progressiveChunkMode');
+end;
+
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -1283,6 +1311,9 @@ begin
     if APath = '' then sub := key else sub := APath + '.' + key;
     child := TyOptChild(ANode, key);
     if (child < 0) and (APath = '') then child := RootMarkerNode(key);
+    { read through the models' parent chain: known, and a scalar -- no
+      subtree to walk [F4c] }
+    if (child < 0) and (APath = '') and RootInheritedKey(key) then Continue;
     if child < 0 then
     begin
       { known to the runtime though not to the documentation: accepted, and

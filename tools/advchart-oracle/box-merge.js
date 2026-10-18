@@ -486,7 +486,11 @@ function titleCase(name, box, title) {
     // the block before the align (install.ts:173-218): text at 0, the subtext's
     // style.y = textRect.height + itemGap; the union of the two
     must(Object.is(subEl.style.y, tr.height + itemGap), name + ': the subtext does not sit at text height + itemGap');
-    const block = { width: Math.max(tr.width, sr.width), height: subEl.style.y + sr.height };
+    // [fin] the union's height: a negative itemGap lifts the subtext above the
+    // title's bottom (or its top), and groupRect spans from the higher top to
+    // the lower bottom -- for a gap >= 0 the same as subtext y + its height
+    const block = { width: Math.max(tr.width, sr.width),
+      height: Math.max(tr.height, subEl.style.y + sr.height) - Math.min(0, subEl.style.y) };
     const params = Object.assign(model.getBoxLayoutParams(), { width: block.width, height: block.height });
     const lr = echarts.helper.getLayoutRect(params, { x: 0, y: 0, width: W, height: H }, model.get('padding'));
     const lrPlain = { x: lr.x, y: lr.y, width: lr.width, height: lr.height };
@@ -684,6 +688,17 @@ const TITLES = [
   // g.x + (-w/2 - 5) is 166.29000000000002 where (g.x - w/2) - 5 gives 166.29
   // (w = 57.42, found by trying ordinary words; 'Title' does not split them)
   ['T23 frame order,text:Budget', {}, 'Budget'],
+  // [F4c] the vertical align is set on each line: bottom and middle hang the
+  // 18px title and the 12px subtext off their own anchors, and the frame is
+  // the union of the two boxes, not the block moved as a whole
+  ['T24 top:bottom', { top: 'bottom' }],
+  ['T25 bottom:middle,text:Quarterly', { bottom: 'middle' }, 'Quarterly'],
+  ['T26 top:bottom,itemGap:30', { top: 'bottom', itemGap: 30 }],
+  // [fin] a negative itemGap lifts the subtext into the title: the frame's bottom is the
+  // title's, the union's larger edge, not the subtext's
+  ['T27 itemGap:-30', { itemGap: -30 }],
+  // and anchored at the bottom the block's height is the union's (30 here, not 18 - 30 + 12)
+  ['T28 bottom:10,itemGap:-30', { bottom: 10, itemGap: -30 }],
 ];
 const LEGENDS = [
   ['L00 default', {}, 13],

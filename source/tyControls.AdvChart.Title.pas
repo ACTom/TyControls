@@ -262,6 +262,9 @@ begin
   Result.Subtext := StrIn(node, 'subtext');
 
   Result.Box := TyMergeBoxIgnoreSize(node, DefaultBox);
+  { a key the merge left null or undefined reads the option root -- for the
+    layout (getBoxLayoutParams) and the words alike (get) [F4c] }
+  TyBoxClimbRoot(Result.Box, AOption.Root);
   Result.WordH := TyBoxWord(Result.Box.Left, Result.Box.Right);
   Result.WordV := TyBoxWord(Result.Box.Top, Result.Box.Bottom);
 
@@ -303,7 +306,7 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
 var
   raw: TTyRawBox;
   r: TTyXYWH;
-  gw, gh, gap, gx, gy, lx, ly: Double;
+  gw, gh, gap, gx, gy, lx, ly, lh, lb, sy: Double;
   pad: array[0..3] of Double;
   i: Integer;
   word_: string;
@@ -351,7 +354,14 @@ begin
     the second line would be. }
   gw := Max(Result.TextW, Result.SubW);
   gh := Result.TextH;
-  if Result.HasSub then gh := gh + gap + Result.SubH;
+  { THE GROUP'S BOUNDING RECT, the union of the two: a negative itemGap
+    lifts the subtext over the title's bottom or above its top, and the box
+    spans the higher top to the lower bottom [fin: it was the title's height
+    plus the gap plus the subtext's, nought or less there, and the title
+    was dropped] }
+  if Result.HasSub then
+    gh := Max(Result.TextH, Result.TextH + gap + Result.SubH)
+      - Min(Double(0), Result.TextH + gap);
   if (gw <= 0) or (gh <= 0) then Exit;
 
   { getLayoutRect on the merged option with the measured block as the size }
@@ -408,9 +418,12 @@ begin
 
   { THE FRAME is the block plus the padding, wherever the alignment left the
     anchor -- upstream's order: the group's own box (which the alignment
-    moved to -w/2 or -w) less the padding, then placed at the group. The
-    vertical half keeps the block whole: upstream aligns each line on its
-    own for middle and bottom, which is not done here. }
+    moved to -w/2 or -w) less the padding, then placed at the group.
+    VERTICALLY EACH LINE IS ALIGNED ON ITS OWN [F4c]: the text at y 0 and
+    the subtext at the title's height plus the gap both take the vertical
+    align, so for middle and bottom the two boxes hang off their own
+    anchors and the group's box is their union (BoundingRect.union, in its
+    order: the text's rect, then the subtext's). }
   case Result.Align of
     ttaCentre: lx := -gw / 2;
     ttaRight: lx := -gw;
@@ -418,15 +431,27 @@ begin
     lx := 0;
   end;
   case Result.VAlign of
-    ttvMiddle: ly := -gh / 2;
-    ttvBottom: ly := -gh;
+    ttvMiddle: ly := 0 - Result.TextH / 2;
+    ttvBottom: ly := 0 - Result.TextH;
   else
     ly := 0;
+  end;
+  lh := Result.TextH;
+  if Result.HasSub then
+  begin
+    sy := Result.TextH + gap;
+    case Result.VAlign of
+      ttvMiddle: sy := sy - Result.SubH / 2;
+      ttvBottom: sy := sy - Result.SubH;
+    end;
+    lb := Max(sy + Result.SubH, ly + lh);
+    ly := Min(sy, ly);
+    lh := lb - ly;
   end;
   Result.FrameX := gx + (lx - pad[3]);
   Result.FrameY := gy + (ly - pad[0]);
   Result.FrameW := gw + pad[1] + pad[3];
-  Result.FrameH := gh + pad[0] + pad[2];
+  Result.FrameH := lh + pad[0] + pad[2];
   Result.Frame := TyRectF(Result.FrameX, Result.FrameY,
     Result.FrameX + Result.FrameW, Result.FrameY + Result.FrameH);
 

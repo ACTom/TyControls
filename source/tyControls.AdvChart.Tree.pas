@@ -104,6 +104,9 @@ type
       is (VZ*x + 0*y) + VMX, zrender's matrix order. [Batch 82] }
     HasView: Boolean;
     VZ, VMX, VMY, VNS: Double;
+    { [F3d] the view group's own translation (VMX less the main group's
+      origin through the zoom) }
+    VTX, VTY: Double;
   end;
 
   { Everything a THEME answers. }
@@ -158,7 +161,7 @@ function TyBuildTreeMarks(ASeriesIndex: Integer; const ASolved: TTyTreeSolved;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.LabelGuide;
 
 { ==================== small readers ==================== }
 
@@ -398,6 +401,8 @@ begin
   ASolved.HasView := True;
   ASolved.VZ := AZ;
   ASolved.VNS := ANodeScale;
+  ASolved.VTX := ATX;
+  ASolved.VTY := ATY;
   { the main group under the view: mul(outer, mainLocal) }
   ASolved.VMX := (AZ * ASolved.GX + 0 * ASolved.GY) + ATX;
   ASolved.VMY := (0 * ASolved.GX + AZ * ASolved.GY) + ATY;
@@ -471,6 +476,9 @@ begin
       target[k].V := TyBoxRawStr('12%');
     end;
   TyCalMergeLayoutParam(target, raw, False, False);
+  { getBoxLayoutParams: a null or undefined key reads the option root
+    [F4c] }
+  for k := 0 to 5 do TyRawClimbRoot(target[k].V, AOption.Root, cBoxKey[k]);
   Result.Box.Width := target[0].V;
   Result.Box.Left := target[1].V;
   Result.Box.Right := target[2].V;
@@ -1145,7 +1153,7 @@ procedure RadialLabel(const ASolved: TTyTreeSolved; ARow: Integer;
 var
   root, t: TTyTreePos;
   kids: TTyIntegerArray;
-  cx, cy, rad, rot, x, y, ox, oy, m4, m5, st, ct, atx, aty, d: Double;
+  cx, cy, rad, rot, x, y, m4, m5, d: Double;
   isLeft: Boolean;
   pos: TTyLabelPosition;
   ah: TTyTextAnchorH;
@@ -1189,37 +1197,20 @@ begin
   dp := ChainFind(AChain, 'label', 'rotate');
   if (dp <> nil) and (dp.JSONType = jtNumber) then rot := ASpec.RotationRad
   else rot := -rad;
-  { the anchor on the box, as the position puts it }
+  { the anchor on the box, as the position puts it, turned about the box's
+    centre (TyLabelTurnedAnchor: getLocalTransform with an origin there) }
   box := ACaption.HostBox;
   d := ASpec.DistanceLogical * AScale;
   TyLabelAnchorXYWH(box, pos, d, 0, 0, x, y, ah, av);
-  { getLocalTransform with an origin at the box's centre }
-  ox := box.X + box.W / 2 - x;
-  oy := box.Y + box.H / 2 - y;
-  if (ox <> 0) or (oy <> 0) then
-  begin
-    m4 := -ox;
-    m5 := -oy;
-  end
-  else
-  begin
-    m4 := 0;
-    m5 := 0;
-  end;
-  if rot <> 0 then
-  begin
-    st := TyJsSin(rot);
-    ct := TyJsCos(rot);
-    atx := m4;
-    aty := m5;
-    m4 := ct * atx + st * aty;
-    m5 := ct * aty - st * atx;
-  end;
-  m4 := m4 + (ox + x);
-  m5 := m5 + (oy + y);
+  TyLabelTurnedAnchor(box, pos, d, rot, m4, m5);
   ACaption.HasFixedAnchor := True;
   ACaption.FixedX := m4;
   ACaption.FixedY := m5;
+  { [F3d] what placed it, for a frame to place it again on the box as the
+    path's scale draws it (zrender recomputes it every frame) }
+  ACaption.HasFixedPos := True;
+  ACaption.FixedPos := Ord(pos);
+  ACaption.FixedDist := d;
   ACaption.FixedInside := TyLabelIsInside(pos);
   { the author's align wins over the side's; the vertical is always middle }
   if ASpec.HasAlignH then ah := ASpec.AlignH;
@@ -1245,11 +1236,68 @@ var
   collapsedParent, zeroSize: Boolean;
   spec: TTyLabelSpec;
   r: TTyXYWH;
+  edgeTag: TTyChartAnim;
+  { [F3a] the enter animation: the real root's place in the main group --
+    where every node and edge starts (TreeView.updateNode's sourceOldLayout:
+    the parent's first place, which is the root's) -- and the frame a local
+    point goes to the canvas by }
+  rootX, rootY, hw, hh: Double;
+  k: Integer;
+  kids: TTyIntegerArray;
+
+  { [F3d] the view group's transform at rest: an update tweens it }
+  procedure TagView(var A: TTyChartAnim);
+  begin
+    A.InView := True;
+    if ASolved.HasView then
+    begin
+      A.VSX := ASolved.VZ;
+      A.VSY := ASolved.VZ;
+      A.VX := ASolved.VTX;
+      A.VY := ASolved.VTY;
+    end
+    else
+    begin
+      A.VSX := 1;
+      A.VSY := 1;
+      A.VX := 0;
+      A.VY := 0;
+    end;
+  end;
+
+  { the main group's frame into an element's tag: G[8] 1 under a view,
+    G[9] its zoom, G[10..11] the translation (the view's, else the main
+    group's origin) }
+  procedure TagFrame(var A: TTyChartAnim);
+  begin
+    TagView(A);
+    A.G[8] := Ord(ASolved.HasView);
+    if ASolved.HasView then
+    begin
+      A.G[9] := ASolved.VZ;
+      A.G[10] := ASolved.VMX;
+      A.G[11] := ASolved.VMY;
+    end
+    else
+    begin
+      A.G[9] := 1;
+      A.G[10] := ASolved.GX;
+      A.G[11] := ASolved.GY;
+    end;
+  end;
+
 begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
   if APPI > 0 then AScale := APPI / 96 else AScale := 1;
   c := ASolved.Spec.Curveness;
+  rootX := 0;
+  rootY := 0;
+  if (ASolved.RealRoot >= 0) and ASolved.Pos[ASolved.RealRoot].Placed then
+  begin
+    rootX := ASolved.Pos[ASolved.RealRoot].X;
+    rootY := ASolved.Pos[ASolved.RealRoot].Y;
+  end;
   { ---- polyline edges: one per open parent, in the parent's lineStyle ----
     (orthogonal only: upstream's radial polyline throws, its production
     build draws no edges) }
@@ -1273,6 +1321,27 @@ begin
       el.Z2 := ASolved.Spec.Z2;
       el.Silent := True;
       el.Datum := TyChartDatum(ASeriesIndex, row, row);
+      { THE ENTER ANIMATION [F3a]: a TreePath made with one child point on
+        the parent, updateProps to every child's (the arrays aligned on the
+        last frame); Sub 1, G[0..1] the parent point, Pts the child points,
+        G[2] the fork's dimension, G[3] the fork's place }
+      el.Anim.Role := carTreeEdge;
+      el.Anim.Series := ASeriesIndex;
+      el.Anim.Index := row;
+      el.Anim.Sub := 1;
+      el.Anim.G[0] := ASolved.Pos[row].X;
+      el.Anim.G[1] := ASolved.Pos[row].Y;
+      if ASolved.Spec.Orient in [troTB, troBT] then el.Anim.G[2] := 0
+      else el.Anim.G[2] := 1;
+      el.Anim.G[3] := TyBoxRawResolve(ASolved.Spec.ForkPosition, 1);
+      kids := ASolved.Hier.Nodes[row].Children;
+      SetLength(el.Anim.Pts, Length(kids) * 2);
+      for k := 0 to High(kids) do
+      begin
+        el.Anim.Pts[k * 2] := ASolved.Pos[kids[k]].X;
+        el.Anim.Pts[k * 2 + 1] := ASolved.Pos[kids[k]].Y;
+      end;
+      TagFrame(el.Anim);
       AList.Add(el);
       Inc(Result);
     end;
@@ -1307,6 +1376,39 @@ begin
         cp1 := TyPointF(s.X, s.Y + (t.Y - s.Y) * c);
         cp2 := TyPointF(t.X, t.Y + (s.Y - t.Y) * c);
       end;
+      { THE ENTER ANIMATION [F3a]: getEdgeShape from the source's first
+        place to the source and the target, updateProps at update timing
+        with no row; G[0..7] x1, y1, cpx1, cpy1, cpx2, cpy2, x2, y2 in the
+        main group, Vals the place it starts from -- the root's, or (radial:
+        no raw place yet, `|| 0`) the centre }
+      el := Default(TTyChartElement);
+      el.Anim.Role := carTreeEdge;
+      el.Anim.Series := ASeriesIndex;
+      el.Anim.Index := row;
+      el.Anim.G[0] := s.X;
+      el.Anim.G[1] := s.Y;
+      el.Anim.G[2] := cp1.X;
+      el.Anim.G[3] := cp1.Y;
+      el.Anim.G[4] := cp2.X;
+      el.Anim.G[5] := cp2.Y;
+      el.Anim.G[6] := t.X;
+      el.Anim.G[7] := t.Y;
+      TagFrame(el.Anim);
+      { [F3d] Vals[2] the parent's row, Vals[3] 1 when radial }
+      SetLength(el.Anim.Vals, 4);
+      if ASolved.Spec.Radial then
+      begin
+        el.Anim.Vals[0] := 0;
+        el.Anim.Vals[1] := 0;
+      end
+      else
+      begin
+        el.Anim.Vals[0] := rootX;
+        el.Anim.Vals[1] := rootY;
+      end;
+      el.Anim.Vals[2] := par;
+      el.Anim.Vals[3] := Ord(ASolved.Spec.Radial);
+      edgeTag := el.Anim;
       { to device px, each point once }
       s := TyPointF(MapX(ASolved, s.X, s.Y), MapY(ASolved, s.X, s.Y));
       t := TyPointF(MapX(ASolved, t.X, t.Y), MapY(ASolved, t.X, t.Y));
@@ -1343,6 +1445,7 @@ begin
       el.Z2 := ASolved.Spec.Z2;
       el.Silent := True;
       el.Datum := TyChartDatum(ASeriesIndex, row, row);
+      el.Anim := edgeTag;
       AList.Add(el);
       Inc(Result);
     end;
@@ -1357,6 +1460,9 @@ begin
     if ItemObj(ASolved, row) <> nil then sym := TySymbolSpecOf(ItemObj(ASolved, row), sym);
     sym := TySymbolResolveOffset(sym);
     if sym.Kind = tsyNone then Continue;
+    { Symbol's _sizeX / _sizeY, before the view's scale [F3a] }
+    hw := sym.WidthPx / 2;
+    hh := sym.HeightPx / 2;
     { under a zoom a symbol grows by the zoom times the compensation --
       (z*ns)*(size/2) is its drawn half -- and its label does not }
     if ASolved.HasView then
@@ -1408,6 +1514,15 @@ begin
       el.Style.StrokeWidthLogical,
       (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0),
       el.Style.HasFill);
+    { [F3d] what the box is made of, for a frame that scales the path }
+    el.Caption.FixedHalfW := sym.WidthPx / 2;
+    el.Caption.FixedInfl := 0;
+    if (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0) then
+    begin
+      el.Caption.FixedInfl := el.Style.StrokeWidthLogical;
+      if not el.Style.HasFill then el.Caption.FixedInfl := Max(el.Caption.FixedInfl, 5.0);
+      el.Caption.FixedInfl := el.Caption.FixedInfl / 2;
+    end;
     if zeroSize then el.Style.StrokeWidthLogical := 0;
     el.Z := ASolved.Spec.Z;
     el.Z2 := ASolved.Spec.Z2 + cTyTreeNodeZ2;
@@ -1416,6 +1531,42 @@ begin
       silent -- upstream's never toggle. [Batch 81] }
     el.Silent := False;
     el.Datum := TyChartDatum(ASeriesIndex, row, row);
+    { THE ENTER ANIMATION [F3a]: the symbol path pops in as a scatter's
+      (enter timing at the row), G[0..4] as carSymbol's; its GROUP slides
+      from the source's first place -- the real root's -- at update timing
+      with no row (updateProps): G[5..6] its place in the main group, G[7]
+      the canvas px per unit of it, G[8..9] where it starts, G[10] 1 where
+      it moves at all }
+    el.Anim.Role := carTreeNode;
+    el.Anim.Series := ASeriesIndex;
+    el.Anim.Index := row;
+    el.Anim.G[0] := ASolved.Pos[row].PX + sym.OffsetX;
+    el.Anim.G[1] := ASolved.Pos[row].PY + sym.OffsetY;
+    el.Anim.G[2] := hw;
+    el.Anim.G[3] := hh;
+    el.Anim.G[4] := el.Style.Alpha;
+    el.Anim.G[5] := ASolved.Pos[row].X;
+    el.Anim.G[6] := ASolved.Pos[row].Y;
+    if ASolved.HasView then el.Anim.G[7] := ASolved.VZ else el.Anim.G[7] := 1;
+    el.Anim.G[8] := rootX;
+    el.Anim.G[9] := rootY;
+    el.Anim.G[10] := Ord(row <> ASolved.RealRoot);
+    { [F3c] the symbol as a scatter's, for the universal transition }
+    el.Caption.LgSymbol := TyGuideSymbolName(sym);
+    el.Caption.LgKeepAspect := sym.KeepAspect;
+    el.Caption.LgG[0] := hw * 2;
+    el.Caption.LgG[1] := hh * 2;
+    el.Caption.LgG[2] := sym.RotateDeg;
+    el.Caption.LgG[3] := sym.OffsetX;
+    el.Caption.LgG[4] := sym.OffsetY;
+    el.Caption.LgG[5] := ASolved.Pos[row].PX;
+    el.Caption.LgG[6] := ASolved.Pos[row].PY;
+    { [F3d] the update's: G[11] 1 when radial (an edge from here reads the
+      place as radialCoordinate does, `|| 0`), Sub the parent's row (0: the
+      virtual root), the view group's transform }
+    el.Anim.G[11] := Ord(ASolved.Spec.Radial);
+    el.Anim.Sub := ASolved.Hier.Nodes[row].Parent;
+    TagView(el.Anim);
     { the caption REQUEST: the row's own spec, through the expansion's table }
     el.Caption.Text := '';
     if row <= High(AInk.ItemLabels) then spec := AInk.ItemLabels[row]

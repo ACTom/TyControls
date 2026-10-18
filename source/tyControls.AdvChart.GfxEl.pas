@@ -35,7 +35,13 @@ unit tyControls.AdvChart.GfxEl;
   An image is a `data:` URL or nothing: the port fetches no other source
   (the rule of batch 105).
 
-  PURE: SysUtils, Classes, Math, fpjson and the AdvChart units. }
+  GRADIENTS AS ANIMATION VALUES [F3b]: a style value that is an object with
+  colorStops reads as an avkGradient (geometry, stops parsed, the object's
+  JSON kept for a discrete step); an interpolated one writes back as a new
+  object {type, x, y, colorStops [{offset, color 'rgba(..)'}], global, x2,
+  y2 | r}, a raw one as the object it was.
+
+  PURE: SysUtils, Classes, Math, fpjson (jsonparser) and the AdvChart units. }
 interface
 uses
   SysUtils, Classes, Math, fpjson,
@@ -259,6 +265,7 @@ procedure TyGfxPathCmds(const APath: TTyZrPath; const AM: TTyMat2D;
 implementation
 
 uses
+  jsonparser,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Color,
   tyControls.AdvChart.PolarBar, tyControls.AdvChart.RichStyle;
@@ -351,6 +358,118 @@ begin
   end;
 end;
 
+{ isGradientObject (colorStops != null) parsed as Track.addKeyframe parses
+  it: the type's numbers, every stop's offset and colour [F3b] }
+function GradientValueOf(AObj: TJSONObject): TTyAnimValue;
+var
+  t: string;
+  d, stops, st: TJSONData;
+  i: Integer;
+  r, g, b, a: Double;
+
+  function Field(const AName: string): Double;
+  begin
+    Result := JsNum(AObj.Find(AName));
+  end;
+
+begin
+  Result := Default(TTyAnimValue);
+  Result.Kind := avkGradient;
+  Result.Str := AObj.AsJSON;
+  t := '';
+  d := AObj.Find('type');
+  if (d <> nil) and (d.JSONType = jtString) then t := d.AsString;
+  if t = 'linear' then
+  begin
+    Result.Stride := 4;
+    Result.Arr := TTyDoubleArray.Create(Field('x'), Field('y'), Field('x2'), Field('y2'));
+  end
+  else if t = 'radial' then
+  begin
+    Result.Stride := 3;
+    Result.Arr := TTyDoubleArray.Create(Field('x'), Field('y'), Field('r'));
+  end;
+  d := AObj.Find('global');
+  if JNull(d) then Result.Num := NaN
+  else if d.JSONType = jtBoolean then
+  begin
+    if d.AsBoolean then Result.Num := 1 else Result.Num := 0;
+  end
+  else Result.Num := JsNum(d);
+  stops := AObj.Find('colorStops');
+  if (stops <> nil) and (stops.JSONType = jtArray) then
+  begin
+    SetLength(Result.Stops, stops.Count * 5);
+    for i := 0 to stops.Count - 1 do
+    begin
+      st := stops.Items[i];
+      if st is TJSONObject then
+      begin
+        Result.Stops[i * 5] := JsNum(TJSONObject(st).Find('offset'));
+        d := TJSONObject(st).Find('color');
+        if (d <> nil) and (d.JSONType = jtString)
+          and TyTryParseCssRgba(d.AsString, r, g, b, a) then
+        begin
+          Result.Stops[i * 5 + 1] := r;
+          Result.Stops[i * 5 + 2] := g;
+          Result.Stops[i * 5 + 3] := b;
+          Result.Stops[i * 5 + 4] := a;
+          Continue;
+        end;
+      end
+      else
+        Result.Stops[i * 5] := NaN;
+      Result.Stops[i * 5 + 1] := NaN;
+      Result.Stops[i * 5 + 2] := NaN;
+      Result.Stops[i * 5 + 3] := NaN;
+      Result.Stops[i * 5 + 4] := NaN;
+    end;
+  end;
+end;
+
+{ an interpolated gradient as the object Animator.ts writes [F3b] }
+function GradientJsonOf(const AValue: TTyAnimValue): TJSONData;
+var
+  o, cs: TJSONObject;
+  stops: TJSONArray;
+  i: Integer;
+
+  function At(AI: Integer): Double;
+  begin
+    if AI <= High(AValue.Arr) then Result := AValue.Arr[AI] else Result := NaN;
+  end;
+
+begin
+  if AValue.Str <> '' then
+  begin
+    Result := GetJSON(AValue.Str);
+    Exit;
+  end;
+  o := TJSONObject.Create;
+  if AValue.Stride = 4 then o.Add('type', 'linear') else o.Add('type', 'radial');
+  o.Add('x', TJSONFloatNumber.Create(At(0)));
+  o.Add('y', TJSONFloatNumber.Create(At(1)));
+  stops := TJSONArray.Create;
+  for i := 0 to (Length(AValue.Stops) div 5) - 1 do
+  begin
+    cs := TJSONObject.Create;
+    cs.Add('offset', TJSONFloatNumber.Create(AValue.Stops[i * 5]));
+    cs.Add('color', TyAnimRgbaString(AValue.Stops[i * 5 + 1], AValue.Stops[i * 5 + 2],
+      AValue.Stops[i * 5 + 3], AValue.Stops[i * 5 + 4]));
+    stops.Add(cs);
+  end;
+  o.Add('colorStops', stops);
+  if not IsNan(AValue.Num) then o.Add('global', AValue.Num <> 0);
+  if AValue.Stride = 4 then
+  begin
+    o.Add('x2', TJSONFloatNumber.Create(At(2)));
+    o.Add('y2', TJSONFloatNumber.Create(At(3)));
+  end
+  else
+    o.Add('r', TJSONFloatNumber.Create(At(2)));
+  Result := o;
+end;
+
 function TyGfxAnimOf(AData: TJSONData): TTyAnimValue;
 var
   arr: TTyDoubleArray;
@@ -358,6 +477,9 @@ var
   d: TJSONData;
 begin
   if JNull(AData) then Exit(TyAnimNull);
+  { a gradient object [F3b] }
+  if (AData.JSONType = jtObject) and not JNull(TJSONObject(AData).Find('colorStops')) then
+    Exit(GradientValueOf(TJSONObject(AData)));
   case AData.JSONType of
     jtNumber: Result := TyAnimNum(AData.AsFloat);
     jtBoolean: Result := TyAnimBool(AData.AsBoolean);
@@ -418,6 +540,7 @@ begin
           for i := 0 to High(AValue.Arr) do a.Add(TJSONFloatNumber.Create(AValue.Arr[i]));
         Result := a;
       end;
+    avkGradient: Result := GradientJsonOf(AValue);
   else
     Result := TJSONNull.Create;
   end;
@@ -2428,7 +2551,10 @@ begin
         Corner(3, box.X, box.Y + h);
         AOut.Shape := TyShapePolygon(q);
         AOut.Shape.HitNonZero := True;
-        if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 5) = 'data:')
+        { [F6a] any string: the renderer draws what AdvChart.Images resolves
+          -- a data URL, an image list's `name/index` -- and nothing for the
+          rest (upstream's image not loaded) }
+        if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
           and not AEl.Invisible and (w > 0) and (h > 0) then
         begin
           AOut.Style.HasFill := True;
@@ -2545,6 +2671,8 @@ begin
     end;
   end;
   AOut.Silent := False;
+  { [F6a] the element's own cursor, 'pointer' by the prototype }
+  if AEl.Cursor <> 'pointer' then AOut.Cursor := AEl.Cursor;
   Result := True;
 end;
 

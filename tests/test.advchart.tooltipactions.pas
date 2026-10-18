@@ -99,7 +99,7 @@ type
   published
     procedure TestAShowTipEventIsThePayload;
     procedure TestASilentShowTipPublishesNothing;
-    procedure TestAShowTipBatchIsRefused;
+    procedure TestAShowTipBatchIsTaken;
     procedure TestAMatrixCellByNameShowsItsTip;
     procedure TestAGeoRegionByNameShowsItsTip;
     procedure TestAGeoRegionUnderThePointerShowsItsTip;
@@ -789,16 +789,20 @@ begin
   end;
 end;
 
-procedure TAdvChartTooltipActionsTest.TestAShowTipBatchIsRefused;
+procedure TAdvChartTooltipActionsTest.TestAShowTipBatchIsTaken;
 var ch: TTyAdvanceChart;
 begin
+  { [F4b: this said a batch of showTip is not taken -- upstream takes it:
+    manuallyShowTip per item, one showtip event of the items, the view's
+    own showTip after it (actions-batch.js, b-showtip-item)] }
   ch := NewChart(cBars);
   try
     FLog.Clear;
-    AssertFalse('a batch of showTip is not taken',
+    AssertTrue('a batch of showTip is taken',
       ch.DispatchAction('{"type":"showTip","batch":[{"seriesIndex":0,"dataIndex":1}]}'));
-    AssertEquals(0, FLog.Count);
-    AssertFalse(ch.TooltipShown);
+    AssertTrue(FLog.Count >= 2);
+    AssertEquals(1, Pos('showtip {"type":"showtip","batch":[', FLog[0]));
+    AssertTrue(ch.TooltipShown);
   finally
     ch.Free;
   end;

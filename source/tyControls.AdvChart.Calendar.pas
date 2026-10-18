@@ -637,6 +637,8 @@ begin
   Result.Box.Height := target[3].V;
   Result.Box.Top := target[4].V;
   Result.Box.Bottom := target[5].V;
+  { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
+  TyBoxClimbRoot(Result.Box, AOption.Root);
 
   if StrOf(node.Find('orient')) = 'vertical' then Result.Orient := tcoVertical;
   d := node.Find('z');

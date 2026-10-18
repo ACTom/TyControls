@@ -468,14 +468,18 @@ end;
 { ==================== building ==================== }
 
 { resize's box params: 5% on every side by default, merged as
-  mergeLayoutParam merges the option's own over them }
-function SingleBoxSpec(ANode: TJSONObject): TTyBoxSpec;
+  mergeLayoutParam merges the option's own over them, raw; a key left null
+  or undefined read from the option root (getBoxLayoutParams' getShallow)
+  [F4c] }
+function SingleBoxRaw(ANode: TJSONObject; ARoot: TJSONData): TTyRawBox;
 begin
-  Result := TyBoxSpec;
-  TyMergedBoxDim(ANode, 'left', 'right', 'width', TyBoxPercent(5),
-    TyBoxPercent(5), TyBoxAuto, Result.Left, Result.Right, Result.Width);
-  TyMergedBoxDim(ANode, 'top', 'bottom', 'height', TyBoxPercent(5),
-    TyBoxPercent(5), TyBoxAuto, Result.Top, Result.Bottom, Result.Height);
+  Result := Default(TTyRawBox);
+  Result.Left := TyBoxRawStr('5%');
+  Result.Top := TyBoxRawStr('5%');
+  Result.Right := TyBoxRawStr('5%');
+  Result.Bottom := TyBoxRawStr('5%');
+  Result := TyMergeBoxLayout(ANode, Result);
+  TyBoxClimbRoot(Result, ARoot);
 end;
 
 { _adjustAxis: [0, width] along x, [0, height] along y -- by the position's
@@ -494,7 +498,7 @@ var
 begin
   if (AOption = nil) or (ASingle = nil) then Exit;
   node := ObjOf(AOption.ComponentAt(TySingleCoordSysName, ASingle.Index));
-  box := TyGetLayoutRect(TyBoxSpecRaw(SingleBoxSpec(node)), ARef.X, ARef.Y,
+  box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), ARef.X, ARef.Y,
     ARef.W, ARef.H, []);
   if not TyXYWHIsValid(box) then
     box := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
@@ -510,7 +514,6 @@ var
   ax: TTyAxis;
   s: TTySingle;
   u, pos: string;
-  spec: TTyBoxSpec;
   box: TTyXYWH;
   vertical: Boolean;
 begin
@@ -547,12 +550,10 @@ begin
     s.InverseFlag := ax.Inverse;
     { resize: getLayoutRect of the box params, 5% on every side by default,
       merged as mergeLayoutParam merges the option's own over them }
-    spec := TyBoxSpec;
-    TyMergedBoxDim(node, 'left', 'right', 'width', TyBoxPercent(5),
-      TyBoxPercent(5), TyBoxAuto, spec.Left, spec.Right, spec.Width);
-    TyMergedBoxDim(node, 'top', 'bottom', 'height', TyBoxPercent(5),
-      TyBoxPercent(5), TyBoxAuto, spec.Top, spec.Bottom, spec.Height);
-    box := TySolveBoxXYWH(spec, TyFixedContainer(AViewport));
+    { [F4c] getLayoutRect itself: the keywords and the flip }
+    box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), AViewport.Left,
+      AViewport.Top, AViewport.Right - AViewport.Left,
+      AViewport.Bottom - AViewport.Top, []);
     s.Rect := box;
     { _adjustAxis: [0, width] along x, [0, height] along y -- by the
       position's isHorizontal -- the base the rect's left or top }
@@ -712,7 +713,7 @@ end;
   band edges unless aligned; else every major tick }
 function TickMarks(AOption: TTyChartOption; AAxis: TTyAxis;
   const ASpec: TTyAxisLayoutSpec; AOptInterval: Double; AAlign: Boolean;
-  ALabelInterval: Double): TTyAxisMarkArray;
+  ALabelInterval: Double; ALineTicks: Boolean = False): TTyAxisMarkArray;
 var
   node: TJSONObject;
   custom: TTyDoubleArray;
@@ -760,7 +761,13 @@ begin
   end
   else
   begin
-    ticks := TyDrawnTicks(AAxis.Scale);
+    { THE SPLIT LINES' AND AREAS' TICKS on an axis with breaks: no break end,
+      the normal ones pruned but for the extent's two ends (breakTicks
+      'none', pruneByBreak 'preserve_extent_bound') [F4a] }
+    if ALineTicks and (AAxis.Scale.BreakMapper <> nil) then
+      ticks := TyDrawnTicksOpt(AAxis.Scale, TyTicksOpt(tbmNone, tpmPreserveExtentBound))
+    else
+      ticks := TyDrawnTicks(AAxis.Scale);
     SetLength(Result, Length(ticks));
     k := 0;
     for i := 0 to High(ticks) do
@@ -933,6 +940,9 @@ begin
       v.Line.Drawn := True;
       TySingleSubPixelLine(v.Line, AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
       v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
+      { cut at the breaks (axisLine.breakLine) [F4a] }
+      TyAxisBreakLineOf(v.Spec, ax, AOption,
+        AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
     end;
     marks := TickMarks(AOption, ax, v.Spec, v.Furn.TickInterval,
       v.Furn.AlignWithLabel, labelIv);
@@ -995,7 +1005,7 @@ begin
     if v.Furn.ShowSplitLine and not v.Blank then
     begin
       lineMarks := TickMarks(AOption, ax, v.Spec, v.Furn.SplitLineInterval,
-        v.Furn.SplitLineAlign, labelIv);
+        v.Furn.SplitLineAlign, labelIv, True);
       w := AxisScaleF(LineWidthIn(node, 'splitLine', 1), APPI);
       SetLength(v.SplitLines, Length(lineMarks));
       for i := 0 to High(lineMarks) do
@@ -1028,7 +1038,7 @@ begin
     if v.Furn.ShowSplitArea and not v.Blank then
     begin
       areaMarks := TickMarks(AOption, ax, v.Spec, v.Furn.SplitAreaInterval,
-        v.Furn.SplitAreaAlign, labelIv);
+        v.Furn.SplitAreaAlign, labelIv, True);
       if Length(areaMarks) > 0 then
       begin
         cnt := v.Furn.SplitAreaInkCount;
@@ -1065,6 +1075,10 @@ begin
         end;
       end;
     end;
+    { THE BREAK AREAS across the single's rect (SingleAxisView's breakArea:
+      rectCoordBuildBreakAxis into the view's group) [F4a] }
+    if not v.Blank then
+      TyLayoutAxisBreakAreas(v.Spec, ax, S.Rect, AOption, AMemory);
   finally
     UnmaskFP(mask);
   end;

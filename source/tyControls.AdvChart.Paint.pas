@@ -23,7 +23,8 @@ unit tyControls.AdvChart.Paint;
   the point: ordering and hit-testing are where the defects are, and they are
   testable here without a graphics stack. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Shape;
+uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
+  tyControls.AdvChart.ZrPath;
 
 type
   { $AARRGGBB, byte-identical to tyControls.Types' TTyColor. Declared again here
@@ -180,7 +181,12 @@ type
     { [Batch 148] a geo component's region: ComponentIndex the geo,
       DataIndex its region group (one per distinct name, MapDraw's order)
       -- a path or its text; the eventData of the group }
-    ctkGeo);
+    ctkGeo,
+    { [F4c] an axis' name or one of its labels, as a tooltip target
+      (AxisBuilder's setTooltipConfig): ComponentIndex the grid * 1000 plus
+      the axis among the grid's x then y axes, DataIndex the label's
+      placement (-1 the name). Never in a paint list. }
+    ctkAxisText);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -236,6 +242,8 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [F4c] textBorderType as written ('' none) }
+    LineDash: string;
     Align: TTyRtAlign;
     VAlign: TTyRtVAlign;
     HasLineHeight: Boolean;
@@ -305,6 +313,8 @@ type
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     LineWidth: Double;
+    { [F4c] a text's textBorderType as written ('' a solid halo) }
+    LineDash: string;
     StrokeFirst: Boolean;
     Radius: array[0..3] of Double;
     Opacity: Double;
@@ -354,6 +364,8 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [F4c] the global textStyle's textBorderType ('' none) }
+    LineDash: string;
     HasOpacity: Boolean;
     Opacity: Double;
     HasShadowColor: Boolean;
@@ -396,6 +408,9 @@ type
 
   TTyElementCaption = record
     Text: string;
+    { [F4c] a text of several lines drawn line by line in its rect, each
+      line aligned on its own (a visualMap's end text with a line break) }
+    MultiLine: Boolean;
     { Set by the mark alongside Text, and read only for `position: outside`. }
     Outside: TTyCaptionOutside;
     { THE ITEM'S OWN LABEL: 1 + the raw row whose data item wrote a `label`
@@ -427,6 +442,18 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { [F3d] A FIXED ANCHOR HUNG ON THE HOST'S BOX (a radial tree's label):
+      the position and the distance (device px) it was placed by, so a
+      frame can place it again on the box as drawn }
+    HasFixedPos: Boolean;
+    FixedPos: Integer;
+    FixedDist: Double;
+    { ... and what the host's box is made of: the path's half width at rest
+      (its scale on the canvas) and the stroke's half margin around it --
+      strokeNoScale divides the line width by the line scale, so the margin
+      stays while the path scales, and goes when the scale is nought
+      (Path.getBoundingRect) }
+    FixedHalfW, FixedInfl: Double;
     { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
       text position (sectorLabel.ts) -- SecAnchor: one of the sector
       positions, its anchor and the alignment it implies; else a built-in
@@ -480,6 +507,10 @@ type
       widen the caption's box. }
     StrokeColour: TTyChartColor;
     StrokeWidthLogical: Double;
+    { [F4c] textBorderType as written -- 'dashed', 'dotted', a number or a
+      JSON array of numbers; '' (or 'solid') a solid halo. normalizeLineDash
+      turns it into a pattern against the halo's width when it is drawn. }
+    StrokeType: string;
     { THE SAME THREE UNDER A HOVER, worked out when the caption is: the host's
       fill lifted (or the emphasis colour it declares) can land in another
       band, and the halo is the lifted fill. HasEmph False keeps the normal
@@ -640,7 +671,50 @@ type
     { [F2a] a treemap's breadcrumb item (Series its series, Index its place
       from the root): a highDownDispatcher of no data -- its own emphasis and
       mouse events (selfType 'breadcrumb'), no tooltip }
-    carTmCrumb);
+    carTmCrumb,
+    { [F3a] THE ENTER ANIMATIONS OF THE REST:
+      carSankeyClip      every node rect, band and their labels of a
+                         sankey: the main group's clip, one proxy per series
+                         (Index -1); G[0..3] the group's bounding rect in its
+                         own frame (x, y, width, height), G[4..7] the frame
+                         (M0, M3, M4, M5: device = M0 * x + M4, M3 * y + M5)
+      carPictorialGlyph  a pictorial bar's glyph path (Index its row, Sub
+                         which glyph of the row, in the order upstream makes
+                         them): G[0..1] the path's position (the pivot of
+                         its scale), G[2..3] symbolScale -- upstream's scale
+                         at rest
+      carPictorialClip   a symbolClip glyph: the bundle's clip rect, one
+                         proxy per row; G[0..3] the clip shape in the
+                         bundle's frame, G[4..5] the bundle's position,
+                         G[6] 1 where the plot clips too, G[7..10] the plot
+      carGraphEdge       a graph edge's line, and its two end symbols and
+      carGraphEdgeFrom   its label: one proxy per edge, the line's
+      carGraphEdgeTo     shape.percent (Line.ts _createLine); the ends and
+      carGraphEdgeLabel  the label are placed from it every frame
+                         (Line.beforeUpdate). G[0..5] the trimmed ends and
+                         control point in the line's frame, G[6] curved,
+                         G[7..10] the frame (SX, SY, X, Y), G[11] the
+                         inverse scale. The label fades on a proxy of its own
+      carTreeNode        a tree node's symbol path: a symbol's pop-in
+                         (G as carSymbol's, G[5..6] the group's place in the
+                         view's frame, G[7..8] the view's scale); its group
+                         slides from its source on a proxy of its own
+      carTreeEdge        a tree edge (Index the node it belongs to): its
+                         shape from its source on the proxy 'treeEdge' }
+    carSankeyClip, carPictorialGlyph, carPictorialClip, carGraphEdge,
+    carGraphEdgeFrom, carGraphEdgeTo, carGraphEdgeLabel, carTreeNode,
+    carTreeEdge,
+    { [F3c] ITEM PATHS NO ANIMATION OF THEIR OWN DRIVES, for the universal
+      transition (AdvChart.AnimView):
+      carMapRegion   a map series' region path (Index its row, Sub 0 the
+                     polygons' compound, 1 the lines'): Pts its PathProxy
+                     data before the roam, G[0..5] the roam's matrix, G[6] 1
+                     where there is one
+      carCustomPath  a custom series' path (Index the item's row, Sub its
+                     place among the item's paths): Pts its PathProxy data in
+                     its own frame, G[0..5] its computed transform, G[6] 1
+                     where there is one, Base its shape for the dividers }
+    carMapRegion, carCustomPath);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
@@ -667,9 +741,60 @@ type
     { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
       element itself) [Batch 137] }
     UtPiece: Integer;
+    { A LABEL LabelManager never fades: its host set disableLabelAnimation
+      (a treemap's breadcrumb) [F3a] }
+    NoFade: Boolean;
+    { A LABEL PLACED ON ITS OWN THAT RIDES A TREE NODE'S GROUP (a radial
+      tree's): G[5..9] the node's, as carTreeNode has them [F3a] }
+    RideTree: Boolean;
+    { [F3d] AN ELEMENT OF A ROAM GROUP -- a graph's main group on a view, a
+      tree's view group -- whose transform an update tweens
+      (applyViewCoordSysTransToElement with the series' model): the group's
+      transform at rest, scale and translation, by which a frame carries what
+      moves in the group to the canvas, and the group's transform now over it
+      (the series' 'viewGroup' proxy) }
+    InView: Boolean;
+    VSX, VSY, VX, VY: Double;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
+    { [F3c] WHAT A UNIVERSAL TRANSITION READS OF AN ELEMENT whose role says
+      nothing of it (AdvChart.AnimView), the role and its numbers left as
+      they are. UtTag 0 none; 1 an item path: UtRow the item's row (where
+      Index is the series'), UtOrder its place in the item's getPathList,
+      UtData its PathProxy data in its own frame and UtM its computed
+      transform (UtHasM), UtBase what the dividers read -- [1, x, y, w, h]
+      a rect, [2, cx, cy, r0, r, startAngle, endAngle, clockwise] a sector,
+      [3] a symbol made from Caption.LgSymbol / LgKeepAspect / LgG as a
+      scatter's (createSymbol(-1, -1, 2, 2) under its size over two, turned,
+      at its place) instead of UtData; UtNoScale its strokeNoScale. 2 a path
+      of a series' view that is no item's: it fades in where a transition
+      morphs (UtRow a number of its own, below -1). }
+    UtTag: Integer;
+    UtRow, UtOrder: Integer;
+    UtData, UtBase: TTyDoubleArray;
+    UtHasM, UtNoScale: Boolean;
+    UtM: TTyMat2D;
+  end;
+
+  { [F6b] zrender's own contain over an element of an SVG map, in the
+    element's coordinates: ToLocal the inverse of its transform, Box its
+    getBoundingRect, the stroke (Stroke, LineWidth: the width over the line
+    scale, at least strokeContainThreshold without a fill) and the fill over
+    Path; RectOnly a text's or an image's rectContain (the box alone) }
+  TTyZrHit = record
+    Active: Boolean;
+    Path: TTyZrPath;
+    ToLocal: TTyMat2D;
+    Box: TTyXYWH;
+    Stroke: Boolean;
+    LineWidth: Double;
+    Fill: Boolean;
+    RectOnly: Boolean;
+    { which node of the SVG the element draws (the node + 1; 0: not one),
+      and whether it is that node's label -- for a reader of the list }
+    SvgNode: Integer;
+    SvgLabel: Boolean;
   end;
 
   TTyChartElement = record
@@ -724,6 +849,9 @@ type
       half of a glyph survived the cut. }
     HasClip: Boolean;
     ClipRect: TTyRectF;
+    { [F4c] the clip's corner radius, device px: a rounded rectangle where
+      it is above nought (a visualMap bar's `r: 3` clip) }
+    ClipRadius: Double;
     { A SECTOR CLIP, a polar line's (createPolarClipPath) [Batch 113]: the
       ink is cut to the ring between ClipR0 and ClipR1 over the sweep from
       ClipSA to ClipEA (radians clockwise on screen; ClipCW zrender's
@@ -767,7 +895,22 @@ type
       says so (a geo region and its text). Everything else keeps the
       rule above: the hit test ignores the clip. }
     ClipHits: Boolean;
+    { [F6a] zrender's Displayable.cursor, the CSS name the canvas takes
+      while the pointer is over the element (Handler.mousemove's
+      setCursor): '' is the prototype's 'pointer'. Set where upstream sets
+      one -- an item's or its series' `cursor` option, 'move' on a node a
+      drag takes, 'default' on a large batch or a pager button that cannot
+      turn the page. Meaningless on a silent element, which is no target. }
+    Cursor: string;
+    { [F6b] AN SVG MAP'S ELEMENT: zrender's own contain in the element's
+      own coordinates -- the pointer taken back through the inverse of
+      its transform, then the box, the stroke and the fill over the
+      PathProxy data (Path.contain), or the box alone (RectOnly: a text's
+      or an image's rectContain). Neither PathHit nor the shape is asked
+      then. }
+    ZrHit: TTyZrHit;
   end;
+  PTyChartElement = ^TTyChartElement;
 
   TTyPaintList = class
   private
@@ -775,6 +918,12 @@ type
     FCount: Integer;
     FOrder: array of Integer;
     FOrdered: Boolean;
+    { [P2] the journal: what SetElement overwrote while it recorded }
+    FJrOn, FJrSession, FJrOpened, FJrTainted: Boolean;
+    FJrIdx: array of Integer;
+    FJrOld: array of TTyChartElement;
+    FJrN: Integer;
+    FJrMark: array of Boolean;
     procedure EnsureOrder;
     function Less(A, B: Integer): Boolean;
     procedure MergeSortOrder;
@@ -784,6 +933,30 @@ type
     function Add(const AElement: TTyChartElement): Integer;
     { The element at its INSERTION index. }
     function Element(AIndex: Integer): TTyChartElement;
+    { The same element BY REFERENCE, for a loop that only reads it [P2]:
+      Element copies the whole record -- the shape's arrays, the caption's
+      strings, through the RTTI -- and a list of a few thousand paid that on
+      every pass that looked at it. Valid until the next Add or Clear. Z and
+      Z2 are never written through it -- SetElement is what re-sorts the
+      paint order -- and nothing is written through the shared empty element
+      it answers out of range, as Element does. }
+    function Ref(AIndex: Integer): PTyChartElement; inline;
+    { THE JOURNAL [P2]. A build opens a session (JournalOpen) and closes it
+      when it is done (JournalClose); inside it, while Record is on, the
+      first SetElement of each index keeps what it overwrote. Writes inside
+      the session with Record off are the build's own and are not kept. A
+      SetElement after the session closed taints it: the list then holds a
+      write a rewind would not know to replay. Rewind puts every kept
+      element back and opens a new session. Clear forgets it all; a write
+      through Ref is never journaled. What it is for: a frame whose states
+      alone changed puts the list back to what the states were written over
+      and writes them again, instead of building the whole list. }
+    procedure JournalOpen;
+    procedure JournalClose;
+    procedure JournalRecord(AOn: Boolean);
+    procedure JournalRewind;
+    { a session closed since the last Clear, and not tainted }
+    function JournalReady: Boolean;
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
@@ -839,6 +1012,8 @@ function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
   clip first where it asks (ClipHits), then upstream's Path.contain where it
   carries one (PathHit), else the shape with ASlopPx }
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+{ [F6b] an SVG map element's zrender contain (ZrHit) at a point }
+function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
@@ -1050,6 +1225,53 @@ begin
   FOrder := nil;
   FCount := 0;
   FOrdered := True;
+  FJrOn := False;
+  FJrSession := False;
+  FJrOpened := False;
+  FJrTainted := False;
+  FJrN := 0;
+  FJrOld := nil;
+  FJrMark := nil;
+end;
+
+procedure TTyPaintList.JournalOpen;
+begin
+  FJrOn := False;
+  FJrSession := True;
+  FJrOpened := False;
+  FJrTainted := False;
+  FJrN := 0;
+  FJrOld := nil;
+  FJrIdx := nil;
+  FJrMark := nil;
+  SetLength(FJrMark, FCount);
+end;
+
+procedure TTyPaintList.JournalClose;
+begin
+  if not FJrSession then Exit;
+  FJrOn := False;
+  FJrSession := False;
+  FJrOpened := True;
+end;
+
+procedure TTyPaintList.JournalRecord(AOn: Boolean);
+begin
+  FJrOn := AOn and FJrSession;
+end;
+
+procedure TTyPaintList.JournalRewind;
+var k: Integer;
+begin
+  for k := FJrN - 1 downto 0 do
+    FItems[FJrIdx[k]] := FJrOld[k];
+  if FJrN > 0 then FOrdered := False;
+  JournalOpen;
+end;
+
+function TTyPaintList.JournalReady: Boolean;
+begin
+  Result := FJrOpened and not FJrSession and not FJrTainted;
 end;
 
 function TTyPaintList.Add(const AElement: TTyChartElement): Integer;
@@ -1066,8 +1288,36 @@ procedure TTyPaintList.SetElement(AIndex: Integer;
   const AElement: TTyChartElement);
 begin
   if (AIndex < 0) or (AIndex >= FCount) then Exit;
+  if FJrOn then
+  begin
+    { an element added after the journal opened is journaled too }
+    if AIndex >= Length(FJrMark) then SetLength(FJrMark, FCount);
+    if not FJrMark[AIndex] then
+    begin
+      FJrMark[AIndex] := True;
+      if FJrN = Length(FJrIdx) then
+      begin
+        SetLength(FJrIdx, Max(16, FJrN * 2));
+        SetLength(FJrOld, Length(FJrIdx));
+      end;
+      FJrIdx[FJrN] := AIndex;
+      FJrOld[FJrN] := FItems[AIndex];
+      Inc(FJrN);
+    end;
+  end
+  else if FJrOpened and not FJrSession then
+    FJrTainted := True;
   FItems[AIndex] := AElement;
   FOrdered := False;
+end;
+
+var
+  GNoElement: TTyChartElement;
+
+function TTyPaintList.Ref(AIndex: Integer): PTyChartElement;
+begin
+  if (AIndex < 0) or (AIndex >= FCount) then Exit(@GNoElement);
+  Result := @FItems[AIndex];
 end;
 
 function TTyPaintList.Element(AIndex: Integer): TTyChartElement;
@@ -1172,13 +1422,37 @@ end;
 { [Batch 148] one element at a point: its clip first where it asks
   (isHover's clip paths), then upstream's own Path.contain where it carries
   one, else the shape with its slop }
+{ [F6b] Path.contain / Displayable.rectContain of an SVG map's element }
+function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
+var x, y: Double; old: TFPUExceptionMask;
+begin
+  Result := False;
+  if IsNan(AX) or IsNan(AY) then Exit;
+  { upstream's arithmetic runs into nought divisors and not-a-numbers (a
+    degenerate cubic's roots): JavaScript's quiet values, not traps }
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    x := AHit.ToLocal[0] * AX + AHit.ToLocal[2] * AY + AHit.ToLocal[4];
+    y := AHit.ToLocal[1] * AX + AHit.ToLocal[3] * AY + AHit.ToLocal[5];
+    if not ((x >= AHit.Box.X) and (x <= AHit.Box.X + AHit.Box.W)
+      and (y >= AHit.Box.Y) and (y <= AHit.Box.Y + AHit.Box.H)) then Exit;
+    if AHit.RectOnly then Exit(True);
+    if AHit.Stroke and TyZrContainStroke(AHit.Path, AHit.LineWidth, x, y) then Exit(True);
+    if AHit.Fill then Result := TyZrContain(AHit.Path, x, y);
+  finally
+    TyZrRestoreFpu(old);
+  end;
+end;
+
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 begin
   if AEl.ClipHits and AEl.HasClip
     and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
       and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
     Exit(False);
-  if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
+  if AEl.ZrHit.Active then Result := TyZrHitContains(AEl.ZrHit, AX, AY)
+  else if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
   else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
 end;
 
@@ -1363,5 +1637,8 @@ begin
   AY2 := SafeNum(AY2, 0);
   AR := 0;
 end;
+
+initialization
+  GNoElement.Datum := TyChartNoDatum;
 
 end.

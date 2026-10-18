@@ -24,6 +24,29 @@
  * time, so the process runs with TZ=UTC and says so by assertion -- the dates
  * then do not depend on the machine that harvested them.
  *
+ * ECSTAT IS THE PORT'S, NOT A STUB. Six examples start with
+ * `echarts.registerTransform(ecStat.transform.regression)` (or histogram,
+ * clustering) and then name the transform in `dataset.transform` -- which is
+ * exactly the option the port reads: it registers the three 'ecStat:'
+ * transforms itself. So the sandbox gives `ecStat.transform.*` as names only
+ * (computing nothing) and the entry records what the page registered under
+ * `registersTransforms`.
+ *
+ * A SEQUENCE IS RECORDED, NOT GUESSED. Some examples never assign the global
+ * `option`: they call myChart.setOption themselves (inside a data callback),
+ * and the universal-transition ones then switch between two or more options on
+ * a setInterval. Every setOption is snapshotted when it is made; the interval
+ * callbacks are then ticked by hand, up to MAX_TICKS times. When the steps
+ * come back round to one already seen, that is a cycle and the entry gets
+ *   sequence: { interval, loopTo, steps: [{ file, opts? }] }
+ * with each distinct option in its own file (<id>.json, <id>.2.json, ...: every
+ * file in the gallery stays a whole option a chart can be given on its own).
+ * An example that does assign `option` keeps exactly what it had; it gains a
+ * sequence only when its interval cycles -- data that changes every tick
+ * (random walks, clocks) is a live feed, not a sequence. An example without
+ * `option` whose ticks never repeat is recorded as the fixed run of steps the
+ * ticks produced, marked `fixed: true`.
+ *
  * Usage:  node harvest.js [pathToEchartsExamples] [outDir] [--only id,id,...]
  *                         [--seeded]
  *   --only    (or TY_GALLERY_ONLY=id,id)  harvest just these ids; every other
@@ -37,6 +60,13 @@
  *       calendar-graph,calendar-heatmap,calendar-simple,calendar-horizontal,
  *       calendar-vertical,calendar-pie,custom-calendar-icon
  *     (one comma-separated argument, no spaces)
+ *   The ecStat examples and the setOption sequences were added, unseeded:
+ *     node harvest.js --only bar-histogram,scatter-clustering,
+ *       scatter-exponential-regression,scatter-linear-regression,
+ *       scatter-logarithmic-regression,scatter-polynomial-regression,
+ *       map-bar-morph,scatter-nebula,scatter-stream-visual,
+ *       treemap-sunburst-transition,pictorialBar-bar-transition,
+ *       pie-parliament-transition,scatter-aggregate-bar,scatter-symbol-morph
  *   The explicit-undefined and linearMap fixes re-harvested, unseeded:
  *     node harvest.js --only candlestick-brush,geo-seatmap-flight,
  *       geo-svg-lines,geo-svg-map,matrix-mini-bar-geo,pictorialBar-forest,
@@ -157,6 +187,74 @@ function seededMath() {
   return m;
 }
 
+/* EVERY setOption THE PAGE MAKES, SNAPSHOTTED WHEN IT IS MADE: the examples
+   that switch between options hand the same object back later, and the ones
+   that stream data mutate theirs in place. `opts` is upstream's second
+   argument as it was written: `true` is notMerge, an object is passed through
+   (it is what TTyAdvanceChart.SetOption takes as its options text). */
+function recordSetOption(collected, opt, opts) {
+  if (opt == null || typeof opt !== 'object') return;
+  let o = null;
+  if (typeof opts === 'boolean') {
+    if (opts) o = { notMerge: true };
+  }
+  else if (opts && typeof opts === 'object') {
+    o = JSON.parse(JSON.stringify(opts, keepExplicitUndefined));
+    if (!Object.keys(o).length) o = null;
+  }
+  collected.calls = collected.calls || [];
+  collected.calls.push({
+    option: opt,
+    json: JSON.stringify(opt, keepExplicitUndefined, 1),
+    opts: o
+  });
+}
+
+/* scatter-symbol-morph steps through eleven options; a sequence longer than
+   this is not one anybody will step through by hand. */
+const MAX_TICKS = 24;
+
+/* Tick the page's setInterval callbacks by hand and collect what they set.
+   `steps` is what the page showed before the first tick. Answers the steps
+   and where the cycle closes (loopTo), or null when there is no sequence to
+   record: no interval, a callback that throws, or -- when `mustCycle` -- ticks
+   that never come back round. */
+function playIntervals(collected, steps, mustCycle) {
+  const intervals = collected.intervals || [];
+  if (!intervals.length) return null;
+  const key = (s) => s.json + '\u0000' + JSON.stringify(s.opts);
+  const seen = new Map();
+  steps.forEach((s, i) => { if (!seen.has(key(s))) seen.set(key(s), i); });
+  const out = steps.slice();
+  for (let t = 0; t < MAX_TICKS; t++) {
+    const before = (collected.calls || []).length;
+    try {
+      for (const iv of intervals) iv.fn();
+    }
+    catch (e) {
+      return null;
+    }
+    for (const s of (collected.calls || []).slice(before)) {
+      const k = key(s);
+      if (seen.has(k)) {
+        const at = seen.get(k);
+        /* THE SAME OPTION AGAIN IS NOT A CYCLE. A clock re-sets its hands
+           every tick and, ticked faster than time moves, sets the very same
+           option twice: that is a live feed standing still. */
+        if (at === out.length - 1) {
+          if (mustCycle || out.length < 2) return null;
+          return { steps: out, loopTo: null, interval: intervals[0].ms };
+        }
+        return { steps: out, loopTo: at, interval: intervals[0].ms };
+      }
+      seen.set(k, out.length);
+      out.push(s);
+    }
+  }
+  if (mustCycle || out.length < 2) return null;
+  return { steps: out, loopTo: 0, interval: intervals[0].ms, fixed: true };
+}
+
 /* Local stand-ins for what an example expects the page to provide. Anything
    that reaches the network is refused rather than faked: an example whose data
    we do not have is an example we cannot show honestly. */
@@ -165,7 +263,8 @@ function makeSandbox(collected) {
     option: undefined,
     app: { config: {}, configParameters: {}, title: '', titleCN: '' },
     myChart: {
-      setOption() {}, showLoading() {}, hideLoading() {}, on() {},
+      setOption(opt, opts) { recordSetOption(collected, opt, opts); },
+      showLoading() {}, hideLoading() {}, on() {},
       getWidth: () => 600, getHeight: () => 400, resize() {}, dispose() {},
       getZr: () => ({ on() {}, off() {}, add() {}, remove() {},
                       getWidth: () => 600, getHeight: () => 400 }),
@@ -203,12 +302,31 @@ function makeSandbox(collected) {
       },
       util: { map: (a, f) => Array.prototype.map.call(a, f) },
       registerMap() { collected.usedMap = true; },
+      registerTransform(t) {
+        collected.transforms = collected.transforms || [];
+        collected.transforms.push(String(t && t.type));
+      },
       getMap: () => null
     },
     ROOT_PATH: '__ROOT__',
     console: { log() {}, warn() {}, error() {} },
     Math: SEEDED ? seededMath() : Math, JSON, Date, Number, String, Array, Object, isNaN, parseInt,
     parseFloat, encodeURIComponent, decodeURIComponent
+  };
+  /* echarts-stat, as far as the examples touch it: a transform each, known by
+     its name. The computing is the port's own (see the header). */
+  const statTransform = (name) => ({
+    type: 'ecStat:' + name,
+    transform() {
+      throw new Error('ecStat runs in the chart, not in the harvester');
+    }
+  });
+  sandbox.ecStat = {
+    transform: {
+      regression: statTransform('regression'),
+      histogram: statTransform('histogram'),
+      clustering: statTransform('clustering')
+    }
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
@@ -269,7 +387,14 @@ function makeSandbox(collected) {
     return Promise.resolve(res);
   };
   sandbox.setTimeout = (f) => { if (typeof f === 'function') f(); return 0; };
-  sandbox.setInterval = () => 0;
+  /* Kept, not run: the sequence ticker (playIntervals) runs them, after the
+     option the page showed first has been written down. */
+  sandbox.setInterval = (fn, ms) => {
+    if (typeof fn !== 'function') return 0;
+    collected.intervals = collected.intervals || [];
+    collected.intervals.push({ fn, ms: Number(ms) || 0 });
+    return collected.intervals.length;
+  };
   sandbox.clearInterval = () => {};
   sandbox.clearTimeout = () => {};
   sandbox.require = refuse('require');
@@ -280,8 +405,42 @@ function makeSandbox(collected) {
     addEventListener() {}, getElementById: () => null
   };
   sandbox.addEventListener = () => {};
+  /* The same local files as $.get, for the examples that read binary data:
+     send() answers at once, from the examples clone or not at all. */
   sandbox.XMLHttpRequest = function () {
-    return { open() {}, send() {}, addEventListener() {} };
+    const xhr = {
+      responseType: '', response: null, responseText: '',
+      status: 0, readyState: 0, onload: null, onreadystatechange: null,
+      url: '',
+      open(method, url) { xhr.url = url; },
+      setRequestHeader() {},
+      addEventListener(type, fn) { if (type === 'load') xhr.onload = fn; },
+      send() {
+        const p = localFor(xhr.url);
+        if (!p) {
+          collected.needsNetwork = String(xhr.url).slice(0, 80);
+          throw new Error('data is not in the examples clone');
+        }
+        const buf = fs.readFileSync(p);
+        collected.usedData = (collected.usedData || 0) + 1;
+        if (xhr.responseType === 'arraybuffer') {
+          xhr.response = buf.buffer.slice(buf.byteOffset,
+                                          buf.byteOffset + buf.length);
+        }
+        else {
+          xhr.responseText = buf.toString('utf8');
+          xhr.response = xhr.responseType === 'json'
+            ? JSON.parse(xhr.responseText) : xhr.responseText;
+        }
+        xhr.status = 200;
+        xhr.readyState = 4;
+        if (typeof xhr.onload === 'function') xhr.onload.call(xhr, { target: xhr });
+        if (typeof xhr.onreadystatechange === 'function') {
+          xhr.onreadystatechange.call(xhr);
+        }
+      }
+    };
+    return xhr;
   };
   return sandbox;
 }
@@ -377,27 +536,66 @@ function main() {
       new vm.Script(deTypeScript(src), { filename: file })
         .runInContext(sandbox, { timeout: 5000 });
       const option = sandbox.option;
-      if (option == null || typeof option !== 'object') {
+      const hasOption = option != null && typeof option === 'object';
+      const calls = collected.calls || [];
+      if (!hasOption && !calls.length) {
         throw new Error('the file defines no option object');
       }
-      entry.callbacks = countCallbacks(option, new WeakSet());
-      entry.seriesTypes = seriesTypesIn(option);
-      entry.components = componentsIn(option);
-      const json = JSON.stringify(option, keepExplicitUndefined, 1);
-      entry.bytes = json.length;
-      /* A CAP, AND THE REASON RECORDED. Ten examples carry between 1 and 64 MB
-         of generated points -- they are the large-mode stress cases, the very
-         ones this port cannot render anyway -- and bundling them would put
-         120 MB of test data in a control library. Everything under the cap
-         (244 of 254) is committed so the demo runs from a fresh clone. */
-      if (json.length > MAX_BYTES) {
+      /* What the page shows first: its `option`, written down BEFORE any tick
+         can mutate it -- or, without one, the setOption calls it made. */
+      const shown = hasOption
+        ? [{ option, json: JSON.stringify(option, keepExplicitUndefined, 1),
+             opts: null }]
+        : calls.slice();
+      const seq = playIntervals(collected, shown, hasOption) ||
+        { steps: shown, interval: 0, loopTo: null };
+      /* each distinct option once, in order of first use */
+      const files = [];
+      const fileOf = new Map();
+      for (const s of seq.steps) {
+        if (fileOf.has(s.json)) continue;
+        const name = files.length ? id + '.' + (files.length + 1) + '.json'
+                                  : id + '.json';
+        fileOf.set(s.json, name);
+        files.push({ name, json: s.json, option: s.option });
+      }
+      let types = [], comps = [];
+      for (const fl of files) {
+        entry.callbacks += countCallbacks(fl.option, new WeakSet());
+        types = types.concat(seriesTypesIn(fl.option));
+        comps = comps.concat(componentsIn(fl.option));
+      }
+      entry.seriesTypes = Array.from(new Set(types)).sort();
+      entry.components = componentsIn(Object.fromEntries(
+        comps.map((k) => [k, true])));
+      if (collected.transforms && collected.transforms.length) {
+        entry.registersTransforms = collected.transforms;
+      }
+      entry.bytes = files.reduce((n, fl) => n + fl.json.length, 0);
+      if (files.length > 1 || seq.steps.length > 1) {
+        entry.sequence = { interval: seq.interval || 0, loopTo: seq.loopTo,
+          steps: seq.steps.map((s) => s.opts
+            ? { file: fileOf.get(s.json), opts: s.opts }
+            : { file: fileOf.get(s.json) }) };
+        if (seq.fixed) entry.sequence.fixed = true;
+      }
+      /* A CAP, AND THE REASON RECORDED. Eleven examples carry between 1 and
+         64 MB of generated points -- they are the large-mode stress cases,
+         the very ones this port cannot render anyway -- and bundling them
+         would put 180 MB of test data in a control library. Everything under
+         the cap (253 of 264) is committed so the demo runs from a fresh
+         clone. A sequence is capped on its largest file. */
+      const biggest = Math.max(...files.map((fl) => fl.json.length));
+      if (biggest > MAX_BYTES) {
         entry.reason = 'converted, but ' +
-          (json.length / 1048576).toFixed(1) + ' MB is too large to bundle';
+          (biggest / 1048576).toFixed(1) + ' MB is too large to bundle';
         entry.tooBig = true;
         failed++;
       }
       else {
-        fs.writeFileSync(path.join(OUT, id + '.json'), json, 'utf8');
+        for (const fl of files) {
+          fs.writeFileSync(path.join(OUT, fl.name), fl.json, 'utf8');
+        }
         entry.ok = true;
         ok++;
       }

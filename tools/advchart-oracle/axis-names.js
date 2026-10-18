@@ -1220,6 +1220,23 @@ add('axisLine colour reaches the name', bar({ name: 'Day', axisLine: { lineStyle
 add('nameLocation "foo": middle anchor, end layout', bar({ name: 'Day', nameLocation: 'foo' }, { name: 'Value', nameLocation: 'foo' }),
   deferred('an unknown nameLocation is read as \'end\' by the port'));
 
+// [F4c] the port has the oriented-box move and axisLabel.minMargin now: a case
+// whose only deferral is an OBB test is compared by the Pascal suite
+add('x labels rotate 30, end x name at gap 0: the turned label rects miss it',
+  bar({ name: 'Day', nameGap: 0, data: DAYS.map(d => d + 'nesday'), axisLabel: { rotate: 30, interval: 0 } }, VALUE));
+add('axisLabel minMargin 24 widens each label rect by 12 after the turn; the y name meets turned labels: an OBB move',
+  bar({ name: 'Day', axisLabel: { minMargin: 24 } }, { name: 'Value', axisLabel: { minMargin: 24, rotate: 20 } }),
+  deferred('an OBB move (y labels rotate 20) is not done'));
+// [fin] the label rects' minMargin on an axis-aligned move: the middle y name
+// meets the y labels' occupied band, which minMargin changes by dropping the
+// textMargin (the band is built from the labels' local boxes, not the widened rects)
+add('axisLabel minMargin 24 on the y labels, middle y name gap 5: no textMargin in the band the name meets',
+  bar(DAY, middle({ name: 'Value', nameGap: 5, axisLabel: { minMargin: 24 } })));
+// [fin] where the widened rects do count: the outer bounds a tight grid is shrunk by (the
+// middle name's occupied band above is built from the rects without it)
+add('axisLabel minMargin 60 on the x labels, a tight grid laid out by its outer bounds: 30 px less tall',
+  bar({ axisLabel: { minMargin: 60 } }, null, { grid: { left: 5, right: 5, top: 5, bottom: 5, outerBoundsMode: 'same' } }));
+
 // ---------- run, check and write ----------
 
 {

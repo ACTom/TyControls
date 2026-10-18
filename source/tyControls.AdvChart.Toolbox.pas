@@ -730,6 +730,9 @@ begin
   defBox.Left := TyBoxRawStr('right');
   defBox.Top := TyBoxRawStr('top');
   Result.Box := TyMergeBoxIgnoreSize(tb, defBox);
+  { the layout's getBoxLayoutParams and the text position's get() both
+    read a null or undefined key from the option root [F4c] }
+  TyBoxClimbRoot(Result.Box, AOption.Root);
   { the hover's default text position: by the model's own keys }
   if Result.Vertical then
   begin

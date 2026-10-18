@@ -113,12 +113,38 @@ registers them the same way (`examples/advchart/umaps.pas`). They are data, used
 Copyright The Apache Software Foundation, licensed under the Apache License 2.0 (the text is in
 the gallery section above).
 
+The SVG maps three gallery examples register (`echarts.registerMap(name, {svg})`), copied as
+they are in `public/data/asset/geo/` of echarts-examples. They come from Wikimedia Commons, and
+each keeps its own licence -- not the Apache License above:
+
+- `Beef_cuts_France.svg` (geo-beef-cuts) -- "File:Beef cuts France.svg" by Pethrus, a
+  derivative of "Brazilian_Cut.svg" by Mpontual,
+  <https://commons.wikimedia.org/wiki/File:Beef_cuts_France.svg>, licensed under
+  [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (or the GFDL 1.2 or later).
+  Changed by the ECharts project: the cuts carry `name` attributes. Shared alike: this file
+  stays under CC BY-SA 3.0.
+- `Map_of_Iceland.svg` (geo-svg-scatter-simple, geo-svg-custom-effect) -- "File:Map of
+  Iceland.svg" by Max Naylor, <https://commons.wikimedia.org/wiki/File:Map_of_Iceland.svg>,
+  released into the public domain. Unchanged (the same 1834 x 1489 drawing).
+- `Sicily_prehellenic_topographic_map.svg` (geo-svg-map) -- "File:Sicily prehellenic
+  topographic map.svg" by Halibutt,
+  <https://commons.wikimedia.org/wiki/File:Sicily_prehellenic_topographic_map.svg>, licensed
+  under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); it builds on "Sicily
+  topographic map-blank.svg" by Sémhur (Ivan d'Hostingue, FAL / CC BY-SA) and "Maps
+  template-en.svg" (CC BY-SA 3.0). Changed by the ECharts project: the routes and sites carry
+  `name` attributes. Shared alike: this file stays under CC BY-SA 4.0. A relief of the island,
+  no political lines.
+
 Not included: maps that draw national borders -- `china`, `world` and `HK`, which a few examples
 ask for. Borders are disputed, and some places require published maps to be reviewed (mainland
 China, for one), so the demo ships none; it says so when an example needs one, and picks up a
 file the user saves in `maps/` under the map's name. (`HK.json` would also be out on its own: its
-fields are GADM's, whose terms forbid redistribution without permission.) Nor the SVG maps, which
-`TyChartRegisterMap` does not read yet.
+fields are GADM's, whose terms forbid redistribution without permission.) Nor the other three
+SVG maps of the gallery -- `flight-seats.svg` (geo-seatmap-flight),
+`MacOdrum-LV5-floorplan-web.svg` (geo-svg-lines, a university library's floor plan) and
+`ksia-ext-plan-min.svg` (geo-svg-traffic, an airport plan): echarts-examples records no source or
+licence for them, so they are not redistributed here; saved in `maps/` under the map's name
+(`<name>.svg`) they are picked up like the others.
 
 ---
 

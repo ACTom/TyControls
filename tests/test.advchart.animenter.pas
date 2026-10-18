@@ -34,7 +34,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Measure,
      tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
      tyControls.AdvChart.AnimView, tyControls.AdvanceChart,
-     tyControls.AdvChart.MarkerView,
+     tyControls.AdvChart.MarkerView, tyControls.AdvChart.Graph,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TAnProbe = class(TTyAdvanceChart)
@@ -65,6 +65,9 @@ type
     FMeasure: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared, FWeighed: Integer;
+    { [F3a] a key upstream does not move must hold upstream's own value too
+      (not only the port's layout): the rest's cases }
+    FStrictFinals: Boolean;
     FReport: string;
     FSeen: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -74,6 +77,8 @@ type
     procedure Load(const AOption: string);
     procedure RunCase(ACase: TJSONObject);
     procedure CompareDerived(const AName: string; AEl: TJSONObject;
+      const M: TAnMap; ASample: Integer);
+    procedure CompareGraphEdge(const AName: string; AEl: TJSONObject;
       const M: TAnMap; ASample: Integer);
     procedure CheckDerivedFrame(const AName, AId: string; const M: TAnMap;
       APc, ATx, ATy, ALx, ALy: Double);
@@ -87,6 +92,7 @@ type
     procedure TestPolarEnterTimelinesAsUpstream;
     procedure TestSingleRiverEnterTimelinesAsUpstream;
     procedure TestChordEnterTimelinesAsUpstream;
+    procedure TestEnter2TimelinesAsUpstream;
     procedure TestHeadlessRenderDoesNotAnimateByDefault;
     procedure TestOffModeAndOptionOff;
     procedure TestSeriesMoveInTheDynamicLayer;
@@ -109,6 +115,52 @@ var
   GPolar: TJSONData = nil;
   GRiver: TJSONData = nil;
   GChord: TJSONData = nil;
+  GEnter2: TJSONData = nil;
+
+{ tests/fixtures/advchart-anim-enter2.json: tools/advchart-oracle/
+  anim-enter2.js, the same harness, clock and samples -- pictorialBar,
+  graph, tree, treemap, sunburst and sankey [F3a] }
+function Enter2Fixture: TJSONObject;
+var sl: TStringList;
+begin
+  if GEnter2 = nil then
+  begin
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+        + 'advchart-anim-enter2.json');
+      GEnter2 := GetJSON(sl.Text);
+    finally
+      sl.Free;
+    end;
+  end;
+  Result := TJSONObject(GEnter2);
+end;
+
+{ the case's graph has no symbol at an edge's start: edgeSymbol 'none', or
+  a pair whose first is 'none' [F3a] }
+function GraphNoFromSymbol(AOption: TJSONData): Boolean;
+var
+  ser, s, d: TJSONData;
+  k: Integer;
+begin
+  Result := True;
+  if not (AOption is TJSONObject) then Exit;
+  ser := TJSONObject(AOption).Find('series');
+  if not (ser is TJSONArray) then Exit;
+  for k := 0 to ser.Count - 1 do
+  begin
+    s := ser.Items[k];
+    if not (s is TJSONObject) then Continue;
+    if (TJSONObject(s).Find('type') = nil) or (TJSONObject(s).Strings['type'] <> 'graph') then Continue;
+    d := TJSONObject(s).Find('edgeSymbol');
+    if d = nil then Exit(True);
+    if d.JSONType = jtString then Exit(d.AsString = 'none');
+    if (d is TJSONArray) and (d.Count > 0) and (d.Items[0].JSONType = jtString) then
+      Exit(d.Items[0].AsString = 'none');
+    Exit(True);
+  end;
+end;
 
 { tests/fixtures/advchart-single-themeriver.json's `anim`: tools/advchart-
   oracle/single-themeriver.js, the same harness, clock and samples
@@ -220,6 +272,9 @@ end;
 
 function SameBits(A, B: Double): Boolean;
 begin
+  { [F3d] not a number is not a number, whatever its payload (a straight
+    line's cpx1, written NaN by setLinePoints) }
+  if IsNan(A) or IsNan(B) then Exit(IsNan(A) and IsNan(B));
   Result := Hex(A) = Hex(B);
 end;
 
@@ -393,13 +448,53 @@ begin
 end;
 
 { 'seriesN:type' -> N, type; and the path's leading number }
-function MapElement(AEl: TJSONObject; AOption: TJSONData): TAnMap;
+{ THE DATA INDEX AN ELEMENT HANGS UNDER [F3a]: its own, else its host's
+  (the id without '#...'), else its parents' up the path; -1 for none }
+function HostDataIndex(AEls: TJSONArray; const AId: string): Integer;
+var
+  id: string;
+  k, p: Integer;
+  d: TJSONData;
+begin
+  Result := -1;
+  if AEls = nil then Exit;
+  id := AId;
+  if Pos('#', id) > 0 then id := Copy(id, 1, Pos('#', id) - 1);
+  while id <> '' do
+  begin
+    for k := 0 to AEls.Count - 1 do
+      if AEls.Objects[k].Strings['id'] = id then
+      begin
+        d := AEls.Objects[k].Find('dataIndex');
+        if (d <> nil) and (d.JSONType = jtNumber) then Exit(d.AsInteger);
+        Break;
+      end;
+    p := Length(id);
+    while (p > 0) and (id[p] <> '.') and (id[p] <> '/') do Dec(p);
+    if (p = 0) or (id[p] = '/') then Exit;
+    id := Copy(id, 1, p - 1);
+  end;
+end;
+
+{ the element of AEls whose id is AId, nil for none }
+function CaseElement(AEls: TJSONArray; const AId: string): TJSONObject;
+var k: Integer;
+begin
+  Result := nil;
+  if AEls = nil then Exit;
+  for k := 0 to AEls.Count - 1 do
+    if AEls.Objects[k].Strings['id'] = AId then Exit(AEls.Objects[k]);
+end;
+
+function MapElement(AEl: TJSONObject; AOption: TJSONData;
+  AEls: TJSONArray = nil): TAnMap;
 var
   id, owner, path, typ, stype, role, base: string;
-  p, k, di: Integer;
+  p, k, di, n: Integer;
   hasTrack, hasAnim: Boolean;
   d, a: TJSONData;
   parts: TStringList;
+  prev: TJSONObject;
 begin
   Result := Default(TAnMap);
   Result.Kind := amkStatic;
@@ -641,6 +736,133 @@ begin
       Result.Kind := amkModel;
       Result.Role := 'boxplot';
       Result.Index := di;
+    end
+    { ---- [F3a] ---- }
+    else if stype = 'sankey' then
+    begin
+      { the main group's (0) enter clip, the series' one proxy }
+      if Pos('#clip', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'sankeyClip';
+        Result.Index := -1;
+      end;
+    end
+    else if stype = 'sunburst' then
+    begin
+      { a piece: its r from r0; its label fades }
+      Result.Kind := amkModel;
+      Result.Index := HostDataIndex(AEls, id);
+      if Pos('#label', id) > 0 then Result.Role := 'label'
+      else Result.Role := 'sunPiece';
+    end
+    else if stype = 'treemap' then
+    begin
+      { only the words fade on a first render }
+      if Pos('#label', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'label';
+        Result.Index := HostDataIndex(AEls, id);
+      end;
+    end
+    else if stype = 'pictorialBar' then
+    begin
+      { <bar>.0 the bundle (its #clip a symbolClip's), <bar>.0.<k> the k-th
+        glyph, <bar>.1 the target rect whose #label fades }
+      Result.Index := HostDataIndex(AEls, id);
+      if Pos('#clip', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'pclip';
+      end
+      else if Pos('#label', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'label';
+      end
+      else if (parts.Count = 3) and (typ <> 'group') then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'pglyph' + parts[2];
+      end;
+    end
+    else if stype = 'graph' then
+    begin
+      { 0.0.<n> a node's Symbol group, .0 its path (the pop-in), its #label
+        the fade; 0.1.<e> an edge's Line group: .0 the line (the percent),
+        .1 / .2 its end symbols and its #label placed from the percent }
+      Result.Index := HostDataIndex(AEls, id);
+      if (parts.Count >= 2) and (parts[1] = '0') then
+      begin
+        if parts.Count = 4 then
+        begin
+          Result.Kind := amkModel;
+          if Pos('#label', id) > 0 then Result.Role := 'label'
+          else Result.Role := 'symbol';
+        end;
+      end
+      else if (parts.Count >= 3) and (parts[1] = '1') then
+      begin
+        Result.Index := StrToIntDef(parts[2], -1);
+        if Pos('#label', id) > 0 then
+        begin
+          Result.Kind := amkDerived;
+          Result.Derived := 'gedgeLabel';
+          Result.Role := 'gedge';
+        end
+        else if (parts.Count = 4) and (parts[3] = '0') then
+        begin
+          Result.Kind := amkModel;
+          Result.Role := 'gedge';
+        end
+        else if parts.Count = 4 then
+        begin
+          { which end: the second child is the to symbol when there are two,
+            or when the line's first child after it is the only one and the
+            edge has no from symbol }
+          Result.Kind := amkDerived;
+          Result.Role := 'gedge';
+          n := 0;
+          for k := 1 to 2 do
+            if CaseElement(AEls, Copy(id, 1, Length(id) - 1) + IntToStr(k)) <> nil then Inc(n);
+          if (parts[3] = '2') or ((n = 1) and GraphNoFromSymbol(AOption)) then
+            Result.Derived := 'gedgeTo'
+          else
+            Result.Derived := 'gedgeFrom';
+        end;
+      end;
+    end
+    else if stype = 'tree' then
+    begin
+      { 0.<k> a node's Symbol group (its slide) or an edge (after the group
+        of the node it belongs to); 0.<k>.0 the symbol path, its #label }
+      if parts.Count = 2 then
+      begin
+        Result.Kind := amkModel;
+        if typ = 'group' then
+        begin
+          Result.Role := 'treeGroup';
+          Result.Index := di;
+        end
+        else
+        begin
+          Result.Role := 'treeEdge';
+          prev := CaseElement(AEls, Copy(id, 1, Pos('/', id)) + '0.'
+            + IntToStr(StrToIntDef(parts[1], 0) - 1));
+          Result.Index := -1;
+          if (prev <> nil) and (prev.Find('dataIndex') <> nil)
+            and (prev.Find('dataIndex').JSONType = jtNumber) then
+            Result.Index := prev.Integers['dataIndex'];
+        end;
+      end
+      else if parts.Count = 3 then
+      begin
+        Result.Kind := amkModel;
+        Result.Index := HostDataIndex(AEls, id);
+        if Pos('#label', id) > 0 then Result.Role := 'label'
+        else Result.Role := 'symbol';
+      end;
     end;
   finally
     parts.Free;
@@ -824,6 +1046,8 @@ var
   p: TTyChartAnimProxy;
   up, upF, up0, got, gotF: TTyDoubleArray;
   got0: array of array of TTyDoubleArray;
+  deduct: array of Integer;
+  from: TTyDoubleArray;
   exact: Boolean;
   lst, frm: TTyPaintList;
   a, b: TTyChartElement;
@@ -842,11 +1066,25 @@ begin
   els := ACase.Arrays['elements'];
   SetLength(maps, els.Count);
   SetLength(got0, els.Count);
+  SetLength(deduct, samples.Count);
+  for s := 0 to High(deduct) do deduct[s] := 0;
   for e := 0 to els.Count - 1 do
   begin
-    maps[e] := MapElement(els.Objects[e], ACase.Elements['option']);
+    maps[e] := MapElement(els.Objects[e], ACase.Elements['option'], els);
     if maps[e].Kind = amkUnknown then
       Miss(Format('%s: %s is not mapped', [name, els.Objects[e].Strings['id']]));
+    { A TEXT OF NO WORDS draws nothing, and the port builds no element for
+      it: its fade's clips are taken off upstream's count [F3a: a treemap
+      root's upper label] }
+    if (maps[e].Kind = amkModel) and (maps[e].Role = 'label')
+      and ((els.Objects[e].Objects['finalText'].Find('style.text') = nil)
+        or (els.Objects[e].Objects['finalText'].Strings['style.text'] = '')) then
+    begin
+      maps[e].Kind := amkStatic;
+      if els.Objects[e].Find('animators') is TJSONArray then
+        for s := 0 to High(deduct) do
+          Inc(deduct[s], els.Objects[e].Arrays['animators'].Items[s].AsInteger);
+    end;
   end;
 
   for s := 0 to samples.Count - 1 do
@@ -917,6 +1155,19 @@ begin
         if not Recorded(key) then Continue;
         if (track = nil) or (track.Find(key) = nil) then
         begin
+          { [F3a] AND IT IS UPSTREAM'S: the value upstream holds still (a
+            symbol proxy's x / y are its GROUP's place, not the path's) }
+          if FStrictFinals and not ((m.Role = 'symbol') and ((key = 'x') or (key = 'y')))
+            and NumsOf(el.Objects['final'].Find(key), upF)
+            and (Length(upF) = Length(got)) then
+            for j := 0 to High(got) do
+              if not SameBits(got[j], upF[j]) and not ((got[j] = 0) and (upF[j] = 0)) then
+              begin
+                Miss(Format('%s t=%s %s: %s holds %s here, %s upstream',
+                  [name, samples.Items[s].AsString, el.Strings['id'], key,
+                   Fmt(got[j]), Fmt(upF[j])]), name + el.Strings['id'] + key + 'held');
+                Break;
+              end;
           { not animated upstream -- unless it rests at its own final value,
             which a forced track writes back unchanged }
           if Length(gotF) = Length(got) then
@@ -947,11 +1198,16 @@ begin
             layout's own; every sample is still held to the bit below
             [Batch 113: a tangential bar ending on 0 degrees] }
           exact := SameBits(gotF[j], upF[j]) or ((gotF[j] = 0) and (upF[j] = 0));
+          { NOR IS A TWEEN FROM ANYWHERE BUT NOUGHT: its last frame is the
+            final step's own arithmetic from where it started, which need not
+            be the layout's bits [F3a: a tree node sliding from its root] }
+          if not exact and (j <= High(up0)) then
+            exact := SameBits(upF[j], (gotF[j] - up0[j]) * 1 + up0[j]);
           { A RIPPLE NEVER RESTS: its last sample is mid-loop, its layout
             value the first frame of a ripple -- the samples speak. NOR DOES
             A THEMERIVER'S CLIP: it is removed when it ends, so upstream's
             last sample is its last frame before the end [Batch 118] }
-          if (Pos('ripple', m.Role) = 1) or (m.Role = 'riverClip') then
+          if (Pos('ripple', m.Role) = 1) or (m.Role = 'riverClip') or (m.Role = 'sankeyClip') then
           begin
             if not SameBits(got[j], up[j]) then
               Miss(Format('%s t=%s %s: %s[%d] %s here, %s upstream',
@@ -977,7 +1233,7 @@ begin
         end;
       end;
     end;
-    want := clips.Items[s].AsInteger;
+    want := clips.Items[s].AsInteger - deduct[s];
     if FChart.AnimClipCount <> want then
       Miss(Format('%s t=%s: %d clips here, %d upstream',
         [name, samples.Items[s].AsString, FChart.AnimClipCount,
@@ -998,10 +1254,21 @@ begin
         if not ProxyNums(p, p.Final[j].Key, got) then Continue;
         gotF := FinalNums(p, p.Final[j].Key);
         if Length(gotF) <> Length(got) then Continue;
+        { where it started, when a replayed element runs on it [F3a] }
+        from := nil;
+        for e := 0 to els.Count - 1 do
+          if (maps[e].Kind = amkModel) and (j <= High(got0[e]))
+            and (FChart.AnimFindProxy(maps[e].Series, maps[e].Index, maps[e].Role) = p) then
+          begin
+            from := got0[e][j];
+            Break;
+          end;
         for n := 0 to High(got) do
           if not SameBits(got[n], gotF[n]) then
             { off the layout: only by the final step's own arithmetic }
-            if not SameBits(got[n], (gotF[n] - got[n]) * 1 + got[n]) then
+            if not SameBits(got[n], (gotF[n] - got[n]) * 1 + got[n])
+              and not ((n <= High(from))
+                and SameBits(got[n], (gotF[n] - from[n]) * 1 + from[n])) then
               Miss(Format('%s: %s.%s rests at %s, the layout says %s', [name,
                 p.Role, p.Final[j].Key, Fmt(got[n]), Fmt(gotF[n])]));
       end;
@@ -1053,6 +1320,11 @@ var
   has: Boolean;
 begin
   eid := AEl.Strings['id'];
+  if Pos('gedge', M.Derived) = 1 then
+  begin
+    CompareGraphEdge(AName, AEl, M, ASample);
+    Exit;
+  end;
   p := FChart.AnimFindProxy(M.Series, M.Index, M.Role);
   if p = nil then
   begin
@@ -1125,6 +1397,73 @@ begin
     by its place now less its place at rest, the end label where the clip
     put it }
   CheckDerivedFrame(AName, eid, M, pc, tx, ty, lx, ly);
+end;
+
+{ [F3a] A GRAPH EDGE'S END SYMBOLS AND LABEL: what Line.beforeUpdate writes
+  from the line's percent -- an end symbol's x, y and scale, the label's x,
+  y and rotation, in the line's frame -- derived by the port from the same
+  proxy and the edge's tag, bit for bit; the label's opacity is its own
+  fade's proxy }
+procedure TAdvChartAnimEnterTest.CompareGraphEdge(const AName: string;
+  AEl: TJSONObject; const M: TAnMap; ASample: Integer);
+var
+  p, fade: TTyChartAnimProxy;
+  track: TJSONObject;
+  g: TTyChartElement;
+  k: Integer;
+  key, eid: string;
+  up: TTyDoubleArray;
+  pc, x, y, s, rot, got: Double;
+  has: Boolean;
+begin
+  eid := AEl.Strings['id'];
+  p := FChart.AnimFindProxy(M.Series, M.Index, 'gedge');
+  if p = nil then
+  begin
+    Miss(Format('%s: no gedge proxy for %s', [AName, eid]), AName + eid + 'dproxy');
+    Exit;
+  end;
+  if not FindListEl(FChart.List, carGraphEdge, M.Series, M.Index, g) then
+  begin
+    Miss(Format('%s: no edge element for %s', [AName, eid]), AName + eid + 'del');
+    Exit;
+  end;
+  if not (AEl.Find('track') is TJSONObject) then Exit;
+  track := AEl.Objects['track'];
+  Inc(FCompared);
+  pc := p.Num('shape.percent');
+  if M.Derived = 'gedgeLabel' then
+  begin
+    TyGraphEdgeLabelLocal(g, pc, x, y, rot);
+    s := NaN;
+  end
+  else
+  begin
+    TyGraphEdgeEnds(g, pc, M.Derived = 'gedgeTo', x, y, s);
+    rot := NaN;
+  end;
+  fade := FChart.AnimFindProxy(M.Series, M.Index, 'gedgeLabel');
+  for k := 0 to track.Count - 1 do
+  begin
+    key := track.Names[k];
+    has := True;
+    if key = 'x' then got := x
+    else if key = 'y' then got := y
+    else if (key = 'scaleX') or (key = 'scaleY') then got := s
+    else if key = 'rotation' then got := rot
+    else if (key = 'style.opacity') and (M.Derived = 'gedgeLabel') and (fade <> nil) then
+      got := fade.Num('style.opacity')
+    else has := False;
+    if not has then
+    begin
+      Miss(Format('%s: %s %s is not derived here', [AName, eid, key]), AName + eid + key + 'dmod');
+      Continue;
+    end;
+    if not NumsOf(track.Arrays[key].Items[ASample], up) or (Length(up) <> 1) then Continue;
+    if not SameBits(got, up[0]) then
+      Miss(Format('%s t=%d %s: %s %s here, %s upstream', [AName, ASample, eid, key,
+        Fmt(got), Fmt(up[0])]), AName + eid + key);
+  end;
 end;
 
 procedure TAdvChartAnimEnterTest.CheckDerivedFrame(const AName, AId: string;
@@ -1295,6 +1634,33 @@ begin
     [FBad, FCompared, FReport]), FBad = 0);
   AssertTrue(Format('only %d cases ran', [ran]), ran >= 4);
   AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 150);
+end;
+
+{ [F3a] THE REST'S ENTER: pictorialBar, graph, tree, treemap, sunburst and
+  sankey -- every case of anim-enter2.js through the same replay }
+procedure TAdvChartAnimEnterTest.TestEnter2TimelinesAsUpstream;
+var
+  cases: TJSONArray;
+  cs: TJSONObject;
+  c, ran: Integer;
+begin
+  AssertEquals('the same clock', T0, Enter2Fixture.Objects['clock'].Floats['T0'], 0);
+  AssertEquals('the same samples', Fixture.Arrays['samplesMs'].AsJSON,
+    Enter2Fixture.Arrays['samplesMs'].AsJSON);
+  cases := Enter2Fixture.Arrays['cases'];
+  FStrictFinals := True;
+  ran := 0;
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    if cs.Strings['kind'] <> 'enter' then Continue;
+    RunCase(cs);
+    Inc(ran);
+  end;
+  AssertTrue(Format('%d mismatches over %d element samples:%s',
+    [FBad, FCompared, FReport]), FBad = 0);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 20);
+  AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 1000);
 end;
 
 procedure TAdvChartAnimEnterTest.TestAn4EnterTimelinesAsUpstream;
@@ -1591,4 +1957,5 @@ finalization
   FreeAndNil(GPolar);
   FreeAndNil(GRiver);
   FreeAndNil(GChord);
+  FreeAndNil(GEnter2);
 end.

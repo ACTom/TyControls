@@ -50,7 +50,12 @@ type
   end;
 
   TAdvChartTimelineOracleTest = class(TTestCase)
-  private
+  { [F5] protected: the keyboard's replay drives this harness }
+  protected
+    { [F5] the elements a pointer would have hovered that the keyboard does
+      not ('next prev'): their states and the display order they lift are
+      not compared }
+    FSkipRoles: string;
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TTlProbe;
@@ -684,10 +689,11 @@ begin
   for i := 0 to High(order) do got := got + RoleName(v.RoleOf(order[i])) + ' ';
   want := '';
   for i := 0 to els.Count - 1 do want := want + els.Objects[i].Strings['role'] + ' ';
-  SameStr('order', Trim(got), Trim(want));
+  if FSkipRoles = '' then SameStr('order', Trim(got), Trim(want));
   { each element by its role, wherever the order put it }
   for i := 0 to els.Count - 1 do
   begin
+    if Pos(' ' + els.Objects[i].Strings['role'] + ' ', ' ' + FSkipRoles + ' ') > 0 then Continue;
     k := -1;
     for j := 0 to High(v.Els) do
       if RoleName(v.RoleOf(j)) = els.Objects[i].Strings['role'] then

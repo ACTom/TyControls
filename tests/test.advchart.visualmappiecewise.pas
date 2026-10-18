@@ -262,6 +262,10 @@ begin
   case AData.JSONType of
     jtNumber: Result := AV.IsNum and (Bits(AV.Num) = Bits(AData.AsFloat));
     jtString: Result := (not AV.IsNum) and (AV.Str = AData.AsString);
+    { [F4c] a pair kept as written }
+    jtArray: Result := AV.IsPair and (AData.Count = 2)
+      and (Bits(AV.Num) = Bits(AData.Items[0].AsFloat))
+      and (Bits(AV.Num2) = Bits(AData.Items[1].AsFloat));
   else
     Result := False;
   end;
@@ -603,7 +607,7 @@ var
   si, i, j, k, raw, found, pIdx: Integer;
   row: TTyVisualRow;
   spec: TTyVisualMapSpec;
-  value: Double;
+  value, sw, sh: Double;
   text, typ: string;
   st: TTyVisualState;
   lst: TTyPaintList;
@@ -692,6 +696,25 @@ begin
         and (Bits(ASeries.Floats['symbolSize']) <> Bits(r.Floats['symbolSize'])) then
         Miss(Format('s%d row %d: size %s mapped upstream, none here', [si, raw,
           r.Find('symbolSize').AsJSON]));
+    end
+    { [F4c] a piece's pair, kept as the pair; a word that is no number, set
+      all the same (NaN, drawn at nought) }
+    else if (r.Find('symbolSize') <> nil) and (r.Find('symbolSize').JSONType = jtArray) then
+    begin
+      Inc(FCompared);
+      if not (row.SizeSet and row.SizePair
+        and (Bits(row.Size) = Bits(TJSONArray(r.Find('symbolSize')).Floats[0]))
+        and (Bits(row.SizeH) = Bits(TJSONArray(r.Find('symbolSize')).Floats[1]))) then
+        Miss(Format('s%d row %d: size %s upstream, %s x %s here (pair %s)', [si, raw,
+          r.Find('symbolSize').AsJSON, Fmt(row.Size), Fmt(row.SizeH),
+          BoolToStr(row.SizePair, True)]));
+    end
+    else if (r.Find('symbolSize') <> nil) and (r.Find('symbolSize').JSONType = jtString) then
+    begin
+      Inc(FCompared);
+      if not (row.SizeSet and IsNan(row.Size)) then
+        Miss(Format('s%d row %d: size %s upstream (no number), %s here', [si, raw,
+          r.Find('symbolSize').AsJSON, Fmt(row.Size)]));
     end;
 
     { THE SAME ROW AS DRAWN: a bar's or a scatter's element }
@@ -721,6 +744,25 @@ begin
         else if el.Style.Alpha <> wantAlpha then
           Miss(Format('s%d row %d: alpha %s, upstream %s', [si, raw,
             Fmt(el.Style.Alpha), Fmt(wantAlpha)]));
+        { [F4c] a pair's symbol is w x h }
+        if (typ = 'scatter') and (r.Find('symbolSize') <> nil)
+          and (r.Find('symbolSize').JSONType = jtArray) then
+        begin
+          Inc(FCompared);
+          case el.Shape.Kind of
+            cskCircle: begin sw := 2 * el.Shape.R1; sh := sw; end;
+            cskEllipse: begin sw := 2 * el.Shape.R0; sh := 2 * el.Shape.R1; end;
+          else
+            begin
+              sw := TyRectFWidth(el.Shape.Bounds);
+              sh := TyRectFHeight(el.Shape.Bounds);
+            end;
+          end;
+          if (Abs(sw - TJSONArray(r.Find('symbolSize')).Floats[0]) > 1e-6)
+            or (Abs(sh - TJSONArray(r.Find('symbolSize')).Floats[1]) > 1e-6) then
+            Miss(Format('s%d row %d: drawn %s x %s, upstream %s', [si, raw,
+              Fmt(sw), Fmt(sh), r.Find('symbolSize').AsJSON]));
+        end;
       end;
     end;
   end;
@@ -959,7 +1001,7 @@ end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestCategoriesAsUpstream;
 begin
-  RunCases(['C1', 'C2', 'C3', 'C4']);
+  RunCases(['C1', 'C2', 'C3', 'C4', 'C5']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestViewCasesEncodeAsUpstream;

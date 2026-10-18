@@ -1247,6 +1247,7 @@ const
     + '"series":[{"type":"bar","data":[50,1000,80]}]}';
 var
   a, b: TTyAdvanceChart;
+  i: Integer;
 begin
   a := NewChart(cOpt, 0, 0, 300, 200);
   a.Name := 'A';
@@ -1256,7 +1257,11 @@ begin
   try
     FLog.Clear;
     AssertTrue(a.DispatchAction('{"type":"expandAxisBreak","yAxisIndex":0,"breaks":[{"start":100,"end":900}]}'));
-    { the non-refined event travels; B publishes its own refined one }
+    { the non-refined event travels; B publishes its own refined one --
+      [F4b] the update's brushselected (each chart's, and B's forwarded
+      one) is no refined event: left out here }
+    for i := FLog.Count - 1 downto 0 do
+      if Pos('axisbreakchanged', FLog[i]) = 0 then FLog.Delete(i);
     AssertEquals('two refined events', 2, FLog.Count);
     AssertTrue('B first (A''s internal event went before its refined one)',
       Pos('B axisbreakchanged', FLog[0]) = 1);

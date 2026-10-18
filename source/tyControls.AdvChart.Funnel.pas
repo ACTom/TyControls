@@ -259,18 +259,14 @@ begin
   Result.Z2 := 0;
 end;
 
-{ A box value out of one option key, or ADefault. }
-function BoxValueOf(ANode: TJSONObject; const AKey: string;
-  const ADefault: TTyBoxValue): TTyBoxValue;
+{ A box value out of one JSON value, or ADefault. }
+function BoxValueOfData(d: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
 var
-  d: TJSONData;
   s: string;
   v: Double;
   fs: TFormatSettings;
 begin
   Result := ADefault;
-  if ANode = nil then Exit;
-  d := ANode.Find(AKey);
   if d = nil then Exit;
   if d.JSONType = jtNumber then Exit(TyBoxPx(d.AsFloat));
   if d.JSONType <> jtString then Exit;
@@ -293,6 +289,15 @@ begin
   if TryStrToFloat(s, v, fs) then Result := TyBoxPx(v);
 end;
 
+{ A box value out of one option key, or ADefault. }
+function BoxValueOf(ANode: TJSONObject; const AKey: string;
+  const ADefault: TTyBoxValue): TTyBoxValue;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  Result := BoxValueOfData(ANode.Find(AKey), ADefault);
+end;
+
 function TyFunnelSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyFunnelSpec;
 var
   node: TJSONObject;
@@ -305,12 +310,20 @@ begin
   if not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
 
-  Result.Box.Left := BoxValueOf(node, 'left', Result.Box.Left);
-  Result.Box.Top := BoxValueOf(node, 'top', Result.Box.Top);
-  Result.Box.Right := BoxValueOf(node, 'right', Result.Box.Right);
-  Result.Box.Bottom := BoxValueOf(node, 'bottom', Result.Box.Bottom);
-  Result.Box.Width := BoxValueOf(node, 'width', Result.Box.Width);
-  Result.Box.Height := BoxValueOf(node, 'height', Result.Box.Height);
+  { getBoxLayoutParams: the four edges have defaults, width and height
+    none -- a null or a key with no default reads the option root [F4c] }
+  Result.Box.Left := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'left', True),
+    Result.Box.Left);
+  Result.Box.Top := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'top', True),
+    Result.Box.Top);
+  Result.Box.Right := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'right', True),
+    Result.Box.Right);
+  Result.Box.Bottom := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'bottom', True),
+    Result.Box.Bottom);
+  Result.Box.Width := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'width', False),
+    Result.Box.Width);
+  Result.Box.Height := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'height', False),
+    Result.Box.Height);
   Result.MinSize := BoxValueOf(node, 'minSize', Result.MinSize);
   Result.MaxSize := BoxValueOf(node, 'maxSize', Result.MaxSize);
 

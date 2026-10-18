@@ -76,6 +76,14 @@ procedure TyCategoryBuiltList(AStart, ACount: Integer; AInterval: Double;
 
 { zrender's oriented-box test, boolean, with a touch threshold. }
 function TyObbIntersect(const A, B: TTyLabelBox; AThreshold: Double): Boolean;
+{ OrientedBoundingRect.intersect WITH a translation [F4c]: the boxes of A and
+  B (each its local rect through its matrix), a touch threshold, a direction
+  and bidirectional false -- moveIfOverlap's options. AMtvX / AMtvY: where
+  they overlap, the shortest move of B along the direction that parts them
+  (the direction-constrained minimum, calcDirMTV); where they do not, the
+  largest gap; nought when a box has no size after the threshold. }
+function TyObbIntersectDir(const A, B: TTyLabelBox; ADirection,
+  AThreshold: Double; out AMtvX, AMtvY: Double): Boolean;
 
 { labelIntersect without the ignore check: the rects, then the oriented
   boxes when either is turned off the axes. }
@@ -310,6 +318,158 @@ begin
     if neg or (hi1 < lo2) or (lo1 > hi2) then Exit(False);
   end;
   Result := True;
+end;
+
+type
+  { createIntersectContext's state, for one intersect with a translation }
+  TObbCtx = record
+    MinX, MinY, MaxX, MaxY, DirMinX, DirMinY: Double;
+    Direction, CheckX, CheckY, Threshold: Double;
+    Negative: Boolean;
+  end;
+
+function ObbNearZero(AV: Double): Boolean;
+begin
+  Result := Abs(AV) < 1e-10;
+end;
+
+{ calcDirMTV, bidirectional false }
+procedure ObbCalcDirMTV(var C: TObbCtx);
+var squareMag, dirSin, dirCos, dotProd, tx, ty: Double;
+begin
+  squareMag := C.MinY * C.MinY + C.MinX * C.MinX;
+  dirSin := TyJsSin(C.Direction);
+  dirCos := TyJsCos(C.Direction);
+  dotProd := dirSin * C.MinY + dirCos * C.MinX;
+  if ObbNearZero(dotProd) then
+  begin
+    if ObbNearZero(C.MinX) and ObbNearZero(C.MinY) then
+    begin
+      C.DirMinX := 0;
+      C.DirMinY := 0;
+    end;
+    Exit;
+  end;
+  tx := squareMag * dirCos / dotProd;
+  ty := squareMag * dirSin / dotProd;
+  if ObbNearZero(tx) and ObbNearZero(ty) then
+  begin
+    C.DirMinX := 0;
+    C.DirMinY := 0;
+    Exit;
+  end;
+  if (C.CheckX * tx + C.CheckY * ty > 0)
+    and (Sqrt(tx * tx + ty * ty) < Sqrt(C.DirMinX * C.DirMinX + C.DirMinY * C.DirMinY)) then
+  begin
+    C.DirMinX := tx;
+    C.DirMinY := ty;
+  end;
+end;
+
+{ _getProjMinMaxOnAxis, the flag in the context }
+procedure ObbProject(var C: TObbCtx; const ASelf, ACorners: TObb; ADim: Integer;
+  out ALo, AHi: Double);
+var
+  proj, mn, mx: Double;
+  k: Integer;
+begin
+  proj := ACorners.CX[0] * ASelf.AX[ADim] + ACorners.CY[0] * ASelf.AY[ADim]
+    + ASelf.Origin[ADim];
+  mn := proj;
+  mx := proj;
+  for k := 1 to 3 do
+  begin
+    proj := ACorners.CX[k] * ASelf.AX[ADim] + ACorners.CY[k] * ASelf.AY[ADim]
+      + ASelf.Origin[ADim];
+    mn := Min(proj, mn);
+    mx := Max(proj, mx);
+  end;
+  ALo := mn + C.Threshold;
+  AHi := mx - C.Threshold;
+  C.Negative := AHi < ALo;
+end;
+
+{ _intersectCheckOneSide with a translation (useDir, bidirectional false) }
+function ObbCheckOneSideMtv(var C: TObbCtx; const ASelf, AOther: TObb;
+  AInverse: Integer): Boolean;
+var
+  i: Integer;
+  lo1, hi1, lo2, hi2, dist0, dist1, s, lenMax: Double;
+begin
+  Result := True;
+  for i := 0 to 1 do
+  begin
+    ObbProject(C, ASelf, ASelf, i, lo1, hi1);
+    ObbProject(C, ASelf, AOther, i, lo2, hi2);
+    if C.Negative or (hi1 < lo2) or (lo1 > hi2) then
+    begin
+      Result := False;
+      if C.Negative then Exit;
+      dist0 := Abs(lo2 - hi1);
+      dist1 := Abs(lo1 - hi2);
+      lenMax := Sqrt(C.MaxX * C.MaxX + C.MaxY * C.MaxY);
+      if Min(dist0, dist1) > lenMax then
+      begin
+        if dist0 < dist1 then s := -dist0 * AInverse else s := dist1 * AInverse;
+        C.MaxX := ASelf.AX[i] * s;
+        C.MaxY := ASelf.AY[i] * s;
+      end;
+    end
+    else
+    begin
+      dist0 := Abs(lo2 - hi1);
+      dist1 := Abs(lo1 - hi2);
+      { useDir: both ways, each through calcDirMTV }
+      s := dist0 * AInverse;
+      C.MinX := ASelf.AX[i] * s;
+      C.MinY := ASelf.AY[i] * s;
+      ObbCalcDirMTV(C);
+      s := -dist1 * AInverse;
+      C.MinX := ASelf.AX[i] * s;
+      C.MinY := ASelf.AY[i] * s;
+      ObbCalcDirMTV(C);
+    end;
+  end;
+end;
+
+function TyObbIntersectDir(const A, B: TTyLabelBox; ADirection,
+  AThreshold: Double; out AMtvX, AMtvY: Double): Boolean;
+var
+  oa, ob: TObb;
+  C: TObbCtx;
+begin
+  AMtvX := 0;
+  AMtvY := 0;
+  oa := MakeObb(A);
+  ob := MakeObb(B);
+  { reset(opt, true) }
+  C.Threshold := Max(Double(0), AThreshold);
+  C.Negative := False;
+  C.MinX := Infinity;
+  C.MinY := Infinity;
+  C.MaxX := 0;
+  C.MaxY := 0;
+  C.DirMinX := Infinity;
+  C.DirMinY := Infinity;
+  C.Direction := ADirection;
+  C.CheckX := TyJsCos(ADirection);
+  C.CheckY := TyJsSin(ADirection);
+  Result := True;
+  if not ObbCheckOneSideMtv(C, oa, ob, 1) then Result := False;
+  if not ObbCheckOneSideMtv(C, ob, oa, -1) then Result := False;
+  if not C.Negative then
+  begin
+    if Result then
+    begin
+      AMtvX := C.DirMinX;
+      AMtvY := C.DirMinY;
+    end
+    else
+    begin
+      AMtvX := C.MaxX;
+      AMtvY := C.MaxY;
+    end;
+  end;
 end;
 
 function TyObbIntersect(const A, B: TTyLabelBox; AThreshold: Double): Boolean;

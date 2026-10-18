@@ -597,8 +597,11 @@ var spec: TTyLabelSpec;
 begin
   { A LUMINANCE OF EXACTLY A HALF, which decides between `>` and `>=` and
     which no round grey can reach: a grey of 128 is 0.5020 and 127 is 0.4980.
-    Alpha supplies the missing precision -- this colour computes to 0.5 to
-    the last bit, and there are twenty-one others that do.
+    Alpha supplies the missing precision -- white at the alpha 0.5 an author
+    writes (rgba(255,255,255,0.5), the byte 128 read back as 0.5) computes
+    to 0.5 to the last bit. [F4c: the alpha is read as written; the colour
+    here was $9683FDFF, whose byte alpha 150/255 made a half and whose
+    written alpha 0.59 does not.]
 
     At exactly the boundary the first test FAILS, so the value falls through
     to the second band. An inclusive comparison would take the first. }
@@ -608,9 +611,9 @@ begin
   spec.InsideColour[1] := $FF222222;
   spec.InsideColour[2] := $FF333333;
   AssertEquals('the colour really is a half', 0.5,
-    TyLabelLuminance($9683FDFF), 0.0);
+    TyLabelLuminance($80FFFFFF), 0.0);
   AssertEquals('and a half is NOT over a half', $FF222222,
-    TyLabelAutoColour(spec, $9683FDFF, True, True));
+    TyLabelAutoColour(spec, $80FFFFFF, True, True));
 end;
 
 procedure TAdvChartLabelsTest.TestTheOffsetMovesTheCaptionAfterThePositionHasPlacedIt;

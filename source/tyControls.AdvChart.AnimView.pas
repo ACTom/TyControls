@@ -270,6 +270,9 @@ type
       oldLayoutSelect }
     FStSelX, FStSelY: Double;
     FStHasSel: Boolean;
+    { [F3a] a label's state proxy of its own: its opacity is upstream's, not
+      a factor over the rest (no fade shares the key) }
+    FStAbs: Boolean;
     { A LINES EFFECT SYMBOL'S RUN [Batch 121]: where the clip's during has
       moved it, and whether a clip that does not loop has finished (the
       symbol removed) }
@@ -337,6 +340,10 @@ type
     { a full update's prevStates: the list clearStates took away, to be put
       back at once after the render (echarts.ts:2667-2748) }
     property StPrev: string read FStPrev write FStPrev;
+    { [F3a] a label's state opacity as upstream has it (a proxy of the
+      states' own); False: a factor over the rest, as a fade on the same
+      proxy has it }
+    property StAbsOpacity: Boolean read FStAbs write FStAbs;
     { a label's place under its select state, kept for the next update's
       move (LabelManager's oldLayoutSelect) }
     procedure StNoteSelect(AX, AY: Double);
@@ -389,6 +396,10 @@ type
       animates); label.valueAnimation turns the fade off }
     LabelFade: Boolean;
     LabelValueAnim: Boolean;
+    { [F3d] a graph laid out by force: the render's own iteration steps
+      synchronously and updateLayout stops the node groups' and the lines'
+      tweens (symbolDraw / lineDraw.updateLayout) -- only the paths animate }
+    GraphForce: Boolean;
     { the base axis runs across the screen: a candle stands upright }
     BaseHoriz: Boolean;
     { ---- an update's view [Batch 90] ---- }
@@ -399,6 +410,10 @@ type
     { per view row: the DataDiffer key (getId) and the raw index }
     Keys: TTyStringArray;
     Raws: TTyIntegerArray;
+    { [F3d] a graph's edge data, per edge row: its getId -- the link's id,
+      else 'source > target' as written (createGraphFromNodeEdge's name),
+      '__ec__' and its count from the second time on }
+    EdgeKeys: TTyStringArray;
     { a pie with animationTypeUpdate 'expansion': every render is its first
       (PieView never keeps its data) }
     PieExpandAlways: Boolean;
@@ -413,6 +428,12 @@ type
       (the axis tween's -- Present False where the series does not
       animate) }
     RtSort: Boolean;
+    { A LINE'S LAST RENDER TOOK LineView's INIT BRANCH (its first, or one
+      after its step or its coordinate system changed) [F3b]: a step line
+      then kept its STEPPED points and stacked-on points as _points /
+      _stackedOnPoints -- the next update's isPointsSame compares those, and
+      lineAnimationDiff reads the stacked-on ones by the raw indices }
+    LineInit: Boolean;
     RtAxis: TTyAnimModel;
     { THE RENDER IS changeAxisOrder's: 1, 2 for the init sort (isInitSort);
       0 for any other -- every bar series reads it }
@@ -434,6 +455,17 @@ type
     { [Batch 137] a list seriesKey's items, typed as UtKey is, in the order
       sort() left them }
     UtKeyItems: TTyStringArray;
+    { [F3c] the series' model id (a transition option's seriesId); the
+      groups its rows name themselves (an encoded dimension's, an item's
+      groupId -- '' where getGroupId falls back on the dataGroupId or the
+      id) and that dataGroupId ('=' and it, '' falsy) -- a transition
+      option reads the new rows against another series' dataGroupId;
+      UtNamed: a transition option's `to` names it (upstream's
+      __universalTransitionEnabled: a custom series makes its items anew) }
+    UtModelId: string;
+    UtGroupOwn: TTyStringArray;
+    UtDataGroup: string;
+    UtNamed: Boolean;
   end;
   TTyChartAnimSeriesArray = array of TTyChartAnimSeries;
 
@@ -457,8 +489,32 @@ type
     GroupDefault: string;
     ChildByRaw: TTyStringArray;
     ChildDefault: string;
+    { [F3c] the groups without the dataGroupId fallback ('' there; an
+      encoded dimension's are its own), GroupOwnDefault for rows past
+      `data`; the dataGroupId ('=' and it, '' falsy); the model id }
+    GroupsOwnByRaw: TTyStringArray;
+    GroupOwnDefault: string;
+    DataGroup: string;
+    ModelId: string;
   end;
   TTyUtSeriesKeysArray = array of TTyUtSeriesKeys;
+
+  { [F3c] A FINDER OF setOption's TRANSITION (UpdateLifecycleTransitionSeriesFinder):
+    a seriesIndex (a number -- querySeries compares with ===) or a
+    seriesId (a string, against the model id); `dimension` is read into
+    groupIdDim upstream and never used }
+  TTyUtFinder = record
+    HasIndex: Boolean;
+    Index: Double;
+    HasId: Boolean;
+    Id: string;
+  end;
+  TTyUtFinderArray = array of TTyUtFinder;
+  { one item of it: the old series `from` names, the new ones `to` names }
+  TTyUtTransitionItem = record
+    From, To_: TTyUtFinderArray;
+  end;
+  TTyUtTransitionArray = array of TTyUtTransitionItem;
 
   { where the NEW datum (x, y) sits in the OLD coordinate system of the
     series that was AOldSeries }
@@ -490,6 +546,10 @@ type
       transition morphs from [milestone D5-D8] }
     UtStale: array of TTyChartElement;
     ToOldPoint: TTyChartAnimToPoint;
+    { [F3c] setOption's `transition` (seriesTransition): given (truthy),
+      it takes the series it names instead of the keys' batches }
+    UtHasTransition: Boolean;
+    UtTransition: TTyUtTransitionArray;
   end;
 
   { AN OLD ITEM ELEMENT AS A UNIVERSAL TRANSITION READS IT [Batch 136]:
@@ -518,8 +578,15 @@ type
     HasStroke, HasFill, NoScale: Boolean;
     LineWidth: Double;
     PieceFirst, PieceCount: Integer;
+    { [F3c] the path's place in its item's getPathList, its element's role
+      and symbol (SymbolDraw keeps a Symbol of the same type) }
+    Order: Integer;
+    ElRole: TTyChartAnimRole;
+    Sym: string;
   end;
   TTyUtOldSnapArray = array of TTyUtOldSnap;
+  { [F3c] per old item, the snaps of its paths in getPathList's order }
+  TTyUtItemPathsArray = array of TTyIntegerArray;
 
   TTyDataDiffKind = (ddkAdd, ddkUpdate, ddkRemove);
   TTyDataDiffCmd = record
@@ -536,6 +603,15 @@ type
     FAnimation: TTyAnimation;
     { the updates armed so far: a style transition's stamp [Batch 136] }
     FPass: Integer;
+    { [F3d] A TREEPATH REMOVED STAYS ITS NODE'S __edge (TreeView's
+      removeNodeEdge leaves it): a parent expanded again tweens it from where
+      the removal took it -- (series, row) and that point }
+    FStale: array of record
+      Series, Row: Integer;
+      X, Y: Double;
+    end;
+    procedure SetStale(ASeries, ARow: Integer; AX, AY: Double);
+    function TakeStale(ASeries, ARow: Integer; out AX, AY: Double): Boolean;
     procedure NoOp;
     { THE UNIVERSAL TRANSITION (series:transition) [Batch 136, D5 UT1]:
       after every view of the new render has armed, the series batched by
@@ -545,15 +621,17 @@ type
       faded in -- then, where anything morphed, every path of the new views
       that has no animation fades in }
     procedure ArmUniversal(AList: TTyPaintList; const ASeries: TTyChartAnimSeriesArray;
-      const APrev: TTyChartAnimPrev; AUtIdx, APrevIdx: TFPHashList;
-      const AUtSnaps: TTyUtOldSnapArray; const AOldOf: TTyIntegerArray;
+      const APrev: TTyChartAnimPrev; AUtIdx: TFPHashList;
+      const AUtSnaps: TTyUtOldSnapArray; const AUtItems: TTyUtItemPathsArray;
+      const AOldOf: TTyIntegerArray;
       const ARowMap: array of TTyIntegerArray; const AUpd: array of Boolean);
-    { the old render's item elements as they are now, before anything is
-      armed: KeyOf(series, row, 'ut') -> index + 1 into ASnaps; nothing when
+    { the old render's item paths as they are now, before anything is
+      armed: KeyOf(series, row, 'ut') -> item + 1 into AItems, each item's
+      paths (snaps into ASnaps) in getPathList's order [F3c]; nothing when
       no new series asks for a transition }
     procedure SnapUniversal(const ASeries: TTyChartAnimSeriesArray;
       const APrev: TTyChartAnimPrev; AOldIndex, AIdx: TFPHashList;
-      out ASnaps: TTyUtOldSnapArray);
+      out ASnaps: TTyUtOldSnapArray; out AItems: TTyUtItemPathsArray);
     function Make(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
     procedure ArmOne(AList: TTyPaintList; AAt: Integer; const AEl: TTyChartElement;
       const AC: TTyChartAnimSeries; AUpdate: Boolean = False);
@@ -615,6 +693,16 @@ function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy):
 { a packed colour as the state machine hands it to the engine: lifted (or
   not opaque) as zrender's rgba() string, else as '#rrggbb' }
 function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
+{ [F3d] A STATE'S GRADIENT. liftColor of a gradient value: every stop's
+  r, g and b times (1 - -0.1), truncated and clamped (zrender's lift), its
+  offset and alpha as they are (util/color.ts liftColor) }
+function TyAnimLiftGradient(const AValue: TTyAnimValue): TTyAnimValue;
+{ ... a gradient value (an interpolated one too) as the painter draws it: the
+  kind by its geometry (four numbers linear, three radial), a number it lacks
+  the reader's default (TyTryReadGradient), each stop's colour packed (alpha
+  rounded to a byte); False for a value that is no gradient or has no stop }
+function TyAnimGradientOfValue(const AValue: TTyAnimValue;
+  out AGrad: TTyChartGradient): Boolean;
 { ADest := ASource with every bound element applied and every following label
   moved with its host, then every ghost still leaving. Insertion indices are
   kept, so a hit on the frame names the same element as a hit on the list
@@ -624,6 +712,11 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   const AStBind: TTyChartAnimProxyArray = nil);
 { A shape scaled by (AFX, AFY) about (ACX, ACY). }
 procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Double);
+{ ... turned by ARad about (ACX, ACY), zrender's sense (anticlockwise on the
+  screen for a positive angle): points and commands turn, a path's draw-time
+  turn grows and its box moves, a circle's or an ellipse's centre turns (an
+  ellipse keeps its axes, as the symbol builder does) [F3b] }
+procedure TyShapeRotateAbout(var AShape: TTyChartShape; ACX, ACY, ARad: Double);
 { ... and moved by (ADX, ADY). }
 procedure TyShapeMove(var AShape: TTyChartShape; ADX, ADY: Double);
 { The first APercent of a polyline's length, as zrender's strokePercent draws
@@ -666,6 +759,28 @@ function TyUtRowGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArra
 { the childGroupId of each view row (by its raw index); '' where it is
   undefined [Batch 138] }
 function TyUtRowChildGroups(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+{ [F3c] the groups a series' rows name themselves (GroupsOwnByRaw) }
+function TyUtRowGroupsOwn(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+{ [F3c] the rows' groups with ADataGroup the fallback where they name none
+  ('' where it is falsy too: the id) }
+function TyUtRowGroupsWith(const AOwn: TTyStringArray; const ADataGroup: string): TTyStringArray;
+{ [F3c] a transition option's finder against a series (its index, its model id) }
+function TyUtFinderMatches(const AF: TTyUtFinder; AIndex: Integer; const AModelId: string): Boolean;
+{ [F3c] setOption's `transition` as JSON: normalizeToArray of its items, each
+  item's from / to normalizeToArray'd; AHas its truthiness (a falsy one is
+  no option at all) }
+procedure TyUtParseTransition(AData: TJSONData; out AHas: Boolean;
+  out AItems: TTyUtTransitionArray);
+{ [F3c] path commands as PathProxy data (M 1, L 2, C 3, Z 6) }
+function TyUtCmdsData(const ACmds: TTyPathCmdArray): TTyDoubleArray;
+{ [F3c] AN ITEM PATH, for the tests: the proxy role its transition runs on
+  ('' for a path that is no item's), its place in its item's getPathList,
+  and its path at the layout -- PathProxy data and computed transform }
+function TyUtPathKey(const AEl: TTyChartElement): string;
+function TyUtPathOrder(const AEl: TTyChartElement): Integer;
+function TyUtPathRow(const AEl: TTyChartElement): Integer;
+procedure TyUtLayoutPath(const AEl: TTyChartElement; out AData: TTyDoubleArray;
+  out AHasM: Boolean; out AM: TTyMat2D);
 { a morph and the universal transition's style keys over one element, as
   its proxy has them now (nothing when it has neither) }
 procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
@@ -676,7 +791,8 @@ uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.C
   tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.LabelGuide, tyControls.AdvChart.PolarBar,
-  tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelLayout;
+  tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelLayout,
+  tyControls.AdvChart.Graph;
 
 function UtHostRole(const AEl: TTyChartElement): string; forward;
 
@@ -794,8 +910,10 @@ var
   pts: TTyAnimValue;
 begin
   { LineView._doUpdateAnimation: el.x = points[ptIdx * 2], el.y = ... --
-    `__points`, which without a step is the very array `points` is }
-  pts := GetAnimProp('shape.points');
+    `__points`, which without a step is the very array `points` is (a step
+    line's own, the diff beside the stepped points [F3b]) }
+  pts := GetAnimProp('shape.__points');
+  if pts.Kind <> avkArray then pts := GetAnimProp('shape.points');
   if pts.Kind <> avkArray then Exit;
   for i := 0 to High(FFollow) do
   begin
@@ -1102,6 +1220,41 @@ begin
   for i := FItems.Count - 1 downto 0 do TObject(FItems[i]).Free;
   FItems.Clear;
   FIndex.Clear;
+  FStale := nil;
+end;
+
+procedure TTyChartAnimSet.SetStale(ASeries, ARow: Integer; AX, AY: Double);
+var i: Integer;
+begin
+  for i := 0 to High(FStale) do
+    if (FStale[i].Series = ASeries) and (FStale[i].Row = ARow) then
+    begin
+      FStale[i].X := AX;
+      FStale[i].Y := AY;
+      Exit;
+    end;
+  SetLength(FStale, Length(FStale) + 1);
+  FStale[High(FStale)].Series := ASeries;
+  FStale[High(FStale)].Row := ARow;
+  FStale[High(FStale)].X := AX;
+  FStale[High(FStale)].Y := AY;
+end;
+
+function TTyChartAnimSet.TakeStale(ASeries, ARow: Integer; out AX, AY: Double): Boolean;
+var i, k: Integer;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  for i := 0 to High(FStale) do
+    if (FStale[i].Series = ASeries) and (FStale[i].Row = ARow) then
+    begin
+      AX := FStale[i].X;
+      AY := FStale[i].Y;
+      for k := i to High(FStale) - 1 do FStale[k] := FStale[k + 1];
+      SetLength(FStale, Length(FStale) - 1);
+      Exit(True);
+    end;
 end;
 
 function TTyChartAnimSet.Count: Integer;
@@ -1231,6 +1384,14 @@ begin
     carLinesLine, carLinesFrom, carLinesTo, carLinesLabel: Result := 'linesLine';
     carLinesEffect: Result := 'linesEffect';
     carParallelLine: Result := 'parallelClip';
+    { [F3a] }
+    carSankeyClip: Result := 'sankeyClip';
+    carPictorialGlyph: Result := 'pglyph';
+    carPictorialClip: Result := 'pclip';
+    carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo: Result := 'gedge';
+    carGraphEdgeLabel: Result := 'gedgeLabel';
+    carTreeNode: Result := 'symbol';
+    carTreeEdge: Result := 'treeEdge';
   else
     Result := '';
   end;
@@ -1239,12 +1400,32 @@ end;
 function TyChartAnimRoleKey(const AEl: TTyChartElement): string;
 begin
   Result := TyChartAnimProxyRole(AEl.Anim.Role);
-  if AEl.Anim.Role = carRipple then Result := Result + IntToStr(AEl.Anim.Sub);
+  { a ripple's number; a pictorial glyph's place in its column [F3a] }
+  if AEl.Anim.Role in [carRipple, carPictorialGlyph] then
+    Result := Result + IntToStr(AEl.Anim.Sub);
+end;
+
+{ [F3b] a row's ITEM model: the series' with the data item's own option
+  object (data[raw], when it is an object) asked first }
+function ItemModelOf(const AC: TTyChartAnimSeries; ARow: Integer): TTyAnimModel;
+var
+  raw: Integer;
+  d: TJSONData;
+begin
+  Result := AC.Model;
+  Result.Item := nil;
+  if not (AC.Model.Own is TJSONObject) then Exit;
+  raw := ARow;
+  if (ARow >= 0) and (ARow <= High(AC.Raws)) then raw := AC.Raws[ARow];
+  d := TJSONObject(AC.Model.Own).Find('data');
+  if not (d is TJSONArray) or (raw < 0) or (raw >= d.Count) then Exit;
+  if d.Items[raw] is TJSONObject then Result.Item := d.Items[raw];
 end;
 
 function KeyIndexOf(const AEl: TTyChartElement): Integer;
 begin
-  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine] then Result := -1
+  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine,
+    carSankeyClip] then Result := -1
   else Result := AEl.Anim.Index;
 end;
 
@@ -1368,6 +1549,34 @@ begin
 end;
 
 { a scatter symbol: the path's scale and opacity, the group's place }
+{ [F3d] a graph edge's line shape as Line.updateData's target has it: the
+  ends, the control point (not a number for a straight line, as
+  setLinePoints writes it) and the percent }
+function GraphEdgeProps(const AEl: TTyChartElement): TTyAnimProps;
+var cx, cy: Double;
+begin
+  if AEl.Anim.G[6] <> 0 then
+  begin
+    cx := AEl.Anim.G[4];
+    cy := AEl.Anim.G[5];
+  end
+  else
+  begin
+    cx := NaN;
+    cy := NaN;
+  end;
+  Result := TyAnimProps([Num1('shape.x1', AEl.Anim.G[0]), Num1('shape.y1', AEl.Anim.G[1]),
+    Num1('shape.x2', AEl.Anim.G[2]), Num1('shape.y2', AEl.Anim.G[3]),
+    Num1('shape.percent', 1), Num1('shape.cpx1', cx), Num1('shape.cpy1', cy)]);
+end;
+
+{ [F3d] a roam group's transform at rest, the props its tween runs on }
+function ViewProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('x', AEl.Anim.VX), Num1('y', AEl.Anim.VY),
+    Num1('scaleX', AEl.Anim.VSX), Num1('scaleY', AEl.Anim.VSY)]);
+end;
+
 function SymbolProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]),
@@ -1725,6 +1934,157 @@ begin
         Start(TyAnimProps([Num1('shape.width', AEl.Anim.G[2]),
           Num1('shape.height', AEl.Anim.G[3])]), opts);
       end;
+    carSankeyClip:
+      begin
+        { [F3a] SankeyView's first render (`!this._data`) of a series that
+          animates: createGridClipShape over the main group's bounding rect
+          -- x - 10, y - 10, no width, height + 20 -- initProps of the width
+          + 20 on the series with the done as its callback (so no row, and
+          forced); the clip goes when it ends }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, -1, 'sankeyClip');
+        props := TyAnimProps([Num1('shape.x', AEl.Anim.G[0] - 10),
+          Num1('shape.y', AEl.Anim.G[1] - 10), Num1('shape.width', AEl.Anim.G[2] + 20),
+          Num1('shape.height', AEl.Anim.G[3] + 20)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.width', 0);
+        opts := TyAnimCallNoIndex;
+        opts.Done := @NoOp;
+        Start(TyAnimProps([props[2]]), opts);
+      end;
+    carTreeNode:
+      begin
+        { [F3a] TreeView.updateNode: a new Symbol -- its path pops in from
+          nothing at enter timing and the row (Symbol.updateData's isInit);
+          its group made at the source's first place and updateProps to the
+          layout at update timing with no row. A series that does not
+          animate sets both at once }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'symbol');
+        props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3]),
+          Num1('style.opacity', AEl.Anim.G[4])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0);
+        p.SetNum('scaleY', 0);
+        p.SetNum('style.opacity', 0);
+        Start(props, TyAnimCallAt(idx));
+        if AEl.Anim.G[10] = 0 then Exit;
+        p := Make(AEl.Anim.Series, idx, 'treeGroup');
+        props := TyAnimProps([Num1('x', AEl.Anim.G[5]), Num1('y', AEl.Anim.G[6])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('x', AEl.Anim.G[8]);
+        p.SetNum('y', AEl.Anim.G[9]);
+        TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+      end;
+    carTreeEdge:
+      begin
+        { [F3a] drawEdge: a curve made on the source's first place (both ends
+          and both control points), a TreePath with one child point on its
+          parent; updateProps to the shape at update timing with no row }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'treeEdge');
+        if AEl.Anim.Sub = 1 then
+        begin
+          ring := Copy(AEl.Anim.Pts, 0, Length(AEl.Anim.Pts));
+          props := TyAnimProps([TyAnimProp('shape.parentPoint',
+            TyAnimArr([AEl.Anim.G[0], AEl.Anim.G[1]], 2)),
+            TyAnimProp('shape.childPoints', TyAnimArr(ring, 2))]);
+          p.Attr(props);
+          p.SetFinal(props);
+          p.SetAnimProp('shape.childPoints', TyAnimArr([AEl.Anim.G[0], AEl.Anim.G[1]], 2));
+        end
+        else
+        begin
+          if Length(AEl.Anim.Vals) < 2 then Exit;
+          props := TyAnimProps([Num1('shape.x1', AEl.Anim.G[0]), Num1('shape.y1', AEl.Anim.G[1]),
+            Num1('shape.cpx1', AEl.Anim.G[2]), Num1('shape.cpy1', AEl.Anim.G[3]),
+            Num1('shape.cpx2', AEl.Anim.G[4]), Num1('shape.cpy2', AEl.Anim.G[5]),
+            Num1('shape.x2', AEl.Anim.G[6]), Num1('shape.y2', AEl.Anim.G[7])]);
+          p.Attr(props);
+          p.SetFinal(props);
+          for k := 0 to 3 do
+          begin
+            p.SetNum(props[k * 2].Key, AEl.Anim.Vals[0]);
+            p.SetNum(props[k * 2 + 1].Key, AEl.Anim.Vals[1]);
+          end;
+        end;
+        { [F3d] its opacity, at rest: a later collapse fades it }
+        p.SetNum('style.opacity', 1);
+        TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+      end;
+    carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
+      begin
+        { [F3a] Line._createLine: `line.shape.percent = 0`, initProps of 1
+          on the series at the edge's row -- its end symbols and its label
+          are placed from it every frame (beforeUpdate); [F3d] the shape
+          beside it, which an update tweens; a Line made in an update enters
+          the same way }
+        if not AC.Enabled or AC.GraphForce then Exit;
+        if Find(AEl.Anim.Series, idx, 'gedge') <> nil then Exit;
+        p := Make(AEl.Anim.Series, idx, 'gedge');
+        props := GraphEdgeProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.percent', 0);
+        Start(TyAnimProps([Num1('shape.percent', 1)]), TyAnimCallAt(idx));
+      end;
+    carGraphEdgeLabel:
+      begin
+        { [F3a] LabelManager's fade of the Line group's text, to its own
+          opacity (the line's: a graph edge's is 0.5 by default) at the
+          edge's row; [F3d] a new Line's in an update too }
+        if not (AC.Enabled and AC.LabelFade) or AEl.Ignore then Exit;
+        if Find(AEl.Anim.Series, idx, 'gedgeLabel') <> nil then Exit;
+        p := Make(AEl.Anim.Series, idx, 'gedgeLabel');
+        props := TyAnimProps([Num1('style.opacity', AEl.Style.Alpha)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('style.opacity', 0);
+        Start(props, TyAnimCallAt(idx));
+      end;
+    carPictorialGlyph:
+      begin
+        { [F3a] createOrUpdateRepeatSymbols / createOrUpdateSingleSymbol: a
+          new path at its place with no scale, initProps to symbolScale on
+          the ITEM's model (ItemModel.isAnimationEnabled: the series' and
+          the row's own `animation`) at the row; a row that does not animate
+          is set at once -- no proxy }
+        if AUpdate or not AC.Enabled or (AEl.Anim.G[4] <> 0) then Exit;
+        p := Make(AEl.Anim.Series, idx, TyChartAnimRoleKey(AEl));
+        { [F3b] a repeated glyph turns too: from the 0 a new path has }
+        if AEl.Anim.G[6] <> 0 then
+          props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3]),
+            Num1('rotation', AEl.Anim.G[5])])
+        else
+          props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0);
+        p.SetNum('scaleY', 0);
+        if AEl.Anim.G[6] <> 0 then p.SetNum('rotation', 0);
+        { [F3b] on the ITEM's model }
+        TyInitProps(p, props, ItemModelOf(AC, idx), TyAnimCallAt(idx));
+      end;
+    carPictorialClip:
+      begin
+        { [F3a] createOrUpdateClip: the bundle's clip made with no length
+          along the value axis, initProps of that length at the row; the
+          glyphs are set where they land }
+        if AUpdate or not AC.Enabled or (AEl.Anim.G[8] <> 0) then Exit;
+        p := Make(AEl.Anim.Series, idx, 'pclip');
+        if AEl.Anim.G[1] <> 0 then
+          props := TyAnimProps([Num1('shape.height', AEl.Anim.G[2])])
+        else
+          props := TyAnimProps([Num1('shape.width', AEl.Anim.G[2])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum(props[0].Key, 0);
+        { [F3b] on the ITEM's model }
+        TyInitProps(p, props, ItemModelOf(AC, idx), TyAnimCallAt(idx));
+      end;
     carBar:
       begin
         p := Make(AEl.Anim.Series, idx, 'bar');
@@ -1915,9 +2275,12 @@ begin
       end;
     carSunPiece:
       begin
-        { only a drill-down's new piece: created with r at r0, initProps r
-          at its row (SunburstPiece.updateData's firstCreate) [Batch 115] }
-        if not (AUpdate and AC.HierDrill) then Exit;
+        { a drill-down's new piece: created with r at r0, initProps r at its
+          row (SunburstPiece.updateData's firstCreate) [Batch 115]; and
+          [F3a] every piece of a first render the same way -- an update that
+          is not a drill stays still here }
+        if AUpdate and not AC.HierDrill then Exit;
+        if not AUpdate and not AC.Enabled then Exit;
         p := Make(AEl.Anim.Series, idx, 'sunPiece');
         props := SunPieceProps(AEl);
         p.Attr(props);
@@ -2039,8 +2402,11 @@ begin
         if not (AC.Enabled and AC.LabelFade) or AC.LabelValueAnim then Exit;
         { A HIDDEN LABEL IS NOT FADED IN: LabelManager walks the texts that
           are not ignored -- a themeRiver's built for its emphasis alone
-          [Batch 118] }
-        if AEl.Ignore and (AC.SeriesType = 'themeRiver') then Exit;
+          [Batch 118]; [F3a] nor is anything's built for a state alone }
+        if AEl.Ignore then Exit;
+        { [F3a] A TREEMAP'S DRILL fades its new words with its own wrap; its
+          breadcrumb's words never fade (disableLabelAnimation) }
+        if AEl.Anim.NoFade or ((AC.SeriesType = 'treemap') and AUpdate) then Exit;
         p := Make(AEl.Anim.Series, idx, 'label');
         p.Attr(props);
         p.SetFinal(props);
@@ -2188,8 +2554,12 @@ var
   prevIdx: TFPHashList;
   utIdx: TFPHashList;
   utSnaps: TTyUtOldSnapArray;
+  utItems: TTyUtItemPathsArray;
   oldOf: TTyIntegerArray;
   rowMap: array of TTyIntegerArray;
+  { [F3d] a graph's edge rows, new to old }
+  edgeMap: array of TTyIntegerArray;
+  ediff: TTyDataDiffCmdArray;
   diffs: array of TTyDataDiffCmdArray;
   upd: array of Boolean;
   i, s, o, q, r, k: Integer;
@@ -2316,6 +2686,519 @@ var
     Result := TyAnimArr(a, 2);
   end;
 
+  { [F3d] ---- a tree's update (TreeView.render) ----
+    By row, the nodes in data order (a parent before its children):
+    updateNode -- a kept Symbol's group updateProps to the layout from
+    where it is (update timing, no row), its path's scale at the row (the
+    style replaced: an opacity tween strands); a new one made at its
+    source's old place (the parent's __oldX / __oldY: where its group was
+    when the render reached it, else -- a real root -- its own place) and
+    sliding to the layout, its path popping in (enter timing, the row).
+    drawEdge -- a kept curve updateProps to getEdgeShape(source, target), a
+    new one from getEdgeShape(sourceOld, sourceOld) (radial: the parent's
+    previous raw place, `|| 0`; a new parent's none -- the centre); a kept
+    TreePath to its points, a new one from one child point on its node (or
+    from where a removal left it). removeNode -- a Symbol whose row is not
+    drawn now: its group to the nearest drawn ancestor's place + 1, its path
+    to no scale and no opacity, its label to no opacity, all on the update's
+    duration and easing (removeOpt); removeNodeEdge -- a curve to
+    getEdgeShape(that ancestor, that ancestor), a TreePath to its owner's
+    nearest drawn place (one child point), both to no opacity. }
+  procedure UpdateTree(ASer, AOld: Integer; const AC: TTyChartAnimSeries);
+  var
+    j, row, par, a, maxRow, k: Integer;
+    nv, ov, le: TTyChartElement;
+    newNode, oldNode, newCurve, oldCurve, newPoly, oldPoly: array of Integer;
+    oldParent: array of Integer;
+    ox, oy, rx, ry: TTyDoubleArray;
+    hasOx, isNew: TTyBoolArray;
+    props, rprops: TTyAnimProps;
+    gp, sp, ep, lp: TTyChartAnimProxy;
+    opts: TTyAnimCallOpts;
+    sx, sy, tx, ty: Double;
+    radial: Boolean;
+
+    procedure Grow(var A: TTyIntegerArray; ARow, AIdx: Integer);
+    var z: Integer;
+    begin
+      if ARow < 0 then Exit;
+      if ARow > High(A) then
+      begin
+        z := Length(A);
+        SetLength(A, ARow + 1);
+        for z := z to High(A) do A[z] := -1;
+      end;
+      if A[ARow] < 0 then A[ARow] := AIdx;
+    end;
+
+    function At(const A: TTyIntegerArray; ARow: Integer): Integer;
+    begin
+      if (ARow >= 0) and (ARow <= High(A)) then Result := A[ARow] else Result := -1;
+    end;
+
+    { the radial place an edge reads: radialCoordinate's `|| 0` }
+    function R0(V: Double): Double;
+    begin
+      if IsNan(V) or (V = 0) then Result := 0 else Result := V;
+    end;
+
+    { getSourceNode: the nearest ancestor (the row itself first when
+      ASelf) drawn now }
+    function Drawn(ARow: Integer; ASelf: Boolean): Integer;
+    var guard: Integer;
+    begin
+      if ASelf then Result := ARow else Result := At(oldParent, ARow);
+      guard := 0;
+      while (Result > 0) and (At(newNode, Result) < 0) and (guard < 10000) do
+      begin
+        Result := At(oldParent, Result);
+        Inc(guard);
+      end;
+      if (Result > 0) and (At(newNode, Result) < 0) then Result := -1;
+    end;
+
+    function NewEl(AIdx: Integer): TTyChartElement;
+    begin
+      Result := AList.Element(AIdx);
+    end;
+
+    function CurveProps(const AEl: TTyChartElement): TTyAnimProps;
+    begin
+      Result := TyAnimProps([Num1('shape.x1', AEl.Anim.G[0]), Num1('shape.y1', AEl.Anim.G[1]),
+        Num1('shape.cpx1', AEl.Anim.G[2]), Num1('shape.cpy1', AEl.Anim.G[3]),
+        Num1('shape.cpx2', AEl.Anim.G[4]), Num1('shape.cpy2', AEl.Anim.G[5]),
+        Num1('shape.x2', AEl.Anim.G[6]), Num1('shape.y2', AEl.Anim.G[7])]);
+    end;
+
+    function PointProps(AX, AY: Double): TTyAnimProps;
+    begin
+      Result := TyAnimProps([Num1('shape.x1', AX), Num1('shape.y1', AY),
+        Num1('shape.cpx1', AX), Num1('shape.cpy1', AY),
+        Num1('shape.cpx2', AX), Num1('shape.cpy2', AY),
+        Num1('shape.x2', AX), Num1('shape.y2', AY)]);
+    end;
+
+    function PathProps(const AEl: TTyChartElement): TTyAnimProps;
+    begin
+      Result := TyAnimProps([TyAnimProp('shape.parentPoint',
+        TyAnimArr([AEl.Anim.G[0], AEl.Anim.G[1]], 2)),
+        TyAnimProp('shape.childPoints',
+          TyAnimArr(Copy(AEl.Anim.Pts, 0, Length(AEl.Anim.Pts)), 2))]);
+    end;
+
+    function OnePathProps(AX, AY: Double): TTyAnimProps;
+    begin
+      Result := TyAnimProps([TyAnimProp('shape.parentPoint', TyAnimArr([AX, AY], 2)),
+        TyAnimProp('shape.childPoints', TyAnimArr([AX, AY], 2))]);
+    end;
+
+    { removeOpt: the series' update duration and easing }
+    function RemoveOpts: TTyAnimCallOpts;
+    var v: TTyAnimOptValue;
+    begin
+      Result := TyAnimCallNoIndex;
+      v := TyAnimGetShallow(AC.Model, 'animationDurationUpdate');
+      if v.Kind in [aokNumber, aokBool] then
+      begin
+        Result.RemoveOpt.HasDuration := True;
+        Result.RemoveOpt.Duration := v.Num;
+      end;
+      v := TyAnimGetShallow(AC.Model, 'animationEasingUpdate');
+      if v.Kind = aokString then
+      begin
+        Result.RemoveOpt.HasEasing := True;
+        Result.RemoveOpt.Easing := v.Str;
+      end;
+    end;
+
+    procedure Ghost(AProxy: TTyChartAnimProxy; const AOldEl: TTyChartElement;
+      const AProps: TTyAnimProps);
+    var o: TTyAnimCallOpts;
+    begin
+      AProxy.FSeries := AOld;
+      AProxy.FLeaving := True;
+      AProxy.FGhost := AOldEl;
+      AProxy.FFinal := nil;
+      FGhosts.Add(AProxy);
+      o := RemoveOpts;
+      o.Done := @AProxy.LeaveDone;
+      TyRemoveElement(AProxy, AProps, AC.Model, o);
+    end;
+
+    function OpacityOf(P: TTyChartAnimProxy): Double;
+    var v: TTyAnimValue;
+    begin
+      v := P.GetAnimProp('style.opacity');
+      if v.Kind = avkNumber then Result := v.Num else Result := 1;
+    end;
+
+    function NewGhost(ARow: Integer; const ARole: string): TTyChartAnimProxy;
+    begin
+      Result := TTyChartAnimProxy.Create(AOld, ARow, ARole);
+      Result.Animation := FAnimation;
+    end;
+
+  begin
+    { ---- the rows ---- }
+    newNode := nil; oldNode := nil; newCurve := nil; oldCurve := nil;
+    newPoly := nil; oldPoly := nil; oldParent := nil;
+    for j := 0 to AList.Count - 1 do
+    begin
+      nv := AList.Element(j);
+      if nv.Anim.Series <> ASer then Continue;
+      if nv.Anim.Role = carTreeNode then Grow(newNode, nv.Anim.Index, j)
+      else if nv.Anim.Role = carTreeEdge then
+      begin
+        if nv.Anim.Sub = 1 then Grow(newPoly, nv.Anim.Index, j)
+        else Grow(newCurve, nv.Anim.Index, j);
+      end;
+    end;
+    for j := 0 to High(APrev.Elements) do
+    begin
+      ov := APrev.Elements[j];
+      if ov.Anim.Series <> AOld then Continue;
+      if ov.Anim.Role = carTreeNode then
+      begin
+        Grow(oldNode, ov.Anim.Index, j);
+        Grow(oldParent, ov.Anim.Index, -1);
+        oldParent[ov.Anim.Index] := ov.Anim.Sub;
+      end
+      else if ov.Anim.Role = carTreeEdge then
+      begin
+        if ov.Anim.Sub = 1 then Grow(oldPoly, ov.Anim.Index, j)
+        else Grow(oldCurve, ov.Anim.Index, j);
+      end;
+    end;
+    { a new node's parent, for the walk up (the tree is the same one) }
+    for j := 0 to High(newNode) do
+      if newNode[j] >= 0 then
+      begin
+        Grow(oldParent, j, -1);
+        if oldParent[j] < 0 then oldParent[j] := NewEl(newNode[j]).Anim.Sub;
+      end;
+    maxRow := Max(Max(Length(newNode), Length(oldNode)),
+      Max(Max(Length(newCurve), Length(oldCurve)), Max(Length(newPoly), Length(oldPoly))));
+    SetLength(ox, maxRow);
+    SetLength(oy, maxRow);
+    SetLength(rx, maxRow);
+    SetLength(ry, maxRow);
+    SetLength(hasOx, maxRow);
+    SetLength(isNew, maxRow);
+
+    { ---- updateNode, in data order ---- }
+    for row := 0 to High(newNode) do
+    begin
+      if newNode[row] < 0 then Continue;
+      nv := NewEl(newNode[row]);
+      par := nv.Anim.Sub;
+      radial := nv.Anim.G[11] <> 0;
+      props := TyAnimProps([Num1('x', nv.Anim.G[5]), Num1('y', nv.Anim.G[6])]);
+      rprops := TyAnimProps([Num1('scaleX', nv.Anim.G[2]), Num1('scaleY', nv.Anim.G[3]),
+        Num1('style.opacity', nv.Anim.G[4])]);
+      if At(oldNode, row) >= 0 then
+      begin
+        ov := APrev.Elements[oldNode[row]];
+        { the Symbol kept: its group from where it is }
+        gp := OldProxy(AOld, row, 'treeGroup');
+        if gp <> nil then Carry(gp, ASer, row)
+        else
+        begin
+          gp := Make(ASer, row, 'treeGroup');
+          gp.Attr(TyAnimProps([Num1('x', ov.Anim.G[5]), Num1('y', ov.Anim.G[6])]));
+        end;
+        ox[row] := gp.Num('x');
+        oy[row] := gp.Num('y');
+        hasOx[row] := True;
+        { the radial place of its previous render (__radialOldRawX) }
+        rx[row] := R0(ov.Anim.G[5]);
+        ry[row] := R0(ov.Anim.G[6]);
+        gp.SetFinal(props);
+        TyUpdateProps(gp, props, AC.Model, TyAnimCallNoIndex);
+        { its path: Symbol.updateData's scale at the row; useStyle strands
+          an opacity tween }
+        sp := Take(AOld, row, ASer, row, 'symbol', TyAnimProps([Num1('scaleX', ov.Anim.G[2]),
+          Num1('scaleY', ov.Anim.G[3]), Num1('style.opacity', ov.Anim.G[4])]), rprops, True);
+        for k := sp.AnimatorCount - 1 downto 0 do
+          if (k < sp.AnimatorCount) and (sp.AnimatorAt(k).TargetName = 'style') then
+            sp.AnimatorAt(k).StopTracks(['opacity']);
+        sp.SetNum('style.opacity', nv.Anim.G[4]);
+        sp.SetFinal(rprops);
+        TyUpdateProps(sp, TyAnimProps([rprops[0], rprops[1]]), AC.Model, TyAnimCallAt(row));
+      end
+      else
+      begin
+        isNew[row] := True;
+        { a new Symbol at its source's old place }
+        if (par > 0) and (par < maxRow) and hasOx[par] then
+        begin
+          sx := ox[par];
+          sy := oy[par];
+        end
+        else
+        begin
+          sx := nv.Anim.G[5];
+          sy := nv.Anim.G[6];
+        end;
+        ox[row] := sx;
+        oy[row] := sy;
+        hasOx[row] := True;
+        { a new Symbol has no previous raw place: its children's curves
+          start at the centre }
+        rx[row] := 0;
+        ry[row] := 0;
+        if not AC.Enabled then Continue;
+        gp := Make(ASer, row, 'treeGroup');
+        gp.Attr(TyAnimProps([Num1('x', sx), Num1('y', sy)]));
+        gp.SetFinal(props);
+        TyUpdateProps(gp, props, AC.Model, TyAnimCallNoIndex);
+        sp := Make(ASer, row, 'symbol');
+        sp.Attr(rprops);
+        sp.SetFinal(rprops);
+        sp.SetNum('scaleX', 0);
+        sp.SetNum('scaleY', 0);
+        sp.SetNum('style.opacity', 0);
+        TyInitProps(sp, rprops, AC.Model, TyAnimCallAt(row));
+      end;
+    end;
+
+    { ---- drawEdge ---- }
+    for row := 0 to High(newCurve) do
+    begin
+      if newCurve[row] < 0 then Continue;
+      nv := NewEl(newCurve[row]);
+      props := CurveProps(nv);
+      if Length(nv.Anim.Vals) >= 4 then
+      begin
+        par := Round(nv.Anim.Vals[2]);
+        radial := nv.Anim.Vals[3] <> 0;
+      end
+      else
+      begin
+        par := At(oldParent, row);
+        radial := False;
+      end;
+      if (At(oldCurve, row) >= 0) and (At(newNode, row) >= 0) and not isNew[row] then
+      begin
+        ov := APrev.Elements[oldCurve[row]];
+        ep := Take(AOld, row, ASer, row, 'treeEdge', CurveProps(ov), props, True);
+      end
+      else
+      begin
+        if not AC.Enabled then Continue;
+        { getEdgeShape(sourceOld, sourceOld) }
+        if (par > 0) and (par < maxRow) and hasOx[par] then
+        begin
+          if radial then
+          begin
+            sx := rx[par];
+            sy := ry[par];
+          end
+          else
+          begin
+            sx := ox[par];
+            sy := oy[par];
+          end;
+        end
+        else
+        begin
+          sx := nv.Anim.G[0];
+          sy := nv.Anim.G[1];
+        end;
+        ep := Make(ASer, row, 'treeEdge');
+        ep.Attr(PointProps(sx, sy));
+      end;
+      ep.SetNum('style.opacity', 1);
+      ep.SetFinal(props);
+      TyUpdateProps(ep, props, AC.Model, TyAnimCallNoIndex);
+    end;
+    for row := 0 to High(newPoly) do
+    begin
+      if newPoly[row] < 0 then Continue;
+      nv := NewEl(newPoly[row]);
+      props := PathProps(nv);
+      if At(oldPoly, row) >= 0 then
+      begin
+        ov := APrev.Elements[oldPoly[row]];
+        ep := Take(AOld, row, ASer, row, 'treeEdge', PathProps(ov), props, True);
+      end
+      else
+      begin
+        if not AC.Enabled then Continue;
+        ep := Make(ASer, row, 'treeEdge');
+        { an edge a removal still takes away: the same TreePath, from where
+          it is (the removal's own end is not modelled) }
+        lp := FindGhost(AOld, row, 'treeEdge');
+        if (lp <> nil) and (lp.GetAnimProp('shape.parentPoint').Kind = avkArray) then
+        begin
+          ep.Attr(TyAnimProps([TyAnimProp('shape.parentPoint', lp.GetAnimProp('shape.parentPoint')),
+            TyAnimProp('shape.childPoints', lp.GetAnimProp('shape.childPoints'))]));
+          lp.StopAnimation;
+          lp.LeaveDone;
+          TakeStale(AOld, row, sx, sy);
+        end
+        { one a removal took to its point }
+        else if TakeStale(AOld, row, sx, sy) then
+          ep.Attr(OnePathProps(sx, sy))
+        else
+          ep.Attr(OnePathProps(nv.Anim.G[0], nv.Anim.G[1]));
+      end;
+      ep.SetNum('style.opacity', 1);
+      ep.SetFinal(props);
+      TyUpdateProps(ep, props, AC.Model, TyAnimCallNoIndex);
+    end;
+
+    { ---- removeNode ---- }
+    if not AC.Enabled then Exit;
+    for row := 0 to High(oldNode) do
+    begin
+      if (oldNode[row] < 0) or (At(newNode, row) >= 0) then Continue;
+      ov := APrev.Elements[oldNode[row]];
+      a := Drawn(row, False);
+      if a < 0 then Continue;
+      nv := NewEl(newNode[a]);
+      tx := nv.Anim.G[5] + 1;
+      ty := nv.Anim.G[6] + 1;
+      { the Symbol as it is: its group's place, its path's scale and
+        opacity }
+      gp := OldProxy(AOld, row, 'treeGroup');
+      sp := OldProxy(AOld, row, 'symbol');
+      ep := NewGhost(row, 'treeNode');
+      if gp <> nil then
+        ep.Attr(TyAnimProps([Num1('x', gp.Num('x')), Num1('y', gp.Num('y'))]))
+      else
+        ep.Attr(TyAnimProps([Num1('x', ov.Anim.G[5]), Num1('y', ov.Anim.G[6])]));
+      if sp <> nil then
+        ep.Attr(TyAnimProps([Num1('scaleX', sp.Num('scaleX')), Num1('scaleY', sp.Num('scaleY')),
+          Num1('style.opacity', sp.Num('style.opacity'))]))
+      else
+        ep.Attr(TyAnimProps([Num1('scaleX', ov.Anim.G[2]), Num1('scaleY', ov.Anim.G[3]),
+          Num1('style.opacity', ov.Anim.G[4])]));
+      Ghost(ep, ov, TyAnimProps([Num1('x', tx), Num1('y', ty), Num1('style.opacity', 0),
+        Num1('scaleX', 0), Num1('scaleY', 0)]));
+      { its label, faded with it (fadeLabel) }
+      if OldEl(AOld, row, 'label', le) and (le.Caption.Text <> '') then
+      begin
+        lp := NewGhost(row, 'treeLabel');
+        sp := OldProxy(AOld, row, 'label');
+        if sp <> nil then lp.Attr(TyAnimProps([Num1('style.opacity', sp.Num('style.opacity'))]))
+        else lp.Attr(TyAnimProps([Num1('style.opacity', 1)]));
+        Ghost(lp, le, TyAnimProps([Num1('style.opacity', 0)]));
+      end;
+    end;
+
+    { ---- removeNodeEdge ---- }
+    for row := 0 to High(oldCurve) do
+    begin
+      if oldCurve[row] < 0 then Continue;
+      if (At(newCurve, row) >= 0) and not ((row < maxRow) and isNew[row]) then Continue;
+      ov := APrev.Elements[oldCurve[row]];
+      a := Drawn(row, False);
+      if a < 0 then Continue;
+      nv := NewEl(newNode[a]);
+      if (Length(ov.Anim.Vals) >= 4) and (ov.Anim.Vals[3] <> 0) then
+      begin
+        tx := R0(nv.Anim.G[5]);
+        ty := R0(nv.Anim.G[6]);
+      end
+      else
+      begin
+        tx := nv.Anim.G[5];
+        ty := nv.Anim.G[6];
+      end;
+      ep := NewGhost(row, 'treeEdge');
+      gp := OldProxy(AOld, row, 'treeEdge');
+      if gp <> nil then
+      begin
+        ep.Attr(TyAnimProps([Num1('shape.x1', gp.Num('shape.x1')), Num1('shape.y1', gp.Num('shape.y1')),
+          Num1('shape.cpx1', gp.Num('shape.cpx1')), Num1('shape.cpy1', gp.Num('shape.cpy1')),
+          Num1('shape.cpx2', gp.Num('shape.cpx2')), Num1('shape.cpy2', gp.Num('shape.cpy2')),
+          Num1('shape.x2', gp.Num('shape.x2')), Num1('shape.y2', gp.Num('shape.y2'))]));
+        ep.Attr(TyAnimProps([Num1('style.opacity', OpacityOf(gp))]));
+      end
+      else
+      begin
+        ep.Attr(CurveProps(ov));
+        ep.Attr(TyAnimProps([Num1('style.opacity', 1)]));
+      end;
+      props := PointProps(tx, ty);
+      SetLength(props, Length(props) + 1);
+      props[High(props)] := Num1('style.opacity', 0);
+      Ghost(ep, ov, props);
+    end;
+    for row := 0 to High(oldPoly) do
+    begin
+      if (oldPoly[row] < 0) or (At(newPoly, row) >= 0) then Continue;
+      ov := APrev.Elements[oldPoly[row]];
+      a := Drawn(row, True);
+      if a < 0 then Continue;
+      nv := NewEl(newNode[a]);
+      tx := nv.Anim.G[5];
+      ty := nv.Anim.G[6];
+      ep := NewGhost(row, 'treeEdge');
+      gp := OldProxy(AOld, row, 'treeEdge');
+      if (gp <> nil) and (gp.GetAnimProp('shape.parentPoint').Kind = avkArray) then
+      begin
+        ep.Attr(TyAnimProps([TyAnimProp('shape.parentPoint', gp.GetAnimProp('shape.parentPoint')),
+          TyAnimProp('shape.childPoints', gp.GetAnimProp('shape.childPoints'))]));
+        ep.Attr(TyAnimProps([Num1('style.opacity', OpacityOf(gp))]));
+      end
+      else
+      begin
+        ep.Attr(PathProps(ov));
+        ep.Attr(TyAnimProps([Num1('style.opacity', 1)]));
+      end;
+      props := OnePathProps(tx, ty);
+      SetLength(props, Length(props) + 1);
+      props[High(props)] := Num1('style.opacity', 0);
+      Ghost(ep, ov, props);
+      { it stays the node's __edge: an expand tweens it from there }
+      SetStale(AOld, row, tx, ty);
+    end;
+  end;
+
+  { [F3d] ---- a kept series' roam group ---- }
+  procedure ArmView(ASer, AOld: Integer; const AC: TTyChartAnimSeries);
+  var
+    j: Integer;
+    nv, ov: TTyChartElement;
+    hasN, hasO: Boolean;
+    props: TTyAnimProps;
+    vp: TTyChartAnimProxy;
+  begin
+    if (AC.SeriesType <> 'graph') and (AC.SeriesType <> 'tree') then Exit;
+    hasN := False;
+    for j := 0 to AList.Count - 1 do
+    begin
+      nv := AList.Element(j);
+      if (nv.Anim.Series = ASer) and nv.Anim.InView then
+      begin
+        hasN := True;
+        Break;
+      end;
+    end;
+    hasO := False;
+    for j := 0 to High(APrev.Elements) do
+    begin
+      ov := APrev.Elements[j];
+      if (ov.Anim.Series = AOld) and ov.Anim.InView then
+      begin
+        hasO := True;
+        Break;
+      end;
+    end;
+    if not (hasN and hasO) then Exit;
+    props := ViewProps(nv);
+    vp := OldProxy(AOld, -1, 'viewGroup');
+    if vp <> nil then Carry(vp, ASer, -1)
+    else
+    begin
+      vp := Make(ASer, -1, 'viewGroup');
+      vp.Attr(ViewProps(ov));
+    end;
+    vp.SetFinal(props);
+    TyUpdateProps(vp, props, AC.Model, TyAnimCallNoIndex);
+  end;
+
   { ---- one element of an updated series ---- }
   procedure UpdateOne(AAt: Integer; const AEl: TTyChartElement;
     const AC: TTyChartAnimSeries; AOld, AOldRow: Integer);
@@ -2327,6 +3210,7 @@ var
     a, rot: Double;
     q2: TTyChartAnimProxy;
     rk: string;
+    ka: Integer;
   begin
     case AEl.Anim.Role of
       carRiver:
@@ -2347,6 +3231,61 @@ var
             with no tween here [Batch 128] }
           if Find(s, -1, 'parallelClip') <> nil then Exit;
           q2 := OldProxy(AOld, -1, 'parallelClip');
+          if q2 <> nil then Carry(q2, s, -1);
+        end;
+      carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
+        begin
+          { [F3d] LineDraw.updateData: a kept Line's shape -- its ends, its
+            control point, percent 1 -- updateProps at the edge's NEW row,
+            from where it is (an enter still running goes on from its
+            percent); a new one draws out (_createLine); a removed one is
+            gone at once }
+          if Find(s, r, 'gedge') <> nil then Exit;
+          { a force layout's lines are set where its iteration puts them }
+          if AC.GraphForce then Exit;
+          if (AOldRow < 0) or not OldEl(AOld, AOldRow, 'gedge', oe) then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := GraphEdgeProps(AEl);
+          p := Take(AOld, AOldRow, s, r, 'gedge', GraphEdgeProps(oe), props, True);
+          { an entering proxy was made without its shape }
+          Ensure(p, 'shape.x1', oe.Anim.G[0]);
+          Ensure(p, 'shape.y1', oe.Anim.G[1]);
+          Ensure(p, 'shape.x2', oe.Anim.G[2]);
+          Ensure(p, 'shape.y2', oe.Anim.G[3]);
+          if oe.Anim.G[6] <> 0 then
+          begin
+            Ensure(p, 'shape.cpx1', oe.Anim.G[4]);
+            Ensure(p, 'shape.cpy1', oe.Anim.G[5]);
+          end
+          else
+          begin
+            Ensure(p, 'shape.cpx1', NaN);
+            Ensure(p, 'shape.cpy1', NaN);
+          end;
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
+      carGraphEdgeLabel:
+        begin
+          { [F3d] the Line's own text: the same element, its fade (if one
+            runs) goes on; a new Line's fades in }
+          if (AOldRow >= 0) and OldEl(AOld, AOldRow, 'gedgeLabel', oe) then
+          begin
+            p := OldProxy(AOld, AOldRow, 'gedgeLabel');
+            if p <> nil then Carry(p, s, r);
+            Exit;
+          end;
+          ArmOne(AList, AAt, AEl, AC, True);
+        end;
+      carSankeyClip:
+        begin
+          { [F3a] the same for a sankey's main group: its enter clip runs on,
+            the view has its data }
+          if Find(s, -1, 'sankeyClip') <> nil then Exit;
+          q2 := OldProxy(AOld, -1, 'sankeyClip');
           if q2 <> nil then Carry(q2, s, -1);
         end;
       carBar:
@@ -2398,6 +3337,9 @@ var
         end;
       carSymbol:
         begin
+          { [F3a] a graph's nodes enter here; [F3d] and update as a
+            scatter's (SymbolDraw.updateData): their x / y in the main
+            group, which the frame carries through it }
           hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'symbol', oe);
           { added, or no symbol before: a new Symbol, which enters }
           if not hasOld then
@@ -2410,12 +3352,28 @@ var
           Ensure(p, 'x', oe.Anim.G[5]);
           Ensure(p, 'y', oe.Anim.G[6]);
           p.SetFinal(props);
-          { _updateCommon sets the style: the opacity is there at once }
+          { _updateCommon sets the style: the opacity is there at once -- and
+            useStyle's new object strands an enter's opacity tween still
+            running on the old one [F3d] }
+          { (from the last: a stopped animator leaves the list) }
+          for ka := p.AnimatorCount - 1 downto 0 do
+            if (ka < p.AnimatorCount) and (p.AnimatorAt(ka).TargetName = 'style') then
+              p.AnimatorAt(ka).StopTracks(['opacity']);
           p.SetNum('style.opacity', AEl.Anim.G[4]);
           { the path's scale at the row, then the group's place with none
             (Symbol.updateData, SymbolDraw.updateData) }
           TyUpdateProps(p, TyAnimProps([props[0], props[1]]), AC.Model, TyAnimCallAt(r));
-          TyUpdateProps(p, TyAnimProps([props[3], props[4]]), AC.Model, TyAnimCallNoIndex);
+          if AC.GraphForce then
+          begin
+            { [F3d] the iteration's updateLayout: the group stopped and set }
+            for ka := p.AnimatorCount - 1 downto 0 do
+              if (ka < p.AnimatorCount) and (p.AnimatorAt(ka).TargetName = '') then
+                p.AnimatorAt(ka).StopTracks(['x', 'y']);
+            p.SetNum('x', props[3].Value.Num);
+            p.SetNum('y', props[4].Value.Num);
+          end
+          else
+            TyUpdateProps(p, TyAnimProps([props[3], props[4]]), AC.Model, TyAnimCallNoIndex);
         end;
       carLineSymbol:
         begin
@@ -2844,6 +3802,33 @@ var
     cmds: TTyDataDiffCmdArray;
     poly, area, sym: TTyChartAnimProxy;
     horiz: Boolean;
+    { [F3b] the stepped points }
+    stepCode: Integer;
+    turn: TTyStepTurn;
+    cn: Boolean;
+    tCur, tNxt, tCurS, tNxtS: TTyDoubleArray;
+    { the old render's _points and _stackedOnPoints: stepped after its
+      init branch [F3b] }
+    keptPts, keptBase: TTyDoubleArray;
+    oldTurn: TTyStepTurn;
+
+    function Pts2(const A: TTyDoubleArray): TTyPointFArray;
+    var z: Integer;
+    begin
+      SetLength(Result, Length(A) div 2);
+      for z := 0 to High(Result) do Result[z] := TyPointF(A[z * 2], A[z * 2 + 1]);
+    end;
+
+    function Flat(const A: TTyPointFArray): TTyDoubleArray;
+    var z: Integer;
+    begin
+      SetLength(Result, Length(A) * 2);
+      for z := 0 to High(A) do
+      begin
+        Result[z * 2] := A[z].X;
+        Result[z * 2 + 1] := A[z].Y;
+      end;
+    end;
 
     function At(const A: TTyDoubleArray; AI: Integer): Double;
     begin
@@ -2887,18 +3872,40 @@ var
     end;
     hasO := OldEl(AOld, -1, 'lineClip', orr) and (Length(orr.Anim.Pts) > 0);
     { NOTHING TO TWEEN without both polylines, or with the series' own
-      `animation` off (setShape); a STEP line is set, not tweened (a
-      deviation: its stepped points are not ported) }
+      `animation` off (setShape). A STEP that changed (`step !==
+      this._step`) is a new polyline upstream, which enters; here it is set
+      [F3b: a step kept is tweened below] }
     if not (hasN and hasO) then Exit;
     if not AC.On_ then Exit;
-    if (nr.Anim.G[7] <> 0) or (orr.Anim.G[7] <> 0) then Exit;
+    if Round(nr.Anim.G[7]) <> Round(orr.Anim.G[7]) then Exit;
+    stepCode := Round(nr.Anim.G[7]);
     oldPts := orr.Anim.Pts;
     newPts := nr.Anim.Pts;
     oldBase := orr.Anim.Base;
     newBase := nr.Anim.Base;
+    { THE OLD RENDER'S _points / _stackedOnPoints: a step line whose last
+      render took the init branch kept them stepped (render turns its local
+      points before it saves them); after an update render they are the
+      layout's [F3b] }
+    keptPts := oldPts;
+    keptBase := oldBase;
+    if APrev.Series[AOld].LineInit and (stepCode <> 0) then
+    begin
+      case stepCode of
+        2: oldTurn := sttMiddle;
+        3: oldTurn := sttEnd;
+      else
+        oldTurn := sttStart;
+      end;
+      if oldBase <> nil then
+        keptBase := Flat(TyTurnPointsIntoStep(Pts2(oldBase), Pts2(oldPts), True,
+          (Round(orr.Anim.G[5]) and 2) <> 0, oldTurn, orr.Anim.G[10] <> 0));
+      keptPts := Flat(TyTurnPointsIntoStep(Pts2(oldPts), nil, False,
+        (Round(orr.Anim.G[5]) and 2) <> 0, oldTurn, orr.Anim.G[10] <> 0));
+    end;
     { UNCHANGED: the polyline is not touched, a tween in flight goes on }
-    if Same(oldBase, newBase, oldBase <> nil, newBase <> nil)
-      and Same(oldPts, newPts, True, True) then
+    if Same(keptBase, newBase, keptBase <> nil, newBase <> nil)
+      and Same(keptPts, newPts, True, True) then
     begin
       poly := OldProxy(AOld, -1, 'linePoly');
       if poly <> nil then Carry(poly, ASer, -1);
@@ -2938,7 +3945,9 @@ var
             end;
             Push2(cur, len, cx, cy);
             Push2(nxt, len, nx, ny);
-            Push2(curS, len, At(oldBase, oi), At(oldBase, oi + 1));
+            { oldStackedOnPoints[oldIdx * 2]: the kept array, stepped or
+              not, by the raw index [F3b] }
+            Push2(curS, len, At(keptBase, oi), At(keptBase, oi + 1));
             Push2(nxtS, len, At(newBase, ni), At(newBase, ni + 1));
             Inc(len, 2);
             raws[m] := AC.Raws[cmds[j].NewIdx];
@@ -3011,30 +4020,72 @@ var
       sEq[j] := statEq[sorted[j]];
       sNew[j] := statNew[sorted[j]];
     end;
+    { A STEP LINE TWEENS ITS STEPPED POINTS (LineView._doUpdateAnimation,
+      `if (step)`): the Float32 diff turned into steps -- plain number
+      arrays -- the stacked-on points filtered by the line's own; the
+      polyline's `__points` (the diff itself) tween beside them, and the
+      symbols follow those [F3b] }
+    if stepCode <> 0 then
+    begin
+      case stepCode of
+        2: turn := sttMiddle;
+        3: turn := sttEnd;
+      else
+        turn := sttStart;
+      end;
+      cn := nr.Anim.G[10] <> 0;
+      tCurS := Flat(TyTurnPointsIntoStep(Pts2(sCurS), Pts2(sCur), True, horiz, turn, cn));
+      tCur := Flat(TyTurnPointsIntoStep(Pts2(sCur), nil, False, horiz, turn, cn));
+      tNxtS := Flat(TyTurnPointsIntoStep(Pts2(sNxtS), Pts2(sNxt), True, horiz, turn, cn));
+      tNxt := Flat(TyTurnPointsIntoStep(Pts2(sNxt), nil, False, horiz, turn, cn));
+    end
+    else
+    begin
+      tCur := sCur;
+      tNxt := sNxt;
+      tCurS := sCurS;
+      tNxtS := sNxtS;
+    end;
     { DON'T TWEEN A DIFF THIS LARGE: set the line (LineView.ts:1358-1376) }
-    if (TyLineBoundingDiff(sCur, sNxt) > 3000)
-      or ((newBase <> nil) and (TyLineBoundingDiff(sCurS, sNxtS) > 3000)) then
+    if (TyLineBoundingDiff(tCur, tNxt) > 3000)
+      or ((newBase <> nil) and (TyLineBoundingDiff(tCurS, tNxtS) > 3000)) then
       Exit;
     poly := OldProxy(AOld, -1, 'linePoly');
     if poly <> nil then Carry(poly, ASer, -1)
     else poly := Make(ASer, -1, 'linePoly');
-    poly.SetAnimProp('shape.points', TyAnimArr(sCur, 0, True));
-    poly.StopAnimation;
     poly.FFollow := nil;
-    TyUpdateProps(poly, TyAnimProps([TyAnimProp('shape.points',
-      TyAnimArr(sNxt, 0, True))]), AC.Model, TyAnimCallNoIndex);
-    poly.SetFinal(TyAnimProps([TyAnimProp('shape.points', TyAnimArr(sNxt, 0, True))]));
+    if stepCode <> 0 then
+    begin
+      { shape.__points = diff.current; shape.points = current; the target
+        {points: next, __points: diff.next} }
+      poly.SetAnimProp('shape.__points', TyAnimArr(sCur, 0, True));
+      poly.SetAnimProp('shape.points', TyAnimArr(tCur, 0, False));
+      poly.StopAnimation;
+      TyUpdateProps(poly, TyAnimProps([TyAnimProp('shape.points', TyAnimArr(tNxt, 0, False)),
+        TyAnimProp('shape.__points', TyAnimArr(sNxt, 0, True))]), AC.Model, TyAnimCallNoIndex);
+      poly.SetFinal(TyAnimProps([TyAnimProp('shape.points', TyAnimArr(tNxt, 0, False)),
+        TyAnimProp('shape.__points', TyAnimArr(sNxt, 0, True))]));
+    end
+    else
+    begin
+      poly.SetAnimProp('shape.points', TyAnimArr(sCur, 0, True));
+      poly.StopAnimation;
+      TyUpdateProps(poly, TyAnimProps([TyAnimProp('shape.points',
+        TyAnimArr(sNxt, 0, True))]), AC.Model, TyAnimCallNoIndex);
+      poly.SetFinal(TyAnimProps([TyAnimProp('shape.points', TyAnimArr(sNxt, 0, True))]));
+    end;
     if newBase <> nil then
     begin
       area := OldProxy(AOld, -1, 'lineArea');
       if area <> nil then Carry(area, ASer, -1)
       else area := Make(ASer, -1, 'lineArea');
-      area.SetAnimProp('shape.stackedOnPoints', TyAnimArr(sCurS, 0, True));
+      { a step's stacked-on points are plain numbers [F3b] }
+      area.SetAnimProp('shape.stackedOnPoints', TyAnimArr(tCurS, 0, stepCode = 0));
       area.StopAnimation;
       TyUpdateProps(area, TyAnimProps([TyAnimProp('shape.stackedOnPoints',
-        TyAnimArr(sNxtS, 0, True))]), AC.Model, TyAnimCallNoIndex);
+        TyAnimArr(tNxtS, 0, stepCode = 0))]), AC.Model, TyAnimCallNoIndex);
       area.SetFinal(TyAnimProps([TyAnimProp('shape.stackedOnPoints',
-        TyAnimArr(sNxtS, 0, True))]));
+        TyAnimArr(tNxtS, 0, stepCode = 0))]));
     end;
     { THE KEPT SYMBOLS FOLLOW the points, by their place in the sorted list }
     for j := 0 to m - 1 do
@@ -3128,10 +4179,11 @@ begin
     end;
     { THE OLD ITEM ELEMENTS AS THEY ARE, before a tween of this update sets a
       carried proxy to the new layout [Batch 136] }
-    SnapUniversal(ASeries, APrev, oldIndex, utIdx, utSnaps);
+    SnapUniversal(ASeries, APrev, oldIndex, utIdx, utSnaps, utItems);
     { WHICH NEW SERIES KEEPS WHICH OLD VIEW: the same model id and type }
     SetLength(oldOf, Length(ASeries));
     SetLength(rowMap, Length(ASeries));
+    SetLength(edgeMap, Length(ASeries));
     SetLength(diffs, Length(ASeries));
     SetLength(upd, Length(ASeries));
     for s := 0 to High(ASeries) do
@@ -3156,7 +4208,23 @@ begin
       for k := 0 to High(diffs[s]) do
         if diffs[s][k].Kind = ddkUpdate then
           rowMap[s][diffs[s][k].NewIdx] := diffs[s][k].OldIdx;
+      { [F3d] a graph's edges, diffed by their own keys }
+      if Length(ASeries[s].EdgeKeys) > 0 then
+      begin
+        ediff := TyDataDiff(APrev.Series[oldOf[s]].EdgeKeys, ASeries[s].EdgeKeys);
+        SetLength(edgeMap[s], Length(ASeries[s].EdgeKeys));
+        for k := 0 to High(edgeMap[s]) do edgeMap[s][k] := -1;
+        for k := 0 to High(ediff) do
+          if ediff[k].Kind = ddkUpdate then
+            edgeMap[s][ediff[k].NewIdx] := ediff[k].OldIdx;
+      end;
     end;
+    { [F3d] A ROAM GROUP KEPT: a graph's main group on a view, a tree's view
+      group -- applyViewCoordSysTransToElement with the series' model on any
+      render but the view's first: updateProps of its transform, update
+      timing with no row }
+    for s := 0 to High(ASeries) do
+      if upd[s] then ArmView(s, oldOf[s], ASeries[s]);
 
     { EVERY ELEMENT OF THE NEW RENDER, in list order }
     for i := 0 to AList.Count - 1 do
@@ -3182,21 +4250,34 @@ begin
         Continue;
       end;
       if (el.Anim.Role in [carLineRun, carLineArea]) then q := -1
+      { [F3d] a graph's edge by the edge rows }
+      else if el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo,
+        carGraphEdgeLabel] then
+      begin
+        if (r >= 0) and (r <= High(edgeMap[s])) then q := edgeMap[s][r] else q := -1;
+      end
       else if (r >= 0) and (r <= High(rowMap[s])) then q := rowMap[s][r]
       else q := -1;
       { done once a key: a candle's three, a radar's two }
       done := (el.Anim.Role in [carCandleWickHigh, carCandleWickLow, carCandleBody,
         carRadarLine, carRadarArea]) and (Find(s, r, role) <> nil);
       if done then Continue;
+      { [F3d] a tree's nodes and edges: its own pass, below }
+      if el.Anim.Role in [carTreeNode, carTreeEdge] then Continue;
       UpdateOne(i, el, ASeries[s], oldOf[s], q);
     end;
+    { [F3d] THE TREES: TreeView.render's updateNode, removeNode and
+      removeNodeEdge }
+    for s := 0 to High(ASeries) do
+      if upd[s] and (ASeries[s].SeriesType = 'tree') then
+        UpdateTree(s, oldOf[s], ASeries[s]);
     { THE LINES, once their symbols are carried }
     for s := 0 to High(ASeries) do
       if upd[s] and (ASeries[s].SeriesType = 'line') then
         UpdateLine(s, oldOf[s], ASeries[s]);
-    { THE REMOVED ROWS of every kept series leave }
+    { THE REMOVED ROWS of every kept series leave (a tree's in its own pass) }
     for s := 0 to High(ASeries) do
-      if upd[s] then
+      if upd[s] and (ASeries[s].SeriesType <> 'tree') then
         for k := 0 to High(diffs[s]) do
           if diffs[s][k].Kind = ddkRemove then
             Leave(s, oldOf[s], diffs[s][k].OldIdx, ASeries[s].Model);
@@ -3229,7 +4310,7 @@ begin
           Leave(o, o, k, APrev.Series[o].Model);
       end;
     { THE UNIVERSAL TRANSITION, once every view has armed [Batch 136] }
-    ArmUniversal(AList, ASeries, APrev, utIdx, prevIdx, utSnaps, oldOf, rowMap, upd);
+    ArmUniversal(AList, ASeries, APrev, utIdx, utSnaps, utItems, oldOf, rowMap, upd);
     { THE STATES' OWN PROXIES of a reused element go with it [Batch 96]: a
       line symbol's path, a line's polyline and area, the other types' own
       ('st:' roles, by raw index) -- upstream's element is the same one and
@@ -3358,6 +4439,73 @@ begin
             SY(AShape.CmdBounds.Top), SX(AShape.CmdBounds.Right),
             SY(AShape.CmdBounds.Bottom));
       end;
+  end;
+end;
+
+procedure TyShapeRotateAbout(var AShape: TTyChartShape; ACX, ACY, ARad: Double);
+var
+  i: Integer;
+  s, c, tx, ty: Double;
+  r: TTyRectF;
+
+  procedure Turn(var AX, AY: Double);
+  var dx, dy: Double;
+  begin
+    dx := AX - ACX;
+    dy := AY - ACY;
+    AX := ACX + dx * c - dy * s;
+    AY := ACY + dx * s + dy * c;
+  end;
+
+  procedure TurnRect(var ARect: TTyRectF);
+  var
+    xs, ys: array[0..3] of Double;
+    k: Integer;
+  begin
+    xs[0] := ARect.Left; ys[0] := ARect.Top;
+    xs[1] := ARect.Right; ys[1] := ARect.Top;
+    xs[2] := ARect.Right; ys[2] := ARect.Bottom;
+    xs[3] := ARect.Left; ys[3] := ARect.Bottom;
+    for k := 0 to 3 do Turn(xs[k], ys[k]);
+    ARect := TyRectF(MinValue(xs), MinValue(ys), MaxValue(xs), MaxValue(ys));
+  end;
+
+begin
+  if (ARad = 0) or IsNan(ARad) then Exit;
+  { the symbol builder's turn (Place): the screen's y grows downward }
+  s := Sin(-ARad);
+  c := Cos(-ARad);
+  case AShape.Kind of
+    cskPolyline, cskPolygon:
+      begin
+        AShape.Points := Copy(AShape.Points, 0, Length(AShape.Points));
+        for i := 0 to High(AShape.Points) do Turn(AShape.Points[i].X, AShape.Points[i].Y);
+        AShape.Cmds := Copy(AShape.Cmds, 0, Length(AShape.Cmds));
+        for i := 0 to High(AShape.Cmds) do
+        begin
+          Turn(AShape.Cmds[i].X1, AShape.Cmds[i].Y1);
+          Turn(AShape.Cmds[i].X2, AShape.Cmds[i].Y2);
+          Turn(AShape.Cmds[i].X, AShape.Cmds[i].Y);
+        end;
+        if AShape.HasCmdBounds then TurnRect(AShape.CmdBounds);
+      end;
+    cskPath:
+      begin
+        { turned about its own centre by the sum, then moved where a turn
+          about (ACX, ACY) puts that centre: the painter's turn is the
+          canvas' (clockwise), hence the negation }
+        tx := AShape.RotCX;
+        ty := AShape.RotCY;
+        Turn(tx, ty);
+        AShape.RotationRad := AShape.RotationRad - ARad;
+        r := AShape.Bounds;
+        AShape.Bounds := TyRectF(r.Left + tx - AShape.RotCX, r.Top + ty - AShape.RotCY,
+          r.Right + tx - AShape.RotCX, r.Bottom + ty - AShape.RotCY);
+        AShape.RotCX := tx;
+        AShape.RotCY := ty;
+      end;
+    cskCircle, cskEllipse, cskSector:
+      Turn(AShape.CX, AShape.CY);
   end;
 end;
 
@@ -3560,6 +4708,130 @@ begin
     AEl.Shape.Bounds.Right + ADX, AEl.Shape.Bounds.Bottom + ADY);
 end;
 
+{ [F3d] a move in a roam group's space, on the canvas at rest: times the
+  group's scale (one off a view) }
+function GroupDX(const AEl: TTyChartElement; ADX: Double): Double;
+begin
+  if AEl.Anim.InView then Result := ADX * AEl.Anim.VSX else Result := ADX;
+end;
+
+function GroupDY(const AEl: TTyChartElement; ADY: Double): Double;
+begin
+  if AEl.Anim.InView then Result := ADY * AEl.Anim.VSY else Result := ADY;
+end;
+
+{ [F3d] THE ROAM GROUP NOW: the series' 'viewGroup' proxy's transform, when
+  it is not the one the element was laid out under (a tween runs, or a ghost
+  left under the old one) }
+function ViewNow(ASet: TTyChartAnimSet; const AEl: TTyChartElement;
+  out ASX, ASY, AX, AY: Double): Boolean;
+var g: TTyChartAnimProxy;
+begin
+  Result := False;
+  ASX := AEl.Anim.VSX;
+  ASY := AEl.Anim.VSY;
+  AX := AEl.Anim.VX;
+  AY := AEl.Anim.VY;
+  if (ASet = nil) or not AEl.Anim.InView then Exit;
+  g := ASet.Find(AEl.Anim.Series, -1, 'viewGroup');
+  if g = nil then Exit;
+  ASX := NumOr(g, 'scaleX', ASX);
+  ASY := NumOr(g, 'scaleY', ASY);
+  AX := NumOr(g, 'x', AX);
+  AY := NumOr(g, 'y', AY);
+  Result := not (SameBitsD(ASX, AEl.Anim.VSX) and SameBitsD(ASY, AEl.Anim.VSY)
+    and SameBitsD(AX, AEl.Anim.VX) and SameBitsD(AY, AEl.Anim.VY));
+end;
+
+{ [F3d] an element laid out under its roam group at rest, carried to the
+  group as it is now: every point through the inverse of the rest transform
+  and the transform now -- a scale about the rest origin and a move -- a
+  caption's anchor moved with it (a text that is not local keeps its size) }
+procedure ViewMap(var AEl: TTyChartElement; ASX, ASY, AX, AY: Double);
+var fx, fy, ax0, ay0: Double;
+begin
+  if (AEl.Anim.VSX = 0) or (AEl.Anim.VSY = 0) then Exit;
+  fx := ASX / AEl.Anim.VSX;
+  fy := ASY / AEl.Anim.VSY;
+  if AEl.Caption.FontSizeLogical > 0 then
+  begin
+    ax0 := AEl.Caption.X;
+    ay0 := AEl.Caption.Y;
+    MoveCaption(AEl, (AX + (ax0 - AEl.Anim.VX) * fx) - ax0,
+      (AY + (ay0 - AEl.Anim.VY) * fy) - ay0);
+    Exit;
+  end;
+  if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then
+  begin
+    MakeInkless(AEl);
+    Exit;
+  end;
+  TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
+  TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+  if AEl.Caption.HasHostBox then
+  begin
+    AEl.Caption.HostBox.X := AX + (AEl.Caption.HostBox.X - AEl.Anim.VX) * fx;
+    AEl.Caption.HostBox.Y := AY + (AEl.Caption.HostBox.Y - AEl.Anim.VY) * fy;
+    AEl.Caption.HostBox.W := AEl.Caption.HostBox.W * fx;
+    AEl.Caption.HostBox.H := AEl.Caption.HostBox.H * fy;
+  end;
+end;
+
+{ [F3d] A GROUP'S PLACE AS ZRENDER USES IT: needLocalTransform ignores a
+  translation within 5e-5 of nought (Transformable's EPSILON) -- a tree
+  node sliding out of a radial tree's centre sits at the centre for its
+  first sliver of a millisecond. (The group's scale, the compensation, is
+  taken as one: a zoomed tree's nodes never sit there.) }
+procedure ZrGroupPlace(var AX, AY: Double);
+begin
+  if (AX <= 5e-5) and (AX >= -5e-5) and (AY <= 5e-5) and (AY >= -5e-5) then
+  begin
+    AX := 0;
+    AY := 0;
+  end;
+end;
+
+{ [F3d] A LABEL HUNG ON ITS HOST'S BOX AND TURNED (a radial tree's): placed
+  again on the box as the host draws it now -- the path scaled by (AFX, AFY)
+  about its centre (G[0..1]), the group moved by (ADX, ADY) -- as zrender's
+  updateInnerText places it every frame }
+procedure RideBox(var AEl: TTyChartElement; AFX, AFY, ADX, ADY: Double);
+var
+  box, now_: TTyXYWH;
+  x0, y0, x1, y1, infl: Double;
+begin
+  if not (AEl.Caption.HasFixedPos and AEl.Caption.HasHostBox) then
+  begin
+    MoveCaption(AEl, ADX, ADY);
+    Exit;
+  end;
+  box := AEl.Caption.HostBox;
+  { the path's own box, scaled about its place, then the stroke's margin
+    -- none at a scale of nought. [fin] A path of no scale AT REST has none
+    in its box either (lineScale nought): nothing to take off. [Was: the
+    margin taken off regardless -- a symbolSize 0 radial tree's labels
+    sat a margin short of their nodes while they moved.] }
+  infl := AEl.Caption.FixedInfl;
+  if not (Abs(AEl.Caption.FixedHalfW) > 1e-10) then infl := 0;
+  now_.X := AEl.Anim.G[0] + ((box.X + infl) - AEl.Anim.G[0]) * AFX + ADX;
+  now_.Y := AEl.Anim.G[1] + ((box.Y + infl) - AEl.Anim.G[1]) * AFY + ADY;
+  now_.W := (box.W - 2 * infl) * AFX;
+  now_.H := (box.H - 2 * infl) * AFY;
+  if Abs(AFX * AEl.Caption.FixedHalfW) > 1e-10 then
+  begin
+    now_.X := now_.X - infl;
+    now_.Y := now_.Y - infl;
+    now_.W := now_.W + 2 * infl;
+    now_.H := now_.H + 2 * infl;
+  end;
+  TyLabelTurnedAnchor(box, TTyLabelPosition(AEl.Caption.FixedPos), AEl.Caption.FixedDist,
+    AEl.Caption.FixedRotationRad, x0, y0);
+  TyLabelTurnedAnchor(now_, TTyLabelPosition(AEl.Caption.FixedPos), AEl.Caption.FixedDist,
+    AEl.Caption.FixedRotationRad, x1, y1);
+  if IsNan(x1) or IsNan(y1) or IsNan(x0) or IsNan(y0) then Exit;
+  MoveCaption(AEl, x1 - x0, y1 - y0);
+end;
+
 { the words of a count, where the caption is one run }
 procedure ApplyText(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 begin
@@ -3621,6 +4893,213 @@ begin
   AEl.Style.StrokeWidthLogical := AEl.Style.StrokeWidthLogical * Min(Abs(sx), Abs(sy));
 end;
 
+{ [F3a] A GRAPH EDGE'S LINE, END SYMBOL OR LABEL at a percent of its line
+  (Line.beforeUpdate): the line drawn to it, an end symbol scaled by it
+  about its end and carried to pointAt(0) or pointAt(percent), the label
+  moved and turned to where beforeUpdate places it }
+procedure GraphEdgeFrom(var AEl: TTyChartElement; APercent: Double;
+  ANow: TTyChartAnimProxy; ASet: TTyChartAnimSet);
+var
+  q1, q2, qc, d, d1, t0, t1: TTyPointF;
+  cv: Boolean;
+  pts: TTyPointFArray;
+  k: Integer;
+  x, y, s, s1, x1, y1, gx, gy, gx1, gy1, rot, rot1, vsx, vsy, vx, vy: Double;
+  ah, ah1: TTyTextAnchorH;
+  av, av1: TTyTextAnchorV;
+  now_: TTyChartElement;
+begin
+  if IsNan(APercent) then Exit;
+  { [F3d] THE LINE AS IT IS NOW: its shape's ends and control point from the
+    proxy (Line.updateData tweens them), its frame the roam group's now --
+    beforeUpdate's invScale the group's scale now; AEl keeps the rest }
+  now_ := AEl;
+  if (ANow <> nil) and (ANow.GetAnimProp('shape.x1').Kind = avkNumber) then
+  begin
+    now_.Anim.G[0] := ANow.Num('shape.x1');
+    now_.Anim.G[1] := ANow.Num('shape.y1');
+    now_.Anim.G[2] := ANow.Num('shape.x2');
+    now_.Anim.G[3] := ANow.Num('shape.y2');
+    if now_.Anim.G[6] <> 0 then
+    begin
+      now_.Anim.G[4] := ANow.Num('shape.cpx1');
+      now_.Anim.G[5] := ANow.Num('shape.cpy1');
+    end;
+  end;
+  if ViewNow(ASet, AEl, vsx, vsy, vx, vy) then
+  begin
+    now_.Anim.G[7] := vsx;
+    now_.Anim.G[8] := vsy;
+    now_.Anim.G[9] := vx;
+    now_.Anim.G[10] := vy;
+    if (vsx = 0) or IsNan(vsx) then now_.Anim.G[11] := 1
+    else now_.Anim.G[11] := 1 / vsx;
+  end;
+  case AEl.Anim.Role of
+    carGraphEdge:
+      begin
+        TyGraphEdgeLine(now_, q1, q2, qc, cv);
+        pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
+        for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(now_, pts[k]);
+        AEl.Shape.Points := pts;
+        AEl.Shape.Bounds := TyShapeBounds(TyShapePolyline(pts));
+        if not (APercent > 0) then MakeInkless(AEl);
+      end;
+    carGraphEdgeFrom, carGraphEdgeTo:
+      begin
+        if not (APercent > 0) then
+        begin
+          MakeInkless(AEl);
+          Exit;
+        end;
+        TyGraphEdgeEnds(now_, APercent, AEl.Anim.Role = carGraphEdgeTo, x, y, s);
+        TyGraphEdgeEnds(AEl, 1, AEl.Anim.Role = carGraphEdgeTo, x1, y1, s1);
+        d := TyGraphEdgeDev(now_, TyPointF(x, y));
+        d1 := TyGraphEdgeDev(AEl, TyPointF(x1, y1));
+        { the symbol's scale on the canvas, now over at rest: invScale times
+          the percent, through the group }
+        if (s1 <> 0) and (AEl.Anim.G[7] <> 0) then
+          s := (s * now_.Anim.G[7]) / (s1 * AEl.Anim.G[7])
+        else
+          s := APercent;
+        TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, s, s);
+        { turned by the tangent's turn: setSymbolRotation reads tangentAt(0)
+          or tangentAt(1), whatever the percent }
+        TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+        TyGraphEdgeLine(now_, t0, t1, d, cv);
+        if AEl.Anim.Role = carGraphEdgeTo then
+        begin
+          rot1 := TyGraphArrowRotation(TyGraphTangentAt(q1, q2, qc, cv, 1), True);
+          rot := TyGraphArrowRotation(TyGraphTangentAt(t0, t1, d, cv, 1), True);
+        end
+        else
+        begin
+          rot1 := TyGraphArrowRotation(TyGraphTangentAt(q1, q2, qc, cv, 0), False);
+          rot := TyGraphArrowRotation(TyGraphTangentAt(t0, t1, d, cv, 0), False);
+        end;
+        if not SameBitsD(rot, rot1) and not IsNan(rot) and not IsNan(rot1) then
+          TyShapeRotateAbout(AEl.Shape, d1.X, d1.Y, (rot - rot1) * Pi / 180);
+        d := TyGraphEdgeDev(now_, TyPointF(x, y));
+        TyShapeMove(AEl.Shape, d.X - d1.X, d.Y - d1.Y);
+      end;
+    carGraphEdgeLabel:
+      begin
+        TyGraphEdgeLabelAt(now_, APercent, gx, gy, rot, ah, av);
+        TyGraphEdgeLabelAt(AEl, 1, gx1, gy1, rot1, ah1, av1);
+        if IsNan(gx) or IsNan(gy) or IsNan(gx1) or IsNan(gy1) then Exit;
+        MoveCaption(AEl, gx - gx1, gy - gy1);
+        if not IsNan(rot) and not IsNan(rot1) then
+          AEl.Caption.RotationRad := AEl.Caption.RotationRad + (rot - rot1);
+        AEl.Caption.AnchorH := ah;
+        AEl.Caption.AnchorV := av;
+      end;
+  end;
+end;
+
+{ [F3a] A TREE EDGE AS ITS PROXY HAS IT: the curve's eight numbers, or the
+  TreePath's parent and child points (TreePath.buildPath, the fork on the
+  dimension and at the place the tag says), each point through the main
+  group's frame to the canvas }
+procedure TreeEdgeFrom(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  cmds: TTyPathCmdArray;
+  pp, ch: TTyAnimValue;
+  n, i, fd, od: Integer;
+  f: Double;
+  tmp: array[0..1] of Double;
+  first, last, ci, ppt: array[0..1] of Double;
+  r: TTyXYWH;
+
+  function MX(AX, AY: Double): Double;
+  begin
+    if AEl.Anim.G[8] <> 0 then Result := (AEl.Anim.G[9] * AX + 0 * AY) + AEl.Anim.G[10]
+    else Result := AEl.Anim.G[10] + AX;
+  end;
+
+  function MY(AX, AY: Double): Double;
+  begin
+    if AEl.Anim.G[8] <> 0 then Result := (0 * AX + AEl.Anim.G[9] * AY) + AEl.Anim.G[11]
+    else Result := AEl.Anim.G[11] + AY;
+  end;
+
+  procedure Add(AKind: TTyPathCmdKind; AX1, AY1, AX2, AY2, AX, AY: Double);
+  begin
+    SetLength(cmds, Length(cmds) + 1);
+    cmds[High(cmds)] := Default(TTyPathCmd);
+    cmds[High(cmds)].Kind := AKind;
+    cmds[High(cmds)].X1 := MX(AX1, AY1);
+    cmds[High(cmds)].Y1 := MY(AX1, AY1);
+    cmds[High(cmds)].X2 := MX(AX2, AY2);
+    cmds[High(cmds)].Y2 := MY(AX2, AY2);
+    cmds[High(cmds)].X := MX(AX, AY);
+    cmds[High(cmds)].Y := MY(AX, AY);
+  end;
+
+  procedure Pt(AKind: TTyPathCmdKind; AX, AY: Double);
+  begin
+    Add(AKind, 0, 0, 0, 0, AX, AY);
+  end;
+
+begin
+  cmds := nil;
+  if AEl.Anim.Sub = 1 then
+  begin
+    pp := AProxy.GetAnimProp('shape.parentPoint');
+    ch := AProxy.GetAnimProp('shape.childPoints');
+    if (pp.Kind <> avkArray) or (ch.Kind <> avkArray) or (Length(pp.Arr) < 2) then Exit;
+    n := Length(ch.Arr) div 2;
+    if n = 0 then Exit;
+    ppt[0] := pp.Arr[0];
+    ppt[1] := pp.Arr[1];
+    if n = 1 then
+    begin
+      Pt(pckMove, ppt[0], ppt[1]);
+      Pt(pckLine, ch.Arr[0], ch.Arr[1]);
+    end
+    else
+    begin
+      fd := Round(AEl.Anim.G[2]);
+      od := 1 - fd;
+      f := AEl.Anim.G[3];
+      first[0] := ch.Arr[0];
+      first[1] := ch.Arr[1];
+      last[0] := ch.Arr[(n - 1) * 2];
+      last[1] := ch.Arr[(n - 1) * 2 + 1];
+      tmp[fd] := ppt[fd];
+      tmp[od] := ppt[od] + (last[od] - ppt[od]) * f;
+      Pt(pckMove, ppt[0], ppt[1]);
+      Pt(pckLine, tmp[0], tmp[1]);
+      Pt(pckMove, first[0], first[1]);
+      tmp[fd] := first[fd];
+      Pt(pckLine, tmp[0], tmp[1]);
+      tmp[fd] := last[fd];
+      Pt(pckLine, tmp[0], tmp[1]);
+      Pt(pckLine, last[0], last[1]);
+      for i := 1 to n - 2 do
+      begin
+        ci[0] := ch.Arr[i * 2];
+        ci[1] := ch.Arr[i * 2 + 1];
+        Pt(pckMove, ci[0], ci[1]);
+        tmp[fd] := ci[fd];
+        Pt(pckLine, tmp[0], tmp[1]);
+      end;
+    end;
+  end
+  else
+  begin
+    Pt(pckMove, AProxy.Num('shape.x1'), AProxy.Num('shape.y1'));
+    Add(pckCurve, AProxy.Num('shape.cpx1'), AProxy.Num('shape.cpy1'),
+      AProxy.Num('shape.cpx2'), AProxy.Num('shape.cpy2'),
+      AProxy.Num('shape.x2'), AProxy.Num('shape.y2'));
+  end;
+  AEl.Shape.Points := [TyPointF(cmds[0].X, cmds[0].Y),
+    TyPointF(cmds[High(cmds)].X, cmds[High(cmds)].Y)];
+  AEl.Shape.Cmds := cmds;
+  r := TyPathCmdsRect(cmds);
+  AEl.Shape.HasCmdBounds := True;
+  AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh, rest: Double;
@@ -3648,6 +5127,78 @@ begin
         AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
           y + AProxy.Num('shape.height'));
       end;
+    carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
+      GraphEdgeFrom(AEl, AProxy.Num('shape.percent'), AProxy, nil);
+    carTreeEdge:
+      TreeEdgeFrom(AEl, AProxy);
+    carGraphEdgeLabel:
+      begin
+        { [F3a] the fade, over the opacity the list gives it (a state's) }
+        rest := AProxy.FinalOf('style.opacity').Num;
+        a := AProxy.Num('style.opacity');
+        if not (a > 0) then MakeInkless(AEl)
+        else if rest > 0 then AEl.Style.Alpha := AEl.Style.Alpha * (a / rest)
+        else AEl.Style.Alpha := a;
+      end;
+    carPictorialGlyph:
+      begin
+        { [F3a] the glyph scaled about its place by the scale now over its
+          scale at rest }
+        if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
+        if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3] else fy := 1;
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then MakeInkless(AEl)
+        else
+        begin
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+          { [F3b] and turned by where its turn is now against its turn at
+            rest (a uniform scale and a turn about one point commute) }
+          if (AEl.Anim.G[6] <> 0) and (AProxy.GetAnimProp('rotation').Kind = avkNumber) then
+            TyShapeRotateAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1],
+              AProxy.Num('rotation') - AEl.Anim.G[5]);
+        end;
+      end;
+    carPictorialClip:
+      begin
+        { [F3a] the bundle's clip along the value axis, from the floor to the
+          length it has now; across it, the whole canvas -- and the plot
+          where the plot clips }
+        if AEl.Anim.G[1] <> 0 then
+        begin
+          a := AProxy.Num('shape.height');
+          r := TyRectF(-1000000, Min(AEl.Anim.G[0], AEl.Anim.G[0] + a), 1000000,
+            Max(AEl.Anim.G[0], AEl.Anim.G[0] + a));
+        end
+        else
+        begin
+          a := AProxy.Num('shape.width');
+          r := TyRectF(Min(AEl.Anim.G[0], AEl.Anim.G[0] + a), -1000000,
+            Max(AEl.Anim.G[0], AEl.Anim.G[0] + a), 1000000);
+        end;
+        if AEl.Anim.G[3] <> 0 then
+          r := TyRectF(Max(r.Left, AEl.Anim.G[4]), Max(r.Top, AEl.Anim.G[5]),
+            Min(r.Right, AEl.Anim.G[6]), Min(r.Bottom, AEl.Anim.G[7]));
+        AEl.HasClip := True;
+        AEl.ClipRect := r;
+      end;
+    carSankeyClip:
+      begin
+        { [F3a] the main group's clip while it grows: its rect in the
+          group's frame carried to the canvas (M0, M3, M4, M5) }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y');
+        fx := x + AProxy.Num('shape.width');
+        fy := y + AProxy.Num('shape.height');
+        x := AEl.Anim.G[4] * x + AEl.Anim.G[6];
+        y := AEl.Anim.G[5] * y + AEl.Anim.G[7];
+        fx := AEl.Anim.G[4] * fx + AEl.Anim.G[6];
+        fy := AEl.Anim.G[5] * fy + AEl.Anim.G[7];
+        r := TyRectF(Min(x, fx), Min(y, fy), Max(x, fx), Max(y, fy));
+        if AEl.HasClip then
+          r := TyRectF(Max(r.Left, AEl.ClipRect.Left), Max(r.Top, AEl.ClipRect.Top),
+            Min(r.Right, AEl.ClipRect.Right), Min(r.Bottom, AEl.ClipRect.Bottom));
+        AEl.HasClip := True;
+        AEl.ClipRect := r;
+      end;
     carLinesLine:
       TyLinesFrameLine(AEl, AProxy.Num('shape.percent'));
     carLinesFrom, carLinesTo:
@@ -3656,16 +5207,16 @@ begin
       TyLinesFrameLabel(AEl, AProxy.Num('shape.percent'));
     carBar:
       BarFrom(AEl, AProxy);
-    carSymbol, carLineSymbol, carEffectSymbol:
+    carSymbol, carLineSymbol, carEffectSymbol, carTreeNode:
       begin
-        if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
+        if AEl.Anim.Role in [carSymbol, carEffectSymbol, carTreeNode] then
         begin
           if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2]
           else fx := 1;
           if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3]
           else fy := 1;
           { an effect symbol's opacity tween moves a style no one draws }
-          if AEl.Anim.Role = carSymbol then
+          if AEl.Anim.Role in [carSymbol, carTreeNode] then
             AEl.Style.Alpha := AProxy.Num('style.opacity');
         end
         else
@@ -3690,8 +5241,11 @@ begin
         { THE GROUP'S PLACE [Batch 90]: a scatter symbol's group moves on an
           update, a line symbol's follows its polyline }
         if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
-          MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5],
-            NumOr(AProxy, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6])
+          { [F3d] a graph node's group moves in its main group }
+          MoveSymbol(AEl, GroupDX(AEl, NumOr(AProxy, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5]),
+            GroupDY(AEl, NumOr(AProxy, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]))
+        { a tree node's group is a proxy of its own (the frame moves it) }
+        else if AEl.Anim.Role = carTreeNode then
         else
           MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
             NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
@@ -4000,6 +5554,88 @@ begin
       + IntToHex((AColor shr 8) and $FF, 2) + IntToHex(AColor and $FF, 2)));
 end;
 
+function TyAnimLiftGradient(const AValue: TTyAnimValue): TTyAnimValue;
+const
+  { `1 - level` for liftColor's level -0.1, a Double }
+  cLift: Double = 1.1;
+var
+  i, k: Integer;
+  v: Double;
+begin
+  Result := AValue;
+  if AValue.Kind <> avkGradient then Exit;
+  Result.Stops := Copy(AValue.Stops, 0, Length(AValue.Stops));
+  { a new object: the discrete write takes no raw text }
+  Result.Str := '';
+  for i := 0 to Length(Result.Stops) div 5 - 1 do
+    for k := 1 to 3 do
+    begin
+      v := Result.Stops[i * 5 + k];
+      if IsNan(v) then Continue;
+      v := Trunc(v * cLift);
+      if v > 255 then v := 255
+      else if v < 0 then v := 0;
+      Result.Stops[i * 5 + k] := v;
+    end;
+end;
+
+function TyAnimGradientOfValue(const AValue: TTyAnimValue;
+  out AGrad: TTyChartGradient): Boolean;
+
+  function Num(AIndex: Integer; ADefault: Double): Double;
+  begin
+    if (AIndex <= High(AValue.Arr)) and not IsNan(AValue.Arr[AIndex]) then
+      Result := AValue.Arr[AIndex]
+    else
+      Result := ADefault;
+  end;
+
+  function Byte_(V: Double): Cardinal;
+  begin
+    if IsNan(V) or (V <= 0) then Exit(0);
+    if V >= 255 then Exit(255);
+    Result := Cardinal(Round(V));
+  end;
+
+var i, n: Integer;
+begin
+  AGrad := Default(TTyChartGradient);
+  Result := False;
+  if AValue.Kind <> avkGradient then Exit;
+  if AValue.Stride = 3 then
+  begin
+    AGrad.Kind := cgkRadial;
+    AGrad.X := Num(0, 0.5);
+    AGrad.Y := Num(1, 0.5);
+    AGrad.R := Num(2, 0.5);
+  end
+  else
+  begin
+    AGrad.Kind := cgkLinear;
+    AGrad.X := Num(0, 0);
+    AGrad.Y := Num(1, 0);
+    AGrad.X2 := Num(2, 1);
+    AGrad.Y2 := Num(3, 0);
+  end;
+  AGrad.Global := (not IsNan(AValue.Num)) and (AValue.Num <> 0);
+  n := Length(AValue.Stops) div 5;
+  SetLength(AGrad.Stops, n);
+  for i := 0 to n - 1 do
+  begin
+    AGrad.Stops[i].Offset := AValue.Stops[i * 5];
+    if IsNan(AGrad.Stops[i].Offset) then AGrad.Stops[i].Offset := 0;
+    AGrad.Stops[i].Color := TTyChartColor((Byte_(AValue.Stops[i * 5 + 4] * 255) shl 24)
+      or (Byte_(AValue.Stops[i * 5 + 1]) shl 16) or (Byte_(AValue.Stops[i * 5 + 2]) shl 8)
+      or Byte_(AValue.Stops[i * 5 + 3]));
+  end;
+  if n = 0 then
+  begin
+    AGrad.Kind := cgkNone;
+    Exit;
+  end;
+  Result := True;
+end;
+
 { a colour value as the canvas paints it: AOk False for null or 'none' }
 function StColourOf(const AV: TTyAnimValue; out AColor: TTyChartColor): Boolean;
 begin
@@ -4008,10 +5644,29 @@ begin
     and TyTryParseChartColor(AV.Str, AColor);
 end;
 
-{ the same value as far as the drawing goes: a colour by its parse }
+{ the same value as far as the drawing goes: a colour by its parse, a
+  gradient by its numbers [F3d] }
 function StSameValue(const A, B: TTyAnimValue): Boolean;
-var ca, cb: TTyChartColor; oa, ob: Boolean;
+var ca, cb: TTyChartColor; oa, ob: Boolean; i: Integer;
 begin
+  { one string twice parses to one answer: at rest every state key's value
+    is its rest's, and an animation frame asked that of every element
+    [P2] }
+  if (A.Kind = avkString) and (B.Kind = avkString) and (A.Str = B.Str) then
+    Exit(True);
+  if (A.Kind = avkGradient) and (B.Kind = avkGradient) then
+  begin
+    if (A.Stride <> B.Stride) or (Length(A.Arr) <> Length(B.Arr))
+      or (Length(A.Stops) <> Length(B.Stops)) then Exit(False);
+    if not (SameBitsD(A.Num, B.Num) or (IsNan(A.Num) and IsNan(B.Num))) then Exit(False);
+    for i := 0 to High(A.Arr) do
+      if not (SameBitsD(A.Arr[i], B.Arr[i]) or (IsNan(A.Arr[i]) and IsNan(B.Arr[i]))) then
+        Exit(False);
+    for i := 0 to High(A.Stops) do
+      if not (SameBitsD(A.Stops[i], B.Stops[i]) or (IsNan(A.Stops[i]) and IsNan(B.Stops[i]))) then
+        Exit(False);
+    Exit(True);
+  end;
   if (A.Kind = avkString) or (B.Kind = avkString) then
   begin
     oa := StColourOf(A, ca);
@@ -4031,6 +5686,7 @@ var
   key: string;
   v, rest, vx, vy, rx, ry: TTyAnimValue;
   c: TTyChartColor;
+  g: TTyChartGradient;
   fx, fy, cx, cy: Double;
   b: TTyRectF;
 
@@ -4062,6 +5718,12 @@ begin
         AEl.Style.FillColor := c;
         AEl.Style.FillGradient := Default(TTyChartGradient);
       end
+      { [F3d] a gradient, as its track has it now }
+      else if TyAnimGradientOfValue(v, g) then
+      begin
+        AEl.Style.HasFill := True;
+        AEl.Style.FillGradient := g;
+      end
       else
         AEl.Style.HasFill := False;
     end
@@ -4072,6 +5734,14 @@ begin
       begin
         AEl.Style.StrokeColor := c;
         AEl.Style.StrokeGradient := Default(TTyChartGradient);
+        if not (AEl.Style.StrokeWidthLogical > 0) then
+          AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
+      end
+      { [F3d] a gradient stroke }
+      else if TyAnimGradientOfValue(v, g) then
+      begin
+        AEl.Style.StrokeColor := g.Stops[0].Color;
+        AEl.Style.StrokeGradient := g;
         if not (AEl.Style.StrokeWidthLogical > 0) then
           AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
       end
@@ -4087,8 +5757,9 @@ begin
     begin
       if RoleHas(key) then Continue;
       if not Off(key, v, rest) or (v.Kind <> avkNumber) then Continue;
-      { a label's is a factor over its own, as its fade's is }
-      if AEl.Caption.FontSizeLogical > 0 then
+      { a label's is a factor over its own, as its fade's is -- unless no
+        fade shares its proxy [F3a] }
+      if (AEl.Caption.FontSizeLogical > 0) and not AProxy.FStAbs then
         AEl.Style.Alpha := AEl.Style.Alpha * v.Num
       else
         AEl.Style.Alpha := v.Num;
@@ -4118,7 +5789,7 @@ begin
       fx := vx.Num / rx.Num;
       fy := vy.Num / ry.Num;
       { about the symbol's centre: a line symbol's point }
-      if AEl.Anim.Role in [carLineSymbol, carSymbol, carEffectSymbol] then
+      if AEl.Anim.Role in [carLineSymbol, carSymbol, carEffectSymbol, carTreeNode] then
       begin
         cx := AEl.Anim.G[0];
         cy := AEl.Anim.G[1];
@@ -4216,8 +5887,8 @@ begin
         else fy := 1;
         if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then op := 0
         else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
-        MoveSymbol(AEl, NumOr(G, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5],
-          NumOr(G, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]);
+        MoveSymbol(AEl, GroupDX(AEl, NumOr(G, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5]),
+          GroupDY(AEl, NumOr(G, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]));
       end;
     carLineSymbol:
       begin
@@ -4227,6 +5898,35 @@ begin
         else fy := 1;
         if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then op := 0
         else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+      end;
+    carTreeNode:
+      begin
+        { [F3d] removeNode: the path's scale about its centre, the group to
+          the source's place + 1 }
+        if AEl.Anim.G[2] <> 0 then fx := NumOr(G, 'scaleX', AEl.Anim.G[2]) / AEl.Anim.G[2]
+        else fx := 1;
+        if AEl.Anim.G[3] <> 0 then fy := NumOr(G, 'scaleY', AEl.Anim.G[3]) / AEl.Anim.G[3]
+        else fy := 1;
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then op := 0
+        else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+        MoveSymbol(AEl, (NumOr(G, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5]) * AEl.Anim.G[7],
+          (NumOr(G, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]) * AEl.Anim.G[7]);
+      end;
+    carTreeEdge:
+      begin
+        { [F3d] removeNodeEdge: the shape to the source's place, faded }
+        TreeEdgeFrom(AEl, G);
+        op := AEl.Style.Alpha * NumOr(G, 'style.opacity', 1);
+      end;
+    carLabel:
+      { [F3d] a removed tree node's label (fadeLabel): placed by the frame
+        on its host's ghost, faded on its own }
+      if G.Role = 'treeLabel' then
+      begin
+        AEl.Style.Alpha := AEl.Style.Alpha * NumOr(G, 'style.opacity', 1);
+        AEl.Silent := True;
+        if not (AEl.Style.Alpha > 0) then MakeInkless(AEl);
+        Exit;
       end;
   end;
   AEl.Style.Alpha := op;
@@ -4695,10 +6395,13 @@ begin
   if ((dg = nil) or (dg.JSONType = jtNull)) and (ARoot is TJSONObject) then
     dg := TJSONObject(ARoot).Find('dataGroupId');
   if UtTruthy(dg) then Result.GroupDefault := '=' + UtJsString(dg);
+  Result.DataGroup := Result.GroupDefault;
+  Result.ModelId := AId;
   { [Batch 138] the encoded dimensions first }
   gDim := (AOwn is TJSONObject) and UtEncodedDim(TJSONObject(AOwn), 'itemGroupId', gPos, gKind);
   cDim := (AOwn is TJSONObject) and UtEncodedDim(TJSONObject(AOwn), 'itemChildGroupId', cPos, cKind);
   if gDim then Result.GroupDefault := '=' + UtDimString(nil, gPos, gKind);
+  if gDim then Result.GroupOwnDefault := Result.GroupDefault;
   if cDim then Result.ChildDefault := '=' + UtDimString(nil, cPos, cKind);
   { the raw data item's groupId and childGroupId }
   data := nil;
@@ -4706,18 +6409,24 @@ begin
   if data is TJSONArray then
   begin
     SetLength(Result.GroupsByRaw, data.Count);
+    SetLength(Result.GroupsOwnByRaw, data.Count);
     SetLength(Result.ChildByRaw, data.Count);
     for i := 0 to data.Count - 1 do
     begin
       it := data.Items[i];
       if gDim then
-        Result.GroupsByRaw[i] := '=' + UtDimString(it, gPos, gKind)
+      begin
+        Result.GroupsByRaw[i] := '=' + UtDimString(it, gPos, gKind);
+        Result.GroupsOwnByRaw[i] := Result.GroupsByRaw[i];
+      end
       else
       begin
         g := nil;
         if it is TJSONObject then g := TJSONObject(it).Find('groupId');
         if UtTruthy(g) then Result.GroupsByRaw[i] := '=' + UtJsString(g)
         else Result.GroupsByRaw[i] := Result.GroupDefault;
+        if UtTruthy(g) then Result.GroupsOwnByRaw[i] := Result.GroupsByRaw[i]
+        else Result.GroupsOwnByRaw[i] := '';
       end;
       if cDim then
         Result.ChildByRaw[i] := '=' + UtDimString(it, cPos, cKind)
@@ -4752,6 +6461,106 @@ begin
       Result[r] := AKeys.ChildByRaw[ARaws[r]]
     else
       Result[r] := AKeys.ChildDefault;
+end;
+
+function TyUtRowGroupsOwn(const AKeys: TTyUtSeriesKeys; const ARaws: TTyIntegerArray): TTyStringArray;
+var r: Integer;
+begin
+  SetLength(Result, Length(ARaws));
+  for r := 0 to High(ARaws) do
+    if (ARaws[r] >= 0) and (ARaws[r] <= High(AKeys.GroupsOwnByRaw)) then
+      Result[r] := AKeys.GroupsOwnByRaw[ARaws[r]]
+    else
+      Result[r] := AKeys.GroupOwnDefault;
+end;
+
+function TyUtRowGroupsWith(const AOwn: TTyStringArray; const ADataGroup: string): TTyStringArray;
+var r: Integer;
+begin
+  SetLength(Result, Length(AOwn));
+  for r := 0 to High(AOwn) do
+    if AOwn[r] <> '' then Result[r] := AOwn[r] else Result[r] := ADataGroup;
+end;
+
+function TyUtFinderMatches(const AF: TTyUtFinder; AIndex: Integer; const AModelId: string): Boolean;
+begin
+  Result := (AF.HasIndex and (AF.Index = AIndex)) or (AF.HasId and (AF.Id = AModelId));
+end;
+
+procedure TyUtParseTransition(AData: TJSONData; out AHas: Boolean;
+  out AItems: TTyUtTransitionArray);
+
+  function Finders(D: TJSONData): TTyUtFinderArray;
+  var
+    k: Integer;
+    res: TTyUtFinderArray;
+
+    procedure Add(E: TJSONData);
+    var
+      fd: TTyUtFinder;
+      x: TJSONData;
+    begin
+      { querySeries reads it as an object; anything else matches nothing }
+      fd := Default(TTyUtFinder);
+      if E is TJSONObject then
+      begin
+        x := TJSONObject(E).Find('seriesIndex');
+        if (x <> nil) and (x.JSONType = jtNumber) then
+        begin
+          fd.HasIndex := True;
+          fd.Index := x.AsFloat;
+        end;
+        x := TJSONObject(E).Find('seriesId');
+        if (x <> nil) and (x.JSONType = jtString) then
+        begin
+          fd.HasId := True;
+          fd.Id := x.AsString;
+        end;
+      end;
+      SetLength(res, Length(res) + 1);
+      res[High(res)] := fd;
+    end;
+
+  begin
+    res := nil;
+    { normalizeToArray: null / undefined none, an array itself, else one }
+    if (D <> nil) and (D.JSONType <> jtNull) then
+    begin
+      if D is TJSONArray then
+      begin
+        for k := 0 to D.Count - 1 do Add(D.Items[k]);
+      end
+      else
+        Add(D);
+    end;
+    Result := res;
+  end;
+
+  procedure AddItem(E: TJSONData);
+  var it: TTyUtTransitionItem;
+  begin
+    it := Default(TTyUtTransitionItem);
+    if E is TJSONObject then
+    begin
+      it.From := Finders(TJSONObject(E).Find('from'));
+      it.To_ := Finders(TJSONObject(E).Find('to'));
+    end;
+    SetLength(AItems, Length(AItems) + 1);
+    AItems[High(AItems)] := it;
+  end;
+
+var k: Integer;
+begin
+  AItems := nil;
+  { `if (transitionOpt)`: a truthy value -- an object or a list always }
+  AHas := UtTruthy(AData) or (AData is TJSONArray) or (AData is TJSONObject);
+  if not AHas then Exit;
+  if AData is TJSONArray then
+  begin
+    for k := 0 to AData.Count - 1 do AddItem(AData.Items[k]);
+  end
+  else
+    AddItem(AData);
 end;
 
 procedure TTyChartAnimProxy.MorphDone;
@@ -4835,6 +6644,32 @@ begin
         Result := 'tmRect'
       else
         Result := '';
+    { [F3c] a funnel's polygon, a bar on a polar, a pictorial glyph (a
+      picture is no path), a map's region, a lines row's line and end
+      symbols, a custom series' path }
+    carFunnel: Result := 'funnel';
+    carPolarBar: Result := 'bar';
+    carPictorialGlyph, carPictorialClip:
+      if Copy(AEl.Caption.LgSymbol, 1, 8) = 'image://' then Result := ''
+      else Result := 'pglyph' + IntToStr(AEl.Anim.Sub);
+    carMapRegion:
+      if AEl.Anim.Index >= 0 then Result := 'utMap' + IntToStr(AEl.Anim.Sub) else Result := '';
+    carLinesLine: Result := 'utLine0';
+    carLinesFrom: Result := 'utLine1';
+    carLinesTo: Result := 'utLine2';
+    carCustomPath:
+      if AEl.Anim.Index >= 0 then Result := 'utCus' + IntToStr(AEl.Anim.Sub) else Result := '';
+    { [F3c] a boxplot's path, a radar's line and area (an area ignored is
+      no path), a gauge's pointer, an effect scatter's symbol and its
+      ripples, a graph's and a tree's node symbols, a parallel's line }
+    carBoxplot: Result := 'boxplot';
+    carRadarLine: Result := 'radarLine';
+    carRadarArea: if AEl.Ignore then Result := '' else Result := 'radarArea';
+    carGaugePointer: Result := 'gaugePointer';
+    carEffectSymbol: Result := 'effectSymbol';
+    carRipple: Result := 'ripple' + IntToStr(AEl.Anim.Sub);
+    carTreeNode: Result := 'symbol';
+    carParallelLine: Result := 'utPar0';
   else
     Result := '';
   end;
@@ -4856,6 +6691,171 @@ end;
 function UtTmRole(const AEl: TTyChartElement): string;
 begin
   if UtHostRole(AEl) <> '' then Result := 'tmRect' else Result := 'utFadeTmBg';
+end;
+
+{ ==================== the rest of the element types [F3c] ==================== }
+
+{ THE PROXY A PATH'S TRANSITION RUNS ON: its morph, its children while it
+  combines, its style -- '' for a path that is no item's (a label, a line's
+  run, a treemap leaf's background). Where the role's own proxy is the
+  path's alone it is that one; where a role shares one over several paths
+  (a lines row's line and end symbols) each path has its own }
+function UtElKey(const AEl: TTyChartElement): string;
+begin
+  if AEl.Anim.UtTag = 1 then
+  begin
+    if AEl.Anim.UtRow >= 0 then Result := 'utx' + IntToStr(AEl.Anim.UtOrder) else Result := '';
+    Exit;
+  end;
+  if AEl.Anim.UtTag = 2 then Exit('');
+  Result := UtHostRole(AEl);
+end;
+
+{ the row of the item a path is in: UtRow where the element is tagged }
+function UtRowOf(const AEl: TTyChartElement): Integer;
+begin
+  if AEl.Anim.UtTag > 0 then Result := AEl.Anim.UtRow else Result := AEl.Anim.Index;
+end;
+
+{ the path's place in its item's getPathList (the item element's traverse
+  order) }
+function UtElOrder(const AEl: TTyChartElement): Integer;
+begin
+  if AEl.Anim.UtTag = 1 then Exit(AEl.Anim.UtOrder);
+  case AEl.Anim.Role of
+    carPictorialGlyph, carPictorialClip, carMapRegion, carCustomPath: Result := AEl.Anim.Sub;
+    carLinesFrom: Result := 1;
+    carLinesTo: Result := 2;
+    { [F3c] the radar's item group: the line, the area, the symbols; an
+      effect symbol's: the symbol, the ripples }
+    carRadarArea: Result := 1;
+    carRipple: Result := 1 + AEl.Anim.Sub;
+  else
+    Result := 0;
+  end;
+end;
+
+{ THE SERIES TYPES whose item paths the port reads and draws for a
+  transition; a batch with any other keeps its own animation }
+function UtTypeMorphs(const AType: string): Boolean;
+begin
+  Result := (AType = 'bar') or (AType = 'pie') or (AType = 'scatter') or (AType = 'line')
+    or (AType = 'sunburst') or (AType = 'treemap')
+    { [F3c] }
+    or (AType = 'funnel') or (AType = 'pictorialBar') or (AType = 'map')
+    or (AType = 'lines') or (AType = 'custom')
+    or (AType = 'heatmap') or (AType = 'boxplot') or (AType = 'candlestick')
+    or (AType = 'radar') or (AType = 'gauge') or (AType = 'graph') or (AType = 'tree')
+    or (AType = 'effectScatter') or (AType = 'parallel') or (AType = 'sankey')
+    or (AType = 'chord') or (AType = 'themeRiver');
+end;
+
+{ [F3c] the path's view saved its old style: the type's, and not a ripple
+  (made by the effect, never styled again) nor a radar's symbol (made anew
+  on every render) }
+function UtSavesOldStyleEl(const AType: string; const AEl: TTyChartElement): Boolean;
+begin
+  Result := ((AType = 'bar') or (AType = 'pie') or (AType = 'scatter') or (AType = 'line')
+    or (AType = 'sunburst') or (AType = 'funnel') or (AType = 'boxplot')
+    or (AType = 'candlestick') or (AType = 'parallel') or (AType = 'radar')
+    or (AType = 'themeRiver') or (AType = 'graph') or (AType = 'tree')
+    or (AType = 'effectScatter'))
+    and (AEl.Anim.Role <> carRipple) and not ((AType = 'radar') and (AEl.Anim.UtTag = 1));
+end;
+
+{ THE VIEWS THAT SAVE THE OLD STYLE of an element they keep (saveOldStyle):
+  animateElementStyles has nothing to start from elsewhere }
+function UtSavesOldStyle(const AType: string): Boolean;
+begin
+  Result := (AType = 'bar') or (AType = 'pie') or (AType = 'scatter') or (AType = 'line')
+    or (AType = 'sunburst') or (AType = 'funnel');
+end;
+
+{ A KEPT VIEW KEEPS THE ITEM'S ELEMENT where its diff pairs the rows -- but
+  a map draws its regions anew every time (MapDraw: regionsGroup.removeAll),
+  and a custom series makes its items anew while it transitions
+  (doesElNeedRecreate: isUniversalTransitionEnabled) }
+function UtKeepsElement(const ASeries: TTyChartAnimSeries; const AEl: TTyChartElement): Boolean;
+begin
+  if ASeries.SeriesType = 'map' then Exit(False);
+  if (ASeries.SeriesType = 'custom') and (ASeries.UtOn or ASeries.UtNamed) then Exit(False);
+  Result := True;
+end;
+
+{ A PATH OF A VIEW THAT IS NO ITEM'S, faded in where anything morphed: its
+  own proxy for that ('' for none) }
+function UtFadeKey(const AEl: TTyChartElement): string;
+begin
+  if AEl.Anim.UtTag = 2 then Exit('utFade');
+  if AEl.Anim.UtTag = 1 then Exit('');
+  if (AEl.Anim.Role = carTmRect) and (UtHostRole(AEl) = '') then Result := 'utFadeTmBg'
+  else Result := '';
+end;
+
+function TyUtCmdsData(const ACmds: TTyPathCmdArray): TTyDoubleArray;
+var
+  i, n: Integer;
+
+  procedure Put(V: Double);
+  begin
+    Result[n] := V;
+    Inc(n);
+  end;
+
+begin
+  SetLength(Result, Length(ACmds) * 7);
+  n := 0;
+  for i := 0 to High(ACmds) do
+    case ACmds[i].Kind of
+      pckMove: begin Put(TyZrCodeM); Put(ACmds[i].X); Put(ACmds[i].Y); end;
+      pckLine: begin Put(TyZrCodeL); Put(ACmds[i].X); Put(ACmds[i].Y); end;
+      pckCurve:
+        begin
+          Put(TyZrCodeC); Put(ACmds[i].X1); Put(ACmds[i].Y1); Put(ACmds[i].X2);
+          Put(ACmds[i].Y2); Put(ACmds[i].X); Put(ACmds[i].Y);
+        end;
+      pckClose: Put(TyZrCodeZ);
+    end;
+  SetLength(Result, n);
+end;
+
+function TyUtPathKey(const AEl: TTyChartElement): string;
+begin
+  Result := UtElKey(AEl);
+end;
+
+function TyUtPathOrder(const AEl: TTyChartElement): Integer;
+begin
+  Result := UtElOrder(AEl);
+end;
+
+function TyUtPathRow(const AEl: TTyChartElement): Integer;
+begin
+  Result := UtRowOf(AEl);
+end;
+
+procedure UtElementPathEx(const AEl: TTyChartElement; P, AMorphP: TTyChartAnimProxy;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D;
+  out AHasLocal: Boolean; out ALocal: TTyMat2D); forward;
+
+procedure TyUtLayoutPath(const AEl: TTyChartElement; out AData: TTyDoubleArray;
+  out AHasM: Boolean; out AM: TTyMat2D);
+var
+  hasLocal: Boolean;
+  local: TTyMat2D;
+begin
+  UtElementPathEx(AEl, nil, nil, AData, AHasM, AM, hasLocal, local);
+end;
+
+{ the proxy a path's shape is read from: its role's where that is not the
+  transition's own }
+function UtShapeProxy(ASet: TTyChartAnimSet; const AEl: TTyChartElement;
+  AUtP: TTyChartAnimProxy): TTyChartAnimProxy;
+var rk: string;
+begin
+  rk := TyChartAnimRoleKey(AEl);
+  if (rk = '') or (rk = UtElKey(AEl)) or (AEl.Anim.UtTag = 1) then Exit(AUtP);
+  Result := ASet.Find(AEl.Anim.Series, KeyIndexOf(AEl), rk);
 end;
 
 { a symbol as SymbolDraw builds it, with its path's scale and its group's
@@ -4885,15 +6885,283 @@ begin
   else AM := parent;
 end;
 
+{ createSymbol(AType, AX, AY, AW, AH, null, AKeepAspect): its PathProxy data
+  [F3c] }
+function UtSymbolData(const AType: string; AKeepAspect: Boolean; AX, AY, AW,
+  AH: Double): TTyDoubleArray;
+var path: TTyZrPath;
+begin
+  if (Copy(AType, 1, 7) = 'path://') and not AKeepAspect then
+    path := TyZrMakePathCover(Copy(AType, 8, MaxInt), TyXYWH(AX, AY, AW, AH))
+  else
+    path := TyZrSymbol(AType, AX, AY, AW, AH);
+  Result := TyGuidePathData(path);
+end;
+
+{ ECLinePath at a percent: a Line's moveTo / lineTo, or a quadratic
+  BezierCurve's, the end lerped (quadraticSubdivide) short of 1; nothing at
+  nought [F3c] }
+function UtLinePath(const AEl: TTyChartElement; APercent: Double): TTyDoubleArray;
+var
+  x1, y1, x2, y2, cx, cy, p01, p12: Double;
+begin
+  Result := nil;
+  if APercent = 0 then Exit;
+  x1 := AEl.Anim.G[0];
+  y1 := AEl.Anim.G[1];
+  x2 := AEl.Anim.G[2];
+  y2 := AEl.Anim.G[3];
+  if AEl.Anim.G[6] = 0 then
+  begin
+    if APercent < 1 then
+    begin
+      x2 := x1 * (1 - APercent) + x2 * APercent;
+      y2 := y1 * (1 - APercent) + y2 * APercent;
+    end;
+    Result := TTyDoubleArray.Create(TyZrCodeM, x1, y1, TyZrCodeL, x2, y2);
+  end
+  else
+  begin
+    cx := AEl.Anim.G[4];
+    cy := AEl.Anim.G[5];
+    if APercent < 1 then
+    begin
+      p01 := (cx - x1) * APercent + x1;
+      p12 := (x2 - cx) * APercent + cx;
+      x2 := (p12 - p01) * APercent + p01;
+      cx := p01;
+      p01 := (cy - y1) * APercent + y1;
+      p12 := (y2 - cy) * APercent + cy;
+      y2 := (p12 - p01) * APercent + p01;
+      cy := p01;
+    end;
+    Result := TTyDoubleArray.Create(TyZrCodeM, x1, y1, TyZrCodeQ, cx, cy, x2, y2);
+  end;
+end;
+
+{ a lines row's end symbol (Line.createSymbol, beforeUpdate): the symbol
+  about nought, at the line's end (the start, or the point at the percent),
+  turned by the tangent, scaled by the percent [F3c] }
+procedure UtLineSymbolPath(const AEl: TTyChartElement; APercent: Double;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D);
+var
+  g: TTyLinesGeom;
+  at: TTyPointF;
+begin
+  AData := UtSymbolData(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+    -AEl.Anim.G[8] / 2, -AEl.Anim.G[9] / 2, AEl.Anim.G[8], AEl.Anim.G[9]);
+  g := Default(TTyLinesGeom);
+  SetLength(g.Pts, 2);
+  g.Pts[0] := TyPointF(AEl.Anim.G[0], AEl.Anim.G[1]);
+  g.Pts[1] := TyPointF(AEl.Anim.G[2], AEl.Anim.G[3]);
+  g.Curved := AEl.Anim.G[6] <> 0;
+  g.CP := TyPointF(AEl.Anim.G[4], AEl.Anim.G[5]);
+  g.Drawn := True;
+  if AEl.Anim.Role = carLinesFrom then at := TyLinesPointAt(g, 0)
+  else at := TyLinesPointAt(g, APercent);
+  AHasM := TyLabelLocalTransform(at.X, at.Y, 0, 0, AEl.Anim.G[11], APercent, APercent, AM);
+end;
+
+{ [F3c] a points array: the proxy's (a transition in flight) where it has
+  one that long, else the layout's }
+function UtPointsOf(AP: TTyChartAnimProxy; const ALayout: TTyDoubleArray;
+  AMin: Integer): TTyDoubleArray;
+var v: TTyAnimValue;
+begin
+  Result := ALayout;
+  if AP = nil then Exit;
+  v := AP.GetAnimProp('shape.points');
+  if (v.Kind = avkArray) and (Length(v.Arr) >= AMin) then Result := v.Arr;
+end;
+
+{ a shape's points, flat }
+function UtShapePoints(const AEl: TTyChartElement): TTyDoubleArray;
+var k: Integer;
+begin
+  SetLength(Result, Length(AEl.Shape.Points) * 2);
+  for k := 0 to High(AEl.Shape.Points) do
+  begin
+    Result[k * 2] := AEl.Shape.Points[k].X;
+    Result[k * 2 + 1] := AEl.Shape.Points[k].Y;
+  end;
+end;
+
+{ Polyline / Polygon (polyHelper.buildPath, no smooth): moveTo, lineTo,
+  closePath for a polygon; nothing under two points }
+function UtPolyData(const APts: TTyDoubleArray; AClose: Boolean): TTyDoubleArray;
+var
+  n, k, at: Integer;
+begin
+  Result := nil;
+  n := Length(APts) div 2;
+  if n < 2 then Exit;
+  SetLength(Result, n * 3 + Ord(AClose));
+  at := 0;
+  for k := 0 to n - 1 do
+  begin
+    if k = 0 then Result[at] := TyZrCodeM else Result[at] := TyZrCodeL;
+    Result[at + 1] := APts[k * 2];
+    Result[at + 2] := APts[k * 2 + 1];
+    Inc(at, 3);
+  end;
+  if AClose then Result[at] := TyZrCodeZ;
+end;
+
+{ BoxPath: the box closed, then the whiskers and the caps as moveTo /
+  lineTo pairs }
+function UtBoxplotPath(const APts: TTyDoubleArray): TTyDoubleArray;
+var
+  n, i, at: Integer;
+begin
+  Result := nil;
+  n := Length(APts) div 2;
+  if n < 4 then Exit;
+  SetLength(Result, 13 + ((n - 4) div 2) * 6);
+  Result[0] := TyZrCodeM;
+  Result[1] := APts[0];
+  Result[2] := APts[1];
+  at := 3;
+  for i := 1 to 3 do
+  begin
+    Result[at] := TyZrCodeL;
+    Result[at + 1] := APts[i * 2];
+    Result[at + 2] := APts[i * 2 + 1];
+    Inc(at, 3);
+  end;
+  Result[at] := TyZrCodeZ;
+  Inc(at);
+  i := 4;
+  while i + 1 < n do
+  begin
+    Result[at] := TyZrCodeM;
+    Result[at + 1] := APts[i * 2];
+    Result[at + 2] := APts[i * 2 + 1];
+    Result[at + 3] := TyZrCodeL;
+    Result[at + 4] := APts[i * 2 + 2];
+    Result[at + 5] := APts[i * 2 + 3];
+    Inc(at, 6);
+    Inc(i, 2);
+  end;
+  SetLength(Result, at);
+end;
+
+{ GaugeView's pointer: a PointerPath (angle -pi/2, the width, the length,
+  at the offset) or the icon (createSymbol over the width and the length,
+  its foot on the offset), turned by the rotation, at the centre }
+procedure UtPointerPath(const AEl: TTyChartElement; ARotation: Double;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D);
+var
+  w, r, x, y, ang, px, py: Double;
+  mask: TFPUExceptionMask;
+begin
+  w := AEl.Caption.LgG[0];
+  r := AEl.Caption.LgG[1];
+  x := AEl.Caption.LgG[2];
+  y := AEl.Caption.LgG[3];
+  if AEl.Caption.LgSymbol <> '' then
+    AData := UtSymbolData(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+      x - w / 2, y - r, w, r)
+  else
+  begin
+    mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+      exOverflow, exUnderflow, exPrecision]);
+    try
+      ang := -Pi / 2;
+      if w >= r / 3 then
+      begin
+        px := x - TyJsCos(ang) * w * 1;
+        py := y - TyJsSin(ang) * w * 1;
+      end
+      else
+      begin
+        px := x - TyJsCos(ang) * w * 2;
+        py := y - TyJsSin(ang) * w * 2;
+      end;
+      ang := -Pi / 2 - Pi / 2;
+      AData := TTyDoubleArray.Create(TyZrCodeM, px, py,
+        TyZrCodeL, x + TyJsCos(ang) * w, y + TyJsSin(ang) * w,
+        TyZrCodeL, x + TyJsCos(-Pi / 2) * r, y + TyJsSin(-Pi / 2) * r,
+        TyZrCodeL, x - TyJsCos(ang) * w, y - TyJsSin(ang) * w,
+        TyZrCodeL, px, py);
+    finally
+      ClearExceptions(False);
+      SetExceptionMask(mask);
+    end;
+  end;
+  AHasM := TyLabelLocalTransform(AEl.Anim.G[0], AEl.Anim.G[1], 0, 0, ARotation, 1, 1, AM);
+end;
+
+{ an effect scatter's ripple: createSymbol(-1, -1, 2, 2) at its scale, in
+  the ripple group (the symbol's size, offset and turn) at the point }
+procedure UtRipplePath(const AEl: TTyChartElement; ASX, ASY: Double;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D);
+var
+  pos, grp, own, m1: TTyMat2D;
+  rot: Double;
+  k: Integer;
+begin
+  AData := UtSymbolData(AEl.Caption.LgSymbol, False, -1, -1, 2, 2);
+  for k := 0 to 5 do pos[k] := 0;
+  pos[0] := 1;
+  pos[3] := 1;
+  pos[4] := AEl.Anim.G[8];
+  pos[5] := AEl.Anim.G[9];
+  rot := AEl.Caption.LgG[2] * Pi / 180;
+  if IsNan(rot) then rot := 0;
+  TyLabelLocalTransform(AEl.Caption.LgG[3], AEl.Caption.LgG[4], 0, 0, rot,
+    AEl.Caption.LgG[0], AEl.Caption.LgG[1], grp);
+  TyLabelLocalTransform(0, 0, 0, 0, 0, ASX, ASY, own);
+  m1 := TyGuideMatMul(pos, grp);
+  AM := TyGuideMatMul(m1, own);
+  AHasM := True;
+end;
+
+{ a polar bar's sector or sausage as BarView's polar creator makes it,
+  from AP's shape where it has one [F3c] }
+function UtPolarSector(const AEl: TTyChartElement; AP: TTyChartAnimProxy): TTyPolarSector;
+begin
+  Result.CX := NumOr(AP, 'shape.cx', AEl.Anim.G[0]);
+  Result.CY := NumOr(AP, 'shape.cy', AEl.Anim.G[1]);
+  Result.R0 := NumOr(AP, 'shape.r0', AEl.Anim.G[2]);
+  Result.R := NumOr(AP, 'shape.r', AEl.Anim.G[3]);
+  Result.SA := NumOr(AP, 'shape.startAngle', AEl.Anim.G[4]);
+  Result.EA := NumOr(AP, 'shape.endAngle', AEl.Anim.G[5]);
+  Result.CW := AEl.Anim.G[6] <> 0;
+end;
+
+{ [x1] A SYMBOL'S GROUP ON THE CANVAS NOW, as its computed transform places
+  it: its proxy's x / y, or its layout's. A graph node on a view keeps its
+  proxy's x / y in its main (roam) group (G[5..6], what SymbolDraw's update
+  tweens) -- on the canvas it is its layout's place (LgG[5..6]) moved by
+  the group's scale times its move there, the frame's own reading
+  (GroupDX / GroupDY); read as a canvas place the morph would start or end
+  at the node's data units. }
+function UtSymbolPlaceX(const AEl: TTyChartElement; P: TTyChartAnimProxy): Double;
+begin
+  if AEl.Anim.InView then
+    Result := AEl.Caption.LgG[5] + GroupDX(AEl, NumOr(P, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5])
+  else
+    Result := NumOr(P, 'x', AEl.Caption.LgG[5]);
+end;
+
+function UtSymbolPlaceY(const AEl: TTyChartElement; P: TTyChartAnimProxy): Double;
+begin
+  if AEl.Anim.InView then
+    Result := AEl.Caption.LgG[6] + GroupDY(AEl, NumOr(P, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6])
+  else
+    Result := NumOr(P, 'y', AEl.Caption.LgG[6]);
+end;
+
 { THE PATH AN ITEM ELEMENT DRAWS NOW, as getUpdatedPathProxy and
   getComputedTransform give it: its proxy's values where it has one (an
   animation in flight), the layout's otherwise; a morph in flight draws its
   frame, with no transform. AHasLocal / ALocal: the path's own transform
   (a symbol's; a morph leaves it as it was) [Batch 137] }
-procedure UtElementPathEx(const AEl: TTyChartElement; P: TTyChartAnimProxy;
+procedure UtElementPathEx(const AEl: TTyChartElement; P, AMorphP: TTyChartAnimProxy;
   out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D;
   out AHasLocal: Boolean; out ALocal: TTyMat2D);
 var
+  bundle: TTyMat2D;
   path: TTyZrPath;
   s: TTyPolarSector;
   corners: TTyDoubleArray;
@@ -4955,7 +7223,7 @@ begin
       UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
         NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
         AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
-        NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]), 1, 1,
+        UtSymbolPlaceX(AEl, P), UtSymbolPlaceY(AEl, P), 1, 1,
         AData, AHasM, AM, AHasLocal, ALocal);
     carLineSymbol:
       UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
@@ -5000,10 +7268,93 @@ begin
         end;
       end;
   end;
-  if (P <> nil) and P.FMorphOn then
+  if AEl.Anim.UtTag = 1 then
+  begin
+    { [F3c] a tagged path: its data and transform, or a scatter's symbol }
+    if (Length(AEl.Anim.UtBase) > 0) and (AEl.Anim.UtBase[0] = 3) then
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        AEl.Caption.LgG[0] / 2, AEl.Caption.LgG[1] / 2, AEl.Caption.LgG[2],
+        AEl.Caption.LgG[3], AEl.Caption.LgG[4], AEl.Caption.LgG[5], AEl.Caption.LgG[6],
+        1, 1, AData, AHasM, AM, AHasLocal, ALocal)
+    else
+    begin
+      AData := AEl.Anim.UtData;
+      AHasM := AEl.Anim.UtHasM;
+      if AHasM then AM := AEl.Anim.UtM;
+    end;
+  end
+  else
+  case AEl.Anim.Role of
+    carFunnel:
+      { [F3c] FunnelPiece: a Polygon of its four points }
+      AData := TyGuidePathData(TyZrPolyPath(AEl.Shape.Points, True));
+    carPolarBar:
+      { [F3c] a Sector (its corner radii as updateStyle gave them) or a
+        Sausage }
+      if AEl.Anim.G[8] <> 0 then
+        AData := TyGuidePathData(TyZrSausagePath(UtPolarSector(AEl, P)))
+      else
+        AData := TyGuidePathData(TyZrSectorPath(UtPolarSector(AEl, P), AEl.Anim.Pts));
+    carPictorialGlyph, carPictorialClip:
+      begin
+        { [F3c] createPath: the symbol at the pattern size about nought,
+          scaled by symbolScale, turned, at its place in the bundle }
+        AData := UtSymbolData(AEl.Caption.LgSymbol, False, -AEl.Caption.LgG[4] / 2,
+          -AEl.Caption.LgG[4] / 2, AEl.Caption.LgG[4], AEl.Caption.LgG[4]);
+        AHasLocal := TyLabelLocalTransform(AEl.Caption.LgG[0], AEl.Caption.LgG[1], 0, 0,
+          AEl.Caption.LgG[5], NumOr(P, 'scaleX', AEl.Caption.LgG[2]),
+          NumOr(P, 'scaleY', AEl.Caption.LgG[3]), ALocal);
+        { under the bundle: a translation (barGroup.x / y) }
+        bundle[0] := 1;
+        bundle[1] := 0;
+        bundle[2] := 0;
+        bundle[3] := 1;
+        bundle[4] := AEl.Caption.LgG[6];
+        bundle[5] := AEl.Caption.LgG[7];
+        AHasM := True;
+        if AHasLocal then AM := TyGuideMatMul(bundle, ALocal) else AM := bundle;
+      end;
+    carMapRegion, carCustomPath:
+      begin
+        { [F3c] the path as its view made it, and its computed transform }
+        AData := AEl.Anim.Pts;
+        AHasM := AEl.Anim.G[6] <> 0;
+        if AHasM then
+          for k := 0 to 5 do AM[k] := AEl.Anim.G[k];
+      end;
+    carLinesLine:
+      AData := UtLinePath(AEl, NumOr(P, 'shape.percent', 1));
+    carLinesFrom, carLinesTo:
+      UtLineSymbolPath(AEl, NumOr(P, 'shape.percent', 1), AData, AHasM, AM);
+    carBoxplot:
+      AData := UtBoxplotPath(UtPointsOf(P, AEl.Anim.Pts, 28));
+    carRadarLine, carRadarArea:
+      AData := UtPolyData(UtPointsOf(P, RadarRing(AEl), 2), AEl.Anim.Role = carRadarArea);
+    carParallelLine:
+      AData := UtPolyData(UtShapePoints(AEl), False);
+    carGaugePointer:
+      UtPointerPath(AEl, NumOr(P, 'rotation', -(AEl.Anim.G[2] + Pi / 2)), AData, AHasM, AM);
+    carEffectSymbol:
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]), 1, 1,
+        AData, AHasM, AM, AHasLocal, ALocal);
+    { a tree node's symbol: its proxy's x / y are its group's place in the
+      main group, its device place is the layout's }
+    carTreeNode:
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        AEl.Caption.LgG[5], AEl.Caption.LgG[6], 1, 1,
+        AData, AHasM, AM, AHasLocal, ALocal);
+    carRipple:
+      UtRipplePath(AEl, NumOr(P, 'scaleX', 0.5), NumOr(P, 'scaleY', 0.5), AData, AHasM, AM);
+  end;
+  if (AMorphP <> nil) and AMorphP.FMorphOn then
   begin
     { the replaced buildPath at __morphT; updateTransform leaves it none }
-    AData := TyMorphPathData(P.FMorph, NumOr(P, '__morphT', 0));
+    AData := TyMorphPathData(AMorphP.FMorph, NumOr(AMorphP, '__morphT', 0));
     AHasM := False;
     for k := 0 to 5 do AM[k] := 0;
   end;
@@ -5015,7 +7366,7 @@ var
   hasLocal: Boolean;
   local: TTyMat2D;
 begin
-  UtElementPathEx(AEl, P, AData, AHasM, AM, hasLocal, local);
+  UtElementPathEx(AEl, P, P, AData, AHasM, AM, hasLocal, local);
 end;
 
 { THE STYLE KEYS a universal transition reads and draws: the style object's
@@ -5040,7 +7391,17 @@ var
 begin
   Result := nil;
   n := 0;
-  if AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then
+  { [F3c] a lines row's line: `line.style.fill = null`, an own key of null
+    (it wins a merge, and animates nothing); a radar's line: `fill:
+    'none'`, a string no colour parses (the same) }
+  if AEl.Anim.Role = carLinesLine then
+  begin
+    if AOwn then Put('style.fill', Default(TTyAnimValue))
+    else Put('style.fill', TyAnimStr('#000'));
+  end
+  else if AEl.Anim.Role = carRadarLine then
+    Put('style.fill', TyAnimStr('none'))
+  else if AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then
     Put('style.fill', TyAnimColorValue(AEl.Style.FillColor, False))
   else if not AOwn then
     Put('style.fill', TyAnimStr('#000'));
@@ -5185,6 +7546,24 @@ begin
       Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]), Num1('shape.cy', AEl.Anim.G[1]),
         Num1('shape.r0', AEl.Anim.G[2]), Num1('shape.r', AEl.Anim.G[3]),
         Num1('shape.startAngle', AEl.Anim.G[4]), Num1('shape.endAngle', AEl.Anim.G[5])]);
+    { [F3c] }
+    carFunnel: Result := TyAnimProps([Num1('style.opacity', AEl.Style.Alpha)]);
+    carPolarBar: Result := PolarBarProps(AEl);
+    carPictorialGlyph, carPictorialClip:
+      Result := TyAnimProps([Num1('scaleX', AEl.Caption.LgG[2]), Num1('scaleY', AEl.Caption.LgG[3])]);
+    carBoxplot:
+      if Length(AEl.Anim.Pts) >= 28 then
+        Result := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(Copy(AEl.Anim.Pts, 0, 28), 2))])
+      else
+        Result := nil;
+    carRadarLine, carRadarArea:
+      Result := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(RadarRing(AEl), 2))]);
+    carGaugePointer:
+      Result := TyAnimProps([Num1('rotation', -(AEl.Anim.G[2] + Pi / 2))]);
+    carEffectSymbol, carTreeNode: Result := SymbolProps(AEl);
+    { a ripple stopped before its loop's first step: where it was made }
+    carRipple:
+      Result := TyAnimProps([Num1('scaleX', 0.5), Num1('scaleY', 0.5), Num1('style.opacity', 1)]);
   else
     Result := nil;
   end;
@@ -5249,13 +7628,44 @@ end;
 
 { AN ITEM ELEMENT AS A TRANSITION READS IT: its path now and transform, its
   own style keys, and what the dividers and sortPaths read }
-procedure UtSnapEl(const AEl: TTyChartElement; P: TTyChartAnimProxy; out S: TTyUtOldSnap);
+procedure UtSnapEl(const AEl: TTyChartElement; P, AMorphP: TTyChartAnimProxy;
+  out S: TTyUtOldSnap);
+var k: Integer;
 begin
   S := Default(TTyUtOldSnap);
   S.PieceFirst := -1;
-  UtElementPathEx(AEl, P, S.Data, S.HasM, S.M, S.HasLocal, S.Local);
-  S.Morphing := (P <> nil) and P.FMorphOn;
-  S.Style := UtOldStyle(AEl, P);
+  S.Order := UtElOrder(AEl);
+  S.ElRole := AEl.Anim.Role;
+  S.Sym := AEl.Caption.LgSymbol;
+  UtElementPathEx(AEl, P, AMorphP, S.Data, S.HasM, S.M, S.HasLocal, S.Local);
+  S.Morphing := (AMorphP <> nil) and AMorphP.FMorphOn;
+  S.Style := UtOldStyle(AEl, AMorphP);
+  if AEl.Anim.UtTag = 1 then
+  begin
+    { [F3c] a tagged path's rect or sector for the dividers }
+    if (Length(AEl.Anim.UtBase) >= 5) and (AEl.Anim.UtBase[0] = 1) then
+    begin
+      S.Kind := cUtKindRect;
+      S.RX := AEl.Anim.UtBase[1];
+      S.RY := AEl.Anim.UtBase[2];
+      S.RW := AEl.Anim.UtBase[3];
+      S.RH := AEl.Anim.UtBase[4];
+    end
+    else if (Length(AEl.Anim.UtBase) >= 8) and (AEl.Anim.UtBase[0] = 2) then
+    begin
+      S.Kind := cUtKindSector;
+      S.SCX := AEl.Anim.UtBase[1];
+      S.SCY := AEl.Anim.UtBase[2];
+      S.SR0 := AEl.Anim.UtBase[3];
+      S.SR := AEl.Anim.UtBase[4];
+      S.SSA := AEl.Anim.UtBase[5];
+      S.SEA := AEl.Anim.UtBase[6];
+      S.SCW := AEl.Anim.UtBase[7] <> 0;
+    end
+    else if (Length(AEl.Anim.UtBase) > 0) and (AEl.Anim.UtBase[0] = 3) then
+      S.Kind := cUtKindSymbol;
+  end
+  else
   case AEl.Anim.Role of
     carBar:
       begin
@@ -5297,10 +7707,58 @@ begin
         S.RW := AEl.Anim.G[2];
         S.RH := AEl.Anim.G[3];
       end;
+    carPolarBar:
+      { [F3c] a Sector divides as one; a Sausage's type is its own }
+      if AEl.Anim.G[8] = 0 then
+      begin
+        S.Kind := cUtKindSector;
+        S.SCX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+        S.SCY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+        S.SR0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+        S.SR := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+        S.SSA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+        S.SEA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+        S.SCW := AEl.Anim.G[6] <> 0;
+      end;
+    carPictorialGlyph, carPictorialClip: S.Kind := cUtKindSymbol;
+    carCustomPath:
+      { [F3c] a custom rect or sector divides as one }
+      if (Length(AEl.Anim.Base) >= 5) and (AEl.Anim.Base[0] = 1) then
+      begin
+        S.Kind := cUtKindRect;
+        S.RX := AEl.Anim.Base[1];
+        S.RY := AEl.Anim.Base[2];
+        S.RW := AEl.Anim.Base[3];
+        S.RH := AEl.Anim.Base[4];
+      end
+      else if (Length(AEl.Anim.Base) >= 8) and (AEl.Anim.Base[0] = 2) then
+      begin
+        S.Kind := cUtKindSector;
+        S.SCX := AEl.Anim.Base[1];
+        S.SCY := AEl.Anim.Base[2];
+        S.SR0 := AEl.Anim.Base[3];
+        S.SR := AEl.Anim.Base[4];
+        S.SSA := AEl.Anim.Base[5];
+        S.SEA := AEl.Anim.Base[6];
+        S.SCW := AEl.Anim.Base[7] <> 0;
+      end;
   end;
   UtSnapStyle(S, AEl.Style.HasFill);
-  { a symbol path's style says strokeNoScale }
-  S.NoScale := AEl.Anim.Role in [carSymbol, carLineSymbol];
+  { a symbol path's style says strokeNoScale -- a pictorial glyph's and a
+    map region's too [F3c] }
+  S.NoScale := (AEl.Anim.Role in [carSymbol, carLineSymbol, carPictorialGlyph,
+    carPictorialClip, carMapRegion, carLinesLine, carEffectSymbol, carRipple, carTreeNode])
+    or ((AEl.Anim.UtTag = 1) and AEl.Anim.UtNoScale);
+  { [F3c] a ripple's opacity is its loop's, an own key }
+  if (AEl.Anim.Role = carRipple) and (P <> nil) and (P.GetAnimProp('style.opacity').Kind = avkNumber) then
+  begin
+    S.Opacity := P.Num('style.opacity');
+    k := 0;
+    while (k <= High(S.Style)) and (S.Style[k].Key <> 'style.opacity') do Inc(k);
+    if k > High(S.Style) then SetLength(S.Style, k + 1);
+    S.Style[k].Key := 'style.opacity';
+    S.Style[k].Value := TyAnimNum(S.Opacity);
+  end;
 end;
 
 { A COMBINING ELEMENT'S CHILD as it is now: its morph frame (no transform)
@@ -5542,17 +8000,93 @@ end;
 
 procedure TTyChartAnimSet.SnapUniversal(const ASeries: TTyChartAnimSeriesArray;
   const APrev: TTyChartAnimPrev; AOldIndex, AIdx: TFPHashList;
-  out ASnaps: TTyUtOldSnapArray);
+  out ASnaps: TTyUtOldSnapArray; out AItems: TTyUtItemPathsArray);
 var
-  i, s, n, k, first: Integer;
+  i, s, n, k, first, it: Integer;
   any: Boolean;
   el: TTyChartElement;
-  role: string;
-  op: TTyChartAnimProxy;
+  key: string;
+  op, sp: TTyChartAnimProxy;
+  v: Pointer;
+  rm: TTyMat2D;
+
+  { THE ITEM a path belongs to: its number, a new one at the end }
+  function ItemOf(const AEl: TTyChartElement): Integer;
+  begin
+    v := AIdx.Find(KeyOf(AEl.Anim.Series, UtRowOf(AEl), 'ut'));
+    if v <> nil then Exit(PtrInt(v) - 1);
+    Result := Length(AItems);
+    SetLength(AItems, Result + 1);
+    AItems[Result] := nil;
+    AIdx.Add(KeyOf(AEl.Anim.Series, UtRowOf(AEl), 'ut'), Pointer(PtrInt(Result + 1)));
+  end;
+
+  { a path of the item, in getPathList's order (a path already there of the
+    same place is the first of it, kept) }
+  function PutPath(AItem, ASnap: Integer): Boolean;
+  var
+    q, at: Integer;
+  begin
+    for q := 0 to High(AItems[AItem]) do
+      if ASnaps[AItems[AItem][q]].Order = ASnaps[ASnap].Order then Exit(False);
+    at := Length(AItems[AItem]);
+    while (at > 0) and (ASnaps[AItems[AItem][at - 1]].Order > ASnaps[ASnap].Order) do Dec(at);
+    SetLength(AItems[AItem], Length(AItems[AItem]) + 1);
+    for q := High(AItems[AItem]) downto at + 1 do AItems[AItem][q] := AItems[AItem][q - 1];
+    AItems[AItem][at] := ASnap;
+    Result := True;
+  end;
+
+  { [F3c] A VIEW THE UPDATE DISPOSED (no series of the new option keeps it):
+    upstream disposes it before the transition, and some views' dispose
+    takes their items off their groups (GraphView.remove: SymbolDraw.remove;
+    MapView: MapDraw.remove) -- what was above them is gone from their
+    transform }
+  function Disposed(AOld: Integer): Boolean;
+  var
+    q: Integer;
+    vk: string;
+  begin
+    if (AOld < 0) or (AOld > High(APrev.Series)) then Exit(False);
+    vk := APrev.Series[AOld].ViewKey + #1 + APrev.Series[AOld].SeriesType;
+    for q := 0 to High(APrev.AliveKeys) do
+      if APrev.AliveKeys[q] = vk then Exit(False);
+    Result := True;
+  end;
+
+  procedure Detach(const AEl: TTyChartElement; P: TTyChartAnimProxy; var S: TTyUtOldSnap);
+  var gx, gy: Double;
+  begin
+    if (AEl.Anim.Role = carSymbol) and (AEl.Anim.G[10] = 1) then
+    begin
+      { a graph node: its symbol group (the node's place, the compensation
+        scale) and its path, no view. ON A VIEW the place is where the
+        group is now -- its proxy's x / y are in the main group, what
+        SymbolDraw's update tweens; removeEl stops that tween where it is }
+      gx := AEl.Anim.G[7];
+      gy := AEl.Anim.G[8];
+      if AEl.Anim.InView then
+      begin
+        gx := NumOr(P, 'x', gx);
+        gy := NumOr(P, 'y', gy);
+      end;
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        gx, gy, AEl.Anim.G[9], AEl.Anim.G[9],
+        S.Data, S.HasM, S.M, S.HasLocal, S.Local);
+    end
+    else if AEl.Anim.Role = carMapRegion then
+      { a region: no roam }
+      S.HasM := False;
+  end;
+
 begin
   ASnaps := nil;
+  AItems := nil;
   if APrev.FullUpdate then Exit;
-  any := False;
+  { [F3c] setOption's transition asks whatever the series say }
+  any := APrev.UtHasTransition;
   for s := 0 to High(ASeries) do
     if ASeries[s].Present and ASeries[s].UtOn and ASeries[s].Enabled then any := True;
   if not any then Exit;
@@ -5560,13 +8094,33 @@ begin
   for i := 0 to High(APrev.Elements) do
   begin
     el := APrev.Elements[i];
-    role := UtHostRole(el);
-    if role = '' then Continue;
-    if AIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut')) <> nil then Continue;
-    op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, el.Anim.Index, role)));
+    key := UtElKey(el);
+    if key = '' then Continue;
+    { the proxy its path is read from, and the one a morph of it runs on
+      (the same one but where the role's is shared) [F3c] }
+    sp := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, KeyIndexOf(el), TyChartAnimRoleKey(el))));
+    op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, UtRowOf(el), key)));
+    if (TyChartAnimRoleKey(el) = key) or (TyChartAnimRoleKey(el) = '') then sp := op;
     SetLength(ASnaps, n + 1);
-    UtSnapEl(el, op, ASnaps[n]);
-    AIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'), Pointer(PtrInt(n + 1)));
+    UtSnapEl(el, sp, op, ASnaps[n]);
+    if (not ASnaps[n].Morphing) and Disposed(el.Anim.Series) then Detach(el, sp, ASnaps[n]);
+    { [F3c] removeEl: an item element that is a path with a parent takes
+      its computed transform as its own (setLocalTransform, decomposed and
+      composed again) before the morph reads it -- a gauge's pointer, a
+      custom series' item that is a path }
+    if (not ASnaps[n].Morphing) and ASnaps[n].HasM
+      and ((el.Anim.Role = carGaugePointer)
+        or ((el.Anim.Role = carCustomPath) and (el.Anim.G[7] = 1))) then
+    begin
+      rm := ASnaps[n].M;
+      TyMorphRecompose(rm, ASnaps[n].HasM, ASnaps[n].M);
+    end;
+    it := ItemOf(el);
+    if not PutPath(it, n) then
+    begin
+      SetLength(ASnaps, n);
+      Continue;
+    end;
     Inc(n);
     { A COMBINING ONE's children, as they are [Batch 137] }
     if (op <> nil) and op.FCombineOn and (Length(op.FPieces) > 0) then
@@ -5587,23 +8141,24 @@ begin
   for i := 0 to High(APrev.UtStale) do
   begin
     el := APrev.UtStale[i];
-    if UtHostRole(el) = '' then Continue;
-    if AIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut')) <> nil then Continue;
+    if UtElKey(el) = '' then Continue;
+    if AIdx.Find(KeyOf(el.Anim.Series, UtRowOf(el), 'ut')) <> nil then Continue;
     SetLength(ASnaps, n + 1);
-    UtSnapEl(el, nil, ASnaps[n]);
-    AIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'), Pointer(PtrInt(n + 1)));
+    UtSnapEl(el, nil, nil, ASnaps[n]);
+    it := ItemOf(el);
+    PutPath(it, n);
     Inc(n);
   end;
 end;
 
 procedure TTyChartAnimSet.ArmUniversal(AList: TTyPaintList;
   const ASeries: TTyChartAnimSeriesArray; const APrev: TTyChartAnimPrev;
-  AUtIdx, APrevIdx: TFPHashList; const AUtSnaps: TTyUtOldSnapArray;
-  const AOldOf: TTyIntegerArray; const ARowMap: array of TTyIntegerArray;
-  const AUpd: array of Boolean);
+  AUtIdx: TFPHashList; const AUtSnaps: TTyUtOldSnapArray;
+  const AUtItems: TTyUtItemPathsArray; const AOldOf: TTyIntegerArray;
+  const ARowMap: array of TTyIntegerArray; const AUpd: array of Boolean);
 type
-  { a new item element taking part: its series and row, the element, its
-    proxy (stopped) and how it reads }
+  { a new item path taking part: its series and row, the element, its
+    transition's proxy (stopped) and how it reads }
   TNewRef = record
     Ser, Row: Integer;
     El: TTyChartElement;
@@ -5611,88 +8166,96 @@ type
     S: TTyUtOldSnap;
   end;
   TNewRefArray = array of TNewRef;
+  TNewRefLists = array of TNewRefArray;
 var
   newIdx: TFPHashList;
+  newItems: array of TTyIntegerArray;
+  newOrders: array of TTyIntegerArray;
   bKeys: TTyStringArray;
   bOld, bNew: array of TTyIntegerArray;
-  i, s, o, k, b: Integer;
+  i, s, o, k, b, it, q, at: Integer;
   el: TTyChartElement;
-  role, lk: string;
+  key, lk: string;
   olds: TTyIntegerArray;
   typesOk: Boolean;
+  v: Pointer;
 
-  { the new list's item element (ASer, ARow); False for none }
-  function NewEl(ASer, ARow: Integer; out AAt: Integer; out AEl: TTyChartElement): Boolean;
-  var v: Pointer;
+  { THE NEW ITEM'S PATHS (ASer, ARow): their list indices, getPathList's
+    order; none for no element }
+  function NewEls(ASer, ARow: Integer): TTyIntegerArray;
+  var v2: Pointer;
   begin
-    AAt := -1;
-    AEl := Default(TTyChartElement);
-    if (ASer < 0) or (ASer > High(ASeries)) then Exit(False);
-    v := newIdx.Find(KeyOf(ASer, ARow, UtTypeRole(ASeries[ASer].SeriesType)));
-    Result := v <> nil;
-    if Result then
-    begin
-      AAt := PtrInt(v) - 1;
-      AEl := AList.Element(AAt);
-    end;
+    Result := nil;
+    if (ASer < 0) or (ASer > High(ASeries)) then Exit;
+    v2 := newIdx.Find(KeyOf(ASer, ARow, 'ut'));
+    if v2 <> nil then Result := newItems[PtrInt(v2) - 1];
   end;
 
-  { the old render's item element (AOld, ARow) }
-  function OldEl(AOld, ARow: Integer; out AEl: TTyChartElement): Boolean;
-  var
-    v: Pointer;
-    k2: Integer;
+  { THE OLD ITEM'S PATHS (AOld, ARow) as they were before this update: snap
+    indices; none for no element }
+  function OldPaths(AOld, ARow: Integer): TTyIntegerArray;
+  var v2: Pointer;
   begin
-    AEl := Default(TTyChartElement);
-    if (AOld < 0) or (AOld > High(APrev.Series)) then Exit(False);
-    v := APrevIdx.Find(KeyOf(AOld, ARow, UtTypeRole(APrev.Series[AOld].SeriesType)));
-    Result := v <> nil;
-    if Result then AEl := APrev.Elements[PtrInt(v) - 1]
-    else
-      { a piece the data still names [milestone D5-D8] }
-      for k2 := 0 to High(APrev.UtStale) do
-        if (APrev.UtStale[k2].Anim.Series = AOld) and (APrev.UtStale[k2].Anim.Index = ARow)
-          and (UtHostRole(APrev.UtStale[k2]) = UtTypeRole(APrev.Series[AOld].SeriesType)) then
-        begin
-          AEl := APrev.UtStale[k2];
-          Exit(True);
-        end;
-  end;
-
-  { the old element (AOld, ARow) as it was before this update: -1 for none }
-  function SnapOf(AOld, ARow: Integer): Integer;
-  var v: Pointer;
-  begin
-    v := AUtIdx.Find(KeyOf(AOld, ARow, 'ut'));
-    if v = nil then Result := -1 else Result := PtrInt(v) - 1;
+    Result := nil;
+    if (AOld < 0) or (AOld > High(APrev.Series)) then Exit;
+    v2 := AUtIdx.Find(KeyOf(AOld, ARow, 'ut'));
+    if v2 <> nil then Result := AUtItems[PtrInt(v2) - 1];
   end;
 
   { THE SAME ELEMENT: the new series kept the old one's view, its diff paired
     the rows, and a symbol kept its type (SymbolDraw makes a new Symbol when
-    it changes) }
+    it changes); a map's regions are made on every draw, and a custom
+    series' items too while it transitions [F3c] }
   function SameEl(AOldSer, AOldRow, ANewSer, ANewRow: Integer): Boolean;
   var
+    op_, ne_: TTyIntegerArray;
     oe, ne: TTyChartElement;
-    at: Integer;
   begin
     Result := False;
     if (ANewSer < 0) or (ANewSer > High(AUpd)) or not AUpd[ANewSer]
       or (AOldOf[ANewSer] <> AOldSer) then Exit;
     if (ANewRow > High(ARowMap[ANewSer])) or (ARowMap[ANewSer][ANewRow] <> AOldRow) then Exit;
-    if not (OldEl(AOldSer, AOldRow, oe) and NewEl(ANewSer, ANewRow, at, ne)) then Exit;
+    op_ := OldPaths(AOldSer, AOldRow);
+    ne_ := NewEls(ANewSer, ANewRow);
+    if (Length(op_) = 0) or (Length(ne_) = 0) then Exit;
+    ne := AList.Element(ne_[0]);
+    oe := Default(TTyChartElement);
+    oe.Anim.Role := AUtSnaps[op_[0]].ElRole;
+    if not UtKeepsElement(ASeries[ANewSer], ne) then Exit;
     if (oe.Anim.Role in [carSymbol, carLineSymbol])
-      and (oe.Caption.LgSymbol <> ne.Caption.LgSymbol) then Exit;
+      and (AUtSnaps[op_[0]].Sym <> ne.Caption.LgSymbol) then Exit;
     Result := True;
   end;
 
-  { the new element's proxy, its own animation stopped (stopAnimation:
+  { the proxy a role animates an element on: stopped where it runs,
+    forwarded to its layout (setToFinal already wrote it upstream) [F3c] }
+  procedure StopRole(ASer, ARow: Integer; const AEl: TTyChartElement; const AKey: string);
+  var rp: TTyChartAnimProxy;
+  begin
+    { a tree node's group slides on a proxy of its own: stopAnimation(newEl)
+      stops the group first }
+    if AEl.Anim.Role = carTreeNode then
+    begin
+      rp := Find(ASer, KeyIndexOf(AEl), 'treeGroup');
+      if rp <> nil then rp.StopAnimation('', True);
+    end;
+    if (TyChartAnimRoleKey(AEl) = '') or (TyChartAnimRoleKey(AEl) = AKey) then Exit;
+    rp := Find(ASer, KeyIndexOf(AEl), TyChartAnimRoleKey(AEl));
+    if rp <> nil then rp.StopAnimation('', True);
+  end;
+
+  { the new path's proxy, its own animation stopped (stopAnimation:
     everything rests at the layout, which setToFinal already wrote) -- and,
     a deviation, a combine of its own ended }
   function StopNew(ASer, ARow: Integer; const AEl: TTyChartElement): TTyChartAnimProxy;
-  var props: TTyAnimProps;
+  var
+    props: TTyAnimProps;
+    key2: string;
   begin
-    Result := Find(ASer, ARow, UtHostRole(AEl));
-    if Result = nil then Result := Make(ASer, ARow, UtHostRole(AEl))
+    key2 := UtElKey(AEl);
+    StopRole(ASer, ARow, AEl, key2);
+    Result := Find(ASer, ARow, key2);
+    if Result = nil then Result := Make(ASer, ARow, key2)
     else Result.StopAnimation('', False);
     if Result.FCombineOn then
     begin
@@ -5707,12 +8270,15 @@ var
 
   { the proxy an element's style animates on: its own, made at rest if none }
   function HostProxy(ASer, ARow: Integer; const AEl: TTyChartElement): TTyChartAnimProxy;
-  var props: TTyAnimProps;
+  var
+    props: TTyAnimProps;
+    key2: string;
   begin
-    Result := Find(ASer, ARow, UtHostRole(AEl));
+    key2 := UtElKey(AEl);
+    Result := Find(ASer, ARow, key2);
     if Result = nil then
     begin
-      Result := Make(ASer, ARow, UtHostRole(AEl));
+      Result := Make(ASer, ARow, key2);
       props := UtFinalProps(AEl);
       Result.Attr(props);
       Result.SetFinal(props);
@@ -5731,20 +8297,18 @@ var
   end;
 
   { stopAnimation(oldEl) + removeEl(oldEl): an old element a morph takes
-    from stops leaving -- its ghost is gone at once }
+    from stops leaving -- its ghosts are gone at once }
   procedure DropGhost(AOld, ARow: Integer);
   var
     k2: Integer;
     g: TTyChartAnimProxy;
-    role2: string;
   begin
     if (AOld < 0) or (AOld > High(APrev.Series)) then Exit;
-    role2 := UtTypeRole(APrev.Series[AOld].SeriesType);
     for k2 := 0 to FGhosts.Count - 1 do
     begin
       g := TTyChartAnimProxy(FGhosts[k2]);
-      if g.FLeaving and not g.FGone and (g.FIndex = ARow) and (g.FRole = role2)
-        and (g.FGhost.Anim.Series = AOld) then
+      if g.FLeaving and not g.FGone and (g.FIndex = ARow)
+        and (g.FGhost.Anim.Series = AOld) and (UtElKey(g.FGhost) <> '') then
       begin
         g.StopAnimation('', False);
         g.FGone := True;
@@ -5752,14 +8316,25 @@ var
     end;
   end;
 
-  { a stopped new element and how it reads }
-  function NewRef(ASer, ARow: Integer; const AEl: TTyChartElement): TNewRef;
+  { the new item's paths, stopped, and how they read }
+  function NewRefs(ASer, ARow: Integer): TNewRefArray;
+  var
+    els: TTyIntegerArray;
+    k2: Integer;
   begin
-    Result.Ser := ASer;
-    Result.Row := ARow;
-    Result.El := AEl;
-    Result.P := StopNew(ASer, ARow, AEl);
-    UtSnapEl(AEl, Result.P, Result.S);
+    els := NewEls(ASer, ARow);
+    SetLength(Result, Length(els));
+    for k2 := 0 to High(els) do
+    begin
+      Result[k2].Ser := ASer;
+      Result[k2].Row := ARow;
+      Result[k2].El := AList.Element(els[k2]);
+      Result[k2].P := StopNew(ASer, ARow, Result[k2].El);
+    end;
+    { read once every path is stopped: a role's proxy may be shared }
+    for k2 := 0 to High(Result) do
+      UtSnapEl(Result[k2].El, UtShapeProxy(Self, Result[k2].El, Result[k2].P), Result[k2].P,
+        Result[k2].S);
   end;
 
   { universalTransition.delay(index, count) of the series ASer }
@@ -5995,7 +8570,131 @@ var
       and (ATm.Duration > 0);
   end;
 
-  procedure TransitionBetween(const AOldList, ANewList: TTyIntegerArray);
+  { APPLYMORPHANIMATION over path lists [F3c]: AFrom the old paths (snap
+    indices) -- one list, or one per old element (AFromMulti) -- ATo the new
+    ones, one list or one per new element (AToMulti). The side of lists is
+    the many, the other the one; with a list a side, the longer is the many.
+    prepareMorphBatches deals the many's paths round the one's, and each
+    batch morphs one to one, combines or separates, its animate index the
+    many paths before it }
+  procedure MorphPaths(const AFrom: array of TTyIntegerArray; AFromMulti: Boolean;
+    const ATo: TNewRefLists; AToMulti: Boolean; const ADivide: string;
+    ASer, AIndex: Integer);
+  var
+    tm: TTyAnimTiming;
+    oneIdx: TTyIntegerArray;
+    manyIdx: array of TTyIntegerArray;
+    batches: TTyMorphBatchArray;
+    oldFlat: TTyIntegerArray;
+    newFlat: TNewRefArray;
+    fromIsMany: Boolean;
+    count, idx, x, y, n: Integer;
+    olds_: TTyIntegerArray;
+    news_: TNewRefArray;
+  begin
+    if (Length(AFrom) = 0) or (Length(ATo) = 0) then Exit;
+    { a flat side is its first list }
+    if (not AFromMulti) and (Length(AFrom[0]) = 0) then Exit;
+    if (not AToMulti) and (Length(ATo[0]) = 0) then Exit;
+    if not MorphTiming(ASer, AIndex, tm) then Exit;
+    { every old path and every new one, numbered }
+    oldFlat := nil;
+    for x := 0 to High(AFrom) do
+      for y := 0 to High(AFrom[x]) do
+      begin
+        SetLength(oldFlat, Length(oldFlat) + 1);
+        oldFlat[High(oldFlat)] := AFrom[x][y];
+      end;
+    newFlat := nil;
+    for x := 0 to High(ATo) do
+      for y := 0 to High(ATo[x]) do
+      begin
+        SetLength(newFlat, Length(newFlat) + 1);
+        newFlat[High(newFlat)] := ATo[x][y];
+      end;
+    manyIdx := nil;
+    oneIdx := nil;
+    if AFromMulti then
+    begin
+      fromIsMany := True;
+      n := 0;
+      SetLength(manyIdx, Length(AFrom));
+      for x := 0 to High(AFrom) do
+      begin
+        SetLength(manyIdx[x], Length(AFrom[x]));
+        for y := 0 to High(AFrom[x]) do
+        begin
+          manyIdx[x][y] := n;
+          Inc(n);
+        end;
+      end;
+      SetLength(oneIdx, Length(newFlat));
+      for y := 0 to High(oneIdx) do oneIdx[y] := y;
+    end
+    else if AToMulti then
+    begin
+      fromIsMany := False;
+      n := 0;
+      SetLength(manyIdx, Length(ATo));
+      for x := 0 to High(ATo) do
+      begin
+        SetLength(manyIdx[x], Length(ATo[x]));
+        for y := 0 to High(ATo[x]) do
+        begin
+          manyIdx[x][y] := n;
+          Inc(n);
+        end;
+      end;
+      SetLength(oneIdx, Length(oldFlat));
+      for y := 0 to High(oneIdx) do oneIdx[y] := y;
+    end
+    else
+    begin
+      fromIsMany := Length(oldFlat) > Length(newFlat);
+      SetLength(manyIdx, 1);
+      if fromIsMany then
+      begin
+        SetLength(manyIdx[0], Length(oldFlat));
+        SetLength(oneIdx, Length(newFlat));
+      end
+      else
+      begin
+        SetLength(manyIdx[0], Length(newFlat));
+        SetLength(oneIdx, Length(oldFlat));
+      end;
+      for y := 0 to High(manyIdx[0]) do manyIdx[0][y] := y;
+      for y := 0 to High(oneIdx) do oneIdx[y] := y;
+    end;
+    batches := TyPrepareMorphBatches(oneIdx, manyIdx);
+    count := 0;
+    for x := 0 to High(batches) do count := count + Length(batches[x].Many);
+    idx := 0;
+    for x := 0 to High(batches) do
+    begin
+      if fromIsMany then
+      begin
+        SetLength(olds_, Length(batches[x].Many));
+        for y := 0 to High(olds_) do olds_[y] := oldFlat[batches[x].Many[y]];
+        if Length(olds_) = 1 then
+          MorphOne(olds_[0], newFlat[batches[x].One], ADivide, ASer, tm, idx, count)
+        else if Length(olds_) > 1 then
+          Combine(olds_, newFlat[batches[x].One], ADivide, ASer, tm, idx, count);
+      end
+      else
+      begin
+        SetLength(news_, Length(batches[x].Many));
+        for y := 0 to High(news_) do news_[y] := newFlat[batches[x].Many[y]];
+        if Length(news_) = 1 then
+          MorphOne(oldFlat[batches[x].One], news_[0], ADivide, ASer, tm, idx, count)
+        else if Length(news_) > 1 then
+          Separate(oldFlat[batches[x].One], news_, ADivide, ASer, tm, idx, count);
+      end;
+      idx := idx + Length(batches[x].Many);
+    end;
+  end;
+
+  procedure TransitionBetween(const AOldList, ANewList: TTyIntegerArray;
+    const AOldGroups, ANewGroups: array of TTyStringArray);
   var
     oldItems, newItems: TUtItemArray;
     useId, hasMorph: Boolean;
@@ -6005,13 +8704,15 @@ var
     oldGroups, newGroups: array of TTyIntegerArray;
     j, q, at: Integer;
     timing: TTyAnimTiming;
-    p: TTyChartAnimProxy;
+    p, rp: TTyChartAnimProxy;
     ne: TTyChartElement;
     done: Boolean;
     inner: TTyDataDiffCmdArray;
     ia, ib: TTyStringArray;
+    role: string;
 
-    procedure Flatten(AIsOld: Boolean; const AList_: TTyIntegerArray; var AItems: TUtItemArray);
+    procedure Flatten(AIsOld: Boolean; const AList_: TTyIntegerArray;
+      const AGroups_: array of TTyStringArray; var AItems: TUtItemArray);
     var
       x, r, cnt: Integer;
       keys, groups, childs: TTyStringArray;
@@ -6034,6 +8735,8 @@ var
           childs := ASeries[AList_[x]].UtChildGroupIds;
           divide := ASeries[AList_[x]].UtDivide;
         end;
+        { [F3c] the groups a transition option reads instead }
+        if x <= High(AGroups_) then groups := AGroups_[x];
         { universal transition is off past 10k items }
         if Length(keys) > cUtDataLimit then Continue;
         cnt := Length(AItems);
@@ -6058,139 +8761,141 @@ var
       end;
     end;
 
+    function StillIn(const AOi: TUtItem): Boolean;
+    begin
+      Result := (still <> nil) and (still.Find(KeyOf(AOi.Series, AOi.Row, 'ut')) <> nil);
+    end;
+
     { updateOneToOne }
     procedure OneToOne(ANewIndex, AOldIndex: Integer);
     var
       oi, ni: TUtItem;
-      hasOld, hasNew: Boolean;
-      oe, ne2: TTyChartElement;
-      at2, sn: Integer;
+      ops, nes: TTyIntegerArray;
+      k2: Integer;
       p2: TTyChartAnimProxy;
       tm: TTyAnimTiming;
-      nr: TNewRef;
+      nr: TNewRefArray;
+      ne2: TTyChartElement;
     begin
       oi := oldItems[AOldIndex];
       ni := newItems[ANewIndex];
-      hasOld := OldEl(oi.Series, oi.Row, oe);
-      sn := SnapOf(oi.Series, oi.Row);
-      if sn < 0 then hasOld := False;
-      hasNew := NewEl(ni.Series, ni.Row, at2, ne2);
+      ops := OldPaths(oi.Series, oi.Row);
+      nes := NewEls(ni.Series, ni.Row);
       { the same element (or none on either side) }
-      if (not hasOld and not hasNew)
-        or (hasOld and hasNew and SameEl(oi.Series, oi.Row, ni.Series, ni.Row)) then
+      if ((Length(ops) = 0) and (Length(nes) = 0))
+        or ((Length(ops) > 0) and (Length(nes) > 0) and SameEl(oi.Series, oi.Row, ni.Series, ni.Row)) then
       begin
-        if not hasNew then Exit;
+        if Length(nes) = 0 then Exit;
         { animateElementStyles: from the style the view saved, at update
-          timing and the item's data index }
+          timing and the item's data index -- path by path, where the view
+          saves one [F3c] }
         if not TyAnimGetConfig(atUpdate, ASeries[ni.Series].Model, TyAnimCallAt(ni.Row), tm) then
           Exit;
-        p2 := HostProxy(ni.Series, ni.Row, ne2);
-        SeedStyle(p2, ne2);
-        p2.FUtStyleOn := True;
-        p2.FUtPass := FPass;
-        UtAnimate(p2, AUtSnaps[sn].Style, tm, True, False, '', @p2.UtStyleDone);
+        for k2 := 0 to High(nes) do
+        begin
+          if k2 > High(ops) then Break;
+          ne2 := AList.Element(nes[k2]);
+          if not UtSavesOldStyleEl(ASeries[ni.Series].SeriesType, ne2) then Continue;
+          p2 := HostProxy(ni.Series, ni.Row, ne2);
+          SeedStyle(p2, ne2);
+          p2.FUtStyleOn := True;
+          p2.FUtPass := FPass;
+          UtAnimate(p2, AUtSnaps[ops[k2]].Style, tm, True, False, '', @p2.UtStyleDone);
+        end;
         Exit;
       end;
       { an element the new chart still has keeps its own transition }
-      if hasOld and (still <> nil) and (still.Find(KeyOf(oi.Series, oi.Row, 'ut')) <> nil) then Exit;
-      if not hasNew then Exit;
-      nr := NewRef(ni.Series, ni.Row, ne2);
-      if hasOld then
+      if (Length(ops) > 0) and StillIn(oi) then Exit;
+      if Length(nes) = 0 then Exit;
+      nr := NewRefs(ni.Series, ni.Row);
+      if Length(ops) > 0 then
       begin
         DropGhost(oi.Series, oi.Row);
         hasMorph := True;
-        if MorphTiming(ni.Series, ANewIndex, tm) then
-          MorphOne(sn, nr, ni.Divide, ni.Series, tm, 0, 1);
+        MorphPaths([ops], False, TNewRefLists.Create(nr), False, ni.Divide, ni.Series, ANewIndex);
       end
       else
-        FadeIn(nr, ni.Series, ANewIndex);
+        for k2 := 0 to High(nr) do FadeIn(nr[k2], ni.Series, ANewIndex);
     end;
 
     { updateManyToOne }
     procedure ManyToOne(ANewIndex: Integer; const AOldIdx: TTyIntegerArray);
     var
       ni, oi: TUtItem;
-      ne2, oe: TTyChartElement;
-      at2, x, sn: Integer;
-      olds_, oldSer: TTyIntegerArray;
-      nr: TNewRef;
-      tm: TTyAnimTiming;
+      x: Integer;
+      lists: array of TTyIntegerArray;
+      oldSer: TTyIntegerArray;
+      ops: TTyIntegerArray;
+      nr: TNewRefArray;
     begin
       ni := newItems[ANewIndex];
       { the old elements: there, not the new one, not still in the chart }
-      olds_ := nil;
+      lists := nil;
       oldSer := nil;
       for x := 0 to High(AOldIdx) do
       begin
         oi := oldItems[AOldIdx[x]];
-        if not OldEl(oi.Series, oi.Row, oe) then Continue;
-        sn := SnapOf(oi.Series, oi.Row);
-        if sn < 0 then Continue;
+        ops := OldPaths(oi.Series, oi.Row);
+        if Length(ops) = 0 then Continue;
         if SameEl(oi.Series, oi.Row, ni.Series, ni.Row) then Continue;
-        if (still <> nil) and (still.Find(KeyOf(oi.Series, oi.Row, 'ut')) <> nil) then Continue;
-        SetLength(olds_, Length(olds_) + 1);
-        olds_[High(olds_)] := sn;
+        if StillIn(oi) then Continue;
+        SetLength(lists, Length(lists) + 1);
+        lists[High(lists)] := ops;
         SetLength(oldSer, Length(oldSer) + 1);
         oldSer[High(oldSer)] := AOldIdx[x];
       end;
-      if not NewEl(ni.Series, ni.Row, at2, ne2) then Exit;
-      nr := NewRef(ni.Series, ni.Row, ne2);
-      if Length(olds_) > 0 then
+      if Length(NewEls(ni.Series, ni.Row)) = 0 then Exit;
+      nr := NewRefs(ni.Series, ni.Row);
+      if Length(lists) > 0 then
       begin
         for x := 0 to High(oldSer) do
           DropGhost(oldItems[oldSer[x]].Series, oldItems[oldSer[x]].Row);
         hasMorph := True;
-        if not MorphTiming(ni.Series, ANewIndex, tm) then Exit;
-        { prepareMorphBatches(one, many): one batch, every old path }
-        if Length(olds_) = 1 then MorphOne(olds_[0], nr, ni.Divide, ni.Series, tm, 0, 1)
-        else Combine(olds_, nr, ni.Divide, ni.Series, tm, 0, Length(olds_));
+        { prepareMorphBatches(one, many): the new paths, every old one dealt }
+        MorphPaths(lists, True, TNewRefLists.Create(nr), False, ni.Divide, ni.Series, ANewIndex);
       end
       else
         { fadeInElement at the item's own data index }
-        FadeIn(nr, ni.Series, ni.Row);
+        for x := 0 to High(nr) do FadeIn(nr[x], ni.Series, ni.Row);
     end;
 
     { updateOneToMany }
     procedure OneToMany(const ANewIdx: TTyIntegerArray; AOldIndex: Integer);
     var
       oi, ni: TUtItem;
-      oe, ne2: TTyChartElement;
-      hasOld: Boolean;
-      at2, x, sn, ser0: Integer;
-      news: TNewRefArray;
-      tm: TTyAnimTiming;
+      ops: TTyIntegerArray;
+      x, y2, ser0: Integer;
+      lists: TNewRefLists;
+      keep: TTyIntegerArray;
     begin
       oi := oldItems[AOldIndex];
-      hasOld := OldEl(oi.Series, oi.Row, oe);
-      sn := SnapOf(oi.Series, oi.Row);
-      if sn < 0 then hasOld := False;
-      if hasOld and (still <> nil) and (still.Find(KeyOf(oi.Series, oi.Row, 'ut')) <> nil) then Exit;
-      news := nil;
+      ops := OldPaths(oi.Series, oi.Row);
+      if (Length(ops) > 0) and StillIn(oi) then Exit;
+      keep := nil;
       for x := 0 to High(ANewIdx) do
       begin
         ni := newItems[ANewIdx[x]];
-        if not NewEl(ni.Series, ni.Row, at2, ne2) then Continue;
-        if hasOld and SameEl(oi.Series, oi.Row, ni.Series, ni.Row) then Continue;
-        SetLength(news, Length(news) + 1);
-        news[High(news)].Ser := ni.Series;
-        news[High(news)].Row := ni.Row;
-        news[High(news)].El := ne2;
+        if Length(NewEls(ni.Series, ni.Row)) = 0 then Continue;
+        if (Length(ops) > 0) and SameEl(oi.Series, oi.Row, ni.Series, ni.Row) then Continue;
+        SetLength(keep, Length(keep) + 1);
+        keep[High(keep)] := ANewIdx[x];
       end;
-      if Length(news) = 0 then Exit;
+      if Length(keep) = 0 then Exit;
       ser0 := newItems[ANewIdx[0]].Series;
       { every new element stopped first }
-      for x := 0 to High(news) do news[x] := NewRef(news[x].Ser, news[x].Row, news[x].El);
-      if hasOld then
+      SetLength(lists, Length(keep));
+      for x := 0 to High(keep) do
+        lists[x] := NewRefs(newItems[keep[x]].Series, newItems[keep[x]].Row);
+      if Length(ops) > 0 then
       begin
         DropGhost(oi.Series, oi.Row);
         hasMorph := True;
-        if not MorphTiming(ser0, ANewIdx[0], tm) then Exit;
         { the old item's divideShape }
-        if Length(news) = 1 then MorphOne(sn, news[0], oi.Divide, ser0, tm, 0, 1)
-        else Separate(sn, news, oi.Divide, ser0, tm, 0, Length(news));
+        MorphPaths([ops], False, lists, True, oi.Divide, ser0, ANewIdx[0]);
       end
       else
-        for x := 0 to High(news) do FadeIn(news[x], ser0, ANewIdx[0]);
+        for x := 0 to High(lists) do
+          for y2 := 0 to High(lists[x]) do FadeIn(lists[x][y2], ser0, ANewIdx[0]);
     end;
 
     { THE DIRECTION [Batch 138]: the first new item whose groupId is an old
@@ -6239,13 +8944,13 @@ var
       var AGroups: array of TTyIntegerArray; out AOrder: TTyIntegerArray);
     var
       x, g, c2: Integer;
-      v: Pointer;
+      v2: Pointer;
     begin
       AOrder := nil;
       for x := 0 to High(AKeys) do
       begin
-        v := AMap.Find('_ec_' + AKeys[x]);
-        if v = nil then
+        v2 := AMap.Find('_ec_' + AKeys[x]);
+        if v2 = nil then
         begin
           g := Length(AOrder);
           SetLength(AOrder, g + 1);
@@ -6256,7 +8961,7 @@ var
         end
         else
         begin
-          g := PtrInt(v) - 1;
+          g := PtrInt(v2) - 1;
           c2 := Length(AGroups[g]);
           SetLength(AGroups[g], c2 + 1);
           AGroups[g][c2] := x;
@@ -6267,11 +8972,11 @@ var
   var
     oldOrder, newOrder: TTyIntegerArray;
     g, ng: Integer;
-    v: Pointer;
+    v2: Pointer;
     ns, dir: Integer;
   begin
-    Flatten(True, AOldList, oldItems);
-    Flatten(False, ANewList, newItems);
+    Flatten(True, AOldList, AOldGroups, oldItems);
+    Flatten(False, ANewList, ANewGroups, newItems);
     dir := Direction;
     { isAllIdSame }
     useId := Length(oldItems) = Length(newItems);
@@ -6315,9 +9020,9 @@ var
       { DataDiffer 'multiple': the old keys in order }
       for g := 0 to High(oldOrder) do
       begin
-        v := newMap.Find('_ec_' + oldKeys[oldOrder[g]]);
-        if v = nil then Continue;
-        ng := PtrInt(v) - 1;
+        v2 := newMap.Find('_ec_' + oldKeys[oldOrder[g]]);
+        if v2 = nil then Continue;
+        ng := PtrInt(v2) - 1;
         if (Length(oldGroups[g]) > 1) and (Length(newGroups[ng]) = 1) then
           ManyToOne(newGroups[ng][0], oldGroups[g])
         else if (Length(oldGroups[g]) = 1) and (Length(newGroups[ng]) > 1) then
@@ -6362,12 +9067,13 @@ var
                 @p.UtStyleDone);
               Continue;
             end;
-            { a treemap leaf's background (disableMorphing, no animator)
-              [Batch 138] }
-            if (ne.Anim.Role = carTmRect) and (UtHostRole(ne) = '') then
+            { a path of the view that is no item's (a treemap leaf's
+              background: disableMorphing, no animator) [Batch 138] }
+            role := UtFadeKey(ne);
+            if role <> '' then
             begin
-              if Find(ns, ne.Anim.Index, 'utFadeTmBg') <> nil then Continue;
-              p := Make(ns, ne.Anim.Index, 'utFadeTmBg');
+              if Find(ns, UtRowOf(ne), role) <> nil then Continue;
+              p := Make(ns, UtRowOf(ne), role);
               p.SetNum('style.opacity', ne.Style.Alpha);
               p.FUtStyleOn := True;
               p.FUtPass := FPass;
@@ -6375,8 +9081,9 @@ var
                 @p.UtStyleDone);
               Continue;
             end;
-            if UtHostRole(ne) = '' then Continue;
-            p := Find(ns, ne.Anim.Index, UtHostRole(ne));
+            role := UtElKey(ne);
+            if role = '' then Continue;
+            p := Find(ns, UtRowOf(ne), role);
             { a line symbol's animators are its group's: its path has none
               unless the transition gave it one }
             if ne.Anim.Role = carLineSymbol then
@@ -6384,8 +9091,17 @@ var
                 or (p.FCombineOn and (p.AnimatorCount > 0)))
             else
               done := (p <> nil) and ((p.AnimatorCount > 0) or p.FMorphOn);
+            { [F3c] a path whose role animates it on a proxy of its own }
+            { (a tagged path's role is its group's or its clip's: not the
+              path's own animators) }
+            if (not done) and (ne.Anim.UtTag = 0) and (TyChartAnimRoleKey(ne) <> '')
+              and (TyChartAnimRoleKey(ne) <> role) then
+            begin
+              rp := Find(ns, KeyIndexOf(ne), TyChartAnimRoleKey(ne));
+              done := (rp <> nil) and (rp.AnimatorCount > 0);
+            end;
             if done then Continue;
-            p := HostProxy(ns, ne.Anim.Index, ne);
+            p := HostProxy(ns, UtRowOf(ne), ne);
             p.SetNum('style.opacity', ne.Style.Alpha);
             p.FUtStyleOn := True;
             p.FUtPass := FPass;
@@ -6453,18 +9169,120 @@ var
     bNew[b2] := ANewL;
   end;
 
+  { the types whose item paths the port draws for a morph; a batch with any
+    other keeps its own animation }
+  function TypesOkOf(const AOldL, ANewL: TTyIntegerArray): Boolean;
+  var k2: Integer;
+  begin
+    Result := (Length(AOldL) > 0) and (Length(ANewL) > 0);
+    for k2 := 0 to High(AOldL) do
+      if not UtTypeMorphs(APrev.Series[AOldL[k2]].SeriesType) then Result := False;
+    for k2 := 0 to High(ANewL) do
+      if not UtTypeMorphs(ASeries[ANewL[k2]].SeriesType) then Result := False;
+  end;
+
+  { THE TRANSITION OPTION (transitionSeriesFromOpt) [F3c]: the old series
+    its `from` finders name, by index or id (the first that answers, a
+    finder at a time), and the new ones its `to` names -- whose groups fall
+    back on the dataGroupId of the OLD series at their index, as upstream's
+    do; both sides found or nothing }
+  procedure FromOption(const AItem: TTyUtTransitionItem);
+  var
+    fromL, toL: TTyIntegerArray;
+    fromG, toG: array of TTyStringArray;
+    f, k2, hit: Integer;
+  begin
+    fromL := nil;
+    toL := nil;
+    fromG := nil;
+    toG := nil;
+    for f := 0 to High(AItem.From) do
+    begin
+      hit := -1;
+      for k2 := 0 to High(APrev.Series) do
+        if APrev.Series[k2].Present and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
+          and TyUtFinderMatches(AItem.From[f], k2, APrev.Series[k2].UtModelId) then
+        begin
+          hit := k2;
+          Break;
+        end;
+      if hit < 0 then Continue;
+      SetLength(fromL, Length(fromL) + 1);
+      fromL[High(fromL)] := hit;
+      SetLength(fromG, Length(fromG) + 1);
+      fromG[High(fromG)] := APrev.Series[hit].UtGroupIds;
+    end;
+    for f := 0 to High(AItem.To_) do
+    begin
+      hit := -1;
+      for k2 := 0 to High(ASeries) do
+        if ASeries[k2].Present and TyUtFinderMatches(AItem.To_[f], k2, ASeries[k2].UtModelId) then
+        begin
+          hit := k2;
+          Break;
+        end;
+      if hit < 0 then Continue;
+      SetLength(toL, Length(toL) + 1);
+      toL[High(toL)] := hit;
+      SetLength(toG, Length(toG) + 1);
+      { globalStore.oldDataGroupIds[idx]: the old series' at the new one's
+        index -- none there is undefined }
+      if (hit <= High(APrev.Series)) and APrev.Series[hit].Present then
+        toG[High(toG)] := TyUtRowGroupsWith(ASeries[hit].UtGroupOwn, APrev.Series[hit].UtDataGroup)
+      else
+        toG[High(toG)] := TyUtRowGroupsWith(ASeries[hit].UtGroupOwn, '');
+    end;
+    if (Length(fromL) > 0) and (Length(toL) > 0) and TypesOkOf(fromL, toL) then
+      TransitionBetween(fromL, toL, fromG, toG);
+  end;
+
 begin
   { series:transition runs on a setOption only (optionChanged) }
   if APrev.FullUpdate then Exit;
   newIdx := TFPHashList.Create;
   try
+    { THE NEW ITEMS' PATHS, in getPathList's order [F3c] }
+    newItems := nil;
+    newOrders := nil;
     for i := 0 to AList.Count - 1 do
     begin
       el := AList.Element(i);
-      role := UtHostRole(el);
-      if role = '' then Continue;
-      if newIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, role)) = nil then
-        newIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, role), Pointer(PtrInt(i + 1)));
+      key := UtElKey(el);
+      if key = '' then Continue;
+      v := newIdx.Find(KeyOf(el.Anim.Series, UtRowOf(el), 'ut'));
+      if v = nil then
+      begin
+        it := Length(newItems);
+        SetLength(newItems, it + 1);
+        SetLength(newOrders, it + 1);
+        newItems[it] := nil;
+        newOrders[it] := nil;
+        newIdx.Add(KeyOf(el.Anim.Series, UtRowOf(el), 'ut'), Pointer(PtrInt(it + 1)));
+      end
+      else
+        it := PtrInt(v) - 1;
+      { a place already taken keeps its first }
+      at := -1;
+      for q := 0 to High(newOrders[it]) do
+        if newOrders[it][q] = UtElOrder(el) then at := q;
+      if at >= 0 then Continue;
+      at := Length(newItems[it]);
+      while (at > 0) and (newOrders[it][at - 1] > UtElOrder(el)) do Dec(at);
+      SetLength(newItems[it], Length(newItems[it]) + 1);
+      SetLength(newOrders[it], Length(newOrders[it]) + 1);
+      for q := High(newItems[it]) downto at + 1 do
+      begin
+        newItems[it][q] := newItems[it][q - 1];
+        newOrders[it][q] := newOrders[it][q - 1];
+      end;
+      newItems[it][at] := i;
+      newOrders[it][at] := UtElOrder(el);
+    end;
+    { [F3c] SETOPTION'S TRANSITION, where it is given, instead of the keys }
+    if APrev.UtHasTransition then
+    begin
+      for k := 0 to High(APrev.UtTransition) do FromOption(APrev.UtTransition[k]);
+      Exit;
     end;
     { findTransitionSeriesBatches: an updated series that asks for it and
       animates; the old series of the same key (the last one with it) --
@@ -6510,23 +9328,8 @@ begin
     end;
     for b := 0 to High(bKeys) do
     begin
-      { the four types whose item elements morph; a batch with any other
-        keeps its own animation }
-      typesOk := (Length(bOld[b]) > 0) and (Length(bNew[b]) > 0);
-      for k := 0 to High(bOld[b]) do
-        if UtTypeRole(APrev.Series[bOld[b][k]].SeriesType) = '' then typesOk := False;
-      for k := 0 to High(bNew[b]) do
-        if UtTypeRole(ASeries[bNew[b][k]].SeriesType) = '' then typesOk := False;
-      { [Batch 138] a treemap or a sunburst only into the other type: the
-        same view keeps its elements (upstream's animateElementStyles, which
-        the port does not model for them) }
-      for k := 0 to High(bOld[b]) do
-        for o := 0 to High(bNew[b]) do
-          if ((APrev.Series[bOld[b][k]].SeriesType = 'treemap')
-            or (APrev.Series[bOld[b][k]].SeriesType = 'sunburst'))
-            and (APrev.Series[bOld[b][k]].SeriesType = ASeries[bNew[b][o]].SeriesType) then
-            typesOk := False;
-      if typesOk then TransitionBetween(bOld[b], bNew[b]);
+      typesOk := TypesOkOf(bOld[b], bNew[b]);
+      if typesOk then TransitionBetween(bOld[b], bNew[b], [], []);
     end;
   finally
     newIdx.Free;
@@ -6536,13 +9339,65 @@ end;
 procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   const ABind: TTyChartAnimProxyArray; ASet: TTyChartAnimSet;
   const AStBind: TTyChartAnimProxyArray);
+
+  { the transition proxy of the element at AAt (its key's) }
+  function UtProxyAt(const AEl: TTyChartElement; AAt: Integer): TTyChartAnimProxy;
+  var key2: string;
+  begin
+    Result := nil;
+    key2 := UtElKey(AEl);
+    if key2 = '' then Exit;
+    if (AAt <= High(ABind)) and (ABind[AAt] <> nil) and (ABind[AAt].FRole = key2) then
+      Result := ABind[AAt]
+    else if ASet <> nil then
+      Result := ASet.Find(AEl.Anim.Series, UtRowOf(AEl), key2);
+  end;
+
+  { [F3c] a label's anchor at rest and on its host's morph frame; False
+    where the host does not morph or the label reads a sector }
+  function LabelOnMorph(const AHostS, AHostF, ALabel: TTyChartElement; AAt: Integer;
+    out AX0, AY0, AX1, AY1: Double): Boolean;
+  var
+    hp: TTyChartAnimProxy;
+    r: TTyXYWH;
+    tmp: TTyChartElement;
+    m: TTyMat2D;
+    k2: Integer;
+  begin
+    Result := False;
+    hp := UtProxyAt(AHostS, AAt);
+    if (hp = nil) or not hp.FMorphOn or hp.FCombineOn then Exit;
+    if AHostS.Caption.SecHas and (ALabel.Anim.LabelPos >= 100) then Exit;
+    r := TyPathDataRect(TyMorphPathData(hp.FMorph, NumOr(hp, '__morphT', 0)));
+    tmp := AHostS;
+    if AHostS.Caption.HasHostBox then
+    begin
+      for k2 := 0 to 5 do m[k2] := 0;
+      tmp.Caption.HostBox := TyPathStrokeRect(r,
+        (((AHostF.Style.StrokeColor shr 24) and $FF) > 0) and (AHostF.Style.StrokeWidthLogical > 0),
+        AHostF.Style.HasFill, AHostF.Style.StrokeWidthLogical, False, False, m);
+    end
+    else
+    begin
+      tmp.Shape := Default(TTyChartShape);
+      tmp.Shape.Kind := cskRect;
+      tmp.Shape.Bounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+    end;
+    tmp.Caption.SecHas := False;
+    AnchorOn(AHostS, ALabel, AX0, AY0);
+    AnchorOn(tmp, ALabel, AX1, AY1);
+    Result := True;
+  end;
+
 var
   i, h, k, nx: Integer;
   el, hostS, hostF: TTyChartElement;
-  x0, y0, x1, y1, dx, dy: Double;
-  moved: Boolean;
-  g, bp: TTyChartAnimProxy;
+  x0, y0, x1, y1, dx, dy, vsx, vsy, vx, vy: Double;
+  moved, viewMoves, edgeDone: Boolean;
+  g, bp, hostP: TTyChartAnimProxy;
+  hostRow, hostSer: Integer;
   extras: array of TTyChartElement;
+  key: string;
 begin
   if (ASource = nil) or (ADest = nil) then Exit;
   ADest.Clear;
@@ -6550,14 +9405,35 @@ begin
   nx := 0;
   for i := 0 to ASource.Count - 1 do
   begin
-    el := ASource.Element(i);
-    if (i <= High(ABind)) and (ABind[i] <> nil) then TyAnimApply(el, ABind[i]);
+    { one copy, the one the frame keeps: read in place [P2] }
+    el := ASource.Ref(i)^;
+    { [F3d] THE ROAM GROUP'S TWEEN: a graph's edges are laid out again in the
+      group as it is now (their own percent and shape over it); everything
+      else of the group is carried after its own frame }
+    viewMoves := ViewNow(ASet, el, vsx, vsy, vx, vy);
+    edgeDone := False;
+    if viewMoves and (el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo]) then
+    begin
+      bp := nil;
+      if i <= High(ABind) then bp := ABind[i];
+      if bp <> nil then GraphEdgeFrom(el, bp.Num('shape.percent'), bp, ASet)
+      else GraphEdgeFrom(el, 1, nil, ASet);
+      edgeDone := True;
+    end;
+    if (i <= High(ABind)) and (ABind[i] <> nil) and not edgeDone then
+      TyAnimApply(el, ABind[i]);
     { A MORPH and a universal transition's style [Batch 136]; a treemap
       rect's from the set, its proxy role being none [Batch 138] }
+    { [F3c] the proxy of the path's own key: its role's where that is the
+      one, else the set's }
     bp := nil;
-    if i <= High(ABind) then bp := ABind[i];
-    if (bp = nil) and (ASet <> nil) and (el.Anim.Role = carTmRect) then
-      bp := ASet.Find(el.Anim.Series, el.Anim.Index, UtTmRole(el));
+    key := UtElKey(el);
+    if key = '' then key := UtFadeKey(el);
+    if key <> '' then
+    begin
+      if (i <= High(ABind)) and (ABind[i] <> nil) and (ABind[i].FRole = key) then bp := ABind[i]
+      else if ASet <> nil then bp := ASet.Find(el.Anim.Series, UtRowOf(el), key);
+    end;
     if bp <> nil then TyUtApply(el, bp);
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
     begin
@@ -6569,6 +9445,36 @@ begin
     { THE STATES [Batch 94] }
     if (i <= High(AStBind)) and (AStBind[i] <> nil) then
       TyAnimApplyState(el, AStBind[i], (i <= High(ABind)) and (ABind[i] = AStBind[i]));
+    { [F3a] A TREE NODE'S GROUP slides on a proxy of its own; a label placed
+      on its own rides it too -- [F3d] placed again on the box its host's
+      path draws now (the pop-in's scale too) }
+    if (ASet <> nil) and ((el.Anim.Role = carTreeNode) or el.Anim.RideTree) then
+    begin
+      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'treeGroup');
+      dx := 0;
+      dy := 0;
+      if (g <> nil) and not g.AtFinal then
+      begin
+        x1 := NumOr(g, 'x', el.Anim.G[5]);
+        y1 := NumOr(g, 'y', el.Anim.G[6]);
+        ZrGroupPlace(x1, y1);
+        dx := (x1 - el.Anim.G[5]) * el.Anim.G[7];
+        dy := (y1 - el.Anim.G[6]) * el.Anim.G[7];
+      end;
+      if el.Anim.RideTree then
+      begin
+        g := ASet.Find(el.Anim.Series, el.Anim.Index, 'symbol');
+        x0 := 1;
+        y0 := 1;
+        if (g <> nil) and not g.AtFinal then
+        begin
+          if el.Anim.G[2] <> 0 then x0 := NumOr(g, 'scaleX', el.Anim.G[2]) / el.Anim.G[2];
+          if el.Anim.G[3] <> 0 then y0 := NumOr(g, 'scaleY', el.Anim.G[3]) / el.Anim.G[3];
+        end;
+        if (dx <> 0) or (dy <> 0) or (x0 <> 1) or (y0 <> 1) then RideBox(el, x0, y0, dx, dy);
+      end
+      else if (dx <> 0) or (dy <> 0) then MoveSymbol(el, dx, dy);
+    end;
     { A COMBINING ELEMENT IS DRAWN AS ITS CHILDREN [Batch 137]: the first in
       its place, the others after the list, silent (insertion indices kept);
       a child has its own style -- the element's states are not its }
@@ -6597,14 +9503,50 @@ begin
         TyShapeMove(el.Shape, NumOr(g, 'x', el.Anim.G[8]) - el.Anim.G[8],
           NumOr(g, 'y', el.Anim.G[9]) - el.Anim.G[9]);
     end;
-    h := el.Anim.HostPlus1 - 1;
-    if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
-      and (h <= High(ABind)) and (ABind[h] <> nil) and not ABind[h].AtFinal then
+    { [F3a] A GRAPH EDGE'S LABEL is placed from its line's percent, whatever
+      its own fade does }
+    if (ASet <> nil) and (el.Anim.Role = carGraphEdgeLabel) then
     begin
-      hostS := ASource.Element(h);
-      hostF := ADest.Element(h);
-      AnchorOn(hostS, el, x0, y0);
-      AnchorOn(hostF, el, x1, y1);
+      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'gedge');
+      if (g <> nil) and (not g.AtFinal or viewMoves) then
+        GraphEdgeFrom(el, g.Num('shape.percent'), g, ASet)
+      else if viewMoves then
+        GraphEdgeFrom(el, 1, nil, ASet);
+    end;
+    { [F3d] the rest of a roam group that moves: carried by the transform
+      now over the one at rest -- a label that follows its host follows it
+      as drawn (below) }
+    if viewMoves and not (el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo,
+      carGraphEdgeLabel]) and not ((el.Anim.Role = carLabel) and (el.Anim.HostPlus1 > 0)) then
+      ViewMap(el, vsx, vsy, vx, vy);
+    h := el.Anim.HostPlus1 - 1;
+    { [F3c] A TEXT ON A MORPHING HOST rides the morph frame: zrender lays a
+      textContent out on its host's bounding rect, which the replaced
+      buildPath draws (with no transform) -- its stroke in it as
+      Path.getBoundingRect grows it. A sector's own positions read the
+      shape, which a morph leaves as it is. }
+    if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
+      and LabelOnMorph(ASource.Element(h), ADest.Element(h), el, h, x0, y0, x1, y1) then
+    begin
+      dx := x1 - x0;
+      dy := y1 - y0;
+      if (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0)) then
+      begin
+        el.Caption.X := el.Caption.X + dx;
+        el.Caption.Y := el.Caption.Y + dy;
+        el.Shape.Bounds := TyRectF(el.Shape.Bounds.Left + dx, el.Shape.Bounds.Top + dy,
+          el.Shape.Bounds.Right + dx, el.Shape.Bounds.Bottom + dy);
+      end;
+    end
+    { (a tree node's group slides on after its symbol rests) }
+    else if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
+      and (((h <= High(ABind)) and (ABind[h] <> nil)
+        and (not ABind[h].AtFinal or (ASource.Ref(h)^.Anim.Role = carTreeNode)))
+        { [F3d] or its host carried by its roam group }
+        or viewMoves) then
+    begin
+      AnchorOn(ASource.Ref(h)^, el, x0, y0);
+      AnchorOn(ADest.Ref(h)^, el, x1, y1);
       dx := x1 - x0;
       dy := y1 - y0;
       moved := (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0));
@@ -6620,12 +9562,43 @@ begin
   end;
   for i := 0 to nx - 1 do ADest.Add(extras[i]);
   { THE GHOSTS, after the list: silent, so a hit never lands on one }
+  hostRow := -1;
   if ASet <> nil then
     for i := 0 to ASet.GhostCount - 1 do
     begin
       g := ASet.Ghost(i);
       if g.Gone then Continue;
       ApplyGhost(el, g);
+      { [F3d] a removed tree node's label on its host's ghost as drawn }
+      if g.Role = 'treeNode' then
+      begin
+        hostRow := g.Index;
+        hostSer := g.Series;
+        hostS := g.Ghost;
+        hostF := el;
+        hostP := g;
+      end
+      else if (g.Role = 'treeLabel') and (g.Index = hostRow) and (g.Series = hostSer) then
+      begin
+        if el.Anim.RideTree then
+        begin
+          x0 := 1;
+          y0 := 1;
+          if hostS.Anim.G[2] <> 0 then x0 := NumOr(hostP, 'scaleX', hostS.Anim.G[2]) / hostS.Anim.G[2];
+          if hostS.Anim.G[3] <> 0 then y0 := NumOr(hostP, 'scaleY', hostS.Anim.G[3]) / hostS.Anim.G[3];
+          RideBox(el, x0, y0, (NumOr(hostP, 'x', hostS.Anim.G[5]) - hostS.Anim.G[5]) * hostS.Anim.G[7],
+            (NumOr(hostP, 'y', hostS.Anim.G[6]) - hostS.Anim.G[6]) * hostS.Anim.G[7]);
+        end
+        else if el.Anim.HostPlus1 > 0 then
+        begin
+          AnchorOn(hostS, el, x0, y0);
+          AnchorOn(hostF, el, x1, y1);
+          if not (IsNan(x0) or IsNan(y0) or IsNan(x1) or IsNan(y1)) then
+            MoveCaption(el, x1 - x0, y1 - y0);
+        end;
+      end;
+      { [F3d] under its roam group as it is now }
+      if ViewNow(ASet, el, vsx, vsy, vx, vy) then ViewMap(el, vsx, vsy, vx, vy);
       ADest.Add(el);
     end;
 end;

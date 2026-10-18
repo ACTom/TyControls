@@ -50,6 +50,18 @@ procedure TySubPixelRect(var ALeft, ATop, ARight, ABottom: Double; AWidthPx: Dou
 
 implementation
 
+{ JavaScript's Math.round: halves go UP, towards +Infinity -- not FPC's Round,
+  which takes a half to the even neighbour. zrender rounds with it, so a
+  coordinate a quarter pixel off the grid (doubled, an exact half) lands where
+  upstream's lands [F4c: banker's rounding put it half a pixel away]. }
+function JsRound(A: Double): Int64;
+begin
+  Result := Floor(A + 0.5);
+  { a value whose + 0.5 rounded up past it in the last bit: Math.round's
+    own guard (x - floor(x) < 0.5 keeps floor) }
+  if (Result - A > 0.5) then Dec(Result);
+end;
+
 function TySubPixelSnap(APos, AWidthPx: Double; ATowardsPositive: Boolean): Double;
 var
   doubled, w: Int64;
@@ -57,9 +69,10 @@ begin
   if (AWidthPx <= 0) or IsNan(APos) or IsNan(AWidthPx) then
     Exit(APos);
   { Work in halves so the two cases -- odd width wants a half-integer, even width
-    wants an integer -- collapse into one parity test. }
-  doubled := Round(APos * 2);
-  w := Round(AWidthPx);
+    wants an integer -- collapse into one parity test. zrender's
+    subPixelOptimize, Math.round for both roundings. }
+  doubled := JsRound(APos * 2);
+  w := JsRound(AWidthPx);
   if ((doubled + w) mod 2) = 0 then
     Result := doubled / 2
   else if ATowardsPositive then
@@ -73,12 +86,12 @@ begin
   if AWidthPx <= 0 then Exit;
   { Compare in halves, matching the snap's own resolution: two coordinates that
     round to the same half-pixel are the same line as far as this is concerned. }
-  if Round(AX1 * 2) = Round(AX2 * 2) then
+  if JsRound(AX1 * 2) = JsRound(AX2 * 2) then
   begin
     AX1 := TySubPixelSnap(AX1, AWidthPx, True);
     AX2 := AX1;
   end;
-  if Round(AY1 * 2) = Round(AY2 * 2) then
+  if JsRound(AY1 * 2) = JsRound(AY2 * 2) then
   begin
     AY1 := TySubPixelSnap(AY1, AWidthPx, True);
     AY2 := AY1;

@@ -30,7 +30,9 @@ function RepoRoot: string;
   list): source/*.pas, the tycontrols package, and source/db/*.pas, the tycontrols_db package.
   The guards that hold library code to a rule read their population from here, so a unit in
   the second package is not one they pass in silence for never having opened it. Not
-  recursive: an IDE backup/ folder under source/ is not library code. }
+  recursive: an IDE backup/ folder under source/ is not library code.
+  The include files come with them (*.inc): a unit split into include files [S1] keeps its
+  code in them, and a guard that opened only the .pas would pass that code unread. }
 function LibrarySourceFiles: TStringList;
 { EVERY design-time registration source, sorted, at least one.
 
@@ -108,8 +110,8 @@ function LibrarySourceFiles: TStringList;
 var
   db: TStringList;
 begin
-  Result := FindAllFiles(RepoRoot + 'source', '*.pas', False);
-  db := FindAllFiles(RepoRoot + 'source' + PathDelim + 'db', '*.pas', False);
+  Result := FindAllFiles(RepoRoot + 'source', '*.pas;*.inc', False);
+  db := FindAllFiles(RepoRoot + 'source' + PathDelim + 'db', '*.pas;*.inc', False);
   try
     Result.AddStrings(db);
   finally

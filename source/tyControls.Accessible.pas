@@ -157,6 +157,7 @@ const
   TyAccObjIdWindow = 0;
   TyAccStateSelected = $2;
   TyAccStateFocused = $4;
+  TyAccStateChecked = $10;
   TyAccStateInvisible = $8000;
   TyAccStateFocusable = $100000;
   TyAccStateSelectable = $200000;
@@ -762,11 +763,14 @@ begin
   else if o.GetChildAccessibleObjectsCount = 0 then
   begin
     { an item: it takes the keyboard focus inside the control, and the
-      control says whether it is selected }
+      control says whether it is selected -- [F5] a check box's (a legend
+      item, a visualMap piece) is checked }
     st := st or TyAccStateSelectable or TyAccStateFocusable;
     if Host(h) then
     begin
-      if h.AccessibleSelected(o) then st := st or TyAccStateSelected;
+      if h.AccessibleSelected(o) then
+        if o.AccessibleRole = larCheckBox then st := st or TyAccStateChecked
+        else st := st or TyAccStateSelected;
       if c.Focused and (h.AccessibleFocusedChild = o) then st := st or TyAccStateFocused;
     end;
   end;

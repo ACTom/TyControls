@@ -51,6 +51,10 @@ type
     IsNum: Boolean;
     Num: Double;
     Str: string;
+    { [F4c] an array -- a symbolSize as [width, height]: Num its first as
+      a number, Num2 its second (NaN where it has none) }
+    IsPair: Boolean;
+    Num2: Double;
   end;
   TTyVisualPieceVisualArray = array of TTyVisualPieceVisual;
 
@@ -170,6 +174,11 @@ type
     Symbol: string;
     SizeSet: Boolean;
     Size: Double;
+    { [F4c] a symbolSize written as [width, height]: Size the width, SizeH
+      the height. A size that is no number is still a size: the symbol's
+      normalizeSymbolSize makes it nought (`|| 0`). }
+    SizePair: Boolean;
+    SizeH: Double;
     LiftZSet: Boolean;
     LiftZ: Double;
     { the brush's visual stage (5000) wrote the colour / the opacity: it
@@ -721,6 +730,25 @@ begin
         Result.Defined := True;
         Result.Str := AData.AsString;
         Result.Num := TyJsToNumber(AData.AsString);
+      end;
+    jtArray:
+      begin
+        { [F4c] kept as written: a symbolSize pair }
+        Result.Defined := True;
+        Result.IsPair := True;
+        Result.Num2 := NaN;
+        if AData.Count > 0 then
+        begin
+          if AData.Items[0].JSONType = jtNumber then Result.Num := AData.Items[0].AsFloat
+          else if AData.Items[0].JSONType = jtString then
+            Result.Num := TyJsToNumber(AData.Items[0].AsString);
+        end;
+        if AData.Count > 1 then
+        begin
+          if AData.Items[1].JSONType = jtNumber then Result.Num2 := AData.Items[1].AsFloat
+          else if AData.Items[1].JSONType = jtString then
+            Result.Num2 := TyJsToNumber(AData.Items[1].AsString);
+        end;
       end;
   end;
 end;
@@ -2242,8 +2270,13 @@ begin
       end
       else if m.Kind = 'symbolSize' then
       begin
+        { a written value is set whatever it is -- a pair as a pair, a word
+          that is no number as NaN (drawn at nought); none written is no
+          visual and the series' size stands [F4c] }
         ARow.Size := v;
-        ARow.SizeSet := not IsNan(v);
+        ARow.SizeSet := pv.Defined;
+        ARow.SizePair := pv.Defined and pv.IsPair;
+        if ARow.SizePair then ARow.SizeH := pv.Num2;
       end
       else if m.Kind = 'liftZ' then
       begin
@@ -2316,7 +2349,17 @@ begin
     end
     else if m.Kind = 'symbolSize' then
     begin
-      if Specified('symbolSize') then ARow.Size := pv.Num
+      ARow.SizePair := False;
+      if Specified('symbolSize') then
+      begin
+        ARow.Size := pv.Num;
+        { [F4c] a piece's [width, height] }
+        if pv.IsPair then
+        begin
+          ARow.SizePair := True;
+          ARow.SizeH := pv.Num2;
+        end;
+      end
       else ARow.Size := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
       ARow.SizeSet := True;
     end

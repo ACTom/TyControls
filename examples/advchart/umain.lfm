@@ -87,6 +87,16 @@ object MainForm: TMainForm
       Caption = 'Save PNG'
       OnClick = BtnShotClick
     end
+    object BtnNext: TTyButton
+      Left = 508
+      Height = 30
+      Top = 548
+      Width = 94
+      Anchors = [akLeft, akBottom]
+      Caption = 'Next step'
+      Visible = False
+      OnClick = BtnNextClick
+    end
     object Chart: TTyAdvanceChart
       Left = 612
       Height = 460
@@ -104,5 +114,11 @@ object MainForm: TMainForm
       Caption = ''
       WordWrap = True
     end
+  end
+  object SeqTimer: TTimer
+    Enabled = False
+    OnTimer = SeqTimerTimer
+    Left = 640
+    Top = 600
   end
 end

@@ -192,6 +192,29 @@ function TyBoxRawStr(const AText: string): TTyBoxRaw;
   left (top) does. Width and height are never touched. }
 function TyMergeBoxIgnoreSize(ANode: TJSONObject;
   const ADefault: TTyRawBox): TTyRawBox;
+{ mergeLayoutParam's BOX branch, for a component laid out at init (a grid, a
+  single axis) [F4c]: per direction (left, right, width / top, bottom,
+  height) the option's own keys over ADefault; when the merged direction
+  does not hold exactly two values and the option wrote some, only the
+  option's own are kept -- with one of them, the first key of the three it
+  did not write that the defaults have. A key dropped is ABSENT (copy
+  writes undefined); a JSON null the option wrote stays null. }
+function TyMergeBoxLayout(ANode: TJSONObject;
+  const ADefault: TTyRawBox): TTyRawBox;
+{ getBoxLayoutParams' getShallow without ignoreParent [F4c]: a key the merged
+  box holds as null or not at all is read from the option ROOT -- the
+  GlobalModel is every component model's parent -- when the root has it. }
+procedure TyBoxClimbRoot(var ABox: TTyRawBox; ARoot: TJSONData);
+{ The same for one key: the root's value of AKey into AV when AV is null or
+  absent and the root has the key. }
+procedure TyRawClimbRoot(var AV: TTyBoxRaw; ARoot: TJSONData; const AKey: string);
+{ getShallow of a box key on a model whose defaults were merged under its
+  option without a layout merge (a pie, a funnel) [F4c]: the option's own
+  non-null value; nil where the default stands (the option has no key and
+  AHasDefault); else the root's value when it has the key, else the
+  option's own (a null, or nil). }
+function TyBoxKeyClimb(ANode: TJSONObject; ARoot: TJSONData; const AKey: string;
+  AHasDefault: Boolean): TJSONData;
 { parsePositionOption: the four words exactly, a trimmed string ending in
   `%` a percentage, other strings parseFloat, null not-a-number, anything
   else a unary plus. }
@@ -633,6 +656,11 @@ type
       across its own lines (V) and along them (H). Upstream's default is
       [0, 3]; the zero value is none. }
     TextMarginVLogical, TextMarginHLogical: Double;
+    { axisLabel.minMargin [F4c], which wins over textMargin: half of it
+      (LOGICAL px; nought for one that is no number) round the label's
+      GLOBAL rect, after its turn -- its own box is not padded }
+    LabelMinMargin: Boolean;
+    LabelMinMarginLogical: Double;
     { WHAT LEGACY containLabel MEASURES: axisLabel.show on a scale that is not
       blank -- whether or not the axis itself is shown, which ShowLabels
       is not. }
@@ -719,6 +747,9 @@ type
       hideOverlap, and the two of one break are moved apart. }
     LabelBreakKind: TTyIntegerArray;
     LabelBreakIndex: TTyIntegerArray;
+    { [F4a] the break's two ends as the extent clamps them, beside each
+      label LabelBreakKind names: what an axis label event's `break` holds }
+    LabelBreakLo, LabelBreakHi: TTyDoubleArray;
     { breakLabelLayout.moveOverlap: true or 'auto' }
     BreakMoveOverlap: Boolean;
     { the axis line cut at the breaks, on the final rect; HasBreakLine False
@@ -1439,12 +1470,21 @@ begin
   padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
   padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
   ABare.LocalRect := TyXYWH(x0, y0, w, h);
-  AMargin.LocalRect := TyRectExpand(ABare.LocalRect, padV, padH, padV, padH);
+  { computeLabelGeometry: a textMargin pads the label's own box; a
+    minMargin -- half of it each side -- the global rect after the turn
+    [F4c] }
+  if ASpec.LabelMinMargin then AMargin.LocalRect := ABare.LocalRect
+  else AMargin.LocalRect := TyRectExpand(ABare.LocalRect, padV, padH, padV, padH);
   if APlace.HasM then ABare.M := APlace.M
   else ABare.M := TyMatLocal(APlace.X, APlace.Y, ASpec.RotationRad);
   AMargin.M := ABare.M;
   ABare.Rect := TyRectApplyMat(ABare.LocalRect, ABare.M);
   AMargin.Rect := TyRectApplyMat(AMargin.LocalRect, AMargin.M);
+  if ASpec.LabelMinMargin then
+  begin
+    padH := AxisScaleF(ASpec.LabelMinMarginLogical, APPI);
+    AMargin.Rect := TyRectExpand(AMargin.Rect, padH, padH, padH, padH);
+  end;
   ABare.AxisAligned := TyMatAxisAligned(ABare.M);
   AMargin.AxisAligned := ABare.AxisAligned;
 end;
@@ -1709,6 +1749,104 @@ begin
   else if Own('right') then Result.Left := nul;
   if Own('top') then Result.Bottom := nul
   else if Own('bottom') then Result.Top := nul;
+end;
+
+function TyMergeBoxLayout(ANode: TJSONObject;
+  const ADefault: TTyRawBox): TTyRawBox;
+
+  function HasValue(const A: TTyBoxRaw): Boolean;
+  begin
+    Result := not (A.Kind in [brAbsent, brNull])
+      and not ((A.Kind = brString) and (A.Str = 'auto'));
+  end;
+
+  procedure Dim(const AK0, AK1, AK2: string; const AD0, AD1, AD2: TTyBoxRaw;
+    out AV0, AV1, AV2: TTyBoxRaw);
+  var
+    keys: array[0..2] of string;
+    defs, merged, res: array[0..2] of TTyBoxRaw;
+    own: array[0..2] of Boolean;
+    i, nNew, nMerged: Integer;
+    d: TJSONData;
+  begin
+    keys[0] := AK0; keys[1] := AK1; keys[2] := AK2;
+    defs[0] := AD0; defs[1] := AD1; defs[2] := AD2;
+    nNew := 0;
+    nMerged := 0;
+    for i := 0 to 2 do
+    begin
+      d := nil;
+      if ANode <> nil then d := ANode.Find(keys[i]);
+      own[i] := d <> nil;
+      { the target: the option's own key over the default }
+      if own[i] then merged[i] := TyBoxRawOf(d) else merged[i] := defs[i];
+      if own[i] and HasValue(merged[i]) then Inc(nNew);
+      if HasValue(merged[i]) then Inc(nMerged);
+    end;
+    if (nMerged = 2) or (nNew = 0) then
+      for i := 0 to 2 do res[i] := merged[i]
+    else
+    begin
+      { the option's own keys only (a key it did not write is undefined) }
+      for i := 0 to 2 do
+        if own[i] then res[i] := merged[i] else res[i] := Default(TTyBoxRaw);
+      { with one value among them, the first key the target has that the
+        option did not write }
+      if nNew < 2 then
+        for i := 0 to 2 do
+          if (not own[i]) and (defs[i].Kind <> brAbsent) then
+          begin
+            res[i] := defs[i];
+            Break;
+          end;
+    end;
+    AV0 := res[0];
+    AV1 := res[1];
+    AV2 := res[2];
+  end;
+
+begin
+  Dim('left', 'right', 'width', ADefault.Left, ADefault.Right, ADefault.Width,
+    Result.Left, Result.Right, Result.Width);
+  Dim('top', 'bottom', 'height', ADefault.Top, ADefault.Bottom, ADefault.Height,
+    Result.Top, Result.Bottom, Result.Height);
+end;
+
+procedure TyRawClimbRoot(var AV: TTyBoxRaw; ARoot: TJSONData; const AKey: string);
+var d: TJSONData;
+begin
+  if not (AV.Kind in [brAbsent, brNull]) then Exit;
+  { getShallow answers the root's value; where the root has no such key it
+    is undefined, which a null left here reads as everywhere a box is read
+    (not a number, falsy) -- so the merged null is kept }
+  if not (ARoot is TJSONObject) then Exit;
+  d := TJSONObject(ARoot).Find(AKey);
+  if d <> nil then AV := TyBoxRawOf(d);
+end;
+
+function TyBoxKeyClimb(ANode: TJSONObject; ARoot: TJSONData; const AKey: string;
+  AHasDefault: Boolean): TJSONData;
+var d: TJSONData;
+begin
+  Result := nil;
+  if ANode <> nil then Result := ANode.Find(AKey);
+  if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+  if (Result = nil) and AHasDefault then Exit;
+  if ARoot is TJSONObject then
+  begin
+    d := TJSONObject(ARoot).Find(AKey);
+    if d <> nil then Result := d;
+  end;
+end;
+
+procedure TyBoxClimbRoot(var ABox: TTyRawBox; ARoot: TJSONData);
+begin
+  TyRawClimbRoot(ABox.Left, ARoot, 'left');
+  TyRawClimbRoot(ABox.Top, ARoot, 'top');
+  TyRawClimbRoot(ABox.Right, ARoot, 'right');
+  TyRawClimbRoot(ABox.Bottom, ARoot, 'bottom');
+  TyRawClimbRoot(ABox.Width, ARoot, 'width');
+  TyRawClimbRoot(ABox.Height, ARoot, 'height');
 end;
 
 function TyBoxRawPos(const A: TTyBoxRaw): TTyPos;

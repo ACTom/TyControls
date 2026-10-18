@@ -578,6 +578,9 @@ begin
   { makeIdAndName }
   ids := TStringList.Create;
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    ids.UseLocale := False;
     ids.Sorted := True;
     ids.Duplicates := dupIgnore;
     ids.CaseSensitive := True;
@@ -858,6 +861,44 @@ begin
   ApplyLeave(AEl, AOpt);
 end;
 
+{ THE ROOT'S enterFrom / leaveTo as `extend(props, root)` takes it [F3b]: a
+  key naming a nested object (style, shape, extra) whose value is an object
+  becomes that object's keys -- REPLACING whatever the props held under it
+  (extend assigns the object), which the nested option's own enterFrom /
+  leaveTo then extends; any other key is the element's own }
+procedure RootPropsOf(AObj: TJSONObject; var AProps: TTyAnimProps);
+var
+  i, j, n: Integer;
+  key, pre: string;
+  d: TJSONData;
+  keep: TTyAnimProps;
+begin
+  if AObj = nil then Exit;
+  for i := 0 to AObj.Count - 1 do
+  begin
+    key := AObj.Names[i];
+    d := AObj.Items[i];
+    if ((key = 'style') or (key = 'shape') or (key = 'extra')) and (d is TJSONObject) then
+    begin
+      pre := key + '.';
+      keep := nil;
+      SetLength(keep, Length(AProps));
+      n := 0;
+      for j := 0 to High(AProps) do
+        if Copy(AProps[j].Key, 1, Length(pre)) <> pre then
+        begin
+          keep[n] := AProps[j];
+          Inc(n);
+        end;
+      SetLength(keep, n);
+      AProps := keep;
+      TyGfxPropsOf(TJSONObject(d), key, AProps);
+    end
+    else
+      TyAnimPropPut(AProps, key, TyGfxAnimOf(d));
+  end;
+end;
+
 procedure TyGfxUpdateLeaveTo(AEl: TTyGfxEl; AOpt: TJSONObject);
 var
   sub: TJSONObject;
@@ -874,7 +915,9 @@ begin
     lt := ObjOf(sub, 'leaveTo');
     if lt = nil then Continue;
     AEl.HasLeaveTo := True;
-    TyGfxPropsOf(lt, cParts[k], AEl.LeaveToProps);
+    { the root's own may name a nested object [F3b] }
+    if k = 0 then RootPropsOf(lt, AEl.LeaveToProps)
+    else TyGfxPropsOf(lt, cParts[k], AEl.LeaveToProps);
   end;
 end;
 
@@ -1119,7 +1162,9 @@ begin
     ef := ObjOf(sub, 'enterFrom');
     if ef = nil then Continue;
     case k of
-      0: TyGfxPropsOf(ef, '', AEnter);
+      { the root's may name a nested object: enterFrom: {style: {opacity:
+        0}} [F3b] }
+      0: RootPropsOf(ef, AEnter);
       1: TyGfxPropsOf(ef, 'style', AEnter);
       2: TyGfxPropsOf(ef, 'shape', AEnter);
     else

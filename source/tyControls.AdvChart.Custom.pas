@@ -309,6 +309,9 @@ type
     EmphasisDisabled, TooltipDisabled: Boolean;
     { an image's source when made }
     ImagePath: string;
+    { [F3c] `morph: false`: disableMorphing (the universal transition passes
+      it by) }
+    NoMorph: Boolean;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -395,13 +398,18 @@ type
     { what stopped the last render (upstream throws), '' none }
     property Error: string read FError;
     property HasData: Boolean read FHasData;
+  public
+    { [F3c] doesElNeedRecreate's first answer: the series transitions
+      (isUniversalTransitionEnabled) -- every item is made anew, the old
+      element kept for the transition to morph from }
+    UtRecreate: Boolean;
   end;
 
 implementation
 
 uses
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.AnimView;
+  tyControls.AdvChart.AnimView, tyControls.AdvChart.Color;
 
 { ==================== JSON ==================== }
 
@@ -621,6 +629,9 @@ begin
   begin
     GRenderItems := TStringList.Create;
     GRenderItems.CaseSensitive := True;
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    GRenderItems.UseLocale := False;
     GRenderItems.Sorted := True;
     GRenderItems.Duplicates := dupError;
     GRenderItems.OwnsObjects := True;
@@ -871,7 +882,7 @@ begin
   else
     Result := 'rgba(' + IntToStr((AColor shr 16) and $FF) + ','
       + IntToStr((AColor shr 8) and $FF) + ',' + IntToStr(AColor and $FF) + ','
-      + TyJsNumberToString(a / 255) + ')';
+      + TyJsNumberToString(TyChartColorAlpha(AColor)) + ')';
 end;
 
 { ==================== the element info ==================== }
@@ -1005,6 +1016,8 @@ var
   info: TTyCustomElInfo;
   st: TJSONObject;
 begin
+  { [F3c] always, while the series transitions }
+  if UtRecreate then Exit(True);
   info := InfoOf(AEl);
   tp := AOpt.Find('type');
   if not JNull(tp) and ((info = nil) or (StrOf(tp) <> info.GType)) then Exit(True);
@@ -1406,6 +1419,12 @@ begin
   end;
   info := InfoOf(el);
   if (info <> nil) and Truthy(AOpt.Find('tooltipDisabled')) then info.TooltipDisabled := True;
+  { [F3c] `morph === false` sets it, anything else clears it }
+  if info <> nil then
+  begin
+    d := AOpt.Find('morph');
+    info.NoMorph := (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean;
+  end;
   UpdateAttachedTx(el, AOpt, isInit);
   UpdateNormal(el, AOpt, nil, isInit);
   { info: replaced only when the option says it }

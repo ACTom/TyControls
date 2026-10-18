@@ -788,6 +788,9 @@ begin
   SetLength(cats, Length(order));
   seen := TStringList.Create;
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    seen.UseLocale := False;
     seen.Sorted := True;
     seen.CaseSensitive := True;
     seen.Duplicates := dupIgnore;
@@ -1083,6 +1086,8 @@ begin
   FBox.Height := target[3].V;
   FBox.Top := target[4].V;
   FBox.Bottom := target[5].V;
+  { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
+  if AOption <> nil then TyBoxClimbRoot(FBox, AOption.Root);
   FRect := TyXYWH(NaN, NaN, NaN, NaN);
   FScale := 1;
 end;
@@ -2199,6 +2204,8 @@ var
   z, outerZ2, added: Integer;
   node: TJSONObject;
   triggerEv, tipShow: Boolean;
+  { [F6a] the next cell rect's cursor ('' the prototype's pointer) }
+  rectCursor: string;
 
   { a new cell's serial in AMatrix's table }
   function NewInfo(const ATarget: string; ALocX, ALocY: Integer): Integer;
@@ -2249,6 +2256,7 @@ var
     el.Silent := ASilent;
     if AInfo >= 0 then el.Datum := TyChartComponentDatum(ctkMatrix, AMatrix.Index, AInfo);
     el.HitStrokeBand := ABand;
+    el.Cursor := rectCursor;
     AList.Add(el);
     Inc(added);
   end;
@@ -2552,7 +2560,14 @@ var
       if ((s.Stroke shr 24) <> 0) and (s.LineWidth > 0) then band := Max(s.LineWidth, 5)
       else rectSilent := True;
     end;
+    { [F6a] `cursor`: the cell's, its parent's (_tmpCellModel.get) }
+    d := nil;
+    if ACell <> nil then d := ACell.Find('cursor');
+    if JNull(d) and (AParent <> nil) then d := AParent.Find('cursor');
+    if (d <> nil) and (d.JSONType = jtString) then rectCursor := d.AsString
+    else rectCursor := '';
     sh := AddRect(AShape, s, z2, rectSilent, info, band);
+    rectCursor := '';
     if AHasText then
       AddLabel(AText, AValue, ALocX, ALocY, ObjIn(ACell, 'label'), ObjIn(AParent, 'label'),
         sh, s.LineWidth, z2, info);

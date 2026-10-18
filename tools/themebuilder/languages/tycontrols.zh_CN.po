@@ -1153,6 +1153,64 @@ msgstr "按名称搜索图标"
 msgid "%s   (ImageIndex %d)"
 msgstr "%s   (ImageIndex %d)"
 
+#: tycontrols.strconsts.rstychartaccbrush
+msgid "Brush"
+msgstr "刷选"
+
+#: tycontrols.strconsts.rstychartaccbrushareas
+#, object-pascal-format
+msgid "%d selected areas"
+msgstr "%d 个选区"
+
+#: tycontrols.strconsts.rstychartaccdatazoom
+msgid "Data zoom"
+msgstr "数据区域缩放"
+
+#: tycontrols.strconsts.rstychartacchandleend
+msgid "End handle"
+msgstr "结束手柄"
+
+#: tycontrols.strconsts.rstychartacchandlestart
+msgid "Start handle"
+msgstr "起始手柄"
+
+#: tycontrols.strconsts.rstychartacclegend
+msgid "Legend"
+msgstr "图例"
+
+#: tycontrols.strconsts.rstychartaccmarkarea
+msgid "Mark area"
+msgstr "标注区域"
+
+#: tycontrols.strconsts.rstychartaccmarkline
+msgid "Mark line"
+msgstr "标注线"
+
+#: tycontrols.strconsts.rstychartaccmarkpoint
+msgid "Mark point"
+msgstr "标注点"
+
+#: tycontrols.strconsts.rstychartaccmarkers
+msgid "Markers"
+msgstr "标注"
+
+#: tycontrols.strconsts.rstychartaccpercentrange
+#, object-pascal-format
+msgid "%s%% to %s%%"
+msgstr "%s%% 至 %s%%"
+
+#: tycontrols.strconsts.rstychartacctimeline
+msgid "Timeline"
+msgstr "时间轴"
+
+#: tycontrols.strconsts.rstychartacctoolbox
+msgid "Toolbox"
+msgstr "工具栏"
+
+#: tycontrols.strconsts.rstychartaccvisualmap
+msgid "Visual map"
+msgstr "视觉映射"
+
 #: tycontrols.strconsts.rstychartlegendselectall
 msgctxt "tycontrols.strconsts.rstychartlegendselectall"
 msgid "All"

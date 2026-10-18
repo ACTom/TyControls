@@ -20,11 +20,11 @@ unit tyControls.AdvChart.AxisName;
   PURE: the measurer is the only window onto text. The move's collision is
   zrender's BoundingRect.intersect with a directional minimum translation,
   also transcribed; when either box is turned off the axes and the two
-  overlap, upstream goes on to an oriented-box test this does not have, and
-  the name is not moved. }
+  overlap, the oriented boxes are tested and the translation is theirs
+  (OrientedBoundingRect.intersect, AxisLabels' TyObbIntersectDir) [F4c]. }
 interface
 uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Layout,
-  tyControls.AdvChart.JsMath;
+  tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels;
 
 { upstream's remRadian: into [0, 2 pi), with JavaScript's exact remainder }
 function TyRemRadian(ARadian: Double): Double;
@@ -375,14 +375,30 @@ begin
   Inc(P.Moves);
 end;
 
-{ moveIfOverlap: an obstacle that is turned off the axes goes to an
-  oriented-box test upstream, which this does not have -- no move }
-procedure MoveIfOverlap(const ARect: TTyXYWH; AAxisAligned: Boolean;
+{ moveIfOverlap -- labelIntersect: the rects first (a fast rejection);
+  both turned with the axes, their translation; else the ORIENTED boxes
+  [F4c] -- each its local rect through its matrix, the name's as moved so
+  far -- with a translation of their own, along the direction }
+procedure MoveIfOverlap(const ALocal: TTyXYWH; const AM: TTyMat2D;
+  const ARect: TTyXYWH; AAxisAligned: Boolean;
   var P: TTyAxisNamePlacement; ADirection: Double);
-var mx, my: Double;
+var
+  mx, my: Double;
+  a, b: TTyLabelBox;
 begin
   if not TyRectIntersectDir(ARect, P.Rect, ADirection, 0.05, mx, my) then Exit;
-  if not (AAxisAligned and P.AxisAligned) then Exit;
+  if not (AAxisAligned and P.AxisAligned) then
+  begin
+    a.LocalRect := ALocal;
+    a.M := AM;
+    a.Rect := ARect;
+    a.AxisAligned := AAxisAligned;
+    b.LocalRect := P.LocalRect;
+    b.M := P.M;
+    b.Rect := P.Rect;
+    b.AxisAligned := P.AxisAligned;
+    if not TyObbIntersectDir(a, b, ADirection, 0.05, mx, my) then Exit;
+  end;
   Translate(P, mx, my);
 end;
 
@@ -398,9 +414,11 @@ begin
   sameDir := AMoveX * ADirX + AMoveY * ADirY >= 0;
   for idx := 0 to n - 1 do
     if sameDir then
-      MoveIfOverlap(ALabels[idx].Rect, ALabels[idx].AxisAligned, P, ADirection)
+      MoveIfOverlap(ALabels[idx].LocalRect, ALabels[idx].M, ALabels[idx].Rect,
+        ALabels[idx].AxisAligned, P, ADirection)
     else
-      MoveIfOverlap(ALabels[n - 1 - idx].Rect, ALabels[n - 1 - idx].AxisAligned,
+      MoveIfOverlap(ALabels[n - 1 - idx].LocalRect, ALabels[n - 1 - idx].M,
+        ALabels[n - 1 - idx].Rect, ALabels[n - 1 - idx].AxisAligned,
         P, ADirection);
 end;
 
@@ -598,8 +616,8 @@ begin
     if ASpec.NameLocation = anlMiddle then
     begin
       if Result.HasOccupied then
-        MoveIfOverlap(TyRectApplyMat(Result.Occupied, G), TyMatAxisAligned(G),
-          Result, direction);
+        MoveIfOverlap(Result.Occupied, G, TyRectApplyMat(Result.Occupied, G),
+          TyMatAxisAligned(G), Result, direction);
     end
     else
     begin

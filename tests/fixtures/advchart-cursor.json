@@ -1,0 +1,1358 @@
+{
+  "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+  "W": 600,
+  "H": 400,
+  "seed": 2463534242,
+  "images": {
+    "wide": {"url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC","width":20,"height":10},
+    "tall": {"url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","width":8,"height":16}
+  },
+  "maps": [
+    {"name":"cursorSquares","text":"{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[20,0],[30,0],[30,10],[20,10],[20,0]]]}}]}"}
+  ],
+  "notes": ["The cursor: zrender Handler.mousemove calls proxy.setCursor(target ? target.cursor : 'default') before it dispatches anything; then the zr-level listeners run: a RoamController (graph, tree, sankey, treemap, geo, map, an inside dataZoom) sets 'grabbing' while it pans (moveOnMouseMove) and otherwise 'grab' when the event has no target and the pointer passes its _checkPointer -- the lowest precedence (_decideCursorStyle); on mouseup the same controller sets 'grab' there, else the target's cursor or 'default'. Nothing is done while globalPan is taken (a brush). HandlerProxy writes `cursor || 'default'`.","Which elements carry which cursor: Displayable.prototype.cursor = 'pointer'; silent elements are no target (findHover goes on below them). Series: bar, pictorialBar (each glyph), candlestick, scatter / effectScatter / line symbols, pie, sunburst, a treemap leaf's content rect: itemModel.getShallow('cursor') -- the item, its level (treemap / sunburst) or category (graph), the series, the root option; a graph node: item.get('cursor'), else 'move' when draggable; a draggable sankey node: 'move'; LargeSymbolDraw / LargeLineDraw: 'default'. Components: a graphic element its `cursor`; a matrix cell its `cursor`; a scrolling legend's page button 'pointer' / 'default' by canJump; a continuous visualMap's handle thumbs and labels getCursor(orient), its in-range bar the same when calculable; a slider dataZoom's handles ew- / ns-resize, its move zone grab / grabbing, its click panel crosshair under brushSelect; brush covers move / the resizes. Everything else that is not silent: pointer.","Pictures: each ZRImage is given __image (its PNG's natural size) and its onload, as a browser's load would, then a frame; the corners are its style rect (x, y, getWidth(), getHeight()) through its global transform."],
+  "cases": [
+    {
+      "id": "bar",
+      "note": "a bar is its item's cursor, else its series', else the prototype's pointer; a label is a text of its own (pointer, whatever its bar says); empty ground, a title without link or triggerEvent, an axis label without triggerEvent: default; a legend item: its hit rect's pointer",
+      "option": {"animation":false,"title":{"text":"Title"},"legend":{"top":30},"grid":{"top":70},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"name":"A","type":"bar","data":[10,20,{"value":15,"cursor":"help"},30],"label":{"show":true,"position":"top"}},{"name":"B","type":"bar","data":[5,12,8,16],"cursor":"crosshair"}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 300,
+          "y": 75,
+          "aim": "empty grid",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 125,
+          "y": 278,
+          "aim": "item s0 d0",
+          "hover": "rect:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 350,
+          "y": 258,
+          "aim": "item s0 d2",
+          "hover": "rect:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 280,
+          "y": 270,
+          "aim": "item s1 d1",
+          "hover": "rect:crosshair",
+          "calls": ["crosshair"],
+          "cursor": "crosshair"
+        },
+        {
+          "type": "move",
+          "x": 237,
+          "y": 142,
+          "aim": "label s0 d1",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 277,
+          "y": 42,
+          "aim": "legend item 0",
+          "hover": "rect:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 29,
+          "aim": "title text",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 259,
+          "y": 334,
+          "aim": "x axis label Tue",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 505,
+          "y": 253,
+          "aim": "item s1 d3",
+          "hover": "rect:crosshair",
+          "calls": ["crosshair"],
+          "cursor": "crosshair"
+        },
+        {
+          "type": "move",
+          "x": 2,
+          "y": 398,
+          "aim": "corner",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "bar-root",
+      "note": "the root option's cursor reaches every item (getShallow climbs the item model, the series, the global model); a legend item is not a series' (pointer)",
+      "option": {"animation":false,"cursor":"wait","legend":{},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"name":"A","type":"bar","data":[10,20,15,30],"label":{"show":true,"position":"top"}},{"name":"B","type":"bar","cursor":"help","data":[3,4,5,6]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 237,
+          "y": 235,
+          "aim": "item s0 d1",
+          "hover": "rect:wait",
+          "calls": ["wait"],
+          "cursor": "wait"
+        },
+        {
+          "type": "move",
+          "x": 280,
+          "y": 303,
+          "aim": "item s1 d1",
+          "hover": "rect:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 350,
+          "y": 182,
+          "aim": "label s0 d2",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 277,
+          "y": 373,
+          "aim": "legend item 0",
+          "hover": "rect:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
+    },
+    {
+      "id": "triggers",
+      "note": "a title with triggerEvent or a link (its subtext with a sublink) and an axis label or name with triggerEvent answer the pointer: pointer",
+      "option": {"animation":false,"title":[{"text":"Zero","triggerEvent":true},{"text":"One","top":40,"link":"https://example.com/a","subtext":"Sub","sublink":"https://example.com/b"},{"text":"Two","top":100}],"grid":{"top":140},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"],"triggerEvent":true,"name":"Days"},"yAxis":{},"series":[{"type":"line","data":[1,2,3,4]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 300,
+          "y": 29,
+          "aim": "title 0",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 54,
+          "aim": "title 1 text",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 79,
+          "aim": "title 1 subtext",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 114,
+          "aim": "title 2 (silent)",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 371,
+          "y": 334,
+          "aim": "x axis label Wed",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 569,
+          "y": 320,
+          "aim": "x axis name",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
+    },
+    {
+      "id": "silent",
+      "note": "a silent series and its labels are no target; a legend without selectedMode has only silent children",
+      "option": {"animation":false,"legend":{"selectedMode":false},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"name":"A","type":"bar","silent":true,"cursor":"help","data":[10,20,15,30],"label":{"show":true,"position":"top"}}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 259,
+          "y": 235,
+          "aim": "item s0 d1",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 259,
+          "y": 139,
+          "aim": "label s0 d1",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 373,
+          "aim": "legend item 0",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "line",
+      "note": "a line's symbols take the item / series cursor; its polyline and area are elements of their own (pointer)",
+      "option": {"animation":false,"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"],"boundaryGap":false},"yAxis":{},"series":[{"type":"line","data":[10,20,{"value":15,"cursor":"help"},30],"areaStyle":{},"symbolSize":10},{"type":"line","cursor":"move","data":[32,34,33,35],"symbolSize":10}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 240,
+          "y": 193,
+          "aim": "item s0 d1",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 390,
+          "y": 224,
+          "aim": "item s0 d2",
+          "hover": "path:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 390,
+          "y": 110,
+          "aim": "item s1 d2",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 315,
+          "y": 208,
+          "aim": "polyline between d1 and d2",
+          "hover": "ec-polyline:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 315,
+          "y": 248,
+          "aim": "area under d1-d2",
+          "hover": "ec-polygon:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
+    },
+    {
+      "id": "large",
+      "note": "a large scatter is one element, LargeSymbolDraw's cursor 'default' whatever the series says",
+      "option": {"animation":false,"xAxis":{},"yAxis":{},"series":[{"type":"scatter","large":true,"largeThreshold":100,"cursor":"help","symbolSize":8,"data":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[11,0],[12,0],[13,0],[14,0],[15,0],[16,0],[17,0],[18,0],[19,0],[20,0],[21,0],[22,0],[23,0],[24,0],[25,0],[26,0],[27,0],[28,0],[29,0],[0,1],[1,1],[2,1],[3,1],[4,1],[5,1],[6,1],[7,1],[8,1],[9,1],[10,1],[11,1],[12,1],[13,1],[14,1],[15,1],[16,1],[17,1],[18,1],[19,1],[20,1],[21,1],[22,1],[23,1],[24,1],[25,1],[26,1],[27,1],[28,1],[29,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[9,2],[10,2],[11,2],[12,2],[13,2],[14,2],[15,2],[16,2],[17,2],[18,2],[19,2],[20,2],[21,2],[22,2],[23,2],[24,2],[25,2],[26,2],[27,2],[28,2],[29,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],[11,3],[12,3],[13,3],[14,3],[15,3],[16,3],[17,3],[18,3],[19,3],[20,3],[21,3],[22,3],[23,3],[24,3],[25,3],[26,3],[27,3],[28,3],[29,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[12,4],[13,4],[14,4],[15,4],[16,4],[17,4],[18,4],[19,4],[20,4],[21,4],[22,4],[23,4],[24,4],[25,4],[26,4],[27,4],[28,4],[29,4],[0,5],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[9,5],[10,5],[11,5],[12,5],[13,5],[14,5],[15,5],[16,5],[17,5],[18,5],[19,5],[20,5],[21,5],[22,5],[23,5],[24,5],[25,5],[26,5],[27,5],[28,5],[29,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[9,6],[10,6],[11,6],[12,6],[13,6],[14,6],[15,6],[16,6],[17,6],[18,6],[19,6],[20,6],[21,6],[22,6],[23,6],[24,6],[25,6],[26,6],[27,6],[28,6],[29,6],[0,7],[1,7],[2,7],[3,7],[4,7],[5,7],[6,7],[7,7],[8,7],[9,7],[10,7],[11,7],[12,7],[13,7],[14,7],[15,7],[16,7],[17,7],[18,7],[19,7],[20,7],[21,7],[22,7],[23,7],[24,7],[25,7],[26,7],[27,7],[28,7],[29,7],[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],[9,8],[10,8],[11,8],[12,8],[13,8],[14,8],[15,8],[16,8],[17,8],[18,8],[19,8],[20,8],[21,8],[22,8],[23,8],[24,8],[25,8],[26,8],[27,8],[28,8],[29,8],[0,9],[1,9],[2,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[14,9],[15,9],[16,9],[17,9],[18,9],[19,9],[20,9],[21,9],[22,9],[23,9],[24,9],[25,9],[26,9],[27,9],[28,9],[29,9]]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 105,
+          "y": 295,
+          "aim": "large point 31",
+          "hover": "path:default",
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 20,
+          "aim": "above the grid",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "pie",
+      "note": "a sector is its item's cursor, else pointer; its label is a text (pointer)",
+      "option": {"animation":false,"series":[{"type":"pie","radius":["30%","60%"],"data":[{"value":3,"name":"a","cursor":"help"},{"value":2,"name":"b"},{"value":1,"name":"c"}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 360,
+          "y": 200,
+          "aim": "item s0 d0",
+          "hover": "sector:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 240,
+          "y": 230,
+          "aim": "item s0 d1",
+          "hover": "sector:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 194,
+          "y": 83,
+          "aim": "label s0 d2",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "the hole",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "sunburst",
+      "note": "a sunburst piece: its item's cursor, else its level's (the item model's parent), else the series'",
+      "option": {"animation":false,"series":[{"type":"sunburst","cursor":"wait","levels":[{},{"cursor":"help"}],"label":{"show":false},"data":[{"name":"a","value":4,"children":[{"name":"a1","value":2,"cursor":"crosshair"},{"name":"a2","value":2}]},{"name":"b","value":3,"cursor":"move"}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 321,
+          "y": 200,
+          "aim": "item s0 d1",
+          "hover": "sector:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 375,
+          "y": 142,
+          "aim": "item s0 d2",
+          "hover": "sector:crosshair",
+          "calls": ["crosshair"],
+          "cursor": "crosshair"
+        },
+        {
+          "type": "move",
+          "x": 341,
+          "y": 283,
+          "aim": "item s0 d3",
+          "hover": "sector:wait",
+          "calls": ["wait"],
+          "cursor": "wait"
+        },
+        {
+          "type": "move",
+          "x": 263,
+          "y": 196,
+          "aim": "item s0 d4",
+          "hover": "sector:move",
+          "calls": ["move"],
+          "cursor": "move"
+        }
+      ]
+    },
+    {
+      "id": "treemap",
+      "note": "a treemap leaf's content rect takes the node's cursor (level, series); its label is pointer; the breadcrumb pointer; roam (true by default) grabs where nothing is hovered and grabs while it pans",
+      "option": {"animation":false,"series":[{"type":"treemap","cursor":"help","top":30,"bottom":60,"left":30,"right":30,"levels":[{},{"cursor":"wait","itemStyle":{"borderWidth":6,"borderColor":"#999"}}],"data":[{"name":"a","value":6,"children":[{"name":"a1","value":4},{"name":"a2","value":2,"cursor":"crosshair"}]},{"name":"b","value":4}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 212,
+          "y": 165,
+          "aim": "item s0 d2",
+          "hover": "rect:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 212,
+          "y": 314,
+          "aim": "item s0 d3",
+          "hover": "rect:crosshair",
+          "calls": ["crosshair"],
+          "cursor": "crosshair"
+        },
+        {
+          "type": "move",
+          "x": 482,
+          "y": 215,
+          "aim": "item s0 d4",
+          "hover": "rect:wait",
+          "calls": ["wait"],
+          "cursor": "wait"
+        },
+        {
+          "type": "move",
+          "x": 462,
+          "y": 185,
+          "aim": "label s0 d4",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 276,
+          "y": 374,
+          "aim": "breadcrumb item",
+          "hover": "polygon:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 10,
+          "y": 10,
+          "aim": "empty",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 10,
+          "y": 10,
+          "aim": "empty",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 20,
+          "y": 18,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 20,
+          "y": 18,
+          "aim": "released",
+          "hover": null,
+          "calls": ["grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 12,
+          "y": 12,
+          "aim": "empty again",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 42,
+          "y": 193,
+          "aim": "the border of parent a (its background)",
+          "hover": "rect:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "note": "a draggable node with no cursor option is 'move'; an item cursor wins over it; a node draggable false keeps pointer; an edge pointer; the RoamController grabs over its area where nothing is hovered, grabbing while it pans, grab again on release",
+      "option": {"animation":false,"series":[{"type":"graph","layout":"none","roam":true,"draggable":true,"left":100,"right":100,"top":80,"bottom":80,"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":100,"cursor":"help"},{"name":"c","x":100,"y":0,"draggable":false},{"name":"d","x":0,"y":100}],"links":[{"source":"a","target":"b"},{"source":"c","target":"d"}],"lineStyle":{"width":4},"symbolSize":20}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 100,
+          "y": 80,
+          "aim": "item s0 d0",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 500,
+          "y": 320,
+          "aim": "item s0 d1",
+          "hover": "path:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 500,
+          "y": 80,
+          "aim": "item s0 d2",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "edge a-b middle",
+          "hover": "ec-line:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 120,
+          "aim": "inside the view, nothing",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 120,
+          "aim": "press",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 310,
+          "y": 125,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "move",
+          "x": 320,
+          "y": 130,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 320,
+          "y": 130,
+          "aim": "release",
+          "hover": null,
+          "calls": ["grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 5,
+          "y": 5,
+          "aim": "outside the view",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "tree",
+      "note": "a tree node is pointer (its item cursor where it has one); roam grabs where nothing is hovered",
+      "option": {"animation":false,"series":[{"type":"tree","roam":true,"expandAndCollapse":false,"top":40,"bottom":40,"left":80,"right":120,"symbolSize":12,"label":{"show":false},"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y"}]}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 80,
+          "y": 200,
+          "aim": "item s0 d1",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 480,
+          "y": 120,
+          "aim": "item s0 d2",
+          "hover": "path:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 480,
+          "y": 280,
+          "aim": "item s0 d3",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 380,
+          "aim": "empty",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 380,
+          "aim": "press",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 310,
+          "y": 382,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 310,
+          "y": 382,
+          "aim": "release",
+          "hover": null,
+          "calls": ["grab"],
+          "cursor": "grab"
+        }
+      ]
+    },
+    {
+      "id": "sankey",
+      "note": "a draggable sankey node (draggable by default) is 'move' whatever else is written; one that is not keeps pointer; a link pointer; roam true grabs where nothing is hovered",
+      "option": {"animation":false,"series":[{"type":"sankey","roam":true,"left":40,"right":140,"top":40,"bottom":40,"data":[{"name":"a"},{"name":"b","draggable":false},{"name":"c","cursor":"help"}],"links":[{"source":"a","target":"b","value":1},{"source":"a","target":"c","value":1}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 50,
+          "y": 200,
+          "aim": "item s0 d0",
+          "hover": "rect:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 450,
+          "y": 118,
+          "aim": "item s0 d1",
+          "hover": "rect:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 450,
+          "y": 282,
+          "aim": "item s0 d2",
+          "hover": "rect:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 250,
+          "y": 280,
+          "aim": "link a-c middle",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 395,
+          "aim": "empty",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        }
+      ]
+    },
+    {
+      "id": "geo",
+      "note": "a geo region is pointer; inside the geo's box off its regions the RoamController grabs; grabbing while it pans",
+      "option": {"animation":false,"geo":{"map":"cursorSquares","roam":true,"left":100,"right":100,"top":100,"bottom":100}},
+      "steps": [
+        {
+          "type": "move",
+          "x": 167,
+          "y": 200,
+          "aim": "region A",
+          "hover": "compound:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "between the regions",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 200,
+          "aim": "press",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 305,
+          "y": 205,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 305,
+          "y": 205,
+          "aim": "release",
+          "hover": null,
+          "calls": ["grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 5,
+          "y": 5,
+          "aim": "outside",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "graphic",
+      "note": "a graphic element is its own `cursor`, pointer by default; a silent one is no target",
+      "option": {"animation":false,"graphic":[{"type":"rect","left":50,"top":50,"shape":{"width":80,"height":40},"style":{"fill":"#c00"},"cursor":"help"},{"type":"circle","left":200,"top":50,"shape":{"r":20},"style":{"fill":"#0c0"}},{"type":"rect","left":300,"top":50,"shape":{"width":80,"height":40},"style":{"fill":"#00c"},"silent":true}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 90,
+          "y": 70,
+          "aim": "help rect",
+          "hover": "rect:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 220,
+          "y": 70,
+          "aim": "circle",
+          "hover": "circle:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 340,
+          "y": 70,
+          "aim": "silent rect",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 500,
+          "y": 300,
+          "aim": "nothing",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "matrix",
+      "note": "a matrix cell written silent false with a cursor answers on its outline (no fill) with that cursor",
+      "option": {"animation":false,"matrix":{"left":100,"right":100,"top":80,"bottom":80,"x":{"data":["A","B"]},"y":{"data":["X","Y"]},"body":{"data":[{"coord":[0,0],"value":"v","cursor":"help","silent":false,"itemStyle":{"borderColor":"#333","borderWidth":2}}]}}},
+      "steps": [
+        {
+          "type": "move",
+          "x": 232,
+          "y": 200,
+          "aim": "the cell's left edge",
+          "hover": "rect:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 301,
+          "y": 215,
+          "aim": "the cell's inside (no fill)",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "candle-pictorial",
+      "note": "a candlestick and a pictorialBar's glyphs take the item / series cursor",
+      "option": {"animation":false,"xAxis":{"data":["a","b","c"]},"yAxis":{"scale":true},"series":[{"type":"candlestick","cursor":"help","data":[[10,20,5,25],[20,15,10,30],[15,18,12,22]]},{"type":"pictorialBar","symbol":"rect","symbolRepeat":true,"symbolSize":[12,6],"data":[8,{"value":12,"cursor":"crosshair"},6]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 165,
+          "y": 218,
+          "aim": "item s0 d0",
+          "hover": "normalCandlestickBox:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 315,
+          "y": 167,
+          "aim": "item s0 d1",
+          "hover": "normalCandlestickBox:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 315,
+          "y": 368,
+          "aim": "a glyph of pictorial d1",
+          "hover": "path:crosshair",
+          "calls": ["crosshair"],
+          "cursor": "crosshair"
+        }
+      ]
+    },
+    {
+      "id": "visualmap",
+      "note": "a continuous visualMap's handles and handle labels are ns-resize standing (ew-resize lying), its in-range bar the same when calculable, its out-of-range bar none (default); its end texts and a piecewise one's items pointer",
+      "option": {"animation":false,"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"type":"bar","data":[1,5,8,3]}],"grid":{"right":140,"bottom":120},"visualMap":[{"type":"continuous","min":0,"max":10,"calculable":true,"range":[2,8],"right":20,"top":40,"text":["High","Low"]},{"type":"continuous","orient":"horizontal","min":0,"max":10,"calculable":true,"left":60,"bottom":20,"seriesIndex":0},{"type":"piecewise","min":0,"max":10,"splitNumber":2,"left":380,"bottom":20,"seriesIndex":0}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 552,
+          "y": 189,
+          "aim": "vm0 handle thumb",
+          "hover": "path:ns-resize",
+          "calls": ["ns-resize"],
+          "cursor": "ns-resize"
+        },
+        {
+          "type": "move",
+          "x": 525,
+          "y": 189,
+          "aim": "vm0 handle label",
+          "hover": "tspan:ns-resize",
+          "calls": ["ns-resize"],
+          "cursor": "ns-resize"
+        },
+        {
+          "type": "move",
+          "x": 552,
+          "y": 147,
+          "aim": "vm0 in-range bar",
+          "hover": "polygon:ns-resize",
+          "calls": ["ns-resize"],
+          "cursor": "ns-resize"
+        },
+        {
+          "type": "move",
+          "x": 552,
+          "y": 80,
+          "aim": "vm0 out-of-range bar, its top",
+          "hover": "polygon:default",
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 552,
+          "y": 61,
+          "aim": "vm0 text High",
+          "hover": "tspan:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 79,
+          "y": 352,
+          "aim": "vm1 handle thumb",
+          "hover": "path:ew-resize",
+          "calls": ["ew-resize"],
+          "cursor": "ew-resize"
+        },
+        {
+          "type": "move",
+          "x": 446,
+          "y": 334,
+          "aim": "vm2 piece 0 symbol",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
+    },
+    {
+      "id": "legend-scroll",
+      "note": "a scrolling legend's page buttons: pointer where it can turn the page, default where it cannot",
+      "option": {"animation":false,"legend":{"type":"scroll","top":10,"left":20,"width":300},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"name":"Series number 0","type":"bar","data":[0,1,2,3]},{"name":"Series number 1","type":"bar","data":[1,2,3,4]},{"name":"Series number 2","type":"bar","data":[2,3,4,5]},{"name":"Series number 3","type":"bar","data":[3,4,5,6]},{"name":"Series number 4","type":"bar","data":[4,5,6,7]},{"name":"Series number 5","type":"bar","data":[5,6,7,8]},{"name":"Series number 6","type":"bar","data":[6,7,8,9]},{"name":"Series number 7","type":"bar","data":[7,8,9,10]},{"name":"Series number 8","type":"bar","data":[8,9,10,11]},{"name":"Series number 9","type":"bar","data":[9,10,11,12]},{"name":"Series number 10","type":"bar","data":[10,11,12,13]},{"name":"Series number 11","type":"bar","data":[11,12,13,14]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 274,
+          "y": 23,
+          "aim": "page previous (cannot)",
+          "hover": "path:default",
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 321,
+          "y": 23,
+          "aim": "page next",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
+    },
+    {
+      "id": "datazoom-inside",
+      "note": "an inside dataZoom's RoamController grabs over its grid where nothing is hovered (a bar is hovered: its pointer), grabbing while it pans, grab on release",
+      "option": {"animation":false,"xAxis":{"type":"category","data":["a","b","c","d","e","f","g","h"]},"yAxis":{},"dataZoom":[{"type":"inside"}],"series":[{"type":"bar","data":[5,6,7,8,7,6,5,4],"barWidth":10}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 300,
+          "y": 80,
+          "aim": "grid, above the bars",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 287,
+          "y": 193,
+          "aim": "item s0 d3",
+          "hover": "rect:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 80,
+          "aim": "grid again",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 80,
+          "aim": "press",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 280,
+          "y": 82,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 280,
+          "y": 82,
+          "aim": "release",
+          "hover": null,
+          "calls": ["grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 395,
+          "aim": "below the grid",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
+      "id": "thumbnail",
+      "note": "a graph's thumbnail: its box and its window are 'grab' (ThumbnailView), the copy inside silent",
+      "option": {"animation":false,"thumbnail":{"right":10,"bottom":10,"width":160,"height":120},"series":[{"type":"graph","layout":"none","roam":true,"left":40,"right":240,"top":40,"bottom":40,"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":100}],"links":[{"source":"a","target":"b"}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 468,
+          "y": 280,
+          "aim": "the thumbnail box",
+          "hover": "rect:grab",
+          "calls": ["grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 510,
+          "y": 330,
+          "aim": "its window",
+          "hover": "rect:grab",
+          "calls": ["grab"],
+          "cursor": "grab"
+        }
+      ]
+    },
+    {
+      "id": "toolbox",
+      "note": "a toolbox icon: pointer",
+      "option": {"animation":false,"toolbox":{"feature":{"restore":{},"saveAsImage":{}}},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"type":"bar","data":[1,2,3,4]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 547,
+          "y": 25,
+          "aim": "restore icon",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 10,
+          "aim": "nothing",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    }
+  ],
+  "pictures": [
+    {
+      "id": "scatter-symbols",
+      "note": "symbol image:// in the unit box scaled by half the symbol size: keepAspect centres the picture there first (so an oblong symbolSize still stretches it), without it the picture covers the box; symbolRotate turns it",
+      "option": {"animation":false,"xAxis":{"min":0,"max":10},"yAxis":{"min":0,"max":10},"series":[{"type":"scatter","symbol":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC","symbolSize":[40,20],"symbolKeepAspect":true,"data":[[2,2]]},{"type":"scatter","symbol":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","symbolSize":[30,30],"symbolKeepAspect":true,"data":[[4,4]]},{"type":"scatter","symbol":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC","symbolSize":24,"symbolRotate":30,"data":[[6,6]]},{"type":"scatter","symbol":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","symbolSize":[10,30],"symbolOffset":[5,"50%"],"data":[[8,8]]}]},
+      "images": [
+        {
+          "image": "wide",
+          "corners": [["4064000000000000","4070800000000000"],["4069000000000000","4070800000000000"],["4069000000000000","4071200000000000"],["4064000000000000","4071200000000000"]],
+          "cornersText": [["160","264"],["200","264"],["200","274"],["160","274"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4070680000000000","4069600000000000"],["4071580000000000","4069600000000000"],["4071580000000000","406d200000000000"],["4070680000000000","406d200000000000"]],
+          "cornersText": [["262.5","203"],["277.5","203"],["277.5","233"],["262.5","233"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "wide",
+          "corners": [["407579b91e8dee34","406453723d1bdc68"],["4076c646e17211cc","4062d3723d1bdc68"],["40778646e17211cc","40656c8dc2e42398"],["407639b91e8dee34","4066ec8dc2e42398"]],
+          "cornersText": [["343.60769515458674","162.60769515458674"],["364.39230484541326","150.60769515458674"],["376.39230484541326","171.39230484541326"],["355.60769515458674","183.39230484541326"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407c200000000000","405d000000000000"],["407cc00000000000","405d000000000000"],["407cc00000000000","4062400000000000"],["407c200000000000","4062400000000000"]],
+          "cornersText": [["450","116"],["460","116"],["460","146"],["450","146"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    },
+    {
+      "id": "legend-icon",
+      "note": "a legend icon image:// in the item box, keepAspect (symbolKeepAspect, true by default) centred in the real 25 x 14 box",
+      "option": {"animation":false,"legend":{"icon":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC","itemWidth":25,"itemHeight":14},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"name":"A","type":"bar","data":[1,2,3,4]},{"name":"B","type":"bar","data":[2,3,4,5]}]},
+      "images": [
+        {
+          "image": "wide",
+          "corners": [["40701f5c28f5c28f","4076ec0000000000"],["4071af5c28f5c28f","4076ec0000000000"],["4071af5c28f5c28f","4077b40000000000"],["40701f5c28f5c28f","4077b40000000000"]],
+          "cornersText": [["257.96","366.75"],["282.96","366.75"],["282.96","379.25"],["257.96","379.25"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "wide",
+          "corners": [["4073000000000000","4076ec0000000000"],["4074900000000000","4076ec0000000000"],["4074900000000000","4077b40000000000"],["4073000000000000","4077b40000000000"]],
+          "cornersText": [["304","366.75"],["329","366.75"],["329","379.25"],["304","379.25"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    },
+    {
+      "id": "graphic-natural",
+      "note": "a graphic image without a width or a height takes its natural size once loaded; one side written scales the other by the aspect",
+      "option": {"animation":false,"graphic":[{"type":"image","x":100,"y":80,"style":{"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC"}},{"type":"image","x":200,"y":80,"style":{"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","width":24}},{"type":"image","x":300,"y":80,"style":{"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC","height":30}},{"type":"image","x":400,"y":80,"style":{"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","width":50,"height":20}}]},
+      "images": [
+        {
+          "image": "wide",
+          "corners": [["4059000000000000","4054000000000000"],["405e000000000000","4054000000000000"],["405e000000000000","4056800000000000"],["4059000000000000","4056800000000000"]],
+          "cornersText": [["100","80"],["120","80"],["120","90"],["100","90"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4069000000000000","4054000000000000"],["406c000000000000","4054000000000000"],["406c000000000000","4060000000000000"],["4069000000000000","4060000000000000"]],
+          "cornersText": [["200","80"],["224","80"],["224","128"],["200","128"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "wide",
+          "corners": [["4072c00000000000","4054000000000000"],["4076800000000000","4054000000000000"],["4076800000000000","405b800000000000"],["4072c00000000000","405b800000000000"]],
+          "cornersText": [["300","80"],["360","80"],["360","110"],["300","110"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4079000000000000","4054000000000000"],["407c200000000000","4054000000000000"],["407c200000000000","4059000000000000"],["4079000000000000","4059000000000000"]],
+          "cornersText": [["400","80"],["450","80"],["450","100"],["400","100"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    },
+    {
+      "id": "pictorial",
+      "note": "a pictorialBar of pictures, repeated, keepAspect",
+      "option": {"animation":false,"xAxis":{"data":["a","b"]},"yAxis":{"max":10},"series":[{"type":"pictorialBar","symbol":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","symbolKeepAspect":true,"symbolRepeat":true,"symbolSize":[20,20],"data":[4,6]}]},
+      "images": [
+        {
+          "image": "tall",
+          "corners": [["4068100000000000","4072c00000000000"],["406a900000000000","4072c00000000000"],["406a900000000000","4074000000000000"],["4068100000000000","4074000000000000"]],
+          "cornersText": [["192.5","300"],["212.5","300"],["212.5","320"],["192.5","320"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4068100000000000","4071480000000000"],["406a900000000000","4071480000000000"],["406a900000000000","4072880000000000"],["4068100000000000","4072880000000000"]],
+          "cornersText": [["192.5","276.5"],["212.5","276.5"],["212.5","296.5"],["192.5","296.5"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4068100000000000","406fa00000000000"],["406a900000000000","406fa00000000000"],["406a900000000000","4071100000000000"],["4068100000000000","4071100000000000"]],
+          "cornersText": [["192.5","253"],["212.5","253"],["212.5","273"],["192.5","273"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4068100000000000","406cb00000000000"],["406a900000000000","406cb00000000000"],["406a900000000000","406f300000000000"],["4068100000000000","406f300000000000"]],
+          "cornersText": [["192.5","229.5"],["212.5","229.5"],["212.5","249.5"],["192.5","249.5"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["4068100000000000","4069c00000000000"],["406a900000000000","4069c00000000000"],["406a900000000000","406c400000000000"],["4068100000000000","406c400000000000"]],
+          "cornersText": [["192.5","206"],["212.5","206"],["212.5","226"],["192.5","226"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","4072c00000000000"],["407b580000000000","4072c00000000000"],["407b580000000000","4074000000000000"],["407a180000000000","4074000000000000"]],
+          "cornersText": [["417.5","300"],["437.5","300"],["437.5","320"],["417.5","320"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","4071480000000000"],["407b580000000000","4071480000000000"],["407b580000000000","4072880000000000"],["407a180000000000","4072880000000000"]],
+          "cornersText": [["417.5","276.5"],["437.5","276.5"],["437.5","296.5"],["417.5","296.5"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","406fa00000000000"],["407b580000000000","406fa00000000000"],["407b580000000000","4071100000000000"],["407a180000000000","4071100000000000"]],
+          "cornersText": [["417.5","253"],["437.5","253"],["437.5","273"],["417.5","273"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","406cb00000000000"],["407b580000000000","406cb00000000000"],["407b580000000000","406f300000000000"],["407a180000000000","406f300000000000"]],
+          "cornersText": [["417.5","229.5"],["437.5","229.5"],["437.5","249.5"],["417.5","249.5"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","4069c00000000000"],["407b580000000000","4069c00000000000"],["407b580000000000","406c400000000000"],["407a180000000000","406c400000000000"]],
+          "cornersText": [["417.5","206"],["437.5","206"],["437.5","226"],["417.5","226"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","4066d00000000000"],["407b580000000000","4066d00000000000"],["407b580000000000","4069500000000000"],["407a180000000000","4069500000000000"]],
+          "cornersText": [["417.5","182.5"],["437.5","182.5"],["437.5","202.5"],["417.5","202.5"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407a180000000000","4063e00000000000"],["407b580000000000","4063e00000000000"],["407b580000000000","4066600000000000"],["407a180000000000","4066600000000000"]],
+          "cornersText": [["417.5","159"],["437.5","159"],["437.5","179"],["417.5","179"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    },
+    {
+      "id": "axis-arrow",
+      "note": "an axis line's arrow image:// (keepAspect)",
+      "option": {"animation":false,"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"],"axisLine":{"symbol":["none","image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC"],"symbolSize":[20,20]}},"yAxis":{"axisLine":{"show":true,"symbol":["none","image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg=="],"symbolSize":[20,20]}},"series":[{"type":"bar","data":[1,2,3,4]}]},
+      "images": [
+        {
+          "image": "tall",
+          "corners": [["4055400000000001","404b800000000000"],["4057c00000000001","404b800000000000"],["4057c00000000001","4052c00000000000"],["4055400000000001","4052c00000000000"]],
+          "cornersText": [["85.00000000000001","55"],["95.00000000000001","55"],["95.00000000000001","75"],["85.00000000000001","75"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "wide",
+          "corners": [["4081080000000000","4073600000000000"],["4081080000000000","4074a00000000000"],["4080b80000000000","4074a00000000000"],["4080b80000000000","4073600000000000"]],
+          "cornersText": [["545","310"],["545","330"],["535","330"],["535","310"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    },
+    {
+      "id": "toolbox-icon",
+      "note": "a toolbox feature's image:// icon fills the item box (createIcon)",
+      "option": {"animation":false,"toolbox":{"itemSize":20,"feature":{"myTool":{"show":true,"title":"mine","icon":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC","onclick":"@noop"},"restore":{}}},"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"series":[{"type":"bar","data":[1,2,3,4]}]},
+      "images": [
+        {
+          "image": "wide",
+          "corners": [["408090e58cf6eb0a","40317ffff8fb2d8b"],["408130e58cf6eb0a","40317ffff8fb2d8b"],["408130e58cf6eb0a","4042bffffc7d96c6"],["408090e58cf6eb0a","4042bffffc7d96c6"]],
+          "cornersText": [["530.112085274742","17.499999581644754"],["550.112085274742","17.499999581644754"],["550.112085274742","37.49999958164476"],["530.112085274742","37.49999958164476"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    },
+    {
+      "id": "datazoom-handle",
+      "note": "a slider dataZoom's handleIcon image:// (createSymbol keepAspect) in the handle box",
+      "option": {"animation":false,"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu"]},"yAxis":{},"dataZoom":[{"type":"slider","handleIcon":"image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg==","start":20,"end":80}],"series":[{"type":"bar","data":[1,2,3,4]}]},
+      "images": [
+        {
+          "image": "tall",
+          "corners": [["4066099999800000","4078080000000000"],["4067e99999800000","4078080000000000"],["4067e99999800000","4076280000000000"],["4066099999800000","4076280000000000"]],
+          "cornersText": [["176.29999995231628","384.5"],["191.29999995231628","384.5"],["191.29999995231628","354.5"],["176.29999995231628","354.5"]],
+          "ignore": false,
+          "invisible": false
+        },
+        {
+          "image": "tall",
+          "corners": [["407bc4ccccc00000","4078080000000000"],["407cb4ccccc00000","4078080000000000"],["407cb4ccccc00000","4076280000000000"],["407bc4ccccc00000","4076280000000000"]],
+          "cornersText": [["444.2999999523163","384.5"],["459.2999999523163","384.5"],["459.2999999523163","354.5"],["444.2999999523163","354.5"]],
+          "ignore": false,
+          "invisible": false
+        }
+      ]
+    }
+  ],
+  "checks": {"expectations":80}
+}

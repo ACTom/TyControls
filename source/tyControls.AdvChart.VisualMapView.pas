@@ -54,10 +54,18 @@ type
     Precision: Integer;
     Formatter: string;
     Box: TTyRawBox;
+    { positionGroup's getBoxLayoutParams: Box with a null or undefined key
+      read from the option root -- getItemAlign reads the option itself and
+      keeps Box [F4c] }
+    PosBox: TTyRawBox;
     { `handleSize`: a percentage of the item width or a length }
     HandleSize: TTyBoxRaw;
     { the handle icon's path body, `path://` taken off }
     HandleIcon: string;
+    { [F6a] an `image://` handle icon, as written ('' none): the thumb is
+      the picture, centred to its aspect in the icon box (createSymbol
+      with keepAspect), hit over its rect }
+    HandleImage: string;
     { handleStyle.borderWidth, doubled as upstream draws it }
     HandleLineWidth: Double;
     BorderWidth: Double;
@@ -540,11 +548,15 @@ begin
   def.Top.Kind := brNull;
   def.Bottom := TyBoxRawNum(0);
   Result.Box := TyMergeBoxIgnoreSize(node, def);
+  Result.PosBox := Result.Box;
+  TyBoxClimbRoot(Result.PosBox, AOption.Root);
   d := node.Find('handleSize');
   if d <> nil then Result.HandleSize := TyBoxRawOf(d);
   d := node.Find('handleIcon');
   if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 7) = 'path://') then
     Result.HandleIcon := Copy(d.AsString, 8, MaxInt);
+  if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 8) = 'image://') then
+    Result.HandleImage := d.AsString;
   hs := ObjOf(node.Find('handleStyle'));
   if hs <> nil then
   begin
@@ -1537,7 +1549,7 @@ begin
   L.BBoxPosition := bb;
 
   { positionGroup, as the continuous view }
-  box := AView.Box;
+  box := AView.PosBox;
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -1560,6 +1572,7 @@ var
   align: TTyTextAnchorH;
   dir: string;
   iconBox, r: TTyXYWH;
+  ib: TTyRectF;
 begin
   if not AView.Calculable then Exit;
   i0 := L.ItemW;
@@ -1584,7 +1597,15 @@ begin
     th[5] := AEnds[h];
     L.Handles[h].Local := th;
     L.Handles[h].Thumb := MatMul(L.Bar, th);
-    L.Handles[h].PathRect := TyVmIconRect(AView.HandleIcon, iconBox);
+    if AView.HandleImage <> '' then
+    begin
+      { [F6a] the picture's own box: no path, no pen }
+      ib := TyImageCenterBox(AView.HandleImage, TyRectF(iconBox.X, iconBox.Y,
+        iconBox.X + iconBox.W, iconBox.Y + iconBox.H));
+      L.Handles[h].PathRect := XYWH(ib.Left, ib.Top, ib.Right - ib.Left, ib.Bottom - ib.Top);
+    end
+    else
+      L.Handles[h].PathRect := TyVmIconRect(AView.HandleIcon, iconBox);
     { Path.getBoundingRect with the pen: strokeNoScale divides by the line
       scale of the thumb's whole transform, which is 1 at scale 1 }
     lw := AView.HandleLineWidth;
@@ -1597,7 +1618,7 @@ begin
       lineScale := Sqrt(Abs(L.Handles[h].Thumb[0] * L.Handles[h].Thumb[3]
         - L.Handles[h].Thumb[2] * L.Handles[h].Thumb[1]));
     r := L.Handles[h].PathRect;
-    if (lw > 0) and (lineScale > 1e-10) then
+    if (lw > 0) and (lineScale > 1e-10) and (AView.HandleImage = '') then
     begin
       r.W := r.W + lw / lineScale;
       r.H := r.H + lw / lineScale;
@@ -1790,6 +1811,9 @@ begin
   if not TyMatInvert(M, inv) then Exit;
   MatApply(inv, AGX, AGY, px, py);
   pr := L.Handles[AHandle].PathRect;
+  { [F6a] a picture: its rect, edges in (rectContain) }
+  if AView.HandleImage <> '' then
+    Exit((px >= pr.X) and (px <= pr.X + pr.W) and (py >= pr.Y) and (py <= pr.Y + pr.H));
   { the pen: strokeNoScale divides by the line scale; a thumb without a fill
     is its pen alone, at least strokeContainThreshold (5) wide }
   lw := AView.HandleLineWidth;
@@ -1881,7 +1905,7 @@ var
   props: TTyTransformProps;
   vertical, left, bottom: Boolean;
   k: Integer;
-  word: string;
+  word, hw, vw: string;
   inStops: TTyVisualGradStopArray;
 
   { Group.getBoundingRect of the view group }
@@ -2012,12 +2036,21 @@ begin
       else MatApply(L.Bar, i0 / 2, i1 + gap, ex, ey);
       if k = 0 then word := TyVmTransformDirection('bottom', L.Bar)
       else word := TyVmTransformDirection('top', L.Bar);
+      { _renderEndsText: the text style's own verticalAlign and align
+        before the ones the bar's turn gives [F4c]; a text with a line break
+        is measured as its block }
       if AView.Horizontal then
-        L.Texts[k] := MakeText(AView.Text[1 - k], ex, ey, WordH(word),
-          tavMiddle, AMeasurer, AInk)
+      begin
+        if AView.TextAlign <> '' then hw := AView.TextAlign else hw := word;
+        if AView.TextVAlign <> '' then vw := AView.TextVAlign else vw := 'middle';
+      end
       else
-        L.Texts[k] := MakeText(AView.Text[1 - k], ex, ey, tahCentre,
-          WordV(word), AMeasurer, AInk);
+      begin
+        if AView.TextAlign <> '' then hw := AView.TextAlign else hw := 'center';
+        if AView.TextVAlign <> '' then vw := AView.TextVAlign else vw := word;
+      end;
+      L.Texts[k] := MakeText(AView.Text[1 - k], ex, ey, WordH(hw),
+        WordV(vw), AMeasurer, AInk);
     end;
   end;
 
@@ -2047,7 +2080,7 @@ begin
   L.BBoxPosition := bb;
 
   { positionGroup: the box with the drawn size, on the canvas, no margin }
-  box := AView.Box;
+  box := AView.PosBox;
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -2115,9 +2148,11 @@ var
         pts[i] := TyPointF(x, y);
       end;
       el.Shape := TyShapePolygon(pts);
-      { the round clip of a partial bar is its rectangle here }
+      { the gradient group's clip: the bar's rect with r 3 [F4c: it was the
+        square rectangle] }
       el.HasClip := True;
       el.ClipRect := GlobalRect(XYWH(0, 0, ALayout.ItemW, ALayout.ItemH), G);
+      el.ClipRadius := 3;
     end;
     { LinearGradient(0, 0, 0, 1) over the element's own rect, turned with
       it: from the rect's (x, y) to (x, y + h), both through the matrix }
@@ -2153,6 +2188,13 @@ var
     el.Caption.FontSizeLogical := AInk.FontSizeLogical;
     el.Caption.FontWeight := AInk.FontWeight;
     el.Caption.Colour := AInk.Text;
+    { THE ELEMENT'S OPACITY, which the caption's ink is multiplied by: Blank
+      leaves it nought, and every text of the view was drawn in no ink at
+      all -- in the control and in every export [F4c: the T1 harvest's
+      missing visualMap texts] }
+    el.Style.Alpha := 1;
+    { a block of lines (a text with a line break) is drawn line by line }
+    el.Caption.MultiLine := Pos(#10, AText.Text) > 0;
     { an out-of-range item's label at half: the opacity on the colour }
     if AOpacity <> 1 then
       el.Caption.Colour := (AInk.Text and $00FFFFFF)
@@ -2169,6 +2211,7 @@ var
   T: TTyMat2D;
   bg: TTyXYWH;
   pr: TTyXYWH;
+  ix, iy: array[0..3] of Double;
   cxl, cyl, cx, cy, sw, sh: Double;
   fill: TTyVisualColor;
 
@@ -2259,7 +2302,8 @@ begin
   end;
   G := MatMul(T, ALayout.Bar);
   { A RECTANGLE over the whole length is the clip itself, rounded; anything
-    else -- a partial range, a trapezoid -- is the polygon, clipped square }
+    else -- a partial range, a trapezoid -- is the polygon under the rounded
+    clip [F4c] }
   Bar(ALayout.OutPoints, ALayout.OutRect, ALayout.OutStops,
     (ALayout.OutPoints[0].X = 0) and (ALayout.OutPoints[3].X = 0));
   Bar(ALayout.InPoints, ALayout.InRect, ALayout.InStops,
@@ -2275,6 +2319,20 @@ begin
     MatApply(MatMul(T, ALayout.Handles[h].Thumb), cxl, cyl, cx, cy);
     sw := pr.W;
     sh := pr.H;
+    if AView.HandleImage <> '' then
+    begin
+      { [F6a] the picture's corners through the thumb's whole transform }
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X, pr.Y, ix[0], iy[0]);
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X + pr.W, pr.Y, ix[1], iy[1]);
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X + pr.W, pr.Y + pr.H, ix[2], iy[2]);
+      MatApply(MatMul(T, ALayout.Handles[h].Thumb), pr.X, pr.Y + pr.H, ix[3], iy[3]);
+      el.Shape := TyShapePolygon([TyPointF(ix[0], iy[0]), TyPointF(ix[1], iy[1]),
+        TyPointF(ix[2], iy[2]), TyPointF(ix[3], iy[3])]);
+      el.Shape.Image := AView.HandleImage;
+      AList.Add(el);
+      Inc(Result);
+      Continue;
+    end;
     el.Shape := TyShapePath(AView.HandleIcon,
       TyRectF(cx - sw / 2, cy - sh / 2, cx + sw / 2, cy + sh / 2),
       -TyJsAtan2(ALayout.Handles[h].Thumb[1], ALayout.Handles[h].Thumb[0]),

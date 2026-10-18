@@ -540,15 +540,18 @@ end;
 
 { mergeDefaultAndTheme's mergeLayoutParam (layoutMode 'box') over the
   defaults 80 / 60 / 80 / 60, then getLayoutRect on the chart }
-function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH): TTyXYWH; forward;
+function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH;
+  ARoot: TJSONData): TTyXYWH; forward;
 
-function ParallelBox(ANode: TJSONObject; const AViewport: TTyRectF): TTyXYWH;
+function ParallelBox(ANode: TJSONObject; const AViewport: TTyRectF;
+  ARoot: TJSONData): TTyXYWH;
 begin
   Result := ParallelBoxIn(ANode, TyXYWH(AViewport.Left, AViewport.Top,
-    AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top));
+    AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top), ARoot);
 end;
 
-function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH): TTyXYWH;
+function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH;
+  ARoot: TJSONData): TTyXYWH;
 var
   raw, target: TTyCalBoxKeys;
   box: TTyRawBox;
@@ -576,6 +579,8 @@ begin
   box.Height := target[3].V;
   box.Top := target[4].V;
   box.Bottom := target[5].V;
+  { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
+  TyBoxClimbRoot(box, ARoot);
   Result := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
 end;
 
@@ -870,7 +875,7 @@ begin
         par.AxisInverse[High(par.AxisInverse)] := JsTruthy(an.Find('inverse'));
       end;
       SetLength(par.Intervals, Length(par.FAxes));
-      par.FRect := ParallelBox(node, AViewport);
+      par.FRect := ParallelBox(node, AViewport, AOption.Root);
       LayoutAxes(par, node);
     end;
   finally
@@ -889,7 +894,7 @@ begin
   if node = nil then Exit;
   mask := MaskFP;
   try
-    APar.FRect := ParallelBoxIn(node, ARef);
+    APar.FRect := ParallelBoxIn(node, ARef, AOption.Root);
     if not TyXYWHIsValid(APar.FRect) then
       APar.FRect := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize,
         TyBoxNowhereSize);

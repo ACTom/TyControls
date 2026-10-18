@@ -1567,9 +1567,9 @@ begin
     'TyAdvChartGeoLabel:hover { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
     '/* A decal''s symbols, where the decal names no colour of its own -- the aria' + LineEnding +
     '   decals that tell the series apart without their colours. Upstream draws' + LineEnding +
-    '   them black at 20%; here the skin''s ink at 20%, so a dark skin''s decals' + LineEnding +
-    '   are light. */' + LineEnding +
-    'TyAdvChartDecal { color: alpha(var(--on-surface), 0.2); }' + LineEnding +
+    '   them rgba(0, 0, 0, 0.2): the readable ink of the surface at 20%, which on' + LineEnding +
+    '   the light skin''s white is exactly that, and white at 20% on a dark one. */' + LineEnding +
+    'TyAdvChartDecal { color: alpha(on(var(--surface)), 0.2); }' + LineEnding +
     '/* The item the keyboard holds. Upstream has no keyboard, so this is the' + LineEnding +
     '   library''s own focus ring, drawn around the mark: the skin''s focus ring, at' + LineEnding +
     '   the width the other controls draw theirs. The offset follows the library''s' + LineEnding +

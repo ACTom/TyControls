@@ -26,6 +26,7 @@ type
     procedure TestHorizontalLineSnapsOnlyY;
     procedure TestDiagonalLineIsLeftAlone;
     procedure TestRectSnapsAllFourEdges;
+    procedure TestAHalfRoundsUpAsMathRoundDoes;
     procedure TestRectBiasesInwardSoItDoesNotCreep;
     procedure TestThinRectKeepsAtLeastOnePixel;
     procedure TestEmptyRectStaysEmpty;
@@ -194,6 +195,24 @@ begin
     the natural result of a zero-width rect is -1 -- which survives a later
     Min/Max swap and reappears as a phantom band somewhere else. }
   AssertTrue('and not inverted', r >= l);
+end;
+
+{ [F4c] zrender's subPixelOptimize rounds the doubled position with
+  Math.round -- a half goes up -- where FPC's Round takes it to the even
+  neighbour. Same answer for an odd width moved forwards; not for a far edge
+  (moved backwards) or an even width. }
+procedure TSubPixelTest.TestAHalfRoundsUpAsMathRoundDoes;
+begin
+  { round(2.5) = 3: (3 + 1) % 2 = 0, so 1.5 -- banker's 2 went back to 0.5 }
+  AssertEquals('a far edge at 1.25, width 1', 1.5, TySubPixelSnap(1.25, 1, False), 0);
+  { round(2.5) = 3: (3 + 2) odd, forwards: 2 -- banker's 2 kept 1 }
+  AssertEquals('1.25, width 2', 2.0, TySubPixelSnap(1.25, 2, True), 0);
+  { round(-2.5) = -2 (towards +Infinity): (-2 + 2) % 2 = 0, so -1 -- banker's -2 too }
+  AssertEquals('-1.25, width 2', -1.0, TySubPixelSnap(-1.25, 2, True), 0);
+  { round(-1.5) = -1: (-1 + 2) odd, backwards: -1 -- banker's -2 kept -1 too }
+  AssertEquals('-0.75, width 2, backwards', -1.0, TySubPixelSnap(-0.75, 2, False), 0);
+  { a width of 2.5 rounds to 3 (an odd width), not banker's 2 }
+  AssertEquals('1.0, width 2.5', 1.5, TySubPixelSnap(1.0, 2.5, True), 0);
 end;
 
 initialization

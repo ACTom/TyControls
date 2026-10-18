@@ -128,6 +128,7 @@ type
     procedure TestAnExcludedParallelAxisIsNotDrawn;
     procedure TestASeriesOnNoParallelSaysSo;
     procedure TestTheClipIsTheViewsFirstRenderOnly;
+    procedure TestASeriesIdOtherOnlyInCaseIsANewView;
   end;
 
 implementation
@@ -1529,6 +1530,37 @@ begin
     if (list.Element(i).Datum.SeriesIndex = 1) and list.Element(i).HasClip then
       clipped := True;
   AssertFalse('the rows shown again are not clipped', clipped);
+end;
+
+{ The views are keyed by the series id as upstream keys them, JavaScript
+  strings: 'PV' is not 'pv', so a series added with it is a new view and
+  clips on its first render. [fin: a case-insensitive key list survived] }
+procedure TAdvChartParallelTest.TestASeriesIdOtherOnlyInCaseIsANewView;
+const
+  cOpt = '{"parallelAxis": [{"dim": 0}, {"dim": 1}], "series": ['
+    + '{"type": "parallel", "id": "pv", "data": [[1, 2], [2, 1]]}]}';
+var
+  p: TTyChartAnimProxy;
+begin
+  Show(cOpt, camAlways);
+  FChart.AnimTick(T0 + 1200);
+  RenderNow;
+  p := FChart.AnimFindProxy(0, -1, 'parallelClip');
+  AssertTrue('the first clip is done', (p = nil) or p.AtFinal);
+  { the merge's flush at the clock's time, as upstream's setOption steps
+    every new clip once at NOW }
+  FChart.AnimNow := T0 + 1200;
+  FChart.SetOption('{"series": [{"id": "pv"}, '
+    + '{"type": "parallel", "id": "PV", "data": [[1, 1], [2, 2]]}]}', False);
+  RenderNow;
+  FChart.AnimTick(T0 + 1400);
+  RenderNow;
+  p := FChart.AnimFindProxy(1, -1, 'parallelClip');
+  AssertTrue('the series with id PV clips as a new view', (p <> nil) and not p.AtFinal);
+  { upstream (a scratch run of the 6.1 dist): 88 of 440 at 200 ms }
+  AssertEquals('linear: 20% of the width', 440 * 0.2, p.Num('shape.width'), 1e-9);
+  p := FChart.AnimFindProxy(0, -1, 'parallelClip');
+  AssertTrue('the kept view pv does not clip again', (p = nil) or p.AtFinal);
 end;
 
 initialization

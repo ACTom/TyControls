@@ -839,6 +839,64 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartaccbrush
+msgid "Brush"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccbrushareas
+#, object-pascal-format
+msgid "%d selected areas"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccdatazoom
+msgid "Data zoom"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartacchandleend
+msgid "End handle"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartacchandlestart
+msgid "Start handle"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartacclegend
+msgid "Legend"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccmarkarea
+msgid "Mark area"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccmarkers
+msgid "Markers"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccmarkline
+msgid "Mark line"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccmarkpoint
+msgid "Mark point"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccpercentrange
+#, object-pascal-format
+msgid "%s%% to %s%%"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartacctimeline
+msgid "Timeline"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartacctoolbox
+msgid "Toolbox"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaccvisualmap
+msgid "Visual map"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartariaalldata
 msgid "The data is as follows: "
 msgstr ""

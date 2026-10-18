@@ -1178,6 +1178,9 @@ begin
   FMap := TStringList.Create;
   FMap.CaseSensitive := True;
   FMap.Duplicates := dupIgnore;
+  { by bytes, as upstream keys a name: the locale compare took
+    U+00C5 and U+212B for one letter, and whatever came after [P2] }
+  FMap.UseLocale := False;
   FMap.Sorted := True;
   for i := 0 to FCount - 1 do
     FMap.AddObject(FCategories[i], TObject(PtrInt(i)));

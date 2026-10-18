@@ -101,6 +101,7 @@ type
     procedure TestSwitchingTheAnimationOffSnapsTheTransitions;
     procedure TestATransitionEndsOnTheChartsClock;
     procedure TestARadarCustomSaysItIsNotDrawn;
+    procedure TestANullCoordinateSystemIsNoneAndSaysNothing;
     procedure TestTheRenderAfterALeaveToThrowStartsOver;
     procedure TestTheApiAnswersNothingWhereUpstreamHasNoFunction;
   end;
@@ -851,6 +852,19 @@ begin
     + '"data":[[1,2,3]]}]}', False);
   AssertEquals('not asked', 0, FCount);
   AssertTrue('the note names the system: ' + Diag, Pos('radar', Diag) > 0);
+end;
+
+{ [F4c] coordinateSystem written null (a harvested undefined): upstream's
+  merge keeps the key, so the series has no coordinate system -- drawn as
+  'none', and nothing said about an axis it never named }
+procedure TAdvChartCustomSeries2Test.TestANullCoordinateSystemIsNoneAndSaysNothing;
+begin
+  TyChartRegisterRenderItem('Grow', @Grow);
+  Show('{"series":[{"type":"custom","coordinateSystem":null,"renderItem":"@Grow",'
+    + '"data":[[1,2,3],[4,5,6]]}]}', False);
+  AssertEquals('every item asked', 2, FCount);
+  AssertEquals('nothing said: ' + Diag, 0, Pos('axis', LowerCase(Diag)));
+  AssertEquals('nor about a coordinate system: ' + Diag, 0, Pos('coordinatesystem', LowerCase(Diag)));
 end;
 
 { upstream's render throws on the leaveTo and keeps throwing at every

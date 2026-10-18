@@ -1172,7 +1172,18 @@ var
     begin
       sym := ChainGet(AHost, 'symbol');
       stype := StrOf(sym);
-      Result := TTyGfxEl.Create(gkPath, 'path');
+      { [F6a] createSymbol's image: a ZRImage of the unit box (cover) }
+      if Copy(stype, 1, 8) = 'image://' then
+      begin
+        Result := TTyGfxEl.Create(gkImage, 'image');
+        TyTlPut(Result.Style, 'image', TJSONString.Create(Copy(stype, 9, MaxInt)));
+        TyTlPut(Result.Style, 'x', TJSONIntegerNumber.Create(-1));
+        TyTlPut(Result.Style, 'y', TJSONIntegerNumber.Create(-1));
+        TyTlPut(Result.Style, 'width', TJSONIntegerNumber.Create(2));
+        TyTlPut(Result.Style, 'height', TJSONIntegerNumber.Create(2));
+      end
+      else
+        Result := TTyGfxEl.Create(gkPath, 'path');
       isEmpty := Copy(stype, 1, 5) = 'empty';
       if isEmpty then stype := LowerCase(Copy(stype, 6, 1)) + Copy(stype, 7, MaxInt);
       if Copy(stype, 1, 7) = 'path://' then
@@ -1311,9 +1322,19 @@ var
     iconSize := ZrParsePercent(ChainGet([ctl], AName + 'BtnSize'), controlSize);
     if ChainGet([ctl], AName + 'BtnSize') = nil then iconSize := controlSize;
     icon := StrOf(ctl.Find(AName + 'Icon'));
-    el := TTyGfxEl.Create(gkPath, 'path');
-    { createIcon: an image draws nothing here; a path is fitted into the
-      button's box, centred }
+    { createIcon: [F6a] an image is a ZRImage of the button's box; a path is
+      fitted into the box, centred }
+    if Copy(icon, 1, 8) = 'image://' then
+    begin
+      el := TTyGfxEl.Create(gkImage, 'image');
+      el.Style.Add('image', Copy(icon, 9, MaxInt));
+      el.Style.Add('x', 0);
+      el.Style.Add('y', -iconSize / 2);
+      el.Style.Add('width', iconSize);
+      el.Style.Add('height', iconSize);
+    end
+    else
+      el := TTyGfxEl.Create(gkPath, 'path');
     if (icon <> '') and (Copy(icon, 1, 8) <> 'image://') then
       el.PathData := TyZrMakePathCenter(TyJsReplaceFirst(icon, 'path://', ''),
         TyXYWH(0, -iconSize / 2, iconSize, iconSize));
@@ -1397,6 +1418,8 @@ begin
   box.Bottom := TyBoxRawOf(fo.Find('bottom'));
   box.Width := TyBoxRawOf(fo.Find('width'));
   box.Height := TyBoxRawOf(fo.Find('height'));
+  { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
+  TyBoxClimbRoot(box, ARoot);
   { normalizeCssArray(padding || 0) }
   d := fo.Find('padding');
   if not TyTlTruthy(d) then

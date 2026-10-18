@@ -86,6 +86,12 @@ type
     BoundHas: Integer;          { 0, 1 or 2 }
     BoundA, BoundB: Double;
     KeepAspect: Boolean;
+    { [F3a] `symbolPatternSize` (400): the glyph path is made at this size
+      and scaled to its own -- what the enter animation scales up to; and a
+      row's `animation: false` (ItemModel.isAnimationEnabled: the series'
+      and the item's own) }
+    PatternSize: Double;
+    AnimOff: Boolean;
   end;
 
   { What a repeat comes to, in device px along the bar. }
@@ -115,10 +121,12 @@ function TyPictorialSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPictoria
   port that read only the series level draws the same circle nine times and
   looks like it lost the option rather than the row.
 
-  ONLY THE SCALAR FORMS ARRIVE HERE. The store parks scalar leaves under their
-  dotted path and skips arrays, so a row's `symbolSize: [10, 20]` is not
-  readable and keeps the series'. Said out loud rather than left as a silent
-  gap: the pair form on a ROW is genuinely unsupported, not merely untested. }
+  THE PAIR FORM ON A ROW [F3d]: the store keeps a row's short array item by
+  item (`symbolSize.0`, `symbolSize.1`), and a row's `symbolSize: [20,
+  '100%']` or `symbolOffset: [5, '-50%']` is read the way the series' is --
+  upstream's visual takes the row's own array (visual/symbol.ts, getShallow),
+  whole, over the series'. [Was: only the scalar forms arrived, and a row's
+  pair kept the series' size.] }
 function TyPictorialRowSpec(const ASpec: TTyPictorialSpec;
   AStore: TTyDataStore; ARow: Integer): TTyPictorialSpec;
 
@@ -172,6 +180,8 @@ begin
   Result.Clip := False;
   Result.BoundHas := 0;
   Result.KeepAspect := False;
+  Result.PatternSize := 400;
+  Result.AnimOff := False;
 end;
 
 { A plain number out of a string, decimal point regardless of the locale. }
@@ -236,7 +246,10 @@ begin
     begin
       a := TJSONArray(d);
       if a.Count > 0 then Result.SizeW := TyBoxDataOf(a.Items[0], Result.SizeW);
-      if a.Count > 1 then Result.SizeH := TyBoxDataOf(a.Items[1], Result.SizeH);
+      if a.Count > 1 then Result.SizeH := TyBoxDataOf(a.Items[1], Result.SizeH)
+      { [F3d] `[16]`: the second is parsePercent(undefined) -- not a number,
+        and no glyph is drawn (was: the default 100%) }
+      else if a.Count = 1 then Result.SizeH := TyBoxPx(NaN);
     end
     else
     begin
@@ -370,6 +383,14 @@ begin
 
   d := node.Find('symbolKeepAspect');
   if (d <> nil) and (d.JSONType = jtBoolean) then Result.KeepAspect := d.AsBoolean;
+
+  { [F3a] `itemModel.get('symbolPatternSize') || 2` }
+  d := node.Find('symbolPatternSize');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.PatternSize := d.AsFloat;
+    if (Result.PatternSize = 0) or IsNan(Result.PatternSize) then Result.PatternSize := 2;
+  end;
 end;
 
 { One row's scalar leaf, as text -- '' when the row did not write that key.
@@ -409,6 +430,20 @@ begin
     Result.HasSize := True;
     Result.SizeW := TyBoxStrOf(s, Result.SizeW);
     Result.SizeH := Result.SizeW;
+  end
+  else
+  begin
+    { [F3d] the row's array, whole: its first and its second -- a second
+      it lacks is parsePercent(undefined), not a number }
+    s := RowText(AStore, ARow, TyOverrideKey('symbolSize.0'));
+    if s <> '' then
+    begin
+      Result.HasSize := True;
+      Result.SizeW := TyBoxStrOf(s, TyBoxPx(NaN));
+      Result.SizeH := TyBoxPx(NaN);
+      s := RowText(AStore, ARow, TyOverrideKey('symbolSize.1'));
+      if s <> '' then Result.SizeH := TyBoxStrOf(s, TyBoxPx(NaN));
+    end;
   end;
 
   s := RowText(AStore, ARow, TyOverrideKey('symbolRotate'));
@@ -429,6 +464,20 @@ begin
     Result.HasOffset := True;
     Result.OffsetX := TyBoxStrOf(s, Result.OffsetX);
     Result.OffsetY := Result.OffsetX;
+  end
+  else
+  begin
+    { [F3d] the row's array: a one-element one falls back to its own first
+      (normalizeSymbolOffset's retrieve2(off[1], off[0])) }
+    s := RowText(AStore, ARow, TyOverrideKey('symbolOffset.0'));
+    if s <> '' then
+    begin
+      Result.HasOffset := True;
+      Result.OffsetX := TyBoxStrOf(s, ASpec.OffsetX);
+      Result.OffsetY := Result.OffsetX;
+      s := RowText(AStore, ARow, TyOverrideKey('symbolOffset.1'));
+      if s <> '' then Result.OffsetY := TyBoxStrOf(s, ASpec.OffsetY);
+    end;
   end;
 
   s := RowText(AStore, ARow, TyOverrideKey('symbolMargin'));
@@ -474,6 +523,17 @@ begin
     Result.BoundHas := 1;
     Result.BoundA := v;
   end;
+
+  { [F3a] the row's own pattern size, and its own `animation` (falsy: the
+    glyphs and the clip are set, not tweened) }
+  s := RowText(AStore, ARow, TyOverrideKey('symbolPatternSize'));
+  if (s <> '') and NumOf(s, v) then
+  begin
+    Result.PatternSize := v;
+    if (v = 0) or IsNan(v) then Result.PatternSize := 2;
+  end;
+  s := RowText(AStore, ARow, TyOverrideKey('animation'));
+  if s <> '' then Result.AnimOff := (s = 'false') or (s = '0');
 end;
 
 function TyPictorialTimes(AValue: Double): Integer;

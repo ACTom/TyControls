@@ -126,6 +126,9 @@ type
     Label_: TTyLabelSpec;
     { one per RAW node: item -> series }
     ItemLabels: TTyLabelSpecArray;
+    { one per RAW node, its decal: the piece's sector useStyle's it, and an
+      edge coloured 'source' / 'target' takes that node's [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 { The graph and the layout. AKept: the legend's verdict per raw node (nil:
@@ -196,7 +199,7 @@ implementation
 
 uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Pie,
-  tyControls.AdvChart.LabelOpt;
+  tyControls.AdvChart.LabelOpt, tyControls.AdvChart.LabelGuide;
 
 const
   cRadian = Pi / 180;
@@ -1216,6 +1219,7 @@ var
   mask: TFPUExceptionMask;
   n1, n2, nd: Integer;
   noInk: Boolean;
+  sec: TTyPolarSector;
 
   procedure Tag(var AEl: TTyChartElement);
   begin
@@ -1266,11 +1270,23 @@ begin
       end;
       d := TyChordNodeFind(S, i, 'itemStyle', 'opacity');
       if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 1;
+      if i <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[i];
       el.Z := S.Z;
       el.Z2 := 2;
       el.Datum := TyChartDatum(ASeriesIndex, S.Nodes[i].DataIndex, i);
       el.Silent := False;
       Tag(el);
+      { [F3c] the piece's Sector for the universal transition (the view
+        group's transform an identity once its scale has run -- upstream keeps
+        that identity matrix or none, by the group's history: the same
+        numbers either way) }
+      el.Anim.UtTag := 1;
+      el.Anim.UtRow := S.Nodes[i].DataIndex;
+      el.Anim.UtOrder := 0;
+      el.Anim.UtData := TyGuidePathData(TyChordSectorPath(S, i));
+      sec := NodeSector(S, i);
+      el.Anim.UtBase := TTyDoubleArray.Create(2, sec.CX, sec.CY, sec.R0, sec.R, sec.SA,
+        sec.EA, Ord(sec.CW));
       if S.Nodes[i].HasLabel and Finite([S.Nodes[i].LabelX, S.Nodes[i].LabelY]) then
       begin
         el.Caption.Text := S.Nodes[i].LabelText;
@@ -1330,6 +1346,8 @@ begin
       if (w = 'source') or (w = 'target') then
       begin
         if w = 'source' then nd := n1 else nd := n2;
+        { edgeStyle.decal = that node's style decal [F4a] }
+        if nd <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[nd];
         el.Style.HasFill := S.Nodes[nd].HasColour;
         el.Style.FillColor := S.Nodes[nd].Colour;
         if S.Nodes[nd].HasGradient then
@@ -1379,6 +1397,9 @@ begin
       el.Datum := TyChartEdgeDatum(ASeriesIndex, i);
       el.Silent := False;
       Tag(el);
+      { [F3c] a ribbon fades in where a universal transition morphs }
+      el.Anim.UtTag := 2;
+      el.Anim.UtRow := -2 - i;
       AList.Add(el);
       Inc(Result);
     end;

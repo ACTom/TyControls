@@ -114,6 +114,9 @@ type
     ItemLabels: TTyLabelSpecArray;
     { the link's default fill (upstream's neutral50) }
     LinkColour: TTyChartColor;
+    { one per node, its decal: the node's rect takes it, and a link
+      coloured 'source' / 'target' that node's (applyCurveStyle) [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -174,7 +177,8 @@ procedure TySankeyNodeRect(const S: TTySankeySolved; ANode: Integer;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers, tyControls.AdvChart.ZrPath,
+  tyControls.AdvChart.LabelGuide;
 
 const
   cEps = 5e-5;
@@ -692,6 +696,9 @@ begin
         else target[k].V := TyBoxRawStr('5%');
       end;
     TyCalMergeLayoutParam(target, raw6, False, False);
+    { getBoxLayoutParams: a null or undefined key reads the option root
+      [F4c] }
+    for k := 0 to 5 do TyRawClimbRoot(target[k].V, AOption.Root, cBoxKey[k]);
     box.Width := Scaled(target[0].V);
     box.Left := Scaled(target[1].V);
     box.Right := Scaled(target[2].V);
@@ -1688,6 +1695,37 @@ begin
   end;
 end;
 
+{ [F3c] a node's Rect (rounded by its radius) in the main group, under the
+  group's transform, for the universal transition }
+procedure UtNodePath(var AEl: TTyChartElement; const S: TTySankeySolved; ARow: Integer;
+  AX, AY, AW, AH, AR: Double);
+var
+  path: TTyZrPath;
+  r1, r2, r3, r4: Double;
+begin
+  AEl.Anim.UtTag := 1;
+  AEl.Anim.UtRow := ARow;
+  AEl.Anim.UtOrder := 0;
+  path := nil;
+  if AR > 0 then
+  begin
+    TyZrRadii([AR], r1, r2, r3, r4);
+    TyZrRoundRect(path, AX, AY, AW, AH, r1, r2, r3, r4);
+  end
+  else
+    TyZrRect(path, AX, AY, AW, AH);
+  AEl.Anim.UtData := TyGuidePathData(path);
+  AEl.Anim.UtBase := TTyDoubleArray.Create(1, AX, AY, AW, AH);
+  AEl.Anim.UtHasM := (S.M0 <> 1) or (S.M3 <> 1) or (S.M4 <> 0) or (S.M5 <> 0);
+  if AEl.Anim.UtHasM then
+  begin
+    AEl.Anim.UtM[0] := S.M0;
+    AEl.Anim.UtM[3] := S.M3;
+    AEl.Anim.UtM[4] := S.M4;
+    AEl.Anim.UtM[5] := S.M5;
+  end;
+end;
+
 function TyBuildSankeyMarks(ASeriesIndex: Integer; const ASolved: TTySankeySolved;
   const AInk: TTySankeyInk; AList: TTyPaintList): Integer;
 var
@@ -1702,6 +1740,59 @@ var
   fillS: string;
   sc: TTyChartColor;
   mask: TFPUExceptionMask;
+  { [F3a] the main group's getBoundingRect: zrender's BoundingRect union of
+    every child's (a path's own box, grown by its stroke), from the first
+    element this series added }
+  gbX, gbY, gbW, gbH: Double;
+  gbHas: Boolean;
+  first, k: Integer;
+  tagged: TTyChartElement;
+
+  { BoundingRect.union of the group's rect with one child's -- the first
+    child's rect cloned and then united with itself, as Group does }
+  procedure GroupUnion(AX, AY, AW, AH: Double);
+  var ux, uy: Double;
+  begin
+    if not gbHas then
+    begin
+      gbX := AX;
+      gbY := AY;
+      gbW := AW;
+      gbH := AH;
+      gbHas := True;
+    end;
+    ux := JsMin(AX, gbX);
+    uy := JsMin(AY, gbY);
+    if not (IsNan(gbX) or IsInfinite(gbX) or IsNan(gbW) or IsInfinite(gbW)) then
+      gbW := JsMax(AX + AW, gbX + gbW) - ux
+    else
+      gbW := AW;
+    if not (IsNan(gbY) or IsInfinite(gbY) or IsNan(gbH) or IsInfinite(gbH)) then
+      gbH := JsMax(AY + AH, gbY + gbH) - uy
+    else
+      gbH := AH;
+    gbX := ux;
+    gbY := uy;
+  end;
+
+  { Path.getBoundingRect: the path's box, and where it is stroked the box
+    grown by the line width (a filled path: no contain threshold) }
+  procedure ChildBox(AX0, AY0, AX1, AY1: Double; AStroke: Boolean; ALineW: Double);
+  var x, y, w, h: Double;
+  begin
+    x := AX0;
+    y := AY0;
+    w := AX1 - AX0;
+    h := AY1 - AY0;
+    if AStroke then
+    begin
+      w := w + ALineW;
+      h := h + ALineW;
+      x := x - ALineW / 2;
+      y := y - ALineW / 2;
+    end;
+    GroupUnion(x, y, w, h);
+  end;
 
   { the link's chain: item -> level of its SOURCE's depth -> series }
   function EdgeFind(const ASub, AKey: string): TJSONData;
@@ -1776,6 +1867,12 @@ var
 begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
+  first := AList.Count;
+  gbHas := False;
+  gbX := 0;
+  gbY := 0;
+  gbW := 0;
+  gbH := 0;
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
@@ -1859,6 +1956,7 @@ begin
         fillS := d.AsString;
         if fillS = 'source' then
         begin
+          if n1 <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[n1];
           el.Style.HasFill := ASolved.Nodes[n1].HasColour;
           el.Style.FillColor := ASolved.Nodes[n1].Colour;
           if ASolved.Nodes[n1].HasGradient then
@@ -1866,6 +1964,7 @@ begin
         end
         else if fillS = 'target' then
         begin
+          if n2 <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[n2];
           el.Style.HasFill := ASolved.Nodes[n2].HasColour;
           el.Style.FillColor := ASolved.Nodes[n2].Colour;
           if ASolved.Nodes[n2].HasGradient then
@@ -1917,9 +2016,17 @@ begin
       end;
       d := EdgeFind('lineStyle', 'opacity');
       if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 0.2;
+      { the band's box in the group [F3a] }
+      ChildBox(mn[0], mn[1], mx[0], mx[1],
+        (el.Style.StrokeColor <> 0) and (el.Style.StrokeWidthLogical > 0),
+        el.Style.StrokeWidthLogical * ASolved.Scale);
       el.Z := ASolved.Z;
       el.Z2 := 0;
       el.Datum := TyChartEdgeDatum(ASeriesIndex, i);
+      { [F3c] a band is a path of the view no item's: it fades in where a
+        universal transition morphs }
+      el.Anim.UtTag := 2;
+      el.Anim.UtRow := -2 - i;
       { a link takes the pointer -- its ECData has a dataIndex, so upstream
         hovers it and shows its tooltip [Batch 100] }
       el.Silent := False;
@@ -1970,9 +2077,18 @@ begin
       d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth,
         'itemStyle', 'opacity');
       if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 1;
+      { the rect's box in the group: its path's 'R' command, (x, y) and
+        (x + w, y + h) [F3a] }
+      ChildBox(JsMin(x, x + w), JsMin(y, y + h), JsMax(x, x + w), JsMax(y, y + h),
+        (el.Style.StrokeColor <> 0) and (el.Style.StrokeWidthLogical > 0),
+        el.Style.StrokeWidthLogical * ASolved.Scale);
+      if i <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[i];
       el.Z := ASolved.Z;
       el.Z2 := 10;
       el.Datum := TyChartDatum(ASeriesIndex, i, i);
+      { [F3c] the node's Rect in the main group, for the universal
+        transition }
+      UtNodePath(el, ASolved, i, x, y, w, h, r);
       { and so does a node [Batch 100] }
       el.Silent := False;
       if ASolved.Nodes[i].HasLabel and Finite([ASolved.Nodes[i].LabelX, ASolved.Nodes[i].LabelY]) then
@@ -1990,6 +2106,25 @@ begin
       end;
       AList.Add(el);
       Inc(Result);
+    end;
+    { THE ENTER ANIMATION'S CLIP [F3a]: SankeyView's createGridClipShape on
+      the main group -- every element of the series (and the labels they
+      carry, which share their host's clip paths) under it }
+    for k := first to AList.Count - 1 do
+    begin
+      tagged := AList.Element(k);
+      tagged.Anim.Role := carSankeyClip;
+      tagged.Anim.Series := ASeriesIndex;
+      tagged.Anim.Index := -1;
+      tagged.Anim.G[0] := gbX;
+      tagged.Anim.G[1] := gbY;
+      tagged.Anim.G[2] := gbW;
+      tagged.Anim.G[3] := gbH;
+      tagged.Anim.G[4] := ASolved.M0;
+      tagged.Anim.G[5] := ASolved.M3;
+      tagged.Anim.G[6] := ASolved.M4;
+      tagged.Anim.G[7] := ASolved.M5;
+      AList.SetElement(k, tagged);
     end;
   finally
     ClearExceptions(False);

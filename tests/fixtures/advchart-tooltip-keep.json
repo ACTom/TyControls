@@ -1,0 +1,5680 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "clock": {
+  "start": 1700000000000,
+  "stepDt": 10
+ },
+ "size": [
+  80,
+  40
+ ],
+ "notes": [
+  "setOption steps and action steps move no clock; an idle step of 0 ms fires the timeouts due now.",
+  "Pointer steps: zrender Handler mousemove / mousedown + mouseup + click / mousewheel / mouseout from outside the canvas; each 10 ms after the last; a frame of every chart after every step.",
+  "TooltipRichContent.getSize answers 80 x 40; box is the moveTo argument.",
+  "The axis pointer's own highlight / downplay batches (notBlur, escapeConnect) are not listened to."
+ ],
+ "cases": [
+  {
+   "id": "click-item",
+   "note": "triggerOn click, item: a move shows nothing, a click on a bar shows it, a move leaves it, a click on nothing hides it, a click on a line symbol, a leave",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "triggerOn": "click"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      371,
+      295
+     ],
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      371,
+      244
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 1,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:1:2",
+        "anchor": [
+         "4077300000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "371",
+         "244"
+        ],
+        "box": [
+         "4078700000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "391",
+         "264"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:1:2",
+        "anchor": [
+         "4077300000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "371",
+         "244"
+        ],
+        "box": [
+         "4078700000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "391",
+         "264"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "click-move-item",
+   "note": "triggerOn mousemove|click, item: a move shows, a click on another bar shows that one, a move off hides, a click shows again",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "triggerOn": "mousemove|click"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      484,
+      244
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      146,
+      282
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 0,
+        "dataIndex": 0,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:0",
+        "anchor": [
+         "4062400000000000",
+         "4071a00000000000"
+        ],
+        "anchorText": [
+         "146",
+         "282"
+        ],
+        "box": [
+         "4064c00000000000",
+         "4072e00000000000"
+        ],
+        "boxText": [
+         "166",
+         "302"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:0",
+        "anchor": [
+         "4062400000000000",
+         "4071a00000000000"
+        ],
+        "anchorText": [
+         "146",
+         "282"
+        ],
+        "box": [
+         "4064c00000000000",
+         "4072e00000000000"
+        ],
+        "boxText": [
+         "166",
+         "302"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "click-always",
+   "note": "triggerOn click with alwaysShowContent: a click on nothing and a leave leave the box up",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "triggerOn": "click",
+       "alwaysShowContent": true
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      371,
+      295
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077300000000000",
+         "4072700000000000"
+        ],
+        "anchorText": [
+         "371",
+         "295"
+        ],
+        "box": [
+         "4078700000000000",
+         "4073b00000000000"
+        ],
+        "boxText": [
+         "391",
+         "315"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "click-axis",
+   "note": "triggerOn click, axis: a click shows the axis tooltip, a move is silent, a click off the grid hides",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis",
+       "triggerOn": "click"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      370,
+      200
+     ],
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      480,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 3
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 480,
+        "y": 300,
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 3,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 3,
+              "dataIndex": 3
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 3,
+              "dataIndex": 3
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           0,
+           3,
+           3
+          ],
+          [
+           1,
+           3,
+           3
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/3@x0,1/3@x0",
+        "anchor": [
+         "407e000000000000",
+         "4072c00000000000"
+        ],
+        "anchorText": [
+         "480",
+         "300"
+        ],
+        "box": [
+         "407f400000000000",
+         "4074000000000000"
+        ],
+        "boxText": [
+         "500",
+         "320"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-axis",
+   "note": "an axis tooltip and a setOption: the box stays and the keep timer shows the last dataByCoordSys again at the last point (no action); a notMerge setOption the same",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      370,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 370,
+        "y": 200,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 2,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ],
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/2@x0,1/2@x0",
+        "anchor": [
+         "4077200000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "370",
+         "200"
+        ],
+        "box": [
+         "4078600000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "390",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ]
+     },
+     "notMerge": true,
+     "newView": true,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-item",
+   "note": "an item tooltip and a setOption: the keep timer dispatches updateAxisPointer at the last point and tries the element there again",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      484,
+      244
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "seriesIndex": 1,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:1:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {},
+       {
+        "data": [
+         2,
+         5,
+         4,
+         9
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:1:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-datazoom",
+   "note": "an axis tooltip and a dataZoom action (its update renders the view): kept at the last point",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ],
+      "dataZoom": [
+       {
+        "type": "inside"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      370,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 370,
+        "y": 200,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 2,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ],
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/2@x0,1/2@x0",
+        "anchor": [
+         "4077200000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "370",
+         "200"
+        ],
+        "box": [
+         "4078600000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "390",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "start": 25,
+      "end": 100
+     },
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ],
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/2@x0,1/2@x0",
+        "anchor": [
+         "4077200000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "370",
+         "200"
+        ],
+        "box": [
+         "4078600000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "390",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ],
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/3@x0,1/3@x0",
+        "anchor": [
+         "4077200000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "370",
+         "200"
+        ],
+        "box": [
+         "4078600000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "390",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ],
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/3@x0,1/3@x0",
+        "anchor": [
+         "4077200000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "370",
+         "200"
+        ],
+        "box": [
+         "4078600000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "390",
+         "220"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-legend",
+   "note": "an item tooltip over a bar, the legend hides the bars: the keep timer finds nothing at the point and hides",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ],
+      "legend": {}
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "B"
+     },
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-highlight",
+   "note": "a highlight is no render of the view: nothing is kept, nothing changes",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-always",
+   "note": "alwaysShowContent, the pointer gone (a hideTip cleared the last point): a setOption leaves the box up and keeps nothing",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis",
+       "alwaysShowContent": true
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 300,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000001"
+        ],
+        "boxText": [
+         "270",
+         "220.00000000000003"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000001"
+        ],
+        "boxText": [
+         "270",
+         "220.00000000000003"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 300,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000001"
+        ],
+        "boxText": [
+         "270",
+         "220.00000000000003"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-click",
+   "note": "triggerOn click: nothing is kept, the box shown stays up",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "triggerOn": "click"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "click",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-none",
+   "note": "triggerOn none, a showTip by hand: nothing is kept, the box stays up",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "triggerOn": "none"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "4070d00000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "269"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4074a00000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "330"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "4070d00000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "269"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4074a00000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "330"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "4070d00000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "269"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4074a00000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "330"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-hidden",
+   "note": "the pointer left and the box went: a setOption keeps nothing",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-delay",
+   "note": "showDelay 50: the kept show waits it out again",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "showDelay": 50
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 60,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 30,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 30,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-showtip-point",
+   "note": "a showTip by seriesIndex + dataIndex places at findPointFromSeries: that point is kept",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 2
+     },
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "seriesIndex": 1,
+        "dataIndex": 2
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 1,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:1:2",
+        "anchor": [
+         "4077340000000000",
+         "406e700000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "243.5"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4070180000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "257.5"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:1:2",
+        "anchor": [
+         "4077340000000000",
+         "406e700000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "243.5"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4070180000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "257.5"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "406e700000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "243.5"
+        ],
+        "box": [
+         "4078740000000000",
+         "4070780000000000"
+        ],
+        "boxText": [
+         "391.25",
+         "263.5"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-axis-to-item",
+   "note": "an axis tooltip, then a setOption that makes it an item tooltip: _keepShow drops the last dataByCoordSys (axis only), so the keep timer tries the element at the last point -- the bar, as an item",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 259,
+        "y": 256,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "tooltip": {
+       "trigger": "item"
+      }
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "ci-move-silent",
+   "ok": true,
+   "what": "a move shows nothing under triggerOn click"
+  },
+  {
+   "id": "ci-click-shows",
+   "ok": true,
+   "what": "a click on a bar shows it"
+  },
+  {
+   "id": "ci-move-keeps",
+   "ok": true,
+   "what": "a move leaves the box"
+  },
+  {
+   "id": "ci-click-off-hides",
+   "ok": true,
+   "what": "a click on nothing hides it"
+  },
+  {
+   "id": "cm-click-other",
+   "ok": true,
+   "what": "mousemove|click: the click shows the bar clicked"
+  },
+  {
+   "id": "ca-stays",
+   "ok": true,
+   "what": "alwaysShowContent: up after a click on nothing and a leave"
+  },
+  {
+   "id": "cx-click",
+   "ok": true,
+   "what": "an axis click shows, a move is silent"
+  },
+  {
+   "id": "ka-stays",
+   "ok": true,
+   "what": "setOption: the axis box stays and is shown again at the last point, no action"
+  },
+  {
+   "id": "ki-reshown",
+   "ok": true,
+   "what": "the keep timer: updateAxisPointer and the item shown again"
+  },
+  {
+   "id": "kd-kept",
+   "ok": true,
+   "what": "dataZoom: kept"
+  },
+  {
+   "id": "kl-hides",
+   "ok": true,
+   "what": "the bars hidden: the kept point finds nothing and hides"
+  },
+  {
+   "id": "kh-nothing",
+   "ok": true,
+   "what": "a highlight keeps nothing"
+  },
+  {
+   "id": "kal-up",
+   "ok": true,
+   "what": "alwaysShowContent: up, nothing kept"
+  },
+  {
+   "id": "kc-up",
+   "ok": true,
+   "what": "triggerOn click: nothing kept, the box up"
+  },
+  {
+   "id": "kn-up",
+   "ok": true,
+   "what": "triggerOn none: nothing kept, the box up"
+  },
+  {
+   "id": "khd-nothing",
+   "ok": true,
+   "what": "the point cleared: nothing kept"
+  },
+  {
+   "id": "kdl-waits",
+   "ok": true,
+   "what": "the kept show dispatches at once"
+  },
+  {
+   "id": "kp-kept",
+   "ok": true,
+   "what": "the showTip point is kept: what is under it now (the bar) is shown"
+  },
+  {
+   "id": "kti-item",
+   "ok": true,
+   "what": "trigger now item: the last dataByCoordSys is dropped, the bar at the point is shown as an item"
+  },
+  {
+   "id": "ka-notmerge-drops",
+   "ok": true,
+   "what": "a notMerge setOption: a new view, the box gone, nothing kept"
+  }
+ ]
+}

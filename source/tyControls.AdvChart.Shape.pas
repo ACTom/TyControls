@@ -102,6 +102,13 @@ type
       are drawn and how the pointer finds a row in them -- AdvChart.Large.
       Default everywhere else. [Batch 117] }
     Large: TTyLargeGeom;
+    { [F6a] A PICTURE: a polygon of four corners -- the image's top-left,
+      top-right, bottom-right, bottom-left, turned as the element is -- that
+      the renderer draws this source into (AdvChart.Images resolves it: a
+      data URL, an image list's `name/index`), and nothing else: no fill, no
+      pen. Hit as the polygon, zrender's rectContain in the image's own
+      frame. Empty on every other shape. }
+    Image: string;
   end;
 
   { [Batch 148] zrender's Path.contain over a path's data, device px: the
