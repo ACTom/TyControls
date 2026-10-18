@@ -67,6 +67,11 @@ type
       from the start, pixel for pixel. And the other way. }
     procedure TestSurfaceFollowsScaleDown;
     procedure TestSurfaceFollowsScaleUp;
+    { The picture is scaled once per device scale, not every frame; an Invalidate -- a new or
+      repainted picture -- scales it again. }
+    procedure TestTiledBackgroundIsScaledOncePerScale;
+    { At S = 2 each cached cell text holds S^2 the pixels: the cache is bounded in pixels too. }
+    procedure TestTextCacheIsBoundedInPixels;
   end;
 
 implementation
@@ -502,6 +507,62 @@ begin
     ref.Free;
     f2.Free;
     f1.Free;
+  end;
+end;
+
+procedure TDeviceScaleGridTest.TestTiledBackgroundIsScaledOncePerScale;
+var
+  f: TForm;
+  g: TTyStringGrid;
+  pic: TBGRABitmap;
+  m: TTyGridMetrics;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(0, 0, CGridW + 40, CGridH + 40);
+    FMode := Ord(gbmTile);
+    g := TTyStringGrid(BuildBackground(f, 96));
+    TyPaintOwnSurface(g, 2).Free;
+    AssertEquals('scaled for the first frame', 1, TGridAccess(g).BackgroundTileBuilds);
+    TyPaintOwnSurface(g, 2).Free;
+    AssertEquals('and reused for the next', 1, TGridAccess(g).BackgroundTileBuilds);
+    TyPaintOwnSurface(g, 1).Free;
+    AssertEquals('S = 1 draws the picture as it is', 1, TGridAccess(g).BackgroundTileBuilds);
+    FBackground.Fill(BGRA(0, 0, 255, 255));   // the picture repainted in place ...
+    g.Invalidate;                              // ... and the grid told
+    pic := TyPaintOwnSurface(g, 2);
+    try
+      AssertEquals('scaled again after an Invalidate', 2, TGridAccess(g).BackgroundTileBuilds);
+      m := TGridAccess(g).GridMetrics;
+      AssertTrue('and the new picture shows', BGRAToColor(pic.GetPixel(2 * (m.ClientW div 2),
+        2 * (m.ClientH - 10))) = clBlue);
+    finally
+      pic.Free;
+    end;
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TDeviceScaleGridTest.TestTextCacheIsBoundedInPixels;
+var
+  f: TForm;
+  g: TTyStringGrid;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(0, 0, CGridW + 40, CGridH + 40);
+    g := TTyStringGrid(BuildLines(f, 96));
+    { A cell's text bitmap at S = 2 is some 150 x 40 device pixels: a 20 000-pixel budget holds
+      three or four of them, where the count cap alone would keep every cell in view. }
+    TGridAccess(g).TextCachePixelBudget := 20000;
+    TyPaintOwnSurface(g, 2).Free;
+    AssertTrue(Format('the cached pixels stay in the budget (%d)', [TGridAccess(g).TextCachePixels]),
+      TGridAccess(g).TextCachePixels <= 20000);
+    AssertTrue(Format('so few cells stay cached (%d)', [TGridAccess(g).TextCacheCount]),
+      TGridAccess(g).TextCacheCount <= 4);
+  finally
+    f.Free;
   end;
 end;
 
