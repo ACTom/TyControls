@@ -565,6 +565,10 @@ function enter2Cases() {
     'animationDuration 500, cubicOut; nodeWidth 30, no border',
     { series: [{ type: 'sankey', nodeWidth: 30, itemStyle: { borderWidth: 0 }, animationDuration: 500,
       animationEasing: 'cubicOut', data: SANKEY_NODES, links: SANKEY_LINKS }] }));
+  out.push(enterCase('sankey.border',
+    'bordered nodes (2 px) and bands (1 px): every stroked child\'s box grows by its line width before the union',
+    { series: [{ type: 'sankey', left: 30, right: 30, itemStyle: { borderColor: '#333', borderWidth: 2 },
+      lineStyle: { borderColor: '#999', borderWidth: 1 }, data: SANKEY_NODES, links: SANKEY_LINKS }] }));
   // ---- off ----
   out.push(enterCase('off.series',
     'animation: false on each series: nothing animates',

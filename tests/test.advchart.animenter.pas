@@ -65,6 +65,9 @@ type
     FMeasure: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared, FWeighed: Integer;
+    { [F3a] a key upstream does not move must hold upstream's own value too
+      (not only the port's layout): the rest's cases }
+    FStrictFinals: Boolean;
     FReport: string;
     FSeen: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -1149,6 +1152,19 @@ begin
         if not Recorded(key) then Continue;
         if (track = nil) or (track.Find(key) = nil) then
         begin
+          { [F3a] AND IT IS UPSTREAM'S: the value upstream holds still (a
+            symbol proxy's x / y are its GROUP's place, not the path's) }
+          if FStrictFinals and not ((m.Role = 'symbol') and ((key = 'x') or (key = 'y')))
+            and NumsOf(el.Objects['final'].Find(key), upF)
+            and (Length(upF) = Length(got)) then
+            for j := 0 to High(got) do
+              if not SameBits(got[j], upF[j]) and not ((got[j] = 0) and (upF[j] = 0)) then
+              begin
+                Miss(Format('%s t=%s %s: %s holds %s here, %s upstream',
+                  [name, samples.Items[s].AsString, el.Strings['id'], key,
+                   Fmt(got[j]), Fmt(upF[j])]), name + el.Strings['id'] + key + 'held');
+                Break;
+              end;
           { not animated upstream -- unless it rests at its own final value,
             which a forced track writes back unchanged }
           if Length(gotF) = Length(got) then
@@ -1629,6 +1645,7 @@ begin
   AssertEquals('the same samples', Fixture.Arrays['samplesMs'].AsJSON,
     Enter2Fixture.Arrays['samplesMs'].AsJSON);
   cases := Enter2Fixture.Arrays['cases'];
+  FStrictFinals := True;
   ran := 0;
   for c := 0 to cases.Count - 1 do
   begin
