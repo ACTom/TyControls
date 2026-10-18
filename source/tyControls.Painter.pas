@@ -458,9 +458,10 @@ procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
 function TyTextFontQuality: TBGRAFontQuality;
 
 { Put the library's text renderer on ABmp. On Win32 that is a renderer that draws text the
-  way Windows lays it out and shapes it -- see TTyGdiTextRenderer; elsewhere it leaves BGRA's
-  own. TyConfigureTextFont calls it, so every bitmap configured for text has it; a surface
-  that configures a font by hand must call it too. }
+  way Windows lays it out and shapes it -- see TTyGdiTextRenderer; on Cocoa one that draws
+  each run in its ink's polarity -- see tyControls.CanvasText (#91); elsewhere it leaves
+  BGRA's own. TyConfigureTextFont calls it, so every bitmap configured for text has it; a
+  surface that configures a font by hand must call it too. }
 procedure TyUseTextRenderer(ABmp: TBGRABitmap);
 { FOR THE TESTS: GDI bitmaps the Win32 text renderer has made or grown (it keeps one); 0
   elsewhere. }
@@ -750,7 +751,7 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections;
+  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText;
 
 { THE TWO MEASUREMENT SURFACES, REUSED.
 
@@ -2225,7 +2226,12 @@ begin
   {$IFDEF LCLWin32}
   if not (ABmp.FontRenderer is TTyGdiTextRenderer) then
     ABmp.FontRenderer := TTyGdiTextRenderer.Create;
-  {$ELSE}
+  {$ENDIF}
+  {$IFDEF LCLCocoa}
+  if not (ABmp.FontRenderer is TTyCanvasTextRenderer) then
+    ABmp.FontRenderer := TTyCanvasTextRenderer.Create;
+  {$ENDIF}
+  {$IF not defined(LCLWin32) and not defined(LCLCocoa)}
   if ABmp = nil then ;
   {$ENDIF}
 end;
