@@ -1,5 +1,5 @@
 {
-  "comment": "Map name -> file, as the gallery examples register them with echarts.registerMap. Read by umaps.pas. Sources: THIRD-PARTY-NOTICES.md. notShipped: maps that draw national borders, which the demo does not include (see umaps.pas); a file named <name>.json or <name>.geo.json put in this folder is still picked up.",
+  "comment": "Map name -> file, as the gallery examples register them with echarts.registerMap (an .svg file is an SVG map, registerMap(name, {svg})). Read by umaps.pas. Sources and licences: THIRD-PARTY-NOTICES.md. notShipped: maps that draw national borders, which the demo does not include (see umaps.pas); a file named <name>.json, <name>.geo.json or <name>.svg put in this folder is still picked up.",
   "notShipped": ["china", "world", "HK"],
   "maps": {
     "USA": {
@@ -12,6 +12,9 @@
     },
     "ch": { "file": "ch.geo.json" },
     "target_map": { "file": "ch.geo.json" },
-    "iceland": { "file": "iceland.geo.json" }
+    "iceland": { "file": "iceland.geo.json" },
+    "Beef_cuts_France": { "file": "Beef_cuts_France.svg" },
+    "iceland_svg": { "file": "Map_of_Iceland.svg" },
+    "sicily": { "file": "Sicily_prehellenic_topographic_map.svg" }
   }
 }

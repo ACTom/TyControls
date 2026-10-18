@@ -8,8 +8,11 @@ unit umaps;
   specialAreas the example passed along with it); a map is read the first time
   an option asks for it, so starting the demo costs nothing.
 
-  The SVG maps of the gallery are not here: TyChartRegisterMap takes GeoJSON
-  only, and those examples keep saying their map is not registered.
+  An SVG map is registered the same way: TyChartRegisterMap takes the
+  markup as it is (upstream's registerMap(name, {svg})). Three of the
+  gallery's seven SVG maps are shipped; the others have no recorded licence
+  (THIRD-PARTY-NOTICES.md) and are picked up from maps/ as <name>.svg when a
+  user puts them there.
 
   MAPS THAT DRAW NATIONAL BORDERS ARE NOT SHIPPED (china, world, HK; the
   "notShipped" list of maps.json). Borders are disputed, and some places
@@ -122,6 +125,7 @@ begin
     begin
       fn := missing[i].MapName + '.json';
       if not FileExists(AMapsDir + fn) then fn := missing[i].MapName + '.geo.json';
+      if not FileExists(AMapsDir + fn) then fn := missing[i].MapName + '.svg';
       if not FileExists(AMapsDir + fn) then Continue;
     end;
     TyChartRegisterMap(missing[i].MapName, ReadUtf8(AMapsDir + fn), special);
