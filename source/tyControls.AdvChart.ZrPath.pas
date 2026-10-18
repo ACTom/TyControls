@@ -99,6 +99,23 @@ procedure TyZrAccumulate(var ARect: TTyXYWH; var AHave: Boolean;
 function TyZrLocal(AScaleX, AScaleY, ARotation, AX, AY: Double): TTyMat2D;
 procedure TyZrApply(const M: TTyMat2D; AX, AY: Double; out OX, OY: Double);
 
+{ ---- contain/path.ts [F6b] ----
+  Path.contain's two tests over the proxy's data, in the element's own
+  coordinates: the nonzero winding of every command (cubic, quadratic, arc,
+  rect, line; a sub-path closed back to its start at the next moveTo and at
+  the end) and the stroke within half the line width of a segment.
+  Upstream's own arithmetic, quirks and all: a cubic whose y is only a
+  quadratic (a = 0) finds no root (Shengjin's formula divides by nought), the
+  root and extremum arrays are module-wide and an unwritten slot keeps what
+  the last call left there, an arc is tested on a circle of radius ry with x
+  scaled by ry / rx. }
+function TyZrContain(const APath: TTyZrPath; AX, AY: Double): Boolean;
+function TyZrContainStroke(const APath: TTyZrPath; ALineWidth, AX, AY: Double): Boolean;
+{ [F6b] the traps a masked stretch saved put back, the flags it left set
+  cleared first -- the x87 ones and SSE's in MXCSR, which ClearExceptions
+  leaves on x86_64: a sticky one would report the host's next trap wrong }
+procedure TyZrRestoreFpu(const AOld: TFPUExceptionMask);
+
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
@@ -1114,6 +1131,681 @@ procedure TyZrApply(const M: TTyMat2D; AX, AY: Double; out OX, OY: Double);
 begin
   OX := M[0] * AX + M[2] * AY + M[4];
   OY := M[1] * AX + M[3] * AY + M[5];
+end;
+
+{ ==================== contain/path.ts [F6b] ==================== }
+
+const
+  cCurveEps = 1e-8;
+  cCurveNumeric = 1e-4;
+  cWindEps = 1e-4;
+
+var
+  { the module-wide scratch arrays of contain/path.ts: a slot a call does not
+    write keeps the last call's value }
+  GZrRoots: array[0..2] of Double = (-1, -1, -1);
+  GZrExtrema: array[0..1] of Double = (-1, -1);
+
+function CvAroundZero(V: Double): Boolean;
+begin
+  Result := (V > -cCurveEps) and (V < cCurveEps);
+end;
+
+function CvNotAroundZero(V: Double): Boolean;
+begin
+  Result := (V > cCurveEps) or (V < -cCurveEps);
+end;
+
+function CvCubicAt(P0, P1, P2, P3, T: Double): Double;
+var onet: Double;
+begin
+  onet := 1 - T;
+  Result := onet * onet * (onet * P0 + 3 * T * P1) + T * T * (T * P3 + 3 * onet * P2);
+end;
+
+function CvQuadraticAt(P0, P1, P2, T: Double): Double;
+var onet: Double;
+begin
+  onet := 1 - T;
+  Result := onet * (onet * P0 + 2 * T * P1) + T * T * P2;
+end;
+
+{ Math.pow(x, ONE_THIRD) }
+function CvCbrt(X: Double): Double;
+const cThird: Double = 1 / 3;
+begin
+  Result := TyJsPow(X, cThird);
+end;
+
+function CvCubicRootAt(P0, P1, P2, P3, AVal: Double): Integer;
+var
+  a, b, c, d, aa, bb, cc, disc, k, t1, t2, t3, ds, y1, y2, tt, theta, asq, tmp,
+    threeSqrt: Double;
+  n: Integer;
+begin
+  threeSqrt := Sqrt(3);
+  a := P3 + 3 * (P1 - P2) - P0;
+  b := 3 * (P2 - P1 * 2 + P0);
+  c := 3 * (P1 - P0);
+  d := P0 - AVal;
+  aa := b * b - 3 * a * c;
+  bb := b * c - 9 * a * d;
+  cc := c * c - 3 * b * d;
+  n := 0;
+  if CvAroundZero(aa) and CvAroundZero(bb) then
+  begin
+    if CvAroundZero(b) then
+      GZrRoots[0] := 0
+    else
+    begin
+      t1 := -c / b;
+      if (t1 >= 0) and (t1 <= 1) then
+      begin
+        GZrRoots[n] := t1;
+        Inc(n);
+      end;
+    end;
+  end
+  else
+  begin
+    disc := bb * bb - 4 * aa * cc;
+    if CvAroundZero(disc) then
+    begin
+      k := bb / aa;
+      t1 := -b / a + k;
+      t2 := -k / 2;
+      if (t1 >= 0) and (t1 <= 1) then begin GZrRoots[n] := t1; Inc(n); end;
+      if (t2 >= 0) and (t2 <= 1) then begin GZrRoots[n] := t2; Inc(n); end;
+    end
+    else if disc > 0 then
+    begin
+      ds := Sqrt(disc);
+      y1 := aa * b + 1.5 * a * (-bb + ds);
+      y2 := aa * b + 1.5 * a * (-bb - ds);
+      if y1 < 0 then y1 := -CvCbrt(-y1) else y1 := CvCbrt(y1);
+      if y2 < 0 then y2 := -CvCbrt(-y2) else y2 := CvCbrt(y2);
+      t1 := (-b - (y1 + y2)) / (3 * a);
+      if (t1 >= 0) and (t1 <= 1) then begin GZrRoots[n] := t1; Inc(n); end;
+    end
+    else
+    begin
+      tt := (2 * aa * b - 3 * a * bb) / (2 * Sqrt(aa * aa * aa));
+      theta := TyJsAcos(tt) / 3;
+      asq := Sqrt(aa);
+      tmp := TyJsCos(theta);
+      t1 := (-b - 2 * asq * tmp) / (3 * a);
+      t2 := (-b + asq * (tmp + threeSqrt * TyJsSin(theta))) / (3 * a);
+      t3 := (-b + asq * (tmp - threeSqrt * TyJsSin(theta))) / (3 * a);
+      if (t1 >= 0) and (t1 <= 1) then begin GZrRoots[n] := t1; Inc(n); end;
+      if (t2 >= 0) and (t2 <= 1) then begin GZrRoots[n] := t2; Inc(n); end;
+      if (t3 >= 0) and (t3 <= 1) then begin GZrRoots[n] := t3; Inc(n); end;
+    end;
+  end;
+  Result := n;
+end;
+
+function CvCubicExtrema(P0, P1, P2, P3: Double): Integer;
+var a, b, c, disc, ds, t1, t2: Double; n: Integer;
+begin
+  b := 6 * P2 - 12 * P1 + 6 * P0;
+  a := 9 * P1 + 3 * P3 - 3 * P0 - 9 * P2;
+  c := 3 * P1 - 3 * P0;
+  n := 0;
+  if CvAroundZero(a) then
+  begin
+    if CvNotAroundZero(b) then
+    begin
+      t1 := -c / b;
+      if (t1 >= 0) and (t1 <= 1) then begin GZrExtrema[n] := t1; Inc(n); end;
+    end;
+  end
+  else
+  begin
+    disc := b * b - 4 * a * c;
+    if CvAroundZero(disc) then
+      GZrExtrema[0] := -b / (2 * a)
+    else if disc > 0 then
+    begin
+      ds := Sqrt(disc);
+      t1 := (-b + ds) / (2 * a);
+      t2 := (-b - ds) / (2 * a);
+      if (t1 >= 0) and (t1 <= 1) then begin GZrExtrema[n] := t1; Inc(n); end;
+      if (t2 >= 0) and (t2 <= 1) then begin GZrExtrema[n] := t2; Inc(n); end;
+    end;
+  end;
+  Result := n;
+end;
+
+function CvQuadraticRootAt(P0, P1, P2, AVal: Double): Integer;
+var a, b, c, disc, ds, t1, t2: Double; n: Integer;
+begin
+  a := P0 - 2 * P1 + P2;
+  b := 2 * (P1 - P0);
+  c := P0 - AVal;
+  n := 0;
+  if CvAroundZero(a) then
+  begin
+    if CvNotAroundZero(b) then
+    begin
+      t1 := -c / b;
+      if (t1 >= 0) and (t1 <= 1) then begin GZrRoots[n] := t1; Inc(n); end;
+    end;
+  end
+  else
+  begin
+    disc := b * b - 4 * a * c;
+    if CvAroundZero(disc) then
+    begin
+      t1 := -b / (2 * a);
+      if (t1 >= 0) and (t1 <= 1) then begin GZrRoots[n] := t1; Inc(n); end;
+    end
+    else if disc > 0 then
+    begin
+      ds := Sqrt(disc);
+      t1 := (-b + ds) / (2 * a);
+      t2 := (-b - ds) / (2 * a);
+      if (t1 >= 0) and (t1 <= 1) then begin GZrRoots[n] := t1; Inc(n); end;
+      if (t2 >= 0) and (t2 <= 1) then begin GZrRoots[n] := t2; Inc(n); end;
+    end;
+  end;
+  Result := n;
+end;
+
+function CvQuadraticExtremum(P0, P1, P2: Double): Double;
+var divider: Double;
+begin
+  divider := P0 + P2 - 2 * P1;
+  if divider = 0 then Result := 0.5
+  else Result := (P0 - P1) / divider;
+end;
+
+{ windingLine.ts }
+function ZrWindingLine(X0, Y0, X1, Y1, X, Y: Double): Double;
+var t, dir, xx: Double;
+begin
+  if ((Y > Y0) and (Y > Y1)) or ((Y < Y0) and (Y < Y1)) then Exit(0);
+  if Y1 = Y0 then Exit(0);
+  t := (Y - Y0) / (Y1 - Y0);
+  if Y1 < Y0 then dir := 1 else dir := -1;
+  if (t = 1) or (t = 0) then
+  begin
+    if Y1 < Y0 then dir := 0.5 else dir := -0.5;
+  end;
+  xx := t * (X1 - X0) + X0;
+  if xx = X then Result := Infinity
+  else if xx > X then Result := dir
+  else Result := 0;
+end;
+
+{ `w += f(...) || 0`: a not-a-number adds nothing }
+function OrNought(V: Double): Double;
+begin
+  if IsNan(V) then Result := 0 else Result := V;
+end;
+
+function ZrWindingCubic(X0, Y0, X1, Y1, X2, Y2, X3, Y3, X, Y: Double): Double;
+var
+  nRoots, nExtrema, i: Integer;
+  w, t, unitW, xx, y0_, y1_, tmp: Double;
+begin
+  if ((Y > Y0) and (Y > Y1) and (Y > Y2) and (Y > Y3))
+    or ((Y < Y0) and (Y < Y1) and (Y < Y2) and (Y < Y3)) then Exit(0);
+  nRoots := CvCubicRootAt(Y0, Y1, Y2, Y3, Y);
+  if nRoots = 0 then Exit(0);
+  w := 0;
+  nExtrema := -1;
+  y0_ := NaN;
+  y1_ := NaN;
+  for i := 0 to nRoots - 1 do
+  begin
+    t := GZrRoots[i];
+    if (t = 0) or (t = 1) then unitW := 0.5 else unitW := 1;
+    xx := CvCubicAt(X0, X1, X2, X3, t);
+    if xx < X then Continue;
+    if nExtrema < 0 then
+    begin
+      nExtrema := CvCubicExtrema(Y0, Y1, Y2, Y3);
+      if (GZrExtrema[1] < GZrExtrema[0]) and (nExtrema > 1) then
+      begin
+        tmp := GZrExtrema[0];
+        GZrExtrema[0] := GZrExtrema[1];
+        GZrExtrema[1] := tmp;
+      end;
+      y0_ := CvCubicAt(Y0, Y1, Y2, Y3, GZrExtrema[0]);
+      if nExtrema > 1 then y1_ := CvCubicAt(Y0, Y1, Y2, Y3, GZrExtrema[1]);
+    end;
+    if nExtrema = 2 then
+    begin
+      if t < GZrExtrema[0] then
+      begin
+        if y0_ < Y0 then w := w + unitW else w := w - unitW;
+      end
+      else if t < GZrExtrema[1] then
+      begin
+        if y1_ < y0_ then w := w + unitW else w := w - unitW;
+      end
+      else
+      begin
+        if Y3 < y1_ then w := w + unitW else w := w - unitW;
+      end;
+    end
+    else
+    begin
+      if t < GZrExtrema[0] then
+      begin
+        if y0_ < Y0 then w := w + unitW else w := w - unitW;
+      end
+      else
+      begin
+        if Y3 < y0_ then w := w + unitW else w := w - unitW;
+      end;
+    end;
+  end;
+  Result := w;
+end;
+
+function ZrWindingQuadratic(X0, Y0, X1, Y1, X2, Y2, X, Y: Double): Double;
+var nRoots, i: Integer; t, w, yy, unitW, xx: Double;
+begin
+  if ((Y > Y0) and (Y > Y1) and (Y > Y2)) or ((Y < Y0) and (Y < Y1) and (Y < Y2)) then Exit(0);
+  nRoots := CvQuadraticRootAt(Y0, Y1, Y2, Y);
+  if nRoots = 0 then Exit(0);
+  t := CvQuadraticExtremum(Y0, Y1, Y2);
+  if (t >= 0) and (t <= 1) then
+  begin
+    w := 0;
+    yy := CvQuadraticAt(Y0, Y1, Y2, t);
+    for i := 0 to nRoots - 1 do
+    begin
+      if (GZrRoots[i] = 0) or (GZrRoots[i] = 1) then unitW := 0.5 else unitW := 1;
+      xx := CvQuadraticAt(X0, X1, X2, GZrRoots[i]);
+      if xx < X then Continue;
+      if GZrRoots[i] < t then
+      begin
+        if yy < Y0 then w := w + unitW else w := w - unitW;
+      end
+      else
+      begin
+        if Y2 < yy then w := w + unitW else w := w - unitW;
+      end;
+    end;
+    Result := w;
+  end
+  else
+  begin
+    if (GZrRoots[0] = 0) or (GZrRoots[0] = 1) then unitW := 0.5 else unitW := 1;
+    xx := CvQuadraticAt(X0, X1, X2, GZrRoots[0]);
+    if xx < X then Exit(0);
+    if Y2 < Y0 then Result := unitW else Result := -unitW;
+  end;
+end;
+
+function ZrWindingArc(CX, CY, R, AStart, AEnd: Double; AAnti: Boolean; X, Y: Double): Double;
+var tmp, dTheta, w, angle, dir, pi2: Double; i: Integer;
+begin
+  pi2 := Pi * 2;
+  Y := Y - CY;
+  if (Y > R) or (Y < -R) then Exit(0);
+  tmp := Sqrt(R * R - Y * Y);
+  GZrRoots[0] := -tmp;
+  GZrRoots[1] := tmp;
+  dTheta := Abs(AStart - AEnd);
+  if dTheta < 1e-4 then Exit(0);
+  if dTheta >= pi2 - 1e-4 then
+  begin
+    if AAnti then dir := 1 else dir := -1;
+    if (X >= GZrRoots[0] + CX) and (X <= GZrRoots[1] + CX) then Exit(dir);
+    Exit(0);
+  end;
+  if AStart > AEnd then
+  begin
+    tmp := AStart;
+    AStart := AEnd;
+    AEnd := tmp;
+  end;
+  if AStart < 0 then
+  begin
+    AStart := AStart + pi2;
+    AEnd := AEnd + pi2;
+  end;
+  w := 0;
+  for i := 0 to 1 do
+  begin
+    if GZrRoots[i] + CX > X then
+    begin
+      angle := TyJsAtan2(Y, GZrRoots[i]);
+      if AAnti then dir := 1 else dir := -1;
+      if angle < 0 then angle := pi2 + angle;
+      if ((angle >= AStart) and (angle <= AEnd))
+        or ((angle + pi2 >= AStart) and (angle + pi2 <= AEnd)) then
+      begin
+        if (angle > Pi / 2) and (angle < Pi * 1.5) then dir := -dir;
+        w := w + dir;
+      end;
+    end;
+  end;
+  Result := w;
+end;
+
+{ contain/line.ts }
+function ZrLineStroke(X0, Y0, X1, Y1, ALineWidth, X, Y: Double): Boolean;
+var l, a, b, tmp, s: Double;
+begin
+  if ALineWidth = 0 then Exit(False);
+  l := ALineWidth;
+  if ((Y > Y0 + l) and (Y > Y1 + l)) or ((Y < Y0 - l) and (Y < Y1 - l))
+    or ((X > X0 + l) and (X > X1 + l)) or ((X < X0 - l) and (X < X1 - l)) then Exit(False);
+  if X0 <> X1 then
+  begin
+    a := (Y0 - Y1) / (X0 - X1);
+    b := (X0 * Y1 - X1 * Y0) / (X0 - X1);
+  end
+  else
+    Exit(Abs(X - X0) <= l / 2);
+  tmp := a * X - Y + b;
+  s := tmp * tmp / (a * a + 1);
+  Result := s <= l / 2 * l / 2;
+end;
+
+function DistSq(AX, AY, BX, BY: Double): Double;
+begin
+  Result := (AX - BX) * (AX - BX) + (AY - BY) * (AY - BY);
+end;
+
+{ curve.ts cubicProjectPoint / quadraticProjectPoint: the distance }
+function ZrProjectPoint(AQuad: Boolean; X0, Y0, X1, Y1, X2, Y2, X3, Y3, X, Y: Double): Double;
+var
+  t, interval, d, prev, next, d1, d2, tt: Double;
+  i: Integer;
+
+  function AtX(AT: Double): Double;
+  begin
+    if AQuad then Result := CvQuadraticAt(X0, X1, X2, AT)
+    else Result := CvCubicAt(X0, X1, X2, X3, AT);
+  end;
+
+  function AtY(AT: Double): Double;
+  begin
+    if AQuad then Result := CvQuadraticAt(Y0, Y1, Y2, AT)
+    else Result := CvCubicAt(Y0, Y1, Y2, Y3, AT);
+  end;
+
+begin
+  t := NaN;
+  interval := 0.005;
+  d := Infinity;
+  tt := 0;
+  while tt < 1 do
+  begin
+    d1 := DistSq(X, Y, AtX(tt), AtY(tt));
+    if d1 < d then
+    begin
+      t := tt;
+      d := d1;
+    end;
+    tt := tt + 0.05;
+  end;
+  d := Infinity;
+  for i := 0 to 31 do
+  begin
+    if interval < cCurveNumeric then Break;
+    prev := t - interval;
+    next := t + interval;
+    d1 := DistSq(AtX(prev), AtY(prev), X, Y);
+    if (prev >= 0) and (d1 < d) then
+    begin
+      t := prev;
+      d := d1;
+    end
+    else
+    begin
+      d2 := DistSq(AtX(next), AtY(next), X, Y);
+      if (next <= 1) and (d2 < d) then
+      begin
+        t := next;
+        d := d2;
+      end
+      else
+        interval := interval * 0.5;
+    end;
+  end;
+  Result := Sqrt(d);
+end;
+
+function ZrCubicStroke(X0, Y0, X1, Y1, X2, Y2, X3, Y3, ALineWidth, X, Y: Double): Boolean;
+var l: Double;
+begin
+  if ALineWidth = 0 then Exit(False);
+  l := ALineWidth;
+  if ((Y > Y0 + l) and (Y > Y1 + l) and (Y > Y2 + l) and (Y > Y3 + l))
+    or ((Y < Y0 - l) and (Y < Y1 - l) and (Y < Y2 - l) and (Y < Y3 - l))
+    or ((X > X0 + l) and (X > X1 + l) and (X > X2 + l) and (X > X3 + l))
+    or ((X < X0 - l) and (X < X1 - l) and (X < X2 - l) and (X < X3 - l)) then Exit(False);
+  Result := ZrProjectPoint(False, X0, Y0, X1, Y1, X2, Y2, X3, Y3, X, Y) <= l / 2;
+end;
+
+function ZrQuadraticStroke(X0, Y0, X1, Y1, X2, Y2, ALineWidth, X, Y: Double): Boolean;
+var l: Double;
+begin
+  if ALineWidth = 0 then Exit(False);
+  l := ALineWidth;
+  if ((Y > Y0 + l) and (Y > Y1 + l) and (Y > Y2 + l))
+    or ((Y < Y0 - l) and (Y < Y1 - l) and (Y < Y2 - l))
+    or ((X > X0 + l) and (X > X1 + l) and (X > X2 + l))
+    or ((X < X0 - l) and (X < X1 - l) and (X < X2 - l)) then Exit(False);
+  Result := ZrProjectPoint(True, X0, Y0, X1, Y1, X2, Y2, 0, 0, X, Y) <= l / 2;
+end;
+
+function ZrNormalizeRadian(A: Double): Double;
+var pi2: Double;
+begin
+  pi2 := Pi * 2;
+  Result := TyJsFMod(A, pi2);
+  if Result < 0 then Result := Result + pi2;
+end;
+
+{ contain/arc.ts }
+function ZrArcStroke(CX, CY, R, AStart, AEnd: Double; AAnti: Boolean;
+  ALineWidth, X, Y: Double): Boolean;
+var l, d, tmp, angle, pi2: Double;
+begin
+  if ALineWidth = 0 then Exit(False);
+  pi2 := Pi * 2;
+  l := ALineWidth;
+  X := X - CX;
+  Y := Y - CY;
+  d := Sqrt(X * X + Y * Y);
+  if (d - l > R) or (d + l < R) then Exit(False);
+  if TyJsFMod(Abs(AStart - AEnd), pi2) < 1e-4 then Exit(True);
+  if AAnti then
+  begin
+    tmp := AStart;
+    AStart := ZrNormalizeRadian(AEnd);
+    AEnd := ZrNormalizeRadian(tmp);
+  end
+  else
+  begin
+    AStart := ZrNormalizeRadian(AStart);
+    AEnd := ZrNormalizeRadian(AEnd);
+  end;
+  if AStart > AEnd then AEnd := AEnd + pi2;
+  angle := TyJsAtan2(Y, X);
+  if angle < 0 then angle := angle + pi2;
+  Result := ((angle >= AStart) and (angle <= AEnd))
+    or ((angle + pi2 >= AStart) and (angle + pi2 <= AEnd));
+end;
+
+{ containPath }
+function ZrContainPath(const APath: TTyZrPath; ALineWidth: Double; AIsStroke: Boolean;
+  X, Y: Double): Boolean;
+var
+  i: Integer;
+  w, xi, yi, x0, y0, x1, y1, cx, cy, rx, ry, theta, dTheta, xs, wd, ht: Double;
+  isFirst, anti: Boolean;
+  s: TTyZrSeg;
+begin
+  w := 0;
+  xi := 0; yi := 0; x0 := 0; y0 := 0;
+  for i := 0 to High(APath) do
+  begin
+    s := APath[i];
+    isFirst := i = 0;
+    if (s.Cmd = zrM) and (i > 0) then
+      if not AIsStroke then w := w + ZrWindingLine(xi, yi, x0, y0, X, Y);
+    if isFirst then
+    begin
+      xi := s.V[0];
+      yi := s.V[1];
+      x0 := xi;
+      y0 := yi;
+    end;
+    case s.Cmd of
+      zrM:
+        begin
+          x0 := s.V[0];
+          y0 := s.V[1];
+          xi := x0;
+          yi := y0;
+        end;
+      zrL:
+        begin
+          if AIsStroke then
+          begin
+            if ZrLineStroke(xi, yi, s.V[0], s.V[1], ALineWidth, X, Y) then Exit(True);
+          end
+          else
+            w := w + OrNought(ZrWindingLine(xi, yi, s.V[0], s.V[1], X, Y));
+          xi := s.V[0];
+          yi := s.V[1];
+        end;
+      zrC:
+        begin
+          if AIsStroke then
+          begin
+            if ZrCubicStroke(xi, yi, s.V[0], s.V[1], s.V[2], s.V[3], s.V[4], s.V[5],
+              ALineWidth, X, Y) then Exit(True);
+          end
+          else
+            w := w + OrNought(ZrWindingCubic(xi, yi, s.V[0], s.V[1], s.V[2], s.V[3],
+              s.V[4], s.V[5], X, Y));
+          xi := s.V[4];
+          yi := s.V[5];
+        end;
+      zrQ:
+        begin
+          if AIsStroke then
+          begin
+            if ZrQuadraticStroke(xi, yi, s.V[0], s.V[1], s.V[2], s.V[3],
+              ALineWidth, X, Y) then Exit(True);
+          end
+          else
+            w := w + OrNought(ZrWindingQuadratic(xi, yi, s.V[0], s.V[1], s.V[2], s.V[3], X, Y));
+          xi := s.V[2];
+          yi := s.V[3];
+        end;
+      zrA:
+        begin
+          cx := s.V[0];
+          cy := s.V[1];
+          rx := s.V[2];
+          ry := s.V[3];
+          theta := s.V[4];
+          dTheta := s.V[5];
+          anti := (1 - s.V[7]) <> 0;
+          x1 := TyJsCos(theta) * rx + cx;
+          y1 := TyJsSin(theta) * ry + cy;
+          if not isFirst then
+            w := w + ZrWindingLine(xi, yi, x1, y1, X, Y)
+          else
+          begin
+            x0 := x1;
+            y0 := y1;
+          end;
+          xs := (X - cx) * ry / rx + cx;
+          if AIsStroke then
+          begin
+            if ZrArcStroke(cx, cy, ry, theta, theta + dTheta, anti, ALineWidth, xs, Y) then
+              Exit(True);
+          end
+          else
+            w := w + ZrWindingArc(cx, cy, ry, theta, theta + dTheta, anti, xs, Y);
+          xi := TyJsCos(theta + dTheta) * rx + cx;
+          yi := TyJsSin(theta + dTheta) * ry + cy;
+        end;
+      zrR:
+        begin
+          x0 := s.V[0];
+          xi := x0;
+          y0 := s.V[1];
+          yi := y0;
+          wd := s.V[2];
+          ht := s.V[3];
+          x1 := x0 + wd;
+          y1 := y0 + ht;
+          if AIsStroke then
+          begin
+            if ZrLineStroke(x0, y0, x1, y0, ALineWidth, X, Y)
+              or ZrLineStroke(x1, y0, x1, y1, ALineWidth, X, Y)
+              or ZrLineStroke(x1, y1, x0, y1, ALineWidth, X, Y)
+              or ZrLineStroke(x0, y1, x0, y0, ALineWidth, X, Y) then Exit(True);
+          end
+          else
+          begin
+            w := w + ZrWindingLine(x1, y0, x1, y1, X, Y);
+            w := w + ZrWindingLine(x0, y1, x0, y0, X, Y);
+          end;
+        end;
+      zrZ:
+        begin
+          if AIsStroke then
+          begin
+            if ZrLineStroke(xi, yi, x0, y0, ALineWidth, X, Y) then Exit(True);
+          end
+          else
+            w := w + ZrWindingLine(xi, yi, x0, y0, X, Y);
+          xi := x0;
+          yi := y0;
+        end;
+    end;
+  end;
+  if (not AIsStroke) and not (Abs(yi - y0) < cWindEps) then
+    w := w + OrNought(ZrWindingLine(xi, yi, x0, y0, X, Y));
+  Result := w <> 0;
+end;
+
+procedure TyZrRestoreFpu(const AOld: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AOld);
+end;
+
+{ upstream's arithmetic divides by nought and meets not-a-numbers (a
+  degenerate cubic's roots): JavaScript's quiet values, not traps }
+function TyZrContain(const APath: TTyZrPath; AX, AY: Double): Boolean;
+var old: TFPUExceptionMask;
+begin
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    Result := ZrContainPath(APath, 0, False, AX, AY);
+  finally
+    TyZrRestoreFpu(old);
+  end;
+end;
+
+function TyZrContainStroke(const APath: TTyZrPath; ALineWidth, AX, AY: Double): Boolean;
+var old: TFPUExceptionMask;
+begin
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    Result := ZrContainPath(APath, ALineWidth, True, AX, AY);
+  finally
+    TyZrRestoreFpu(old);
+  end;
 end;
 
 end.
