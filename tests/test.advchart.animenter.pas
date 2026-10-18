@@ -272,6 +272,9 @@ end;
 
 function SameBits(A, B: Double): Boolean;
 begin
+  { [F3d] not a number is not a number, whatever its payload (a straight
+    line's cpx1, written NaN by setLinePoints) }
+  if IsNan(A) or IsNan(B) then Exit(IsNan(A) and IsNan(B));
   Result := Hex(A) = Hex(B);
 end;
 

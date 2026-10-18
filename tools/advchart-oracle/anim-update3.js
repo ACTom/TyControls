@@ -45,7 +45,9 @@ Numbers are the 16 lowercase hex digits of the IEEE double (big-endian; NaN
 Top level: source, version, seed, measure {firstCode, ratio[] (hex)}, clock
 {T0}, notes[], cases[], guards[].
 
-A case: id, group, note, W, H, option, probes[], events[]. The first
+A case: id, group, note, W, H, option, probes[], events[] (ring: a circular
+layout -- the ring's cos / sin are not correctly rounded in either runtime,
+compared to 1e-9). The first
 setOption is at T0. An event, in order, at t ms after T0:
   {t, do: 'sample', rec}       zr.animation.update(), then what the probes
                                read
@@ -388,9 +390,10 @@ add('graph', 'graph-legend', "layout none on a view with two categories, arrows 
     { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1),
     { t: T1 + 2000, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1 + 2000)]);
 
-add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow; 300 ms cubicInOut, the default update timing",
+add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow and labels (insideEndTop: beforeUpdate turns them with the tangent); 300 ms cubicInOut, the default update timing",
   { animation: true,
     series: [{ type: 'graph', layout: 'none', symbolSize: [24, 16], edgeSymbol: ['circle', 'arrow'], edgeSymbolSize: 8,
+      edgeLabel: { show: true, formatter: 'L', position: 'insideEndTop' },
       lineStyle: { curveness: 0.3 }, data: GN.map(n => ({ name: n.name, x: n.x, y: n.y })), links: GL }] },
   ['graph'],
   [{ t: T1 - 1, do: 'sample' },
@@ -404,7 +407,7 @@ add('graph', 'graph-circular', "layout circular, legend off for category B: the 
       data: GN.map(n => ({ name: n.name, category: n.category })), links: GL }, LIN)] },
   ['graph'],
   [{ t: T1 - 1, do: 'sample' },
-    { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1)]);
+    { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1)], { ring: true });
 
 add('graph', 'graph-enter-update', "an update while the enter still runs (at 150 of the enter's 1000 ms): a kept edge's percent goes on from where it is to 1 at update timing, its ends move; the nodes' pop-in goes on",
   { animation: true,
@@ -552,9 +555,10 @@ function pointer(chart, ev, type) {
 function runCase(c) {
   const chart = mk(c.W, c.H);
   try {
-    const out = { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, option: clone(c.option),
+    const out = { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, ring: !!c.ring, option: clone(c.option),
       probes: c.probes, events: [] };
-    quiet(() => chart.setOption(c.option));
+    // a copy: echarts stores its inner records on the objects it is given
+    quiet(() => chart.setOption(clone(c.option)));
     c.events.forEach(ev => {
       NOW = T0 + ev.t;
       const o = clone(ev);
@@ -563,9 +567,9 @@ function runCase(c) {
         refresh(chart);
         o.rec = readRec(chart, c.probes);
       }
-      else if (ev.do === 'merge') quiet(() => chart.setOption(ev.option));
-      else if (ev.do === 'notMerge') quiet(() => chart.setOption(ev.option, true));
-      else if (ev.do === 'action') quiet(() => chart.dispatchAction(ev.action));
+      else if (ev.do === 'merge') quiet(() => chart.setOption(clone(ev.option)));
+      else if (ev.do === 'notMerge') quiet(() => chart.setOption(clone(ev.option), true));
+      else if (ev.do === 'action') quiet(() => chart.dispatchAction(clone(ev.action)));
       else if (ev.do === 'hover') quiet(() => pointer(chart, ev, 'mouseover'));
       else if (ev.do === 'out') quiet(() => pointer(chart, ev, 'mouseout'));
       else must(false, 'an event it does not know: ' + ev.do);

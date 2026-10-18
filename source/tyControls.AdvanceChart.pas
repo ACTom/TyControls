@@ -853,6 +853,9 @@ type
     FGraphSpecs: array of TTyGraphSpec;
     FGraphNodes: array of TTyGraphNodeArray;
     FGraphEdges: array of TTyGraphEdgeArray;
+    { [F3d] the edge rows' DataDiffer keys, read off the option the layout
+      was made from }
+    FGraphEdgeKeys: array of TTyStringArray;
     FGraphCats: array of TTyGraphCategoryArray;
     { WHAT EACH FORCE LAYOUT LEFT FOR THE NEXT PASS, indexed by SERIES index
       rather than by slot, and kept OUTSIDE the build: every relayout throws
@@ -1707,6 +1710,8 @@ type
       [Batch 99] }
     function AnimAliveKeys: TTyStringArray;
     { each view row's DataDiffer key and raw index }
+    { [F3d] a graph's edge rows' DataDiffer keys }
+    function AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
     { A FULL UPDATE ANIMATES [Batch 96]: before its layout, the render it
@@ -19280,6 +19285,9 @@ begin
     FGraphEdges[i] := solved.Edges;
     FGraphCats[i] := solved.Cats;
   end;
+  { [F3d] the edges' keys for the next update }
+  SetLength(FGraphEdgeKeys, Length(FBindings));
+  for i := 0 to High(FBindings) do FGraphEdgeKeys[i] := AnimGraphEdgeKeys(i);
   if APPI < 0 then ;
 end;
 
@@ -41398,6 +41406,49 @@ begin
   end;
 end;
 
+{ [F3d] THE EDGE DATA'S KEYS, per edge row (the links that resolved, in
+  order, past the legend's filter): createGraphFromNodeEdge names an edge by
+  the link's id, else `source + ' > ' + target` as written; getId takes the
+  name, '__ec__' and its count from the second time on (as AnimRowKeys) }
+function TTyAdvanceChart.AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
+var
+  ser, links, item, d: TJSONData;
+  k, c, j: Integer;
+  nm: string;
+  names: TTyStringArray;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FGraphEdges)) then Exit;
+  if FBindings[ASlot].SeriesType <> 'graph' then Exit;
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (ser is TJSONObject) then Exit;
+  links := TJSONObject(ser).Find('edges');
+  if (links = nil) or not JsTruthy(links) then links := TJSONObject(ser).Find('links');
+  if not (links is TJSONArray) then Exit;
+  SetLength(Result, Length(FGraphEdges[ASlot]));
+  SetLength(names, Length(FGraphEdges[ASlot]));
+  for k := 0 to High(FGraphEdges[ASlot]) do
+  begin
+    nm := '';
+    j := FGraphEdges[ASlot][k].Row;
+    if (j >= 0) and (j < links.Count) and (links.Items[j] is TJSONObject) then
+    begin
+      item := links.Items[j];
+      d := TJSONObject(item).Find('id');
+      if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then nm := TyGraphJsText(d)
+      else
+        nm := TyGraphJsText(TJSONObject(item).Find('source')) + ' > '
+          + TyGraphJsText(TJSONObject(item).Find('target'));
+    end;
+    names[k] := nm;
+    c := 0;
+    for j := 0 to k do
+      if names[j] = nm then Inc(c);
+    if c > 1 then Result[k] := nm + '__ec__' + IntToStr(c)
+    else Result[k] := nm;
+  end;
+end;
+
 procedure TTyAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
   out ARaws: TTyIntegerArray);
 var
@@ -41585,6 +41636,8 @@ begin
     r.LineInit := LineHistInit(r.ViewKey);
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
+    { [F3d] a graph's edges }
+    if slot <= High(FGraphEdgeKeys) then r.EdgeKeys := FGraphEdgeKeys[slot];
     { its universal transition, read off the old option [Batch 136]: the
       key, a list's items, its divideShape, its rows' groups [Batch 137]
       and child groups [Batch 138] }
@@ -41752,6 +41805,8 @@ begin
     if (si <= High(FAnimFresh)) and FAnimFresh[si] then r.ViewKey := 'n:' + r.ViewKey;
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
+    { [F3d] a graph's edges }
+    if slot <= High(FGraphEdgeKeys) then r.EdgeKeys := FGraphEdgeKeys[slot];
     { the groups of its rows [Batch 137] and their child groups [Batch 138] }
     utk := TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t, FOption.ComponentId('series', si));
     r.UtGroupIds := TyUtRowGroups(utk, r.Raws);

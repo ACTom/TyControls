@@ -406,6 +406,10 @@ type
     { per view row: the DataDiffer key (getId) and the raw index }
     Keys: TTyStringArray;
     Raws: TTyIntegerArray;
+    { [F3d] a graph's edge data, per edge row: its getId -- the link's id,
+      else 'source > target' as written (createGraphFromNodeEdge's name),
+      '__ec__' and its count from the second time on }
+    EdgeKeys: TTyStringArray;
     { a pie with animationTypeUpdate 'expansion': every render is its first
       (PieView never keeps its data) }
     PieExpandAlways: Boolean;
@@ -1427,6 +1431,34 @@ begin
 end;
 
 { a scatter symbol: the path's scale and opacity, the group's place }
+{ [F3d] a graph edge's line shape as Line.updateData's target has it: the
+  ends, the control point (not a number for a straight line, as
+  setLinePoints writes it) and the percent }
+function GraphEdgeProps(const AEl: TTyChartElement): TTyAnimProps;
+var cx, cy: Double;
+begin
+  if AEl.Anim.G[6] <> 0 then
+  begin
+    cx := AEl.Anim.G[4];
+    cy := AEl.Anim.G[5];
+  end
+  else
+  begin
+    cx := NaN;
+    cy := NaN;
+  end;
+  Result := TyAnimProps([Num1('shape.x1', AEl.Anim.G[0]), Num1('shape.y1', AEl.Anim.G[1]),
+    Num1('shape.x2', AEl.Anim.G[2]), Num1('shape.y2', AEl.Anim.G[3]),
+    Num1('shape.percent', 1), Num1('shape.cpx1', cx), Num1('shape.cpy1', cy)]);
+end;
+
+{ [F3d] a roam group's transform at rest, the props its tween runs on }
+function ViewProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('x', AEl.Anim.VX), Num1('y', AEl.Anim.VY),
+    Num1('scaleX', AEl.Anim.VSX), Num1('scaleY', AEl.Anim.VSY)]);
+end;
+
 function SymbolProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]),
@@ -1867,21 +1899,25 @@ begin
       begin
         { [F3a] Line._createLine: `line.shape.percent = 0`, initProps of 1
           on the series at the edge's row -- its end symbols and its label
-          are placed from it every frame (beforeUpdate) }
-        if AUpdate or not AC.Enabled then Exit;
+          are placed from it every frame (beforeUpdate); [F3d] the shape
+          beside it, which an update tweens; a Line made in an update enters
+          the same way }
+        if not AC.Enabled then Exit;
+        if Find(AEl.Anim.Series, idx, 'gedge') <> nil then Exit;
         p := Make(AEl.Anim.Series, idx, 'gedge');
-        props := TyAnimProps([Num1('shape.percent', 1)]);
+        props := GraphEdgeProps(AEl);
         p.Attr(props);
         p.SetFinal(props);
         p.SetNum('shape.percent', 0);
-        Start(props, TyAnimCallAt(idx));
+        Start(TyAnimProps([Num1('shape.percent', 1)]), TyAnimCallAt(idx));
       end;
     carGraphEdgeLabel:
       begin
         { [F3a] LabelManager's fade of the Line group's text, to its own
           opacity (the line's: a graph edge's is 0.5 by default) at the
-          edge's row }
-        if AUpdate or not (AC.Enabled and AC.LabelFade) or AEl.Ignore then Exit;
+          edge's row; [F3d] a new Line's in an update too }
+        if not (AC.Enabled and AC.LabelFade) or AEl.Ignore then Exit;
+        if Find(AEl.Anim.Series, idx, 'gedgeLabel') <> nil then Exit;
         p := Make(AEl.Anim.Series, idx, 'gedgeLabel');
         props := TyAnimProps([Num1('style.opacity', AEl.Style.Alpha)]);
         p.Attr(props);
@@ -2400,6 +2436,9 @@ var
   utSnaps: TTyUtOldSnapArray;
   oldOf: TTyIntegerArray;
   rowMap: array of TTyIntegerArray;
+  { [F3d] a graph's edge rows, new to old }
+  edgeMap: array of TTyIntegerArray;
+  ediff: TTyDataDiffCmdArray;
   diffs: array of TTyDataDiffCmdArray;
   upd: array of Boolean;
   i, s, o, q, r, k: Integer;
@@ -2526,6 +2565,49 @@ var
     Result := TyAnimArr(a, 2);
   end;
 
+  { [F3d] ---- a kept series' roam group ---- }
+  procedure ArmView(ASer, AOld: Integer; const AC: TTyChartAnimSeries);
+  var
+    j: Integer;
+    nv, ov: TTyChartElement;
+    hasN, hasO: Boolean;
+    props: TTyAnimProps;
+    vp: TTyChartAnimProxy;
+  begin
+    if (AC.SeriesType <> 'graph') and (AC.SeriesType <> 'tree') then Exit;
+    hasN := False;
+    for j := 0 to AList.Count - 1 do
+    begin
+      nv := AList.Element(j);
+      if (nv.Anim.Series = ASer) and nv.Anim.InView then
+      begin
+        hasN := True;
+        Break;
+      end;
+    end;
+    hasO := False;
+    for j := 0 to High(APrev.Elements) do
+    begin
+      ov := APrev.Elements[j];
+      if (ov.Anim.Series = AOld) and ov.Anim.InView then
+      begin
+        hasO := True;
+        Break;
+      end;
+    end;
+    if not (hasN and hasO) then Exit;
+    props := ViewProps(nv);
+    vp := OldProxy(AOld, -1, 'viewGroup');
+    if vp <> nil then Carry(vp, ASer, -1)
+    else
+    begin
+      vp := Make(ASer, -1, 'viewGroup');
+      vp.Attr(ViewProps(ov));
+    end;
+    vp.SetFinal(props);
+    TyUpdateProps(vp, props, AC.Model, TyAnimCallNoIndex);
+  end;
+
   { ---- one element of an updated series ---- }
   procedure UpdateOne(AAt: Integer; const AEl: TTyChartElement;
     const AC: TTyChartAnimSeries; AOld, AOldRow: Integer);
@@ -2537,6 +2619,7 @@ var
     a, rot: Double;
     q2: TTyChartAnimProxy;
     rk: string;
+    ka: Integer;
   begin
     case AEl.Anim.Role of
       carRiver:
@@ -2558,6 +2641,51 @@ var
           if Find(s, -1, 'parallelClip') <> nil then Exit;
           q2 := OldProxy(AOld, -1, 'parallelClip');
           if q2 <> nil then Carry(q2, s, -1);
+        end;
+      carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
+        begin
+          { [F3d] LineDraw.updateData: a kept Line's shape -- its ends, its
+            control point, percent 1 -- updateProps at the edge's NEW row,
+            from where it is (an enter still running goes on from its
+            percent); a new one draws out (_createLine); a removed one is
+            gone at once }
+          if Find(s, r, 'gedge') <> nil then Exit;
+          if (AOldRow < 0) or not OldEl(AOld, AOldRow, 'gedge', oe) then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := GraphEdgeProps(AEl);
+          p := Take(AOld, AOldRow, s, r, 'gedge', GraphEdgeProps(oe), props, True);
+          { an entering proxy was made without its shape }
+          Ensure(p, 'shape.x1', oe.Anim.G[0]);
+          Ensure(p, 'shape.y1', oe.Anim.G[1]);
+          Ensure(p, 'shape.x2', oe.Anim.G[2]);
+          Ensure(p, 'shape.y2', oe.Anim.G[3]);
+          if oe.Anim.G[6] <> 0 then
+          begin
+            Ensure(p, 'shape.cpx1', oe.Anim.G[4]);
+            Ensure(p, 'shape.cpy1', oe.Anim.G[5]);
+          end
+          else
+          begin
+            Ensure(p, 'shape.cpx1', NaN);
+            Ensure(p, 'shape.cpy1', NaN);
+          end;
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
+      carGraphEdgeLabel:
+        begin
+          { [F3d] the Line's own text: the same element, its fade (if one
+            runs) goes on; a new Line's fades in }
+          if (AOldRow >= 0) and OldEl(AOld, AOldRow, 'gedgeLabel', oe) then
+          begin
+            p := OldProxy(AOld, AOldRow, 'gedgeLabel');
+            if p <> nil then Carry(p, s, r);
+            Exit;
+          end;
+          ArmOne(AList, AAt, AEl, AC, True);
         end;
       carSankeyClip:
         begin
@@ -2616,11 +2744,9 @@ var
         end;
       carSymbol:
         begin
-          { [F3a] A GRAPH'S NODES enter here, and do not move in an update:
-            its edges have no update tween yet, and nodes sliding under lines
-            that jump is no picture upstream draws -- the whole graph is set
-            (an F3 item still open) }
-          if AC.SeriesType = 'graph' then Exit;
+          { [F3a] a graph's nodes enter here; [F3d] and update as a
+            scatter's (SymbolDraw.updateData): their x / y in the main
+            group, which the frame carries through it }
           hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'symbol', oe);
           { added, or no symbol before: a new Symbol, which enters }
           if not hasOld then
@@ -2633,7 +2759,13 @@ var
           Ensure(p, 'x', oe.Anim.G[5]);
           Ensure(p, 'y', oe.Anim.G[6]);
           p.SetFinal(props);
-          { _updateCommon sets the style: the opacity is there at once }
+          { _updateCommon sets the style: the opacity is there at once -- and
+            useStyle's new object strands an enter's opacity tween still
+            running on the old one [F3d] }
+          { (from the last: a stopped animator leaves the list) }
+          for ka := p.AnimatorCount - 1 downto 0 do
+            if (ka < p.AnimatorCount) and (p.AnimatorAt(ka).TargetName = 'style') then
+              p.AnimatorAt(ka).StopTracks(['opacity']);
           p.SetNum('style.opacity', AEl.Anim.G[4]);
           { the path's scale at the row, then the group's place with none
             (Symbol.updateData, SymbolDraw.updateData) }
@@ -3448,6 +3580,7 @@ begin
     { WHICH NEW SERIES KEEPS WHICH OLD VIEW: the same model id and type }
     SetLength(oldOf, Length(ASeries));
     SetLength(rowMap, Length(ASeries));
+    SetLength(edgeMap, Length(ASeries));
     SetLength(diffs, Length(ASeries));
     SetLength(upd, Length(ASeries));
     for s := 0 to High(ASeries) do
@@ -3472,7 +3605,23 @@ begin
       for k := 0 to High(diffs[s]) do
         if diffs[s][k].Kind = ddkUpdate then
           rowMap[s][diffs[s][k].NewIdx] := diffs[s][k].OldIdx;
+      { [F3d] a graph's edges, diffed by their own keys }
+      if Length(ASeries[s].EdgeKeys) > 0 then
+      begin
+        ediff := TyDataDiff(APrev.Series[oldOf[s]].EdgeKeys, ASeries[s].EdgeKeys);
+        SetLength(edgeMap[s], Length(ASeries[s].EdgeKeys));
+        for k := 0 to High(edgeMap[s]) do edgeMap[s][k] := -1;
+        for k := 0 to High(ediff) do
+          if ediff[k].Kind = ddkUpdate then
+            edgeMap[s][ediff[k].NewIdx] := ediff[k].OldIdx;
+      end;
     end;
+    { [F3d] A ROAM GROUP KEPT: a graph's main group on a view, a tree's view
+      group -- applyViewCoordSysTransToElement with the series' model on any
+      render but the view's first: updateProps of its transform, update
+      timing with no row }
+    for s := 0 to High(ASeries) do
+      if upd[s] then ArmView(s, oldOf[s], ASeries[s]);
 
     { EVERY ELEMENT OF THE NEW RENDER, in list order }
     for i := 0 to AList.Count - 1 do
@@ -3498,6 +3647,12 @@ begin
         Continue;
       end;
       if (el.Anim.Role in [carLineRun, carLineArea]) then q := -1
+      { [F3d] a graph's edge by the edge rows }
+      else if el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo,
+        carGraphEdgeLabel] then
+      begin
+        if (r >= 0) and (r <= High(edgeMap[s])) then q := edgeMap[s][r] else q := -1;
+      end
       else if (r >= 0) and (r <= High(rowMap[s])) then q := rowMap[s][r]
       else q := -1;
       { done once a key: a candle's three, a radar's two }
@@ -3943,6 +4098,75 @@ begin
     AEl.Shape.Bounds.Right + ADX, AEl.Shape.Bounds.Bottom + ADY);
 end;
 
+{ [F3d] a move in a roam group's space, on the canvas at rest: times the
+  group's scale (one off a view) }
+function GroupDX(const AEl: TTyChartElement; ADX: Double): Double;
+begin
+  if AEl.Anim.InView then Result := ADX * AEl.Anim.VSX else Result := ADX;
+end;
+
+function GroupDY(const AEl: TTyChartElement; ADY: Double): Double;
+begin
+  if AEl.Anim.InView then Result := ADY * AEl.Anim.VSY else Result := ADY;
+end;
+
+{ [F3d] THE ROAM GROUP NOW: the series' 'viewGroup' proxy's transform, when
+  it is not the one the element was laid out under (a tween runs, or a ghost
+  left under the old one) }
+function ViewNow(ASet: TTyChartAnimSet; const AEl: TTyChartElement;
+  out ASX, ASY, AX, AY: Double): Boolean;
+var g: TTyChartAnimProxy;
+begin
+  Result := False;
+  ASX := AEl.Anim.VSX;
+  ASY := AEl.Anim.VSY;
+  AX := AEl.Anim.VX;
+  AY := AEl.Anim.VY;
+  if (ASet = nil) or not AEl.Anim.InView then Exit;
+  g := ASet.Find(AEl.Anim.Series, -1, 'viewGroup');
+  if g = nil then Exit;
+  ASX := NumOr(g, 'scaleX', ASX);
+  ASY := NumOr(g, 'scaleY', ASY);
+  AX := NumOr(g, 'x', AX);
+  AY := NumOr(g, 'y', AY);
+  Result := not (SameBitsD(ASX, AEl.Anim.VSX) and SameBitsD(ASY, AEl.Anim.VSY)
+    and SameBitsD(AX, AEl.Anim.VX) and SameBitsD(AY, AEl.Anim.VY));
+end;
+
+{ [F3d] an element laid out under its roam group at rest, carried to the
+  group as it is now: every point through the inverse of the rest transform
+  and the transform now -- a scale about the rest origin and a move -- a
+  caption's anchor moved with it (a text that is not local keeps its size) }
+procedure ViewMap(var AEl: TTyChartElement; ASX, ASY, AX, AY: Double);
+var fx, fy, ax0, ay0: Double;
+begin
+  if (AEl.Anim.VSX = 0) or (AEl.Anim.VSY = 0) then Exit;
+  fx := ASX / AEl.Anim.VSX;
+  fy := ASY / AEl.Anim.VSY;
+  if AEl.Caption.FontSizeLogical > 0 then
+  begin
+    ax0 := AEl.Caption.X;
+    ay0 := AEl.Caption.Y;
+    MoveCaption(AEl, (AX + (ax0 - AEl.Anim.VX) * fx) - ax0,
+      (AY + (ay0 - AEl.Anim.VY) * fy) - ay0);
+    Exit;
+  end;
+  if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then
+  begin
+    MakeInkless(AEl);
+    Exit;
+  end;
+  TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
+  TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+  if AEl.Caption.HasHostBox then
+  begin
+    AEl.Caption.HostBox.X := AX + (AEl.Caption.HostBox.X - AEl.Anim.VX) * fx;
+    AEl.Caption.HostBox.Y := AY + (AEl.Caption.HostBox.Y - AEl.Anim.VY) * fy;
+    AEl.Caption.HostBox.W := AEl.Caption.HostBox.W * fx;
+    AEl.Caption.HostBox.H := AEl.Caption.HostBox.H * fy;
+  end;
+end;
+
 { the words of a count, where the caption is one run }
 procedure ApplyText(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 begin
@@ -4008,23 +4232,50 @@ end;
   (Line.beforeUpdate): the line drawn to it, an end symbol scaled by it
   about its end and carried to pointAt(0) or pointAt(percent), the label
   moved and turned to where beforeUpdate places it }
-procedure GraphEdgeFrom(var AEl: TTyChartElement; APercent: Double);
+procedure GraphEdgeFrom(var AEl: TTyChartElement; APercent: Double;
+  ANow: TTyChartAnimProxy; ASet: TTyChartAnimSet);
 var
-  q1, q2, qc, d, d1: TTyPointF;
+  q1, q2, qc, d, d1, t0, t1: TTyPointF;
   cv: Boolean;
   pts: TTyPointFArray;
   k: Integer;
-  x, y, s, x1, y1, gx, gy, gx1, gy1, rot, rot1: Double;
+  x, y, s, s1, x1, y1, gx, gy, gx1, gy1, rot, rot1, vsx, vsy, vx, vy: Double;
   ah, ah1: TTyTextAnchorH;
   av, av1: TTyTextAnchorV;
+  now_: TTyChartElement;
 begin
   if IsNan(APercent) then Exit;
+  { [F3d] THE LINE AS IT IS NOW: its shape's ends and control point from the
+    proxy (Line.updateData tweens them), its frame the roam group's now --
+    beforeUpdate's invScale the group's scale now; AEl keeps the rest }
+  now_ := AEl;
+  if (ANow <> nil) and (ANow.GetAnimProp('shape.x1').Kind = avkNumber) then
+  begin
+    now_.Anim.G[0] := ANow.Num('shape.x1');
+    now_.Anim.G[1] := ANow.Num('shape.y1');
+    now_.Anim.G[2] := ANow.Num('shape.x2');
+    now_.Anim.G[3] := ANow.Num('shape.y2');
+    if now_.Anim.G[6] <> 0 then
+    begin
+      now_.Anim.G[4] := ANow.Num('shape.cpx1');
+      now_.Anim.G[5] := ANow.Num('shape.cpy1');
+    end;
+  end;
+  if ViewNow(ASet, AEl, vsx, vsy, vx, vy) then
+  begin
+    now_.Anim.G[7] := vsx;
+    now_.Anim.G[8] := vsy;
+    now_.Anim.G[9] := vx;
+    now_.Anim.G[10] := vy;
+    if (vsx = 0) or IsNan(vsx) then now_.Anim.G[11] := 1
+    else now_.Anim.G[11] := 1 / vsx;
+  end;
   case AEl.Anim.Role of
     carGraphEdge:
       begin
-        TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+        TyGraphEdgeLine(now_, q1, q2, qc, cv);
         pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
-        for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(AEl, pts[k]);
+        for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(now_, pts[k]);
         AEl.Shape.Points := pts;
         AEl.Shape.Bounds := TyShapeBounds(TyShapePolyline(pts));
         if not (APercent > 0) then MakeInkless(AEl);
@@ -4036,16 +4287,39 @@ begin
           MakeInkless(AEl);
           Exit;
         end;
-        TyGraphEdgeEnds(AEl, APercent, AEl.Anim.Role = carGraphEdgeTo, x, y, s);
-        TyGraphEdgeEnds(AEl, 1, AEl.Anim.Role = carGraphEdgeTo, x1, y1, s);
-        d := TyGraphEdgeDev(AEl, TyPointF(x, y));
+        TyGraphEdgeEnds(now_, APercent, AEl.Anim.Role = carGraphEdgeTo, x, y, s);
+        TyGraphEdgeEnds(AEl, 1, AEl.Anim.Role = carGraphEdgeTo, x1, y1, s1);
+        d := TyGraphEdgeDev(now_, TyPointF(x, y));
         d1 := TyGraphEdgeDev(AEl, TyPointF(x1, y1));
-        TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, APercent, APercent);
+        { the symbol's scale on the canvas, now over at rest: invScale times
+          the percent, through the group }
+        if (s1 <> 0) and (AEl.Anim.G[7] <> 0) then
+          s := (s * now_.Anim.G[7]) / (s1 * AEl.Anim.G[7])
+        else
+          s := APercent;
+        TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, s, s);
+        { turned by the tangent's turn: setSymbolRotation reads tangentAt(0)
+          or tangentAt(1), whatever the percent }
+        TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+        TyGraphEdgeLine(now_, t0, t1, d, cv);
+        if AEl.Anim.Role = carGraphEdgeTo then
+        begin
+          rot1 := TyGraphArrowRotation(TyGraphTangentAt(q1, q2, qc, cv, 1), True);
+          rot := TyGraphArrowRotation(TyGraphTangentAt(t0, t1, d, cv, 1), True);
+        end
+        else
+        begin
+          rot1 := TyGraphArrowRotation(TyGraphTangentAt(q1, q2, qc, cv, 0), False);
+          rot := TyGraphArrowRotation(TyGraphTangentAt(t0, t1, d, cv, 0), False);
+        end;
+        if not SameBitsD(rot, rot1) and not IsNan(rot) and not IsNan(rot1) then
+          TyShapeRotateAbout(AEl.Shape, d1.X, d1.Y, (rot - rot1) * Pi / 180);
+        d := TyGraphEdgeDev(now_, TyPointF(x, y));
         TyShapeMove(AEl.Shape, d.X - d1.X, d.Y - d1.Y);
       end;
     carGraphEdgeLabel:
       begin
-        TyGraphEdgeLabelAt(AEl, APercent, gx, gy, rot, ah, av);
+        TyGraphEdgeLabelAt(now_, APercent, gx, gy, rot, ah, av);
         TyGraphEdgeLabelAt(AEl, 1, gx1, gy1, rot1, ah1, av1);
         if IsNan(gx) or IsNan(gy) or IsNan(gx1) or IsNan(gy1) then Exit;
         MoveCaption(AEl, gx - gx1, gy - gy1);
@@ -4189,7 +4463,7 @@ begin
           y + AProxy.Num('shape.height'));
       end;
     carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
-      GraphEdgeFrom(AEl, AProxy.Num('shape.percent'));
+      GraphEdgeFrom(AEl, AProxy.Num('shape.percent'), AProxy, nil);
     carTreeEdge:
       TreeEdgeFrom(AEl, AProxy);
     carGraphEdgeLabel:
@@ -4302,8 +4576,9 @@ begin
         { THE GROUP'S PLACE [Batch 90]: a scatter symbol's group moves on an
           update, a line symbol's follows its polyline }
         if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
-          MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5],
-            NumOr(AProxy, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6])
+          { [F3d] a graph node's group moves in its main group }
+          MoveSymbol(AEl, GroupDX(AEl, NumOr(AProxy, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5]),
+            GroupDY(AEl, NumOr(AProxy, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]))
         { a tree node's group is a proxy of its own (the frame moves it) }
         else if AEl.Anim.Role = carTreeNode then
         else
@@ -4942,8 +5217,8 @@ begin
         else fy := 1;
         if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then op := 0
         else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
-        MoveSymbol(AEl, NumOr(G, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5],
-          NumOr(G, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]);
+        MoveSymbol(AEl, GroupDX(AEl, NumOr(G, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5]),
+          GroupDY(AEl, NumOr(G, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6]));
       end;
     carLineSymbol:
       begin
@@ -7265,8 +7540,8 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
 var
   i, h, k, nx: Integer;
   el, hostS, hostF: TTyChartElement;
-  x0, y0, x1, y1, dx, dy: Double;
-  moved: Boolean;
+  x0, y0, x1, y1, dx, dy, vsx, vsy, vx, vy: Double;
+  moved, viewMoves, edgeDone: Boolean;
   g, bp: TTyChartAnimProxy;
   extras: array of TTyChartElement;
 begin
@@ -7277,7 +7552,21 @@ begin
   for i := 0 to ASource.Count - 1 do
   begin
     el := ASource.Element(i);
-    if (i <= High(ABind)) and (ABind[i] <> nil) then TyAnimApply(el, ABind[i]);
+    { [F3d] THE ROAM GROUP'S TWEEN: a graph's edges are laid out again in the
+      group as it is now (their own percent and shape over it); everything
+      else of the group is carried after its own frame }
+    viewMoves := ViewNow(ASet, el, vsx, vsy, vx, vy);
+    edgeDone := False;
+    if viewMoves and (el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo]) then
+    begin
+      bp := nil;
+      if i <= High(ABind) then bp := ABind[i];
+      if bp <> nil then GraphEdgeFrom(el, bp.Num('shape.percent'), bp, ASet)
+      else GraphEdgeFrom(el, 1, nil, ASet);
+      edgeDone := True;
+    end;
+    if (i <= High(ABind)) and (ABind[i] <> nil) and not edgeDone then
+      TyAnimApply(el, ABind[i]);
     { A MORPH and a universal transition's style [Batch 136]; a treemap
       rect's from the set, its proxy role being none [Batch 138] }
     bp := nil;
@@ -7341,13 +7630,24 @@ begin
     if (ASet <> nil) and (el.Anim.Role = carGraphEdgeLabel) then
     begin
       g := ASet.Find(el.Anim.Series, el.Anim.Index, 'gedge');
-      if (g <> nil) and not g.AtFinal then GraphEdgeFrom(el, g.Num('shape.percent'));
+      if (g <> nil) and (not g.AtFinal or viewMoves) then
+        GraphEdgeFrom(el, g.Num('shape.percent'), g, ASet)
+      else if viewMoves then
+        GraphEdgeFrom(el, 1, nil, ASet);
     end;
+    { [F3d] the rest of a roam group that moves: carried by the transform
+      now over the one at rest -- a label that follows its host follows it
+      as drawn (below) }
+    if viewMoves and not (el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo,
+      carGraphEdgeLabel]) and not ((el.Anim.Role = carLabel) and (el.Anim.HostPlus1 > 0)) then
+      ViewMap(el, vsx, vsy, vx, vy);
     h := el.Anim.HostPlus1 - 1;
     { (a tree node's group slides on after its symbol rests) }
     if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
-      and (h <= High(ABind)) and (ABind[h] <> nil)
-      and (not ABind[h].AtFinal or (ASource.Element(h).Anim.Role = carTreeNode)) then
+      and (((h <= High(ABind)) and (ABind[h] <> nil)
+        and (not ABind[h].AtFinal or (ASource.Element(h).Anim.Role = carTreeNode)))
+        { [F3d] or its host carried by its roam group }
+        or viewMoves) then
     begin
       hostS := ASource.Element(h);
       hostF := ADest.Element(h);
@@ -7374,6 +7674,8 @@ begin
       g := ASet.Ghost(i);
       if g.Gone then Continue;
       ApplyGhost(el, g);
+      { [F3d] under its roam group as it is now }
+      if ViewNow(ASet, el, vsx, vsy, vx, vy) then ViewMap(el, vsx, vsy, vx, vy);
       ADest.Add(el);
     end;
 end;

@@ -1175,6 +1175,12 @@ begin
     cap.Anim.Role := carLabel;
     cap.Anim.Series := host.Datum.SeriesIndex;
     cap.Anim.Index := host.Datum.DataIndex;
+    { [F3d] the host's roam group: the label is carried with it }
+    cap.Anim.InView := host.Anim.InView;
+    cap.Anim.VSX := host.Anim.VSX;
+    cap.Anim.VSY := host.Anim.VSY;
+    cap.Anim.VX := host.Anim.VX;
+    cap.Anim.VY := host.Anim.VY;
     { A LINES ROW'S LABEL rides its line's percent (Line.beforeUpdate): the
       line's geometry and placing with it [Batch 121] }
     if host.Anim.Role = carLinesLine then

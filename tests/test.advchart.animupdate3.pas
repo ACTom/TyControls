@@ -47,9 +47,13 @@ type
     FRoot: TJSONData;
     FBad, FCompared, FSamples: Integer;
     FWhere, FReport: string;
+    { a circular layout's case: the ring's cos / sin are not correctly
+      rounded in either runtime -- its numbers to 1e-9 }
+    FTol: Double;
     procedure Bad(const AWhat: string);
     procedure SameNum(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure NearNum(const AWhat: string; AGot: Double; AWant: TJSONData; ATol: Double);
+    procedure NearVal(const AWhat: string; AGot, AWant: Double);
     procedure SameKey(const AWhat: string; P: TTyChartAnimProxy; const AKey: string;
       AWant: TJSONData);
     procedure SameArr(const AWhat: string; const AGot: TTyAnimValue; AWant: TJSONData);
@@ -227,6 +231,12 @@ var want: Double;
 begin
   Inc(FCompared);
   want := WantNum(AWant);
+  if (FTol > 0) and not IsNan(want) and not IsNan(AGot) then
+  begin
+    if Abs(AGot - want) > FTol then
+      Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(want)]));
+    Exit;
+  end;
   if not SameBits(AGot, want) then
     Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(want)]));
 end;
@@ -245,6 +255,19 @@ begin
   end;
   if Abs(AGot - want) > ATol then
     Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(want)]));
+end;
+
+procedure TAdvChartAnimUpdate3OracleTest.NearVal(const AWhat: string; AGot, AWant: Double);
+begin
+  Inc(FCompared);
+  if IsNan(AWant) or IsNan(AGot) then
+  begin
+    if not (IsNan(AWant) and IsNan(AGot)) then
+      Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(AWant)]));
+    Exit;
+  end;
+  if Abs(AGot - AWant) > 1e-6 then
+    Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(AWant)]));
 end;
 
 procedure TAdvChartAnimUpdate3OracleTest.SameKey(const AWhat: string;
@@ -343,7 +366,8 @@ var
   leaf: TJSONObject;
   p: TTyChartAnimProxy;
   el: TTyChartElement;
-  cx, cy: Double;
+  cx, cy, vsx, vsy, vx, vy: Double;
+  vw: TJSONObject;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -422,17 +446,51 @@ begin
         if p = nil then
         begin
           if leaf.Integers['n'] > 0 then Bad(name + ': upstream tweens the edge, the port has no proxy');
-          Continue;
+        end
+        else
+        begin
+          SameKey(name, p, 'shape.percent', leaf.Find('percent'));
+          SameKey(name, p, 'shape.x1', leaf.Find('x1'));
+          SameKey(name, p, 'shape.y1', leaf.Find('y1'));
+          SameKey(name, p, 'shape.x2', leaf.Find('x2'));
+          SameKey(name, p, 'shape.y2', leaf.Find('y2'));
+          SameKey(name, p, 'shape.cpx1', leaf.Find('cpx1'));
+          SameKey(name, p, 'shape.cpy1', leaf.Find('cpy1'));
         end;
-        SameKey(name, p, 'shape.percent', leaf.Find('percent'));
-        SameKey(name, p, 'shape.x1', leaf.Find('x1'));
-        SameKey(name, p, 'shape.y1', leaf.Find('y1'));
-        SameKey(name, p, 'shape.x2', leaf.Find('x2'));
-        SameKey(name, p, 'shape.y2', leaf.Find('y2'));
-        SameKey(name, p, 'shape.cpx1', leaf.Find('cpx1'));
-        SameKey(name, p, 'shape.cpy1', leaf.Find('cpy1'));
+      end;
+      { THE FRAME: a whole straight line's two ends on the canvas -- the
+        shape through the main group as it is now }
+      if (sub = '') and (WantNum(leaf.Find('percent')) = 1) and IsNan(WantNum(leaf.Find('cpx1')))
+        and FrameEl(s, idx, carGraphEdge, el) and (Length(el.Shape.Points) = 2) then
+      begin
+        vw := TJSONObject(ARec.Find('g' + IntToStr(s) + '/view'));
+        if vw <> nil then
+        begin
+          vsx := WantNum(vw.Find('scaleX'));
+          vsy := WantNum(vw.Find('scaleY'));
+          vx := WantNum(vw.Find('x'));
+          vy := WantNum(vw.Find('y'));
+        end
+        else
+        begin
+          vsx := 1;
+          vsy := 1;
+          vx := 0;
+          vy := 0;
+        end;
+        NearVal(name + ' drawn x1', el.Shape.Points[0].X, vsx * WantNum(leaf.Find('x1')) + vx);
+        NearVal(name + ' drawn y1', el.Shape.Points[0].Y, vsy * WantNum(leaf.Find('y1')) + vy);
+        NearVal(name + ' drawn x2', el.Shape.Points[1].X, vsx * WantNum(leaf.Find('x2')) + vx);
+        NearVal(name + ' drawn y2', el.Shape.Points[1].Y, vsy * WantNum(leaf.Find('y2')) + vy);
       end
-
+      { THE FRAME: the label's anchor where beforeUpdate hung it, through the
+        group }
+      else if (sub = 'label') and (WantNum(leaf.Find('op')) > 0)
+        and FrameEl(s, idx, carGraphEdgeLabel, el) then
+      begin
+        NearNum(name + ' drawn x', el.Caption.X, leaf.Find('gx'), 1e-6);
+        NearNum(name + ' drawn y', el.Caption.Y, leaf.Find('gy'), 1e-6);
+      end;
     end;
   end;
 end;
@@ -763,6 +821,8 @@ var
   act: string;
 begin
   FWhere := ACase.Strings['id'];
+  FTol := 0;
+  if (ACase.Find('ring') <> nil) and ACase.Booleans['ring'] then FTol := 1e-9;
   NewChart(ACase.Integers['W'], ACase.Integers['H']);
   t0 := TJSONObject(FRoot).Objects['clock'].Floats['T0'];
   FChart.AnimationMode := camAlways;
@@ -816,7 +876,16 @@ begin
   for i := 0 to cases.Count - 1 do
     if cases.Objects[i].Strings['group'] = AGroup then
     begin
-      RunCase(cases.Objects[i]);
+      try
+        RunCase(cases.Objects[i]);
+      except
+        on E: Exception do
+        begin
+          Bad(E.ClassName + ': ' + E.Message);
+          if FChart <> nil then FChart.Measurer := nil;
+          FreeAndNil(FChart);
+        end;
+      end;
       Inc(n);
     end;
   AssertTrue('cases run', n > 0);

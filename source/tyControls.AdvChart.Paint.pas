@@ -706,6 +706,14 @@ type
     { A LABEL PLACED ON ITS OWN THAT RIDES A TREE NODE'S GROUP (a radial
       tree's): G[5..9] the node's, as carTreeNode has them [F3a] }
     RideTree: Boolean;
+    { [F3d] AN ELEMENT OF A ROAM GROUP -- a graph's main group on a view, a
+      tree's view group -- whose transform an update tweens
+      (applyViewCoordSysTransToElement with the series' model): the group's
+      transform at rest, scale and translation, by which a frame carries what
+      moves in the group to the canvas, and the group's transform now over it
+      (the series' 'viewGroup' proxy) }
+    InView: Boolean;
+    VSX, VSY, VX, VY: Double;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;

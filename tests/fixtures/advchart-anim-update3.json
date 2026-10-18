@@ -116,6 +116,7 @@
    "note": "layout none on a view with two categories, arrows and edge labels: the legend switches category B off -- its nodes fade and shrink, their edges go at once, the view's rect changes so the main group tweens (update timing, no row) while the kept nodes stay at their place in the group and their scale is set at once; switched on again later",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "legend": {
@@ -4405,9 +4406,10 @@
   {
    "id": "graph-move",
    "group": "graph",
-   "note": "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow; 300 ms cubicInOut, the default update timing",
+   "note": "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow and labels (insideEndTop: beforeUpdate turns them with the tangent); 300 ms cubicInOut, the default update timing",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -4423,6 +4425,11 @@
        "arrow"
       ],
       "edgeSymbolSize": 8,
+      "edgeLabel": {
+       "show": true,
+       "formatter": "L",
+       "position": "insideEndTop"
+      },
       "lineStyle": {
        "curveness": 0.3
       },
@@ -4581,6 +4588,16 @@
        "gy": "40557d6e4675c016",
        "gs": "bfe93c1736e683f8"
       },
+      "g0/edge0/label": {
+       "x": "40574a1d0ec27dd6",
+       "y": "4044ecc9d813301b",
+       "rotation": "bfdac418bbd3dc2f",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c0eec3a5a7b6f",
+       "gy": "40547570fa815424",
+       "gs": "3fed3df66fe439b8"
+      },
       "g0/edge1": {
        "x1": "4058918d8e533333",
        "y1": "404c00cb1ca66666",
@@ -4608,6 +4625,16 @@
        "gx": "4064339203d332ee",
        "gy": "406567a002066622",
        "gs": "bfd3e3b74bda2770"
+      },
+      "g0/edge1/label": {
+       "x": "404d90ed098fff54",
+       "y": "4057c9880287ffaa",
+       "rotation": "3fe9220c9dac9fc8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40643391b76d7952",
+       "gy": "4064da342405df8f",
+       "gs": "3fe6a0922d3f83ac"
       },
       "g0/edge2": {
        "x1": "404bf7afe375c28f",
@@ -4637,6 +4664,16 @@
        "gy": "4068ee75d326acfb",
        "gs": "bfe45b29fc249df4"
       },
+      "g0/edge2/label": {
+       "x": "4061c4daa50d15e5",
+       "y": "405c321347f05839",
+       "rotation": "bfc9446fe45b8020",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4072dfdc408a8d30",
+       "gy": "406878ca46ca1510",
+       "gs": "3fef60e87948cbed"
+      },
       "g0/edge3": {
        "x1": "406258e6fb91eb85",
        "y1": "405f56bb707eb852",
@@ -4665,6 +4702,16 @@
        "gy": "4070de8b02d3ef0c",
        "gs": "bfa4c24d4c218171"
       },
+      "g0/edge3/label": {
+       "x": "405657f3cad35580",
+       "y": "40639a2dc388eace",
+       "rotation": "3fe09cd6790864b8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a652c21cfa85a",
+       "gy": "40709a52ecb21da9",
+       "gs": "3febc8a6c11fcb7f"
+      },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
        "y1": "40638db7226c0000",
@@ -4692,6 +4739,16 @@
        "gx": "4055c6f2c3a02824",
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
+      },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4056d0c31cbcf1a7",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
       }
      }
     },
@@ -4874,6 +4931,16 @@
        "gy": "40557d6e4675c016",
        "gs": "bfe93c1736e683f8"
       },
+      "g0/edge0/label": {
+       "x": "40574a1d0ec27dd6",
+       "y": "4044ecc9d813301b",
+       "rotation": "bfdac418bbd3dc2f",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c0eec3a5a7b6f",
+       "gy": "40547570fa815424",
+       "gs": "3fed3df66fe439b8"
+      },
       "g0/edge1": {
        "x1": "4058918d8e533333",
        "y1": "404c00cb1ca66666",
@@ -4901,6 +4968,16 @@
        "gx": "4064339203d332ee",
        "gy": "406567a002066622",
        "gs": "bfd3e3b74bda2770"
+      },
+      "g0/edge1/label": {
+       "x": "404d90ed098fff54",
+       "y": "4057c9880287ffaa",
+       "rotation": "3fe9220c9dac9fc8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40643391b76d7952",
+       "gy": "4064da342405df8f",
+       "gs": "3fe6a0922d3f83ac"
       },
       "g0/edge2": {
        "x1": "404bf7afe375c28f",
@@ -4930,6 +5007,16 @@
        "gy": "4068ee75d326acfb",
        "gs": "bfe45b29fc249df4"
       },
+      "g0/edge2/label": {
+       "x": "4061c4daa50d15e5",
+       "y": "405c321347f05839",
+       "rotation": "bfc9446fe45b8020",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4072dfdc408a8d30",
+       "gy": "406878ca46ca1510",
+       "gs": "3fef60e87948cbed"
+      },
       "g0/edge3": {
        "x1": "406258e6fb91eb85",
        "y1": "405f56bb707eb852",
@@ -4957,6 +5044,16 @@
        "gx": "406a3ff63bdc4467",
        "gy": "4070de8b02d3ef0c",
        "gs": "bfa4c24d4c218171"
+      },
+      "g0/edge3/label": {
+       "x": "405657f3cad35580",
+       "y": "40639a2dc388eace",
+       "rotation": "3fe09cd6790864b8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a652c21cfa85a",
+       "gy": "40709a52ecb21da9",
+       "gs": "3febc8a6c11fcb7f"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -4986,6 +5083,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4056d0c31cbcf1a7",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -5013,6 +5120,16 @@
        "gx": "4075ec47a6c00000",
        "gy": "40614516f5333334",
        "gs": "0000000000000000"
+      },
+      "g0/edge5/label": {
+       "x": "40662b5990700000",
+       "y": "40529e5cb2800000",
+       "rotation": "4005a8018302fe40",
+       "scale": "3fe4000000000000",
+       "op": "0000000000000000",
+       "gx": "4075a9e0681a2e97",
+       "gy": "406175b1bc487f76",
+       "gs": "bfed069a4cf30d92"
       }
      }
     },
@@ -5127,6 +5244,16 @@
        "gy": "40557d6e4267de85",
        "gs": "bfe93c17333cecea"
       },
+      "g0/edge0/label": {
+       "x": "40574a1d13f8e773",
+       "y": "4044ecc9d301d626",
+       "rotation": "bfdac418af6795e8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c0eec3cd012f4",
+       "gy": "40547570f6872816",
+       "gs": "3fed3df6726a0887"
+      },
       "g0/edge1": {
        "x1": "4058918d939b1e78",
        "y1": "404c00cb17386e35",
@@ -5154,6 +5281,16 @@
        "gx": "40643392023bd766",
        "gy": "406567a0021d8c7e",
        "gs": "bfd3e3b7432c4d32"
+      },
+      "g0/edge1/label": {
+       "x": "404d90ed099c6549",
+       "y": "4057c98802a4ef9d",
+       "rotation": "3fe9220c99ff1734",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40643391b5e65ed2",
+       "gy": "4064da34241d05e2",
+       "gs": "3fe6a0922fd948d8"
       },
       "g0/edge2": {
        "x1": "404bf7afe388d6b5",
@@ -5183,6 +5320,16 @@
        "gy": "4068ee75d6343f81",
        "gs": "bfe45b2a00832aed"
       },
+      "g0/edge2/label": {
+       "x": "4061c4daa32d3cce",
+       "y": "405c32134bc14f61",
+       "rotation": "bfc9446ffb9bf954",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4072dfdc3e4733cd",
+       "gy": "406878ca49c96792",
+       "gs": "3fef60e87824f1cf"
+      },
       "g0/edge3": {
        "x1": "406258e6f9756ec4",
        "y1": "405f56bb745bbd22",
@@ -5210,6 +5357,16 @@
        "gx": "406a3ff63a3b4559",
        "gy": "4070de8b02e8a142",
        "gs": "bfa4c24d344393aa"
+      },
+      "g0/edge3/label": {
+       "x": "405657f3cacd7c14",
+       "y": "40639a2dc3a2c992",
+       "rotation": "3fe09cd677059b14",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a652c20373c31",
+       "gy": "40709a52ecc7fb2d",
+       "gs": "3febc8a6c21f3362"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -5239,6 +5396,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4056d0c319844f6b",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -5266,6 +5433,16 @@
        "gx": "4075ec47a5957999",
        "gy": "40614516f4dd74c4",
        "gs": "3e30ca6db13237b8"
+      },
+      "g0/edge5/label": {
+       "x": "40662b598ffc8ab2",
+       "y": "40529e5cb214d1f5",
+       "rotation": "401764fe6b882f91",
+       "scale": "3fe4000000000000",
+       "op": "3e212e0be826d695",
+       "gx": "40762eaee43bf178",
+       "gy": "4061147c2dcbb630",
+       "gs": "3fed069a4c96c57f"
       }
      }
     },
@@ -5380,6 +5557,16 @@
        "gy": "40557d2d685cadd4",
        "gs": "bfe93bdc9db29680"
       },
+      "g0/edge0/label": {
+       "x": "40574a70755c552f",
+       "y": "4044ec78c273d949",
+       "rotation": "bfdac351f9a1648b",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c0f1393d8513c",
+       "gy": "4054753157c1e633",
+       "gs": "3fed3e1ecbd2105c"
+      },
       "g0/edge1": {
        "x1": "405891e20d0783af",
        "y1": "404c00743d235784",
@@ -5407,6 +5594,16 @@
        "gx": "406433788e1aaba2",
        "gy": "406567a1746c249d",
        "gs": "bfd3e32c7169e902"
+      },
+      "g0/edge1/label": {
+       "x": "404d90edcfef53a5",
+       "y": "4057c989d1872dc4",
+       "rotation": "3fe921d1c68b95a0",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4064337945bf3326",
+       "gy": "4064da35966c00a3",
+       "gs": "3fe6a0bbc86d5bdc"
       },
       "g0/edge2": {
        "x1": "404bf7b114b81fcd",
@@ -5436,6 +5633,16 @@
        "gy": "4068eea6ac4f176f",
        "gs": "bfe45b6fe537f764"
       },
+      "g0/edge2/label": {
+       "x": "4061c4bca77bac96",
+       "y": "405c32505762dd4a",
+       "rotation": "bfc945e3ef074804",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4072dfb80af68686",
+       "gy": "406878fa3bf237a3",
+       "gs": "3fef60d63afb8fb7"
+      },
       "g0/edge3": {
        "x1": "406258c533c5d92f",
        "y1": "405f56f940cbb56e",
@@ -5463,6 +5670,16 @@
        "gx": "406a3fdc2beb6cf4",
        "gy": "4070de8c4df7570c",
        "gs": "bfa4c0cf65aefe22"
+      },
+      "g0/edge3/label": {
+       "x": "405657f36d3c9b79",
+       "y": "40639a2f61752ccf",
+       "rotation": "3fe09cb64bcca9b4",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a65129b0fc6c4",
+       "gy": "40709a544a8ae7c0",
+       "gs": "3febc8b6b7e010d0"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -5492,6 +5709,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4056d08f92993932",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -5519,6 +5746,16 @@
        "gx": "4075ec34fe5bec39",
        "gy": "4061451199486d46",
        "gs": "3ef0ca6db13237b8"
+      },
+      "g0/edge5/label": {
+       "x": "40662b52591e10eb",
+       "y": "40529e55ff9a8898",
+       "rotation": "401764fcb5418405",
+       "scale": "3fe4000000000000",
+       "op": "3ee12e0be826d695",
+       "gx": "40762e9c47692572",
+       "gy": "406114770b0e301c",
+       "gs": "3fed0694886e04d5"
       }
      }
     },
@@ -5633,6 +5870,16 @@
        "gy": "405575b2ac91a27c",
        "gs": "bfe9351bc58a3054"
       },
+      "g0/edge0/label": {
+       "x": "4057540e3f645a2e",
+       "y": "4044e31f57b60b1b",
+       "rotation": "bfdaac6ed30cbb93",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c139d28342952",
+       "gy": "40546ddafd895ef3",
+       "gs": "3fed42c298f1ad45"
+      },
       "g0/edge1": {
        "x1": "40589ba02308f56e",
        "y1": "404bf66ff49b52a8",
@@ -5660,6 +5907,16 @@
        "gx": "406430890ac555e3",
        "gy": "406567cc29a861b0",
        "gs": "bfd3d3351381d3b8"
+      },
+      "g0/edge1/label": {
+       "x": "404d9104af6837ff",
+       "y": "4057c9bf34127a1c",
+       "rotation": "3fe91b0de3393dc8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406430a7a8593238",
+       "gy": "4064da604ef821f5",
+       "gs": "3fe6a583e1f00281"
       },
       "g0/edge2": {
        "x1": "404bf7d4473b890d",
@@ -5689,6 +5946,16 @@
        "gy": "4068f4488e4891b4",
        "gs": "bfe46380695ef35c"
       },
+      "g0/edge2/label": {
+       "x": "4061c1476844fb9b",
+       "y": "405c395ab1dab620",
+       "rotation": "bfc970d49a8ed275",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4072db8b42c1120a",
+       "gy": "40687e81d40c37e5",
+       "gs": "3fef5eb95ee286ad"
+      },
       "g0/edge3": {
        "x1": "406254e015bea5f8",
        "y1": "405f5e19d7d43aa8",
@@ -5716,6 +5983,16 @@
        "gx": "406a3cdae062dd5c",
        "gy": "4070deb27c5df27a",
        "gs": "bfa494abe10cf1da"
+      },
+      "g0/edge3/label": {
+       "x": "405657e8a2b90557",
+       "y": "40639a5f1b756f19",
+       "rotation": "3fe098fe4b7dc680",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a62212a4cf64d",
+       "gy": "40709a7ca2f15212",
+       "gs": "3febca8ed7937b2f"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -5745,6 +6022,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4056ca9e3f8dd707",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -5772,6 +6059,16 @@
        "gx": "4075ea0e4b3a5d80",
        "gy": "406144735c3c392d",
        "gs": "3f40034d0450c82c"
+      },
+      "g0/edge5/label": {
+       "x": "40662a7d6327ad32",
+       "y": "40529d90334b4778",
+       "rotation": "401764ca27f759fc",
+       "scale": "3fe4000000000000",
+       "op": "3f30624dd2f1a9fd",
+       "gx": "40762c76c7533f38",
+       "gy": "406113df5c7a5714",
+       "gs": "3fed05ea3b76a54d"
       }
      }
     },
@@ -5886,6 +6183,16 @@
        "gy": "40553f917754d347",
        "gs": "bfe9046d79b8a268"
       },
+      "g0/edge0/label": {
+       "x": "405799a693d1609a",
+       "y": "40449f75d52a0818",
+       "rotation": "bfda0885ae56670c",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c3477fdbc713c",
+       "gy": "405438c22dce5c57",
+       "gs": "3fed638fb4031b94"
+      },
       "g0/edge1": {
        "x1": "4058e2223401450f",
        "y1": "404badf1dc4dc875",
@@ -5913,6 +6220,16 @@
        "gx": "40641b4a3b644a92",
        "gy": "406569013f164294",
        "gs": "bfd36223b4ec2dc2"
+      },
+      "g0/edge1/label": {
+       "x": "404d91aa3851c4aa",
+       "y": "4057cb418edbd338",
+       "rotation": "3fe8eb2e70bc4698",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40641c3c6a71c073",
+       "gy": "4064db963074e063",
+       "gs": "3fe6c73d11bc2bb0"
       },
       "g0/edge2": {
        "x1": "404bf8d301a3f67f",
@@ -5942,6 +6259,16 @@
        "gy": "40691d0bac35d2c0",
        "gs": "bfe49e123fa25f77"
       },
+      "g0/edge2/label": {
+       "x": "4061a840becc4394",
+       "y": "405c6c4e97434770",
+       "rotation": "bfcaaa0e8da7f16f",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4072bd55fa93a862",
+       "gy": "4068a686c0ac6111",
+       "gs": "3fef4ee554f31872"
+      },
       "g0/edge3": {
        "x1": "406238afccf7bf1e",
        "y1": "405f91aeab2acb00",
@@ -5969,6 +6296,16 @@
        "gx": "406a271b60110c18",
        "gy": "4070dfc6cf240a84",
        "gs": "bfa34f17c96bb44f"
+      },
+      "g0/edge3/label": {
+       "x": "4056579a8a00d43c",
+       "y": "40639bb882ed0d24",
+       "rotation": "3fe07d91eda19564",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a4cd6851760f4",
+       "gy": "40709ba107860244",
+       "gs": "3febd81cd76c6094"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -5998,6 +6335,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40569f9c33441ca9",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -6025,6 +6372,16 @@
        "gx": "4075da7eaeaab44a",
        "gy": "40613ff726eeef45",
        "gs": "3f70034d0450c82c"
+      },
+      "g0/edge5/label": {
+       "x": "4066247a834b23eb",
+       "y": "405297f4f0aaab16",
+       "rotation": "4017635c040132c3",
+       "scale": "3fe4000000000000",
+       "op": "3f60624dd2f1a9fd",
+       "gx": "40761cefd5d1fb8e",
+       "gy": "40610f92a7a1c7dc",
+       "gs": "3fed0116a8461214"
       }
      }
     },
@@ -6139,6 +6496,16 @@
        "gy": "4054aca50b66a0db",
        "gs": "bfe8822296ce9b47"
       },
+      "g0/edge0/label": {
+       "x": "4058568d2fd4bb2b",
+       "y": "4043e7ce4e404911",
+       "rotation": "bfd85a98c64e6aa8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406c8dcaa7e8c690",
+       "gy": "4053a8ab2c5d5f5d",
+       "gs": "3fedb602ab9af572"
+      },
       "g0/edge1": {
        "x1": "4059a1833d7eaf79",
        "y1": "404ae92de37b5158",
@@ -6166,6 +6533,16 @@
        "gx": "4063e19fbf5ce2b6",
        "gy": "40656c48301bee22",
        "gs": "bfd243cf9f7acbe5"
+      },
+      "g0/edge1/label": {
+       "x": "404d936b875df956",
+       "y": "4057cf5a3c22e9aa",
+       "rotation": "3fe87234bef1c480",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4063e4a8839fdf22",
+       "gy": "4064dee4a793220c",
+       "gs": "3fe71b9168490a62"
       },
       "g0/edge2": {
        "x1": "404bfb866951b1d9",
@@ -6195,6 +6572,16 @@
        "gy": "40698baf8fb9cc77",
        "gs": "bfe53ec0077cf78c"
       },
+      "g0/edge2/label": {
+       "x": "406164533bf25014",
+       "y": "405cf69b73a83f94",
+       "rotation": "bfce124189f0fa2e",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40726b6683cd4ad4",
+       "gy": "40691327b2f88f87",
+       "gs": "3fef1ef78874bc0d"
+      },
       "g0/edge3": {
        "x1": "4061ec2cbe4995ab",
        "y1": "40600ed82b41bbae",
@@ -6222,6 +6609,16 @@
        "gx": "4069ec13960e665c",
        "gy": "4070e2b4d4624bc1",
        "gs": "bf9f42a9cc101374"
+      },
+      "g0/edge3/label": {
+       "x": "405656c6900ce13a",
+       "y": "40639f62097adeb1",
+       "rotation": "3fe02e5157214f58",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406a131fd3a6676c",
+       "gy": "40709ebe96a965b4",
+       "gs": "3febfed5ed16963a"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -6251,6 +6648,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40562adfc8c522ce",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -6278,6 +6685,16 @@
        "gx": "4075b052b41b225a",
        "gy": "406133afe5a197bc",
        "gs": "3f8b0591f74851ca"
+      },
+      "g0/edge5/label": {
+       "x": "4066143e6b5f5b94",
+       "y": "4052889bdf09fdab",
+       "rotation": "40175f77a64cf10c",
+       "scale": "3fe4000000000000",
+       "op": "3f7ba5e353f7ced9",
+       "gx": "4075f2db46e1af3c",
+       "gy": "406103ccc96f9482",
+       "gs": "3fecf3e18f37d67c"
       }
      }
     },
@@ -6392,6 +6809,16 @@
        "gy": "40538e87cd6e599c",
        "gs": "bfe78d19a208d33a"
       },
+      "g0/edge0/label": {
+       "x": "4059c669373993f4",
+       "y": "40428229c0c9f003",
+       "rotation": "bfd550e5e748ae97",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406d3c4f6539d729",
+       "gy": "4052902233fb1474",
+       "gs": "3fee3dd007d42142"
+      },
       "g0/edge1": {
        "x1": "405b1632bbc3c211",
        "y1": "40496a0119e176dd",
@@ -6419,6 +6846,16 @@
        "gx": "40637153c05bf00a",
        "gy": "406572a9ea8549b0",
        "gs": "bfd060687ead1433"
+      },
+      "g0/edge1/label": {
+       "x": "404d96d67f9e2a04",
+       "y": "4057d75465269c1b",
+       "rotation": "3fe7a69f9378e750",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406377dfb206163a",
+       "gy": "4064e564dc691036",
+       "gs": "3fe7a68f52f0963c"
       },
       "g0/edge2": {
        "x1": "404c00c8d4e7620f",
@@ -6448,6 +6885,16 @@
        "gy": "406a63249b9fdb2a",
        "gs": "bfe67d7606ebdd1f"
       },
+      "g0/edge2/label": {
+       "x": "4060e00b7306835e",
+       "y": "405e03edc287d1f4",
+       "rotation": "bfd28955a84c49b8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4071cc182563a850",
+       "gy": "4069e6bf84f10224",
+       "gs": "3feeaacb77137dea"
+      },
       "g0/edge3": {
        "x1": "4061572d86c08850",
        "y1": "4060972aa2efa6df",
@@ -6475,6 +6922,16 @@
        "gx": "4069791f5d8281ed",
        "gy": "4070e8696554cacd",
        "gs": "bf8d672d53c8b6e4"
+      },
+      "g0/edge3/label": {
+       "x": "40565529c43f4b5e",
+       "y": "4063a683bea9fd80",
+       "rotation": "3fdef8b4356e4228",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4069a31d1e3f4d73",
+       "gy": "4070a4e3d5178b54",
+       "gs": "3fec53573c0bea2d"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -6504,6 +6961,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4055478bd0f649b7",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -6531,6 +6998,16 @@
        "gx": "40755e78ec07b66c",
        "gy": "40611b56dff426c1",
        "gs": "3fa0034d0450c82c"
+      },
+      "g0/edge5/label": {
+       "x": "4065f4f86eb7b882",
+       "y": "40526a2c97f13071",
+       "rotation": "401757d8a96b3cae",
+       "scale": "3fe4000000000000",
+       "op": "3f90624dd2f1a9fd",
+       "gx": "4075a12ea458522a",
+       "gy": "4060ec71a116a06c",
+       "gs": "3fecd9b5ade0edef"
       }
      }
     },
@@ -6645,6 +7122,16 @@
        "gy": "404fcd2ccc2a9daa",
        "gs": "bfe4c73353a3e817"
       },
+      "g0/edge0/label": {
+       "x": "405e79c2c5bb927c",
+       "y": "403be077ff354514",
+       "rotation": "bfca6790d44df26c",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406f7b95514409fd",
+       "gy": "404df3b9aff65747",
+       "gs": "3fef52512db63618"
+      },
       "g0/edge1": {
        "x1": "405fd955c480575d",
        "y1": "4044848ddff95133",
@@ -6672,6 +7159,16 @@
        "gx": "406201fab0f097c3",
        "gy": "4065878a33e1552b",
        "gs": "bfc80e5adf71c578"
+      },
+      "g0/edge1/label": {
+       "x": "404da204b7dcf458",
+       "y": "4057f16cc0d9aa75",
+       "rotation": "3fe5d33efa054708",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406210921c3d5d44",
+       "gy": "4064fadf8e703bd0",
+       "gs": "3fe8d75ed6b30462"
       },
       "g0/edge2": {
        "x1": "404c11fd453969a0",
@@ -6701,6 +7198,16 @@
        "gy": "406d23f384ddce50",
        "gs": "bfea937641af40dd"
       },
+      "g0/edge2/label": {
+       "x": "405e5ea705dd769b",
+       "y": "4060ba78330aa0f2",
+       "rotation": "bfdfaec63dc4dc28",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406f8ace4dbc7048",
+       "gy": "406c9c7312092855",
+       "gs": "3fec2889eac02962"
+      },
       "g0/edge3": {
        "x1": "405edf8d3cc1dba0",
        "y1": "4062551b4017cbaa",
@@ -6728,6 +7235,16 @@
        "gx": "4068011523a215dc",
        "gy": "4070fb133b32c0c9",
        "gs": "3fb2b50690399209"
+      },
+      "g0/edge3/label": {
+       "x": "40564fe36b4c57cb",
+       "y": "4063bdd809ff70fb",
+       "rotation": "3fd789593222cba8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40683a71973d4535",
+       "gy": "4070ba712ec96024",
+       "gs": "3feddc3f6dc01a12"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -6757,6 +7274,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40525fe7eb86f74d",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -6784,6 +7311,16 @@
        "gx": "407442ee7b057674",
        "gy": "4060b2d2e5b59ae8",
        "gs": "3fbac09ff35c9077"
+      },
+      "g0/edge5/label": {
+       "x": "40657aee9927b24e",
+       "y": "4051e7879f2301a2",
+       "rotation": "4017386c17a056aa",
+       "scale": "3fe4000000000000",
+       "op": "3fab5f5843fd9f97",
+       "gx": "407486545647dfba",
+       "gy": "4060880b49bb5bc4",
+       "gs": "3fec697dd6e41c22"
       }
      }
     },
@@ -6898,6 +7435,16 @@
        "gy": "404fbe40ed707c8c",
        "gs": "bfe4c21e30344e97"
       },
+      "g0/edge0/label": {
+       "x": "405e835a645c961e",
+       "y": "403bcdd128cc9bae",
+       "rotation": "bfca4b594d5cf6aa",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406f8030f8e7056c",
+       "gy": "404de5121c0798fc",
+       "gs": "3fef53c24ef196da"
+      },
       "g0/edge1": {
        "x1": "405fe30d9a625268",
        "y1": "40447a90049a0e41",
@@ -6925,6 +7472,16 @@
        "gx": "4061ff0d0fc09887",
        "gy": "406587b4cdb72b77",
        "gs": "bfc800b485d7f9dd"
+      },
+      "g0/edge1/label": {
+       "x": "404da21b88a92b65",
+       "y": "4057f1a20124f654",
+       "rotation": "3fe5d061885749ac",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40620db11316f61c",
+       "gy": "4064fb0b7746ade2",
+       "gs": "3fe8d92d1593b4e0"
       },
       "g0/edge2": {
        "x1": "404c12206127fa1a",
@@ -6954,6 +7511,16 @@
        "gy": "406d2991c9c6db34",
        "gs": "bfea9b75b981cbb0"
       },
+      "g0/edge2/label": {
+       "x": "405e57c0f753f81a",
+       "y": "4060bdfb1e1c4900",
+       "rotation": "bfdfcc219425300d",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406f8290dfa28bbd",
+       "gy": "406ca1fed2d15d0c",
+       "gs": "3fec218dcdcccfb0"
+      },
       "g0/edge3": {
        "x1": "405ed7c80022c669",
        "y1": "406258a9424fb54a",
@@ -6981,6 +7548,16 @@
        "gx": "4067fe15c5a76736",
        "gy": "4070fb39511a6db6",
        "gs": "3fb2f97e3c50a21c"
+      },
+      "g0/edge3/label": {
+       "x": "40564fd8a7b5180d",
+       "y": "4063be07a5610923",
+       "rotation": "3fd772d6164571b8",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4068379faded662b",
+       "gy": "4070baa15f556fc0",
+       "gs": "3fede04991eab37a"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -7010,6 +7587,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "405259fa68839996",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -7037,6 +7624,16 @@
        "gx": "407440171433c7cf",
        "gy": "4060b140d2b0dbac",
        "gs": "3fbb0591f74851ca"
+      },
+      "g0/edge5/label": {
+       "x": "4065793b9192a548",
+       "y": "4051e591075d1296",
+       "rotation": "401737f6dc63c4fa",
+       "scale": "3fe4000000000000",
+       "op": "3faba5e353f7ced9",
+       "gx": "4074837f61e92b31",
+       "gy": "40608688a5912946",
+       "gs": "3fec67ce2aa2bed7"
       }
      }
     },
@@ -7151,6 +7748,16 @@
        "gy": "404faf7b10d90c20",
        "gs": "bfe4bd183d2c0055"
       },
+      "g0/edge0/label": {
+       "x": "405e8cd993ee87a8",
+       "y": "403bbb59d50f4f28",
+       "rotation": "bfca2f7acd23aaa2",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406f84c0f73956dd",
+       "gy": "404dd68fc9566c0f",
+       "gs": "3fef552d64feb4bd"
+      },
       "g0/edge1": {
        "x1": "405fecacaf2579de",
        "y1": "404470ab9cb630ac",
@@ -7178,6 +7785,16 @@
        "gx": "4061fc26e40da8ee",
        "gy": "406587defb0932f4",
        "gs": "bfc7f33d988e34f8"
+      },
+      "g0/edge1/label": {
+       "x": "404da2321f5774be",
+       "y": "4057f1d6b9cb7fb0",
+       "rotation": "3fe5cd8e07f69ff4",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40620ad7539bab91",
+       "gy": "4064fb36f0298cb4",
+       "gs": "3fe8daf4de587624"
       },
       "g0/edge2": {
        "x1": "404c124323a81944",
@@ -7207,6 +7824,16 @@
        "gy": "406d2f21bf1110e8",
        "gs": "bfeaa35e239256ac"
       },
+      "g0/edge2/label": {
+       "x": "405e50ec7b5dad4d",
+       "y": "4060c175176aaa91",
+       "rotation": "bfdfe93b54b9a3ee",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406f7a688a9770fe",
+       "gy": "406ca77c897fb875",
+       "gs": "3fec1a9b7425d038"
+      },
       "g0/edge3": {
        "x1": "405ed0168e9543f0",
        "y1": "40625c2e368457d6",
@@ -7234,6 +7861,16 @@
        "gx": "4067fb1e0a5847ae",
        "gy": "4070fb5f05febb2a",
        "gs": "3fb33dceadeb3354"
+      },
+      "g0/edge3/label": {
+       "x": "40564fcdff8900cf",
+       "y": "4063be36c77e69f4",
+       "rotation": "3fd75c61577e15a0",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406834d54330bb0b",
+       "gy": "4070bad130621778",
+       "gs": "3fede44d737a0a32"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -7263,6 +7900,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4052541bfef8b2eb",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -7290,6 +7937,16 @@
        "gx": "40743d4170bd4370",
        "gy": "4060afab8dae12c1",
        "gs": "3fbb4afa0a875902"
+      },
+      "g0/edge5/label": {
+       "x": "406577860639e7e6",
+       "y": "4051e39671199771",
+       "rotation": "40173780cc60c4aa",
+       "scale": "3fe4000000000000",
+       "op": "3fabece72fb5b66b",
+       "gx": "407480ac34720d9d",
+       "gy": "40608502ebfc97f0",
+       "gs": "3fec661b0e91c9d4"
       }
      }
     },
@@ -7404,6 +8061,16 @@
        "gy": "404be073fb61af99",
        "gs": "bfe3844c72d5c9d8"
       },
+      "g0/edge0/label": {
+       "x": "40607fd34669d61e",
+       "y": "4036f890fa3a1b7f",
+       "rotation": "bfc389ff6828b528",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4070593e965d4d68",
+       "gy": "404a18481ae06a6b",
+       "gs": "3fefa0bdd55a27df"
+      },
       "g0/edge1": {
        "x1": "406133d963e970a3",
        "y1": "4041e3c601d51eb8",
@@ -7431,6 +8098,16 @@
        "gx": "40613ccecc4955a2",
        "gy": "406592beb6360f04",
        "gs": "bfc4db8cb1edc2aa"
+      },
+      "g0/edge1/label": {
+       "x": "404da804feb75615",
+       "y": "4057ff6e63c392c5",
+       "rotation": "3fe527463bd82000",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40614e594bfe6895",
+       "gy": "4065066a691798c5",
+       "gs": "3fe9425e3653642f"
       },
       "g0/edge2": {
        "x1": "404c1b395299999a",
@@ -7460,6 +8137,16 @@
        "gy": "406e9e4092400964",
        "gs": "bfec8f860b5bdaa5"
       },
+      "g0/edge2/label": {
+       "x": "405c8e229346d30c",
+       "y": "4061a6e85b6805de",
+       "rotation": "bfe3d903c3d8dd6c",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406d60db7ae079ac",
+       "gy": "406e12c158cbd43d",
+       "gs": "3fea0a250e454ca2"
+      },
       "g0/edge3": {
        "x1": "405cd45516800000",
        "y1": "406344762d000000",
@@ -7487,6 +8174,16 @@
        "gx": "4067373ee74da4bc",
        "gy": "40710517b39b4977",
        "gs": "3fc57236a48d74f8"
+      },
+      "g0/edge3/label": {
+       "x": "40564d0ea1210deb",
+       "y": "4063ca5da0821bd5",
+       "rotation": "3fcf5b4945f94db0",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40678001ce11a5c1",
+       "gy": "4070c87578a178c5",
+       "gs": "3fef0b6afea95875"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -7516,6 +8213,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4050d0c31cbcf1a7",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -7543,6 +8250,16 @@
        "gx": "40724000044cccd0",
        "gy": "405be6667be6665c",
        "gs": "3fdf46726c6dc6f4"
+      },
+      "g0/edge5/label": {
+       "x": "4063740005600004",
+       "y": "404cf0001adffff2",
+       "rotation": "401685fc157d6746",
+       "scale": "3fe4000000000000",
+       "op": "3fd0000000000000",
+       "gx": "40728615f236ea62",
+       "gy": "405bc0e0828c193a",
+       "gs": "3fe96de5336bcaf8"
       }
      }
     },
@@ -7657,6 +8374,16 @@
        "gy": "404be073fb61af99",
        "gs": "bfe3844c72d5c9d8"
       },
+      "g0/edge0/label": {
+       "x": "40607fd34669d61e",
+       "y": "4036f890fa3a1b7f",
+       "rotation": "bfc389ff6828b528",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4070593e965d4d68",
+       "gy": "404a18481ae06a6b",
+       "gs": "3fefa0bdd55a27df"
+      },
       "g0/edge1": {
        "x1": "406133d963e970a3",
        "y1": "4041e3c601d51eb8",
@@ -7684,6 +8411,16 @@
        "gx": "40613ccecc4955a2",
        "gy": "406592beb6360f04",
        "gs": "bfc4db8cb1edc2aa"
+      },
+      "g0/edge1/label": {
+       "x": "404da804feb75615",
+       "y": "4057ff6e63c392c5",
+       "rotation": "3fe527463bd82000",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40614e594bfe6895",
+       "gy": "4065066a691798c5",
+       "gs": "3fe9425e3653642f"
       },
       "g0/edge2": {
        "x1": "404c1b395299999a",
@@ -7713,6 +8450,16 @@
        "gy": "406e9e4092400964",
        "gs": "bfec8f860b5bdaa5"
       },
+      "g0/edge2/label": {
+       "x": "405c8e229346d30c",
+       "y": "4061a6e85b6805de",
+       "rotation": "bfe3d903c3d8dd6c",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "406d60db7ae079ac",
+       "gy": "406e12c158cbd43d",
+       "gs": "3fea0a250e454ca2"
+      },
       "g0/edge3": {
        "x1": "405cd45516800000",
        "y1": "406344762d000000",
@@ -7740,6 +8487,16 @@
        "gx": "4067373ee74da4bc",
        "gy": "40710517b39b4977",
        "gs": "3fc57236a48d74f8"
+      },
+      "g0/edge3/label": {
+       "x": "40564d0ea1210deb",
+       "y": "4063ca5da0821bd5",
+       "rotation": "3fcf5b4945f94db0",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "40678001ce11a5c1",
+       "gy": "4070c87578a178c5",
+       "gs": "3fef0b6afea95875"
       },
       "g0/edge4": {
        "x1": "4052b7c447e80000",
@@ -7769,6 +8526,16 @@
        "gy": "4043faebc9b3e826",
        "gs": "3fefe94a073cbb6d"
       },
+      "g0/edge4/label": {
+       "x": "402922bdd220c8b2",
+       "y": "402a334d7841c460",
+       "rotation": "40149898102bdec6",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "4050d0c31cbcf1a7",
+       "gy": "4044bc3d4647058a",
+       "gs": "3fdb1093a6eab0ca"
+      },
       "g0/edge5": {
        "x1": "4065c75990700000",
        "y1": "4053665cb2800000",
@@ -7796,6 +8563,16 @@
        "gx": "40711b87aa00fda8",
        "gy": "4051f66e2681f306",
        "gs": "3fef46726c6dc6f4"
+      },
+      "g0/edge5/label": {
+       "x": "4062066994813d11",
+       "y": "40408409b0226fc8",
+       "rotation": "40158c6bce7c94e7",
+       "scale": "3fe4000000000000",
+       "op": "3fe0000000000000",
+       "gx": "407161cee1b09894",
+       "gy": "405215aa3dd2a950",
+       "gs": "3fe3fd809822fe28"
       }
      }
     }
@@ -7807,6 +8584,7 @@
    "note": "layout circular, legend off for category B: the circular layout is solved again for the nodes left, so every kept node moves (its group x / y in the main group) and the main group tweens; rotateLabel off",
    "W": 400,
    "H": 300,
+   "ring": true,
    "option": {
     "animation": true,
     "legend": {
@@ -8900,6 +9678,7 @@
    "note": "an update while the enter still runs (at 150 of the enter's 1000 ms): a kept edge's percent goes on from where it is to 1 at update timing, its ends move; the nodes' pop-in goes on",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -11536,6 +12315,7 @@
    "note": "a graph on cartesian2d: no view, the nodes' groups slide in pixels, the edges tween in pixels; a value changes",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "xAxis": {
@@ -12742,6 +13522,7 @@
    "note": "orthogonal LR, curve edges, 1000 ms linear: collapsing 'a' (data index 2) -- its children go to a's place + 1 and fade (removeNode, the update timing), their edges shrink into a's place and fade, the kept nodes slide (the layout changed), the view group tweens to the new rect; then expanding it again -- the children grow out of a's OLD place (sourceOldLayout: __oldX / __oldY)",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -22091,6 +22872,7 @@
    "note": "orient TB, polyline edges: collapsing 'b' removes its TreePath (to the source's place, no opacity) and its children; expanding it builds a TreePath from one child point on b",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -30433,6 +31215,7 @@
    "note": "collapse 'a' and expand it again 300 ms in, before the removal ends: the removed elements are not given back -- new ones are made from the source's old place while the old ones still fade",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -33796,6 +34579,7 @@
    "note": "the default update timing (300 ms cubicInOut) and the initial depth: expanding a collapsed 'a2' (data index 4) whose child was never drawn",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -38401,6 +39185,7 @@
    "note": "a radial tree's first render: every label comes out of its node with the path's scale (the text config's rect is the path's, scaled), turned about its centre",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -41983,6 +42768,7 @@
    "note": "a radial tree, collapsing 'b' (data index 6) and expanding it again: the removed labels fade with the node, the new ones come out of b's old place",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "series": [
@@ -51373,6 +52159,7 @@
    "note": "a data item's array symbolSize -- [20, '100%'] (the percent of the bar's length, symbolRepeat off), ['50%', 12] repeated (the percent of the category's width), [16] (one number, the second NaN), and a row's array symbolOffset [5, '-50%'] -- read from the item's own visual (visual/symbol.ts getShallow), not the series'",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": false,
     "xAxis": {
@@ -51542,6 +52329,7 @@
    "note": "the same on a horizontal bar (the category axis on y): the value dimension is x; a series' one-number array [18] (the second NaN: no glyph); a row's one-number symbolOffset [10] (both ways)",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": false,
     "yAxis": {
@@ -51766,6 +52554,7 @@
    "note": "a bar whose emphasis colour is a gradient over a plain colour (discrete: at once), another whose own colour is a gradient and whose emphasis is another gradient (two stops to three), a series whose colour is a gradient with no emphasis colour (createEmphasisDefaultState's liftColor lifts every stop): highlighted and downplayed, the state's fill tweens through zrender's gradient track (300 ms cubicOut, the state animation)",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "xAxis": {
@@ -57706,6 +58495,7 @@
    "note": "a bar's own colour a radial gradient, its select colour another (the centre and the radius move, two stops each): selected by the action, unselected 400 ms later, selected again 100 ms after that while the unselect's tween still runs; a plain bar beside it selects at once (a colour against a gradient is discrete)",
    "W": 400,
    "H": 300,
+   "ring": false,
    "option": {
     "animation": true,
     "xAxis": {
