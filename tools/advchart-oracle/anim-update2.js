@@ -17,6 +17,11 @@ batches 90-99 (AN3, AN5, AN6) and F3a left out.
               group's matrix), minor split lines ('minor_line_' + value),
               split areas ('area_' + the band's first tick value, a Rect
               from the previous edge).
+  pictorial   a pictorial bar's enter on its ITEM model (the data item's
+              animationDuration / animationEasing / animationDelay over the
+              series'), a repeated glyph's rotation from 0 to symbolRotate
+              beside its scale (createOrUpdateRepeatSymbols), a single
+              glyph's set at once, the symbolClip bundle's clip.
 
 Runs the real ECharts 6.1 development build (D:/Projects/echarts/dist, or
 ECHARTS_DIST) in node's server-side mode (SVG renderer), chart._ssr = false,
@@ -49,6 +54,10 @@ A sample's rec, by probe:
          animators with a clip), 'line<s>/stackedOnPoints' and
          'line<s>/areaN' (the polygon's), 'line<s>/sym<raw index>' [x, y] of
          each symbol group.
+  pictorial  per pictorialBar series s and row i: 'pict<s>:<i>/<k>' {x, y,
+         scaleX, scaleY, rotation, n} of the k-th glyph path of the bar's
+         bundle (creation order), 'pict<s>:<i>/clip' {the clip's shape
+         numbers, n} when the bundle is clipped.
   axis   per cartesian axis view, every leaf of its _axisGroup with an anid:
          'axis:<xAxis|yAxis><index>/<anid>' {x, y, rotation, shape.<k> for
          each number of its shape, n (its animators with a clip)}.
@@ -166,6 +175,29 @@ function refresh(chart) { zr(chart).storage.getDisplayList(true); }
 // the probes
 // ---------------------------------------------------------------------------
 const PROBES = {
+  pictorial(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'pictorialBar') return;
+      const data = sm.getData();
+      data.each(i => {
+        const bar = data.getItemGraphicEl(i);
+        if (!bar || !bar.__pictorialBundle) return;
+        const key = 'pict' + sm.seriesIndex + ':' + i;
+        let k = 0;
+        bar.__pictorialBundle.eachChild(path => {
+          rec[key + '/' + k] = { x: hex(path.x), y: hex(path.y), scaleX: hex(path.scaleX), scaleY: hex(path.scaleY),
+            rotation: hex(path.rotation), n: nClip(path) };
+          k++;
+        });
+        const clip = bar.__pictorialBundle.getClipPath();
+        if (clip) {
+          const o = { n: nClip(clip) };
+          for (const kk of Object.keys(clip.shape)) if (typeof clip.shape[kk] === 'number') o['shape.' + kk] = hex(clip.shape[kk]);
+          rec[key + '/clip'] = o;
+        }
+      });
+    });
+  },
   axis(chart, rec) {
     (chart._componentsViews || []).forEach(v => {
       const m = v && v.__model;
@@ -285,6 +317,24 @@ add('axis', 'axis-horizontal', "a horizontal value x axis with minor ticks and m
     { t: T1, do: 'merge', option: { grid: { top: 40, bottom: 50 }, yAxis: { data: ['a', 'b', 'c', 'd'] }, series: [{ data: [15, 30, 8, 22] }] } },
     ...after([0, 1, 16, 100, 400, 799, 800, 801, 1200], T1)]);
 
+const S_PIC = [0, 1, 16, 100, 300, 301, 500, 800, 999, 1000, 1001, 1500, 2000, 2300, 2301, 3000];
+add('pictorial', 'pict-item-timing', "a repeated glyph turned by symbolRotate 30 pops in and turns from 0 (createOrUpdateRepeatSymbols' rotation); the ITEM model's animationDuration (2000), animationEasing ('linear') and animationDelay (300) over the series' (800 ms cubicOut); a row whose item says animation: false is set; a single glyph is turned at once and only scales",
+  { animation: true, xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'] }, yAxis: { type: 'value', max: 100 },
+    series: [{ type: 'pictorialBar', symbol: 'rect', symbolRepeat: true, symbolSize: [20, 12], symbolRotate: 30,
+      animationDuration: 800, animationEasing: 'cubicOut',
+      data: [{ value: 40, animationDuration: 2000 }, { value: 60, animationEasing: 'linear', animationDelay: 300 },
+        { value: 30, animation: false }, { value: 50, symbolRepeat: false, symbolSize: 30 }] }] },
+  ['pictorial'],
+  [...S_PIC.map(t => ({ t, do: 'sample' }))]);
+
+add('pictorial', 'pict-clip-timing', "symbolClip: the bundle's clip grows on the item model's timing (a row's own animationDuration 1500 and delay 200; the series' 1000 linear)",
+  { animation: true, yAxis: { type: 'category', data: ['a', 'b'] }, xAxis: { type: 'value', max: 100 },
+    series: [{ type: 'pictorialBar', symbol: 'triangle', symbolClip: true, symbolRepeat: 10, symbolSize: [16, 16], symbolRotate: -45,
+      animationDuration: 1000, animationEasing: 'linear',
+      data: [{ value: 70, animationDuration: 1500, animationDelay: 200 }, 40] }] },
+  ['pictorial'],
+  [...S_PIC.map(t => ({ t, do: 'sample' }))]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -363,6 +413,17 @@ function guards(out) {
     const b = r('step-stack', T1 + 401, 'line1/points')[1];
     return Math.abs(a - b) > 5;
   })());
+  const P = 'pict-item-timing';
+  const pv = (t, key, prop) => {
+    const smp = cs(P).events.filter(q => q.do === 'sample' && q.t === t).pop();
+    const e = smp.rec[key];
+    return e && num(e[prop]);
+  };
+  guard('a repeated glyph turns from 0', pv(0, 'pict0:0/0', 'rotation') === 0 && pv(3000, 'pict0:0/0', 'rotation') !== 0);
+  guard("the item's duration: still turning at 1500", pv(1500, 'pict0:0/0', 'rotation') !== pv(3000, 'pict0:0/0', 'rotation'));
+  guard("the item's delay: nothing before 300", pv(300, 'pict0:1/0', 'scaleX') === 0 && pv(500, 'pict0:1/0', 'scaleX') !== 0);
+  guard('a row that does not animate is set', pv(0, 'pict0:2/0', 'scaleX') !== 0);
+  guard('a single glyph is turned at once', pv(0, 'pict0:3/0', 'rotation') !== 0 && pv(0, 'pict0:3/0', 'scaleX') === 0);
   const A = 'axis-value';
   const ax = (id, t, key) => {
     const smp = cs(id).events.filter(q => q.do === 'sample' && q.t === t).pop();

@@ -637,6 +637,11 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   const AStBind: TTyChartAnimProxyArray = nil);
 { A shape scaled by (AFX, AFY) about (ACX, ACY). }
 procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Double);
+{ ... turned by ARad about (ACX, ACY), zrender's sense (anticlockwise on the
+  screen for a positive angle): points and commands turn, a path's draw-time
+  turn grows and its box moves, a circle's or an ellipse's centre turns (an
+  ellipse keeps its axes, as the symbol builder does) [F3b] }
+procedure TyShapeRotateAbout(var AShape: TTyChartShape; ACX, ACY, ARad: Double);
 { ... and moved by (ADX, ADY). }
 procedure TyShapeMove(var AShape: TTyChartShape; ADX, ADY: Double);
 { The first APercent of a polyline's length, as zrender's strokePercent draws
@@ -1268,6 +1273,23 @@ begin
     Result := Result + IntToStr(AEl.Anim.Sub);
 end;
 
+{ [F3b] a row's ITEM model: the series' with the data item's own option
+  object (data[raw], when it is an object) asked first }
+function ItemModelOf(const AC: TTyChartAnimSeries; ARow: Integer): TTyAnimModel;
+var
+  raw: Integer;
+  d: TJSONData;
+begin
+  Result := AC.Model;
+  Result.Item := nil;
+  if not (AC.Model.Own is TJSONObject) then Exit;
+  raw := ARow;
+  if (ARow >= 0) and (ARow <= High(AC.Raws)) then raw := AC.Raws[ARow];
+  d := TJSONObject(AC.Model.Own).Find('data');
+  if not (d is TJSONArray) or (raw < 0) or (raw >= d.Count) then Exit;
+  if d.Items[raw] is TJSONObject then Result.Item := d.Items[raw];
+end;
+
 function KeyIndexOf(const AEl: TTyChartElement): Integer;
 begin
   if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine,
@@ -1866,12 +1888,19 @@ begin
           is set at once -- no proxy }
         if AUpdate or not AC.Enabled or (AEl.Anim.G[4] <> 0) then Exit;
         p := Make(AEl.Anim.Series, idx, TyChartAnimRoleKey(AEl));
-        props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3])]);
+        { [F3b] a repeated glyph turns too: from the 0 a new path has }
+        if AEl.Anim.G[6] <> 0 then
+          props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3]),
+            Num1('rotation', AEl.Anim.G[5])])
+        else
+          props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3])]);
         p.Attr(props);
         p.SetFinal(props);
         p.SetNum('scaleX', 0);
         p.SetNum('scaleY', 0);
-        Start(props, TyAnimCallAt(idx));
+        if AEl.Anim.G[6] <> 0 then p.SetNum('rotation', 0);
+        { [F3b] on the ITEM's model }
+        TyInitProps(p, props, ItemModelOf(AC, idx), TyAnimCallAt(idx));
       end;
     carPictorialClip:
       begin
@@ -1887,7 +1916,8 @@ begin
         p.Attr(props);
         p.SetFinal(props);
         p.SetNum(props[0].Key, 0);
-        Start(props, TyAnimCallAt(idx));
+        { [F3b] on the ITEM's model }
+        TyInitProps(p, props, ItemModelOf(AC, idx), TyAnimCallAt(idx));
       end;
     carBar:
       begin
@@ -3637,6 +3667,73 @@ begin
   end;
 end;
 
+procedure TyShapeRotateAbout(var AShape: TTyChartShape; ACX, ACY, ARad: Double);
+var
+  i: Integer;
+  s, c, tx, ty: Double;
+  r: TTyRectF;
+
+  procedure Turn(var AX, AY: Double);
+  var dx, dy: Double;
+  begin
+    dx := AX - ACX;
+    dy := AY - ACY;
+    AX := ACX + dx * c - dy * s;
+    AY := ACY + dx * s + dy * c;
+  end;
+
+  procedure TurnRect(var ARect: TTyRectF);
+  var
+    xs, ys: array[0..3] of Double;
+    k: Integer;
+  begin
+    xs[0] := ARect.Left; ys[0] := ARect.Top;
+    xs[1] := ARect.Right; ys[1] := ARect.Top;
+    xs[2] := ARect.Right; ys[2] := ARect.Bottom;
+    xs[3] := ARect.Left; ys[3] := ARect.Bottom;
+    for k := 0 to 3 do Turn(xs[k], ys[k]);
+    ARect := TyRectF(MinValue(xs), MinValue(ys), MaxValue(xs), MaxValue(ys));
+  end;
+
+begin
+  if (ARad = 0) or IsNan(ARad) then Exit;
+  { the symbol builder's turn (Place): the screen's y grows downward }
+  s := Sin(-ARad);
+  c := Cos(-ARad);
+  case AShape.Kind of
+    cskPolyline, cskPolygon:
+      begin
+        AShape.Points := Copy(AShape.Points, 0, Length(AShape.Points));
+        for i := 0 to High(AShape.Points) do Turn(AShape.Points[i].X, AShape.Points[i].Y);
+        AShape.Cmds := Copy(AShape.Cmds, 0, Length(AShape.Cmds));
+        for i := 0 to High(AShape.Cmds) do
+        begin
+          Turn(AShape.Cmds[i].X1, AShape.Cmds[i].Y1);
+          Turn(AShape.Cmds[i].X2, AShape.Cmds[i].Y2);
+          Turn(AShape.Cmds[i].X, AShape.Cmds[i].Y);
+        end;
+        if AShape.HasCmdBounds then TurnRect(AShape.CmdBounds);
+      end;
+    cskPath:
+      begin
+        { turned about its own centre by the sum, then moved where a turn
+          about (ACX, ACY) puts that centre: the painter's turn is the
+          canvas' (clockwise), hence the negation }
+        tx := AShape.RotCX;
+        ty := AShape.RotCY;
+        Turn(tx, ty);
+        AShape.RotationRad := AShape.RotationRad - ARad;
+        r := AShape.Bounds;
+        AShape.Bounds := TyRectF(r.Left + tx - AShape.RotCX, r.Top + ty - AShape.RotCY,
+          r.Right + tx - AShape.RotCX, r.Bottom + ty - AShape.RotCY);
+        AShape.RotCX := tx;
+        AShape.RotCY := ty;
+      end;
+    cskCircle, cskEllipse, cskSector:
+      Turn(AShape.CX, AShape.CY);
+  end;
+end;
+
 procedure TyShapeMove(var AShape: TTyChartShape; ADX, ADY: Double);
 var i: Integer;
 begin
@@ -4101,7 +4198,15 @@ begin
         if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
         if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3] else fy := 1;
         if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then MakeInkless(AEl)
-        else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+        else
+        begin
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+          { [F3b] and turned by where its turn is now against its turn at
+            rest (a uniform scale and a turn about one point commute) }
+          if (AEl.Anim.G[6] <> 0) and (AProxy.GetAnimProp('rotation').Kind = avkNumber) then
+            TyShapeRotateAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1],
+              AProxy.Num('rotation') - AEl.Anim.G[5]);
+        end;
       end;
     carPictorialClip:
       begin

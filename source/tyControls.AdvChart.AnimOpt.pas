@@ -94,6 +94,10 @@ type
       makes; a call's own payload goes first [Batch 96] }
     Payload: TTyAnimOverride;
     HasPayload: Boolean;
+    { AN ITEM MODEL [F3b]: the data item's own option object, asked before
+      the series' (Model.getShallow: a nullish key falls to the parent) --
+      a pictorial bar animates on its item's model. nil: none }
+    Item: TJSONData;
   end;
 
   TTyAnimTiming = record
@@ -496,6 +500,16 @@ end;
 function TyAnimGetShallow(const AModel: TTyAnimModel; const AKey: string): TTyAnimOptValue;
 var d: TJSONData;
 begin
+  { an item model's own key first, unless nullish [F3b] }
+  if AModel.Item is TJSONObject then
+  begin
+    d := TJSONObject(AModel.Item).Find(AKey);
+    if d <> nil then
+    begin
+      Result := OptOf(d);
+      if not IsNullish(Result) then Exit;
+    end;
+  end;
   { the model's own option: the author's key where there is one (null
     included), else the type's default }
   Result := OptUndefined;

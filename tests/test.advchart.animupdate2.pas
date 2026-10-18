@@ -11,7 +11,10 @@ unit test.advchart.animupdate2;
            follow them;
     axis   the cartesian axes' groupTransition of the axis name, the minor
            ticks, the minor split lines and the split areas, beside the line,
-           ticks, labels and split lines.
+           ticks, labels and split lines;
+    pictorial  a pictorial bar's enter on its item's model (the data item's
+           duration, easing and delay), a repeated glyph's turn from 0, the
+           symbolClip clip.
 
   This replays every case through the control and compares, bit for bit,
   the proxies the control animates. }
@@ -40,7 +43,8 @@ type
     procedure RenderNow;
     procedure ProbeLine(ARec: TJSONObject);
     procedure ProbeAxis(ARec: TJSONObject);
-    procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
+    procedure ProbePictorial(ARec, ALast: TJSONObject);
+    procedure CheckSample(const AProbes: TJSONArray; ARec, ALast: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
   protected
@@ -49,6 +53,7 @@ type
   published
     procedure TestTheStepLinesUpdateAsUpstream;
     procedure TestTheAxesGroupTransitionAsUpstream;
+    procedure TestThePictorialGlyphsEnterAsUpstream;
   end;
 
 implementation
@@ -315,12 +320,63 @@ begin
   end;
 end;
 
+{ ---- the pictorial probe: each glyph's proxy, the clip's ---- }
+procedure TAdvChartAnimUpdate2OracleTest.ProbePictorial(ARec, ALast: TJSONObject);
+var
+  i, s, row, colon, slash: Integer;
+  name, glyph: string;
+  leaf, last: TJSONObject;
+  p: TTyChartAnimProxy;
+  v: TTyAnimValue;
+begin
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 4) <> 'pict' then Continue;
+    colon := Pos(':', name);
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 5, colon - 5));
+    row := StrToInt(Copy(name, colon + 1, slash - colon - 1));
+    glyph := Copy(name, slash + 1, MaxInt);
+    leaf := TJSONObject(ARec.Items[i]);
+    if glyph = 'clip' then p := FChart.AnimFindProxy(s, row, 'pclip')
+    else p := FChart.AnimFindProxy(s, row, 'pglyph' + glyph);
+    if p = nil then
+    begin
+      if leaf.Integers['n'] > 0 then Bad(name + ': upstream animates it, the port has no proxy');
+      Continue;
+    end;
+    if glyph = 'clip' then
+    begin
+      if p.GetAnimProp('shape.width').Kind = avkNumber then
+        SameNum(name + '.width', p.Num('shape.width'), leaf.Find('shape.width'))
+      else
+        SameNum(name + '.height', p.Num('shape.height'), leaf.Find('shape.height'));
+      Continue;
+    end;
+    SameNum(name + '.scaleX', p.Num('scaleX'), leaf.Find('scaleX'));
+    SameNum(name + '.scaleY', p.Num('scaleY'), leaf.Find('scaleY'));
+    v := p.GetAnimProp('rotation');
+    if v.Kind = avkNumber then SameNum(name + '.rotation', v.Num, leaf.Find('rotation'))
+    else
+    begin
+      { a glyph whose turn moves upstream must have one }
+      last := nil;
+      if ALast <> nil then last := TJSONObject(ALast.Find(name));
+      Inc(FCompared);
+      if (last <> nil) and (last.Strings['rotation'] <> leaf.Strings['rotation']) then
+        Bad(name + ': upstream turns it, the port does not');
+    end;
+  end;
+end;
+
 procedure TAdvChartAnimUpdate2OracleTest.CheckSample(const AProbes: TJSONArray;
-  ARec: TJSONObject);
+  ARec, ALast: TJSONObject);
 var i: Integer;
 begin
   for i := 0 to AProbes.Count - 1 do
-    if AProbes.Strings[i] = 'line' then ProbeLine(ARec)
+    if AProbes.Strings[i] = 'pictorial' then ProbePictorial(ARec, ALast)
+    else if AProbes.Strings[i] = 'line' then ProbeLine(ARec)
     else if AProbes.Strings[i] = 'axis' then ProbeAxis(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
@@ -332,6 +388,7 @@ var
   j: Integer;
   t0, now_: Double;
   act: string;
+  lastRec: TJSONObject;
 begin
   FWhere := ACase.Strings['id'];
   NewChart(ACase.Integers['W'], ACase.Integers['H']);
@@ -341,6 +398,14 @@ begin
   FChart.SetOption(ACase.Objects['option'].AsJSON, True);
   RenderNow;
   events := ACase.Arrays['events'];
+  { the last sample's record: where each glyph rests }
+  lastRec := nil;
+  for j := events.Count - 1 downto 0 do
+    if events.Objects[j].Strings['do'] = 'sample' then
+    begin
+      lastRec := events.Objects[j].Objects['rec'];
+      Break;
+    end;
   for j := 0 to events.Count - 1 do
   begin
     ev := events.Objects[j];
@@ -353,7 +418,7 @@ begin
       FChart.AnimTick(now_);
       RenderNow;
       Inc(FSamples);
-      CheckSample(ACase.Arrays['probes'], ev.Objects['rec']);
+      CheckSample(ACase.Arrays['probes'], ev.Objects['rec'], lastRec);
     end
     else if act = 'merge' then
     begin
@@ -405,6 +470,11 @@ end;
 procedure TAdvChartAnimUpdate2OracleTest.TestTheAxesGroupTransitionAsUpstream;
 begin
   RunGroup('axis', 2000);
+end;
+
+procedure TAdvChartAnimUpdate2OracleTest.TestThePictorialGlyphsEnterAsUpstream;
+begin
+  RunGroup('pictorial', 500);
 end;
 
 initialization

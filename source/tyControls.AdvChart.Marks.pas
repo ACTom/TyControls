@@ -3526,7 +3526,10 @@ begin
         about its own place to symbolScale -- the size over the pattern
         size, mirrored along the value axis as the glyph is ((isHorizontal ?
         -1 : 1) * pxSign) -- G[0..1] that place, G[2..3] the scale, G[4] 1
-        where the row does not animate (ItemModel.isAnimationEnabled) }
+        where the row does not animate (ItemModel.isAnimationEnabled);
+        [F3b] G[5] symbolMeta.rotation (radians, zrender's sense), G[6] 1 for
+        a repeated glyph -- it turns from 0 to it beside its scale, a single
+        one is turned at once }
       el.Anim.Series := ABinding.SeriesIndex;
       el.Anim.Index := i;
       if spec.Clip then
@@ -3551,6 +3554,10 @@ begin
         el.Anim.G[2] := glyphW / spec.PatternSize;
         el.Anim.G[3] := glyphH / spec.PatternSize;
         el.Anim.G[4] := Ord(spec.AnimOff);
+        { [F3b] `(symbolRotate || 0) * PI / 180 || 0` }
+        el.Anim.G[5] := spec.RotateDeg * Pi / 180;
+        if IsNan(el.Anim.G[5]) then el.Anim.G[5] := 0;
+        el.Anim.G[6] := Ord(spec.Repeat_ <> prNone);
         if baseHoriz then el.Anim.G[3] := el.Anim.G[3] * (-1 * pxSign)
         else el.Anim.G[2] := el.Anim.G[2] * (1 * pxSign);
       end;
