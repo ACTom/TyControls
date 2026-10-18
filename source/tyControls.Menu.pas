@@ -1290,7 +1290,9 @@ var
   { Both GDI passes are COLLECTED here and run after P.EndPaint: anything drawn straight
     to ACanvas during the loop is erased by EndPaint's blit of the BGRA layer (the same
     trap the tree view's node icons hit). Rects are painter-local, offset by ARect below. }
-  pendingIcon: array of record Res: TScaledImageListResolution; Idx, X, Y: Integer;
+  { Res is the resolution to draw: the layout one at S = 1, the raster one at a device scale
+    (#83); W x H is the icon's layout size. }
+  pendingIcon: array of record Res: TScaledImageListResolution; Idx, X, Y, W, H: Integer;
     Enabled: Boolean; Clip: TRect; end;
   pendingIconCount: Integer;
   pendingDraw: array of record Item: TMenuItem; R: TRect; St: TOwnerDrawState; end;
@@ -1460,7 +1462,13 @@ begin
         IconRes := FRows[i].LCLImages.ResolutionForPPI[FRows[i].LCLImagesWidth, APPI, 1];
         if pendingIconCount = Length(pendingIcon) then
           SetLength(pendingIcon, Length(pendingIcon) + 8);
-        pendingIcon[pendingIconCount].Res := IconRes;
+        if P.DeviceScale > 1 then
+          pendingIcon[pendingIconCount].Res := FRows[i].LCLImages.ResolutionForPPI[
+            FRows[i].LCLImagesWidth, APPI * P.DeviceScale, 1]
+        else
+          pendingIcon[pendingIconCount].Res := IconRes;
+        pendingIcon[pendingIconCount].W := IconRes.Width;
+        pendingIcon[pendingIconCount].H := IconRes.Height;
         pendingIcon[pendingIconCount].Idx := FRows[i].ImageIndex;
         { The GDI pass runs after EndPaint, on the composited canvas, and it has to be
           mirrored HERE with everything else: it is the only piece of a row whose position is
@@ -1545,11 +1553,14 @@ begin
       begin
         ACanvas.SaveHandleState;
         try
-          IntersectClipRect(ACanvas.Handle,
+          with TyCanvasRect(ACanvas, Rect(
             ARect.Left + pendingIcon[k].Clip.Left,  ARect.Top + pendingIcon[k].Clip.Top,
-            ARect.Left + pendingIcon[k].Clip.Right, ARect.Top + pendingIcon[k].Clip.Bottom);
-          pendingIcon[k].Res.Draw(ACanvas, ARect.Left + pendingIcon[k].X,
-            ARect.Top + pendingIcon[k].Y, pendingIcon[k].Idx, pendingIcon[k].Enabled);
+            ARect.Left + pendingIcon[k].Clip.Right, ARect.Top + pendingIcon[k].Clip.Bottom)) do
+            IntersectClipRect(ACanvas.Handle, Left, Top, Right, Bottom);
+          { Disabled row = the greyed icon (see the note where Enabled is collected). }
+          TyDrawResolutionScaled(ACanvas, pendingIcon[k].Res, pendingIcon[k].Idx,
+            Bounds(ARect.Left + pendingIcon[k].X, ARect.Top + pendingIcon[k].Y,
+              pendingIcon[k].W, pendingIcon[k].H), TyGhostEffect[not pendingIcon[k].Enabled]);
         finally
           ACanvas.RestoreHandleState;
         end;

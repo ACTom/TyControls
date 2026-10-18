@@ -85,6 +85,13 @@ procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integ
   sharp on a Retina layer (#83). At S = 1 it is TyBlitImage(P.Bitmap, ..., P.PPI, ...). }
 procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Integer;
   AX, AY, ASizePx: Integer; AGhosted: Boolean);
+{ ARes's item AIndex into ADst (LAYOUT pixels) on ACanvas, drawing with AEffect. At S = 1 it is
+  ARes.Draw at ADst's corner. At a device scale ARes is the resolution the caller picked for the
+  raster PPI; an item not S times ADst's size is stretched to it (an unscaled list hands back
+  its one size), and the result goes into ADst on a canvas in layout units, 1:1 at S times the
+  place on one in device units (#83). }
+procedure TyDrawResolutionScaled(ACanvas: TCanvas; const ARes: TScaledImageListResolution;
+  AIndex: Integer; const ADst: TRect; AEffect: TGraphicsDrawEffect);
 
 { A fresh, CALLER-OWNED BGRABitmap of item AIndex at ASizePx, for a control that owns its own
   compositing (scales the image to fit, tiles it, ...) rather than blitting at a slot. Our list
@@ -206,17 +213,62 @@ begin
   Result := ADim;
 end;
 
+function ForeignScaled(AList: TCustomImageList; AIndex, ASizePx, APPI, AScale: Integer;
+  AGhosted: Boolean; out ALogicalW, ALogicalH: Integer): TBGRABitmap; forward;
+
+{ ABmp, S times ADst's size, onto ACanvas at device scale AScale: into the layout rectangle ADst on
+  a canvas in layout units -- the system puts each layout pixel back on S device pixels -- and
+  1:1 at S times the place on a canvas in device units. Alpha-blended. }
+procedure PutOnCanvas(ACanvas: TCanvas; ABmp: TBGRABitmap; const ADst: TRect;
+  const AScale: TTyCanvasScale);
+begin
+  if AScale.DeviceUnits then
+    ABmp.Draw(ACanvas, ADst.Left * AScale.Scale, ADst.Top * AScale.Scale, False)
+  else
+    ABmp.Draw(ACanvas, ADst, False);
+end;
+
 procedure TyDrawImage(ACanvas: TCanvas; AList: TCustomImageList; AIndex: Integer;
   AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
 var
   bmp, dim: TBGRABitmap;
   res: TScaledImageListResolution;
-  w96: Integer;
+  w96, lw, lh: Integer;
+  sc: TTyCanvasScale;
 begin
   { ASizePx < 1 EXITS rather than clamping: a zero slot means the layout gave the icon no room,
     and drawing nothing is the honest answer, not a 1px smudge. }
   if (ACanvas = nil) or (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
   if APPI <= 0 then APPI := 96;
+
+  { A canvas at a device scale (#83): the icon is taken at S times its size -- our list renders
+    the vector there, a foreign list hands its resolution for it or its S = 1 bitmap stretched --
+    and put into its layout place. }
+  sc := TyCanvasDeviceScale(ACanvas);
+  if sc.Scale > 1 then
+  begin
+    dim := nil;
+    if AList is TTyVirtualImageList then
+    begin
+      bmp := TyTakeVectorBitmap(TTyVirtualImageList(AList), AIndex, ASizePx * sc.Scale,
+        AGhosted, dim);
+      lw := ASizePx;
+      lh := ASizePx;
+    end
+    else
+    begin
+      bmp := ForeignScaled(AList, AIndex, ASizePx, APPI, sc.Scale, AGhosted, lw, lh);
+      dim := bmp;   // ours to free
+    end;
+    try
+      if bmp <> nil then
+        PutOnCanvas(ACanvas, bmp, Rect(AX + (ASizePx - lw) div 2, AY + (ASizePx - lh) div 2,
+          AX + (ASizePx - lw) div 2 + lw, AY + (ASizePx - lh) div 2 + lh), sc);
+    finally
+      dim.Free;
+    end;
+    Exit;
+  end;
 
   if AList is TTyVirtualImageList then
   begin
@@ -432,6 +484,46 @@ begin
       dmDrawWithTransparency);
   finally
     bmp.Free;
+  end;
+end;
+
+procedure TyDrawResolutionScaled(ACanvas: TCanvas; const ARes: TScaledImageListResolution;
+  AIndex: Integer; const ADst: TRect; AEffect: TGraphicsDrawEffect);
+var
+  sc: TTyCanvasScale;
+  tmp: TBitmap;
+  one, big: TBGRABitmap;
+  w, h: Integer;
+begin
+  if (ACanvas = nil) or not ARes.Valid then Exit;
+  sc := TyCanvasDeviceScale(ACanvas);
+  if sc.Scale <= 1 then
+  begin
+    ARes.Draw(ACanvas, ADst.Left, ADst.Top, AIndex, AEffect);
+    Exit;
+  end;
+  w := (ADst.Right - ADst.Left) * sc.Scale;
+  h := (ADst.Bottom - ADst.Top) * sc.Scale;
+  if (w <= 0) or (h <= 0) then Exit;
+  tmp := TBitmap.Create;
+  try
+    tmp.PixelFormat := pf32bit;
+    tmp.SetSize(ARes.Width, ARes.Height);
+    ARes.GetBitmap(AIndex, tmp, AEffect);
+    one := TBGRABitmap.Create(tmp);
+  finally
+    tmp.Free;
+  end;
+  try
+    if (one.Width <> w) or (one.Height <> h) then
+    begin
+      big := one.Resample(w, h, rmSimpleStretch) as TBGRABitmap;
+      one.Free;
+      one := big;
+    end;
+    PutOnCanvas(ACanvas, one, ADst, sc);
+  finally
+    one.Free;
   end;
 end;
 
