@@ -672,7 +672,18 @@ type
                          shape from its source on the proxy 'treeEdge' }
     carSankeyClip, carPictorialGlyph, carPictorialClip, carGraphEdge,
     carGraphEdgeFrom, carGraphEdgeTo, carGraphEdgeLabel, carTreeNode,
-    carTreeEdge);
+    carTreeEdge,
+    { [F3c] ITEM PATHS NO ANIMATION OF THEIR OWN DRIVES, for the universal
+      transition (AdvChart.AnimView):
+      carMapRegion   a map series' region path (Index its row, Sub 0 the
+                     polygons' compound, 1 the lines'): Pts its PathProxy
+                     data before the roam, G[0..5] the roam's matrix, G[6] 1
+                     where there is one
+      carCustomPath  a custom series' path (Index the item's row, Sub its
+                     place among the item's paths): Pts its PathProxy data in
+                     its own frame, G[0..5] its computed transform, G[6] 1
+                     where there is one, Base its shape for the dividers }
+    carMapRegion, carCustomPath);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

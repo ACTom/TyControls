@@ -4459,6 +4459,39 @@ end;
   text straight after it (zrender's storage order: a text follows its
   host), with the current state values -- and the full path Path.contain
   walks, the clip the hit test respects, the datum a pointer names }
+{ [F3c] a compound path's PathProxy data: each ring of two points or more a
+  Polygon's (moveTo, lineTo, closePath) or a Polyline's (no close) }
+function RegionPathData(const ASubs: TTyGeoRingArray; AIsLine: Boolean): TTyDoubleArray;
+var
+  j, q, n: Integer;
+begin
+  n := 0;
+  for j := 0 to High(ASubs) do
+    if Length(ASubs[j]) >= 2 then
+    begin
+      n := n + Length(ASubs[j]) * 3;
+      if not AIsLine then Inc(n);
+    end;
+  SetLength(Result, n);
+  n := 0;
+  for j := 0 to High(ASubs) do
+  begin
+    if Length(ASubs[j]) < 2 then Continue;
+    for q := 0 to High(ASubs[j]) do
+    begin
+      if q = 0 then Result[n] := 1 else Result[n] := 2;
+      Result[n + 1] := ASubs[j][q].X;
+      Result[n + 2] := ASubs[j][q].Y;
+      Inc(n, 3);
+    end;
+    if not AIsLine then
+    begin
+      Result[n] := 6;
+      Inc(n);
+    end;
+  end;
+end;
+
 function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
   AApplyStates: Boolean): Integer;
@@ -4594,6 +4627,24 @@ begin
           el.Z2 := Round(c.Num[stkZ2]);
           el.Silent := silentGroup;
           el.Datum := GroupDatum(g);
+          { [F3c] A MAP SERIES' REGION, for the universal transition: the
+            compound path MapDraw makes (every ring of two points or more,
+            moveTo, lineTo, closed but a line's) before the roam, and the
+            roam's matrix }
+          if AGeo.Data.Active and (g <= High(AGeo.Data.Groups))
+            and (AGeo.Data.Groups[g].Row >= 0) then
+          begin
+            el.Anim.Role := carMapRegion;
+            el.Anim.Series := AGeo.Data.SeriesIndex;
+            el.Anim.Index := AGeo.Data.Groups[g].Row;
+            el.Anim.Sub := k;
+            el.Anim.Pts := RegionPathData(p.Subs, p.IsLine);
+            if dr.HasTrans then
+            begin
+              for j := 0 to 5 do el.Anim.G[j] := dr.Trans[j];
+              el.Anim.G[6] := 1;
+            end;
+          end;
           if dr.HasClip then
           begin
             el.HasClip := True;

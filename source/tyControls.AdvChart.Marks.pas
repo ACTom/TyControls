@@ -3113,7 +3113,7 @@ var
   i, k, idx, valCol, n: Integer;
   baseHoriz, stacked, haveCol, mirror, pxUp, empty: Boolean;
   x, y, own, baseline, zeroPx, floorPx, valuePx: Double;
-  cutLen, boundLen, pxSign, categorySize, acrossCentre: Double;
+  cutLen, boundLen, pxSign, categorySize, acrossCentre, bundleAcross: Double;
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
   offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
   lay: TTyCoordLayout;
@@ -3232,6 +3232,9 @@ begin
     categorySize := Abs(col.Width);
     if baseHoriz then acrossCentre := pt.X + col.Offset + col.Width / 2
     else acrossCentre := pt.Y + col.Offset + col.Width / 2;
+    { [F3c] the bundle's place across: layout[xy] }
+    if baseHoriz then bundleAcross := pt.X + col.Offset
+    else bundleAcross := pt.Y + col.Offset;
     { A COLLAPSED COLUMN DRAWS NOTHING, the same answer a bar gives: every
       percentage across the bar would be a percentage of nothing. }
     if categorySize <= 0 then Continue;
@@ -3509,6 +3512,37 @@ begin
         where the row does not animate (ItemModel.isAnimationEnabled) }
       el.Anim.Series := ABinding.SeriesIndex;
       el.Anim.Index := i;
+      { [F3c] THE PATH createPath MAKES, for the universal transition: the
+        symbol at the pattern size about nought, symbolScale (signed as the
+        glyph is mirrored), symbolRotate, its place in the bundle (the run's
+        along the value axis, half the column and the offset across it) and
+        the bundle's (the bar's corner) -- composed as zrender does, the
+        bundle a translation over it }
+      el.Anim.Sub := k;
+      if spec.SymbolName <> '' then el.Caption.LgSymbol := spec.SymbolName
+      else el.Caption.LgSymbol := 'circle';
+      el.Caption.LgKeepAspect := False;
+      el.Caption.LgG[2] := glyphW / spec.PatternSize;
+      el.Caption.LgG[3] := glyphH / spec.PatternSize;
+      if baseHoriz then el.Caption.LgG[3] := el.Caption.LgG[3] * (-1 * pxSign)
+      else el.Caption.LgG[2] := el.Caption.LgG[2] * (1 * pxSign);
+      el.Caption.LgG[4] := spec.PatternSize;
+      el.Caption.LgG[5] := spec.RotateDeg * Pi / 180;
+      if IsNan(el.Caption.LgG[5]) then el.Caption.LgG[5] := 0;
+      if baseHoriz then
+      begin
+        el.Caption.LgG[0] := col.Width / 2 + offAcross;
+        el.Caption.LgG[1] := along;
+        el.Caption.LgG[6] := bundleAcross;
+        el.Caption.LgG[7] := floorPx;
+      end
+      else
+      begin
+        el.Caption.LgG[0] := along;
+        el.Caption.LgG[1] := col.Width / 2 + offAcross;
+        el.Caption.LgG[6] := floorPx;
+        el.Caption.LgG[7] := bundleAcross;
+      end;
       if spec.Clip then
       begin
         el.Anim.Role := carPictorialClip;
@@ -3653,6 +3687,8 @@ begin
     if L.IsRadial then el.Anim.G[7] := 1 else el.Anim.G[7] := 0;
     if sausage then el.Anim.G[8] := 1 else el.Anim.G[8] := 0;
     if zero then el.Anim.G[9] := 1 else el.Anim.G[9] := 0;
+    { [F3c] the corner radii the Sector's shape holds (its path's) }
+    el.Anim.Pts := Copy(corners, 0, Length(corners));
     ItemCaption(AVisual, AStore, i, el.Caption);
     { a clipped bar's label is not drawn: its host is ignored }
     if clipped then el.Caption.Text := '';

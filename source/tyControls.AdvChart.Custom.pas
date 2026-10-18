@@ -309,6 +309,9 @@ type
     EmphasisDisabled, TooltipDisabled: Boolean;
     { an image's source when made }
     ImagePath: string;
+    { [F3c] `morph: false`: disableMorphing (the universal transition passes
+      it by) }
+    NoMorph: Boolean;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -395,6 +398,11 @@ type
     { what stopped the last render (upstream throws), '' none }
     property Error: string read FError;
     property HasData: Boolean read FHasData;
+  public
+    { [F3c] doesElNeedRecreate's first answer: the series transitions
+      (isUniversalTransitionEnabled) -- every item is made anew, the old
+      element kept for the transition to morph from }
+    UtRecreate: Boolean;
   end;
 
 implementation
@@ -1005,6 +1013,8 @@ var
   info: TTyCustomElInfo;
   st: TJSONObject;
 begin
+  { [F3c] always, while the series transitions }
+  if UtRecreate then Exit(True);
   info := InfoOf(AEl);
   tp := AOpt.Find('type');
   if not JNull(tp) and ((info = nil) or (StrOf(tp) <> info.GType)) then Exit(True);
@@ -1406,6 +1416,12 @@ begin
   end;
   info := InfoOf(el);
   if (info <> nil) and Truthy(AOpt.Find('tooltipDisabled')) then info.TooltipDisabled := True;
+  { [F3c] `morph === false` sets it, anything else clears it }
+  if info <> nil then
+  begin
+    d := AOpt.Find('morph');
+    info.NoMorph := (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean;
+  end;
   UpdateAttachedTx(el, AOpt, isInit);
   UpdateNormal(el, AOpt, nil, isInit);
   { info: replaced only when the option says it }

@@ -45210,6 +45210,8 @@ begin
     anim.Model.HasPayload := FAnimHasPayload;
     anim.Enabled := AnimAllowed and TyAnimIsEnabled(anim.Model);
     anim.Driver := FCuAnim;
+    { [F3c] a series that transitions makes its items anew }
+    view.UtRecreate := TyUtEnabled(node) or AnimUtNamed(si);
     try
       view.Render(ids, raws, @CustomCall, z, zl, anim);
     finally
@@ -45285,10 +45287,60 @@ begin
   end;
 end;
 
+{ [F3c] a custom series' path tagged for the universal transition: the
+  item's row, its place among the item's paths, its PathProxy data in its own
+  frame and its computed transform (the device scale over it), its rect's or
+  sector's shape for the dividers }
+procedure CustomUtPath(var APe: TTyChartElement; AEl: TTyGfxEl; ASeries, ARow: Integer;
+  var APlace: Integer; AScale: Double);
+
+  function Sh(const AKey: string; ADefault: Double): Double;
+  var d: TJSONData;
+  begin
+    d := AEl.Shape.Find(AKey);
+    if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat else Result := ADefault;
+  end;
+
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  APe.Anim.Role := carCustomPath;
+  APe.Anim.Series := ASeries;
+  APe.Anim.Index := ARow;
+  APe.Anim.Sub := APlace;
+  Inc(APlace);
+  APe.Anim.Pts := TyGuidePathData(TyGfxPath(AEl));
+  if AEl.HasTransform then
+  begin
+    for k := 0 to 5 do APe.Anim.G[k] := AEl.Transform[k] * AScale;
+    APe.Anim.G[6] := 1;
+  end
+  else if AScale <> 1 then
+  begin
+    APe.Anim.G[0] := AScale;
+    APe.Anim.G[3] := AScale;
+    APe.Anim.G[6] := 1;
+  end;
+  case AEl.Kind of
+    gkRect:
+      APe.Anim.Base := TTyDoubleArray.Create(1, Sh('x', 0), Sh('y', 0), Sh('width', 0),
+        Sh('height', 0));
+    gkSector:
+      begin
+        { the Sector's default shape under what the option wrote }
+        d := AEl.Shape.Find('clockwise');
+        if (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean then k := 0 else k := 1;
+        APe.Anim.Base := TTyDoubleArray.Create(2, Sh('cx', 0), Sh('cy', 0), Sh('r0', 0),
+          Sh('r', 0), Sh('startAngle', 0), Sh('endAngle', Pi * 2), k);
+      end;
+  end;
+end;
+
 function TTyAdvanceChart.CustomBuild(ASlot: Integer; AList: TTyPaintList;
   APPI: Integer): Integer;
 var
-  si, i, inside, raw: Integer;
+  si, i, inside, raw, upath: Integer;
   view: TTyCustomView;
   root, el: TTyGfxEl;
   meas: ITyTextMeasurer;
@@ -45344,6 +45396,12 @@ var
       pe.HasClip := True;
       pe.ClipRect := clip;
     end;
+    { [F3c] AN ITEM'S PATH as getPathList finds it (no text, no image, not
+      invisible, not `morph: false`), for the universal transition }
+    if (AEl.Kind in [gkRect, gkCircle, gkEllipse, gkRing, gkSector, gkArc, gkPolygon,
+      gkPolyline, gkLine, gkBezier, gkPath]) and not AEl.Invisible
+      and not ((AEl.Custom is TTyCustomElInfo) and TTyCustomElInfo(AEl.Custom).NoMorph) then
+      CustomUtPath(pe, AEl, si, inside, upath, scale);
     k := AList.Add(pe);
     if Length(FCustomPaintEls) <= k then SetLength(FCustomPaintEls, k + 1);
     FCustomPaintEls[k] := AEl;
@@ -45411,6 +45469,7 @@ begin
     datum := TyChartDatum(si, inside, raw);
     maxZ2 := NegInfinity;
     UpdZ(root);
+    upath := 0;
     Walk(root, False);
   end;
 end;
