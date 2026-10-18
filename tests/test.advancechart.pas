@@ -113,6 +113,7 @@ type
     procedure TestTheMinorTickLengthComesFromTheTheme;
     procedure TestHairlinesLandOnWholePixels;
     procedure TestRepeatedRendersDoNotGrowTheHeap;
+    procedure TestALongLinePaintsTheSameWhateverTheGlobalRandomHolds;
   end;
 implementation
 
@@ -807,6 +808,63 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over thirty renders', [before, after]),
     after <= before);
+end;
+
+procedure TAdvanceChartTest.TestALongLinePaintsTheSameWhateverTheGlobalRandomHolds;
+{ line-aqi and area-rainfall painted a few pixels differently from one run of
+  the same exe to the next: BGRA's polygon filler sorts edges with pivots from
+  the global Random (see TyPinBgraRandom). A long line and a long area, the
+  same option rendered under six different global seeds, every frame the same
+  as the first. }
+const
+  cSeeds: array[0..5] of LongWord = (1, 2, 3, 12345, $DEADBEEF, 99);
+var
+  opt, cats, vals: string;
+  ref: TBGRABitmap;
+  i, k, x, y, diff: Integer;
+  st: LongWord;
+begin
+  cats := '';
+  vals := '';
+  st := 11;
+  for i := 0 to 599 do
+  begin
+    {$push}{$R-}{$Q-}
+    st := st * 1103515245 + 12345;
+    {$pop}
+    if i > 0 then
+    begin
+      cats := cats + ',';
+      vals := vals + ',';
+    end;
+    cats := cats + IntToStr(i);
+    vals := vals + IntToStr(40 + (st shr 8) mod 300);
+  end;
+  opt := '{ animation: false, xAxis: { data: [' + cats + '] }, yAxis: {},'
+    + ' series: [{ type: ''line'', symbol: ''none'', data: [' + vals + '] },'
+    + ' { type: ''line'', symbol: ''none'', areaStyle: {}, data: [' + vals + '] }] }';
+  FChart.Option := opt;
+  ref := nil;
+  try
+    for k := 0 to High(cSeeds) do
+    begin
+      RandSeed := cSeeds[k];
+      Draw(800, 500);
+      if ref = nil then
+        ref := FBmp.Duplicate as TBGRABitmap
+      else
+      begin
+        diff := 0;
+        for y := 0 to 499 do
+          for x := 0 to 799 do
+            if PixelAt(x, y) <> ref.GetPixel(x, y) then Inc(diff);
+        AssertEquals('pixels that differ under global seed ' + IntToStr(cSeeds[k]),
+          0, diff);
+      end;
+    end;
+  finally
+    ref.Free;
+  end;
 end;
 
 { ============ what the paint path was skipping ============ }

@@ -1155,6 +1155,25 @@ var
     c: TBGRAPixel;
     sub: TTyChartShape;
     pts: ArrayOfTPointF;
+
+    { a row's polygon with BGRA's generator pinned (TyPinBgraRandom) }
+    procedure PinnedPoly(AKind: Integer);
+    var
+      saved: LongWord;
+    begin
+      saved := TyPinBgraRandom;
+      try
+        case AKind of
+          0: layer.DrawPolyLineAntialias(pts, c, pen);
+          1: layer.DrawPolygonAntialias(pts, c, pen);
+        else
+          layer.FillPolyAntialias(pts, c);
+        end;
+      finally
+        TyUnpinBgraRandom(saved);
+      end;
+    end;
+
   begin
     g := AElement.Shape.Large;
     spec := LargeSymbolSpec(g);
@@ -1225,7 +1244,7 @@ var
           if AStroke then
           begin
             pts := LinesRowPoints(g, i, ox, oy);
-            if Length(pts) >= 2 then layer.DrawPolyLineAntialias(pts, c, pen);
+            if Length(pts) >= 2 then PinnedPoly(0);
           end;
           Continue;
         end;
@@ -1273,11 +1292,11 @@ var
                 pts[j] := PointF(sub.Points[j].X - ox, sub.Points[j].Y - oy);
               if AStroke then
               begin
-                if sub.Kind = cskPolyline then layer.DrawPolyLineAntialias(pts, c, pen)
-                else layer.DrawPolygonAntialias(pts, c, pen);
+                if sub.Kind = cskPolyline then PinnedPoly(0)
+                else PinnedPoly(1);
               end
               else if sub.Kind = cskPolygon then
-                layer.FillPolyAntialias(pts, c);
+                PinnedPoly(2);
             end;
           end;
         end;

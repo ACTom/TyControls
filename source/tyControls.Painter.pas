@@ -496,6 +496,27 @@ function TyGdiTextRunsKeptForTest: Integer;
 function TyPainterClipMasksBuiltForTest: Integer;
 procedure TyPainterClipReuseForTest(AOn: Boolean);
 
+{ BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
+  filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
+  (TOnePassFillPolyInfo.PartitionByY) sorts a polygon's edges by y with a
+  quicksort whose pivot is Random(n). Edges on the same y come out in a
+  pivot-dependent order, and where that order decides which scanline path the
+  antialiaser takes the coverage differs by a step or two -- the same long line
+  painted differently from one run of an exe to the next, and from a fresh
+  chart to the next in one process.
+
+  Call TyPinBgraRandom before such a call and TyUnpinBgraRandom with its
+  answer after it: the generator is pinned to one seed for the call, so a
+  polygon paints the same whatever the application's generator holds. FPC's
+  generator state is private, so the application's stream cannot be put back
+  as it was; when BGRA drew from the pinned one, the application's is reseeded
+  from a value derived from the seed it held -- it keeps running rather than
+  restarting, and stays reproducible for an application that seeds it. When
+  BGRA drew nothing (fewer than ten points) the stream is left exactly as it
+  was. Main thread only, like everything else that paints. }
+function TyPinBgraRandom: LongWord;
+procedure TyUnpinBgraRandom(ASaved: LongWord);
+
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
 // few LCL-canvas caption-width measures (GroupBox/TabControl) go through this so
@@ -751,6 +772,43 @@ implementation
 
 uses
   LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections;
+
+{ Canvas2D's own fill, stroke and clip with the generator pinned. }
+procedure CtxFill(ACtx: TBGRACanvas2D);
+var
+  saved: LongWord;
+begin
+  saved := TyPinBgraRandom;
+  try
+    ACtx.fill;
+  finally
+    TyUnpinBgraRandom(saved);
+  end;
+end;
+
+procedure CtxStroke(ACtx: TBGRACanvas2D);
+var
+  saved: LongWord;
+begin
+  saved := TyPinBgraRandom;
+  try
+    ACtx.stroke;
+  finally
+    TyUnpinBgraRandom(saved);
+  end;
+end;
+
+procedure CtxClip(ACtx: TBGRACanvas2D);
+var
+  saved: LongWord;
+begin
+  saved := TyPinBgraRandom;
+  try
+    ACtx.clip;
+  finally
+    TyUnpinBgraRandom(saved);
+  end;
+end;
 
 { THE TWO MEASUREMENT SURFACES, REUSED.
 
@@ -2573,7 +2631,7 @@ begin
   ctx := FBmp.Canvas2D;
   BuildPath(0);
   ctx.fillStyle(TyColorToBGRA(AFillColor));
-  ctx.fill;
+  CtxFill(ctx);
 
   w := Scale(ABorderWidthLogical);
   if (w <= 0) or (TyAlphaOf(ABorderColor) = 0) then Exit;
@@ -2583,7 +2641,7 @@ begin
   BuildPath(half);
   ctx.strokeStyle(TyColorToBGRA(ABorderColor));
   ctx.lineWidth := w;
-  ctx.stroke;
+  CtxStroke(ctx);
 end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor);
@@ -2844,13 +2902,13 @@ begin
   if AFilled then
   begin
     ctx.fillStyle(TyColorToBGRA(AColor));
-    ctx.fill;
+    CtxFill(ctx);
   end
   else
   begin
     ctx.lineWidth := Math.Max(1, Scale(1));
     ctx.strokeStyle(TyColorToBGRA(AColor));
-    ctx.stroke;
+    CtxStroke(ctx);
   end;
 end;
 
@@ -3928,7 +3986,7 @@ begin
   ctx.fillMode := VecFillMode(ARule);
   grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
   ctx.fillStyle(grad);
-  ctx.fill;
+  CtxFill(ctx);
 end;
 
 procedure TTyPainter.FillPathPattern(AImage: TBGRABitmap;
@@ -3980,7 +4038,7 @@ begin
     end;
     ctx.fillStyle(pat);
     try
-      ctx.fill;
+      CtxFill(ctx);
     finally
       pat := nil;
     end;
@@ -4007,7 +4065,7 @@ begin
   grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
   ctx.strokeStyle(grad);
   ctx.lineWidth := w;
-  ctx.stroke;
+  CtxStroke(ctx);
 end;
 
 procedure TTyPainter.FillPath(AColor: TTyColor; ARule: TTyFillRule);
@@ -4018,7 +4076,7 @@ begin
   ctx := FBmp.Canvas2D;
   ctx.fillMode := VecFillMode(ARule);
   ctx.fillStyle(TyColorToBGRA(AColor));
-  ctx.fill;
+  CtxFill(ctx);
 end;
 
 procedure TTyPainter.FillPathWith(const AFill: TTyFill; const ABounds: TRect;
@@ -4104,7 +4162,7 @@ begin
     ctx.fillStyle(TyColorToBGRA(AFill.Color));
   end;
   try
-    ctx.fill;
+    CtxFill(ctx);
   finally
     { AFTER the fill: the pattern references this bitmap, it does not own a
       copy of it. }
@@ -4136,7 +4194,7 @@ begin
     devDash[i] := ScaleF(FVecDash[i]) / w;
   ctx.lineStyle(devDash);
   ctx.strokeStyle(TyColorToBGRA(AColor));
-  ctx.stroke;
+  CtxStroke(ctx);
 end;
 
 procedure TTyPainter.FillAndStrokePath(AFillColor, AStrokeColor: TTyColor;
@@ -4262,7 +4320,7 @@ begin
   if FBmp = nil then Exit;
   ctx := FBmp.Canvas2D;
   ctx.fillMode := VecFillMode(ARule);
-  ctx.clip;
+  CtxClip(ctx);
 end;
 
 { CLIP MASKS, REUSED.
@@ -4293,6 +4351,32 @@ var
 function TyPainterClipMasksBuiltForTest: Integer;
 begin
   Result := GClipMasksBuilt;
+end;
+
+const
+  CBgraPinnedSeed = LongWord($6A09E667);
+
+function TyPinBgraRandom: LongWord;
+begin
+  Result := RandSeed;
+  RandSeed := CBgraPinnedSeed;
+end;
+
+procedure TyUnpinBgraRandom(ASaved: LongWord);
+begin
+  { Untouched: FPC reseeds only when RandSeed <> its last seed, and nothing
+    called Random, so putting the value back leaves the stream where it was. }
+  if RandSeed = CBgraPinnedSeed then
+  begin
+    RandSeed := ASaved;
+    Exit;
+  end;
+  { Drawn from: putting ASaved back would reseed the application's generator
+    from it at its next call -- the same numbers after every paint. A value
+    derived from it instead; the reseed then differs paint by paint. }
+  {$push}{$R-}{$Q-}
+  RandSeed := (ASaved xor LongWord($9E3779B9)) * 1103515245 + 12345;
+  {$pop}
 end;
 
 procedure TyPainterClipReuseForTest(AOn: Boolean);
@@ -4418,7 +4502,7 @@ begin
   ctx.beginPath;
   ctx.rect(ARect.Left, ARect.Top, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   ctx.fillMode := fmWinding;
-  ctx.clip;
+  CtxClip(ctx);
   ctx.beginPath;   // leave no half-built path behind for the caller to trip on
   if fresh and (st.clipMaskReadOnly <> nil) then
     with FClipMasks[FClipNext] do
