@@ -829,9 +829,8 @@ const
   { WHAT THE GALLERY IS STILL TOLD, AND WHY. Paths are index-free, and a run
     of `children[].` is folded to one, so a key reported at every depth of a
     tree is one entry. Every one of these is a key ECharts 6.1 does not read
-    where it is written (or a root key the port does not yet pass down, the
-    F4 item), so saying nothing would be the lie. }
-  cKnown: array[0..30] of string = (
+    where it is written, so saying nothing would be the lie. }
+  cKnown: array[0..28] of string = (
     'toolbox.feature.mark',            // no such feature since ECharts 3
     'calculable',                      // ECharts 2
     'bmap',                            // the Baidu-map extension, not core
@@ -852,7 +851,6 @@ const
     'series[].data[].discretion',
     'series[].categories[].keyword',   // graph: the webkit dump's own fields,
     'series[].categories[].base',      // read by nothing upstream
-    'silent', 'progressive',           // root: F4, the model's parent chain
     { [T1] echarts-package-size.json's own field (treemap-sunburst-transition):
       treemap and sunburst read `value` }
     'series[].data[].size', 'series[].data[].children[].size',
@@ -867,7 +865,7 @@ var
   i, j, k, f: Integer;
   opt: TTyChartOption;
   issues: TTyOptIssueArray;
-  known: TStringList;
+  known, used: TStringList;
   sl, files: TStringList;
 begin
   { [F1b] Before: 125 of 244 gallery charts were told some option was not one
@@ -878,6 +876,7 @@ begin
     + PathDelim;
   AssertTrue('the gallery is there', FileExists(dir + 'index.json'));
   known := TStringList.Create;
+  used := TStringList.Create;
   sl := TStringList.Create;
   files := TStringList.Create;
   opt := TTyChartOption.Create;
@@ -932,17 +931,28 @@ begin
         while Pos('children[].children[].', p) > 0 do
           p := StringReplace(p, 'children[].children[].', 'children[].', [rfReplaceAll]);
         if (issues[j].Kind = oikBadEnumValue) or (known.IndexOf(p) < 0) then
+        begin
           if Pos(id + ': ' + p + ';', bad) = 0 then
             bad := bad + id + ': ' + p + '; ';
+        end
+        else if used.IndexOf(p) < 0 then
+          used.Add(p);
       end;
       end;
     end;
     AssertEquals('gallery complaints nobody has judged', '', bad);
+    { and every judged one is still raised by some file: an entry nothing
+      raises any more is stale -- or a file (a sequence step) went unread }
+    bad := '';
+    for i := 0 to High(cKnown) do
+      if used.IndexOf(cKnown[i]) < 0 then bad := bad + cKnown[i] + '; ';
+    AssertEquals('judged complaints no gallery file raises', '', bad);
   finally
     root.Free;
     opt.Free;
     files.Free;
     sl.Free;
+    used.Free;
     known.Free;
   end;
 end;
