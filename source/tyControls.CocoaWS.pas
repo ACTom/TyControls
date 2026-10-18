@@ -26,21 +26,43 @@ unit tyControls.CocoaWS;
 interface
 
 {$IFDEF LCLCocoa}
-{$modeswitch objectivec2}   // required to use CocoaFullControlEdit
+{$modeswitch objectivec2}   // required by CocoaAll / CocoaFullControlEdit
 {$interfaces corba}          // ICocoaIMEControl is a CORBA (non-refcounted, GUID) interface
 
 uses
   Types, Controls, Forms,
   CocoaAll,
-  { ICocoaIMEControl + TCocoaIMEParameters. Lazarus 4.0 moved them from CocoaPrivate to
-    CocoaFullControlEdit, and a uses clause cannot ask which Lazarus it is compiled with (FPC
-    does not see a constant from an earlier unit of the same clause), so tycontrols.lpk asks:
-    its Conditionals define TY_LCL_BEFORE_4 when GetIDEValue('LAZ_FULLVERSION') -- which only
-    4.0 and later answer -- is not 4.0 or later (#81). Without the package (the source path
-    added to a project by hand) this takes the 4.x unit. }
-  {$IFDEF TY_LCL_BEFORE_4}CocoaPrivate,{$ELSE}CocoaFullControlEdit,{$ENDIF}
+  LCLVersion,                // lcl_fullversion: the implementation picks the IME unit by it
   tyControls.Types,          // TTyWindowFrame & co.
   tyControls.TextMenu;       // ITyImeEditable
+
+{ A macOS IME handler for ATarget (a TTyEdit / TTyMemo): an object implementing LCL-Cocoa's
+  ICocoaIMEControl, which bridges NSTextInputClient composition to the control. The control creates
+  it before its handle, returns it from its LM_IM_COMPOSITION handler and frees it. }
+function TyCocoaNewImeHandler(const ATarget: ITyImeEditable): TObject;
+
+{ ---- the window frame: tyControls.PlatformWS calls these, nothing else does ------------------ }
+procedure TyCocoaApplyWindowFrame(AForm: TCustomForm; const AFrame: TTyWindowFrame);
+function TyCocoaSystemButtonGroup(AForm: TCustomForm): TTySystemButtonGroup;
+procedure TyCocoaPlaceSystemButtons(AForm: TCustomForm; const ARect: TRect);
+function TyCocoaTitleDoubleClick: TTyTitleDoubleClick;
+function TyCocoaStartSystemMove(AForm: TCustomForm): Boolean;
+function TyCocoaIsZoomed(AForm: TCustomForm): Boolean;
+procedure TyCocoaSetZoomed(AForm: TCustomForm; AZoomed: Boolean);
+function TyCocoaMinimize(AForm: TCustomForm): Boolean;
+procedure TyCocoaApplyAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
+{$ENDIF}
+
+implementation
+
+{$IFDEF LCLCocoa}
+
+uses
+  { ICocoaIMEControl + TCocoaIMEParameters. Lazarus 4.0 moved them from CocoaPrivate to
+    CocoaFullControlEdit. A uses clause cannot ask a unit of its own clause which Lazarus it is,
+    so the question is asked here, of LCLVersion in the interface's -- the same with the package
+    and without it (a project with source/ on its search path, #88). }
+  {$IF lcl_fullversion >= 4000000}CocoaFullControlEdit{$ELSE}CocoaPrivate{$ENDIF};
 
 type
   { Bridges macOS NSTextInputClient composition (via TCocoaFullControlEdit) to a TTyEdit/TTyMemo.
@@ -59,21 +81,10 @@ type
     function  IMEGetTextBound(var params: TCocoaIMEParameters): TRect;
   end;
 
-{ ---- the window frame: tyControls.PlatformWS calls these, nothing else does ------------------ }
-procedure TyCocoaApplyWindowFrame(AForm: TCustomForm; const AFrame: TTyWindowFrame);
-function TyCocoaSystemButtonGroup(AForm: TCustomForm): TTySystemButtonGroup;
-procedure TyCocoaPlaceSystemButtons(AForm: TCustomForm; const ARect: TRect);
-function TyCocoaTitleDoubleClick: TTyTitleDoubleClick;
-function TyCocoaStartSystemMove(AForm: TCustomForm): Boolean;
-function TyCocoaIsZoomed(AForm: TCustomForm): Boolean;
-procedure TyCocoaSetZoomed(AForm: TCustomForm; AZoomed: Boolean);
-function TyCocoaMinimize(AForm: TCustomForm): Boolean;
-procedure TyCocoaApplyAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
-{$ENDIF}
-
-implementation
-
-{$IFDEF LCLCocoa}
+function TyCocoaNewImeHandler(const ATarget: ITyImeEditable): TObject;
+begin
+  Result := TTyCocoaImeHandler.Create(ATarget);
+end;
 
 constructor TTyCocoaImeHandler.Create(const ATarget: ITyImeEditable);
 begin
