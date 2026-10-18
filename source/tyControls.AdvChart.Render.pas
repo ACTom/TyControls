@@ -1470,15 +1470,18 @@ end;
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
 var
   i: Integer;
+  pe: PTyChartElement;
 begin
   if (P = nil) or (AList = nil) then Exit;
   { Paint order, back to front. The hit test walks the same order in reverse, so
-    what the eye sees on top is what the pointer gets. }
+    what the eye sees on top is what the pointer gets. By reference: drawing
+    adds nothing to the list [P2]. }
   for i := 0 to AList.Count - 1 do
-    if not AList.Element(AList.PaintOrder(i)).Ignore
-      and not AList.Element(AList.PaintOrder(i)).ProgHidden
-      and not AList.Element(AList.PaintOrder(i)).GfxUnder then
-      TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
+  begin
+    pe := AList.Ref(AList.PaintOrder(i));
+    if not pe^.Ignore and not pe^.ProgHidden and not pe^.GfxUnder then
+      TyRenderElement(P, pe^);
+  end;
 end;
 
 finalization

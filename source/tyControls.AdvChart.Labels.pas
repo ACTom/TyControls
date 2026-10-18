@@ -910,8 +910,9 @@ begin
   n := AList.Count;
   for i := 0 to n - 1 do
   begin
+    { most elements carry no words: asked by reference before the copy [P2] }
+    if AList.Ref(i)^.Caption.Text = '' then Continue;
     host := AList.Element(i);
-    if host.Caption.Text = '' then Continue;
     si := host.Datum.SeriesIndex;
     if (si < 0) or (si > High(ASpecs)) then Continue;
     spec := ASpecs[si];

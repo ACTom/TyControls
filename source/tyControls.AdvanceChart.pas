@@ -925,6 +925,22 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [P2] the last StApplyChanged changed a geo's flags }
+    FStGeoApplied: Boolean;
+    { StPrimaryInk held through a sync's declarations [P2] }
+    FStInk: TTyChartColor;
+    FStInkHold, FStInkHeld: Boolean;
+    { [P2] through the same declarations: the three state styles of the last
+      row with no object of its own (its chain past the item, its block),
+      and a series' emphasis spec by its node -- what every such row of a
+      series reads alike }
+    FStMemoOk: Boolean;
+    FStMemoS: Integer;
+    FStMemoBlk: string;
+    FStMemoNodes: TTyStNodeArray;
+    FStMemoDecl: array[0..2] of TTyStObject;
+    FStMemoSpecNode: TJSONObject;
+    FStMemoSpec: TTyChartEmphasisSpec;
     FHighlightKeys: TTyStringArray;
     FEvDownId, FEvUpId: Int64;
     FEvDownArmed: Boolean;
@@ -2705,6 +2721,7 @@ type
     { [F2a] a hovered breadcrumb item's emphasis, onto the list just built:
       its fill, its words, both up by ten }
     procedure TmCrumbStates(AList: TTyPaintList);
+    procedure TmCrumbWrite(AList: TTyPaintList);
     { [F2a, old deferral #36] a treemap label's and upper label's opacity:
       setLabelStyle's defaultOpacity, the node's style.opacity -- the raw
       item's itemStyle.opacity over the series' (dataStyleTask), which the
@@ -3193,9 +3210,11 @@ type
       its state declared, applied and written into the list }
     procedure StSyncMarks(AList: TTyPaintList);
     procedure StWrite(AList: TTyPaintList);
+    procedure StWriteRows(AList: TTyPaintList);
     { upstream's frame: every flag that changed since the last one becomes a
       state list. True when an element changed. }
     function StApplyChanged: Boolean;
+    function StPatchList: Boolean;
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
     { [F2b] the row's second dispatcher (a gauge's arc), nil for none }
     function StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
@@ -3265,6 +3284,8 @@ type
     function StOwnsElement(AIndex: Integer): Boolean;
     function StEmphasised(AIndex: Integer): Boolean;
     function StPrimaryInk: TTyChartColor;
+    function StMemoMatches(ASeries: Integer; const ANodes: TTyStNodeArray;
+      const ABlock: string): Boolean;
     procedure SelEnsure(ASlot: Integer);
     function SelData(ASlot: Integer): TTySelData;
     procedure SelSyncFlags(ASlot: Integer);
@@ -4286,6 +4307,12 @@ function TyChartGroupConnected(const AGroup: string): Boolean;
   counterpart (copy, alias, zoom-in ...) -- is the host's own cursor. }
 function TyChartCssCursor(const ACss: string; out ACursor: TCursor): Boolean;
 
+{ [P2] The state patch (StPatchList): a switch that turns it off -- every
+  state change builds the list again, the reference it must match -- and
+  how many frames it has patched. }
+procedure TyAdvChartStPatchForTest(AOn: Boolean);
+function TyAdvChartStPatchesForTest: Integer;
+
 implementation
 
 uses
@@ -4305,6 +4332,20 @@ uses
   tyControls.AdvChart.StatTransform,
   { `image://` pictures and their image lists [F6a] }
   tyControls.AdvChart.Images;
+
+var
+  GStPatchOff: Boolean = False;
+  GStPatches: Integer = 0;
+
+procedure TyAdvChartStPatchForTest(AOn: Boolean);
+begin
+  GStPatchOff := not AOn;
+end;
+
+function TyAdvChartStPatchesForTest: Integer;
+begin
+  Result := GStPatches;
+end;
 
 { ==================== echarts.connect [Batch 141] ==================== }
 
@@ -8085,8 +8126,9 @@ begin
     { LOCAL space. EndPaint blits at ARect's origin, so everything below is
       measured from zero. }
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    { upstream's frame: the flags become state lists [Batch 88] }
-    if StApplyChanged then FProgReuse := False;
+    { upstream's frame: the flags become state lists [Batch 88] -- the list
+      patched where only they changed [P2] }
+    if StApplyChanged then FProgReuse := StPatchList;
     P.BeginPaint(ACanvas, ARect, APPI);
     PaintStatic(P, R, APPI, measurer);
     PaintDynamic(P, R, APPI, measurer);
@@ -13139,8 +13181,14 @@ begin
     try
       n := TyBuildGeo(geo, ink, NewTextMeasurer(APPI), APPI, tmp, False);
       if n <> FGeoDraws[k].Count then Continue;
-      for i := 0 to n - 1 do
-        FPaintList.SetElement(FGeoDraws[k].Start + i, tmp.Element(i));
+      { a state write: journaled [P2] }
+      FPaintList.JournalRecord(True);
+      try
+        for i := 0 to n - 1 do
+          FPaintList.SetElement(FGeoDraws[k].Start + i, tmp.Element(i));
+      finally
+        FPaintList.JournalRecord(False);
+      end;
     finally
       tmp.Free;
     end;
@@ -16393,12 +16441,24 @@ end;
   declared ink, both up by ten (the default proxy's z2 lift); a solve draws
   new items, and the hover of an older one is gone }
 procedure TTyAdvanceChart.TmCrumbStates(AList: TTyPaintList);
+begin
+  FTmCrumbDirty := False;
+  if AList = nil then Exit;
+  { a state write: journaled [P2] }
+  AList.JournalRecord(True);
+  try
+    TmCrumbWrite(AList);
+  finally
+    AList.JournalRecord(False);
+  end;
+end;
+
+procedure TTyAdvanceChart.TmCrumbWrite(AList: TTyPaintList);
 var
   i, k, hi, slot: Integer;
   el, cap: TTyChartElement;
 begin
-  FTmCrumbDirty := False;
-  if (AList = nil) or (FTmCrumbHoverS < 0) or (FTmCrumbHoverGen <> FTmCrumbGen) then Exit;
+  if (FTmCrumbHoverS < 0) or (FTmCrumbHoverGen <> FTmCrumbGen) then Exit;
   slot := SlotOfSeries(FTmCrumbHoverS);
   if (slot < 0) or (slot > High(FTreemapInks)) then Exit;
   for i := 0 to AList.Count - 1 do
@@ -16429,7 +16489,8 @@ end;
 procedure TTyAdvanceChart.TmLabelOpacity(AList: TTyPaintList);
 var
   i, hi, slot, s, row: Integer;
-  el, host: TTyChartElement;
+  el: TTyChartElement;
+  pe, host: PTyChartElement;
   item, ser: TJSONObject;
   v: Double;
   has: Boolean;
@@ -16437,16 +16498,16 @@ begin
   if AList = nil then Exit;
   for i := 0 to AList.Count - 1 do
   begin
-    el := AList.Element(i);
-    if el.Caption.FontSizeLogical <= 0 then Continue;
-    hi := el.Caption.LmHostPlus1 - 1;
+    pe := AList.Ref(i);
+    if pe^.Caption.FontSizeLogical <= 0 then Continue;
+    hi := pe^.Caption.LmHostPlus1 - 1;
     if (hi < 0) or (hi >= AList.Count) then Continue;
-    host := AList.Element(hi);
-    if host.Anim.Role <> carTmRect then Continue;
-    s := host.Anim.Series;
+    host := AList.Ref(hi);
+    if host^.Anim.Role <> carTmRect then Continue;
+    s := host^.Anim.Series;
     slot := SlotOfSeries(s);
     if (slot < 0) or (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Continue;
-    row := host.Anim.Index;
+    row := host^.Anim.Index;
     item := nil;
     if (row >= 0) and (row <= High(FTreemaps[slot].Hier.Nodes))
       and (FTreemaps[slot].Hier.Nodes[row].Item is TJSONObject) then
@@ -16455,6 +16516,7 @@ begin
     { the raw item's style over the series' -- never a level's }
     v := TyStReadNumber([item, ser], ['itemStyle', 'opacity'], has);
     if not has or IsNan(v) then Continue;
+    el := pe^;
     el.Style.Alpha := v;
     AList.SetElement(i, el);
   end;
@@ -23391,6 +23453,7 @@ begin
     Inc(drawn, BuildThumbnails(list));
     Result := drawn + gfxCount;
     UtStaleHarvest;
+    list.JournalClose;
   end;
 end;
 
@@ -23916,9 +23979,11 @@ begin
     line where some state shows it, and routes it ---- }
   for e := 0 to count - 1 do
   begin
+    { most elements are not such a label: asked by reference before the
+      copies [P2] }
+    if AList.Ref(e)^.Caption.LmKind <> 1 then Continue;
     el := AList.Element(e);
     c := el.Caption;
-    if c.LmKind <> 1 then Continue;
     hi := c.LmHostPlus1 - 1;
     if (hi < 0) or (hi >= count) then Continue;
     host := AList.Element(hi);
@@ -24096,7 +24161,7 @@ begin
       { ...which is not one list the rects could be drawn from }
       layered := False;
       for i := 0 to FPaintList.Count - 1 do
-        if ProgIsLayered(FPaintList.Element(i)) then
+        if ProgIsLayered(FPaintList.Ref(i)^) then
         begin
           layered := True;
           Break;
@@ -24633,7 +24698,7 @@ procedure TTyAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintLi
   APPI: Integer);
 var
   i, idx: Integer;
-  el: TTyChartElement;
+  pe: PTyChartElement;
   any, blitted: Boolean;
   bmp: TBGRABitmap;
 begin
@@ -24642,7 +24707,7 @@ begin
   any := False;
   if (bmp <> nil) and (AList = FPaintList) then
     for i := 0 to AList.Count - 1 do
-      if ProgIsLayered(AList.Element(i)) then
+      if ProgIsLayered(AList.Ref(i)^) then
       begin
         any := True;
         Break;
@@ -24659,10 +24724,10 @@ begin
   for i := 0 to AList.Count - 1 do
   begin
     idx := AList.PaintOrder(i);
-    el := AList.Element(idx);
+    pe := AList.Ref(idx);
     { a graphic element under the axes is painted before them [Batch 122] }
-    if el.Ignore or el.ProgHidden or el.GfxUnder then Continue;
-    if el.ProgChunk > 0 then
+    if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
+    if pe^.ProgChunk > 0 then
     begin
       if not blitted then
       begin
@@ -24671,7 +24736,7 @@ begin
       end;
       Continue;
     end;
-    TyRenderElement(APainter, el);
+    TyRenderElement(APainter, pe^);
   end;
 end;
 
@@ -25931,7 +25996,7 @@ end;
 procedure TTyAdvanceChart.StampCursors(AList: TTyPaintList);
 var
   k, si, slot, raw, depth: Integer;
-  el: TTyChartElement;
+  pe: PTyChartElement;
   st, c: string;
   root, series, item, lvl: TJSONObject;
   rootCur: string;
@@ -26001,12 +26066,12 @@ begin
   CurOf(root, rootCur);
   for k := 0 to AList.Count - 1 do
   begin
-    el := AList.Element(k);
-    if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex < 0) then Continue;
-    if el.Silent or el.IsGuide then Continue;
+    pe := AList.Ref(k);
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.SeriesIndex < 0) then Continue;
+    if pe^.Silent or pe^.IsGuide then Continue;
     { a label is a text of its own: the prototype's pointer }
-    if el.Caption.FontSizeLogical > 0 then Continue;
-    si := el.Datum.SeriesIndex;
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    si := pe^.Datum.SeriesIndex;
     slot := SlotOfSeries(si);
     if slot < 0 then Continue;
     st := FBindings[slot].SeriesType;
@@ -26014,7 +26079,7 @@ begin
     c := '';
     { A LARGE BATCH: LargeSymbolDraw's and LargeLineDraw's 'default'; a
       large candlestick takes its series' cursor }
-    if el.Shape.Kind = cskLarge then
+    if pe^.Shape.Kind = cskLarge then
     begin
       if (st = 'scatter') or (st = 'effectScatter') or (st = TyLinesSeriesTypeName) then
         c := 'default'
@@ -26023,10 +26088,10 @@ begin
         if not CurOf(series, c) then c := rootCur;
       end;
     end
-    else if el.Datum.DataIndex >= 0 then
+    else if pe^.Datum.DataIndex >= 0 then
     begin
-      raw := el.Datum.RawDataIndex;
-      if raw < 0 then raw := el.Datum.DataIndex;
+      raw := pe^.Datum.RawDataIndex;
+      if raw < 0 then raw := pe^.Datum.DataIndex;
       if (st = 'bar') or (st = 'pictorialBar') or (st = 'candlestick')
         or (st = 'scatter') or (st = 'effectScatter') or (st = 'line')
         or (st = 'pie') or (st = TyTreeSeriesTypeName) then
@@ -26047,7 +26112,7 @@ begin
       else if st = TyTreemapSeriesTypeName then
       begin
         { only a leaf's content rect (TreemapView.renderNode) }
-        if (el.Anim.Role = carTmRect) and (el.Anim.Sub = 1) then
+        if (pe^.Anim.Role = carTmRect) and (pe^.Anim.Sub = 1) then
         begin
           item := StItemNode(si, raw);
           depth := -1;
@@ -26057,27 +26122,27 @@ begin
           c := Chain(item, LevelOf(series, depth), series);
         end;
       end
-      else if (st = TyGraphSeriesTypeName) and not el.Datum.IsEdge then
+      else if (st = TyGraphSeriesTypeName) and not pe^.Datum.IsEdge then
       begin
         { setDraggable(draggable, !!itemModel.get('cursor')): 'move' on a
           draggable node with no cursor anywhere up its chain }
         item := StItemNode(si, raw);
         lvl := CategoryOf(series, item);
         c := Chain(item, lvl, series);
-        if (c = '') and GraphDraggable(slot, el.Datum.DataIndex) then c := 'move';
+        if (c = '') and GraphDraggable(slot, pe^.Datum.DataIndex) then c := 'move';
       end
-      else if (st = TySankeySeriesTypeName) and not el.Datum.IsEdge then
+      else if (st = TySankeySeriesTypeName) and not pe^.Datum.IsEdge then
       begin
         { SankeyView: a draggable node's rect is 'move', whatever else }
         if (slot <= High(FSankeys)) and FSankeys[slot].Valid
-          and (el.Datum.DataIndex <= High(FSankeys[slot].Nodes))
-          and TySankeyDraggable(FSankeys[slot], el.Datum.DataIndex) then
+          and (pe^.Datum.DataIndex <= High(FSankeys[slot].Nodes))
+          and TySankeyDraggable(FSankeys[slot], pe^.Datum.DataIndex) then
           c := 'move';
       end;
     end;
     if c = '' then Continue;
-    el.Cursor := c;
-    AList.SetElement(k, el);
+    { the cursor does not decide the paint order: written in place [P2] }
+    pe^.Cursor := c;
   end;
 end;
 
@@ -27394,10 +27459,30 @@ end;
 
 { tokens.color.primary -- the ink a title is written in, which is how the
   skin says it }
+function TTyAdvanceChart.StMemoMatches(ASeries: Integer;
+  const ANodes: TTyStNodeArray; const ABlock: string): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if not FStMemoOk or (ASeries <> FStMemoS) or (Length(ANodes) = 0) or (ANodes[0] <> nil)
+    or (Length(ANodes) <> Length(FStMemoNodes)) or (ABlock <> FStMemoBlk) then Exit;
+  for k := 1 to High(ANodes) do
+    if ANodes[k] <> FStMemoNodes[k] then Exit;
+  Result := True;
+end;
+
 function TTyAdvanceChart.StPrimaryInk: TTyChartColor;
 begin
+  { ONCE PER SYNC: every row of a bar or a scatter asked the theme for it
+    [P2]; outside a sync it is asked afresh }
+  if FStInkHeld then Exit(FStInk);
   Result := TTyChartColor(ActiveController.Model.ResolveStyle('TyAdvChartTitle',
     '', []).TextColor);
+  if FStInkHold then
+  begin
+    FStInk := Result;
+    FStInkHeld := True;
+  end;
 end;
 
 procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
@@ -27407,7 +27492,7 @@ var
   s, idx, labIdx: Integer;
   lineShow, labRest, labIgn, ownLine, emphLine, seriesLine, labShow, emphLab: Boolean;
   item: PTyStItem;
-  host, cap, guide, part: TTyChartElement;
+  ph, pc, pg, pp: PTyChartElement;
   nodes: TTyStNodeArray;
   scale, off, mid, dx, dy, ss, half: Double;
   has, bolder, disabled, was, normalShow, stShow, doScale: Boolean;
@@ -27443,7 +27528,7 @@ begin
     Exit;
   end;
   item := @FSt[s].Rows[ARaw];
-  host := AList.Element(FSt[s].HostIdx[ARaw]);
+  ph := AList.Ref(FSt[s].HostIdx[ARaw]);
   nodes := StNodes(s, ARaw);
   if APPI > 0 then scale := APPI / 96 else scale := 1;
 
@@ -27459,7 +27544,7 @@ begin
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
   for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
-  item^.Host.Rest := StRestOf(host);
+  item^.Host.Rest := StRestOf(ph^);
   { THE SELECT LOOK the series type brings under what is declared: a bar's
     and a scatter's border in the primary ink (BarSeries.ts:165,
     ScatterSeries.ts:151); a pie's and a line's nothing }
@@ -27486,10 +27571,32 @@ begin
     'lineStyle') }
   if FSt[s].Kind in [sskLines, sskParallel, sskRadar] then blk := 'lineStyle'
   else blk := 'itemStyle';
-  item^.Host.Decl[stnSelect] := TyStOverlay(base,
-    TyStReadStyle(nodes, 'select', blk, bolder));
-  item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', blk, bolder);
-  item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', blk, bolder);
+  { A ROW WITH NO OBJECT OF ITS OWN reads its states from the rest of its
+    chain alone -- as the last such row did, when the chain and the block
+    are the same: those three asked once per series in a sync [P2] }
+  if FStInkHold and StMemoMatches(s, nodes, blk) then
+  begin
+    item^.Host.Decl[stnSelect] := FStMemoDecl[0];
+    item^.Host.Decl[stnEmphasis] := FStMemoDecl[1];
+    item^.Host.Decl[stnBlur] := FStMemoDecl[2];
+  end
+  else
+  begin
+    item^.Host.Decl[stnSelect] := TyStOverlay(base,
+      TyStReadStyle(nodes, 'select', blk, bolder));
+    item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', blk, bolder);
+    item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', blk, bolder);
+    if FStInkHold and (Length(nodes) > 0) and (nodes[0] = nil) then
+    begin
+      FStMemoOk := True;
+      FStMemoS := s;
+      FStMemoBlk := blk;
+      FStMemoNodes := Copy(nodes, 0, Length(nodes));
+      FStMemoDecl[0] := item^.Host.Decl[stnSelect];
+      FStMemoDecl[1] := item^.Host.Decl[stnEmphasis];
+      FStMemoDecl[2] := item^.Host.Decl[stnBlur];
+    end;
+  end;
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
   { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
     emphasis.itemStyle); its shadow is not drawn here [Batch 108] }
@@ -27507,7 +27614,7 @@ begin
           and the emphasis radius the layout's plus scaleSize }
         off := TyStReadNumber([nodes[1]], ['selectedOffset'], has);
         if not has or IsNan(off) then off := 10;
-        mid := (host.Shape.StartRad + host.Shape.EndRad) / 2;
+        mid := (ph^.Shape.StartRad + ph^.Shape.EndRad) / 2;
         if IsNan(mid) or IsNan(off) then mid := 0;
         dx := TyJsCos(mid) * (off * scale);
         dy := TyJsSin(mid) * (off * scale);
@@ -27520,17 +27627,28 @@ begin
           ss := TyStReadNumber(nodes, ['emphasis', 'scaleSize'], has);
           if not has then ss := 5
           else if IsNan(ss) then ss := 0;
-          TyStSetNum(item^.Host.Decl[stnEmphasis], stkR, host.Shape.R1 + ss * scale);
+          TyStSetNum(item^.Host.Decl[stnEmphasis], stkR, ph^.Shape.R1 + ss * scale);
         end;
       end;
     sskSymbol:
       begin
-        { Symbol.ts:218-357: the path grows by the emphasis ratio }
-        spec := TyChartReadEmphasis(nodes[1]);
+        { Symbol.ts:218-357: the path grows by the emphasis ratio -- the
+          series' spec read once per sync [P2] }
+        if FStInkHold and (FStMemoSpecNode <> nil) and (FStMemoSpecNode = nodes[1]) then
+          spec := FStMemoSpec
+        else
+        begin
+          spec := TyChartReadEmphasis(nodes[1]);
+          if FStInkHold and (nodes[1] <> nil) then
+          begin
+            FStMemoSpecNode := nodes[1];
+            FStMemoSpec := spec;
+          end;
+        end;
         if nodes[0] <> nil then
           spec := TyChartMergeEmphasis(spec, TyChartReadEmphasis(nodes[0]));
-        half := (host.Shape.Bounds.Bottom - host.Shape.Bounds.Top) / 2;
-        if host.Shape.Kind in [cskCircle, cskEllipse] then half := host.Shape.R1;
+        half := (ph^.Shape.Bounds.Bottom - ph^.Shape.Bounds.Top) / 2;
+        if ph^.Shape.Kind in [cskCircle, cskEllipse] then half := ph^.Shape.R1;
         { a symbol of no size or a NaN one keeps its size }
         if StPositive(half) then
           TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale,
@@ -27560,8 +27678,8 @@ begin
         else
         begin
           spec := TreeEmphasisOf(ASlot, ARaw);
-          half := (host.Shape.Bounds.Bottom - host.Shape.Bounds.Top) / 2;
-          if host.Shape.Kind in [cskCircle, cskEllipse] then half := host.Shape.R1;
+          half := (ph^.Shape.Bounds.Bottom - ph^.Shape.Bounds.Top) / 2;
+          if ph^.Shape.Kind in [cskCircle, cskEllipse] then half := ph^.Shape.R1;
           if FTrees[ASlot].HasView and StPositive(FTrees[ASlot].VZ * FTrees[ASlot].VNS) then
             half := half / (FTrees[ASlot].VZ * FTrees[ASlot].VNS);
         end;
@@ -27622,12 +27740,12 @@ begin
       (item, series); a symbol reads itemStyle }
     if FSt[s].Kind = sskRadar then
     begin
-      part := AList.Element(FSt[s].PartIdx[ARaw][k]);
+      pp := AList.Ref(FSt[s].PartIdx[ARaw][k]);
       for n := Low(TTyStName) to High(TTyStName) do
-        if part.Anim.Role = carRadarArea then
+        if pp^.Anim.Role = carRadarArea then
         begin
           obj := TyStReadStyle(nodes, cStNames[n], 'areaStyle', bolder);
-          TyStSetNum(obj, stkIgnore, Ord(part.Ignore
+          TyStSetNum(obj, stkIgnore, Ord(pp^.Ignore
             and (TyStFind(nodes, [cStNames[n], 'areaStyle']) = nil)));
           item^.Parts[k].Decl[n] := obj;
         end
@@ -27667,7 +27785,7 @@ begin
     item^.Label_.HasState[stnBlur] := stShow;
     obj := TyStNoObject;
     TyStSetNum(obj, stkOpacity, 1);
-    TyStSetNum(obj, stkZ2, host.Z2 + 2);
+    TyStSetNum(obj, stkZ2, ph^.Z2 + 2);
     TyStSetNum(obj, stkX, 0);
     TyStSetNum(obj, stkY, 0);
     TyStSetNum(obj, stkR, 0);
@@ -27690,15 +27808,15 @@ begin
     item^.Label_ := Default(TTyStElement)
   else
   begin
-    cap := AList.Element(idx);
+    pc := AList.Ref(idx);
     item^.Label_.Exists := True;
     item^.Label_.IsPath := False;
     item^.Label_.Proxy := not disabled;
     for n := Low(TTyStName) to High(TTyStName) do item^.Label_.HasState[n] := True;
-    item^.Label_.Rest := StLabelRestOf(cap);
+    item^.Label_.Rest := StLabelRestOf(pc^);
     { NORMAL SHOW AS THE LABEL WAS STYLED: hideOverlap hides it later, and
       that is no `show: false` [Batch 103] }
-    normalShow := (not cap.Ignore) or cap.Caption.LmOverlapHidden;
+    normalShow := (not pc^.Ignore) or pc^.Caption.LmOverlapHidden;
     for n := Low(TTyStName) to High(TTyStName) do
     begin
       obj := TyStNoObject;
@@ -27721,7 +27839,7 @@ begin
       { hideOverlap's hideEl: a label it hid shows again under emphasis,
         unless that state already says (LabelLayoutHelper.ts hideOverlap)
         [Batch 103] }
-      if (n = stnEmphasis) and cap.Caption.LmEmphShow and not obj.Has[stkIgnore] then
+      if (n = stnEmphasis) and pc^.Caption.LmEmphShow and not obj.Has[stkIgnore] then
         TyStSetNum(obj, stkIgnore, 0);
       txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
       if has and (txt <> 'inherit') and (txt <> 'auto')
@@ -27737,8 +27855,8 @@ begin
         (pie/labelLayout.ts:541-544) }
       if (n = stnSelect) and (FSt[s].Kind = sskPie) then
       begin
-        TyStSetNum(obj, stkX, cap.Caption.X + dx);
-        TyStSetNum(obj, stkY, cap.Caption.Y + dy);
+        TyStSetNum(obj, stkX, pc^.Caption.X + dx);
+        TyStSetNum(obj, stkY, pc^.Caption.Y + dy);
       end;
       item^.Label_.Decl[n] := obj;
     end;
@@ -27758,12 +27876,12 @@ begin
     item^.Guide := Default(TTyStElement)
   else
   begin
-    guide := AList.Element(idx);
+    pg := AList.Ref(idx);
     item^.Guide.Exists := True;
     item^.Guide.IsPath := False;
     item^.Guide.Proxy := not disabled;
     for n := Low(TTyStName) to High(TTyStName) do item^.Guide.HasState[n] := True;
-    item^.Guide.Rest := StGuideRestOf(guide);
+    item^.Guide.Rest := StGuideRestOf(pg^);
     { setLabelLineStyle: EVERY STATE ITS OWN IGNORE -- hidden where the label
       is, or where the state's labelLine.show (the normal one by default) is
       false -- its smooth (nought unless the state says) and its lineStyle.
@@ -27801,11 +27919,11 @@ begin
     labIdx := FSt[s].LabelIdx[ARaw];
     if labIdx >= 0 then
     begin
-      cap := AList.Element(labIdx);
+      pc := AList.Ref(labIdx);
       if ownLine then
-        labRest := cap.Ignore and not cap.Caption.LmOverlapHidden
+        labRest := pc^.Ignore and not pc^.Caption.LmOverlapHidden
       else
-        labRest := cap.Ignore;
+        labRest := pc^.Ignore;
     end
     else
       labRest := True;
@@ -28046,6 +28164,7 @@ procedure TTyAdvanceChart.StSyncMarks(AList: TTyPaintList);
 var
   s, k: Integer;
   el: TTyChartElement;
+  pe: PTyChartElement;
 begin
   if AList = nil then Exit;
   for s := 0 to High(FSt) do
@@ -28055,13 +28174,13 @@ begin
   end;
   for k := 0 to AList.Count - 1 do
   begin
-    el := AList.Element(k);
-    if not (el.Datum.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea]) then Continue;
-    s := el.Datum.ComponentIndex;
+    pe := AList.Ref(k);
+    if not (pe^.Datum.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea]) then Continue;
+    s := pe^.Datum.ComponentIndex;
     if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
     StPush(FSt[s].MarkIdx, k);
     SetLength(FSt[s].MarkPart, Length(FSt[s].MarkIdx));
-    FSt[s].MarkPart[High(FSt[s].MarkPart)] := StMarkPartOf(el);
+    FSt[s].MarkPart[High(FSt[s].MarkPart)] := StMarkPartOf(pe^);
   end;
   for s := 0 to High(FSt) do
   begin
@@ -28071,14 +28190,19 @@ begin
       Continue;
     end;
     StDeclareMarks(s, AList);
-    { no transition: the list itself }
-    for k := 0 to Min(High(FSt[s].MarkIdx), High(FSt[s].Marks)) do
-    begin
-      if FSt[s].Marks[k].States = [] then Continue;
-      el := AList.Element(FSt[s].MarkIdx[k]);
-      if FSt[s].Marks[k].IsPath then StWriteHost(el, FSt[s].Marks[k], False)
-      else StWriteLabel(el, FSt[s].Marks[k], False);
-      AList.SetElement(FSt[s].MarkIdx[k], el);
+    { no transition: the list itself -- a state write, journaled [P2] }
+    AList.JournalRecord(True);
+    try
+      for k := 0 to Min(High(FSt[s].MarkIdx), High(FSt[s].Marks)) do
+      begin
+        if FSt[s].Marks[k].States = [] then Continue;
+        el := AList.Element(FSt[s].MarkIdx[k]);
+        if FSt[s].Marks[k].IsPath then StWriteHost(el, FSt[s].Marks[k], False)
+        else StWriteLabel(el, FSt[s].Marks[k], False);
+        AList.SetElement(FSt[s].MarkIdx[k], el);
+      end;
+    finally
+      AList.JournalRecord(False);
     end;
   end;
 end;
@@ -28157,6 +28281,7 @@ var
   slot, s, k, raw, n, i, hoverS: Integer;
   ed: TTySelData;
   el: TTyChartElement;
+  pe: PTyChartElement;
   gel: TTyGfxEl;
   item: PTyStItem;
   prev: TTyStNames;
@@ -28310,70 +28435,70 @@ begin
     label line, and a line's polyline and area }
   for k := 0 to AList.Count - 1 do
   begin
-    el := AList.Element(k);
-    if el.Datum.Kind <> ctkSeries then Continue;
-    s := el.Datum.SeriesIndex;
+    pe := AList.Ref(k);
+    if pe^.Datum.Kind <> ctkSeries then Continue;
+    s := pe^.Datum.SeriesIndex;
     if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
     { A SANKEY: its links by link index, its nodes by node index [Batch 114] }
     if FSt[s].Kind = sskSankey then
     begin
-      raw := el.Datum.DataIndex;
-      if el.Datum.IsEdge then
+      raw := pe^.Datum.DataIndex;
+      if pe^.Datum.IsEdge then
       begin
         if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
-        if el.Caption.FontSizeLogical > 0 then
+        if pe^.Caption.FontSizeLogical > 0 then
         begin
           if FSt[s].EdgeLabelIdx[raw] < 0 then FSt[s].EdgeLabelIdx[raw] := k;
         end
-        else if not el.Silent and (FSt[s].EdgeHostIdx[raw] < 0) then
+        else if not pe^.Silent and (FSt[s].EdgeHostIdx[raw] < 0) then
           FSt[s].EdgeHostIdx[raw] := k;
         Continue;
       end;
       if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
-      if el.Caption.FontSizeLogical > 0 then
+      if pe^.Caption.FontSizeLogical > 0 then
       begin
         if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
       end
-      else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
+      else if not pe^.Silent and (FSt[s].HostIdx[raw] < 0) then
         FSt[s].HostIdx[raw] := k;
       Continue;
     end;
     { [F2a] A GRAPH'S EDGE: its line hosts, its arrows (silent) are parts,
       its caption the label }
-    if el.Datum.IsEdge and (FSt[s].Kind = sskGraph) then
+    if pe^.Datum.IsEdge and (FSt[s].Kind = sskGraph) then
     begin
-      raw := StGraphEdgeOfRow(SlotOfSeries(s), el.Datum.DataIndex);
+      raw := StGraphEdgeOfRow(SlotOfSeries(s), pe^.Datum.DataIndex);
       if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
-      if el.Caption.FontSizeLogical > 0 then
+      if pe^.Caption.FontSizeLogical > 0 then
       begin
         if FSt[s].EdgeLabelIdx[raw] < 0 then FSt[s].EdgeLabelIdx[raw] := k;
       end
-      else if el.Silent then
+      else if pe^.Silent then
         StPush(FSt[s].EdgePartIdx[raw], k)
       else if FSt[s].EdgeHostIdx[raw] < 0 then
         FSt[s].EdgeHostIdx[raw] := k;
       Continue;
     end;
     { a chord's ribbon, by its raw link index [Batch 120] }
-    if el.Datum.IsEdge and (FSt[s].Kind = sskChord) then
+    if pe^.Datum.IsEdge and (FSt[s].Kind = sskChord) then
     begin
-      raw := el.Datum.RawDataIndex;
+      raw := pe^.Datum.RawDataIndex;
       if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
-      if (el.Caption.FontSizeLogical = 0) and not el.Silent
+      if (pe^.Caption.FontSizeLogical = 0) and not pe^.Silent
         and (FSt[s].EdgeHostIdx[raw] < 0) then
         FSt[s].EdgeHostIdx[raw] := k;
       Continue;
     end;
-    if el.Datum.IsEdge then Continue;
-    if el.Datum.DataIndex < 0 then
+    if pe^.Datum.IsEdge then Continue;
+    if pe^.Datum.DataIndex < 0 then
     begin
       if not FSt[s].IsLine then Continue;
-      if el.Shape.Kind = cskPolyline then
+      if pe^.Shape.Kind = cskPolyline then
       begin
         SetLength(FSt[s].RunIdx, Length(FSt[s].RunIdx) + 1);
         FSt[s].RunIdx[High(FSt[s].RunIdx)] := k;
       end
-      else if el.Shape.Kind = cskPolygon then
+      else if pe^.Shape.Kind = cskPolygon then
       begin
         SetLength(FSt[s].AreaIdx, Length(FSt[s].AreaIdx) + 1);
         FSt[s].AreaIdx[High(FSt[s].AreaIdx)] := k;
@@ -28382,18 +28507,18 @@ begin
     end;
     slot := SlotOfSeries(s);
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
-    raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
+    raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
     { A GAUGE: the pointer hosts, the progress arc is the peer, its round
       caps (added just before it) follow it; the title and the reading are
       no label of either -- they have no states [F2b] }
     if FSt[s].Kind = sskGauge then
     begin
-      if el.Anim.Role = carGaugePointer then
+      if pe^.Anim.Role = carGaugePointer then
       begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
       end
-      else if (el.Anim.Role = carGaugeProgress) and (FSt[s].PeerHostIdx[raw] < 0) then
+      else if (pe^.Anim.Role = carGaugeProgress) and (FSt[s].PeerHostIdx[raw] < 0) then
       begin
         FSt[s].PeerHostIdx[raw] := k;
         { the end cap rides the arc's end, the start cap is before it }
@@ -28412,8 +28537,8 @@ begin
       parts of the same dispatcher, in the order they were built [F2b] }
     if FSt[s].Kind = sskRadar then
     begin
-      if el.Caption.FontSizeLogical > 0 then Continue;
-      if el.Anim.Role = carRadarLine then
+      if pe^.Caption.FontSizeLogical > 0 then Continue;
+      if pe^.Anim.Role = carRadarLine then
       begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
       end
@@ -28425,7 +28550,7 @@ begin
       the paths' and the texts' states [Batch 152] }
     if FSt[s].Kind = sskMap then
     begin
-      if not el.Silent and (el.Caption.FontSizeLogical = 0)
+      if not pe^.Silent and (pe^.Caption.FontSizeLogical = 0)
         and (FSt[s].HostIdx[raw] < 0) then FSt[s].HostIdx[raw] := k;
       Continue;
     end;
@@ -28441,8 +28566,8 @@ begin
       Continue;
     end;
     { [F2a] A TREE'S EDGE: under its node's paint order, the node's datum }
-    if (FSt[s].Kind = sskTree) and (el.Caption.FontSizeLogical = 0)
-      and (el.Z2 < FTrees[slot].Spec.Z2 + cTyTreeNodeZ2) then
+    if (FSt[s].Kind = sskTree) and (pe^.Caption.FontSizeLogical = 0)
+      and (pe^.Z2 < FTrees[slot].Spec.Z2 + cTyTreeNodeZ2) then
     begin
       if FSt[s].EdgeHostIdx[raw] < 0 then FSt[s].EdgeHostIdx[raw] := k;
       Continue;
@@ -28453,30 +28578,30 @@ begin
       row's }
     if FSt[s].Kind = sskTreemap then
     begin
-      if el.Caption.FontSizeLogical > 0 then
+      if pe^.Caption.FontSizeLogical > 0 then
       begin
-        i := el.Caption.LmHostPlus1 - 1;
+        i := pe^.Caption.LmHostPlus1 - 1;
         if (i >= 0) and (i < AList.Count) and (AList.Element(i).Anim.Role = carTmRect)
           and (FSt[s].LabelIdx[raw] < 0) then FSt[s].LabelIdx[raw] := k;
       end
-      else if el.Anim.Role = carTmRect then
+      else if pe^.Anim.Role = carTmRect then
       begin
-        if (el.Anim.Sub = 1) or (el.Anim.G[4] = 0) then FSt[s].HostIdx[raw] := k
+        if (pe^.Anim.Sub = 1) or (pe^.Anim.G[4] = 0) then FSt[s].HostIdx[raw] := k
         else StPush(FSt[s].PartIdx[raw], k);
       end;
       Continue;
     end;
-    if el.Caption.FontSizeLogical > 0 then
+    if pe^.Caption.FontSizeLogical > 0 then
     begin
       if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
     end
-    else if el.IsGuide then
+    else if pe^.IsGuide then
       FSt[s].GuideIdx[raw] := k
     else if FSt[s].Kind = sskLines then
     begin
       { THE LINE HOSTS, the end symbols after it are parts; the effect
         symbol is no part of the Line group's states [Batch 121] }
-      if el.Silent then Continue;
+      if pe^.Silent then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end
@@ -28484,7 +28609,7 @@ begin
     begin
       { THE GLYPHS ARE THE PATHS, the first the host, the rest parts; the
         inkless bar rect has no states [Batch 90] }
-      if el.Caption.HostTransparent then Continue;
+      if pe^.Caption.HostTransparent then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end
@@ -28492,8 +28617,8 @@ begin
     begin
       { ONE PATH upstream, body and wicks: the body hosts, the wicks follow
         [Batch 90] }
-      if el.Silent then Continue;
-      if el.Anim.Role = carCandleBody then
+      if pe^.Silent then Continue;
+      if pe^.Anim.Role = carCandleBody then
       begin
         if FSt[s].HostIdx[raw] >= 0 then StPush(FSt[s].FollowIdx[raw], FSt[s].HostIdx[raw]);
         FSt[s].HostIdx[raw] := k;
@@ -28501,7 +28626,7 @@ begin
       else if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].FollowIdx[raw], k);
     end
-    else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
+    else if not pe^.Silent and (FSt[s].HostIdx[raw] < 0) then
       FSt[s].HostIdx[raw] := k;
   end;
   { [F2a] a treemap leaf drawn with no content: its background hosts }
@@ -28513,6 +28638,12 @@ begin
           FSt[s].HostIdx[raw] := FSt[s].PartIdx[raw][0];
           FSt[s].PartIdx[raw] := Copy(FSt[s].PartIdx[raw], 1, Length(FSt[s].PartIdx[raw]) - 1);
         end;
+  { the primary ink asked once for every row below (StPrimaryInk), and what
+    rows with no object of their own read alike (StDeclareItem) [P2] }
+  FStInkHold := True;
+  FStInkHeld := False;
+  FStMemoOk := False;
+  FStMemoSpecNode := nil;
   for slot := 0 to High(FBindings) do
   begin
     s := FBindings[slot].SeriesIndex;
@@ -28608,7 +28739,16 @@ begin
       else
         StDeclarePeer(slot, raw, AList);
   end;
+  FStInkHold := False;
+  FStInkHeld := False;
+  FStMemoOk := False;
+  FStMemoNodes := nil;
+  FStMemoSpecNode := nil;
   FStDirty := False;
+  { WHAT THE STATES ARE WRITTEN OVER, kept from here to the end of the
+    build: a frame whose states alone change puts it back and writes them
+    again (StPatchList) [P2] }
+  AList.JournalOpen;
   StWrite(AList);
   { THE POINTER STILL OVER A REUSED ELEMENT: zrender's hover target is the
     same element, so the next move sends neither an out nor an over }
@@ -28722,6 +28862,17 @@ begin
 end;
 
 procedure TTyAdvanceChart.StWrite(AList: TTyPaintList);
+begin
+  { a state write: journaled, where a build's session is open [P2] }
+  AList.JournalRecord(True);
+  try
+    StWriteRows(AList);
+  finally
+    AList.JournalRecord(False);
+  end;
+end;
+
+procedure TTyAdvanceChart.StWriteRows(AList: TTyPaintList);
 var
   s, raw, k: Integer;
   el: TTyChartElement;
@@ -28835,12 +28986,37 @@ begin
   end;
 end;
 
+{ A FRAME WHOSE STATES ALONE CHANGED [P2]: the list back to what the last
+  build's state writes went over (its journal), and those writes again --
+  StWrite, the breadcrumb's, the maps', the markers' -- in the build's order.
+  Not where a geo's flags changed (only TyBuildGeo draws those), a relayout
+  or an update is pending, or anything else wrote to the list since the
+  build: then it is built again, as before. }
+function TTyAdvanceChart.StPatchList: Boolean;
+begin
+  Result := False;
+  if GStPatchOff or FStGeoApplied or (FPaintList = nil) or not FPaintListValid
+    or FDirty or FAnimPending or FExporting or not FPaintList.JournalReady then Exit;
+  FPaintList.JournalRewind;
+  { the incremental layer holds the chunks as they were written: drawn
+    again, as after a build [Batch 119] }
+  FProgLayerOk := False;
+  StWrite(FPaintList);
+  TmCrumbStates(FPaintList);
+  MapRepatch(FPaintListPPI);
+  StSyncMarks(FPaintList);
+  FPaintList.JournalClose;
+  Inc(GStPatches);
+  Result := True;
+end;
+
 function TTyAdvanceChart.StApplyChanged: Boolean;
 var s, raw: Integer;
 begin
   Result := False;
-  { the geos' flags too [Batch 148] }
-  if GeoApplyChanged then Result := True;
+  { the geos' flags too [Batch 148] -- which only a build draws [P2] }
+  FStGeoApplied := GeoApplyChanged;
+  if FStGeoApplied then Result := True;
   { and a map picture's, which are its series' rows' [Batch 152] }
   if MapApplyChanged then Result := True;
   { a breadcrumb item's hover [F2a] }
@@ -29563,7 +29739,7 @@ procedure TTyAdvanceChart.StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPa
 var
   s: Integer;
   item: PTyStItem;
-  host: TTyChartElement;
+  ph: PTyChartElement;
   nodes: TTyStNodeArray;
   has, bolder, disabled, prevWas: Boolean;
   prev: TTyStNames;
@@ -29571,7 +29747,7 @@ var
 begin
   s := FBindings[ASlot].SeriesIndex;
   item := @FSt[s].EdgeRows[AEdge];
-  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  ph := AList.Ref(FSt[s].EdgeHostIdx[AEdge]);
   nodes := StEdgeNodes(s, AEdge);
   prevWas := item^.Host.Exists;
   prev := item^.Host.States;
@@ -29580,7 +29756,7 @@ begin
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
   for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
-  item^.Host.Rest := StRestOf(host);
+  item^.Host.Rest := StRestOf(ph^);
   for n := Low(TTyStName) to High(TTyStName) do
     item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
   { ChordSeries' defaultOption: emphasis.lineStyle.opacity 0.5 }
@@ -29644,7 +29820,8 @@ procedure TTyAdvanceChart.StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintLi
 var
   s, idx: Integer;
   item: PTyStItem;
-  host, cap: TTyChartElement;
+  cap: TTyChartElement;
+  ph: PTyChartElement;
   nodes: TTyStNodeArray;
   has, bolder, disabled, was, prevWas: Boolean;
   prev: TTyStNames;
@@ -29654,7 +29831,7 @@ var
 begin
   s := FBindings[ASlot].SeriesIndex;
   item := @FSt[s].EdgeRows[AEdge];
-  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  ph := AList.Ref(FSt[s].EdgeHostIdx[AEdge]);
   nodes := StEdgeNodes(s, AEdge);
   prevWas := item^.Host.Exists;
   prev := item^.Host.States;
@@ -29663,7 +29840,7 @@ begin
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
   for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
-  item^.Host.Rest := StRestOf(host);
+  item^.Host.Rest := StRestOf(ph^);
   for n := Low(TTyStName) to High(TTyStName) do
   begin
     obj := TyStReadStyle(nodes, cStNames[n], 'lineStyle:item', bolder);
@@ -29919,7 +30096,8 @@ procedure TTyAdvanceChart.StDeclareGraphEdge(ASlot, AEdge: Integer; AList: TTyPa
 var
   s, idx, k: Integer;
   item: PTyStItem;
-  host, cap: TTyChartElement;
+  cap: TTyChartElement;
+  ph: PTyChartElement;
   nodes: TTyStNodeArray;
   has, bolder, disabled, was, prevWas, normalShow, stShow: Boolean;
   prev: TTyStNames;
@@ -29938,7 +30116,7 @@ var
 begin
   s := FBindings[ASlot].SeriesIndex;
   item := @FSt[s].EdgeRows[AEdge];
-  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  ph := AList.Ref(FSt[s].EdgeHostIdx[AEdge]);
   nodes := StEdgeNodes(s, AEdge);
   prevWas := item^.Host.Exists;
   prev := item^.Host.States;
@@ -29947,7 +30125,7 @@ begin
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
   for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
-  item^.Host.Rest := StRestOf(host);
+  item^.Host.Rest := StRestOf(ph^);
   for n := Low(TTyStName) to High(TTyStName) do
     item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
   { ---- the arrows ---- }
@@ -30088,7 +30266,8 @@ procedure TTyAdvanceChart.StDeclareTreemap(ASlot, ARaw: Integer; AList: TTyPaint
 var
   s, idx, k: Integer;
   item: PTyStItem;
-  host, cap: TTyChartElement;
+  cap: TTyChartElement;
+  ph: PTyChartElement;
   nodes: TTyStNodeArray;
   has, was, normalShow, stShow, isBg: Boolean;
   n: TTyStName;
@@ -30135,13 +30314,13 @@ var
 begin
   s := FBindings[ASlot].SeriesIndex;
   item := @FSt[s].Rows[ARaw];
-  host := AList.Element(FSt[s].HostIdx[ARaw]);
+  ph := AList.Ref(FSt[s].HostIdx[ARaw]);
   nodes := StNodes(s, ARaw);
   item^.NoDispatch := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   { a leaf's node group dispatches: its content (or its lone background)
     hosts; a parent's background alone }
-  item^.HasGroup := (host.Anim.Sub = 1) or (host.Anim.G[4] <> 0);
-  Declare(item^.Host, host);
+  item^.HasGroup := (ph^.Anim.Sub = 1) or (ph^.Anim.G[4] <> 0);
+  Declare(item^.Host, ph^);
   if Length(item^.Parts) <> Length(FSt[s].PartIdx[ARaw]) then SetLength(item^.Parts, 0);
   was := Length(item^.Parts) > 0;
   SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
@@ -30164,7 +30343,7 @@ begin
   else
   begin
     cap := AList.Element(idx);
-    isBg := host.Anim.Sub = 0;
+    isBg := ph^.Anim.Sub = 0;
     if isBg then key := 'upperLabel' else key := 'label';
     item^.Label_.Exists := True;
     item^.Label_.IsPath := False;
@@ -40540,7 +40719,7 @@ end;
 procedure TTyAdvanceChart.UtStaleHarvest;
 var
   i, k: Integer;
-  el: TTyChartElement;
+  pe: PTyChartElement;
   idx: TFPHashList;
   key: string;
   v: Pointer;
@@ -40550,8 +40729,8 @@ begin
   try
     for i := 0 to FPaintList.Count - 1 do
     begin
-      el := FPaintList.Element(i);
-      if (el.Anim.Role <> carSunPiece) or (el.Anim.Index <= 0) then Continue;
+      pe := FPaintList.Ref(i);
+      if (pe^.Anim.Role <> carSunPiece) or (pe^.Anim.Index <= 0) then Continue;
       if idx = nil then
       begin
         idx := TFPHashList.Create;
@@ -40559,14 +40738,14 @@ begin
           idx.Add(IntToStr(FUtStale[k].Anim.Series) + ':' + IntToStr(FUtStale[k].Anim.Index),
             Pointer(PtrInt(k + 1)));
       end;
-      key := IntToStr(el.Anim.Series) + ':' + IntToStr(el.Anim.Index);
+      key := IntToStr(pe^.Anim.Series) + ':' + IntToStr(pe^.Anim.Index);
       v := idx.Find(key);
       if v <> nil then
-        FUtStale[PtrInt(v) - 1] := el
+        FUtStale[PtrInt(v) - 1] := pe^
       else
       begin
         SetLength(FUtStale, Length(FUtStale) + 1);
-        FUtStale[High(FUtStale)] := el;
+        FUtStale[High(FUtStale)] := pe^;
         idx.Add(key, Pointer(PtrInt(Length(FUtStale))));
       end;
     end;
@@ -42376,8 +42555,9 @@ begin
   if StApplyChanged then
   begin
     FStatic.Drop;
-    { the states restyle the list: it is built again [Batch 119] }
-    FProgReuse := False;
+    { the states restyle the list: it is built again [Batch 119] -- or,
+      where only they changed, patched where it stands [P2] }
+    FProgReuse := StPatchList;
   end;
 
   if FStatic.NeedsRender(w, h) then
@@ -43238,7 +43418,8 @@ begin
     change of them is repainted in rects where it can be }
   if StApplyChanged then
   begin
-    FProgReuse := False;
+    { built again, or patched where only the states changed [P2] }
+    FProgReuse := StPatchList;
     partial := DrCanPartial(w, h) and DrStaticPartial(R, APPI, pool);
     if not partial then StaticDrop;
   end;
