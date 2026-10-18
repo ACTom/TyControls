@@ -737,6 +737,12 @@ begin
     + ' series: [{ type: ''graph'', data: [{ id: ''n1'', name: ''a'' }] },'
     + ' { type: ''tree'', animationDurationUpdate: 500 },'
     + ' { type: ''lines'', blendMode: ''lighter'', data: [{ effect: { show: true } }] }] }'));
+  { [T1] what the universal-transition pages write: every series' update
+    animation and its universalTransition }
+  AssertEquals('', IssuesOf(
+    '{ series: [{ type: ''map'', map: ''USA'', animationDurationUpdate: 1000 },'
+    + ' { type: ''treemap'', animationDurationUpdate: 1000, universalTransition: true },'
+    + ' { type: ''sunburst'', universalTransition: true }] }'));
   { BY NODE: a graph's `id` is not every series' `id` on its data items }
   AssertEquals('series[0].data[0].id', IssuesOf(
     '{ series: [{ type: ''pie'', data: [{ id: ''n1'', value: 1 }] }] }'));

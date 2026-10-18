@@ -943,7 +943,7 @@ const
     A key upstream does NOT read stays out of here and stays reported --
     toolbox.feature.mark, the root `calculable`, an inside dataZoom's
     `realtime` -- because saying nothing about it would be the lie. }
-  cRuntimeKeys: array[0..46] of TRuntimeKey = (
+  cRuntimeKeys: array[0..50] of TRuntimeKey = (
     { model/mixin/palette.ts:53 -- a series' own palette }
     (Parent: 'series-scatter'; Key: 'color'),
     { label/labelStyle.ts:551 }
@@ -954,6 +954,16 @@ const
     (Parent: 'series-tree'; Key: 'animationDuration'),
     { chart/tree/TreeSeries.ts:315 }
     (Parent: 'series-tree'; Key: 'animationDurationUpdate'),
+    { animation/basicTransition.ts:90 -- getAnimationConfig, for any series;
+      the map's regions are updated through it (map-bar-morph) }
+    (Parent: 'series-map'; Key: 'animationDurationUpdate'),
+    { chart/treemap/TreemapSeries.ts:279 -- in the series' own defaults }
+    (Parent: 'series-treemap'; Key: 'animationDurationUpdate'),
+    { model/Series.ts:671 isUniversalTransitionEnabled -- any series
+      (treemap-sunburst-transition) }
+    (Parent: 'series-treemap'; Key: 'universalTransition'),
+    { model/Series.ts:671 }
+    (Parent: 'series-sunburst'; Key: 'universalTransition'),
     { chart/chord/ChordSeries.ts:146 -- the node labels }
     (Parent: 'series-chord'; Key: 'label'),
     { chart/custom/CustomView.ts:126/712 -- deprecated, still read }
