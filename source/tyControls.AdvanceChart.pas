@@ -42184,7 +42184,7 @@ function TTyAdvanceChart.AnimPart(AContinuous: Boolean): TTyPaintList;
 var
   frame: TTyPaintList;
   i, h: Integer;
-  el: TTyChartElement;
+  pe: PTyChartElement;
   cont: Boolean;
 begin
   frame := AnimFrame;
@@ -42192,22 +42192,23 @@ begin
   FAnimSplit.Clear;
   Result := FAnimSplit;
   if frame = nil then Exit;
+  { read in place, copied only into the half it goes to [P2] }
   for i := 0 to frame.Count - 1 do
   begin
-    el := frame.Element(i);
+    pe := frame.Ref(i);
     { a ripple, an effect symbol, and a label hanging off one; a lines
       effect symbol, and every element of a lines series with a trail
       (its layer is redrawn every frame) [Batch 121] }
-    cont := el.Anim.Role in [carRipple, carEffectSymbol, carLinesEffect];
-    if (not cont) and (el.Datum.Kind = ctkSeries)
-      and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then cont := True;
-    if (not cont) and (el.Anim.Role = carLabel) then
+    cont := pe^.Anim.Role in [carRipple, carEffectSymbol, carLinesEffect];
+    if (not cont) and (pe^.Datum.Kind = ctkSeries)
+      and (LinesTrailAlpha(pe^.Datum.SeriesIndex) > 0) then cont := True;
+    if (not cont) and (pe^.Anim.Role = carLabel) then
     begin
-      h := el.Anim.HostPlus1 - 1;
+      h := pe^.Anim.HostPlus1 - 1;
       cont := (h >= 0) and (h < frame.Count)
-        and (frame.Element(h).Anim.Role = carEffectSymbol);
+        and (frame.Ref(h)^.Anim.Role = carEffectSymbol);
     end;
-    if cont = AContinuous then FAnimSplit.Add(el);
+    if cont = AContinuous then FAnimSplit.Add(pe^);
   end;
 end;
 

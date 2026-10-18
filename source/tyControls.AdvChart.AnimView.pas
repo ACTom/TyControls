@@ -4410,6 +4410,11 @@ end;
 function StSameValue(const A, B: TTyAnimValue): Boolean;
 var ca, cb: TTyChartColor; oa, ob: Boolean;
 begin
+  { one string twice parses to one answer: at rest every state key's value
+    is its rest's, and an animation frame asked that of every element
+    [P2] }
+  if (A.Kind = avkString) and (B.Kind = avkString) and (A.Str = B.Str) then
+    Exit(True);
   if (A.Kind = avkString) or (B.Kind = avkString) then
   begin
     oa := StColourOf(A, ca);
@@ -6937,7 +6942,7 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   const AStBind: TTyChartAnimProxyArray);
 var
   i, h, k, nx: Integer;
-  el, hostS, hostF: TTyChartElement;
+  el: TTyChartElement;
   x0, y0, x1, y1, dx, dy: Double;
   moved: Boolean;
   g, bp: TTyChartAnimProxy;
@@ -6949,7 +6954,8 @@ begin
   nx := 0;
   for i := 0 to ASource.Count - 1 do
   begin
-    el := ASource.Element(i);
+    { one copy, the one the frame keeps: read in place [P2] }
+    el := ASource.Ref(i)^;
     if (i <= High(ABind)) and (ABind[i] <> nil) then TyAnimApply(el, ABind[i]);
     { A MORPH and a universal transition's style [Batch 136]; a treemap
       rect's from the set, its proxy role being none [Batch 138] }
@@ -7020,12 +7026,10 @@ begin
     { (a tree node's group slides on after its symbol rests) }
     if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
       and (h <= High(ABind)) and (ABind[h] <> nil)
-      and (not ABind[h].AtFinal or (ASource.Element(h).Anim.Role = carTreeNode)) then
+      and (not ABind[h].AtFinal or (ASource.Ref(h)^.Anim.Role = carTreeNode)) then
     begin
-      hostS := ASource.Element(h);
-      hostF := ADest.Element(h);
-      AnchorOn(hostS, el, x0, y0);
-      AnchorOn(hostF, el, x1, y1);
+      AnchorOn(ASource.Ref(h)^, el, x0, y0);
+      AnchorOn(ADest.Ref(h)^, el, x1, y1);
       dx := x1 - x0;
       dy := y1 - y0;
       moved := (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0));
