@@ -21,6 +21,13 @@ type
     { #82: LCL-GTK3's IsWayland and IMCommitStr exist only from Lazarus 4.99 (trunk) on, so the
       package defines TY_LCL_FROM_4_99 there and tyControls.Gtk3WS reads them only under it. }
     procedure TestTheGtk3TrunkMembersFollowTheLazarusVersion;
+    { #89: LCL-Cocoa wraps a form's content and every custom control in an NSScrollView. In a
+      full-size-content window AppKit gives each one under the title bar an automatic top
+      content inset, and before macOS 15 its hit test keeps that inset to the scroll view:
+      a press on a control in TTyTitleBar went to the scroll view around it (seen on 12.7,
+      not on 15.3). A category on TCocoaScrollView sends such a press on into the document.
+      Nothing here compiles for macOS: this pins the shape, macOS 12 is the proof. }
+    procedure TestAPressUnderTheMacTitleBarReachesTheControl;
   end;
 
 implementation
@@ -66,6 +73,29 @@ begin
     Pos('{$IFDEF TY_LCL_FROM_4_99}' + LineEnding + '  { The backend already knows', unitText) > 0);
   AssertTrue('and so is IMCommitStr',
     Pos('{$IFDEF TY_LCL_FROM_4_99}' + LineEnding + '  if GTK3WidgetSet = nil then Exit;', unitText) > 0);
+end;
+
+procedure TPackageConditionalsTest.TestAPressUnderTheMacTitleBarReachesTheControl;
+var unitText, body: string;
+  i, e: Integer;
+begin
+  unitText := FileText('source' + PathDelim + 'tyControls.CocoaWS.pas');
+  AssertTrue('a category on LCL-Cocoa''s scroll view',
+    Pos('objccategory(TCocoaScrollView)', unitText) > 0);
+  AssertTrue('replacing hitTest:',
+    Pos('function hitTest(aPoint: NSPoint): NSView; message ''hitTest:''; reintroduce;',
+      unitText) > 0);
+  i := Pos('function TyScrollViewInsetHit.hitTest(aPoint: NSPoint): NSView;', unitText);
+  AssertTrue('implemented', i > 0);
+  e := Pos(LineEnding + 'end;', Copy(unitText, i, MaxInt));
+  body := Copy(unitText, i, e);
+  AssertTrue('AppKit''s answer first', Pos('inherited hitTest(aPoint)', body) > 0);
+  AssertTrue('only in a window whose frame TTyForm runs (full-size content)',
+    Pos('NSFullSizeContentViewWindowMask', body) > 0);
+  AssertTrue('and only where AppKit kept the press to the scroll view itself',
+    Pos('Result <> NSView(self)', body) > 0);
+  AssertTrue('then the document''s own hit test',
+    (Pos('doc := NSView(documentView);', body) > 0) and (Pos('doc.hitTest(', body) > 0));
 end;
 
 initialization

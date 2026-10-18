@@ -62,7 +62,8 @@ uses
     CocoaFullControlEdit. A uses clause cannot ask a unit of its own clause which Lazarus it is,
     so the question is asked here, of LCLVersion in the interface's -- the same with the package
     and without it (a project with source/ on its search path, #88). }
-  {$IF lcl_fullversion >= 4000000}CocoaFullControlEdit{$ELSE}CocoaPrivate{$ENDIF};
+  {$IF lcl_fullversion >= 4000000}CocoaFullControlEdit{$ELSE}CocoaPrivate{$ENDIF},
+  CocoaScrollers;   // TCocoaScrollView, the scroll view a press under the title bar stops at (#89)
 
 type
   { Bridges macOS NSTextInputClient composition (via TCocoaFullControlEdit) to a TTyEdit/TTyMemo.
@@ -149,6 +150,23 @@ type
     procedure performWindowDragWithEvent(event: NSEvent); message 'performWindowDragWithEvent:';
   end;
 
+  { A PRESS UNDER THE TITLE BAR REACHES THE CONTROL (#89). LCL-Cocoa wraps a form's content
+    (TCocoaWindowContent) and every custom control (TCocoaManualScrollHost) in an NSScrollView.
+    In a full-size-content window -- the frame TTyForm runs, see TyCocoaApplyWindowFrame --
+    AppKit gives each scroll view under the title bar an automatic top content inset the
+    height of the system's bar (28 pt), and before macOS 15 its hit test keeps that inset to
+    itself: the press goes to the scroll view, never to the control inside it. On macOS 12.7
+    no click on a control in TTyTitleBar got through in the demo; in antdesign, with taller
+    controls, the lower part of each one worked (15.3 goes on in). Zeroing the inset only
+    moves the stop one wrapper further in, since every control's wrapper has its own; so
+    where AppKit answered the scroll view itself, its document is asked, and a view it finds
+    gets the press. Every wrapper on the way in is a TCocoaScrollView, so this runs at each.
+    Other windows, and presses AppKit already sends on, keep AppKit's answer. TCocoaScrollView
+    has no hitTest: of its own; inherited is NSScrollView's. }
+  TyScrollViewInsetHit = objccategory(TCocoaScrollView)
+    function hitTest(aPoint: NSPoint): NSView; message 'hitTest:'; reintroduce;
+  end;
+
   TSystemButtons = array[0..2] of NSButton;
 
 const
@@ -158,6 +176,20 @@ const
 
 var
   GSystemInset: Integer = -1;
+
+function TyScrollViewInsetHit.hitTest(aPoint: NSPoint): NSView;
+var
+  doc, inner: NSView;
+begin
+  Result := inherited hitTest(aPoint);
+  if (Result <> NSView(self)) or (window = nil)
+    or ((window.styleMask and NSFullSizeContentViewWindowMask) = 0) then Exit;
+  doc := NSView(documentView);
+  if (doc = nil) or (contentView = nil) then Exit;
+  { the document's hit test takes a point in its superview's coordinates: the clip view's }
+  inner := doc.hitTest(contentView.convertPoint_fromView(aPoint, superview));
+  if inner <> nil then Result := inner;
+end;
 
 function FormWindow(AForm: TCustomForm): NSWindow;
 begin
