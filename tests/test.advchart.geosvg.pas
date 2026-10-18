@@ -1362,9 +1362,6 @@ begin
   AssertFalse(TyGeoMapIsSvg('m1'));
 end;
 
-{ contain/path.ts as zrender has it: a cubic whose y is only quadratic
-  finds no root, so the region between it and its closing line is outside
-  -- the browser's own fill would say inside }
 { a division by nought in the host, traps on: EZeroDivide, not an
   EInvalidOp a sticky flag of the masked stretch left behind (MXCSR) }
 function HostTrapClass: string;
@@ -1380,6 +1377,9 @@ begin
   end;
 end;
 
+{ contain/path.ts as zrender has it: a cubic whose y is only quadratic
+  finds no root, so the region between it and its closing line is outside
+  -- the browser's own fill would say inside }
 procedure TAdvChartGeoSvgTest.TestZrenderContainQuirks;
 var p: TTyZrPath; hit: TTyZrHit;
 begin
