@@ -1438,6 +1438,9 @@ type
     FAnimFrame: TTyPaintList;
     FAnimNow: Double;
     FAnimTimer: TTimer;
+    { THE PAUSE [F3b]: a driver with no clips that is paused and resumed
+      with the chart's -- a driver made later takes its pause from it }
+    FPauseClock: TTyAnimation;
     FAnimMode: TTyChartAnimationMode;
     FAnimPending: Boolean;
     FAnimLive: Boolean;
@@ -1686,6 +1689,13 @@ type
     procedure AnimArmTimer;
     procedure AnimTimerFired(Sender: TObject);
     procedure AnimTickBody(ANowMs: Double);
+    { a driver that takes the chart's pause [F3b] }
+    function NewAnimDriver: TTyAnimation;
+    { every driver of the chart, the nil ones left out }
+    function AnimDrivers: TFPList;
+    { a flush while paused steps every driver, as upstream's one animation
+      steps every clip [F3b] }
+    procedure AnimFlushOthers(AOwn: TTyAnimation);
     { every live clip loops }
     function AnimLoopOnly: Boolean;
     { the pointer's slide: synced to the hover, dropped with the build }
@@ -3765,6 +3775,18 @@ type
     { ms; NaN (the default) is the machine's clock -- and only then does the
       timer run }
     property AnimNow: Double read FAnimNow write FAnimNow;
+    { ---- pause [F3b] ---- }
+    { zrender's animation.pause / resume (chart.getZr().animation): at the
+      chart's clock every driver stops counting time; while paused no frame
+      steps (AnimTick does nothing: no clip moves, no progressive chunk is
+      drawn, no `rendered`), though a setOption's flush still steps every
+      clip once, as upstream's refreshImmediately does. resume adds the
+      stretch to each driver's paused time, so a clip goes on from where it
+      stood. A second pause, or a resume while running, does nothing. A
+      single animator pauses with TTyAnimator.Pause. }
+    procedure AnimPause;
+    procedure AnimResume;
+    function AnimPaused: Boolean;
     { ---- the tooltip's box [Batch 100] ---- }
     { ms; NaN (the default) is the machine's clock -- and only then does the
       timer run. A test sets it and steps TooltipTick. }
@@ -4477,11 +4499,12 @@ begin
   FAnimNow := NaN;
   FAnimMode := camAuto;
   FProgStepCost := NaN;
-  FGfxAnim := TTyAnimation.Create;
+  FPauseClock := TTyAnimation.Create;
+  FGfxAnim := NewAnimDriver;
   FGfxView := TTyGfxView.Create;
   FGfxView.Animation := FGfxAnim;
   FGfxUnder := TTyPaintList.Create;
-  FCuAnim := TTyAnimation.Create;
+  FCuAnim := NewAnimDriver;
   FGfxW := NaN;
   FGfxH := NaN;
   FTbStatus := TStringList.Create;
@@ -4583,6 +4606,7 @@ begin
   FreeAndNil(FGfxAnim);
   { after the custom views, whose elements' animators it drives [Batch 124] }
   FreeAndNil(FCuAnim);
+  FreeAndNil(FPauseClock);
   FreeAndNil(FGfxUnder);
   inherited Destroy;
 end;
@@ -15883,7 +15907,7 @@ begin
     and TyAnimOptTruthy(TyAnimGetShallow(model, 'animation'));
   labelsOn := TyAnimIsEnabled(model);
   if not (wrapOn or labelsOn) then Exit;
-  if FAnim = nil then FAnim := TTyAnimation.Create;
+  if FAnim = nil then FAnim := NewAnimDriver;
   A := Default(TTyTmAnim);
   SetLength(A.Groups, nn);
   SetLength(A.Rects, nn);
@@ -29121,7 +29145,7 @@ var
   threshold: Double;
 begin
   if not FStProxied or (FPaintList = nil) then Exit;
-  if FAnim = nil then FAnim := TTyAnimation.Create;
+  if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
@@ -31874,7 +31898,7 @@ begin
   end;
   { the indicator as _createIndicator makes it: at half the item, at 0,
     zrender's default fill; its label at the origin }
-  if FVmAnim = nil then FVmAnim := TTyAnimation.Create;
+  if FVmAnim = nil then FVmAnim := NewAnimDriver;
   FVmIndBag[AIndex] := TTyAnimBag.Create;
   FVmIndBag[AIndex].Animation := FVmAnim;
   FVmIndBag[AIndex].Attr(TyAnimProps([TyAnimProp('x', TyAnimNum(L.ItemW / 2)),
@@ -35599,7 +35623,7 @@ begin
     p := FLegProxies[i];
     if p = nil then
     begin
-      if FLegAnim = nil then FLegAnim := TTyAnimation.Create;
+      if FLegAnim = nil then FLegAnim := NewAnimDriver;
       p := TTyChartAnimProxy.Create(-1, i, 'legend.scroll');
       p.Animation := FLegAnim;
       { THE FIRST RENDER: the content group stands unscrolled }
@@ -40967,7 +40991,7 @@ begin
     if AnimAllowed then
     begin
       FAnimPending := False;
-      if FAnim = nil then FAnim := TTyAnimation.Create;
+      if FAnim = nil then FAnim := NewAnimDriver;
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }
@@ -41039,6 +41063,7 @@ begin
   FAnimFlush := False;
   if FAnim = nil then Exit;
   FAnim.Update(AnimClock, True);
+  AnimFlushOthers(FAnim);
   FAnimLive := FAnim.ClipCount > 0;
   FAnimContinuous := FAnimLive and AnimLoopOnly;
   AnimArmTimer;
@@ -41049,6 +41074,7 @@ begin
   if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
     or CuLive or TlLive)
     and IsNan(FAnimNow)
+    and not AnimPaused
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -41067,6 +41093,98 @@ end;
 procedure TTyAdvanceChart.AnimTimerFired(Sender: TObject);
 begin
   AnimTick(AnimClock);
+end;
+
+{ ==================== the pause [F3b] ====================
+
+  Animation.pause / resume (zrender/src/animation/Animation.ts): the clock a
+  driver steps its clips at is the wall clock less every paused stretch;
+  the frame loop skips update() while paused, and only a flush steps. The
+  chart has one driver upstream; here each part has its own, so they pause
+  together and a flush while paused steps them all. }
+
+function TTyAdvanceChart.NewAnimDriver: TTyAnimation;
+begin
+  Result := TTyAnimation.Create;
+  Result.AdoptPause(FPauseClock);
+end;
+
+function TTyAdvanceChart.AnimDrivers: TFPList;
+
+  procedure Put(A: TTyAnimation);
+  begin
+    if A <> nil then Result.Add(A);
+  end;
+
+begin
+  Result := TFPList.Create;
+  Put(FAnim);
+  Put(FPtrAnim);
+  Put(FLegAnim);
+  Put(FLoadAnim);
+  Put(FGfxAnim);
+  Put(FCuAnim);
+  Put(FTlAnim);
+  Put(FVmAnim);
+end;
+
+procedure TTyAdvanceChart.AnimFlushOthers(AOwn: TTyAnimation);
+var
+  list: TFPList;
+  i: Integer;
+  now_: Double;
+begin
+  if not AnimPaused then Exit;
+  now_ := AnimClock;
+  list := AnimDrivers;
+  try
+    for i := 0 to list.Count - 1 do
+      if TTyAnimation(list[i]) <> AOwn then TTyAnimation(list[i]).Update(now_, True);
+  finally
+    list.Free;
+  end;
+  InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.AnimPause;
+var
+  list: TFPList;
+  i: Integer;
+  now_: Double;
+begin
+  if AnimPaused then Exit;
+  now_ := AnimClock;
+  FPauseClock.Pause(now_);
+  list := AnimDrivers;
+  try
+    for i := 0 to list.Count - 1 do TTyAnimation(list[i]).Pause(now_);
+  finally
+    list.Free;
+  end;
+  AnimArmTimer;
+end;
+
+procedure TTyAdvanceChart.AnimResume;
+var
+  list: TFPList;
+  i: Integer;
+  now_: Double;
+begin
+  if not AnimPaused then Exit;
+  now_ := AnimClock;
+  FPauseClock.Resume(now_);
+  list := AnimDrivers;
+  try
+    for i := 0 to list.Count - 1 do TTyAnimation(list[i]).Resume(now_);
+  finally
+    list.Free;
+  end;
+  AnimArmTimer;
+end;
+
+function TTyAdvanceChart.AnimPaused: Boolean;
+begin
+  Result := (FPauseClock <> nil) and FPauseClock.Paused;
 end;
 
 { ==================== the bar race (realtimeSort) [Batch 135] ==================== }
@@ -41538,6 +41656,9 @@ end;
 procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
 var ran, was: Boolean;
 begin
+  { THE LOOP OF A PAUSED ANIMATION steps nothing (`!self._paused &&
+    self.update()`): no clip, no chunk, no frame event [F3b] }
+  if AnimPaused then Exit;
   { ONE FRAME: zrender's clips step, then the chart's _onframe draws its
     chunks, then the flush -- `rendered` once for the frame, and `finished`
     when nothing is left moving or to draw [Batch 119] }
@@ -41807,7 +41928,7 @@ begin
     key := PtrKeyOf(hit.Axis);
     props := PtrProps(hit, at);
     if FPtrProxies = nil then FPtrProxies := TFPList.Create;
-    if FPtrAnim = nil then FPtrAnim := TTyAnimation.Create;
+    if FPtrAnim = nil then FPtrAnim := NewAnimDriver;
     p := nil;
     for k := 0 to FPtrProxies.Count - 1 do
       if TTyChartAnimProxy(FPtrProxies[k]).Role = key then
@@ -43531,6 +43652,7 @@ begin
     FGfxH := h;
     { the flush that steps every new clip at the setOption instant }
     FGfxAnim.Update(AnimClock, True);
+    AnimFlushOthers(FGfxAnim);
     AnimArmTimer;
   end
   { NOT BEFORE THE FIRST RENDER: the size is NaN until then, and comparing
@@ -45194,6 +45316,7 @@ begin
   if CuLive then
   begin
     FCuAnim.Update(AnimClock, True);
+    AnimFlushOthers(FCuAnim);
     AnimArmTimer;
   end;
 end;
@@ -45765,7 +45888,7 @@ begin
   FLoadShown := True;
   if FLoadCfg.ShowSpinner then
   begin
-    if FLoadAnim = nil then FLoadAnim := TTyAnimation.Create;
+    if FLoadAnim = nil then FLoadAnim := NewAnimDriver;
     FLoadArc := TTyAnimBag.Create;
     FLoadArc.Animation := FLoadAnim;
     { the clips start at their first step: the next tick, upstream's next
@@ -46142,7 +46265,7 @@ begin
     TlArmTimer;
     Exit;
   end;
-  if FTlAnim = nil then FTlAnim := TTyAnimation.Create;
+  if FTlAnim = nil then FTlAnim := NewAnimDriver;
   if FTlView = nil then
   begin
     Inc(FTlUidSeq);
