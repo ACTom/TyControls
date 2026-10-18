@@ -642,7 +642,13 @@ function chartCases() {
     + 'old bars grouped g, the new pie grouped z -- both keyed g, many to many, by id one to one', [
     s(cart([barS({ id: 'a', dataGroupId: 'g' })])),
     s(solo(pieS({ id: 'b', dataGroupId: 'z' })), null, false, T({ seriesIndex: 0 }, { seriesIndex: 0 }))]);
-  add('opt.dimension', 'a finder\'s dimension changes nothing (upstream reads it into groupIdDim and never uses it)', [
+  add('opt.groupbug.keys', 'the same bug where the keys decide: the new pie\'s names are not the old bars\' (no ids to '
+    + 'pair), so the groups key the items -- the new side keyed by the OLD series\' g, not its own z, and the four '
+    + 'bars combine into the one sector (many to one)', [
+    s(cart([barS({ id: 'a', dataGroupId: 'g' })])),
+    s(solo(pieS({ id: 'b', dataGroupId: 'z' }, [{ name: 'P', value: 3 }])), null, false,
+      T({ seriesIndex: 0 }, { seriesIndex: 0 }))]);
+  add('opt.dimension','a finder\'s dimension changes nothing (upstream reads it into groupIdDim and never uses it)', [
     s(cart([barS({ id: 'a' })])), s(solo(pieS({ id: 'b' })), null, false,
       T({ seriesIndex: 0, dimension: 1 }, { seriesIndex: 0, dimension: 0 }))]);
   add('opt.custom', 'the same custom series with the transition option: its items are made anew (isUniversalTransition'
@@ -691,6 +697,11 @@ function chartCases() {
     data: VALS.map((v, i) => (i % 2 ? [v, v - 2, v - 3, v + 1] : [v - 2, v, v - 3, v + 1])) }]));
   pair('radar', 'radar polygons (the line and its symbols)', () => ({ color: PALETTE,
     radar: { startAngle: 125, indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }] },
+    series: [{ type: 'radar', id: 'k', universalTransition: true,
+      data: NAMES.map((n, i) => ({ name: n, value: [VALS[i], (VALS[i] + 3) % 10, 9 - VALS[i]] })) }] }));
+  // (a start angle where every axis' atan2(sin, cos) is V8's to the last bit, not the C library's)
+  pair('radar8', 'radar polygons from startAngle 8', () => ({ color: PALETTE,
+    radar: { startAngle: 8, indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }] },
     series: [{ type: 'radar', id: 'k', universalTransition: true,
       data: NAMES.map((n, i) => ({ name: n, value: [VALS[i], (VALS[i] + 3) % 10, 9 - VALS[i]] })) }] }));
   // (start and end angles whose radians depend on the order of the division)
@@ -763,6 +774,8 @@ function guards(charts) {
   must(combs(byId('custom.pin-pie')).length === 4, 'custom.pin-pie: not four combining');
   must(combs(byId('lines.sym-pie')).length === 4, 'lines.sym-pie: not four combining');
   none('opt.missing');
+  must(combs(byId('opt.groupbug.keys')).length === 1,
+    'opt.groupbug.keys: the old group does not key the new side');
   atLeast('opt.array', 8, morphs);
   atLeast('mixed.list', 4, combs);
   must(byId('sb-sb.recolor').elements.some(e => e.item && Array.isArray(e.style.fill)), 'sb-sb.recolor: no style moves');
@@ -783,6 +796,7 @@ function guards(charts) {
   }
   must(morphs(byId('bar-radar')).length === 16, 'bar-radar: not sixteen morphs (a line and three symbols each)');
   must(combs(byId('radar-bar')).length === 4, 'radar-bar: not four combining');
+  must(morphs(byId('bar-radar8')).length === 16 && combs(byId('radar8-bar')).length === 4, 'radar8: not as radar');
   must(morphs(byId('bar-escatter')).length === 16, 'bar-escatter: not sixteen morphs (a symbol and three ripples each)');
   must(combs(byId('escatter-bar')).length === 4, 'escatter-bar: not four combining');
   must(morphs(byId('bar-river')).length === 2, 'bar-river: the layers are at the layer index (two morph)');
