@@ -4946,29 +4946,6 @@ begin
   Result := InternalCellRect(CR, rowTop, rowH, Column, PPI, ACellRect);
 end;
 
-{ DrawLine(AX1, AY1, AX2, AY2, AColor, False) on the painter's layer for a horizontal or vertical
-  run in layout pixels -- the same pixels, from the first point up to but not including the
-  second -- one LAYOUT pixel wide at any device scale (#83). BGRA's own line is one device pixel
-  wide: half the weight on a 2x layer. }
-procedure TyLayerRule(P: TTyPainter; AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
-var
-  r: TRect;
-begin
-  if AY1 = AY2 then
-  begin
-    if AX1 = AX2 then Exit;
-    if AX2 > AX1 then r := Rect(AX1, AY1, AX2, AY1 + 1)
-    else r := Rect(AX2 + 1, AY1, AX1 + 1, AY1 + 1);
-  end
-  else
-  begin
-    Assert(AX1 = AX2, 'TyLayerRule: horizontal or vertical runs only');
-    if AY2 > AY1 then r := Rect(AX1, AY1, AX1 + 1, AY2)
-    else r := Rect(AX1, AY2 + 1, AX1 + 1, AY1 + 1);
-  end;
-  P.Bitmap.FillRect(P.Dev(r), AColor, dmDrawWithTransparency);
-end;
-
 { ── C3 ── RenderTo / Paint ──────────────────────────────────────────────── }
 
 { RenderTo — paint the VISIBLE window only (performance is the point).
@@ -5319,15 +5296,15 @@ begin
         if posIdx < colCount - 1 then
         begin
           if RtlLayout then colCaptionX := cellLeft else colCaptionX := cellRight - 1;
-          TyLayerRule(P, colCaptionX, headerBandRect.Top,
-                         colCaptionX, headerBandRect.Bottom,
-                         TyColorToBGRA(S.BorderColor));
+          P.DrawRule(colCaptionX, headerBandRect.Top,
+                     colCaptionX, headerBandRect.Bottom,
+                     TyColorToBGRA(S.BorderColor));
         end;
       end;
 
       { Bottom border of header band }
-      TyLayerRule(P, CR.Left, CR.Top, CR.Right, CR.Top,
-                     TyColorToBGRA(S.BorderColor));
+      P.DrawRule(CR.Left, CR.Top, CR.Right, CR.Top,
+                 TyColorToBGRA(S.BorderColor));
 
       { D3: drag-reorder overlay — ghost of dragged column + drop-mark caret }
       if FDragging and (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) then
@@ -5371,12 +5348,12 @@ begin
             if cellLeft < CR.Left  then cellLeft := CR.Left;
             if cellLeft > CR.Right then cellLeft := CR.Right;
             { Draw a 2px wide vertical accent bar }
-            TyLayerRule(P, cellLeft,     headerBandRect.Top,
-                           cellLeft,     headerBandRect.Bottom,
-                           accentPx);
-            TyLayerRule(P, cellLeft + 1, headerBandRect.Top,
-                           cellLeft + 1, headerBandRect.Bottom,
-                           accentPx);
+            P.DrawRule(cellLeft,     headerBandRect.Top,
+                       cellLeft,     headerBandRect.Bottom,
+                       accentPx);
+            P.DrawRule(cellLeft + 1, headerBandRect.Top,
+                       cellLeft + 1, headerBandRect.Bottom,
+                       accentPx);
           end;
         end;
       end;
@@ -5456,9 +5433,9 @@ begin
         the resolved control border token — the same one the tree-lines use — so a
         skin recolours both together and nothing is hardcoded here. }
       if FShowSeparators and (GetNodeLevel(node) = 0) then
-        TyLayerRule(P, rowRect.Left, rowRect.Bottom - 1,
-                       rowRect.Right, rowRect.Bottom - 1,
-                       TyColorToBGRA(S.BorderColor));
+        P.DrawRule(rowRect.Left, rowRect.Bottom - 1,
+                   rowRect.Right, rowRect.Bottom - 1,
+                   TyColorToBGRA(S.BorderColor));
 
       { Only the node's LEVEL is needed out here (it gates the tree-line block and
         feeds the ancestor guides); every x derived from it comes from the shared
@@ -5547,7 +5524,7 @@ begin
                               mainColBase + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
                                           - (slots.ButtonSlotW shr 1));
                 if anc^.NextSibling <> nil then
-                  TyLayerRule(P, ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                  P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
                     TyColorToBGRA(S.BorderColor));
                 anc := anc^.Parent;
               end;
@@ -5556,13 +5533,13 @@ begin
                              + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                              - (slots.ButtonSlotW shr 1));
               ancMidY := rowTop + rowH div 2;
-              TyLayerRule(P, ancMidX, rowTop,    ancMidX, ancMidY,
+              P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
                 TyColorToBGRA(S.BorderColor));
-              TyLayerRule(P, ancMidX, ancMidY,
+              P.DrawRule(ancMidX, ancMidY,
                 TreeLineX(mainColBase, colCellRight, mainColBase + slots.IndentPx), ancMidY,
                 TyColorToBGRA(S.BorderColor));
               if node^.NextSibling <> nil then
-                TyLayerRule(P, ancMidX, ancMidY, ancMidX, rowTop + rowH,
+                P.DrawRule(ancMidX, ancMidY, ancMidX, rowTop + rowH,
                   TyColorToBGRA(S.BorderColor));
             end;
 
@@ -5832,7 +5809,7 @@ begin
                           contentLeft + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
                                       - (slots.ButtonSlotW shr 1));
             if anc^.NextSibling <> nil then
-              TyLayerRule(P, ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+              P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
                 TyColorToBGRA(S.BorderColor));
             anc := anc^.Parent;
           end;
@@ -5843,13 +5820,13 @@ begin
                          + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                          - (slots.ButtonSlotW shr 1));
           ancMidY := rowTop + rowH div 2;
-          TyLayerRule(P, ancMidX, rowTop,    ancMidX, ancMidY,
+          P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
             TyColorToBGRA(S.BorderColor));
-          TyLayerRule(P, ancMidX, ancMidY,
+          P.DrawRule(ancMidX, ancMidY,
             TreeLineX(contentLeft, CR.Right, contentLeft + slots.IndentPx), ancMidY,
             TyColorToBGRA(S.BorderColor));
           if node^.NextSibling <> nil then
-            TyLayerRule(P, ancMidX, ancMidY, ancMidX, rowTop + rowH,
+            P.DrawRule(ancMidX, ancMidY, ancMidX, rowTop + rowH,
               TyColorToBGRA(S.BorderColor));
         end;
 

@@ -6,8 +6,8 @@ unit test.devicescale.sweep;
   The painter's own methods are pinned pixel for pixel (test.devicescale.painter). What they
   cannot see is a control that draws on the painter's layer DIRECTLY -- FillRect, PutImage, a
   clip rect -- in layout coordinates: on a layer S times larger that drawing lands at half its
-  position and half its size. This sweep draws each palette control at S = 2 and compares it with
-  the same control at twice the size and PPI 192 (test.devicescale.support).
+  position and half its size. This sweep draws each palette control at S = 2 and compares it,
+  averaged down 2:1, with the same control drawn at S = 1 (test.devicescale.support).
 
   THE LIST IS A RATCHET. CKnownUnported names the classes that fail today; the assertion is that
   the failing set is EXACTLY that list -- a new failure is a regression, and a class that passes
@@ -40,14 +40,6 @@ type
   end;
 
 const
-  { The score (unmatched ink + mismatched blocks, test.devicescale.support) above which a
-    control counts as not drawing at the device scale. Measured when this was set (2026-10-17,
-    the comparison as test.devicescale.support has it): every correct picture, palette and
-    stateful checks together, scored at most 20 (a bold title in TTyAdvancedListBox; the next
-    was 2); of 21 porting mistakes put back one at a time, the lowest still caught scored 28
-    (the menu banner drawn at its layout position). 24 sits between them. }
-  CMaxMismatch = 24;
-
   { Classes known not to draw at the device scale yet. Each porting task removes its own: the
     shell tree, whose drive icons are drawn on the canvas after the layer (TyDrawImage, Task 16),
     and the panels whose paint cache is still one-times (TTyPaintCache). }

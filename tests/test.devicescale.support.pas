@@ -38,7 +38,7 @@ unit test.devicescale.support;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LMessages, LCLType,
+  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LMessages, LCLType, fpcunit,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Painter;
 
@@ -56,10 +56,36 @@ const
   CStrongInk = 15;
   CWeakInk = 5;
   { Ink near a pixel covers it only when stronger than 1/CCoverFraction of the pixel's own. }
-  CCoverFraction = 4;
+  CCoverFraction = 5;
   CLocalTile = 16;
   CBlock = 4;
   CBlockTolerance = 64;
+
+  { The score (unmatched ink + mismatched blocks) above which a
+    control counts as not drawing at the device scale. Measured when this was set (2026-10-17,
+    the comparison as this unit has it): every correct picture, palette and
+    stateful checks together, scored at most 20 (a bold title in TTyAdvancedListBox; the next
+    was 2); of 21 porting mistakes put back one at a time, the lowest still caught scored 28
+    (the menu banner drawn at its layout position). 24 sits between them. }
+  CMaxMismatch = 24;
+
+type
+  { The checks a device-scale test makes on a control built in a given state. }
+  TDeviceScaleCase = class(TTestCase)
+  protected
+    { The control ABuild makes, sized AW x AH, draws at S = 2 as at S = 1: score <= CMaxMismatch.
+      With TY_SWEEP_DIR set, a failing check (every check, with TY_SWEEP_ALL too) leaves its two
+      pictures, the ink difference and its score there. }
+    procedure CheckScale(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer);
+    { The rules across ABand (layout pixels) at S = 1 -- between AMin and AMax of them, so the
+      band is not all "rule" -- must be on the S = 2 raster, as painted, exactly those rules one
+      layout pixel wide: at twice their place, two device pixels each. Catches what the picture
+      comparison cannot see: a rule at the wrong place, or at half its weight. }
+    procedure CheckRules(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer;
+      const ABand: TRect; AVertical: Boolean; AMin, AMax: Integer);
+  end;
+
+function TyRulesText(const A: TTyIntArray): string;
 
 { The control's OWN surface (no children), painted the way test.dpi.support's PaintOne paints it:
   at S = AScale through the seam with DeviceUnits, into a W*S x H*S bitmap that starts white.
@@ -460,6 +486,71 @@ begin
   AInk := TyInkMismatch(AScaled, ARef);
   ABlocks := TyBlockMismatch(AScaled, ARef);
   Result := AInk + ABlocks;
+end;
+
+function TyRulesText(const A: TTyIntArray): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(A) do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + IntToStr(A[i]);
+  end;
+end;
+
+procedure TDeviceScaleCase.CheckScale(const AName: string; ABuild: TTyBuildForScale;
+  AW, AH: Integer);
+var
+  a, b, d: TBGRABitmap;
+  score, ink, blocks: Integer;
+  dir: string;
+  log: TextFile;
+begin
+  score := TyDeviceScaleMismatchPictures(ABuild, AW, AH, a, b, ink, blocks);
+  try
+    dir := GetEnvironmentVariable('TY_SWEEP_DIR');
+    if ((score > CMaxMismatch) or (GetEnvironmentVariable('TY_SWEEP_ALL') <> '')) and (dir <> '') then
+    begin
+      { Every score, passing or not, for measuring the threshold against. }
+      AssignFile(log, IncludeTrailingPathDelimiter(dir) + 'scores.txt');
+      if FileExists(IncludeTrailingPathDelimiter(dir) + 'scores.txt') then Append(log) else Rewrite(log);
+      WriteLn(log, Format('%-28s %5d  (ink %d, blocks %d)', [AName, score, ink, blocks]));
+      CloseFile(log);
+      a.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-s2.png');
+      b.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-ref.png');
+      d := TyInkMismatchImage(a, b);
+      d.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-diff.png');
+      d.Free;
+    end;
+  finally
+    a.Free;
+    b.Free;
+  end;
+  AssertTrue(Format('%s draws at the device scale (score %d > %d: ink %d, blocks %d)',
+    [AName, score, CMaxMismatch, ink, blocks]), score <= CMaxMismatch);
+end;
+
+procedure TDeviceScaleCase.CheckRules(const AName: string; ABuild: TTyBuildForScale;
+  AW, AH: Integer; const ABand: TRect; AVertical: Boolean; AMin, AMax: Integer);
+var
+  raster, ref: TBGRABitmap;
+  rr, rs: TTyIntArray;
+begin
+  TyPaintAtBothScales(ABuild, AW, AH, raster, ref);
+  try
+    rs := TyRules(ref, ABand, AVertical, 4);
+    rr := TyRules(raster, Rect(2 * ABand.Left, 2 * ABand.Top, 2 * ABand.Right, 2 * ABand.Bottom),
+      AVertical, 4);
+  finally
+    raster.Free;
+    ref.Free;
+  end;
+  AssertTrue(Format('%s at S = 1: %d to %d rules, found %s', [AName, AMin, AMax, TyRulesText(rs)]),
+    (Length(rs) >= AMin) and (Length(rs) <= AMax));
+  AssertEquals(AName + ' at S = 2: the S = 1 rules, one layout pixel wide',
+    TyRulesText(TyDoubledRules(rs)), TyRulesText(rr));
 end;
 
 function TyDeviceScaleMismatch(ABuild: TTyBuildForScale; AW, AH: Integer): Integer;

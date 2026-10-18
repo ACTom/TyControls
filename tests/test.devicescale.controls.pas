@@ -19,23 +19,16 @@ uses
   tyControls.ListView, tyControls.ListBox, tyControls.AdvancedListBox, tyControls.TabSet,
   tyControls.ListGroupPanel, tyControls.ValueListEditor, tyControls.ListView.Layout,
   tyControls.Columns, tyControls.TreeView,
-  tyControls.Types, test.devicescale.support, test.devicescale.sweep;
+  tyControls.Types, test.devicescale.support;
 
 type
-  TDeviceScaleControlsTest = class(TTestCase)
+  TDeviceScaleControlsTest = class(TDeviceScaleCase)
   private
     FIconFont: TTyIconFont;
     FImages: TImageList;
     FMode: Integer;
     function IconFont: TTyIconFont;
     function Images: TImageList;
-    procedure CheckScale(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer);
-    { The rules across ABand (layout pixels) at S = 1 -- between AMin and AMax of them, so the
-      band is not all "rule" -- must be on the S = 2 raster, as painted, exactly those rules one
-      layout pixel wide: at twice their place, two device pixels each. Catches what the picture
-      comparison cannot see: a rule at the wrong place, or at half its weight. }
-    procedure CheckRules(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer;
-      const ABand: TRect; AVertical: Boolean; AMin, AMax: Integer);
     function BuildImage(AParent: TWinControl; APPI: Integer): TControl;
     function BuildImageView(AParent: TWinControl; APPI: Integer): TControl;
     function BuildGlyphButton(AParent: TWinControl; APPI: Integer): TControl;
@@ -122,18 +115,6 @@ const
   CTreeW = 240;
   CTreeH = 160;
 
-function RulesText(const A: TTyIntArray): string;
-var
-  i: Integer;
-begin
-  Result := '';
-  for i := 0 to High(A) do
-  begin
-    if i > 0 then Result := Result + ',';
-    Result := Result + IntToStr(A[i]);
-  end;
-end;
-
 procedure TyFillTestPicture(ABmp: TBitmap; AW, AH: Integer);
 var
   x, y: Integer;
@@ -185,59 +166,6 @@ begin
     end;
   end;
   Result := FImages;
-end;
-
-procedure TDeviceScaleControlsTest.CheckScale(const AName: string; ABuild: TTyBuildForScale;
-  AW, AH: Integer);
-var
-  a, b, d: TBGRABitmap;
-  score, ink, blocks: Integer;
-  dir: string;
-  log: TextFile;
-begin
-  score := TyDeviceScaleMismatchPictures(ABuild, AW, AH, a, b, ink, blocks);
-  try
-    dir := GetEnvironmentVariable('TY_SWEEP_DIR');
-    if ((score > CMaxMismatch) or (GetEnvironmentVariable('TY_SWEEP_ALL') <> '')) and (dir <> '') then
-    begin
-      { Every score, passing or not, for measuring the threshold against. }
-      AssignFile(log, IncludeTrailingPathDelimiter(dir) + 'scores.txt');
-      if FileExists(IncludeTrailingPathDelimiter(dir) + 'scores.txt') then Append(log) else Rewrite(log);
-      WriteLn(log, Format('%-28s %5d  (ink %d, blocks %d)', [AName, score, ink, blocks]));
-      CloseFile(log);
-      a.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-s2.png');
-      b.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-ref.png');
-      d := TyInkMismatchImage(a, b);
-      d.SaveToFile(IncludeTrailingPathDelimiter(dir) + AName + '-diff.png');
-      d.Free;
-    end;
-  finally
-    a.Free;
-    b.Free;
-  end;
-  AssertTrue(Format('%s draws at the device scale (score %d > %d: ink %d, blocks %d)',
-    [AName, score, CMaxMismatch, ink, blocks]), score <= CMaxMismatch);
-end;
-
-procedure TDeviceScaleControlsTest.CheckRules(const AName: string; ABuild: TTyBuildForScale;
-  AW, AH: Integer; const ABand: TRect; AVertical: Boolean; AMin, AMax: Integer);
-var
-  raster, ref: TBGRABitmap;
-  rr, rs: TTyIntArray;
-begin
-  TyPaintAtBothScales(ABuild, AW, AH, raster, ref);
-  try
-    rs := TyRules(ref, ABand, AVertical, 4);
-    rr := TyRules(raster, Rect(2 * ABand.Left, 2 * ABand.Top, 2 * ABand.Right, 2 * ABand.Bottom),
-      AVertical, 4);
-  finally
-    raster.Free;
-    ref.Free;
-  end;
-  AssertTrue(Format('%s at S = 1: %d to %d rules, found %s', [AName, AMin, AMax, RulesText(rs)]),
-    (Length(rs) >= AMin) and (Length(rs) <= AMax));
-  AssertEquals(AName + ' at S = 2: the S = 1 rules, one layout pixel wide',
-    RulesText(TyDoubledRules(rs)), RulesText(rr));
 end;
 
 { ---- builders ---- }

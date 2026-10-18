@@ -109,6 +109,11 @@ type
     procedure TestCanvas2DKeepsTransformAcrossPainterCalls;
     { Task 7: TyDeviceScaleRendering := False is the way back to one times. }
     procedure TestSwitchOffDrawsAtOne;
+    { Task 13: DrawRule, the rule a control draws instead of Bitmap.DrawLine(…, False). At S = 1
+      it is that line, pixel for pixel, in all four directions. }
+    procedure TestDrawRuleIsDrawLineAtOne;
+    { At S = 2 it is one LAYOUT pixel wide: two device pixels, at twice the place. }
+    procedure TestDrawRuleIsOneLayoutPixelWide;
   end;
 
 const
@@ -1054,6 +1059,67 @@ begin
     P.EndPaint;
   finally
     P.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestDrawRuleIsDrawLineAtOne;
+const
+  Lines: array[0..5, 0..3] of Integer = (
+    (5, 7, 50, 7), (50, 9, 5, 9),      // right, left
+    (8, 3, 8, 30), (12, 30, 12, 3),    // down, up
+    (20, 20, 20, 20), (0, 39, 60, 39)); // a point (nothing), the last row
+var
+  a, b: TTyPainter;
+  i: Integer;
+  red: TBGRAPixel;
+begin
+  red := BGRA(255, 0, 0, 255);
+  a := TTyPainter.Create;
+  b := TTyPainter.Create;
+  try
+    a.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+    b.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+    for i := 0 to High(Lines) do
+    begin
+      a.DrawRule(Lines[i, 0], Lines[i, 1], Lines[i, 2], Lines[i, 3], red);
+      b.Bitmap.DrawLine(Lines[i, 0], Lines[i, 1], Lines[i, 2], Lines[i, 3], red, False);
+    end;
+    AssertSamePixels('DrawRule = DrawLine(…, False) at S = 1', a.Bitmap, b.Bitmap);
+    a.EndPaint;
+    b.EndPaint;
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestDrawRuleIsOneLayoutPixelWide;
+var
+  P: TTyPainter;
+  ref: TBGRABitmap;
+  red: TBGRAPixel;
+begin
+  red := BGRA(255, 0, 0, 255);
+  ref := TBGRABitmap.Create(120, 80);
+  P := TTyPainter.Create;
+  try
+    TyForceDeviceScaleForTest(2, True);
+    try
+      P.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+      P.DrawRule(10, 5, 50, 5, red);    // x 10..49 on row 5
+      P.DrawRule(50, 7, 10, 7, red);    // x 11..50 on row 7
+      P.DrawRule(30, 12, 30, 36, red);  // y 12..35 in column 30
+      ref.FillRect(20, 10, 100, 12, red, dmDrawWithTransparency);
+      ref.FillRect(22, 14, 102, 16, red, dmDrawWithTransparency);
+      ref.FillRect(60, 24, 62, 72, red, dmDrawWithTransparency);
+      AssertSamePixels('DrawRule at S = 2', P.Bitmap, ref);
+      P.EndPaint;
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  finally
+    P.Free;
+    ref.Free;
   end;
 end;
 
