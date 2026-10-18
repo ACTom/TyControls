@@ -24,14 +24,22 @@ unit umain;
 
   The theme switcher earns its place twice over for a chart: the axis domain
   resolves eight theme keys, so switching a skin is what proves the chart is
-  drawn IN the theme rather than pasted on top of one. }
+  drawn IN the theme rather than pasted on top of one.
+
+  A SEQUENCE IS PLAYED AS THE PAGE PLAYS IT. The universal-transition examples
+  switch between options on a timer (map to bar, treemap to sunburst); the
+  harvester recorded those setOption calls, and here they are replayed -- each
+  with the options the page passed (notMerge or a plain merge) at the page's
+  interval, and by hand with Next step. That is the manual check for
+  universalTransition: the morph between two options can only be seen with
+  both of them, in order, on one chart. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, fpjson, jsonparser,
+  Classes, SysUtils, Forms, Controls, ExtCtrls, fpjson, jsonparser,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
@@ -49,6 +57,12 @@ type
     Category: string;
     Reason: string;
     Ok: Boolean;
+    { The page's own setOption sequence, empty for a single option: each
+      step's file and the options it was set with, as JSON text ('' for a
+      plain merge); the step the loop goes back to (-1: it stops at the end);
+      the page's interval in ms (0: by hand only). }
+    StepFiles, StepOpts: array of string;
+    LoopTo, Interval: Integer;
   end;
 
   TMainForm = class(TTyForm)
@@ -62,7 +76,9 @@ type
     Chart: TTyAdvanceChart;
     BtnApply: TTyButton;
     BtnShot: TTyButton;
+    BtnNext: TTyButton;
     LblStatus: TTyLabel;
+    SeqTimer: TTimer;
 
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -71,6 +87,8 @@ type
     procedure ExampleListChange(Sender: TObject);
     procedure BtnApplyClick(Sender: TObject);
     procedure BtnShotClick(Sender: TObject);
+    procedure BtnNextClick(Sender: TObject);
+    procedure SeqTimerTimer(Sender: TObject);
   private
     FEntries: array of TGalleryEntry;
     FCategories: TStringList;
@@ -81,6 +99,8 @@ type
       in code fires the list's change event as well, so without it one click on
       a tab loaded the same option two or three times. }
     FShownSlot: Integer;
+    { the step of the shown entry's sequence the chart now holds }
+    FStep: Integer;
     procedure LoadIndex;
     procedure FillCategories;
     procedure FillList;
@@ -89,6 +109,11 @@ type
       there is no such id or it was never converted. }
     function SelectById(const AId: string): Boolean;
     procedure Apply;
+    { What the library says about AText, under the status line. }
+    procedure ShowNotes(const AText: string);
+    { Start (or stop, for a single option) the shown entry's sequence. }
+    procedure StartSequence;
+    procedure NextStep;
   public
     destructor Destroy; override;
   end;
@@ -109,6 +134,8 @@ resourcestring
   rsPickOne = 'Pick an example on the left.';
   rsSavedTo = 'Saved to %s';
   rsCounts = '%s — %d example(s)';
+  { above the notes while a setOption sequence plays: step, of how many }
+  rsStep = 'Step %d of %d of the page''s setOption sequence.';
   { said under the notes when an example needs a border map the demo does not
     ship: %s the map name(s), %s the maps folder }
   rsBorderMapNotShipped = 'This example needs the map %s, which the demo does '
@@ -179,9 +206,9 @@ end;
 procedure TMainForm.LoadIndex;
 var
   root: TJSONData;
-  arr: TJSONArray;
-  obj: TJSONObject;
-  i, n: Integer;
+  arr, steps: TJSONArray;
+  obj, seq: TJSONObject;
+  i, k, n: Integer;
 begin
   SetLength(FEntries, 0);
   if FGalleryDir = '' then Exit;
@@ -201,6 +228,26 @@ begin
       FEntries[n].Category := PrimaryCategory(obj.Get('category', ''));
       FEntries[n].Ok := obj.Get('ok', False);
       FEntries[n].Reason := obj.Get('reason', '');
+      FEntries[n].LoopTo := -1;
+      if obj.Find('sequence') is TJSONObject then
+      begin
+        seq := TJSONObject(obj.Find('sequence'));
+        if seq.Find('steps') is TJSONArray then
+        begin
+          steps := TJSONArray(seq.Find('steps'));
+          SetLength(FEntries[n].StepFiles, steps.Count);
+          SetLength(FEntries[n].StepOpts, steps.Count);
+          for k := 0 to steps.Count - 1 do
+            if steps.Items[k] is TJSONObject then
+            begin
+              FEntries[n].StepFiles[k] := TJSONObject(steps.Items[k]).Get('file', '');
+              if TJSONObject(steps.Items[k]).Find('opts') is TJSONObject then
+                FEntries[n].StepOpts[k] := TJSONObject(steps.Items[k]).Find('opts').AsJSON;
+            end;
+          FEntries[n].LoopTo := seq.Get('loopTo', -1);
+          FEntries[n].Interval := seq.Get('interval', 0);
+        end;
+      end;
       Inc(n);
     end;
     SetLength(FEntries, n);
@@ -264,6 +311,7 @@ begin
   if (slot < 0) or (slot > High(FEntries)) then Exit;
   if slot = FShownSlot then Exit;
   FShownSlot := slot;
+  StartSequence;
 
   if not FEntries[slot].Ok then
   begin
@@ -308,10 +356,6 @@ begin
 end;
 
 procedure TMainForm.Apply;
-var
-  diags: TTyOptDiagArray;
-  i, notes: Integer;
-  s, border: string;
 begin
   { THE PAGE'S OWN registerMap. An ECharts example fetches its GeoJSON before
     it sets the option; the harvest kept only the map's name. }
@@ -322,16 +366,20 @@ begin
     LblStatus.Caption := Chart.OptionError;
     Exit;
   end;
+  ShowNotes(OptionMemo.Text);
+end;
+
+procedure TMainForm.ShowNotes(const AText: string);
+var
+  diags: TTyOptDiagArray;
+  i, notes: Integer;
+  s, border: string;
+begin
   { THE LIBRARY'S OWN WORDS. Asking TyOptDiagnose rather than the control keeps
     two things honest at once: the answer is current (the control's build is
     only made during a paint), and the demo cannot describe a gap more kindly
     than the option editor does. }
-  diags := TyOptDiagnose(OptionMemo.Text);
-  if Length(diags) = 0 then
-  begin
-    LblStatus.Caption := rsOptionOk;
-    Exit;
-  end;
+  diags := TyOptDiagnose(AText);
   { ONLY REAL NOTES ARE COUNTED. The all-clear row says the option is
     understood; counting it under the header announced one thing the chart
     "could not honour" above a single line saying nothing was wrong. When it is the only kind of row there
@@ -343,6 +391,7 @@ begin
     is not a note of its own; what it hides is counted instead, so the header
     gives the real total rather than the hundred rows that fit. }
   notes := 0;
+  s := '';
   for i := 0 to High(diags) do
     case diags[i].Kind of
       odkAllClear: ;
@@ -350,9 +399,10 @@ begin
     else
       Inc(notes);
     end;
-  if notes = 0 then
+  if Length(diags) = 0 then
+    s := rsOptionOk
+  else if notes = 0 then
   begin
-    s := '';
     for i := 0 to High(diags) do
     begin
       if s <> '' then s := s + LineEnding;
@@ -368,10 +418,73 @@ begin
   end;
   { A MAP THE DEMO DOES NOT SHIP. The library only says the map is not
     registered; the demo, which chose not to ship it, says why and what to do. }
-  border := BorderMapsMissing(OptionMemo.Text, FMapsDir);
+  border := BorderMapsMissing(AText, FMapsDir);
   if border <> '' then
     s := s + LineEnding + LineEnding + Format(rsBorderMapNotShipped, [border, FMapsDir]);
+  if (FShownSlot >= 0) and (FShownSlot <= High(FEntries))
+    and (Length(FEntries[FShownSlot].StepFiles) > 1) then
+    s := Format(rsStep, [FStep + 1, Length(FEntries[FShownSlot].StepFiles)])
+      + LineEnding + s;
   LblStatus.Caption := s;
+end;
+
+procedure TMainForm.StartSequence;
+var playing: Boolean;
+begin
+  SeqTimer.Enabled := False;
+  FStep := 0;
+  playing := (FShownSlot >= 0) and (FShownSlot <= High(FEntries))
+    and FEntries[FShownSlot].Ok
+    and (Length(FEntries[FShownSlot].StepFiles) > 1);
+  BtnNext.Visible := playing;
+  if playing and (FEntries[FShownSlot].Interval > 0) then
+  begin
+    SeqTimer.Interval := FEntries[FShownSlot].Interval;
+    SeqTimer.Enabled := True;
+  end;
+end;
+
+{ The next setOption of the page, with the options it was made with: the chart
+  is not reset between steps, which is what lets universalTransition morph
+  one option into the next. }
+procedure TMainForm.NextStep;
+var
+  e, k: Integer;
+  fn: string;
+begin
+  e := FShownSlot;
+  if (e < 0) or (e > High(FEntries)) then Exit;
+  if Length(FEntries[e].StepFiles) < 2 then Exit;
+  k := FStep + 1;
+  if k > High(FEntries[e].StepFiles) then
+  begin
+    if FEntries[e].LoopTo < 0 then
+    begin
+      SeqTimer.Enabled := False;
+      Exit;
+    end;
+    k := FEntries[e].LoopTo;
+  end;
+  fn := FGalleryDir + FEntries[e].StepFiles[k];
+  if not FileExists(fn) then
+  begin
+    SeqTimer.Enabled := False;
+    LblStatus.Caption := Format(rsNotConverted, [fn]);
+    Exit;
+  end;
+  FStep := k;
+  OptionMemo.Text := ReadTextFile(fn);
+  RegisterGalleryMapsFor(OptionMemo.Text, FMapsDir);
+  if FEntries[e].StepOpts[k] = '' then
+    Chart.SetOption(OptionMemo.Text, False)
+  else
+    Chart.SetOption(OptionMemo.Text, FEntries[e].StepOpts[k]);
+  if Chart.OptionError <> '' then
+  begin
+    LblStatus.Caption := Chart.OptionError;
+    Exit;
+  end;
+  ShowNotes(OptionMemo.Text);
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -443,7 +556,25 @@ end;
 
 procedure TMainForm.BtnApplyClick(Sender: TObject);
 begin
+  { an edited option is not overwritten by the next step of the sequence }
+  SeqTimer.Enabled := False;
   Apply;
+end;
+
+procedure TMainForm.BtnNextClick(Sender: TObject);
+begin
+  NextStep;
+  { the page's rhythm restarts from the step just shown }
+  if SeqTimer.Enabled then
+  begin
+    SeqTimer.Enabled := False;
+    SeqTimer.Enabled := True;
+  end;
+end;
+
+procedure TMainForm.SeqTimerTimer(Sender: TObject);
+begin
+  NextStep;
 end;
 
 procedure TMainForm.BtnShotClick(Sender: TObject);

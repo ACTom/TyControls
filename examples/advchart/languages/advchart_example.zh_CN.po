@@ -35,6 +35,10 @@ msgstr "双 y 轴"
 msgid "Apply"
 msgstr "应用"
 
+#: tmainform.btnnext.caption
+msgid "Next step"
+msgstr "下一步"
+
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: umain.rsoptionok
@@ -70,6 +74,11 @@ msgstr "未转换：%s"
 #: umain.rspickone
 msgid "Pick an example on the left."
 msgstr "在左边挑一个示例。"
+
+#: umain.rsstep
+#, object-pascal-format
+msgid "Step %d of %d of the page's setOption sequence."
+msgstr "页面 setOption 序列的第 %d 步，共 %d 步。"
 
 #: umain.rssavedto
 #, object-pascal-format
