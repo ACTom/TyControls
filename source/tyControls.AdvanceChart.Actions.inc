@@ -1497,6 +1497,8 @@ var
   d: TJSONData;
   brk: TJSONArray;
   nLine, nCol: Integer;
+  it: TJSONObject;
+  tp: TJSONData;
 begin
   Result := False;
   { the action's non-refined event: its entry in the connect table }
@@ -1539,7 +1541,24 @@ begin
       before := Length(FBatchCapList);
       { each item through the action, as doDispatchAction's map hands it:
         a copy of the item over the payload, its batch null }
-      DispatchActionCore(TJSONObject(items.Items[i].Clone));
+      it := TJSONObject(items.Items[i].Clone);
+      { the batch's action runs on every item, whatever type the item
+        names -- a connected chart is sent items typed with the event's
+        name ('expandaxisbreak'): the axis breaks' handler reads the item's
+        type, and one it does not know changes no break (still reported) }
+      if refine then
+      begin
+        tp := it.Find('type');
+        if (tp <> nil) and (tp.JSONType = jtString) then FBreakActAs := tp.AsString
+        else FBreakActAs := '';
+        FBreakActAsSet := True;
+        it.Strings['type'] := AType;
+      end;
+      try
+        DispatchActionCore(it);
+      finally
+        FBreakActAsSet := False;
+      end;
       { eventObj = actionResult || a copy of the batch item }
       SetLength(entries, Length(entries) + 1);
       if Length(FBatchCapList) > before then

@@ -13391,6 +13391,735 @@
      ]
     }
    ]
+  },
+  {
+   "id": "batch-axisbreak-connect",
+   "note": "expandAxisBreak (a refined action) batched in a connected group: its non-refined batch event goes to connect only, every item a copy of the FIRST item (refineEvent keeps eventObj) -- so B is sent the first break twice and expands only that one; collapseAxisBreak back the same way",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "breaks": [
+        {
+         "start": 60,
+         "end": 400,
+         "gap": "6%"
+        },
+        {
+         "start": 450,
+         "end": 900,
+         "gap": "6%"
+        }
+       ]
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         20,
+         420,
+         950,
+         55
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "breaks": [
+        {
+         "start": 60,
+         "end": 400,
+         "gap": "6%"
+        },
+        {
+         "start": 450,
+         "end": 900,
+         "gap": "6%"
+        }
+       ]
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         20,
+         420,
+         950,
+         55
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "expandAxisBreak",
+      "yAxisIndex": 0,
+      "batch": [
+       {
+        "breaks": [
+         {
+          "start": 60,
+          "end": 400
+         }
+        ]
+       },
+       {
+        "breaks": [
+         {
+          "start": 450,
+          "end": 900
+         }
+        ]
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 60,
+          "end": 400,
+          "isExpanded": false,
+          "old": {
+           "isExpanded": false
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 60,
+          "end": 400,
+          "isExpanded": false,
+          "old": {
+           "isExpanded": false
+          }
+         }
+        ],
+        "fromAction": "expandAxisBreak",
+        "fromActionPayload": {
+         "type": "expandAxisBreak",
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 60,
+             "end": 400
+            }
+           ],
+           "type": "expandaxisbreak",
+           "yAxisIndex": 0,
+           "batch": null
+          },
+          {
+           "breaks": [
+            {
+             "start": 60,
+             "end": 400
+            }
+           ],
+           "type": "expandaxisbreak",
+           "yAxisIndex": 0,
+           "batch": null
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 60,
+          "end": 400,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": false
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": false
+          }
+         }
+        ],
+        "fromAction": "expandAxisBreak",
+        "fromActionPayload": {
+         "type": "expandAxisBreak",
+         "yAxisIndex": 0,
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 60,
+             "end": 400
+            }
+           ]
+          },
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ]
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "expandAxisBreak",
+      "yAxisIndex": 0,
+      "batch": [
+       {
+        "breaks": [
+         {
+          "start": 450,
+          "end": 900
+         }
+        ]
+       },
+       {
+        "breaks": [
+         {
+          "start": 60,
+          "end": 400
+         }
+        ]
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": true
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": true
+          }
+         }
+        ],
+        "fromAction": "expandAxisBreak",
+        "fromActionPayload": {
+         "type": "expandAxisBreak",
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ],
+           "type": "expandaxisbreak",
+           "yAxisIndex": 0,
+           "batch": null
+          },
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ],
+           "type": "expandaxisbreak",
+           "yAxisIndex": 0,
+           "batch": null
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": false
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 60,
+          "end": 400,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": false
+          }
+         }
+        ],
+        "fromAction": "expandAxisBreak",
+        "fromActionPayload": {
+         "type": "expandAxisBreak",
+         "yAxisIndex": 0,
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ]
+          },
+          {
+           "breaks": [
+            {
+             "start": 60,
+             "end": 400
+            }
+           ]
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "collapseAxisBreak",
+      "yAxisIndex": 0,
+      "batch": [
+       {
+        "breaks": [
+         {
+          "start": 450,
+          "end": 900
+         }
+        ]
+       },
+       {
+        "breaks": [
+         {
+          "start": 60,
+          "end": 400
+         }
+        ]
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": true
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": true,
+          "old": {
+           "isExpanded": true
+          }
+         }
+        ],
+        "fromAction": "collapseAxisBreak",
+        "fromActionPayload": {
+         "type": "collapseAxisBreak",
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ],
+           "type": "collapseaxisbreak",
+           "yAxisIndex": 0,
+           "batch": null
+          },
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ],
+           "type": "collapseaxisbreak",
+           "yAxisIndex": 0,
+           "batch": null
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "axisbreakchanged",
+       {
+        "type": "axisbreakchanged",
+        "breaks": [
+         {
+          "yAxisIndex": 0,
+          "start": 450,
+          "end": 900,
+          "isExpanded": false,
+          "old": {
+           "isExpanded": true
+          }
+         },
+         {
+          "yAxisIndex": 0,
+          "start": 60,
+          "end": 400,
+          "isExpanded": false,
+          "old": {
+           "isExpanded": true
+          }
+         }
+        ],
+        "fromAction": "collapseAxisBreak",
+        "fromActionPayload": {
+         "type": "collapseAxisBreak",
+         "yAxisIndex": 0,
+         "batch": [
+          {
+           "breaks": [
+            {
+             "start": 450,
+             "end": 900
+            }
+           ]
+          },
+          {
+           "breaks": [
+            {
+             "start": 60,
+             "end": 400
+            }
+           ]
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
   }
  ],
  "exportCases": [
@@ -14077,6 +14806,11 @@
    "id": "batch-dz-silent",
    "ok": true,
    "what": "silent: applied, nothing published"
+  },
+  {
+   "id": "batch-break-first-item",
+   "ok": true,
+   "what": "B is sent the first item twice (refineEvent keeps eventObj)"
   },
   {
    "id": "exp-layout-exp-row",

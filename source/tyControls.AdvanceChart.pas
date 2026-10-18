@@ -1472,6 +1472,10 @@ type
       wait (FBatchDefer) and run once after the last item }
     FBatchCapDepth: Integer;
     FBatchCapType, FBatchCapRefined: string;
+    { a batch item's own type, which the axis breaks' handler reads in
+      place of the action's (FBreakActAsSet: it is set) }
+    FBreakActAs: string;
+    FBreakActAsSet: Boolean;
     FBatchCapList, FBatchCapRef: TTyStringArray;
     FBatchDefer: Integer;
     FBatchDue, FBatchDueHas: Boolean;

@@ -1395,6 +1395,9 @@ var
 
 begin
   t := APayload.Strings['type'];
+  { a batch item's own type: updateModelAxisBreak reads payload.type }
+  if FBreakActAsSet then t := FBreakActAs;
+  FBreakActAsSet := False;
   payloadJson := APayload.AsJSON;
   evBreaks := '';
   mains[0] := 'xAxis';
@@ -1431,9 +1434,15 @@ begin
           or (d.JSONType in [jtArray, jtObject]));
         if t = 'expandAxisBreak' then now_ := True
         else if t = 'collapseAxisBreak' then now_ := False
-        else now_ := not old;
-        if d <> nil then bo.Delete('isExpanded');
-        bo.Add('isExpanded', now_);
+        else if t = 'toggleAxisBreak' then now_ := not old
+        { a type none of the three: the break as it is }
+        else now_ := old;
+        if (t = 'expandAxisBreak') or (t = 'collapseAxisBreak')
+          or (t = 'toggleAxisBreak') then
+        begin
+          if d <> nil then bo.Delete('isExpanded');
+          bo.Add('isExpanded', now_);
+        end;
         if evBreaks <> '' then evBreaks := evBreaks + ',';
         evBreaks := evBreaks + '{"' + mains[m] + 'Index":' + IntToStr(idx[i])
           + ',"start":' + JsonOrUndefined(bo.Find('start'))
