@@ -9,7 +9,7 @@
         <OtherUnitFiles Value="source"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
-      <Conditionals Value="if not (GetIDEValue(&apos;LAZ_FULLVERSION&apos;) &gt;= 4000000) then CustomOptions += &apos; -dTY_LCL_BEFORE_4&apos;; if GetIDEValue(&apos;LAZ_FULLVERSION&apos;) &gt;= 4990000 then CustomOptions += &apos; -dTY_LCL_FROM_4_99&apos;;"/>
+      <Conditionals Value="if GetIDEValue(&apos;LAZ_FULLVERSION&apos;) &gt;= 4990000 then CustomOptions += &apos; -dTY_LCL_FROM_4_99&apos;;"/>
     </CompilerOptions>
     <Description Value="A Lazarus component library with skin/style support: all controls are fully custom-drawn via BGRABitmap, their appearances are uniformly styled by lightweight CSS text themes (.tycss), delivering pixel-perfect identical UI rendering across Windows, Linux and macOS.
 
@@ -68,6 +68,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
       <Item>
         <Filename Value="source/tyControls.Painter.pas"/>
         <UnitName Value="tyControls.Painter"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CanvasText.pas"/>
+        <UnitName Value="tyControls.CanvasText"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.Accel.pas"/>

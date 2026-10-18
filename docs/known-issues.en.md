@@ -29,6 +29,12 @@ The cause is in LCL. GTK2 does read the real GTK style, but only once, when the 
 
 **Recommendation:** use Qt5 / Qt6 if you need the app to follow the OS appearance — there the values come from the live Qt palette and track a desktop colour-scheme change.
 
+## macOS (compiling the library from source)
+
+A project that puts `source/` on its own search path and asks for DWARF3 debug information does not build on macOS: `tyControls.CocoaWS.pas ... Internal error 200609171`. This is an FPC 3.2 bug: its DWARF3 writer does not handle Objective-C classes. Projects that use the package are not affected.
+
+**Recommendation:** use the `tycontrols` package, or set the project's debug information to DWARF2 or Automatic.
+
 ## Windows (several monitors at different scaling)
 
 A form dragged onto a monitor with different scaling lays itself out again for that monitor's DPI. Popups (dropdown lists, menus, hint balloons) do not follow: they are drawn at the DPI of the form they belong to, and come out too large or too small when they open on the other monitor.

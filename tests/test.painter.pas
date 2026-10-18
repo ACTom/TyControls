@@ -5,9 +5,10 @@ unit test.painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, Graphics, LCLType, LCLIntf, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Grid;
+  tyControls.Types, tyControls.Painter, tyControls.CanvasText, tyControls.Grid,
+  test.designregistry;
 
 type
   TPainterTest = class(TTestCase)
@@ -35,6 +36,9 @@ type
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
     procedure TestTextIsInkedAsWindowsInksIt;
+    procedure TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
+    procedure TestTheCanvasRendererDrawsInTheInksPolarity;
+    procedure TestMacTextGoesThroughTheCanvasRenderer;
     procedure TestDrawnTextEndsWhereItWasMeasured;
     procedure TestDrawGlyphAllKinds;
     procedure TestChevronLeftIsTheApexMirrorOfChevronRight;
@@ -262,6 +266,240 @@ end;
   at 1200), so a light-ink case going red where it was green is the renderer drifting from
   what Windows draws on that desktop -- light ink drawn from dark-on-light coverage did
   exactly that -- not an environment to be waved through. }
+{$IFDEF LCLWin32}
+type
+  TTestCanvasAccess = class(TCanvas);
+
+function TestSystemParametersInfo(uiAction, uiParam: LongWord; pvParam: Pointer;
+  fWinIni: LongWord): LongBool; stdcall; external 'user32' name 'SystemParametersInfoW';
+
+{ The desktop's own answer, asked here rather than of the renderer: ClearType is in effect. }
+function DesktopUsesClearType: Boolean;
+const
+  SPI_GETFONTSMOOTHING = $004A;
+  SPI_GETFONTSMOOTHINGTYPE = $200A;
+  FE_FONTSMOOTHINGCLEARTYPE = 2;
+var
+  smooth: LongBool;
+  kind: LongWord;
+begin
+  smooth := False;
+  kind := 0;
+  Result := TestSystemParametersInfo(SPI_GETFONTSMOOTHING, 0, @smooth, 0) and smooth
+    and TestSystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, @kind, 0)
+    and (kind = FE_FONTSMOOTHINGCLEARTYPE);
+end;
+{$ENDIF}
+
+{ ON AN OPAQUE SURFACE, WHAT WINDOWS DRAWS THERE (#90). Text averaged to grey keeps
+  ClearType's weight but not its sharpness: a stem ClearType lays on two subpixels comes out
+  as two grey pixels, and next to the system's own text in the same window it reads soft.
+  Where the surface under the run is opaque, the colour the text lands on is known, so the
+  three coverages go down channel by channel, as GDI lays them down itself. Compared pixel
+  by pixel with GDI drawing the same run with the same call on the same surface: black on
+  white and white on black, where GDI's blend and ours are the same arithmetic. First the
+  grey of the two is compared, so a run in the wrong place cannot pass for the wrong colour.
+  A desktop with ClearType off gets grey from both. }
+procedure TPainterTest.TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
+{$IFDEF LCLWin32}
+  procedure Compare(const AFont: string; ALightInk: Boolean);
+  const
+    CText = '节点 0 (L0) Illuminate Tabs 富输入 · TyControls';
+    W = 560;
+    H = 32;
+  var
+    ours, theirs: TBGRABitmap;
+    b: TBitmap;
+    r: TRect;
+    bg, ink, po, pt: TBGRAPixel;
+    x, y, greyWorst, worst, inked, chroma: Integer;
+    ourR, ourG, ourB, winR, winG, winB: Integer;
+    what: string;
+  begin
+    if ALightInk then
+    begin
+      bg := BGRABlack;
+      ink := BGRAWhite;
+    end
+    else
+    begin
+      bg := BGRAWhite;
+      ink := BGRABlack;
+    end;
+    ours := TBGRABitmap.Create(W, H, bg);
+    theirs := nil;
+    b := TBitmap.Create;
+    try
+      TyConfigureTextFont(ours, AFont, 9, 400, 96);
+      ours.TextOut(4, 4, CText, ink);
+      b.PixelFormat := pf24bit;
+      b.SetSize(W, H);
+      b.Canvas.Brush.Color := BGRAToColor(bg);
+      b.Canvas.FillRect(0, 0, W, H);
+      b.Canvas.Font.Name := AFont;
+      b.Canvas.Font.Height := -TyFontHeightPx(9, 96);
+      b.Canvas.Font.Quality := fqCleartypeNatural;
+      TTestCanvasAccess(b.Canvas).RequiredState([csHandleValid, csFontValid]);
+      SetBkMode(b.Canvas.Handle, TRANSPARENT);
+      SetTextColor(b.Canvas.Handle, BGRAToColor(ink));
+      r := Rect(4, 4, W, H);
+      b.Canvas.Changing;
+      LCLIntf.DrawText(b.Canvas.Handle, PChar(CText), Length(CText), r,
+        DT_SINGLELINE or DT_NOCLIP or DT_NOPREFIX);
+      b.Canvas.Changed;
+      theirs := TBGRABitmap.Create(b);
+      greyWorst := 0;
+      worst := 0;
+      inked := 0;
+      chroma := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+        begin
+          po := ours.GetPixel(x, y);
+          pt := theirs.GetPixel(x, y);
+          ourR := po.red;
+          ourG := po.green;
+          ourB := po.blue;
+          winR := pt.red;
+          winG := pt.green;
+          winB := pt.blue;
+          if (winR <> bg.red) or (winG <> bg.green) or (winB <> bg.blue) then Inc(inked);
+          greyWorst := Max(greyWorst, Abs((ourR + ourG + ourB) div 3 - (winR + winG + winB) div 3));
+          worst := Max(worst, Max(Abs(ourR - winR), Max(Abs(ourG - winG), Abs(ourB - winB))));
+          chroma := Max(chroma, Max(ourR, Max(ourG, ourB)) - Min(ourR, Min(ourG, ourB)));
+        end;
+      what := Format('%s, %s ink: worst grey difference %d, worst channel difference %d,'
+        + ' ours most coloured %d, %d pixels inked by Windows', [AFont,
+        BoolToStr(ALightInk, 'light', 'dark'), greyWorst, worst, chroma, inked]);
+      AssertTrue('precondition: Windows drew the run -- ' + what, inked > 200);
+      AssertTrue('the run lies where Windows lays it, as heavy -- ' + what, greyWorst <= 2);
+      if DesktopUsesClearType then
+        AssertTrue('channel by channel what Windows draws there -- ' + what, worst <= 2)
+      else
+        AssertEquals('ClearType is off: grey, as Windows draws it -- ' + what, 0, chroma);
+    finally
+      theirs.Free;
+      b.Free;
+      ours.Free;
+    end;
+  end;
+
+begin
+  Compare('Microsoft YaHei UI', False);
+  Compare('Segoe UI', False);
+  Compare('Microsoft YaHei UI', True);
+  Compare('Segoe UI', True);
+end;
+{$ELSE}
+begin
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+end;
+{$ENDIF}
+
+{ IN THE INK'S POLARITY (#91). BGRABitmap rasterises every run white on black on an LCL
+  bitmap and uses that as the mask, whatever the colour of the ink. macOS font smoothing
+  thickens light-on-dark far more than dark-on-light (one line of PingFang SC 13 px, white
+  on black and inverted: 25% more ink than black on white), so dark text drawn from that
+  mask came out heavy -- 26% more ink than LCL's own text on a transparent surface. The
+  canvas renderer draws the run on the same kind of bitmap, with the same canvas call, in the
+  ink's polarity. That property is the canvas's, not the Mac's, so it is checked here on
+  whatever canvas this is: the coverage laid down on a transparent surface is, pixel for
+  pixel, the run the canvas itself draws dark on light for dark ink and light on dark for
+  light ink. A mask of the other polarity differs pixel by pixel on any canvas that smooths
+  or hints by polarity -- ClearType does, at every contrast. }
+procedure TPainterTest.TestTheCanvasRendererDrawsInTheInksPolarity;
+
+  procedure Compare(const AFont: string; ALightInk: Boolean);
+  const
+    CText = 'Illuminate Tabs 节点 0 (L0) 富输入 · TyControls';
+    W = 520;
+    H = 34;
+    CHeight = 15;
+  var
+    ours: TBGRABitmap;
+    b: TBitmap;
+    theirs: TBGRABitmap;
+    ink: TBGRAPixel;
+    x, y, worst, inked, o, c: Integer;
+    p: TBGRAPixel;
+    what: string;
+  begin
+    if ALightInk then ink := BGRAWhite else ink := BGRABlack;
+    ours := TBGRABitmap.Create(W, H, BGRAPixelTransparent);
+    b := TBitmap.Create;
+    theirs := nil;
+    try
+      ours.FontRenderer := TTyCanvasTextRenderer.Create;
+      ours.FontName := AFont;
+      ours.FontHeight := CHeight;
+      ours.FontQuality := fqSystemClearType;
+      ours.TextOut(4, 4, CText, ink);
+      { theirs: the canvas, the run in the ink's own polarity, at the same place }
+      b.SetSize(W, H);
+      if ALightInk then b.Canvas.Brush.Color := clBlack else b.Canvas.Brush.Color := clWhite;
+      b.Canvas.FillRect(0, 0, W, H);
+      b.Canvas.Font.Name := AFont;
+      b.Canvas.Font.Height := -CHeight;
+      b.Canvas.Font.Quality := fqCleartype;
+      if ALightInk then b.Canvas.Font.Color := clWhite else b.Canvas.Font.Color := clBlack;
+      b.Canvas.Brush.Style := bsClear;
+      b.Canvas.TextOut(4, 4, CText);
+      theirs := TBGRABitmap.Create(b);
+      worst := 0;
+      inked := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+        begin
+          p := theirs.GetPixel(x, y);
+          c := (p.red + p.green + p.blue) div 3;
+          if not ALightInk then c := 255 - c;
+          if c > 0 then Inc(inked);
+          o := ours.GetPixel(x, y).alpha;
+          worst := Max(worst, Abs(o - c));
+        end;
+      what := Format('%s, %s ink: worst coverage difference %d, %d pixels inked by the canvas',
+        [AFont, BoolToStr(ALightInk, 'light', 'dark'), worst, inked]);
+      AssertTrue('precondition: the canvas drew the run -- ' + what, inked > 200);
+      AssertTrue('pixel for pixel the canvas''s own run in the ink''s polarity -- ' + what,
+        worst <= 2);
+    finally
+      theirs.Free;
+      b.Free;
+      ours.Free;
+    end;
+  end;
+
+begin
+  Compare('Segoe UI', False);
+  Compare('Segoe UI', True);
+  Compare('Microsoft YaHei UI', False);
+  Compare('Microsoft YaHei UI', True);
+end;
+
+{ #91: what the test above checks is only worth something if Cocoa text goes through that
+  renderer. Nothing here runs Cocoa, so the wiring is read off the source: the procedure
+  every font configuration ends in installs it under LCLCocoa. }
+procedure TPainterTest.TestMacTextGoesThroughTheCanvasRenderer;
+var
+  sl: TStringList;
+  i, e: Integer;
+  body: string;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(RepoRoot + 'source' + PathDelim + 'tyControls.Painter.pas');
+    i := Pos('procedure TyUseTextRenderer(ABmp: TBGRABitmap);' + LineEnding + 'begin', sl.Text);
+    AssertTrue('TyUseTextRenderer found', i > 0);
+    e := Pos(LineEnding + 'end;', Copy(sl.Text, i, MaxInt));
+    body := Copy(sl.Text, i, e);
+    AssertTrue('Cocoa installs the canvas renderer -- ' + body,
+      Pos('{$IFDEF LCLCocoa}' + LineEnding + '  if not (ABmp.FontRenderer is TTyCanvasTextRenderer) then'
+        + LineEnding + '    ABmp.FontRenderer := TTyCanvasTextRenderer.Create;', body) > 0);
+  finally
+    sl.Free;
+  end;
+end;
+
 procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
 
   { Coverage of every pixel: 0 = paper, 1 = ink. }

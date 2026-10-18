@@ -313,7 +313,7 @@ type
     FImeCaretValid: Boolean;
     FPreedit: string;
     FInPreedit: Boolean;
-    { macOS:LM_IM_COMPOSITION 答它(TTyCocoaImeHandler),构造时就建,Cocoa 在建句柄时问 }
+    { macOS:LM_IM_COMPOSITION 答它(TyCocoaNewImeHandler),构造时就建,Cocoa 在建句柄时问 }
     FCocoaIme: TObject;
     { 事件 }
     FOnData: TTyTerminalDataEvent;
@@ -977,7 +977,7 @@ begin
   {$IFDEF LCLCocoa}
   { 句柄建之前就要在:LCL-Cocoa 在 CreateHandle 里发 LM_IM_COMPOSITION(Edit.pas 同一做法);
     handler 以 COM 字段持有 Self,_AddRef 是空操作,没有环 }
-  FCocoaIme := TTyCocoaImeHandler.Create(Self);
+  FCocoaIme := TyCocoaNewImeHandler(Self);
   {$ENDIF}
   SetInitialBounds(0, 0, 480, 300);
 end;
