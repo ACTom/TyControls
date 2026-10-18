@@ -676,7 +676,8 @@ uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.C
   tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.LabelGuide, tyControls.AdvChart.PolarBar,
-  tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelLayout;
+  tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelLayout,
+  tyControls.AdvChart.Graph;
 
 function UtHostRole(const AEl: TTyChartElement): string; forward;
 
@@ -1231,6 +1232,14 @@ begin
     carLinesLine, carLinesFrom, carLinesTo, carLinesLabel: Result := 'linesLine';
     carLinesEffect: Result := 'linesEffect';
     carParallelLine: Result := 'parallelClip';
+    { [F3a] }
+    carSankeyClip: Result := 'sankeyClip';
+    carPictorialGlyph: Result := 'pglyph';
+    carPictorialClip: Result := 'pclip';
+    carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo: Result := 'gedge';
+    carGraphEdgeLabel: Result := 'gedgeLabel';
+    carTreeNode: Result := 'symbol';
+    carTreeEdge: Result := 'treeEdge';
   else
     Result := '';
   end;
@@ -1239,12 +1248,15 @@ end;
 function TyChartAnimRoleKey(const AEl: TTyChartElement): string;
 begin
   Result := TyChartAnimProxyRole(AEl.Anim.Role);
-  if AEl.Anim.Role = carRipple then Result := Result + IntToStr(AEl.Anim.Sub);
+  { a ripple's number; a pictorial glyph's place in its column [F3a] }
+  if AEl.Anim.Role in [carRipple, carPictorialGlyph] then
+    Result := Result + IntToStr(AEl.Anim.Sub);
 end;
 
 function KeyIndexOf(const AEl: TTyChartElement): Integer;
 begin
-  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine] then Result := -1
+  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel, carParallelLine,
+    carSankeyClip] then Result := -1
   else Result := AEl.Anim.Index;
 end;
 
@@ -1725,6 +1737,143 @@ begin
         Start(TyAnimProps([Num1('shape.width', AEl.Anim.G[2]),
           Num1('shape.height', AEl.Anim.G[3])]), opts);
       end;
+    carSankeyClip:
+      begin
+        { [F3a] SankeyView's first render (`!this._data`) of a series that
+          animates: createGridClipShape over the main group's bounding rect
+          -- x - 10, y - 10, no width, height + 20 -- initProps of the width
+          + 20 on the series with the done as its callback (so no row, and
+          forced); the clip goes when it ends }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, -1, 'sankeyClip');
+        props := TyAnimProps([Num1('shape.x', AEl.Anim.G[0] - 10),
+          Num1('shape.y', AEl.Anim.G[1] - 10), Num1('shape.width', AEl.Anim.G[2] + 20),
+          Num1('shape.height', AEl.Anim.G[3] + 20)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.width', 0);
+        opts := TyAnimCallNoIndex;
+        opts.Done := @NoOp;
+        Start(TyAnimProps([props[2]]), opts);
+      end;
+    carTreeNode:
+      begin
+        { [F3a] TreeView.updateNode: a new Symbol -- its path pops in from
+          nothing at enter timing and the row (Symbol.updateData's isInit);
+          its group made at the source's first place and updateProps to the
+          layout at update timing with no row. A series that does not
+          animate sets both at once }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'symbol');
+        props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3]),
+          Num1('style.opacity', AEl.Anim.G[4])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0);
+        p.SetNum('scaleY', 0);
+        p.SetNum('style.opacity', 0);
+        Start(props, TyAnimCallAt(idx));
+        if AEl.Anim.G[10] = 0 then Exit;
+        p := Make(AEl.Anim.Series, idx, 'treeGroup');
+        props := TyAnimProps([Num1('x', AEl.Anim.G[5]), Num1('y', AEl.Anim.G[6])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('x', AEl.Anim.G[8]);
+        p.SetNum('y', AEl.Anim.G[9]);
+        TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+      end;
+    carTreeEdge:
+      begin
+        { [F3a] drawEdge: a curve made on the source's first place (both ends
+          and both control points), a TreePath with one child point on its
+          parent; updateProps to the shape at update timing with no row }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'treeEdge');
+        if AEl.Anim.Sub = 1 then
+        begin
+          ring := Copy(AEl.Anim.Pts, 0, Length(AEl.Anim.Pts));
+          props := TyAnimProps([TyAnimProp('shape.parentPoint',
+            TyAnimArr([AEl.Anim.G[0], AEl.Anim.G[1]], 2)),
+            TyAnimProp('shape.childPoints', TyAnimArr(ring, 2))]);
+          p.Attr(props);
+          p.SetFinal(props);
+          p.SetAnimProp('shape.childPoints', TyAnimArr([AEl.Anim.G[0], AEl.Anim.G[1]], 2));
+        end
+        else
+        begin
+          if Length(AEl.Anim.Vals) < 2 then Exit;
+          props := TyAnimProps([Num1('shape.x1', AEl.Anim.G[0]), Num1('shape.y1', AEl.Anim.G[1]),
+            Num1('shape.cpx1', AEl.Anim.G[2]), Num1('shape.cpy1', AEl.Anim.G[3]),
+            Num1('shape.cpx2', AEl.Anim.G[4]), Num1('shape.cpy2', AEl.Anim.G[5]),
+            Num1('shape.x2', AEl.Anim.G[6]), Num1('shape.y2', AEl.Anim.G[7])]);
+          p.Attr(props);
+          p.SetFinal(props);
+          for k := 0 to 3 do
+          begin
+            p.SetNum(props[k * 2].Key, AEl.Anim.Vals[0]);
+            p.SetNum(props[k * 2 + 1].Key, AEl.Anim.Vals[1]);
+          end;
+        end;
+        TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+      end;
+    carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
+      begin
+        { [F3a] Line._createLine: `line.shape.percent = 0`, initProps of 1
+          on the series at the edge's row -- its end symbols and its label
+          are placed from it every frame (beforeUpdate) }
+        if AUpdate or not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'gedge');
+        props := TyAnimProps([Num1('shape.percent', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.percent', 0);
+        Start(props, TyAnimCallAt(idx));
+      end;
+    carGraphEdgeLabel:
+      begin
+        { [F3a] LabelManager's fade of the Line group's text, to its own
+          opacity (the line's: a graph edge's is 0.5 by default) at the
+          edge's row }
+        if AUpdate or not (AC.Enabled and AC.LabelFade) or AEl.Ignore then Exit;
+        p := Make(AEl.Anim.Series, idx, 'gedgeLabel');
+        props := TyAnimProps([Num1('style.opacity', AEl.Style.Alpha)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('style.opacity', 0);
+        Start(props, TyAnimCallAt(idx));
+      end;
+    carPictorialGlyph:
+      begin
+        { [F3a] createOrUpdateRepeatSymbols / createOrUpdateSingleSymbol: a
+          new path at its place with no scale, initProps to symbolScale on
+          the ITEM's model (ItemModel.isAnimationEnabled: the series' and
+          the row's own `animation`) at the row; a row that does not animate
+          is set at once -- no proxy }
+        if AUpdate or not AC.Enabled or (AEl.Anim.G[4] <> 0) then Exit;
+        p := Make(AEl.Anim.Series, idx, TyChartAnimRoleKey(AEl));
+        props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0);
+        p.SetNum('scaleY', 0);
+        Start(props, TyAnimCallAt(idx));
+      end;
+    carPictorialClip:
+      begin
+        { [F3a] createOrUpdateClip: the bundle's clip made with no length
+          along the value axis, initProps of that length at the row; the
+          glyphs are set where they land }
+        if AUpdate or not AC.Enabled or (AEl.Anim.G[8] <> 0) then Exit;
+        p := Make(AEl.Anim.Series, idx, 'pclip');
+        if AEl.Anim.G[1] <> 0 then
+          props := TyAnimProps([Num1('shape.height', AEl.Anim.G[2])])
+        else
+          props := TyAnimProps([Num1('shape.width', AEl.Anim.G[2])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum(props[0].Key, 0);
+        Start(props, TyAnimCallAt(idx));
+      end;
     carBar:
       begin
         p := Make(AEl.Anim.Series, idx, 'bar');
@@ -1915,9 +2064,12 @@ begin
       end;
     carSunPiece:
       begin
-        { only a drill-down's new piece: created with r at r0, initProps r
-          at its row (SunburstPiece.updateData's firstCreate) [Batch 115] }
-        if not (AUpdate and AC.HierDrill) then Exit;
+        { a drill-down's new piece: created with r at r0, initProps r at its
+          row (SunburstPiece.updateData's firstCreate) [Batch 115]; and
+          [F3a] every piece of a first render the same way -- an update that
+          is not a drill stays still here }
+        if AUpdate and not AC.HierDrill then Exit;
+        if not AUpdate and not AC.Enabled then Exit;
         p := Make(AEl.Anim.Series, idx, 'sunPiece');
         props := SunPieceProps(AEl);
         p.Attr(props);
@@ -2039,8 +2191,11 @@ begin
         if not (AC.Enabled and AC.LabelFade) or AC.LabelValueAnim then Exit;
         { A HIDDEN LABEL IS NOT FADED IN: LabelManager walks the texts that
           are not ignored -- a themeRiver's built for its emphasis alone
-          [Batch 118] }
-        if AEl.Ignore and (AC.SeriesType = 'themeRiver') then Exit;
+          [Batch 118]; [F3a] nor is anything's built for a state alone }
+        if AEl.Ignore then Exit;
+        { [F3a] A TREEMAP'S DRILL fades its new words with its own wrap; its
+          breadcrumb's words never fade (disableLabelAnimation) }
+        if AEl.Anim.NoFade or ((AC.SeriesType = 'treemap') and AUpdate) then Exit;
         p := Make(AEl.Anim.Series, idx, 'label');
         p.Attr(props);
         p.SetFinal(props);
@@ -2347,6 +2502,14 @@ var
             with no tween here [Batch 128] }
           if Find(s, -1, 'parallelClip') <> nil then Exit;
           q2 := OldProxy(AOld, -1, 'parallelClip');
+          if q2 <> nil then Carry(q2, s, -1);
+        end;
+      carSankeyClip:
+        begin
+          { [F3a] the same for a sankey's main group: its enter clip runs on,
+            the view has its data }
+          if Find(s, -1, 'sankeyClip') <> nil then Exit;
+          q2 := OldProxy(AOld, -1, 'sankeyClip');
           if q2 <> nil then Carry(q2, s, -1);
         end;
       carBar:
@@ -3621,6 +3784,163 @@ begin
   AEl.Style.StrokeWidthLogical := AEl.Style.StrokeWidthLogical * Min(Abs(sx), Abs(sy));
 end;
 
+{ [F3a] A GRAPH EDGE'S LINE, END SYMBOL OR LABEL at a percent of its line
+  (Line.beforeUpdate): the line drawn to it, an end symbol scaled by it
+  about its end and carried to pointAt(0) or pointAt(percent), the label
+  moved and turned to where beforeUpdate places it }
+procedure GraphEdgeFrom(var AEl: TTyChartElement; APercent: Double);
+var
+  q1, q2, qc, d, d1: TTyPointF;
+  cv: Boolean;
+  pts: TTyPointFArray;
+  k: Integer;
+  x, y, s, x1, y1, gx, gy, gx1, gy1, rot, rot1: Double;
+  ah, ah1: TTyTextAnchorH;
+  av, av1: TTyTextAnchorV;
+begin
+  if IsNan(APercent) then Exit;
+  case AEl.Anim.Role of
+    carGraphEdge:
+      begin
+        TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+        pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
+        for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(AEl, pts[k]);
+        AEl.Shape.Points := pts;
+        AEl.Shape.Bounds := TyShapeBounds(TyShapePolyline(pts));
+        if not (APercent > 0) then MakeInkless(AEl);
+      end;
+    carGraphEdgeFrom, carGraphEdgeTo:
+      begin
+        if not (APercent > 0) then
+        begin
+          MakeInkless(AEl);
+          Exit;
+        end;
+        TyGraphEdgeEnds(AEl, APercent, AEl.Anim.Role = carGraphEdgeTo, x, y, s);
+        TyGraphEdgeEnds(AEl, 1, AEl.Anim.Role = carGraphEdgeTo, x1, y1, s);
+        d := TyGraphEdgeDev(AEl, TyPointF(x, y));
+        d1 := TyGraphEdgeDev(AEl, TyPointF(x1, y1));
+        TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, APercent, APercent);
+        TyShapeMove(AEl.Shape, d.X - d1.X, d.Y - d1.Y);
+      end;
+    carGraphEdgeLabel:
+      begin
+        TyGraphEdgeLabelAt(AEl, APercent, gx, gy, rot, ah, av);
+        TyGraphEdgeLabelAt(AEl, 1, gx1, gy1, rot1, ah1, av1);
+        if IsNan(gx) or IsNan(gy) or IsNan(gx1) or IsNan(gy1) then Exit;
+        MoveCaption(AEl, gx - gx1, gy - gy1);
+        if not IsNan(rot) and not IsNan(rot1) then
+          AEl.Caption.RotationRad := AEl.Caption.RotationRad + (rot - rot1);
+        AEl.Caption.AnchorH := ah;
+        AEl.Caption.AnchorV := av;
+      end;
+  end;
+end;
+
+{ [F3a] A TREE EDGE AS ITS PROXY HAS IT: the curve's eight numbers, or the
+  TreePath's parent and child points (TreePath.buildPath, the fork on the
+  dimension and at the place the tag says), each point through the main
+  group's frame to the canvas }
+procedure TreeEdgeFrom(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  cmds: TTyPathCmdArray;
+  pp, ch: TTyAnimValue;
+  n, i, fd, od: Integer;
+  f: Double;
+  tmp: array[0..1] of Double;
+  first, last, ci, ppt: array[0..1] of Double;
+  r: TTyXYWH;
+
+  function MX(AX, AY: Double): Double;
+  begin
+    if AEl.Anim.G[8] <> 0 then Result := (AEl.Anim.G[9] * AX + 0 * AY) + AEl.Anim.G[10]
+    else Result := AEl.Anim.G[10] + AX;
+  end;
+
+  function MY(AX, AY: Double): Double;
+  begin
+    if AEl.Anim.G[8] <> 0 then Result := (0 * AX + AEl.Anim.G[9] * AY) + AEl.Anim.G[11]
+    else Result := AEl.Anim.G[11] + AY;
+  end;
+
+  procedure Add(AKind: TTyPathCmdKind; AX1, AY1, AX2, AY2, AX, AY: Double);
+  begin
+    SetLength(cmds, Length(cmds) + 1);
+    cmds[High(cmds)] := Default(TTyPathCmd);
+    cmds[High(cmds)].Kind := AKind;
+    cmds[High(cmds)].X1 := MX(AX1, AY1);
+    cmds[High(cmds)].Y1 := MY(AX1, AY1);
+    cmds[High(cmds)].X2 := MX(AX2, AY2);
+    cmds[High(cmds)].Y2 := MY(AX2, AY2);
+    cmds[High(cmds)].X := MX(AX, AY);
+    cmds[High(cmds)].Y := MY(AX, AY);
+  end;
+
+  procedure Pt(AKind: TTyPathCmdKind; AX, AY: Double);
+  begin
+    Add(AKind, 0, 0, 0, 0, AX, AY);
+  end;
+
+begin
+  cmds := nil;
+  if AEl.Anim.Sub = 1 then
+  begin
+    pp := AProxy.GetAnimProp('shape.parentPoint');
+    ch := AProxy.GetAnimProp('shape.childPoints');
+    if (pp.Kind <> avkArray) or (ch.Kind <> avkArray) or (Length(pp.Arr) < 2) then Exit;
+    n := Length(ch.Arr) div 2;
+    if n = 0 then Exit;
+    ppt[0] := pp.Arr[0];
+    ppt[1] := pp.Arr[1];
+    if n = 1 then
+    begin
+      Pt(pckMove, ppt[0], ppt[1]);
+      Pt(pckLine, ch.Arr[0], ch.Arr[1]);
+    end
+    else
+    begin
+      fd := Round(AEl.Anim.G[2]);
+      od := 1 - fd;
+      f := AEl.Anim.G[3];
+      first[0] := ch.Arr[0];
+      first[1] := ch.Arr[1];
+      last[0] := ch.Arr[(n - 1) * 2];
+      last[1] := ch.Arr[(n - 1) * 2 + 1];
+      tmp[fd] := ppt[fd];
+      tmp[od] := ppt[od] + (last[od] - ppt[od]) * f;
+      Pt(pckMove, ppt[0], ppt[1]);
+      Pt(pckLine, tmp[0], tmp[1]);
+      Pt(pckMove, first[0], first[1]);
+      tmp[fd] := first[fd];
+      Pt(pckLine, tmp[0], tmp[1]);
+      tmp[fd] := last[fd];
+      Pt(pckLine, tmp[0], tmp[1]);
+      Pt(pckLine, last[0], last[1]);
+      for i := 1 to n - 2 do
+      begin
+        ci[0] := ch.Arr[i * 2];
+        ci[1] := ch.Arr[i * 2 + 1];
+        Pt(pckMove, ci[0], ci[1]);
+        tmp[fd] := ci[fd];
+        Pt(pckLine, tmp[0], tmp[1]);
+      end;
+    end;
+  end
+  else
+  begin
+    Pt(pckMove, AProxy.Num('shape.x1'), AProxy.Num('shape.y1'));
+    Add(pckCurve, AProxy.Num('shape.cpx1'), AProxy.Num('shape.cpy1'),
+      AProxy.Num('shape.cpx2'), AProxy.Num('shape.cpy2'),
+      AProxy.Num('shape.x2'), AProxy.Num('shape.y2'));
+  end;
+  AEl.Shape.Points := [TyPointF(cmds[0].X, cmds[0].Y),
+    TyPointF(cmds[High(cmds)].X, cmds[High(cmds)].Y)];
+  AEl.Shape.Cmds := cmds;
+  r := TyPathCmdsRect(cmds);
+  AEl.Shape.HasCmdBounds := True;
+  AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh, rest: Double;
@@ -3648,6 +3968,70 @@ begin
         AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
           y + AProxy.Num('shape.height'));
       end;
+    carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
+      GraphEdgeFrom(AEl, AProxy.Num('shape.percent'));
+    carTreeEdge:
+      TreeEdgeFrom(AEl, AProxy);
+    carGraphEdgeLabel:
+      begin
+        { [F3a] the fade, over the opacity the list gives it (a state's) }
+        rest := AProxy.FinalOf('style.opacity').Num;
+        a := AProxy.Num('style.opacity');
+        if not (a > 0) then MakeInkless(AEl)
+        else if rest > 0 then AEl.Style.Alpha := AEl.Style.Alpha * (a / rest)
+        else AEl.Style.Alpha := a;
+      end;
+    carPictorialGlyph:
+      begin
+        { [F3a] the glyph scaled about its place by the scale now over its
+          scale at rest }
+        if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
+        if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3] else fy := 1;
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then MakeInkless(AEl)
+        else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+      end;
+    carPictorialClip:
+      begin
+        { [F3a] the bundle's clip along the value axis, from the floor to the
+          length it has now; across it, the whole canvas -- and the plot
+          where the plot clips }
+        if AEl.Anim.G[1] <> 0 then
+        begin
+          a := AProxy.Num('shape.height');
+          r := TyRectF(-1000000, Min(AEl.Anim.G[0], AEl.Anim.G[0] + a), 1000000,
+            Max(AEl.Anim.G[0], AEl.Anim.G[0] + a));
+        end
+        else
+        begin
+          a := AProxy.Num('shape.width');
+          r := TyRectF(Min(AEl.Anim.G[0], AEl.Anim.G[0] + a), -1000000,
+            Max(AEl.Anim.G[0], AEl.Anim.G[0] + a), 1000000);
+        end;
+        if AEl.Anim.G[3] <> 0 then
+          r := TyRectF(Max(r.Left, AEl.Anim.G[4]), Max(r.Top, AEl.Anim.G[5]),
+            Min(r.Right, AEl.Anim.G[6]), Min(r.Bottom, AEl.Anim.G[7]));
+        AEl.HasClip := True;
+        AEl.ClipRect := r;
+      end;
+    carSankeyClip:
+      begin
+        { [F3a] the main group's clip while it grows: its rect in the
+          group's frame carried to the canvas (M0, M3, M4, M5) }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y');
+        fx := x + AProxy.Num('shape.width');
+        fy := y + AProxy.Num('shape.height');
+        x := AEl.Anim.G[4] * x + AEl.Anim.G[6];
+        y := AEl.Anim.G[5] * y + AEl.Anim.G[7];
+        fx := AEl.Anim.G[4] * fx + AEl.Anim.G[6];
+        fy := AEl.Anim.G[5] * fy + AEl.Anim.G[7];
+        r := TyRectF(Min(x, fx), Min(y, fy), Max(x, fx), Max(y, fy));
+        if AEl.HasClip then
+          r := TyRectF(Max(r.Left, AEl.ClipRect.Left), Max(r.Top, AEl.ClipRect.Top),
+            Min(r.Right, AEl.ClipRect.Right), Min(r.Bottom, AEl.ClipRect.Bottom));
+        AEl.HasClip := True;
+        AEl.ClipRect := r;
+      end;
     carLinesLine:
       TyLinesFrameLine(AEl, AProxy.Num('shape.percent'));
     carLinesFrom, carLinesTo:
@@ -3656,16 +4040,16 @@ begin
       TyLinesFrameLabel(AEl, AProxy.Num('shape.percent'));
     carBar:
       BarFrom(AEl, AProxy);
-    carSymbol, carLineSymbol, carEffectSymbol:
+    carSymbol, carLineSymbol, carEffectSymbol, carTreeNode:
       begin
-        if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
+        if AEl.Anim.Role in [carSymbol, carEffectSymbol, carTreeNode] then
         begin
           if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2]
           else fx := 1;
           if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3]
           else fy := 1;
           { an effect symbol's opacity tween moves a style no one draws }
-          if AEl.Anim.Role = carSymbol then
+          if AEl.Anim.Role in [carSymbol, carTreeNode] then
             AEl.Style.Alpha := AProxy.Num('style.opacity');
         end
         else
@@ -3692,6 +4076,8 @@ begin
         if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
           MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5],
             NumOr(AProxy, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6])
+        { a tree node's group is a proxy of its own (the frame moves it) }
+        else if AEl.Anim.Role = carTreeNode then
         else
           MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
             NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
@@ -4118,7 +4504,7 @@ begin
       fx := vx.Num / rx.Num;
       fy := vy.Num / ry.Num;
       { about the symbol's centre: a line symbol's point }
-      if AEl.Anim.Role in [carLineSymbol, carSymbol, carEffectSymbol] then
+      if AEl.Anim.Role in [carLineSymbol, carSymbol, carEffectSymbol, carTreeNode] then
       begin
         cx := AEl.Anim.G[0];
         cy := AEl.Anim.G[1];
@@ -6569,6 +6955,19 @@ begin
     { THE STATES [Batch 94] }
     if (i <= High(AStBind)) and (AStBind[i] <> nil) then
       TyAnimApplyState(el, AStBind[i], (i <= High(ABind)) and (ABind[i] = AStBind[i]));
+    { [F3a] A TREE NODE'S GROUP slides on a proxy of its own; a label placed
+      on its own rides it too }
+    if (ASet <> nil) and ((el.Anim.Role = carTreeNode) or el.Anim.RideTree) then
+    begin
+      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'treeGroup');
+      if (g <> nil) and not g.AtFinal then
+      begin
+        dx := (NumOr(g, 'x', el.Anim.G[5]) - el.Anim.G[5]) * el.Anim.G[7];
+        dy := (NumOr(g, 'y', el.Anim.G[6]) - el.Anim.G[6]) * el.Anim.G[7];
+        if el.Anim.RideTree then MoveCaption(el, dx, dy)
+        else MoveSymbol(el, dx, dy);
+      end;
+    end;
     { A COMBINING ELEMENT IS DRAWN AS ITS CHILDREN [Batch 137]: the first in
       its place, the others after the list, silent (insertion indices kept);
       a child has its own style -- the element's states are not its }
@@ -6597,9 +6996,18 @@ begin
         TyShapeMove(el.Shape, NumOr(g, 'x', el.Anim.G[8]) - el.Anim.G[8],
           NumOr(g, 'y', el.Anim.G[9]) - el.Anim.G[9]);
     end;
+    { [F3a] A GRAPH EDGE'S LABEL is placed from its line's percent, whatever
+      its own fade does }
+    if (ASet <> nil) and (el.Anim.Role = carGraphEdgeLabel) then
+    begin
+      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'gedge');
+      if (g <> nil) and not g.AtFinal then GraphEdgeFrom(el, g.Num('shape.percent'));
+    end;
     h := el.Anim.HostPlus1 - 1;
+    { (a tree node's group slides on after its symbol rests) }
     if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
-      and (h <= High(ABind)) and (ABind[h] <> nil) and not ABind[h].AtFinal then
+      and (h <= High(ABind)) and (ABind[h] <> nil)
+      and (not ABind[h].AtFinal or (ASource.Element(h).Anim.Role = carTreeNode)) then
     begin
       hostS := ASource.Element(h);
       hostF := ADest.Element(h);

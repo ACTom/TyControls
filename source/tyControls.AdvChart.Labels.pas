@@ -1182,6 +1182,31 @@ begin
       cap.Anim.Role := carLinesLabel;
       cap.Anim.G := host.Anim.G;
     end;
+    { [F3a] A GRAPH EDGE'S LABEL is the Line group's text: placed from the
+      line's percent, faded on its own }
+    if host.Anim.Role = carGraphEdge then
+    begin
+      cap.Anim := host.Anim;
+      cap.Anim.Vals := Copy(host.Anim.Vals, 0, Length(host.Anim.Vals));
+      cap.Anim.Role := carGraphEdgeLabel;
+    end;
+    { [F3a] A TREE NODE'S LABEL rides its group's slide: one hung off the
+      symbol follows it as drawn, one placed on its own is carried }
+    if (host.Anim.Role = carTreeNode) and host.Caption.HasFixedAnchor then
+    begin
+      cap.Anim.RideTree := True;
+      cap.Anim.G := host.Anim.G;
+    end;
+    { [F3a] a treemap's breadcrumb item: disableLabelAnimation }
+    cap.Anim.NoFade := host.Anim.Role = carTmCrumb;
+    { [F3a] A SANKEY'S LABEL is under its host's clip paths -- the main
+      group's enter clip -- and never fades (disableLabelAnimation) }
+    if host.Anim.Role = carSankeyClip then
+    begin
+      cap.Anim.Role := carSankeyClip;
+      cap.Anim.Index := -1;
+      cap.Anim.G := host.Anim.G;
+    end;
     if not host.Caption.HasFixedAnchor then
     begin
       cap.Anim.HostPlus1 := i + 1;

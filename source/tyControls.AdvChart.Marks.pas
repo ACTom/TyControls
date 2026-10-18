@@ -3491,6 +3491,44 @@ begin
       el := MarkElement(shape, v, ABinding.SeriesIndex, i);
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
+      { THE ENTER ANIMATION [F3a]. A symbolClip's glyphs are set where they
+        land and the bundle's clip grows along the value axis from the
+        floor -- one proxy per bar: G[0] the floor (the bundle's place along
+        the value axis), G[1] 1 for a vertical bar, G[2] the bar's signed
+        length (the clip's width or height at rest), G[3] 1 where the plot
+        clips too, G[4..7] the plot, G[8] 1 where the row does not animate.
+        Every other glyph scales from nothing
+        about its own place to symbolScale -- the size over the pattern
+        size, mirrored along the value axis as the glyph is ((isHorizontal ?
+        -1 : 1) * pxSign) -- G[0..1] that place, G[2..3] the scale, G[4] 1
+        where the row does not animate (ItemModel.isAnimationEnabled) }
+      el.Anim.Series := ABinding.SeriesIndex;
+      el.Anim.Index := i;
+      if spec.Clip then
+      begin
+        el.Anim.Role := carPictorialClip;
+        el.Anim.G[0] := floorPx;
+        el.Anim.G[1] := Ord(baseHoriz);
+        el.Anim.G[2] := cutLen;
+        el.Anim.G[3] := Ord(col.Clip);
+        el.Anim.G[4] := plot.Left;
+        el.Anim.G[5] := plot.Top;
+        el.Anim.G[6] := plot.Right;
+        el.Anim.G[7] := plot.Bottom;
+        el.Anim.G[8] := Ord(spec.AnimOff);
+      end
+      else
+      begin
+        el.Anim.Role := carPictorialGlyph;
+        el.Anim.Sub := k;
+        el.Anim.G[0] := pt.X;
+        el.Anim.G[1] := pt.Y;
+        el.Anim.G[2] := glyphW / spec.PatternSize;
+        el.Anim.G[3] := glyphH / spec.PatternSize;
+        el.Anim.G[4] := Ord(spec.AnimOff);
+        if baseHoriz then el.Anim.G[3] := el.Anim.G[3] * (-1 * pxSign)
+        else el.Anim.G[2] := el.Anim.G[2] * (1 * pxSign);
+      end;
       { THE TARGET: the bar group is the dispatcher and its glyphs are what
         zrender finds under the pointer -- as drawn, so the clip that cuts a
         glyph cuts its hit too (Handler.isHover asks every clipPath up the

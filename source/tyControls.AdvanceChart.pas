@@ -28427,7 +28427,7 @@ begin
     its polyline) a proxy of the states' own }
   if (role <> nil) and (el.Anim.Role in [carBar, carPolarBar, carSymbol, carSector, carFunnel,
     carCandleBody, carCandleWickHigh, carCandleWickLow, carLabel, carGuide,
-    carBoxplot]) then
+    carBoxplot, carTreeNode]) then
     p := role
   else
   begin
@@ -28468,7 +28468,9 @@ begin
     { a symbol path's scale is half its size; a pictorial glyph's its own }
     if AKind = cStPxPath then
       case el.Anim.Role of
-        carSymbol, carEffectSymbol:
+        { [F3a] a graph's node is a carSymbol, a tree's a carTreeNode: the
+          Symbol path's own scale, its half size }
+        carSymbol, carEffectSymbol, carTreeNode:
           begin
             Seed('scaleX', TyAnimNum(el.Anim.G[2]));
             Seed('scaleY', TyAnimNum(el.Anim.G[3]));
@@ -39587,7 +39589,12 @@ begin
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
       or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName)
       { a chord's node labels [Batch 120] }
-      or (t = TyChordSeriesTypeName);
+      or (t = TyChordSeriesTypeName)
+      { [F3a] a sunburst's, a treemap's (its first render: its own wrap
+        fades a drill's), a pictorial bar's, a graph's nodes' and a tree's }
+      or (t = TySunburstSeriesTypeName) or (t = TyTreemapSeriesTypeName)
+      or (t = TyPictorialSeriesTypeName) or (t = TyGraphSeriesTypeName)
+      or (t = TyTreeSeriesTypeName);
     { A SUNBURST'S DRILL-DOWN: its pieces transition, its new labels fade
       [Batch 115] }
     r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];
