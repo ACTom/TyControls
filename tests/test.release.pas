@@ -67,6 +67,8 @@ type
     procedure BothScriptsShipTheSameTrees;
     procedure TheChartOptionEditorStaysAShell;
     procedure EveryUnitOnDiskIsListedInItsPackage;
+    { [S1] the include files are named by no .lpk }
+    procedure EveryIncludeFileAPackagedUnitNamesShips;
     procedure EveryTestUnitThatRegistersTestsIsLinked;
     procedure TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
     procedure TheExampleRecordingsMatchTheOracle;
@@ -533,6 +535,69 @@ begin
       + LineEnding + bad.Text, '', bad.Text);
   finally
     bad.Free;
+  end;
+end;
+
+procedure TReleaseManifestTest.EveryIncludeFileAPackagedUnitNamesShips;
+var
+  todo, seen: TStringList;
+  sl: TStringList;
+  txt, rel, incRel, bad: string;
+  p, q, found: Integer;
+begin
+  { NO MANIFEST NAMES AN INCLUDE FILE. The .lpk lists units, and both directions above walk
+    units; a unit split into include files (the terminal view, the chart control [S1]) keeps
+    most of its code in files that only its own $I directives name. They ship today because
+    both scripts copy source/ whole -- this keeps a later filter from shipping a unit without
+    the files it cannot compile without. Each $I in each packaged unit, and in each include
+    it reaches, resolved next to the file that names it. }
+  todo := TStringList.Create;
+  seen := TStringList.Create;
+  sl := TStringList.Create;
+  try
+    CollectLpkFiles('tycontrols.lpk', todo);
+    CollectLpkFiles('tycontrols_dt.lpk', todo);
+    CollectLpkFiles('tycontrols_db.lpk', todo);
+    bad := '';
+    found := 0;
+    while todo.Count > 0 do
+    begin
+      rel := todo[0];
+      todo.Delete(0);
+      if not (SameText(ExtractFileExt(rel), '.pas') or SameText(ExtractFileExt(rel), '.inc')) then
+        Continue;
+      if not FileExists(RepoRoot + rel) then Continue;
+      sl.LoadFromFile(RepoRoot + rel);
+      txt := sl.Text;
+      p := 1;
+      repeat
+        p := PosEx('{$I ', txt, p);
+        if p = 0 then Break;
+        q := PosEx('}', txt, p);
+        if q = 0 then Break;
+        incRel := Trim(Copy(txt, p + 4, q - p - 4));
+        p := q;
+        incRel := ExtractFilePath(rel) + incRel;
+        if seen.IndexOf(incRel) >= 0 then Continue;
+        seen.Add(incRel);
+        Inc(found);
+        if not FileExists(RepoRoot + incRel) then
+          bad := bad + LineEnding + '  ' + incRel + '  (named by ' + rel + ', not on disk)'
+        else
+        begin
+          if not IsShipped(FPs1, incRel) then bad := bad + LineEnding + '  ' + incRel + '  (ps1)';
+          if not IsShipped(FSh, incRel) then bad := bad + LineEnding + '  ' + incRel + '  (sh)';
+          todo.Add(incRel);
+        end;
+      until False;
+    end;
+    AssertTrue('the units name their include files (' + IntToStr(found) + ')', found >= 15);
+    AssertEquals('include files a packaged unit needs that the release does not ship:' + bad,
+      '', bad);
+  finally
+    sl.Free;
+    seen.Free;
+    todo.Free;
   end;
 end;
 

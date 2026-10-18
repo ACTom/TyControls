@@ -458,8 +458,8 @@ end;
 function LiteralKeys(const AUnit: string): TStringList;
 var
   sl: TStringList;
-  t, lit: string;
-  i, n, depth: Integer;
+  t, lit, rest, incName: string;
+  i, n, depth, p, q: Integer;
 
   procedure Take(const S: string);
   var
@@ -481,6 +481,19 @@ begin
   try
     sl.LoadFromFile(TbRepoDir + 'source' + PathDelim + AUnit + '.pas');
     t := sl.Text;
+    { the include files are the unit's text too: a unit split into them [S1] names its
+      keys there. Each $I directive's file, read from the same directory. }
+    rest := t;
+    repeat
+      p := Pos('{$I ', rest);
+      if p = 0 then Break;
+      rest := Copy(rest, p + 4, MaxInt);
+      q := Pos('}', rest);
+      incName := Trim(Copy(rest, 1, q - 1));
+      rest := Copy(rest, q + 1, MaxInt);
+      sl.LoadFromFile(TbRepoDir + 'source' + PathDelim + incName);
+      t := t + LineEnding + sl.Text;
+    until False;
   finally
     sl.Free;
   end;
