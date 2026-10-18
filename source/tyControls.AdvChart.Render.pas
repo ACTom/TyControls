@@ -37,7 +37,8 @@ function TyElementGradientBox(const AElement: TTyChartElement;
 
 { A pattern's image: a `data:` URL with base64 content, decoded once and
   kept; nil for anything else or anything that does not decode. Owned by the
-  cache. [Batch 105] }
+  cache. [Batch 105] [F6a] AdvChart.Images answers: an image list's
+  `image://name/index` (or `name/index`) too, at its own width. }
 function TyPatternImage(const ASource: string): TBGRABitmap;
 { [Batch 152] an image the chart made itself (a heatmap layer), kept under
   AKey -- a 'data:' key no decoder reads -- for TyPatternImage to answer;
@@ -71,12 +72,47 @@ procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
 
 implementation
 
-uses base64, BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Symbol,
-  tyControls.AdvChart.Decal;
+uses BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Decal, tyControls.AdvChart.Images;
 
 var
-  GPatternCache: TStringList = nil;
   GDecalCache: TStringList = nil;
+
+{ [F6a] A PICTURE DRAWN INTO ITS CORNERS: ACorners the image's top-left,
+  top-right, bottom-right and bottom-left in device px (a shape's
+  polygon); the image through the affine map of its own rect onto them,
+  inside the polygon. The resolution is the one for the top edge's length.
+  Nothing when the source has no picture -- upstream's image not loaded. }
+procedure PaintImageInto(P: TTyPainter; const ASource: string;
+  const ACorners: TTyPointFArray);
+var
+  img: TBGRABitmap;
+  nw, nh, ew: Double;
+  pm: array[0..5] of Double;
+  i: Integer;
+begin
+  if Length(ACorners) < 4 then Exit;
+  { a picture of no area (a symbol scaled to nothing) draws nothing: its
+    map has no inverse }
+  if Abs((ACorners[1].X - ACorners[0].X) * (ACorners[3].Y - ACorners[0].Y)
+    - (ACorners[1].Y - ACorners[0].Y) * (ACorners[3].X - ACorners[0].X)) < 1e-9 then Exit;
+  if IsNan(ACorners[0].X + ACorners[0].Y + ACorners[1].X + ACorners[1].Y
+    + ACorners[3].X + ACorners[3].Y) then Exit;
+  ew := Sqrt(Sqr(ACorners[1].X - ACorners[0].X) + Sqr(ACorners[1].Y - ACorners[0].Y));
+  img := TyChartImage(ASource, ew, nw, nh);
+  if (img = nil) or (img.Width <= 0) or (img.Height <= 0) then Exit;
+  pm[0] := (ACorners[1].X - ACorners[0].X) / img.Width;
+  pm[1] := (ACorners[1].Y - ACorners[0].Y) / img.Width;
+  pm[2] := (ACorners[3].X - ACorners[0].X) / img.Height;
+  pm[3] := (ACorners[3].Y - ACorners[0].Y) / img.Height;
+  pm[4] := ACorners[0].X;
+  pm[5] := ACorners[0].Y;
+  P.BeginPath;
+  P.MoveTo(ACorners[0].X, ACorners[0].Y);
+  for i := 1 to 3 do P.LineTo(ACorners[i].X, ACorners[i].Y);
+  P.ClosePath;
+  P.FillPathPattern(img, 'no-repeat', pm, tfrNonZero);
+end;
 
 function TyDecalTileImage(const ADecal: TTyChartDecal; AScale: Double): TBGRABitmap;
 var
@@ -136,6 +172,12 @@ begin
           (tile.Symbols[i].X + tile.Symbols[i].W) * AScale,
           (tile.Symbols[i].Y + tile.Symbols[i].H) * AScale));
         if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Continue;
+        { [F6a] a picture: drawn as it is, no decal colour }
+        if sh.Image <> '' then
+        begin
+          PaintImageInto(P, sh.Image, sh.Points);
+          Continue;
+        end;
         P.BeginPath;
         TyTraceShape(P, sh);
         if spec.Kind = tsyLine then
@@ -186,63 +228,15 @@ begin
 end;
 
 function TyPatternImage(const ASource: string): TBGRABitmap;
-var
-  k, comma: Integer;
-  head, raw: string;
-  ms: TStringStream;
-  bmp: TBGRABitmap;
+var nw, nh: Double;
 begin
-  Result := nil;
-  if Copy(ASource, 1, 5) <> 'data:' then Exit;
-  if GPatternCache = nil then
-  begin
-    GPatternCache := TStringList.Create;
-    GPatternCache.OwnsObjects := True;
-    GPatternCache.Sorted := True;
-    GPatternCache.CaseSensitive := True;
-  end;
-  if GPatternCache.Find(ASource, k) then
-    Exit(TBGRABitmap(GPatternCache.Objects[k]));
-  comma := Pos(',', ASource);
-  if comma <= 0 then Exit;
-  head := LowerCase(Copy(ASource, 1, comma - 1));
-  if (Length(head) < 7) or (Copy(head, Length(head) - 6, 7) <> ';base64') then Exit;
-  bmp := nil;
-  try
-    raw := DecodeStringBase64(Copy(ASource, comma + 1, MaxInt));
-    ms := TStringStream.Create(raw);
-    try
-      bmp := TBGRABitmap.Create(ms);
-    finally
-      ms.Free;
-    end;
-  except
-    FreeAndNil(bmp);
-  end;
-  { kept even when it failed, so a broken image is not decoded every frame;
-    a long-running chart cycling through patterns does not grow forever }
-  if GPatternCache.Count >= 64 then GPatternCache.Clear;
-  GPatternCache.AddObject(ASource, bmp);
-  Result := bmp;
+  { [F6a] the pictures moved to AdvChart.Images, with the image lists }
+  Result := TyChartImage(ASource, 0, nw, nh);
 end;
 
 procedure TyPatternRegisterImage(const AKey: string; ABmp: TBGRABitmap);
-var k: Integer;
 begin
-  if GPatternCache = nil then
-  begin
-    GPatternCache := TStringList.Create;
-    GPatternCache.OwnsObjects := True;
-    GPatternCache.Sorted := True;
-    GPatternCache.CaseSensitive := True;
-  end;
-  if GPatternCache.Find(AKey, k) then
-  begin
-    ABmp.Free;
-    Exit;
-  end;
-  if GPatternCache.Count >= 64 then GPatternCache.Clear;
-  GPatternCache.AddObject(AKey, ABmp);
+  TyChartImageRegisterBitmap(AKey, ABmp);
 end;
 
 function TyElementGradientBox(const AElement: TTyChartElement;
@@ -470,7 +464,9 @@ begin
         h := AGeom.SymH;
         if AGeom.Boost then
           P.RectPath(x - w / 2, y - h / 2, x - w / 2 + w, y - h / 2 + h)
-        else if ASpec.Kind <> tsyNone then
+        { [F6a] a picture in a large batch: LargeSymbolPath builds through
+          the symbol's path, and an image has none -- nothing }
+        else if not (ASpec.Kind in [tsyNone, tsyImage]) then
         begin
           sub := TyBuildSymbolInBox(ASpec, TyRectF(x - w / 2, y - h / 2,
             x - w / 2 + w, y - h / 2 + h));
@@ -954,6 +950,7 @@ var
   stops: array of TTyGradStop;
   img: TBGRABitmap;
   pm: TTyDoubleArray;
+  nw, nh, devW: Double;
 
   procedure PaintPen; forward;
 
@@ -990,7 +987,16 @@ var
           scaled to the device. No image -- a URL, or one that does not
           decode -- fills nothing, which is upstream's `hasFill = false`
           while the image is not ready. [Batch 105] }
-        img := TyPatternImage(AElement.Style.FillPattern.Image);
+        { [F6a] the resolution for the device pixels the image covers: a
+          unit image's box, else its natural size at this PPI }
+        if AElement.Style.FillPattern.HasMatrix and AElement.Style.FillPattern.UnitImage then
+          devW := Sqrt(Sqr(AElement.Style.FillPattern.Matrix[0])
+            + Sqr(AElement.Style.FillPattern.Matrix[1])) * P.PPI / 96
+        else if TyChartImageSize(AElement.Style.FillPattern.Image, nw, nh) then
+          devW := nw * P.PPI / 96
+        else
+          devW := 0;
+        img := TyChartImage(AElement.Style.FillPattern.Image, devW, nw, nh);
         if img <> nil then
         begin
           if AElement.Style.FillPattern.HasMatrix then
@@ -1008,7 +1014,18 @@ var
             end;
           end
           else
+          begin
             TyPatternMatrix(AElement.Style.FillPattern, pm);
+            { a resolution other than the natural size: its pixels are
+              smaller than css px by that much [F6a] }
+            if (img.Width > 0) and (img.Height > 0) and (nw > 0) and (nh > 0) then
+            begin
+              pm[0] := pm[0] * nw / img.Width;
+              pm[1] := pm[1] * nw / img.Width;
+              pm[2] := pm[2] * nh / img.Height;
+              pm[3] := pm[3] * nh / img.Height;
+            end;
+          end;
           for gi := 0 to 5 do pm[gi] := pm[gi] * P.PPI / 96;
           P.FillPathPattern(img, AElement.Style.FillPattern.Repetition, pm, rule);
         end;
@@ -1221,7 +1238,7 @@ var
         w := g.SymW;
         h := g.SymH;
         case TTySymbolKind(g.SymKind) of
-          tsyNone: ;
+          tsyNone, tsyImage: ;
           tsyCircle:
             begin
               r := Min(w, h) / 2;
@@ -1353,6 +1370,25 @@ var
 
 begin
   if P = nil then Exit;
+  { [F6a] A PICTURE: the image in its corners, with the element's alpha and
+    clip, and nothing else of the style -- zrender's Image draws no path
+    (a symbol's colour never reaches it) }
+  if AElement.Shape.Image <> '' then
+  begin
+    P.SaveState;
+    try
+      if AElement.HasClip then
+        P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
+          Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+      if AElement.Style.Alpha < 1 then
+        P.SetElementAlpha(AElement.Style.Alpha);
+      PaintImageInto(P, AElement.Shape.Image, AElement.Shape.Points);
+    finally
+      P.RestoreState;
+    end;
+    TyRenderCaption(P, AElement);
+    Exit;
+  end;
   { Nothing to draw is not an error -- a placeholder element with neither fill
     nor stroke is a legitimate way to register a hit area with no ink. GLYPHS
     COUNT AS INK: a caption fills no path and strokes nothing, and without
@@ -1424,7 +1460,6 @@ begin
 end;
 
 finalization
-  FreeAndNil(GPatternCache);
   FreeAndNil(GDecalCache);
 
 end.

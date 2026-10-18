@@ -234,6 +234,9 @@ type
     ItemWidth, ItemHeight: Double;
     { `legend.icon`; '' when absent. }
     Icon: string;
+    { [F6a] `symbolKeepAspect`, true by default (LegendModel): a picture
+      icon keeps its aspect in the item box (makeImage 'center') }
+    KeepAspect: Boolean;
     { A `{name}` template. Replaced ONCE, because upstream calls
       String.replace with a string pattern rather than a global regexp. }
     Formatter: string;
@@ -345,8 +348,10 @@ type
     Local: TTyXYWH;
     Box: TTyRectF;
     Path: TTyZrPath;
-    { an 'image://' icon: laid out, never drawn }
+    { an 'image://' icon: laid out over its whole box, [F6a] and drawn there
+      from ImageSrc (createIcon's image fills the box) }
     IsImage: Boolean;
+    ImageSrc: string;
   end;
 
   TTyLegendLayout = record
@@ -749,6 +754,7 @@ begin
   Result.BorderRadii := TyCornerRadii([]);
   Result.Z := cDefaultZ;
   Result.InactiveBorderAuto := True;
+  Result.KeepAspect := True;
   { [Batch 98] }
   Result.IsScroll := False;
   Result.HasSelector := False;
@@ -973,6 +979,8 @@ begin
   Result.ItemWidth := NumIn(node, 'itemWidth', Result.ItemWidth);
   Result.ItemHeight := NumIn(node, 'itemHeight', Result.ItemHeight);
   Result.Icon := StrIn(node, 'icon');
+  d := node.Find('symbolKeepAspect');
+  if (d <> nil) and (d.JSONType = jtBoolean) then Result.KeepAspect := d.AsBoolean;
   { A FUNCTION FORMATTER CANNOT SURVIVE JSON, so only the string form exists
     here and a non-string leaves the name alone. }
   d := node.Find('formatter');
@@ -1960,6 +1968,7 @@ begin
   if Copy(AStr, 1, 8) = 'image://' then
   begin
     APart.IsImage := True;
+    APart.ImageSrc := AStr;
     APart.Local := box;
     Exit;
   end;
@@ -2686,9 +2695,23 @@ var
   procedure DrawPagerIcon(const APart: TTyLegendPagerPart; ACanJump: Boolean;
     AWhich: Integer);
   begin
-    if APart.IsImage or (Length(APart.Path) = 0) then
+    if APart.IsImage then
     begin
-      { an image icon is not drawn here; its box still takes the click }
+      { [F6a] the picture over the whole box, whether it can jump or not
+        (an image takes no colour) }
+      el := Blank;
+      el.Shape := TyShapePolygon([TyPointF(APart.Box.Left, APart.Box.Top),
+        TyPointF(APart.Box.Right, APart.Box.Top),
+        TyPointF(APart.Box.Right, APart.Box.Bottom),
+        TyPointF(APart.Box.Left, APart.Box.Bottom)]);
+      el.Shape.Image := APart.ImageSrc;
+      AList.Add(el);
+      Inc(Result);
+    end
+    else if Length(APart.Path) = 0 then
+    begin
+      { a path that parses to nothing draws nothing; its box still takes the
+        click }
     end
     else
     begin
@@ -2711,6 +2734,9 @@ var
       el.Shape := TyShapeRect(APart.Box);
       el.Silent := False;
       el.Datum := TyChartComponentDatum(ctkLegendPager, ALegendIndex, AWhich);
+      { [F6a] `icon.cursor = canJump ? 'pointer' : 'default'`
+        (ScrollableLegendView._updatePageInfoView) }
+      if not ACanJump then el.Cursor := 'default';
       AList.Add(el);
       Inc(Result);
     end;
@@ -2732,6 +2758,10 @@ var
     sp.Kind := AKind;
     sp.Empty := AEmpty;
     sp.PathData := APath;
+    { [F6a] getDefaultLegendIcon hands createSymbol the legend's
+      symbolKeepAspect; a line's own marker (LineSeries.getLegendIcon)
+      none }
+    sp.KeepAspect := ASpec.KeepAspect and not it.OwnIcon;
     Result := Blank;
     Result.Shape := TyBuildSymbolInBox(sp, ABox);
     if AEmpty or (AKind = tsyLine) then

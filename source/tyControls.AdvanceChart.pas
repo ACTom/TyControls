@@ -1085,8 +1085,13 @@ type
     { the last pointer position, device px }
     FDzLastX, FDzLastY: Double;
     FDzCursor: string;
-    FDzBaseCursor: TCursor;
-    FDzHasBaseCursor: Boolean;
+    { [F6a] THE CHART'S CURSOR: the CSS name upstream's canvas would show
+      (zrender's Handler and the roam / brush listeners' setCursorStyle),
+      and the host's own Cursor kept while the chart shows another }
+    FCursorName: string;
+    FHostCursor: TCursor;
+    FHasHostCursor: Boolean;
+    FCursorSet: TCursor;
     { the clock: NaN is the machine's, a number a test's }
     FDzNow: Double;
     FDzTimer: TTimer;
@@ -1646,6 +1651,13 @@ type
     { Option to axes, series and stores. Cheap enough to redo on a resize; the
       expensive half is the label measuring in Relayout. }
     procedure Rebuild;
+    { [F6a] the bodies of Rebuild, Paint, RenderTo and RenderToBitmap: each
+      public entry opens the image scope -- an `image://name/i` looks for
+      `name` on this chart's Owner (AdvChart.Images) -- around its body }
+    procedure RebuildBody;
+    procedure PaintBody;
+    procedure RenderToBody(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    function RenderToBitmapBody(const AOptsJson: string): TBGRABitmap;
     { The half that needs a painter, because it has to MEASURE the labels before
       it can know how much room the plot has left. }
     procedure Relayout(APainter: TTyPainter; const ARect: TTyRectF;
@@ -1807,7 +1819,17 @@ type
     procedure DzViewUpdate;
     function DzStateKey: string;
     procedure DzSyncLayout(const APayload: TTyAnimOverride; AHasPayload: Boolean);
-    procedure DzApplyCursor;
+    { [F6a] the cursor the pointer's position asks for: the hovered
+      element's own (zrender's Handler), then the roam controllers' grab /
+      grabbing, then the brush's -- applied to the control's Cursor }
+    function TargetCursor(const ATarget: TTyChartEventTarget): string;
+    function VmCursor(AIndex, APart: Integer): string;
+    function DzGrabAt(AX, AY: Integer): Boolean;
+    function AnyPanRoam: Boolean;
+    function RoamGrabAt(AX, AY: Integer): Boolean;
+    procedure CursorAfterMove(AX, AY: Integer);
+    procedure CursorAfterUp(AX, AY: Integer);
+    procedure ApplyCursorName(const AName: string);
     procedure DzArmTimer;
     procedure DzTimerFired(Sender: TObject);
     function DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
@@ -2996,6 +3018,11 @@ type
       AElement: Integer): TTyChartEventTarget;
     function SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
     procedure SilenceSeries(AList: TTyPaintList);
+    { [F6a] the series' elements' cursors: an item's `cursor` (over its
+      level's, its category's, its series', the root's -- the model's
+      parent chain), 'move' on a node a drag takes, 'default' on a large
+      batch -- where the series' view sets one }
+    procedure StampCursors(AList: TTyPaintList);
     procedure EmitChartEvent(const AType: string; const ATarget: TTyChartEventTarget;
       AX, AY: Integer; AHasOffset: Boolean = True);
     procedure EventMove(AX, AY: Integer);
@@ -3621,6 +3648,12 @@ type
     function DataZoomInsideRange(AIndex: Integer; out ALo, AHi: Double): Boolean;
     function DataZoomHoverName: string;
     property DataZoomCursorName: string read FDzCursor;
+    { [F6a] THE CHART'S CURSOR as upstream names it: the CSS cursor its
+      canvas would show after the last pointer event ('default' when the
+      pointer is over nothing that sets one). The control's Cursor follows
+      it through TyChartCssCursor; 'default' gives the host's own Cursor
+      back. }
+    property CursorName: string read FCursorName;
     { ms; NaN (the default) is the machine's clock }
     property DataZoomNow: Double read FDzNow write FDzNow;
     { ---- the enter animation [Batch 89] ---- }
@@ -4131,6 +4164,17 @@ function TyChartConnect(const ACharts: array of TTyAdvanceChart): string; overlo
 procedure TyChartDisconnect(const AGroup: string);
 function TyChartGroupConnected(const AGroup: string): Boolean;
 
+{ [F6a] A CSS CURSOR AS AN LCL ONE: pointer crHandPoint, move / all-scroll /
+  grabbing crSizeAll, grab crHandPoint, crosshair / cell crCross, text /
+  vertical-text crIBeam, not-allowed / no-drop crNo, help crHelp, wait
+  crHourGlass, progress crAppStart, ew- / e- / w-resize crSizeWE, ns- / n- /
+  s-resize crSizeNS, nwse- / nw- / se-resize crSizeNWSE, nesw- / ne- /
+  sw-resize crSizeNESW, col-resize crHSplit, row-resize crVSplit, none
+  crNone. A list (`url(...), pointer`) is read by its last entry, the
+  keyword fallback. False -- default, auto, '' and a name with no LCL
+  counterpart (copy, alias, zoom-in ...) -- is the host's own cursor. }
+function TyChartCssCursor(const ACss: string; out ACursor: TCursor): Boolean;
+
 implementation
 
 uses
@@ -4147,7 +4191,9 @@ uses
   tyControls.AdvChart.ToolboxDlg,
   tyControls.AdvChart.AxisBreak, tyControls.AdvChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }
-  tyControls.AdvChart.StatTransform;
+  tyControls.AdvChart.StatTransform,
+  { `image://` pictures and their image lists [F6a] }
+  tyControls.AdvChart.Images;
 
 { ==================== echarts.connect [Batch 141] ==================== }
 
@@ -4163,6 +4209,68 @@ var
   { groupIdBase: +new Date() when first asked, then one up per new group }
   GTyGroupIdBase: Int64 = -1;
   GTyChartSeq: Integer = 0;
+
+{ [F6a] AN AXIS ARROW THAT IS A PICTURE: AxisBuilder's createSymbol(type,
+  -w / 2, -h / 2, w, h, stroke, true) -- the image centred to its aspect in
+  the arrow's box, turned and placed as the path is. False for any other
+  symbol type. }
+function TyAxisArrowImage(const AArrow: TTyAxisArrow; out AEl: TTyChartElement): Boolean;
+var
+  M: TTyMat2D;
+  b: TTyRectF;
+  q: array[0..3] of TTyPointF;
+  x, y: Double;
+begin
+  AEl := Default(TTyChartElement);
+  Result := Copy(AArrow.SymbolType, 1, 8) = 'image://';
+  if not Result then Exit;
+  b := TyImageCenterBox(AArrow.SymbolType, TyRectF(-AArrow.W / 2, -AArrow.H / 2,
+    AArrow.W / 2, AArrow.H / 2));
+  M := TyZrLocal(1, 1, AArrow.Rotation, AArrow.X, AArrow.Y);
+  TyZrApply(M, b.Left, b.Top, x, y);
+  q[0] := TyPointF(x, y);
+  TyZrApply(M, b.Right, b.Top, x, y);
+  q[1] := TyPointF(x, y);
+  TyZrApply(M, b.Right, b.Bottom, x, y);
+  q[2] := TyPointF(x, y);
+  TyZrApply(M, b.Left, b.Bottom, x, y);
+  q[3] := TyPointF(x, y);
+  AEl.Style := TyChartStyle;
+  AEl.Style.Alpha := 1;
+  AEl.Shape := TyShapePolygon(q);
+  AEl.Shape.Image := AArrow.SymbolType;
+end;
+
+function TyChartCssCursor(const ACss: string; out ACursor: TCursor): Boolean;
+var
+  s: string;
+  k: Integer;
+begin
+  ACursor := crDefault;
+  s := ACss;
+  { a list: its last entry, the fallback a keyword always closes it with }
+  k := LastDelimiter(',', s);
+  if k > 0 then s := Copy(s, k + 1, MaxInt);
+  s := LowerCase(Trim(s));
+  Result := True;
+  if s = 'pointer' then ACursor := crHandPoint
+  else if (s = 'move') or (s = 'all-scroll') or (s = 'grabbing') then ACursor := crSizeAll
+  else if s = 'grab' then ACursor := crHandPoint
+  else if (s = 'crosshair') or (s = 'cell') then ACursor := crCross
+  else if (s = 'text') or (s = 'vertical-text') then ACursor := crIBeam
+  else if (s = 'not-allowed') or (s = 'no-drop') then ACursor := crNo
+  else if s = 'help' then ACursor := crHelp
+  else if s = 'wait' then ACursor := crHourGlass
+  else if s = 'progress' then ACursor := crAppStart
+  else if (s = 'ew-resize') or (s = 'e-resize') or (s = 'w-resize') then ACursor := crSizeWE
+  else if (s = 'ns-resize') or (s = 'n-resize') or (s = 's-resize') then ACursor := crSizeNS
+  else if (s = 'nwse-resize') or (s = 'nw-resize') or (s = 'se-resize') then ACursor := crSizeNWSE
+  else if (s = 'nesw-resize') or (s = 'ne-resize') or (s = 'sw-resize') then ACursor := crSizeNESW
+  else if s = 'col-resize' then ACursor := crHSplit
+  else if s = 'row-resize' then ACursor := crVSplit
+  else if s = 'none' then ACursor := crNone
+  else Result := False;
+end;
 
 function TyChartGroupConnected(const AGroup: string): Boolean;
 var i: Integer;
@@ -4241,6 +4349,8 @@ begin
   FTipHideAt := NaN;
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
+  { what upstream's canvas starts as [F6a] }
+  FCursorName := 'default';
   Width := 320;
   Height := 200;
   TabStop := False;   { see the published declaration }
@@ -5368,6 +5478,17 @@ end;
 { ==================== the pipeline ==================== }
 
 procedure TTyAdvanceChart.Rebuild;
+var prev: TComponent;
+begin
+  prev := TyChartImageScopeEnter(Owner);
+  try
+    RebuildBody;
+  finally
+    TyChartImageScopeLeave(prev);
+  end;
+end;
+
+procedure TTyAdvanceChart.RebuildBody;
 var
   d: TJSONData;
   lnRaws: TTyLinesRawArray;
@@ -7247,6 +7368,11 @@ var
     t: string;
     empty: Boolean;
   begin
+    if TyAxisArrowImage(AArrow, el) then
+    begin
+      TyRenderElement(P, el);
+      Exit;
+    end;
     t := AArrow.SymbolType;
     empty := Copy(t, 1, 5) = 'empty';
     path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
@@ -7769,6 +7895,18 @@ begin
 end;
 
 procedure TTyAdvanceChart.RenderTo(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+var prev: TComponent;
+begin
+  prev := TyChartImageScopeEnter(Owner);
+  try
+    RenderToBody(ACanvas, ARect, APPI);
+  finally
+    TyChartImageScopeLeave(prev);
+  end;
+end;
+
+procedure TTyAdvanceChart.RenderToBody(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 var
   P: TTyPainter;
@@ -8979,10 +9117,11 @@ begin
     if Hit(dzrClickPanel) then Exit(res);
   end;
   d := HitTestAt(Round(AX * s + FLastRect.Left), Round(AY * s + FLastRect.Top), el);
-  { a line's own path is silent upstream (triggerLineEvent false): only its
-    symbols are targets }
+  { a line's own path is no dataZoom 'other' (triggerLineEvent false): only
+    its symbols are -- [F6a] nor is its area, hoverable since }
   if TyChartDatumValid(d) and not ((FPaintList <> nil) and (el >= 0)
-    and (el < FPaintList.Count) and (FPaintList.Element(el).Shape.Kind = cskPolyline)) then
+    and (el < FPaintList.Count) and ((FPaintList.Element(el).Shape.Kind = cskPolyline)
+      or (FPaintList.Element(el).Anim.Role = carLineArea))) then
     Result.Kind := dtkOther;
 end;
 
@@ -9510,33 +9649,6 @@ begin
   DropStatic;
 end;
 
-procedure TTyAdvanceChart.DzApplyCursor;
-var c: TCursor;
-begin
-  if FDzCursor = 'ew-resize' then c := crSizeWE
-  else if FDzCursor = 'ns-resize' then c := crSizeNS
-  else if FDzCursor = 'crosshair' then c := crCross
-  else if (FDzCursor = 'grab') or (FDzCursor = 'pointer') then c := crHandPoint
-  else if FDzCursor = 'grabbing' then c := crSizeAll
-  { a brush cover's [Batch 126] }
-  else if FDzCursor = 'move' then c := crSizeAll
-  else if FDzCursor = 'nwse-resize' then c := crSizeNWSE
-  else if FDzCursor = 'nesw-resize' then c := crSizeNESW
-  else
-  begin
-    { 'default': the host's own cursor back }
-    if FDzHasBaseCursor then Cursor := FDzBaseCursor;
-    FDzHasBaseCursor := False;
-    Exit;
-  end;
-  if not FDzHasBaseCursor then
-  begin
-    FDzBaseCursor := Cursor;
-    FDzHasBaseCursor := True;
-  end;
-  Cursor := c;
-end;
-
 procedure TTyAdvanceChart.DzArmTimer;
 var
   due, now_: Double;
@@ -9738,7 +9850,6 @@ begin
           end;
         if not SameDzTarget(t, FDzHover) then DzMouseOver(t);
         FDzHover := t;
-        DzApplyCursor;
         if DzStateKey <> key then DzViewUpdate;
       end;
     dpDown:
@@ -14436,6 +14547,8 @@ begin
     FThumbDrag := -1;
     ParExpUp(X, Y);
     DataZoomPointer(dpClick, X, Y, Shift, 0);
+    { [F6a] the RoamControllers' mouseup: the pan's cursor given back }
+    if not (csDesigning in ComponentState) then CursorAfterUp(X, Y);
     { A CLICK: pressed and released on the same thing -- the same datum, a
       node's disc and its label being different things -- within 4 px. On a
       tree node whose series says `expandAndCollapse: true`, it toggles.
@@ -16302,6 +16415,12 @@ var
     path: TTyZrPath;
     t: string;
   begin
+    { [F6a] a picture }
+    if TyAxisArrowImage(AArrow, el) then
+    begin
+      TyRenderElement(APainter, el);
+      Exit;
+    end;
     t := AArrow.SymbolType;
     path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
     if Length(path) = 0 then Exit;
@@ -17076,6 +17195,12 @@ var
     path: TTyZrPath;
     t: string;
   begin
+    { [F6a] a picture }
+    if TyAxisArrowImage(AArrow, el) then
+    begin
+      TyRenderElement(APainter, el);
+      Exit;
+    end;
     t := AArrow.SymbolType;
     path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
     if Length(path) = 0 then Exit;
@@ -19714,6 +19839,12 @@ var
     path: TTyZrPath;
     t: string;
   begin
+    { [F6a] a picture }
+    if TyAxisArrowImage(AArrow, el) then
+    begin
+      TyRenderElement(APainter, el);
+      Exit;
+    end;
     t := AArrow.SymbolType;
     path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
     if Length(path) = 0 then Exit;
@@ -22954,6 +23085,8 @@ begin
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
+    { the cursors [F6a] }
+    if drawn > 0 then StampCursors(list);
     { a treemap label's opacity, the node's [F2a] }
     if drawn > 0 then TmLabelOpacity(list);
     { THE CHUNKS: which frame draws each element of a progressive series,
@@ -25479,6 +25612,159 @@ begin
   end;
 end;
 
+procedure TTyAdvanceChart.StampCursors(AList: TTyPaintList);
+var
+  k, si, slot, raw, depth: Integer;
+  el: TTyChartElement;
+  st, c: string;
+  root, series, item, lvl: TJSONObject;
+  rootCur: string;
+
+  function CurOf(AObj: TJSONObject; out AValue: string): Boolean;
+  var x: TJSONData;
+  begin
+    Result := False;
+    AValue := '';
+    if AObj = nil then Exit;
+    x := AObj.Find('cursor');
+    if (x = nil) or (x.JSONType = jtNull) then Exit;
+    Result := True;
+    if x.JSONType = jtString then AValue := x.AsString
+    else AValue := x.AsJSON;
+  end;
+
+  { getShallow('cursor') up the item model's parents: the item, its level
+    (treemap, sunburst) or category (graph), the series, the root; '' none }
+  function Chain(AItem, AMid, ASeries: TJSONObject): string;
+  begin
+    if CurOf(AItem, Result) then Exit;
+    if CurOf(AMid, Result) then Exit;
+    if CurOf(ASeries, Result) then Exit;
+    Result := rootCur;
+  end;
+
+  function LevelOf(ASeries: TJSONObject; ADepth: Integer): TJSONObject;
+  var x: TJSONData;
+  begin
+    Result := nil;
+    if (ASeries = nil) or (ADepth < 0) then Exit;
+    x := ASeries.Find('levels');
+    if (x is TJSONArray) and (ADepth < TJSONArray(x).Count)
+      and (TJSONArray(x).Items[ADepth] is TJSONObject) then
+      Result := TJSONObject(TJSONArray(x).Items[ADepth]);
+  end;
+
+  function CategoryOf(ASeries, AItem: TJSONObject): TJSONObject;
+  var x, cats: TJSONData; ci: Integer;
+  begin
+    Result := nil;
+    if (ASeries = nil) or (AItem = nil) then Exit;
+    x := AItem.Find('category');
+    if (x = nil) or (x.JSONType <> jtNumber) then Exit;
+    ci := Trunc(x.AsFloat);
+    cats := ASeries.Find('categories');
+    if (cats is TJSONArray) and (ci >= 0) and (ci < TJSONArray(cats).Count)
+      and (TJSONArray(cats).Items[ci] is TJSONObject) then
+      Result := TJSONObject(TJSONArray(cats).Items[ci]);
+  end;
+
+  function GraphDraggable(ASlot, ARow: Integer): Boolean;
+  var q: Integer;
+  begin
+    Result := False;
+    if (ASlot < 0) or (ASlot > High(FGraphNodes)) then Exit;
+    for q := 0 to High(FGraphNodes[ASlot]) do
+      if FGraphNodes[ASlot][q].Row = ARow then Exit(FGraphNodes[ASlot][q].Draggable);
+  end;
+
+begin
+  if (FOption = nil) or (AList = nil) then Exit;
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  rootCur := '';
+  CurOf(root, rootCur);
+  for k := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex < 0) then Continue;
+    if el.Silent or el.IsGuide then Continue;
+    { a label is a text of its own: the prototype's pointer }
+    if el.Caption.FontSizeLogical > 0 then Continue;
+    si := el.Datum.SeriesIndex;
+    slot := SlotOfSeries(si);
+    if slot < 0 then Continue;
+    st := FBindings[slot].SeriesType;
+    series := StSeriesNode(si);
+    c := '';
+    { A LARGE BATCH: LargeSymbolDraw's and LargeLineDraw's 'default'; a
+      large candlestick takes its series' cursor }
+    if el.Shape.Kind = cskLarge then
+    begin
+      if (st = 'scatter') or (st = 'effectScatter') or (st = TyLinesSeriesTypeName) then
+        c := 'default'
+      else if st = 'candlestick' then
+      begin
+        if not CurOf(series, c) then c := rootCur;
+      end;
+    end
+    else if el.Datum.DataIndex >= 0 then
+    begin
+      raw := el.Datum.RawDataIndex;
+      if raw < 0 then raw := el.Datum.DataIndex;
+      if (st = 'bar') or (st = 'pictorialBar') or (st = 'candlestick')
+        or (st = 'scatter') or (st = 'effectScatter') or (st = 'line')
+        or (st = 'pie') or (st = TyTreeSeriesTypeName) then
+      begin
+        { a line's polyline and area have no row; its symbols do }
+        item := StItemNode(si, raw);
+        c := Chain(item, nil, series);
+      end
+      else if st = TySunburstSeriesTypeName then
+      begin
+        item := StItemNode(si, raw);
+        depth := -1;
+        if (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
+          and (raw <= High(FSunbursts[slot].Hier.Nodes)) then
+          depth := FSunbursts[slot].Hier.Nodes[raw].Depth;
+        c := Chain(item, LevelOf(series, depth), series);
+      end
+      else if st = TyTreemapSeriesTypeName then
+      begin
+        { only a leaf's content rect (TreemapView.renderNode) }
+        if (el.Anim.Role = carTmRect) and (el.Anim.Sub = 1) then
+        begin
+          item := StItemNode(si, raw);
+          depth := -1;
+          if (slot <= High(FTreemaps)) and FTreemaps[slot].Valid
+            and (raw <= High(FTreemaps[slot].Hier.Nodes)) then
+            depth := FTreemaps[slot].Hier.Nodes[raw].Depth;
+          c := Chain(item, LevelOf(series, depth), series);
+        end;
+      end
+      else if (st = TyGraphSeriesTypeName) and not el.Datum.IsEdge then
+      begin
+        { setDraggable(draggable, !!itemModel.get('cursor')): 'move' on a
+          draggable node with no cursor anywhere up its chain }
+        item := StItemNode(si, raw);
+        lvl := CategoryOf(series, item);
+        c := Chain(item, lvl, series);
+        if (c = '') and GraphDraggable(slot, el.Datum.DataIndex) then c := 'move';
+      end
+      else if (st = TySankeySeriesTypeName) and not el.Datum.IsEdge then
+      begin
+        { SankeyView: a draggable node's rect is 'move', whatever else }
+        if (slot <= High(FSankeys)) and FSankeys[slot].Valid
+          and (el.Datum.DataIndex <= High(FSankeys[slot].Nodes))
+          and TySankeyDraggable(FSankeys[slot], el.Datum.DataIndex) then
+          c := 'move';
+      end;
+    end;
+    if c = '' then Continue;
+    el.Cursor := c;
+    AList.SetElement(k, el);
+  end;
+end;
+
 function TTyAdvanceChart.SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
 var slot: Integer;
 begin
@@ -25520,9 +25806,30 @@ begin
     n := FOption.ComponentAt('series', ADatum.SeriesIndex);
     d := nil;
     if n is TJSONObject then d := TJSONObject(n).Find('triggerEvent');
-    if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
-    p := TyChartBlankParams;
-    p.SelfType := st;
+    { [F6a] A LINE'S POLYLINE AND ITS AREA (LineView.packEventData): the
+      polyline's eventData with triggerEvent true or 'line', the area's
+      with true or 'area' -- either with the deprecated triggerLineEvent
+      true -- selfType saying which }
+    if (st = 'line') and (FPaintList <> nil) and (AElement >= 0)
+      and (AElement < FPaintList.Count) then
+    begin
+      p := TyChartBlankParams;
+      if FPaintList.Element(AElement).Anim.Role = carLineArea then p.SelfType := 'area'
+      else p.SelfType := 'line';
+      if not (((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean)
+        or ((d <> nil) and (d.JSONType = jtString) and (d.AsString = p.SelfType))) then
+      begin
+        d := nil;
+        if n is TJSONObject then d := TJSONObject(n).Find('triggerLineEvent');
+        if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
+      end;
+    end
+    else
+    begin
+      if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
+      p := TyChartBlankParams;
+      p.SelfType := st;
+    end;
   end
   else
   begin
@@ -25677,6 +25984,20 @@ begin
       if k = 0 then r := Hung(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign)
       else r := Hung(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign);
       if not Inside(r) then Continue;
+      { [F6a] `textEl.silent = !link && !triggerEvent` (the subtext's by
+        sublink): a silent title is no target -- the pointer goes on to
+        what is under it }
+      if not TriggersEvent(FOption.ComponentAt('title', i)) then
+      begin
+        node := FOption.ComponentAt('title', i);
+        if not (node is TJSONObject) then Continue;
+        if k = 0 then node := TJSONObject(node).Find('link')
+        else node := TJSONObject(node).Find('sublink');
+        if (node = nil) or not (((node.JSONType = jtString) and (node.AsString <> ''))
+          or ((node.JSONType = jtNumber) and (node.AsFloat <> 0))
+          or ((node.JSONType = jtBoolean) and node.AsBoolean)
+          or (node.JSONType in [jtObject, jtArray])) then Continue;
+      end;
       Result.Id := -(1000 + 2 * i + k);
       if TriggersEvent(FOption.ComponentAt('title', i)) then
       begin
@@ -38871,6 +39192,8 @@ begin
   ParExpMove(X, Y);
   { an icon's pointer, the brush's crosshair [Batch 125] }
   TbApplyCursor(X, Y);
+  { [F6a] the chart's cursor, all of it }
+  CursorAfterMove(X, Y);
   { REPAINT ON MOVEMENT, not only when the datum changes. The box is anchored
     to the CURSOR -- upstream positions against the raw pointer offsets and
     never against the snapped datum -- so a repaint gated on the datum would
@@ -38907,6 +39230,9 @@ begin
     FDzHover := Default(TTyDzTarget);
     DzViewUpdate;
   end;
+  { [F6a] the host's own cursor back: the canvas' style keeps the last
+    name upstream, but a cursor matters only over the control }
+  if not (csDesigning in ComponentState) then ApplyCursorName('default');
   { INHERITED LAST. The base class ends in PointerStateChanged, which this
     control answers with a repaint -- and a repaint before the hover was
     cleared would draw the tooltip one more time on the way out. }
@@ -41040,6 +41366,17 @@ begin
 end;
 
 procedure TTyAdvanceChart.Paint;
+var prev: TComponent;
+begin
+  prev := TyChartImageScopeEnter(Owner);
+  try
+    PaintBody;
+  finally
+    TyChartImageScopeLeave(prev);
+  end;
+end;
+
+procedure TTyAdvanceChart.PaintBody;
 begin
   { a paint is a frame: the toolbox's hover states land [Batch 125] -- a
     dirty-rect window's frame is its flush, and a paint that only
@@ -42130,16 +42467,10 @@ begin
 end;
 
 function GfxImageSize(const ASource: string; out AW, AH: Double): Boolean;
-var bmp: TBGRABitmap;
 begin
-  bmp := TyPatternImage(ASource);
-  Result := (bmp <> nil) and (bmp.Width > 0) and (bmp.Height > 0);
-  if Result then
-  begin
-    AW := bmp.Width;
-    AH := bmp.Height;
-  end
-  else
+  { [F6a] a data URL's pixels, an image list's Width x Height }
+  Result := TyChartImageSize(ASource, AW, AH) and (AW > 0) and (AH > 0);
+  if not Result then
   begin
     AW := 0;
     AH := 0;
@@ -44300,6 +44631,17 @@ begin
 end;
 
 function TTyAdvanceChart.RenderToBitmap(const AOptsJson: string): TBGRABitmap;
+var prev: TComponent;
+begin
+  prev := TyChartImageScopeEnter(Owner);
+  try
+    Result := RenderToBitmapBody(AOptsJson);
+  finally
+    TyChartImageScopeLeave(prev);
+  end;
+end;
+
+function TTyAdvanceChart.RenderToBitmapBody(const AOptsJson: string): TBGRABitmap;
 var o: TTyChartExportOpts;
 begin
   ExportOptsOrRaise(AOptsJson, o);
@@ -45563,9 +45905,28 @@ begin
     { the icons }
     for i := 0 to High(FTbSpecs[t].Icons) do
     begin
-      { an image icon is laid out and answers the pointer; it draws nothing --
-        nor does a degenerate path, NaN through and through }
-      if FTbSpecs[t].Icons[i].IsImage then Continue;
+      { [F6a] AN IMAGE ICON: createIcon's ZRImage over the whole item box,
+        with the icon style's opacity and nothing else of it }
+      if FTbSpecs[t].Icons[i].IsImage then
+      begin
+        TbIconOrigin(t, i, ox, oy);
+        if IsNan(ox) or IsNan(oy) then Continue;
+        r := TyToolboxIconRect(FTbSpecs[t], FTbSpecs[t].Icons[i], False);
+        el := Blank;
+        el.Shape := TyShapePolygon([
+          TyPointF(FLastRect.Left + s * (ox + r.X), FLastRect.Top + s * (oy + r.Y)),
+          TyPointF(FLastRect.Left + s * (ox + r.X + r.W), FLastRect.Top + s * (oy + r.Y)),
+          TyPointF(FLastRect.Left + s * (ox + r.X + r.W), FLastRect.Top + s * (oy + r.Y + r.H)),
+          TyPointF(FLastRect.Left + s * (ox + r.X), FLastRect.Top + s * (oy + r.Y + r.H))]);
+        el.Shape.Image := FTbSpecs[t].Icons[i].IconText;
+        sty := TyTbStyleOf(FTbSpecs[t].Icons[i], TbEmphasised(t, i));
+        if sty.HasOpacity and not IsNan(sty.Opacity) then
+          el.Style.Alpha := Max(0, Min(1, sty.Opacity));
+        AList.Add(el);
+        Inc(Result);
+        Continue;
+      end;
+      { a degenerate path draws nothing, NaN through and through }
       if IsNan(FTbSpecs[t].Icons[i].PathRect.X) or IsNan(FTbSpecs[t].Icons[i].PathRect.Y)
         or IsNan(FTbSpecs[t].Icons[i].PathRect.W) or IsNan(FTbSpecs[t].Icons[i].PathRect.H) then
         Continue;
@@ -46593,7 +46954,9 @@ var
 begin
   c := '';
   bc := '';
-  if (FEvHover.HdKind = 8) and (FEvHover.Id <> 0) then c := 'pointer';
+  { a toolbox icon (a graphic element shares the kind: its own cursor is
+    TargetCursor's [F6a]) }
+  if (FEvHover.HdKind = 8) and (FEvHover.Id < 0) then c := 'pointer';
   { a timeline element's cursor, zrender's default [Batch 129] }
   if (FEvHover.HdKind = 10) and (FEvHover.Id <> 0) then c := 'pointer';
   { a brush cover's piece under the pointer: its own cursor [Batch 126] }
@@ -46626,13 +46989,224 @@ begin
   begin
     FTbCursor := c;
     FDzCursor := c;
-    DzApplyCursor;
   end
   else if FTbCursor <> '' then
   begin
     FTbCursor := '';
     FDzCursor := 'default';
-    DzApplyCursor;
+  end;
+end;
+
+{ ==================== the chart's cursor [F6a] ==================== }
+
+{ THE ELEMENT'S OWN cursor (Displayable.cursor, 'pointer' unless something
+  set another): what zrender's Handler.mousemove hands setCursor for the
+  hovered target; 'default' for no target }
+function TTyAdvanceChart.TargetCursor(const ATarget: TTyChartEventTarget): string;
+var idx: Integer;
+begin
+  Result := 'default';
+  if ATarget.Id = 0 then Exit;
+  Result := 'pointer';
+  case ATarget.HdKind of
+    { a brush cover's piece: its own (move, the eight resizes) }
+    9:
+      if (ATarget.HdGen >= 0) and (ATarget.HdGen <= Ord(High(TTyBrushPiece))) then
+      begin
+        if BrushCtlOf(ATarget.HdSeries) <> nil then
+          Result := BrushCtlOf(ATarget.HdSeries).PieceCursor(TTyBrushPiece(ATarget.HdGen), True)
+        else
+          Result := TyBrushPieceCursor(TTyBrushPiece(ATarget.HdGen), True);
+        if Result = '' then Result := 'default';
+        Exit;
+      end;
+    7:
+      begin
+        Result := VmCursor(ATarget.HdSeries, ATarget.HdRow);
+        Exit;
+      end;
+  end;
+  { an element of the display list: its own }
+  if (ATarget.Id > 0) and (FPaintList <> nil) then
+  begin
+    idx := ATarget.Id - 1;
+    if (idx < FPaintList.Count) and (FPaintList.Element(idx).Cursor <> '') then
+      Result := FPaintList.Element(idx).Cursor;
+  end;
+end;
+
+{ a visualMap's part: a continuous one's handle thumb and handle label are
+  getCursor(orient) -- ns-resize standing, ew-resize lying; its in-range bar
+  the same when calculable and none ('default') otherwise, its out-of-range
+  bar none; the end texts and a piecewise one's items keep 'pointer' }
+function TTyAdvanceChart.VmCursor(AIndex, APart: Integer): string;
+var orient: string;
+begin
+  Result := 'pointer';
+  if (AIndex < 0) or (AIndex > High(FVisualViews)) or (AIndex > High(FVisualLayouts)) then Exit;
+  if FVisualLayouts[AIndex].Piecewise then Exit;
+  if FVisualViews[AIndex].Horizontal then orient := 'ew-resize' else orient := 'ns-resize';
+  if APart = cVmOut then Result := 'default'
+  else if APart = cVmIn then
+  begin
+    if FVisualViews[AIndex].Calculable then Result := orient else Result := 'default';
+  end
+  else if (APart >= cVmThumb0) and (APart < cVmText0) then Result := orient;
+end;
+
+{ an inside dataZoom's RoamController would grab here: a grid one controls
+  holds the point }
+function TTyAdvanceChart.DzGrabAt(AX, AY: Integer): Boolean;
+var
+  s, x, y: Double;
+  g: Integer;
+begin
+  Result := False;
+  if (FBuild = nil) or (Length(FDzState) = 0) or (csDesigning in ComponentState) then Exit;
+  s := DzScale;
+  x := (AX - FLastRect.Left) / s;
+  y := (AY - FLastRect.Top) / s;
+  for g := 0 to FBuild.GridCount - 1 do
+    if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then Exit(True);
+end;
+
+{ a graph's, a tree's, a sankey's, a treemap's, a geo's or a map's
+  RoamController would grab here (its _checkPointer) }
+function TTyAdvanceChart.RoamGrabAt(AX, AY: Integer): Boolean;
+var g: Integer;
+begin
+  Result := RoamTargetAt(AX, AY, False, g) >= 0;
+  if not Result then Result := g >= 0;
+end;
+
+{ some RoamController listens to the release: one that pans }
+function TTyAdvanceChart.AnyPanRoam: Boolean;
+var
+  i: Integer;
+  gg: TTyGeo;
+begin
+  Result := True;
+  for i := 0 to High(FGraphs) do
+    if (FGraphs[i] <> nil) and (i <= High(FGraphSpecs))
+      and (FGraphSpecs[i].Roam in [grmPan, grmBoth]) then Exit;
+  for i := 0 to High(FTreeViews) do
+    if (FTreeViews[i] <> nil) and (i <= High(FTreeSpecs))
+      and (FTreeSpecs[i].Roam in [grmPan, grmBoth]) then Exit;
+  for i := 0 to High(FSankeyViews) do
+    if (FSankeyViews[i] <> nil) and (i <= High(FSankeySpecs))
+      and (FSankeySpecs[i].Roam in [grmPan, grmBoth]) then Exit;
+  for i := 0 to High(FTreemaps) do
+    if FTreemaps[i].Valid and TreemapRoamOk(i, False) then Exit;
+  for i := 0 to High(FGeos) + Length(FMapGeos) do
+  begin
+    if i <= High(FGeos) then gg := FGeos[i]
+    else gg := FMapGeos[i - Length(FGeos)];
+    if (gg <> nil) and gg.Valid and gg.Spec.Show and (gg.Spec.Roam in [grmPan, grmBoth]) then Exit;
+  end;
+  if (FBuild <> nil) and (Length(FDzState) > 0) then
+    for i := 0 to FBuild.GridCount - 1 do
+      if DzControlType(i) >= 1 then Exit;
+  Result := False;
+end;
+
+{ AFTER zrender's mousemove and its listeners: the hovered element's
+  cursor (a dataZoom slider's part above the rest), then the
+  RoamControllers' -- 'grabbing' while one pans, else 'grab' over the area
+  of one where nothing is hovered (the lowest precedence:
+  _decideCursorStyle) -- none of it while the brush holds globalPan; then
+  the brush's own (its crosshair, TbApplyCursor) }
+procedure TTyAdvanceChart.CursorAfterMove(AX, AY: Integer);
+var
+  c: string;
+  none: Boolean;
+begin
+  if csDesigning in ComponentState then Exit;
+  none := FEvHover.Id = 0;
+  if (FDzHover.Kind = dtkSlider) or (FDzDrag.Kind = dtkSlider) then
+  begin
+    c := FDzCursor;
+    none := False;
+  end
+  else
+    c := TargetCursor(FEvHover);
+  if not PanTaken then
+  begin
+    if (FRoamSeries >= 0) or (FRoamGeo >= 0) or (FDzPanGrid >= 0)
+      or ((FThumbDrag >= 0) and (FThumbDrag <= High(FThumbs))) then
+      c := 'grabbing'
+    else if none and (RoamGrabAt(AX, AY) or DzGrabAt(AX, AY)) then
+      c := 'grab';
+  end;
+  if FTbCursor <> '' then c := FTbCursor;
+  ApplyCursorName(c);
+end;
+
+{ RoamController._mouseupHandler, with a pan controller in the chart: 'grab'
+  where nothing is hovered inside a roam area, else the released-on
+  element's own cursor -- the pan's 'grabbing' given back }
+procedure TTyAdvanceChart.CursorAfterUp(AX, AY: Integer);
+var
+  t: TTyChartEventTarget;
+  d: TTyDzTarget;
+  s: Double;
+  c: string;
+begin
+  if csDesigning in ComponentState then Exit;
+  if PanTaken or not AnyPanRoam then Exit;
+  t := Default(TTyChartEventTarget);
+  if (AX >= FLastRect.Left) and (AY >= FLastRect.Top) and (AX <= FLastRect.Right)
+    and (AY <= FLastRect.Bottom) then
+    t := EventTargetAt(AX, AY);
+  d := Default(TTyDzTarget);
+  if (FBuild <> nil) and (Length(FDzState) > 0) then
+  begin
+    s := DzScale;
+    d := DzFindTarget((AX - FLastRect.Left) / s, (AY - FLastRect.Top) / s);
+  end;
+  if d.Kind = dtkSlider then
+  begin
+    case d.Role of
+      dzrHandle0, dzrHandle1:
+        if FDzLayouts[d.Slider].Horizontal then c := 'ew-resize' else c := 'ns-resize';
+      dzrMoveZone, dzrFiller: c := 'grab';
+      dzrClickPanel:
+        if FDzViews[d.Slider].BrushSelect then c := 'crosshair' else c := 'pointer';
+    else
+      c := 'pointer';
+    end;
+  end
+  else if (t.Id = 0) and (RoamGrabAt(AX, AY) or DzGrabAt(AX, AY)) then
+    c := 'grab'
+  else
+    c := TargetCursor(t);
+  ApplyCursorName(c);
+end;
+
+{ THE NAME ONTO THE CONTROL: a CSS cursor with an LCL counterpart replaces
+  the control's Cursor, the host's own kept; 'default' (or a name with no
+  counterpart) gives it back. A Cursor the host set while the chart showed
+  its own is the host's new one. }
+procedure TTyAdvanceChart.ApplyCursorName(const AName: string);
+var c: TCursor;
+begin
+  FCursorName := AName;
+  if csDesigning in ComponentState then Exit;
+  if TyChartCssCursor(AName, c) then
+  begin
+    if not FHasHostCursor then
+    begin
+      FHostCursor := Cursor;
+      FHasHostCursor := True;
+    end
+    else if Cursor <> FCursorSet then
+      FHostCursor := Cursor;
+    FCursorSet := c;
+    if Cursor <> c then Cursor := c;
+  end
+  else if FHasHostCursor then
+  begin
+    if Cursor = FCursorSet then Cursor := FHostCursor;
+    FHasHostCursor := False;
   end;
 end;
 
@@ -49629,6 +50203,8 @@ begin
     el.Z2 := TyThumbItemZ2 - 10;
     el.Silent := False;
     el.Datum := TyChartNoDatum;
+    { ThumbnailView's _bgRect: cursor 'grab' [F6a] }
+    el.Cursor := 'grab';
     AList.Add(el);
     Inc(Result);
     if not st.View.Valid then Continue;
@@ -49696,6 +50272,8 @@ begin
     el.Z2 := TyThumbItemZ2 + 10;
     el.Silent := False;
     el.Datum := TyChartNoDatum;
+    { and its _windowRect [F6a] }
+    el.Cursor := 'grab';
     el.HasClip := True;
     el.ClipRect := clip;
     AList.Add(el);

@@ -32,7 +32,11 @@ type
     failure -- `symbol: 'none'` is how a line asks for no markers. }
   TTySymbolKind = (tsyNone, tsyCircle, tsyRect, tsyRoundRect, tsySquare,
                    tsyTriangle, tsyDiamond, tsyPin, tsyArrow, tsyLine,
-                   tsyPath);
+                   tsyPath,
+                   { [F6a] `image://...`: PathData the source after the
+                     prefix; the shape is the picture's box as a polygon
+                     carrying the source (TTyChartShape.Image) }
+                   tsyImage);
 
   TTySymbolSpec = record
     Kind: TTySymbolKind;
@@ -40,7 +44,8 @@ type
       filled with the theme's own background token -- not with white, which is
       why the fill colour is asked of the caller rather than decided here. }
     Empty: Boolean;
-    { tsyPath only: the body of `path://...`, in SVG path syntax. }
+    { tsyPath: the body of `path://...`, in SVG path syntax. [F6a] tsyImage:
+      the body of `image://...` (a data URL, or `list/index`). }
     PathData: string;
     { Device pixels. symbolSize is a number or a [w, h] pair. }
     WidthPx: Double;
@@ -60,6 +65,20 @@ type
     KeepAspect: Boolean;
   end;
   TTySymbolSpecArray = array of TTySymbolSpec;
+
+{ [F6a] THE NATURAL SIZE OF A PICTURE, CSS px -- what upstream reads off
+  the loaded image for makeImage's 'center' layout (symbolKeepAspect). Set
+  by AdvChart.Images, which this pure unit cannot use; nil, or False, is a
+  picture not loaded: the box is the whole symbol box, as upstream's before
+  its onload. }
+type
+  TTySymbolImageSize = function(const ASource: string; out AW, AH: Double): Boolean;
+var
+  TySymbolImageSize: TTySymbolImageSize = nil;
+
+{ makeImage's 'center' layout (graphic.centerGraphic): the box of the
+  picture's aspect inside ABox, centred; ABox itself without a natural size }
+function TyImageCenterBox(const ASource: string; const ABox: TTyRectF): TTyRectF;
 
 { A spec with upstream's defaults for a series type: symbolSize is 10 for a
   scatter and 6 for a line, and neither is written down anywhere else. }
@@ -91,11 +110,11 @@ function TySymbolSpecOf(ANode: TJSONObject;
   on a series that has no icon of its own both come out as sharp-cornered
   boxes. This port used to answer tsyNone there, which drew nothing.
 
-  THREE NAMES REALLY ARE NOTHING: the empty string, 'none', and an
-  `image://` URL -- the first two because upstream tests symbolType !== 'none'
-  before it ever reaches the proxy table, the third because upstream draws a
-  picture and a pure unit has nowhere to put one. A grey box would be a worse
-  answer than no box. }
+  TWO NAMES REALLY ARE NOTHING: the empty string and 'none' -- upstream tests
+  symbolType !== 'none' before it ever reaches the proxy table.
+  [F6a: an `image://` URL was a third, "a pure unit has nowhere to put a
+  picture"; it is tsyImage now, the shape carrying the source and the
+  renderer drawing it.] }
 function TySymbolKindOf(const AName: string; out AEmpty: Boolean;
   out APath: string): TTySymbolKind;
 
@@ -196,15 +215,18 @@ begin
   s := Trim(AName);
   if s = '' then Exit(tsyNone);
 
-  { `path://` and `image://` are prefixes, not names. Only the first is
-    supported: the shape record can carry SVG path data, and there is nowhere
-    for an image to live in a pure unit. }
+  { `path://` and `image://` are prefixes, not names: the shape record
+    carries the SVG path data, and [F6a] the picture's source }
   if Copy(s, 1, 7) = 'path://' then
   begin
     APath := Copy(s, 8, MaxInt);
     Exit(tsyPath);
   end;
-  if Copy(s, 1, 8) = 'image://' then Exit(tsyNone);
+  if Copy(s, 1, 8) = 'image://' then
+  begin
+    APath := Copy(s, 9, MaxInt);
+    Exit(tsyImage);
+  end;
 
   { The `empty` prefix is stripped and the rest lower-cased at its first
     letter, exactly as upstream does it: emptyCircle -> circle. }
@@ -578,7 +600,7 @@ function TyBuildSymbol(const ASpec: TTySymbolSpec;
 var
   w, h, side, r, x, y, ph, pr, dy, ang, dx, tanX, tanY, cpLen, cy: Double;
   L: TPointList;
-  box: TTyRectF;
+  box, ib: TTyRectF;
 begin
   Result := TyShapeRect(TyInvalidRectF);
   { An EQUIVALENT MUTANT lives on this line and is recorded rather than
@@ -599,6 +621,30 @@ begin
   L.Pts := nil;
   L.N := 0;
   box := TyRectF(ACX - w / 2, ACY - h / 2, ACX + w / 2, ACY + h / 2);
+
+  { [F6a] A PICTURE: createSymbol(-1, -1, 2, 2) makes the image in the UNIT
+    box -- with symbolKeepAspect centred to the picture's aspect THERE --
+    and the element is then scaled by half the symbol size on each axis,
+    so an oblong symbolSize stretches even a kept aspect. Its corners go
+    through the same turn and offset as any polygon's. }
+  if ASpec.Kind = tsyImage then
+  begin
+    if ASpec.KeepAspect then
+    begin
+      ib := TyImageCenterBox(ASpec.PathData, TyRectF(-1, -1, 1, 1));
+      box := TyRectF(ACX + ib.Left * w / 2, ACY + ib.Top * h / 2,
+        ACX + ib.Right * w / 2, ACY + ib.Bottom * h / 2);
+    end;
+    Push(L, box.Left, box.Top);
+    Push(L, box.Right, box.Top);
+    Push(L, box.Right, box.Bottom);
+    Push(L, box.Left, box.Bottom);
+    Place(L, ACX, ACY, ASpec);
+    SetLength(L.Pts, L.N);
+    Result := TyShapePolygon(L.Pts);
+    Result.Image := ASpec.PathData;
+    Exit;
+  end;
 
   case ASpec.Kind of
     tsyCircle:
@@ -747,11 +793,35 @@ begin
     Result := TyShapePolygon(L.Pts);
 end;
 
+function TyImageCenterBox(const ASource: string; const ABox: TTyRectF): TTyRectF;
+var
+  nw, nh, aspect, w, h, cx, cy: Double;
+begin
+  Result := ABox;
+  if not Assigned(TySymbolImageSize) then Exit;
+  if not TySymbolImageSize(ASource, nw, nh) then Exit;
+  if (nw <= 0) or (nh <= 0) then Exit;
+  { centerGraphic: the height's width at the picture's aspect, else the
+    width's height }
+  aspect := nw / nh;
+  w := TyRectFHeight(ABox) * aspect;
+  if w <= TyRectFWidth(ABox) then h := TyRectFHeight(ABox)
+  else
+  begin
+    w := TyRectFWidth(ABox);
+    h := w / aspect;
+  end;
+  cx := ABox.Left + TyRectFWidth(ABox) / 2;
+  cy := ABox.Top + TyRectFHeight(ABox) / 2;
+  Result := TyRectF(cx - w / 2, cy - h / 2, cx - w / 2 + w, cy - h / 2 + h);
+end;
+
 function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
   const ABox: TTyRectF): TTyChartShape;
 var
   spec: TTySymbolSpec;
   w, h, side: Double;
+  ib: TTyRectF;
 begin
   Result := TyShapeRect(TyInvalidRectF);
   if ASpec.Kind = tsyNone then Exit;
@@ -761,6 +831,18 @@ begin
   if (w <= 0) or (h <= 0) then Exit;
 
   case ASpec.Kind of
+    tsyImage:
+      begin
+        { [F6a] a REAL box: makeImage's 'center' fits the aspect in it as it
+          stands (a legend icon), not in a unit box scaled after }
+        if ASpec.KeepAspect then ib := TyImageCenterBox(ASpec.PathData, ABox)
+        else ib := ABox;
+        spec := ASpec;
+        spec.KeepAspect := False;
+        spec.WidthPx := TyRectFWidth(ib);
+        spec.HeightPx := TyRectFHeight(ib);
+        Exit(TyBuildSymbol(spec, (ib.Left + ib.Right) / 2, (ib.Top + ib.Bottom) / 2));
+      end;
     tsyCircle:
       Exit(TyShapeCircle(ABox.Left + w / 2 + ASpec.OffsetX,
                          ABox.Top + h / 2 + ASpec.OffsetY,
