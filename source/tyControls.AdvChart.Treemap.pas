@@ -176,6 +176,11 @@ type
     Label_: TTyLabelSpec;
     ItemLabels: TTyLabelSpecArray;
     CrumbFill: TTyChartColor;
+    { a hovered item's: breadcrumb.emphasis.itemStyle.color (the skin's
+      hover tone by default) and its declared text colour [F2a] }
+    CrumbEmphFill: TTyChartColor;
+    CrumbEmphHasText: Boolean;
+    CrumbEmphText: TTyChartColor;
   end;
 
 { Layout and pruning over the container, device px at APPI. AView is what
@@ -2478,7 +2483,9 @@ begin
   cnt := 0;
   Walk(0, 0);
   Result := cnt;
-  { the breadcrumb: pale arrows, their words over them; painted, not hit }
+  { the breadcrumb: pale arrows, their words over them; painted, hit by the
+    control's own test (CrumbAt) -- a hover and a click there are the
+    item's [F2a] }
   for j := 0 to High(ASolved.Crumbs) do
   begin
     el := TyChartElement(TyShapePolygon(ASolved.Crumbs[j].Points));
@@ -2487,6 +2494,9 @@ begin
     el.Z := ASolved.Z;
     el.Z2 := 100000;
     el.Silent := True;
+    el.Anim.Role := carTmCrumb;
+    el.Anim.Series := ASeriesIndex;
+    el.Anim.Index := j;
     el.Datum := TyChartDatum(ASeriesIndex, ASolved.Crumbs[j].Row, ASolved.Crumbs[j].Row);
     if ASolved.Crumbs[j].Text <> '' then
     begin

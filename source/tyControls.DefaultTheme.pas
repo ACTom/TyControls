@@ -1416,6 +1416,9 @@ begin
     '   so a dark skin gets a dark chip. */' + LineEnding +
     'TyAdvChartTreemapLabel { color: #FFFFFF; font-size: var(--font-size-base); }' + LineEnding +
     'TyAdvChartBreadcrumb { background: alpha(var(--on-surface), 0.08); color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A hovered breadcrumb item. Upstream lifts it to the page''s own ground' + LineEnding +
+    '   (tokens.color.background); the words keep their colour. */' + LineEnding +
+    'TyAdvChartBreadcrumb:hover { background: var(--surface); color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '/* A SANKEY''S LINKS. Upstream fills them a mid grey at 0.2 opacity; here the' + LineEnding +
     '   grey is the ink''s own muted tone, so a dark skin''s links stay grey on' + LineEnding +
     '   its ground. */' + LineEnding +

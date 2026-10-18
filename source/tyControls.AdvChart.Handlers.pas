@@ -119,6 +119,9 @@ type
       JSON text (an empty object where the model map holds none); '' everywhere else.
       A geo event's geoIndex is its ComponentIndex. }
     Region: string;
+    { A TREEMAP BREADCRUMB ITEM'S eventData.nodeData [F2a]: {dataIndex,
+      name} as JSON text; '' everywhere else }
+    NodeData: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 

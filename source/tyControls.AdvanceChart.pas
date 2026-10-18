@@ -262,7 +262,17 @@ type
     sskParallel,
     { [Batch 152] a map series' region: the row's flags only -- the paths
       and their states are the geo's (MapDraw), which takes the flags }
-    sskMap);
+    sskMap,
+    { [F2a] A GRAPH: its nodes by raw row (a Symbol -- the group dispatches,
+      the path draws, the label is the path's), its edges' Line groups in
+      EdgeRows by their place in the solved edge list (the line hosts, the
+      arrows are parts, the caption the label). A TREE: its nodes as a
+      graph's, and in EdgeRows by the node that draws it the edge
+      symbolEl.__edge -- flags of its own, set by blurSeries and by its
+      node's onHoverStateChange (TreeView.ts:464-477). A TREEMAP: a leaf's
+      node group dispatches (its content hosts, its background is a part),
+      a parent's background alone. }
+    sskGraph, sskTree, sskTreemap);
   TTyStNodeArray = array of TJSONObject;
 
 const
@@ -310,6 +320,8 @@ type
       the band and its label -- a second data type with states of its own }
     EdgeRows: array of TTyStItem;
     EdgeHostIdx, EdgeLabelIdx: TTyIntegerArray;
+    { a graph edge's arrows, by edge [F2a] }
+    EdgePartIdx: array of TTyIntegerArray;
     { getComponentStates(series).isBlured: blurSeries reached it, so the next
       allLeaveBlur walks it [Batch 90] }
     IsBlured: Boolean;
@@ -716,10 +728,12 @@ type
     FCrumbPressSeries, FCrumbPressIndex, FCrumbPressX, FCrumbPressY: Integer;
     { a press that started on a breadcrumb item is not a treemap click }
     FCrumbPressed: Boolean;
-    { THE HOVERED TREEMAP NODE (series, row; -1 none): zrender's hover
-      target, found before a pan's render moves the picture and kept by the
-      kept element through renders, until the pointer moves off it }
-    FTmHoverSeries, FTmHoverRow: Integer;
+    { THE HOVERED BREADCRUMB ITEM [F2a]: its series and place (-1 none),
+      and the render that made it -- every solve draws new items, which
+      start in no state (Breadcrumb.render removeAll) }
+    FTmCrumbHoverS, FTmCrumbHoverK, FTmCrumbHoverGen: Integer;
+    FTmCrumbGen: Integer;
+    FTmCrumbDirty: Boolean;
     { the series a sunburst drill renders for: its pieces transition }
     FHierDrill: TTyBoolArray;
     { THE SANKEYS and their inks, per slot. [Batch 79] }
@@ -2325,6 +2339,7 @@ type
       categories the predicate needs. }
     function KeepGraphNode(ARawIndex: Integer): Boolean;
     function GraphInk(ASlot: Integer): TTyGraphInk;
+    procedure GraphNodeLooks(ASlot: Integer; var AInk: TTyGraphInk);
     { What upstream's getName calls node ANode of the graph in ASlot -- its
       own name, or its category on a category axis. '' when there is none. }
     function GraphNodeName(ASlot, ANode: Integer): string;
@@ -2539,8 +2554,6 @@ type
     function DoSunAction(APayload: TJSONObject): Boolean;
     function DoTreemapAction(const AType: string; APayload: TJSONObject;
       const AEventJson: string = ''): Boolean;
-    { a new tree or a drill took the hovered element away }
-    procedure TmHoverCheck;
     { the render an action asks for, then its event }
     procedure HierUpdate(const AEventType, APayloadJson: string);
     procedure SunburstClick(ASeries, ARow: Integer);
@@ -2560,18 +2573,16 @@ type
     procedure TmWrapCheck;
     procedure TreemapFrame(AFrame: TTyPaintList);
     function IsTreemapDatum(const ADatum: TTyChartDatumRef): Boolean;
-    procedure ApplyTreemapHover(AList: TTyPaintList);
+    { [F2a] a hovered breadcrumb item's emphasis, onto the list just built:
+      its fill, its words, both up by ten }
+    procedure TmCrumbStates(AList: TTyPaintList);
+    { [F2a, old deferral #36] a treemap label's and upper label's opacity:
+      setLabelStyle's defaultOpacity, the node's style.opacity -- the raw
+      item's itemStyle.opacity over the series' (dataStyleTask), which the
+      rects themselves never take (getItemStyleNormal leaves it out) }
+    procedure TmLabelOpacity(AList: TTyPaintList);
     function GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
       AIndex: Integer): TTyChartEmphasisSpec;
-    { THE HOVER, APPLIED TO THE GRAPHS IN THE LIST: every element of the
-      hovered graph -- and of every other graph its blurScope reaches --
-      blurred, the focus sets spared, and the hovered element raised IN
-      PLACE. A graph is not overlaid by PaintEmphasis: a translucent edge
-      drawn twice darkens, and a lifted copy would cover the nodes. }
-    procedure ApplyGraphHover(AList: TTyPaintList; APPI: Integer);
-    { A TREE'S HOVER, in place in the static list: its own focus words --
-      ancestor, descendant, relative -- and upstream's edge rule. [Batch 83] }
-    procedure ApplyTreeHover(AList: TTyPaintList; APPI: Integer);
     function IsTreeDatum(const ADatum: TTyChartDatumRef): Boolean;
     { ==== [Batch 100] the tooltip's timers and the targets it gained ==== }
     function TipClock: Double;
@@ -2673,9 +2684,6 @@ type
     function TreeRowValue(ASlot, ARow: Integer): Double;
     { True when the datum is on a laid-out graph. }
     function IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
-    { The static layer again with the same build and the same list -- a
-      hover on a graph restyles what is already there. }
-    procedure RestyleStatic;
     { The chart's ground for label halos, and whether it counts as dark. }
     procedure LabelGround(out AGround: TTyChartColor; out ADark: Boolean);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
@@ -3021,6 +3029,7 @@ type
     { ecData.focus / blurScope of an item's element (the item, then the
       series) and of the series' own elements }
     function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+    function GraphCategoryNode(ASlot, ACategory: Integer): TJSONObject;
     function StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
     function StIsSankey(ASeriesIndex: Integer): Boolean;
     { [Batch 120] a chord; a series with an edge data's rows (a sankey's,
@@ -3031,6 +3040,27 @@ type
     procedure StSankeyCurveFill(ASlot, AEdge: Integer;
       const ANodes: TTyStNodeArray; const AState: string; var AObj: TTyStObject);
     procedure StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+    { [F2a] graph, tree and treemap on the shared state model }
+    procedure StDeclareGraphEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+    procedure StDeclareTreeEdge(ASlot, ARaw: Integer; AList: TTyPaintList);
+    procedure StDeclareTreemap(ASlot, ARaw: Integer; AList: TTyPaintList);
+    { TreeView's onHoverStateChange on a node group that went from AOld to
+      another state: unless it went to blur, its edge takes the state -- when
+      the parent's symbol is not blurred at that moment }
+    procedure StTreeFollow(ASeriesIndex, ARaw, AOld: Integer);
+    { a graph's node by its raw row, an edge by the link row its elements
+      carry; the edge data's inner index (the edges whose two ends survive
+      the legend, in order) and back; -1: none }
+    function StGraphNodeOfRaw(ASlot, ARaw: Integer): Integer;
+    function StGraphEdgeOfRow(ASlot, ARow: Integer): Integer;
+    function StGraphEdgeInner(ASlot, AEdge: Integer): Integer;
+    function StGraphEdgeOfInner(ASlot, AInner: Integer): Integer;
+    { the graph's edge data as the selection reads it, by inner index: the
+      edge data's name, its raw index [F2a] }
+    function SelEdgeData(ASlot: Integer): TTySelData;
+    { queryDataIndex on a graph's edge data: solved edge indices }
+    function QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
+      out AEdges: TTyIntegerArray): Boolean;
     function StItemFocus(ASeriesIndex, ARaw: Integer;
       out AScope: TTyStScope): TTyStFocus;
     function StEdgeFocus(ASeriesIndex, AEdge: Integer;
@@ -3517,6 +3547,10 @@ type
     function SankeyEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
     { a chord ribbon's state record, by raw link index [Batch 120] }
     function ChordEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
+    { [F2a] the state record of a series' second set of rows: a graph's edge
+      (by its place in the solved edge list), a tree's edge (by the node
+      that draws it), a sankey's or a chord's link }
+    function EdgeStates(ASeriesIndex, AIndex: Integer; out AItem: TTyStItem): Boolean;
     { a force graph's preserved state and running instance [Batch 114] }
     function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
@@ -4165,8 +4199,8 @@ begin
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
   FCrumbPressSeries := -1;
-  FTmHoverSeries := -1;
-  FTmHoverRow := -1;
+  FTmCrumbHoverS := -1;
+  FTmCrumbHoverK := -1;
   FDzFrom := -1;
   FDzPanGrid := -1;
   FDzNow := NaN;
@@ -14309,7 +14343,7 @@ procedure TTyAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   d: TTyChartDatumRef;
-  el, slot, cs: Integer;
+  el, slot: Integer;
   cap, zrClick: Boolean;
   n: TJSONData;
 begin
@@ -14381,13 +14415,8 @@ begin
     end;
     FPressArmed := False;
     { A BREADCRUMB ITEM: pressed and released on it, within 4 px }
-    if FCrumbPressed then
-    begin
-      FCrumbPressed := False;
-      if CrumbAt(X, Y, slot, cs) and (slot = FCrumbPressSeries) and (cs = FCrumbPressIndex)
-        and (Sqrt(Sqr(X - FCrumbPressX) + Sqr(Y - FCrumbPressY)) <= 4) then
-        TreemapCrumbSelect(slot, cs);
-    end;
+    { its click is the item's own onclick, in EventUp [F2a] }
+    FCrumbPressed := False;
   end;
   { ParallelView's mouseup hears every button [Batch 140] }
   if (Button <> mbLeft) and not (csDesigning in ComponentState) then ParExpUp(X, Y);
@@ -14608,10 +14637,27 @@ begin
 end;
 
 procedure TTyAdvanceChart.HierUpdate(const AEventType, APayloadJson: string);
+var
+  txt: string;
+  p, a, b: Integer;
 begin
   { updateView: the layout, the visuals and the render again }
   FullUpdate;
-  EmitPayloadEvent(AEventType, APayloadJson);
+  { THE EVENT OBJECT'S type IS THE ACTION'S EVENT NAME (doDispatchAction:
+    eventObj.type = actionInfo.event), in its place -- rewritten in the
+    text, which a parse would lose the NULs of a generated id in [F2a] }
+  txt := APayloadJson;
+  p := Pos('"type"', txt);
+  if p > 0 then
+  begin
+    a := p + 6;
+    while (a <= Length(txt)) and (txt[a] <> '"') do Inc(a);
+    b := a + 1;
+    while (b <= Length(txt)) and (txt[b] <> '"') do Inc(b);
+    if b <= Length(txt) then
+      txt := Copy(txt, 1, a) + AEventType + Copy(txt, b, MaxInt);
+  end;
+  EmitPayloadEvent(AEventType, txt);
 end;
 
 function TTyAdvanceChart.DoSunAction(APayload: TJSONObject): Boolean;
@@ -15019,8 +15065,8 @@ end;
 { zrender's polygon.contain: the winding number about the point }
 function CrumbContains(const APts: array of TTyPointF; AX, AY: Double): Boolean;
 var
-  i, j, w: Integer;
-  x0, y0, x1, y1, t, xi: Double;
+  i, j: Integer;
+  x0, y0, x1, y1, t, xi, w, dir: Double;
 begin
   w := 0;
   for i := 0 to High(APts) do
@@ -15032,12 +15078,14 @@ begin
     y1 := APts[j].Y;
     if ((y0 > AY) and (y1 > AY)) or ((y0 < AY) and (y1 < AY)) or (y0 = y1) then Continue;
     t := (AY - y0) / (y1 - y0);
+    { zrender's windingLine: a ray through a vertex counts each of its two
+      edges half [F2a: whole, so a breadcrumb's notch on the pointer's row
+      counted twice and its neighbour took the hover] }
+    if y1 < y0 then dir := 1 else dir := -1;
+    if (t = 1) or (t = 0) then dir := dir / 2;
     xi := t * (x1 - x0) + x0;
     if xi = AX then Exit(True);
-    if xi > AX then
-    begin
-      if y0 < y1 then Inc(w) else Dec(w);
-    end;
+    if xi > AX then w := w + dir;
   end;
   Result := w <> 0;
 end;
@@ -15966,29 +16014,74 @@ begin
   Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName);
 end;
 
-{ THE HOVERED NODE'S DISPATCHER in emphasis (setAsHighDownDispatcher): a
-  leaf's group -- its background and content both -- or a parent's
-  background alone; each lifted (liftColor) and its z2 up by 10 }
-procedure TTyAdvanceChart.ApplyTreemapHover(AList: TTyPaintList);
+{ [F2a] A HOVERED BREADCRUMB ITEM: the item's emphasis state -- its declared
+  fill (Breadcrumb.ts:189, the skin's hover tone by default), its words'
+  declared ink, both up by ten (the default proxy's z2 lift); a solve draws
+  new items, and the hover of an older one is gone }
+procedure TTyAdvanceChart.TmCrumbStates(AList: TTyPaintList);
 var
-  slot, row, i: Integer;
-  leaf: Boolean;
-  el: TTyChartElement;
+  i, k, hi, slot: Integer;
+  el, cap: TTyChartElement;
 begin
-  if (AList = nil) or (FTmHoverSeries < 0) then Exit;
-  slot := SlotOfSeries(FTmHoverSeries);
-  if (slot < 0) or (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Exit;
-  row := FTmHoverRow;
-  if (row < 0) or (row > High(FTreemaps[slot].Nodes)) then Exit;
-  leaf := Length(FTreemaps[slot].Nodes[row].View) = 0;
+  FTmCrumbDirty := False;
+  if (AList = nil) or (FTmCrumbHoverS < 0) or (FTmCrumbHoverGen <> FTmCrumbGen) then Exit;
+  slot := SlotOfSeries(FTmCrumbHoverS);
+  if (slot < 0) or (slot > High(FTreemapInks)) then Exit;
   for i := 0 to AList.Count - 1 do
   begin
     el := AList.Element(i);
-    if (el.Anim.Role <> carTmRect) or (el.Anim.Series <> FTmHoverSeries)
-      or (el.Anim.Index <> row) then Continue;
-    if (el.Anim.Sub = 1) and not leaf then Continue;
-    if el.Style.HasFill then el.Style.FillColor := TyChartLiftColor(el.Style.FillColor);
-    el.Z2 := el.Z2 + 10;
+    if (el.Anim.Role <> carTmCrumb) or (el.Anim.Series <> FTmCrumbHoverS)
+      or (el.Anim.Index <> FTmCrumbHoverK) then Continue;
+    el.Style.HasFill := True;
+    el.Style.FillColor := FTreemapInks[slot].CrumbEmphFill;
+    el.Z2 := el.Z2 + TyStZ2EmphasisLift;
+    AList.SetElement(i, el);
+    { its words: the caption hung off it }
+    for k := 0 to AList.Count - 1 do
+    begin
+      cap := AList.Element(k);
+      if cap.Caption.FontSizeLogical <= 0 then Continue;
+      hi := cap.Caption.LmHostPlus1 - 1;
+      if hi <> i then Continue;
+      cap.Z2 := cap.Z2 + TyStZ2EmphasisLift;
+      if FTreemapInks[slot].CrumbEmphHasText then
+        cap.Caption.Colour := FTreemapInks[slot].CrumbEmphText;
+      AList.SetElement(k, cap);
+    end;
+  end;
+end;
+
+{ [F2a, old deferral #36] the labels' opacity, the node's style.opacity }
+procedure TTyAdvanceChart.TmLabelOpacity(AList: TTyPaintList);
+var
+  i, hi, slot, s, row: Integer;
+  el, host: TTyChartElement;
+  item, ser: TJSONObject;
+  v: Double;
+  has: Boolean;
+begin
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if el.Caption.FontSizeLogical <= 0 then Continue;
+    hi := el.Caption.LmHostPlus1 - 1;
+    if (hi < 0) or (hi >= AList.Count) then Continue;
+    host := AList.Element(hi);
+    if host.Anim.Role <> carTmRect then Continue;
+    s := host.Anim.Series;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Continue;
+    row := host.Anim.Index;
+    item := nil;
+    if (row >= 0) and (row <= High(FTreemaps[slot].Hier.Nodes))
+      and (FTreemaps[slot].Hier.Nodes[row].Item is TJSONObject) then
+      item := TJSONObject(FTreemaps[slot].Hier.Nodes[row].Item);
+    ser := StSeriesNode(s);
+    { the raw item's style over the series' -- never a level's }
+    v := TyStReadNumber([item, ser], ['itemStyle', 'opacity'], has);
+    if not has or IsNan(v) then Continue;
+    el.Style.Alpha := v;
     AList.SetElement(i, el);
   end;
 end;
@@ -17831,23 +17924,8 @@ begin
     if Length(FTmHave) <= si then SetLength(FTmHave, si + 1);
     FTmHave[si] := have;
   end;
-  TmHoverCheck;
-end;
-
-procedure TTyAdvanceChart.TmHoverCheck;
-var slot: Integer; keep: Boolean;
-begin
-  if FTmHoverSeries < 0 then Exit;
-  slot := SlotOfSeries(FTmHoverSeries);
-  keep := (slot >= 0) and (slot <= High(FTreemaps)) and FTreemaps[slot].Valid
-    and (FTmHoverSeries <= High(FTmHave)) and (FTmHoverRow >= 0)
-    and (FTmHoverRow <= High(FTmHave[FTmHoverSeries].Bg))
-    and (FTmHave[FTmHoverSeries].Bg[FTmHoverRow] or FTmHave[FTmHoverSeries].Ct[FTmHoverRow]);
-  if not keep then
-  begin
-    FTmHoverSeries := -1;
-    FTmHoverRow := -1;
-  end;
+  { new breadcrumb items: no hover on them [F2a] }
+  Inc(FTmCrumbGen);
 end;
 
 { THE SANKEYS: each laid out in its box on the whole canvas, its nodes
@@ -18034,7 +18112,9 @@ end;
   series; after the rows, the breadcrumb's words, and its chip. }
 function TTyAdvanceChart.TreemapInk(ASlot: Integer): TTyTreemapInk;
 var
-  dummyCol: TTyChartColor;
+  dummyCol, col: TTyChartColor;
+  sNode: TJSONObject;
+  has: Boolean;
   base, crumb: TTyLabelSpec;
   ls, cs: TTyStyleSet;
   hs: TTyLabelSpecArray;
@@ -18062,9 +18142,23 @@ begin
   crumb.FontSizeLogical := ResolveFontSize(cs);
   crumb.FontWeight := cs.FontWeight;
   GlobalInk(crumb.FontName, crumb.FontSizeLogical, crumb.FontWeight, dummyCol, [ttpSize, ttpWeight, ttpFamily]);
+  Result.CrumbFill := TTyChartColor(cs.Background.Color);
+  { THE AUTHOR'S breadcrumb colours over the skin's: itemStyle.color, its
+    textStyle.color, and the hover's (Breadcrumb.ts:150-189) [F2a] }
+  sNode := StSeriesNode(FBindings[ASlot].SeriesIndex);
+  if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'itemStyle', 'color'], has), col) and has then
+    Result.CrumbFill := col;
+  if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'itemStyle', 'textStyle', 'color'], has), col) and has then
+    crumb.Colour := col;
+  Result.CrumbEmphFill := TTyChartColor(ActiveController.Model.ResolveStyle(
+    'TyAdvChartBreadcrumb', '', [tysHover]).Background.Color);
+  if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'emphasis', 'itemStyle', 'color'], has), col) and has then
+    Result.CrumbEmphFill := col;
+  Result.CrumbEmphHasText := TyTryParseChartColor(TyStReadString([sNode],
+    ['breadcrumb', 'emphasis', 'itemStyle', 'textStyle', 'color'], has), col) and has;
+  if Result.CrumbEmphHasText then Result.CrumbEmphText := col;
   SetLength(Result.ItemLabels, Length(Result.ItemLabels) + 1);
   Result.ItemLabels[High(Result.ItemLabels)] := crumb;
-  Result.CrumbFill := TTyChartColor(cs.Background.Color);
   { the parents' headers: outside text in the chart's label ink, a halo of
     the ground [Batch 78] }
   base := LabelBaseFor(ASlot);
@@ -18364,6 +18458,7 @@ begin
   Result.Label_ := LabelSpecFor(ASlot, '{b}');
   Result.Label_.DefaultText := tldValue;
   Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  GraphNodeLooks(ASlot, Result);
   { THE c PLACEHOLDER IS THE VALUE COLUMN on a view and the value AXIS' column on axes,
     where there is no column called value at all. }
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
@@ -18375,6 +18470,76 @@ begin
       Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
   end;
   GraphEdgeLabels(ASlot, Result);
+end;
+
+{ [F2a] A GRAPH NODE'S EMPHASIS LABEL show: the item's emphasis.label.show,
+  else its own label.show (Series.fillDataTextStyle's defaultEmphasis on a
+  data item), else the category's emphasis, else the series' -- whose
+  default is true (GraphSeries.defaultOption) }
+function GraphEmLabelShow(AItem, ACat, ASeries: TJSONObject): Boolean;
+var has: Boolean;
+begin
+  Result := TyStReadBool([AItem], ['emphasis', 'label', 'show'], has);
+  if has then Exit;
+  Result := TyStReadBool([AItem], ['label', 'show'], has);
+  if has then Exit;
+  Result := TyStReadBool([ACat, ASeries], ['emphasis', 'label', 'show'], has);
+  if not has then Result := True;
+end;
+
+{ [F2a] A GRAPH NODE'S OWN LOOK: its opacity (style.opacity -- the node's
+  itemStyle over its category's over the series', categoryVisual and
+  dataStyleTask), and its own label -- the node's `label` over its
+  category's over the series' (the wrapped getItemModel), built hidden when
+  only a state shows it (GraphSeries' emphasis.label.show is true unless
+  told) }
+procedure TTyAdvanceChart.GraphNodeLooks(ASlot: Integer; var AInk: TTyGraphInk);
+var
+  i, raw: Integer;
+  sNode, item, cat: TJSONObject;
+  arr, d: TJSONData;
+  spec: TTyLabelSpec;
+  has, emShow: Boolean;
+  v: Double;
+begin
+  AInk.NodeOpacity := nil;
+  AInk.NodeLabels := nil;
+  if (ASlot < 0) or (ASlot > High(FGraphNodes)) then Exit;
+  SetLength(AInk.NodeOpacity, Length(FGraphNodes[ASlot]));
+  SetLength(AInk.NodeLabels, Length(FGraphNodes[ASlot]));
+  sNode := StSeriesNode(FBindings[ASlot].SeriesIndex);
+  arr := nil;
+  if sNode <> nil then
+  begin
+    arr := sNode.Find('data');
+    if (arr = nil) or (arr.JSONType = jtNull) then arr := sNode.Find('nodes');
+  end;
+  for i := 0 to High(FGraphNodes[ASlot]) do
+  begin
+    raw := FGraphNodes[ASlot][i].RawRow;
+    item := nil;
+    if (arr is TJSONArray) and (raw >= 0) and (raw < arr.Count)
+      and (TJSONArray(arr).Items[raw] is TJSONObject) then
+      item := TJSONObject(TJSONArray(arr).Items[raw]);
+    cat := GraphCategoryNode(ASlot, FGraphNodes[ASlot][i].ModelCategory);
+    v := TyStReadNumber([item, cat, sNode], ['itemStyle', 'opacity'], has);
+    if not has or IsNan(v) then v := 1;
+    AInk.NodeOpacity[i] := v;
+    spec := AInk.Label_;
+    if cat <> nil then
+    begin
+      d := cat.Find('label');
+      if d is TJSONObject then spec := TyLabelSpecOfNode(TJSONObject(d), sNode, spec);
+    end;
+    if item <> nil then
+    begin
+      d := item.Find('label');
+      if d is TJSONObject then spec := TyLabelSpecOfNode(TJSONObject(d), sNode, spec);
+    end;
+    emShow := GraphEmLabelShow(item, cat, sNode);
+    if emShow then spec.StateShow := True;
+    AInk.NodeLabels[i] := spec;
+  end;
 end;
 
 { THE EDGE LABELS of one graph [Batch 114]: per edge, the spec (the series'
@@ -18430,6 +18595,9 @@ begin
   SetLength(AInk.EdgeLabelDistX, n);
   SetLength(AInk.EdgeLabelDistY, n);
   SetLength(AInk.EdgeLabelSpecs, n);
+  SetLength(AInk.EdgeLabelRot, n);
+  SetLength(AInk.EdgeLabelOffX, n);
+  SetLength(AInk.EdgeLabelOffY, n);
   if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
   { the line's frame: the view's overall transform, the label scaled back by
     1 / its scaleX (every ancestor's scaleX, and only the main group has one) }
@@ -18502,6 +18670,21 @@ begin
     end;
     AInk.EdgeLabelDistX[i] := dx * scale;
     AInk.EdgeLabelDistY[i] := dy * scale;
+    { `rotate` and `offset` (createTextConfig): the turn replaces the one
+      Line.beforeUpdate gave, the offset moves the anchor in the label's own
+      turned frame [F2a] }
+    AInk.EdgeLabelRot[i] := NaN;
+    d := LabKey('rotate');
+    if (d <> nil) and (d.JSONType = jtNumber) then AInk.EdgeLabelRot[i] := d.AsFloat * (Pi / 180);
+    AInk.EdgeLabelOffX[i] := NaN;
+    AInk.EdgeLabelOffY[i] := NaN;
+    d := LabKey('offset');
+    if (d is TJSONArray) and (d.Count >= 2) and (d.Items[0].JSONType = jtNumber)
+      and (d.Items[1].JSONType = jtNumber) then
+    begin
+      AInk.EdgeLabelOffX[i] := d.Items[0].AsFloat * scale;
+      AInk.EdgeLabelOffY[i] := d.Items[1].AsFloat * scale;
+    end;
     { THE WORDS: the formatter (a handler or a template over the EDGE's data:
       a the series, b the edge data's name, c its value), else the default
       text -- the NODE value at the edge's index (TyGraphEdgeDefaultText) }
@@ -22142,7 +22325,7 @@ var
   si2: TTySunburstInk;
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
-  pk: Integer;
+  pk, gk, gq: Integer;
   gfxCount: Integer;
 begin
   Result := 0;
@@ -22317,6 +22500,11 @@ begin
           if Length(itemSpecs) <= FBindings[i].SeriesIndex then
             SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
           itemSpecs[FBindings[i].SeriesIndex] := gi.EdgeLabelSpecs;
+          { and the nodes' own after them [F2a] }
+          gk := Length(gi.EdgeLabelSpecs);
+          SetLength(itemSpecs[FBindings[i].SeriesIndex], gk + Length(gi.NodeLabels));
+          for gq := 0 to High(gi.NodeLabels) do
+            itemSpecs[FBindings[i].SeriesIndex][gk + gq] := gi.NodeLabels[gq];
         end;
         Continue;
       end;
@@ -22696,18 +22884,18 @@ begin
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
-    { AFTER THE LABELS, so a caption dims and rises with its node. }
-    if drawn > 0 then ApplyGraphHover(list, APPI);
-    if drawn > 0 then ApplyTreeHover(list, APPI);
+    { a treemap label's opacity, the node's [F2a] }
+    if drawn > 0 then TmLabelOpacity(list);
     { THE CHUNKS: which frame draws each element of a progressive series,
       and which are still to come -- before the states, which an element
       with no data does not take [Batch 119] }
     if drawn > 0 then ProgTag(list);
-    if drawn > 0 then ApplyTreemapHover(list);
     { THE STATES, onto the elements just built [Batch 88] -- and with
       nothing drawn too: a legend can switch every series off, and their
       records go with their elements [Batch 93] }
     StSync(list, APPI);
+    { a hovered breadcrumb item [F2a] }
+    TmCrumbStates(list);
     { a map picture's flags are its rows' -- the selection the sync just
       wrote among them [Batch 152] }
     MapRepatch(APPI);
@@ -25461,6 +25649,38 @@ begin
     if k <= High(FVmLive) then Result.HdGen := FVmLive[k].Gen;
     Exit;
   end;
+  { [F2a] A TREEMAP'S BREADCRUMB ITEM, over its series: a highDownDispatcher
+    whose ecData holds only eventData -- componentType 'series', selfType
+    'breadcrumb', nodeData (Breadcrumb.ts packEventData) -- no dataIndex, so
+    no select and no tooltip; HdGen the solve that drew it }
+  if CrumbAt(AX, AY, k, q) then
+  begin
+    slot := SlotOfSeries(k);
+    Result.Id := -(11000000000 + Int64(FTmCrumbGen) * 1000000 + Int64(k) * 1000 + q);
+    Result.HdKind := 15;
+    Result.HdSeries := k;
+    Result.HdRow := q;
+    Result.HdGen := FTmCrumbGen;
+    Result.HasData := True;
+    Result.Params.ComponentType := 'series';
+    Result.Params.ComponentSubType := TyTreemapSeriesTypeName;
+    Result.Params.ComponentIndex := k;
+    Result.Params.SeriesType := TyTreemapSeriesTypeName;
+    Result.Params.SeriesIndex := k;
+    Result.Params.SeriesName := SeriesModelName(k);
+    Result.Params.SelfType := 'breadcrumb';
+    if (slot >= 0) and (slot <= High(FTreemaps)) and (q <= High(FTreemaps[slot].Crumbs)) then
+    begin
+      i := FTreemaps[slot].Crumbs[q].Row;
+      nm := '';
+      if (i >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil)
+        and (i < FStores[slot].Count) then nm := FStores[slot].GetItemName(i);
+      Result.Params.NodeData := '{"dataIndex":' + IntToStr(i) + ',"name":"'
+        + StringToJSONString(nm) + '"}';
+    end;
+    Result.Model := SeriesEventModel(k);
+    Exit;
+  end;
   { THE DISPLAY LIST: series items, their labels, markers, legend items --
     as DRAWN: in motion, or on a state proxy, the frame (its insertion
     indices are the list's) [Batch 94] }
@@ -25824,9 +26044,21 @@ begin
   { and a geo region a render replaced [Batch 148] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 14) and (GeoOfTarget(FEvHover) = nil) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { and a breadcrumb item a solve replaced [F2a] }
+  if (FEvHover.Id <> 0) and (FEvHover.HdKind = 15) and (FEvHover.HdGen <> FTmCrumbGen) then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   if FEvPreset then t := FEvPresetT
   else t := EventTargetAt(AX, AY);
   FEvPreset := False;
+  { zrender's isOutsideBoundary: a point off the canvas hovers nothing
+    [F2a: the treemap's own hover said so; every hover is the state
+    machine's now] }
+  if (AX < FLastRect.Left) or (AY < FLastRect.Top) or (AX > FLastRect.Right)
+    or (AY > FLastRect.Bottom) then
+  begin
+    t := Default(TTyChartEventTarget);
+    t.Params := TyChartBlankParams;
+  end;
   if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     { the element's own mouseout, bubbled [Batch 116] }
@@ -25932,6 +26164,9 @@ begin
   else if t.HdKind = 13 then BreakExpandClick(t.HdSeries, t.HdRow)
   { [Batch 148] the geo's map group: GeoView._handleRegionClick }
   else if t.HdKind = 14 then GeoRegionClick(t)
+  { [F2a] a breadcrumb item's onclick: the zoom or the drill, before the
+    chart's own click }
+  else if t.HdKind = 15 then TreemapCrumbSelect(t.HdSeries, t.HdRow)
   else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
@@ -26305,7 +26540,14 @@ begin
     Result := sskParallel
   { a map series' regions [Batch 152] }
   else if t = TyMapSeriesTypeName then
-    Result := sskMap;
+    Result := sskMap
+  { [F2a] a laid-out graph, a solved tree, a solved treemap }
+  else if (t = TyGraphSeriesTypeName) and (ASlot <= High(FGraphLaidOut))
+    and FGraphLaidOut[ASlot] then Result := sskGraph
+  else if (t = TyTreeSeriesTypeName) and (ASlot <= High(FTrees)) and FTrees[ASlot].Valid then
+    Result := sskTree
+  else if (t = TyTreemapSeriesTypeName) and (ASlot <= High(FTreemaps))
+    and FTreemaps[ASlot].Valid then Result := sskTreemap;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -26330,6 +26572,35 @@ begin
     if (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))
       and (FSunbursts[slot].Hier.Nodes[ARaw].Item is TJSONObject) then
       Result := TJSONObject(FSunbursts[slot].Hier.Nodes[ARaw].Item);
+    Exit;
+  end;
+  { [F2a] A TREE'S AND A TREEMAP'S DATA IS THEIR HIERARCHY: the row's own
+    node; a graph's nodes are `data || nodes` }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+    and (slot <= High(FTrees)) and FTrees[slot].Valid then
+  begin
+    if (ARaw >= 0) and (ARaw <= High(FTrees[slot].Hier.Nodes))
+      and (FTrees[slot].Hier.Nodes[ARaw].Item is TJSONObject) then
+      Result := TJSONObject(FTrees[slot].Hier.Nodes[ARaw].Item);
+    Exit;
+  end;
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
+    and (slot <= High(FTreemaps)) and FTreemaps[slot].Valid then
+  begin
+    if (ARaw >= 0) and (ARaw <= High(FTreemaps[slot].Hier.Nodes))
+      and (FTreemaps[slot].Hier.Nodes[ARaw].Item is TJSONObject) then
+      Result := TJSONObject(FTreemaps[slot].Hier.Nodes[ARaw].Item);
+    Exit;
+  end;
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+  begin
+    s := StSeriesNode(ASeriesIndex);
+    if s = nil then Exit;
+    d := s.Find('data');
+    if (d = nil) or (d.JSONType = jtNull) then d := s.Find('nodes');
+    if (d is TJSONArray) and (ARaw >= 0) and (ARaw < d.Count)
+      and (TJSONArray(d).Items[ARaw] is TJSONObject) then
+      Result := TJSONObject(TJSONArray(d).Items[ARaw]);
     Exit;
   end;
   { A CHORD'S NODE: its item of `data || nodes` [Batch 120] }
@@ -26380,6 +26651,12 @@ begin
     StDeclareCustom(ASlot, ARaw, AList);
     Exit;
   end;
+  { a treemap's rects [F2a] }
+  if FSt[s].Kind = sskTreemap then
+  begin
+    StDeclareTreemap(ASlot, ARaw, AList);
+    Exit;
+  end;
   { A MAP REGION'S ROW: only its flags matter here -- the region group's
     paths take them through the geo [Batch 152] }
   if FSt[s].Kind = sskMap then
@@ -26402,7 +26679,7 @@ begin
   item^.Host.IsPath := True;
   { a symbol (a line's, a scatter's): the group dispatches, the path draws
     [Batch 90] }
-  item^.HasGroup := FSt[s].Kind = sskSymbol;
+  item^.HasGroup := FSt[s].Kind in [sskSymbol, sskGraph, sskTree];
   { emphasis.disabled: no hover dispatcher and no default proxy }
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
@@ -26425,8 +26702,8 @@ begin
       [Batch 90] }
     sskRect, sskFunnel, sskPictorial,
     { a sankey node's: select.itemStyle.borderColor (SankeySeries.ts)
-      [Batch 114] }
-    sskSankey:
+      [Batch 114]; a graph node's (GraphSeries.ts select.itemStyle) [F2a] }
+    sskSankey, sskGraph:
       TyStSetColor(base, stkStroke, StPrimaryInk);
   end;
   { a lines row's: its lineStyle's (Line._updateCommonStl) [Batch 121] }
@@ -26486,6 +26763,34 @@ begin
         own origin (PictorialBarView.ts:920-924) [Batch 90] }
       if TyStReadBool(nodes, ['emphasis', 'scale'], has) then
         TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale, 1.1);
+    { [F2a] A GRAPH'S AND A TREE'S NODE IS A Symbol: emphasis.scale along
+      item -> category / leaves -> series over its own half size
+      (`this._sizeY`, the symbol size as written, before any view scale) }
+    sskGraph, sskTree:
+      begin
+        if FSt[s].Kind = sskGraph then
+        begin
+          k := StGraphNodeOfRaw(ASlot, ARaw);
+          spec := GraphEmphasisOf(ASlot, False, k);
+          half := NaN;
+          if k >= 0 then
+          begin
+            if FGraphNodes[ASlot][k].HasSize then half := FGraphNodes[ASlot][k].SizeH / 2
+            else half := FGraphSpecs[ASlot].Symbol.HeightPx / 2;
+          end;
+        end
+        else
+        begin
+          spec := TreeEmphasisOf(ASlot, ARaw);
+          half := (host.Shape.Bounds.Bottom - host.Shape.Bounds.Top) / 2;
+          if host.Shape.Kind in [cskCircle, cskEllipse] then half := host.Shape.R1;
+          if FTrees[ASlot].HasView and StPositive(FTrees[ASlot].VZ * FTrees[ASlot].VNS) then
+            half := half / (FTrees[ASlot].VZ * FTrees[ASlot].VNS);
+        end;
+        if StPositive(half) then
+          TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale,
+            TyChartSymbolScaleRatio(spec, half));
+      end;
   end;
 
   { ---- the other glyphs: the host's declared states on their own rest
@@ -26604,10 +26909,16 @@ begin
       { ignore = !show only when the state's show differs from the normal one }
       stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
       { a themeRiver's model shows the emphasis label unless told
-        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118] }
+        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118]; a graph's
+        too (GraphSeries.ts emphasis.label.show) [F2a] }
       if (n = stnEmphasis) and (FSt[s].Kind = sskRiver) and not has then
       begin
         stShow := True;
+        has := True;
+      end;
+      if (n = stnEmphasis) and (FSt[s].Kind = sskGraph) then
+      begin
+        stShow := GraphEmLabelShow(nodes[0], nodes[1], nodes[2]);
         has := True;
       end;
       if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
@@ -26826,6 +27137,7 @@ end;
 procedure TTyAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
 var
   slot, s, k, raw, n, i, hoverS: Integer;
+  ed: TTySelData;
   el: TTyChartElement;
   gel: TTyGfxEl;
   item: PTyStItem;
@@ -26871,6 +27183,7 @@ begin
     FSt[s].PartIdx := nil;
     FSt[s].EdgeHostIdx := nil;
     FSt[s].EdgeLabelIdx := nil;
+    FSt[s].EdgePartIdx := nil;
   end;
   for slot := 0 to High(FBindings) do
   begin
@@ -26920,6 +27233,22 @@ begin
       begin
         FSt[s].EdgeHostIdx[i] := -1;
         FSt[s].EdgeLabelIdx[i] := -1;
+      end;
+    end;
+    { [F2a] A GRAPH'S EDGES by their place in the solved list; A TREE'S by
+      the node that draws them }
+    if FSt[s].Kind in [sskGraph, sskTree] then
+    begin
+      if FSt[s].Kind = sskGraph then n := Length(FGraphEdges[slot]) else n := k;
+      if Length(FSt[s].EdgeRows) < n then SetLength(FSt[s].EdgeRows, n);
+      SetLength(FSt[s].EdgeHostIdx, n);
+      SetLength(FSt[s].EdgeLabelIdx, n);
+      SetLength(FSt[s].EdgePartIdx, n);
+      for i := 0 to n - 1 do
+      begin
+        FSt[s].EdgeHostIdx[i] := -1;
+        FSt[s].EdgeLabelIdx[i] := -1;
+        FSt[s].EdgePartIdx[i] := nil;
       end;
     end;
     if Length(FSt[s].Rows) < k then SetLength(FSt[s].Rows, k);
@@ -26979,6 +27308,22 @@ begin
         FSt[s].HostIdx[raw] := k;
       Continue;
     end;
+    { [F2a] A GRAPH'S EDGE: its line hosts, its arrows (silent) are parts,
+      its caption the label }
+    if el.Datum.IsEdge and (FSt[s].Kind = sskGraph) then
+    begin
+      raw := StGraphEdgeOfRow(SlotOfSeries(s), el.Datum.DataIndex);
+      if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
+      if el.Caption.FontSizeLogical > 0 then
+      begin
+        if FSt[s].EdgeLabelIdx[raw] < 0 then FSt[s].EdgeLabelIdx[raw] := k;
+      end
+      else if el.Silent then
+        StPush(FSt[s].EdgePartIdx[raw], k)
+      else if FSt[s].EdgeHostIdx[raw] < 0 then
+        FSt[s].EdgeHostIdx[raw] := k;
+      Continue;
+    end;
     { a chord's ribbon, by its raw link index [Batch 120] }
     if el.Datum.IsEdge and (FSt[s].Kind = sskChord) then
     begin
@@ -27028,6 +27373,32 @@ begin
       else StPush(FSt[s].PartIdx[raw], k);
       Continue;
     end;
+    { [F2a] A TREE'S EDGE: under its node's paint order, the node's datum }
+    if (FSt[s].Kind = sskTree) and (el.Caption.FontSizeLogical = 0)
+      and (el.Z2 < FTrees[slot].Spec.Z2 + cTyTreeNodeZ2) then
+    begin
+      if FSt[s].EdgeHostIdx[raw] < 0 then FSt[s].EdgeHostIdx[raw] := k;
+      Continue;
+    end;
+    { [F2a] A TREEMAP'S RECTS: a leaf's content hosts and its background is
+      a part, a parent's background hosts; a label is the one its rect
+      carries (the content's, a parent's header); a breadcrumb item is no
+      row's }
+    if FSt[s].Kind = sskTreemap then
+    begin
+      if el.Caption.FontSizeLogical > 0 then
+      begin
+        i := el.Caption.LmHostPlus1 - 1;
+        if (i >= 0) and (i < AList.Count) and (AList.Element(i).Anim.Role = carTmRect)
+          and (FSt[s].LabelIdx[raw] < 0) then FSt[s].LabelIdx[raw] := k;
+      end
+      else if el.Anim.Role = carTmRect then
+      begin
+        if (el.Anim.Sub = 1) or (el.Anim.G[4] = 0) then FSt[s].HostIdx[raw] := k
+        else StPush(FSt[s].PartIdx[raw], k);
+      end;
+      Continue;
+    end;
     if el.Caption.FontSizeLogical > 0 then
     begin
       if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
@@ -27066,6 +27437,15 @@ begin
     else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
       FSt[s].HostIdx[raw] := k;
   end;
+  { [F2a] a treemap leaf drawn with no content: its background hosts }
+  for s := 0 to High(FSt) do
+    if FSt[s].Kind = sskTreemap then
+      for raw := 0 to High(FSt[s].HostIdx) do
+        if (FSt[s].HostIdx[raw] < 0) and (Length(FSt[s].PartIdx[raw]) > 0) then
+        begin
+          FSt[s].HostIdx[raw] := FSt[s].PartIdx[raw][0];
+          FSt[s].PartIdx[raw] := Copy(FSt[s].PartIdx[raw], 1, Length(FSt[s].PartIdx[raw]) - 1);
+        end;
   for slot := 0 to High(FBindings) do
   begin
     s := FBindings[slot].SeriesIndex;
@@ -27121,6 +27501,28 @@ begin
           FSt[s].EdgeRows[raw] := Default(TTyStItem)
         else
           StDeclareChordEdge(slot, raw, AList);
+    { [F2a] a graph's edges (their selection from the series' one map) and
+      a tree's }
+    if FSt[s].Kind in [sskGraph, sskTree] then
+    begin
+      if FSt[s].Kind = sskGraph then ed := SelEdgeData(slot);
+      for raw := 0 to High(FSt[s].EdgeRows) do
+        if (raw > High(FSt[s].EdgeHostIdx)) or (FSt[s].EdgeHostIdx[raw] < 0) then
+          FSt[s].EdgeRows[raw] := Default(TTyStItem)
+        else
+        begin
+          if FSt[s].Kind = sskGraph then
+          begin
+            StDeclareGraphEdge(slot, raw, AList);
+            i := StGraphEdgeInner(slot, raw);
+            FSt[s].EdgeRows[raw].Host.Selected := (s <= High(FSel)) and FSelInit[s]
+              and (i >= 0) and TySelIsSelected(FSel[s], ed, i);
+          end
+          else
+            StDeclareTreeEdge(slot, raw, AList);
+          TyStApplyItem(FSt[s].EdgeRows[raw]);
+        end;
+    end;
   end;
   FStDirty := False;
   StWrite(AList);
@@ -27313,6 +27715,15 @@ begin
         StWriteHost(el, item^.Host, FStProxied);
         AList.SetElement(FSt[s].EdgeHostIdx[raw], el);
       end;
+      { a graph edge's arrows, their own values [F2a] }
+      if raw <= High(FSt[s].EdgePartIdx) then
+        for k := 0 to Min(High(FSt[s].EdgePartIdx[raw]), High(item^.Parts)) do
+          if item^.Parts[k].States <> [] then
+          begin
+            el := AList.Element(FSt[s].EdgePartIdx[raw][k]);
+            StWriteHost(el, item^.Parts[k], FStProxied);
+            AList.SetElement(FSt[s].EdgePartIdx[raw][k], el);
+          end;
       if (FSt[s].EdgeLabelIdx[raw] >= 0) and item^.Label_.Exists
         and (item^.Label_.States <> []) then
       begin
@@ -27332,6 +27743,8 @@ begin
   if GeoApplyChanged then Result := True;
   { and a map picture's, which are its series' rows' [Batch 152] }
   if MapApplyChanged then Result := True;
+  { a breadcrumb item's hover [F2a] }
+  if FTmCrumbDirty then Result := True;
   if not FStDirty then Exit;
   FStDirty := False;
   for s := 0 to High(FSt) do
@@ -27609,8 +28022,11 @@ begin
             Seed('scaleY', TyAnimNum(el.Anim.G[8]));
           end;
       else
-        { a pictorial glyph's emphasis.scale: a factor over its own scale }
-        if (FSt[ASeries].Kind = sskPictorial) and AEl.Decl[stnEmphasis].Has[stkScale] then
+        { a pictorial glyph's emphasis.scale: a factor over its own scale;
+          a graph's and a tree's Symbol path too (the port's factor over the
+          size it drew) [F2a] }
+        if (FSt[ASeries].Kind in [sskPictorial, sskGraph, sskTree])
+          and AEl.Decl[stnEmphasis].Has[stkScale] then
         begin
           Seed('scaleX', TyAnimNum(1));
           Seed('scaleY', TyAnimNum(1));
@@ -27715,6 +28131,24 @@ begin
         if (FSt[s].EdgeHostIdx[raw] >= 0) and FSt[s].EdgeRows[raw].Host.Exists then
           StAnimEl(FSt[s].EdgeRows[raw].Host, FSt[s].EdgeHostIdx[raw], s, raw,
             'edge', cStPxPath, cfg, hasCfg, over);
+    { [F2a] A GRAPH'S EDGES (the Line group's path, its arrows, its label)
+      and A TREE'S (the edge path): states of their own, proxies of their
+      own -- their stateTransition the series' as every other element's }
+    if FSt[s].Kind in [sskGraph, sskTree] then
+      for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
+      begin
+        if (FSt[s].EdgeHostIdx[raw] < 0) or not FSt[s].EdgeRows[raw].Host.Exists then Continue;
+        item := @FSt[s].EdgeRows[raw];
+        StAnimEl(item^.Host, FSt[s].EdgeHostIdx[raw], s, raw, 'edge', cStPxPath,
+          cfg, hasCfg, over);
+        if raw <= High(FSt[s].EdgePartIdx) then
+          for k := 0 to Min(High(FSt[s].EdgePartIdx[raw]), High(item^.Parts)) do
+            StAnimEl(item^.Parts[k], FSt[s].EdgePartIdx[raw][k], s, raw,
+              'edgepart' + IntToStr(k), cStPxPart, cfg, hasCfg, over);
+        if (FSt[s].EdgeLabelIdx[raw] >= 0) and item^.Label_.Exists then
+          StAnimEl(item^.Label_, FSt[s].EdgeLabelIdx[raw], s, raw, 'edgelabel', cStPxLabel,
+            cfg, hasCfg, over);
+      end;
     { a line's polyline and area: one element each upstream, its runs here }
     if FSt[s].Run.Host.Exists and (Length(FSt[s].RunIdx) > 0) then
     begin
@@ -27848,19 +28282,87 @@ begin
     Result[2] := StSeriesNode(ASeriesIndex);
     Exit;
   end;
+  { [F2a] A GRAPH NODE'S CHAIN: its item, the category it names by index,
+    the series (GraphSeries' wrapped getItemModel) }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+  begin
+    SetLength(Result, 3);
+    Result[0] := StItemNode(ASeriesIndex, ARaw);
+    Result[1] := nil;
+    d := StGraphNodeOfRaw(slot, ARaw);
+    if d >= 0 then Result[1] := GraphCategoryNode(slot, FGraphNodes[slot][d].ModelCategory);
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
+  { A TREE NODE'S: its item, `leaves` for a leaf-modelled one, the series }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+    and (slot <= High(FTrees)) and FTrees[slot].Valid then
+  begin
+    SetLength(Result, 3);
+    Result[0] := StItemNode(ASeriesIndex, ARaw);
+    Result[1] := nil;
+    if (ARaw >= 0) and (ARaw <= High(FTrees[slot].LeafModelled))
+      and FTrees[slot].LeafModelled[ARaw] then Result[1] := FTrees[slot].Spec.Leaves;
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
+  { A TREEMAP NODE'S: its item, the level of its depth, the series }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
+    and (slot <= High(FTreemaps)) and FTreemaps[slot].Valid then
+  begin
+    SetLength(Result, 3);
+    Result[0] := StItemNode(ASeriesIndex, ARaw);
+    Result[1] := nil;
+    if (ARaw >= 0) and (ARaw <= High(FTreemaps[slot].Hier.Nodes)) then
+    begin
+      d := FTreemaps[slot].Hier.Nodes[ARaw].Depth;
+      if (d >= 0) and (d <= High(FTreemaps[slot].Levels)) then
+        Result[1] := FTreemaps[slot].Levels[d];
+    end;
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
   SetLength(Result, 2);
   Result[0] := StItemNode(ASeriesIndex, ARaw);
   Result[1] := StSeriesNode(ASeriesIndex);
 end;
 
+{ the category model a graph node names by index (nil: none) }
+function TTyAdvanceChart.GraphCategoryNode(ASlot, ACategory: Integer): TJSONObject;
+var sNode: TJSONObject; d: TJSONData;
+begin
+  Result := nil;
+  if ACategory < 0 then Exit;
+  sNode := StSeriesNode(FBindings[ASlot].SeriesIndex);
+  if sNode = nil then Exit;
+  d := sNode.Find('categories');
+  if (d is TJSONArray) and (ACategory < d.Count) and (TJSONArray(d).Items[ACategory] is TJSONObject) then
+    Result := TJSONObject(TJSONArray(d).Items[ACategory]);
+end;
+
 { A SANKEY LINK'S CHAIN: its item, the level of its SOURCE's depth, the
   series [Batch 114] }
 function TTyAdvanceChart.StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
-var slot: Integer;
+var slot: Integer; sNode: TJSONObject; links: TJSONData;
 begin
   Result := nil;
   SetLength(Result, 3);
   slot := SlotOfSeries(ASeriesIndex);
+  { [F2a] A GRAPH EDGE'S CHAIN: its link, the series }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+    and (slot <= High(FGraphEdges)) then
+  begin
+    sNode := StSeriesNode(ASeriesIndex);
+    Result[2] := sNode;
+    if (sNode = nil) or (AEdge < 0) or (AEdge > High(FGraphEdges[slot])) then Exit;
+    links := sNode.Find('edges');
+    if (links = nil) or (links.JSONType = jtNull) then links := sNode.Find('links');
+    if (links is TJSONArray) and (FGraphEdges[slot][AEdge].Row >= 0)
+      and (FGraphEdges[slot][AEdge].Row < links.Count)
+      and (TJSONArray(links).Items[FGraphEdges[slot][AEdge].Row] is TJSONObject) then
+      Result[0] := TJSONObject(TJSONArray(links).Items[FGraphEdges[slot][AEdge].Row]);
+    Exit;
+  end;
   { A CHORD LINK'S CHAIN: its item, the series (no levels) [Batch 120] }
   if (slot >= 0) and (slot <= High(FChords)) and FChords[slot].Valid then
   begin
@@ -27893,7 +28395,10 @@ end;
 
 function TTyAdvanceChart.StHasEdges(ASeriesIndex: Integer): Boolean;
 begin
-  Result := StIsSankey(ASeriesIndex) or StIsChord(ASeriesIndex);
+  Result := StIsSankey(ASeriesIndex) or StIsChord(ASeriesIndex)
+    { a graph's edge data [F2a] }
+    or ((ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+      and (FSt[ASeriesIndex].Kind = sskGraph));
 end;
 
 { ONE CHORD RIBBON INTO THE STATE MACHINE [Batch 120]: a path whose states
@@ -27940,6 +28445,16 @@ begin
     if prev <> [] then TyStUseItemStates(item^, prev);
   end;
   TyStApplyItem(item^);
+end;
+
+function TTyAdvanceChart.EdgeStates(ASeriesIndex, AIndex: Integer;
+  out AItem: TTyStItem): Boolean;
+begin
+  AItem := Default(TTyStItem);
+  Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt)) and (AIndex >= 0)
+    and (AIndex <= High(FSt[ASeriesIndex].EdgeRows))
+    and FSt[ASeriesIndex].EdgeRows[AIndex].Host.Exists;
+  if Result then AItem := FSt[ASeriesIndex].EdgeRows[AIndex];
 end;
 
 function TTyAdvanceChart.ChordEdgeStates(ASeriesIndex, AEdge: Integer;
@@ -28046,14 +28561,483 @@ begin
   TyStApplyItem(item^);
 end;
 
+{ ==================== graph, tree and treemap states [F2a] ==================== }
+
+function TTyAdvanceChart.StGraphNodeOfRaw(ASlot, ARaw: Integer): Integer;
+var j: Integer;
+begin
+  Result := -1;
+  if (ASlot < 0) or (ASlot > High(FGraphNodes)) then Exit;
+  for j := 0 to High(FGraphNodes[ASlot]) do
+    if FGraphNodes[ASlot][j].RawRow = ARaw then Exit(j);
+end;
+
+function TTyAdvanceChart.StGraphEdgeOfRow(ASlot, ARow: Integer): Integer;
+var j: Integer;
+begin
+  Result := -1;
+  if (ASlot < 0) or (ASlot > High(FGraphEdges)) then Exit;
+  for j := 0 to High(FGraphEdges[ASlot]) do
+    if FGraphEdges[ASlot][j].Row = ARow then Exit(j);
+end;
+
+{ the edge data after Graph.update's filterSelf: an edge whose two ends both
+  survive the legend }
+function GraphEdgeSurvives(const ANodes: TTyGraphNodeArray; const AEdge: TTyGraphEdge): Boolean;
+begin
+  Result := (AEdge.Source >= 0) and (AEdge.Source <= High(ANodes))
+    and (AEdge.Target >= 0) and (AEdge.Target <= High(ANodes))
+    and (ANodes[AEdge.Source].Row >= 0) and (ANodes[AEdge.Target].Row >= 0);
+end;
+
+function TTyAdvanceChart.StGraphEdgeInner(ASlot, AEdge: Integer): Integer;
+var j: Integer;
+begin
+  Result := -1;
+  if (ASlot < 0) or (ASlot > High(FGraphEdges)) then Exit;
+  if (AEdge < 0) or (AEdge > High(FGraphEdges[ASlot])) then Exit;
+  if not GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][AEdge]) then Exit;
+  Result := 0;
+  for j := 0 to AEdge - 1 do
+    if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Inc(Result);
+end;
+
+function TTyAdvanceChart.StGraphEdgeOfInner(ASlot, AInner: Integer): Integer;
+var j, n: Integer;
+begin
+  Result := -1;
+  if (ASlot < 0) or (ASlot > High(FGraphEdges)) or (AInner < 0) then Exit;
+  n := 0;
+  for j := 0 to High(FGraphEdges[ASlot]) do
+    if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then
+    begin
+      if n = AInner then Exit(j);
+      Inc(n);
+    end;
+end;
+
+function TTyAdvanceChart.SelEdgeData(ASlot: Integer): TTySelData;
+var
+  j, n, s: Integer;
+  links: TJSONData;
+  sNode, item: TJSONObject;
+  has: Boolean;
+begin
+  Result := Default(TTySelData);
+  if (ASlot < 0) or (ASlot > High(FGraphEdges)) then Exit;
+  s := FBindings[ASlot].SeriesIndex;
+  sNode := StSeriesNode(s);
+  links := nil;
+  if sNode <> nil then
+  begin
+    links := sNode.Find('edges');
+    if (links = nil) or (links.JSONType = jtNull) then links := sNode.Find('links');
+  end;
+  n := 0;
+  for j := 0 to High(FGraphEdges[ASlot]) do
+    if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Inc(n);
+  SetLength(Result.Keys, n);
+  SetLength(Result.Raws, n);
+  SetLength(Result.Disabled, n);
+  n := 0;
+  for j := 0 to High(FGraphEdges[ASlot]) do
+  begin
+    if not GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Continue;
+    { the edge data's name: the link's id, else 'source > target' }
+    Result.Keys[n] := FGraphEdges[ASlot][j].DataName;
+    if Result.Keys[n] = '' then Result.Keys[n] := 'e'#0#0 + IntToStr(FGraphEdges[ASlot][j].RawIndex);
+    Result.Raws[n] := FGraphEdges[ASlot][j].RawIndex;
+    item := nil;
+    if (links is TJSONArray) and (FGraphEdges[ASlot][j].Row >= 0)
+      and (FGraphEdges[ASlot][j].Row < links.Count)
+      and (TJSONArray(links).Items[FGraphEdges[ASlot][j].Row] is TJSONObject) then
+      item := TJSONObject(TJSONArray(links).Items[FGraphEdges[ASlot][j].Row]);
+    Result.Disabled[n] := TyStReadBool([item, sNode], ['select', 'disabled'], has);
+    Inc(n);
+  end;
+end;
+
+{ queryDataIndex on the edge data (dataIndexInside as it is, dataIndex raw,
+  else the edge data's name), as solved edge indices }
+function TTyAdvanceChart.QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
+  out AEdges: TTyIntegerArray): Boolean;
+var
+  d: TJSONData;
+  mode, k: Integer;
+
+  function One(AItem: TJSONData): Integer;
+  var j: Integer;
+  begin
+    Result := -1;
+    if mode = 2 then
+    begin
+      if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
+      for j := 0 to High(FGraphEdges[ASlot]) do
+        if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j])
+          and (FGraphEdges[ASlot][j].DataName = AItem.AsString) then Exit(j);
+      Exit;
+    end;
+    if (AItem.JSONType <> jtNumber) or (Frac(AItem.AsFloat) <> 0) then Exit;
+    if mode = 0 then Exit(StGraphEdgeOfInner(ASlot, Trunc(AItem.AsFloat)));
+    for j := 0 to High(FGraphEdges[ASlot]) do
+      if (FGraphEdges[ASlot][j].RawIndex = Trunc(AItem.AsFloat))
+        and GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Exit(j);
+  end;
+
+begin
+  AEdges := nil;
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FGraphEdges)) then Exit;
+  mode := 0;
+  d := APayload.Find('dataIndexInside');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    mode := 1;
+    d := APayload.Find('dataIndex');
+  end;
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    mode := 2;
+    d := APayload.Find('name');
+  end;
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  Result := True;
+  if d is TJSONArray then
+  begin
+    SetLength(AEdges, d.Count);
+    for k := 0 to d.Count - 1 do AEdges[k] := One(d.Items[k]);
+  end
+  else
+  begin
+    SetLength(AEdges, 1);
+    AEdges[0] := One(d);
+  end;
+end;
+
+{ A GRAPH'S EDGE (Line.ts _updateCommonStl): the line's states are its
+  lineStyle's along link -> series; the arrows take the line's state stroke
+  as their fill and its opacity; the label's states are the link's `label`,
+  the series' `edgeLabel` (resolveParentPath), its emphasis show defaulting
+  to the normal one (defaultEmphasis). emphasis.disabled: no dispatcher, no
+  proxy on any of them. }
+procedure TTyAdvanceChart.StDeclareGraphEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+var
+  s, idx, k: Integer;
+  item: PTyStItem;
+  host, cap: TTyChartElement;
+  nodes: TTyStNodeArray;
+  has, bolder, disabled, was, prevWas, normalShow, stShow: Boolean;
+  prev: TTyStNames;
+  n: TTyStName;
+  obj: TTyStObject;
+  d: TJSONData;
+  ss: Double;
+  c: TTyChartColor;
+
+  function EdgeLab(const AState, AKey: string): TJSONData;
+  begin
+    Result := TyStFind([nodes[0]], [AState, 'label', AKey]);
+    if Result = nil then Result := TyStFind([nodes[2]], [AState, 'edgeLabel', AKey]);
+  end;
+
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].EdgeRows[AEdge];
+  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  nodes := StEdgeNodes(s, AEdge);
+  prevWas := item^.Host.Exists;
+  prev := item^.Host.States;
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  item^.Host.Proxy := not disabled;
+  for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
+  item^.Host.Rest := StRestOf(host);
+  for n := Low(TTyStName) to High(TTyStName) do
+    item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
+  { ---- the arrows ---- }
+  if Length(item^.Parts) <> Length(FSt[s].EdgePartIdx[AEdge]) then SetLength(item^.Parts, 0);
+  was := Length(item^.Parts) > 0;
+  SetLength(item^.Parts, Length(FSt[s].EdgePartIdx[AEdge]));
+  for k := 0 to High(item^.Parts) do
+  begin
+    item^.Parts[k].Exists := True;
+    item^.Parts[k].IsPath := True;
+    item^.Parts[k].Proxy := not disabled;
+    item^.Parts[k].Rest := StRestOf(AList.Element(FSt[s].EdgePartIdx[AEdge][k]));
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      item^.Parts[k].HasState[n] := True;
+      obj := TyStNoObject;
+      if item^.Host.Decl[n].Has[stkStroke] then
+      begin
+        obj.Has[stkFill] := True;
+        obj.Color[stkFill] := item^.Host.Decl[n].Color[stkStroke];
+        obj.None[stkFill] := item^.Host.Decl[n].None[stkStroke];
+      end;
+      if item^.Host.Decl[n].Has[stkOpacity] then
+        TyStSetNum(obj, stkOpacity, item^.Host.Decl[n].Num[stkOpacity]);
+      item^.Parts[k].Decl[n] := obj;
+    end;
+    if not was then
+    begin
+      item^.Parts[k].Cur := item^.Parts[k].Rest;
+      item^.Parts[k].States := [];
+      if item^.Host.States <> [] then TyStUseStates(item^.Parts[k], item^.Host.States);
+    end;
+  end;
+  { ---- the label ---- }
+  idx := FSt[s].EdgeLabelIdx[AEdge];
+  was := item^.Label_.Exists;
+  if idx < 0 then
+    item^.Label_ := Default(TTyStElement)
+  else
+  begin
+    cap := AList.Element(idx);
+    item^.Label_.Exists := True;
+    item^.Label_.IsPath := False;
+    item^.Label_.Proxy := not disabled;
+    item^.Label_.Rest := StLabelRestOf(cap);
+    normalShow := not cap.Ignore;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      item^.Label_.HasState[n] := True;
+      obj := TyStNoObject;
+      d := EdgeLab(cStNames[n], 'show');
+      if (d = nil) and (n = stnEmphasis) then stShow := normalShow
+      else if d <> nil then stShow := (d.JSONType = jtBoolean) and d.AsBoolean
+      else stShow := normalShow;
+      if stShow <> normalShow then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+      d := EdgeLab(cStNames[n], 'color');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> 'inherit')
+        and (d.AsString <> 'auto') and TyTryParseChartColor(d.AsString, c) then
+        TyStSetColor(obj, stkFill, c);
+      d := EdgeLab(cStNames[n], 'opacity');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        ss := d.AsFloat;
+        if not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
+      end;
+      item^.Label_.Decl[n] := obj;
+    end;
+    if not was then
+    begin
+      item^.Label_.Cur := item^.Label_.Rest;
+      item^.Label_.States := [];
+      if item^.Host.Exists and (item^.Host.States <> []) then
+        TyStUseStates(item^.Label_, item^.Host.States);
+    end;
+  end;
+  if not prevWas then
+  begin
+    item^.Host.Cur := item^.Host.Rest;
+    item^.Host.States := [];
+  end
+  else if FStRerender then
+  begin
+    TyStClearItem(item^);
+    if prev <> [] then TyStUseItemStates(item^, prev);
+  end;
+end;
+
+{ A TREE'S EDGE (TreeView.ts drawEdge): setStatesStylesFromModel(edge,
+  itemModel, 'lineStyle') along the node's chain and the default proxy --
+  installed whatever the node's emphasis says; no label, no dispatcher }
+procedure TTyAdvanceChart.StDeclareTreeEdge(ASlot, ARaw: Integer; AList: TTyPaintList);
+var
+  s: Integer;
+  item: PTyStItem;
+  nodes: TTyStNodeArray;
+  bolder, prevWas: Boolean;
+  prev: TTyStNames;
+  n: TTyStName;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].EdgeRows[ARaw];
+  nodes := StNodes(s, ARaw);
+  prevWas := item^.Host.Exists;
+  prev := item^.Host.States;
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  item^.Host.Proxy := True;
+  item^.NoDispatch := True;
+  for n := Low(TTyStName) to High(TTyStName) do
+  begin
+    item^.Host.HasState[n] := True;
+    item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
+  end;
+  item^.Host.Rest := StRestOf(AList.Element(FSt[s].EdgeHostIdx[ARaw]));
+  item^.Label_ := Default(TTyStElement);
+  if not prevWas then
+  begin
+    item^.Host.Cur := item^.Host.Rest;
+    item^.Host.States := [];
+  end
+  else if FStRerender then
+  begin
+    TyStClearItem(item^);
+    if prev <> [] then TyStUseItemStates(item^, prev);
+  end;
+end;
+
+{ A TREEMAP NODE (TreemapView.ts renderNode): every state's style is
+  getStateItemStyle of [state].itemStyle -- color the fill, strokeColor the
+  stroke, strokeWidth the width, never an opacity -- and a background's
+  fill is the state's borderColor, written whether or not it is declared (an
+  undeclared one takes the fill away). The proxy always; a disabled
+  emphasis only stops the dispatcher. A leaf's group dispatches (its content
+  hosts, its background is a part with states of its own); a parent's
+  background alone. The labels: the content's `label`, a header's
+  `upperLabel` (shown under emphasis by default). }
+procedure TTyAdvanceChart.StDeclareTreemap(ASlot, ARaw: Integer; AList: TTyPaintList);
+var
+  s, idx, k: Integer;
+  item: PTyStItem;
+  host, cap: TTyChartElement;
+  nodes: TTyStNodeArray;
+  has, was, normalShow, stShow, isBg: Boolean;
+  n: TTyStName;
+  obj: TTyStObject;
+  key, txt: string;
+  ss: Double;
+  c: TTyChartColor;
+
+  function StateStyle(AIsBg: Boolean; AState: TTyStName): TTyStObject;
+  var t: string; h: Boolean; col: TTyChartColor; v: Double;
+  begin
+    Result := TyStNoObject;
+    if AIsBg then
+    begin
+      t := TyStReadString(nodes, [cStNames[AState], 'itemStyle', 'borderColor'], h);
+      if h and TyTryParseChartColor(t, col) then TyStSetColor(Result, stkFill, col)
+      else TyStSetNone(Result, stkFill);
+    end
+    else
+    begin
+      t := TyStReadString(nodes, [cStNames[AState], 'itemStyle', 'color'], h);
+      if h and TyTryParseChartColor(t, col) then TyStSetColor(Result, stkFill, col);
+    end;
+    t := TyStReadString(nodes, [cStNames[AState], 'itemStyle', 'strokeColor'], h);
+    if h and TyTryParseChartColor(t, col) then TyStSetColor(Result, stkStroke, col);
+    v := TyStReadNumber(nodes, [cStNames[AState], 'itemStyle', 'strokeWidth'], h);
+    if h and not IsNan(v) then TyStSetNum(Result, stkLineWidth, v);
+  end;
+
+  procedure Declare(var AEl: TTyStElement; const AFrom: TTyChartElement);
+  var m: TTyStName;
+  begin
+    AEl.Exists := True;
+    AEl.IsPath := True;
+    AEl.Proxy := True;
+    AEl.Rest := StRestOf(AFrom);
+    for m := Low(TTyStName) to High(TTyStName) do
+    begin
+      AEl.HasState[m] := True;
+      AEl.Decl[m] := StateStyle(AFrom.Anim.Sub = 0, m);
+    end;
+  end;
+
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].Rows[ARaw];
+  host := AList.Element(FSt[s].HostIdx[ARaw]);
+  nodes := StNodes(s, ARaw);
+  item^.NoDispatch := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  { a leaf's node group dispatches: its content (or its lone background)
+    hosts; a parent's background alone }
+  item^.HasGroup := (host.Anim.Sub = 1) or (host.Anim.G[4] <> 0);
+  Declare(item^.Host, host);
+  if Length(item^.Parts) <> Length(FSt[s].PartIdx[ARaw]) then SetLength(item^.Parts, 0);
+  was := Length(item^.Parts) > 0;
+  SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
+  for k := 0 to High(item^.Parts) do
+  begin
+    Declare(item^.Parts[k], AList.Element(FSt[s].PartIdx[ARaw][k]));
+    if not was then
+    begin
+      item^.Parts[k].Cur := item^.Parts[k].Rest;
+      item^.Parts[k].States := [];
+      if item^.Host.States <> [] then TyStUseStates(item^.Parts[k], item^.Host.States);
+    end;
+  end;
+  item^.Guide := Default(TTyStElement);
+  { the label of the host: a content's `label`, a background's `upperLabel` }
+  idx := FSt[s].LabelIdx[ARaw];
+  was := item^.Label_.Exists;
+  if idx < 0 then
+    item^.Label_ := Default(TTyStElement)
+  else
+  begin
+    cap := AList.Element(idx);
+    isBg := host.Anim.Sub = 0;
+    if isBg then key := 'upperLabel' else key := 'label';
+    item^.Label_.Exists := True;
+    item^.Label_.IsPath := False;
+    item^.Label_.Proxy := True;
+    item^.Label_.Rest := StLabelRestOf(cap);
+    normalShow := not cap.Ignore;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      item^.Label_.HasState[n] := True;
+      obj := TyStNoObject;
+      stShow := TyStReadBool(nodes, [cStNames[n], key, 'show'], has);
+      { TreemapSeries' emphasis.upperLabel.show }
+      if (n = stnEmphasis) and isBg and not has then
+      begin
+        stShow := True;
+        has := True;
+      end;
+      if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+      txt := TyStReadString(nodes, [cStNames[n], key, 'color'], has);
+      if has and (txt <> 'inherit') and (txt <> 'auto') and TyTryParseChartColor(txt, c) then
+        TyStSetColor(obj, stkFill, c);
+      ss := TyStReadNumber(nodes, [cStNames[n], key, 'opacity'], has);
+      if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
+      item^.Label_.Decl[n] := obj;
+    end;
+    if not was then
+    begin
+      item^.Label_.Cur := item^.Label_.Rest;
+      item^.Label_.States := [];
+      if item^.Host.Exists and (item^.Host.States <> []) then
+        TyStUseStates(item^.Label_, item^.Host.States);
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.StTreeFollow(ASeriesIndex, ARaw, AOld: Integer);
+var
+  slot, par, nw: Integer;
+begin
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  if FSt[ASeriesIndex].Kind <> sskTree then Exit;
+  if (ARaw < 0) or (ARaw > High(FSt[ASeriesIndex].Rows)) then Exit;
+  nw := FSt[ASeriesIndex].Rows[ARaw].GroupHover;
+  if (nw = AOld) or (nw = TyStHoverBlur) then Exit;
+  if (ARaw > High(FSt[ASeriesIndex].EdgeRows))
+    or not FSt[ASeriesIndex].EdgeRows[ARaw].Host.Exists then Exit;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FTrees)) or not FTrees[slot].Valid then Exit;
+  if ARaw > High(FTrees[slot].Hier.Nodes) then Exit;
+  par := FTrees[slot].Hier.Nodes[ARaw].Parent;
+  { the parent's symbol blurred at this moment: the edge stays }
+  if (par >= 0) and (par <= High(FSt[ASeriesIndex].Rows))
+    and FSt[ASeriesIndex].Rows[par].Host.Exists
+    and (FSt[ASeriesIndex].Rows[par].GroupHover = TyStHoverBlur) then Exit;
+  FSt[ASeriesIndex].EdgeRows[ARaw].Host.HoverState := nw;
+  FStDirty := True;
+end;
+
 function TTyAdvanceChart.StItemFocus(ASeriesIndex, ARaw: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var
   nodes: TTyStNodeArray;
-  d: TJSONData;
+  d, legacy: TJSONData;
   w: string;
   slot, i, p: Integer;
-  anc: TTyIntegerArray;
+  anc, ns, es: TTyIntegerArray;
+  adj: Boolean;
+  hier: TTyHierarchy;
   info: TTyCustomElInfo;
   txt: TJSONString;
 
@@ -28124,6 +29108,71 @@ begin
     end;
     Exit(TyStFocusOf(d));
   end;
+  { [F2a] A GRAPH NODE'S 'adjacency' (the legacy focusNodeAdjacency where no
+    focus is written, any value but null): getAdjacentDataIndices -- its
+    edges and both ends of each -- in two index sets }
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and (FSt[ASeriesIndex].Kind = sskGraph) then
+  begin
+    adj := False;
+    if d = nil then
+    begin
+      legacy := nil;
+      if nodes[2] <> nil then legacy := nodes[2].Find('focusNodeAdjacency');
+      adj := (legacy <> nil) and (legacy.JSONType <> jtNull);
+    end
+    else
+      adj := (d.JSONType = jtString) and (d.AsString = 'adjacency');
+    if not adj then Exit(TyStFocusOf(d));
+    Result := Default(TTyStFocus);
+    Result.Kind := sfkIndices;
+    TyGraphFocusSets(FGraphNodes[slot], FGraphEdges[slot], False,
+      StGraphNodeOfRaw(slot, ARaw), ns, es);
+    for i := 0 to High(ns) do
+      if (ns[i] >= 0) and (ns[i] <= High(FGraphNodes[slot]))
+        and (FGraphNodes[slot][ns[i]].Row >= 0) then Add(FGraphNodes[slot][ns[i]].Row);
+    Result.EdgeIndices := es;
+    Exit;
+  end;
+  { [F2a] A TREE'S WORDS (TreeView.ts:447-457): ancestor, descendant,
+    relative as data indices -- the virtual root and the node itself among
+    them; A TREEMAP'S (TreemapView.ts:822-825) ancestor and descendant only }
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and (FSt[ASeriesIndex].Kind in [sskTree, sskTreemap]) then
+  begin
+    if (d <> nil) and (d.JSONType = jtString) then w := d.AsString else w := '';
+    if (w <> 'ancestor') and (w <> 'descendant')
+      and not ((w = 'relative') and (FSt[ASeriesIndex].Kind = sskTree)) then
+      Exit(TyStFocusOf(d));
+    Result := Default(TTyStFocus);
+    Result.Kind := sfkIndices;
+    if FSt[ASeriesIndex].Kind = sskTree then hier := FTrees[slot].Hier
+    else hier := FTreemaps[slot].Hier;
+    if (ARaw < 0) or (ARaw > High(hier.Nodes)) then Exit;
+    if (w = 'ancestor') or (w = 'relative') then
+    begin
+      anc := nil;
+      p := ARaw;
+      while p >= 0 do
+      begin
+        SetLength(anc, Length(anc) + 1);
+        anc[High(anc)] := p;
+        p := hier.Nodes[p].Parent;
+      end;
+      for i := High(anc) downto 0 do Add(anc[i]);
+    end;
+    if (w = 'descendant') or (w = 'relative') then
+    begin
+      Add(ARaw);
+      i := ARaw + 1;
+      while (i <= High(hier.Nodes)) and (hier.Nodes[i].Depth > hier.Nodes[ARaw].Depth) do
+      begin
+        Add(i);
+        Inc(i);
+      end;
+    end;
+    Exit;
+  end;
   if not ((slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
     and (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))) then
     Exit(TyStFocusOf(d));
@@ -28167,13 +29216,34 @@ function TTyAdvanceChart.StEdgeFocus(ASeriesIndex, AEdge: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var
   nodes: TTyStNodeArray;
-  d: TJSONData;
+  d, legacy: TJSONData;
   slot: Integer;
+  adj: Boolean;
 begin
   nodes := StEdgeNodes(ASeriesIndex, AEdge);
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
+  { [F2a] A GRAPH EDGE'S 'adjacency': itself and its two ends (GraphView) }
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and (FSt[ASeriesIndex].Kind = sskGraph) then
+  begin
+    adj := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'adjacency');
+    if (d = nil) and (nodes[2] <> nil) then
+    begin
+      legacy := nodes[2].Find('focusNodeAdjacency');
+      adj := (legacy <> nil) and (legacy.JSONType <> jtNull);
+    end;
+    if not adj or (AEdge < 0) or (AEdge > High(FGraphEdges[slot])) then Exit(TyStFocusOf(d));
+    Result := Default(TTyStFocus);
+    Result.Kind := sfkIndices;
+    SetLength(Result.EdgeIndices, 1);
+    Result.EdgeIndices[0] := AEdge;
+    SetLength(Result.Indices, 2);
+    Result.Indices[0] := FGraphNodes[slot][FGraphEdges[slot][AEdge].Source].Row;
+    Result.Indices[1] := FGraphNodes[slot][FGraphEdges[slot][AEdge].Target].Row;
+    Exit;
+  end;
   { A CHORD RIBBON'S 'adjacency' -- the series' default -- itself and its two
     ends (ChordEdge) [Batch 120] }
   if StIsChord(ASeriesIndex) then
@@ -28227,7 +29297,7 @@ end;
 procedure TTyAdvanceChart.StBlurSeries(ATarget: Integer; const AFocus: TTyStFocus;
   AScope: TTyStScope);
 var
-  slot, s, raw, k, poly, tslot: Integer;
+  slot, s, raw, k, poly, tslot, old: Integer;
   tkey, key: string;
   same, sameCoord, spare: Boolean;
   item: PTyStItem;
@@ -28269,8 +29339,10 @@ begin
         item := StItemAt(s, AFocus.Indices[k]);
         if item = nil then Continue;
         poly := StPolyOf(s);
+        old := item^.GroupHover;
         TyStItemLeaveBlur(item^, poly);
         if poly >= 0 then StPolyTo(s, poly);
+        StTreeFollow(s, StInnerRaw(s, AFocus.Indices[k]), old);
       end;
       { the edge data's, by the same indices in every series blurred }
       for k := 0 to High(AFocus.EdgeIndices) do
@@ -28289,7 +29361,7 @@ end;
 { allLeaveBlur (util/states.ts:404-427): every series blurSeries reached
   leaves blur, whole; none is blured after }
 procedure TTyAdvanceChart.StAllLeaveBlur;
-var s, raw, poly: Integer;
+var s, raw, poly, old: Integer;
 begin
   for s := 0 to High(FSt) do
   begin
@@ -28299,7 +29371,11 @@ begin
       if poly = TyStHoverBlur then poly := TyStHoverNormal;
       for raw := 0 to High(FSt[s].Rows) do
         if FSt[s].Rows[raw].Host.Exists then
+        begin
+          old := FSt[s].Rows[raw].GroupHover;
           TyStItemLeaveBlur(FSt[s].Rows[raw], poly);
+          StTreeFollow(s, raw, old);
+        end;
       if poly >= 0 then StPolyTo(s, poly);
       for raw := 0 to High(FSt[s].EdgeRows) do
         if FSt[s].EdgeRows[raw].Host.Exists then
@@ -28344,15 +29420,18 @@ begin
       { a sankey link is a dispatcher of its own [Batch 114]; a chord
         ribbon too [Batch 120] }
       if not StHasEdges(s) then Exit;
-      if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FSt[s].EdgeRows)) then Exit;
-      AItem := @FSt[s].EdgeRows[ATarget.HdRow];
-      if not AItem^.Host.Exists or not AItem^.Host.Proxy then Exit;
+      k := ATarget.HdRow;
+      { a graph's elements carry the link's row [F2a] }
+      if FSt[s].Kind = sskGraph then k := StGraphEdgeOfRow(SlotOfSeries(s), k);
+      if (k < 0) or (k > High(FSt[s].EdgeRows)) then Exit;
+      AItem := @FSt[s].EdgeRows[k];
+      if not TyStItemDispatches(AItem^) then Exit;
       APart := 0;
       Exit(True);
     end;
     AItem := StItemAt(s, ATarget.HdRow);
     { emphasis.disabled: not a highDownDispatcher at all }
-    if (AItem = nil) or not AItem^.Host.Proxy then Exit;
+    if (AItem = nil) or not TyStItemDispatches(AItem^) then Exit;
     { a custom item whose root option says emphasisDisabled
       (disableHoverEmphasis: no dispatcher) [Batch 124] }
     if (s >= 0) and (s <= High(FSt)) and (FSt[s].Kind = sskCustom) then
@@ -28384,7 +29463,7 @@ end;
 { handleGlobalMouseOutForHighDown: allLeaveBlur, then the dispatcher leaves
   emphasis unless an action holds it }
 procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
-var item: PTyStItem; part, s, poly: Integer;
+var item: PTyStItem; part, s, poly, old: Integer;
 begin
   { [Batch 148] a geo region's group }
   if ATarget.HdKind = 14 then
@@ -28421,14 +29500,30 @@ begin
     Exit;
   end;
   if ATarget.HdKind = 6 then Exit;
+  { [F2a] a breadcrumb item: allLeaveBlur, and it leaves emphasis }
+  if ATarget.HdKind = 15 then
+  begin
+    StAllLeaveBlur;
+    if (FTmCrumbHoverS = ATarget.HdSeries) and (FTmCrumbHoverK = ATarget.HdRow)
+      and (FTmCrumbHoverGen = ATarget.HdGen) then
+    begin
+      FTmCrumbHoverS := -1;
+      FTmCrumbHoverK := -1;
+      FTmCrumbDirty := True;
+    end;
+    if FStDirty or FTmCrumbDirty then InvalidateFrame;
+    Exit;
+  end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   StAllLeaveBlur;
   if part = 0 then
   begin
     poly := StPolyOf(s);
+    old := item^.GroupHover;
     if TyStItemHoverLeave(item^, poly) then FStDirty := True;
     if poly >= 0 then StPolyTo(s, poly);
+    if not ATarget.HdEdge then StTreeFollow(s, StInnerRaw(s, ATarget.HdRow), old);
   end
   else if (item^.Host.HighByOuter = 0) and (item^.Host.HoverState = TyStHoverEmphasis) then
   begin
@@ -28464,7 +29559,7 @@ end;
 procedure TTyAdvanceChart.StHoverOverSeries(const ATarget: TTyChartEventTarget);
 var
   item: PTyStItem;
-  part, s, poly: Integer;
+  part, s, poly, old: Integer;
   focus: TTyStFocus;
   scope: TTyStScope;
 begin
@@ -28481,9 +29576,22 @@ begin
     Exit;
   end;
   if ATarget.HdKind = 6 then Exit;
+  { [F2a] a breadcrumb item enters emphasis (its ecData has no series: no
+    blur) }
+  if ATarget.HdKind = 15 then
+  begin
+    FTmCrumbHoverS := ATarget.HdSeries;
+    FTmCrumbHoverK := ATarget.HdRow;
+    FTmCrumbHoverGen := ATarget.HdGen;
+    FTmCrumbDirty := True;
+    InvalidateFrame;
+    Exit;
+  end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
-  if (part = 0) and ATarget.HdEdge then
+  if (part = 0) and ATarget.HdEdge and (FSt[s].Kind = sskGraph) then
+    focus := StEdgeFocus(s, StGraphEdgeOfRow(SlotOfSeries(s), ATarget.HdRow), scope)
+  else if (part = 0) and ATarget.HdEdge then
     focus := StEdgeFocus(s, ATarget.HdRow, scope)
   else if part = 0 then
     focus := StItemFocus(s, StInnerRaw(s, ATarget.HdRow), scope)
@@ -28493,8 +29601,10 @@ begin
   if part = 0 then
   begin
     poly := StPolyOf(s);
+    old := item^.GroupHover;
     if TyStItemHoverEnter(item^, poly) then FStDirty := True;
     if poly >= 0 then StPolyTo(s, poly);
+    if not ATarget.HdEdge then StTreeFollow(s, StInnerRaw(s, ATarget.HdRow), old);
   end
   else if item^.Host.HighByOuter = 0 then
   begin
@@ -28516,16 +29626,19 @@ begin
 end;
 
 function TTyAdvanceChart.StEmphasised(AIndex: Integer): Boolean;
-var d: TTyChartDatumRef; item: PTyStItem;
+var d: TTyChartDatumRef; item: PTyStItem; k: Integer;
 begin
   Result := False;
   if not StOwnsElement(AIndex) then Exit;
   d := FPaintList.Element(AIndex).Datum;
   if d.IsEdge then
   begin
-    Result := StHasEdges(d.SeriesIndex) and (d.DataIndex >= 0)
-      and (d.DataIndex <= High(FSt[d.SeriesIndex].EdgeRows))
-      and (stnEmphasis in FSt[d.SeriesIndex].EdgeRows[d.DataIndex].Host.States);
+    k := d.DataIndex;
+    if FSt[d.SeriesIndex].Kind = sskGraph then
+      k := StGraphEdgeOfRow(SlotOfSeries(d.SeriesIndex), k);
+    Result := StHasEdges(d.SeriesIndex) and (k >= 0)
+      and (k <= High(FSt[d.SeriesIndex].EdgeRows))
+      and (stnEmphasis in FSt[d.SeriesIndex].EdgeRows[k].Host.States);
     Exit;
   end;
   item := StItemAt(d.SeriesIndex, d.DataIndex);
@@ -28611,7 +29724,7 @@ end;
 
 procedure TTyAdvanceChart.SelSyncFlags(ASlot: Integer);
 var
-  s, raw, inner: Integer;
+  s, raw, inner, k: Integer;
   data: TTySelData;
   st: TTyDataStore;
   was: Boolean;
@@ -28630,6 +29743,23 @@ begin
     FSt[s].Rows[raw].Host.Selected := (inner >= 0)
       and TySelIsSelected(FSel[s], data, inner);
     if was <> FSt[s].Rows[raw].Host.Selected then FStDirty := True;
+    { the rest of the group: enterSelect traverses it [F2a] }
+    for k := 0 to High(FSt[s].Rows[raw].Parts) do
+      FSt[s].Rows[raw].Parts[k].Selected := FSt[s].Rows[raw].Host.Selected;
+  end;
+  { a graph's edges, from the same map [F2a] }
+  if FSt[s].Kind = sskGraph then
+  begin
+    data := SelEdgeData(ASlot);
+    for raw := 0 to High(FSt[s].EdgeRows) do
+    begin
+      if not FSt[s].EdgeRows[raw].Host.Exists then Continue;
+      inner := StGraphEdgeInner(ASlot, raw);
+      was := FSt[s].EdgeRows[raw].Host.Selected;
+      FSt[s].EdgeRows[raw].Host.Selected := (inner >= 0)
+        and TySelIsSelected(FSel[s], data, inner);
+      if was <> FSt[s].EdgeRows[raw].Host.Selected then FStDirty := True;
+    end;
   end;
 end;
 
@@ -28885,7 +30015,7 @@ procedure TTyAdvanceChart.SelApply(APayload: TJSONObject; const AType: string);
 var
   t: string;
   series, inner: TTyIntegerArray;
-  i, slot, s, kind: Integer;
+  i, slot, s, kind, k: Integer;
   data: TTySelData;
   d: TJSONData;
 begin
@@ -28911,11 +30041,22 @@ begin
     SelEnsure(slot);
     s := series[i];
     if (s > High(FSel)) or not FSelInit[s] then Continue;
-    { a graph's links are not this model's data }
+    { A GRAPH'S LINKS share the series' one map, keyed by the edge data's
+      names (Series.select(dataIndex, dataType)) [F2a]; any other series'
+      edge data is not this model's }
     d := APayload.Find('dataType');
-    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge') then Continue;
-    if not QueryDataIndex(slot, APayload, inner) then Continue;
-    data := SelData(slot);
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge') then
+    begin
+      if not ((s <= High(FSt)) and (FSt[s].Kind = sskGraph)) then Continue;
+      if not QueryEdgeIndex(slot, APayload, inner) then Continue;
+      for k := 0 to High(inner) do inner[k] := StGraphEdgeInner(slot, inner[k]);
+      data := SelEdgeData(slot);
+    end
+    else
+    begin
+      if not QueryDataIndex(slot, APayload, inner) then Continue;
+      data := SelData(slot);
+    end;
     case kind of
       0: TySelSelect(FSel[s], data, inner);
       1: TySelUnselect(FSel[s], data, inner);
@@ -28931,7 +30072,8 @@ procedure TTyAdvanceChart.SelPublish(APayload: TJSONObject; const AOwnEvent: str
 var
   t, lt, sel, selMap, nm: string;
   inner: TTyIntegerArray;
-  k, slot, s: Integer;
+  k, slot, s, q, nd: Integer;
+  dts: array[0..1] of string;
   idx: TTyIntegerArray;
   fromPayload: TJSONObject;
   d: TJSONData;
@@ -28952,14 +30094,39 @@ begin
     if (s < 0) or (s > High(FSel)) or not FSelInit[s] then Continue;
     idx := TySelIndices(FSel[s], SelData(slot));
     if Length(idx) = 0 then Continue;
-    if sel <> '' then sel := sel + ',';
-    sel := sel + '{"dataIndex":[';
-    for k := 0 to High(idx) do
+    { getAllSelectedIndices: one entry per data of getAllData -- a graph's
+      node and edge data (the same indices, the map is one), a tree's and a
+      treemap's 'main' [F2a] }
+    if FBindings[slot].SeriesType = TyGraphSeriesTypeName then
     begin
-      if k > 0 then sel := sel + ',';
-      sel := sel + IntToStr(idx[k]);
+      dts[0] := 'node';
+      dts[1] := 'edge';
+      nd := 2;
+    end
+    else if (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+      or (FBindings[slot].SeriesType = TyTreemapSeriesTypeName) then
+    begin
+      dts[0] := 'main';
+      nd := 1;
+    end
+    else
+    begin
+      dts[0] := '';
+      nd := 1;
     end;
-    sel := sel + '],"seriesIndex":' + IntToStr(s) + '}';
+    for q := 0 to nd - 1 do
+    begin
+      if sel <> '' then sel := sel + ',';
+      sel := sel + '{"dataIndex":[';
+      for k := 0 to High(idx) do
+      begin
+        if k > 0 then sel := sel + ',';
+        sel := sel + IntToStr(idx[k]);
+      end;
+      sel := sel + '],"seriesIndex":' + IntToStr(s);
+      if dts[q] <> '' then sel := sel + ',"dataType":"' + dts[q] + '"';
+      sel := sel + '}';
+    end;
   end;
   d := APayload.Find('isFromClick');
   if JsTruthy(d) then post := d.AsJSON else post := 'false';
@@ -29022,9 +30189,11 @@ var
   scope: TTyStScope;
   nodes: array[0..0] of TJSONObject;
 
-  procedure Apply(var AItem: TTyStItem; AOnPath: Boolean);
+  procedure Apply(var AItem: TTyStItem; AOnPath: Boolean; ARaw: Integer);
+  var old: Integer;
   begin
     poly := StPolyOf(s);
+    old := AItem.GroupHover;
     if isHigh then
     begin
       if TyStItemEnterEmphasisBy(AItem, digit, AOnPath, poly) then FStDirty := True;
@@ -29032,6 +30201,8 @@ var
     else if TyStItemLeaveEmphasisBy(AItem, digit, AOnPath, poly) then
       FStDirty := True;
     if poly >= 0 then StPolyTo(s, poly);
+    { a tree node's edge [F2a] }
+    if ARaw >= 0 then StTreeFollow(s, ARaw, old);
   end;
 
   { A SANKEY'S EDGE DATA [Batch 114]: `dataType: 'edge'` makes queryDataIndex
@@ -29045,6 +30216,12 @@ var
     if not StHasEdges(ASeries) then Exit;
     x := APayload.Find('dataType');
     if not ((x <> nil) and (x.JSONType = jtString) and (x.AsString = 'edge')) then Exit;
+    { a graph's: queryDataIndex on its edge data [F2a] }
+    if FSt[ASeries].Kind = sskGraph then
+    begin
+      QueryEdgeIndex(SlotOfSeries(ASeries), APayload, AIdx);
+      Exit(True);
+    end;
     Result := True;
     x := APayload.Find('dataIndex');
     if x is TJSONArray then
@@ -29186,9 +30363,8 @@ begin
     begin
       for k := 0 to High(inner) do
         if (inner[k] >= 0) and (inner[k] <= High(FSt[s].EdgeRows))
-          and FSt[s].EdgeRows[inner[k]].Host.Exists
-          and FSt[s].EdgeRows[inner[k]].Host.Proxy then
-          Apply(FSt[s].EdgeRows[inner[k]], False);
+          and TyStItemDispatches(FSt[s].EdgeRows[inner[k]]) then
+          Apply(FSt[s].EdgeRows[inner[k]], False, -1);
       Continue;
     end;
     has := QueryDataIndex(slot, APayload, inner);
@@ -29225,14 +30401,15 @@ begin
     begin
       for raw := 0 to High(FSt[s].Rows) do
         { only a highDownDispatcher: emphasis not disabled }
-        if FSt[s].Rows[raw].Host.Exists and FSt[s].Rows[raw].Host.Proxy then
-          Apply(FSt[s].Rows[raw], False);
+        if TyStItemDispatches(FSt[s].Rows[raw]) then
+          Apply(FSt[s].Rows[raw], False, raw);
     end
     else
       for k := 0 to High(inner) do
       begin
         item := StItemAt(s, inner[k]);
-        if (item <> nil) and item^.Host.Proxy then Apply(item^, False);
+        if (item <> nil) and TyStItemDispatches(item^) then
+          Apply(item^, False, StInnerRaw(s, inner[k]));
       end;
   end;
   if FStDirty then InvalidateFrame;
@@ -32592,7 +33769,7 @@ end;
   selected, select otherwise, whatever selectedMode says }
 procedure TTyAdvanceChart.StClickSelect(const ATarget: TTyChartEventTarget);
 var
-  slot, s: Integer;
+  slot, s, inner: Integer;
   selected: Boolean;
   p: string;
 begin
@@ -32601,6 +33778,7 @@ begin
   slot := SlotOfSeries(s);
   if slot < 0 then Exit;
   selected := False;
+  inner := ATarget.HdRow;
   { a marker's element is never flagged selected: always select }
   if (ATarget.HdKind = 1) and not ATarget.HdEdge then
   begin
@@ -32608,14 +33786,28 @@ begin
     if (s <= High(FSel)) and FSelInit[s] then
       selected := TySelIsSelected(FSel[s], SelData(slot), ATarget.HdRow);
   end;
+  { A GRAPH'S EDGE: the edge data's own inner index, selected by the one
+    map [F2a] }
+  if (ATarget.HdKind = 1) and ATarget.HdEdge
+    and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+  begin
+    inner := StGraphEdgeInner(slot, StGraphEdgeOfRow(slot, ATarget.HdRow));
+    SelEnsure(slot);
+    if (s <= High(FSel)) and FSelInit[s] and (inner >= 0) then
+      selected := TySelIsSelected(FSel[s], SelEdgeData(slot), inner);
+  end;
   if selected then p := '{"type":"unselect"' else p := '{"type":"select"';
-  { a graph's data type rides along }
+  { a graph's data type rides along; a tree's and a treemap's data is
+    'main' [F2a] }
   if (ATarget.HdKind = 1) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
   begin
     if ATarget.HdEdge then p := p + ',"dataType":"edge"'
     else p := p + ',"dataType":"node"';
-  end;
-  p := p + ',"dataIndexInside":' + IntToStr(ATarget.HdRow) + ',"seriesIndex":'
+  end
+  else if (ATarget.HdKind = 1) and ((FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+    or (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)) then
+    p := p + ',"dataType":"main"';
+  p := p + ',"dataIndexInside":' + IntToStr(inner) + ',"seriesIndex":'
     + IntToStr(s) + ',"isFromClick":true}';
   DispatchAction(p);
 end;
@@ -34173,171 +35365,6 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ApplyTreeHover(AList: TTyPaintList; APPI: Integer);
-var
-  hs, r, n, i, k, row, par, si: Integer;
-  focus: string;
-  blurAll: Boolean;
-  spec, es: TTyChartEmphasisSpec;
-  symSt, edgeSt: array of TTyGraphHoverState;
-  order, anc: TTyIntegerArray;
-  el: TTyChartElement;
-  st: TTyGraphHoverState;
-  isCaption, isSymbol: Boolean;
-  normal, res: TTyChartStyle;
-  states: TTyChartStateList;
-  ratio: Double;
-
-  procedure Push(ARow: Integer);
-  begin
-    SetLength(order, Length(order) + 1);
-    order[High(order)] := ARow;
-  end;
-
-  function Blurred(ADeclared, ANormal: Double): Double;
-  begin
-    if not IsNan(ADeclared) then Result := ADeclared
-    else Result := ANormal * TyChartBlurOpacityFactor;
-  end;
-
-begin
-  if (AList = nil) or not TyChartDatumValid(FTipDatum) then Exit;
-  if FTipDatum.IsEdge or not IsTreeDatum(FTipDatum) then Exit;
-  hs := SlotOfSeries(FTipDatum.SeriesIndex);
-  r := FTipDatum.DataIndex;
-  n := Length(FTrees[hs].Hier.Nodes);
-  if (r <= 0) or (r >= n) or not FTrees[hs].Pos[r].Placed then Exit;
-  spec := TreeEmphasisOf(hs, r);
-  { a disabled emphasis is no hover at all }
-  if spec.Disabled then Exit;
-  focus := TreeFocusOf(hs, r);
-  if focus = 'adjacency' then focus := 'self';
-  blurAll := (focus = 'self') or (focus = 'ancestor') or (focus = 'descendant')
-    or (focus = 'relative');
-  SetLength(symSt, n);
-  SetLength(edgeSt, n);
-  for i := 0 to n - 1 do
-  begin
-    if blurAll then symSt[i] := ghsBlur else symSt[i] := ghsNormal;
-    edgeSt[i] := symSt[i];
-  end;
-  { THE ROWS THAT LEAVE THE BLUR, in upstream's order }
-  order := nil;
-  if (focus = 'ancestor') or (focus = 'relative') then
-  begin
-    anc := nil;
-    row := r;
-    while row > 0 do
-    begin
-      SetLength(anc, Length(anc) + 1);
-      anc[High(anc)] := row;
-      row := FTrees[hs].Hier.Nodes[row].Parent;
-    end;
-    for i := High(anc) downto 0 do Push(anc[i]);
-  end;
-  if (focus = 'descendant') or (focus = 'relative') then
-  begin
-    { the row and its pre-order subtree, contiguous }
-    Push(r);
-    i := r + 1;
-    while (i < n) and (FTrees[hs].Hier.Nodes[i].Depth > FTrees[hs].Hier.Nodes[r].Depth) do
-    begin
-      if FTrees[hs].Pos[i].Placed then Push(i);
-      Inc(i);
-    end;
-  end;
-  if Length(order) = 0 then Push(r);
-  for k := 0 to High(order) do
-  begin
-    row := order[k];
-    if row = r then symSt[row] := ghsEmphasis else symSt[row] := ghsNormal;
-    { a row's own edge follows it only when its parent's symbol is not
-      blurred at this moment }
-    par := FTrees[hs].Hier.Nodes[row].Parent;
-    if (par > 0) and (symSt[par] <> ghsBlur) then edgeSt[row] := symSt[row]
-    else if par <= 0 then edgeSt[row] := symSt[row];
-  end;
-
-  si := FTipDatum.SeriesIndex;
-  for i := 0 to AList.Count - 1 do
-  begin
-    el := AList.Element(i);
-    if (el.Datum.SeriesIndex <> si) or (el.Datum.DataIndex < 0)
-      or (el.Datum.DataIndex >= n) then Continue;
-    row := el.Datum.DataIndex;
-    isCaption := el.Caption.FontSizeLogical > 0;
-    isSymbol := not isCaption and (el.Z2 >= FTrees[hs].Spec.Z2 + cTyTreeNodeZ2);
-    if isCaption or isSymbol then st := symSt[row] else st := edgeSt[row];
-    if st = ghsNormal then Continue;
-    es := TreeEmphasisOf(hs, row);
-    if st = ghsBlur then
-    begin
-      if isCaption then el.Style.Alpha := Blurred(es.BlurLabelOpacity, el.Style.Alpha)
-      else if isSymbol then el.Style.Alpha := Blurred(es.BlurItemOpacity, el.Style.Alpha)
-      else el.Style.Alpha := Blurred(es.BlurLineOpacity, el.Style.Alpha);
-      AList.SetElement(i, el);
-      Continue;
-    end;
-    states := Default(TTyChartStateList);
-    states.Emphasis := True;
-    if isCaption then
-    begin
-      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-      { the block's pieces too [Batch 86] }
-      TyCaptionToEmphasis(el.Caption);
-    end
-    else if not isSymbol then
-    begin
-      { the edge: its stroke lifted unless declared, a width only if so }
-      normal := TyChartNoStyle;
-      TyChartSetColor(normal, cskStroke, el.Style.StrokeColor);
-      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
-      res := TyChartResolveStyle(normal, es.Line, states);
-      el.Style.StrokeColor := res.Color[cskStroke];
-      if TyChartStyleHas(es.Line, cskLineWidth) then
-        el.Style.StrokeWidthLogical := es.Line.Num[cskLineWidth];
-      if TyChartStyleHas(res, cskOpacity) then el.Style.Alpha := res.Num[cskOpacity];
-      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-    end
-    else
-    begin
-      { the symbol: its fill lifted unless declared, grown about its centre }
-      normal := TyChartNoStyle;
-      if el.Style.HasFill then TyChartSetColor(normal, cskFill, el.Style.FillColor);
-      if el.Style.StrokeColor <> 0 then
-        TyChartSetColor(normal, cskStroke, el.Style.StrokeColor);
-      if el.Style.StrokeWidthLogical > 0 then
-        TyChartSetNum(normal, cskLineWidth, el.Style.StrokeWidthLogical);
-      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
-      res := TyChartResolveStyle(normal, es.Item, states);
-      if TyChartStyleHas(res, cskFill) then
-      begin
-        el.Style.HasFill := True;
-        el.Style.FillColor := res.Color[cskFill];
-      end;
-      if TyChartStyleHas(res, cskStroke) then el.Style.StrokeColor := res.Color[cskStroke];
-      if TyChartStyleHas(res, cskLineWidth) then
-        el.Style.StrokeWidthLogical := res.Num[cskLineWidth];
-      if TyChartStyleHas(res, cskOpacity) then el.Style.Alpha := res.Num[cskOpacity];
-      if el.Shape.Kind in [cskCircle, cskEllipse] then
-        ratio := TyChartSymbolScaleRatio(es, el.Shape.R1)
-      else
-        ratio := TyChartSymbolScaleRatio(es, (el.Shape.Bounds.Bottom - el.Shape.Bounds.Top) / 2);
-      if ratio <> 1 then el.Shape := TyScaleShape(el.Shape, ratio);
-      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-    end;
-    AList.SetElement(i, el);
-  end;
-  if APPI < 0 then ;
-end;
-
-procedure TTyAdvanceChart.RestyleStatic;
-begin
-  { THE CACHE ONLY. The list stays valid: its geometry is what the pointer is
-    still being tested against until the next paint rebuilds it. }
-  StaticDrop;
-  inherited Invalidate;
-end;
 
 function TTyAdvanceChart.GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
   AIndex: Integer): TTyChartEmphasisSpec;
@@ -34393,186 +35420,6 @@ begin
   raw := FGraphNodes[ASlot][AIndex].RawRow;
   if (arr <> nil) and (raw >= 0) and (raw < arr.Count) then
     Result := TyChartMergeEmphasis(Result, TyChartReadEmphasis(arr.Items[raw]));
-end;
-
-procedure TTyAdvanceChart.ApplyGraphHover(AList: TTyPaintList; APPI: Integer);
-var
-  hs, t, i, k, hover, si: Integer;
-  hoverEdge, blur, sameCs: Boolean;
-  spec, es: TTyChartEmphasisSpec;
-  nodeSet, edgeSet: TTyIntegerArray;
-  nstates, estates: array of TTyGraphHoverStateArray;
-  el: TTyChartElement;
-  st: TTyGraphHoverState;
-  isCaption: Boolean;
-  normal, res: TTyChartStyle;
-  states: TTyChartStateList;
-  ratio: Double;
-  edgeStroke: TTyChartColor;
-  edgeAlpha: Double;
-
-  function NodeByRow(ASlot, ARow: Integer): Integer;
-  var j: Integer;
-  begin
-    for j := 0 to High(FGraphNodes[ASlot]) do
-      if FGraphNodes[ASlot][j].Row = ARow then Exit(j);
-    Result := -1;
-  end;
-
-  function EdgeByRow(ASlot, ARow: Integer): Integer;
-  var j: Integer;
-  begin
-    for j := 0 to High(FGraphEdges[ASlot]) do
-      if FGraphEdges[ASlot][j].Row = ARow then Exit(j);
-    Result := -1;
-  end;
-
-  { The blurred opacity: the declared one, or the normal one times a tenth
-    -- except on an element whose emphasis is DISABLED, which upstream never
-    gives the computed blur style: only a declared opacity reaches it. }
-  function Blurred(ADeclared, ANormal: Double; ADisabled: Boolean): Double;
-  begin
-    if not IsNan(ADeclared) then Result := ADeclared
-    else if ADisabled then Result := ANormal
-    else Result := ANormal * TyChartBlurOpacityFactor;
-  end;
-
-begin
-  if (AList = nil) or not TyChartDatumValid(FTipDatum) then Exit;
-  if not IsGraphDatum(FTipDatum) then Exit;
-  hs := SlotOfSeries(FTipDatum.SeriesIndex);
-  hoverEdge := FTipDatum.IsEdge;
-  if hoverEdge then hover := EdgeByRow(hs, FTipDatum.DataIndex)
-  else hover := NodeByRow(hs, FTipDatum.DataIndex);
-  if hover < 0 then Exit;
-  spec := GraphEmphasisOf(hs, hoverEdge, hover);
-  { A DISABLED EMPHASIS IS NO HOVER AT ALL: nothing rises and nothing
-    dims. }
-  if spec.Disabled then Exit;
-  TyGraphFocusSets(FGraphNodes[hs], FGraphEdges[hs], hoverEdge, hover,
-    nodeSet, edgeSet);
-
-  { EVERY GRAPH'S STATES: blurred when the scope reaches it, the sets spared
-    under adjacency -- by index, in another graph too. }
-  SetLength(nstates, Length(FBindings));
-  SetLength(estates, Length(FBindings));
-  for t := 0 to High(FBindings) do
-  begin
-    if (t > High(FGraphLaidOut)) or not FGraphLaidOut[t] then Continue;
-    { A graph on a view owns its view; graphs on axes share a grid when they
-      share a cartesian. }
-    sameCs := (t = hs) or ((FGraphs[t] = nil) and (FGraphs[hs] = nil)
-      and (FBindings[t].Cart <> nil) and (FBindings[t].Cart = FBindings[hs].Cart));
-    blur := TyChartShouldBlur(spec.Focus, spec.BlurScope, t = hs, sameCs);
-    TyGraphBlurStates(Length(FGraphNodes[t]), Length(FGraphEdges[t]), blur,
-      spec.Focus = cfAdjacency, nodeSet, edgeSet, nstates[t], estates[t]);
-  end;
-  if hoverEdge then estates[hs][hover] := ghsEmphasis
-  else nstates[hs][hover] := ghsEmphasis;
-
-  for i := 0 to AList.Count - 1 do
-  begin
-    el := AList.Element(i);
-    si := el.Datum.SeriesIndex;
-    if si < 0 then Continue;
-    t := SlotOfSeries(si);
-    if (t < 0) or (t > High(nstates)) or (Length(nstates[t]) + Length(estates[t]) = 0)
-    then Continue;
-    if el.Datum.IsEdge then k := EdgeByRow(t, el.Datum.DataIndex)
-    else k := NodeByRow(t, el.Datum.DataIndex);
-    if k < 0 then Continue;
-    if el.Datum.IsEdge then st := estates[t][k] else st := nstates[t][k];
-    if st = ghsNormal then Continue;
-    es := GraphEmphasisOf(t, el.Datum.IsEdge, k);
-    isCaption := el.Caption.FontSizeLogical > 0;
-
-    if st = ghsBlur then
-    begin
-      { DIMMED, and nothing else: colour, size and order stay. }
-      if isCaption then
-        el.Style.Alpha := Blurred(es.BlurLabelOpacity, el.Style.Alpha, es.Disabled)
-      else if el.Datum.IsEdge then
-        el.Style.Alpha := Blurred(es.BlurLineOpacity, el.Style.Alpha, es.Disabled)
-      else
-        el.Style.Alpha := Blurred(es.BlurItemOpacity, el.Style.Alpha, es.Disabled);
-      AList.SetElement(i, el);
-      Continue;
-    end;
-
-    { ---- emphasis ---- }
-    states := Default(TTyChartStateList);
-    states.Emphasis := True;
-    if isCaption then
-    begin
-      { THE WORDS RISE WITH THEIR NODE, so it does not cover them -- in the
-        ink the lifted node calls for. }
-      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-      { the block's pieces too [Batch 86] }
-      TyCaptionToEmphasis(el.Caption);
-    end
-    else if el.Datum.IsEdge then
-    begin
-      { A LINE READS ONLY emphasis.lineStyle: its stroke lifted unless one is
-        declared, and a width and an opacity only if declared. Its
-        arrowheads take the stroke it ends up with as their fill. }
-      normal := TyChartNoStyle;
-      if el.Shape.Kind = cskPolyline then
-        TyChartSetColor(normal, cskStroke, el.Style.StrokeColor)
-      else
-        TyChartSetColor(normal, cskStroke, el.Style.FillColor);
-      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
-      res := TyChartResolveStyle(normal, es.Line, states);
-      edgeStroke := res.Color[cskStroke];
-      edgeAlpha := el.Style.Alpha;
-      if TyChartStyleHas(res, cskOpacity) then edgeAlpha := res.Num[cskOpacity];
-      if el.Shape.Kind = cskPolyline then
-      begin
-        el.Style.StrokeColor := edgeStroke;
-        if TyChartStyleHas(es.Line, cskLineWidth) then
-          el.Style.StrokeWidthLogical := es.Line.Num[cskLineWidth];
-      end
-      else
-      begin
-        el.Style.HasFill := True;
-        el.Style.FillColor := edgeStroke;
-      end;
-      el.Style.Alpha := edgeAlpha;
-      { UP BY TEN -- above the other edges, still under every node. }
-      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-    end
-    else
-    begin
-      { A NODE READS ONLY emphasis.itemStyle: its fill lifted unless one is
-        declared, a border if declared, and the symbol grown about its
-        centre. }
-      normal := TyChartNoStyle;
-      if el.Style.HasFill then TyChartSetColor(normal, cskFill, el.Style.FillColor);
-      if el.Style.StrokeColor <> 0 then
-        TyChartSetColor(normal, cskStroke, el.Style.StrokeColor);
-      if el.Style.StrokeWidthLogical > 0 then
-        TyChartSetNum(normal, cskLineWidth, el.Style.StrokeWidthLogical);
-      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
-      res := TyChartResolveStyle(normal, es.Item, states);
-      if TyChartStyleHas(res, cskFill) then
-      begin
-        el.Style.HasFill := True;
-        el.Style.FillColor := res.Color[cskFill];
-      end;
-      if TyChartStyleHas(res, cskStroke) then el.Style.StrokeColor := res.Color[cskStroke];
-      if TyChartStyleHas(res, cskLineWidth) then
-        el.Style.StrokeWidthLogical := res.Num[cskLineWidth];
-      if TyChartStyleHas(res, cskOpacity) then el.Style.Alpha := res.Num[cskOpacity];
-      if el.Shape.Kind in [cskCircle, cskEllipse] then
-        ratio := TyChartSymbolScaleRatio(es, el.Shape.R1)
-      else
-        ratio := TyChartSymbolScaleRatio(es,
-          (el.Shape.Bounds.Bottom - el.Shape.Bounds.Top) / 2);
-      if ratio <> 1 then el.Shape := TyScaleShape(el.Shape, ratio);
-      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-    end;
-    AList.SetElement(i, el);
-  end;
-  if APPI < 0 then ;
 end;
 
 function TTyAdvanceChart.EmphasiseElement(AIndex: Integer; APPI: Integer;
@@ -37379,30 +38226,13 @@ var
   d, preD: TTyChartDatumRef;
   spec: TTyTooltipSpec;
   el, preEl: Integer;
-  wasOn, graphChanged, tipWas, pre, roamed: Boolean;
+  wasOn, tipWas, pre, roamed: Boolean;
   dx, dy, pdx, pdy: Double;
 begin
   { the frame between two pointer events [Batch 125] }
   TbFrame;
-  graphChanged := False;
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
-  { A TREEMAP'S HOVER, before the drag pans: zrender's handler finds the
-    element under the pointer first and RoamController moves the picture
-    after [Batch 115] }
-  d := HitTestAt(X, Y, el);
-  if ((X < FLastRect.Left) or (X > FLastRect.Right) or (Y < FLastRect.Top)
-    or (Y > FLastRect.Bottom)) or not IsTreemapDatum(d) then
-  begin
-    d.SeriesIndex := -1;
-    d.DataIndex := -1;
-  end;
-  if (d.SeriesIndex <> FTmHoverSeries) or (d.DataIndex <> FTmHoverRow) then
-  begin
-    FTmHoverSeries := d.SeriesIndex;
-    FTmHoverRow := d.DataIndex;
-    graphChanged := True;
-  end;
   { THE HOVER BEFORE THE PAN [Milestone D9-D14]: zrender's Handler finds
     the element under the pointer first; the RoamController (and the
     thumbnail's) listens on the zr-level mousemove and moves the picture
@@ -37482,14 +38312,9 @@ begin
   end
   else
     d := HitTestAt(X, Y, el);
-  { A GRAPH'S HOVER LIVES IN THE STATIC LAYER, so a change of it -- onto a
-    graph element, off one, or from one to another -- draws that layer
-    again. A label's hit is its node's: they share the datum. }
-  if (IsGraphDatum(d) or IsGraphDatum(FTipDatum) or IsTreeDatum(d)
-    or IsTreeDatum(FTipDatum))
-    and ((d.SeriesIndex <> FTipDatum.SeriesIndex)
-      or (d.DataIndex <> FTipDatum.DataIndex) or (d.IsEdge <> FTipDatum.IsEdge)) then
-    graphChanged := True;
+  { [F2a] a graph's, a tree's and a treemap's hover are the state machine's
+    flags (StHoverOver / StHoverOut, from EventMove): the frame applies
+    them }
   FTipDatum := d;
   FTipElement := el;
   FTipX := X;
@@ -37523,22 +38348,17 @@ begin
     this asks for is a blit of the static layer plus one box; the gate the old
     TTyChart needed was compensating for a control that re-rendered everything
     from scratch each paint, and that is what the cache removed. }
-  if graphChanged then RestyleStatic
-  else if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
+  if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
     or tipWas or FTipShown then
     InvalidateFrame;
 end;
 
 procedure TTyAdvanceChart.MouseLeave;
-var wasOn, wasGraph: Boolean;
+var wasOn: Boolean;
 begin
   TbFrame;
   if not (csDesigning in ComponentState) then EventLeave(FEvLastX, FEvLastY);
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) or FTipShown;
-  wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum)
-    or (FTmHoverSeries >= 0);
-  FTmHoverSeries := -1;
-  FTmHoverRow := -1;
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   { globalout through the pointer's listener [Batch 153]: the axis
@@ -37561,8 +38381,7 @@ begin
     control answers with a repaint -- and a repaint before the hover was
     cleared would draw the tooltip one more time on the way out. }
   inherited MouseLeave;
-  if wasGraph then RestyleStatic
-  else if wasOn then InvalidateFrame;
+  if wasOn then InvalidateFrame;
 end;
 
 { ==================== the enter animation [Batch 89] ==================== }
@@ -39388,6 +40207,20 @@ begin
   begin
     if Length(FSt[ASeries].AreaIdx) > 0 then idx := FSt[ASeries].AreaIdx[0];
   end
+  { [F2a] the second set of rows by its own index: 'edge', 'edgelabel',
+    'edgepart<k>' }
+  else if Copy(APart, 1, 4) = 'edge' then
+  begin
+    if (ARow < 0) or (ARow > High(FSt[ASeries].EdgeHostIdx)) then Exit;
+    if APart = 'edge' then idx := FSt[ASeries].EdgeHostIdx[ARow]
+    else if APart = 'edgelabel' then idx := FSt[ASeries].EdgeLabelIdx[ARow]
+    else if (Copy(APart, 1, 8) = 'edgepart') and (ARow <= High(FSt[ASeries].EdgePartIdx)) then
+    begin
+      raw := StrToIntDef(Copy(APart, 9, MaxInt), -1);
+      if (raw >= 0) and (raw <= High(FSt[ASeries].EdgePartIdx[ARow])) then
+        idx := FSt[ASeries].EdgePartIdx[ARow][raw];
+    end;
+  end
   else
   begin
     slot := SlotOfSeries(ASeries);
@@ -39397,7 +40230,14 @@ begin
     if (raw < 0) or (raw > High(FSt[ASeries].HostIdx)) then Exit;
     if APart = 'host' then idx := FSt[ASeries].HostIdx[raw]
     else if APart = 'label' then idx := FSt[ASeries].LabelIdx[raw]
-    else if APart = 'guide' then idx := FSt[ASeries].GuideIdx[raw];
+    else if APart = 'guide' then idx := FSt[ASeries].GuideIdx[raw]
+    { a part with states of its own, 'part<k>' [F2a] }
+    else if (Copy(APart, 1, 4) = 'part') and (raw <= High(FSt[ASeries].PartIdx)) then
+    begin
+      slot := StrToIntDef(Copy(APart, 5, MaxInt), -1);
+      if (slot >= 0) and (slot <= High(FSt[ASeries].PartIdx[raw])) then
+        idx := FSt[ASeries].PartIdx[raw][slot];
+    end;
   end;
   if (idx >= 0) and (idx <= High(FAnimStBind)) then Result := FAnimStBind[idx];
 end;

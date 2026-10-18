@@ -114,6 +114,12 @@ type
     HasGroup: Boolean;
     GroupHover: Integer;
     GroupHbo: Cardinal;
+    { NO highDownDispatcher, the default proxy all the same: a treemap node
+      whose emphasis is disabled (TreemapView setAsHighDownDispatcher(el,
+      !isDisabled) beside an unconditional setDefaultStateProxy) -- it is
+      never hovered nor highlighted, and a blur still takes it to a tenth
+      [F2a] }
+    NoDispatch: Boolean;
   end;
   PTyStItem = ^TTyStItem;
 
@@ -189,6 +195,10 @@ procedure TyStLeaveEmphasisBy(var AEl: TTyStElement; ADigit: Integer);
   (LineView.ts:893-899, onHoverStateChange -> _changePolyState). }
 { the dispatcher's __highByOuter: the group's on a line symbol }
 function TyStDispatcherHbo(const AItem: TTyStItem): Cardinal;
+{ isHighDownDispatcher: an element that exists, whose emphasis is not
+  disabled (the proxy goes with it everywhere but a treemap) and that is not
+  NoDispatch [F2a] }
+function TyStItemDispatches(const AItem: TTyStItem): Boolean;
 { enterEmphasisWhenMouseOver / leaveEmphasisWhenMouseOut: nothing while the
   dispatcher is held by an action }
 function TyStItemHoverEnter(var AItem: TTyStItem; var APoly: Integer): Boolean;
@@ -572,6 +582,11 @@ function TyStDispatcherHbo(const AItem: TTyStItem): Cardinal;
 begin
   if AItem.HasGroup then Result := AItem.GroupHbo
   else Result := AItem.Host.HighByOuter;
+end;
+
+function TyStItemDispatches(const AItem: TTyStItem): Boolean;
+begin
+  Result := AItem.Host.Exists and AItem.Host.Proxy and not AItem.NoDispatch;
 end;
 
 { doChangeHoverState on the group: a change carries the polyline }
