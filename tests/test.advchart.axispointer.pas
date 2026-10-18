@@ -76,7 +76,7 @@ type
     procedure TestASeriesShorterThanTheAxisDropsOut;
     procedure TestACrossStillMakesOneSection;
     procedure TestShowContentFalseKeepsThePointerAndDropsTheBox;
-    procedure TestAModelChangeTakesThePointerAway;
+    procedure TestARebuildKeepsThePointerAndALeaveTakesIt;
     procedure TestThePointerLabelRoundsToTheScalesPrecision;
     procedure TestWithSnapOffTheLabelReadsTheCursor;
     procedure TestOrderReordersTheRowsWithinTheSection;
@@ -638,16 +638,38 @@ begin
              pointerOnly < withBox div 2);
 end;
 
-procedure TAdvChartAxisTriggerTest.TestAModelChangeTakesThePointerAway;
+procedure TAdvChartAxisTriggerTest.TestARebuildKeepsThePointerAndALeaveTakesIt;
 var
   p: TPoint;
   cold: TBGRABitmap;
-  x, y, diff: Integer;
-  a, b: PBGRAPixel;
+
+  function Diff: Integer;
+  var
+    x, y: Integer;
+    a, b: PBGRAPixel;
+  begin
+    Result := 0;
+    for y := 0 to cH - 1 do
+    begin
+      a := cold.ScanLine[y];
+      b := FBmp.ScanLine[y];
+      for x := 0 to cW - 1 do
+      begin
+        if (a^.red <> b^.red) or (a^.green <> b^.green)
+          or (a^.blue <> b^.blue) then Inc(Result);
+        Inc(a);
+        Inc(b);
+      end;
+    end;
+  end;
+
 begin
-  { THE OTHER WAY A HOVER ENDS. MouseLeave clears it and so does Invalidate --
-    and the second matters more, because the hits hold AXIS POINTERS into a
-    build that a rebuild is about to free. }
+  { [F4b: this said a rebuild takes the pointer away -- upstream's
+    axisPointer model keeps the status, value and rows updateModelActually
+    wrote across the update, so the pointer stays where it was; the hits
+    hold AXIS POINTERS into the build a rebuild frees, so they are kept as
+    values and read back by the next build (tooltip-keep.js, keep-axis).]
+    A leave is what ends the hover. }
   Draw(cTwoSeries);
   p := BarPoint(2, 95);
   cold := TBGRABitmap.Create(cW, cH, BGRAWhite);
@@ -657,20 +679,13 @@ begin
     FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
     FChart.Invalidate;
     FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
-    diff := 0;
-    for y := 0 to cH - 1 do
-    begin
-      a := cold.ScanLine[y];
-      b := FBmp.ScanLine[y];
-      for x := 0 to cW - 1 do
-      begin
-        if (a^.red <> b^.red) or (a^.green <> b^.green)
-          or (a^.blue <> b^.blue) then Inc(diff);
-        Inc(a);
-        Inc(b);
-      end;
-    end;
-    AssertEquals('a rebuilt chart has no pointer on it', 0, diff);
+    AssertTrue('a rebuilt chart keeps its pointer', Diff > 0);
+    AssertEquals('one pointer, read back from the new build', 1, Length(FChart.TipHits));
+    FChart.MouseLeave;
+    { the box, if any, after hideDelay }
+    FChart.TooltipTick(1e15);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+    AssertEquals('a leave takes it away', 0, Diff);
   finally
     cold.Free;
   end;

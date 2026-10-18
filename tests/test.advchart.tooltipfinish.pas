@@ -92,7 +92,7 @@ type
     { what the fixture does not reach }
     procedure TestAnUnregisteredPositionHandlerIsTheDefault;
     procedure TestTheMachineClockArmsATimer;
-    procedure TestARebuildTakesTheBoxAway;
+    procedure TestARebuildKeepsTheBoxAndANewOptionTakesIt;
     procedure TestAnUnwrittenConfineIsTrueAndAWrittenOneIsObeyed;
     procedure TestAnOptionsShownPointerHoldsUntilThePointerMoves;
   end;
@@ -928,12 +928,13 @@ begin
   AssertTrue('shown once the delay has passed', FChart.TooltipShown);
 end;
 
-procedure TAdvChartTooltipFinishTest.TestARebuildTakesTheBoxAway;
+procedure TAdvChartTooltipFinishTest.TestARebuildKeepsTheBoxAndANewOptionTakesIt;
 var o: TJSONObject;
 begin
-  { a hovered datum is a pair of subscripts into a build: a rebuild drops
-    the box with it, alwaysShowContent or not (upstream keeps it and shows
-    again at the last pointer) }
+  { [F4b: this said a rebuild drops the box, alwaysShowContent or not --
+    upstream's TooltipView.render leaves its content up (and _keepShow
+    shows it again at the last point): now so here; a notMerge option is a
+    new view, and the box goes with the old one (tooltip-keep.js).] }
   o := TJSONObject(GetJSON('{"animation":false,"tooltip":{"alwaysShowContent":true},'
     + '"xAxis":{"type":"category","data":["A","B","C","D"]},'
     + '"yAxis":{"type":"value","min":0,"max":100},'
@@ -948,7 +949,10 @@ begin
   FChart.Leave;
   AssertTrue('alwaysShowContent keeps it past the leave', FChart.TooltipShown);
   FChart.Invalidate;
-  AssertFalse('a rebuild drops it', FChart.TooltipShown);
+  AssertTrue('a rebuild keeps it', FChart.TooltipShown);
+  FChart.Option := '{"animation":false,"tooltip":{"alwaysShowContent":true},'
+    + '"series":[{"type":"pie","data":[1,2]}]}';
+  AssertFalse('a new option (a new view) drops it', FChart.TooltipShown);
 end;
 
 procedure TAdvChartTooltipFinishTest.TestAnUnwrittenConfineIsTrueAndAWrittenOneIsObeyed;
