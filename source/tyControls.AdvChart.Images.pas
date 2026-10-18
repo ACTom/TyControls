@@ -121,6 +121,9 @@ function NewCache(AOwns: Boolean): TStringList;
 begin
   Result := TStringList.Create;
   Result.OwnsObjects := AOwns;
+  { by bytes, as upstream keys a name: the locale compare took
+    U+00C5 and U+212B for one letter, and whatever came after [P2] }
+  Result.UseLocale := False;
   Result.Sorted := True;
   Result.CaseSensitive := True;
   Result.Duplicates := dupIgnore;

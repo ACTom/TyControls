@@ -621,6 +621,9 @@ begin
   begin
     GRenderItems := TStringList.Create;
     GRenderItems.CaseSensitive := True;
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    GRenderItems.UseLocale := False;
     GRenderItems.Sorted := True;
     GRenderItems.Duplicates := dupError;
     GRenderItems.OwnsObjects := True;

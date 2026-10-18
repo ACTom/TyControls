@@ -133,6 +133,9 @@ begin
   begin
     GDecalCache := TStringList.Create;
     GDecalCache.OwnsObjects := True;
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    GDecalCache.UseLocale := False;
     GDecalCache.Sorted := True;
     GDecalCache.CaseSensitive := True;
   end;

@@ -578,6 +578,9 @@ begin
   { makeIdAndName }
   ids := TStringList.Create;
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    ids.UseLocale := False;
     ids.Sorted := True;
     ids.Duplicates := dupIgnore;
     ids.CaseSensitive := True;

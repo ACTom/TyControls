@@ -779,6 +779,9 @@ var
 begin
   counts := TStringList.Create;
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    counts.UseLocale := False;
     counts.Sorted := True;
     counts.CaseSensitive := True;
     SetLength(Result, Length(AHier.Nodes));
@@ -1520,6 +1523,9 @@ begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    ids.UseLocale := False;
     ids.Sorted := True;
     ids.CaseSensitive := True;
     Travel(ASolved, 0, none, APalette, ABorder, ids);

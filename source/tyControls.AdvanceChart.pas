@@ -12756,6 +12756,9 @@ begin
     names := TStringList.Create;
     try
       names.CaseSensitive := True;
+      { by bytes, as upstream keys a name: the locale compare took
+        U+00C5 and U+212B for one letter, and whatever came after [P2] }
+      names.UseLocale := False;
       names.Sorted := True;
       lists := nil;
       for k := 0 to High(FMapGroups[g].F) do
@@ -13031,6 +13034,9 @@ begin
     counts := TStringList.Create;
     try
       counts.CaseSensitive := True;
+      { by bytes, as upstream keys a name: the locale compare took
+        U+00C5 and U+212B for one letter, and whatever came after [P2] }
+      counts.UseLocale := False;
       counts.Sorted := True;
       for fi := 0 to High(FMapGroups[g].F) do
       begin
@@ -19796,6 +19802,10 @@ begin
   FParSolved := nil;
   SetLength(FParSolved, Length(FBindings));
   seen := TStringList.Create;
+  seen.CaseSensitive := True;
+  { by bytes, as upstream keys a name: the locale compare took
+    U+00C5 and U+212B for one letter, and whatever came after [P2] }
+  seen.UseLocale := False;
   seen.Sorted := True;
   seen.Duplicates := dupIgnore;
   try

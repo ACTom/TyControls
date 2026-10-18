@@ -507,6 +507,9 @@ begin
     not entered, so ['a', 'a', 'a-1'] ends with two 'a-1' }
   seenNames := TStringList.Create;
   try
+    { by bytes, as upstream keys a name: the locale compare took
+      U+00C5 and U+212B for one letter, and whatever came after [P2] }
+    seenNames.UseLocale := False;
     seenNames.Sorted := True;
     seenNames.Duplicates := dupIgnore;
     seenNames.CaseSensitive := True;
