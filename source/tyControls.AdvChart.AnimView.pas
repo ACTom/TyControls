@@ -2568,6 +2568,11 @@ var
         end;
       carSymbol:
         begin
+          { [F3a] A GRAPH'S NODES enter here, and do not move in an update:
+            its edges have no update tween yet, and nodes sliding under lines
+            that jump is no picture upstream draws -- the whole graph is set
+            (an F3 item still open) }
+          if AC.SeriesType = 'graph' then Exit;
           hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'symbol', oe);
           { added, or no symbol before: a new Symbol, which enters }
           if not hasOld then
