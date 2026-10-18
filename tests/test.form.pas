@@ -14,8 +14,9 @@ uses
     TControlDpiRoundTripTest. StdCtrls is here for the plain LCL TButton that rides in the
     same form as the control group. }
   tyControls.Button, tyControls.CheckBox, tyControls.TyLabel, tyControls.ToggleSwitch,
-  tyControls.ButtonGroup, tyControls.Edit,
-  tyControls.WindowEffects;   // TyLastWindowEffect/TyWindowEffectApplies apply-pipe seam
+  tyControls.ButtonGroup, tyControls.Edit, tyControls.Panel,
+  tyControls.WindowEffects,   // TyLastWindowEffect/TyWindowEffectApplies apply-pipe seam
+  tyControls.PlatformWS, test.devicescale.support;
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -358,10 +359,26 @@ type
   TTyFormBackdropTest = class(TTestCase)
   private
     function GreenThemePath: string;
+    { A 320 x 240 form under the green image theme, its backdrops built while the platform
+      answers AScale for the form (as Cocoa on a Retina screen; 1 = no seam). The caller frees
+      the form, then the controller. }
+    function ImageForm(AScale: Integer; out ACtl: TTyStyleController): TForm;
+    { AClass on an image-theme form, painted at AScale with the backdrop built at that scale,
+      as the form's own paint builds it before its children's. }
+    function PaintOnImageForm(AClass: TControlClass; AScale: Integer): TBGRABitmap;
+    procedure CheckImageThemeControl(const AName: string; AClass: TControlClass);
   published
     procedure TestRebuildBackdropBuildsWithoutPaint;
     procedure TestRebuildBackdropMatchesClientSize;
     procedure TestNonImageThemeHasNoBackdrop;
+    { #83: the backdrops hold device pixels -- controls sample them at S times their layout
+      offset -- and the blur is S times as wide, so the frost is the same in layout pixels. }
+    procedure TestBackdropAtScaleTwoIsRasterSized;
+    procedure TestBackdropFollowsScaleChange;
+    procedure TestBackdropsAtScaleTwoAreTheScaleOnePictures;
+    { The whole path: a transparent panel shows the sharp photo, an edit the frosted one. }
+    procedure TestImageThemePanelAtScaleTwo;
+    procedure TestImageThemeGlassEditAtScaleTwo;
   end;
 
   { Verifies Task 6: TTyForm.MenuBar association + the non-mac shortcut dispatch
@@ -537,6 +554,7 @@ type
       snapshot — to prove FIX #1: an image theme builds FSharpBackdrop with NO paint cycle. }
     procedure CallRebuildBackdrop;
     function SharpBackdrop: TBGRABitmap;
+    function BlurredBackdrop: TBGRABitmap;
   end;
 
 procedure TCaptionButtonAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -605,6 +623,10 @@ end;
 procedure TTyFormAccess.ForceDesigning(AValue: Boolean); begin SetDesigning(AValue, False); end;
 
 procedure TTyFormAccess.CallRebuildBackdrop; begin RebuildBackdrop; end;
+function TTyFormAccess.BlurredBackdrop: TBGRABitmap;
+begin
+  Result := (Self as ITyGlassHost).GlassBackdrop;
+end;
 function TTyFormAccess.SharpBackdrop: TBGRABitmap;
 begin
   // FSharpBackdrop is private; read it through the public ITyGlassHost accessor the form
@@ -2640,6 +2662,217 @@ begin
   end;
 end;
 
+procedure NeedWidgetSet; forward;   { a real window: see its definition further down }
+
+{ The screen the form is on reports AScale, through the platform facade: the form's own canvas
+  answers it, a painter with no canvas does not -- as on Cocoa. 1 leaves the platform alone. }
+procedure ScreenScale(AScale: Integer);
+begin
+  TyResetTestPlatform;
+  if AScale <= 1 then Exit;
+  TyTestPlatform.Active := True;
+  TyTestPlatform.DeviceScale := AScale;
+end;
+
+function TTyFormBackdropTest.ImageForm(AScale: Integer; out ACtl: TTyStyleController): TForm;
+var
+  f: TTyFormAccess;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  ACtl := TTyStyleController.Create(nil);
+  f.SetBounds(0, 0, 320, 240);
+  ACtl.ThemeFile := GreenThemePath;
+  ScreenScale(AScale);
+  try
+    f.ApplyChromeTheme(ACtl);
+    f.CallRebuildBackdrop;
+  finally
+    TyResetTestPlatform;
+  end;
+  Result := f;
+end;
+
+const
+  { Mean channel distance under which a backdrop averaged down 2:1 is the S = 1 one. Measured
+    (2026-10-18, green theme, 320 x 240): the sharp photo 1.77 apart (resampling); the frost 0.32,
+    and 2.97 with the blur left at the layout radius on the 2x photo. }
+  CSharpApart = 3.0;
+  CFrostApart = 1.0;
+
+{ Mean channel distance between A and B, of the same size. }
+function MeanApart(A, B: TBGRABitmap): Double;
+var
+  x, y, r, g, bl: Integer;
+  pa, pb: TBGRAPixel;
+  sum: Int64;
+begin
+  if (A.Width <> B.Width) or (A.Height <> B.Height) then Exit(255);
+  sum := 0;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+    begin
+      pa := A.GetPixel(x, y);
+      pb := B.GetPixel(x, y);
+      r := pa.red; r := Abs(r - pb.red);
+      g := pa.green; g := Abs(g - pb.green);
+      bl := pa.blue; bl := Abs(bl - pb.blue);
+      Inc(sum, r + g + bl);
+    end;
+  Result := sum / (3.0 * A.Width * A.Height);
+end;
+
+procedure TTyFormBackdropTest.TestBackdropAtScaleTwoIsRasterSized;
+var
+  f: TTyFormAccess;
+  ctl: TTyStyleController;
+begin
+  if not FileExists(GreenThemePath) then begin AssertTrue('green.tycss not found', True); Exit; end;
+  f := TTyFormAccess(ImageForm(2, ctl));
+  try
+    AssertTrue('backdrop exists', f.SharpBackdrop <> nil);
+    AssertEquals('sharp: twice the client width', 2 * f.ClientWidth, f.SharpBackdrop.Width);
+    AssertEquals('sharp: twice the client height', 2 * f.ClientHeight, f.SharpBackdrop.Height);
+    AssertTrue('the green theme has glass', f.BlurredBackdrop <> nil);
+    AssertEquals('blurred: twice the client width', 2 * f.ClientWidth, f.BlurredBackdrop.Width);
+  finally
+    f.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TTyFormBackdropTest.TestBackdropFollowsScaleChange;
+var
+  f: TTyFormAccess;
+  ctl: TTyStyleController;
+begin
+  { Review Focus 1: a window moved from a Retina screen to a plain one. }
+  if not FileExists(GreenThemePath) then begin AssertTrue('green.tycss not found', True); Exit; end;
+  f := TTyFormAccess(ImageForm(2, ctl));
+  try
+    f.CallRebuildBackdrop;   // now at S = 1
+    AssertEquals('rebuilt at the layout width', f.ClientWidth, f.SharpBackdrop.Width);
+    AssertEquals('the blurred one too', f.ClientWidth, f.BlurredBackdrop.Width);
+    ScreenScale(2);
+    try
+      f.CallRebuildBackdrop;
+    finally
+      TyResetTestPlatform;
+    end;
+    AssertEquals('and back at the raster width', 2 * f.ClientWidth, f.SharpBackdrop.Width);
+  finally
+    f.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TTyFormBackdropTest.TestBackdropsAtScaleTwoAreTheScaleOnePictures;
+var
+  f1, f2: TTyFormAccess;
+  c1, c2: TTyStyleController;
+  half: TBGRABitmap;
+  sharp, blurred: Double;
+begin
+  { Averaged down 2:1 the S = 2 backdrops are the S = 1 ones, up to resampling. A blur left at
+    the layout radius on the 2x photo is half as wide: the frost shows twice the detail. }
+  if not FileExists(GreenThemePath) then begin AssertTrue('green.tycss not found', True); Exit; end;
+  f2 := TTyFormAccess(ImageForm(2, c2));
+  f1 := TTyFormAccess(ImageForm(1, c1));
+  try
+    half := TyHalve(f2.SharpBackdrop);
+    try
+      sharp := MeanApart(half, f1.SharpBackdrop);
+    finally
+      half.Free;
+    end;
+    half := TyHalve(f2.BlurredBackdrop);
+    try
+      blurred := MeanApart(half, f1.BlurredBackdrop);
+    finally
+      half.Free;
+    end;
+    AssertTrue(Format('the sharp photo (mean %.2f apart)', [sharp]), sharp < CSharpApart);
+    AssertTrue(Format('the frost (mean %.2f apart)', [blurred]), blurred < CFrostApart);
+  finally
+    f1.Free;
+    c1.Free;
+    f2.Free;
+    c2.Free;
+  end;
+end;
+
+function TTyFormBackdropTest.PaintOnImageForm(AClass: TControlClass; AScale: Integer): TBGRABitmap;
+var
+  f: TTyFormAccess;
+  ctl: TTyStyleController;
+  c: TControl;
+begin
+  NeedWidgetSet;
+  f := TTyFormAccess.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  try
+    f.SetBounds(0, 0, 320, 240);
+    ctl.ThemeFile := GreenThemePath;
+    f.ApplyChromeTheme(ctl);
+    c := AClass.Create(f);
+    c.Parent := f;
+    c.SetBounds(37, 41, 180, 70);
+    TTyCustomControl(c).Controller := ctl;   // the control's own theme: the form's is chrome only
+    { The backdrop is sampled at the control's place on the form: both need handles. }
+    f.HandleNeeded;
+    if c is TWinControl then TWinControl(c).HandleNeeded;
+    ScreenScale(AScale);
+    try
+      f.CallRebuildBackdrop;
+    finally
+      TyResetTestPlatform;
+    end;
+    Result := TyPaintOwnSurface(c, AScale);
+  finally
+    f.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TTyFormBackdropTest.CheckImageThemeControl(const AName: string; AClass: TControlClass);
+var
+  a, half, b: TBGRABitmap;
+  ink, blocks: Integer;
+begin
+  if not FileExists(GreenThemePath) then begin AssertTrue('green.tycss not found', True); Exit; end;
+  a := PaintOnImageForm(AClass, 2);
+  b := nil;
+  half := nil;
+  try
+    half := TyHalve(a);
+    b := PaintOnImageForm(AClass, 1);
+    ink := TyInkMismatch(half, b);
+    blocks := TyBlockMismatch(half, b);
+    if GetEnvironmentVariable('TY_SWEEP_DIR') <> '' then
+    begin
+      half.SaveToFile(IncludeTrailingPathDelimiter(GetEnvironmentVariable('TY_SWEEP_DIR')) +
+        AName + '-image-s2.png');
+      b.SaveToFile(IncludeTrailingPathDelimiter(GetEnvironmentVariable('TY_SWEEP_DIR')) +
+        AName + '-image-ref.png');
+    end;
+    AssertTrue(Format('%s on an image form draws at the device scale (ink %d, blocks %d)',
+      [AName, ink, blocks]), ink + blocks <= CMaxMismatch);
+  finally
+    a.Free;
+    half.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyFormBackdropTest.TestImageThemePanelAtScaleTwo;
+begin
+  CheckImageThemeControl('TTyPanel', TTyPanel);
+end;
+
+procedure TTyFormBackdropTest.TestImageThemeGlassEditAtScaleTwo;
+begin
+  CheckImageThemeControl('TTyEdit', TTyEdit);
+end;
+
 procedure TTyFormBackdropTest.TestNonImageThemeHasNoBackdrop;
 var F: TTyFormAccess; Ctl: TTyStyleController;
 begin
@@ -2730,7 +2963,6 @@ begin
   end;
 end;
 
-procedure NeedWidgetSet; forward;   { a real window: see its definition further down }
 
 {$IFDEF LCLWin32}
 function Win32GetMenu(AWnd: THandle): THandle; stdcall; external 'user32' name 'GetMenu';
