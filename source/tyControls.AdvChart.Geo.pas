@@ -70,8 +70,22 @@ unit tyControls.AdvChart.Geo;
   group is the item's graphic element (its events, tooltip and states the
   series'). A TTyGeo carries that as a TTyGeoData the control sets.
 
-  NOT HERE (spec sections 185, 187, 189 and 191): SVG maps and projection
-  streams.
+  SVG MAPS [F6b]: a map registered as SVG markup (or the wrapper form with
+  an `svg` string) is GeoSVGResource's -- the document parsed once, a graphic
+  built per geo through GeoSvg (zrender's parseSVG), its regions the
+  self-named items of the region-available tags with GeoSVGRegion's centre,
+  the view not flipped and aspectScale 1 by default. MapDraw._buildSVG's
+  picture is kept per node: the option's itemStyle over the SVG's own style
+  on every named shape, the three states with the default proxy and no z2
+  lift on emphasis, a label 'inside' each self-named shape or group, and
+  every node's hover and select flags moved the way traverseUpdateState
+  moves them -- a component's highlight by name reaches every dispatcher of
+  the name, a hover the outermost dispatcher over the element, the event
+  the innermost named item. updateSelectStatus marks a self-named item and
+  everything under it, so a named item inside a named group follows the
+  group's selection.
+
+  NOT HERE (spec sections 185, 187, 189, 191 and 204): projection streams.
 
   PURE but for fpjson: no painter, no LCL. }
 interface
@@ -83,7 +97,7 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Color, tyControls.AdvChart.Graph,
   tyControls.AdvChart.States, tyControls.AdvChart.GeoFix,
-  tyControls.AdvChart.Handlers;
+  tyControls.AdvChart.Handlers, tyControls.AdvChart.GeoSvg;
 
 const
   TyGeoCoordSysName = 'geo';
@@ -410,6 +424,46 @@ type
     Groups: array of TTyGeoDataGroup;
   end;
 
+  { [F6b] AN SVG NODE'S PICTURE beyond the values its states move (those
+    are its TTyStElement's): its own paint servers (-1 none), the option's
+    gradient fill, the fill and stroke opacities, strokeNoScale, the SVG's
+    own dash (its own units), and for a named shape the option's normal and
+    state paints (their dash and what they set) }
+  TTyGeoSvgLook = record
+    FillGrad, StrokeGrad: Integer;
+    HasOptGrad: Boolean;
+    OptGrad: TTyChartGradient;
+    FillOpacity, StrokeOpacity: Double;
+    NoScale: Boolean;
+    HasDash: Boolean;
+    Dash: TTyDoubleArray;
+    Styled: Boolean;
+    Opt: TTyGeoPaint;
+    StateOpt: array[TTyStName] of TTyGeoPaint;
+  end;
+
+  { [F6b] an SVG map's node flags, kept over a render (MapDraw keeps its
+    graphic while the map is the same: the elements keep their hover and
+    action bits) }
+  TTyGeoSvgFlags = record
+    Valid: Boolean;
+    MapName: string;
+    Count: Integer;
+    Hover: TTyIntegerArray;
+    Hbo: array of Cardinal;
+    Blured: Boolean;
+    { the transforms the last frame drew with }
+    Prev: array of TTyMat2D;
+    PrevHas: array of Boolean;
+  end;
+
+  { [F6b] where a label host's text was last placed (updateInnerText runs
+    only while the host is dirty) }
+  TTyGeoSvgPlace = record
+    Valid: Boolean;
+    AX, AY, Rot, TX, TY: Double;
+  end;
+
   { A Transformable's props, as View keeps its three: no origin, no anchor. }
   TTyGeoTrans = record
     X, Y, ScaleX, ScaleY, Rotation, SkewX, SkewY: Double;
@@ -467,6 +521,45 @@ type
       parts were last worked out for }
     FRoamGen: Integer;
     FDrawRoamGen: Integer;
+    { [F6b] AN SVG MAP: its graphic and the measurer of its text; per node
+      the named item (self or from a group; -1 none), the self-named item,
+      the event group (the innermost self-named item's), the hover group
+      (the outermost dispatcher's), whether it is a dispatcher, the region
+      option's silent (-1 none), __highByOuter, the state elements of the
+      node and of its label, the look, the label; per group its
+      dispatchers; per region its node; the global transforms }
+    FIsSvg: Boolean;
+    FSvgMeasure: TTyGsMeasure;
+    FSvg: TTyGsGraphic;
+    FSvgItem, FSvgSelf, FSvgEvent, FSvgHover: TTyIntegerArray;
+    FSvgIsDisp: array of Boolean;
+    FSvgSilentOpt: TTyIntegerArray;
+    FSvgHbo: array of Cardinal;
+    FSvgEl, FSvgLbl: array of TTyStElement;
+    FSvgLook: array of TTyGeoSvgLook;
+    FSvgLabel: array of TTyGeoLabel;
+    FSvgHasLabel: array of Boolean;
+    FSvgDisp: array of TTyIntegerArray;
+    FSvgFocusSelf: Boolean;
+    FSvgRegionNode: TTyIntegerArray;
+    FSvgGlobal: array of TTyMat2D;
+    FSvgHasGlobal, FSvgReached: array of Boolean;
+    FSvgGlobalGen: Integer;
+    FSvgChanged: Boolean;
+    { the global transforms the last build drew with (a group host's
+      children are updated after it: its label reads theirs), and the
+      labels' placements }
+    FSvgPrevGlobal: array of TTyMat2D;
+    FSvgPrevHas: array of Boolean;
+    FSvgPlace: array of TTyGeoSvgPlace;
+    FSvgPlaceGen: Integer;
+    procedure SvgPlaceLabel(ANode, APPI: Integer);
+    procedure SvgSetup;
+    procedure SvgGlobals;
+    procedure SvgPicture(const AInk: TTyGeoInk);
+    procedure SvgSyncSelection;
+    procedure SvgTraverse(ANode, AMode, AValue: Integer);
+    function SvgGroupHead(AGroup: Integer): Integer;
     procedure EnsureGroups;
     procedure InitItems;
     procedure UpdateTransform;
@@ -621,6 +714,34 @@ type
     property Gen: Integer read FGen write FGen;
     { the picture the last Draw worked out (empty before one) }
     property LastDraw: TTyGeoDraw read FDraw;
+    { ==== an SVG map [F6b] ==== }
+    property IsSvg: Boolean read FIsSvg;
+    { the width of a text in a font, CSS px (set before Resize: the parse
+      of a <text> moves on by the width of what it has read) }
+    property SvgMeasure: TTyGsMeasure read FSvgMeasure write FSvgMeasure;
+    property SvgGraphic: TTyGsGraphic read FSvg;
+    { a node's state element and its label's (the picture once drawn) }
+    function SvgNodeItem(ANode: Integer): TTyStElement;
+    function SvgLabelItem(ANode: Integer): TTyStElement;
+    function SvgHasLabel(ANode: Integer): Boolean;
+    function SvgLabelOf(ANode: Integer): TTyGeoLabel;
+    function SvgLook(ANode: Integer): TTyGeoSvgLook;
+    { a node's global transform (False: none -- zrender's null) }
+    function SvgGlobal(ANode: Integer; out AM: TTyMat2D): Boolean;
+    function SvgEventGroup(ANode: Integer): Integer;
+    function SvgHoverGroup(ANode: Integer): Integer;
+    { the current per-node stroke Path.getBoundingRect reads }
+    function SvgStrokes: TTyGsStrokeArray;
+    { getBoundingRect of a node now }
+    function SvgNodeRect(ANode: Integer): TTyXYWH;
+    { a label host's text, placed as updateInnerText places it now: the
+      innerTransformable's position (AX, AY) and rotation, and where the
+      text's own origin lands (ATX, ATY), device px; False without a label }
+    function SvgLabelPlace(ANode, APPI: Integer; out AX, AY, ARot, ATX, ATY: Double): Boolean;
+    { the flags to carry over a render, and their restoring on the new geo
+      (the same map, the same nodes) }
+    function SvgSaveFlags: TTyGeoSvgFlags;
+    procedure SvgRestoreFlags(const AFlags: TTyGeoSvgFlags);
   end;
 
 { ---- the registry ---- }
@@ -629,15 +750,21 @@ type
   text -- or the wrapper form, an object of geoJSON (or geoJson) and
   specialAreas, whose specialAreas then win over ASpecialAreas. It passes the
   option reader's nesting guard and relaxed parse; False (and the registry
-  unchanged) when it does not parse, or when it is an SVG map (an object
-  with `svg`, not supported). ASpecialAreas: JSON text of an object, '' for none.
-  Registering a name again replaces it. }
+  unchanged) when it does not parse. ASpecialAreas: JSON text of an object, '' for none.
+  Registering a name again replaces it.
+  [F6b] AN SVG MAP: the wrapper form with an `svg` string (upstream's
+  registerMap(name, svg-object)), or the markup itself -- text whose first
+  character past the white space (and a byte-order mark) is '<', a port
+  convenience. False when the XML does not parse or has no svg element
+  (upstream throws in parseXML); ASpecialAreas is not read. }
 function TyChartRegisterMap(const AName, AGeoJson: string;
   const ASpecialAreas: string = ''): Boolean;
 { echarts.getMap: the GeoJSON and the special areas as registered (JSON text;
   '' for none). False for a name nobody registered. }
 function TyChartGetMap(const AName: string; out AGeoJson, ASpecialAreas: string): Boolean;
 function TyChartMapRegistered(const AName: string): Boolean;
+{ [F6b] the map registered under AName is an SVG one }
+function TyGeoMapIsSvg(const AName: string): Boolean;
 
 type
   TTyGeoMissingMap = record
@@ -700,7 +827,8 @@ function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
 implementation
 
 uses
-  tyControls.AdvChart.Data,
+  DOM,
+  tyControls.AdvChart.Data, tyControls.AdvChart.ZrPath, tyControls.FontUnits,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Convert,
   tyControls.AdvChart.Calendar,
   tyControls.AdvChart.Labels, tyControls.AdvChart.OptionMerge,
@@ -711,6 +839,13 @@ const
   cJsPi: Double = 3.141592653589793;
   { zrender Transformable's EPSILON }
   cTransEps: Double = 5e-5;
+  { [F6b] what SvgTraverse does to a node and all under it }
+  cSvgEnterEmph = 0;
+  cSvgLeaveEmph = 1;
+  cSvgEnterBlur = 2;
+  cSvgLeaveBlur = 3;
+  cSvgSetSel = 4;
+  cSvgSetHover = 5;
 
 type
   TFpuMask = record
@@ -725,8 +860,8 @@ end;
 
 procedure UnmaskFpu(const AMask: TFpuMask);
 begin
-  ClearExceptions(False);
-  SetExceptionMask(AMask.M);
+  { [F6b] SSE's flags too (MXCSR), which ClearExceptions leaves on x86_64 }
+  TyZrRestoreFpu(AMask.M);
 end;
 
 { ==================== JavaScript values ==================== }
@@ -1295,6 +1430,17 @@ type
     Failed: Boolean;
     Features: array of TGeoFeature;
     Parsed: array of TGeoParsed;
+    { [F6b] an SVG map: the document parseXML read and its svg element, the
+      bounding rect of the first graphic built (every later build reuses it,
+      as _buildGraphic reuses this._boundingRect), the region names a build
+      without a measurer finds (what MapSeries appends) and its rect }
+    IsSvg: Boolean;
+    SvgDoc: TXMLDocument;
+    SvgEl: TDOMElement;
+    SvgHasRect: Boolean;
+    SvgRect: TTyXYWH;
+    SvgNames: TTyStringArray;
+    SvgNamesRect: TTyXYWH;
     destructor Destroy; override;
     procedure Decode;
     function ParseRegions(const ANameProperty: string): Integer;
@@ -1310,6 +1456,7 @@ begin
   Parsed := nil;
   Root.Free;
   Special.Free;
+  SvgDoc.Free;
   inherited Destroy;
 end;
 
@@ -1732,6 +1879,12 @@ begin
   Parsed[Result].HasRect := hasRect;
 end;
 
+function GeoPtNaN: TTyGeoPt;
+begin
+  Result.X := NaN;
+  Result.Y := NaN;
+end;
+
 function TGeoResource.Load(ANameMap: TJSONObject; const ANameProperty: string): TTyGeoSource;
 var
   pi, i: Integer;
@@ -1741,6 +1894,17 @@ var
   mask: TFpuMask;
 begin
   Result := nil;
+  { [F6b] an SVG map's regions: its self-named items' names (load ignores
+    nameMap and nameProperty) }
+  if IsSvg then
+  begin
+    Result := TTyGeoSource.Create;
+    SetLength(Result.FRegions, Length(SvgNames));
+    for i := 0 to High(SvgNames) do
+      Result.FRegions[i] := TTyGeoRegion.Create(SvgNames[i], nil, False, GeoPtNaN);
+    Result.FRect := SvgNamesRect;
+    Exit;
+  end;
   mask := MaskFpu;
   try
     pi := ParseRegions(ANameProperty);
@@ -1800,6 +1964,66 @@ begin
     [Milestone D9-D14] }
 end;
 
+procedure PutMap(ARes: TGeoResource);
+var i: Integer;
+begin
+  i := IndexOfMap(ARes.Name);
+  if i >= 0 then
+  begin
+    GMaps[i].Free;
+    GMaps[i] := ARes;
+  end
+  else
+  begin
+    SetLength(GMaps, Length(GMaps) + 1);
+    GMaps[High(GMaps)] := ARes;
+  end;
+end;
+
+{ [F6b] new GeoSVGResource: parseXML now (it throws on a broken document);
+  the graphic waits for a geo }
+function RegisterSvgMap(const AName, AText: string): Boolean;
+var
+  doc: TXMLDocument;
+  el: TDOMElement;
+  res: TGeoResource;
+  g: TTyGsGraphic;
+  k, n: Integer;
+begin
+  Result := False;
+  if not TyGsParseDocument(AText, doc, el) then Exit;
+  res := TGeoResource.Create;
+  res.Name := AName;
+  res.Text := AText;
+  res.IsSvg := True;
+  res.SvgDoc := doc;
+  res.SvgEl := el;
+  g := TyGsBuild(el, nil, False, Default(TTyXYWH));
+  if g.Ok then
+  begin
+    for k := 0 to High(g.Named) do
+      if g.Named[k].From < 0 then
+      begin
+        n := Length(res.SvgNames);
+        SetLength(res.SvgNames, n + 1);
+        res.SvgNames[n] := g.Named[k].Name;
+      end;
+    res.SvgNamesRect := g.Rect;
+  end;
+  PutMap(res);
+  Result := True;
+end;
+
+{ the markup itself: '<' first past white space and a byte-order mark }
+function LooksLikeMarkup(const AText: string): Boolean;
+var i: Integer;
+begin
+  i := 1;
+  if Copy(AText, 1, 3) = #$EF#$BB#$BF then i := 4;
+  while (i <= Length(AText)) and (AText[i] in [#9, #10, #13, ' ']) do Inc(i);
+  Result := (i <= Length(AText)) and (AText[i] = '<');
+end;
+
 function TyChartRegisterMap(const AName, AGeoJson: string;
   const ASpecialAreas: string): Boolean;
 var
@@ -1810,13 +2034,20 @@ var
   specialText: string;
 begin
   Result := False;
+  if LooksLikeMarkup(AGeoJson) then Exit(RegisterSvgMap(AName, AGeoJson));
   root := ParseText(AGeoJson);
   if root = nil then Exit;
   special := nil;
   specialText := ASpecialAreas;
   try
-    { an SVG map is not supported }
-    if Truthy(Own(root, 'svg')) then Exit;
+    { [F6b] an SVG map: `rawDef.svg` truthy -- a string here (a JSON text
+      cannot hold the Document upstream also takes) }
+    if Truthy(Own(root, 'svg')) then
+    begin
+      if Own(root, 'svg').JSONType = jtString then
+        Result := RegisterSvgMap(AName, Own(root, 'svg').AsString);
+      Exit;
+    end;
     { THE WRAPPER FORM: geoJson or geoJSON, and specialAreas, without features }
     wrapped := Own(root, 'geoJson');
     if not Truthy(wrapped) then wrapped := Own(root, 'geoJSON');
@@ -1874,7 +2105,8 @@ begin
   AGeoJson := '';
   ASpecialAreas := '';
   i := IndexOfMap(AName);
-  Result := i >= 0;
+  { [F6b] getMapForUser answers nothing for an SVG map }
+  Result := (i >= 0) and not GMaps[i].IsSvg;
   if not Result then Exit;
   AGeoJson := GMaps[i].Text;
   ASpecialAreas := GMaps[i].SpecialText;
@@ -1883,6 +2115,31 @@ end;
 function TyChartMapRegistered(const AName: string): Boolean;
 begin
   Result := IndexOfMap(AName) >= 0;
+end;
+
+function TyGeoMapIsSvg(const AName: string): Boolean;
+var i: Integer;
+begin
+  i := IndexOfMap(AName);
+  Result := (i >= 0) and GMaps[i].IsSvg;
+end;
+
+{ [F6b] useGraphic: a graphic of the map's document (its first build's
+  bounding rect reused) }
+function TyGeoSvgBuildFor(const AName: string; const AMeasure: TTyGsMeasure;
+  out AG: TTyGsGraphic): Boolean;
+var i: Integer;
+begin
+  AG := Default(TTyGsGraphic);
+  i := IndexOfMap(AName);
+  if (i < 0) or not GMaps[i].IsSvg then Exit(False);
+  AG := TyGsBuild(GMaps[i].SvgEl, AMeasure, GMaps[i].SvgHasRect, GMaps[i].SvgRect);
+  Result := AG.Ok;
+  if Result and not GMaps[i].SvgHasRect then
+  begin
+    GMaps[i].SvgHasRect := True;
+    GMaps[i].SvgRect := AG.Rect;
+  end;
 end;
 
 procedure TyChartUnregisterMap(const AName: string);
@@ -2278,10 +2535,27 @@ begin
 end;
 
 function TTyGeo.SetFlags(AGroup, AHover: Integer; AHbo: Cardinal; ASelected: Boolean): Boolean;
+var k: Integer;
 begin
   Result := False;
   EnsureGroups;
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  if FIsSvg then
+  begin
+    { [F6b] a map series' row flags on every self-named element of the name }
+    FSvgChanged := FSt[AGroup].Selected <> ASelected;
+    FSt[AGroup].Selected := ASelected;
+    FSt[AGroup].Hover := AHover;
+    FSt[AGroup].Hbo := AHbo;
+    if Length(FSvgEl) > 0 then
+      for k := 0 to High(FSvgSelf) do
+        if (FSvgSelf[k] >= 0) and (FSvgEvent[k] = AGroup) then
+        begin
+          FSvgHbo[k] := AHbo;
+          SvgTraverse(k, cSvgSetHover, AHover);
+        end;
+    Exit(FSvgChanged);
+  end;
   Result := (FSt[AGroup].Hover <> AHover) or (FSt[AGroup].Hbo <> AHbo)
     or (FSt[AGroup].Selected <> ASelected);
   FSt[AGroup].Hover := AHover;
@@ -2703,6 +2977,12 @@ begin
   FSt := nil;
   FIsBlured := False;
   FreeAndNil(FSource);
+  FIsSvg := False;
+  FSvg := Default(TTyGsGraphic);
+  FSvgEl := nil;
+  FSvgLbl := nil;
+  FSvgGlobal := nil;
+  FSvgHasGlobal := nil;
   FHasData := False;
   FHasView := False;
   FMtRaw := MatIdentity;
@@ -2715,24 +2995,49 @@ begin
   if APPI > 0 then FScale := APPI / 96 else FScale := 1;
   mask := MaskFpu;
   try
-    FSource := TyGeoLoadMap(FSpec.MapName, FNameMap, FSpec.NameProperty);
-    if FSource = nil then Exit;
-    { a projection when both handlers are there (the dev build drops one
-      without unproject) }
     FProjection := Default(TTyGeoProjection);
-    if FSpec.HasProjection
-      and TyChartFindGeoProjection(FSpec.ProjectName, FProjection.Project)
-      and TyChartFindGeoProjection(FSpec.UnprojectName, FProjection.Unproject) then
-      FProjection.Active := True
+    if TyGeoMapIsSvg(FSpec.MapName) then
+    begin
+      { [F6b] GeoSVGResource: this geo's graphic, its regions the
+        self-named items; no y flip; a projection written on an SVG map is
+        dropped and then read off null -- setOption throws }
+      FIsSvg := True;
+      if not TyGeoSvgBuildFor(FSpec.MapName, FSvgMeasure, FSvg) then Exit;
+      FSource := TTyGeoSource.Create;
+      FSvgRegionNode := nil;
+      for i := 0 to High(FSvg.Named) do
+        if FSvg.Named[i].From < 0 then
+        begin
+          SetLength(FSource.FRegions, Length(FSource.FRegions) + 1);
+          FSource.FRegions[High(FSource.FRegions)] :=
+            TTyGeoRegion.Create(FSvg.Named[i].Name, nil, False, GeoPtNaN);
+          SetLength(FSvgRegionNode, Length(FSvgRegionNode) + 1);
+          FSvgRegionNode[High(FSvgRegionNode)] := FSvg.Named[i].Node;
+        end;
+      FSource.FRect := FSvg.Rect;
+      if FSpec.HasProjection then Exit;
+      FInvertY := False;
+    end
     else
     begin
-      FProjection.Project := nil;
-      FProjection.Unproject := nil;
+      FSource := TyGeoLoadMap(FSpec.MapName, FNameMap, FSpec.NameProperty);
+      if FSource = nil then Exit;
+      { a projection when both handlers are there (the dev build drops one
+        without unproject) }
+      if FSpec.HasProjection
+        and TyChartFindGeoProjection(FSpec.ProjectName, FProjection.Project)
+        and TyChartFindGeoProjection(FSpec.UnprojectName, FProjection.Unproject) then
+        FProjection.Active := True
+      else
+      begin
+        FProjection.Project := nil;
+        FProjection.Unproject := nil;
+      end;
+      { invertLongitute is decided on the option's projection BEFORE the
+        check that drops one without both functions: a dropped projection
+        still leaves y the right way up }
+      FInvertY := not FSpec.HasProjection;
     end;
-    { invertLongitute is decided on the option's projection BEFORE the
-      check that drops one without both functions: a dropped projection
-      still leaves y the right way up }
-    FInvertY := not FSpec.HasProjection;
     { the rect: the map's, or the union of the projected regions' }
     if FProjection.Active then
     begin
@@ -2754,6 +3059,7 @@ begin
     SetBoundingRect(bound.X, bound.Y, bound.W, bound.H);
     if FProjection.Active then FAspectScale := 1
     else if FSpec.HasAspectScale then FAspectScale := FSpec.AspectScale
+    else if FIsSvg then FAspectScale := 1
     else FAspectScale := TyGeoDefaultAspectScale;
     { boundingCoords: sampled through a projection -- the left edge as the
       diagonal upstream walks }
@@ -2786,6 +3092,7 @@ begin
       cont := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
     LayoutView(cont);
     FValid := True;
+    if FIsSvg then SvgSetup;
   finally
     UnmaskFpu(mask);
   end;
@@ -3039,6 +3346,7 @@ const
 
 var
   GGeoDefaults: TJSONObject = nil;
+  GGeoSvgDefaults: TJSONObject = nil;
   GMapDefaults: TJSONObject = nil;
 
 { GeoModel.defaultOption as far as a region's style and label read it }
@@ -3056,6 +3364,24 @@ begin
         'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
         'itemStyle', TJSONObject.Create(['color', cTok + 'highlight'])])]);
   Result := GGeoDefaults;
+end;
+
+{ [F6b] the same for a geo on an SVG map: init gives itemStyle no colour
+  (the SVG's own fill stays) }
+function GeoSvgDefaults: TJSONObject;
+begin
+  if GGeoSvgDefaults = nil then
+    GGeoSvgDefaults := TJSONObject.Create([
+      'label', TJSONObject.Create(['show', False, 'color', cTok + 'label']),
+      'itemStyle', TJSONObject.Create(['borderWidth', 0.5,
+        'borderColor', cTok + 'border']),
+      'emphasis', TJSONObject.Create([
+        'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
+        'itemStyle', TJSONObject.Create(['color', cTok + 'highlight'])]),
+      'select', TJSONObject.Create([
+        'label', TJSONObject.Create(['show', True, 'color', cTok + 'labelHighlight']),
+        'itemStyle', TJSONObject.Create(['color', cTok + 'highlight'])])]);
+  Result := GGeoSvgDefaults;
 end;
 
 { [Batch 152] MapSeries.defaultOption as far as a region's style and label
@@ -3125,7 +3451,7 @@ end;
 { the geo's option merged over the defaults, read at a path [Batch 152: or
   a map series' over MapSeries' defaults] }
 function GeoMergedGet(AGeoNode: TJSONObject; const APath: array of string;
-  AMapSeries: Boolean = False): TJSONData;
+  AMapSeries: Boolean = False; ASvg: Boolean = False): TJSONData;
 var
   u, d, uv, dv: TJSONData;
   i: Integer;
@@ -3134,7 +3460,9 @@ begin
   Result := nil;
   u := AGeoNode;
   live := u <> nil;
-  if AMapSeries then d := MapDefaults else d := GeoDefaults;
+  if AMapSeries then d := MapDefaults
+  else if ASvg then d := GeoSvgDefaults
+  else d := GeoDefaults;
   for i := 0 to High(APath) do
   begin
     dv := nil;
@@ -3156,7 +3484,7 @@ begin
       end;
       { init's `option.itemStyle = option.itemStyle || (an empty object)`: a falsy
         itemStyle is a fresh object that takes the colour default only }
-      if not AMapSeries and (i = 0) and (APath[0] = 'itemStyle') and not Truthy(uv)
+      if not AMapSeries and not ASvg and (i = 0) and (APath[0] = 'itemStyle') and not Truthy(uv)
         and (High(APath) = 1) and (APath[1] = 'color') and (dv is TJSONObject) then
         Exit(TJSONObject(dv).Find('color'));
       Exit(nil);
@@ -3233,7 +3561,7 @@ begin
   AToken := gtkNone;
   Result := PathGet(ARegion, APath);
   if Result <> nil then Exit;
-  Result := GeoMergedGet(FChainNode, APath, FKind = gkMapSeries);
+  Result := GeoMergedGet(FChainNode, APath, FKind = gkMapSeries, FIsSvg);
   if Result <> nil then
   begin
     AToken := TokenOf(Result);
@@ -4222,18 +4550,39 @@ begin
 end;
 
 function TTyGeo.HoverEnter(AGroup: Integer): Boolean;
+var k: Integer;
 begin
   Result := False;
   EnsureGroups;
+  if FIsSvg then
+  begin
+    { enterEmphasisWhenMouseOver on every dispatcher of the name }
+    if (AGroup < 0) or (AGroup > High(FSvgDisp)) then Exit;
+    FSvgChanged := False;
+    for k := 0 to High(FSvgDisp[AGroup]) do
+      if FSvgHbo[FSvgDisp[AGroup][k]] = 0 then
+        SvgTraverse(FSvgDisp[AGroup][k], cSvgEnterEmph, 0);
+    Exit(FSvgChanged);
+  end;
   if (AGroup < 0) or (AGroup > High(FSt)) or (FSt[AGroup].Hbo <> 0) then Exit;
   Result := FSt[AGroup].Hover <> TyStHoverEmphasis;
   FSt[AGroup].Hover := TyStHoverEmphasis;
 end;
 
 function TTyGeo.HoverLeave(AGroup: Integer): Boolean;
+var k: Integer;
 begin
   Result := False;
   EnsureGroups;
+  if FIsSvg then
+  begin
+    if (AGroup < 0) or (AGroup > High(FSvgDisp)) then Exit;
+    FSvgChanged := False;
+    for k := 0 to High(FSvgDisp[AGroup]) do
+      if FSvgHbo[FSvgDisp[AGroup][k]] = 0 then
+        SvgTraverse(FSvgDisp[AGroup][k], cSvgLeaveEmph, 0);
+    Exit(FSvgChanged);
+  end;
   if (AGroup < 0) or (AGroup > High(FSt)) or (FSt[AGroup].Hbo <> 0) then Exit;
   if FSt[AGroup].Hover <> TyStHoverEmphasis then Exit;
   FSt[AGroup].Hover := TyStHoverNormal;
@@ -4241,9 +4590,22 @@ begin
 end;
 
 function TTyGeo.EnterEmphasisBy(AGroup, ADigit: Integer): Boolean;
+var k, d: Integer;
 begin
   Result := False;
   EnsureGroups;
+  if FIsSvg then
+  begin
+    if (AGroup < 0) or (AGroup > High(FSvgDisp)) then Exit;
+    FSvgChanged := False;
+    for k := 0 to High(FSvgDisp[AGroup]) do
+    begin
+      d := FSvgDisp[AGroup][k];
+      FSvgHbo[d] := FSvgHbo[d] or GeoDigitBit(ADigit);
+      SvgTraverse(d, cSvgEnterEmph, 0);
+    end;
+    Exit(FSvgChanged);
+  end;
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
   FSt[AGroup].Hbo := FSt[AGroup].Hbo or GeoDigitBit(ADigit);
   Result := FSt[AGroup].Hover <> TyStHoverEmphasis;
@@ -4251,9 +4613,22 @@ begin
 end;
 
 function TTyGeo.LeaveEmphasisBy(AGroup, ADigit: Integer): Boolean;
+var k, d: Integer;
 begin
   Result := False;
   EnsureGroups;
+  if FIsSvg then
+  begin
+    if (AGroup < 0) or (AGroup > High(FSvgDisp)) then Exit;
+    FSvgChanged := False;
+    for k := 0 to High(FSvgDisp[AGroup]) do
+    begin
+      d := FSvgDisp[AGroup][k];
+      FSvgHbo[d] := FSvgHbo[d] and not GeoDigitBit(ADigit);
+      if FSvgHbo[d] = 0 then SvgTraverse(d, cSvgLeaveEmph, 0);
+    end;
+    Exit(FSvgChanged);
+  end;
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
   FSt[AGroup].Hbo := FSt[AGroup].Hbo and not GeoDigitBit(ADigit);
   { only when every bit is gone }
@@ -4267,6 +4642,13 @@ var i: Integer;
 begin
   Result := False;
   EnsureGroups;
+  if FIsSvg then
+  begin
+    FSvgChanged := False;
+    if Length(FSvgEl) > 0 then SvgTraverse(TyGsRootNode, cSvgEnterBlur, 0);
+    FIsBlured := True;
+    Exit(FSvgChanged);
+  end;
   for i := 0 to High(FSt) do
     if FSt[i].Hover <> TyStHoverBlur then
     begin
@@ -4281,6 +4663,12 @@ var i: Integer;
 begin
   Result := False;
   EnsureGroups;
+  if FIsSvg then
+  begin
+    FSvgChanged := False;
+    if Length(FSvgEl) > 0 then SvgTraverse(TyGsRootNode, cSvgLeaveBlur, 0);
+    Exit(FSvgChanged);
+  end;
   for i := 0 to High(FSt) do
     if FSt[i].Hover = TyStHoverBlur then
     begin
@@ -4294,13 +4682,31 @@ begin
   Result := False;
   EnsureGroups;
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+  { [F6b] an SVG map's names: the nodes follow at the next apply
+    (updateSelectStatus) }
   Result := FSt[AGroup].Selected <> ASelected;
   FSt[AGroup].Selected := ASelected;
 end;
 
 function TTyGeo.GroupFlags(AGroup: Integer): TTyGeoGroupSt;
+var h: Integer;
 begin
   EnsureGroups;
+  if FIsSvg then
+  begin
+    { a name's flags: its first dispatcher's (or first item's) hover and
+      action bits, the name's selection }
+    Result := Default(TTyGeoGroupSt);
+    if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
+    Result.Selected := FSt[AGroup].Selected;
+    h := SvgGroupHead(AGroup);
+    if (h >= 0) and (h <= High(FSvgEl)) then
+    begin
+      Result.Hover := FSvgEl[h].HoverState;
+      Result.Hbo := FSvgHbo[h];
+    end;
+    Exit;
+  end;
   if (AGroup >= 0) and (AGroup <= High(FSt)) then Result := FSt[AGroup]
   else Result := Default(TTyGeoGroupSt);
 end;
@@ -4317,6 +4723,32 @@ end;
 
 function TTyGeo.Draw(const AInk: TTyGeoInk; APPI: Integer): TTyGeoDraw;
 begin
+  if FIsSvg then
+  begin
+    { [F6b] the SVG's picture per node; the roam moves only the transforms }
+    if not (FDrawOk and (FDrawPPI = APPI) and SameInk(FDrawInk, AInk)) then
+    begin
+      SvgPicture(AInk);
+      FDraw := Default(TTyGeoDraw);
+      DrawRoamUnits(Self, FDraw);
+      if FSpec.Clip then
+      begin
+        FDraw.HasClip := True;
+        FDraw.Clip := ViewRect;
+      end;
+      FDrawOk := True;
+      FDrawPPI := APPI;
+      FDrawInk := AInk;
+      FDrawRoamGen := FRoamGen;
+      FItemsOk := True;
+    end;
+    if (FSvgGlobalGen <> FRoamGen) or (Length(FSvgGlobal) <> Length(FSvg.Nodes)) then
+    begin
+      SvgGlobals;
+      DrawRoamUnits(Self, FDraw);
+    end;
+    Exit(FDraw);
+  end;
   if not (FDrawOk and (FDrawPPI = APPI) and SameInk(FDrawInk, AInk)) then
   begin
     FDraw := TyGeoDrawOf(Self, AInk, APPI);
@@ -4430,10 +4862,29 @@ begin
 end;
 
 function TTyGeo.ApplyStates(const AInk: TTyGeoInk; APPI: Integer): Boolean;
-var g, k: Integer;
+var g, k: Integer; names: TTyStNames;
 begin
   Result := False;
   Draw(AInk, APPI);
+  if FIsSvg then
+  begin
+    { [F6b] updateSelectStatus, then applyElementStates on every node and
+      the text of a host whose list changed }
+    SvgSyncSelection;
+    for k := 0 to High(FSvgEl) do
+    begin
+      if not FSvgEl[k].Exists then Continue;
+      names := TyStTargetStates(FSvgEl[k]);
+      if TyStUseStates(FSvgEl[k], names) then
+      begin
+        Result := True;
+        if FSvgHasLabel[k] then TyStUseStates(FSvgLbl[k], names);
+        { the host is dirty: its text is placed again }
+        if k <= High(FSvgPlace) then FSvgPlace[k].Valid := False;
+      end;
+    end;
+    Exit;
+  end;
   if not FItemsOk then InitItems;
   for g := 0 to High(FSt) do
     for k := 0 to High(FSt[g].Items) do
@@ -4451,6 +4902,1075 @@ begin
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
   if (APath < 0) or (APath > High(FSt[AGroup].Items)) then Exit;
   Result := FSt[AGroup].Items[APath];
+end;
+
+{ ==================== SVG maps [F6b] ==================== }
+
+function GsTransOf(const T: TTyGeoTrans): TTyGsTrans;
+begin
+  Result.X := T.X;
+  Result.Y := T.Y;
+  Result.ScaleX := T.ScaleX;
+  Result.ScaleY := T.ScaleY;
+  Result.Rotation := T.Rotation;
+  Result.SkewX := T.SkewX;
+  Result.SkewY := T.SkewY;
+end;
+
+{ Path.getLineScale over a global transform }
+function SvgLineScale(AHas: Boolean; const M: TTyMat2D): Double;
+begin
+  if AHas and (Abs(M[0] - 1) > 1e-10) and (Abs(M[3] - 1) > 1e-10) then
+    Result := Sqrt(Abs(M[0] * M[3] - M[2] * M[1]))
+  else
+    Result := 1;
+end;
+
+function TTyGeo.SvgNodeItem(ANode: Integer): TTyStElement;
+begin
+  if (ANode >= 0) and (ANode <= High(FSvgEl)) then Result := FSvgEl[ANode]
+  else Result := Default(TTyStElement);
+end;
+
+function TTyGeo.SvgLabelItem(ANode: Integer): TTyStElement;
+begin
+  if (ANode >= 0) and (ANode <= High(FSvgLbl)) then Result := FSvgLbl[ANode]
+  else Result := Default(TTyStElement);
+end;
+
+function TTyGeo.SvgHasLabel(ANode: Integer): Boolean;
+begin
+  Result := (ANode >= 0) and (ANode <= High(FSvgHasLabel)) and FSvgHasLabel[ANode];
+end;
+
+function TTyGeo.SvgLook(ANode: Integer): TTyGeoSvgLook;
+begin
+  if (ANode >= 0) and (ANode <= High(FSvgLook)) then Result := FSvgLook[ANode]
+  else Result := Default(TTyGeoSvgLook);
+end;
+
+function TTyGeo.SvgLabelOf(ANode: Integer): TTyGeoLabel;
+begin
+  if SvgHasLabel(ANode) then Result := FSvgLabel[ANode]
+  else Result := Default(TTyGeoLabel);
+end;
+
+function TTyGeo.SvgGlobal(ANode: Integer; out AM: TTyMat2D): Boolean;
+begin
+  Result := (ANode >= 0) and (ANode <= High(FSvgHasGlobal)) and FSvgHasGlobal[ANode];
+  if Result then AM := FSvgGlobal[ANode] else AM := MatIdentity;
+end;
+
+function TTyGeo.SvgEventGroup(ANode: Integer): Integer;
+begin
+  if (ANode >= 0) and (ANode <= High(FSvgEvent)) then Result := FSvgEvent[ANode]
+  else Result := -1;
+end;
+
+function TTyGeo.SvgHoverGroup(ANode: Integer): Integer;
+begin
+  if (ANode >= 0) and (ANode <= High(FSvgHover)) then Result := FSvgHover[ANode]
+  else Result := -1;
+end;
+
+{ updateTransform down the tree: the transform group (the roam), the SVG
+  group (the raw), the extra root, the parsed root and the document's
+  elements -- an ignored node and all under it never updated }
+procedure TTyGeo.SvgGlobals;
+var
+  n, i, p: Integer;
+  hasP, hp: Boolean;
+  pm, ppm, lm: TTyMat2D;
+begin
+  n := Length(FSvg.Nodes);
+  SetLength(FSvgGlobal, n);
+  SetLength(FSvgHasGlobal, n);
+  SetLength(FSvgReached, n);
+  FSvgGlobalGen := FRoamGen;
+  hasP := HasRoamTransform;
+  pm := MatIdentity;
+  if hasP then pm := RoamMatrix;
+  if TyGsNeedLocal(GsTransOf(FRaw)) then
+  begin
+    lm := TyGeoLocalTransform(FRaw);
+    if hasP then pm := TyGeoMatMul(pm, lm) else pm := lm;
+    hasP := True;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    FSvgHasGlobal[i] := False;
+    FSvgGlobal[i] := MatIdentity;
+    p := FSvg.Nodes[i].Parent;
+    FSvgReached[i] := not FSvg.Nodes[i].Ignore and ((p < 0) or FSvgReached[p]);
+    if not FSvgReached[i] then Continue;
+    if p >= 0 then
+    begin
+      hp := FSvgHasGlobal[p];
+      ppm := FSvgGlobal[p];
+    end
+    else
+    begin
+      hp := hasP;
+      ppm := pm;
+    end;
+    if TyGsNeedLocal(FSvg.Nodes[i].T) then
+    begin
+      lm := TyGsLocal(FSvg.Nodes[i].T);
+      if hp then FSvgGlobal[i] := TyGeoMatMul(ppm, lm) else FSvgGlobal[i] := lm;
+      FSvgHasGlobal[i] := True;
+    end
+    else if hp then
+    begin
+      FSvgGlobal[i] := ppm;
+      FSvgHasGlobal[i] := True;
+    end;
+  end;
+end;
+
+function TTyGeo.SvgStrokes: TTyGsStrokeArray;
+var i: Integer; c: TTyStObject;
+begin
+  Result := nil;
+  SetLength(Result, Length(FSvg.Nodes));
+  for i := 0 to High(Result) do
+  begin
+    Result[i] := Default(TTyGsStroke);
+    Result[i].LineScale := 1;
+    if (i > High(FSvgEl)) or not FSvgEl[i].Exists then Continue;
+    c := FSvgEl[i].Cur;
+    Result[i].LineWidth := c.Num[stkLineWidth];
+    Result[i].HasStroke := TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0);
+    Result[i].HasFill := TyStHasColour(c, stkFill);
+    if FSvgLook[i].NoScale and (i <= High(FSvgHasGlobal)) then
+      Result[i].LineScale := SvgLineScale(FSvgHasGlobal[i], FSvgGlobal[i]);
+  end;
+end;
+
+function TTyGeo.SvgNodeRect(ANode: Integer): TTyXYWH;
+begin
+  Result := TyGsNodeRect(FSvg, ANode, SvgStrokes);
+end;
+
+{ the paint the SVG gives a node: its style's keys, the element's default
+  where a key is not set }
+procedure SvgOwnPaint(const G: TTyGsGraphic; const N: TTyGsNode; var O: TTyStObject;
+  var L: TTyGeoSvgLook);
+
+  procedure One(const P: TTyGsPaint; AKey: TTyStKey; const ADefault: string;
+    var AGrad: Integer);
+  var c: TTyChartColor; s: string;
+  begin
+    case P.Kind of
+      gpUnset:
+        if (ADefault <> '') and TyTryParseChartColor(ADefault, c) then TyStSetColor(O, AKey, c)
+        else TyStSetNone(O, AKey);
+      gpColour:
+        begin
+          { a colour the canvas cannot read still counts as one for hasFill
+            and hasStroke; it draws nothing here }
+          s := Trim(P.Colour);
+          if not TyTryParseChartColor(s, c) then c := 0;
+          TyStSetColor(O, AKey, c);
+        end;
+      gpGradient:
+        begin
+          AGrad := P.Grad;
+          c := 0;
+          if (P.Grad >= 0) and (P.Grad <= High(G.Grads)) and (Length(G.Grads[P.Grad].Stops) > 0) then
+            if not TyTryParseChartColor(Trim(G.Grads[P.Grad].Stops[0].Colour), c) then c := 0;
+          TyStSetColor(O, AKey, c);
+        end;
+    else
+      TyStSetNone(O, AKey);
+    end;
+  end;
+
+begin
+  One(N.St.Fill, stkFill, TyGsDefaultFill(N.Kind), L.FillGrad);
+  One(N.St.Stroke, stkStroke, TyGsDefaultStroke(N.Kind), L.StrokeGrad);
+  if N.St.NumHas[gnLineWidth] then TyStSetNum(O, stkLineWidth, N.St.Num[gnLineWidth])
+  else if N.Kind = gskImage then TyStSetNum(O, stkLineWidth, NaN)
+  else TyStSetNum(O, stkLineWidth, 1);
+  if N.St.NumHas[gnOpacity] then TyStSetNum(O, stkOpacity, N.St.Num[gnOpacity])
+  else TyStSetNum(O, stkOpacity, 1);
+  if N.St.NumHas[gnFillOpacity] then L.FillOpacity := N.St.Num[gnFillOpacity];
+  if N.St.NumHas[gnStrokeOpacity] then L.StrokeOpacity := N.St.Num[gnStrokeOpacity];
+  L.HasDash := N.St.HasDash;
+  L.Dash := Copy(N.St.Dash, 0, Length(N.St.Dash));
+end;
+
+{ MapDraw._buildSVG's per-node picture for an ink: every named shape's style
+  the option's itemStyle over the SVG's own (setStyle: only what the option
+  sets), strokeNoScale, the three state objects and the default proxy, no
+  emphasis z2 lift on a named item; the labels of the self-named shapes and
+  groups (setLabelStyle: the host gets all three states, the text the host's
+  proxy); focus 'self' anywhere: every element a proxy, an emphasis and a
+  blur state (_enableBlurEntireSVG). The flags are kept. }
+procedure TTyGeo.SvgPicture(const AInk: TTyGeoInk);
+var
+  n, i, it, g, si: Integer;
+  old: array of TTyStElement;
+  el, lb: TTyStElement;
+  look: TTyGeoSvgLook;
+  ropt: TJSONObject;
+  o: TTyStObject;
+  np, sp: TTyGeoPaint;
+  s: TTyStName;
+  lbl: TTyGeoLabel;
+  ls: TTyGeoLabelState;
+  nd: TTyGsNode;
+begin
+  n := Length(FSvg.Nodes);
+  old := nil;
+  if Length(FSvgEl) = n then old := Copy(FSvgEl, 0, n);
+  SetLength(FSvgEl, n);
+  SetLength(FSvgLbl, n);
+  SetLength(FSvgLook, n);
+  SetLength(FSvgLabel, n);
+  SetLength(FSvgHasLabel, n);
+  for i := 0 to n - 1 do
+  begin
+    nd := FSvg.Nodes[i];
+    el := Default(TTyStElement);
+    lb := Default(TTyStElement);
+    if old <> nil then
+    begin
+      el.HoverState := old[i].HoverState;
+      el.Selected := old[i].Selected;
+      el.HighByOuter := old[i].HighByOuter;
+    end;
+    look := Default(TTyGeoSvgLook);
+    look.FillGrad := -1;
+    look.StrokeGrad := -1;
+    look.FillOpacity := 1;
+    look.StrokeOpacity := 1;
+    it := FSvgItem[i];
+    g := -1;
+    ropt := nil;
+    if it >= 0 then
+    begin
+      g := GroupIndexOf(FSvg.Named[it].Name);
+      ropt := GroupOpt(g);
+    end;
+    if nd.Kind <> gskGroup then
+    begin
+      el.Exists := True;
+      el.IsPath := not (nd.Kind in [gskTSpan, gskImage]);
+      o := TyStNoObject;
+      SvgOwnPaint(FSvg, nd, o, look);
+      if (it >= 0) and TyGsStyleTag(FSvg.Named[it].Tag) then
+      begin
+        { applyOptionStyleForRegion }
+        look.Styled := True;
+        look.NoScale := True;
+        np := PaintFor(Self, ropt, -1, AInk, False, g);
+        look.Opt := np;
+        if np.FillHas then
+        begin
+          StPaintColour(o, stkFill, np.FillSrc, np.Fill);
+          look.FillGrad := -1;
+          look.HasOptGrad := np.FillGradient.Kind <> cgkNone;
+          look.OptGrad := np.FillGradient;
+        end;
+        if np.StrokeHas then
+        begin
+          StPaintColour(o, stkStroke, np.StrokeSrc, np.Stroke);
+          look.StrokeGrad := -1;
+        end;
+        if np.WidthHas then TyStSetNum(o, stkLineWidth, np.LineWidthLogical);
+        if np.HasOpacity then TyStSetNum(o, stkOpacity, np.Opacity);
+        for s := Low(TTyStName) to High(TTyStName) do
+        begin
+          sp := PaintFor(Self, ropt, Ord(s), AInk, False);
+          look.StateOpt[s] := sp;
+          el.Decl[s] := TyStNoObject;
+          if sp.FillInherit then el.Decl[s].FillInherit := True
+          else if sp.FillHas then StPaintColour(el.Decl[s], stkFill, sp.FillSrc, sp.Fill);
+          if sp.StrokeHas then StPaintColour(el.Decl[s], stkStroke, sp.StrokeSrc, sp.Stroke);
+          if sp.WidthHas then TyStSetNum(el.Decl[s], stkLineWidth, sp.LineWidthLogical);
+          if sp.HasOpacity then TyStSetNum(el.Decl[s], stkOpacity, sp.Opacity);
+          el.HasState[s] := True;
+        end;
+        el.Proxy := True;
+      end;
+      { enableHoverEmphasis: setDefaultStateProxy on the dispatcher and
+        everything under it }
+      if FSvgHover[i] >= 0 then el.Proxy := True;
+      { z2EmphasisLift 0 on every named item }
+      el.NoEmphLift := it >= 0;
+      if FSvgFocusSelf then
+      begin
+        el.Proxy := True;
+        el.HasState[stnEmphasis] := True;
+        el.HasState[stnBlur] := True;
+      end;
+      TyStSetNum(o, stkZ2, 0);
+      TyStSetNum(o, stkIgnore, 0);
+      el.Rest := o;
+      el.Cur := o;
+    end;
+    { resetLabelForRegion on a self-named shape or group }
+    FSvgHasLabel[i] := False;
+    si := FSvgSelf[i];
+    if (si >= 0) and TyGsStateTag(FSvg.Named[si].Tag) then
+    begin
+      lbl := LabelFor(Self, ropt, FSvg.Named[si].Name, AInk, g);
+      if lbl.Exists then
+      begin
+        FSvgHasLabel[i] := True;
+        FSvgLabel[i] := lbl;
+        el.Exists := True;
+        for s := Low(TTyStName) to High(TTyStName) do el.HasState[s] := True;
+        lb.Exists := True;
+        { the text takes the host's proxy: setLabelStyle hands it a styled
+          shape's, enableHoverEmphasis a dispatcher's (a group's too) }
+        lb.Proxy := el.Proxy or (FSvgHover[i] >= 0);
+        for s := Low(TTyStName) to High(TTyStName) do lb.HasState[s] := True;
+        o := TyStNoObject;
+        TyStSetColor(o, stkFill, lbl.Colour);
+        if lbl.HasOpacity then TyStSetNum(o, stkOpacity, lbl.Opacity)
+        else TyStSetNum(o, stkOpacity, 1);
+        TyStSetNum(o, stkZ2, 2);
+        TyStSetNum(o, stkIgnore, Ord(not lbl.Shown));
+        lb.Rest := o;
+        lb.Cur := o;
+        for s := Low(TTyStName) to High(TTyStName) do
+        begin
+          ls := lbl.States[s];
+          o := TyStNoObject;
+          if ls.HasColour then
+          begin
+            if ls.ColourNone then TyStSetNone(o, stkFill)
+            else TyStSetColor(o, stkFill, ls.Colour);
+          end;
+          if ls.HasOpacity then TyStSetNum(o, stkOpacity, ls.Opacity);
+          if ls.HasIgnore then TyStSetNum(o, stkIgnore, Ord(ls.Ignore));
+          lb.Decl[s] := o;
+        end;
+        if nd.Kind = gskGroup then
+        begin
+          o := TyStNoObject;
+          TyStSetNum(o, stkZ2, 0);
+          el.Rest := o;
+          el.Cur := o;
+        end;
+      end;
+    end;
+    FSvgEl[i] := el;
+    FSvgLbl[i] := lb;
+    FSvgLook[i] := look;
+  end;
+  FSvgPlace := nil;
+end;
+
+function TTyGeo.SvgGroupHead(AGroup: Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if (AGroup >= 0) and (AGroup <= High(FSvgDisp)) and (Length(FSvgDisp[AGroup]) > 0) then
+    Exit(FSvgDisp[AGroup][0]);
+  for i := 0 to High(FSvgSelf) do
+    if (FSvgSelf[i] >= 0) and (FSvgEvent[i] = AGroup) then Exit(i);
+end;
+
+{ traverseUpdateState: the node and every node under it }
+procedure TTyGeo.SvgTraverse(ANode, AMode, AValue: Integer);
+var i, h: Integer;
+begin
+  if (ANode < 0) or (ANode > High(FSvgEl)) then Exit;
+  h := FSvgEl[ANode].HoverState;
+  case AMode of
+    cSvgEnterEmph: h := TyStHoverEmphasis;
+    cSvgLeaveEmph: if h = TyStHoverEmphasis then h := TyStHoverNormal;
+    cSvgEnterBlur: h := TyStHoverBlur;
+    cSvgLeaveBlur: if h = TyStHoverBlur then h := TyStHoverNormal;
+    cSvgSetHover: h := AValue;
+    cSvgSetSel:
+      if FSvgEl[ANode].Selected <> (AValue <> 0) then
+      begin
+        FSvgEl[ANode].Selected := AValue <> 0;
+        FSvgChanged := True;
+      end;
+  end;
+  if h <> FSvgEl[ANode].HoverState then
+  begin
+    FSvgEl[ANode].HoverState := h;
+    FSvgChanged := True;
+  end;
+  for i := 0 to High(FSvg.Nodes[ANode].Children) do
+    SvgTraverse(FSvg.Nodes[ANode].Children[i], AMode, AValue);
+end;
+
+{ updateSelectStatus: a node with event data (a self-named item) and all
+  under it take its name's selection; nothing under it is asked again }
+procedure TTyGeo.SvgSyncSelection;
+
+  procedure Walk(ANode: Integer);
+  var i, g: Integer;
+  begin
+    if FSvgSelf[ANode] >= 0 then
+    begin
+      g := FSvgEvent[ANode];
+      if (g >= 0) and (g <= High(FSt)) then SvgTraverse(ANode, cSvgSetSel, Ord(FSt[g].Selected))
+      else SvgTraverse(ANode, cSvgSetSel, 0);
+      Exit;
+    end;
+    for i := 0 to High(FSvg.Nodes[ANode].Children) do Walk(FSvg.Nodes[ANode].Children[i]);
+  end;
+
+begin
+  if Length(FSvg.Nodes) > 0 then Walk(TyGsRootNode);
+end;
+
+procedure TTyGeo.SvgSetup;
+var
+  n, i, k, g, p: Integer;
+  d: TJSONData;
+  tok: TTyGeoToken;
+  strokes: TTyGsStrokeArray;
+  c: TTyPointF;
+  pt: TTyGeoPt;
+begin
+  n := Length(FSvg.Nodes);
+  FGroupsOk := False;
+  EnsureGroups;
+  SetLength(FSvgItem, n);
+  SetLength(FSvgSelf, n);
+  SetLength(FSvgEvent, n);
+  SetLength(FSvgHover, n);
+  SetLength(FSvgIsDisp, n);
+  SetLength(FSvgSilentOpt, n);
+  SetLength(FSvgHbo, n);
+  for i := 0 to n - 1 do
+  begin
+    FSvgItem[i] := -1;
+    FSvgSelf[i] := -1;
+    FSvgIsDisp[i] := False;
+    FSvgSilentOpt[i] := -1;
+    FSvgHbo[i] := 0;
+  end;
+  FSvgDisp := nil;
+  SetLength(FSvgDisp, Length(FGroupNames));
+  FSvgFocusSelf := False;
+  for k := 0 to High(FSvg.Named) do
+  begin
+    i := FSvg.Named[k].Node;
+    FSvgItem[i] := k;
+    g := GroupIndexOf(FSvg.Named[k].Name);
+    { `regionModel.get('silent', true)`: the region option's own }
+    d := PathGet(GroupOpt(g), ['silent']);
+    if d <> nil then FSvgSilentOpt[i] := Ord(Truthy(d));
+    if FSvg.Named[k].From >= 0 then Continue;
+    FSvgSelf[i] := k;
+    if not TyGsStateTag(FSvg.Named[k].Tag) then Continue;
+    { resetStateTriggerForRegion: a high-down dispatcher unless the emphasis
+      is disabled; its focus 'self' blurs the whole SVG }
+    if (FKind = gkComponent) and (g >= 0) then
+    begin
+      d := Chain(GroupOpt(g), ['emphasis', 'focus'], tok);
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'self') then
+        FSvgFocusSelf := True;
+    end;
+    if (g >= 0) and not GroupEmphasisDisabled(g) then
+    begin
+      FSvgIsDisp[i] := True;
+      SetLength(FSvgDisp[g], Length(FSvgDisp[g]) + 1);
+      FSvgDisp[g][High(FSvgDisp[g])] := i;
+    end;
+  end;
+  { the event group: the innermost self-named item over a node; the hover
+    group: the outermost dispatcher (findEventDispatcher keeps the last it
+    meets on the way up) }
+  for i := 0 to n - 1 do
+  begin
+    p := FSvg.Nodes[i].Parent;
+    if FSvgSelf[i] >= 0 then FSvgEvent[i] := GroupIndexOf(FSvg.Named[FSvgSelf[i]].Name)
+    else if p >= 0 then FSvgEvent[i] := FSvgEvent[p]
+    else FSvgEvent[i] := -1;
+    if (p >= 0) and (FSvgHover[p] >= 0) then FSvgHover[i] := FSvgHover[p]
+    else if FSvgIsDisp[i] then FSvgHover[i] := GroupIndexOf(FSvg.Named[FSvgSelf[i]].Name)
+    else FSvgHover[i] := -1;
+  end;
+  SvgGlobals;
+  { GeoSVGRegion.calcCenter: asked once, on the normal style of the picture }
+  SvgPicture(Default(TTyGeoInk));
+  strokes := SvgStrokes;
+  for k := 0 to High(FSvgRegionNode) do
+  begin
+    c := TyGsRegionCentre(FSvg, FSvgRegionNode[k], strokes);
+    pt.X := c.X;
+    pt.Y := c.Y;
+    FSource.FRegions[k].SetCenter(pt);
+  end;
+  FDrawOk := False;
+  FItemsOk := False;
+end;
+
+{ updateInnerText of a label host's text: the host's rect (now) through the
+  host's transform, 'inside' its centre, the offset and the turn as
+  innerTransformable takes them }
+function TTyGeo.SvgLabelPlace(ANode, APPI: Integer; out AX, AY, ARot, ATX, ATY: Double): Boolean;
+begin
+  AX := NaN; AY := NaN; ARot := 0; ATX := NaN; ATY := NaN;
+  Result := SvgHasLabel(ANode);
+  if not Result then Exit;
+  if (ANode > High(FSvgPlace)) or not FSvgPlace[ANode].Valid then SvgPlaceLabel(ANode, APPI);
+  AX := FSvgPlace[ANode].AX;
+  AY := FSvgPlace[ANode].AY;
+  ARot := FSvgPlace[ANode].Rot;
+  ATX := FSvgPlace[ANode].TX;
+  ATY := FSvgPlace[ANode].TY;
+end;
+
+{ updateInnerText, run while the host is dirty: the host's rect -- a group's
+  through its children's rects, which zrender has not updated yet that
+  frame (their transforms the last frame's; none on the first) -- through
+  the host's transform, 'inside' its centre, the offset and the turn }
+procedure TTyGeo.SvgPlaceLabel(ANode, APPI: Integer);
+var
+  lbl: TTyGeoLabel;
+  c: TTyStObject;
+  r: TTyXYWH;
+  m: TTyMat2D;
+  scale, offX, offY, ox, oy, m4, m5, t4, sn, cs, AX, AY, ARot: Double;
+  hasOff: Boolean;
+  s: TTyStName;
+  strokes: TTyGsStrokeArray;
+  k: Integer;
+begin
+  if Length(FSvgPlace) <> Length(FSvg.Nodes) then SetLength(FSvgPlace, Length(FSvg.Nodes));
+  FSvgPlace[ANode] := Default(TTyGeoSvgPlace);
+  if not SvgHasLabel(ANode) then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  lbl := FSvgLabel[ANode];
+  strokes := SvgStrokes;
+  if FSvg.Nodes[ANode].Kind = gskGroup then
+    for k := 0 to High(strokes) do
+      if (k <> ANode) and FSvgLook[k].NoScale then
+      begin
+        if (k <= High(FSvgPrevHas)) and FSvgPrevHas[k] then
+          strokes[k].LineScale := SvgLineScale(True, FSvgPrevGlobal[k])
+        else
+          strokes[k].LineScale := 1;
+      end;
+  r := TyGsNodeRect(FSvg, ANode, strokes);
+  if SvgGlobal(ANode, m) then r := TyGsRectApply(r, m);
+  { calculateTextPosition 'inside' }
+  AX := r.X + r.W / 2;
+  AY := r.Y + r.H / 2;
+  offX := 0;
+  offY := 0;
+  hasOff := lbl.HasOffset;
+  if lbl.HasOffset then
+  begin
+    offX := lbl.OffX;
+    offY := lbl.OffY;
+  end;
+  if lbl.HasRotate then ARot := lbl.RotationRad;
+  c := FSvgLbl[ANode].Cur;
+  for s := Low(TTyStName) to High(TTyStName) do
+  begin
+    if not (s in FSvgLbl[ANode].States) then Continue;
+    if lbl.States[s].HasOffset then
+    begin
+      hasOff := True;
+      offX := lbl.States[s].OffX;
+      offY := lbl.States[s].OffY;
+    end;
+    if lbl.States[s].HasRotate then ARot := lbl.States[s].RotationRad;
+  end;
+  if c.Has[stkZ2] then ;
+  offX := offX * scale;
+  offY := offY * scale;
+  if hasOff then
+  begin
+    AX := AX + offX;
+    AY := AY + offY;
+    ox := -offX;
+    oy := -offY;
+  end
+  else
+  begin
+    ox := 0;
+    oy := 0;
+  end;
+  if (ox <> 0) or (oy <> 0) then
+  begin
+    m4 := -ox;
+    m5 := -oy;
+  end
+  else
+  begin
+    m4 := 0;
+    m5 := 0;
+  end;
+  if ARot <> 0 then
+  begin
+    sn := TyJsSin(ARot);
+    cs := TyJsCos(ARot);
+    t4 := cs * m4 + sn * m5;
+    m5 := cs * m5 - sn * m4;
+    m4 := t4;
+  end;
+  FSvgPlace[ANode].Valid := True;
+  FSvgPlace[ANode].AX := AX;
+  FSvgPlace[ANode].AY := AY;
+  FSvgPlace[ANode].Rot := ARot;
+  FSvgPlace[ANode].TX := m4 + (ox + AX);
+  FSvgPlace[ANode].TY := m5 + (oy + AY);
+end;
+
+function TTyGeo.SvgSaveFlags: TTyGeoSvgFlags;
+var i: Integer;
+begin
+  Result := Default(TTyGeoSvgFlags);
+  if not FIsSvg or (Length(FSvgEl) = 0) then Exit;
+  Result.Valid := True;
+  Result.MapName := FSpec.MapName;
+  Result.Count := Length(FSvgEl);
+  SetLength(Result.Hover, Result.Count);
+  SetLength(Result.Hbo, Result.Count);
+  for i := 0 to Result.Count - 1 do
+  begin
+    Result.Hover[i] := FSvgEl[i].HoverState;
+    if i <= High(FSvgHbo) then Result.Hbo[i] := FSvgHbo[i];
+  end;
+  Result.Blured := FIsBlured;
+  Result.Prev := Copy(FSvgPrevGlobal, 0, Length(FSvgPrevGlobal));
+  Result.PrevHas := Copy(FSvgPrevHas, 0, Length(FSvgPrevHas));
+end;
+
+procedure TTyGeo.SvgRestoreFlags(const AFlags: TTyGeoSvgFlags);
+var i: Integer;
+begin
+  if not (AFlags.Valid and FIsSvg and (AFlags.MapName = FSpec.MapName)
+    and (AFlags.Count = Length(FSvgEl)) and (Length(FSvgHbo) = AFlags.Count)) then Exit;
+  for i := 0 to AFlags.Count - 1 do
+  begin
+    FSvgEl[i].HoverState := AFlags.Hover[i];
+    FSvgHbo[i] := AFlags.Hbo[i];
+  end;
+  FIsBlured := AFlags.Blured;
+  FSvgPrevGlobal := Copy(AFlags.Prev, 0, Length(AFlags.Prev));
+  FSvgPrevHas := Copy(AFlags.PrevHas, 0, Length(AFlags.PrevHas));
+end;
+
+{ the first family of a CSS list, unquoted }
+function SvgFamily(const S: string): string;
+var p: Integer;
+begin
+  Result := S;
+  p := Pos(',', Result);
+  if p > 0 then Result := Copy(Result, 1, p - 1);
+  Result := Trim(Result);
+  if (Length(Result) >= 2) and (Result[1] in ['''', '"']) then
+    Result := Copy(Result, 2, Length(Result) - 2);
+end;
+
+function SvgWeight(const S: string): Integer;
+var v: Double;
+begin
+  Result := 400;
+  if (S = 'bold') or (S = 'bolder') then Exit(700);
+  if S = 'lighter' then Exit(300);
+  v := TyJsToNumber(S);
+  if not IsNan(v) and (v > 0) then Result := Round(v);
+end;
+
+{ the elements of an SVG map: every node under the root in the order
+  zrender's storage adds them -- a group's children, then a host's text --
+  with the current state values, the global transforms, upstream's own
+  contain, the root's clip (the bounding rect) and the geo's }
+function TyBuildGeoSvg(AGeo: TTyGeo; const AInk: TTyGeoInk;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
+  AApplyStates: Boolean): Integer;
+var
+  scale: Double;
+  clip: TTyXYWH;
+  strokes: TTyGsStrokeArray;
+  mask: TFpuMask;
+
+  function Datum(ANode: Integer): TTyChartDatumRef;
+  var g: Integer;
+  begin
+    g := AGeo.FSvgEvent[ANode];
+    if AGeo.Data.Active then
+    begin
+      if (g >= 0) and (g <= High(AGeo.Data.Groups)) and (AGeo.Data.Groups[g].Row >= 0) then
+        Result := TyChartDatum(AGeo.Data.SeriesIndex, AGeo.Data.Groups[g].Row)
+      else
+        Result := TyChartNoDatum;
+    end
+    else if g >= 0 then
+    begin
+      Result := TyChartComponentDatum(ctkGeo, AGeo.Index, g);
+      { the hover's group rides in the raw index: the outermost dispatcher
+        over the element, not its own name }
+      Result.RawDataIndex := AGeo.FSvgHover[ANode];
+    end
+    else
+      Result := TyChartNoDatum;
+  end;
+
+  { silent on the node or any node over it (the region option's own over
+    the parser's), or on the whole map }
+  function SilentAt(ANode: Integer): Boolean;
+  var k: Integer;
+  begin
+    Result := AGeo.Spec.Silent;
+    k := ANode;
+    while (k >= 0) and not Result do
+    begin
+      if AGeo.FSvgSilentOpt[k] >= 0 then Result := AGeo.FSvgSilentOpt[k] = 1
+      else Result := AGeo.FSvg.Nodes[k].Silent;
+      k := AGeo.FSvg.Nodes[k].Parent;
+    end;
+  end;
+
+  function WithAlpha(AColour: TTyChartColor; AAlpha: Double): TTyChartColor;
+  var a: Integer;
+  begin
+    if IsNan(AAlpha) or (AAlpha >= 1) then Exit(AColour);
+    if AAlpha < 0 then AAlpha := 0;
+    a := Round(((AColour shr 24) and $FF) * AAlpha);
+    Result := (AColour and $00FFFFFF) or (TTyChartColor(a) shl 24);
+  end;
+
+  procedure Finish(var AEl: TTyChartElement; ANode: Integer; AZ2: Double;
+    AOwnSilent: Boolean; ALabel: Boolean = False);
+  begin
+    AEl.ZrHit.SvgNode := ANode + 1;
+    AEl.ZrHit.SvgLabel := ALabel;
+    AEl.Z := AGeo.Spec.Z;
+    AEl.Z2 := Round(AZ2);
+    AEl.Silent := AOwnSilent or SilentAt(ANode);
+    AEl.Datum := Datum(ANode);
+    AEl.HasClip := True;
+    AEl.ClipRect := TyRectOfXYWH(clip);
+    AEl.ClipHits := True;
+    AList.Add(AEl);
+    Inc(Result);
+  end;
+
+  function SvgGradient(AG, ANode: Integer; const M: TTyMat2D): TTyChartGradient;
+  var gr: TTyGsGradient; k: Integer; c: TTyChartColor; det: Double;
+  begin
+    Result := Default(TTyChartGradient);
+    if (AG < 0) or (AG > High(AGeo.FSvg.Grads)) then Exit;
+    gr := AGeo.FSvg.Grads[AG];
+    if gr.Radial then Result.Kind := cgkRadial else Result.Kind := cgkLinear;
+    Result.Global := gr.Global;
+    if gr.Global then
+    begin
+      { the coordinates are the element's own: through its transform }
+      Result.X := M[0] * gr.X + M[2] * gr.Y + M[4];
+      Result.Y := M[1] * gr.X + M[3] * gr.Y + M[5];
+      Result.X2 := M[0] * gr.X2 + M[2] * gr.Y2 + M[4];
+      Result.Y2 := M[1] * gr.X2 + M[3] * gr.Y2 + M[5];
+      det := Sqrt(Abs(M[0] * M[3] - M[2] * M[1]));
+      Result.R := gr.R * det;
+    end
+    else
+    begin
+      Result.X := gr.X;
+      Result.Y := gr.Y;
+      Result.X2 := gr.X2;
+      Result.Y2 := gr.Y2;
+      Result.R := gr.R;
+    end;
+    SetLength(Result.Stops, Length(gr.Stops));
+    for k := 0 to High(gr.Stops) do
+    begin
+      Result.Stops[k].Offset := gr.Stops[k].Offset;
+      if not TyTryParseChartColor(Trim(gr.Stops[k].Colour), c) then c := 0;
+      Result.Stops[k].Color := c;
+    end;
+    if ANode < 0 then ;
+  end;
+
+  procedure EmitShape(ANode: Integer);
+  var
+    nd: TTyGsNode;
+    st: TTyStElement;
+    c: TTyStObject;
+    look: TTyGeoSvgLook;
+    hasM, hasStroke, hasFill: Boolean;
+    m, inv: TTyMat2D;
+    cmds: TTyPathCmdArray;
+    pts: TTyPointFArray;
+    el: TTyChartElement;
+    shape: TTyChartShape;
+    det, lw, ls, w, x, y: Double;
+    box, r: TTyXYWH;
+    k: Integer;
+    sn: TTyStName;
+    dash: TTyOptDash;
+    dashLogical: TTyDoubleArray;
+    optDash: Boolean;
+    q: array[0..3] of TTyPointF;
+  begin
+    nd := AGeo.FSvg.Nodes[ANode];
+    st := AGeo.FSvgEl[ANode];
+    c := st.Cur;
+    look := AGeo.FSvgLook[ANode];
+    hasM := AGeo.SvgGlobal(ANode, m);
+    if not TyGeoMatInvert(m, inv) then inv := MatIdentity;
+    det := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]));
+    case nd.Kind of
+      gskTSpan:
+        begin
+          box := TyGsNodeRect(AGeo.FSvg, ANode, nil);
+          r := TyGsRectApply(box, m);
+          el := TyChartElement(TyShapeRect(TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H)));
+          if not nd.Invisible and TyStHasColour(c, stkFill) then
+          begin
+            el.Caption.Text := nd.St.Text;
+            el.Caption.FontName := SvgFamily(nd.St.Font.Family);
+            el.Caption.FontSizeLogical := TyFontSizeFromPx(nd.St.Font.SizePx * det / scale);
+            el.Caption.FontWeight := SvgWeight(nd.St.Font.Weight);
+            el.Caption.Colour := WithAlpha(c.Color[stkFill], look.FillOpacity);
+            el.Caption.X := m[4];
+            el.Caption.Y := m[5];
+            if nd.St.StrHas[gsTextAlign] and (nd.St.Str[gsTextAlign] = 'center') then
+              el.Caption.AnchorH := tahCentre
+            else if nd.St.StrHas[gsTextAlign]
+              and ((nd.St.Str[gsTextAlign] = 'right') or (nd.St.Str[gsTextAlign] = 'end')) then
+              el.Caption.AnchorH := tahRight
+            else
+              el.Caption.AnchorH := tahLeft;
+            if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'middle') then
+              el.Caption.AnchorV := tavMiddle
+            else if nd.St.StrHas[gsTextBaseline]
+              and ((nd.St.Str[gsTextBaseline] = 'bottom') or (nd.St.Str[gsTextBaseline] = 'alphabetic')
+                or (nd.St.Str[gsTextBaseline] = 'ideographic')) then
+              el.Caption.AnchorV := tavBottom
+            else
+              el.Caption.AnchorV := tavTop;
+            el.Caption.RotationRad := -TyJsAtan2(m[1], m[0]);
+            el.Caption.Truncate := False;
+            if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
+            begin
+              el.Caption.StrokeColour := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
+              el.Caption.StrokeWidthLogical := c.Num[stkLineWidth] * det / scale;
+            end;
+          end;
+          el.Style.Alpha := c.Num[stkOpacity];
+          el.ZrHit.Active := True;
+          el.ZrHit.RectOnly := True;
+          el.ZrHit.ToLocal := inv;
+          el.ZrHit.Box := box;
+        end;
+      gskImage:
+        begin
+          x := nd.St.IX;
+          if IsNan(x) or (x = 0) then x := 0;
+          y := nd.St.IY;
+          if IsNan(y) or (y = 0) then y := 0;
+          box := TyGsNodeRect(AGeo.FSvg, ANode, nil);
+          q[0] := TyPointF(m[0] * box.X + m[2] * box.Y + m[4], m[1] * box.X + m[3] * box.Y + m[5]);
+          q[1] := TyPointF(m[0] * (box.X + box.W) + m[2] * box.Y + m[4], m[1] * (box.X + box.W) + m[3] * box.Y + m[5]);
+          q[2] := TyPointF(m[0] * (box.X + box.W) + m[2] * (box.Y + box.H) + m[4],
+            m[1] * (box.X + box.W) + m[3] * (box.Y + box.H) + m[5]);
+          q[3] := TyPointF(m[0] * box.X + m[2] * (box.Y + box.H) + m[4], m[1] * box.X + m[3] * (box.Y + box.H) + m[5]);
+          SetLength(pts, 4);
+          for k := 0 to 3 do pts[k] := q[k];
+          el := TyChartElement(TyShapePolygon(pts));
+          if not nd.Invisible and (Copy(nd.St.Image, 1, 5) = 'data:') and (nd.St.IW > 0) and (nd.St.IH > 0) then
+          begin
+            el.Style.HasFill := True;
+            el.Style.FillColor := 0;
+            el.Style.FillPattern.Present := True;
+            el.Style.FillPattern.Image := nd.St.Image;
+            el.Style.FillPattern.Repetition := 'no-repeat';
+            el.Style.FillPattern.HasMatrix := True;
+            el.Style.FillPattern.UnitImage := True;
+            el.Style.FillPattern.Matrix[0] := m[0] * nd.St.IW / scale;
+            el.Style.FillPattern.Matrix[1] := m[1] * nd.St.IW / scale;
+            el.Style.FillPattern.Matrix[2] := m[2] * nd.St.IH / scale;
+            el.Style.FillPattern.Matrix[3] := m[3] * nd.St.IH / scale;
+            el.Style.FillPattern.Matrix[4] := (m[0] * x + m[2] * y + m[4]) / scale;
+            el.Style.FillPattern.Matrix[5] := (m[1] * x + m[3] * y + m[5]) / scale;
+          end;
+          el.Style.Alpha := c.Num[stkOpacity];
+          el.ZrHit.Active := True;
+          el.ZrHit.RectOnly := True;
+          el.ZrHit.ToLocal := inv;
+          el.ZrHit.Box := box;
+        end;
+    else
+      begin
+        TyGsPathCmds(nd.Path, m, cmds, pts);
+        shape := TyShapePolygon(pts);
+        shape.Cmds := cmds;
+        shape.HitNonZero := True;
+        el := TyChartElement(shape);
+        hasFill := TyStHasColour(c, stkFill);
+        lw := c.Num[stkLineWidth];
+        hasStroke := TyStHasColour(c, stkStroke) and (lw > 0);
+        if not nd.Invisible then
+        begin
+          if hasFill then
+          begin
+            el.Style.HasFill := True;
+            el.Style.FillColor := WithAlpha(c.Color[stkFill], look.FillOpacity);
+            if not st.Merged.Has[stkFill] then
+            begin
+              if look.HasOptGrad then el.Style.FillGradient := look.OptGrad
+              else if look.FillGrad >= 0 then el.Style.FillGradient := SvgGradient(look.FillGrad, ANode, m);
+            end;
+          end;
+          if hasStroke then
+          begin
+            el.Style.StrokeColor := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
+            if look.NoScale then w := lw else w := lw * det / scale;
+            el.Style.StrokeWidthLogical := w;
+            { the dash: the option's (its normal, a state's over it in list
+              order) on a named shape, else the SVG's own }
+            optDash := look.Styled and look.Opt.DashHas;
+            dash := look.Opt.Dash;
+            dashLogical := look.Opt.DashLogical;
+            if look.Styled then
+              for sn := Low(TTyStName) to High(TTyStName) do
+                if (sn in st.States) and look.StateOpt[sn].DashHas then
+                begin
+                  optDash := True;
+                  dash := look.StateOpt[sn].Dash;
+                  dashLogical := look.StateOpt[sn].DashLogical;
+                end;
+            if optDash then
+              el.Style.DashLogical := TyDashPattern(dash, dashLogical, lw)
+            else if look.HasDash and (Length(look.Dash) > 0) then
+            begin
+              SetLength(el.Style.DashLogical, Length(look.Dash));
+              for k := 0 to High(look.Dash) do
+                if look.NoScale then el.Style.DashLogical[k] := look.Dash[k]
+                else el.Style.DashLogical[k] := look.Dash[k] * det / scale;
+            end;
+          end;
+        end;
+        el.Style.Alpha := c.Num[stkOpacity];
+        { Path.contain: in the element's own coordinates }
+        el.ZrHit.Active := True;
+        el.ZrHit.Path := nd.Path;
+        el.ZrHit.ToLocal := inv;
+        el.ZrHit.Box := TyGsNodeRect(AGeo.FSvg, ANode, strokes);
+        el.ZrHit.Fill := hasFill;
+        if hasStroke then
+        begin
+          if look.NoScale then ls := SvgLineScale(hasM, m) else ls := 1;
+          if ls > 1e-10 then
+          begin
+            w := lw;
+            if not hasFill then w := JsMax(w, TyGeoStrokeContain);
+            el.ZrHit.Stroke := True;
+            el.ZrHit.LineWidth := w / ls;
+          end;
+        end;
+      end;
+    end;
+    Finish(el, ANode, c.Num[stkZ2], False);
+  end;
+
+  procedure EmitLabel(ANode: Integer);
+  var
+    lbl: TTyGeoLabel;
+    c: TTyStObject;
+    txt, fam: string;
+    fsz, fwt: Integer;
+    ax, ay, rot, tx, ty, w, h: Double;
+    s: TTyStName;
+    box: TTyRectF;
+    el: TTyChartElement;
+  begin
+    if AMeasurer = nil then Exit;
+    if not AGeo.SvgLabelPlace(ANode, APPI, ax, ay, rot, tx, ty) then Exit;
+    lbl := AGeo.FSvgLabel[ANode];
+    c := AGeo.FSvgLbl[ANode].Cur;
+    txt := lbl.Text;
+    fsz := lbl.FontSizeLogical;
+    fwt := lbl.FontWeight;
+    fam := lbl.FontFamily;
+    for s := Low(TTyStName) to High(TTyStName) do
+    begin
+      if not (s in AGeo.FSvgLbl[ANode].States) then Continue;
+      txt := lbl.States[s].Text;
+      if lbl.States[s].HasFontSize then fsz := lbl.States[s].FontSizeLogical;
+      if lbl.States[s].HasFontWeight then fwt := lbl.States[s].FontWeight;
+      if lbl.States[s].HasFontFamily then fam := lbl.States[s].FontFamily;
+    end;
+    w := 0;
+    h := 0;
+    if txt <> '' then AMeasurer.MeasureLine(txt, fam, fsz, fwt, w, h);
+    if IsNan(tx) or IsNan(ty) then
+    begin
+      tx := 0;
+      ty := 0;
+    end;
+    box := TyAnchorBox(tx, ty, w, h, tahCentre, tavMiddle);
+    el := TyChartElement(TyShapeRect(box));
+    el.Caption.Text := txt;
+    el.Caption.FontName := fam;
+    el.Caption.FontSizeLogical := fsz;
+    el.Caption.FontWeight := fwt;
+    if TyStHasColour(c, stkFill) then el.Caption.Colour := c.Color[stkFill]
+    else el.Caption.Colour := 0;
+    el.Caption.X := tx;
+    el.Caption.Y := ty;
+    el.Caption.AnchorH := tahCentre;
+    el.Caption.AnchorV := tavMiddle;
+    el.Caption.RotationRad := rot;
+    el.Caption.Truncate := False;
+    el.Style.Alpha := c.Num[stkOpacity];
+    el.Ignore := (c.Num[stkIgnore] <> 0) or (txt = '') or (w <= 0) or (h <= 0)
+      or IsNan(ax) or IsNan(ay);
+    { a text is silent on its own or under a silent host }
+    Finish(el, ANode, c.Num[stkZ2], lbl.Silent, True);
+  end;
+
+  procedure Emit(ANode: Integer);
+  var i: Integer;
+  begin
+    if AGeo.FSvg.Nodes[ANode].Ignore then Exit;
+    if AGeo.FSvg.Nodes[ANode].Kind = gskGroup then
+    begin
+      for i := 0 to High(AGeo.FSvg.Nodes[ANode].Children) do
+        Emit(AGeo.FSvg.Nodes[ANode].Children[i]);
+    end
+    else
+      EmitShape(ANode);
+    if AGeo.SvgHasLabel(ANode) then EmitLabel(ANode);
+  end;
+
+var m0: TTyMat2D;
+begin
+  Result := 0;
+  AGeo.Draw(AInk, APPI);
+  if AApplyStates then AGeo.ApplyStates(AInk, APPI);
+  if Length(AGeo.FSvg.Nodes) = 0 then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  mask := MaskFpu;
+  try
+    { the root's clip: the bounding rect through the root's transform; the
+      geo's own clip, the view rect, over it }
+    if AGeo.SvgGlobal(TyGsRootNode, m0) then clip := TyGsRectApply(AGeo.FSvg.Rect, m0)
+    else clip := AGeo.FSvg.Rect;
+    if AGeo.Spec.Clip then
+      clip := TyXYWH(Max(clip.X, AGeo.ViewRect.X), Max(clip.Y, AGeo.ViewRect.Y),
+        Min(clip.X + clip.W, AGeo.ViewRect.X + AGeo.ViewRect.W) - Max(clip.X, AGeo.ViewRect.X),
+        Min(clip.Y + clip.H, AGeo.ViewRect.Y + AGeo.ViewRect.H) - Max(clip.Y, AGeo.ViewRect.Y));
+    strokes := AGeo.SvgStrokes;
+    if AGeo.FSvgPlaceGen <> AGeo.RoamGen then
+    begin
+      AGeo.FSvgPlace := nil;
+      AGeo.FSvgPlaceGen := AGeo.RoamGen;
+    end;
+    Emit(TyGsRootNode);
+    { this frame's transforms are what the next one's group labels read }
+    AGeo.FSvgPrevGlobal := Copy(AGeo.FSvgGlobal, 0, Length(AGeo.FSvgGlobal));
+    AGeo.FSvgPrevHas := Copy(AGeo.FSvgHasGlobal, 0, Length(AGeo.FSvgHasGlobal));
+  finally
+    UnmaskFpu(mask);
+  end;
 end;
 
 { ==================== the elements ==================== }
@@ -4522,6 +6042,12 @@ var
 begin
   Result := 0;
   if (AGeo = nil) or (AList = nil) then Exit;
+  if AGeo.IsSvg then
+  begin
+    if AGeo.Valid and AGeo.Spec.Show then
+      Result := TyBuildGeoSvg(AGeo, AInk, AMeasurer, APPI, AList, AApplyStates);
+    Exit;
+  end;
   dr := AGeo.Draw(AInk, APPI);
   { a render applies the states its elements are in (updateStates); a
     roam's patch of a standing list does not -- that waits for the frame
@@ -4794,5 +6320,6 @@ end;
 finalization
   TyChartClearMaps;
   FreeAndNil(GGeoDefaults);
+  FreeAndNil(GGeoSvgDefaults);
   FreeAndNil(GMapDefaults);
 end.
