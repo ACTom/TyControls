@@ -21422,6 +21422,2583 @@
    ]
   },
   {
+   "id": "g-select-legend",
+   "note": "a legend hides category k0 (node a): the edge data drops a-b and a-c (filterSelf), so an edge's data index is not its link's row; selectedMode 'single': click the edge b-c (edge data 0, link 1), then c-d, select by action the raw index 1 (b-c again: its link's row, edge data 0), hover c-d, leave",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "data": [
+      "k0"
+     ],
+     "selected": {
+      "k0": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "name": "G",
+      "layout": "none",
+      "symbolSize": 30,
+      "left": 100,
+      "top": 100,
+      "width": 300,
+      "height": 150,
+      "label": {
+       "show": true
+      },
+      "lineStyle": {
+       "color": "#888888",
+       "width": 2,
+       "opacity": 0.8
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 100,
+        "y": 100,
+        "itemStyle": {
+         "color": "#5070dd"
+        },
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 300,
+        "y": 100,
+        "itemStyle": {
+         "color": "#b6d634"
+        },
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 200,
+        "y": 250,
+        "itemStyle": {
+         "color": "#505372"
+        },
+        "category": 1
+       },
+       {
+        "name": "d",
+        "x": 400,
+        "y": 250,
+        "itemStyle": {
+         "color": "#ff994d"
+        },
+        "category": 1
+       },
+       {
+        "name": "e",
+        "x": 400,
+        "y": 130,
+        "itemStyle": {
+         "color": "#0ca8df"
+        },
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       }
+      ],
+      "selectedMode": "single",
+      "categories": [
+       {
+        "name": "k0"
+       },
+       {
+        "name": "k1"
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "type": "init",
+     "events": [],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "graph",
+        "selectedMap": null,
+        "selectedIndices": [],
+        "nodes": [
+         {
+          "raw": 1,
+          "name": "b",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#b6d634",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#b6d634",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "b",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 2,
+          "name": "c",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#505372",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#505372",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "c",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 3,
+          "name": "d",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#ff994d",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#ff994d",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "d",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 4,
+          "name": "e",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#0ca8df",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#0ca8df",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "e",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         }
+        ],
+        "edges": [
+         {
+          "raw": 1,
+          "name": "b > c",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         },
+         {
+          "raw": 2,
+          "name": "c > d",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "click",
+     "x": 250,
+     "y": 175,
+     "aim": "edge s0 i0",
+     "hit": {
+      "hd": {
+       "s": 0,
+       "i": 0,
+       "dt": "edge"
+      }
+     },
+     "events": [
+      {
+       "type": "mouseover",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "dataType": "edge",
+        "name": "b > c",
+        "selfType": null,
+        "nodeData": null
+       }
+      },
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "dataType": "edge",
+        "dataIndexInside": 0,
+        "seriesIndex": 0,
+        "isFromClick": true
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": true,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "dataType": "edge",
+         "dataIndexInside": 0,
+         "seriesIndex": 0,
+         "isFromClick": true
+        },
+        "escapeConnect": true
+       }
+      },
+      {
+       "type": "click",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "dataType": "edge",
+        "name": "b > c",
+        "selfType": null,
+        "nodeData": null
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "graph",
+        "selectedMap": {
+         "b > c": true
+        },
+        "selectedIndices": [
+         1
+        ],
+        "nodes": [
+         {
+          "raw": 1,
+          "name": "b",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#b6d634",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#b6d634",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "b",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 2,
+          "name": "c",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#505372",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#505372",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "c",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 3,
+          "name": "d",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#ff994d",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#ff994d",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "d",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 4,
+          "name": "e",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#0ca8df",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#0ca8df",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "e",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         }
+        ],
+        "edges": [
+         {
+          "raw": 1,
+          "name": "b > c",
+          "hs": 2,
+          "hbo": 0,
+          "line": {
+           "st": "select,emphasis",
+           "hs": 2,
+           "sel": true,
+           "px": true,
+           "z2": 10,
+           "fill": null,
+           "stroke": "rgba(149,149,149,1)",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         },
+         {
+          "raw": 2,
+          "name": "c > d",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "click",
+     "x": 300,
+     "y": 250,
+     "aim": "edge s0 i1",
+     "hit": {
+      "hd": {
+       "s": 0,
+       "i": 1,
+       "dt": "edge"
+      }
+     },
+     "events": [
+      {
+       "type": "mouseout",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "dataType": "edge",
+        "name": "b > c",
+        "selfType": null,
+        "nodeData": null
+       }
+      },
+      {
+       "type": "mouseover",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 2,
+        "dataType": "edge",
+        "name": "c > d",
+        "selfType": null,
+        "nodeData": null
+       }
+      },
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "dataType": "edge",
+        "dataIndexInside": 1,
+        "seriesIndex": 0,
+        "isFromClick": true
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": true,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "dataType": "edge",
+         "dataIndexInside": 1,
+         "seriesIndex": 0,
+         "isFromClick": true
+        },
+        "escapeConnect": true
+       }
+      },
+      {
+       "type": "click",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 2,
+        "dataType": "edge",
+        "name": "c > d",
+        "selfType": null,
+        "nodeData": null
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "graph",
+        "selectedMap": {
+         "c > d": true
+        },
+        "selectedIndices": [
+         2
+        ],
+        "nodes": [
+         {
+          "raw": 1,
+          "name": "b",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#b6d634",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#b6d634",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "b",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 2,
+          "name": "c",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#505372",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#505372",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "c",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 3,
+          "name": "d",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#ff994d",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#ff994d",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "d",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 4,
+          "name": "e",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#0ca8df",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#0ca8df",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "e",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         }
+        ],
+        "edges": [
+         {
+          "raw": 1,
+          "name": "b > c",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         },
+         {
+          "raw": 2,
+          "name": "c > d",
+          "hs": 2,
+          "hbo": 0,
+          "line": {
+           "st": "select,emphasis",
+           "hs": 2,
+           "sel": true,
+           "px": true,
+           "z2": 10,
+           "fill": null,
+           "stroke": "rgba(149,149,149,1)",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "action",
+     "payload": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataType": "edge",
+      "dataIndex": 1
+     },
+     "events": [
+      {
+       "type": "select",
+       "payload": {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataType": "edge",
+        "dataIndex": 1
+       }
+      },
+      {
+       "type": "selectchanged",
+       "payload": {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0,
+          "dataType": "node"
+         },
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0,
+          "dataType": "edge"
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataType": "edge",
+         "dataIndex": 1
+        },
+        "escapeConnect": true
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "graph",
+        "selectedMap": {
+         "b > c": true
+        },
+        "selectedIndices": [
+         1
+        ],
+        "nodes": [
+         {
+          "raw": 1,
+          "name": "b",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#b6d634",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#b6d634",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "b",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 2,
+          "name": "c",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#505372",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#505372",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "c",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 3,
+          "name": "d",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#ff994d",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#ff994d",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "d",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 4,
+          "name": "e",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#0ca8df",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#0ca8df",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "e",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         }
+        ],
+        "edges": [
+         {
+          "raw": 1,
+          "name": "b > c",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "select",
+           "hs": 0,
+           "sel": true,
+           "px": true,
+           "z2": 9,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         },
+         {
+          "raw": 2,
+          "name": "c > d",
+          "hs": 2,
+          "hbo": 0,
+          "line": {
+           "st": "emphasis",
+           "hs": 2,
+           "sel": false,
+           "px": true,
+           "z2": 20,
+           "fill": null,
+           "stroke": "rgba(149,149,149,1)",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "move",
+     "x": 300,
+     "y": 250,
+     "aim": "edge s0 i1",
+     "hit": {
+      "hd": {
+       "s": 0,
+       "i": 1,
+       "dt": "edge"
+      }
+     },
+     "events": [],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "graph",
+        "selectedMap": {
+         "b > c": true
+        },
+        "selectedIndices": [
+         1
+        ],
+        "nodes": [
+         {
+          "raw": 1,
+          "name": "b",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#b6d634",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#b6d634",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "b",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 2,
+          "name": "c",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#505372",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#505372",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "c",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 3,
+          "name": "d",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#ff994d",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#ff994d",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "d",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 4,
+          "name": "e",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#0ca8df",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#0ca8df",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "e",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         }
+        ],
+        "edges": [
+         {
+          "raw": 1,
+          "name": "b > c",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "select",
+           "hs": 0,
+           "sel": true,
+           "px": true,
+           "z2": 9,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         },
+         {
+          "raw": 2,
+          "name": "c > d",
+          "hs": 2,
+          "hbo": 0,
+          "line": {
+           "st": "emphasis",
+           "hs": 2,
+           "sel": false,
+           "px": true,
+           "z2": 20,
+           "fill": null,
+           "stroke": "rgba(149,149,149,1)",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "leave",
+     "events": [
+      {
+       "type": "mouseout",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 2,
+        "dataType": "edge",
+        "name": "c > d",
+        "selfType": null,
+        "nodeData": null
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "graph",
+        "selectedMap": {
+         "b > c": true
+        },
+        "selectedIndices": [
+         1
+        ],
+        "nodes": [
+         {
+          "raw": 1,
+          "name": "b",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#b6d634",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#b6d634",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "b",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 2,
+          "name": "c",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#505372",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#505372",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "c",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 3,
+          "name": "d",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#ff994d",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#ff994d",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "d",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         },
+         {
+          "raw": 4,
+          "name": "e",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#0ca8df",
+           "stroke": null,
+           "lineWidth": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#0ca8df",
+            "stroke": null,
+            "lineWidth": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "402e000000000000",
+            "15"
+           ],
+           "sy": [
+            "402e000000000000",
+            "15"
+           ],
+           "rsx": [
+            "402e000000000000",
+            "15"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "e",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          }
+         }
+        ],
+        "edges": [
+         {
+          "raw": 1,
+          "name": "b > c",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "select",
+           "hs": 0,
+           "sel": true,
+           "px": true,
+           "z2": 9,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         },
+         {
+          "raw": 2,
+          "name": "c > d",
+          "hs": 0,
+          "hbo": 0,
+          "line": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#888888",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fe999999999999a",
+            "0.8"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#888888",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3fe999999999999a",
+             "0.8"
+            ]
+           }
+          },
+          "arrows": [
+           null,
+           null
+          ],
+          "label": null
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
    "id": "g-declared",
    "note": "declared emphasis / blur / select styles on nodes (item, category, series) and edges (link, series); a disabled node and a disabled edge: no hover at all, and under another hover only their declared blur opacity",
    "W": 600,
@@ -45112,6 +47689,3446 @@
            "hs": 0,
            "sel": false,
            "px": false,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1x",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "t-held-ancestor",
+   "note": "tree focus 'ancestor': highlight A1 by action (blurs the rest, A1 held), then hover A1 itself -- blurSeries blurs the held node too and the ancestor indices (A1 among them) leave blur, the held node takes no hover: A1 ends normal; leave, downplay",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "tree",
+      "name": "T",
+      "data": [
+       {
+        "name": "root",
+        "children": [
+         {
+          "name": "A",
+          "children": [
+           {
+            "name": "A1"
+           },
+           {
+            "name": "A2"
+           }
+          ]
+         },
+         {
+          "name": "B",
+          "children": [
+           {
+            "name": "B1",
+            "children": [
+             {
+              "name": "B1x"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      "left": 60,
+      "top": 40,
+      "bottom": 40,
+      "right": 160,
+      "symbolSize": 14,
+      "expandAndCollapse": false,
+      "initialTreeDepth": -1,
+      "label": {
+       "show": true,
+       "position": "left"
+      },
+      "leaves": {
+       "label": {
+        "position": "right"
+       }
+      },
+      "itemStyle": {
+       "color": "#5070dd",
+       "borderColor": "#333333",
+       "borderWidth": 1
+      },
+      "lineStyle": {
+       "color": "#999999",
+       "width": 2
+      },
+      "emphasis": {
+       "focus": "ancestor"
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "type": "init",
+     "events": [],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "tree",
+        "selectedMap": null,
+        "selectedIndices": [],
+        "nodes": [
+         null,
+         {
+          "name": "root",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "root",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": null
+         },
+         {
+          "name": "A",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A1",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A2",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A2",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1x",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1x",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "action",
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "events": [
+      {
+       "type": "highlight",
+       "payload": {
+        "type": "highlight",
+        "seriesIndex": 0,
+        "dataIndex": 3
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "tree",
+        "selectedMap": null,
+        "selectedIndices": [],
+        "nodes": [
+         null,
+         {
+          "name": "root",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "root",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": null
+         },
+         {
+          "name": "A",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A1",
+          "hs": 2,
+          "hbo": 1,
+          "path": {
+           "st": "emphasis",
+           "hs": 2,
+           "sel": false,
+           "px": true,
+           "z2": 110,
+           "fill": "rgba(255,255,255,1)",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401eccccccccccce",
+            "7.700000000000001"
+           ],
+           "sy": [
+            "401eccccccccccce",
+            "7.700000000000001"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "emphasis",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 112,
+           "fill": null,
+           "text": "A1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "emphasis",
+           "hs": 2,
+           "sel": false,
+           "px": true,
+           "z2": 10,
+           "fill": null,
+           "stroke": "rgba(168,168,168,1)",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A2",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A2",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1x",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1x",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "move",
+     "x": 313,
+     "y": 104,
+     "aim": "tree node s0 i3",
+     "hit": {
+      "hd": {
+       "s": 0,
+       "i": 3,
+       "dt": "main"
+      }
+     },
+     "events": [
+      {
+       "type": "mouseover",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 3,
+        "dataType": "main",
+        "name": "A1",
+        "selfType": null,
+        "nodeData": null
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "tree",
+        "selectedMap": null,
+        "selectedIndices": [],
+        "nodes": [
+         null,
+         {
+          "name": "root",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "root",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": null
+         },
+         {
+          "name": "A",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A1",
+          "hs": 0,
+          "hbo": 1,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A2",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A2",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1x",
+          "hs": 1,
+          "hbo": 0,
+          "path": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "blur",
+           "ignore": false,
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1x",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "blur",
+           "hs": 1,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3fb999999999999a",
+            "0.1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "leave",
+     "events": [
+      {
+       "type": "mouseout",
+       "payload": {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 3,
+        "dataType": "main",
+        "name": "A1",
+        "selfType": null,
+        "nodeData": null
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "tree",
+        "selectedMap": null,
+        "selectedIndices": [],
+        "nodes": [
+         null,
+         {
+          "name": "root",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "root",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": null
+         },
+         {
+          "name": "A",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A1",
+          "hs": 0,
+          "hbo": 1,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A2",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A2",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1x",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1x",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "type": "action",
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "events": [
+      {
+       "type": "downplay",
+       "payload": {
+        "type": "downplay",
+        "seriesIndex": 0,
+        "dataIndex": 3
+       }
+      }
+     ],
+     "state": {
+      "series": [
+       {
+        "s": 0,
+        "type": "tree",
+        "selectedMap": null,
+        "selectedIndices": [],
+        "nodes": [
+         null,
+         {
+          "name": "root",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "root",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": null
+         },
+         {
+          "name": "A",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A1",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "A2",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "A2",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 100,
+           "fill": "#fff",
+           "stroke": "#5070dd",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 100,
+            "fill": "#fff",
+            "stroke": "#5070dd",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           },
+           "sx": [
+            "401c000000000000",
+            "7"
+           ],
+           "sy": [
+            "401c000000000000",
+            "7"
+           ],
+           "rsx": [
+            "401c000000000000",
+            "7"
+           ]
+          },
+          "label": {
+           "st": "",
+           "ignore": false,
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "z2": 102,
+           "fill": null,
+           "text": "B1",
+           "rest": {
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ],
+            "z2": 102,
+            "ignore": false
+           }
+          },
+          "edge": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
+           "z2": 0,
+           "fill": null,
+           "stroke": "#999999",
+           "lineWidth": [
+            "4000000000000000",
+            "2"
+           ],
+           "opacity": [
+            "3ff0000000000000",
+            "1"
+           ],
+           "rest": {
+            "z2": 0,
+            "fill": null,
+            "stroke": "#999999",
+            "lineWidth": [
+             "4000000000000000",
+             "2"
+            ],
+            "opacity": [
+             "3ff0000000000000",
+             "1"
+            ]
+           }
+          }
+         },
+         {
+          "name": "B1x",
+          "hs": 0,
+          "hbo": 0,
+          "path": {
+           "st": "",
+           "hs": 0,
+           "sel": false,
+           "px": true,
            "z2": 100,
            "fill": "#fff",
            "stroke": "#5070dd",

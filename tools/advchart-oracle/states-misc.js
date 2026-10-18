@@ -740,6 +740,16 @@ const LARGE = [
       series: [{ type: 'scatter', large: true, largeThreshold: 20, symbolSize: 10, selectedMode: 'multiple',
         data: Array.from({ length: 30 }, (_, i) => [3 + i * 3, 10 + ((i * 29) % 80)]) }] },
     events: [click(0, ['large', 0, 5]), click(400, ['large', 0, 9])] },
+  { id: 'large-held-blur', note: 'a large bar series under two scatters: highlighting scatter 1 (focus series) by action at 0 '
+    + 'blurs scatter 2; the pointer over a large bar at 400 and off it at 800 -- the large path is no highDownDispatcher, '
+    + 'so its mouseover / mouseout leave the blur alone; downplay at 1200',
+    option: { animation: false, xAxis: { type: 'category', data: lv(450).map((_, i) => 'c' + i) },
+      yAxis: { type: 'value', max: 100 },
+      series: [{ type: 'bar', large: true, data: lv(450) },
+        { type: 'scatter', symbolSize: 10, emphasis: { focus: 'series' }, data: [[20, 95], [220, 95], [420, 95]] },
+        { type: 'scatter', symbolSize: 10, data: [[40, 95], [240, 95], [440, 95]] }] },
+    events: [act(0, { type: 'highlight', seriesIndex: 1, dataIndex: 0 }), over(400, ['large', 0, 100]), out(800),
+      act(1200, { type: 'downplay', seriesIndex: 1, dataIndex: 0 })] },
 ];
 
 // E. a label hidden at rest
@@ -769,6 +779,13 @@ const LABELS = [
     option: funnel({ label: { show: false } }), events: [over(0, ['item', 0, 1]), out(500)] },
   { id: 'funnel-label-inside', note: 'a funnel\'s inside label hidden at rest, shown under the hover of band d',
     option: funnel({ label: { show: false, position: 'inside' } }), events: [over(0, ['item', 0, 3]), out(500)] },
+  { id: 'bar-item-label-emphasis', note: 'a bar series whose emphasis hides its labels; bar 1 writes label.show of its own, which '
+    + 'fillDataTextStyle copies to its emphasis.label.show (defaultEmphasis on the data item): hovering bar 1 at 0 keeps '
+    + 'its label, hovering bar 0 at 800 hides bar 0\'s',
+    option: { animation: false, color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', label: { show: true, position: 'top' }, emphasis: { label: { show: false } },
+        data: [5, { value: 20, label: { show: true } }, 36] }] },
+    events: [over(0, ['item', 0, 1]), out(500), over(800, ['item', 0, 0]), out(1200)] },
 ];
 
 // F. a pictorial bar's hit target
@@ -911,6 +928,13 @@ function guards(cases) {
     const last = c.selection[c.selection.length - 1][0];
     g('large-click-model', same(last.indices, [300]), JSON.stringify(last));
   }
+  {
+    const c = byId(cases, 'large-held-blur');
+    const p = elRow(c, 2, 1, 'host');
+    const ev = c.published.filter(e => e.type === 'mouseover' || e.type === 'mouseout').map(e => e.at + e.type).join(',');
+    g('large-hover-keeps-held-blur', p && statesAt(p, 450) === 'blur' && statesAt(p, 1000) === 'blur'
+      && statesAt(p, 1600) === '' && ev === '400mouseover,800mouseout', ev);
+  }
   // E. a hidden label
   {
     const c = byId(cases, 'pie-label-emphasis');
@@ -923,6 +947,13 @@ function guards(cases) {
     const gl = elRow(c, 0, 1, 'guide');
     g('funnel-default-emphasis-label', l && numAt(l, 'ignore', 1600) === true && numAt(l, 'ignore', 450) === false
       && gl && numAt(gl, 'ignore', 450) === false, 'funnel-label-emphasis');
+  }
+  {
+    const c = byId(cases, 'bar-item-label-emphasis');
+    const l1 = elRow(c, 0, 1, 'label');
+    const l0 = elRow(c, 0, 0, 'label');
+    g('item-label-show-is-its-emphasis', l1 && l0 && numAt(l1, 'ignore', 200) === false && numAt(l0, 'ignore', 1000) === true,
+      'bar-item-label-emphasis');
   }
   // F. the glyph is the target
   {

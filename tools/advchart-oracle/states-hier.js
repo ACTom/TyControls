@@ -223,6 +223,12 @@ const CASES = [
     steps: [ck(node(0, 0)), ck(edge(0, 0)), act({ type: 'select', seriesIndex: 0, dataType: 'edge', dataIndex: 2 }),
       act({ type: 'toggleSelect', seriesIndex: 0, dataType: 'edge', dataIndex: [0, 1] }),
       act({ type: 'unselect', seriesIndex: 0, name: 'a' }), mv(node(0, 3)), ck(node(0, 3)), leave()] },
+  { id: 'g-select-legend', note: "a legend hides category k0 (node a): the edge data drops a-b and a-c (filterSelf), so an edge's data index is not its link's row; selectedMode 'single': click the edge b-c (edge data 0, link 1), then c-d, select by action the raw index 1 (b-c again: its link's row, edge data 0), hover c-d, leave",
+    option: { animation: false, legend: { data: ['k0'], selected: { k0: false } },
+      series: [graphS({ selectedMode: 'single', categories: [{ name: 'k0' }, { name: 'k1' }],
+        data: GN().map((n, i) => Object.assign(n, { category: i === 0 ? 0 : 1 })) })] },
+    steps: [ck(edge(0, 0)), ck(edge(0, 1)), act({ type: 'select', seriesIndex: 0, dataType: 'edge', dataIndex: 1 }),
+      mv(edge(0, 1)), leave()] },
   { id: 'g-declared', note: 'declared emphasis / blur / select styles on nodes (item, category, series) and edges (link, series); a disabled node and a disabled edge: no hover at all, and under another hover only their declared blur opacity',
     option: { animation: false, series: [graphS({
       categories: [{ name: 'k0', emphasis: { itemStyle: { color: '#123456' } }, blur: { itemStyle: { opacity: 0.4 } } }],
@@ -274,6 +280,10 @@ const CASES = [
     steps: [act({ type: 'highlight', seriesIndex: 0, dataIndex: 5 }), act({ type: 'downplay', seriesIndex: 0, dataIndex: 5 }),
       ck(tnode(0, 2)), ck(tnode(0, 5)), act({ type: 'select', seriesIndex: 0, name: 'A1' }),
       mv(tnode(0, 3)), mv(tnode(0, 1)), leave()] },
+  { id: 't-held-ancestor', note: "tree focus 'ancestor': highlight A1 by action (blurs the rest, A1 held), then hover A1 itself -- blurSeries blurs the held node too and the ancestor indices (A1 among them) leave blur, the held node takes no hover: A1 ends normal; leave, downplay",
+    option: { animation: false, series: [treeS({ emphasis: { focus: 'ancestor' } })] },
+    steps: [act({ type: 'highlight', seriesIndex: 0, dataIndex: 3 }), mv(tnode(0, 3)), leave(),
+      act({ type: 'downplay', seriesIndex: 0, dataIndex: 3 })] },
   // ------------------------------------------------------------------ treemap
   { id: 'm-descendant', note: "treemap focus 'descendant' with declared emphasis (color, strokeColor, strokeWidth, borderColor for the background) and blur colours; hover the parent A's header (its background is the dispatcher), the leaf a1 (its node group), B; leave. Labels and upper labels take itemStyle.opacity (series 0.8, a2 0.4)",
     option: { animation: false, series: [tmS({ emphasis: { focus: 'descendant', itemStyle: { color: '#123456', borderColor: '#654321', strokeColor: '#ff0000', strokeWidth: 2 } },

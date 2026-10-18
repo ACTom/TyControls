@@ -1040,17 +1040,20 @@ end;
   factor over what the list holds, so a blurred series' marker fades in to
   a tenth of its own and no further }
 procedure TAdvChartStatesMiscTest.TestAMarkPointFadesWithinItsEnterAnimation;
+const
+  cOpt = '{"color":["#5470c6","#91cc75"],"xAxis":{"type":"category","data":["A","B","C"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[5,20,36],'
+    + '"markPoint":{"animationDuration":2000,"data":[{"type":"max","name":"max"}]}},'
+    + '{"type":"bar","emphasis":{"focus":"series"},"data":[8,12,6]}]}';
 var
   k, mk: Integer;
   el: TTyChartElement;
   b: TTyRectF;
   f: TTyPaintList;
+  blurred, plain: Double;
 begin
   NewChart(camAlways);
-  Load('{"color":["#5470c6","#91cc75"],"xAxis":{"type":"category","data":["A","B","C"]},'
-    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[5,20,36],'
-    + '"markPoint":{"animationDuration":2000,"data":[{"type":"max","name":"max"}]}},'
-    + '{"type":"bar","emphasis":{"focus":"series"},"data":[8,12,6]}]}');
+  Load(cOpt);
   FChart.AnimTick(T0 + 1);
   FChart.AnimTick(T0 + 300);
   Draw;
@@ -1078,6 +1081,24 @@ begin
   AssertTrue('still fading in', FChart.AnimClipCount > 0);
   AssertTrue(Format('the frame within the tenth: %g', [f.Element(mk).Style.Alpha]),
     (f.Element(mk).Style.Alpha > 0) and (f.Element(mk).Style.Alpha < 0.1));
+  blurred := f.Element(mk).Style.Alpha;
+  { the same fade on a chart nobody hovers: the blurred frame is a tenth of
+    it -- the fade multiplies what the list holds, it does not replace it }
+  NewChart(camAlways);
+  Load(cOpt);
+  FChart.AnimTick(T0 + 1);
+  FChart.AnimTick(T0 + 300);
+  Draw;
+  FChart.AnimTick(T0 + 400);
+  Draw;
+  mk := -1;
+  for k := 0 to FChart.List.Count - 1 do
+    if FChart.List.Element(k).Anim.Role = carMarkPoint then mk := k;
+  AssertTrue('the markPoint, unblurred', mk >= 0);
+  AssertTrue('still fading in, unblurred', FChart.AnimClipCount > 0);
+  plain := FChart.Frame.Element(mk).Style.Alpha;
+  AssertTrue(Format('the unblurred frame shows: %g', [plain]), plain > 0);
+  AssertEquals('a tenth of the unblurred fade', 0.1 * plain, blurred, 1e-9);
 end;
 
 { THE LABEL OF A PICTORIAL BAR hangs off the silent bar rect: silent with
