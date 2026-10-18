@@ -5591,8 +5591,10 @@ var
   bmp: TBGRABitmap;
   st: TTextStyle;
 begin
-  w := ARect.Right - ARect.Left;
-  h := ARect.Bottom - ARect.Top;
+  { The text is laid out on its own bitmap at the RASTER size and PPI (#83): w x h below are
+    device pixels, ARect is layout. }
+  w := P.Dev(ARect.Right - ARect.Left);
+  h := P.Dev(ARect.Bottom - ARect.Top);
   if (w <= 0) or (h <= 0) or (AText = '') then Exit;
 
   { **本函数不走 TTyPainter.DrawText**,所以画笔那一层的 RTL 对齐翻转够不着它 ——
@@ -5620,7 +5622,7 @@ begin
   key := AText + #1 + fname + #1 + IntToStr(sz) + #1 + IntToStr(weight) + #1 +
          IntToStr(AColor) + #1 + IntToStr(w) + 'x' + IntToStr(h) + #1 +
          IntToStr(Ord(AHAlign)) + #1 + IntToStr(Ord(AVAlign)) + #1 +
-         IntToStr(Ord(AWordWrap)) + #1 + IntToStr(P.PPI) + #1 +
+         IntToStr(Ord(AWordWrap)) + #1 + IntToStr(P.RasterPPI) + #1 +
          IntToStr(Ord(goCellEllipsis in Options));
 
   idx := FTextCache.IndexOf(key);
@@ -5633,7 +5635,7 @@ begin
     if FTextCache.Count > 8192 then FTextCache.Clear;
 
     bmp := TBGRABitmap.Create(w, h);      { 全透明 }
-    TyConfigureTextFont(bmp, fname, sz, weight, P.PPI);
+    TyConfigureTextFont(bmp, fname, sz, weight, P.RasterPPI);
 
     txt := AText;
     if (not AWordWrap) and (goCellEllipsis in Options) then
@@ -5680,7 +5682,7 @@ begin
   end;
 
   { PutImage 尊重 ClipRect —— 半掩的单元格照样被裁掉一截。 }
-  P.Bitmap.PutImage(ARect.Left, ARect.Top, bmp, dmDrawWithTransparency);
+  P.Bitmap.PutImage(P.Dev(ARect.Left), P.Dev(ARect.Top), bmp, dmDrawWithTransparency);
 end;
 
 function TTyGridEditLink.HandleKey(var AKey: Word; AShift: TShiftState): Boolean;
@@ -7043,7 +7045,7 @@ var
   begin
     if not merged then
     begin
-      P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
+      P.Bitmap.FillRect(P.Dev(Rect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw)),
         line, dmSet);
       Exit;
     end;
@@ -7054,8 +7056,8 @@ var
       if not (coVisible in c.Options) then Continue;
       if SameMergedCell(j, DisplayToData(row), j, DisplayToData(row + 1)) then Continue;
       cx := ColumnLeftPx(j);
-      P.Bitmap.FillRect(cx, r.Bottom - 1 - half,
-        cx + ColumnWidthPx(j), r.Bottom - 1 - half + lw, line, dmSet);
+      P.Bitmap.FillRect(P.Dev(Rect(cx, r.Bottom - 1 - half,
+        cx + ColumnWidthPx(j), r.Bottom - 1 - half + lw)), line, dmSet);
     end;
   end;
 
@@ -7095,7 +7097,7 @@ begin
     x := ColumnLeftPx(i) + ColumnWidthPx(i);
     if (x <= 0) or (x > M.ClientW) then Continue;
     if not merged then
-      P.Bitmap.FillRect(x - 1 - half, M.FrozenTop, x - 1 - half + lw, M.ClientH,
+      P.Bitmap.FillRect(P.Dev(Rect(x - 1 - half, M.FrozenTop, x - 1 - half + lw, M.ClientH)),
         line, dmSet)
     else
       { 逐行分段:本列与右邻列在这一行上属于同一个合并区时,跳过这一段。 }
@@ -7106,7 +7108,7 @@ begin
           if row < 0 then Continue;
           if SameMergedCell(i, DisplayToData(row), i + 1, DisplayToData(row)) then Continue;
           r := TyGridRowRect(row, M);
-          P.Bitmap.FillRect(x - 1 - half, r.Top, x - 1 - half + lw, r.Bottom,
+          P.Bitmap.FillRect(P.Dev(Rect(x - 1 - half, r.Top, x - 1 - half + lw, r.Bottom)),
             line, dmSet);
         end;
   end;
@@ -7598,8 +7600,8 @@ begin
           { 图标贴在段的**起点**那一侧,与标题同侧。两分支同一条路。 }
           imgR := ToScreenRect(Rect(rr.Left + ScaleI(4), 0,
             rr.Left + ScaleI(4) + imgSz, 0));
-          TyBlitImage(P.Bitmap, imgList, imgIdx,
-            imgR.Left, bandTop + (AHeaderH - imgSz) div 2, imgSz, P.Scale(96), False);
+          TyBlitImageScaled(P, imgList, imgIdx,
+            imgR.Left, bandTop + (AHeaderH - imgSz) div 2, imgSz, False);
           Inc(imgPad, imgSz + ScaleI(4));
         end;
       end;
@@ -7665,8 +7667,7 @@ begin
 
     { 分段之间的竖分隔线。 }
     if r.Right - 1 < M.ClientW then
-      P.Bitmap.DrawLine(r.Right - 1, bandTop, r.Right - 1, bandTop + AHeaderH,
-        line, False);
+      P.DrawRule(r.Right - 1, bandTop, r.Right - 1, bandTop + AHeaderH, line);
   end;
 end;
 
@@ -7677,6 +7678,7 @@ procedure TTyCustomGrid.RenderBackgroundBitmap(P: TTyPainter;
 var
   area, dst, oldClip: TRect;
   x, y, bw, bh: Integer;
+  tile: TBGRABitmap;
 begin
   if FBackgroundBitmap = nil then Exit;
   bw := FBackgroundBitmap.Width;
@@ -7695,29 +7697,37 @@ begin
 
   oldClip := P.Bitmap.ClipRect;
   { 与外层裁剪**求交**,不覆盖 —— 快路径下外层夹着那条露出来的带。 }
-  if not IntersectRect(dst, oldClip, area) then Exit;
+  { area and the picture's size are layout pixels: one picture pixel is one layout pixel, as at
+    S = 1, so on a 2x layer it is drawn S times its size (#83). }
+  if not IntersectRect(dst, oldClip, P.Dev(area)) then Exit;
   P.Bitmap.ClipRect := dst;
+  tile := FBackgroundBitmap;
   try
     case FBackgroundMode of
       gbmStretch:
-        P.Bitmap.StretchPutImage(area, FBackgroundBitmap, dmDrawWithTransparency);
+        P.Bitmap.StretchPutImage(P.Dev(area), FBackgroundBitmap, dmDrawWithTransparency);
       gbmCenter:
         begin
           dst := Rect(0, 0, bw, bh);
           OffsetRect(dst, (area.Left + area.Right - bw) div 2,
                           (area.Top + area.Bottom - bh) div 2);
-          P.Bitmap.PutImage(dst.Left, dst.Top, FBackgroundBitmap,
-            dmDrawWithTransparency);
+          if P.DeviceScale = 1 then
+            P.Bitmap.PutImage(dst.Left, dst.Top, FBackgroundBitmap,
+              dmDrawWithTransparency)
+          else
+            P.Bitmap.StretchPutImage(P.Dev(dst), FBackgroundBitmap, dmDrawWithTransparency);
         end;
       else
         begin
+          if P.DeviceScale > 1 then
+            tile := FBackgroundBitmap.Resample(P.Dev(bw), P.Dev(bh), rmSimpleStretch) as TBGRABitmap;
           y := area.Top;
           while y < area.Bottom do
           begin
             x := area.Left;
             while x < area.Right do
             begin
-              P.Bitmap.PutImage(x, y, FBackgroundBitmap, dmDrawWithTransparency);
+              P.Bitmap.PutImage(P.Dev(x), P.Dev(y), tile, dmDrawWithTransparency);
               Inc(x, bw);
             end;
             Inc(y, bh);
@@ -7725,6 +7735,7 @@ begin
         end;
     end;
   finally
+    if tile <> FBackgroundBitmap then tile.Free;
     P.Bitmap.ClipRect := oldClip;
   end;
 end;
@@ -7971,14 +7982,14 @@ begin
         g.Text, hdrS.FontName, ResolveFontSize(hdrS), hdrS.FontWeight, ink,
         g.Alignment, tlCenter, True);
     if rc.Right - 1 < M.ClientW then
-      P.Bitmap.DrawLine(rc.Right - 1, rc.Top, rc.Right - 1, rc.Bottom, line, False);
+      P.DrawRule(rc.Right - 1, rc.Top, rc.Right - 1, rc.Bottom, line);
     { 级与级之间也要有分隔,否则两级看起来是一整块。 }
     if rc.Bottom < h then
-      P.Bitmap.DrawLine(rc.Left, rc.Bottom - 1, rc.Right, rc.Bottom - 1, line, False);
+      P.DrawRule(rc.Left, rc.Bottom - 1, rc.Right, rc.Bottom - 1, line);
   end;
 
   { 分组带与列头带之间的横分隔线。 }
-  P.Bitmap.DrawLine(0, h - 1, M.ClientW, h - 1, line, False);
+  P.DrawRule(0, h - 1, M.ClientW, h - 1, line);
 end;
 
 procedure TTyCustomGrid.RenderCellBorders(P: TTyPainter; const M: TTyGridMetrics);
@@ -8024,13 +8035,13 @@ begin
       { 边框画在单元格**内侧** —— 与 StrokeBorder 同一条约定,
         免得相邻两格的边框互相盖住半个像素。 }
       if b.Top then
-        P.Bitmap.FillRect(cell.Left, cell.Top, cell.Right, cell.Top + w, px, dmSet);
+        P.Bitmap.FillRect(P.Dev(Rect(cell.Left, cell.Top, cell.Right, cell.Top + w)), px, dmSet);
       if b.Bottom then
-        P.Bitmap.FillRect(cell.Left, cell.Bottom - w, cell.Right, cell.Bottom, px, dmSet);
+        P.Bitmap.FillRect(P.Dev(Rect(cell.Left, cell.Bottom - w, cell.Right, cell.Bottom)), px, dmSet);
       if b.Left then
-        P.Bitmap.FillRect(cell.Left, cell.Top, cell.Left + w, cell.Bottom, px, dmSet);
+        P.Bitmap.FillRect(P.Dev(Rect(cell.Left, cell.Top, cell.Left + w, cell.Bottom)), px, dmSet);
       if b.Right then
-        P.Bitmap.FillRect(cell.Right - w, cell.Top, cell.Right, cell.Bottom, px, dmSet);
+        P.Bitmap.FillRect(P.Dev(Rect(cell.Right - w, cell.Top, cell.Right, cell.Bottom)), px, dmSet);
     end;
   end;
 end;
@@ -8084,16 +8095,20 @@ var
   S: TTyStyleSet;
   R, band, oldClip: TRect;
   M: TTyGridMetrics;
-  fastDy, bodyTop, seamPos: Integer;
+  fastDy, bodyTop, seamPos, sc: Integer;
   seamR: TRect;
   canFast: Boolean;
 begin
-  { 持久表面:滚动时正文那一大块像素可以整体平移复用。尺寸变了就重建。 }
+  { 持久表面:滚动时正文那一大块像素可以整体平移复用。尺寸变了就重建。
+    The surface holds DEVICE pixels, DeviceScale times the layout size (#83); a change of the
+    scale -- a window moved to another screen -- is a change of size, and rebuilds it. }
   R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-  if (FSurface = nil) or (FSurface.Width <> R.Right) or (FSurface.Height <> R.Bottom) then
+  sc := TyCanvasDeviceScale(ACanvas).Scale;
+  if sc < 1 then sc := 1;
+  if (FSurface = nil) or (FSurface.Width <> R.Right * sc) or (FSurface.Height <> R.Bottom * sc) then
   begin
     FreeAndNil(FSurface);
-    FSurface := TBGRABitmap.Create(R.Right, R.Bottom);
+    FSurface := TBGRABitmap.Create(R.Right * sc, R.Bottom * sc);
     FSurfaceFresh := False;
   end;
 
@@ -8146,7 +8161,7 @@ begin
       Inc(FFastScrollFrames);
       { 平移带的下沿是**正文窗格**的下沿,不是视口下沿 ——
         底部冻结带不随滚动,搬了它就会跟着一起跑。 }
-      ShiftSurfaceRows(bodyTop, M.ClientH - M.FrozenBottom, fastDy);
+      ShiftSurfaceRows(P.Dev(bodyTop), P.Dev(M.ClientH - M.FrozenBottom), P.Dev(fastDy));
       if fastDy > 0 then
         band := Rect(0, M.ClientH - M.FrozenBottom - fastDy, M.ClientW,
                      M.ClientH - M.FrozenBottom)
@@ -8184,7 +8199,7 @@ begin
       M.ClipBottom := band.Bottom;
       FMetricsCache := M;
       oldClip := P.Bitmap.ClipRect;
-      P.Bitmap.ClipRect := band;
+      P.Bitmap.ClipRect := P.Dev(band);
     end
     else
       FSurface.Fill(BGRAPixelTransparent);
@@ -8239,7 +8254,7 @@ begin
   oldClip := P.Bitmap.ClipRect;
   { **求交**而不是覆盖 —— 外层可能是脏区重画限定的那条横带,覆盖掉它就会
     在带外重画一遍:同一段文字叠两次、抗锯齿变深。 }
-  if not IntersectRect(clip, oldClip, TyGridRowBandRect(APos, M)) then Exit;
+  if not IntersectRect(clip, oldClip, P.Dev(TyGridRowBandRect(APos, M))) then Exit;
   P.Bitmap.ClipRect := clip;
   try
     ADraw();
@@ -8255,7 +8270,7 @@ var
 begin
   if not Assigned(ADraw) then Exit;
   oldClip := P.Bitmap.ClipRect;
-  if not IntersectRect(clip, oldClip, TyGridPaneRect(M, APane)) then Exit;
+  if not IntersectRect(clip, oldClip, P.Dev(TyGridPaneRect(M, APane))) then Exit;
   P.Bitmap.ClipRect := clip;
   try
     ADraw();
@@ -8437,7 +8452,7 @@ begin
         直接覆盖的话这一格会画到带外去 —— 那里上一帧的像素还在,
         同一段文字叠画两次,抗锯齿边缘变深,于是"快路径与整幅重画逐像素相同"
         这条守卫就红了。(固定行从前根本不画,所以这个坑一直没露头。) }
-      if not IntersectRect(clipR, oldClip, vis) then
+      if not IntersectRect(clipR, oldClip, P.Dev(vis)) then
       begin
         P.Bitmap.ClipRect := oldClip;
         Continue;
@@ -11172,7 +11187,7 @@ begin
   if sz <= 0 then Exit;
   cx := (r.Left + r.Right) div 2;
   cy := (r.Top + r.Bottom) div 2;
-  TyBlitImage(P.Bitmap, FImages, idx, cx - sz div 2, cy - sz div 2, sz, P.Scale(96), False);
+  TyBlitImageScaled(P, FImages, idx, cx - sz div 2, cy - sz div 2, sz, False);
 end;
 
 { ---- 单元格图形 ----------------------------------------------------------- }

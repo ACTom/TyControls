@@ -117,6 +117,7 @@ type
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRectAt(const ARect: TRect);
+    procedure DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
     procedure FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
       ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
       AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
@@ -313,6 +314,11 @@ type
       after a drop shadow bled into them. No-op when there are no rounded corners. }
     procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRect(const ARect: TRect);
+    { Bitmap.DrawLine(AX1, AY1, AX2, AY2, AColor, False) for a horizontal or vertical run, in
+      layout pixels: the same pixels -- from the first point up to, not including, the second --
+      one LAYOUT pixel wide at any device scale. Bitmap.DrawLine is one DEVICE pixel wide: half
+      the weight on a 2x layer (#83). }
+    procedure DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
     property Bitmap: TBGRABitmap read FBmp;
     { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
       填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。
@@ -4191,6 +4197,36 @@ procedure TTyPainter.EraseRectAt(const ARect: TRect);
 begin
   if FBmp = nil then Exit;
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, BGRA(0,0,0,0), dmSet);
+end;
+
+procedure TTyPainter.DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
+var
+  R: TRect;
+begin
+  if AY1 = AY2 then
+  begin
+    if AX1 = AX2 then Exit;
+    if AX2 > AX1 then R := Rect(AX1, AY1, AX2, AY1 + 1)
+    else R := Rect(AX2 + 1, AY1, AX1 + 1, AY1 + 1);
+  end
+  else
+  begin
+    Assert(AX1 = AX2, 'TTyPainter.DrawRule: horizontal or vertical runs only');
+    if AY2 > AY1 then R := Rect(AX1, AY1, AX1 + 1, AY2)
+    else R := Rect(AX1, AY2 + 1, AX1 + 1, AY1 + 1);
+  end;
+  if RasterEnter then R := Dev(R);
+  try
+    DrawRuleAt(R, AColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
+begin
+  if FBmp = nil then Exit;
+  FBmp.FillRect(ARect, AColor, dmDrawWithTransparency);
 end;
 
 var
