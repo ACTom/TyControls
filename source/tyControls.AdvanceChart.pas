@@ -439,15 +439,22 @@ type
       first setOption, as upstream's initBase ignores it.
     LazyUpdate: the update -- and its `updated` event -- waits for the next
       render; the merge itself happens now, as upstream's does.
-    Silent: no `updated` event for this update. }
+    Silent: no `updated` event for this update.
+    Transition [F3c]: `transition` -- the series the update's universal
+      transition takes, `{from, to}` finders (seriesIndex / seriesId) or a
+      list of them, instead of the series' own keys (HasTransition: given
+      and truthy). }
   TTySetOptionOpts = record
     NotMerge, LazyUpdate, Silent: Boolean;
     ReplaceMerge: TTyStringArray;
+    HasTransition: Boolean;
+    Transition: TTyUtTransitionArray;
   end;
 
 { The options object as JSON text -- `{notMerge, replaceMerge, lazyUpdate,
-  silent}`, replaceMerge a main type or an array of them, the flags read for
-  their JavaScript truthiness, other keys (`transition`) ignored. '' is no
+  silent, transition}`, replaceMerge a main type or an array of them, the
+  flags read for their JavaScript truthiness, `transition` as
+  TyUtParseTransition reads it [F3c], other keys ignored. '' is no
   options. False when the text is no object. }
 function TySetOptionOptsOf(const AJson: string; out AOpts: TTySetOptionOpts): Boolean;
 
@@ -1483,6 +1490,11 @@ type
     { AN ACTION RENDERED A LAZY setOption still waiting: armed with the
       action's render, not at the next paint [milestone D1-D4] }
     FAnimLazyTaken: Boolean;
+    { [F3c] THE LAST setOption's `transition`, for the update it starts:
+      handed to the old render's record when the update arms, read by a
+      custom series' build (the series it names make their items anew) }
+    FAnimUtHas: Boolean;
+    FAnimUtTrans: TTyUtTransitionArray;
     { A MERGE setOption waiting for its arming [Batch 99, AN6]: the models it
       maps onto are the old ones, so are their views -- a series kept as a
       full update keeps it, the axes groupTransition, the markers update }
@@ -1647,6 +1659,9 @@ type
     { the series' universal transition keys now, as FAnimOldUtKeys keeps
       them [Batch 136, 137] }
     function AnimUtKeys: TTyUtSeriesKeysArray;
+    { [F3c] the pending transition option's `to` names series ASeries
+      (series:beforeupdate's __universalTransitionEnabled) }
+    function AnimUtNamed(ASeries: Integer): Boolean;
     { the axis views of the option now: 'xAxis0=' + id + #1 + subtype [Batch 99] }
     function AxisViewKeys: TTyStringArray;
     { the view of every series model now, shown or not: view key + #1 + type
@@ -4722,6 +4737,8 @@ begin
     AOpts.NotMerge := Truthy(o.Find('notMerge'));
     AOpts.LazyUpdate := Truthy(o.Find('lazyUpdate'));
     AOpts.Silent := Truthy(o.Find('silent'));
+    { [F3c] the universal transition's series }
+    TyUtParseTransition(o.Find('transition'), AOpts.HasTransition, AOpts.Transition);
     r := o.Find('replaceMerge');
     if r <> nil then
     begin
@@ -4741,6 +4758,9 @@ end;
 procedure TTyAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
+  { [F3c] a setOption with no transition option }
+  FAnimUtHas := False;
+  FAnimUtTrans := nil;
   ApplyNotMerge(AValue);
   AfterSetOption(False, False);
 end;
@@ -4928,7 +4948,13 @@ begin
   end
   else
     Result := DoMerge(AJson, AOpts.ReplaceMerge);
-  if Result then AfterSetOption(AOpts.LazyUpdate, AOpts.Silent);
+  if Result then
+  begin
+    { [F3c] the update's transition option: this setOption's }
+    FAnimUtHas := AOpts.HasTransition;
+    FAnimUtTrans := AOpts.Transition;
+    AfterSetOption(AOpts.LazyUpdate, AOpts.Silent);
+  end;
 end;
 
 function TTyAdvanceChart.SetOption(const AJson, AOptsJson: string): Boolean;
@@ -40545,6 +40571,19 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.AnimUtNamed(ASeries: Integer): Boolean;
+var
+  i, k: Integer;
+  id: string;
+begin
+  Result := False;
+  if not FAnimUtHas then Exit;
+  id := FOption.ComponentId('series', ASeries);
+  for i := 0 to High(FAnimUtTrans) do
+    for k := 0 to High(FAnimUtTrans[i].To_) do
+      if TyUtFinderMatches(FAnimUtTrans[i].To_[k], ASeries, id) then Exit(True);
+end;
+
 function TTyAdvanceChart.AxisViewKeys: TTyStringArray;
 var
   t, i, n: Integer;
@@ -40779,6 +40818,10 @@ begin
       r.UtDivide := FAnimOldUtKeys[si].Divide;
       r.UtGroupIds := TyUtRowGroups(FAnimOldUtKeys[si], r.Raws);
       r.UtChildGroupIds := TyUtRowChildGroups(FAnimOldUtKeys[si], r.Raws);
+      { [F3c] the model id and the groups a transition option reads }
+      r.UtModelId := FAnimOldUtKeys[si].ModelId;
+      r.UtGroupOwn := TyUtRowGroupsOwn(FAnimOldUtKeys[si], r.Raws);
+      r.UtDataGroup := FAnimOldUtKeys[si].DataGroup;
     end;
     FAnimPrev.Series[si] := r;
   end;
@@ -40939,6 +40982,12 @@ begin
     utk := TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t, FOption.ComponentId('series', si));
     r.UtGroupIds := TyUtRowGroups(utk, r.Raws);
     r.UtChildGroupIds := TyUtRowChildGroups(utk, r.Raws);
+    { [F3c] the model id, the groups a transition option reads, and
+      whether that option's `to` names the series }
+    r.UtModelId := utk.ModelId;
+    r.UtGroupOwn := TyUtRowGroupsOwn(utk, r.Raws);
+    r.UtDataGroup := utk.DataGroup;
+    r.UtNamed := AnimUtNamed(si);
     if t = TyPieSeriesTypeName then
     begin
       v := TyAnimGetShallow(r.Model, 'animationTypeUpdate');
@@ -40976,6 +41025,9 @@ begin
         { the views alive after it: an old one that is not among them was
           disposed [Batch 99] }
         FAnimPrev.AliveKeys := AnimAliveKeys;
+        { [F3c] the setOption's transition option }
+        FAnimPrev.UtHasTransition := FAnimUtHas;
+        FAnimPrev.UtTransition := FAnimUtTrans;
         FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev);
       end
       else
@@ -40983,6 +41035,9 @@ begin
         FAnimSet.Clear;
         FAnimSet.Arm(FPaintList, AnimSeriesInfo);
       end;
+      { series:transition resets the flag of the series it named }
+      FAnimUtHas := False;
+      FAnimUtTrans := nil;
       { THE AXES: a full update of the same option renders the same axis
         views again and groupTransitions them; a new option's are new views,
         which never do (probed: under notMerge only the series move)
