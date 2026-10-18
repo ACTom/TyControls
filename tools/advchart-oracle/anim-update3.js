@@ -552,6 +552,12 @@ add('radial', 'radial-midway', "a radial tree, collapsing 'b' (data index 6) and
     { t: T1 + 300, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } },
     ...after([300, 301, 500, 999], T1)]);
 
+add('radial', 'radial-zero', "a radial tree of symbolSize 0 entering: every path has no scale all along while its label fades in -- the label's rect is the path's (nought), with no stroke margin (lineScale is nought), and it rides the group sliding out of the centre",
+  { animation: true, series: [{ type: 'tree', layout: 'radial', data: TREE, initialTreeDepth: -1, symbolSize: 0,
+    animationDuration: 1000, animationEasing: 'linear' }] },
+  ['tree'],
+  [...[0, 1, 16, 100, 500, 999, 1000, 1001].map(t => ({ t, do: 'sample' }))]);
+
 add('radial', 'radial-delay', "a radial tree entering with animationDelay (idx) => idx * 30: a later node's path waits at no scale while its group already slides and its label already fades in -- the label's rect is the path's (nought), with no stroke margin (lineScale nought)",
   { animation: true, series: [{ type: 'tree', layout: 'radial', data: TREE, initialTreeDepth: -1, symbolSize: 12,
     animationDuration: 1000, animationEasing: 'linear', animationDelay: { $fn: 'idx*30' } }] },

@@ -4807,8 +4807,12 @@ begin
   end;
   box := AEl.Caption.HostBox;
   { the path's own box, scaled about its place, then the stroke's margin
-    -- none at a scale of nought }
+    -- none at a scale of nought. [fin] A path of no scale AT REST has none
+    in its box either (lineScale nought): nothing to take off. [Was: the
+    margin taken off regardless -- a symbolSize 0 radial tree's labels
+    sat a margin short of their nodes while they moved.] }
   infl := AEl.Caption.FixedInfl;
+  if not (Abs(AEl.Caption.FixedHalfW) > 1e-10) then infl := 0;
   now_.X := AEl.Anim.G[0] + ((box.X + infl) - AEl.Anim.G[0]) * AFX + ADX;
   now_.Y := AEl.Anim.G[1] + ((box.Y + infl) - AEl.Anim.G[1]) * AFY + ADY;
   now_.W := (box.W - 2 * infl) * AFX;
