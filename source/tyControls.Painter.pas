@@ -319,6 +319,11 @@ type
       one LAYOUT pixel wide at any device scale. Bitmap.DrawLine is one DEVICE pixel wide: half
       the weight on a 2x layer (#83). }
     procedure DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
+    { The layer, DeviceScale times the layout size (#83). Two conventions on it:
+      - Bitmap.Canvas2D takes LAYOUT pixels: BeginPaint presets scale(S) and strokeScale(S).
+      - Everything else on it (FillRect, PutImage, ClipRect, DrawLine, TextRect, ...) takes
+        RASTER pixels: map with Dev(), give fonts RasterPPI, draw 1-px rules with DrawRule.
+      At S = 1 the two are the same and nothing needs mapping. }
     property Bitmap: TBGRABitmap read FBmp;
     { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
       填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。

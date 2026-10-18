@@ -40,7 +40,7 @@ Box.Clear;
 | `ShowCustom` | 进自定义画模式 → `Paint` 调 `OnPaintPreview`。 |
 | `Clear` | 清空。 |
 | `AllowText: Boolean` | 是否允许文本预览。默认 True;图片场景设 False → `PreviewFile` 对文本也显示占位。 |
-| `OnPaintPreview: TTyPaintSurfaceEvent` | 低层自绘钩子(同 `TTyPaintPanel.OnPaintSurface`),仅自定义画模式下触发。 |
+| `OnPaintPreview: TTyPaintSurfaceEvent` | 低层自绘钩子(同 `TTyPaintPanel.OnPaintSurface`),仅自定义画模式下触发。直接画 `APainter.Bitmap` 时注意 Retina 屏的换算,见[事件与属性约定](../events.md)。 |
 
 ## 关键设计
 

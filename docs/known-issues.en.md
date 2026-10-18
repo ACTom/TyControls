@@ -29,6 +29,12 @@ The cause is in LCL. GTK2 does read the real GTK style, but only once, when the 
 
 **Recommendation:** use Qt5 / Qt6 if you need the app to follow the OS appearance — there the values come from the live Qt palette and track a desktop colour-scheme change.
 
+## Qt6 / GTK3 (integer desktop scaling)
+
+With the desktop scaled by a whole factor such as 200%, the interface looks soft: controls are drawn at one times and the system enlarges them. macOS Retina screens are already drawn at their real pixels; Qt6 / GTK3 are not wired up yet.
+
+**Recommendation:** keep the desktop scaling at 100% and enlarge the interface with a higher font DPI instead.
+
 ## macOS (compiling the library from source)
 
 A project that puts `source/` on its own search path and asks for DWARF3 debug information does not build on macOS: `tyControls.CocoaWS.pas ... Internal error 200609171`. This is an FPC 3.2 bug: its DWARF3 writer does not handle Objective-C classes. Projects that use the package are not affected.
