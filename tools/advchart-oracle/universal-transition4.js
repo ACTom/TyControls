@@ -667,10 +667,12 @@ function chartCases() {
     itemStyle: { color: '#eb5454', color0: '#47b262', borderColor: '#eb5454', borderColor0: '#47b262' },
     data: VALS.map((v, i) => (i % 2 ? [v, v - 2, v - 3, v + 1] : [v - 2, v, v - 3, v + 1])) }]));
   pair('radar', 'radar polygons (the line and its symbols)', () => ({ color: PALETTE,
-    radar: { indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }] },
+    radar: { startAngle: 125, indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }] },
     series: [{ type: 'radar', id: 'k', universalTransition: true,
       data: NAMES.map((n, i) => ({ name: n, value: [VALS[i], (VALS[i] + 3) % 10, 9 - VALS[i]] })) }] }));
+  // (start and end angles whose radians depend on the order of the division)
   pair('gauge', 'gauge pointers', () => solo({ type: 'gauge', id: 'k', universalTransition: true, max: 10,
+    startAngle: 215, endAngle: -85,
     data: NAMES.map((n, i) => ({ name: n, value: VALS[i] })), detail: { show: false }, title: { show: false } }));
   pair('graph', 'graph nodes', () => solo({ type: 'graph', id: 'k', layout: 'none', universalTransition: true,
     data: NAMES.map((n, i) => ({ name: n, x: i * 10, y: VALS[i], value: VALS[i] })),

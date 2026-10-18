@@ -967,9 +967,8 @@ begin
 
   { STEP ONE: the option's degrees are the MATH convention and the drawing
     frame has y pointing down, so the sign flips. }
-  { [F3c] -seriesModel.get('startAngle') / 180 * Math.PI, in its order }
-  startA := -ASpec.StartDeg / 180 * Pi;
-  endA := -ASpec.EndDeg / 180 * Pi;
+  startA := -ASpec.StartDeg * cRadian;
+  endA := -ASpec.EndDeg * cRadian;
   { STEP TWO, and the flag is INVERTED on the way in. }
   TyNormalizeArcAngles(startA, endA, not ASpec.Clockwise);
   Result.StartRad := startA;
