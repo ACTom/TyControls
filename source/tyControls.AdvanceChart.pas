@@ -292,6 +292,9 @@ type
 const
   { [Batch 152] a roam host index past this is a map series group's geo }
   cMapRoamBase = 1000000;
+  { [F4a] a break area's axis key past this is a singleAxis (the index
+    after it); below it a grid's (grid * 1000 + axis) }
+  cBreakSingleKey = 900000;
 
 type
   { [Batch 152, D14 GE4] A MAP_SERIES_GROUP: the map series on one geo
@@ -1240,6 +1243,11 @@ type
     FSeriesDecals: TTyChartDecalArray;
     FRowDecals: array of TTyChartDecalArray;
     FRowDecalSet: array of TTyBoolArray;
+    { [F4a] the same decals as objects, before the defaults: what a custom
+      series' api.visual('decal') hands its renderItem (nodes not owned:
+      the option's, or the built-in palette's) }
+    FSeriesDecalRaws: array of TTyDecalRaw;
+    FRowDecalRaws: array of array of TTyDecalRaw;
     { aria.enabled as the setOptions left it: initBase turns an aria object
       on, the preprocessor copies the legacy `show` [Batch 131] }
     FAriaEnabled: Boolean;
@@ -2119,6 +2127,19 @@ type
     procedure SolveDecals;
     { the decal a slot's raw row is drawn with: its own, else the series' }
     function RowDecalOf(ASlot, ARaw: Integer): TTyChartDecal;
+    { [F4a] the decal object a slot's raw row takes (api.visual('decal')),
+      as JSON; nil for none }
+    function RowDecalJson(ASlot, ARaw: Integer): TJSONData;
+    { [F4a] every raw row's decal, by raw index }
+    function RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+    { [F4a] aria.decal on: the palette, else False }
+    function AriaDecalPalette(out APal: TJSONData; out APalN: Integer): Boolean;
+    { [F4a] a treemap's or a sunburst's node decals by row: the node's own
+      itemStyle.decal, else the series'; with aria.decal on,
+      enableAriaDecalForTree's -- every node the palette decal of its
+      depth-1 ancestor's name, AOrder the tree's eachNode order }
+    function TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarchy;
+      const AOrder: TTyIntegerArray): TTyChartDecalArray;
     { a legend item's decal: the legend's itemStyle.decal over the series' }
     function LegendDecalOf(ALegend: Integer; const AName: string;
       const ASeries: TTyChartDecal): TTyChartDecal;
@@ -6951,6 +6972,13 @@ var g, a: Integer;
 begin
   Result := nil;
   AGrid := nil;
+  { a singleAxis [F4a]: cBreakSingleKey + its index, no grid }
+  if AAxisKey >= cBreakSingleKey then
+  begin
+    a := AAxisKey - cBreakSingleKey;
+    if (a <= High(FSingles)) and (FSingles[a] <> nil) then Result := FSingles[a].Axis;
+    Exit;
+  end;
   if FBuild = nil then Exit;
   g := AAxisKey div 1000;
   a := AAxisKey mod 1000;
@@ -7021,6 +7049,24 @@ begin
   Result := False;
   AAxisKey := -1;
   AArea := -1;
+  { THE SINGLES' first: drawn after the grids' [F4a] }
+  for a := High(FSingles) downto 0 do
+  begin
+    if (FSingles[a] = nil) or (Length(FSingles[a].View.Spec.BreakAreas) = 0) then Continue;
+    axo := FSingles[a].Axis;
+    opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
+    if not opt.ExpandOnClick then Continue;
+    spec := @FSingles[a].View.Spec;
+    for q := High(spec^.BreakAreas) downto 0 do
+      if (spec^.BreakAreas[q].HasB and InPolygon(spec^.BreakAreas[q].A, spec^.BreakAreas[q].B))
+        or NearLine(spec^.BreakAreas[q].A)
+        or (spec^.BreakAreas[q].HasB and NearLine(spec^.BreakAreas[q].B)) then
+      begin
+        AAxisKey := cBreakSingleKey + a;
+        AArea := q;
+        Exit(True);
+      end;
+  end;
   if FBuild = nil then Exit;
   { the x axes' areas are drawn over the y axes' (their views render
     later): asked first }
@@ -7059,7 +7105,10 @@ var
 begin
   ax := BreakAxisOf(AAxisKey, gb);
   if ax = nil then Exit;
-  spec := gb.SpecFor(ax);
+  if AAxisKey >= cBreakSingleKey then
+    spec := @FSingles[AAxisKey - cBreakSingleKey].View.Spec
+  else
+    spec := gb.SpecFor(ax);
   if (spec = nil) or (AArea < 0) or (AArea > High(spec^.BreakAreas)) then Exit;
   BreakExpandClick(AAxisKey, spec^.BreakAreas[AArea].BreakIndex);
 end;
@@ -7085,7 +7134,7 @@ var
   t, evBreaks, payloadJson: string;
   m: Integer;
   idx: TTyIntegerArray;
-  mains: array[0..1] of string;
+  mains: array[0..2] of string;
   i, k, j: Integer;
   node, bo, inp: TJSONObject;
   arr, inputs: TJSONData;
@@ -7180,8 +7229,10 @@ begin
   evBreaks := '';
   mains[0] := 'xAxis';
   mains[1] := 'yAxis';
+  { and the singles' [F4a] }
+  mains[2] := 'singleAxis';
   inputs := APayload.Find('breaks');
-  for m := 0 to 1 do
+  for m := 0 to 2 do
   begin
     idx := Query(mains[m]);
     for i := 0 to High(idx) do
@@ -7237,16 +7288,37 @@ end;
 
 procedure TTyAdvanceChart.PaintBreakAreas(APainter: TTyPainter);
 var
-  pass, g, a, q, i: Integer;
+  pass, g, a, si: Integer;
   gb: TTyGridBuild;
   axo: TTyAxis;
   spec: PTyAxisLayoutSpec;
+  prox_: Boolean;
+  pa, pb, pc: TTyBreakPointArray;
   opt: TTyBreakAreaOpt;
   st: TTyStyleSet;
   stroke, fill: TTyColor;
   cc: TTyChartColor;
   lw, op: Double;
   hasStroke, hasFill: Boolean;
+
+  { A BREAK LEAF IN ITS groupTransition [F4a]: its points where the axis
+    proxy of its anid has them now, while the axes move }
+  function Prox(const AAnid: string; const ADef: TTyBreakPointArray): TTyBreakPointArray;
+  var
+    p: TTyChartAnimProxy;
+    v: TTyAnimValue;
+    z: Integer;
+  begin
+    Result := ADef;
+    if not prox_ then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(axo.MainType + IntToStr(axo.ComponentIndex), AAnid));
+    if p = nil then Exit;
+    v := p.GetAnimProp('shape.points');
+    if (v.Kind <> avkArray) or (v.Stride <> 2) then Exit;
+    SetLength(Result, Length(v.Arr) div 2);
+    for z := 0 to High(Result) do
+      Result[z] := TyPointF(v.Arr[2 * z], v.Arr[2 * z + 1]);
+  end;
 
   procedure Line(const P: TTyBreakPointArray);
   var z: Integer;
@@ -7260,71 +7332,97 @@ var
     APainter.SetLineDash([]);
   end;
 
-begin
-  if (FBuild = nil) or (FOption = nil) then Exit;
-  st := ActiveController.Model.ResolveStyle('TyAdvChartBreakArea', '', []);
-  { the y axes' views first, as upstream renders them }
-  for pass := 0 to 1 do
-    for g := 0 to FBuild.GridCount - 1 do
+  procedure Areas;
+  var q, i: Integer;
+  begin
+    opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
+    { THE SKIN'S COLOURS unless the option writes its own; the skin's fill
+      carries its opacity, an author's colour takes the option's (0.6
+      unless written) }
+    hasStroke := tpBorderColor in st.Present;
+    stroke := st.BorderColor;
+    if opt.HasBorderColor and TyTryParseChartColor(opt.BorderColor, cc) then
     begin
-      gb := FBuild.Grid(g);
-      for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+      stroke := TTyColor(cc);
+      hasStroke := True;
+    end;
+    if not IsNan(opt.BorderWidth) then lw := opt.BorderWidth
+    else if tpBorderWidth in st.Present then lw := st.BorderWidth
+    else lw := 1;
+    if lw <= 0 then hasStroke := False;
+    hasFill := tpBackground in st.Present;
+    fill := st.Background.Color;
+    op := opt.Opacity;
+    if opt.HasColor and TyTryParseChartColor(opt.Color, cc) then
+    begin
+      fill := TTyColor(cc);
+      hasFill := True;
+      if IsNan(op) then op := 0.6;
+    end;
+    if not IsNan(op) then
+    begin
+      if op < 0 then op := 0;
+      if op > 1 then op := 1;
+      fill := TTyColor((Cardinal(fill) and $00FFFFFF)
+        or (Cardinal(Round(((Cardinal(fill) shr 24) and $FF) * op)) shl 24));
+    end;
+    for q := 0 to High(spec^.BreakAreas) do
+    begin
+      pa := Prox('break_a_' + spec^.BreakAreas[q].Id, spec^.BreakAreas[q].A);
+      Line(pa);
+      if not spec^.BreakAreas[q].HasB then Continue;
+      pb := Prox('break_b_' + spec^.BreakAreas[q].Id, spec^.BreakAreas[q].B);
+      Line(pb);
+      { from A's end back along B: the band between them -- the polygon's
+        own points while it moves }
+      pc := nil;
+      SetLength(pc, Length(spec^.BreakAreas[q].A) + Length(spec^.BreakAreas[q].B));
+      for i := 0 to High(spec^.BreakAreas[q].A) do pc[i] := spec^.BreakAreas[q].A[i];
+      for i := 0 to High(spec^.BreakAreas[q].B) do
+        pc[Length(spec^.BreakAreas[q].A) + i] :=
+          spec^.BreakAreas[q].B[High(spec^.BreakAreas[q].B) - i];
+      pc := Prox('break_c_' + spec^.BreakAreas[q].Id, pc);
+      if hasFill and (Length(pc) > 0) then
       begin
-        if (pass = 0) <> (a >= gb.XAxisCount) then Continue;
-        if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
-        if axo = nil then Continue;
-        spec := gb.SpecFor(axo);
-        if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
-        opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
-        { THE SKIN'S COLOURS unless the option writes its own; the skin's fill
-          carries its opacity, an author's colour takes the option's (0.6
-          unless written) }
-        hasStroke := tpBorderColor in st.Present;
-        stroke := st.BorderColor;
-        if opt.HasBorderColor and TyTryParseChartColor(opt.BorderColor, cc) then
-        begin
-          stroke := TTyColor(cc);
-          hasStroke := True;
-        end;
-        if not IsNan(opt.BorderWidth) then lw := opt.BorderWidth
-        else if tpBorderWidth in st.Present then lw := st.BorderWidth
-        else lw := 1;
-        if lw <= 0 then hasStroke := False;
-        hasFill := tpBackground in st.Present;
-        fill := st.Background.Color;
-        op := opt.Opacity;
-        if opt.HasColor and TyTryParseChartColor(opt.Color, cc) then
-        begin
-          fill := TTyColor(cc);
-          hasFill := True;
-          if IsNan(op) then op := 0.6;
-        end;
-        if not IsNan(op) then
-        begin
-          if op < 0 then op := 0;
-          if op > 1 then op := 1;
-          fill := TTyColor((Cardinal(fill) and $00FFFFFF)
-            or (Cardinal(Round(((Cardinal(fill) shr 24) and $FF) * op)) shl 24));
-        end;
-        for q := 0 to High(spec^.BreakAreas) do
-        begin
-          Line(spec^.BreakAreas[q].A);
-          if not spec^.BreakAreas[q].HasB then Continue;
-          Line(spec^.BreakAreas[q].B);
-          if hasFill and (Length(spec^.BreakAreas[q].A) > 0) then
-          begin
-            { from A's end back along B: the band between them }
-            APainter.BeginPath;
-            APainter.MoveTo(spec^.BreakAreas[q].A[0].X, spec^.BreakAreas[q].A[0].Y);
-            for i := 1 to High(spec^.BreakAreas[q].A) do
-              APainter.LineTo(spec^.BreakAreas[q].A[i].X, spec^.BreakAreas[q].A[i].Y);
-            for i := High(spec^.BreakAreas[q].B) downto 0 do
-              APainter.LineTo(spec^.BreakAreas[q].B[i].X, spec^.BreakAreas[q].B[i].Y);
-            APainter.FillPath(fill);
-          end;
-        end;
+        APainter.BeginPath;
+        APainter.MoveTo(pc[0].X, pc[0].Y);
+        for i := 1 to High(pc) do APainter.LineTo(pc[i].X, pc[i].Y);
+        APainter.FillPath(fill);
       end;
     end;
+  end;
+
+begin
+  if FOption = nil then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartBreakArea', '', []);
+  { the grids' break leaves from their proxies while the axes move }
+  prox_ := AxesDynamic and not FExporting;
+  { the y axes' views first, as upstream renders them }
+  if FBuild <> nil then
+    for pass := 0 to 1 do
+      for g := 0 to FBuild.GridCount - 1 do
+      begin
+        gb := FBuild.Grid(g);
+        for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+        begin
+          if (pass = 0) <> (a >= gb.XAxisCount) then Continue;
+          if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
+          if axo = nil then Continue;
+          spec := gb.SpecFor(axo);
+          if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
+          Areas;
+        end;
+      end;
+  { the singles' [F4a]: in the view's group, out of the groupTransition }
+  prox_ := False;
+  for si := 0 to High(FSingles) do
+  begin
+    if FSingles[si] = nil then Continue;
+    axo := FSingles[si].Axis;
+    spec := @FSingles[si].View.Spec;
+    if Length(spec^.BreakAreas) = 0 then Continue;
+    Areas;
+  end;
 end;
 
 { ==================== paint ==================== }
@@ -8168,8 +8266,10 @@ begin
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
   PaintSeries(APainter, AMeasurer, APPI);
-  { THE BREAK AREAS, zigzagZ over the series [Batch 132] }
-  PaintBreakAreas(APainter);
+  { THE BREAK AREAS, zigzagZ over the series [Batch 132] -- the dynamic
+    layer's while the series move there, over them and in their axes'
+    groupTransition [F4a] }
+  if FExporting or not FAnimLive or FAnimContinuous then PaintBreakAreas(APainter);
   { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
     2 [Batch 128] }
   PaintParallels(APainter, APPI, AMeasurer);
@@ -10386,6 +10486,118 @@ begin
     Result := FRowDecals[ASlot][ARaw];
 end;
 
+function TTyAdvanceChart.RowDecalJson(ASlot, ARaw: Integer): TJSONData;
+var
+  r: TTyDecalRaw;
+  k: TTyDecalKey;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FSeriesDecalRaws)) then Exit;
+  r := FSeriesDecalRaws[ASlot];
+  if (ARaw >= 0) and (ARaw <= High(FRowDecalSet[ASlot])) and FRowDecalSet[ASlot][ARaw]
+    and (ARaw <= High(FRowDecalRaws[ASlot])) then
+    r := FRowDecalRaws[ASlot][ARaw];
+  if not r.Present then Exit;
+  Result := TJSONObject.Create;
+  for k := Low(TTyDecalKey) to High(TTyDecalKey) do
+    if r.Keys[k] <> nil then
+      TJSONObject(Result).Add(TyDecalKeyNames[k], r.Keys[k].Clone);
+end;
+
+function TTyAdvanceChart.RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+var k, n: Integer;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  n := FStores[ASlot].RawCount;
+  SetLength(Result, n);
+  for k := 0 to n - 1 do Result[k] := RowDecalOf(ASlot, k);
+end;
+
+function TTyAdvanceChart.AriaDecalPalette(out APal: TJSONData;
+  out APalN: Integer): Boolean;
+var aria, d: TJSONData;
+begin
+  APal := nil;
+  APalN := 0;
+  Result := False;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  aria := TJSONObject(FOption.Root).Find('aria');
+  if not (FAriaEnabled and (aria is TJSONObject)) then Exit;
+  d := TJSONObject(aria).Find('decal');
+  if not ((d is TJSONObject) and TyDecalTruthy(TJSONObject(d).Find('show'))) then Exit;
+  APal := TyDecalPaletteOf(aria);
+  APalN := TyDecalPaletteCount(APal);
+  Result := True;
+end;
+
+{ THE TREES' DECALS [F4a]. decalVisual gives every node its item decal --
+  dataStyleTask's own itemStyle.decal, else (getItemVisual's fallback) the
+  series'. With aria.decal.show, setDecal leaves a treemap and a sunburst to
+  enableAriaDecalForTree: over a scope new every call, every node in the
+  tree's eachNode (pre-)order asks getDecalFromPalette for its depth-1
+  ancestor's name, or that ancestor's data index -- the root asks for its
+  own, the series' name as written -- and setVisual('decal') puts the
+  palette's object in place of the node's, the node's own not merged. }
+function TTyAdvanceChart.TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarchy;
+  const AOrder: TTyIntegerArray): TTyChartDecalArray;
+var
+  n, r, k, cur, pick, palN: Integer;
+  skin: TTyChartColor;
+  pal, d, node: TJSONData;
+  scope: TTyDecalScope;
+  nm: string;
+begin
+  Result := nil;
+  n := Length(AHier.Nodes);
+  SetLength(Result, n);
+  if (ASlot < 0) or (ASlot > High(FBindings)) or FBindings[ASlot].Hidden then Exit;
+  skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).TextColor);
+  if AriaDecalPalette(pal, palN) then
+  begin
+    scope := Default(TTyDecalScope);
+    for k := 0 to High(AOrder) do
+    begin
+      r := AOrder[k];
+      if (r < 0) or (r >= n) then Continue;
+      cur := r;
+      while (cur >= 0) and (AHier.Nodes[cur].Depth > 1) do cur := AHier.Nodes[cur].Parent;
+      if cur < 0 then Continue;
+      { convertOptionIdName(name, ''): a string, a number's text, else '' }
+      if cur = 0 then node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex)
+      else node := AHier.Nodes[cur].Item;
+      nm := '';
+      if node is TJSONObject then
+      begin
+        d := TJSONObject(node).Find('name');
+        if d <> nil then
+          case d.JSONType of
+            jtString: nm := d.AsString;
+            jtNumber: nm := TyJsonJsString(d);
+          end;
+      end;
+      if nm = '' then nm := IntToStr(cur);
+      pick := TyDecalFromPalette(scope, palN, nm);
+      Result[r] := TyDecalResolve(TyDecalRawOf(TyDecalPaletteItem(pal, pick)), skin);
+    end;
+    Exit;
+  end;
+  for r := 0 to n - 1 do
+  begin
+    Result[r] := DecalOfSeries(FBindings[ASlot].SeriesIndex);
+    { a sunburst ignores the style on its data [F4a] }
+    if FBindings[ASlot].SeriesType = TySunburstSeriesTypeName then Continue;
+    node := AHier.Nodes[r].Item;
+    if not (node is TJSONObject) then Continue;
+    d := TJSONObject(node).Find('itemStyle');
+    if not (d is TJSONObject) then Continue;
+    d := TJSONObject(d).Find('decal');
+    if TyDecalTruthy(d) and not TyDecalIsPrimitive(d) then
+      Result[r] := TyDecalResolve(TyDecalRawOf(d), skin);
+  end;
+end;
+
 procedure TTyAdvanceChart.AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
 var
   aria, d: TJSONData;
@@ -10436,7 +10648,7 @@ var
   scopes: array of TTypeScope;
   aria, pal, d: TJSONData;
   palN, si, slot, n, k, rawN, pick, t: Integer;
-  useDecal: Boolean;
+  useDecal, noItems: Boolean;
   skin: TTyChartColor;
   node, item: TJSONObject;
   typ, path, nm: string;
@@ -10463,9 +10675,13 @@ begin
   FSeriesDecals := nil;
   FRowDecals := nil;
   FRowDecalSet := nil;
+  FSeriesDecalRaws := nil;
+  FRowDecalRaws := nil;
   SetLength(FSeriesDecals, n);
   SetLength(FRowDecals, n);
   SetLength(FRowDecalSet, n);
+  SetLength(FSeriesDecalRaws, n);
+  SetLength(FRowDecalRaws, n);
   if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
   skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).TextColor);
@@ -10488,6 +10704,9 @@ begin
     typ := FBindings[slot].SeriesType;
     path := TyStyleAccessPath(typ);
     seriesRaw := OwnDecal(node);
+    { a sunburst and a tree say ignoreStyleOnData: dataStyleTask reads no
+      item's style, so no item's decal [F4a] }
+    noItems := (typ = TySunburstSeriesTypeName) or (typ = TyTreeSeriesTypeName);
     st := nil;
     if slot <= High(FStores) then st := FStores[slot];
     rows := nil;
@@ -10498,7 +10717,7 @@ begin
     SetLength(rowSet, rawN);
     { dataStyleTask: the view's rows only }
     for k := 0 to rawN - 1 do
-      if st.IndexOfRawIndex(k) >= 0 then
+      if (not noItems) and (st.IndexOfRawIndex(k) >= 0) then
       begin
         item := RawItemNode(slot, k);
         if item = nil then Continue;
@@ -10548,13 +10767,16 @@ begin
     { decalVisual: nothing for a series the legend filtered }
     if FBindings[slot].Hidden then Continue;
     FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin);
+    FSeriesDecalRaws[slot] := seriesRaw;
     SetLength(FRowDecals[slot], rawN);
     SetLength(FRowDecalSet[slot], rawN);
+    SetLength(FRowDecalRaws[slot], rawN);
     for k := 0 to rawN - 1 do
       if rowSet[k] then
       begin
         FRowDecalSet[slot][k] := True;
         FRowDecals[slot][k] := TyDecalResolve(rows[k], skin);
+        FRowDecalRaws[slot][k] := rows[k];
       end;
   end;
 end;
@@ -16712,8 +16934,22 @@ begin
       and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
     begin
       APainter.BeginPath;
-      APainter.MoveTo(v.Line.X1, v.Line.Y1);
-      APainter.LineTo(v.Line.X2, v.Line.Y2);
+      { cut at the breaks: a segment between each two [F4a] }
+      if sp.HasBreakLine then
+      begin
+        for q := 0 to High(sp.BreakLineSegs) do
+          if Finite(sp.BreakLineSegs[q].X1, sp.BreakLineSegs[q].Y1)
+            and Finite(sp.BreakLineSegs[q].X2, sp.BreakLineSegs[q].Y2) then
+          begin
+            APainter.MoveTo(sp.BreakLineSegs[q].X1, sp.BreakLineSegs[q].Y1);
+            APainter.LineTo(sp.BreakLineSegs[q].X2, sp.BreakLineSegs[q].Y2);
+          end;
+      end
+      else
+      begin
+        APainter.MoveTo(v.Line.X1, v.Line.Y1);
+        APainter.LineTo(v.Line.X2, v.Line.Y2);
+      end;
       APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
       for q := 0 to High(sp.Arrows) do
         if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
@@ -17113,6 +17349,8 @@ begin
       el.Style.StrokeColor := v.Stroke;
       el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
     end;
+    { and that row's decal [F4a] }
+    el.Style.Decal := RowDecalOf(ASlot, raw);
     { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
     if k < st.Count then
       el.Datum := TyChartDatum(si, k, st.GetRawIndex(k))
@@ -20556,6 +20794,7 @@ var
 begin
   Result := TyRadarVisual(SeriesColor(ASlot));
   Result.Fills := PerDatumColours(ASlot);
+  Result.Decals := RawRowDecals(ASlot);
   { a visualMap's symbolSize per ring }
   if (ASlot <= High(FVisualRows)) and (FVisualRows[ASlot] <> nil) then
   begin
@@ -20603,6 +20842,38 @@ begin
     d := ar.Find('opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.AreaOpacity := Max(Double(0), Min(Double(1), d.AsFloat));
+  end;
+  { AN ITEM'S OWN areaStyle [F4a]: Model.isEmpty is `option == null`, so any
+    object an item writes shows its polygon; its colour and opacity over the
+    series' }
+  d := node.Find('data');
+  if d is TJSONArray then
+  begin
+    SetLength(Result.RowArea, d.Count);
+    SetLength(Result.RowAreaColourSet, d.Count);
+    SetLength(Result.RowAreaColour, d.Count);
+    SetLength(Result.RowAreaOpacitySet, d.Count);
+    SetLength(Result.RowAreaOpacity, d.Count);
+    for k := 0 to d.Count - 1 do
+    begin
+      if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
+      ar := nil;
+      if TJSONObject(TJSONArray(d).Items[k]).Find('areaStyle') is TJSONObject then
+        ar := TJSONObject(TJSONObject(TJSONArray(d).Items[k]).Find('areaStyle'));
+      if ar = nil then Continue;
+      Result.RowArea[k] := True;
+      if (ar.Find('color') <> nil) and (ar.Find('color').JSONType = jtString)
+        and TyTryParseChartColor(ar.Find('color').AsString, c) then
+      begin
+        Result.RowAreaColourSet[k] := True;
+        Result.RowAreaColour[k] := c;
+      end;
+      if (ar.Find('opacity') <> nil) and (ar.Find('opacity').JSONType = jtNumber) then
+      begin
+        Result.RowAreaOpacitySet[k] := True;
+        Result.RowAreaOpacity[k] := Max(Double(0), Min(Double(1), ar.Find('opacity').AsFloat));
+      end;
+    end;
   end;
   { a state's areaStyle shows the polygon in that state [F2b] }
   for k := 0 to 2 do
@@ -20654,6 +20925,7 @@ var
 begin
   Result := TyGaugeVisual;
   Result.Fills := PerDatumColours(ASlot);
+  Result.Decals := RawRowDecals(ASlot);
   model := ActiveController.Model;
   { THE TRACK IS THE RING A PIE DRAWS WITH NO DATA. Upstream writes a literal
     pale grey, which is a pale grey ring on a dark skin; the same key the empty
@@ -21170,8 +21442,8 @@ begin
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
       { the series' style decal under the legend's own [Batch 131]; an icon
-        the series draws itself (a line's) takes none here }
-      if not Result[i].OwnIcon then
+        the series draws itself (a line's) takes it too: getLegendIcon sets
+        the legend style on its symbol, decal and all [F4a] }
       begin
         if j <= High(FSeriesDecals) then
           Result[i].Decal := LegendDecalOf(ALegend, AEntries[i].Name, FSeriesDecals[j])
@@ -22749,6 +23021,7 @@ var
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
   pk, gk, gq: Integer;
+  tmOrder: TTyIntegerArray;
   gfxCount: Integer;
 begin
   Result := 0;
@@ -22939,6 +23212,7 @@ begin
       begin
         if (i <= High(FSankeys)) and FSankeys[i].Valid then
         begin
+          FSankeyInks[i].NodeDecals := RawRowDecals(i);
           Inc(drawn, TyBuildSankeyMarks(FBindings[i].SeriesIndex, FSankeys[i],
             FSankeyInks[i], list));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -22955,6 +23229,7 @@ begin
       begin
         if (i <= High(FChords)) and FChords[i].Valid then
         begin
+          FChordInks[i].NodeDecals := RawRowDecals(i);
           Inc(drawn, TyBuildChordMarks(FBindings[i].SeriesIndex, FChords[i],
             FChordInks[i], list));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -22970,6 +23245,10 @@ begin
       begin
         if (i <= High(FTreemaps)) and FTreemaps[i].Valid then
         begin
+          { eachNode's pre-order: the rows' own, as written }
+          SetLength(tmOrder, Length(FTreemaps[i].Hier.Nodes));
+          for gq := 0 to High(tmOrder) do tmOrder[gq] := gq;
+          FTreemapInks[i].NodeDecals := TreeNodeDecals(i, FTreemaps[i].Hier, tmOrder);
           Inc(drawn, TyBuildTreemapMarks(FBindings[i].SeriesIndex, FTreemaps[i],
             FTreemapInks[i], list));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -22986,6 +23265,9 @@ begin
         if (i <= High(FSunbursts)) and FSunbursts[i].Valid then
         begin
           si2 := SunburstInk(i);
+          { the layout sorted the children in place: eachNode walks them so }
+          si2.NodeDecals := TreeNodeDecals(i, FSunbursts[i].Hier,
+            TySunburstSubtree(FSunbursts[i], 0));
           Inc(drawn, TyBuildSunburstMarks(FBindings[i].SeriesIndex, FSunbursts[i], si2,
             FStores[i], list, APPI));
           if Length(specs) <= FBindings[i].SeriesIndex then
@@ -26673,6 +26955,14 @@ begin
         { A BREAK'S LABEL expands its break on a click [Batch 132] }
         if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
         begin
+          { eventData.break: the break's start and end [F4a] }
+          if spec^.LabelBreakKind[q] = 1 then Result.Params.BreakType := 'start'
+          else Result.Params.BreakType := 'end';
+          if q <= High(spec^.LabelBreakLo) then
+          begin
+            Result.Params.BreakStart := spec^.LabelBreakLo[q];
+            Result.Params.BreakEnd := spec^.LabelBreakHi[q];
+          end;
           Result.HdKind := 13;
           Result.HdSeries := g * 1000 + a;
           Result.HdRow := spec^.LabelBreakIndex[q];
@@ -26683,8 +26973,12 @@ begin
           Result.Params.DataIndex := Round(TTyOrdinalScale(axObj.Scale).TickToOrdinal(spec^.TickValues[q]));
           Result.Params.RawDataIndex := Result.Params.DataIndex;
         end
+        { eventData.value is the label's rawLabel: scale.getLabel(tick),
+          grouped as the label is [F4a] }
+        else if axObj.Scale is TTyTimeScale then
+          Result.Params.ValueText := TTyTimeScale(axObj.Scale).GetLabel(spec^.TickValues[q])
         else
-          Result.Params.ValueText := TyChartValueText(spec^.TickValues[q]);
+          Result.Params.ValueText := TyAxisTickLabel(axObj, spec^.TickValues[q], False, '');
         Exit;
       end;
       Result.Model := Default(TTyEventModel);
@@ -40504,8 +40798,10 @@ begin
       q := TTyChartAnimProxy(oldMap.Find(newKeys[i]));
       if q <> nil then
         for k := 0 to High(from) do
-          if q.GetAnimProp(from[k].Key).Kind = avkNumber then
-            from[k].Value := q.GetAnimProp(from[k].Key);
+          { a break leaf's points too: getAnimatableProps clones the shape
+            as it is now [F4a] }
+          if q.GetAnimProp(from[k].Key).Kind in [avkNumber, avkArray] then
+            from[k].Value := TyAnimClone(q.GetAnimProp(from[k].Key));
       p.Attr(from);
       p.SetFinal(props);
       { updateProps on the axis model, at no data index }
@@ -42260,6 +42556,8 @@ begin
       layer draws them [Batch 96] }
     if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
     TyRenderPaintList(APainter, AnimFrame);
+    { the break areas over the series in motion [F4a] }
+    PaintBreakAreas(APainter);
     { the parallel axes over the lines in motion [Batch 128] }
     PaintParallels(APainter, APPI, AMeasurer);
     PaintTitles(APainter);
@@ -44679,8 +44977,8 @@ begin
 end;
 
 { the style visual's fill and stroke; the item visuals a visualMap sets --
-  symbol, symbolSize, liftZ [Batch 124]; the rest a custom series has none
-  of }
+  symbol, symbolSize, liftZ [Batch 124]; the item's decal, a copy of the
+  object (F4a); the rest a custom series has none of }
 function TTyChartCustomApi.Visual(const AType: string; ADataIndexInside: Integer): TJSONData;
 var
   r: Integer;
@@ -44693,6 +44991,13 @@ begin
   begin
     Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
     if Result <> nil then Result := Result.Clone;
+  end
+  else if AType = 'decal' then
+  begin
+    { the item's decal visual, through getItemVisual's fallback to the
+      series' [F4a] }
+    if r >= 0 then Result := Chart.RowDecalJson(Slot, Store.GetRawIndex(r))
+    else Result := Chart.RowDecalJson(Slot, -1);
   end
   else if Chart.CustomVisualRow(Slot, r, vr) then
   begin
@@ -45313,6 +45618,7 @@ var
   clipOn: Boolean;
   clip: TTyRectF;
   all: TTyGfxElArray;
+  decalSkin: TTyChartColor;
 
   { doUpdateZ over one item's tree: the running greatest z2 lifts each
     textContent to it + 2 }
@@ -45349,6 +45655,16 @@ var
         Exit;
     end;
     if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
+    { A PATH'S style.decal [F4a]: CustomView turns the decal object
+      renderItem returned into its pattern -- api.visual('decal') or one
+      written there; a text or an image takes none (isPath). A primitive
+      (`'none'`) is no pattern here: upstream sets `dirty` on it and throws. }
+    if not (AEl.Kind in [gkUnknown, gkGroup, gkImage, gkText]) and (AEl.Style <> nil) then
+    begin
+      d := AEl.Style.Find('decal');
+      if d is TJSONObject then
+        pe.Style.Decal := TyDecalResolve(TyDecalRawOf(d), decalSkin);
+    end;
     pe.Silent := ASilent;
     pe.Datum := datum;
     pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
@@ -45387,6 +45703,8 @@ begin
   if APPI <= 0 then APPI := 96;
   scale := APPI / 96;
   meas := NewTextMeasurer(96);
+  decalSkin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).TextColor);
   { the transforms and the textContents' places }
   TyGfxUpdateTransforms(view.Root);
   MarkerGround(ground.Background, ground.IsDark);

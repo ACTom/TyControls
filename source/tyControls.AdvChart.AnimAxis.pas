@@ -34,6 +34,12 @@ unit tyControls.AdvChart.AnimAxis;
   another tick (a tick mark and a split line keep the tick number, and stay)
   [Batch 135].
 
+    break areas  'break_a_' + id,      each break's zigzag polylines A and B
+                 'break_b_' + id,      and the polygon between them (A, then
+                 'break_c_' + id       B backwards) -- shape.points, arrays
+                                       of a length the render decides, cut
+                                       or padded by zrender's fillArray;
+                                       id the break's identity [F4a]
   Minor ticks ('minorticks_'), minor split lines ('minor_line_'), split
   areas ('area_') and the axis name ('name') are not modelled: they are
   drawn where the layout puts them. }
@@ -42,7 +48,9 @@ uses SysUtils, Math,
   tyControls.AdvChart.Types, tyControls.AdvChart.Layout, tyControls.AdvChart.Anim;
 
 type
-  TTyAxisAnimKind = (aakLine, aakTick, aakLabel, aakSplitLine);
+  TTyAxisAnimKind = (aakLine, aakTick, aakLabel, aakSplitLine,
+    { [F4a] a break area's polyline A, B and its polygon }
+    aakBreakA, aakBreakB, aakBreakC);
 
   { one leaf of an axis group: a Text (X, Y, Rotation) or a Line (X1 .. Y2),
     and where it came from in the spec }
@@ -53,6 +61,8 @@ type
     Index: Integer;
     X, Y, Rotation: Double;
     X1, Y1, X2, Y2: Double;
+    { a break leaf's points, x and y in turn [F4a] }
+    Pts: TTyDoubleArray;
   end;
   TTyAxisAnimElArray = array of TTyAxisAnimEl;
 
@@ -81,7 +91,7 @@ procedure TySubPixelOptimizeLine(var AX1, AY1, AX2, AY2: Double; ALineWidth: Dou
 function TyAxisAnimElements(const ASpec: TTyAxisLayoutSpec;
   const AIn: TTyAxisAnimInput): TTyAxisAnimElArray;
 { the props groupTransition moves: x / y / rotation of a Text, the four
-  ends of a Line }
+  ends of a Line, a break leaf's points }
 function TyAxisAnimProps(const AEl: TTyAxisAnimEl): TTyAnimProps;
 { a proxy key: the axis' ('xAxis0') and the anid }
 function TyAxisAnimKey(const AAxisKey, AAnid: string): string;
@@ -126,6 +136,26 @@ procedure Apply(const M: TTyMat2D; AX, AY: Double; out AOX, AOY: Double);
 begin
   AOX := M[0] * AX + M[2] * AY + M[4];
   AOY := M[1] * AX + M[3] * AY + M[5];
+end;
+
+{ a polyline's points flattened, or a polygon's: A, then B backwards }
+function FlatPoints(const AA, AB: TTyBreakPointArray): TTyDoubleArray;
+var i, n: Integer;
+begin
+  SetLength(Result, 2 * (Length(AA) + Length(AB)));
+  n := 0;
+  for i := 0 to High(AA) do
+  begin
+    Result[n] := AA[i].X;
+    Result[n + 1] := AA[i].Y;
+    Inc(n, 2);
+  end;
+  for i := High(AB) downto 0 do
+  begin
+    Result[n] := AB[i].X;
+    Result[n + 1] := AB[i].Y;
+    Inc(n, 2);
+  end;
 end;
 
 function TyAxisAnimElements(const ASpec: TTyAxisLayoutSpec;
@@ -226,6 +256,18 @@ begin
       TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
         AIn.SplitWidth);
     end;
+  { the break areas: rectCoordBuildBreakAxis adds them to the axis group
+    [F4a] }
+  for i := 0 to High(ASpec.BreakAreas) do
+  begin
+    k := Push(aakBreakA, 'break_a_' + ASpec.BreakAreas[i].Id, i);
+    els[k].Pts := FlatPoints(ASpec.BreakAreas[i].A, nil);
+    if not ASpec.BreakAreas[i].HasB then Continue;
+    k := Push(aakBreakB, 'break_b_' + ASpec.BreakAreas[i].Id, i);
+    els[k].Pts := FlatPoints(ASpec.BreakAreas[i].B, nil);
+    k := Push(aakBreakC, 'break_c_' + ASpec.BreakAreas[i].Id, i);
+    els[k].Pts := FlatPoints(ASpec.BreakAreas[i].A, ASpec.BreakAreas[i].B);
+  end;
   SetLength(els, n);
   Result := els;
 end;
@@ -243,7 +285,9 @@ end;
 
 function TyAxisAnimProps(const AEl: TTyAxisAnimEl): TTyAnimProps;
 begin
-  if AEl.Kind = aakLabel then
+  if AEl.Kind in [aakBreakA, aakBreakB, aakBreakC] then
+    Result := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(AEl.Pts, 2))])
+  else if AEl.Kind = aakLabel then
     Result := TyAnimProps([TyAnimProp('x', TyAnimNum(AEl.X)),
       TyAnimProp('y', TyAnimNum(AEl.Y)), TyAnimProp('rotation', TyAnimNum(AEl.Rotation))])
   else

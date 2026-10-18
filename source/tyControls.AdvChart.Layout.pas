@@ -719,6 +719,9 @@ type
       hideOverlap, and the two of one break are moved apart. }
     LabelBreakKind: TTyIntegerArray;
     LabelBreakIndex: TTyIntegerArray;
+    { [F4a] the break's two ends as the extent clamps them, beside each
+      label LabelBreakKind names: what an axis label event's `break` holds }
+    LabelBreakLo, LabelBreakHi: TTyDoubleArray;
     { breakLabelLayout.moveOverlap: true or 'auto' }
     BreakMoveOverlap: Boolean;
     { the axis line cut at the breaks, on the final rect; HasBreakLine False

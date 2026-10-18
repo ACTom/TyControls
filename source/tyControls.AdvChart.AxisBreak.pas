@@ -52,8 +52,10 @@ type
 
 { `breaks` of an axis, parsed (parseAxisBreakOption). AIsTime picks the
   time scale's parse (a number rounded, a string a date) over the interval
-  scale's (Number()). }
-function TyParseAxisBreaks(AData: TJSONData; AIsTime: Boolean): TTyAxisBreakArray;
+  scale's (Number()). ANoNegative: a log axis' `noNegative` -- an end
+  below nought is nought [F4a]. }
+function TyParseAxisBreaks(AData: TJSONData; AIsTime: Boolean;
+  ANoNegative: Boolean = False): TTyAxisBreakArray;
 { retrieveAxisBreaksOption on a cartesian axis: the `breaks` key written
   (anything but null), on an axis that is not a category one }
 function TyAxisBreaksWritten(ANode: TJSONObject): Boolean;
@@ -143,7 +145,8 @@ begin
   end;
 end;
 
-function TyParseAxisBreaks(AData: TJSONData; AIsTime: Boolean): TTyAxisBreakArray;
+function TyParseAxisBreaks(AData: TJSONData; AIsTime: Boolean;
+  ANoNegative: Boolean): TTyAxisBreakArray;
 var
   i, j, n: Integer;
   o: TJSONObject;
@@ -220,6 +223,12 @@ begin
     begin
       b.GapKind := bgkAbs;
       b.GapVal := 0;
+    end;
+    { noNegative: an end below nought is nought [F4a] }
+    if ANoNegative then
+    begin
+      if b.VMin < 0 then b.VMin := 0;
+      if b.VMax < 0 then b.VMax := 0;
     end;
     { written backwards: turned round }
     if b.VMin > b.VMax then
@@ -656,6 +665,215 @@ begin
   Result.H := my - Result.Y;
 end;
 
+{ ==================== zrender's OrientedBoundingRect.intersect ====================
+
+  [F4a] With an MTV, a direction and bidirectional false -- what
+  adjustBreakLabelPair hands labelIntersect for two labels that are not both
+  axis aligned. The intersect context (BoundingRect.ts createIntersectContext):
+  minTv starts at (Infinity, Infinity), maxTv at (0, 0), dirMinTv at minTv;
+  every overlapping projection offers its two ways out to calcDirMTV, which
+  keeps the shortest translation ALONG the direction (one way only). }
+type
+  TObbM = record
+    CX, CY: array[0..3] of Double;
+    AX, AY: array[0..1] of Double;
+    Origin: array[0..1] of Double;
+  end;
+  TObbCtx = record
+    MinX, MinY, MaxX, MaxY, DirX, DirY: Double;
+    Touch: Double;
+    NegativeSize: Boolean;
+    Direction, CheckX, CheckY: Double;
+  end;
+
+function ObbOf(const ABox: TTyLabelBox): TObbM;
+var
+  x, y, x2, y2, px, py, len: Double;
+  i: Integer;
+  m: TTyMat2D;
+begin
+  m := ABox.M;
+  x := ABox.LocalRect.X;
+  y := ABox.LocalRect.Y;
+  x2 := x + ABox.LocalRect.W;
+  y2 := y + ABox.LocalRect.H;
+  Result.CX[0] := x;  Result.CY[0] := y;
+  Result.CX[1] := x2; Result.CY[1] := y;
+  Result.CX[2] := x2; Result.CY[2] := y2;
+  Result.CX[3] := x;  Result.CY[3] := y2;
+  for i := 0 to 3 do
+  begin
+    px := Result.CX[i];
+    py := Result.CY[i];
+    Result.CX[i] := m[0] * px + m[2] * py + m[4];
+    Result.CY[i] := m[1] * px + m[3] * py + m[5];
+  end;
+  Result.AX[0] := Result.CX[1] - Result.CX[0];
+  Result.AY[0] := Result.CY[1] - Result.CY[0];
+  Result.AX[1] := Result.CX[3] - Result.CX[0];
+  Result.AY[1] := Result.CY[3] - Result.CY[0];
+  for i := 0 to 1 do
+  begin
+    { Point.normalize: a nought vector stays nought }
+    len := Sqrt(Result.AX[i] * Result.AX[i] + Result.AY[i] * Result.AY[i]);
+    if len <> 0 then
+    begin
+      Result.AX[i] := Result.AX[i] / len;
+      Result.AY[i] := Result.AY[i] / len;
+    end;
+  end;
+  for i := 0 to 1 do
+    Result.Origin[i] := Result.AX[i] * Result.CX[0] + Result.AY[i] * Result.CY[0];
+end;
+
+{ _getProjMinMaxOnAxis: the corners on the self box' axis ADim }
+procedure ObbProj(var C: TObbCtx; const ASelf, ACorners: TObbM; ADim: Integer;
+  out ALo, AHi: Double);
+var
+  proj, mn, mx: Double;
+  k: Integer;
+begin
+  proj := ACorners.CX[0] * ASelf.AX[ADim] + ACorners.CY[0] * ASelf.AY[ADim]
+    + ASelf.Origin[ADim];
+  mn := proj;
+  mx := proj;
+  for k := 1 to 3 do
+  begin
+    proj := ACorners.CX[k] * ASelf.AX[ADim] + ACorners.CY[k] * ASelf.AY[ADim]
+      + ASelf.Origin[ADim];
+    mn := Min(proj, mn);
+    mx := Max(proj, mx);
+  end;
+  ALo := mn + C.Touch;
+  AHi := mx - C.Touch;
+  C.NegativeSize := AHi < ALo;
+end;
+
+function ObbNearZero(V: Double): Boolean;
+begin
+  Result := Abs(V) < 1e-10;
+end;
+
+{ calcDirMTV, bidirectional false }
+procedure ObbDirMtv(var C: TObbCtx);
+var sq, s, co, dot, tx, ty: Double;
+begin
+  sq := C.MinY * C.MinY + C.MinX * C.MinX;
+  s := TyJsSin(C.Direction);
+  co := TyJsCos(C.Direction);
+  dot := s * C.MinY + co * C.MinX;
+  if ObbNearZero(dot) then
+  begin
+    if ObbNearZero(C.MinX) and ObbNearZero(C.MinY) then
+    begin
+      C.DirX := 0;
+      C.DirY := 0;
+    end;
+    Exit;
+  end;
+  tx := sq * co / dot;
+  ty := sq * s / dot;
+  if ObbNearZero(tx) and ObbNearZero(ty) then
+  begin
+    C.DirX := 0;
+    C.DirY := 0;
+    Exit;
+  end;
+  if (C.CheckX * tx + C.CheckY * ty > 0)
+    and (Sqrt(tx * tx + ty * ty) < Sqrt(C.DirX * C.DirX + C.DirY * C.DirY)) then
+  begin
+    C.DirX := tx;
+    C.DirY := ty;
+  end;
+end;
+
+{ _intersectCheckOneSide with an MTV }
+function ObbOneSide(var C: TObbCtx; const ASelf, AOther: TObbM; AInverse: Double): Boolean;
+var
+  i: Integer;
+  lo1, hi1, lo2, hi2, d0, d1, ax, ay: Double;
+begin
+  Result := True;
+  for i := 0 to 1 do
+  begin
+    ax := ASelf.AX[i];
+    ay := ASelf.AY[i];
+    ObbProj(C, ASelf, ASelf, i, lo1, hi1);
+    ObbProj(C, ASelf, AOther, i, lo2, hi2);
+    if C.NegativeSize or (hi1 < lo2) or (lo1 > hi2) then
+    begin
+      Result := False;
+      if C.NegativeSize then Exit;
+      d0 := Abs(lo2 - hi1);
+      d1 := Abs(lo1 - hi2);
+      if Min(d0, d1) > Sqrt(C.MaxX * C.MaxX + C.MaxY * C.MaxY) then
+      begin
+        if d0 < d1 then
+        begin
+          C.MaxX := ax * (-d0 * AInverse);
+          C.MaxY := ay * (-d0 * AInverse);
+        end
+        else
+        begin
+          C.MaxX := ax * (d1 * AInverse);
+          C.MaxY := ay * (d1 * AInverse);
+        end;
+      end;
+    end
+    else
+    begin
+      d0 := Abs(lo2 - hi1);
+      d1 := Abs(lo1 - hi2);
+      { useDir: both ways, one at a time (bidirectional false) }
+      C.MinX := ax * (d0 * AInverse);
+      C.MinY := ay * (d0 * AInverse);
+      ObbDirMtv(C);
+      C.MinX := ax * (-d1 * AInverse);
+      C.MinY := ay * (-d1 * AInverse);
+      ObbDirMtv(C);
+    end;
+  end;
+end;
+
+function TyObbIntersectDir(const A, B: TTyLabelBox; ADirection, ATouch: Double;
+  out AMtvX, AMtvY: Double): Boolean;
+var
+  C: TObbCtx;
+  oa, ob: TObbM;
+begin
+  AMtvX := 0;
+  AMtvY := 0;
+  C.Touch := Max(Double(0), ATouch);
+  C.NegativeSize := False;
+  C.MinX := Infinity;
+  C.MinY := Infinity;
+  C.MaxX := 0;
+  C.MaxY := 0;
+  C.DirX := Infinity;
+  C.DirY := Infinity;
+  C.Direction := ADirection;
+  C.CheckX := TyJsCos(ADirection);
+  C.CheckY := TyJsSin(ADirection);
+  oa := ObbOf(A);
+  ob := ObbOf(B);
+  Result := True;
+  if not ObbOneSide(C, oa, ob, 1) then Result := False;
+  if not ObbOneSide(C, ob, oa, -1) then Result := False;
+  if not C.NegativeSize then
+  begin
+    if Result then
+    begin
+      AMtvX := C.DirX;
+      AMtvY := C.DirY;
+    end
+    else
+    begin
+      AMtvX := C.MaxX;
+      AMtvY := C.MaxY;
+    end;
+  end;
+end;
+
 procedure TyAdjustBreakLabelPair(AInverse: Boolean; AAxisRotation: Double;
   var AP0, AP1: TTyAxisLabelPlacement; const ABox0, ABox1: TTyLabelBox;
   const ABareLocal0, ABareLocal1: TTyXYWH);
@@ -672,10 +890,12 @@ var
 
 begin
   if AInverse then dir := -(AAxisRotation + Pi) else dir := -AAxisRotation;
-  { labelIntersect: both boxes axis aligned is the rect test alone; any
-    other needs the oriented one, which is not here }
-  if not (ABox0.AxisAligned and ABox1.AxisAligned) then Exit;
+  { labelIntersect: the rects first (a fast rejection); both boxes axis
+    aligned is that test alone, any other goes on to the oriented boxes,
+    whose MTV replaces the rects' [F4a] }
   if not TyRectIntersectDir(ABox0.Rect, ABox1.Rect, dir, 0, mtvX, mtvY) then Exit;
+  if not (ABox0.AxisAligned and ABox1.AxisAligned) then
+    if not TyObbIntersectDir(ABox0, ABox1, dir, 0, mtvX, mtvY) then Exit;
   { rotate the axis back to (1, 0) }
   st := TyJsSin(-AAxisRotation);
   ct := TyJsCos(-AAxisRotation);

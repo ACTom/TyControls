@@ -181,6 +181,73 @@ type
     function HasExtent(AKind: TTyScaleExtentKind): Boolean;
   end;
 
+  { [F4a] A LOG AXIS WITH BREAKS: upstream's LogScale and its two stubs.
+    powStub holds the extent as set and the breaks as written; intervalStub
+    holds the extent in the logarithm and the breaks taken into it
+    (parseAxisBreakOptionInwardTransform: the two ends through the log, an
+    absolute gap as what it spans from the start there), and its own break
+    mapper -- the gaps, the elapsed (linear) extent -- in that space.
+
+    THE MAPPER IS A LOG MAPPER TO THE SCALE: TransformIn and TransformOut
+    are the logarithm and the power alone, NeedTransform True, so the
+    interval scale steps in decades as on any log axis. Normalize goes
+    through the logarithm and then the stub's breaks.
+
+    THE LOOKUP (logScalePowTick's): the log of the extent at the last
+    effective SetExtent and the raw extent, then each break's two ends at
+    2 + idx and 2 + idx + 1 -- so a second break's start overwrites the
+    first one's end, which then comes back as a power, as upstream's does.
+    A value found among the logs comes back as its raw value. }
+  ITyLogBreakScaleMapper = interface(ITyBreakScaleMapper)
+    ['{8B5D2E31-6C4A-4F09-A3E7-1D9C0B7A5F42}']
+    { intervalStub.setExtent and powStub.setExtent, apart from the lookup
+      (updateIntervalOrLogScaleForNiceOrAligned) }
+    procedure SetNiced(const ARaw, ALog: TTyRange);
+    { intervalStub.setExtent alone: the log extent the nice step is
+      worked out on }
+    procedure SetStubExtent(const ALog: TTyRange);
+    { the breaks in log space, their gaps of the last stub extent }
+    function StubBreaks: TTyAxisBreakArray;
+    { logScalePowTick over the scale's lookup }
+    function PowLookup(ALogValue: Double): Double;
+  end;
+
+  TTyLogBreakScaleMapper = class(TInterfacedObject, ITyScaleMapper,
+    ITyBreakScaleMapper, ITyLogBreakScaleMapper)
+  private
+    FLog: ITyScaleMapper;
+    FStubObj: TTyBreakScaleMapper;
+    FStub: ITyScaleMapper;          // keeps FStubObj alive
+    FRaw: TTyAxisBreakArray;
+    FExt: array[TTyScaleExtentKind] of TTyRange;
+    FHas: array[TTyScaleExtentKind] of Boolean;
+    FFrom, FTo: TTyDoubleArray;
+  public
+    { ALog the log mapper; ABreaks as parsed (noNegative applied) }
+    constructor Create(const ALog: ITyScaleMapper; const ABreaks: TTyAxisBreakArray);
+    { ITyBreakScaleMapper: the breaks as written, the gaps intervalStub
+      worked out; the linear extent and BreakInside in LOG space }
+    function BreakList: TTyAxisBreakArray;
+    function BreakCount: Integer;
+    function LinearExtent(AKind: TTyScaleExtentKind): TTyRange;
+    function BreakInside(AValue: Double): Integer;
+    { ITyScaleMapper }
+    function NeedTransform: Boolean;
+    function TransformIn(AValue: Double): Double;
+    function TransformOut(AValue: Double): Double;
+    function Normalize(AValue: Double): Double;
+    function Denormalize(ANorm: Double): Double;
+    function Contain(AValue: Double): Boolean;
+    function GetExtent(AKind: TTyScaleExtentKind): TTyRange;
+    procedure SetExtent(AKind: TTyScaleExtentKind; const ARange: TTyRange);
+    function HasExtent(AKind: TTyScaleExtentKind): Boolean;
+    { ITyLogBreakScaleMapper }
+    procedure SetNiced(const ARaw, ALog: TTyRange);
+    procedure SetStubExtent(const ALog: TTyRange);
+    function StubBreaks: TTyAxisBreakArray;
+    function PowLookup(ALogValue: Double): Double;
+  end;
+
   { WHICH TICKS A SCALE HANDS BACK (upstream's ScaleGetTicksOpt). The break
     ends as ticks of their own: inserted (the default -- labels, axis
     ticks), left out (split lines and areas), or alone. The normal ticks
@@ -423,6 +490,11 @@ type
     { [Batch 132] with breaks }
     function BrokenTicks(const AOpt: TTyTicksOpt;
       const ABrk: ITyBreakScaleMapper): TTyScaleTickArray;
+    { [F4a] a log axis' breaks: intervalStub's ticks taken back out }
+    function LogBrokenTicks(const AOpt: TTyTicksOpt;
+      const ALb: ITyLogBreakScaleMapper): TTyScaleTickArray;
+    { [F4a] the log-break mapper, when this is a log axis with breaks }
+    function LogBreak: ITyLogBreakScaleMapper;
     function LogWarped: Boolean;
     procedure NiceifyJs(ASplitNumber: Double; AUserInterval: Double);
   public
@@ -455,6 +527,9 @@ type
     { The major ticks in the stepping space -- decades on a log axis -- as
       drawn, or expanded to the nice extent. }
     function StepTicks(AExpand: Boolean): TTyDoubleArray;
+    { [F4a] the extent the step walks: decades on a log axis -- upstream's
+      intervalStub.getExtent() }
+    function StepExtent: TTyRange;
     property HasIntervalCount: Boolean read FHasIntervalCount;
     property IntervalCount: Integer read FIntervalCount;
     { ON A LOG AXIS, OVER THE DECADES NICEIFY LEFT: upstream's intervalStub
@@ -1324,6 +1399,188 @@ end;
 function TTyBreakScaleMapper.HasExtent(AKind: TTyScaleExtentKind): Boolean;
 begin
   Result := FHas[AKind];
+end;
+
+{ ============================ TTyLogBreakScaleMapper ============================ }
+
+constructor TTyLogBreakScaleMapper.Create(const ALog: ITyScaleMapper;
+  const ABreaks: TTyAxisBreakArray);
+var
+  inw: TTyAxisBreakArray;
+  i, n: Integer;
+  k: TTyScaleExtentKind;
+  mask: TFPUExceptionMask;
+begin
+  inherited Create;
+  FLog := ALog;
+  FRaw := Copy(ABreaks);
+  inw := Copy(ABreaks);
+  SetLength(FFrom, 2);
+  SetLength(FTo, 2);
+  FFrom[0] := NaN;
+  FFrom[1] := NaN;
+  FTo[0] := NaN;
+  FTo[1] := NaN;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    for i := 0 to High(inw) do
+    begin
+      inw[i].VMin := FLog.TransformIn(ABreaks[i].VMin);
+      inw[i].VMax := FLog.TransformIn(ABreaks[i].VMax);
+      if inw[i].GapKind = bgkAbs then
+        inw[i].GapVal := FLog.TransformIn(ABreaks[i].VMin + ABreaks[i].GapVal) - inw[i].VMin;
+      { lookup.from[2 + idx] = vmin, lookup.from[2 + idx + 1] = vmax: the
+        next break's start lands on this one's end }
+      n := 2 + i + 2;
+      if Length(FFrom) < n then
+      begin
+        SetLength(FFrom, n);
+        SetLength(FTo, n);
+      end;
+      FFrom[2 + i] := inw[i].VMin;
+      FTo[2 + i] := ABreaks[i].VMin;
+      FFrom[2 + i + 1] := inw[i].VMax;
+      FTo[2 + i + 1] := ABreaks[i].VMax;
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+  { intervalStub's break mapper: the breaks already in its space }
+  FStubObj := TTyBreakScaleMapper.Create(nil, inw);
+  FStub := FStubObj;
+  for k := Low(TTyScaleExtentKind) to High(TTyScaleExtentKind) do
+  begin
+    FExt[k] := TyRange(1, 10);
+    FHas[k] := False;
+  end;
+  FHas[sekEffective] := True;
+end;
+
+function TTyLogBreakScaleMapper.BreakList: TTyAxisBreakArray;
+var
+  s: TTyAxisBreakArray;
+  i: Integer;
+begin
+  Result := Copy(FRaw);
+  s := FStubObj.BreakList;
+  for i := 0 to High(Result) do
+    if i <= High(s) then Result[i].GapReal := s[i].GapReal;
+end;
+
+function TTyLogBreakScaleMapper.BreakCount: Integer;
+begin
+  Result := Length(FRaw);
+end;
+
+function TTyLogBreakScaleMapper.LinearExtent(AKind: TTyScaleExtentKind): TTyRange;
+begin
+  Result := FStubObj.LinearExtent(AKind);
+end;
+
+function TTyLogBreakScaleMapper.BreakInside(AValue: Double): Integer;
+begin
+  Result := FStubObj.BreakInside(AValue);
+end;
+
+function TTyLogBreakScaleMapper.NeedTransform: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyLogBreakScaleMapper.TransformIn(AValue: Double): Double;
+begin
+  Result := FLog.TransformIn(AValue);
+end;
+
+function TTyLogBreakScaleMapper.TransformOut(AValue: Double): Double;
+begin
+  Result := FLog.TransformOut(AValue);
+end;
+
+{ intervalStub.normalize(logScaleLogTick(val)) }
+function TTyLogBreakScaleMapper.Normalize(AValue: Double): Double;
+begin
+  Result := FStubObj.Normalize(FLog.TransformIn(AValue));
+end;
+
+{ logScalePowTick(intervalStub.scale(val)), no lookup }
+function TTyLogBreakScaleMapper.Denormalize(ANorm: Double): Double;
+begin
+  Result := FLog.TransformOut(FStubObj.Denormalize(ANorm));
+end;
+
+{ powStub.contain }
+function TTyLogBreakScaleMapper.Contain(AValue: Double): Boolean;
+var e: TTyRange;
+begin
+  e := GetExtent(sekMapping);
+  Result := not IsNan(AValue) and (AValue >= e.Start) and (AValue <= e.Stop);
+end;
+
+function TTyLogBreakScaleMapper.GetExtent(AKind: TTyScaleExtentKind): TTyRange;
+begin
+  if (AKind = sekMapping) and not FHas[sekMapping] then
+    Result := FExt[sekEffective]
+  else
+    Result := FExt[AKind];
+end;
+
+{ LogScale.setExtent2: nothing for an extent that is not two positive finite
+  ends in order; else powStub as set, intervalStub in the log -- and the
+  effective one writes the lookup's first two }
+procedure TTyLogBreakScaleMapper.SetExtent(AKind: TTyScaleExtentKind; const ARange: TTyRange);
+var lg: TTyRange;
+begin
+  if IsNan(ARange.Start) or IsNan(ARange.Stop) or IsInfinite(ARange.Start)
+    or IsInfinite(ARange.Stop) or (ARange.Start > ARange.Stop)
+    or (ARange.Start <= 0) or (ARange.Stop <= 0) then Exit;
+  FExt[AKind] := ARange;
+  FHas[AKind] := True;
+  lg.Start := FLog.TransformIn(ARange.Start);
+  lg.Stop := FLog.TransformIn(ARange.Stop);
+  if AKind = sekEffective then
+  begin
+    FFrom[0] := lg.Start;
+    FFrom[1] := lg.Stop;
+    FTo[0] := ARange.Start;
+    FTo[1] := ARange.Stop;
+  end;
+  FStub.SetExtent(AKind, lg);
+end;
+
+function TTyLogBreakScaleMapper.HasExtent(AKind: TTyScaleExtentKind): Boolean;
+begin
+  Result := FHas[AKind];
+end;
+
+procedure TTyLogBreakScaleMapper.SetNiced(const ARaw, ALog: TTyRange);
+begin
+  FStub.SetExtent(sekEffective, ALog);
+  FExt[sekEffective] := ARaw;
+  FHas[sekEffective] := True;
+end;
+
+procedure TTyLogBreakScaleMapper.SetStubExtent(const ALog: TTyRange);
+begin
+  FStub.SetExtent(sekEffective, ALog);
+end;
+
+function TTyLogBreakScaleMapper.StubBreaks: TTyAxisBreakArray;
+begin
+  Result := FStubObj.BreakList;
+end;
+
+function TTyLogBreakScaleMapper.PowLookup(ALogValue: Double): Double;
+var i: Integer;
+begin
+  for i := 0 to High(FFrom) do
+    if (not IsNan(FFrom[i])) and (ALogValue = FFrom[i]) then Exit(FTo[i]);
+  Result := FLog.TransformOut(ALogValue);
 end;
 
 { ============================ TTyScale ============================ }
@@ -3035,6 +3292,13 @@ begin
   Result := FLogRule and (FMapper <> nil) and FMapper.NeedTransform;
 end;
 
+function TTyIntervalScale.LogBreak: ITyLogBreakScaleMapper;
+begin
+  Result := nil;
+  if (FMapper = nil) or not FLogRule then Exit;
+  if not Supports(FMapper, ITyLogBreakScaleMapper, Result) then Result := nil;
+end;
+
 function TTyIntervalScale.StubExtent: TTyRange;
 var
   e: TTyRange;
@@ -3161,6 +3425,15 @@ begin
     SetExtent(TyRange(lo, hi));
     lin := BreakMapper.LinearExtent(sekEffective);
     span := lin.Stop - lin.Start;
+  end
+  { A LOG AXIS WITH BREAKS [F4a]: intervalStub takes the validated log
+    extent (its gaps worked out there) and the span is its linear one --
+    logScaleCalcNiceTicks' getScaleLinearSpanEffective }
+  else if warped and (LogBreak <> nil) then
+  begin
+    LogBreak.SetStubExtent(TyRange(lo, hi));
+    lin := LogBreak.LinearExtent(sekEffective);
+    span := lin.Stop - lin.Start;
   end;
 
   if FLogRule then
@@ -3232,7 +3505,17 @@ begin
     powHi := FMapper.TransformOut(hi);
     if (not IsNan(a)) and (lo = a) then powLo := oldE.Start;
     if (not IsNan(b)) and (hi = b) then powHi := oldE.Stop;
-    SetExtent(TyRange(powLo, powHi));
+    { with breaks, upstream's own: transformOut over the scale's lookup --
+      the extent's ends, and a break's -- and the two stubs set apart,
+      the lookup left as it was [F4a] }
+    if LogBreak <> nil then
+    begin
+      powLo := LogBreak.PowLookup(lo);
+      powHi := LogBreak.PowLookup(hi);
+      LogBreak.SetNiced(TyRange(powLo, powHi), TyRange(lo, hi));
+    end
+    else
+      SetExtent(TyRange(powLo, powHi));
   end
   else
     SetExtent(TyRange(lo, hi));
@@ -3247,6 +3530,11 @@ end;
 function TTyIntervalScale.StepTicks(AExpand: Boolean): TTyDoubleArray;
 begin
   Result := StubTicks(AExpand);
+end;
+
+function TTyIntervalScale.StepExtent: TTyRange;
+begin
+  Result := StubExtent;
 end;
 
 function TTyIntervalScale.AlignTo(ARef: TTyIntervalScale; AFixLo, AFixHi,
@@ -3345,6 +3633,9 @@ end;
 function TTyIntervalScale.Normalize(AValue: Double): Double;
 var t: Double;
 begin
+  { a log axis with breaks: intervalStub's own normalize, its extent the
+    decades the nice step set [F4a] }
+  if LogBreak <> nil then Exit(FMapper.Normalize(AValue));
   if not (LogWarped and StillNiced and not FMapper.HasExtent(sekMapping)) then
     Exit(inherited Normalize(AValue));
   if FStubStop = FStubStart then Exit(0.5);
@@ -3357,7 +3648,8 @@ begin
   { THE DECADES THE NICE STEP LEFT, while nothing has set another extent and
     no mapping extent was asked for -- a mapping one upstream takes through
     the logarithm, as setExtent2 does }
-  if LogWarped and StillNiced
+  { with breaks, the stub's elapsed one [F4a] }
+  if LogWarped and StillNiced and (LogBreak = nil)
     and ((AKind = sekEffective) or not FMapper.HasExtent(sekMapping)) then
   begin
     Result.Start := FStubStart;
@@ -3369,6 +3661,7 @@ end;
 
 function TTyIntervalScale.Denormalize(ANorm: Double): Double;
 begin
+  if LogBreak <> nil then Exit(FMapper.Denormalize(ANorm));
   if not (LogWarped and StillNiced and not FMapper.HasExtent(sekMapping)) then
     Exit(inherited Denormalize(ANorm));
   Result := FMapper.TransformOut(FStubStart + ANorm * (FStubStop - FStubStart));
@@ -3424,6 +3717,8 @@ begin
   if FPrecisionNaN then precD := NaN else precD := prec;
   brk := BreakMapper;
   if brk <> nil then brks := brk.BreakList else brks := nil;
+  { a log axis steps in the log, over the breaks taken into it [F4a] }
+  if LogBreak <> nil then brks := LogBreak.StubBreaks;
   if e.Start < FNiceStart then
   begin
     if AExpand then Push(TyRoundP(FNiceStart - iv, precD))
@@ -3486,8 +3781,127 @@ function TTyIntervalScale.GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArra
 var brk: ITyBreakScaleMapper;
 begin
   brk := BreakMapper;
+  if LogBreak <> nil then Exit(LogBrokenTicks(AOpt, LogBreak));
   if (brk = nil) or LogWarped then Exit(PlainTicks);
   Result := BrokenTicks(AOpt, brk);
+end;
+
+{ LOG WITH BREAKS [F4a]: LogScale.getTicks -- intervalStub's ticks in log
+  space (stepping over its breaks, pruned by them with its interval, its
+  break ends added), each taken back out: a normal tick through
+  logScalePowTick over the two stubs' extents (StubToValue), a break end
+  and its break through the scale's own lookup
+  (getTicksBreakOutwardTransform). The minor ticks (getMinorTicks over
+  LogScale): between the expanded ticks taken back out, in value space,
+  none next to a break end, each group pruned by the breaks as written
+  with intervalStub's interval. }
+function TTyIntervalScale.LogBrokenTicks(const AOpt: TTyTicksOpt;
+  const ALb: ITyLogBreakScaleMapper): TTyScaleTickArray;
+var
+  sb, rb: TTyAxisBreakArray;
+  le, e: TTyRange;
+  maj, wt: TTyScaleTickArray;
+  grp, minors: TTyDoubleArray;
+  i, k, m, nm, split, mprec: Integer;
+  prev, next, miv, v: Double;
+
+  function AsTicks(const AValues: TTyDoubleArray): TTyScaleTickArray;
+  var q: Integer;
+  begin
+    SetLength(Result, Length(AValues));
+    for q := 0 to High(AValues) do
+    begin
+      Result[q] := Default(TTyScaleTick);
+      Result[q].Value := AValues[q];
+    end;
+  end;
+
+  procedure Out_(var ATicks: TTyScaleTickArray);
+  var q: Integer;
+  begin
+    for q := 0 to High(ATicks) do
+      if ATicks[q].BreakKind <> btkNone then
+      begin
+        ATicks[q].Value := ALb.PowLookup(ATicks[q].Value);
+        ATicks[q].BreakVMin := ALb.PowLookup(ATicks[q].BreakVMin);
+        ATicks[q].BreakVMax := ALb.PowLookup(ATicks[q].BreakVMax);
+      end
+      else
+        ATicks[q].Value := StubToValue(ATicks[q].Value);
+  end;
+
+begin
+  Result := nil;
+  if IsNan(FInterval) or (FInterval = 0) then Exit;
+  sb := ALb.StubBreaks;
+  le := StubExtent;
+  if AOpt.BreakMode = tbmOnly then
+  begin
+    AddBreakTicks(Result, sb, le, nil);
+    Out_(Result);
+    Exit;
+  end;
+  maj := AsTicks(StubTicks(False));
+  TyPruneTicksByBreaks(maj, AOpt.Prune, sb, FInterval, le);
+  if AOpt.BreakMode <> tbmNone then AddBreakTicks(maj, sb, le, nil);
+  Out_(maj);
+
+  minors := nil;
+  nm := 0;
+  split := FMinorSplit;
+  if split >= 2 then
+  begin
+    e := GetExtent;
+    rb := ALb.BreakList;
+    wt := AsTicks(StubTicks(True));
+    TyPruneTicksByBreaks(wt, tpmAuto, sb, FInterval, le);
+    AddBreakTicks(wt, sb, le, nil);
+    Out_(wt);
+    for i := 1 to High(wt) do
+    begin
+      if (wt[i - 1].BreakKind <> btkNone) or (wt[i].BreakKind <> btkNone) then Continue;
+      prev := wt[i - 1].Value;
+      next := wt[i].Value;
+      miv := (next - prev) / split;
+      mprec := TyIntervalPrecision(miv);
+      grp := nil;
+      for k := 0 to split - 2 do
+      begin
+        v := TyJsToFixed(prev + (k + 1) * miv, mprec);
+        if (v > e.Start) and (v < e.Stop) then
+        begin
+          SetLength(grp, Length(grp) + 1);
+          grp[High(grp)] := v;
+        end;
+      end;
+      TyPruneValuesByBreaks(grp, tpmAuto, rb, FInterval, e);
+      SetLength(minors, nm + Length(grp));
+      for k := 0 to High(grp) do minors[nm + k] := grp[k];
+      Inc(nm, Length(grp));
+    end;
+  end;
+
+  SetLength(Result, Length(maj) + nm);
+  i := 0;
+  k := 0;
+  m := 0;
+  while (i <= High(maj)) or (k < nm) do
+  begin
+    if (k >= nm) or ((i <= High(maj)) and (maj[i].Value <= minors[k])) then
+    begin
+      Result[m] := maj[i];
+      Inc(i);
+    end
+    else
+    begin
+      Result[m] := Default(TTyScaleTick);
+      Result[m].Value := minors[k];
+      Result[m].Level := 1;
+      Inc(k);
+    end;
+    Inc(m);
+  end;
+  SetLength(Result, m);
 end;
 
 function TTyIntervalScale.BrokenTicks(const AOpt: TTyTicksOpt;

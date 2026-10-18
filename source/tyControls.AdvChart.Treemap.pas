@@ -181,6 +181,9 @@ type
     CrumbEmphFill: TTyChartColor;
     CrumbEmphHasText: Boolean;
     CrumbEmphText: TTyChartColor;
+    { by row, the node's decal: the content rect's normalStyle.decal is the
+      node style's [F4a] }
+    NodeDecals: TTyChartDecalArray;
   end;
 
 { Layout and pruning over the container, device px at APPI. AView is what
@@ -2437,6 +2440,7 @@ var
         (bw + cw) + nd.TX, (bw + ch) + nd.TY)));
       el.Style.HasFill := nd.HasFill;
       el.Style.FillColor := nd.Fill;
+      if ARow <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[ARow];
       el.Z := ASolved.Z;
       el.Z2 := z2;
       el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);

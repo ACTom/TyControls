@@ -2772,6 +2772,10 @@ var
       begin
         Result.Style.HasFill := True;
         Result.Style.FillColor := AInk.EmptyFill;
+        { an empty icon keeps the decal over its white: the icon's style is
+          the legend style's, decal and all, before the fill is swapped
+          (getDefaultLegendIcon, LineSeries.getLegendIcon) [F4a] }
+        Result.Style.Decal := it.Decal;
       end;
     end
     else

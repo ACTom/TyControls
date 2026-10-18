@@ -122,6 +122,14 @@ type
     { A TREEMAP BREADCRUMB ITEM'S eventData.nodeData [F2a]: {dataIndex,
       name} as JSON text; '' everywhere else }
     NodeData: string;
+    { A BREAK'S END [F4a]: an axis label formatter's extra.break -- 'start'
+      or 'end', and the break's two ends as the extent clamps them (on a log
+      axis as its lookup brings them back) -- and an axis label event's
+      eventData.break, whose ends are the same (upstream writes no type
+      there; the word is the tick's all the same). '' and not-a-number
+      everywhere else. }
+    BreakType: string;
+    BreakStart, BreakEnd: Double;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 
@@ -915,6 +923,8 @@ begin
   Result.AxisIndex := -1;
   Result.ComponentIndex := -1;
   Result.TickIndex := -1;
+  Result.BreakStart := NaN;
+  Result.BreakEnd := NaN;
 end;
 
 finalization
