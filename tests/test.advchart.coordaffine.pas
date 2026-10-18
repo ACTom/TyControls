@@ -553,8 +553,10 @@ begin
         for i := 0 to lst.Count - 1 do
         begin
           e := lst.Element(i);
+          { the area is no longer silent: it hovers as upstream's does [F6a];
+            the series' only polygon with no row is it }
           if e.Datum.IsEdge or (e.Datum.SeriesIndex <> si)
-            or (e.Datum.RawDataIndex <> -1) or (not e.Silent)
+            or (e.Datum.RawDataIndex <> -1)
             or (e.Shape.Kind <> cskPolygon) then Continue;
           ring := e.Shape.Points;
         end;

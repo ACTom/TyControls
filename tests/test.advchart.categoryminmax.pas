@@ -579,13 +579,15 @@ begin
              Fmt(e.ClipRect.Top), Fmt(e.ClipRect.Right), Fmt(e.ClipRect.Bottom)]));
       end;
     end;
-  { and the area under it, through the same cut }
+  { and the area under it, through the same cut -- found as the series'
+    polygon with no row: it is no longer silent, it hovers as upstream's
+    does [F6a] (keyed on silent, the check found nothing and passed) }
   if lst <> nil then
     for i := 0 to lst.Count - 1 do
     begin
       e := lst.Element(i);
       if e.Datum.IsEdge or (e.Datum.SeriesIndex <> si)
-        or (e.Datum.RawDataIndex <> -1) or (not e.Silent)
+        or (e.Datum.RawDataIndex <> -1)
         or (e.Shape.Kind <> cskPolygon) then Continue;
       clip := ASeries.Objects['clip'];
       Inc(FCompared);
