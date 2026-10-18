@@ -38,7 +38,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Events, tyControls.AdvChart.KeyNav, tyControls.AdvChart.Legend,
      tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.DataZoomView,
      tyControls.AdvChart.VisualMapView, tyControls.AdvChart.Geo, tyControls.AdvChart.Toolbox,
-     tyControls.AdvChart.Brush,
+     tyControls.AdvChart.Brush, tyControls.AdvChart.Handlers,
      tyControls.Accessible, tyControls.AdvanceChart,
      test.advchart.select, test.advchart.keyboard, test.advchart.legendscroll,
      test.advchart.timeline, test.advchart.datazoominteract,
@@ -48,6 +48,9 @@ type
   TCkProbe = class(TKbProbe)
   public
     procedure Enter(ABackward: Boolean);
+    procedure PtrDown(AX, AY: Integer);
+    procedure PtrMove(AX, AY: Integer);
+    procedure PtrUp(AX, AY: Integer);
   end;
 
   TCkZoomLog = class
@@ -92,6 +95,8 @@ type
     procedure TestEscapeClearsTheBrush;
     procedure TestTheVisualMapHandles;
     procedure TestTheVisualMapPieces;
+    procedure TestAHandleKeyIsAWholeDrag;
+    procedure TestAHandleNodeReadsAPointerDrag;
     procedure TestTheMarkersAreItems;
     procedure TestTheGraphEdgesAreItems;
     procedure TestTheGeoRegionsAreItems;
@@ -152,6 +157,38 @@ end;
 procedure TCkProbe.Enter(ABackward: Boolean);
 begin
   KbEnter(ABackward);
+end;
+
+procedure TCkProbe.PtrDown(AX, AY: Integer);
+begin
+  MouseDown(mbLeft, [], AX, AY);
+end;
+
+procedure TCkProbe.PtrMove(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
+end;
+
+procedure TCkProbe.PtrUp(AX, AY: Integer);
+begin
+  MouseUp(mbLeft, [], AX, AY);
+end;
+
+{ a visualMap handle's thumb centre on the canvas }
+function CkThumbAt(AChart: TTyAdvanceChart; AHandle: Integer): TPoint;
+var
+  L: TTyVisualMapLayout;
+  pr: TTyXYWH;
+  cx, cy: Double;
+  M: TTyMat2D;
+begin
+  L := AChart.VisualMapLayout(0);
+  M := L.Handles[AHandle].Thumb;
+  pr := L.Handles[AHandle].PathRect;
+  cx := pr.X + pr.W / 2;
+  cy := pr.Y + pr.H / 2;
+  Result := Point(Round(M[0] * cx + M[2] * cy + M[4] + L.GroupX),
+    Round(M[1] * cx + M[3] * cy + M[5] + L.GroupY));
 end;
 
 procedure TCkZoomLog.OnZoom(Sender: TObject; const AAction: TTyDzAction);
@@ -734,6 +771,65 @@ begin
   AssertFalse(FChart.VisualMapLive(0).ThumbEmph[1]);
 end;
 
+{ [fin] a key on a handle is a whole drag -- the move AND the release: a
+  drag that is not realtime dispatches only at its release; and the handle's
+  node in the same tree reads the value the key left }
+procedure TAdvChartComponentKeysTest.TestAHandleKeyIsAWholeDrag;
+var
+  live: TTyVmLive;
+  n: TLazAccessibleObject;
+begin
+  Load('{"animation":false,"visualMap":{"type":"continuous","min":0,"max":100,"calculable":true,'
+    + '"realtime":false},"xAxis":{"type":"category","data":["a","b","c"]},"yAxis":{},'
+    + '"series":[{"type":"bar","data":[10,50,90]}]}', ['datarangeselected']);
+  FChart.AccessibleSync;
+  n := FChart.AccessibleStopNode(TyKbStop(ksVisualMap, 0, 0), 0);
+  AssertTrue('the start handle''s node', n <> nil);
+  AssertEquals('0', n.AccessibleValue);
+  FChart.Key(VK_TAB);
+  AssertEquals('visualMap0/0:0', Stop);
+  AssertEquals(0, FChart.Key(VK_RIGHT));
+  live := FChart.VisualMapLive(0);
+  AssertEquals('a fiftieth of the bar up', 2, live.Interval[0], 1e-6);
+  AssertFalse('released: no drag left running', live.Dragging);
+  AssertEquals('not realtime: the release dispatches', 1, FLog.Lines.Count);
+  AssertTrue(Pos('datarangeselected', FLog.Text) = 1);
+  FChart.AccessibleSync;
+  n := FChart.AccessibleStopNode(TyKbStop(ksVisualMap, 0, 0), 0);
+  AssertEquals('the node reads the value the key left', '2', n.AccessibleValue);
+end;
+
+{ [fin] A VALUE THAT MOVES WITH NO NEW LAYOUT: a pointer drag of a handle
+  that is not realtime moves the handle and dispatches nothing until the
+  release -- the same tree, and its node's value read again on the sync }
+procedure TAdvChartComponentKeysTest.TestAHandleNodeReadsAPointerDrag;
+var
+  p: TPoint;
+  n0, n: TLazAccessibleObject;
+begin
+  Load('{"animation":false,"visualMap":{"type":"continuous","min":0,"max":100,"calculable":true,'
+    + '"realtime":false,"right":20,"top":"middle"},"xAxis":{"type":"category","data":["a","b","c"]},'
+    + '"yAxis":{},"series":[{"type":"bar","data":[10,50,90]}]}', ['datarangeselected']);
+  FChart.AccessibleSync;
+  n0 := FChart.AccessibleStopNode(TyKbStop(ksVisualMap, 0, 1), 0);
+  AssertTrue('the end handle''s node', n0 <> nil);
+  AssertEquals('100', n0.AccessibleValue);
+  p := CkThumbAt(FChart, 1);
+  AssertEquals('the press is on the upper thumb', 'vm0.handle1', FChart.VisualMapRoleAt(p.X, p.Y));
+  FChart.PtrMove(p.X, p.Y);
+  FChart.PtrDown(p.X, p.Y);
+  FChart.PtrMove(p.X, p.Y + 20);
+  AssertTrue('it drags', FChart.VisualMapLive(0).Dragging);
+  AssertEquals('nothing dispatched yet', 0, FLog.Lines.Count);
+  AssertTrue('the handle moved', FChart.VisualMapLive(0).Interval[1] < 100);
+  FChart.AccessibleSync;
+  n := FChart.AccessibleStopNode(TyKbStop(ksVisualMap, 0, 1), 0);
+  AssertTrue('no new layout: the same tree', n = n0);
+  AssertEquals('its value read again', TyChartValueText(FChart.VisualMapLive(0).Interval[1]),
+    n.AccessibleValue);
+  FChart.PtrUp(p.X, p.Y + 20);
+end;
+
 procedure TAdvChartComponentKeysTest.TestTheVisualMapPieces;
 begin
   Load('{"animation":false,"visualMap":{"type":"piecewise","pieces":[{"lt":5},{"gte":5}]},'
@@ -773,6 +869,10 @@ begin
   FChart.Key(VK_ESCAPE);
   FChart.TooltipTick(5000);
   AssertFalse('its tooltip goes with it', FChart.TooltipShown);
+  { [fin] a mark model with no marks is no stop: nothing to walk }
+  Load('{"animation":false,' + '"xAxis":{"type":"category","data":["a","b","c"]},'
+    + '"yAxis":{},"series":[{"type":"bar","data":[3,9,1],"markPoint":{"data":[]}}]}', []);
+  AssertEquals('no marks, no stop', 'items0/0', StopsText);
 end;
 
 procedure TAdvChartComponentKeysTest.TestTheGraphEdgesAreItems;
