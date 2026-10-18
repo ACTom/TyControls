@@ -79,6 +79,10 @@ type
     { an element a custom series made: its z2EmphasisLift and z2SelectLift
       are 1, not 10 and 9 (CustomView.createEl) [Batch 123] }
     LiftOne: Boolean;
+    { z2EmphasisLift 0: a gauge's pointer and progress arc (GaugeView.ts:
+      558/570) -- the emphasis leaves the paint order alone; select still
+      lifts by 9 [F2b] }
+    NoEmphLift: Boolean;
     { the flags }
     HoverState: Integer;
     Selected: Boolean;
@@ -409,6 +413,7 @@ begin
   if exists and not AObj.Has[stkZ2] then
   begin
     if AEl.LiftOne then TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + 1)
+    else if AEl.NoEmphLift then TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2])
     else TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2EmphasisLift);
   end;
   Result := exists;
