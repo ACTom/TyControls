@@ -70,6 +70,14 @@ type
 
   TTyPieLabelSpec = record
     Show: Boolean;
+    { A STATE SHOWS IT [F2b]: `emphasis`, `select` or `blur` .label.show
+      true on the series. zrender creates the text when any state shows it
+      (labelStyle.setLabelStyle needsCreateText) and the pie's layout places
+      it whenever a state would show it (labelLayout.ts isLabelShown): built,
+      laid out and part of avoidOverlap, ignored at rest. }
+    StateShow: Boolean;
+    { a state's labelLine.show true: the line is built too [F2b] }
+    StateLineShow: Boolean;
     Position: TTyPieLabelPosition;
     AlignTo: TTyPieAlignTo;
     Rotate: TTyPieRotate;
@@ -511,6 +519,32 @@ begin
     for k := 0 to 3 do Result.Ink.MarginLogical[k] := margins.MarginLogical[k];
   end;
 
+  { the states that show what the normal label hides [F2b] }
+  for k := 0 to 2 do
+  begin
+    case k of
+      0: line := ObjOf(series.Find('emphasis'));
+      1: line := ObjOf(series.Find('select'));
+    else
+      line := ObjOf(series.Find('blur'));
+    end;
+    if line = nil then Continue;
+    node := ObjOf(line.Find('label'));
+    if node <> nil then
+    begin
+      d := node.Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        Result.StateShow := True;
+    end;
+    node := ObjOf(line.Find('labelLine'));
+    if node <> nil then
+    begin
+      d := node.Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        Result.StateLineShow := True;
+    end;
+  end;
+
   line := ObjOf(series.Find('labelLine'));
   if line <> nil then
   begin
@@ -582,7 +616,8 @@ begin
   { FORCED, unconditionally and after everything else -- upstream's last word on
     a pie label is `verticalAlign: middle`. }
   Result.AnchorV := tavMiddle;
-  if not ASpec.Show then Exit;
+  { a label only a state shows is placed all the same [F2b] }
+  if not (ASpec.Show or ASpec.StateShow) then Exit;
   if not ASector.Valid then Exit;
   if IsNan(ASector.StartRad) or IsNan(ASector.EndRad) then Exit;
 
@@ -691,7 +726,7 @@ begin
         every other value, while labelLayout still computes the outer anchor
         for it. So `position: 'top'` on a pie puts the label out past the rim
         with nothing pointing at it. }
-      Result.HasLine := ASpec.ShowLine
+      Result.HasLine := (ASpec.ShowLine or ASpec.StateLineShow)
         and ((ASpec.PositionWord = 'outer') or (ASpec.PositionWord = 'outside'));
       Result.P1 := TyPointF(x1, y1);
       Result.P2 := TyPointF(x2, y2);
@@ -1220,7 +1255,8 @@ begin
   Result := 0;
   if (AList = nil) or (AMeasurer = nil) then Exit;
   if not ALayout.Valid then Exit;
-  if not ASpec.Show then Exit;
+  { built when a state shows it, ignored at rest [F2b] }
+  if not (ASpec.Show or ASpec.StateShow) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
 
   { The three bands and the outside ink, packed into the shape the shared
@@ -1408,6 +1444,9 @@ begin
         { SILENT. A leader line is a pointer at the slice, not a target of its
           own, and a hit on it would report the datum twice over. }
         el.Silent := True;
+        { at rest where the label or the line is hidden (PieSeries
+          _defaultLabelLine: labelLine.show and label.show) [F2b] }
+        el.Ignore := not (ASpec.Show and ASpec.ShowLine);
         { but it is the slice's: its select state moves it [Batch 88] }
         el.IsGuide := True;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Sectors[i].Index, row);
@@ -1518,6 +1557,8 @@ begin
       el.Datum := TyChartDatum(ABinding.SeriesIndex,
         ALayout.Sectors[i].Index, row);
       el.Z2 := 1;
+      { only a state shows it [F2b] }
+      el.Ignore := not ASpec.Show;
       { it fades in on entering, where it stands (LabelManager) [Batch 89] }
       el.Anim.Role := carLabel;
       el.Anim.Series := ABinding.SeriesIndex;

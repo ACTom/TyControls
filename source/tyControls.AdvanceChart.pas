@@ -26361,11 +26361,43 @@ procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
 var
   blk: string;
   s, idx, labIdx: Integer;
-  lineShow, labRest, labIgn, ownLine: Boolean;
+  lineShow, labRest, labIgn, ownLine, emphLine, seriesLine, labShow, emphLab: Boolean;
   item: PTyStItem;
   host, cap, guide: TTyChartElement;
   nodes: TTyStNodeArray;
   scale, off, mid, dx, dy, ss, half: Double;
+{ AN ITEM'S emphasis.label.show AS THE MODEL HOLDS IT [F2b]: the first
+  node that writes it, a data item that writes a label.show of its own
+  having it copied (Series.fillDataTextStyle's defaultEmphasis); the series'
+  default its type's (ADefault: a funnel's true) or else its normal show
+  (mergeDefaultAndTheme's defaultEmphasis -- the same as normal, so no
+  change). AHas False when nothing says. }
+function StEmphLabelShow(const ANodes: array of TJSONObject; ADefaultTrue: Boolean;
+  out AHas: Boolean): Boolean;
+var i: Integer; d: TJSONData;
+begin
+  Result := False;
+  AHas := False;
+  for i := 0 to High(ANodes) do
+  begin
+    if ANodes[i] = nil then Continue;
+    d := TyStFind([ANodes[i]], ['emphasis', 'label', 'show']);
+    if d <> nil then
+    begin
+      AHas := True;
+      Exit(TyStReadBool([ANodes[i]], ['emphasis', 'label', 'show'], AHas));
+    end;
+    { a data item's own label.show is its emphasis one too }
+    if (i = 0) and (High(ANodes) > 0) and (TyStFind([ANodes[i]], ['label', 'show']) <> nil) then
+      Exit(TyStReadBool([ANodes[i]], ['label', 'show'], AHas));
+  end;
+  if ADefaultTrue then
+  begin
+    AHas := True;
+    Result := True;
+  end;
+end;
+
   has, bolder, disabled, was, normalShow, stShow, doScale: Boolean;
   base, obj: TTyStObject;
   spec: TTyChartEmphasisSpec;
@@ -26604,12 +26636,12 @@ begin
       { ignore = !show only when the state's show differs from the normal one }
       stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
       { a themeRiver's model shows the emphasis label unless told
-        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118] }
-      if (n = stnEmphasis) and (FSt[s].Kind = sskRiver) and not has then
-      begin
-        stShow := True;
-        has := True;
-      end;
+        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118]; a funnel's
+        too (FunnelSeries.defaultOption) [F2b] }
+      if (n = stnEmphasis) and (FSt[s].Kind in [sskRiver, sskFunnel]) then
+        stShow := StEmphLabelShow(nodes, True, has)
+      else if n = stnEmphasis then
+        stShow := StEmphLabelShow(nodes, False, has);
       if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
       { hideOverlap's hideEl: a label it hid shows again under emphasis,
         unless that state already says (LabelLayoutHelper.ts hideOverlap)
@@ -26793,6 +26825,29 @@ procedure TTyAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
     AItem.Host.Exists := True;
     AItem.Host.IsPath := True;
     AItem.Host.Proxy := not TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+    { PieSeries / FunnelSeries _defaultLabelLine [F2b]: the series'
+      labelLine.show is ANDed with its label.show, and the emphasis one --
+      the normal one unless written -- with its emphasis label.show }
+    emphLine := lineShow;
+    if ownLine then
+    begin
+      seriesLine := TyStReadBool([nodes[High(nodes)]], ['labelLine', 'show'], has);
+      if not has then seriesLine := True;
+      emphLine := TyStReadBool([nodes[High(nodes)]], ['emphasis', 'labelLine', 'show'], has);
+      if not has then emphLine := seriesLine;
+      labShow := TyStReadBool([nodes[High(nodes)]], ['label', 'show'], has);
+      if not has then labShow := True;
+      { the series' emphasis label.show: written, the funnel's default, else
+        the normal one (defaultEmphasis) }
+      emphLab := StEmphLabelShow([nodes[High(nodes)]], FSt[s].Kind = sskFunnel, has);
+      if not has then emphLab := labShow;
+      emphLine := emphLine and emphLab;
+      seriesLine := seriesLine and labShow;
+      lineShow := TyStReadBool([nodes[0]], ['labelLine', 'show'], has);
+      if not has then lineShow := seriesLine;
+      stShow := TyStReadBool([nodes[0]], ['emphasis', 'labelLine', 'show'], has);
+      if has then emphLine := stShow;
+    end;
     for n := Low(TTyStName) to High(TTyStName) do AItem.Host.HasState[n] := True;
     AItem.Host.Rest := StRestOf(AList.Element(AIdx[0]));
     for n := Low(TTyStName) to High(TTyStName) do
@@ -26809,6 +26864,7 @@ procedure TTyAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
       AItem.Host.States := [];
     end
     else if FStRerender then
+      if ownLine and (n = stnEmphasis) then stShow := emphLine;
     begin
       TyStClearItem(AItem);
       if prev <> [] then TyStUseStates(AItem.Host, prev);
