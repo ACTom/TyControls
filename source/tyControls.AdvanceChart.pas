@@ -2392,7 +2392,7 @@ type
     function GeoSyncFromRows(AGeo: TTyGeo): Boolean;
     { after the states' sync of a build, and in a frame: a map picture whose
       flags moved takes its states again, its elements in place }
-    procedure MapRepatch(APPI: Integer);
+    procedure MapRepatch(APPI: Integer; AForce: Boolean = False);
     function MapApplyChanged: Boolean;
     { MapSeries.formatTooltip }
     function MapTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
@@ -13162,7 +13162,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.MapRepatch(APPI: Integer);
+procedure TTyAdvanceChart.MapRepatch(APPI: Integer; AForce: Boolean);
 var
   k, i, n: Integer;
   geo: TTyGeo;
@@ -13175,7 +13175,9 @@ begin
   begin
     geo := TTyGeo(FGeoDraws[k].Geo);
     if (geo = nil) or not geo.Data.Active then Continue;
-    if not GeoSyncFromRows(geo) then Continue;
+    { forced by a state patch: the flags were synced already (MapApplyChanged),
+      and the list was put back to the regions the last build drew [P2] }
+    if not GeoSyncFromRows(geo) and not AForce then Continue;
     geo.ApplyStates(ink, APPI);
     tmp := TTyPaintList.Create;
     try
@@ -29003,7 +29005,7 @@ begin
   FProgLayerOk := False;
   StWrite(FPaintList);
   TmCrumbStates(FPaintList);
-  MapRepatch(FPaintListPPI);
+  MapRepatch(FPaintListPPI, True);
   StSyncMarks(FPaintList);
   FPaintList.JournalClose;
   Inc(GStPatches);

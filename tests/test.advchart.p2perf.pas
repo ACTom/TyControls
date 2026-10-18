@@ -23,7 +23,7 @@ uses Classes, SysUtils, Math, Types, Controls, Graphics, Forms, fpcunit, testreg
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.DirtyRect,
+     tyControls.AdvChart.DirtyRect, tyControls.AdvChart.Geo,
      tyControls.AdvanceChart;
 
 type
@@ -52,6 +52,8 @@ type
     procedure TestAProgressiveScatterRedrawsItsChunks;
     procedure TestTheDirtyRectPathPatchesAsABuildWould;
     procedure TestRenderToPatchesAsABuildWould;
+    procedure TestAPolarLinePatchesAsABuildWould;
+    procedure TestAGeoAndAMapSeriesAsABuildWould;
     procedure TestNoStateChangeNoPatch;
   end;
 
@@ -332,6 +334,55 @@ begin
     + '   label: { show: true } },'
     + ' { type: ''line'', data: [8, 12, 18, 30], symbolSize: 10 }] }', False, True, 23);
   AssertTrue('frames were patched', n > 3);
+end;
+
+procedure TAdvChartStPatchTest.TestAPolarLinePatchesAsABuildWould;
+var n: Integer;
+begin
+  { a polar line's symbols once carried stack garbage in their animation
+    record (the symbol area the polar path never set): a patched list and a
+    fresh build never compared equal }
+  n := Sweep('{ ' + cNoTip + 'polar: {}, angleAxis: { type: ''category'','
+    + ' data: [''a'', ''b'', ''c'', ''d'', ''e'', ''f''] }, radiusAxis: {},'
+    + ' series: [{ type: ''line'', coordinateSystem: ''polar'', symbolSize: 10,'
+    + ' data: [5, 20, 36, 10, 14, 30], emphasis: { focus: ''series'' } }] }', True, False, 17);
+  AssertTrue('the dirty-rect path patched', n > 0);
+  n := Sweep('{ ' + cNoTip + 'polar: {}, angleAxis: { type: ''category'','
+    + ' data: [''a'', ''b'', ''c'', ''d'', ''e'', ''f''] }, radiusAxis: {},'
+    + ' series: [{ type: ''line'', coordinateSystem: ''polar'', symbolSize: 10,'
+    + ' data: [5, 20, 36, 10, 14, 30], emphasis: { focus: ''series'' } }] }', False, False, 17);
+  AssertTrue('the whole-layer path patched', n > 0);
+end;
+
+procedure TAdvChartStPatchTest.TestAGeoAndAMapSeriesAsABuildWould;
+const
+  cMap = '{"type":"FeatureCollection","features":['
+    + '{"type":"Feature","properties":{"name":"A"},"geometry":{"type":"Polygon",'
+    + '"coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"B"},"geometry":{"type":"Polygon",'
+    + '"coordinates":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"C"},"geometry":{"type":"Polygon",'
+    + '"coordinates":[[[0,10],[20,10],[10,20],[0,10]]]}}]}';
+var n: Integer;
+begin
+  AssertTrue(TyChartRegisterMap('p2sq', cMap));
+  try
+    { a geo component's regions: their flags are drawn by the build alone
+      (TyBuildGeo), so a change of them is built again, never patched }
+    Sweep('{ ' + cNoTip + 'geo: { map: ''p2sq'', label: { show: true },'
+      + ' emphasis: { itemStyle: { areaColor: ''#f80'' } } },'
+      + ' series: [{ type: ''scatter'', coordinateSystem: ''geo'','
+      + ' data: [[5, 5, 1], [15, 5, 2]], symbolSize: 14 }] }', False, False, 19);
+    { a map series' regions are its rows: rewritten with the states
+      (MapRepatch) }
+    n := Sweep('{ ' + cNoTip + 'series: [{ type: ''map'', map: ''p2sq'','
+      + ' label: { show: true }, data: [{ name: ''A'', value: 1 }, { name: ''B'', value: 2 },'
+      + ' { name: ''C'', value: 3 }], emphasis: { itemStyle: { areaColor: ''#0c0'' } } }] }',
+      False, False, 19);
+    AssertTrue('the map series patched', n > 0);
+  finally
+    TyChartClearMaps;
+  end;
 end;
 
 procedure TAdvChartStPatchTest.TestNoStateChangeNoPatch;
