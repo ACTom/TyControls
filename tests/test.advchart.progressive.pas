@@ -551,6 +551,14 @@ var
 begin
   Inc(FSnaps);
   t := ASnap.Strings['t'];
+  { [F4b] A POINTER STEP'S FLUSH: the oracle runs _onframe without the
+    frame's _flush there (no rendered can be recorded), the port's paint
+    after a hover says rendered when it marked something -- not compared
+    at pointer steps (the spec records it) }
+  if (t = 'move') or (t = 'leave') then
+    for j := FChart.Events.Count - 1 downto 0 do
+      if (FChart.Events[j] = 'rendered') or (FChart.Events[j] = 'finished') then
+        FChart.Events.Delete(j);
   { the events, in order }
   ev := ASnap.Arrays['events'];
   SameInt('events', FChart.Events.Count, ev.Count);

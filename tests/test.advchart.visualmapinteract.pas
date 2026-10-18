@@ -981,9 +981,13 @@ end;
 procedure TAdvChartVisualMapInteractTest.TestABatchOfAnotherTypeIsRefused;
 begin
   Show(cBar + '"visualMap":{"type":"continuous","min":0,"max":100}}');
-  { [Batch 141] select batches are taken now; restore takes none }
-  AssertFalse('a restore batch is not taken',
+  { [Batch 141] select batches are taken now; restore takes none
+    [F4b: restore takes one too (every action does); a type nothing
+    registers does not] }
+  AssertTrue('a restore batch is taken',
     FChart.DispatchAction('{"type":"restore","batch":[{"seriesIndex":0,"dataIndex":1}]}'));
+  AssertFalse('an unknown type is not',
+    FChart.DispatchAction('{"type":"nosuch","batch":[{"seriesIndex":0,"dataIndex":1}]}'));
 end;
 
 procedure TAdvChartVisualMapInteractTest.TestAHighlightBatchIsOneEventWithEveryItem;

@@ -469,7 +469,28 @@ type
       default model of position 'bottom' under the cascade }
     PosJson: string;
     PosDefault: Boolean;
+    { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
+      axes as a dataByCoordSys (JSON) while the build they pointed into is
+      gone -- Stale until the next build reads them back by raw row -- and
+      the box held where it was painted (Frozen at FrozenX / FrozenY, its
+      top-left) until a show places it again }
+    DbcJson: string;
+    Stale: Boolean;
+    Frozen: Boolean;
+    FrozenX, FrozenY: Double;
   end;
+
+  { [F4b] an axis pointer kept across a re-render: the axisPointer model's
+    status, value and seriesDataIndices outlive the update (updateModelActually
+    wrote them into the model), so the pointer stays where it was }
+  TTyPtrKeep = record
+    Dim: string;
+    Index: Integer;
+    Cross, Linked: Boolean;
+    Value, SnapValue: Double;
+    Series, Rows: TTyIntegerArray;
+  end;
+  TTyPtrKeepArray = array of TTyPtrKeep;
 
   { [Batch 153] AN ACTION WAITING: a payload the chart dispatched while one
     of its own ran (upstream's _pendingActions), or the global listener's
@@ -479,6 +500,9 @@ type
     Payload: TJSONObject;
     Hits: TTyAxisHitArray;
     HasHits: Boolean;
+    { [F4b] the brushSelect a visual stage dispatched inside an action: its
+      brushselected event (it has no update), waiting in the same queue }
+    EventJson: string;
   end;
 
   { [Batch 153] what TooltipView._tryShow is handed: the point, the axis
@@ -1354,6 +1378,41 @@ type
     FUapListener: Boolean;
     FActHits: TTyTipAct;
     FPressEl: Integer;
+    { [F4b] TooltipView._lastX / _lastY (NaN: null) and _lastDataByCoordSys
+      (JSON, '' null); the keep timer _keepShow arms (NaN: none); the axis
+      pointers kept across a re-render, put back by the next build; a guard
+      so a timer's work does not run the other timers inside it }
+    FTipLastX, FTipLastY: Double;
+    FTipLastDbc: string;
+    FTipKeepAt: Double;
+    FTipKeepSeq: Integer;
+    FTipKeepPtr: TTyPtrKeepArray;
+    FTipKeepPtrDue: Boolean;
+    FTipAdvancing: Boolean;
+    { [F4b] A BATCH OF ANY ACTION: the items' own events of the action's
+      type (and a refined action's refined events) are taken here, not
+      published, while FBatchCapDepth > 0; the updates the items ask for
+      wait (FBatchDefer) and run once after the last item }
+    FBatchCapDepth: Integer;
+    FBatchCapType, FBatchCapRefined: string;
+    FBatchCapList, FBatchCapRef: TTyStringArray;
+    FBatchDefer: Integer;
+    FBatchDue, FBatchDueHas: Boolean;
+    FBatchDuePayload: TTyAnimOverride;
+    { [F4b] the brushSelect a batch's items asked for: one, the last state's
+      (the update runs once); and whether the update after them gave one }
+    FBatchBrushJson: string;
+    FBatchBrushHas, FBatchBrushQueued: Boolean;
+    { [F4b] a view action (graphRoam, sankeyRoam, dragNode) running as an
+      action: the roam helpers leave the event and `updated` to it }
+    FViewActionDepth: Integer;
+    { [F4b] zrender's dirty flag: something asked for a repaint since the
+      last flush (a paint emits `rendered` only then); the tooltip's and
+      the pointer's state as the last paint drew it (their actions ask for a
+      repaint only when it changed); the paint's start on the chart's clock }
+    FZrDirty: Boolean;
+    FTipPaintedKey: string;
+    FPaintT0: Double;
     { THE ENTER ANIMATION [Batch 89]. One driver per chart; the proxies the
       animated elements read, keyed so they outlive a rebuilt list; each
       list element's proxy by insertion index; the frame the dynamic layer
@@ -1984,6 +2043,19 @@ type
       select / unselect / toggleSelect, dataZoom and brushSelect; False for
       any other type }
     function DoBatchAction(APayload: TJSONObject): Boolean;
+    { [F4b] doDispatchAction's batch for every other action: each item over
+      the payload through the action, the update once, one event }
+    function DoBatchGeneric(APayload: TJSONObject; const AType: string): Boolean;
+    { [F4b] zrender's `rendered` with its elapsedTime }
+    procedure EmitRendered(AElapsed: Double);
+    { [F4b] the tooltip's and the pointer's state, as a key; a repaint only
+      when it changed since the last paint }
+    function TipStateKey: string;
+    procedure TipInvalidate;
+    { [F4b] a repaint that marks zrender dirty only when the tooltip, the
+      pointer or the states changed (the repaint itself as before) }
+    procedure InvalidateFrameQuiet;
+    procedure HoverInvalidate;
     { legendSelectActionHandler without the update: the event object it
       returns, its type set, as JSON; AEvent its type }
     function LegendActionApply(APayload: TJSONObject; const AType: string;
@@ -2677,7 +2749,12 @@ type
     { showTip's dataByCoordSys from the hits; and back, for a payload that
       writes its own }
     function TipDbcJson(const AHits: TTyAxisHitArray): TJSONArray;
-    function TipHitsOfDbc(ADbc: TJSONArray): TTyAxisHitArray;
+    { [F4b] AByRaw reads a row by its raw dataIndex (a frozen box's axes
+      after a re-render), not dataIndexInside }
+    function TipHitsOfDbc(ADbc: TJSONArray; AByRaw: Boolean = False): TTyAxisHitArray;
+    { [F4b] an axis by dimension and component index, wherever it lives }
+    function TipAxisAt(const ADim: string; AIndex: Integer; out APlot: TTyRectF;
+      out APolar: TTyPolar; out ASingle: TTySingle): TTyAxis;
     { the axisPointer model's axes in collection order, for the event's
       axesInfo }
     function TipCollectionOrder: TTyAxisArray;
@@ -2692,9 +2769,31 @@ type
       geo region) }
     function TipComponentRef(APayload: TJSONObject; out ADatum: TTyChartDatumRef;
       out AElement: Integer; out AX, AY: Double): Boolean;
-    { a rebuild: the hover and the box both go }
+    { a re-render: the hover goes; the box stays, frozen, and _keepShow
+      arms its timer [F4b] }
     procedure TipReset;
     procedure TipDropDisplay;
+    { [F4b] a new tooltip view (notMerge): the box, the last point and the
+      kept pointer all go }
+    procedure TipForget;
+    { [F4b] the snapshots' axes into JSON before their build goes, the box
+      held where it was painted }
+    procedure TipFreeze;
+    { [F4b] TooltipView.render's _keepShow }
+    procedure TipRendered;
+    { [F4b] a frozen snapshot's axes and element read back from the build
+      that stands now }
+    procedure TipSnapRefresh;
+    function GetTipSnapShown: TTyTipSnap;
+    { [F4b] the axis pointers kept across a re-render, and put back }
+    procedure TipKeepPointer;
+    procedure TipKeepRestore;
+    { [F4b] the keep timer: manuallyShowTip at the last point }
+    procedure TipKeepFire;
+    { [F4b] TooltipView.manuallyShowTip, the view's method: what showTip's
+      update runs, and what the keep timer calls directly }
+    procedure TipManualShow(APayload: TJSONObject; const AHits: TTyAxisHitArray;
+      AHasHits: Boolean);
     { a marker item: its kind, its block and its place in the block }
     function MarkerItemOf(const ADatum: TTyChartDatumRef;
       out AKind: TTyMarkerKind; out ABlock: TTyMkBlock;
@@ -2764,7 +2863,7 @@ type
     property TipHits: TTyAxisHitArray read FTipHits;
     { what the box shows (or showed last): the point, the axes or the
       target, a manual placement [Batch 153] }
-    property TipSnapShown: TTyTipSnap read FTipSnap;
+    property TipSnapShown: TTyTipSnap read GetTipSnapShown;
     { the series index of a hit's binding slot; -1 for none [Batch 141] }
     function SlotSeriesIndex(ASlot: Integer): Integer;
     { THE LIST AS IT STANDS THIS FRAME: every animated element read from its
@@ -4239,6 +4338,9 @@ begin
   FTipNow := NaN;
   FTipShowAt := NaN;
   FTipHideAt := NaN;
+  FTipLastX := NaN;
+  FTipLastY := NaN;
+  FTipKeepAt := NaN;
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
   Width := 320;
@@ -4396,9 +4498,13 @@ begin
     about to be freed. Invalidate clears it too, but Resize sets FDirty without
     going through Invalidate -- so the one place that can be trusted to clear
     it is the one that does the freeing. }
+  { [F4b] the axisPointer model keeps its status, value and rows across
+    the update: kept as values, put back by the next build }
+  TipKeepPointer;
   FTipHits := nil;
-  { and the box with its snapshots, which hold the same pointers [Batch 100] }
-  TipDropDisplay;
+  { and the box's snapshots, which hold the same pointers [Batch 100] --
+    turned into values: the box stays up across the re-render [F4b] }
+  TipFreeze;
   { the hits an action waiting carries hold them too: it falls back on its
     dataByCoordSys [Batch 153] }
   ActForgetHits;
@@ -4538,6 +4644,9 @@ procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string;
 var i: Integer;
 begin
   FOptionText := AValue;
+  { [F4b] new models, a new tooltip view: the old one's box, last point and
+    the axisPointer models' state go with it }
+  TipForget;
   { EVERY visualMap VIEW GOES with its model [Batch 116] }
   VmDisposeAll;
   { THE OLD OPTION'S SERIES VIEWS, before the text goes: an update keeps a
@@ -4962,7 +5071,7 @@ procedure TTyAdvanceChart.EmitUpdated;
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
-  i: Integer;
+  i, saved: Integer;
 begin
   if FEvSilent > 0 then Exit;
   if not HasChartHandler('updated') then Exit;
@@ -4970,8 +5079,15 @@ begin
   ev.EventType := 'updated';
   ev.Params := TyChartBlankParams;
   regs := Copy(FEventRegs);
-  for i := 0 to High(regs) do
-    if regs[i].EventType = 'updated' then regs[i].Handler(Self, ev);
+  { [F4b] outside the cycle }
+  saved := FActCycle;
+  FActCycle := 0;
+  try
+    for i := 0 to High(regs) do
+      if regs[i].EventType = 'updated' then regs[i].Handler(Self, ev);
+  finally
+    FActCycle := saved;
+  end;
 end;
 
 function TTyAdvanceChart.SeriesViewKey(ASeries: Integer): string;
@@ -5309,7 +5425,9 @@ begin
     here the next movement re-establishes it, which is a real difference and a
     small one, and the alternative is a box describing a bar nobody can see.
     [Batch 100] The box shown goes with it, whatever alwaysShowContent says
-    -- upstream keeps it and re-shows at the last pointer. }
+    -- upstream keeps it and re-shows at the last pointer.
+    [F4b: no longer -- the box stays up and TooltipView's _keepShow shows it
+    again at the last point; TipReset says how.] }
   TipReset;
   { THE AXIS HOVER IS NOT CLEARED HERE, and deliberately not: every Invalidate
     sets FDirty, every FDirty relayouts, and every relayout rebuilds -- so
@@ -5325,10 +5443,27 @@ begin
   DropStatic;
   { a dirty-rect window prepares at its next paint [Batch 142] }
   FDrPending := True;
+  { [F4b] zrender is dirty }
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
 procedure TTyAdvanceChart.InvalidateFrame;
+begin
+  { [F4b] zrender is dirty: the next flush says `rendered` }
+  FZrDirty := True;
+  InvalidateFrameQuiet;
+end;
+
+procedure TTyAdvanceChart.HoverInvalidate;
+begin
+  { zrender marks what changed: a state the hover moved, a box or a
+    pointer that is somewhere else; the frame is asked for regardless }
+  if FStDirty or (TipStateKey <> FTipPaintedKey) then FZrDirty := True;
+  InvalidateFrameQuiet;
+end;
+
+procedure TTyAdvanceChart.InvalidateFrameQuiet;
 begin
   { A DIRTY-RECT WINDOW FLUSHES FIRST [Batch 142]: the frame is prepared
     when the queue next runs -- once, however many asked -- and only the
@@ -5345,7 +5480,8 @@ begin
     Exit;
   end;
   { The static layer is KEPT -- see the declaration. This is the repaint an
-    animation tick asks for: same model, same layout, same axes, one frame on. }
+    animation tick asks for: same model, same layout, same axes, one frame on.
+    [F4b] Quiet: whoever asked marks zrender dirty, or not. }
   inherited Invalidate;
 end;
 
@@ -6663,6 +6799,8 @@ begin
     if FBrushActDepth = 0 then BrushFlush;
   end;
   FDirty := False;
+  { [F4b] the axis pointers a re-render kept }
+  TipKeepRestore;
   { the update's flush: `rendered` once it is painted [Batch 119] }
   if not FStreamRelayout and not FExporting then FFlushDue := True;
   { a resize's `updated`, after its brushselected [milestone D5-D8] }
@@ -6957,7 +7095,7 @@ begin
   Invalidate;
   { THE NON-REFINED EVENT, which no handler hears but the connect listener:
     a copy of the payload, the type lowercased [Batch 141] }
-  if FEvSilent = 0 then
+  if (FEvSilent = 0) and (FBatchCapDepth = 0) then
     ConnectBroadcast(LowerCase(t), CopyWithType(APayload, LowerCase(t)), nil);
   EmitPayloadEvent('axisbreakchanged', '{"type":"axisbreakchanged","breaks":['
     + evBreaks + '],"fromAction":"' + StringToJSONString(t)
@@ -7789,6 +7927,8 @@ begin
 
     Holding it here also means the layout pass and the paint pass measure with
     the same instance, which is what they are supposed to agree about. }
+  { [F4b] the flush's start, for `rendered`'s elapsedTime }
+  FPaintT0 := AnimClock;
   measurer := NewTextMeasurer(APPI);
   P := TTyPainter.Create;
   try
@@ -9488,6 +9628,7 @@ begin
   SolveDataZoomViews(NewTextMeasurer(FLastPPI), FLastPPI);
   TipReset;
   DropStatic;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -9500,6 +9641,7 @@ begin
   if FLastPPI <= 0 then
   begin
     FDirty := True;
+    FZrDirty := True;
     inherited Invalidate;
     Exit;
   end;
@@ -11681,6 +11823,7 @@ begin
     end;
     StaticDrop;
     FProgReuse := False;
+    FZrDirty := True;
     inherited Invalidate;
   end;
   { the event: the payload, its animation where a geo was reached (in
@@ -11780,6 +11923,7 @@ begin
     if FLastPPI > 0 then BuildSeriesList(NewTextMeasurer(FLastPPI), FLastPPI);
     StaticDrop;
     FProgReuse := False;
+    FZrDirty := True;
     inherited Invalidate;
   end;
 end;
@@ -13130,9 +13274,13 @@ begin
     if q.IndexOfName('seriesIndex') >= 0 then q.Elements['seriesIndex'] := arr
     else q.Add('seriesIndex', arr);
     { the legacy action is registered with no update of its own: 'update',
-      a render; the select it dispatches runs after }
+      a render; the select it dispatches runs after -- [F4b] dispatched
+      (api.dispatchAction) inside the action, so it waits; the action's
+      own event (a copy of the payload, the type lowercased) goes first }
+    DispatchActionObject(TJSONObject(q.Clone));
     FullUpdate;
-    DoSelectAction(q);
+    EmitPayloadEvent(LowerCase(APayload.Get('type', '')),
+      CopyWithType(APayload, LowerCase(APayload.Get('type', ''))));
   finally
     q.Free;
   end;
@@ -13873,6 +14021,7 @@ begin
   if not Result then Exit;
   { __updateOnOwnRoam: the thumbnail's window follows [Batch 140] }
   ThumbUpdateWindows;
+  { [F4b] as an action, the dispatch publishes its event and `updated` }
   { A NEW PICTURE, NOT A NEW LAYOUT: the static layer goes, the build and
     the force answer stay. The hover names an element of a list about to be
     rebuilt. The list is built again at once [Milestone D9-D14]: the next
@@ -13880,9 +14029,10 @@ begin
     picture where it moved, as zrender's storage holds it. }
   TipReset;
   DropStaticKeepList;
+  FZrDirty := True;
   inherited Invalidate;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
-  EmitUpdated;
+  if FViewActionDepth = 0 then EmitUpdated;
 end;
 
 function TTyAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
@@ -14051,6 +14201,7 @@ begin
   { A NEW PICTURE, NOT A NEW LAYOUT -- as a roam step }
   TipReset;
   DropStatic;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -14147,7 +14298,8 @@ begin
       ev.Integers['dataIndex'] := ADataIndex;
       if AHasX then ev.Floats['localX'] := ALocalX;
       if AHasY then ev.Floats['localY'] := ALocalY;
-      EmitPayloadEvent('dragnode', ev.AsJSON);
+      { [F4b] the action publishes its own (a copy of its payload) }
+      if FViewActionDepth = 0 then EmitPayloadEvent('dragnode', ev.AsJSON);
     finally
       ev.Free;
     end;
@@ -14155,7 +14307,7 @@ begin
   if not Result then Exit;
   { update: 'update' -- the whole chart laid out again }
   Invalidate;
-  EmitUpdated;
+  if FViewActionDepth = 0 then EmitUpdated;
 end;
 
 function TTyAdvanceChart.SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
@@ -14273,7 +14425,7 @@ begin
   { the series group's transform changes; everything on the canvas follows
     it -- laid out again here, as the tree's roam is }
   Invalidate;
-  EmitUpdated;
+  if FViewActionDepth = 0 then EmitUpdated;
 end;
 
 function TTyAdvanceChart.SankeyRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
@@ -14420,8 +14572,9 @@ begin
     cap := (el >= 0) and (FPaintList <> nil)
       and (FPaintList.Element(el).Caption.FontSizeLogical > 0);
     { zrender's click: pressed and released on the same element, within
-      4 px [Batch 153] }
-    zrClick := (FPressEl >= 0) and (el = FPressEl)
+      4 px [Batch 153] -- nothing under both is the same too (_downEl ===
+      _upEl, both null): the click still reaches the listeners [F4b] }
+    zrClick := FPressArmed and (el = FPressEl)
       and (Sqrt(Sqr(X - FPressX) + Sqr(Y - FPressY)) <= 4);
     { zrender's Draggable ends first: a dragged cover's dragend [Batch 126] }
     BrushDragEnd;
@@ -17739,6 +17892,7 @@ begin
   DropStatic;
   BuildSeriesList(m, FLastPPI);
   TipReset;
+  FZrDirty := True;
   inherited Invalidate;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   EmitUpdated;
@@ -24319,7 +24473,9 @@ end;
   scheduler finished }
 function TTyAdvanceChart.ProgIdle: Boolean;
 begin
-  Result := not ProgLive and not FAnimLive and not FLazyPending;
+  { [F4b] and no action pending (bindRenderedEvent's _pendingActions) }
+  Result := not ProgLive and not FAnimLive and not FLazyPending
+    and (Length(FActPending) = 0);
 end;
 
 function TTyAdvanceChart.ProgFrame(AEmit: Boolean): Boolean;
@@ -24378,7 +24534,10 @@ begin
   InvalidateFrame;
   if AEmit then
   begin
-    EmitPlain('rendered');
+    { [F4b] the frame's flush: what it drew is no longer dirty }
+    FZrDirty := False;
+    FTipPaintedKey := TipStateKey;
+    EmitRendered(0);
     if ProgIdle then EmitPlain('finished');
     AnimArmTimer;
   end;
@@ -24495,25 +24654,104 @@ procedure TTyAdvanceChart.EmitPlain(const AType: string);
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
-  i: Integer;
+  i, saved: Integer;
 begin
   if not HasChartHandler(AType) then Exit;
   ev := Default(TTyChartEvent);
   ev.EventType := AType;
   ev.Params := TyChartBlankParams;
   regs := Copy(FEventRegs);
-  for i := 0 to High(regs) do
-    if regs[i].EventType = AType then regs[i].Handler(Self, ev);
+  { [F4b] outside the cycle }
+  saved := FActCycle;
+  FActCycle := 0;
+  try
+    for i := 0 to High(regs) do
+      if regs[i].EventType = AType then regs[i].Handler(Self, ev);
+  finally
+    FActCycle := saved;
+  end;
 end;
 
-{ bindRenderedEvent over an update's flush: `rendered`, and `finished` when
-  nothing animates, nothing is to draw and no update waits }
+{ bindRenderedEvent over a flush: `rendered`, and `finished` when nothing
+  animates, nothing is to draw, no update waits and no action is pending.
+  [F4b] Every flush that had something to draw -- zrender's
+  _needsRefresh: an update's (FFlushDue) or any repaint asked for since the
+  last (FZrDirty: a hover, the tooltip, the pointer...), not only an
+  update's -- with the paint's elapsedTime on the chart's clock. }
 procedure TTyAdvanceChart.EmitFlush;
+var elapsed: Double;
 begin
-  if not FFlushDue then Exit;
+  if not FFlushDue and not FZrDirty then Exit;
   FFlushDue := False;
-  EmitPlain('rendered');
+  FZrDirty := False;
+  FTipPaintedKey := TipStateKey;
+  elapsed := AnimClock - FPaintT0;
+  if IsNan(elapsed) or (elapsed < 0) then elapsed := 0;
+  EmitRendered(elapsed);
   if ProgIdle then EmitPlain('finished');
+end;
+
+procedure TTyAdvanceChart.EmitRendered(AElapsed: Double);
+var
+  ev: TTyChartEvent;
+  regs: array of TTyChartEventReg;
+  i, saved: Integer;
+begin
+  if not HasChartHandler('rendered') then Exit;
+  ev := Default(TTyChartEvent);
+  ev.EventType := 'rendered';
+  ev.Params := TyChartBlankParams;
+  ev.Payload := '{"elapsedTime":' + TyJsNumberToString(AElapsed) + '}';
+  regs := Copy(FEventRegs);
+  { a handler is outside any dispatch (IN_EC_CYCLE is false) }
+  saved := FActCycle;
+  FActCycle := 0;
+  try
+    for i := 0 to High(regs) do
+      if regs[i].EventType = 'rendered' then regs[i].Handler(Self, ev);
+  finally
+    FActCycle := saved;
+  end;
+end;
+
+function TTyAdvanceChart.TipStateKey: string;
+var
+  i, k: Integer;
+
+  function H(A: Double): string;
+  begin
+    Result := FloatToStrF(A, ffGeneral, 17, 0, DefaultFormatSettings);
+  end;
+
+begin
+  Result := BoolToStr(FTipShown, '1', '0') + '|' + H(FTipSnap.X) + ',' + H(FTipSnap.Y)
+    + '|' + IntToStr(Ord(FTipSnap.Datum.Kind)) + ',' + IntToStr(FTipSnap.Datum.SeriesIndex)
+    + ',' + IntToStr(FTipSnap.Datum.DataIndex) + ',' + IntToStr(FTipSnap.Datum.ComponentIndex)
+    + ',' + BoolToStr(FTipSnap.Datum.IsEdge, '1', '0') + ',' + IntToStr(FTipSnap.Element)
+    + '|' + FTipSnap.DbcJson + '|' + BoolToStr(FTipSnap.Frozen, '1', '0') + H(FTipSnap.FrozenX)
+    + ',' + H(FTipSnap.FrozenY) + '|' + FTipSnap.PosJson;
+  for i := 0 to High(FTipSnap.Hits) do
+  begin
+    Result := Result + '|s' + IntToHex(PtrUInt(FTipSnap.Hits[i].Axis), 16) + H(FTipSnap.Hits[i].Value)
+      + ',' + H(FTipSnap.Hits[i].SnapValue);
+    for k := 0 to High(FTipSnap.Hits[i].Rows) do
+      Result := Result + ',' + IntToStr(FTipSnap.Hits[i].Slots[k]) + ':' + IntToStr(FTipSnap.Hits[i].Rows[k]);
+  end;
+  for i := 0 to High(FTipHits) do
+  begin
+    Result := Result + '|p' + IntToHex(PtrUInt(FTipHits[i].Axis), 16) + H(FTipHits[i].Value)
+      + ',' + H(FTipHits[i].SnapValue) + BoolToStr(FTipHits[i].Cross, 'c', '');
+    for k := 0 to High(FTipHits[i].Rows) do
+      Result := Result + ',' + IntToStr(FTipHits[i].Slots[k]) + ':' + IntToStr(FTipHits[i].Rows[k]);
+  end;
+end;
+
+procedure TTyAdvanceChart.TipInvalidate;
+begin
+  { zrender marks what changed: a box or a pointer that is where it was
+    marks nothing (the frame is asked for as before) }
+  if TipStateKey <> FTipPaintedKey then FZrDirty := True;
+  InvalidateFrameQuiet;
 end;
 
 { ==================== the tooltip ==================== }
@@ -30462,25 +30700,52 @@ procedure TTyAdvanceChart.EmitPayloadEvent(const AType, APayloadJson: string;
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
-  i: Integer;
+  i, saved: Integer;
 begin
   { a silent dispatch publishes nothing -- and so sends nothing to its
     group [Batch 141] }
   if FEvSilent > 0 then Exit;
+  { [F4b] A BATCH'S ITEMS publish nothing of their own: their events (and
+    a refined action's refined ones) are the batch's }
+  if FBatchCapDepth > 0 then
+  begin
+    if AType = FBatchCapType then
+    begin
+      SetLength(FBatchCapList, Length(FBatchCapList) + 1);
+      FBatchCapList[High(FBatchCapList)] := APayloadJson;
+      Exit;
+    end;
+    if (FBatchCapRefined <> '') and (AType = FBatchCapRefined) then
+    begin
+      SetLength(FBatchCapRef, Length(FBatchCapRef) + 1);
+      FBatchCapRef[High(FBatchCapRef)] := APayloadJson;
+      Exit;
+    end;
+  end;
   ev := Default(TTyChartEvent);
   ev.EventType := AType;
   ev.HasParams := False;
   ev.Params := TyChartBlankParams;
   ev.HasOffset := False;
   ev.Payload := APayloadJson;
-  if Assigned(FOnChartEvent) then FOnChartEvent(Self, ev);
-  regs := Copy(FEventRegs);
-  for i := 0 to High(regs) do
-    if regs[i].EventType = AType then regs[i].Handler(Self, ev);
-  { THE CONNECT LISTENER, registered after the chart's own forwarders
-    (_initEvents runs in the constructor, enableConnect after init): the
-    chart's handlers hear the event first [Batch 141] }
-  ConnectBroadcast(AType, APayloadJson, AObj);
+  { [F4b] THE EVENT IS OUTSIDE THE CYCLE: doDispatchAction clears
+    IN_EC_CYCLE before it triggers, so what a handler (or the group a
+    connect sends it to) dispatches runs at once -- and flushes the
+    actions this one left pending }
+  saved := FActCycle;
+  FActCycle := 0;
+  try
+    if Assigned(FOnChartEvent) then FOnChartEvent(Self, ev);
+    regs := Copy(FEventRegs);
+    for i := 0 to High(regs) do
+      if regs[i].EventType = AType then regs[i].Handler(Self, ev);
+    { THE CONNECT LISTENER, registered after the chart's own forwarders
+      (_initEvents runs in the constructor, enableConnect after init): the
+      chart's handlers hear the event first [Batch 141] }
+    ConnectBroadcast(AType, APayloadJson, AObj);
+  finally
+    FActCycle := saved;
+  end;
 end;
 
 function JsTruthy(AData: TJSONData): Boolean;
@@ -31683,6 +31948,7 @@ begin
   if FVisualViews[AIndex].Calculable then
     for h := 0 to 1 do FVmLive[AIndex].LabelBlur[h] := True;
   DropStaticKeepList;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -31695,6 +31961,7 @@ begin
   FVmLive[AIndex].IndLabelVisible := False;
   for h := 0 to 1 do FVmLive[AIndex].LabelBlur[h] := False;
   DropStaticKeepList;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -31773,6 +32040,7 @@ begin
     FVmLive[AIndex].Labels[h] := FVisualLayouts[AIndex].Handles[h].Label_;
   end;
   DropStatic;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -32010,6 +32278,7 @@ begin
   if anyChange then
   begin
     DropStatic;
+    FZrDirty := True;
     inherited Invalidate;
   end;
 end;
@@ -32445,6 +32714,7 @@ begin
     Relayout(nil, FLastRect, FLastPPI, m);
     DropStatic;
     LazyUpdateDone;
+    FZrDirty := True;
     inherited Invalidate;
   end;
 end;
@@ -33304,6 +33574,7 @@ end;
 function TTyAdvanceChart.DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
 var
   series: TTyIntegerArray;
+  ev, anim: TJSONObject;
   k, n: Integer;
   d: TJSONData;
   rp: TTyGraphRoamPayload;
@@ -33334,32 +33605,60 @@ begin
     series[0] := -1;
   end;
   n := Length(series);
-  if AType = 'dragNode' then
-  begin
-    hasX := Num('localX', lx);
-    hasY := Num('localY', ly);
-    d := APayload.Find('dataIndex');
-    hasIdx := (d <> nil) and (d.JSONType = jtNumber) and (Frac(d.AsFloat) = 0);
-    if not hasIdx then Exit;
-    idx := Trunc(d.AsFloat);
-    for k := 0 to n - 1 do
-      if SankeyDragNode(series[k], idx, hasX, lx, hasY, ly) then Result := True;
-    Exit;
-  end;
-  rp := Default(TTyGraphRoamPayload);
-  rp.HasPan := Num('dx', rp.DX) and Num('dy', rp.DY);
-  rp.HasZoom := Num('zoom', rp.Zoom);
-  Num('originX', rp.OriginX);
-  Num('originY', rp.OriginY);
-  if not (rp.HasPan or rp.HasZoom) then Exit;
-  for k := 0 to n - 1 do
-  begin
-    rp.SeriesIndex := series[k];
-    if AType = 'sankeyRoam' then
+  { [F4b] AS AN ACTION: the helpers' own event and `updated` are the
+    dispatch's -- one event, a copy of the payload (a roam's with the
+    animation payloadDisableAnimation wrote), then the tail's `updated` }
+  Inc(FViewActionDepth);
+  try
+    if AType = 'dragNode' then
     begin
-      if SankeyDispatchRoam(rp) then Result := True;
+      hasX := Num('localX', lx);
+      hasY := Num('localY', ly);
+      d := APayload.Find('dataIndex');
+      hasIdx := (d <> nil) and (d.JSONType = jtNumber) and (Frac(d.AsFloat) = 0);
+      if not hasIdx then Exit;
+      idx := Trunc(d.AsFloat);
+      for k := 0 to n - 1 do
+        if SankeyDragNode(series[k], idx, hasX, lx, hasY, ly) then Result := True;
+      { update: 'update', inside the dispatch -- its visual stage's
+        brushSelect waits with the rest }
+      if Result then FullUpdate;
     end
-    else if GraphDispatchRoam(rp) then Result := True;
+    else
+    begin
+      rp := Default(TTyGraphRoamPayload);
+      rp.HasPan := Num('dx', rp.DX) and Num('dy', rp.DY);
+      rp.HasZoom := Num('zoom', rp.Zoom);
+      Num('originX', rp.OriginX);
+      Num('originY', rp.OriginY);
+      if not (rp.HasPan or rp.HasZoom) then Exit;
+      for k := 0 to n - 1 do
+      begin
+        rp.SeriesIndex := series[k];
+        if AType = 'sankeyRoam' then
+        begin
+          if SankeyDispatchRoam(rp) then Result := True;
+        end
+        else if GraphDispatchRoam(rp) then Result := True;
+      end;
+    end;
+  finally
+    Dec(FViewActionDepth);
+  end;
+  if not Result then Exit;
+  ev := TJSONObject(APayload.Clone);
+  try
+    if AType <> 'dragNode' then
+    begin
+      anim := TJSONObject.Create;
+      anim.Add('duration', 0);
+      if ev.Find('animation') <> nil then ev.Elements['animation'] := anim
+      else ev.Add('animation', anim);
+    end;
+    ev.Strings['type'] := LowerCase(AType);
+    EmitPayloadEvent(LowerCase(AType), VmJsJson(ev), ev);
+  finally
+    ev.Free;
   end;
 end;
 
@@ -33458,13 +33757,29 @@ end;
   keeps its numbers as they are -- no text in between) [Batch 130]; the
   actions dispatched while it ran, then `updated` [Batch 153] }
 function TTyAdvanceChart.DispatchActionObject(APayload: TJSONObject): Boolean;
+var n: Integer;
+  tp: TJSONData;
 begin
+  { [F4b] dispatchAction in the rendering procedure (IN_EC_CYCLE): the
+    payload waits in _pendingActions and runs after the action that is
+    running, its event before `updated` -- whatever the action }
+  if FActCycle > 0 then
+  begin
+    tp := APayload.Find('type');
+    Result := (tp <> nil) and (tp.JSONType = jtString);
+    n := Length(FActPending);
+    SetLength(FActPending, n + 1);
+    FActPending[n] := Default(TTyTipAct);
+    FActPending[n].Payload := APayload;
+    Exit;
+  end;
   Result := DispatchActionCore(APayload);
   { the pending brushSelect, then triggerUpdatedEvent [Batch 127] }
   if FBrushActDepth = 0 then BrushFlush;
-  { flushPendingActions: what the tooltip's and the pointer's actions
-    dispatched while they ran [Batch 153] }
-  if (FBrushActDepth = 0) and (FActCycle = 0) then ActFlushPending;
+  { flushPendingActions: what the actions dispatched while they ran
+    [Batch 153] -- [F4b] also from a dispatch a handler made: its flush
+    takes what the outer one left waiting }
+  if FActCycle = 0 then ActFlushPending;
   FActHits.Hits := nil;
   FActHits.HasHits := False;
   { every dispatch ends with triggerUpdatedEvent [Batch 97] }
@@ -33484,6 +33799,10 @@ begin
   p := APayload;
   { an action's brushselected comes after its own event [Batch 127] }
   Inc(FBrushActDepth);
+  { [F4b] IN_EC_CYCLE for every action, its update included: what it
+    dispatches waits (DispatchActionObject queues it); its event is
+    published outside the cycle (EmitPayloadEvent) }
+  Inc(FActCycle);
   try
     tp := p.Find('type');
     if (tp = nil) or (tp.JSONType <> jtString) then Exit;
@@ -33499,7 +33818,14 @@ begin
       or (t = 'legendScroll') or (t = 'dragNode') or (t = 'restore')
       or (t = 'changeMagicType') or (t = 'changeDataView')
       { the timeline's two (prepareAndUpdate, update) [milestone D5-D8] }
-      or (t = 'timelineChange') or (t = 'timelinePlayChange') then
+      or (t = 'timelineChange') or (t = 'timelinePlayChange')
+      { [F4b] updateView (sunburst, treemap), the axis breaks' and the
+        legacy selects' update }
+      or (t = 'sunburstRootToNode') or (t = 'treemapZoomToNode')
+      or (t = 'treemapRootToNode') or (t = 'treemapMove') or (t = 'treemapRender')
+      or (t = 'expandAxisBreak') or (t = 'collapseAxisBreak') or (t = 'toggleAxisBreak')
+      or (t = 'mapToggleSelect') or (t = 'pieToggleSelect') or (t = 'mapSelect')
+      or (t = 'pieSelect') or (t = 'mapUnSelect') or (t = 'pieUnSelect') then
       FBrushPayload := True;
     { A BATCH -- `if (payload.batch)`, a truthy one -- of highlight /
       downplay [Batch 116]: each item over the payload, one event; of the
@@ -33679,6 +34005,7 @@ begin
     p.Free;
     FCustomAction := savedAction;
     Dec(FBrushActDepth);
+    Dec(FActCycle);
   end;
 end;
 
@@ -33827,6 +34154,145 @@ begin
     EmitPayloadEvent('brushselected', js + ']}');
     Exit(True);
   end;
+  { [F4b] every other action }
+  Result := DoBatchGeneric(APayload, t);
+end;
+
+function TTyAdvanceChart.DoBatchGeneric(APayload: TJSONObject;
+  const AType: string): Boolean;
+var
+  ev, act, js, first: string;
+  items: TJSONArray;
+  i, k, before: Integer;
+  refine: Boolean;
+  savedType, savedRef: string;
+  savedList, savedRefList, entries, refs: TTyStringArray;
+  d: TJSONData;
+  brk: TJSONArray;
+  nLine, nCol: Integer;
+begin
+  Result := False;
+  { the action's non-refined event: its entry in the connect table }
+  ev := '';
+  for i := 0 to TyConnectEventCount - 1 do
+    if (TyConnectEventAt(i, act) <> '') and (act = AType) then
+    begin
+      ev := TyConnectEventAt(i, act);
+      Break;
+    end;
+  if ev = '' then Exit;
+  { the axis breaks' refineEvent: eventObj is never reset, every entry is
+    the first item's copy; one refined event of every item's breaks }
+  refine := (AType = 'expandAxisBreak') or (AType = 'collapseAxisBreak')
+    or (AType = 'toggleAxisBreak');
+  items := BatchItemsOf(APayload);
+  savedType := FBatchCapType;
+  savedRef := FBatchCapRefined;
+  savedList := FBatchCapList;
+  savedRefList := FBatchCapRef;
+  entries := nil;
+  refs := nil;
+  FBatchCapType := ev;
+  if refine then FBatchCapRefined := 'axisbreakchanged' else FBatchCapRefined := '';
+  FBatchCapList := nil;
+  FBatchCapRef := nil;
+  Inc(FBatchCapDepth);
+  Inc(FBatchDefer);
+  FBatchDue := False;
+  FBatchBrushHas := False;
+  FBatchBrushJson := '';
+  { no item at all: the update still runs (with the payload) -- here the
+    one whose visual stage the brush hears }
+  if (items.Count = 0) and FBrushPayload then FBatchDue := True;
+  try
+    first := '';
+    if items.Count > 0 then first := CopyWithType(TJSONObject(items.Items[0]), ev);
+    for i := 0 to items.Count - 1 do
+    begin
+      before := Length(FBatchCapList);
+      { each item through the action, as doDispatchAction's map hands it:
+        a copy of the item over the payload, its batch null }
+      DispatchActionCore(TJSONObject(items.Items[i].Clone));
+      { eventObj = actionResult || a copy of the batch item }
+      SetLength(entries, Length(entries) + 1);
+      if Length(FBatchCapList) > before then
+        entries[High(entries)] := FBatchCapList[High(FBatchCapList)]
+      else
+        entries[High(entries)] := CopyWithType(TJSONObject(items.Items[i]), ev);
+    end;
+    refs := FBatchCapRef;
+  finally
+    Dec(FBatchCapDepth);
+    Dec(FBatchDefer);
+    FBatchCapType := savedType;
+    FBatchCapRefined := savedRef;
+    FBatchCapList := savedList;
+    FBatchCapRef := savedRefList;
+    items.Free;
+  end;
+  { THE UPDATE, once: updateMethods[update](payload) }
+  FBatchBrushQueued := False;
+  if FBatchDue and (FBatchDefer = 0) then
+  begin
+    FBatchDue := False;
+    FullUpdateWith(FBatchDuePayload, FBatchDueHas);
+  end;
+  { the brushSelect the items' own updates asked for, when the one above
+    gave none }
+  if FBatchBrushHas and not FBatchBrushQueued and (FBatchDefer = 0) then
+  begin
+    SetLength(FActPending, Length(FActPending) + 1);
+    FActPending[High(FActPending)] := Default(TTyTipAct);
+    FActPending[High(FActPending)].EventJson := FBatchBrushJson;
+  end;
+  FBatchBrushHas := False;
+  FBatchBrushJson := '';
+  Result := True;
+  if FEvSilent > 0 then Exit;
+  js := BatchEventHead(APayload, ev);
+  for i := 0 to High(entries) do
+  begin
+    if i > 0 then js := js + ',';
+    if refine then js := js + first else js := js + entries[i];
+  end;
+  js := js + ']}';
+  if not refine then
+  begin
+    EmitPayloadEvent(ev, js);
+    Exit;
+  end;
+  { a refined action: the batch event goes to the connect listener only;
+    the refined event once, its breaks every item's, fromActionPayload the
+    batch's payload }
+  ConnectBroadcast(ev, js, nil);
+  js := '';
+  for k := 0 to High(refs) do
+  begin
+    if TyJsonNestingExceeds(refs[k], TyOptionMaxNesting, nLine, nCol) then Continue;
+    d := nil;
+    try
+      d := GetJSON(NulSafeJson(refs[k]));
+      NulRestore(d);
+    except
+      d := nil;
+    end;
+    try
+      if (d is TJSONObject) and (TJSONObject(d).Find('breaks') is TJSONArray) then
+      begin
+        brk := TJSONArray(TJSONObject(d).Find('breaks'));
+        for i := 0 to brk.Count - 1 do
+        begin
+          if js <> '' then js := js + ',';
+          js := js + VmJsJson(brk.Items[i]);
+        end;
+      end;
+    finally
+      d.Free;
+    end;
+  end;
+  EmitPayloadEvent('axisbreakchanged', '{"type":"axisbreakchanged","breaks":['
+    + js + '],"fromAction":"' + StringToJSONString(AType)
+    + '","fromActionPayload":' + APayload.AsJSON + ',"escapeConnect":true}');
 end;
 
 function TTyAdvanceChart.DzModelId(AIndex: Integer): string;
@@ -34782,6 +35248,14 @@ var
   m: ITyTextMeasurer;
   hk, hs, hraw, slot, inner: Integer;
 begin
+  { [F4b] a batch's items: the update runs once, after the last }
+  if FBatchDefer > 0 then
+  begin
+    FBatchDue := True;
+    FBatchDuePayload := APayload;
+    FBatchDueHas := AHasPayload;
+    Exit;
+  end;
   { an update renders every parallelAxis view -- but the one an
     axisAreaSelect names [Batch 130] }
   if not FParBrushInAas then FParBrushSkip := -1;
@@ -34833,6 +35307,7 @@ begin
   RtRenderPass;
   { the cached picture is the old render's; the list is the new one's }
   StaticDrop;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -36583,8 +37058,23 @@ begin
 end;
 
 procedure TTyAdvanceChart.TipApplyShow(const ASnap: TTyTipSnap);
-var spec: TTyTooltipSpec;
+var
+  spec: TTyTooltipSpec;
+  arr: TJSONArray;
 begin
+  { [F4b] _showAxisTooltip's callback: _updateContentNotChangedOnAxis keeps
+    the dataByCoordSys first, whatever the content then does }
+  if Length(ASnap.Hits) > 0 then
+  begin
+    arr := TipDbcJson(TipAxesHits(ASnap.Hits));
+    try
+      FTipLastDbc := arr.AsJSON;
+    finally
+      arr.Free;
+    end;
+  end
+  else if ASnap.DbcJson <> '' then
+    FTipLastDbc := ASnap.DbcJson;
   spec := TipSpecOf(ASnap);
   { _showTooltipContent returns before anything for `show: false` or
     `showContent: false` -- and a box already up stays as it was }
@@ -36614,21 +37104,52 @@ begin
 end;
 
 function TTyAdvanceChart.TipAdvance(ANow: Double): Boolean;
-var showDue, hideDue, showFirst: Boolean;
+var
+  showDue, hideDue, keepDue, showFirst: Boolean;
+  bestAt: Double;
+  bestSeq, which: Integer;
+
+  procedure Consider(ADue: Boolean; AAt: Double; ASeq, AWhich: Integer);
+  begin
+    if not ADue then Exit;
+    if (which < 0) or (AAt < bestAt) or ((AAt = bestAt) and (ASeq < bestSeq)) then
+    begin
+      bestAt := AAt;
+      bestSeq := ASeq;
+      which := AWhich;
+    end;
+  end;
+
 begin
   Result := False;
   if IsNan(ANow) then Exit;
+  { [F4b] one timeout at a time: a timer's work (the keep timer's
+    dispatches) does not fire the others inside it }
+  if FTipAdvancing then Exit;
+  FTipAdvancing := True;
+  try
   repeat
     showDue := (not IsNan(FTipShowAt)) and (FTipShowAt <= ANow);
     hideDue := (not IsNan(FTipHideAt)) and (FTipHideAt <= ANow);
-    if not (showDue or hideDue) then Break;
-    { in the order the two timeouts would have fired: by time, then by
+    { [F4b] the keep timer never fires inside a dispatch }
+    keepDue := (not IsNan(FTipKeepAt)) and (FTipKeepAt <= ANow) and (FActCycle = 0);
+    if not (showDue or hideDue or keepDue) then Break;
+    { in the order the timeouts would have fired: by time, then by
       creation }
-    if showDue and hideDue then
-      showFirst := (FTipShowAt < FTipHideAt)
-        or ((FTipShowAt = FTipHideAt) and (FTipShowSeq < FTipHideSeq))
-    else
-      showFirst := showDue;
+    which := -1;
+    bestAt := 0;
+    bestSeq := 0;
+    Consider(showDue, FTipShowAt, FTipShowSeq, 0);
+    Consider(hideDue, FTipHideAt, FTipHideSeq, 1);
+    Consider(keepDue, FTipKeepAt, FTipKeepSeq, 2);
+    if which = 2 then
+    begin
+      FTipKeepAt := NaN;
+      TipKeepFire;
+      Result := True;
+      Continue;
+    end;
+    showFirst := which = 0;
     if showFirst then
     begin
       FTipShowAt := NaN;
@@ -36644,6 +37165,9 @@ begin
     end;
     Result := True;
   until False;
+  finally
+    FTipAdvancing := False;
+  end;
 end;
 
 procedure TTyAdvanceChart.TipArmTimer;
@@ -36653,6 +37177,9 @@ begin
   if not IsNan(FTipShowAt) then due := FTipShowAt;
   if (not IsNan(FTipHideAt)) and (IsNan(due) or (FTipHideAt < due)) then
     due := FTipHideAt;
+  { [F4b] the keep timer }
+  if (not IsNan(FTipKeepAt)) and (IsNan(due) or (FTipKeepAt < due)) then
+    due := FTipKeepAt;
   { only on the machine's clock: a test steps TooltipTick itself }
   if IsNan(due) or (not IsNan(FTipNow)) or (csDesigning in ComponentState) then
   begin
@@ -36676,13 +37203,13 @@ end;
 procedure TTyAdvanceChart.TipTimerFired(Sender: TObject);
 begin
   if FTipTimer <> nil then FTipTimer.Enabled := False;
-  if TipAdvance(TipClock) then InvalidateFrame;
+  if TipAdvance(TipClock) then TipInvalidate;
   TipArmTimer;
 end;
 
 procedure TTyAdvanceChart.TooltipTick(ANowMs: Double);
 begin
-  if TipAdvance(ANowMs) then InvalidateFrame;
+  if TipAdvance(ANowMs) then TipInvalidate;
   TipArmTimer;
 end;
 
@@ -36851,6 +37378,12 @@ begin
     a := FActPending[0];
     for i := 0 to High(FActPending) - 1 do FActPending[i] := FActPending[i + 1];
     SetLength(FActPending, Length(FActPending) - 1);
+    { [F4b] a brushSelect waiting: its event, nothing to update }
+    if a.Payload = nil then
+    begin
+      if a.EventJson <> '' then EmitPayloadEvent('brushselected', a.EventJson);
+      Continue;
+    end;
     FActHits.Hits := a.Hits;
     FActHits.HasHits := a.HasHits;
     DispatchActionCore(a.Payload);
@@ -37110,9 +37643,66 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TipHitsOfDbc(ADbc: TJSONArray): TTyAxisHitArray;
+function TTyAdvanceChart.TipAxisAt(const ADim: string; AIndex: Integer;
+  out APlot: TTyRectF; out APolar: TTyPolar; out ASingle: TTySingle): TTyAxis;
 var
-  i, j, k, g, c, n, slot, row, m: Integer;
+  g, c: Integer;
+  gb: TTyGridBuild;
+  cart: TTyCartesian2D;
+  ax: TTyAxis;
+
+  procedure Take(AAxis: TTyAxis);
+  begin
+    if (ax = nil) and (AAxis <> nil) and (AAxis.Dim = ADim)
+      and (AAxis.ComponentIndex = AIndex) then ax := AAxis;
+  end;
+
+begin
+  ax := nil;
+  APlot := Default(TTyRectF);
+  APolar := nil;
+  ASingle := nil;
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for c := 0 to gb.CartesianCount - 1 do
+      begin
+        cart := gb.CartesianByIndex(c);
+        if cart = nil then Continue;
+        if ax = nil then
+        begin
+          Take(cart.AxisByDim('x'));
+          Take(cart.AxisByDim('y'));
+          if ax <> nil then APlot := gb.PlotRect;
+        end;
+      end;
+    end;
+  if ax = nil then
+    for g := 0 to High(FPolars) do
+      if (ax = nil) and (FPolars[g] <> nil) then
+      begin
+        Take(FPolars[g].AxisByDim('radius'));
+        Take(FPolars[g].AxisByDim('angle'));
+        if ax <> nil then APolar := FPolars[g];
+      end;
+  if ax = nil then
+    for g := 0 to High(FSingles) do
+      if (ax = nil) and (FSingles[g] <> nil) then
+      begin
+        Take(FSingles[g].Axis);
+        if ax <> nil then
+        begin
+          ASingle := FSingles[g];
+          APlot := ASingle.GetRect;
+        end;
+      end;
+  Result := ax;
+end;
+
+function TTyAdvanceChart.TipHitsOfDbc(ADbc: TJSONArray; AByRaw: Boolean): TTyAxisHitArray;
+var
+  i, j, k, n, slot, row, m: Integer;
   cs, ai, it: TJSONObject;
   dba, sdi: TJSONArray;
   d: TJSONData;
@@ -37121,19 +37711,10 @@ var
   v: Double;
   ax: TTyAxis;
   hit: TTyAxisHit;
-  gb: TTyGridBuild;
-  cart: TTyCartesian2D;
   plot: TTyRectF;
   pol: TTyPolar;
   sgl: TTySingle;
   crossType, isCat: Boolean;
-
-  procedure Take(AAxis: TTyAxis);
-  begin
-    if (ax = nil) and (AAxis <> nil) and (AAxis.Dim = dim)
-      and (AAxis.ComponentIndex = idx) then ax := AAxis;
-  end;
-
 begin
   Result := nil;
   if (ADbc = nil) or (FBuild = nil) or (FOption = nil) then Exit;
@@ -37154,44 +37735,7 @@ begin
       if (d = nil) or (d.JSONType <> jtNumber) then Continue;
       idx := Trunc(d.AsFloat);
       { the axis' model by dimension and index, wherever it lives }
-      ax := nil;
-      plot := Default(TTyRectF);
-      pol := nil;
-      sgl := nil;
-      for g := 0 to FBuild.GridCount - 1 do
-      begin
-        gb := FBuild.Grid(g);
-        for c := 0 to gb.CartesianCount - 1 do
-        begin
-          cart := gb.CartesianByIndex(c);
-          if cart = nil then Continue;
-          if ax = nil then
-          begin
-            Take(cart.AxisByDim('x'));
-            Take(cart.AxisByDim('y'));
-            if ax <> nil then plot := gb.PlotRect;
-          end;
-        end;
-      end;
-      if ax = nil then
-        for g := 0 to High(FPolars) do
-          if (ax = nil) and (FPolars[g] <> nil) then
-          begin
-            Take(FPolars[g].AxisByDim('radius'));
-            Take(FPolars[g].AxisByDim('angle'));
-            if ax <> nil then pol := FPolars[g];
-          end;
-      if ax = nil then
-        for g := 0 to High(FSingles) do
-          if (ax = nil) and (FSingles[g] <> nil) then
-          begin
-            Take(FSingles[g].Axis);
-            if ax <> nil then
-            begin
-              sgl := FSingles[g];
-              plot := sgl.GetRect;
-            end;
-          end;
+      ax := TipAxisAt(dim, idx, plot, pol, sgl);
       if ax = nil then Continue;
       { axisValue == null: nothing for this axis }
       d := ai.Find('value');
@@ -37225,9 +37769,19 @@ begin
           if (d = nil) or (d.JSONType <> jtNumber) then Continue;
           slot := SlotOfSeries(Trunc(d.AsFloat));
           if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
-          d := it.Find('dataIndexInside');
-          if (d = nil) or (d.JSONType <> jtNumber) then Continue;
-          row := Trunc(d.AsFloat);
+          if AByRaw then
+          begin
+            { [F4b] the row that raw index is in the build standing now }
+            d := it.Find('dataIndex');
+            if (d = nil) or (d.JSONType <> jtNumber) then Continue;
+            row := FStores[slot].IndexOfRawIndex(Trunc(d.AsFloat));
+          end
+          else
+          begin
+            d := it.Find('dataIndexInside');
+            if (d = nil) or (d.JSONType <> jtNumber) then Continue;
+            row := Trunc(d.AsFloat);
+          end;
           { getDataParams of a row that is not there: no data, skipped }
           if (row < 0) or (row >= FStores[slot].Count) then Continue;
           n := Length(hit.Slots);
@@ -37533,6 +38087,8 @@ end;
 
 procedure TTyAdvanceChart.TipHideVia(AViaListener: Boolean);
 begin
+  { [F4b] _hide forgets the axis tooltip it kept }
+  FTipLastDbc := '';
   { _hide: a hideTip from the view }
   TipDispatch(TJSONObject.Create(['type', 'hideTip', 'from', TipUid]), nil,
     False, AViaListener);
@@ -37548,6 +38104,9 @@ var
 begin
   g := TyTooltipSpecOf(FOption, -1, -1);
   if not g.HasComponent then Exit;
+  { [F4b] _lastX / _lastY: so a re-render can show the tip again }
+  FTipLastX := AEv.X;
+  FTipLastY := AEv.Y;
   snap := Default(TTyTipSnap);
   snap.X := AEv.X;
   snap.Y := AEv.Y;
@@ -37564,6 +38123,8 @@ begin
   end;
   snap.Datum := AEv.Datum;
   snap.Element := AEv.Element;
+  { [F4b] a target, or none: no axis tooltip to keep }
+  FTipLastDbc := '';
   { findEventDispatcher: tooltipDisabled on the way up is no dispatcher }
   if CustomTipDisabled(AEv.Element) then
   begin
@@ -37677,7 +38238,7 @@ begin
       FTipHits := hits;
       FOptPtrGone := True;
       PtrAnimSync;
-      InvalidateFrame;
+      TipInvalidate;
       { the event: the first row a processed axis took (the first pass's,
         then the linked ones'), then the axes shown in the model's order }
       for i := 0 to High(hits) do
@@ -37748,6 +38309,29 @@ end;
 
 procedure TTyAdvanceChart.DoShowTip(APayload: TJSONObject);
 var
+  hits: TTyAxisHitArray;
+  hasHits: Boolean;
+begin
+  hits := FActHits.Hits;
+  hasHits := FActHits.HasHits;
+  FActHits.Hits := nil;
+  FActHits.HasHits := False;
+  Inc(FActCycle);
+  try
+    { the timers due fire first -- a view that is there, a show not its own }
+    if TyTooltipSpecOf(FOption, -1, -1).HasComponent and not TipFromIs(APayload, TipUid) then
+      TipAdvance(TipClock);
+    TipManualShow(APayload, hits, hasHits);
+  finally
+    Dec(FActCycle);
+  end;
+  EmitPayloadEvent('showtip', CopyWithType(APayload, 'showtip'));
+  TipArmTimer;
+end;
+
+procedure TTyAdvanceChart.TipManualShow(APayload: TJSONObject;
+  const AHits: TTyAxisHitArray; AHasHits: Boolean);
+var
   g: TTyTooltipSpec;
   ev: TTyTipEvent;
   d: TJSONData;
@@ -37758,18 +38342,14 @@ var
   datum: TTyChartDatumRef;
   el, sIdx, raw: Integer;
 begin
-  hits := FActHits.Hits;
-  hasHits := FActHits.HasHits;
-  FActHits.Hits := nil;
-  FActHits.HasHits := False;
-  Inc(FActCycle);
-  try
+  hits := AHits;
+  hasHits := AHasHits;
+  begin
     g := TyTooltipSpecOf(FOption, -1, -1);
     { manuallyShowTip is the view's: no tooltip component, no view; the
       view's own showTip comes back to it and is done }
     if g.HasComponent and not TipFromIs(APayload, TipUid) then
     begin
-      TipAdvance(TipClock);
       ev := TipEventBlank;
       ev.PosJson := TipPositionJson(APayload);
       if TipComponentRef(APayload, ev.Datum, ev.Element, ev.X, ev.Y) then
@@ -37858,13 +38438,9 @@ begin
         end;
         TipTryShowEvent(ev, False);
       end;
-      InvalidateFrame;
+      TipInvalidate;
     end;
-  finally
-    Dec(FActCycle);
   end;
-  EmitPayloadEvent('showtip', CopyWithType(APayload, 'showtip'));
-  TipArmTimer;
 end;
 
 procedure TTyAdvanceChart.DoHideTip(APayload: TJSONObject);
@@ -37878,8 +38454,13 @@ begin
       TipAdvance(TipClock);
       { hideLater(hideDelay); then _hide unless the view sent it }
       TipHide(g);
+      { [F4b] _lastX = _lastY = _lastDataByCoordSys = null: nothing for a
+        re-render to keep }
+      FTipLastX := NaN;
+      FTipLastY := NaN;
+      FTipLastDbc := '';
       if not TipFromIs(APayload, TipUid) then TipHideVia(False);
-      InvalidateFrame;
+      TipInvalidate;
     end;
   finally
     Dec(FActCycle);
@@ -37894,6 +38475,7 @@ begin
   FTipShowFlag := False;
   FTipShowAt := NaN;
   FTipHideAt := NaN;
+  FTipKeepAt := NaN;
   FTipSnap := Default(TTyTipSnap);
   FTipSnap.Datum := TyChartNoDatum;
   FTipSnap.Element := -1;
@@ -37905,7 +38487,279 @@ procedure TTyAdvanceChart.TipReset;
 begin
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
+  { [F4b] A RE-RENDER IS NOT A HIDE. TooltipView.render resets its group,
+    not its content: the box stays up as it was -- alwaysShowContent or
+    not -- and _keepShow shows the tip again at the last point a tick
+    later. The snapshots lose their pointers into the build here (it is
+    about to be rebuilt), not their meaning. }
+  TipFreeze;
+  TipRendered;
+end;
+
+procedure TTyAdvanceChart.TipForget;
+begin
   TipDropDisplay;
+  FTipLastX := NaN;
+  FTipLastY := NaN;
+  FTipLastDbc := '';
+  FTipKeepPtr := nil;
+  FTipKeepPtrDue := False;
+  { the hits point into a build about to be freed: never kept }
+  FTipHits := nil;
+end;
+
+procedure TTyAdvanceChart.TipFreeze;
+
+  procedure Freeze(var ASnap: TTyTipSnap; AShown: Boolean);
+  var
+    tips: TTyAxisHitArray;
+    i, n: Integer;
+    arr: TJSONArray;
+  begin
+    { the box where the last paint put it: held there until a show places
+      it again (the content element keeps its position) }
+    if AShown and not ASnap.Frozen and TyRectFIsValid(FTipBox) then
+    begin
+      ASnap.Frozen := True;
+      ASnap.FrozenX := FTipBox.Left;
+      ASnap.FrozenY := FTipBox.Top;
+    end;
+    ASnap.Stale := True;
+    ASnap.Element := -1;
+    if Length(ASnap.Hits) = 0 then Exit;
+    { the tooltip's axes, as a dataByCoordSys: never a cross arm }
+    tips := nil;
+    for i := 0 to High(ASnap.Hits) do
+      if not ASnap.Hits[i].Cross and (ASnap.Hits[i].Axis <> nil) then
+      begin
+        n := Length(tips);
+        SetLength(tips, n + 1);
+        tips[n] := ASnap.Hits[i];
+      end;
+    arr := TipDbcJson(tips);
+    try
+      ASnap.DbcJson := arr.AsJSON;
+    finally
+      arr.Free;
+    end;
+    ASnap.Hits := nil;
+    ASnap.Stale := True;
+  end;
+
+begin
+  if FOption = nil then Exit;
+  Freeze(FTipSnap, FTipShown);
+  Freeze(FTipPend, False);
+end;
+
+procedure TTyAdvanceChart.TipRendered;
+var g: TTyTooltipSpec;
+begin
+  if (FOption = nil) or (csDesigning in ComponentState) then Exit;
+  g := TyTooltipSpecOf(FOption, -1, -1);
+  { no tooltip component, no view to render }
+  if not g.HasComponent then Exit;
+  { TooltipRichContent.update: under alwaysShowContent _moveIfResized puts
+    the box at its ratios of the view again -- (y / h) * h, which need not
+    be y }
+  if g.AlwaysShowContent and FTipSnap.Frozen and (ClientWidth > 0)
+    and (ClientHeight > 0) then
+  begin
+    FTipSnap.FrozenX := (FTipSnap.FrozenX / ClientWidth) * ClientWidth;
+    FTipSnap.FrozenY := (FTipSnap.FrozenY / ClientHeight) * ClientHeight;
+  end;
+  { _lastDataByCoordSys is the axis tooltip's only }
+  if g.Trigger <> tttAxis then FTipLastDbc := '';
+  { try to keep the tooltip shown when refreshing -- not when the API
+    drives it alone ('none'), nor under exactly 'click' }
+  if IsNan(FTipLastX) or IsNan(FTipLastY) or (g.TriggerOn = 'none')
+    or (g.TriggerOn = 'click') then Exit;
+  { clearTimeout(_refreshUpdateTimeout); setTimeout(...) with no delay }
+  FTipKeepAt := TipClock;
+  Inc(FTipSeq);
+  FTipKeepSeq := FTipSeq;
+  TipArmTimer;
+end;
+
+procedure TTyAdvanceChart.TipSnapRefresh;
+
+  procedure Refresh(var ASnap: TTyTipSnap);
+  var
+    d: TJSONData;
+    nLine, nCol, slot, row, el: Integer;
+  begin
+    if not ASnap.Stale then Exit;
+    if ASnap.DbcJson <> '' then
+    begin
+      d := nil;
+      if not TyJsonNestingExceeds(ASnap.DbcJson, TyOptionMaxNesting, nLine, nCol) then
+        try
+          d := GetJSON(ASnap.DbcJson);
+        except
+          d := nil;
+        end;
+      try
+        if d is TJSONArray then ASnap.Hits := TipHitsOfDbc(TJSONArray(d), True);
+      finally
+        d.Free;
+      end;
+    end
+    else if TyChartDatumValid(ASnap.Datum) and (ASnap.Datum.RawDataIndex >= 0) then
+    begin
+      { a series item: its row again by its raw index }
+      slot := SlotOfSeries(ASnap.Datum.SeriesIndex);
+      if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      begin
+        row := FStores[slot].IndexOfRawIndex(ASnap.Datum.RawDataIndex);
+        if row >= 0 then ASnap.Datum.DataIndex := row;
+      end;
+    end;
+    { a series item's element (its dispatcher): the one the list now holds
+      for that row }
+    if (ASnap.Element < 0) and (Length(ASnap.Hits) = 0) and (FPaintList <> nil)
+      and FPaintListValid and (ASnap.Datum.Kind = ctkSeries) and not ASnap.Datum.IsEdge
+      and TyChartDatumValid(ASnap.Datum) then
+    begin
+      el := FPaintList.IndexOfDatum(ASnap.Datum.SeriesIndex, ASnap.Datum.DataIndex);
+      ASnap.Element := el;
+    end;
+    ASnap.Stale := False;
+  end;
+
+begin
+  { only against a build that stands }
+  if FDirty or (FBuild = nil) then Exit;
+  Refresh(FTipSnap);
+  Refresh(FTipPend);
+end;
+
+function TTyAdvanceChart.GetTipSnapShown: TTyTipSnap;
+begin
+  TipSnapRefresh;
+  Result := FTipSnap;
+end;
+
+procedure TTyAdvanceChart.TipKeepPointer;
+var
+  i, k, n: Integer;
+  kp: TTyPtrKeep;
+begin
+  if Length(FTipHits) = 0 then Exit;
+  FTipKeepPtr := nil;
+  for i := 0 to High(FTipHits) do
+  begin
+    if FTipHits[i].Axis = nil then Continue;
+    kp := Default(TTyPtrKeep);
+    kp.Dim := FTipHits[i].Axis.Dim;
+    kp.Index := FTipHits[i].Axis.ComponentIndex;
+    kp.Cross := FTipHits[i].Cross;
+    kp.Linked := FTipHits[i].Linked;
+    kp.Value := FTipHits[i].Value;
+    kp.SnapValue := FTipHits[i].SnapValue;
+    SetLength(kp.Series, Length(FTipHits[i].Slots));
+    SetLength(kp.Rows, Length(FTipHits[i].Slots));
+    for k := 0 to High(FTipHits[i].Slots) do
+    begin
+      kp.Series[k] := SlotSeriesIndex(FTipHits[i].Slots[k]);
+      kp.Rows[k] := FTipHits[i].Rows[k];
+    end;
+    n := Length(FTipKeepPtr);
+    SetLength(FTipKeepPtr, n + 1);
+    FTipKeepPtr[n] := kp;
+  end;
+  FTipKeepPtrDue := Length(FTipKeepPtr) > 0;
+end;
+
+procedure TTyAdvanceChart.TipKeepRestore;
+var
+  i, k, n, slot: Integer;
+  hit: TTyAxisHit;
+  ax: TTyAxis;
+  plot: TTyRectF;
+  pol: TTyPolar;
+  sgl: TTySingle;
+  tipSpec: TTyTooltipSpec;
+  crossType: Boolean;
+begin
+  if not FTipKeepPtrDue then Exit;
+  FTipKeepPtrDue := False;
+  if (FOption = nil) or (FBuild = nil) then
+  begin
+    FTipKeepPtr := nil;
+    Exit;
+  end;
+  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
+  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
+  FTipHits := nil;
+  for i := 0 to High(FTipKeepPtr) do
+  begin
+    ax := TipAxisAt(FTipKeepPtr[i].Dim, FTipKeepPtr[i].Index, plot, pol, sgl);
+    if ax = nil then Continue;
+    hit := Default(TTyAxisHit);
+    hit.Axis := ax;
+    hit.Plot := plot;
+    hit.Polar := pol;
+    hit.Single := sgl;
+    hit.Cross := FTipKeepPtr[i].Cross;
+    hit.Linked := FTipKeepPtr[i].Linked;
+    hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
+      ax.Scale is TTyOrdinalScale, True, (tipSpec.Trigger = tttAxis) and not hit.Cross,
+      crossType);
+    if hit.Spec.Show = apsNo then Continue;
+    hit.Value := FTipKeepPtr[i].Value;
+    hit.SnapValue := FTipKeepPtr[i].SnapValue;
+    { seriesDataIndices as the model holds them: the rows that are still
+      there }
+    for k := 0 to High(FTipKeepPtr[i].Series) do
+    begin
+      slot := SlotOfSeries(FTipKeepPtr[i].Series[k]);
+      if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil)
+        or (FTipKeepPtr[i].Rows[k] < 0)
+        or (FTipKeepPtr[i].Rows[k] >= FStores[slot].Count) then Continue;
+      n := Length(hit.Slots);
+      SetLength(hit.Slots, n + 1);
+      SetLength(hit.Rows, n + 1);
+      hit.Slots[n] := slot;
+      hit.Rows[n] := FTipKeepPtr[i].Rows[k];
+    end;
+    n := Length(FTipHits);
+    SetLength(FTipHits, n + 1);
+    FTipHits[n] := hit;
+  end;
+  FTipKeepPtr := nil;
+end;
+
+procedure TTyAdvanceChart.TipKeepFire;
+var
+  p: TJSONObject;
+  d: TJSONData;
+  nLine, nCol: Integer;
+begin
+  { manuallyShowTip(tooltipModel, ecModel, api, payload) with the payload
+    x: _lastX, y: _lastY, dataByCoordSys: _lastDataByCoordSys -- the view's
+    method, called
+    straight from the timeout: what it dispatches is dispatched at once }
+  if IsNan(FTipLastX) or IsNan(FTipLastY) or (FOption = nil) then Exit;
+  p := TJSONObject.Create;
+  try
+    p.Add('x', TJSONFloatNumber.Create(FTipLastX));
+    p.Add('y', TJSONFloatNumber.Create(FTipLastY));
+    if FTipLastDbc <> '' then
+    begin
+      d := nil;
+      if not TyJsonNestingExceeds(FTipLastDbc, TyOptionMaxNesting, nLine, nCol) then
+        try
+          d := GetJSON(FTipLastDbc);
+        except
+          d := nil;
+        end;
+      if d <> nil then p.Add('dataByCoordSys', d);
+    end;
+    TipManualShow(p, nil, False);
+  finally
+    p.Free;
+  end;
+  TipInvalidate;
 end;
 
 procedure TTyAdvanceChart.TooltipContentSize(var AW, AH: Double);
@@ -38012,6 +38866,7 @@ var block: TTyTooltipBlock;
 begin
   Result := '';
   if not FTipShown then Exit;
+  TipSnapRefresh;
   if Length(FTipSnap.Hits) > 0 then
   begin
     block := AxisTooltipContent(FTipSnap.Hits, TyTooltipSpecOf(FOption, -1, -1));
@@ -38505,6 +39360,9 @@ begin
     decides -- a show waiting out showDelay is not drawn yet, a hide waiting
     out hideDelay still is, at the place and with the content of the show }
   if not FTipShown then Exit;
+  { [F4b] a box that outlived a re-render: its axes and element from the
+    build standing now }
+  TipSnapRefresh;
   snap := FTipSnap;
   onAxis := Length(snap.Hits) > 0;
   if not TipTargetValid(snap.Datum) and not onAxis then Exit;
@@ -38659,6 +39517,13 @@ begin
       else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
     end;
     at := TyTooltipPlace(spec, pin);
+    { [F4b] the box a re-render left up stays where it was until a show
+      places it again }
+    if snap.Frozen then
+    begin
+      at.X := snap.FrozenX - ARect.Left;
+      at.Y := snap.FrozenY - ARect.Top;
+    end;
     box := TyRectF(ARect.Left + at.X, ARect.Top + at.Y,
       ARect.Left + at.X + w, ARect.Top + at.Y + h);
     FTipBox := box;
@@ -38880,7 +39745,7 @@ begin
     from scratch each paint, and that is what the cache removed. }
   if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
     or tipWas or FTipShown then
-    InvalidateFrame;
+    HoverInvalidate;
 end;
 
 procedure TTyAdvanceChart.MouseLeave;
@@ -38911,7 +39776,7 @@ begin
     control answers with a repaint -- and a repaint before the hover was
     cleared would draw the tooltip one more time on the way out. }
   inherited MouseLeave;
-  if wasOn then InvalidateFrame;
+  if wasOn then HoverInvalidate;
 end;
 
 { ==================== the enter animation [Batch 89] ==================== }
@@ -38943,6 +39808,7 @@ begin
     AnimDropAll;
     FAnimPending := False;
     DropStatic;
+    FZrDirty := True;
     inherited Invalidate;
   end;
   { the spinner stops under camOff and turns again out of it [Batch 106] }
@@ -40262,7 +41128,10 @@ begin
   if ran then AnimArmTimer;
   if ran or was then
   begin
-    EmitPlain('rendered');
+    { [F4b] the frame's flush: what it drew is no longer dirty }
+    FZrDirty := False;
+    FTipPaintedKey := TipStateKey;
+    EmitRendered(0);
     if ProgIdle then EmitPlain('finished');
     { the bar race's `rendered` listeners read the frame [Batch 135] }
     RtRendered;
@@ -40954,7 +41823,8 @@ end;
 
 procedure TTyAdvanceChart.PointerStateChanged;
 begin
-  InvalidateFrame;
+  { [F4b] the base class' pointer bookkeeping: a repaint, nothing marked }
+  InvalidateFrameQuiet;
 end;
 
 procedure TTyAdvanceChart.RenderCached(ACanvas: TCanvas; const ARect: TRect;
@@ -40965,6 +41835,8 @@ var
   w, h: Integer;
   measurer: ITyTextMeasurer;
 begin
+  { [F4b] the flush's start, for `rendered`'s elapsedTime }
+  FPaintT0 := AnimClock;
   { THE DIRTY-RECT PATH [Batch 142]: the canvas holds the last frame, and
     only what changed is drawn on it }
   if FUseDirtyRect then
@@ -41568,6 +42440,7 @@ begin
   FDrDynTiles := nil;
   FreeAndNil(FDrDyn);
   FDrPending := True;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -41821,6 +42694,8 @@ var
   pool: TTyRepaintPool;
   full, partial: Boolean;
 begin
+  { [F4b] the flush's start, for `rendered`'s elapsedTime }
+  FPaintT0 := AnimClock;
   FDrLastRects := nil;
   FDrLastFull := True;
   w := ARect.Right - ARect.Left;
@@ -45150,6 +46025,11 @@ begin
       begin
         TyTlPut(node, 'autoPlay', TJSONBoolean.Create(False));
         stop := True;
+        pp := '{"type":"timelinePlayChange","playState":false';
+        d := APayload.Find('from');
+        if d <> nil then pp := pp + ',"from":' + d.AsJSON;
+        pp := pp + '}';
+        DispatchActionObject(TJSONObject(GetJSON(pp)));
       end;
     finally
       full.Free;
@@ -45180,20 +46060,10 @@ begin
     render came first (TlMerge renders inside the dispatch): the checkpoint
     the second render meets is already sliding, and its
     stopAnimation(forward) puts it at its tick [milestone D5-D8: a merged
-    frame waited for the next frame, so the timeline was rendered here] }
-  if stop then
-  begin
-    pp := '{"type":"timelinePlayChange","playState":false';
-    d := APayload.Find('from');
-    if d <> nil then pp := pp + ',"from":' + d.AsJSON;
-    pp := pp + '}';
-    ev := TJSONObject(GetJSON(pp));
-    try
-      DoTimelinePlayChange(ev);
-    finally
-      ev.Free;
-    end;
-  end;
+    frame waited for the next frame, so the timeline was rendered here]
+    [F4b: it is dispatched where the action decides it (api.dispatchAction
+    while IN_EC_CYCLE) and waits in the one queue -- after this action's
+    update and event, before the brushSelect the update dispatched.] }
 end;
 
 procedure TTyAdvanceChart.DoTimelinePlayChange(APayload: TJSONObject);
@@ -45710,6 +46580,7 @@ end;
 procedure TTyAdvanceChart.TbChanged;
 begin
   DropStatic;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
@@ -47489,10 +48360,29 @@ begin
     FBrushSelLog[n].Time := ATime;
     FBrushSelLog[n].Batch := ABatch;
     { the brushSelect action: its brushselected event, after the event of
-      the action whose update dispatched it [Batch 127] }
-    n := Length(FBrushEmitQ);
-    SetLength(FBrushEmitQ, n + 1);
-    FBrushEmitQ[n] := BrushSelectedJson(ABatch);
+      the action whose update dispatched it [Batch 127] -- [F4b] inside an
+      action, in the one queue of what that action dispatched, in order }
+    if FBatchDefer > 0 then
+    begin
+      { a batch's items: the update runs once, so does its brushSelect --
+        the last state's }
+      FBatchBrushJson := BrushSelectedJson(ABatch);
+      FBatchBrushHas := True;
+    end
+    else if FActCycle > 0 then
+    begin
+      n := Length(FActPending);
+      SetLength(FActPending, n + 1);
+      FActPending[n] := Default(TTyTipAct);
+      FActPending[n].EventJson := BrushSelectedJson(ABatch);
+      FBatchBrushQueued := True;
+    end
+    else
+    begin
+      n := Length(FBrushEmitQ);
+      SetLength(FBrushEmitQ, n + 1);
+      FBrushEmitQ[n] := BrushSelectedJson(ABatch);
+    end;
   finally
     FBrushInSelect := False;
   end;
@@ -47737,6 +48627,7 @@ end;
 procedure TTyAdvanceChart.BrushChanged;
 begin
   DropStatic;
+  FZrDirty := True;
   inherited Invalidate;
 end;
 
