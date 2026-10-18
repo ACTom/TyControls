@@ -67,13 +67,23 @@ type
   private
     FBmp: TBitmap;
     FValid: Boolean;
+    FScale: Integer;               // device pixels per layout pixel the bitmap holds (#83)
+    FLayoutW, FLayoutH: Integer;   // the layout size it was rendered for
   public
     destructor Destroy; override;
     procedure Drop;   // mark stale; the bitmap itself is kept for reuse
-    { True when the caller must render into Canvas at AW x AH; False when Blit alone will do. }
-    function NeedsRender(AW, AH: Integer): Boolean;
+    { True when the caller must render into Canvas at AW x AH; False when Blit alone will do.
+      This one is the device scale 1. }
+    function NeedsRender(AW, AH: Integer): Boolean; overload;
+    { At the device scale AScale.Scale (of the canvas the cache is blitted to) the bitmap holds
+      S times the pixels, and its canvas is registered as a raster canvas: a painter rendering
+      into it draws at S and lands 1:1. A change of S is a change of size (#83). }
+    function NeedsRender(AW, AH: Integer; const AScale: TTyCanvasScale): Boolean; overload;
     procedure Blit(ACanvas: TCanvas);
     function Canvas: TCanvas;
+    { The bitmap's size in device pixels: S times the layout size; 0 before the first render. }
+    function RasterWidth: Integer;
+    function RasterHeight: Integer;
   end;
 
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
@@ -917,6 +927,9 @@ end;
   control rendered offscreen in isolation), leaving that path untouched. }
 destructor TTyPaintCache.Destroy;
 begin
+  { The registry holds the canvas by address: left there, it would answer for the next object
+    allocated at it. }
+  if FBmp <> nil then TyUnregisterRasterCanvas(FBmp.Canvas);
   FBmp.Free;
   inherited Destroy;
 end;
@@ -927,9 +940,22 @@ begin
 end;
 
 function TTyPaintCache.NeedsRender(AW, AH: Integer): Boolean;
+var
+  one: TTyCanvasScale;
+begin
+  one.Scale := 1;
+  one.DeviceUnits := False;
+  Result := NeedsRender(AW, AH, one);
+end;
+
+function TTyPaintCache.NeedsRender(AW, AH: Integer; const AScale: TTyCanvasScale): Boolean;
+var
+  s: Integer;
 begin
   Result := False;
   if (AW <= 0) or (AH <= 0) then Exit;
+  s := AScale.Scale;
+  if s < 1 then s := 1;
   if FBmp = nil then
   begin
     FBmp := TBitmap.Create;
@@ -944,11 +970,19 @@ begin
       cache users -- were affected; every other container paints straight to its window Canvas.) }
     FBmp.PixelFormat := pf24bit;
   end;
-  if (FBmp.Width <> AW) or (FBmp.Height <> AH) then
+  if (FBmp.Width <> AW * s) or (FBmp.Height <> AH * s) or (s <> FScale) then
   begin
-    FBmp.SetSize(AW, AH);
+    FBmp.SetSize(AW * s, AH * s);
     FValid := False;   // a resized surface holds nothing usable
   end;
+  if s <> FScale then
+  begin
+    if s > 1 then TyRegisterRasterCanvas(FBmp.Canvas, s)
+    else TyUnregisterRasterCanvas(FBmp.Canvas);
+    FScale := s;
+  end;
+  FLayoutW := AW;
+  FLayoutH := AH;
   Result := not FValid;
   FValid := True;
 end;
@@ -957,12 +991,28 @@ procedure TTyPaintCache.Blit(ACanvas: TCanvas);
 begin
   { The destination DC is clipped to the invalid region, so this transfers the damaged
     rectangle only -- which is the entire point. }
-  if FBmp <> nil then ACanvas.Draw(0, 0, FBmp);
+  if FBmp = nil then Exit;
+  if (FScale <= 1) or TyCanvasDeviceScale(ACanvas).DeviceUnits then
+    ACanvas.Draw(0, 0, FBmp)
+  else
+    { A canvas in layout units -- a window on a Retina screen: the S-times bitmap goes into the
+      layout rectangle, and the system puts each layout pixel back on S device pixels. }
+    ACanvas.StretchDraw(Rect(0, 0, FLayoutW, FLayoutH), FBmp);
 end;
 
 function TTyPaintCache.Canvas: TCanvas;
 begin
   if FBmp <> nil then Result := FBmp.Canvas else Result := nil;
+end;
+
+function TTyPaintCache.RasterWidth: Integer;
+begin
+  if FBmp <> nil then Result := FBmp.Width else Result := 0;
+end;
+
+function TTyPaintCache.RasterHeight: Integer;
+begin
+  if FBmp <> nil then Result := FBmp.Height else Result := 0;
 end;
 
 { The painter's linear-gradient geometry, mirrored. TTyPainter.GradientEndpoints
