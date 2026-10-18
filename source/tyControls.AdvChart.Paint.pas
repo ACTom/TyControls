@@ -23,7 +23,8 @@ unit tyControls.AdvChart.Paint;
   the point: ordering and hit-testing are where the defects are, and they are
   testable here without a graphics stack. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Shape;
+uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
+  tyControls.AdvChart.ZrPath;
 
 type
   { $AARRGGBB, byte-identical to tyControls.Types' TTyColor. Declared again here
@@ -710,6 +711,26 @@ type
     LabelAtXPct, LabelAtYPct: Boolean;
   end;
 
+  { [F6b] zrender's own contain over an element of an SVG map, in the
+    element's coordinates: ToLocal the inverse of its transform, Box its
+    getBoundingRect, the stroke (Stroke, LineWidth: the width over the line
+    scale, at least strokeContainThreshold without a fill) and the fill over
+    Path; RectOnly a text's or an image's rectContain (the box alone) }
+  TTyZrHit = record
+    Active: Boolean;
+    Path: TTyZrPath;
+    ToLocal: TTyMat2D;
+    Box: TTyXYWH;
+    Stroke: Boolean;
+    LineWidth: Double;
+    Fill: Boolean;
+    RectOnly: Boolean;
+    { which node of the SVG the element draws (the node + 1; 0: not one),
+      and whether it is that node's label -- for a reader of the list }
+    SvgNode: Integer;
+    SvgLabel: Boolean;
+  end;
+
   TTyChartElement = record
     Shape: TTyChartShape;
     Style: TTyChartElementStyle;
@@ -812,6 +833,13 @@ type
       drag takes, 'default' on a large batch or a pager button that cannot
       turn the page. Meaningless on a silent element, which is no target. }
     Cursor: string;
+    { [F6b] AN SVG MAP'S ELEMENT: zrender's own contain in the element's
+      own coordinates -- the pointer taken back through the inverse of
+      its transform, then the box, the stroke and the fill over the
+      PathProxy data (Path.contain), or the box alone (RectOnly: a text's
+      or an image's rectContain). Neither PathHit nor the shape is asked
+      then. }
+    ZrHit: TTyZrHit;
   end;
 
   TTyPaintList = class
@@ -884,6 +912,8 @@ function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
   clip first where it asks (ClipHits), then upstream's Path.contain where it
   carries one (PathHit), else the shape with ASlopPx }
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+{ [F6b] an SVG map element's zrender contain (ZrHit) at a point }
+function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
@@ -1217,13 +1247,37 @@ end;
 { [Batch 148] one element at a point: its clip first where it asks
   (isHover's clip paths), then upstream's own Path.contain where it carries
   one, else the shape with its slop }
+{ [F6b] Path.contain / Displayable.rectContain of an SVG map's element }
+function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
+var x, y: Double; old: TFPUExceptionMask;
+begin
+  Result := False;
+  if IsNan(AX) or IsNan(AY) then Exit;
+  { upstream's arithmetic runs into nought divisors and not-a-numbers (a
+    degenerate cubic's roots): JavaScript's quiet values, not traps }
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    x := AHit.ToLocal[0] * AX + AHit.ToLocal[2] * AY + AHit.ToLocal[4];
+    y := AHit.ToLocal[1] * AX + AHit.ToLocal[3] * AY + AHit.ToLocal[5];
+    if not ((x >= AHit.Box.X) and (x <= AHit.Box.X + AHit.Box.W)
+      and (y >= AHit.Box.Y) and (y <= AHit.Box.Y + AHit.Box.H)) then Exit;
+    if AHit.RectOnly then Exit(True);
+    if AHit.Stroke and TyZrContainStroke(AHit.Path, AHit.LineWidth, x, y) then Exit(True);
+    if AHit.Fill then Result := TyZrContain(AHit.Path, x, y);
+  finally
+    TyZrRestoreFpu(old);
+  end;
+end;
+
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 begin
   if AEl.ClipHits and AEl.HasClip
     and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
       and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
     Exit(False);
-  if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
+  if AEl.ZrHit.Active then Result := TyZrHitContains(AEl.ZrHit, AX, AY)
+  else if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
   else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
 end;
 

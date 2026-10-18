@@ -49,7 +49,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Matrix, tyControls.AdvChart.Tree,
-  tyControls.AdvChart.Geo, tyControls.AdvChart.HeatLayer,
+  tyControls.AdvChart.Geo, tyControls.AdvChart.GeoSvg, tyControls.AdvChart.HeatLayer,
   tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
   tyControls.AdvChart.Sankey,
   tyControls.AdvChart.Graph,
@@ -733,6 +733,11 @@ type
     FGeoSel: array of TJSONObject;
     FGeoGen: Integer;
     FGeoDirty: Boolean;
+    { [F6b] what an SVG map's text is measured with while it is parsed: one
+      measurer per render, made on the first text }
+    FGeoSvgMeas: ITyTextMeasurer;
+    { the SVG maps' flags over a render: the geos' and the map series' }
+    FSvgKeepGeo, FSvgKeepMap: array of TTyGeoSvgFlags;
     { [Batch 150] the centre and zoom a geoRoam wrote back into each geo
       model's option (Valid after the first), the model's for as long as it
       lives; and how many geos the last geoRoam moved }
@@ -2905,6 +2910,12 @@ type
       theme's fonts. Virtual so a text table -- zrender's, for a chart laid
       out against upstream's -- can stand in for the fonts. }
     function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; virtual;
+    { [F6b] AN SVG MAP'S TEXT while it is parsed (a <tspan> moves on by the
+      width of the text before it): the width in CSS px of AText in AFont,
+      zrender's platformApi.measureText. The default asks the painter's
+      measurer at 96 PPI with the font size in px; virtual so a test can
+      answer with zrender's own width table. }
+    function GeoSvgMeasure(const AText: string; const AFont: TTyGsFont): Double; virtual;
     { THE TOOLBOX'S DIALOGS [Batch 125]: dataView's table (True when Refresh
       closed it, the text in AText) and saveAsImage's file name. Virtual so
       a host -- or a test -- answers without a modal; the defaults are the
@@ -11543,6 +11554,14 @@ end;
 procedure TTyAdvanceChart.FreeGeos;
 var i: Integer;
 begin
+  { [F6b] an SVG map's elements live on through a render (MapDraw keeps its
+    graphic while the map stays): their flags, for the next geo of the slot }
+  if Length(FSvgKeepGeo) < Length(FGeos) then SetLength(FSvgKeepGeo, Length(FGeos));
+  for i := 0 to High(FGeos) do
+    if FGeos[i] <> nil then FSvgKeepGeo[i] := FGeos[i].SvgSaveFlags;
+  if Length(FSvgKeepMap) < Length(FMapGeos) then SetLength(FSvgKeepMap, Length(FMapGeos));
+  for i := 0 to High(FMapGeos) do
+    if FMapGeos[i] <> nil then FSvgKeepMap[i] := FMapGeos[i].SvgSaveFlags;
   for i := 0 to High(FGeos) do FreeAndNil(FGeos[i]);
   FGeos := nil;
   for i := 0 to High(FMapGeos) do FreeAndNil(FMapGeos[i]);
@@ -11573,9 +11592,11 @@ begin
     last ones is stale }
   Inc(FGeoGen);
   SetLength(FGeos, n);
+  FGeoSvgMeas := nil;
   for i := 0 to n - 1 do
   begin
     FGeos[i] := TTyGeo.Create(FOption, i);
+    FGeos[i].SvgMeasure := @GeoSvgMeasure;
     { [Batch 150] the model's option holds what a roam wrote back }
     if (i <= High(FGeoRoam)) and FGeoRoam[i].Valid then
       FGeos[i].SetRoamOption(FGeoRoam[i].Centre, FGeoRoam[i].Zoom);
@@ -11583,6 +11604,7 @@ begin
       calendar day for a geo in one [Batch 154] }
     if ComponentBoxRef('geo', i, ref) then FGeos[i].ResizeXYWH(ref, APPI)
     else FGeos[i].Resize(FLastRect, APPI);
+    if i <= High(FSvgKeepGeo) then FGeos[i].SvgRestoreFlags(FSvgKeepGeo[i]);
     FGeos[i].Gen := FGeoGen;
     { GeoView.render's updateSelectStatus }
     GeoSyncSelected(i);
@@ -12055,6 +12077,20 @@ begin
     Exit;
   end;
   idx := nil;
+  if FGeos[AGeo].IsSvg then
+  begin
+    { [F6b] an SVG map's elements are not all the geo's datum (the unnamed
+      ones carry none, a map series' its rows): where the build put them }
+    for i := 0 to High(FGeoDraws) do
+      if (FGeoDraws[i].Geo = FGeos[AGeo]) and (FGeoDraws[i].Start >= 0)
+        and (FGeoDraws[i].Start + FGeoDraws[i].Count <= FPaintList.Count) then
+      begin
+        SetLength(idx, FGeoDraws[i].Count);
+        for n := 0 to FGeoDraws[i].Count - 1 do idx[n] := FGeoDraws[i].Start + n;
+        Break;
+      end;
+  end
+  else
   for i := 0 to FPaintList.Count - 1 do
   begin
     el := FPaintList.Element(i);
@@ -12930,6 +12966,9 @@ var
   dimV: Integer;
   data: TTyGeoData;
 begin
+  if Length(FSvgKeepMap) < Length(FMapGeos) then SetLength(FSvgKeepMap, Length(FMapGeos));
+  for i := 0 to High(FMapGeos) do
+    if FMapGeos[i] <> nil then FSvgKeepMap[i] := FMapGeos[i].SvgSaveFlags;
   for i := 0 to High(FMapGeos) do FreeAndNil(FMapGeos[i]);
   FMapGeos := nil;
   { a geo component draws with the data of the first map series naming it
@@ -12974,6 +13013,7 @@ begin
       nameMap.Free;
     end;
     FMapGeos[g] := geo;
+    geo.SvgMeasure := @GeoSvgMeasure;
     for k := 0 to High(FMapRoam) do
       if (FMapRoam[k].Key = FMapGroups[g].Key) and FMapRoam[k].State.Valid then
         geo.SetRoamOption(FMapRoam[k].State.Centre, FMapRoam[k].State.Zoom);
@@ -12983,6 +13023,7 @@ begin
       geo.ResizeXYWH(ref, APPI)
     else
       geo.Resize(FLastRect, APPI);
+    if g <= High(FSvgKeepMap) then geo.SvgRestoreFlags(FSvgKeepMap[g]);
     geo.Gen := FGeoGen;
     if FMapGroups[g].Main < 0 then Continue;
     { mapSymbolLayout: the offsets of the legend symbols }
@@ -13630,6 +13671,8 @@ begin
   geo := GeoOfTarget(ATarget);
   if geo = nil then Exit;
   g := ATarget.HdRow;
+  { [F6b] an SVG element under no dispatcher (a named text) }
+  if g < 0 then Exit;
   if geo.GroupEmphasisDisabled(g) then Exit;
   if geo.GroupFocusSelf(g) and geo.BlurAll then FGeoDirty := True;
   if geo.HoverEnter(g) then FGeoDirty := True;
@@ -13644,6 +13687,7 @@ begin
   geo := GeoOfTarget(ATarget);
   if geo = nil then Exit;
   g := ATarget.HdRow;
+  if g < 0 then Exit;
   if geo.GroupEmphasisDisabled(g) then Exit;
   StAllLeaveBlur;
   if geo.HoverLeave(g) then FGeoDirty := True;
@@ -22652,6 +22696,29 @@ begin
   Result := TTyPainterTextMeasurer.Create(APPI);
 end;
 
+function TTyAdvanceChart.GeoSvgMeasure(const AText: string; const AFont: TTyGsFont): Double;
+var fam: string; p, wt: Integer; w, h, v: Double;
+begin
+  if FGeoSvgMeas = nil then FGeoSvgMeas := NewTextMeasurer(96);
+  fam := AFont.Family;
+  p := Pos(',', fam);
+  if p > 0 then fam := Copy(fam, 1, p - 1);
+  fam := Trim(fam);
+  if (Length(fam) >= 2) and (fam[1] in ['''', '"']) then fam := Copy(fam, 2, Length(fam) - 2);
+  wt := 400;
+  if (AFont.Weight = 'bold') or (AFont.Weight = 'bolder') then wt := 700
+  else if AFont.Weight = 'lighter' then wt := 300
+  else
+  begin
+    v := TyJsToNumber(AFont.Weight);
+    if not IsNan(v) and (v > 0) then wt := Round(v);
+  end;
+  w := 0;
+  h := 0;
+  FGeoSvgMeas.MeasureLine(AText, fam, TyFontSizeFromPx(AFont.SizePx), wt, w, h);
+  Result := w;
+end;
+
 function TTyAdvanceChart.PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
 var slot: Integer;
 begin
@@ -26509,7 +26576,9 @@ begin
           geo := FGeos[d.ComponentIndex];
           Result.HdKind := 14;
           Result.HdSeries := d.ComponentIndex;
-          Result.HdRow := d.DataIndex;
+          { [F6b] the hover's group: the raw index (on an SVG map the
+            outermost dispatcher over the element; the region's own else) }
+          Result.HdRow := d.RawDataIndex;
           Result.HdGen := geo.Gen;
           Result.HdName := geo.GroupName(d.DataIndex);
           Result.HasData := True;

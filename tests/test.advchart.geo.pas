@@ -879,8 +879,9 @@ begin
   for i := 1 to 400 do deep := deep + '[';
   AssertFalse('too deep', TyChartRegisterMap('m', deep));
   AssertFalse('not JSON', TyChartRegisterMap('m', '{"type": '));
-  { an SVG map is not supported }
-  AssertFalse('svg', TyChartRegisterMap('m', '{"svg": "<svg></svg>"}'));
+  { an SVG map is taken since F6b (registerMap(name, {svg})): under its own
+    name, so the GeoJSON one below stands }
+  AssertTrue('svg', TyChartRegisterMap('s', '{"svg": "<svg></svg>"}'));
   AssertFalse('special areas that do not parse', TyChartRegisterMap('m', cSquare, '{x'));
   { and the registration before them stands }
   AssertTrue('still registered', TyChartGetMap('m', js, sp));
