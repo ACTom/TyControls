@@ -431,18 +431,53 @@ begin
   Result := (w = '') or (Pos(',' + AId + ',', ',' + w + ',') > 0);
 end;
 
-{ the frame element of item path (series, row, place) and child APiece (0:
-  the path itself); -1 for none }
-function FindPath(AList: TTyPaintList; ASeries, ARow, APath: Integer; APiece: Integer = 0): Integer;
+{ the order value of the APath-th path of item (series, row): the item's
+  paths sorted by their order (whatever is drawn in their place); -1 none }
+function OrderOfPath(AList: TTyPaintList; ASeries, ARow, APath: Integer): Integer;
 var
-  i: Integer;
+  i, j, n, t: Integer;
+  ords: array of Integer;
   el: TTyChartElement;
+  seen: Boolean;
 begin
+  ords := nil;
   for i := 0 to AList.Count - 1 do
   begin
     el := AList.Element(i);
     if TyUtPathKey(el) = '' then Continue;
-    if (el.Anim.Series = ASeries) and (el.Anim.Index = ARow) and (TyUtPathOrder(el) = APath)
+    if (el.Anim.Series <> ASeries) or (TyUtPathRow(el) <> ARow) then Continue;
+    seen := False;
+    for j := 0 to High(ords) do
+      if ords[j] = TyUtPathOrder(el) then seen := True;
+    if seen then Continue;
+    n := Length(ords);
+    SetLength(ords, n + 1);
+    ords[n] := TyUtPathOrder(el);
+    while (n > 0) and (ords[n - 1] > ords[n]) do
+    begin
+      t := ords[n - 1];
+      ords[n - 1] := ords[n];
+      ords[n] := t;
+      Dec(n);
+    end;
+  end;
+  if (APath < 0) or (APath > High(ords)) then Result := -1 else Result := ords[APath];
+end;
+
+{ the frame element of item path (series, row, place) and child APiece (0:
+  the path itself); -1 for none }
+function FindPath(AList: TTyPaintList; ASeries, ARow, APath: Integer; APiece: Integer = 0): Integer;
+var
+  i, o: Integer;
+  el: TTyChartElement;
+begin
+  o := OrderOfPath(AList, ASeries, ARow, APath);
+  if o < 0 then Exit(-1);
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if TyUtPathKey(el) = '' then Continue;
+    if (el.Anim.Series = ASeries) and (TyUtPathRow(el) = ARow) and (TyUtPathOrder(el) = o)
       and (el.Anim.UtPiece = APiece) then Exit(i);
   end;
   Result := -1;
@@ -452,17 +487,19 @@ end;
   its place; '' for none }
 function KeyOfPath(AList: TTyPaintList; ASeries, ARow, APath: Integer): string;
 var
-  i: Integer;
+  i, o: Integer;
   el: TTyChartElement;
 begin
+  Result := '';
+  o := OrderOfPath(AList, ASeries, ARow, APath);
+  if o < 0 then Exit;
   for i := 0 to AList.Count - 1 do
   begin
     el := AList.Element(i);
     if TyUtPathKey(el) = '' then Continue;
-    if (el.Anim.Series = ASeries) and (el.Anim.Index = ARow) and (TyUtPathOrder(el) = APath) then
+    if (el.Anim.Series = ASeries) and (TyUtPathRow(el) = ARow) and (TyUtPathOrder(el) = o) then
       Exit(TyUtPathKey(el));
   end;
-  Result := '';
 end;
 
 { the text that follows the frame element AHost; -1 for none }
@@ -622,7 +659,14 @@ var
   want: TTyChartColor;
 begin
   sv := SampleOf(AStyle.Find('fill'), ASample);
-  if (sv <> nil) and (sv.JSONType = jtString) and (sv.AsString <> 'transparent') then
+  { 'none' fills nothing }
+  if (sv <> nil) and (sv.JSONType = jtString) and (sv.AsString = 'none') then
+  begin
+    Inc(FCompared);
+    if AFe.Style.HasFill and (AFe.Shape.Kind <> cskPolyline) then
+      Miss(AId + ': a fill here, none upstream', AOnce + 'fill');
+  end
+  else if (sv <> nil) and (sv.JSONType = jtString) and (sv.AsString <> 'transparent') then
   begin
     Inc(FCompared);
     if not TyTryParseChartColor(sv.AsString, want) then
@@ -709,10 +753,19 @@ begin
       Miss(id + ' (' + it.Strings['type'] + '): no such path here', ACid + ASide + 'none' + it.Strings['type']);
       Continue;
     end;
+    { a ripple at rest is wherever its loop is: its layout is not upstream's
+      instant }
+    if lst.Element(at).Anim.Role = carRipple then Continue;
     TyUtLayoutPath(lst.Element(at), data, hasM, m);
     ComparePath(id, ACid + ASide + 'rest', data, it.Elements['d']);
     wm := it.Find('m');
     Inc(FCompared);
+    { an identity matrix upstream keeps is no transform's numbers }
+    if (wm <> nil) and (wm.JSONType = jtArray) and (not hasM)
+      and (wm.Items[0].AsString = Hex(1)) and (wm.Items[1].AsString = Hex(0))
+      and (wm.Items[2].AsString = Hex(0)) and (wm.Items[3].AsString = Hex(1))
+      and (wm.Items[4].AsString = Hex(0)) and (wm.Items[5].AsString = Hex(0)) then
+      wm := nil;
     if (wm = nil) or (wm.JSONType = jtNull) then
     begin
       if hasM then Miss(id + ': a transform here, none upstream', ACid + ASide + 'm0');
@@ -850,7 +903,11 @@ begin
         Inc(FMorphs);
         ComparePath(id, once, CmdsData(fe), el.Arrays['d'].Items[s]);
       end;
-      CompareStyle(id, once, fe, el.Objects['style'], s);
+      { a symbol scaled to nought is drawn as nothing here: its style is
+        not drawn }
+      sv := SampleOf(el.Objects['snap'].Find('scaleX'), s);
+      if not ((sv <> nil) and (sv.JSONType = jtString) and (FromHex(sv.AsString) = 0)) then
+        CompareStyle(id, once, fe, el.Objects['style'], s);
     end;
   end;
   { THE TEXTS: where each is drawn against where it rests (the last

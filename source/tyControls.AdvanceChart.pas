@@ -4755,6 +4755,51 @@ begin
   Result := True;
 end;
 
+{ [F3c] the paths a series' view drew from AFrom on (no text): its view's,
+  no item's -- faded in where a universal transition morphs }
+procedure UtTagFade(AList: TTyPaintList; AFrom, ASeries: Integer);
+var
+  k, n: Integer;
+  el: TTyChartElement;
+begin
+  n := 0;
+  for k := AFrom to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if (el.Caption.Text <> '') or (el.Anim.Role <> carNone) or (el.Anim.UtTag <> 0) then Continue;
+    el.Anim.Series := ASeries;
+    el.Anim.UtTag := 2;
+    el.Anim.UtRow := -2 - n;
+    Inc(n);
+    AList.SetElement(k, el);
+  end;
+end;
+
+{ [F3c] the graph nodes AList has from AFrom on: G[7..8] the node's layout
+  place, G[9] the compensation scale, G[10] 1 }
+procedure UtTagGraphNodes(AList: TTyPaintList; AFrom: Integer;
+  const ANodes: TTyGraphNodeArray; ANodeScale: Double);
+var
+  k, q: Integer;
+  el: TTyChartElement;
+begin
+  for k := AFrom to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if el.Anim.Role <> carSymbol then Continue;
+    for q := 0 to High(ANodes) do
+      if ANodes[q].Row = el.Anim.Index then
+      begin
+        el.Anim.G[7] := ANodes[q].X;
+        el.Anim.G[8] := ANodes[q].Y;
+        el.Anim.G[9] := ANodeScale;
+        el.Anim.G[10] := 1;
+        AList.SetElement(k, el);
+        Break;
+      end;
+  end;
+end;
+
 procedure TTyAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
@@ -17131,6 +17176,20 @@ begin
     el.Anim.G[2] := pg.Box.W;
     el.Anim.G[3] := pg.Box.H;
     el.Anim.G[4] := gy;
+    { [F3c] THE LAYER'S PATH for the universal transition -- at the layer's
+      index among the data's items (setItemGraphicEl(idx), upstream's) --
+      in the group, which sits at its y }
+    el.Anim.UtTag := 1;
+    el.Anim.UtRow := k;
+    el.Anim.UtOrder := 0;
+    el.Anim.UtData := TyUtCmdsData(pg.Cmds);
+    el.Anim.UtHasM := gy <> 0;
+    if el.Anim.UtHasM then
+    begin
+      el.Anim.UtM[0] := 1;
+      el.Anim.UtM[3] := 1;
+      el.Anim.UtM[5] := gy;
+    end;
     AList.Add(el);
     Inc(Result);
   end;
@@ -22709,6 +22768,7 @@ var
   itemSpecs: TTyLabelSpecTable;
   pk, gk, gq: Integer;
   gfxCount: Integer;
+  utAt: Integer;
 begin
   Result := 0;
   gfxCount := 0;
@@ -22860,11 +22920,18 @@ begin
           { ON A VIEW THE SYMBOLS ARE SCALED as zrender composes them: the
             view's overall scale times the compensation scale. }
           if (i <= High(FGraphs)) and (FGraphs[i] <> nil) then
+          begin
+            utAt := list.Count;
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
               gi, FStores[i], list,
               FGraphs[i].OverallScaleX * FGraphNodeScale[i],
-              FGraphs[i].OverallScaleY * FGraphNodeScale[i]))
+              FGraphs[i].OverallScaleY * FGraphNodeScale[i]));
+            { [F3c] a node's symbol group in the main group: its place and
+              the compensation scale, which a universal transition reads off
+              a disposed view }
+            UtTagGraphNodes(list, utAt, FGraphNodes[i], FGraphNodeScale[i]);
+          end
           else
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
@@ -22988,8 +23055,12 @@ begin
         if i <= High(FGauges) then
         begin
           gv := GaugeVisual(i);
+          utAt := list.Count;
           Inc(drawn, TyBuildGaugeAxis(FBindings[i], FGauges[i],
             FGaugeSpecs[i], gv, AMeasurer, APPI, list));
+          { [F3c] the dial's paths (no text): its view's, faded in where a
+            universal transition morphs }
+          UtTagFade(list, utAt, FBindings[i].SeriesIndex);
           Inc(drawn, TyBuildGaugeValue(FBindings[i], FGauges[i],
             FGaugeSpecs[i], FGaugeItems[i], gv, FStores[i],
             FStores[i].DimIndexOf(TyGaugeValueDim), AMeasurer, APPI, list));
@@ -40830,7 +40901,8 @@ begin
   for i := 0 to FPaintList.Count - 1 do
   begin
     el := FPaintList.Element(i);
-    if el.Anim.Role = carNone then Continue;
+    { [F3c] an item path a universal transition reads, whatever its role }
+    if (el.Anim.Role = carNone) and (el.Anim.UtTag = 0) then Continue;
     FAnimPrev.Elements[n] := el;
     Inc(n);
   end;
@@ -45311,6 +45383,8 @@ begin
   APe.Anim.Sub := APlace;
   Inc(APlace);
   APe.Anim.Pts := TyGuidePathData(TyGfxPath(AEl));
+  { the item's element itself (no group above it in the item) }
+  if (AEl.Parent <> nil) and (AEl.Parent.Parent = nil) then APe.Anim.G[7] := 1;
   if AEl.HasTransform then
   begin
     for k := 0 to 5 do APe.Anim.G[k] := AEl.Transform[k] * AScale;

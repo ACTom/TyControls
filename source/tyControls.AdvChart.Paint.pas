@@ -719,6 +719,23 @@ type
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
+    { [F3c] WHAT A UNIVERSAL TRANSITION READS OF AN ELEMENT whose role says
+      nothing of it (AdvChart.AnimView), the role and its numbers left as
+      they are. UtTag 0 none; 1 an item path: UtRow the item's row (where
+      Index is the series'), UtOrder its place in the item's getPathList,
+      UtData its PathProxy data in its own frame and UtM its computed
+      transform (UtHasM), UtBase what the dividers read -- [1, x, y, w, h]
+      a rect, [2, cx, cy, r0, r, startAngle, endAngle, clockwise] a sector,
+      [3] a symbol made from Caption.LgSymbol / LgKeepAspect / LgG as a
+      scatter's (createSymbol(-1, -1, 2, 2) under its size over two, turned,
+      at its place) instead of UtData; UtNoScale its strokeNoScale. 2 a path
+      of a series' view that is no item's: it fades in where a transition
+      morphs (UtRow a number of its own, below -1). }
+    UtTag: Integer;
+    UtRow, UtOrder: Integer;
+    UtData, UtBase: TTyDoubleArray;
+    UtHasM, UtNoScale: Boolean;
+    UtM: TTyMat2D;
   end;
 
   TTyChartElement = record

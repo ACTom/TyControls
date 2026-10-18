@@ -967,8 +967,9 @@ begin
 
   { STEP ONE: the option's degrees are the MATH convention and the drawing
     frame has y pointing down, so the sign flips. }
-  startA := -ASpec.StartDeg * cRadian;
-  endA := -ASpec.EndDeg * cRadian;
+  { [F3c] -seriesModel.get('startAngle') / 180 * Math.PI, in its order }
+  startA := -ASpec.StartDeg / 180 * Pi;
+  endA := -ASpec.EndDeg / 180 * Pi;
   { STEP TWO, and the flag is INVERTED on the way in. }
   TyNormalizeArcAngles(startA, endA, not ASpec.Clockwise);
   Result.StartRad := startA;
@@ -1860,6 +1861,12 @@ begin
           el.Anim.G[1] := ALayout.CY;
           el.Anim.G[2] := angle;
           el.Anim.G[3] := ALayout.StartRad;
+          { [F3c] the PointerPath's width, length and offset }
+          el.Caption.LgSymbol := '';
+          el.Caption.LgG[0] := halfW;
+          el.Caption.LgG[1] := len;
+          el.Caption.LgG[2] := ox;
+          el.Caption.LgG[3] := oy;
           AList.Add(el);
           Inc(Result);
         end;
@@ -1912,6 +1919,13 @@ begin
         el.Anim.G[1] := ALayout.CY;
         el.Anim.G[2] := angle;
         el.Anim.G[3] := ALayout.StartRad;
+        { [F3c] the icon over the width and the length, at the offset }
+        el.Caption.LgSymbol := ASpec.Needle.Icon;
+        el.Caption.LgKeepAspect := ASpec.Needle.KeepAspect;
+        el.Caption.LgG[0] := halfW;
+        el.Caption.LgG[1] := len;
+        el.Caption.LgG[2] := ox;
+        el.Caption.LgG[3] := oy;
         AList.Add(el);
         Inc(Result);
       end;

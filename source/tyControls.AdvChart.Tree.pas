@@ -158,7 +158,7 @@ function TyBuildTreeMarks(ASeriesIndex: Integer; const ASolved: TTyTreeSolved;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.LabelGuide;
 
 { ==================== small readers ==================== }
 
@@ -1527,6 +1527,16 @@ begin
     el.Anim.G[8] := rootX;
     el.Anim.G[9] := rootY;
     el.Anim.G[10] := Ord(row <> ASolved.RealRoot);
+    { [F3c] the symbol as a scatter's, for the universal transition }
+    el.Caption.LgSymbol := TyGuideSymbolName(sym);
+    el.Caption.LgKeepAspect := sym.KeepAspect;
+    el.Caption.LgG[0] := hw * 2;
+    el.Caption.LgG[1] := hh * 2;
+    el.Caption.LgG[2] := sym.RotateDeg;
+    el.Caption.LgG[3] := sym.OffsetX;
+    el.Caption.LgG[4] := sym.OffsetY;
+    el.Caption.LgG[5] := ASolved.Pos[row].PX;
+    el.Caption.LgG[6] := ASolved.Pos[row].PY;
     { the caption REQUEST: the row's own spec, through the expansion's table }
     el.Caption.Text := '';
     if row <= High(AInk.ItemLabels) then spec := AInk.ItemLabels[row]

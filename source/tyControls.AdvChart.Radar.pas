@@ -315,7 +315,7 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 
 implementation
 
-uses tyControls.FontUnits;
+uses tyControls.FontUnits, tyControls.AdvChart.LabelGuide, tyControls.AdvChart.JsMath;
 
 const
   cRadian = Pi / 180;
@@ -646,7 +646,8 @@ begin
   a := AStartRad + sign * AIndex * 2 * Pi / ACount;
   { atan2 OF ITS OWN SINE AND COSINE, which folds into (-Pi, Pi]. Not
     decoration: the name-alignment table is written against that range. }
-  Result := ArcTan2(Sin(a), Cos(a));
+  { [F3c] JavaScript's Math.sin / cos / atan2 (V8's), bit for bit }
+  Result := TyJsAtan2(TyJsSin(a), TyJsCos(a));
 end;
 
 procedure TyRadarIndicatorExtent(const AInd: TTyRadarIndicator;
@@ -840,7 +841,8 @@ begin
   if FR1 <= 0 then Exit;
   if Length(FAxes) = 0 then Exit;
 
-  startRad := FSpec.StartDeg * cRadian;
+  { [F3c] radarModel.get('startAngle') * Math.PI / 180, in its order }
+  startRad := FSpec.StartDeg * Pi / 180;
   for i := 0 to High(FAxes) do
   begin
     { NOT NORMALISED INTO ORDER. A radius pair written the other way round is
@@ -970,7 +972,8 @@ begin
   { THE MINUS ON Y is the whole convention. The angle counts anticlockwise and
     the screen's y counts down, so the sine is subtracted rather than added --
     which is why a radar's startAngle is NOT negated the way a pie's is. }
-  Result := TyPointF(FCX + ACoord * Cos(a), FCY - ACoord * Sin(a));
+  { [F3c] Math.cos / sin: V8's }
+  Result := TyPointF(FCX + ACoord * TyJsCos(a), FCY - ACoord * TyJsSin(a));
 end;
 
 function TTyRadar.ValueToPoint(AValue: Double; AIndex: Integer): TTyPointF;
@@ -1496,6 +1499,24 @@ begin
         el.Silent := False;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
         el.HitSlopLogical := 4;
+        { [F3c] the symbol path RadarView makes (createSymbol(-1, -1, 2, 2)
+          under half its size, turned, at the point; strokeNoScale), after
+          the line and the area in the item's group }
+        el.Anim.Series := ABinding.SeriesIndex;
+        el.Anim.UtTag := 1;
+        el.Anim.UtRow := k;
+        el.Anim.UtOrder := 2 + i;
+        el.Anim.UtBase := TTyDoubleArray.Create(3);
+        el.Anim.UtNoScale := True;
+        el.Caption.LgSymbol := TyGuideSymbolName(rowSym);
+        el.Caption.LgKeepAspect := rowSym.KeepAspect;
+        el.Caption.LgG[0] := rowSym.WidthPx;
+        el.Caption.LgG[1] := rowSym.HeightPx;
+        el.Caption.LgG[2] := rowSym.RotateDeg;
+        el.Caption.LgG[3] := 0;
+        el.Caption.LgG[4] := 0;
+        el.Caption.LgG[5] := pts[i].X;
+        el.Caption.LgG[6] := pts[i].Y;
         AList.Add(el);
         Inc(Result);
       end;

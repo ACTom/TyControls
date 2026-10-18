@@ -733,11 +733,14 @@ function TyUtFinderMatches(const AF: TTyUtFinder; AIndex: Integer; const AModelI
   no option at all) }
 procedure TyUtParseTransition(AData: TJSONData; out AHas: Boolean;
   out AItems: TTyUtTransitionArray);
+{ [F3c] path commands as PathProxy data (M 1, L 2, C 3, Z 6) }
+function TyUtCmdsData(const ACmds: TTyPathCmdArray): TTyDoubleArray;
 { [F3c] AN ITEM PATH, for the tests: the proxy role its transition runs on
   ('' for a path that is no item's), its place in its item's getPathList,
   and its path at the layout -- PathProxy data and computed transform }
 function TyUtPathKey(const AEl: TTyChartElement): string;
 function TyUtPathOrder(const AEl: TTyChartElement): Integer;
+function TyUtPathRow(const AEl: TTyChartElement): Integer;
 procedure TyUtLayoutPath(const AEl: TTyChartElement; out AData: TTyDoubleArray;
   out AHasM: Boolean; out AM: TTyMat2D);
 { a morph and the universal transition's style keys over one element, as
@@ -5426,6 +5429,17 @@ begin
     carLinesTo: Result := 'utLine2';
     carCustomPath:
       if AEl.Anim.Index >= 0 then Result := 'utCus' + IntToStr(AEl.Anim.Sub) else Result := '';
+    { [F3c] a boxplot's path, a radar's line and area (an area ignored is
+      no path), a gauge's pointer, an effect scatter's symbol and its
+      ripples, a graph's and a tree's node symbols, a parallel's line }
+    carBoxplot: Result := 'boxplot';
+    carRadarLine: Result := 'radarLine';
+    carRadarArea: if AEl.Ignore then Result := '' else Result := 'radarArea';
+    carGaugePointer: Result := 'gaugePointer';
+    carEffectSymbol: Result := 'effectSymbol';
+    carRipple: Result := 'ripple' + IntToStr(AEl.Anim.Sub);
+    carTreeNode: Result := 'symbol';
+    carParallelLine: Result := 'utPar0';
   else
     Result := '';
   end;
@@ -5458,17 +5472,34 @@ end;
   (a lines row's line and end symbols) each path has its own }
 function UtElKey(const AEl: TTyChartElement): string;
 begin
+  if AEl.Anim.UtTag = 1 then
+  begin
+    if AEl.Anim.UtRow >= 0 then Result := 'utx' + IntToStr(AEl.Anim.UtOrder) else Result := '';
+    Exit;
+  end;
+  if AEl.Anim.UtTag = 2 then Exit('');
   Result := UtHostRole(AEl);
+end;
+
+{ the row of the item a path is in: UtRow where the element is tagged }
+function UtRowOf(const AEl: TTyChartElement): Integer;
+begin
+  if AEl.Anim.UtTag > 0 then Result := AEl.Anim.UtRow else Result := AEl.Anim.Index;
 end;
 
 { the path's place in its item's getPathList (the item element's traverse
   order) }
 function UtElOrder(const AEl: TTyChartElement): Integer;
 begin
+  if AEl.Anim.UtTag = 1 then Exit(AEl.Anim.UtOrder);
   case AEl.Anim.Role of
     carPictorialGlyph, carPictorialClip, carMapRegion, carCustomPath: Result := AEl.Anim.Sub;
     carLinesFrom: Result := 1;
     carLinesTo: Result := 2;
+    { [F3c] the radar's item group: the line, the area, the symbols; an
+      effect symbol's: the symbol, the ripples }
+    carRadarArea: Result := 1;
+    carRipple: Result := 1 + AEl.Anim.Sub;
   else
     Result := 0;
   end;
@@ -5482,7 +5513,24 @@ begin
     or (AType = 'sunburst') or (AType = 'treemap')
     { [F3c] }
     or (AType = 'funnel') or (AType = 'pictorialBar') or (AType = 'map')
-    or (AType = 'lines') or (AType = 'custom');
+    or (AType = 'lines') or (AType = 'custom')
+    or (AType = 'heatmap') or (AType = 'boxplot') or (AType = 'candlestick')
+    or (AType = 'radar') or (AType = 'gauge') or (AType = 'graph') or (AType = 'tree')
+    or (AType = 'effectScatter') or (AType = 'parallel') or (AType = 'sankey')
+    or (AType = 'chord') or (AType = 'themeRiver');
+end;
+
+{ [F3c] the path's view saved its old style: the type's, and not a ripple
+  (made by the effect, never styled again) nor a radar's symbol (made anew
+  on every render) }
+function UtSavesOldStyleEl(const AType: string; const AEl: TTyChartElement): Boolean;
+begin
+  Result := ((AType = 'bar') or (AType = 'pie') or (AType = 'scatter') or (AType = 'line')
+    or (AType = 'sunburst') or (AType = 'funnel') or (AType = 'boxplot')
+    or (AType = 'candlestick') or (AType = 'parallel') or (AType = 'radar')
+    or (AType = 'themeRiver') or (AType = 'graph') or (AType = 'tree')
+    or (AType = 'effectScatter'))
+    and (AEl.Anim.Role <> carRipple) and not ((AType = 'radar') and (AEl.Anim.UtTag = 1));
 end;
 
 { THE VIEWS THAT SAVE THE OLD STYLE of an element they keep (saveOldStyle):
@@ -5508,8 +5556,37 @@ end;
   own proxy for that ('' for none) }
 function UtFadeKey(const AEl: TTyChartElement): string;
 begin
+  if AEl.Anim.UtTag = 2 then Exit('utFade');
+  if AEl.Anim.UtTag = 1 then Exit('');
   if (AEl.Anim.Role = carTmRect) and (UtHostRole(AEl) = '') then Result := 'utFadeTmBg'
   else Result := '';
+end;
+
+function TyUtCmdsData(const ACmds: TTyPathCmdArray): TTyDoubleArray;
+var
+  i, n: Integer;
+
+  procedure Put(V: Double);
+  begin
+    Result[n] := V;
+    Inc(n);
+  end;
+
+begin
+  SetLength(Result, Length(ACmds) * 7);
+  n := 0;
+  for i := 0 to High(ACmds) do
+    case ACmds[i].Kind of
+      pckMove: begin Put(TyZrCodeM); Put(ACmds[i].X); Put(ACmds[i].Y); end;
+      pckLine: begin Put(TyZrCodeL); Put(ACmds[i].X); Put(ACmds[i].Y); end;
+      pckCurve:
+        begin
+          Put(TyZrCodeC); Put(ACmds[i].X1); Put(ACmds[i].Y1); Put(ACmds[i].X2);
+          Put(ACmds[i].Y2); Put(ACmds[i].X); Put(ACmds[i].Y);
+        end;
+      pckClose: Put(TyZrCodeZ);
+    end;
+  SetLength(Result, n);
 end;
 
 function TyUtPathKey(const AEl: TTyChartElement): string;
@@ -5520,6 +5597,11 @@ end;
 function TyUtPathOrder(const AEl: TTyChartElement): Integer;
 begin
   Result := UtElOrder(AEl);
+end;
+
+function TyUtPathRow(const AEl: TTyChartElement): Integer;
+begin
+  Result := UtRowOf(AEl);
 end;
 
 procedure UtElementPathEx(const AEl: TTyChartElement; P, AMorphP: TTyChartAnimProxy;
@@ -5542,7 +5624,7 @@ function UtShapeProxy(ASet: TTyChartAnimSet; const AEl: TTyChartElement;
 var rk: string;
 begin
   rk := TyChartAnimRoleKey(AEl);
-  if (rk = '') or (rk = UtElKey(AEl)) then Exit(AUtP);
+  if (rk = '') or (rk = UtElKey(AEl)) or (AEl.Anim.UtTag = 1) then Exit(AUtP);
   Result := ASet.Find(AEl.Anim.Series, KeyIndexOf(AEl), rk);
 end;
 
@@ -5648,6 +5730,160 @@ begin
   if AEl.Anim.Role = carLinesFrom then at := TyLinesPointAt(g, 0)
   else at := TyLinesPointAt(g, APercent);
   AHasM := TyLabelLocalTransform(at.X, at.Y, 0, 0, AEl.Anim.G[11], APercent, APercent, AM);
+end;
+
+{ [F3c] a points array: the proxy's (a transition in flight) where it has
+  one that long, else the layout's }
+function UtPointsOf(AP: TTyChartAnimProxy; const ALayout: TTyDoubleArray;
+  AMin: Integer): TTyDoubleArray;
+var v: TTyAnimValue;
+begin
+  Result := ALayout;
+  if AP = nil then Exit;
+  v := AP.GetAnimProp('shape.points');
+  if (v.Kind = avkArray) and (Length(v.Arr) >= AMin) then Result := v.Arr;
+end;
+
+{ a shape's points, flat }
+function UtShapePoints(const AEl: TTyChartElement): TTyDoubleArray;
+var k: Integer;
+begin
+  SetLength(Result, Length(AEl.Shape.Points) * 2);
+  for k := 0 to High(AEl.Shape.Points) do
+  begin
+    Result[k * 2] := AEl.Shape.Points[k].X;
+    Result[k * 2 + 1] := AEl.Shape.Points[k].Y;
+  end;
+end;
+
+{ Polyline / Polygon (polyHelper.buildPath, no smooth): moveTo, lineTo,
+  closePath for a polygon; nothing under two points }
+function UtPolyData(const APts: TTyDoubleArray; AClose: Boolean): TTyDoubleArray;
+var
+  n, k, at: Integer;
+begin
+  Result := nil;
+  n := Length(APts) div 2;
+  if n < 2 then Exit;
+  SetLength(Result, n * 3 + Ord(AClose));
+  at := 0;
+  for k := 0 to n - 1 do
+  begin
+    if k = 0 then Result[at] := TyZrCodeM else Result[at] := TyZrCodeL;
+    Result[at + 1] := APts[k * 2];
+    Result[at + 2] := APts[k * 2 + 1];
+    Inc(at, 3);
+  end;
+  if AClose then Result[at] := TyZrCodeZ;
+end;
+
+{ BoxPath: the box closed, then the whiskers and the caps as moveTo /
+  lineTo pairs }
+function UtBoxplotPath(const APts: TTyDoubleArray): TTyDoubleArray;
+var
+  n, i, at: Integer;
+begin
+  Result := nil;
+  n := Length(APts) div 2;
+  if n < 4 then Exit;
+  SetLength(Result, 13 + ((n - 4) div 2) * 6);
+  Result[0] := TyZrCodeM;
+  Result[1] := APts[0];
+  Result[2] := APts[1];
+  at := 3;
+  for i := 1 to 3 do
+  begin
+    Result[at] := TyZrCodeL;
+    Result[at + 1] := APts[i * 2];
+    Result[at + 2] := APts[i * 2 + 1];
+    Inc(at, 3);
+  end;
+  Result[at] := TyZrCodeZ;
+  Inc(at);
+  i := 4;
+  while i + 1 < n do
+  begin
+    Result[at] := TyZrCodeM;
+    Result[at + 1] := APts[i * 2];
+    Result[at + 2] := APts[i * 2 + 1];
+    Result[at + 3] := TyZrCodeL;
+    Result[at + 4] := APts[i * 2 + 2];
+    Result[at + 5] := APts[i * 2 + 3];
+    Inc(at, 6);
+    Inc(i, 2);
+  end;
+  SetLength(Result, at);
+end;
+
+{ GaugeView's pointer: a PointerPath (angle -pi/2, the width, the length,
+  at the offset) or the icon (createSymbol over the width and the length,
+  its foot on the offset), turned by the rotation, at the centre }
+procedure UtPointerPath(const AEl: TTyChartElement; ARotation: Double;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D);
+var
+  w, r, x, y, ang, px, py: Double;
+  mask: TFPUExceptionMask;
+begin
+  w := AEl.Caption.LgG[0];
+  r := AEl.Caption.LgG[1];
+  x := AEl.Caption.LgG[2];
+  y := AEl.Caption.LgG[3];
+  if AEl.Caption.LgSymbol <> '' then
+    AData := UtSymbolData(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+      x - w / 2, y - r, w, r)
+  else
+  begin
+    mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+      exOverflow, exUnderflow, exPrecision]);
+    try
+      ang := -Pi / 2;
+      if w >= r / 3 then
+      begin
+        px := x - TyJsCos(ang) * w * 1;
+        py := y - TyJsSin(ang) * w * 1;
+      end
+      else
+      begin
+        px := x - TyJsCos(ang) * w * 2;
+        py := y - TyJsSin(ang) * w * 2;
+      end;
+      ang := -Pi / 2 - Pi / 2;
+      AData := TTyDoubleArray.Create(TyZrCodeM, px, py,
+        TyZrCodeL, x + TyJsCos(ang) * w, y + TyJsSin(ang) * w,
+        TyZrCodeL, x + TyJsCos(-Pi / 2) * r, y + TyJsSin(-Pi / 2) * r,
+        TyZrCodeL, x - TyJsCos(ang) * w, y - TyJsSin(ang) * w,
+        TyZrCodeL, px, py);
+    finally
+      ClearExceptions(False);
+      SetExceptionMask(mask);
+    end;
+  end;
+  AHasM := TyLabelLocalTransform(AEl.Anim.G[0], AEl.Anim.G[1], 0, 0, ARotation, 1, 1, AM);
+end;
+
+{ an effect scatter's ripple: createSymbol(-1, -1, 2, 2) at its scale, in
+  the ripple group (the symbol's size, offset and turn) at the point }
+procedure UtRipplePath(const AEl: TTyChartElement; ASX, ASY: Double;
+  out AData: TTyDoubleArray; out AHasM: Boolean; out AM: TTyMat2D);
+var
+  pos, grp, own, m1: TTyMat2D;
+  rot: Double;
+  k: Integer;
+begin
+  AData := UtSymbolData(AEl.Caption.LgSymbol, False, -1, -1, 2, 2);
+  for k := 0 to 5 do pos[k] := 0;
+  pos[0] := 1;
+  pos[3] := 1;
+  pos[4] := AEl.Anim.G[8];
+  pos[5] := AEl.Anim.G[9];
+  rot := AEl.Caption.LgG[2] * Pi / 180;
+  if IsNan(rot) then rot := 0;
+  TyLabelLocalTransform(AEl.Caption.LgG[3], AEl.Caption.LgG[4], 0, 0, rot,
+    AEl.Caption.LgG[0], AEl.Caption.LgG[1], grp);
+  TyLabelLocalTransform(0, 0, 0, 0, 0, ASX, ASY, own);
+  m1 := TyGuideMatMul(pos, grp);
+  AM := TyGuideMatMul(m1, own);
+  AHasM := True;
 end;
 
 { a polar bar's sector or sausage as BarView's polar creator makes it,
@@ -5779,6 +6015,22 @@ begin
         end;
       end;
   end;
+  if AEl.Anim.UtTag = 1 then
+  begin
+    { [F3c] a tagged path: its data and transform, or a scatter's symbol }
+    if (Length(AEl.Anim.UtBase) > 0) and (AEl.Anim.UtBase[0] = 3) then
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        AEl.Caption.LgG[0] / 2, AEl.Caption.LgG[1] / 2, AEl.Caption.LgG[2],
+        AEl.Caption.LgG[3], AEl.Caption.LgG[4], AEl.Caption.LgG[5], AEl.Caption.LgG[6],
+        1, 1, AData, AHasM, AM, AHasLocal, ALocal)
+    else
+    begin
+      AData := AEl.Anim.UtData;
+      AHasM := AEl.Anim.UtHasM;
+      if AHasM then AM := AEl.Anim.UtM;
+    end;
+  end
+  else
   case AEl.Anim.Role of
     carFunnel:
       { [F3c] FunnelPiece: a Polygon of its four points }
@@ -5821,6 +6073,30 @@ begin
       AData := UtLinePath(AEl, NumOr(P, 'shape.percent', 1));
     carLinesFrom, carLinesTo:
       UtLineSymbolPath(AEl, NumOr(P, 'shape.percent', 1), AData, AHasM, AM);
+    carBoxplot:
+      AData := UtBoxplotPath(UtPointsOf(P, AEl.Anim.Pts, 28));
+    carRadarLine, carRadarArea:
+      AData := UtPolyData(UtPointsOf(P, RadarRing(AEl), 2), AEl.Anim.Role = carRadarArea);
+    carParallelLine:
+      AData := UtPolyData(UtShapePoints(AEl), False);
+    carGaugePointer:
+      UtPointerPath(AEl, NumOr(P, 'rotation', -(AEl.Anim.G[2] + Pi / 2)), AData, AHasM, AM);
+    carEffectSymbol:
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        NumOr(P, 'x', AEl.Caption.LgG[5]), NumOr(P, 'y', AEl.Caption.LgG[6]), 1, 1,
+        AData, AHasM, AM, AHasLocal, ALocal);
+    { a tree node's symbol: its proxy's x / y are its group's place in the
+      main group, its device place is the layout's }
+    carTreeNode:
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        AEl.Caption.LgG[5], AEl.Caption.LgG[6], 1, 1,
+        AData, AHasM, AM, AHasLocal, ALocal);
+    carRipple:
+      UtRipplePath(AEl, NumOr(P, 'scaleX', 0.5), NumOr(P, 'scaleY', 0.5), AData, AHasM, AM);
   end;
   if (AMorphP <> nil) and AMorphP.FMorphOn then
   begin
@@ -5862,14 +6138,20 @@ var
 begin
   Result := nil;
   n := 0;
-  if AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then
+  { [F3c] a lines row's line: `line.style.fill = null`, an own key of null
+    (it wins a merge, and animates nothing); a radar's line: `fill:
+    'none'`, a string no colour parses (the same) }
+  if AEl.Anim.Role = carLinesLine then
+  begin
+    if AOwn then Put('style.fill', Default(TTyAnimValue))
+    else Put('style.fill', TyAnimStr('#000'));
+  end
+  else if AEl.Anim.Role = carRadarLine then
+    Put('style.fill', TyAnimStr('none'))
+  else if AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then
     Put('style.fill', TyAnimColorValue(AEl.Style.FillColor, False))
   else if not AOwn then
-    Put('style.fill', TyAnimStr('#000'))
-  { [F3c] a lines row's line: `line.style.fill = null`, an own key of null
-    (it wins a merge, and animates nothing) }
-  else if AEl.Anim.Role = carLinesLine then
-    Put('style.fill', Default(TTyAnimValue));
+    Put('style.fill', TyAnimStr('#000'));
   if ((AEl.Style.StrokeColor shr 24) and $FF) > 0 then
     Put('style.stroke', TyAnimColorValue(AEl.Style.StrokeColor, False));
   if AEl.Style.StrokeWidthLogical > 0 then
@@ -6016,6 +6298,19 @@ begin
     carPolarBar: Result := PolarBarProps(AEl);
     carPictorialGlyph, carPictorialClip:
       Result := TyAnimProps([Num1('scaleX', AEl.Caption.LgG[2]), Num1('scaleY', AEl.Caption.LgG[3])]);
+    carBoxplot:
+      if Length(AEl.Anim.Pts) >= 28 then
+        Result := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(Copy(AEl.Anim.Pts, 0, 28), 2))])
+      else
+        Result := nil;
+    carRadarLine, carRadarArea:
+      Result := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(RadarRing(AEl), 2))]);
+    carGaugePointer:
+      Result := TyAnimProps([Num1('rotation', -(AEl.Anim.G[2] + Pi / 2))]);
+    carEffectSymbol, carTreeNode: Result := SymbolProps(AEl);
+    { a ripple stopped before its loop's first step: where it was made }
+    carRipple:
+      Result := TyAnimProps([Num1('scaleX', 0.5), Num1('scaleY', 0.5), Num1('style.opacity', 1)]);
   else
     Result := nil;
   end;
@@ -6082,6 +6377,7 @@ end;
   own style keys, and what the dividers and sortPaths read }
 procedure UtSnapEl(const AEl: TTyChartElement; P, AMorphP: TTyChartAnimProxy;
   out S: TTyUtOldSnap);
+var k: Integer;
 begin
   S := Default(TTyUtOldSnap);
   S.PieceFirst := -1;
@@ -6091,6 +6387,32 @@ begin
   UtElementPathEx(AEl, P, AMorphP, S.Data, S.HasM, S.M, S.HasLocal, S.Local);
   S.Morphing := (AMorphP <> nil) and AMorphP.FMorphOn;
   S.Style := UtOldStyle(AEl, AMorphP);
+  if AEl.Anim.UtTag = 1 then
+  begin
+    { [F3c] a tagged path's rect or sector for the dividers }
+    if (Length(AEl.Anim.UtBase) >= 5) and (AEl.Anim.UtBase[0] = 1) then
+    begin
+      S.Kind := cUtKindRect;
+      S.RX := AEl.Anim.UtBase[1];
+      S.RY := AEl.Anim.UtBase[2];
+      S.RW := AEl.Anim.UtBase[3];
+      S.RH := AEl.Anim.UtBase[4];
+    end
+    else if (Length(AEl.Anim.UtBase) >= 8) and (AEl.Anim.UtBase[0] = 2) then
+    begin
+      S.Kind := cUtKindSector;
+      S.SCX := AEl.Anim.UtBase[1];
+      S.SCY := AEl.Anim.UtBase[2];
+      S.SR0 := AEl.Anim.UtBase[3];
+      S.SR := AEl.Anim.UtBase[4];
+      S.SSA := AEl.Anim.UtBase[5];
+      S.SEA := AEl.Anim.UtBase[6];
+      S.SCW := AEl.Anim.UtBase[7] <> 0;
+    end
+    else if (Length(AEl.Anim.UtBase) > 0) and (AEl.Anim.UtBase[0] = 3) then
+      S.Kind := cUtKindSymbol;
+  end
+  else
   case AEl.Anim.Role of
     carBar:
       begin
@@ -6171,8 +6493,19 @@ begin
   UtSnapStyle(S, AEl.Style.HasFill);
   { a symbol path's style says strokeNoScale -- a pictorial glyph's and a
     map region's too [F3c] }
-  S.NoScale := AEl.Anim.Role in [carSymbol, carLineSymbol, carPictorialGlyph,
-    carPictorialClip, carMapRegion, carLinesLine];
+  S.NoScale := (AEl.Anim.Role in [carSymbol, carLineSymbol, carPictorialGlyph,
+    carPictorialClip, carMapRegion, carLinesLine, carEffectSymbol, carRipple, carTreeNode])
+    or ((AEl.Anim.UtTag = 1) and AEl.Anim.UtNoScale);
+  { [F3c] a ripple's opacity is its loop's, an own key }
+  if (AEl.Anim.Role = carRipple) and (P <> nil) and (P.GetAnimProp('style.opacity').Kind = avkNumber) then
+  begin
+    S.Opacity := P.Num('style.opacity');
+    k := 0;
+    while (k <= High(S.Style)) and (S.Style[k].Key <> 'style.opacity') do Inc(k);
+    if k > High(S.Style) then SetLength(S.Style, k + 1);
+    S.Style[k].Key := 'style.opacity';
+    S.Style[k].Value := TyAnimNum(S.Opacity);
+  end;
 end;
 
 { A COMBINING ELEMENT'S CHILD as it is now: its morph frame (no transform)
@@ -6422,16 +6755,17 @@ var
   key: string;
   op, sp: TTyChartAnimProxy;
   v: Pointer;
+  rm: TTyMat2D;
 
   { THE ITEM a path belongs to: its number, a new one at the end }
   function ItemOf(const AEl: TTyChartElement): Integer;
   begin
-    v := AIdx.Find(KeyOf(AEl.Anim.Series, AEl.Anim.Index, 'ut'));
+    v := AIdx.Find(KeyOf(AEl.Anim.Series, UtRowOf(AEl), 'ut'));
     if v <> nil then Exit(PtrInt(v) - 1);
     Result := Length(AItems);
     SetLength(AItems, Result + 1);
     AItems[Result] := nil;
-    AIdx.Add(KeyOf(AEl.Anim.Series, AEl.Anim.Index, 'ut'), Pointer(PtrInt(Result + 1)));
+    AIdx.Add(KeyOf(AEl.Anim.Series, UtRowOf(AEl), 'ut'), Pointer(PtrInt(Result + 1)));
   end;
 
   { a path of the item, in getPathList's order (a path already there of the
@@ -6448,6 +6782,38 @@ var
     for q := High(AItems[AItem]) downto at + 1 do AItems[AItem][q] := AItems[AItem][q - 1];
     AItems[AItem][at] := ASnap;
     Result := True;
+  end;
+
+  { [F3c] A VIEW THE UPDATE DISPOSED (no series of the new option keeps it):
+    upstream disposes it before the transition, and some views' dispose
+    takes their items off their groups (GraphView.remove: SymbolDraw.remove;
+    MapView: MapDraw.remove) -- what was above them is gone from their
+    transform }
+  function Disposed(AOld: Integer): Boolean;
+  var
+    q: Integer;
+    vk: string;
+  begin
+    if (AOld < 0) or (AOld > High(APrev.Series)) then Exit(False);
+    vk := APrev.Series[AOld].ViewKey + #1 + APrev.Series[AOld].SeriesType;
+    for q := 0 to High(APrev.AliveKeys) do
+      if APrev.AliveKeys[q] = vk then Exit(False);
+    Result := True;
+  end;
+
+  procedure Detach(const AEl: TTyChartElement; P: TTyChartAnimProxy; var S: TTyUtOldSnap);
+  begin
+    if (AEl.Anim.Role = carSymbol) and (AEl.Anim.G[10] = 1) then
+      { a graph node: its symbol group (the node's place, the compensation
+        scale) and its path, no view }
+      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+        AEl.Anim.G[7], AEl.Anim.G[8], AEl.Anim.G[9], AEl.Anim.G[9],
+        S.Data, S.HasM, S.M, S.HasLocal, S.Local)
+    else if AEl.Anim.Role = carMapRegion then
+      { a region: no roam }
+      S.HasM := False;
   end;
 
 begin
@@ -6468,10 +6834,22 @@ begin
     { the proxy its path is read from, and the one a morph of it runs on
       (the same one but where the role's is shared) [F3c] }
     sp := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, KeyIndexOf(el), TyChartAnimRoleKey(el))));
-    op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, el.Anim.Index, key)));
+    op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, UtRowOf(el), key)));
     if (TyChartAnimRoleKey(el) = key) or (TyChartAnimRoleKey(el) = '') then sp := op;
     SetLength(ASnaps, n + 1);
     UtSnapEl(el, sp, op, ASnaps[n]);
+    if (not ASnaps[n].Morphing) and Disposed(el.Anim.Series) then Detach(el, sp, ASnaps[n]);
+    { [F3c] removeEl: an item element that is a path with a parent takes
+      its computed transform as its own (setLocalTransform, decomposed and
+      composed again) before the morph reads it -- a gauge's pointer, a
+      custom series' item that is a path }
+    if (not ASnaps[n].Morphing) and ASnaps[n].HasM
+      and ((el.Anim.Role = carGaugePointer)
+        or ((el.Anim.Role = carCustomPath) and (el.Anim.G[7] = 1))) then
+    begin
+      rm := ASnaps[n].M;
+      TyMorphRecompose(rm, ASnaps[n].HasM, ASnaps[n].M);
+    end;
     it := ItemOf(el);
     if not PutPath(it, n) then
     begin
@@ -6499,7 +6877,7 @@ begin
   begin
     el := APrev.UtStale[i];
     if UtElKey(el) = '' then Continue;
-    if AIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut')) <> nil then Continue;
+    if AIdx.Find(KeyOf(el.Anim.Series, UtRowOf(el), 'ut')) <> nil then Continue;
     SetLength(ASnaps, n + 1);
     UtSnapEl(el, nil, nil, ASnaps[n]);
     it := ItemOf(el);
@@ -6589,6 +6967,13 @@ var
   procedure StopRole(ASer, ARow: Integer; const AEl: TTyChartElement; const AKey: string);
   var rp: TTyChartAnimProxy;
   begin
+    { a tree node's group slides on a proxy of its own: stopAnimation(newEl)
+      stops the group first }
+    if AEl.Anim.Role = carTreeNode then
+    begin
+      rp := Find(ASer, KeyIndexOf(AEl), 'treeGroup');
+      if rp <> nil then rp.StopAnimation('', True);
+    end;
     if (TyChartAnimRoleKey(AEl) = '') or (TyChartAnimRoleKey(AEl) = AKey) then Exit;
     rp := Find(ASer, KeyIndexOf(AEl), TyChartAnimRoleKey(AEl));
     if rp <> nil then rp.StopAnimation('', True);
@@ -7139,13 +7524,13 @@ var
         { animateElementStyles: from the style the view saved, at update
           timing and the item's data index -- path by path, where the view
           saves one [F3c] }
-        if not UtSavesOldStyle(ASeries[ni.Series].SeriesType) then Exit;
         if not TyAnimGetConfig(atUpdate, ASeries[ni.Series].Model, TyAnimCallAt(ni.Row), tm) then
           Exit;
         for k2 := 0 to High(nes) do
         begin
           if k2 > High(ops) then Break;
           ne2 := AList.Element(nes[k2]);
+          if not UtSavesOldStyleEl(ASeries[ni.Series].SeriesType, ne2) then Continue;
           p2 := HostProxy(ni.Series, ni.Row, ne2);
           SeedStyle(p2, ne2);
           p2.FUtStyleOn := True;
@@ -7422,8 +7807,8 @@ var
             role := UtFadeKey(ne);
             if role <> '' then
             begin
-              if Find(ns, ne.Anim.Index, role) <> nil then Continue;
-              p := Make(ns, ne.Anim.Index, role);
+              if Find(ns, UtRowOf(ne), role) <> nil then Continue;
+              p := Make(ns, UtRowOf(ne), role);
               p.SetNum('style.opacity', ne.Style.Alpha);
               p.FUtStyleOn := True;
               p.FUtPass := FPass;
@@ -7433,7 +7818,7 @@ var
             end;
             role := UtElKey(ne);
             if role = '' then Continue;
-            p := Find(ns, ne.Anim.Index, role);
+            p := Find(ns, UtRowOf(ne), role);
             { a line symbol's animators are its group's: its path has none
               unless the transition gave it one }
             if ne.Anim.Role = carLineSymbol then
@@ -7442,13 +7827,16 @@ var
             else
               done := (p <> nil) and ((p.AnimatorCount > 0) or p.FMorphOn);
             { [F3c] a path whose role animates it on a proxy of its own }
-            if (not done) and (TyChartAnimRoleKey(ne) <> '') and (TyChartAnimRoleKey(ne) <> role) then
+            { (a tagged path's role is its group's or its clip's: not the
+              path's own animators) }
+            if (not done) and (ne.Anim.UtTag = 0) and (TyChartAnimRoleKey(ne) <> '')
+              and (TyChartAnimRoleKey(ne) <> role) then
             begin
               rp := Find(ns, KeyIndexOf(ne), TyChartAnimRoleKey(ne));
               done := (rp <> nil) and (rp.AnimatorCount > 0);
             end;
             if done then Continue;
-            p := HostProxy(ns, ne.Anim.Index, ne);
+            p := HostProxy(ns, UtRowOf(ne), ne);
             p.SetNum('style.opacity', ne.Style.Alpha);
             p.FUtStyleOn := True;
             p.FUtPass := FPass;
@@ -7596,7 +7984,7 @@ begin
       el := AList.Element(i);
       key := UtElKey(el);
       if key = '' then Continue;
-      v := newIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'));
+      v := newIdx.Find(KeyOf(el.Anim.Series, UtRowOf(el), 'ut'));
       if v = nil then
       begin
         it := Length(newItems);
@@ -7604,7 +7992,7 @@ begin
         SetLength(newOrders, it + 1);
         newItems[it] := nil;
         newOrders[it] := nil;
-        newIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'), Pointer(PtrInt(it + 1)));
+        newIdx.Add(KeyOf(el.Anim.Series, UtRowOf(el), 'ut'), Pointer(PtrInt(it + 1)));
       end
       else
         it := PtrInt(v) - 1;
@@ -7697,7 +8085,7 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
     if (AAt <= High(ABind)) and (ABind[AAt] <> nil) and (ABind[AAt].FRole = key2) then
       Result := ABind[AAt]
     else if ASet <> nil then
-      Result := ASet.Find(AEl.Anim.Series, AEl.Anim.Index, key2);
+      Result := ASet.Find(AEl.Anim.Series, UtRowOf(AEl), key2);
   end;
 
   { [F3c] a label's anchor at rest and on its host's morph frame; False
@@ -7763,7 +8151,7 @@ begin
     if key <> '' then
     begin
       if (i <= High(ABind)) and (ABind[i] <> nil) and (ABind[i].FRole = key) then bp := ABind[i]
-      else if ASet <> nil then bp := ASet.Find(el.Anim.Series, el.Anim.Index, key);
+      else if ASet <> nil then bp := ASet.Find(el.Anim.Series, UtRowOf(el), key);
     end;
     if bp <> nil then TyUtApply(el, bp);
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then

@@ -1084,7 +1084,7 @@ function TyBuildGraphMarks(ASeriesIndex: Integer;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath, tyControls.AdvChart.LabelGuide;
 
 { ==================== the view ==================== }
 
@@ -6389,6 +6389,16 @@ begin
     el.Anim.G[4] := el.Style.Alpha;
     el.Anim.G[5] := ANodes[i].PX;
     el.Anim.G[6] := ANodes[i].PY;
+    { [F3c] the symbol as a scatter's, for the universal transition }
+    el.Caption.LgSymbol := TyGuideSymbolName(sym);
+    el.Caption.LgKeepAspect := sym.KeepAspect;
+    el.Caption.LgG[0] := hw * 2;
+    el.Caption.LgG[1] := hh * 2;
+    el.Caption.LgG[2] := sym.RotateDeg;
+    el.Caption.LgG[3] := sym.OffsetX;
+    el.Caption.LgG[4] := sym.OffsetY;
+    el.Caption.LgG[5] := ANodes[i].PX;
+    el.Caption.LgG[6] := ANodes[i].PY;
     { THE NODE'S OWN LABEL [F2a]: its spec in the item row after the edges';
       built hidden when only a state shows it }
     if i <= High(AInk.NodeLabels) then nspec := AInk.NodeLabels[i]

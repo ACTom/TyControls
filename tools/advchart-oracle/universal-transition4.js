@@ -458,7 +458,8 @@ function runCase(c) {
         if (st.after == null) {
           for (let k = 16; k <= 5000; k += 250) step(zr, t + k);
           zr.storage.getDisplayList(true);
-          must(clipCount(zr) === 0, c.id + ': step ' + (i - 1) + ' did not settle');
+          // (an effect scatter's ripples loop for ever)
+          must(c.loops || clipCount(zr) === 0, c.id + ': step ' + (i - 1) + ' did not settle');
           t += T_GAP;
         }
         else {
@@ -652,6 +653,46 @@ function chartCases() {
   // ---- interrupted ----
   add('bar-pict.inflight', '200 ms into bars -> glyphs, the bars again: each bar combines the glyphs where they are',
     [s(cart([barS()])), s(cart([pictS()])), s(cart([barS()]), 200)]);
+  // ---- the other types (each against bars of the same names, both ways) ----
+  const pair = (tid, note, other, opts) => {
+    add('bar-' + tid, 'bars into ' + note, [s(cart([barS()])), s(other())], opts);
+    add(tid + '-bar', note + ' into bars', [s(other()), s(cart([barS()]))], opts);
+  };
+  pair('heatmap', 'heatmap cells', () => Object.assign(cart([{ type: 'heatmap', id: 'k', universalTransition: true,
+    data: NAMES.map((n, i) => [i, i % 2, VALS[i]]) }]), { yAxis: { type: 'category', data: ['u', 'v'] },
+    visualMap: { min: 0, max: 10, show: false, inRange: { color: ['#5070dd', '#ff994d'] } } }));
+  pair('boxplot', 'boxes', () => cart([{ type: 'boxplot', id: 'k', universalTransition: true,
+    data: VALS.map(v => [1, v - 2, v, v + 1, v + 3]) }]));
+  pair('candle', 'candles', () => cart([{ type: 'candlestick', id: 'k', universalTransition: true,
+    itemStyle: { color: '#eb5454', color0: '#47b262', borderColor: '#eb5454', borderColor0: '#47b262' },
+    data: VALS.map((v, i) => (i % 2 ? [v, v - 2, v - 3, v + 1] : [v - 2, v, v - 3, v + 1])) }]));
+  pair('radar', 'radar polygons (the line and its symbols)', () => ({ color: PALETTE,
+    radar: { indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }] },
+    series: [{ type: 'radar', id: 'k', universalTransition: true,
+      data: NAMES.map((n, i) => ({ name: n, value: [VALS[i], (VALS[i] + 3) % 10, 9 - VALS[i]] })) }] }));
+  pair('gauge', 'gauge pointers', () => solo({ type: 'gauge', id: 'k', universalTransition: true, max: 10,
+    data: NAMES.map((n, i) => ({ name: n, value: VALS[i] })), detail: { show: false }, title: { show: false } }));
+  pair('graph', 'graph nodes', () => solo({ type: 'graph', id: 'k', layout: 'none', universalTransition: true,
+    data: NAMES.map((n, i) => ({ name: n, x: i * 10, y: VALS[i], value: VALS[i] })),
+    links: [{ source: 'A', target: 'B' }, { source: 'C', target: 'D' }] }));
+  pair('tree', 'tree nodes', () => solo({ type: 'tree', id: 'k', universalTransition: true, expandAndCollapse: false,
+    symbol: 'circle', itemStyle: { color: '#ffffff', borderColor: '#5070dd', borderWidth: 2 },
+    data: [{ name: 'r', children: NAMES.map((n, i) => ({ name: n, value: VALS[i] })) }] }));
+  pair('escatter', 'effect scatter symbols (the symbol and its ripples)', () => vcart([{ type: 'effectScatter',
+    id: 'k', universalTransition: true, data: NAMES.map((n, i) => ({ name: n, value: [i + 0.5, VALS[i]] })) }]),
+    { loops: true });
+  pair('parallel', 'parallel lines', () => ({ color: PALETTE, parallelAxis: [{ dim: 0, max: 10 }, { dim: 1, max: 10 }],
+    series: [{ type: 'parallel', id: 'k', universalTransition: true,
+      data: NAMES.map((n, i) => ({ name: n, value: [VALS[i], 10 - VALS[i]] })) }] }));
+  pair('sankey', 'sankey nodes', () => solo({ type: 'sankey', id: 'k', universalTransition: true,
+    data: NAMES.map(n => ({ name: n })),
+    links: [{ source: 'A', target: 'C', value: 5 }, { source: 'B', target: 'D', value: 3 }, { source: 'A', target: 'D', value: 2 }] }));
+  pair('chord', 'chord pieces', () => solo({ type: 'chord', id: 'k', universalTransition: true,
+    data: NAMES.map(n => ({ name: n })),
+    links: [{ source: 'A', target: 'C', value: 5 }, { source: 'B', target: 'D', value: 3 }, { source: 'A', target: 'D', value: 2 }] }));
+  pair('river', 'themeRiver layers', () => ({ color: PALETTE, singleAxis: { type: 'time' },
+    series: [{ type: 'themeRiver', id: 'k', universalTransition: true,
+      data: NAMES.map((n, i) => [['2015/11/08', VALS[i], n], ['2015/11/09', VALS[3 - i], n]]).flat() }] }));
   // ---- the gallery's ----
   add('gal.pict-bar', 'pictorialBar-bar-transition: the vehicles\' glyphs into bars (merged, as the page does)',
     [s(galleryOption('pictorialBar-bar-transition.json')), s(galleryOption('pictorialBar-bar-transition.2.json'), null, true)],
