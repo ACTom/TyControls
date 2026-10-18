@@ -878,6 +878,11 @@ type
       键含文字/字体/字号/字重/颜色/尺寸/对齐 —— 任何一项变了都是新条目,
       因此换主题、改列宽、切深色都不需要显式失效。 }
     FTextCache:        TStringList;   { Sorted;Objects 存 TBGRABitmap,自己拥有 }
+    FTextCachePixels:  Int64;         { the pixels FTextCache holds (#83: S^2 per entry at S) }
+    FTextCachePixelBudget: Int64;
+    FBgTile:           TBGRABitmap;   { the background picture at FBgTileScale times (#83) }
+    FBgTileScale:      Integer;
+    FBgTileBuilds:     Integer;
     FBidiLayouts:      Integer;       { 建过几次 TBidiTextLayout —— 只给测试,见 BidiLayoutCount }
     { 一次绘制期间的 GridMetrics 记忆化。CellRect/CellVisibleRect/CellPane 都要它,
       于是每格要重算三四次;而每次都得遍历列求冻结带宽、还要为 HeaderBands 分配数组。
@@ -1145,6 +1150,11 @@ type
       只表现为变慢 —— TTyMemo 那次每键半秒就是这个形状。
       所以"排版发生在缓存未命中的分支里"这条契约,只能在这里断言。 }
     function TextCacheCount: Integer;
+    { The pixels the text cache holds, and the most it may (FOR THE TESTS to lower). }
+    function TextCachePixels: Int64;
+    property TextCachePixelBudget: Int64 read FTextCachePixelBudget write FTextCachePixelBudget;
+    { How many times the background picture has been scaled for a device scale. }
+    property BackgroundTileBuilds: Integer read FBgTileBuilds;
     { 第四个探针,同样只给测试用:一共建过几次 TBidiTextLayout。
       **像素证明不了这件事**。双向布局对只有一个 run 的文字(纯拉丁、纯 CJK、
       纯阿拉伯)排出来的结果与裸 TextRect 逐像素相同 —— 把闸门改成恒真,
@@ -4336,6 +4346,7 @@ begin
   FTextCache.Sorted := True;          { 排序 → IndexOf 走二分 }
   FTextCache.Duplicates := dupIgnore;
   FTextCache.OwnsObjects := True;
+  FTextCachePixelBudget := 32 * 1024 * 1024;
   FShowFooter := False;
   FFooterHeight := 24;
   FScrollX := 0;
@@ -4379,6 +4390,7 @@ begin
   FHeader.Free;
   FTextCache.Free;      { OwnsObjects → 顺带释放缓存的位图 }
   FSurface.Free;
+  FBgTile.Free;
   FRowHeights.Free;
   FHeaderGroups.Free;
   inherited Destroy;
@@ -5407,6 +5419,7 @@ end;
 procedure TTyCustomGrid.ClearTextCache;
 begin
   if FTextCache <> nil then FTextCache.Clear;
+  FTextCachePixels := 0;
 end;
 
 procedure TTyCustomGrid.InvalidateSurface;
@@ -5433,6 +5446,9 @@ begin
     否则解锁后那一次重画会走脏区快路径,复用上一帧的陈旧像素。 }
   FSurfaceFresh := False;
   FSurfacePendingDy := 0;
+  { The background picture scaled for the device scale is kept between frames, never past an
+    Invalidate: a new picture, or the same one repainted in place, scales again (#83). }
+  FreeAndNil(FBgTile);
   if FUpdateCount > 0 then
   begin
     FPendingInvalidate := True;
@@ -5632,7 +5648,12 @@ begin
   begin
     { 上限只是防失控(滚动久了键会一直增长);视口内的格数远小于它。
       整表清空比 LRU 简单,代价是清空后那一帧要重画 —— 可以接受。 }
-    if FTextCache.Count > 8192 then FTextCache.Clear;
+    { ... and a pixel budget: at a device scale every entry holds S^2 the pixels (#83). }
+    if (FTextCache.Count > 8192) or (FTextCachePixels + Int64(w) * h > FTextCachePixelBudget) then
+    begin
+      FTextCache.Clear;
+      FTextCachePixels := 0;
+    end;
 
     bmp := TBGRABitmap.Create(w, h);      { 全透明 }
     TyConfigureTextFont(bmp, fname, sz, weight, P.RasterPPI);
@@ -5673,6 +5694,7 @@ begin
       直接走人就把位图漏了(上面刚 IndexOf 过,理论上碰不到;但漏内存的代价
       是几百 MB,值得这三行)。 }
     idx := FTextCache.AddObject(key, bmp);
+    Inc(FTextCachePixels, Int64(w) * h);
     if (idx < 0) or (FTextCache.Objects[idx] <> bmp) then
     begin
       bmp.Free;
@@ -5688,6 +5710,11 @@ end;
 function TTyGridEditLink.HandleKey(var AKey: Word; AShift: TShiftState): Boolean;
 begin
   Result := False;      { 默认什么都不吃,网格照常处理导航键 }
+end;
+
+function TTyCustomGrid.TextCachePixels: Int64;
+begin
+  Result := FTextCachePixels;
 end;
 
 function TTyCustomGrid.TextCacheCount: Integer;
@@ -7698,10 +7725,21 @@ begin
   oldClip := P.Bitmap.ClipRect;
   { 与外层裁剪**求交**,不覆盖 —— 快路径下外层夹着那条露出来的带。 }
   { area and the picture's size are layout pixels: one picture pixel is one layout pixel, as at
-    S = 1, so on a 2x layer it is drawn S times its size (#83). }
+    S = 1, so on a 2x layer it is drawn S times its size (#83) -- scaled once and kept. }
   if not IntersectRect(dst, oldClip, P.Dev(area)) then Exit;
   P.Bitmap.ClipRect := dst;
   tile := FBackgroundBitmap;
+  if (P.DeviceScale > 1) and (FBackgroundMode <> gbmStretch) then
+  begin
+    if (FBgTile = nil) or (FBgTileScale <> P.DeviceScale) then
+    begin
+      FreeAndNil(FBgTile);
+      FBgTile := FBackgroundBitmap.Resample(P.Dev(bw), P.Dev(bh), rmSimpleStretch) as TBGRABitmap;
+      FBgTileScale := P.DeviceScale;
+      Inc(FBgTileBuilds);
+    end;
+    tile := FBgTile;
+  end;
   try
     case FBackgroundMode of
       gbmStretch:
@@ -7711,16 +7749,10 @@ begin
           dst := Rect(0, 0, bw, bh);
           OffsetRect(dst, (area.Left + area.Right - bw) div 2,
                           (area.Top + area.Bottom - bh) div 2);
-          if P.DeviceScale = 1 then
-            P.Bitmap.PutImage(dst.Left, dst.Top, FBackgroundBitmap,
-              dmDrawWithTransparency)
-          else
-            P.Bitmap.StretchPutImage(P.Dev(dst), FBackgroundBitmap, dmDrawWithTransparency);
+          P.Bitmap.PutImage(P.Dev(dst.Left), P.Dev(dst.Top), tile, dmDrawWithTransparency);
         end;
       else
         begin
-          if P.DeviceScale > 1 then
-            tile := FBackgroundBitmap.Resample(P.Dev(bw), P.Dev(bh), rmSimpleStretch) as TBGRABitmap;
           y := area.Top;
           while y < area.Bottom do
           begin
@@ -7735,7 +7767,6 @@ begin
         end;
     end;
   finally
-    if tile <> FBackgroundBitmap then tile.Free;
     P.Bitmap.ClipRect := oldClip;
   end;
 end;
