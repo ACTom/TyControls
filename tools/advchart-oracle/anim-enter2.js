@@ -569,6 +569,10 @@ function enter2Cases() {
     'bordered nodes (2 px) and bands (1 px): every stroked child\'s box grows by its line width before the union',
     { series: [{ type: 'sankey', left: 30, right: 30, itemStyle: { borderColor: '#333', borderWidth: 2 },
       lineStyle: { borderColor: '#999', borderWidth: 1 }, data: SANKEY_NODES, links: SANKEY_LINKS }] }));
+  out.push(enterCase('sankey.reversed',
+    'the nodes listed right to left: the union widens to the right before it reaches the left edge (the new left, '
+    + 'not the old, is what the width is measured from)',
+    { series: [{ type: 'sankey', data: SANKEY_NODES.slice().reverse(), links: SANKEY_LINKS }] }));
   // ---- off ----
   out.push(enterCase('off.series',
     'animation: false on each series: nothing animates',
