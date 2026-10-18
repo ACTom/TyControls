@@ -92,6 +92,7 @@ type
     procedure TestRestPathsAsUpstream;
     procedure TestEveryTransitionAsUpstream;
     procedure TestTransitionOptionTakesOverTheKeys;
+    procedure TestTheViewsOtherPathsFadeIn;
   end;
 
 implementation
@@ -1015,6 +1016,72 @@ begin
     p := FChart.AnimFindProxy(0, i, 'sector');
     AssertFalse('slice ' + IntToStr(i) + ' does not morph', (p <> nil) and p.MorphOn);
   end;
+end;
+
+{ the paths of a view no item owns -- a gauge's dial, a sankey's bands, a
+  chord's ribbons -- fade in where anything morphed: at every sample the
+  opacities of those upstream fades against the port's (sorted, bit for
+  bit), as many of each }
+procedure TAdvChartUniversalTransition4Test.TestTheViewsOtherPathsFadeIn;
+const
+  cCases: array[0..2] of string = ('bar-gauge', 'bar-sankey', 'bar-chord');
+var
+  c: TJSONObject;
+  els, samples: TJSONArray;
+  ci, s, e, k: Integer;
+  t1: Double;
+  frm: TTyPaintList;
+  want, got: TStringList;
+  op: TJSONData;
+  fading: Integer;
+begin
+  want := TStringList.Create;
+  got := TStringList.Create;
+  try
+    for ci := 0 to High(cCases) do
+    begin
+      c := CaseById(cCases[ci]);
+      els := c.Arrays['elements'];
+      samples := c.Arrays['samples'];
+      t1 := Play(c, False);
+      fading := 0;
+      for s := 0 to samples.Count - 1 do
+      begin
+        if s > 0 then FChart.AnimTick(t1 + samples.Items[s].AsFloat);
+        frm := FChart.Frame;
+        want.Clear;
+        got.Clear;
+        for e := 0 to els.Count - 1 do
+        begin
+          if els.Objects[e].Booleans['item'] then Continue;
+          op := els.Objects[e].Objects['style'].Find('opacity');
+          if not (op is TJSONArray) then Continue;
+          want.Add(op.Items[s].AsString);
+        end;
+        for k := 0 to frm.Count - 1 do
+          if frm.Element(k).Anim.UtTag = 2 then
+          begin
+            { only those whose opacity runs: a ribbon at rest is not faded }
+            if FChart.AnimFindProxy(frm.Element(k).Anim.Series, frm.Element(k).Anim.UtRow,
+              'utFade') = nil then Continue;
+            got.Add(Hex(frm.Element(k).Style.Alpha));
+          end;
+        want.Sort;
+        got.Sort;
+        if s = 1 then fading := want.Count;
+        Inc(FCompared);
+        if want.Text <> got.Text then
+          Miss(Format('%s t=%s: %d paths fading here, upstream %d (%s / %s)', [cCases[ci],
+            samples.Items[s].AsString, got.Count, want.Count, Copy(got.CommaText, 1, 60),
+            Copy(want.CommaText, 1, 60)]), cCases[ci] + 'fade');
+      end;
+      AssertTrue(cCases[ci] + ': upstream fades its view''s other paths', fading > 0);
+    end;
+  finally
+    want.Free;
+    got.Free;
+  end;
+  AssertTrue(Format('%d of %d differ from upstream:%s', [FBad, FCompared, FReport]), FBad = 0);
 end;
 
 initialization

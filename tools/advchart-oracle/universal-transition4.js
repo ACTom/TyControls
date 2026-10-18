@@ -748,15 +748,41 @@ function guards(charts) {
   must(morphs(byId('gal.bar-map')).length > 40, 'gal.bar-map: few morphs');
   must(combs(byId('gal.parl-pie')).length === 6, 'gal.parl-pie: not six combining');
   must(morphs(byId('gal.pie-parl')).length > 100, 'gal.pie-parl: few morphs');
+  // the sausages are sausages, both ways
+  must(byId('pie-polar.sausage').newRest.every(r => r.type === 'sausage'), 'pie-polar.sausage: not sausages');
+  must(byId('polar.sausage-bar').oldRest.every(r => r.type === 'sausage'), 'polar.sausage-bar: not sausages');
+  // the other types: bars into each morph, each into bars morphs or combines
+  for (const tid of ['heatmap', 'boxplot', 'candle', 'gauge', 'graph', 'tree', 'parallel', 'sankey', 'chord']) {
+    atLeast('bar-' + tid, 4, morphs);
+    atLeast(tid + '-bar', 4, morphs);
+  }
+  must(morphs(byId('bar-radar')).length === 16, 'bar-radar: not sixteen morphs (a line and three symbols each)');
+  must(combs(byId('radar-bar')).length === 4, 'radar-bar: not four combining');
+  must(morphs(byId('bar-escatter')).length === 16, 'bar-escatter: not sixteen morphs (a symbol and three ripples each)');
+  must(combs(byId('escatter-bar')).length === 4, 'escatter-bar: not four combining');
+  must(morphs(byId('bar-river')).length === 2, 'bar-river: the layers are at the layer index (two morph)');
+  // the view's other paths fade in: a gauge's dial, a sankey's bands, a chord's ribbons
+  const fades = c => c.elements.filter(e => !e.item && Array.isArray(e.style.opacity)).length;
+  must(fades(byId('bar-gauge')) > 50, 'bar-gauge: the dial does not fade in');
+  must(fades(byId('bar-sankey')) === 3 && fades(byId('bar-chord')) === 3, 'bar-sankey / bar-chord: the links do not fade in');
+  // a graph's nodes off a disposed view: their morph starts with no view
+  // transform -- in the data's units (x 0 .. 30), not the canvas' (40 .. 360)
+  {
+    const fr = byId('graph-bar').elements.filter(e => e.item && e.morph).map(e => e.d[0]);
+    const xs = fr.map(d => { bits.setUint32(0, parseInt(d[1].slice(0, 8), 16)); bits.setUint32(4, parseInt(d[1].slice(8), 16)); return bits.getFloat64(0); });
+    must(xs.length === 4 && xs.every(x => x < 35), 'graph-bar: the nodes morph from the canvas, not from their group ' + xs);
+  }
+  // the texts that ride a morph, and those that do not
+  must(byId('label.bar-hbar').elements.some(e => e.text && new Set(e.text.x).size > 2), 'label.bar-hbar: no text moves');
+  must(byId('label.bar-pie').elements.every(e => !e.text || new Set(e.text.x).size === 1), 'label.bar-pie: a text moves');
 }
 
-const NO_GUARDS = process.env.UT4_NO_GUARDS === '1';
 function generate() {
   NOW = T_BASE;
   rngState = SEED;
   registerMaps();
   const charts = chartCases().map(c => Object.assign(c, runCase(c)));
-  if (!NO_GUARDS) guards(charts);
+  guards(charts);
   return {
     source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + ') + zrender 6.1.0, node SSR (svg), controlled clock',
     note: 'F3c: steps of setOption (the first at T0; a next one after the previous ran out, T + 10000, or `after` ms into '
