@@ -67,6 +67,7 @@ type
     procedure TestTheRootSilencesTheSeries;
     procedure TestTheRootProgressiveReachesTheSeries;
     procedure TestTheDiagnosticsKnowTheRootKeys;
+    procedure TestTheClimbNeedsAnObjectRoot;
   end;
 
 implementation
@@ -646,6 +647,39 @@ begin
     end;
   end;
   Verdict(20);
+end;
+
+{ ==================== no object root ==================== }
+
+{ the climb reads the root only when it is an object: none (no option) or
+  an option that is no object leaves a null or missing key as it was }
+procedure TAdvChartRootInheritOracleTest.TestTheClimbNeedsAnObjectRoot;
+var
+  box: TTyRawBox;
+  arr: TJSONArray;
+  obj: TJSONObject;
+begin
+  box := Default(TTyRawBox);
+  box.Left.Kind := brNull;
+  TyBoxClimbRoot(box, nil);
+  AssertTrue('no root: the null stays', box.Left.Kind = brNull);
+  AssertTrue('no root: the missing stays', box.Width.Kind = brAbsent);
+  arr := TJSONArray.Create([10]);
+  try
+    TyBoxClimbRoot(box, arr);
+    AssertTrue('an array root: the null stays', box.Left.Kind = brNull);
+    AssertTrue('an array root: the missing stays', box.Width.Kind = brAbsent);
+  finally
+    arr.Free;
+  end;
+  obj := TJSONObject.Create(['left', 10, 'width', 'auto']);
+  try
+    TyBoxClimbRoot(box, obj);
+    AssertTrue('an object root: its left', (box.Left.Kind = brNumber) and (box.Left.Num = 10));
+    AssertTrue('an object root: its width', (box.Width.Kind = brString) and (box.Width.Str = 'auto'));
+  finally
+    obj.Free;
+  end;
 end;
 
 initialization

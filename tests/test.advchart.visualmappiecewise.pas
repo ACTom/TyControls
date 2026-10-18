@@ -1001,7 +1001,7 @@ end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestCategoriesAsUpstream;
 begin
-  RunCases(['C1', 'C2', 'C3', 'C4']);
+  RunCases(['C1', 'C2', 'C3', 'C4', 'C5']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestViewCasesEncodeAsUpstream;

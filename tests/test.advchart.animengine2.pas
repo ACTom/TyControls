@@ -15,7 +15,8 @@ unit test.advchart.animengine2;
                 looping radial, a gradient to a colour keyframe;
     the pause   the chart's animation paused and resumed (a second pause
                 and a resume while running do nothing), a merge during a
-                pause whose flush steps every clip once; an element's
+                pause whose flush steps every clip once (a series-only
+                merge's too); an element's
                 animator paused and resumed, a loop's across its restart.
 
   This replays it through the control bit for bit -- the custom series'
@@ -66,6 +67,7 @@ type
     procedure TestTheGradientKeyframesAreUpstreams;
     procedure TestThePauseOfTheChartIsUpstreams;
     procedure TestThePauseOfAnAnimatorIsUpstreams;
+    procedure TestASeriesMergeWhilePausedStepsTheGraphic;
   end;
 
   { What the fixture does not reach. }
@@ -526,6 +528,13 @@ end;
 procedure TAdvChartAnimEngine2OracleTest.TestThePauseOfAnAnimatorIsUpstreams;
 begin
   RunCaseId('pause-animator', 300);
+end;
+
+{ a merge of the series alone while paused: upstream's one animation flushes
+  the graphic's clip too -- the port's series driver flushes the others }
+procedure TAdvChartAnimEngine2OracleTest.TestASeriesMergeWhilePausedStepsTheGraphic;
+begin
+  RunCaseId('pause-series-merge', 100);
 end;
 
 { ==================== beyond the fixture ==================== }

@@ -317,6 +317,16 @@ add('axis', 'axis-horizontal', "a horizontal value x axis with minor ticks and m
     { t: T1, do: 'merge', option: { grid: { top: 40, bottom: 50 }, yAxis: { data: ['a', 'b', 'c', 'd'] }, series: [{ data: [15, 30, 8, 22] }] } },
     ...after([0, 1, 16, 100, 400, 799, 800, 801, 1200], T1)]);
 
+// [fin] the split areas' edge carried as x + width: on an inverse category x axis the ticks run
+// right to left, and where a tick's coordinate is under half the previous one (past zero here,
+// the inset making them fractional) x + (c - x) is not c -- the next band starts at the sum
+add('axis', 'axis-split-inverse', "an inverse category x axis with split areas on fractional insets: each band's x is the previous x + width, which past the small coordinates is not the tick's own; the grid moves (500 ms cubicInOut)",
+  { animation: true, grid: { left: 10.37, right: 33.71 }, xAxis: { type: 'category', inverse: true, data: CATS, splitArea: { show: true } },
+    yAxis: { type: 'value' }, series: [{ type: 'bar', data: [5, 9, 3, 7, 6] }] },
+  ['axis'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { grid: { left: 12.91, right: 27.43 } } }, ...after([0, 1, 100, 499, 500, 501], T1)]);
+
 const S_PIC = [0, 1, 16, 100, 300, 301, 500, 800, 999, 1000, 1001, 1500, 2000, 2300, 2301, 3000];
 add('pictorial', 'pict-item-timing', "a repeated glyph turned by symbolRotate 30 pops in and turns from 0 (createOrUpdateRepeatSymbols' rotation); the ITEM model's animationDuration (2000), animationEasing ('linear') and animationDelay (300) over the series' (800 ms cubicOut); a row whose item says animation: false is set; a single glyph is turned at once and only scales",
   { animation: true, xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'] }, yAxis: { type: 'value', max: 100 },

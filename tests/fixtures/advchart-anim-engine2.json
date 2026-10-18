@@ -7374,6 +7374,341 @@
      }
     }
    ]
+  },
+  {
+   "id": "pause-series-merge",
+   "group": "pause",
+   "note": "the chart's animation paused at 300; at 500 a merge that changes only the bar series' data: its flush steps the graphic element's entering clip to the clock (500), though the graphic was not in the merge; resumed at 700 the clip goes on 400 ms behind",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5
+      ]
+     }
+    ],
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "x": 200,
+      "y": 20,
+      "shape": {
+       "width": 20,
+       "height": 20
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "enterFrom": {
+       "x": 0
+      },
+      "enterAnimation": {
+       "duration": 1000,
+       "easing": "linear"
+      }
+     }
+    ]
+   },
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "0000000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 1,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "3fc999999999999a",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 150,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "403e000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "404e000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "pause"
+    },
+    {
+     "t": 400,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "404e000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 500,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         2
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 500,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4059000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 600,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4059000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 700,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4059000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 700,
+     "do": "resume"
+    },
+    {
+     "t": 701,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "404e199999999999",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 900,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4059000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 1100,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4061800000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 1300,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4066800000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 1500,
+     "do": "sample",
+     "els": {
+      "a": {
+       "x": "4069000000000000",
+       "y": "4034000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000",
+       "style.opacity": "3ff0000000000000",
+       "style.fill": "#5070dd",
+       "shape.x": "0000000000000000",
+       "shape.y": "0000000000000000",
+       "shape.width": "4034000000000000",
+       "shape.height": "4034000000000000",
+       "n": 0
+      }
+     }
+    }
+   ]
   }
  ],
  "grads": [
@@ -7703,6 +8038,10 @@
   },
   {
    "name": "a paused loop holds",
+   "ok": true
+  },
+  {
+   "name": "a series-only merge while paused steps the graphic clip",
    "ok": true
   }
  ]

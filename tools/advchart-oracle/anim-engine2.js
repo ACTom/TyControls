@@ -394,6 +394,17 @@ add('pause', 'pause-animator', "one element's animator paused at 200 and resumed
     ...samples([250, 300, 400, 500, 600]), { t: 600, do: 'resumeAnimator', id: 'p', k: 0 }, { t: 650, do: 'resumeAnimator', id: 'lp', k: 0 },
     ...samples([650, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600])]);
 
+// [fin] the flush of a merge that touches only a series steps the graphic's clips too: one
+// zrender animation holds every clip (the port's drivers flush one another while paused)
+add('pause', 'pause-series-merge', "the chart's animation paused at 300; at 500 a merge that changes only the bar series' data: its flush steps the graphic element's entering clip to the clock (500), though the graphic was not in the merge; resumed at 700 the clip goes on 400 ms behind",
+  { animation: true, xAxis: { type: 'category', data: ['p', 'q'] }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', data: [3, 5] }],
+    graphic: [{ type: 'rect', id: 'a', x: 200, y: 20, shape: { width: 20, height: 20 }, style: { fill: '#5070dd' },
+      enterFrom: { x: 0 }, enterAnimation: ENTER }] },
+  [...samples([0, 1, 150, 300]), { t: 300, do: 'pause' }, ...samples([400]),
+    { t: 500, do: 'merge', option: { series: [{ data: [4, 2] }] } },
+    ...samples([500, 600, 700]), { t: 700, do: 'resume' }, ...samples([701, 900, 1100, 1300, 1500])]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -479,6 +490,9 @@ function guards(out) {
   guard('the other runs on', v(A, 500, 'q', 'x') > v(A, 200, 'q', 'x'));
   guard('a resumed animator ends late', v(A, 1100, 'p', 'x') < 200 && v(A, 1500, 'p', 'x') === 200);
   guard('a paused loop holds', v(A, 400, 'lp', 'x') === v(A, 300, 'lp', 'x'));
+  const S = 'pause-series-merge';
+  guard('a series-only merge while paused steps the graphic clip', v(S, 600, 'a', 'x') !== v(S, 400, 'a', 'x')
+    && v(S, 600, 'a', 'x') === v(S, 700, 'a', 'x'));
   return g;
 }
 
