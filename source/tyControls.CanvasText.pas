@@ -116,9 +116,12 @@ begin
       BitmapFillRect(tmp, Rect(0, 0, w, h), clBlack)
     else
       BitmapFillRect(tmp, Rect(0, 0, w, h), clWhite);
+    { Assign takes the pixel height across only between equal PPIs (Size otherwise), so the
+      scratch's font is put at FFont's first -- the run is drawn at the height it is measured
+      at, and nothing here sizes a font of its own (test.dpi.measurefont). }
+    tmp.Canvas.Font.PixelsPerInch := FFont.PixelsPerInch;
     tmp.Canvas.Font := FFont;
     tmp.Canvas.Font.Orientation := 0;
-    tmp.Canvas.Font.Height := FFont.Height;
     if lightInk then tmp.Canvas.Font.Color := clWhite else tmp.Canvas.Font.Color := clBlack;
     if plain then
       BitmapTextOut(tmp, Point(mx, my), sUTF8)
