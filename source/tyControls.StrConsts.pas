@@ -576,6 +576,22 @@ resourcestring
   // Also what a screen reader calls a chart that has no title [Batch 144;
   // one string since Milestone D9-D14, not a second 'Chart'].
   rsTyChartTypeChart = 'Chart';
+  // [F5] the accessible tree's chart components: their names, a dataZoom's
+  // window (two percents) and a brush's areas as values
+  rsTyChartAccBrush = 'Brush';
+  rsTyChartAccBrushAreas = '%d selected areas';
+  rsTyChartAccDataZoom = 'Data zoom';
+  rsTyChartAccHandleEnd = 'End handle';
+  rsTyChartAccHandleStart = 'Start handle';
+  rsTyChartAccLegend = 'Legend';
+  rsTyChartAccMarkArea = 'Mark area';
+  rsTyChartAccMarkLine = 'Mark line';
+  rsTyChartAccMarkPoint = 'Mark point';
+  rsTyChartAccMarkers = 'Markers';
+  rsTyChartAccPercentRange = '%s%% to %s%%';
+  rsTyChartAccTimeline = 'Timeline';
+  rsTyChartAccToolbox = 'Toolbox';
+  rsTyChartAccVisualMap = 'Visual map';
 
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
