@@ -3361,10 +3361,10 @@ begin
     anchor := anchor + offAlong;
 
     { THE BAR RECT: the union of the data's own length and the far end of the
-      glyph run, and the ONLY thing here a pointer can land on. Upstream keeps
-      the same rectangle for the same two reasons -- an outside label has to
-      clear the icon rather than the value, and what a reader points at should
-      be the bar rather than whichever half of a glyph survived the clip. }
+      glyph run -- what an outside label hangs off, so it clears the icon
+      rather than the value. SILENT, as upstream's (PictorialBarView.ts:692-
+      696): the pointer lands on the glyphs, and the label, whose host this
+      is, is silent with it. [F2b; the rect was the only target before] }
     barLen := pxSign * Max(Abs(cutLen), Abs(anchor + sizeFix));
     if IsNan(barLen) or IsInfinite(barLen) then Continue;
     barRect := BandRect(floorPx + barLen / 2, Abs(barLen) / 2,
@@ -3380,7 +3380,7 @@ begin
     el.Style.Alpha := AVisual.Alpha;
     el.Z := AVisual.Z;
     el.Z2 := AVisual.Z2;
-    el.Silent := False;
+    el.Silent := True;
     el.Datum := TyChartDatum(ABinding.SeriesIndex, i);
     ItemCaption(AVisual, AStore, i, el.Caption);
     { FILLED BUT TRANSPARENT, for its label: upstream's target rect has a
@@ -3491,10 +3491,12 @@ begin
       el := MarkElement(shape, v, ABinding.SeriesIndex, i);
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
-      { SILENT, and the bar rect above is why: two hittable things for one
-        datum would report it twice, and a glyph cut in half is the worse of
-        the two targets. }
-      el.Silent := True;
+      { THE TARGET: the bar group is the dispatcher and its glyphs are what
+        zrender finds under the pointer -- as drawn, so the clip that cuts a
+        glyph cuts its hit too (Handler.isHover asks every clipPath up the
+        chain) [F2b] }
+      el.Silent := False;
+      el.ClipHits := True;
       AList.Add(el);
       Inc(Result);
     end;

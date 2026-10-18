@@ -27044,9 +27044,9 @@ begin
     end
     else if FSt[s].Kind = sskPictorial then
     begin
-      { THE GLYPHS ARE THE PATHS (silent here: the inkless bar rect is the
-        target), the first the host, the rest parts [Batch 90] }
-      if not el.Silent then Continue;
+      { THE GLYPHS ARE THE PATHS, the first the host, the rest parts; the
+        inkless bar rect has no states [Batch 90] }
+      if el.Caption.HostTransparent then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end

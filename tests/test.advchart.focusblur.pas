@@ -90,11 +90,13 @@ end;
 
 { the pointer onto an item's mark, near its centre }
 procedure TAdvChartFocusBlurTest.HoverItem(ASeries, ARow: Integer);
-var el: TTyChartElement; x, y: Integer;
+var el: TTyChartElement; x, y: Integer; b: TTyRectF;
 begin
   AssertTrue(Format('a mark for s%d i%d', [ASeries, ARow]), HostOf(ASeries, ARow, el));
-  x := Round((el.Shape.Bounds.Left + el.Shape.Bounds.Right) / 2);
-  y := Round((el.Shape.Bounds.Top + el.Shape.Bounds.Bottom) / 2);
+  { the shape's own box: a pictorial glyph is a path [F2b] }
+  b := TyShapeBounds(el.Shape);
+  x := Round((b.Left + b.Right) / 2);
+  y := Round((b.Top + b.Bottom) / 2);
   FChart.Move(x, y);
 end;
 
@@ -163,7 +165,8 @@ end;
 procedure TAdvChartFocusBlurTest.TestPictorialGlyphsTakeTheStatesTogether;
 var
   before, after: TFbElements;
-  k, glyphs: Integer;
+  k, glyphs, top: Integer;
+  gb: TTyRectF;
   b: TTyChartElement;
 begin
   Plain('{"animation":false,"xAxis":{"type":"category","data":["a","b"]},'
@@ -172,7 +175,16 @@ begin
     + '"emphasis":{"focus":"series","scale":true},"data":[20,30]},'
     + '{"type":"bar","name":"B","data":[10,15]}]}');
   before := Marks(0, 1);
-  HoverItem(0, 1);
+  { the topmost glyph: the lower ones are wider than their band and the
+    bar beside them is over them -- the glyphs are the target [F2b] }
+  top := -1;
+  for k := 0 to High(before) do
+    if not before[k].Silent and ((top < 0)
+      or (TyShapeBounds(before[k].Shape).Top < TyShapeBounds(before[top].Shape).Top)) then
+      top := k;
+  AssertTrue('a glyph', top >= 0);
+  gb := TyShapeBounds(before[top].Shape);
+  FChart.Move(Round((gb.Left + gb.Right) / 2), Round((gb.Top + gb.Bottom) / 2));
   Frame;
   AssertEquals('hovered', 'emphasis', StText(0, 1));
   after := Marks(0, 1);
@@ -180,9 +192,11 @@ begin
   glyphs := 0;
   for k := 0 to High(after) do
   begin
-    if not after[k].Silent then
+    { the bar rect: silent, as upstream's -- the glyphs are the target
+      [F2b] }
+    if after[k].Silent then
     begin
-      AssertFalse('the target rect stays inkless', after[k].Style.HasFill);
+      AssertFalse('the bar rect stays inkless', after[k].Style.HasFill);
       Continue;
     end;
     Inc(glyphs);
@@ -202,7 +216,7 @@ begin
   Frame;
   after := Marks(0, 1);
   for k := 0 to High(after) do
-    if after[k].Silent then
+    if not after[k].Silent then
       AssertEquals('back at rest', Integer(before[k].Style.FillColor), Integer(after[k].Style.FillColor));
   AssertEquals('B back', '', StText(1, 0));
 end;
