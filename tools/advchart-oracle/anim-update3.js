@@ -145,6 +145,22 @@ function num(h) {
 }
 const hx = v => hex(typeof v === 'number' ? v : NaN);
 const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+// a function in an option, written {$fn: name} in the fixture (the test
+// registers the same name with the control's timing registry)
+const FNS = { 'idx*30': idx => idx * 30 };
+function materialize(v) {
+  if (Array.isArray(v)) return v.map(materialize);
+  if (v && typeof v === 'object') {
+    if (typeof v.$fn === 'string') {
+      must(FNS[v.$fn], 'unknown $fn ' + v.$fn);
+      return FNS[v.$fn];
+    }
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = materialize(v[k]);
+    return o;
+  }
+  return v;
+}
 let warnings = 0;
 const quiet = fn => {
   const w = console.warn;
@@ -407,6 +423,16 @@ add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one wi
       { name: 'c', x: 50, y: 100 }, { name: 'd', x: 120, y: 150 }, { name: 'e', x: 80, y: 160 }, { name: 'f', x: 180, y: 80 }],
       links: GL.concat([{ source: 'f', target: 'b' }]) }] } }, ...after(S_UPD, T1)]);
 
+add('graph', 'graph-edge-delay', "layout none with animationDelayUpdate (idx) => idx * 30 (linear, 1000 ms): a merge moves two nodes; each kept Line's shape waits by its own edge index (LineDraw.updateData's updateProps at the row), each kept node's path scale by its node index, the groups and the view with no row",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', symbolSize: 16, edgeSymbol: ['none', 'arrow'],
+      data: GN.map(n => ({ name: n.name, x: n.x, y: n.y })), links: GL }, LIN, { animationDelayUpdate: { $fn: 'idx*30' } })] },
+  ['graph'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 10, y: 10 }, { name: 'b', x: 140, y: 30 },
+      { name: 'c', x: 50, y: 100 }, { name: 'd', x: 120, y: 150 }, { name: 'e', x: 80, y: 160 }] }] } },
+    ...after([0, 1, 16, 31, 61, 91, 100, 121, 250, 500, 1000, 1031, 1061, 1091, 1121, 1200], T1)]);
+
 add('graph', 'graph-circular', "layout circular, legend off for category B: the circular layout is solved again for the nodes left, so every kept node moves (its group x / y in the main group) and the main group tweens; rotateLabel off",
   { animation: true, legend: { data: ['A', 'B'] },
     series: [Object.assign({ type: 'graph', layout: 'circular', categories: GCATS, symbolSize: 16, label: { show: true },
@@ -433,6 +459,14 @@ add('graph', 'graph-force', "a force layout without layoutAnimation (layoutAnima
   ['graph'],
   [{ t: 0, do: 'sample' }, { t: 100, do: 'sample' }, { t: T1 - 1, do: 'sample' },
     { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_UPD, T1)], { placeFrom: T1 });
+
+add('graph', 'graph-force-anim', "a force layout with layoutAnimation (the default): GraphSeriesModel.isAnimationEnabled is false, the series does not animate at all -- the paths are at their scale at once, no line draws out, a legend toggle tweens nothing (the iteration runs on a timer that never fires here: the places are not compared)",
+  { animation: true, legend: { data: ['A', 'B'] },
+    series: [{ type: 'graph', layout: 'force', force: { repulsion: 80 }, categories: GCATS, symbolSize: 16,
+      edgeSymbol: ['none', 'arrow'], data: GN, links: GL }] },
+  ['graph'],
+  [{ t: 0, do: 'sample' }, { t: 100, do: 'sample' }, { t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after([0, 1, 100, 300], T1)], { placeFrom: 0 });
 
 add('graph', 'graph-cartesian', "a graph on cartesian2d: no view, the nodes' groups slide in pixels, the edges tween in pixels; a value changes",
   { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
@@ -510,6 +544,20 @@ add('radial', 'radial-toggle', "a radial tree, collapsing 'b' (data index 6) and
     { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...afterRm(T1),
     { t: T1 + 2000, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after(S_TREE, T1 + 2000)]);
 
+add('radial', 'radial-midway', "a radial tree, collapsing 'b' (data index 6) and expanding it again 300 ms in, while b still slides: the new curves start at b's raw place of its previous render (__radialOldRawX), not at where its group is now",
+  { animation: true, series: [Object.assign({ type: 'tree', layout: 'radial', data: TREE, initialTreeDepth: -1, symbolSize: 12 }, TLIN)] },
+  ['tree'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after([0, 1, 300], T1),
+    { t: T1 + 300, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } },
+    ...after([300, 301, 500, 999], T1)]);
+
+add('radial', 'radial-delay', "a radial tree entering with animationDelay (idx) => idx * 30: a later node's path waits at no scale while its group already slides and its label already fades in -- the label's rect is the path's (nought), with no stroke margin (lineScale nought)",
+  { animation: true, series: [{ type: 'tree', layout: 'radial', data: TREE, initialTreeDepth: -1, symbolSize: 12,
+    animationDuration: 1000, animationEasing: 'linear', animationDelay: { $fn: 'idx*30' } }] },
+  ['tree'],
+  [...[0, 1, 16, 100, 200, 250, 500, 999, 1000, 1300].map(t => ({ t, do: 'sample' }))]);
+
 // ---- a data item's array symbolSize ----
 add('pictorial', 'pict-item-size', "a data item's array symbolSize -- [20, '100%'] (the percent of the bar's length, symbolRepeat off), ['50%', 12] repeated (the percent of the category's width), [16] (one number, the second NaN), and a row's array symbolOffset [5, '-50%'] -- read from the item's own visual (visual/symbol.ts getShallow), not the series'",
   { animation: false, xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'] }, yAxis: { type: 'value', max: 100 },
@@ -562,6 +610,14 @@ add('stateGrad', 'select-gradient', "a bar's own colour a radial gradient, its s
     { t: T1 + 400, do: 'action', action: { type: 'unselect', seriesIndex: 0, dataIndex: 2 } }, ...after([0, 1, 50, 100], T1 + 400),
     { t: T1 + 500, do: 'action', action: { type: 'select', seriesIndex: 0, dataIndex: 2 } }, ...after(S_ST, T1 + 500)]);
 
+add('stateGrad', 'state-gradient-lift', "a series whose colour is a gradient with no emphasis colour, its channels ones whose lift (x 1.1) has a fraction of a half or more (5, 15, 25, 45, 75, 105): lift's '| 0' truncates them, it does not round",
+  { animation: true, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', data: [2, 3],
+      itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#050f19' }, { offset: 1, color: 'rgb(45,75,105)' }] } } }] },
+  ['state'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'action', action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }, ...after([0, 1, 50, 150, 299, 300, 301], T1)]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -591,7 +647,7 @@ function runCase(c) {
       placeFrom: c.placeFrom == null ? null : c.placeFrom, option: clone(c.option),
       probes: c.probes, events: [] };
     // a copy: echarts stores its inner records on the objects it is given
-    quiet(() => chart.setOption(clone(c.option)));
+    quiet(() => chart.setOption(materialize(clone(c.option))));
     c.events.forEach(ev => {
       NOW = T0 + ev.t;
       const o = clone(ev);
@@ -601,8 +657,8 @@ function runCase(c) {
         o.rec = readRec(chart, c.probes);
       }
       else if (ev.do === 'frame') zr(chart).animation.update();
-      else if (ev.do === 'merge') quiet(() => chart.setOption(clone(ev.option)));
-      else if (ev.do === 'notMerge') quiet(() => chart.setOption(clone(ev.option), true));
+      else if (ev.do === 'merge') quiet(() => chart.setOption(materialize(clone(ev.option))));
+      else if (ev.do === 'notMerge') quiet(() => chart.setOption(materialize(clone(ev.option)), true));
       else if (ev.do === 'action') quiet(() => chart.dispatchAction(clone(ev.action)));
       else if (ev.do === 'hover') quiet(() => pointer(chart, ev, 'mouseover'));
       else if (ev.do === 'out') quiet(() => pointer(chart, ev, 'mouseout'));
@@ -635,6 +691,9 @@ function guards(out) {
   guard('graph-move: a kept edge tweens its shape', rec('graph-move', T1 + 100, 'g0/edge0').n === 1
     && n(rec('graph-move', T1 + 100, 'g0/edge0').x2) !== n(rec('graph-move', T1 - 1, 'g0/edge0').x2));
   guard('graph-move: a new edge draws out', n(rec('graph-move', T1, 'g0/edge5').percent) === 0);
+  guard('graph-edge-delay: a later edge waits by its row', n(rec('graph-edge-delay', T1 + 16, 'g0/edge0').x2)
+    !== n(rec('graph-edge-delay', T1 - 1, 'g0/edge0').x2)
+    && n(rec('graph-edge-delay', T1 + 16, 'g0/edge3').x1) === n(rec('graph-edge-delay', T1 - 1, 'g0/edge3').x1));
   guard('graph-legend: a filtered node fades as a ghost', rec('graph-legend', T1 + 100, 'g0/ghost1')
     && n(rec('graph-legend', T1 + 100, 'g0/ghost1').op) > 0 && !rec('graph-legend', T1 + 200, 'g0/ghost1'));
   guard('graph-enter-update: useStyle strands the opacity tween',
@@ -645,6 +704,8 @@ function guards(out) {
   guard('graph-force: the paths still pop in', n(rec('graph-force', 0, 'g0/node0').sx) === 0
     && rec('graph-force', 100, 'g0/node0').n > 0);
   guard('graph-force: a toggle slides nothing', rec('graph-force', T1 + 100, 'g0/node0').n === 0);
+  guard('graph-force-anim: no path pops in', n(rec('graph-force-anim', 0, 'g0/node0').sx) > 0
+    && rec('graph-force-anim', 0, 'g0/node0').n === 0 && n(rec('graph-force-anim', 0, 'g0/edge0').percent) === 1);
   // tree
   guard('tree-collapse: a removed node goes to the source + 1', Math.abs(n(rec('tree-collapse', T1 + 999, 'tr0/ghost3').x)
     - (n(rec('tree-collapse', T1 + 1500, 'tr0/node2').x) + 1)) < 0.1);
@@ -655,6 +716,8 @@ function guards(out) {
   guard('tree-midway: a ghost and a new node share a row', !!rec('tree-midway', T1 + 500, 'tr0/ghost3')
     && !!rec('tree-midway', T1 + 500, 'tr0/node3'));
   // radial
+  guard("radial-midway: a new curve starts at the source's previous raw place, not its group now",
+    n(rec('radial-midway', T1 + 300, 'tr0/edge7').x1) !== n(rec('radial-midway', T1 + 300, 'tr0/node6').x));
   guard('radial-enter: a label sits at its distance from a node of no scale', (() => {
     const l = rec('radial-enter', 0, 'tr0/label3');
     const nd = rec('radial-enter', 0, 'tr0/node3');

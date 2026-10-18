@@ -29,7 +29,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Anim,
-     tyControls.AdvChart.AnimView,
+     tyControls.AdvChart.AnimView, tyControls.AdvChart.Shape, tyControls.AdvChart.AnimOpt,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax,
      test.advchart.graphic;
@@ -52,6 +52,10 @@ type
     FTol: Double;
     { [F3d] a sample past the case's placeFrom: places not compared }
     FNoPlace: Boolean;
+    { [fin] a treeExpandAndCollapse action replayed through TreeToggle (the
+      public method a click goes through), and how many were }
+    FByMethod: Boolean;
+    FToggles: Integer;
     procedure Bad(const AWhat: string);
     procedure SameNum(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure NearNum(const AWhat: string; AGot: Double; AWant: TJSONData; ATol: Double);
@@ -71,6 +75,7 @@ type
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
+    function HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -80,6 +85,7 @@ type
     procedure TestTheRadialLabelsFollowTheirNodesAsUpstream;
     procedure TestAnItemsArraySymbolSizeAsUpstream;
     procedure TestAStatesGradientTweensAsUpstream;
+    procedure TestATreeToggleIsTheAction;
   end;
 
 implementation
@@ -187,6 +193,31 @@ end;
 
 { ==================== the oracle ==================== }
 
+{ [fin] {"$fn": name} -> '@name', in place, everywhere: the control's timing
+  registry knows the name }
+procedure Au3Fns(AData: TJSONData);
+var
+  i: Integer;
+  child: TJSONData;
+begin
+  if (AData = nil) or not (AData.JSONType in [jtArray, jtObject]) then Exit;
+  for i := 0 to AData.Count - 1 do
+  begin
+    child := AData.Items[i];
+    if (child.JSONType = jtObject) and (TJSONObject(child).Count = 1)
+      and (TJSONObject(child).Find('$fn') <> nil) then
+      AData.Items[i] := TJSONString.Create('@' + TJSONObject(child).Strings['$fn'])
+    else
+      Au3Fns(child);
+  end;
+end;
+
+function TAdvChartAnimUpdate3OracleTest.HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
+begin
+  { (idx) => idx * 30; undefined * 30 is not a number, and `delay || 0` }
+  if AHasIndex then Result := ADataIndex * 30 else Result := NaN;
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.SetUp;
 var sl: TStringList;
 begin
@@ -204,6 +235,8 @@ begin
   finally
     sl.Free;
   end;
+  Au3Fns(FRoot);
+  TyChartRegisterAnimTiming('idx*30', @HIdx30);
   FChart := nil;
   FBad := 0;
   FCompared := 0;
@@ -215,6 +248,7 @@ procedure TAdvChartAnimUpdate3OracleTest.TearDown;
 begin
   if FChart <> nil then FChart.Measurer := nil;
   FreeAndNil(FChart);
+  TyChartUnregisterAnimTiming('idx*30');
   FreeAndNil(FRoot);
   FreeAndNil(FForm);
   FreeAndNil(FCtl);
@@ -370,6 +404,7 @@ var
   p: TTyChartAnimProxy;
   el: TTyChartElement;
   cx, cy, vsx, vsy, vx, vy: Double;
+  bx: TTyRectF;
   vw: TJSONObject;
 begin
   for i := 0 to ARec.Count - 1 do
@@ -422,11 +457,14 @@ begin
       { THE FRAME: the node's path on the canvas -- its centre, the group's
         global place }
       if not FNoPlace and FrameEl(s, idx, carSymbol, el)
-        and TyRectFIsValid(el.Shape.Bounds) and (WantNum(leaf.Find('op')) > 0)
+        and TyRectFIsValid(TyShapeBounds(el.Shape)) and (WantNum(leaf.Find('op')) > 0)
         and (WantNum(leaf.Find('sx')) > 0) then
       begin
-        cx := (el.Shape.Bounds.Left + el.Shape.Bounds.Right) / 2;
-        cy := (el.Shape.Bounds.Top + el.Shape.Bounds.Bottom) / 2;
+        { [fin] the shape's own extent: a circle's is its centre and radius
+          (Shape.Bounds is only a rect's or a path's) }
+        bx := TyShapeBounds(el.Shape);
+        cx := (bx.Left + bx.Right) / 2;
+        cy := (bx.Top + bx.Bottom) / 2;
         NearNum(name + ' drawn x', cx, leaf.Find('wx'), 1e-6);
         NearNum(name + ' drawn y', cy, leaf.Find('wy'), 1e-6);
       end;
@@ -516,7 +554,9 @@ end;
   edges, the labels ---- }
 procedure TAdvChartAnimUpdate3OracleTest.DrawnCentre(const AWhat: string;
   ASeries, AIndex: Integer; ALeaf: TJSONObject);
-var el: TTyChartElement;
+var
+  el: TTyChartElement;
+  bx: TTyRectF;
 begin
   { THE FRAME: the path's centre on the canvas against its global place --
     a live node's, or (none live) its ghost's }
@@ -527,11 +567,11 @@ begin
     Bad(AWhat + ': not drawn');
     Exit;
   end;
-  if not TyRectFIsValid(el.Shape.Bounds) then Exit;
-  NearNum(AWhat + ' drawn x', (el.Shape.Bounds.Left + el.Shape.Bounds.Right) / 2,
-    ALeaf.Find('wx'), 1e-6);
-  NearNum(AWhat + ' drawn y', (el.Shape.Bounds.Top + el.Shape.Bounds.Bottom) / 2,
-    ALeaf.Find('wy'), 1e-6);
+  { [fin] the shape's own extent (a circle has no Shape.Bounds) }
+  bx := TyShapeBounds(el.Shape);
+  if not TyRectFIsValid(bx) then Exit;
+  NearNum(AWhat + ' drawn x', (bx.Left + bx.Right) / 2, ALeaf.Find('wx'), 1e-6);
+  NearNum(AWhat + ' drawn y', (bx.Top + bx.Bottom) / 2, ALeaf.Find('wy'), 1e-6);
 end;
 
 procedure TAdvChartAnimUpdate3OracleTest.ProbeTree(ARec: TJSONObject);
@@ -914,10 +954,19 @@ begin
       RenderNow;
     end
     else if act = 'action' then
+    begin
       { NO PAINT: an action's render returns without a flush, and a state
         it changed is applied in the next frame (echarts' _onframe), after
         that frame's step -- the sample's tick, then its paint }
-      FChart.DispatchAction(ev.Objects['action'].AsJSON)
+      if FByMethod and (ev.Objects['action'].Get('type', '') = 'treeExpandAndCollapse') then
+      begin
+        FChart.TreeToggle(ev.Objects['action'].Get('seriesIndex', -1),
+          ev.Objects['action'].Integers['dataIndex']);
+        Inc(FToggles);
+      end
+      else
+        FChart.DispatchAction(ev.Objects['action'].AsJSON);
+    end
     else
       Bad('an event it does not know: ' + act);
   end;
@@ -977,6 +1026,17 @@ end;
 procedure TAdvChartAnimUpdate3OracleTest.TestAStatesGradientTweensAsUpstream;
 begin
   RunGroup('stateGrad', 300);
+end;
+
+{ [fin] TreeToggle -- the public method, and a node's click -- is the
+  action's full update too: the tree cases again, every
+  treeExpandAndCollapse through it }
+procedure TAdvChartAnimUpdate3OracleTest.TestATreeToggleIsTheAction;
+begin
+  FByMethod := True;
+  FToggles := 0;
+  RunGroup('tree', 2000);
+  AssertTrue('toggled through the method', FToggles >= 4);
 end;
 
 initialization
