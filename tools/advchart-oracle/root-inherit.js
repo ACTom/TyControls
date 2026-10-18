@@ -151,6 +151,11 @@ add('silent', 'sil-root-1', "the root's silent 1 is truthy (`!!`)",
 add('silent', 'sil-marker', "a markLine with the root's silent: true, on a series that says false",
   Object.assign({ animation: false, silent: true }, BAR, { series: [{ type: 'bar', silent: false, data: [3, 5],
     markLine: { data: [{ yAxis: 4 }] } }] }), ['silent']);
+// [fin] the same markLine with no silent anywhere: it answers the pointer (zrender's
+// strokeContainThreshold 5 round its 1 px stroke) -- the control the case above needs
+add('silent', 'sil-marker-loud', "the markLine of sil-marker with no silent anywhere: not silent, it answers the pointer",
+  Object.assign({ animation: false }, BAR, { series: [{ type: 'bar', data: [3, 5],
+    markLine: { data: [{ yAxis: 4 }] } }] }), ['silent']);
 
 // -- progressive --
 const progCase = (id, note, root, series) => add('prog', id, note,
@@ -279,6 +284,7 @@ function guards(recs) {
   check('sil-own-false: not silent', by('sil-own-false').seriesSilent === false);
   check('sil-own-null: silent', by('sil-own-null').seriesSilent === true);
   check('sil-marker: the marker silent through the root', by('sil-marker').markerSilent === true);
+  check('sil-marker-loud: the marker answers', by('sil-marker-loud').markerSilent === false);
   check("p-scatter: the root's progressive", num(by('p-scatter').prog[0].progressive) === 1000);
   check("p-line: the line's own 0", num(by('p-line').prog[0].progressive) === 0);
   check("p-line-null: a null climbs", num(by('p-line-null').prog[0].progressive) === 1000);

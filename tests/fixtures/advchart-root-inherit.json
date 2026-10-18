@@ -1428,6 +1428,61 @@
    }
   },
   {
+   "group": "silent",
+   "id": "sil-marker-loud",
+   "note": "the markLine of sil-marker with no silent anywhere: not silent, it answers the pointer",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5
+      ],
+      "markLine": {
+       "data": [
+        {
+         "yAxis": 4
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "seriesSilent": false,
+   "bar": {
+    "x": "4075de0000000000",
+    "y": "4074000000000000",
+    "width": "4063680000000000",
+    "height": "c06fe00000000000",
+    "text": "349.875,320,155.25,-255"
+   },
+   "markerSilent": false,
+   "markLine": {
+    "x1": "4056800000000000",
+    "y1": "405d000000000000",
+    "x2": "4080e00000000000",
+    "y2": "405d000000000000",
+    "text": "90,116,540,116"
+   }
+  },
+  {
    "group": "prog",
    "id": "p-scatter",
    "note": "a scatter has no progressive of its own: the root's 1000 and threshold 500",
@@ -1858,6 +1913,10 @@
   },
   {
    "name": "sil-marker: the marker silent through the root",
+   "ok": true
+  },
+  {
+   "name": "sil-marker-loud: the marker answers",
    "ok": true
   },
   {
