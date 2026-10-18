@@ -66316,5 +66316,86 @@
    ]
   }
  ],
- "guards": []
+ "guards": [
+  {
+   "name": "graph-move: the main group tweens",
+   "ok": true
+  },
+  {
+   "name": "graph-move: a kept edge tweens its shape",
+   "ok": true
+  },
+  {
+   "name": "graph-move: a new edge draws out",
+   "ok": true
+  },
+  {
+   "name": "graph-legend: a filtered node fades as a ghost",
+   "ok": true
+  },
+  {
+   "name": "graph-enter-update: useStyle strands the opacity tween",
+   "ok": true
+  },
+  {
+   "name": "graph-force: no line draws out",
+   "ok": true
+  },
+  {
+   "name": "graph-force: the paths still pop in",
+   "ok": true
+  },
+  {
+   "name": "graph-force: a toggle slides nothing",
+   "ok": true
+  },
+  {
+   "name": "tree-collapse: a removed node goes to the source + 1",
+   "ok": true
+  },
+  {
+   "name": "tree-collapse: an expanded child starts at its parent's old place",
+   "ok": true
+  },
+  {
+   "name": "tree-polyline: the TreePath shrinks to one child point",
+   "ok": true
+  },
+  {
+   "name": "tree-midway: a ghost and a new node share a row",
+   "ok": true
+  },
+  {
+   "name": "radial-enter: a label sits at its distance from a node of no scale",
+   "ok": true
+  },
+  {
+   "name": "radial-enter: the stroke margin comes with any scale",
+   "ok": true
+  },
+  {
+   "name": "pict-item-size: a row's [20, '100%'] reaches the glyph",
+   "ok": true
+  },
+  {
+   "name": "pict-item-size: a one-number array draws nothing repeated",
+   "ok": true
+  },
+  {
+   "name": "state-gradient: gradient to gradient tweens",
+   "ok": true
+  },
+  {
+   "name": "state-gradient: a colour to a gradient is at once",
+   "ok": true
+  },
+  {
+   "name": "state-gradient: liftColor lifts every stop",
+   "ok": true
+  },
+  {
+   "name": "select-gradient: a radial gradient tweens its radius",
+   "ok": true
+  }
+ ]
 }

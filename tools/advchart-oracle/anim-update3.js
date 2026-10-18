@@ -621,6 +621,72 @@ function runCase(c) {
 function guards(out) {
   const g = [];
   const guard = (name, ok) => g.push({ name, ok: !!ok });
+  const cs = id => out.cases.find(q => q.id === id);
+  // the record at the LAST sample at t ms after T0 (numbers decoded)
+  const rec = (id, t, key) => {
+    const smp = cs(id).events.filter(q => q.do === 'sample' && q.t === t).pop();
+    must(smp, id + ': no sample at ' + t);
+    return smp.rec[key];
+  };
+  const n = v => num(v);
+  // graph
+  guard('graph-move: the main group tweens', rec('graph-move', T1 + 100, 'g0/view').n === 1
+    && n(rec('graph-move', T1 + 100, 'g0/view').x) !== n(rec('graph-move', T1 - 1, 'g0/view').x));
+  guard('graph-move: a kept edge tweens its shape', rec('graph-move', T1 + 100, 'g0/edge0').n === 1
+    && n(rec('graph-move', T1 + 100, 'g0/edge0').x2) !== n(rec('graph-move', T1 - 1, 'g0/edge0').x2));
+  guard('graph-move: a new edge draws out', n(rec('graph-move', T1, 'g0/edge5').percent) === 0);
+  guard('graph-legend: a filtered node fades as a ghost', rec('graph-legend', T1 + 100, 'g0/ghost1')
+    && n(rec('graph-legend', T1 + 100, 'g0/ghost1').op) > 0 && !rec('graph-legend', T1 + 200, 'g0/ghost1'));
+  guard('graph-enter-update: useStyle strands the opacity tween',
+    n(rec('graph-enter-update', 0, 'g0/node0').op) === 0 && n(rec('graph-enter-update', 151, 'g0/node0').op) === 1
+    && n(rec('graph-enter-update', 151, 'g0/node0').sx) < 6);
+  guard('graph-force: no line draws out', n(rec('graph-force', 0, 'g0/edge0').percent) === 1
+    && rec('graph-force', 0, 'g0/edge0').n === 0);
+  guard('graph-force: the paths still pop in', n(rec('graph-force', 0, 'g0/node0').sx) === 0
+    && rec('graph-force', 100, 'g0/node0').n > 0);
+  guard('graph-force: a toggle slides nothing', rec('graph-force', T1 + 100, 'g0/node0').n === 0);
+  // tree
+  guard('tree-collapse: a removed node goes to the source + 1', Math.abs(n(rec('tree-collapse', T1 + 999, 'tr0/ghost3').x)
+    - (n(rec('tree-collapse', T1 + 1500, 'tr0/node2').x) + 1)) < 0.1);
+  guard("tree-collapse: an expanded child starts at its parent's old place",
+    n(rec('tree-collapse', T1 + 2000, 'tr0/node3').x) === n(rec('tree-collapse', T1 + 1500, 'tr0/node2').x));
+  guard('tree-polyline: the TreePath shrinks to one child point', rec('tree-polyline', T1 + 500, 'tr0/edge6').n > 0
+    && n(rec('tree-polyline', T1 + 500, 'tr0/edge6').op) < 1);
+  guard('tree-midway: a ghost and a new node share a row', !!rec('tree-midway', T1 + 500, 'tr0/ghost3')
+    && !!rec('tree-midway', T1 + 500, 'tr0/node3'));
+  // radial
+  guard('radial-enter: a label sits at its distance from a node of no scale', (() => {
+    const l = rec('radial-enter', 0, 'tr0/label3');
+    const nd = rec('radial-enter', 0, 'tr0/node3');
+    const dx = n(l.m[4]) - n(nd.wx);
+    const dy = n(l.m[5]) - n(nd.wy);
+    return Math.abs(Math.sqrt(dx * dx + dy * dy) - 5) < 1e-9;
+  })());
+  guard('radial-enter: the stroke margin comes with any scale', (() => {
+    const l = rec('radial-enter', 1, 'tr0/label3');
+    const nd = rec('radial-enter', 1, 'tr0/node3');
+    const dx = n(l.m[4]) - n(nd.wx);
+    const dy = n(l.m[5]) - n(nd.wy);
+    return Math.sqrt(dx * dx + dy * dy) > 5.9;
+  })());
+  // pictorial
+  guard("pict-item-size: a row's [20, '100%'] reaches the glyph", n(rec('pict-item-size', 0, 'pict0:0/0').scaleX) === 20 / 400);
+  guard('pict-item-size: a one-number array draws nothing repeated', rec('pict-item-size', 0, 'pict0:2/count') === 0);
+  // states
+  guard('state-gradient: gradient to gradient tweens', (() => {
+    const f = rec('state-gradient', T1 + 1250, 'st0/1').fill;
+    return f && f.stops && f.stops.length === 3 && n(f.x2) > 0 && n(f.x2) < 1;
+  })());
+  guard('state-gradient: a colour to a gradient is at once', (() => {
+    const f = rec('state-gradient', T1, 'st0/0').fill;
+    return f && f.type === 'linear';
+  })());
+  guard('state-gradient: liftColor lifts every stop', rec('state-gradient', T1 + 2700, 'st1/1').fill.stops[0].color
+    !== rec('state-gradient', T1 + 2400, 'st1/1').fill.stops[0].color);
+  guard('select-gradient: a radial gradient tweens its radius', (() => {
+    const f = rec('select-gradient', T1 + 150, 'st0/2').fill;
+    return f && f.type === 'radial' && n(f.r) > 0.5 && n(f.r) < 0.9;
+  })());
   return g;
 }
 
