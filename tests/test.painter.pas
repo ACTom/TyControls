@@ -5,7 +5,7 @@ unit test.painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, Graphics, LCLType, LCLIntf, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Grid;
 
@@ -35,6 +35,7 @@ type
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
     procedure TestTextIsInkedAsWindowsInksIt;
+    procedure TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
     procedure TestDrawnTextEndsWhereItWasMeasured;
     procedure TestDrawGlyphAllKinds;
     procedure TestChevronLeftIsTheApexMirrorOfChevronRight;
@@ -262,6 +263,136 @@ end;
   at 1200), so a light-ink case going red where it was green is the renderer drifting from
   what Windows draws on that desktop -- light ink drawn from dark-on-light coverage did
   exactly that -- not an environment to be waved through. }
+{$IFDEF LCLWin32}
+type
+  TTestCanvasAccess = class(TCanvas);
+
+function TestSystemParametersInfo(uiAction, uiParam: LongWord; pvParam: Pointer;
+  fWinIni: LongWord): LongBool; stdcall; external 'user32' name 'SystemParametersInfoW';
+
+{ The desktop's own answer, asked here rather than of the renderer: ClearType is in effect. }
+function DesktopUsesClearType: Boolean;
+const
+  SPI_GETFONTSMOOTHING = $004A;
+  SPI_GETFONTSMOOTHINGTYPE = $200A;
+  FE_FONTSMOOTHINGCLEARTYPE = 2;
+var
+  smooth: LongBool;
+  kind: LongWord;
+begin
+  smooth := False;
+  kind := 0;
+  Result := TestSystemParametersInfo(SPI_GETFONTSMOOTHING, 0, @smooth, 0) and smooth
+    and TestSystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, @kind, 0)
+    and (kind = FE_FONTSMOOTHINGCLEARTYPE);
+end;
+{$ENDIF}
+
+{ ON AN OPAQUE SURFACE, WHAT WINDOWS DRAWS THERE (#90). Text averaged to grey keeps
+  ClearType's weight but not its sharpness: a stem ClearType lays on two subpixels comes out
+  as two grey pixels, and next to the system's own text in the same window it reads soft.
+  Where the surface under the run is opaque, the colour the text lands on is known, so the
+  three coverages go down channel by channel, as GDI lays them down itself. Compared pixel
+  by pixel with GDI drawing the same run with the same call on the same surface: black on
+  white and white on black, where GDI's blend and ours are the same arithmetic. First the
+  grey of the two is compared, so a run in the wrong place cannot pass for the wrong colour.
+  A desktop with ClearType off gets grey from both. }
+procedure TPainterTest.TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
+{$IFDEF LCLWin32}
+  procedure Compare(const AFont: string; ALightInk: Boolean);
+  const
+    CText = '节点 0 (L0) Illuminate Tabs 富输入 · TyControls';
+    W = 560;
+    H = 32;
+  var
+    ours, theirs: TBGRABitmap;
+    b: TBitmap;
+    r: TRect;
+    bg, ink, po, pt: TBGRAPixel;
+    x, y, greyWorst, worst, inked, chroma: Integer;
+    ourR, ourG, ourB, winR, winG, winB: Integer;
+    what: string;
+  begin
+    if ALightInk then
+    begin
+      bg := BGRABlack;
+      ink := BGRAWhite;
+    end
+    else
+    begin
+      bg := BGRAWhite;
+      ink := BGRABlack;
+    end;
+    ours := TBGRABitmap.Create(W, H, bg);
+    theirs := nil;
+    b := TBitmap.Create;
+    try
+      TyConfigureTextFont(ours, AFont, 9, 400, 96);
+      ours.TextOut(4, 4, CText, ink);
+      b.PixelFormat := pf24bit;
+      b.SetSize(W, H);
+      b.Canvas.Brush.Color := BGRAToColor(bg);
+      b.Canvas.FillRect(0, 0, W, H);
+      b.Canvas.Font.Name := AFont;
+      b.Canvas.Font.Height := -TyFontHeightPx(9, 96);
+      b.Canvas.Font.Quality := fqCleartypeNatural;
+      TTestCanvasAccess(b.Canvas).RequiredState([csHandleValid, csFontValid]);
+      SetBkMode(b.Canvas.Handle, TRANSPARENT);
+      SetTextColor(b.Canvas.Handle, BGRAToColor(ink));
+      r := Rect(4, 4, W, H);
+      b.Canvas.Changing;
+      LCLIntf.DrawText(b.Canvas.Handle, PChar(CText), Length(CText), r,
+        DT_SINGLELINE or DT_NOCLIP or DT_NOPREFIX);
+      b.Canvas.Changed;
+      theirs := TBGRABitmap.Create(b);
+      greyWorst := 0;
+      worst := 0;
+      inked := 0;
+      chroma := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+        begin
+          po := ours.GetPixel(x, y);
+          pt := theirs.GetPixel(x, y);
+          ourR := po.red;
+          ourG := po.green;
+          ourB := po.blue;
+          winR := pt.red;
+          winG := pt.green;
+          winB := pt.blue;
+          if (winR <> bg.red) or (winG <> bg.green) or (winB <> bg.blue) then Inc(inked);
+          greyWorst := Max(greyWorst, Abs((ourR + ourG + ourB) div 3 - (winR + winG + winB) div 3));
+          worst := Max(worst, Max(Abs(ourR - winR), Max(Abs(ourG - winG), Abs(ourB - winB))));
+          chroma := Max(chroma, Max(ourR, Max(ourG, ourB)) - Min(ourR, Min(ourG, ourB)));
+        end;
+      what := Format('%s, %s ink: worst grey difference %d, worst channel difference %d,'
+        + ' ours most coloured %d, %d pixels inked by Windows', [AFont,
+        BoolToStr(ALightInk, 'light', 'dark'), greyWorst, worst, chroma, inked]);
+      AssertTrue('precondition: Windows drew the run -- ' + what, inked > 200);
+      AssertTrue('the run lies where Windows lays it, as heavy -- ' + what, greyWorst <= 2);
+      if DesktopUsesClearType then
+        AssertTrue('channel by channel what Windows draws there -- ' + what, worst <= 2)
+      else
+        AssertEquals('ClearType is off: grey, as Windows draws it -- ' + what, 0, chroma);
+    finally
+      theirs.Free;
+      b.Free;
+      ours.Free;
+    end;
+  end;
+
+begin
+  Compare('Microsoft YaHei UI', False);
+  Compare('Segoe UI', False);
+  Compare('Microsoft YaHei UI', True);
+  Compare('Segoe UI', True);
+end;
+{$ELSE}
+begin
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+end;
+{$ENDIF}
+
 procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
 
   { Coverage of every pixel: 0 = paper, 1 = ink. }

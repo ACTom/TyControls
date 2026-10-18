@@ -1360,7 +1360,7 @@ begin
     that runs the OS font-substitution cascade a Latin UI font (macOS San Francisco) needs to
     fill CJK glyphs.
 
-    Win32: fqSystem, which TTyGdiTextRenderer turns into ClearType's shapes laid down in grey
+    Win32: fqSystem, which TTyGdiTextRenderer turns into ClearType as Windows lays it down
     -- see there. Rotated text is the one thing that renderer hands back to BGRA. }
   {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLCocoa)}
   Result := fqSystemClearType;
@@ -1391,16 +1391,22 @@ type
     What Windows draws is the third one's SHAPES -- hinted vertically only, so horizontal
     strokes are crisp and the glyph keeps its form -- at the weight ClearType gives them. This
     renderer draws exactly that: GDI renders the run in ClearType in the ink's polarity --
-    dark ink black on white, light ink white on black -- the three subpixel coverages are
-    averaged into one grey, and that grey is laid down in the ink colour with the same
-    non-gamma blend GDI uses. The polarity is not a nicety: Windows weights the two
+    dark ink black on white, light ink white on black -- and the three subpixel coverages are
+    laid down in the ink colour with the same non-gamma blend GDI uses: channel by channel
+    where the surface under the pixel is opaque, as GDI lays them on a window; averaged into
+    one grey where it is not, since there the colour the text ends up on is not known yet
+    and a coloured edge would land on whatever shows through. (Every pixel was grey until
+    #90: weight right, sharpness not -- a stem ClearType puts on two subpixels came out as
+    two grey pixels, soft next to the system's own text.) A desktop with ClearType off gets
+    grey everywhere, as its own text is. The polarity is not a nicety: Windows weights the two
     differently under the user's ClearType contrast. At the default (1400) they cover within
     half a percent of each other; at 1200 a white-on-black line of 9pt Segoe UI inks 12% more
     than the black-on-white one, and light text drawn from the dark-on-light coverage came out
     a tenth lighter than the text Windows drew beside it.
     Measured on a line of 9pt YaHei: the ink it lays down is the ink native ClearType lays
     down (1403 against 1404 at 100%, 3697 against 3697 at 175%), and so is the share of solid
-    pixels; there is no colour, so a transparent surface or an accent button is safe.
+    pixels; on an opaque surface black on white and white on black, every channel of every
+    pixel is the one GDI draws there.
 
     Layout is GDI's own, and it is the layout the measuring side reports: the run is drawn by
     the very DrawText call BGRA measures it with (DT_CALCRECT dropped), on the same font in the
@@ -1475,6 +1481,27 @@ const
   GdiKeptMaxWidth = 8192;
 
 function TyGdiFlush: LongBool; stdcall; external 'gdi32' name 'GdiFlush';
+function TySystemParametersInfo(uiAction, uiParam: LongWord; pvParam: Pointer;
+  fWinIni: LongWord): LongBool; stdcall; external 'user32' name 'SystemParametersInfoW';
+
+{ Whether the desktop draws its own text in ClearType: font smoothing on, and of that type.
+  Asked per run -- a user32 read of a setting the user can change at any time, which LCL does
+  not pass on (it swallows WM_SETTINGCHANGE). }
+function TyDesktopClearType: Boolean;
+const
+  SPI_GETFONTSMOOTHING = $004A;
+  SPI_GETFONTSMOOTHINGTYPE = $200A;
+  FE_FONTSMOOTHINGCLEARTYPE = 2;
+var
+  smooth: LongBool;
+  kind: LongWord;
+begin
+  smooth := False;
+  kind := 0;
+  Result := TySystemParametersInfo(SPI_GETFONTSMOOTHING, 0, @smooth, 0) and smooth
+    and TySystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, @kind, 0)
+    and (kind = FE_FONTSMOOTHINGCLEARTYPE);
+end;
 
 function TTyGdiTextRenderer.RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
 begin
@@ -1512,8 +1539,9 @@ begin
 end;
 
 type
-  { A straight run's coverage, 0..255 per pixel of its w x h box, already turned the way
-    the ink reads it (see InternalTextOutAngle). }
+  { A straight run's coverage, 0..255 three times per pixel of its w x h box -- the red,
+    green and blue subpixels, in that order -- already turned the way the ink reads it (see
+    InternalTextOutAngle). }
   TTyRunInk = class
     W, H: Integer;
     Cov: array of Byte;
@@ -1815,14 +1843,16 @@ procedure TTyGdiTextRenderer.InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y
 var
   sz: TSize;
   ofsX: Single;
-  ox, oy, mx, my, w, h, px, py, dy, cov, a: Integer;
+  ox, oy, mx, my, w, h, px, py, dx, dy, cov, a: Integer;
+  cr, cg, cb, ir, ig, ib, v: Integer;
   flags: Cardinal;
   r: TRect;
   tmp: TBitmap;
   shot: TBGRABitmap;
   row: PBGRAPixel;
   ink: TBGRAPixel;
-  kept, lightInk, cache: Boolean;
+  kept, lightInk, cache, clearType, wrote: Boolean;
+  dline, d: PBGRAPixel;
   ds: TDIBSection;
   bits, line, pc: PByte;
   stride, bpp, nw, nh: Integer;
@@ -1881,7 +1911,7 @@ begin
     run := TTyRunInk.Create;
     run.W := w;
     run.H := h;
-    SetLength(run.Cov, w * h);
+    SetLength(run.Cov, w * h * 3);
     { The kept bitmap (GShot) grows in the direction a run needs more room and stays within
       GdiKeptMaxPixels / GdiKeptMaxWidth (it gives up height only to make room for width
       under that cap, never otherwise); only the w x h the run uses is
@@ -1998,13 +2028,29 @@ begin
         end;
         for px := 0 to w - 1 do
         begin
+          { a DIB row is blue, green, red }
           if line <> nil then
-            cov := (line[px * bpp] + line[px * bpp + 1] + line[px * bpp + 2]) div 3
+          begin
+            cb := line[px * bpp];
+            cg := line[px * bpp + 1];
+            cr := line[px * bpp + 2];
+          end
           else
-            cov := (row[px].red + row[px].green + row[px].blue) div 3;
-          if not lightInk then cov := 255 - cov;
-          pc^ := cov;
-          Inc(pc);
+          begin
+            cr := row[px].red;
+            cg := row[px].green;
+            cb := row[px].blue;
+          end;
+          if not lightInk then
+          begin
+            cr := 255 - cr;
+            cg := 255 - cg;
+            cb := 255 - cb;
+          end;
+          pc[0] := cr;
+          pc[1] := cg;
+          pc[2] := cb;
+          Inc(pc, 3);
         end;
       end;
     finally
@@ -2012,29 +2058,59 @@ begin
       if not kept then
         tmp.Free;
     end;
-    if cache then KeepRun(key, run, w * h);
+    if cache then KeepRun(key, run, w * h * 3);
   end;
   try
     ink := c;
+    ir := c.red;   { Integer copies: (byte - byte) of a field goes negative here }
+    ig := c.green;
+    ib := c.blue;
+    clearType := TyDesktopClearType;
+    wrote := False;
     for py := 0 to h - 1 do
     begin
       dy := oy - my + py;
       if (dy < ADest.ClipRect.Top) or (dy >= ADest.ClipRect.Bottom) then Continue;
-      pc := PByte(run.Cov) + py * w;
+      pc := PByte(run.Cov) + py * w * 3;
+      dline := nil;
       for px := 0 to w - 1 do
       begin
-        cov := pc[px];
+        cr := pc[px * 3];
+        cg := pc[px * 3 + 1];
+        cb := pc[px * 3 + 2];
+        if (cr = 0) and (cg = 0) and (cb = 0) then Continue;
+        dx := ox - mx + px;
+        { An opaque surface: each coverage on its own channel, as GDI lays it on a window. }
+        if clearType and (dx >= ADest.ClipRect.Left) and (dx < ADest.ClipRect.Right) then
+        begin
+          if dline = nil then dline := ADest.ScanLine[dy];
+          d := dline + dx;
+          if d^.alpha = 255 then
+          begin
+            v := d^.red;
+            d^.red := v + (ir - v) * (cr * c.alpha div 255) div 255;
+            v := d^.green;
+            d^.green := v + (ig - v) * (cg * c.alpha div 255) div 255;
+            v := d^.blue;
+            d^.blue := v + (ib - v) * (cb * c.alpha div 255) div 255;
+            wrote := True;
+            Continue;
+          end;
+        end;
+        cov := (cr + cg + cb) div 3;
         if cov > 0 then
         begin
           a := cov * c.alpha div 255;
           if a > 0 then
           begin
             ink.alpha := a;
-            ADest.FastBlendPixel(ox - mx + px, dy, ink);   // clipped against ClipRect there
+            ADest.FastBlendPixel(dx, dy, ink);   // clipped against ClipRect there
           end;
         end;
       end;
     end;
+    if wrote then
+      ADest.InvalidateBitmap;   // written through ScanLine, as FastBlendPixel does after its own
   finally
     if not cache then run.Free;
   end;
