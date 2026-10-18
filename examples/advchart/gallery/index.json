@@ -1,7 +1,7 @@
 {
  "source": "apache/echarts-examples",
  "total": 273,
- "converted": 244,
+ "converted": 253,
  "entries": [
   {
    "id": "area-basic",
@@ -321,11 +321,24 @@
    "titleCN": "直方图（自定义系列）",
    "category": "custom",
    "difficulty": 0,
-   "ok": false,
-   "reason": "ecStat is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "registersTransforms": [
+    "ecStat:histogram"
+   ],
+   "bytes": 2664
   },
   {
    "id": "bar-label-rotation",
@@ -3217,11 +3230,40 @@
    "titleCN": "地图柱状图变形动画",
    "category": "map, animation",
    "difficulty": 0,
-   "ok": false,
-   "reason": "the file defines no option object",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "map"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 5384,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": 1,
+    "steps": [
+     {
+      "file": "map-bar-morph.json"
+     },
+     {
+      "file": "map-bar-morph.2.json",
+      "opts": {
+       "notMerge": true
+      }
+     },
+     {
+      "file": "map-bar-morph.json",
+      "opts": {
+       "notMerge": true
+      }
+     }
+    ]
+   }
   },
   {
    "id": "map-iceland-pie",
@@ -3652,6 +3694,7 @@
    "ok": true,
    "reason": "",
    "seriesTypes": [
+    "bar",
     "pictorialBar"
    ],
    "components": [
@@ -3662,8 +3705,23 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 2,
-   "bytes": 23095
+   "callbacks": 6,
+   "bytes": 48229,
+   "sequence": {
+    "interval": 2500,
+    "loopTo": 0,
+    "steps": [
+     {
+      "file": "pictorialBar-bar-transition.json"
+     },
+     {
+      "file": "pictorialBar-bar-transition.2.json"
+     },
+     {
+      "file": "pictorialBar-bar-transition.3.json"
+     }
+    ]
+   }
   },
   {
    "id": "pictorialBar-body-fill",
@@ -3979,11 +4037,24 @@
    "ok": true,
    "reason": "",
    "seriesTypes": [
+    "custom",
     "pie"
    ],
    "components": [],
-   "callbacks": 0,
-   "bytes": 529
+   "callbacks": 1,
+   "bytes": 971,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": 0,
+    "steps": [
+     {
+      "file": "pie-parliament-transition.json"
+     },
+     {
+      "file": "pie-parliament-transition.2.json"
+     }
+    ]
+   }
   },
   {
    "id": "pie-pattern",
@@ -4348,14 +4419,36 @@
    "ok": true,
    "reason": "",
    "seriesTypes": [
+    "bar",
     "scatter"
    ],
    "components": [
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 2,
-   "bytes": 17770
+   "callbacks": 3,
+   "bytes": 18189,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": 1,
+    "steps": [
+     {
+      "file": "scatter-aggregate-bar.json"
+     },
+     {
+      "file": "scatter-aggregate-bar.2.json",
+      "opts": {
+       "notMerge": true
+      }
+     },
+     {
+      "file": "scatter-aggregate-bar.json",
+      "opts": {
+       "notMerge": true
+      }
+     }
+    ]
+   }
   },
   {
    "id": "scatter-anscombe-quartet",
@@ -4406,11 +4499,24 @@
    "titleCN": "数据聚合",
    "category": "scatter",
    "difficulty": 1,
-   "ok": false,
-   "reason": "ecStat is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "registersTransforms": [
+    "ecStat:clustering"
+   ],
+   "bytes": 3677
   },
   {
    "id": "scatter-effect",
@@ -4437,11 +4543,24 @@
    "titleCN": "指数回归（使用统计插件）",
    "category": "scatter",
    "difficulty": 1,
-   "ok": false,
-   "reason": "ecStat is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "registersTransforms": [
+    "ecStat:regression"
+   ],
+   "bytes": 1588
   },
   {
    "id": "scatter-jitter",
@@ -4530,11 +4649,25 @@
    "titleCN": "线性回归（使用统计插件）",
    "category": "scatter",
    "difficulty": 2,
-   "ok": false,
-   "reason": "ecStat is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "registersTransforms": [
+    "ecStat:regression"
+   ],
+   "bytes": 9236
   },
   {
    "id": "scatter-logarithmic-regression",
@@ -4542,11 +4675,26 @@
    "titleCN": "对数回归（使用统计插件）",
    "category": "scatter",
    "difficulty": 16,
-   "ok": false,
-   "reason": "ecStat is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "visualMap",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "registersTransforms": [
+    "ecStat:regression"
+   ],
+   "bytes": 4496
   },
   {
    "id": "scatter-map-brush",
@@ -4605,10 +4753,22 @@
    "category": "scatter",
    "difficulty": 5,
    "ok": false,
-   "reason": "the file defines no option object",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "reason": "converted, but 63.8 MB is too large to bundle",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 66906517,
+   "tooBig": true
   },
   {
    "id": "scatter-nutrients-matrix",
@@ -4681,11 +4841,24 @@
    "titleCN": "多项式回归（使用统计插件）",
    "category": "scatter",
    "difficulty": 2,
-   "ok": false,
-   "reason": "ecStat is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "registersTransforms": [
+    "ecStat:regression"
+   ],
+   "bytes": 1666
   },
   {
    "id": "scatter-punchCard",
@@ -4752,11 +4925,20 @@
    "titleCN": "流式渲染和视觉映射操作",
    "category": "scatter",
    "difficulty": 5,
-   "ok": false,
-   "reason": "the file defines no option object",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 586505
   },
   {
    "id": "scatter-symbol-morph",
@@ -4775,7 +4957,46 @@
     "yAxis"
    ],
    "callbacks": 0,
-   "bytes": 4202
+   "bytes": 8604,
+   "sequence": {
+    "interval": 700,
+    "loopTo": 0,
+    "steps": [
+     {
+      "file": "scatter-symbol-morph.json"
+     },
+     {
+      "file": "scatter-symbol-morph.2.json"
+     },
+     {
+      "file": "scatter-symbol-morph.3.json"
+     },
+     {
+      "file": "scatter-symbol-morph.4.json"
+     },
+     {
+      "file": "scatter-symbol-morph.5.json"
+     },
+     {
+      "file": "scatter-symbol-morph.6.json"
+     },
+     {
+      "file": "scatter-symbol-morph.7.json"
+     },
+     {
+      "file": "scatter-symbol-morph.8.json"
+     },
+     {
+      "file": "scatter-symbol-morph.9.json"
+     },
+     {
+      "file": "scatter-symbol-morph.10.json"
+     },
+     {
+      "file": "scatter-symbol-morph.11.json"
+     }
+    ]
+   }
   },
   {
    "id": "scatter-weibo",
@@ -5166,11 +5387,27 @@
    "titleCN": "矩形树图和旭日图的动画过渡",
    "category": "treemap",
    "difficulty": 4,
-   "ok": false,
-   "reason": "the file defines no option object",
-   "seriesTypes": [],
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst",
+    "treemap"
+   ],
    "components": [],
-   "callbacks": 0
+   "callbacks": 0,
+   "bytes": 164879,
+   "sequence": {
+    "interval": 3000,
+    "loopTo": 0,
+    "steps": [
+     {
+      "file": "treemap-sunburst-transition.json"
+     },
+     {
+      "file": "treemap-sunburst-transition.2.json"
+     }
+    ]
+   }
   },
   {
    "id": "treemap-visual",

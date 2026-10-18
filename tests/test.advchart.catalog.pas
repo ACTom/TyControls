@@ -831,7 +831,7 @@ const
     tree is one entry. Every one of these is a key ECharts 6.1 does not read
     where it is written (or a root key the port does not yet pass down, the
     F4 item), so saying nothing would be the lie. }
-  cKnown: array[0..25] of string = (
+  cKnown: array[0..30] of string = (
     'toolbox.feature.mark',            // no such feature since ECharts 3
     'calculable',                      // ECharts 2
     'bmap',                            // the Baidu-map extension, not core
@@ -852,17 +852,23 @@ const
     'series[].data[].discretion',
     'series[].categories[].keyword',   // graph: the webkit dump's own fields,
     'series[].categories[].base',      // read by nothing upstream
-    'silent', 'progressive');          // root: F4, the model's parent chain
+    'silent', 'progressive',           // root: F4, the model's parent chain
+    { [T1] echarts-package-size.json's own field (treemap-sunburst-transition):
+      treemap and sunburst read `value` }
+    'series[].data[].size', 'series[].data[].children[].size',
+    { [T1] pictorialBar-bar-transition writes its pictorialBar keys on the bar
+      step too; a bar reads none of them }
+    'series[].symbolRepeat', 'series[].symbolSize', 'series[].data[].symbol');
 var
   dir, id, text, p, q, bad: string;
   inBr: Boolean;
   root: TJSONData;
-  arr: TJSONArray;
-  i, j, k: Integer;
+  arr, steps: TJSONArray;
+  i, j, k, f: Integer;
   opt: TTyChartOption;
   issues: TTyOptIssueArray;
   known: TStringList;
-  sl: TStringList;
+  sl, files: TStringList;
 begin
   { [F1b] Before: 125 of 244 gallery charts were told some option was not one
     ECharts knows -- 2,332 rows shown and some 22,000 more cut off -- and 13
@@ -873,6 +879,7 @@ begin
   AssertTrue('the gallery is there', FileExists(dir + 'index.json'));
   known := TStringList.Create;
   sl := TStringList.Create;
+  files := TStringList.Create;
   opt := TTyChartOption.Create;
   root := GetJSON(ReadLF(dir + 'index.json'));
   try
@@ -882,8 +889,24 @@ begin
     for i := 0 to arr.Count - 1 do
     begin
       if not TJSONObject(arr.Items[i]).Get('ok', False) then Continue;
-      id := TJSONObject(arr.Items[i]).Get('id', '');
-      sl.LoadFromFile(dir + id + '.json');
+      { [T1] and every step of a setOption sequence: the demo shows each of
+        them, with these same notes under it }
+      files.Clear;
+      files.Add(TJSONObject(arr.Items[i]).Get('id', '') + '.json');
+      if (TJSONObject(arr.Items[i]).Find('sequence') is TJSONObject)
+        and (TJSONObject(TJSONObject(arr.Items[i]).Find('sequence')).Find('steps')
+          is TJSONArray) then
+      begin
+        steps := TJSONArray(TJSONObject(TJSONObject(arr.Items[i]).Find('sequence'))
+          .Find('steps'));
+        for j := 0 to steps.Count - 1 do
+          if files.IndexOf(TJSONObject(steps.Items[j]).Get('file', '')) < 0 then
+            files.Add(TJSONObject(steps.Items[j]).Get('file', ''));
+      end;
+      for f := 0 to files.Count - 1 do
+      begin
+      id := ChangeFileExt(files[f], '');
+      sl.LoadFromFile(dir + files[f]);
       text := sl.Text;
       AssertTrue(id + ' parses', opt.SetOptionText(text));
       issues := TyOptValidate(opt);
@@ -912,11 +935,13 @@ begin
           if Pos(id + ': ' + p + ';', bad) = 0 then
             bad := bad + id + ': ' + p + '; ';
       end;
+      end;
     end;
     AssertEquals('gallery complaints nobody has judged', '', bad);
   finally
     root.Free;
     opt.Free;
+    files.Free;
     sl.Free;
     known.Free;
   end;
