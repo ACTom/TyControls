@@ -50,7 +50,12 @@ type
   end;
 
   TAdvChartDataZoomInteractOracleTest = class(TTestCase)
-  private
+  { [F5] protected: the keyboard's replay drives this harness }
+  protected
+    { [F5] a step the keyboard made: what only a pointer leaves behind (the
+      stop, the hover, the cursor, the drag, the labels it shows, the hovered
+      handles) is not compared }
+    FKbStep: Boolean;
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TDziProbe;
@@ -282,14 +287,14 @@ begin
       end;
     end;
   { stopped }
-  if (typ = 'mousemove') or (typ = 'mousewheel') then
+  if not FKbStep and ((typ = 'mousemove') or (typ = 'mousewheel')) then
   begin
     Inc(FCompared);
     if AStep.Booleans['prevented'] <> APrevented then
       Miss(Format('%s stopped %s upstream', [typ, BoolToStr(AStep.Booleans['prevented'], True)]));
   end;
   { what the pointer is over, and the cursor it leaves }
-  if typ = 'mousemove' then
+  if not FKbStep and (typ = 'mousemove') then
   begin
     d := AStep.Find('hover');
     if (d = nil) or (d.JSONType = jtNull) then want := ''
@@ -363,6 +368,7 @@ begin
         Num(Format('dz%d range %d', [idx, j]), st.Range[j], dz.Arrays['range'].Items[j]);
         Num(Format('dz%d laid-out end %d', [idx, j]), L.HandleEnds[j], dz.Arrays['handleEnds'].Items[j]);
       end;
+      if FKbStep then Continue;
       Inc(FCompared);
       if st.Dragging <> dz.Booleans['dragging'] then
         Miss(Format('dz%d dragging %s upstream', [idx, BoolToStr(dz.Booleans['dragging'], True)]));

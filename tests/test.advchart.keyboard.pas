@@ -476,6 +476,8 @@ begin
         builtFromFacts := Pos('This is a chart', want) = 1;
         ser := TyAccChildren(root);
         if not builtFromFacts then Continue;
+        { [F5] the series lists come first; the components' nodes after them }
+        SetLength(ser, chart.AccessibleSeriesCount);
         at := 0;
         for k := 0 to High(ser) do
         begin
@@ -1072,7 +1074,10 @@ begin
     + '"series":[{"type":"bar","name":"A","data":[1,2]},{"type":"bar","name":"B","data":[2,1]}]}');
   FChart.AccessibleSync;
   AssertEquals('the title', 'Sales', root.AccessibleName);
-  AssertEquals(2, root.GetChildAccessibleObjectsCount);
+  { [F5] two series lists, then the legend's group }
+  AssertEquals(3, root.GetChildAccessibleObjectsCount);
+  AssertEquals('two of them are series', 2, FChart.AccessibleSeriesCount);
+  AssertEquals('the legend', Ord(larGroup), Ord(TyAccChildren(root)[2].AccessibleRole));
   items := TyAccChildren(TyAccChildren(root)[1]);
   FChart.AccessibleSync;
   AssertTrue('the same objects without a new layout',
@@ -1080,7 +1085,8 @@ begin
   AssertTrue(FChart.DispatchAction('{"type":"legendToggleSelect","name":"A"}'));
   Frame;
   FChart.AccessibleSync;
-  AssertEquals('the legend hid one', 1, root.GetChildAccessibleObjectsCount);
+  AssertEquals('the legend hid one', 2, root.GetChildAccessibleObjectsCount);
+  AssertEquals(1, FChart.AccessibleSeriesCount);
   AssertEquals('The 1 series is a Bar chart representing B.', TyAccChildren(root)[0].AccessibleName);
   { an empty chart: the word, no description, no children }
   Load('{"series":[]}');

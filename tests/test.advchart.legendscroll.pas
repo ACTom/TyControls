@@ -54,7 +54,9 @@ type
   end;
 
   TAdvChartLegendScrollTest = class(TTestCase)
-  private
+  { [F5] protected: the keyboard's replay (test.advchart.compkeys) drives
+    this harness }
+  protected
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TLsProbe;

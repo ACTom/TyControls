@@ -70,7 +70,8 @@ type
   end;
 
   TAdvChartVisualMapInteractOracleTest = class(TTestCase)
-  private
+  { [F5] protected: the keyboard's replay drives this harness }
+  protected
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TVmiProbe;
