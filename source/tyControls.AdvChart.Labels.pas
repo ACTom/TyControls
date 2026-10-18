@@ -248,6 +248,12 @@ procedure TyLabelAnchor(const AHost: TTyRectF; APosition: TTyLabelPosition;
 procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
   ADistancePx, AAtX, AAtY: Double;
   out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+{ [F3d] A LABEL HUNG ON A BOX AND TURNED ABOUT THE BOX'S CENTRE (zrender's
+  updateInnerText with a text config's rotation and 'center' origin, the
+  radial tree's): the anchor the position puts on ABox at ADist, carried by
+  getLocalTransform's turn about the centre }
+procedure TyLabelTurnedAnchor(const ABox: TTyXYWH; APosition: TTyLabelPosition;
+  ADist, ARot: Double; out AX, AY: Double);
 
 { Whether a position puts the caption over its host. Upstream decides this by
   asking whether the position's NAME contains "inside" -- a substring test on a
@@ -361,7 +367,8 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 implementation
 
 uses tyControls.AdvChart.Style, tyControls.AdvChart.RichStyle,
-  tyControls.AdvChart.LabelLayout, tyControls.AdvChart.Color;
+  tyControls.AdvChart.LabelLayout, tyControls.AdvChart.Color,
+  tyControls.AdvChart.JsMath;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
@@ -473,6 +480,40 @@ begin
   r.W := TyRectFWidth(AHost);
   r.H := TyRectFHeight(AHost);
   TyLabelAnchorXYWH(r, APosition, ADistancePx, AAtX, AAtY, AX, AY, AH, AV);
+end;
+
+procedure TyLabelTurnedAnchor(const ABox: TTyXYWH; APosition: TTyLabelPosition;
+  ADist, ARot: Double; out AX, AY: Double);
+var
+  x, y, ox, oy, m4, m5, st, ct, atx, aty: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  TyLabelAnchorXYWH(ABox, APosition, ADist, 0, 0, x, y, ah, av);
+  { getLocalTransform with an origin at the box's centre }
+  ox := ABox.X + ABox.W / 2 - x;
+  oy := ABox.Y + ABox.H / 2 - y;
+  if (ox <> 0) or (oy <> 0) then
+  begin
+    m4 := -ox;
+    m5 := -oy;
+  end
+  else
+  begin
+    m4 := 0;
+    m5 := 0;
+  end;
+  if ARot <> 0 then
+  begin
+    st := TyJsSin(ARot);
+    ct := TyJsCos(ARot);
+    atx := m4;
+    aty := m5;
+    m4 := ct * atx + st * aty;
+    m5 := ct * aty - st * atx;
+  end;
+  AX := m4 + (ox + x);
+  AY := m5 + (oy + y);
 end;
 
 procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
@@ -1181,6 +1222,12 @@ begin
     cap.Anim.Role := carLabel;
     cap.Anim.Series := host.Datum.SeriesIndex;
     cap.Anim.Index := host.Datum.DataIndex;
+    { [F3d] the host's roam group: the label is carried with it }
+    cap.Anim.InView := host.Anim.InView;
+    cap.Anim.VSX := host.Anim.VSX;
+    cap.Anim.VSY := host.Anim.VSY;
+    cap.Anim.VX := host.Anim.VX;
+    cap.Anim.VY := host.Anim.VY;
     { A LINES ROW'S LABEL rides its line's percent (Line.beforeUpdate): the
       line's geometry and placing with it [Batch 121] }
     if host.Anim.Role = carLinesLine then

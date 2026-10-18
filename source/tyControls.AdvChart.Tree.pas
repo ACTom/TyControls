@@ -104,6 +104,9 @@ type
       is (VZ*x + 0*y) + VMX, zrender's matrix order. [Batch 82] }
     HasView: Boolean;
     VZ, VMX, VMY, VNS: Double;
+    { [F3d] the view group's own translation (VMX less the main group's
+      origin through the zoom) }
+    VTX, VTY: Double;
   end;
 
   { Everything a THEME answers. }
@@ -398,6 +401,8 @@ begin
   ASolved.HasView := True;
   ASolved.VZ := AZ;
   ASolved.VNS := ANodeScale;
+  ASolved.VTX := ATX;
+  ASolved.VTY := ATY;
   { the main group under the view: mul(outer, mainLocal) }
   ASolved.VMX := (AZ * ASolved.GX + 0 * ASolved.GY) + ATX;
   ASolved.VMY := (0 * ASolved.GX + AZ * ASolved.GY) + ATY;
@@ -1148,7 +1153,7 @@ procedure RadialLabel(const ASolved: TTyTreeSolved; ARow: Integer;
 var
   root, t: TTyTreePos;
   kids: TTyIntegerArray;
-  cx, cy, rad, rot, x, y, ox, oy, m4, m5, st, ct, atx, aty, d: Double;
+  cx, cy, rad, rot, x, y, m4, m5, d: Double;
   isLeft: Boolean;
   pos: TTyLabelPosition;
   ah: TTyTextAnchorH;
@@ -1192,37 +1197,20 @@ begin
   dp := ChainFind(AChain, 'label', 'rotate');
   if (dp <> nil) and (dp.JSONType = jtNumber) then rot := ASpec.RotationRad
   else rot := -rad;
-  { the anchor on the box, as the position puts it }
+  { the anchor on the box, as the position puts it, turned about the box's
+    centre (TyLabelTurnedAnchor: getLocalTransform with an origin there) }
   box := ACaption.HostBox;
   d := ASpec.DistanceLogical * AScale;
   TyLabelAnchorXYWH(box, pos, d, 0, 0, x, y, ah, av);
-  { getLocalTransform with an origin at the box's centre }
-  ox := box.X + box.W / 2 - x;
-  oy := box.Y + box.H / 2 - y;
-  if (ox <> 0) or (oy <> 0) then
-  begin
-    m4 := -ox;
-    m5 := -oy;
-  end
-  else
-  begin
-    m4 := 0;
-    m5 := 0;
-  end;
-  if rot <> 0 then
-  begin
-    st := TyJsSin(rot);
-    ct := TyJsCos(rot);
-    atx := m4;
-    aty := m5;
-    m4 := ct * atx + st * aty;
-    m5 := ct * aty - st * atx;
-  end;
-  m4 := m4 + (ox + x);
-  m5 := m5 + (oy + y);
+  TyLabelTurnedAnchor(box, pos, d, rot, m4, m5);
   ACaption.HasFixedAnchor := True;
   ACaption.FixedX := m4;
   ACaption.FixedY := m5;
+  { [F3d] what placed it, for a frame to place it again on the box as the
+    path's scale draws it (zrender recomputes it every frame) }
+  ACaption.HasFixedPos := True;
+  ACaption.FixedPos := Ord(pos);
+  ACaption.FixedDist := d;
   ACaption.FixedInside := TyLabelIsInside(pos);
   { the author's align wins over the side's; the vertical is always middle }
   if ASpec.HasAlignH then ah := ASpec.AlignH;
@@ -1257,11 +1245,32 @@ var
   k: Integer;
   kids: TTyIntegerArray;
 
+  { [F3d] the view group's transform at rest: an update tweens it }
+  procedure TagView(var A: TTyChartAnim);
+  begin
+    A.InView := True;
+    if ASolved.HasView then
+    begin
+      A.VSX := ASolved.VZ;
+      A.VSY := ASolved.VZ;
+      A.VX := ASolved.VTX;
+      A.VY := ASolved.VTY;
+    end
+    else
+    begin
+      A.VSX := 1;
+      A.VSY := 1;
+      A.VX := 0;
+      A.VY := 0;
+    end;
+  end;
+
   { the main group's frame into an element's tag: G[8] 1 under a view,
     G[9] its zoom, G[10..11] the translation (the view's, else the main
     group's origin) }
   procedure TagFrame(var A: TTyChartAnim);
   begin
+    TagView(A);
     A.G[8] := Ord(ASolved.HasView);
     if ASolved.HasView then
     begin
@@ -1385,7 +1394,8 @@ begin
       el.Anim.G[6] := t.X;
       el.Anim.G[7] := t.Y;
       TagFrame(el.Anim);
-      SetLength(el.Anim.Vals, 2);
+      { [F3d] Vals[2] the parent's row, Vals[3] 1 when radial }
+      SetLength(el.Anim.Vals, 4);
       if ASolved.Spec.Radial then
       begin
         el.Anim.Vals[0] := 0;
@@ -1396,6 +1406,8 @@ begin
         el.Anim.Vals[0] := rootX;
         el.Anim.Vals[1] := rootY;
       end;
+      el.Anim.Vals[2] := par;
+      el.Anim.Vals[3] := Ord(ASolved.Spec.Radial);
       edgeTag := el.Anim;
       { to device px, each point once }
       s := TyPointF(MapX(ASolved, s.X, s.Y), MapY(ASolved, s.X, s.Y));
@@ -1502,6 +1514,15 @@ begin
       el.Style.StrokeWidthLogical,
       (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0),
       el.Style.HasFill);
+    { [F3d] what the box is made of, for a frame that scales the path }
+    el.Caption.FixedHalfW := sym.WidthPx / 2;
+    el.Caption.FixedInfl := 0;
+    if (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0) then
+    begin
+      el.Caption.FixedInfl := el.Style.StrokeWidthLogical;
+      if not el.Style.HasFill then el.Caption.FixedInfl := Max(el.Caption.FixedInfl, 5.0);
+      el.Caption.FixedInfl := el.Caption.FixedInfl / 2;
+    end;
     if zeroSize then el.Style.StrokeWidthLogical := 0;
     el.Z := ASolved.Spec.Z;
     el.Z2 := ASolved.Spec.Z2 + cTyTreeNodeZ2;
@@ -1540,6 +1561,12 @@ begin
     el.Caption.LgG[4] := sym.OffsetY;
     el.Caption.LgG[5] := ASolved.Pos[row].PX;
     el.Caption.LgG[6] := ASolved.Pos[row].PY;
+    { [F3d] the update's: G[11] 1 when radial (an edge from here reads the
+      place as radialCoordinate does, `|| 0`), Sub the parent's row (0: the
+      virtual root), the view group's transform }
+    el.Anim.G[11] := Ord(ASolved.Spec.Radial);
+    el.Anim.Sub := ASolved.Hier.Nodes[row].Parent;
+    TagView(el.Anim);
     { the caption REQUEST: the row's own spec, through the expansion's table }
     el.Caption.Text := '';
     if row <= High(AInk.ItemLabels) then spec := AInk.ItemLabels[row]

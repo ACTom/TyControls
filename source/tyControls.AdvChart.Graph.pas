@@ -6201,6 +6201,12 @@ var
     A.G[9] := fr.X;
     A.G[10] := fr.Y;
     A.G[11] := fr.InvScale;
+    { [F3d] on a view: the main group's transform at rest }
+    A.InView := AInk.HasFrame and AEdges[AAt].HasEnds;
+    A.VSX := fr.SX;
+    A.VSY := fr.SY;
+    A.VX := fr.X;
+    A.VY := fr.Y;
     { the label: [position, distance x, y, rotate, offset x, y] }
     SetLength(A.Vals, 6);
     A.Vals[0] := -1;
@@ -6518,6 +6524,19 @@ begin
     el.Caption.LgG[4] := sym.OffsetY;
     el.Caption.LgG[5] := ANodes[i].PX;
     el.Caption.LgG[6] := ANodes[i].PY;
+    { [F3d] ON A VIEW the Symbol group's place is the layout's, in the main
+      group -- what SymbolDraw's update tweens -- and the main group's
+      transform carries it to the canvas (its own tween over that) }
+    if AInk.HasFrame then
+    begin
+      el.Anim.G[5] := ANodes[i].X;
+      el.Anim.G[6] := ANodes[i].Y;
+      el.Anim.InView := True;
+      el.Anim.VSX := AInk.Frame.SX;
+      el.Anim.VSY := AInk.Frame.SY;
+      el.Anim.VX := AInk.Frame.X;
+      el.Anim.VY := AInk.Frame.Y;
+    end;
     { THE NODE'S OWN LABEL [F2a]: its spec in the item row after the edges';
       built hidden when only a state shows it }
     if i <= High(AInk.NodeLabels) then nspec := AInk.NodeLabels[i]

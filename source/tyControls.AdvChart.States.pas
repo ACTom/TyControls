@@ -65,6 +65,11 @@ type
     Lifted: array[TTyStKey] of Boolean;
     { an emphasis fill of 'inherit': the fill the lift would start from }
     FillInherit: Boolean;
+    { [F3d] A COLOUR THAT IS A GRADIENT: the object as written, JSON text
+      ('' for a plain colour). Color is then its first stop's, for a reader
+      that knows no gradient; Lifted with it is liftColor's gradient -- every
+      stop lifted (util/color.ts liftColor) }
+    GradJson: array[TTyStKey] of string;
   end;
 
   { ONE zrender ELEMENT: a bar, a slice, a symbol path, a polyline, a label,
@@ -157,6 +162,12 @@ function TyStNoObject: TTyStObject;
 procedure TyStSetNum(var AObj: TTyStObject; AKey: TTyStKey; AValue: Double);
 procedure TyStSetColor(var AObj: TTyStObject; AKey: TTyStKey; AColor: TTyChartColor);
 procedure TyStSetNone(var AObj: TTyStObject; AKey: TTyStKey);
+{ [F3d] a gradient object as the key's colour (JSON text, its first stop's
+  colour beside it) }
+procedure TyStSetGradient(var AObj: TTyStObject; AKey: TTyStKey; const AJson: string;
+  AFirst: TTyChartColor);
+{ [F3d] a gradient object: JSON with a `colorStops` that is not null }
+function TyStIsGradient(AData: TJSONData): Boolean;
 { ATop's keys over ABase's (zrender's extend of one state over another) }
 function TyStOverlay(const ABase, ATop: TTyStObject): TTyStObject;
 { hasFillOrStroke: set, and not 'none' }
@@ -323,6 +334,7 @@ begin
   AObj.None[AKey] := False;
   AObj.Lifted[AKey] := False;
   AObj.Color[AKey] := AColor;
+  AObj.GradJson[AKey] := '';
 end;
 
 procedure TyStSetNone(var AObj: TTyStObject; AKey: TTyStKey);
@@ -331,6 +343,23 @@ begin
   AObj.None[AKey] := True;
   AObj.Lifted[AKey] := False;
   AObj.Color[AKey] := 0;
+  AObj.GradJson[AKey] := '';
+end;
+
+procedure TyStSetGradient(var AObj: TTyStObject; AKey: TTyStKey; const AJson: string;
+  AFirst: TTyChartColor);
+begin
+  TyStSetColor(AObj, AKey, AFirst);
+  AObj.GradJson[AKey] := AJson;
+end;
+
+function TyStIsGradient(AData: TJSONData): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if (AData = nil) or (AData.JSONType <> jtObject) then Exit;
+  d := TJSONObject(AData).Find('colorStops');
+  Result := (d <> nil) and (d.JSONType <> jtNull);
 end;
 
 procedure CopyKey(var ADst: TTyStObject; const ASrc: TTyStObject; AKey: TTyStKey);
@@ -340,6 +369,7 @@ begin
   ADst.Color[AKey] := ASrc.Color[AKey];
   ADst.None[AKey] := ASrc.None[AKey];
   ADst.Lifted[AKey] := ASrc.Lifted[AKey];
+  ADst.GradJson[AKey] := ASrc.GradJson[AKey];
 end;
 
 function TyStOverlay(const ABase, ATop: TTyStObject): TTyStObject;
@@ -401,19 +431,23 @@ begin
       fillKey := AObj.FillInherit;
       if fillKey then
       begin
-        { 'inherit': the colour the lift would start from, as it is }
-        TyStSetColor(AObj, stkFill, fromFill.Color[stkFill]);
+        { 'inherit': the colour the lift would start from, as it is -- a
+          gradient too [F3d] }
+        TyStSetGradient(AObj, stkFill, fromFill.GradJson[stkFill], fromFill.Color[stkFill]);
         if not TyStHasColour(fromFill, stkFill) then TyStSetNone(AObj, stkFill);
         AObj.FillInherit := False;
       end
       else if not TyStHasColour(AObj, stkFill) and TyStHasColour(fromFill, stkFill) then
       begin
-        TyStSetColor(AObj, stkFill, TyChartLiftColor(fromFill.Color[stkFill]));
+        { liftColor: a gradient's every stop [F3d] }
+        TyStSetGradient(AObj, stkFill, fromFill.GradJson[stkFill],
+          TyChartLiftColor(fromFill.Color[stkFill]));
         AObj.Lifted[stkFill] := True;
       end
       else if not TyStHasColour(AObj, stkStroke) and TyStHasColour(fromStroke, stkStroke) then
       begin
-        TyStSetColor(AObj, stkStroke, TyChartLiftColor(fromStroke.Color[stkStroke]));
+        TyStSetGradient(AObj, stkStroke, fromStroke.GradJson[stkStroke],
+          TyChartLiftColor(fromStroke.Color[stkStroke]));
         AObj.Lifted[stkStroke] := True;
       end;
     end;
@@ -838,10 +872,25 @@ var
   s: string;
   has: Boolean;
   c: TTyChartColor;
+  d: TJSONData;
+  g: TTyChartGradient;
 begin
   if AState = '' then s := TyStReadString(ANodes, [ABlock, AName], has)
   else s := TyStReadString(ANodes, [AState, ABlock, AName], has);
   if not has then Exit;
+  { [F3d] A GRADIENT is a colour too: the state's style takes the object
+    as it is (setStatesStylesFromModel); its first stop stands for it where
+    a gradient is not drawn. [Was: read as no colour -- the state left the
+    fill alone, and an emphasis even lifted the rest colour instead.] }
+  if AState = '' then d := TyStFind(ANodes, [ABlock, AName])
+  else d := TyStFind(ANodes, [AState, ABlock, AName]);
+  if TyStIsGradient(d) then
+  begin
+    c := 0;
+    if TyTryReadGradient(d, g) and (Length(g.Stops) > 0) then c := g.Stops[0].Color;
+    TyStSetGradient(AObj, AKey, d.AsJSON, c);
+    Exit;
+  end;
   if s = 'none' then
     TyStSetNone(AObj, AKey)
   else if (s = 'inherit') and AAllowInherit then

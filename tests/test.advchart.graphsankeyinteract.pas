@@ -643,6 +643,31 @@ begin
         SameNum(Format('%s edge %d cpx', [tag, e]), edges[e].TCPX, ed, 'cp', 0);
         SameNum(Format('%s edge %d cpy', [tag, e]), edges[e].TCPY, ed, 'cp', 1);
       end;
+    end
+    else
+    begin
+      { [F3d] A GRAPH OFF A VIEW: the line in pixels -- the ends the
+        builder trimmed off the nodes (adjustEdge), and the control point --
+        as the drawn edge carries them (its enter tag, G[0..5]) }
+      k := FindEl(si, edges[e].Row, True, False);
+      Inc(FCompared);
+      if k < 0 then Miss(Format('%s edge %d is not drawn', [tag, e]))
+      else
+      begin
+        el := FChart.List.Element(k);
+        SameNum(Format('%s edge %d x1', [tag, e]), el.Anim.G[0], ed, 'shape', 0);
+        SameNum(Format('%s edge %d y1', [tag, e]), el.Anim.G[1], ed, 'shape', 1);
+        SameNum(Format('%s edge %d x2', [tag, e]), el.Anim.G[2], ed, 'shape', 2);
+        SameNum(Format('%s edge %d y2', [tag, e]), el.Anim.G[3], ed, 'shape', 3);
+        Inc(FCompared);
+        if curved <> (el.Anim.G[6] <> 0) then
+          Miss(Format('%s edge %d curved is %s upstream', [tag, e, BoolToStr(curved, True)]))
+        else if curved then
+        begin
+          SameNum(Format('%s edge %d cpx', [tag, e]), el.Anim.G[4], ed, 'cp', 0);
+          SameNum(Format('%s edge %d cpy', [tag, e]), el.Anim.G[5], ed, 'cp', 1);
+        end;
+      end;
     end;
     FTol := 0;
     { the edge's own lineStyle and symbols }

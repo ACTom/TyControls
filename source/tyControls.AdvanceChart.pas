@@ -860,6 +860,9 @@ type
     FGraphSpecs: array of TTyGraphSpec;
     FGraphNodes: array of TTyGraphNodeArray;
     FGraphEdges: array of TTyGraphEdgeArray;
+    { [F3d] the edge rows' DataDiffer keys, read off the option the layout
+      was made from }
+    FGraphEdgeKeys: array of TTyStringArray;
     FGraphCats: array of TTyGraphCategoryArray;
     { WHAT EACH FORCE LAYOUT LEFT FOR THE NEXT PASS, indexed by SERIES index
       rather than by slot, and kept OUTSIDE the build: every relayout throws
@@ -1738,6 +1741,8 @@ type
       [Batch 99] }
     function AnimAliveKeys: TTyStringArray;
     { each view row's DataDiffer key and raw index }
+    { [F3d] a graph's edge rows' DataDiffer keys }
+    function AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
     { A FULL UPDATE ANIMATES [Batch 96]: before its layout, the render it
@@ -2860,6 +2865,11 @@ type
     { the series an action's query names (none: every one of the type) }
     function HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
     function DoSunAction(APayload: TJSONObject): Boolean;
+    { [F3d] treeExpandAndCollapse as an action: the queried trees' node
+      flipped, then the update (update: 'update') }
+    function DoTreeToggleAction(APayload: TJSONObject): Boolean;
+    { flip one tree's node (no render); False for a row it has not }
+    function TreeFlip(ASlot, ADataIndex: Integer): Boolean;
     function DoTreemapAction(const AType: string; APayload: TJSONObject;
       const AEventJson: string = ''): Boolean;
     { the render an action asks for, then its event }
@@ -19024,33 +19034,62 @@ begin
   Result := TreeDispatchRoam(p);
 end;
 
+function TTyAdvanceChart.TreeFlip(ASlot, ADataIndex: Integer): Boolean;
+var s: Integer;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].SeriesType <> TyTreeSeriesTypeName then Exit;
+  s := FBindings[ASlot].SeriesIndex;
+  if (ASlot > High(FTrees)) or not FTrees[ASlot].Hier.Valid then Exit;
+  if (ADataIndex <= 0) or (ADataIndex > High(FTrees[ASlot].Hier.Nodes)) then Exit;
+  if s > High(FTreeToggled) then SetLength(FTreeToggled, s + 1);
+  if ADataIndex > High(FTreeToggled[s]) then
+    SetLength(FTreeToggled[s], Length(FTrees[ASlot].Hier.Nodes));
+  FTreeToggled[s][ADataIndex] := not FTreeToggled[s][ADataIndex];
+  { the solved flag too, so TreeExpanded answers before the relayout }
+  FTrees[ASlot].Hier.Nodes[ADataIndex].Expanded :=
+    not FTrees[ASlot].Hier.Nodes[ADataIndex].Expanded;
+  Result := True;
+  if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
+end;
+
 function TTyAdvanceChart.TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
-var i, s: Integer;
+var i: Integer;
 begin
   Result := False;
   for i := 0 to High(FBindings) do
   begin
-    if FBindings[i].SeriesType <> TyTreeSeriesTypeName then Continue;
-    s := FBindings[i].SeriesIndex;
-    if (ASeriesIndex >= 0) and (s <> ASeriesIndex) then Continue;
-    if (i > High(FTrees)) or not FTrees[i].Hier.Valid then Continue;
-    if (ADataIndex <= 0) or (ADataIndex > High(FTrees[i].Hier.Nodes)) then Continue;
-    if s > High(FTreeToggled) then SetLength(FTreeToggled, s + 1);
-    if ADataIndex > High(FTreeToggled[s]) then
-      SetLength(FTreeToggled[s], Length(FTrees[i].Hier.Nodes));
-    FTreeToggled[s][ADataIndex] := not FTreeToggled[s][ADataIndex];
-    { the solved flag too, so TreeExpanded answers before the relayout }
-    FTrees[i].Hier.Nodes[ADataIndex].Expanded :=
-      not FTrees[i].Hier.Nodes[ADataIndex].Expanded;
-    Result := True;
-    if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
+    if (ASeriesIndex >= 0) and (FBindings[i].SeriesIndex <> ASeriesIndex) then Continue;
+    if TreeFlip(i, ADataIndex) then Result := True;
   end;
   if Result then
   begin
-    Invalidate;
+    { [F3d] THE ACTION'S UPDATE (update: 'update'): a full update of the
+      same option -- the kept nodes slide, the shown ones grow out of their
+      parent, the hidden ones shrink into it. [Was: a relayout that snapped.] }
+    FullUpdate;
     { the dispatch's triggerUpdatedEvent [Batch 97] }
     EmitUpdated;
   end;
+end;
+
+function TTyAdvanceChart.DoTreeToggleAction(APayload: TJSONObject): Boolean;
+var
+  slots: TTyIntegerArray;
+  k: Integer;
+  d: TJSONData;
+  di: Integer;
+begin
+  Result := True;
+  d := APayload.Find('dataIndex');
+  if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+  di := Round(d.AsFloat);
+  slots := HierQuery(APayload, TyTreeSeriesTypeName);
+  for k := 0 to High(slots) do
+    if TreeFlip(slots[k], di) then Result := True;
+  FullUpdate;
+  EmitUpdated;
 end;
 
 function TTyAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
@@ -19698,6 +19737,9 @@ begin
     FGraphEdges[i] := solved.Edges;
     FGraphCats[i] := solved.Cats;
   end;
+  { [F3d] the edges' keys for the next update }
+  SetLength(FGraphEdgeKeys, Length(FBindings));
+  for i := 0 to High(FBindings) do FGraphEdgeKeys[i] := AnimGraphEdgeKeys(i);
   if APPI < 0 then ;
 end;
 
@@ -28027,6 +28069,17 @@ begin
   TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
 end;
 
+{ [F3d] the rest colour of AKey as the option's gradient object at APath,
+  when that is one }
+procedure StRestGradient(var ARest: TTyStObject; const ANodes: array of TJSONObject;
+  const APath: array of string; AKey: TTyStKey);
+var d: TJSONData;
+begin
+  d := TyStFind(ANodes, APath);
+  if TyStIsGradient(d) then
+    TyStSetGradient(ARest, AKey, d.AsJSON, ARest.Color[AKey]);
+end;
+
 { a label's: its anchor (the Text's own x / y), its paint order, whether it
   shows; its fill stays absent -- the automatic ink is the port's }
 function StLabelRestOf(const AEl: TTyChartElement): TTyStObject;
@@ -28115,7 +28168,20 @@ end;
 function SameColourKey(const A, B: TTyStObject; AKey: TTyStKey): Boolean;
 begin
   Result := (A.Has[AKey] = B.Has[AKey]) and (A.None[AKey] = B.None[AKey])
-    and (A.None[AKey] or (A.Color[AKey] = B.Color[AKey]));
+    and (A.None[AKey] or ((A.Color[AKey] = B.Color[AKey])
+      { [F3d] a gradient is the same only as itself, lifted or not }
+      and (A.GradJson[AKey] = B.GradJson[AKey])
+      and ((A.GradJson[AKey] = '') or (A.Lifted[AKey] = B.Lifted[AKey]))));
+end;
+
+function StColourValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue; forward;
+
+{ [F3d] a state object's gradient key as the painter draws it }
+function StGradientOf(const AObj: TTyStObject; AKey: TTyStKey;
+  out AGrad: TTyChartGradient): Boolean;
+begin
+  Result := (AObj.GradJson[AKey] <> '') and not AObj.None[AKey]
+    and TyAnimGradientOfValue(StColourValue(AObj, AKey), AGrad);
 end;
 
 { THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
@@ -28123,7 +28189,7 @@ end;
   gradient fill leaves the gradient too (the port does not lift a ramp). }
 procedure StWriteHost(var AEl: TTyChartElement; const AState: TTyStElement;
   AProxied: Boolean);
-var c, r: TTyStObject;
+var c, r: TTyStObject; g: TTyChartGradient;
 begin
   c := AState.Cur;
   r := AState.Rest;
@@ -28139,6 +28205,13 @@ begin
   if not SameColourKey(c, r, stkFill) then
   begin
     if c.None[stkFill] then AEl.Style.HasFill := False
+    { [F3d] a state's gradient -- declared, inherited or lifted }
+    else if StGradientOf(c, stkFill, g) then
+    begin
+      AEl.Style.HasFill := True;
+      AEl.Style.FillColor := c.Color[stkFill];
+      AEl.Style.FillGradient := g;
+    end
     else if not (c.Lifted[stkFill] and (AEl.Style.FillGradient.Kind <> cgkNone)) then
     begin
       AEl.Style.HasFill := True;
@@ -28149,6 +28222,11 @@ begin
   if not SameColourKey(c, r, stkStroke) then
   begin
     if c.None[stkStroke] then AEl.Style.StrokeColor := 0
+    else if StGradientOf(c, stkStroke, g) then
+    begin
+      AEl.Style.StrokeColor := c.Color[stkStroke];
+      AEl.Style.StrokeGradient := g;
+    end
     else if not (c.Lifted[stkStroke] and (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
     begin
       AEl.Style.StrokeColor := c.Color[stkStroke];
@@ -28548,6 +28626,16 @@ begin
       FStMemoDecl[1] := item^.Host.Decl[stnEmphasis];
       FStMemoDecl[2] := item^.Host.Decl[stnBlur];
     end;
+  end;
+  { [F3d] A GRADIENT AT REST is the option's object (the element's
+    style.fill is it): the state's tween starts from it, and the emphasis
+    lifts it }
+  if blk = 'itemStyle' then
+  begin
+    if ph^.Style.FillGradient.Kind <> cgkNone then
+      StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'color'], stkFill);
+    if ph^.Style.StrokeGradient.Kind <> cgkNone then
+      StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'borderColor'], stkStroke);
   end;
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
   { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
@@ -30031,11 +30119,25 @@ end;
 { a colour key of a state object as the engine takes it: 'none', null for
   no stroke, a lifted colour as liftColor's rgba() string }
 function StColourValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue;
+var d: TJSONData;
 begin
   if AObj.None[AKey] then
   begin
     if AKey = stkStroke then Result := TyAnimNull
     else Result := TyAnimStr('none');
+  end
+  { [F3d] A GRADIENT: the object as written -- its track interpolates it
+    against another gradient, and against a colour it is discrete (set at
+    once); lifted, every stop (liftColor) }
+  else if AObj.GradJson[AKey] <> '' then
+  begin
+    d := GetJSON(AObj.GradJson[AKey]);
+    try
+      Result := TyGfxAnimOf(d);
+    finally
+      d.Free;
+    end;
+    if AObj.Lifted[AKey] then Result := TyAnimLiftGradient(Result);
   end
   else
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
@@ -35497,7 +35599,9 @@ begin
       or (t = 'treemapRootToNode') or (t = 'treemapMove') or (t = 'treemapRender')
       or (t = 'expandAxisBreak') or (t = 'collapseAxisBreak') or (t = 'toggleAxisBreak')
       or (t = 'mapToggleSelect') or (t = 'pieToggleSelect') or (t = 'mapSelect')
-      or (t = 'pieSelect') or (t = 'mapUnSelect') or (t = 'pieUnSelect') then
+      or (t = 'pieSelect') or (t = 'mapUnSelect') or (t = 'pieUnSelect')
+      { [F3d] }
+      or (t = 'treeExpandAndCollapse') then
       FBrushPayload := True;
     { A BATCH -- `if (payload.batch)`, a truthy one -- of highlight /
       downplay [Batch 116]: each item over the payload, one event; of the
@@ -35593,6 +35697,9 @@ begin
     else if t = 'sunburstRootToNode' then
       { [Batch 115] }
       Result := DoSunAction(p)
+    { [F3d] the tree's expand and collapse }
+    else if t = 'treeExpandAndCollapse' then
+      Result := DoTreeToggleAction(p)
     else if (t = 'treemapZoomToNode') or (t = 'treemapRootToNode')
       or (t = 'treemapMove') or (t = 'treemapRender') then
       Result := DoTreemapAction(t, p)
@@ -41939,6 +42046,49 @@ begin
   end;
 end;
 
+{ [F3d] THE EDGE DATA'S KEYS, per edge row (the links that resolved, in
+  order, past the legend's filter): createGraphFromNodeEdge names an edge by
+  the link's id, else `source + ' > ' + target` as written; getId takes the
+  name, '__ec__' and its count from the second time on (as AnimRowKeys) }
+function TTyAdvanceChart.AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
+var
+  ser, links, item, d: TJSONData;
+  k, c, j: Integer;
+  nm: string;
+  names: TTyStringArray;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FGraphEdges)) then Exit;
+  if FBindings[ASlot].SeriesType <> 'graph' then Exit;
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (ser is TJSONObject) then Exit;
+  links := TJSONObject(ser).Find('edges');
+  if (links = nil) or not JsTruthy(links) then links := TJSONObject(ser).Find('links');
+  if not (links is TJSONArray) then Exit;
+  SetLength(Result, Length(FGraphEdges[ASlot]));
+  SetLength(names, Length(FGraphEdges[ASlot]));
+  for k := 0 to High(FGraphEdges[ASlot]) do
+  begin
+    nm := '';
+    j := FGraphEdges[ASlot][k].Row;
+    if (j >= 0) and (j < links.Count) and (links.Items[j] is TJSONObject) then
+    begin
+      item := links.Items[j];
+      d := TJSONObject(item).Find('id');
+      if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then nm := TyGraphJsText(d)
+      else
+        nm := TyGraphJsText(TJSONObject(item).Find('source')) + ' > '
+          + TyGraphJsText(TJSONObject(item).Find('target'));
+    end;
+    names[k] := nm;
+    c := 0;
+    for j := 0 to k do
+      if names[j] = nm then Inc(c);
+    if c > 1 then Result[k] := nm + '__ec__' + IntToStr(c)
+    else Result[k] := nm;
+  end;
+end;
+
 procedure TTyAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
   out ARaws: TTyIntegerArray);
 var
@@ -42126,6 +42276,8 @@ begin
     r.LineInit := LineHistInit(r.ViewKey);
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
+    { [F3d] a graph's edges }
+    if slot <= High(FGraphEdgeKeys) then r.EdgeKeys := FGraphEdgeKeys[slot];
     { its universal transition, read off the old option [Batch 136]: the
       key, a list's items, its divideShape, its rows' groups [Batch 137]
       and child groups [Batch 138] }
@@ -42226,6 +42378,9 @@ begin
     { THE TYPES WHOSE LABELS FADE IN HERE: the ones this batch animates,
       and the heatmap, whose cells never move but whose labels upstream's
       LabelManager fades all the same }
+    { [F3d] a force graph's iteration stops its groups' and lines' tweens }
+    if (t = 'graph') and (slot <= High(FGraphSpecs)) and FGraphLaidOut[slot] then
+      r.GraphForce := FGraphSpecs[slot].Layout = glForce;
     r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
       or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName)
@@ -42298,6 +42453,8 @@ begin
     if (si <= High(FAnimFresh)) and FAnimFresh[si] then r.ViewKey := 'n:' + r.ViewKey;
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
+    { [F3d] a graph's edges }
+    if slot <= High(FGraphEdgeKeys) then r.EdgeKeys := FGraphEdgeKeys[slot];
     { the groups of its rows [Batch 137] and their child groups [Batch 138] }
     utk := TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t, FOption.ComponentId('series', si));
     r.UtGroupIds := TyUtRowGroups(utk, r.Raws);

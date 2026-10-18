@@ -442,6 +442,18 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { [F3d] A FIXED ANCHOR HUNG ON THE HOST'S BOX (a radial tree's label):
+      the position and the distance (device px) it was placed by, so a
+      frame can place it again on the box as drawn }
+    HasFixedPos: Boolean;
+    FixedPos: Integer;
+    FixedDist: Double;
+    { ... and what the host's box is made of: the path's half width at rest
+      (its scale on the canvas) and the stroke's half margin around it --
+      strokeNoScale divides the line width by the line scale, so the margin
+      stays while the path scales, and goes when the scale is nought
+      (Path.getBoundingRect) }
+    FixedHalfW, FixedInfl: Double;
     { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
       text position (sectorLabel.ts) -- SecAnchor: one of the sector
       positions, its anchor and the alignment it implies; else a built-in
@@ -735,6 +747,14 @@ type
     { A LABEL PLACED ON ITS OWN THAT RIDES A TREE NODE'S GROUP (a radial
       tree's): G[5..9] the node's, as carTreeNode has them [F3a] }
     RideTree: Boolean;
+    { [F3d] AN ELEMENT OF A ROAM GROUP -- a graph's main group on a view, a
+      tree's view group -- whose transform an update tweens
+      (applyViewCoordSysTransToElement with the series' model): the group's
+      transform at rest, scale and translation, by which a frame carries what
+      moves in the group to the canvas, and the group's transform now over it
+      (the series' 'viewGroup' proxy) }
+    InView: Boolean;
+    VSX, VSY, VX, VY: Double;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
