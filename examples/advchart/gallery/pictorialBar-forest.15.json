@@ -1,0 +1,125 @@
+{
+ "xAxis": {
+  "name": 2030
+ },
+ "series": [
+  {
+   "data": [
+    {
+     "value": 742.5,
+     "symbolOffset": null
+    },
+    {
+     "value": 877.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 1125,
+     "symbolOffset": null
+    },
+    {
+     "value": 1147.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 1282.5,
+     "symbolOffset": null
+    },
+    {
+     "value": 1425,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 1147.5,
+     "symbolOffset": null
+    },
+    {
+     "value": 1012.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 975,
+     "symbolOffset": null
+    },
+    {
+     "value": 742.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    }
+   ]
+  },
+  {
+   "data": [
+    {
+     "value": -825,
+     "symbolOffset": null
+    },
+    {
+     "value": -877.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -1012.5,
+     "symbolOffset": null
+    },
+    {
+     "value": -1275,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -1282.5,
+     "symbolOffset": null
+    },
+    {
+     "value": -1282.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -1275,
+     "symbolOffset": null
+    },
+    {
+     "value": -1012.5,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -877.5,
+     "symbolOffset": null
+    },
+    {
+     "value": -825,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    }
+   ]
+  }
+ ]
+}

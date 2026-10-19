@@ -74,7 +74,14 @@ rather than duplicated here so it cannot drift from the upstream file.
 example gallery, converted from TypeScript to JSON by `tools/advchart-gallery/harvest.js`.
 They are DATA, not code: each file is one chart configuration, and the conversion changes
 only the notation. Callbacks cannot survive the trip to JSON and are dropped; the index
-records how many each example lost.
+records how many each example lost. Three large ones are stored gzipped (`*.json.gz`), and
+five whose data the page computes are stored without that data.
+
+Two demo units carry code of the same examples, translated to Pascal under the same licence:
+`examples/advchart/urenderitems.pas` (the custom series' `renderItem` functions) and
+`examples/advchart/ugenerated.pas` (the data generators of the five, including the
+Perlin-noise helper heatmap-large carries, credited there to
+https://github.com/josephg/noisejs).
 
 They are used as a conformance corpus -- the point of the demo is to show what
 `TTyAdvanceChart` does with an option written for ECharts, unmodified.

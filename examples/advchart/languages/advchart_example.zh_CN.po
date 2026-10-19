@@ -84,3 +84,40 @@ msgstr "页面 setOption 序列的第 %d 步，共 %d 步。"
 #, object-pascal-format
 msgid "Saved to %s"
 msgstr "已保存到 %s"
+
+#: umain.rsnoticetoobig
+#, object-pascal-format
+msgid "This example is converted, but its option is %s MB -- too large to ship with the demo."
+msgstr "这个示例已经转换，但它的 option 有 %s MB，太大，demo 没有附带。"
+
+#: umain.rsnoticebmap
+msgid "This example draws on Baidu Map (bmap), which needs the online Baidu Maps API. TTyAdvanceChart has no bmap coordinate system."
+msgstr "这个示例画在百度地图（bmap）上，要联网调用百度地图 API。TTyAdvanceChart 没有 bmap 坐标系。"
+
+#: umain.rsnoticeunlicensedsvg
+#, object-pascal-format
+msgid "This example draws on the SVG map %s from the ECharts examples site, which has no recorded licence, so the demo does not include it. Save the SVG under the map's name in %s (for instance flight-seats.svg) to see the example."
+msgstr "这个示例画在 ECharts 示例站点的 SVG 地图 %s 上。这张图没有记录许可证，demo 没有附带。把这份 SVG 以地图名存进 %s（例如 flight-seats.svg）就能看到这个示例。"
+
+#: umain.rsnoticeprojection
+#, object-pascal-format
+msgid "This example projects its map with d3-geo's Albers USA projection, which the page loads from a CDN; the demo has no Pascal port of it. Register handlers under the names %s with TyChartRegisterGeoProjection to draw it."
+msgstr "这个示例用 d3-geo 的 Albers USA 投影画地图，页面从 CDN 加载它；demo 里没有它的 Pascal 版。用 TyChartRegisterGeoProjection 以 %s 这些名字注册投影处理函数，就能画出来。"
+
+#: umain.rsnoticenotconverted
+#, object-pascal-format
+msgid "This example could not be converted: %s"
+msgstr "这个示例没能转换：%s"
+
+#: umain.rsnotelostcanvas
+msgid "The page draws a picture of its own on a canvas (here the background pattern); the harvest cannot carry it, so it is left out."
+msgstr "页面自己在 canvas 上画了一张图（这里是背景图案），采集带不过来，所以没有它。"
+
+#: umain.rsnotegenerated
+msgid "The data of this example is made by ugenerated.pas, from the page's own code and random numbers; the editor shows the option without it."
+msgstr "这个示例的数据由 ugenerated.pas 按页面自己的代码和随机数生成；编辑框里显示的是不含这些数据的 option。"
+
+#: umain.rsnoteshortened
+#, object-pascal-format
+msgid "The option is %s MB; the editor shows its beginning, and Apply sets the whole of it while that is unchanged."
+msgstr "这份 option 有 %s MB，编辑框只显示开头；只要没改动，“应用”设置的是完整的 option。"

@@ -111,7 +111,8 @@
    "encode": {
     "x": 1,
     "y": 0
-   }
+   },
+   "renderItem": "@matrix-mini-bar-data-collection"
   },
   {
    "type": "custom",
@@ -119,7 +120,8 @@
    "encode": {
     "x": 3,
     "y": 0
-   }
+   },
+   "renderItem": "@matrix-mini-bar-data-collection#2"
   },
   {
    "type": "custom",
@@ -127,7 +129,8 @@
    "encode": {
     "x": 5,
     "y": 0
-   }
+   },
+   "renderItem": "@matrix-mini-bar-data-collection#3"
   }
  ]
 }

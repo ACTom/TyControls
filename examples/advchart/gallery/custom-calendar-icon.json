@@ -26,6 +26,7 @@
   {
    "type": "custom",
    "coordinateSystem": "calendar",
+   "renderItem": "@custom-calendar-icon",
    "dimensions": [
     null,
     {

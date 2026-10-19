@@ -1,0 +1,62 @@
+{
+ "series": [
+  {
+   "data": [
+    {
+     "value": 42.98,
+     "name": "Perfect",
+     "title": {
+      "offsetCenter": [
+       "0%",
+       "-30%"
+      ]
+     },
+     "detail": {
+      "valueAnimation": true,
+      "offsetCenter": [
+       "0%",
+       "-20%"
+      ]
+     }
+    },
+    {
+     "value": 30.85,
+     "name": "Good",
+     "title": {
+      "offsetCenter": [
+       "0%",
+       "0%"
+      ]
+     },
+     "detail": {
+      "valueAnimation": true,
+      "offsetCenter": [
+       "0%",
+       "10%"
+      ]
+     }
+    },
+    {
+     "value": 90.95,
+     "name": "Commonly",
+     "title": {
+      "offsetCenter": [
+       "0%",
+       "30%"
+      ]
+     },
+     "detail": {
+      "valueAnimation": true,
+      "offsetCenter": [
+       "0%",
+       "40%"
+      ]
+     }
+    }
+   ],
+   "pointer": {
+    "show": false
+   }
+  }
+ ]
+}

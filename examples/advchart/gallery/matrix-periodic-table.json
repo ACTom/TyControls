@@ -924,6 +924,7 @@
     "color": "#555",
     "align": "center"
    }
-  }
+  },
+  "renderItem": "@matrix-periodic-table"
  }
 }

@@ -411,9 +411,9 @@
     "fontFamily": "Ubuntu Condensed, sans-serif"
    }
   },
-  "width": null,
-  "height": null,
-  "left": null,
+  "width": 360,
+  "height": 360,
+  "left": 120,
   "top": 50,
   "backgroundStyle": {
    "color": "transparent",

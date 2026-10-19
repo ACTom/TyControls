@@ -32,19 +32,35 @@ unit umain;
   with the options the page passed (notMerge or a plain merge) at the page's
   interval, and by hand with Next step. That is the manual check for
   universalTransition: the morph between two options can only be seen with
-  both of them, in order, on one chart. }
+  both of them, in order, on one chart. A page that keeps updating itself on
+  a timer (bar-race, the gauges, dynamic-data) was recorded the same way --
+  the first thirty updates, on the seeded random numbers -- and plays once.
+
+  WHAT A PAGE DOES IN JAVASCRIPT IS DONE HERE IN PASCAL. A custom series'
+  renderItem is a function upstream and a named handler here: the harvest
+  writes `renderItem: '@<example id>'`, and urenderitems.pas registers a
+  transcription of every one the gallery uses. Five examples compute their
+  data (half a million bars, a million points); the gallery ships them
+  without it and ugenerated.pas makes it from the page's own generator before
+  the option is set. Three that load a large file ship it gzipped.
+
+  WHAT CANNOT BE DRAWN SAYS SO, ON THE CHART. A map the demo does not ship,
+  a Baidu map, a projection from a script on a CDN, a file too large to
+  ship: the reason is shown over the chart (the chart's own loading mask,
+  without the spinner) rather than an empty frame. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, ExtCtrls, fpjson, jsonparser,
+  Classes, SysUtils, StrUtils, Forms, Controls, ExtCtrls, fpjson, jsonparser,
+  zstream,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
   tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose,
-  umaps;
+  umaps, urenderitems, ugenerated;
 
 type
   { One row of gallery/index.json. `Ok` false means the harvester could not
@@ -63,6 +79,17 @@ type
       the page's interval in ms (0: by hand only). }
     StepFiles, StepOpts: array of string;
     LoopTo, Interval: Integer;
+    { the file the option is in: <id>.json, or <id>.json.gz for the three
+      large ones shipped compressed }
+    FileName: string;
+    { the data is made by ugenerated.pas (index.json `generated`) }
+    Generated: Boolean;
+    { converted, but too large to ship (and the size, in MB, as the harvest
+      wrote it); it draws on Baidu Map }
+    TooBig, Bmap: Boolean;
+    SizeText: string;
+    { what the harvest could not carry ('canvas': a picture the page drew) }
+    Lost: string;
   end;
 
   TMainForm = class(TTyForm)
@@ -101,6 +128,16 @@ type
     FShownSlot: Integer;
     { the step of the shown entry's sequence the chart now holds }
     FStep: Integer;
+    { AN OPTION TOO LONG FOR THE EDITOR (the gzipped ones, several MB): the
+      memo shows its start and this holds the whole, which Apply sets while
+      the memo still shows what it was given }
+    FFullText, FShownText: string;
+    procedure SetMemoOption(const AText: string);
+    function MemoOption: string;
+    { The reason the shown example draws nothing (or only part), '' for
+      none: shown over the chart. }
+    function NoticeFor(const AText: string): string;
+    procedure ShowNotice(const ANotice: string);
     procedure LoadIndex;
     procedure FillCategories;
     procedure FillList;
@@ -138,6 +175,28 @@ resourcestring
   rsStep = 'Step %d of %d of the page''s setOption sequence.';
   { said under the notes when an example needs a border map the demo does not
     ship: %s the map name(s), %s the maps folder }
+  { over the chart when an example cannot be drawn here }
+  rsNoticeTooBig = 'This example is converted, but its option is %s MB -- too '
+    + 'large to ship with the demo.';
+  rsNoticeBmap = 'This example draws on Baidu Map (bmap), which needs the online '
+    + 'Baidu Maps API. TTyAdvanceChart has no bmap coordinate system.';
+  rsNoticeUnlicensedSvg = 'This example draws on the SVG map %s from the '
+    + 'ECharts examples site, which has no recorded licence, so the demo does '
+    + 'not include it. Save the SVG under the map''s name in %s (for instance '
+    + 'flight-seats.svg) to see the example.';
+  rsNoticeProjection = 'This example projects its map with d3-geo''s Albers USA '
+    + 'projection, which the page loads from a CDN; the demo has no Pascal port '
+    + 'of it. Register handlers under the names %s with '
+    + 'TyChartRegisterGeoProjection to draw it.';
+  rsNoticeNotConverted = 'This example could not be converted: %s';
+  { under the notes }
+  rsNoteLostCanvas = 'The page draws a picture of its own on a canvas (here the '
+    + 'background pattern); the harvest cannot carry it, so it is left out.';
+  rsNoteGenerated = 'The data of this example is made by ugenerated.pas, from the '
+    + 'page''s own code and random numbers; the editor shows the option without '
+    + 'it.';
+  rsNoteShortened = 'The option is %s MB; the editor shows its beginning, and '
+    + 'Apply sets the whole of it while that is unchanged.';
   rsBorderMapNotShipped = 'This example needs the map %s, which the demo does '
     + 'not include. Borders between countries are disputed, and some places '
     + 'require published maps to be reviewed, so neither TyControls nor this demo '
@@ -178,6 +237,74 @@ begin
   finally
     sl.Free;
   end;
+end;
+
+{ A gallery file: .json as text, .json.gz unzipped. }
+function ReadGalleryFile(const AName: string): string;
+var
+  gz: TGZFileStream;
+  buf: array[0..65535] of Byte;
+  n: Integer;
+  ss: TStringStream;
+begin
+  if not AnsiEndsText('.gz', AName) then Exit(ReadTextFile(AName));
+  ss := TStringStream.Create('');
+  try
+    gz := TGZFileStream.Create(AName, gzOpenRead);
+    try
+      repeat
+        n := gz.Read(buf, SizeOf(buf));
+        if n > 0 then ss.WriteBuffer(buf, n);
+      until n <= 0;
+    finally
+      gz.Free;
+    end;
+    Result := ss.DataString;
+  finally
+    ss.Free;
+  end;
+end;
+
+{ Text broken into lines of about AWidth columns, at spaces (a wide
+  character -- CJK -- counts two and may be broken after), for the notice
+  over the chart, which does not wrap. }
+function WrapForNotice(const AText: string; AWidth: Integer): string;
+var
+  i, col, lastSpace, cpLen: Integer;
+  line: string;
+begin
+  Result := '';
+  line := '';
+  col := 0;
+  lastSpace := 0;
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    cpLen := 1;
+    if Ord(AText[i]) >= $F0 then cpLen := 4
+    else if Ord(AText[i]) >= $E0 then cpLen := 3
+    else if Ord(AText[i]) >= $C0 then cpLen := 2;
+    line := line + Copy(AText, i, cpLen);
+    if cpLen >= 3 then Inc(col, 2) else Inc(col);
+    if AText[i] = ' ' then lastSpace := Length(line);
+    Inc(i, cpLen);
+    if col >= AWidth then
+    begin
+      if (lastSpace > 0) and (cpLen < 3) then
+      begin
+        Result := Result + TrimRight(Copy(line, 1, lastSpace)) + LineEnding;
+        line := Copy(line, lastSpace + 1, MaxInt);
+      end
+      else
+      begin
+        Result := Result + line + LineEnding;
+        line := '';
+      end;
+      col := Length(line);
+      lastSpace := 0;
+    end;
+  end;
+  Result := Result + line;
 end;
 
 { The gallery's own category strings, normalised. Several examples carry a
@@ -229,6 +356,21 @@ begin
       FEntries[n].Ok := obj.Get('ok', False);
       FEntries[n].Reason := obj.Get('reason', '');
       FEntries[n].LoopTo := -1;
+      FEntries[n].FileName := obj.Get('file', FEntries[n].Id + '.json');
+      FEntries[n].Generated := obj.Find('generated') is TJSONObject;
+      FEntries[n].TooBig := obj.Get('tooBig', False);
+      FEntries[n].Bmap := Pos('bmap', obj.Get('reason', '')) > 0;
+      FEntries[n].SizeText := '';
+      if FEntries[n].TooBig then
+      begin
+        k := Pos('but ', FEntries[n].Reason);
+        if k > 0 then
+          FEntries[n].SizeText := Trim(Copy(FEntries[n].Reason, k + 4,
+            Pos(' MB', FEntries[n].Reason) - k - 4));
+      end;
+      FEntries[n].Lost := '';
+      if obj.Find('lost') is TJSONArray then
+        FEntries[n].Lost := TJSONArray(obj.Find('lost')).AsJSON;
       if obj.Find('sequence') is TJSONObject then
       begin
         seq := TJSONObject(obj.Find('sequence'));
@@ -315,19 +457,20 @@ begin
 
   if not FEntries[slot].Ok then
   begin
-    OptionMemo.Text := '';
+    SetMemoOption('');
     Chart.Option := '';
     LblStatus.Caption := Format(rsNotConverted, [FEntries[slot].Reason]);
+    ShowNotice(NoticeFor(''));
     Exit;
   end;
 
-  fn := FGalleryDir + FEntries[slot].Id + '.json';
+  fn := FGalleryDir + FEntries[slot].FileName;
   if not FileExists(fn) then
   begin
     LblStatus.Caption := Format(rsNotConverted, [fn]);
     Exit;
   end;
-  OptionMemo.Text := ReadTextFile(fn);
+  SetMemoOption(ReadGalleryFile(fn));
   Apply;
 end;
 
@@ -355,18 +498,99 @@ begin
     end;
 end;
 
-procedure TMainForm.Apply;
+procedure TMainForm.SetMemoOption(const AText: string);
+const
+  cMemoMax = 1536 * 1024;
+  cShown = 256 * 1024;
 begin
+  FFullText := AText;
+  if Length(AText) > cMemoMax then
+    FShownText := Copy(AText, 1, cShown) + LineEnding + '...'
+  else
+    FShownText := AText;
+  OptionMemo.Text := FShownText;
+  { the memo gives its text back with its own line ends: compare with that }
+  FShownText := OptionMemo.Text;
+end;
+
+function TMainForm.MemoOption: string;
+begin
+  Result := OptionMemo.Text;
+  if (FFullText <> '') and (Result = FShownText) then Result := FFullText;
+end;
+
+procedure TMainForm.Apply;
+var opt, filled: string;
+begin
+  opt := MemoOption;
   { THE PAGE'S OWN registerMap. An ECharts example fetches its GeoJSON before
     it sets the option; the harvest kept only the map's name. }
-  RegisterGalleryMapsFor(OptionMemo.Text, FMapsDir);
-  Chart.Option := OptionMemo.Text;
+  RegisterGalleryMapsFor(opt, FMapsDir);
+  { THE PAGE'S OWN DATA, for the five that compute it: the arrays the
+    harvest left empty are filled where they stand }
+  if (FShownSlot >= 0) and (FShownSlot <= High(FEntries))
+    and FEntries[FShownSlot].Generated
+    and GalleryFillGenerated(FEntries[FShownSlot].Id, opt, filled) then
+    Chart.Option := filled
+  else
+    Chart.Option := opt;
   if Chart.OptionError <> '' then
   begin
     LblStatus.Caption := Chart.OptionError;
+    ShowNotice('');
     Exit;
   end;
-  ShowNotes(OptionMemo.Text);
+  ShowNotes(opt);
+end;
+
+function TMainForm.NoticeFor(const AText: string): string;
+var
+  e: Integer;
+  names: string;
+begin
+  Result := '';
+  e := FShownSlot;
+  if (e < 0) or (e > High(FEntries)) then Exit;
+  if not FEntries[e].Ok then
+  begin
+    if FEntries[e].Bmap then Result := rsNoticeBmap
+    else if FEntries[e].TooBig then Result := Format(rsNoticeTooBig, [FEntries[e].SizeText])
+    else Result := Format(rsNoticeNotConverted, [FEntries[e].Reason]);
+    Exit;
+  end;
+  if AText = '' then Exit;
+  { a Baidu map: the option's own bmap component }
+  if Pos('"bmap"', AText) > 0 then Exit(rsNoticeBmap);
+  { a map the demo does not ship (each check parses the option: only when
+    the option names a map at all) }
+  if Pos('"map"', AText) > 0 then
+  begin
+    names := BorderMapsMissing(AText, FMapsDir);
+    if names <> '' then Exit(Format(rsBorderMapNotShipped, [names, FMapsDir]));
+    names := UnlicensedMapsMissing(AText, FMapsDir);
+    if names <> '' then Exit(Format(rsNoticeUnlicensedSvg, [names, FMapsDir]));
+  end;
+  names := ProjectionsMissing(AText);
+  if names <> '' then Exit(Format(rsNoticeProjection, [names]));
+end;
+
+procedure TMainForm.ShowNotice(const ANotice: string);
+var cfg: TJSONObject;
+begin
+  if ANotice = '' then
+  begin
+    Chart.HideLoading;
+    Exit;
+  end;
+  { THE CHART'S OWN LOADING MASK, without the spinner: the reason sits in
+    the chart's frame, in the chart's theme }
+  cfg := TJSONObject.Create(['text', WrapForNotice(ANotice, 64),
+    'showSpinner', False, 'fontSize', 13]);
+  try
+    Chart.ShowLoading(cfg.AsJSON);
+  finally
+    cfg.Free;
+  end;
 end;
 
 procedure TMainForm.ShowNotes(const AText: string);
@@ -421,6 +645,16 @@ begin
   border := BorderMapsMissing(AText, FMapsDir);
   if border <> '' then
     s := s + LineEnding + LineEnding + Format(rsBorderMapNotShipped, [border, FMapsDir]);
+  if (FShownSlot >= 0) and (FShownSlot <= High(FEntries)) then
+  begin
+    if FEntries[FShownSlot].Generated then s := s + LineEnding + rsNoteGenerated;
+    if Pos('canvas', FEntries[FShownSlot].Lost) > 0 then
+      s := s + LineEnding + rsNoteLostCanvas;
+    if Length(FFullText) <> Length(FShownText) then
+      s := s + LineEnding + Format(rsNoteShortened,
+        [FormatFloat('0.0', Length(FFullText) / 1048576)]);
+  end;
+  ShowNotice(NoticeFor(AText));
   if (FShownSlot >= 0) and (FShownSlot <= High(FEntries))
     and (Length(FEntries[FShownSlot].StepFiles) > 1) then
     s := Format(rsStep, [FStep + 1, Length(FEntries[FShownSlot].StepFiles)])
@@ -473,12 +707,12 @@ begin
     Exit;
   end;
   FStep := k;
-  OptionMemo.Text := ReadTextFile(fn);
-  RegisterGalleryMapsFor(OptionMemo.Text, FMapsDir);
+  SetMemoOption(ReadGalleryFile(fn));
+  RegisterGalleryMapsFor(FFullText, FMapsDir);
   if FEntries[e].StepOpts[k] = '' then
-    Chart.SetOption(OptionMemo.Text, False)
+    Chart.SetOption(FFullText, False)
   else
-    Chart.SetOption(OptionMemo.Text, FEntries[e].StepOpts[k]);
+    Chart.SetOption(FFullText, FEntries[e].StepOpts[k]);
   if Chart.OptionError <> '' then
   begin
     LblStatus.Caption := Chart.OptionError;
@@ -499,6 +733,8 @@ var
 begin
   FCategories := TStringList.Create;
   FShownSlot := -1;
+  { the gallery's renderItem functions, transcribed (urenderitems.pas) }
+  RegisterGalleryRenderItems;
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do

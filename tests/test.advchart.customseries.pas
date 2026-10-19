@@ -136,7 +136,7 @@ type
     procedure CheckPieces(const AWhat: string; const APieces: TTyRtPieceArray;
       AWant: TJSONArray);
     procedure CheckTextStyle(const AWhat: string; AEl: TTyGfxEl; AWant: TJSONObject);
-    procedure CheckEl(AEl: TTyGfxEl; AWant: TJSONObject);
+    procedure CheckEl(AEl: TTyGfxEl; AWant: TJSONObject); virtual;
     procedure CheckCalls(AWant: TJSONArray);
     procedure CheckEls(AWant: TJSONArray);
     procedure CheckOrder(AWant: TJSONArray);

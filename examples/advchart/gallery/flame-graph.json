@@ -1,0 +1,7017 @@
+{
+ "backgroundColor": {
+  "type": "linear",
+  "x": 0,
+  "y": 0,
+  "x2": 0,
+  "y2": 1,
+  "colorStops": [
+   {
+    "offset": 0.05,
+    "color": "#eee"
+   },
+   {
+    "offset": 0.95,
+    "color": "#eeeeb0"
+   }
+  ]
+ },
+ "tooltip": {},
+ "title": [
+  {
+   "text": "Flame Graph",
+   "left": "center",
+   "top": 10,
+   "textStyle": {
+    "fontFamily": "Verdana",
+    "fontWeight": "normal",
+    "fontSize": 20
+   }
+  }
+ ],
+ "toolbox": {
+  "feature": {
+   "restore": {}
+  },
+  "right": 20,
+  "top": 10
+ },
+ "xAxis": {
+  "show": false
+ },
+ "yAxis": {
+  "show": false,
+  "max": 17
+ },
+ "series": [
+  {
+   "type": "custom",
+   "renderItem": "@flame-graph",
+   "encode": {
+    "x": [
+     0,
+     1,
+     2
+    ],
+    "y": 0
+   },
+   "data": [
+    {
+     "name": "29509a5f-d6bc-47c9-8828-f93f5bc71d6b",
+     "value": [
+      0,
+      0,
+      57412,
+      "root",
+      100
+     ],
+     "itemStyle": {
+      "color": "#8fd3e8"
+     }
+    },
+    {
+     "name": "b25b0d27-ce7b-44e9-b2b6-ff168a6fa36c",
+     "value": [
+      1,
+      0,
+      89,
+      "genunix syscall_mstate",
+      0.15501985647599806
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f775c1e7-f63d-447c-94d4-93cf81123782",
+     "value": [
+      1,
+      89,
+      102,
+      "unix 0xfffffffffb8001d6",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "cb04a063-4781-487a-95b1-5b5ef22f024d",
+     "value": [
+      2,
+      89,
+      102,
+      "unix trap",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "0e50c834-9785-462a-892b-f4be8214e1b0",
+     "value": [
+      3,
+      89,
+      102,
+      "unix pagefault",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5fa6ae34-6380-4a66-8fe5-98823f075958",
+     "value": [
+      4,
+      89,
+      101,
+      "genunix as_fault",
+      0.020901553682157042
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d1038d15-a8ae-4bdd-b0dc-2e71f4847948",
+     "value": [
+      5,
+      89,
+      100,
+      "genunix segvn_fault",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5b374899-eadd-4da0-9669-39032726725d",
+     "value": [
+      6,
+      89,
+      90,
+      "genunix fop_getpage",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0b4e8e87-92b1-4e55-b40e-2fc6a959fa8d",
+     "value": [
+      7,
+      89,
+      90,
+      "ufs ufs_getpage",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "d8c76cd5-8d6f-4674-8a87-53fc31a17d23",
+     "value": [
+      8,
+      89,
+      90,
+      "unix page_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "bb476309-a6c4-4a0c-bc63-27e8c693e9ee",
+     "value": [
+      9,
+      89,
+      90,
+      "unix page_lookup_create",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1a5d714f-11fa-44df-a6d0-461cc0d1ee37",
+     "value": [
+      6,
+      90,
+      97,
+      "genunix segvn_faultpage",
+      0.012192572981258273
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c3acb3b5-ec48-4101-ab89-74066ba7cf36",
+     "value": [
+      7,
+      90,
+      97,
+      "genunix anon_zero",
+      0.012192572981258273
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5d89bb8b-fe36-41d6-bee5-8bc627b9d69f",
+     "value": [
+      8,
+      90,
+      94,
+      "genunix fop_getpage",
+      0.006967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c1d90a58-5b34-44dc-afb4-71e113aa2ad7",
+     "value": [
+      9,
+      90,
+      94,
+      "genunix swap_getpage",
+      0.006967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5232d249-3b1c-4cf3-8d35-6a49cdd4ca33",
+     "value": [
+      10,
+      90,
+      94,
+      "genunix swap_getapage",
+      0.006967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "985f8af3-e579-47c9-b937-8141e5180d91",
+     "value": [
+      11,
+      90,
+      91,
+      "genunix pvn_plist_init",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "89b04a7d-b28c-4434-81b4-d7cca5adb0ed",
+     "value": [
+      11,
+      91,
+      92,
+      "unix lgrp_mem_choose",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8e78d682-54a0-4c71-8db8-f5d5cf609e48",
+     "value": [
+      11,
+      92,
+      93,
+      "unix page_create_va",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1038d10c-a3f0-4050-95b4-0e4b7aa28877",
+     "value": [
+      12,
+      92,
+      93,
+      "unix page_get_freelist",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "18f95faf-1e9d-4544-8171-5f594a38497b",
+     "value": [
+      13,
+      92,
+      93,
+      "unix page_get_mnode_freelist",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "6d6dfa5a-e15d-4460-aaf5-b4130062fa02",
+     "value": [
+      14,
+      92,
+      93,
+      "unix mutex_enter",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "e1ab8ac3-3be8-4419-8b27-e79a702d0933",
+     "value": [
+      11,
+      93,
+      94,
+      "unix page_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ea6aacce-7ec1-4563-b578-d46ce8998d3e",
+     "value": [
+      12,
+      93,
+      94,
+      "unix page_lookup_create",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "9f58da02-3eb8-4cd4-8393-2e8f33b1312a",
+     "value": [
+      8,
+      94,
+      97,
+      "unix pagezero",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b4dabb1c-8c2f-47ce-abf2-61665adf071b",
+     "value": [
+      9,
+      94,
+      97,
+      "unix pfnzero",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ca04aae1-5084-4a16-87aa-fd0794c5605e",
+     "value": [
+      10,
+      94,
+      97,
+      "unix hwblkclr",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b16f30e3-41f6-48da-b5fc-593820038c97",
+     "value": [
+      6,
+      97,
+      98,
+      "ufs ufs_getpage",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "42a7e8e5-4a76-4757-bdf1-0332d22a14fc",
+     "value": [
+      6,
+      98,
+      100,
+      "unix hat_memload_region",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8a04dd2b-37f9-4f27-8f30-1f31e79fd556",
+     "value": [
+      7,
+      98,
+      100,
+      "unix hat_memload",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "966b074a-a476-4f3d-9321-679a8825e610",
+     "value": [
+      8,
+      98,
+      100,
+      "unix hati_load_common",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "33419774-1ee9-4005-bc8c-5ebfb6951e55",
+     "value": [
+      9,
+      98,
+      100,
+      "unix hati_pte_map",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "eeb48a0e-aa42-4eeb-acc9-34eee3c55a5d",
+     "value": [
+      10,
+      98,
+      100,
+      "unix hment_assign",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "79031563-629c-45ff-9356-ea54fd4c3124",
+     "value": [
+      11,
+      98,
+      100,
+      "unix hment_insert",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7736b2e6-1be1-4605-b203-1100e6362d48",
+     "value": [
+      12,
+      98,
+      99,
+      "genunix avl_add",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2dd5edf2-0f12-4f95-99ae-7841a1687120",
+     "value": [
+      13,
+      98,
+      99,
+      "genunix avl_find",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2c47dc5b-a5e3-47e0-a0ed-2069bc791aa0",
+     "value": [
+      14,
+      98,
+      99,
+      "unix hment_compare",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7c853742-390b-4201-a1db-0b5bd02bb369",
+     "value": [
+      4,
+      101,
+      102,
+      "genunix segvn_fault",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "cb01f245-8086-4b60-987b-32b9d96b9165",
+     "value": [
+      1,
+      102,
+      144,
+      "unix 0xfffffffffb800c7c",
+      0.07315543788754965
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "03eb77eb-7ba5-45fb-870f-022e210ef87c",
+     "value": [
+      1,
+      144,
+      146,
+      "unix 0xfffffffffb800c81",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d4542713-1516-4105-b6be-d5d8e7e3c6bd",
+     "value": [
+      1,
+      146,
+      618,
+      "unix 0xfffffffffb800c86",
+      0.8221277781648436
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "302ef61c-9ff3-4b96-bb66-cb4df88b3e80",
+     "value": [
+      2,
+      146,
+      150,
+      "genunix gethrtime_unscaled",
+      0.006967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1567af28-e06a-493c-9f97-0b559e207272",
+     "value": [
+      2,
+      150,
+      505,
+      "genunix syscall_mstate",
+      0.6183376297638125
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a7d2c7b9-ded7-497f-b007-e17706bdc8ee",
+     "value": [
+      3,
+      150,
+      353,
+      "genunix gethrtime_unscaled",
+      0.35358461645649
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a4cb8a3e-1f2e-4957-827c-8dbab3baca24",
+     "value": [
+      4,
+      150,
+      161,
+      "unix tsc_gethrtimeunscaled",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f337ff3f-863f-4bd3-a357-cbeeec2505e3",
+     "value": [
+      4,
+      161,
+      347,
+      "unix tsc_read",
+      0.32397408207343414
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "817bcceb-cbe4-4195-93dc-83ffc4ea29b5",
+     "value": [
+      3,
+      353,
+      366,
+      "unix tsc_gethrtimeunscaled",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "557c1e0a-addc-4a4c-b89e-1d3fe5a7042a",
+     "value": [
+      2,
+      505,
+      615,
+      "unix atomic_add_64",
+      0.19159757541977288
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "c69602fb-4008-4ffb-93a4-2cf4f38be712",
+     "value": [
+      1,
+      618,
+      4979,
+      "unix 0xfffffffffb800c91",
+      7.595972967323903
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a6c381c8-fcd9-4029-aa3e-38c8508a2cbe",
+     "value": [
+      2,
+      618,
+      645,
+      "genunix audit_getstate",
+      0.04702849578485334
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f938697c-9bfa-4d16-8820-8caec831016c",
+     "value": [
+      2,
+      645,
+      655,
+      "genunix clear_stale_fd",
+      0.017417961401797532
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ea1bd957-88d9-4967-a0ac-4013bc14cc0c",
+     "value": [
+      2,
+      655,
+      682,
+      "genunix disp_lock_exit",
+      0.04702849578485334
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "022f7903-2354-4333-99d7-dcae2c769332",
+     "value": [
+      2,
+      682,
+      4927,
+      "genunix post_syscall",
+      7.393924615063054
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4671688a-b056-4c5b-8bf5-c32dd613490f",
+     "value": [
+      3,
+      682,
+      683,
+      "FSS fss_preempt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#f2d643"
+     }
+    },
+    {
+     "name": "ebfda23b-8c6f-4e5d-8991-14d979cfca7c",
+     "value": [
+      3,
+      683,
+      698,
+      "genunix audit_getstate",
+      0.026126942102696303
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4c80bf54-1530-434f-89ec-11c12aa3696b",
+     "value": [
+      3,
+      698,
+      742,
+      "genunix clear_stale_fd",
+      0.07663903016790914
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "77675fcf-4bb7-4f51-9e72-67f57f9c9f42",
+     "value": [
+      3,
+      742,
+      2838,
+      "genunix disp_lock_exit",
+      3.6508047098167626
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1392dcb0-6ba7-4ed6-9bd6-790d8a5875db",
+     "value": [
+      4,
+      742,
+      781,
+      "unix clear_int_flag",
+      0.06793004946701038
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "06fdbb60-1fc2-4ba6-9a5d-9bebb3e990d9",
+     "value": [
+      4,
+      781,
+      2774,
+      "unix do_splx",
+      3.4713997073782483
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a9396bbc-fc17-4625-9121-3c021b7f8b7c",
+     "value": [
+      4,
+      2774,
+      2775,
+      "unix kpreempt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "523a5663-fded-4e3c-b645-e85e8d9757c2",
+     "value": [
+      5,
+      2774,
+      2775,
+      "unix preempt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ecb7c991-193f-49f3-9a1d-93c70683040e",
+     "value": [
+      6,
+      2774,
+      2775,
+      "genunix disp_lock_exit_nopreempt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a779133c-110c-411c-8e4e-1d84b296dd7f",
+     "value": [
+      7,
+      2774,
+      2775,
+      "unix do_splx",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "fea79d7d-1502-45f4-a537-85b436c3d330",
+     "value": [
+      3,
+      2838,
+      2839,
+      "genunix sigcheck",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0daad78e-01ff-46dc-8bce-6ae7f558f12a",
+     "value": [
+      3,
+      2839,
+      3509,
+      "genunix thread_lock",
+      1.1670034139204346
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9d0e710a-2e82-4109-bac2-bb435b4e9794",
+     "value": [
+      4,
+      2839,
+      3019,
+      "unix clear_int_flag",
+      0.3135233052323556
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "cf04db55-3b84-4bf2-9eec-807ec4713582",
+     "value": [
+      4,
+      3019,
+      3419,
+      "unix splr",
+      0.6967184560719013
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5e8ce37d-565d-4dba-9640-1a135cca41de",
+     "value": [
+      3,
+      3509,
+      3540,
+      "unix do_splx",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b8ea3383-5b64-4478-8a9c-32a42686c850",
+     "value": [
+      3,
+      3540,
+      3563,
+      "unix i_ddi_splhigh",
+      0.040061311224134324
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "224b4baa-6d00-481d-9d25-836283c10b4e",
+     "value": [
+      3,
+      3563,
+      3591,
+      "unix lock_clear_splx",
+      0.04877029192503309
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "9fbc0f3a-b7ba-497f-ab0d-154b9abc8810",
+     "value": [
+      3,
+      3591,
+      4369,
+      "unix lock_try",
+      1.3551173970598482
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "0242b08b-6992-452f-b36d-c17915b43cfc",
+     "value": [
+      3,
+      4369,
+      4375,
+      "unix lwp_getdatamodel",
+      0.010450776841078521
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "80a6c19b-4445-46e2-a936-8c92190e7c68",
+     "value": [
+      3,
+      4375,
+      4389,
+      "unix preempt",
+      0.024385145962516546
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1508f01c-18a6-4173-b96b-100749f18363",
+     "value": [
+      4,
+      4375,
+      4383,
+      "FSS fss_preempt",
+      0.013934369121438027
+     ],
+     "itemStyle": {
+      "color": "#f2d643"
+     }
+    },
+    {
+     "name": "8b223d48-8c80-4461-aad4-e89bc5ef3774",
+     "value": [
+      5,
+      4375,
+      4378,
+      "unix cpucaps_charge",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1b40dc09-5b61-4e5d-8654-3b8dd2c71102",
+     "value": [
+      6,
+      4375,
+      4376,
+      "unix caps_charge_adjust",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "4da6087f-2f81-438f-86c3-5f6b62a0225a",
+     "value": [
+      7,
+      4375,
+      4376,
+      "genunix mstate_thread_onproc_time",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b8432b71-b4b9-47e8-b044-80a8964abe62",
+     "value": [
+      8,
+      4375,
+      4376,
+      "unix tsc_gethrtimeunscaled",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "169c7d7e-c805-44ad-a757-7158b53f029e",
+     "value": [
+      5,
+      4378,
+      4383,
+      "unix setbackdq",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d2d02227-fdf6-4c42-ae85-5c422109cd6e",
+     "value": [
+      6,
+      4378,
+      4379,
+      "unix cmt_balance",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5c5376b7-8718-4770-b562-5692a3ae3b48",
+     "value": [
+      6,
+      4379,
+      4380,
+      "unix cpu_wakeup_mwait",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "bab1813a-3b30-4e2b-8a7b-f8f14d05a818",
+     "value": [
+      7,
+      4379,
+      4380,
+      "unix bitset_in_set",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "91654d1f-9f75-4018-a6fb-61fadd2abfae",
+     "value": [
+      4,
+      4383,
+      4384,
+      "unix do_splx",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "518392ed-233c-48b3-b85f-594b0b4583dd",
+     "value": [
+      4,
+      4384,
+      4389,
+      "unix swtch",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "cf153ace-832d-407e-a417-08f7b9e04640",
+     "value": [
+      5,
+      4384,
+      4385,
+      "genunix disp_lock_exit_high",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e86559bc-abee-4f1e-adb9-4668735f4174",
+     "value": [
+      5,
+      4385,
+      4386,
+      "unix disp",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d53284f0-9d08-455f-9eda-90750eda280e",
+     "value": [
+      6,
+      4385,
+      4386,
+      "unix membar_enter",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "624a34e8-739d-425e-9cb2-4b84255d69ba",
+     "value": [
+      5,
+      4386,
+      4387,
+      "unix do_splx",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "16d14ec7-3c7e-478b-af7b-0e83e3c10c2c",
+     "value": [
+      5,
+      4387,
+      4389,
+      "unix resume",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1ca6a77d-5973-4366-a1f1-6fe4529fc5eb",
+     "value": [
+      6,
+      4387,
+      4389,
+      "genunix savectx",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8cbfe023-77ed-4aa4-a229-627d3a1759e5",
+     "value": [
+      7,
+      4387,
+      4388,
+      "genunix schedctl_save",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8dade592-3b02-4fce-af12-2ab6df0f2929",
+     "value": [
+      3,
+      4389,
+      4425,
+      "unix prunstop",
+      0.06270466104647113
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "9dc6dd7d-bb1f-4fc5-9524-94f58a0d938f",
+     "value": [
+      3,
+      4425,
+      4517,
+      "unix splr",
+      0.1602452448965373
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "c1986a81-e8fb-421e-864a-36121815c00b",
+     "value": [
+      3,
+      4517,
+      4523,
+      "unix splx",
+      0.010450776841078521
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "097552b9-7768-40c3-b1b2-843497b9af6b",
+     "value": [
+      2,
+      4927,
+      4960,
+      "genunix thread_lock",
+      0.05747927262593186
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "27c99ac9-e503-4129-aed7-6f6877eb6191",
+     "value": [
+      2,
+      4960,
+      4963,
+      "unix lwp_getdatamodel",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "153bf669-3ed1-43ab-80f3-07f68e6c0fe7",
+     "value": [
+      2,
+      4963,
+      4965,
+      "unix prunstop",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "60e7cc31-07a6-4931-b678-0cff919cea6c",
+     "value": [
+      1,
+      4979,
+      5496,
+      "unix 0xfffffffffb800ca0",
+      0.9005086044729325
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "3e52356d-42d9-4efb-bb9f-02e24bf5b870",
+     "value": [
+      2,
+      4979,
+      4986,
+      "genunix gethrtime_unscaled",
+      0.012192572981258273
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "fb9643eb-9022-45bf-a07f-c06860f53f8f",
+     "value": [
+      2,
+      4986,
+      5398,
+      "genunix syscall_mstate",
+      0.7176200097540584
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8038c270-2670-4838-8fd4-37714b1fb675",
+     "value": [
+      3,
+      4986,
+      5168,
+      "genunix gethrtime_unscaled",
+      0.3170068975127151
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1b4dba3b-e13f-45bc-88bd-497b2f5f5163",
+     "value": [
+      4,
+      4986,
+      5003,
+      "unix tsc_gethrtimeunscaled",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "3afe825e-16b5-4523-a387-fbc01fa46de9",
+     "value": [
+      4,
+      5003,
+      5163,
+      "unix tsc_read",
+      0.2786873824287605
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5e8ec51c-029c-4182-b828-8b2adad8c520",
+     "value": [
+      3,
+      5168,
+      5180,
+      "unix tsc_gethrtimeunscaled",
+      0.020901553682157042
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d088a382-57ef-486c-8e84-0155dbdb7061",
+     "value": [
+      2,
+      5398,
+      5493,
+      "unix atomic_add_64",
+      0.16547063331707657
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "2ba36674-9707-448a-8e9f-0105731a0de7",
+     "value": [
+      1,
+      5496,
+      5502,
+      "unix _sys_rtt",
+      0.010450776841078521
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "abe470ad-c49e-4756-94ed-ac0d50fde760",
+     "value": [
+      1,
+      5502,
+      5503,
+      "unix _sys_rtt_ints_disabled",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "122badd8-838e-49c7-af3c-e1acb662a552",
+     "value": [
+      2,
+      5502,
+      5503,
+      "unix sys_rtt_common",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "63ce4716-abd3-41ed-aad8-9a9a6a711444",
+     "value": [
+      3,
+      5502,
+      5503,
+      "unix trap",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f702ddbb-772c-43ab-92f7-2d96a688f08b",
+     "value": [
+      4,
+      5502,
+      5503,
+      "genunix new_mstate",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1c8ceb18-6020-4b29-8758-95c9e65640e0",
+     "value": [
+      5,
+      5502,
+      5503,
+      "genunix cpu_update_pct",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "692fbd43-1837-4de2-9823-2f9fabf6e87d",
+     "value": [
+      6,
+      5502,
+      5503,
+      "genunix cpu_grow",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2e4c2849-3ed6-4fe1-9e57-3df80fedafbd",
+     "value": [
+      7,
+      5502,
+      5503,
+      "genunix cpu_decay",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "291bff3a-192d-4e45-92fd-66e456c0304c",
+     "value": [
+      1,
+      5503,
+      5504,
+      "unix _sys_sysenter_post_swapgs",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b152c57a-528d-48bd-9853-0c18b92267cd",
+     "value": [
+      2,
+      5503,
+      5504,
+      "genunix exece",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b1a5798e-8d43-495b-81ba-11f2cfb8d798",
+     "value": [
+      3,
+      5503,
+      5504,
+      "genunix exec_common",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "582dd6cb-572a-4586-82d9-76db71c342ff",
+     "value": [
+      4,
+      5503,
+      5504,
+      "genunix close_exec",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "70de5905-56da-4bec-a48b-f4f499f7d126",
+     "value": [
+      5,
+      5503,
+      5504,
+      "genunix closef",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ec80245c-5ab6-45e6-81b7-a45bdce81b61",
+     "value": [
+      6,
+      5503,
+      5504,
+      "genunix fop_close",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5f135145-2cf8-4486-8a7a-d075ecfa600c",
+     "value": [
+      7,
+      5503,
+      5504,
+      "namefs nm_close",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#ebdba4"
+     }
+    },
+    {
+     "name": "b78eec38-2509-41dd-8b71-dc67702caf33",
+     "value": [
+      8,
+      5503,
+      5504,
+      "doorfs door_close",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#fcce10"
+     }
+    },
+    {
+     "name": "87f4e512-d5aa-47a0-be9f-93458bc76970",
+     "value": [
+      1,
+      5504,
+      57412,
+      "unix sys_syscall",
+      90.41315404445064
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "88074673-6839-4c57-b457-71be1d748182",
+     "value": [
+      2,
+      5504,
+      5515,
+      "genunix gethrtime_unscaled",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "904cc5fc-e3fc-4d12-8d8d-c7f8b694b6da",
+     "value": [
+      2,
+      5515,
+      5518,
+      "genunix memcntl",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0a8f3456-3561-4561-9db8-9928b055ff95",
+     "value": [
+      3,
+      5515,
+      5518,
+      "genunix as_faulta",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "09022235-7f78-46e5-becc-18f416751023",
+     "value": [
+      4,
+      5515,
+      5518,
+      "genunix segvn_faulta",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a1b1840c-a725-4773-8d59-b032d5653108",
+     "value": [
+      5,
+      5515,
+      5518,
+      "genunix fop_getpage",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "12521c2e-34ca-40c1-873e-2f540818fe6e",
+     "value": [
+      6,
+      5515,
+      5518,
+      "ufs ufs_getpage",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "ff717c0c-e3f5-4792-a3f9-ce462768a5b7",
+     "value": [
+      7,
+      5515,
+      5518,
+      "ufs ufs_getpage_ra",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "33be25c7-65ab-4d06-9ed8-4d5bcec84876",
+     "value": [
+      8,
+      5515,
+      5518,
+      "genunix pvn_read_kluster",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d9383e2f-3344-4204-83a4-529e2234125f",
+     "value": [
+      9,
+      5515,
+      5518,
+      "unix page_create_va",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5b79e557-75f8-4a18-8387-a17172051690",
+     "value": [
+      10,
+      5515,
+      5517,
+      "unix page_get_freelist",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1fab757a-455f-460e-8802-723a82291572",
+     "value": [
+      11,
+      5515,
+      5517,
+      "unix page_get_mnode_freelist",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8c5479b5-b0fc-4193-9bdd-a23d6db1b32c",
+     "value": [
+      12,
+      5515,
+      5516,
+      "unix mtype_func",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8cff20d1-7fea-413d-8e06-e6477ce55a0f",
+     "value": [
+      12,
+      5516,
+      5517,
+      "unix mutex_enter",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "bb0af9ce-182e-48d1-84ee-1c522b51a9de",
+     "value": [
+      2,
+      5518,
+      5519,
+      "genunix mmapobjsys",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "42688244-6f14-4e0a-a517-1db58fd1d285",
+     "value": [
+      3,
+      5518,
+      5519,
+      "unix mmapobj",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b047438e-bcad-41f2-a6aa-e2ab0cfd87e9",
+     "value": [
+      4,
+      5518,
+      5519,
+      "unix mmapobj_map_interpret",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7cff3d51-0972-4da4-b73f-119a4052bb8d",
+     "value": [
+      5,
+      5518,
+      5519,
+      "unix mmapobj_map_elf",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "087845c8-1413-4ba9-88d1-e4b1668c53c7",
+     "value": [
+      6,
+      5518,
+      5519,
+      "genunix as_unmap",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "638e347b-2dbf-4cb9-881b-4082cb24c531",
+     "value": [
+      7,
+      5518,
+      5519,
+      "genunix segvn_unmap",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3e0d2b42-df39-4aa8-8c70-e85daf05c9ee",
+     "value": [
+      8,
+      5518,
+      5519,
+      "unix hat_unload_callback",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ecad92ad-e213-46a0-b25e-fb51b59bb755",
+     "value": [
+      9,
+      5518,
+      5519,
+      "unix htable_walk",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "59d52056-1ee1-4755-9f7d-f9f14ad38ed2",
+     "value": [
+      10,
+      5518,
+      5519,
+      "unix htable_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f245eca3-a5c1-460d-a6d4-0e16f9f4dcc4",
+     "value": [
+      2,
+      5519,
+      55188,
+      "genunix open",
+      86.51327248658816
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "66704c79-92df-49c0-8ee8-458f050a5def",
+     "value": [
+      3,
+      5519,
+      5526,
+      "genunix copen",
+      0.012192572981258273
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2cb9bd1a-4e20-41eb-b83a-99fc0da01b45",
+     "value": [
+      3,
+      5526,
+      55173,
+      "genunix openat",
+      86.47495297150421
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7d71a6e1-4058-47a9-9ef0-cec63c35cd02",
+     "value": [
+      4,
+      5526,
+      5588,
+      "genunix audit_getstate",
+      0.10799136069114472
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "de1eb1a3-fec0-44fe-911f-ab84fead0871",
+     "value": [
+      4,
+      5588,
+      55032,
+      "genunix copen",
+      86.12136835504772
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0f8ec4f5-e854-4163-ba30-c20992471425",
+     "value": [
+      5,
+      5588,
+      5596,
+      "genunix audit_falloc",
+      0.013934369121438027
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6388ee86-0b60-49b6-bbba-8873fd898a03",
+     "value": [
+      5,
+      5596,
+      5662,
+      "genunix audit_getstate",
+      0.11495854525186372
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "95cb7e53-cdf5-490e-97d6-e1bcedca4c8e",
+     "value": [
+      6,
+      5596,
+      5597,
+      "unix _sys_rtt_ints_disabled",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7b8ec187-72b9-4fbe-978c-6675f6f14c41",
+     "value": [
+      7,
+      5596,
+      5597,
+      "unix sys_rtt_common",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a7d37ed1-7735-4437-a2e0-32c25dfad98d",
+     "value": [
+      8,
+      5596,
+      5597,
+      "unix kpreempt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ee260c11-d21e-42f4-b5ab-27844ea25873",
+     "value": [
+      9,
+      5596,
+      5597,
+      "unix preempt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "34e7c45f-3a4d-4f99-b0a7-6fb03b3fed12",
+     "value": [
+      10,
+      5596,
+      5597,
+      "unix swtch",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f6104c18-ab48-48cc-ba97-b02813d2cdfc",
+     "value": [
+      5,
+      5662,
+      5694,
+      "genunix audit_unfalloc",
+      0.055737476485752106
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "10614795-f74e-497b-8854-a1d9041692d9",
+     "value": [
+      5,
+      5694,
+      5703,
+      "genunix crfree",
+      0.015676165261617782
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c1cb5356-e0f7-460a-b14f-e171eccaa5c7",
+     "value": [
+      5,
+      5703,
+      5708,
+      "genunix crhold",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "80a2f5b3-d292-4869-b882-1b968f7e64df",
+     "value": [
+      5,
+      5708,
+      5724,
+      "genunix cv_broadcast",
+      0.027868738242876053
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "385d02b3-8961-4088-8021-9c23680d8528",
+     "value": [
+      5,
+      5724,
+      7087,
+      "genunix falloc",
+      2.374068139065004
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8767986b-106c-47ba-843e-d1da779d2cce",
+     "value": [
+      6,
+      5724,
+      6037,
+      "genunix audit_falloc",
+      0.5451821918762628
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "69d5d903-3a46-4ab9-8a9f-1dc19b3a92d7",
+     "value": [
+      7,
+      5724,
+      5735,
+      "genunix kmem_cache_alloc",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "bf17927e-3282-4b2f-933b-0ae7e881357e",
+     "value": [
+      7,
+      5735,
+      6015,
+      "genunix kmem_zalloc",
+      0.4877029192503309
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "53131460-d475-41cb-be81-1d49b6704eaa",
+     "value": [
+      8,
+      5735,
+      5801,
+      "genunix kmem_cache_alloc",
+      0.11495854525186372
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c6e1f246-a657-47e0-bb02-ac86f99b0f68",
+     "value": [
+      8,
+      5801,
+      5923,
+      "unix mutex_enter",
+      0.21249912910192992
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "6e41b72a-f711-489b-903b-5a378ec7bb3e",
+     "value": [
+      8,
+      5923,
+      5969,
+      "unix mutex_exit",
+      0.08012262244826865
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d46b5cf2-4436-4cbb-8032-4c302daa7463",
+     "value": [
+      7,
+      6015,
+      6023,
+      "unix bzero",
+      0.013934369121438027
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "61d38704-b62e-490e-a811-d052914c398d",
+     "value": [
+      6,
+      6037,
+      6048,
+      "genunix crhold",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8a6c6561-605b-49cf-879f-266ce883cc82",
+     "value": [
+      6,
+      6048,
+      6097,
+      "genunix kmem_cache_alloc",
+      0.08534801086880792
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b64f15ce-b576-41cc-837b-aa75464c38f0",
+     "value": [
+      6,
+      6097,
+      6110,
+      "genunix kmem_zalloc",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ac0db323-ebce-4fa2-bc6f-415397463aff",
+     "value": [
+      6,
+      6110,
+      6661,
+      "genunix ufalloc",
+      0.9597296732390441
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "cdb688ac-dd05-4c3e-acd8-95ba9f47c09c",
+     "value": [
+      7,
+      6110,
+      6123,
+      "genunix fd_find",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "97afbdca-4b07-46f7-853c-19aa586240ea",
+     "value": [
+      7,
+      6123,
+      6132,
+      "genunix fd_reserve",
+      0.015676165261617782
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7fb6d491-179e-4f52-8a8c-a5ec886cbdd4",
+     "value": [
+      7,
+      6132,
+      6426,
+      "genunix ufalloc_file",
+      0.5120880652128474
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3825a4ab-bb2d-4f00-8e05-4ba48418fde7",
+     "value": [
+      8,
+      6132,
+      6293,
+      "genunix fd_find",
+      0.2804291785689403
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ed772450-53f9-408f-9457-c3b70509fab6",
+     "value": [
+      8,
+      6293,
+      6308,
+      "genunix fd_reserve",
+      0.026126942102696303
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f34f3d02-1321-4c96-95a8-408ba21f6cfe",
+     "value": [
+      7,
+      6426,
+      6623,
+      "unix mutex_enter",
+      0.34313383961541144
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "121eea01-bf45-4e3d-b93e-ad15508c4ab9",
+     "value": [
+      7,
+      6623,
+      6652,
+      "unix mutex_exit",
+      0.050512088065212846
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "c5069a6f-dc2b-4393-a27a-1c0dad47f80e",
+     "value": [
+      6,
+      6661,
+      6681,
+      "genunix ufalloc_file",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7591cd67-e2e3-41b3-8cf6-51834b95112e",
+     "value": [
+      6,
+      6681,
+      6815,
+      "unix atomic_add_32",
+      0.23340068278408696
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f645a660-1301-4648-b2d6-087b5bd2cb5c",
+     "value": [
+      6,
+      6815,
+      6914,
+      "unix mutex_enter",
+      0.17243781787779558
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a9edc8ec-73aa-43b1-bbfa-ea260f23f625",
+     "value": [
+      6,
+      6914,
+      6972,
+      "unix mutex_exit",
+      0.10102417613042569
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5b9523b9-9f1f-4b3c-9353-46253672ac10",
+     "value": [
+      5,
+      7087,
+      7095,
+      "genunix fd_reserve",
+      0.013934369121438027
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "59df9f2b-88f2-47d8-a7da-359961720442",
+     "value": [
+      5,
+      7095,
+      7104,
+      "genunix kmem_cache_alloc",
+      0.015676165261617782
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "58dbaf9d-98e8-44e9-8b10-45576d51bd31",
+     "value": [
+      5,
+      7104,
+      7109,
+      "genunix kmem_cache_free",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "436403bc-503a-452b-a5f4-0d04713ebbaf",
+     "value": [
+      5,
+      7109,
+      7178,
+      "genunix lookupnameat",
+      0.12018393367240299
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e29fd7c6-4afb-425f-88c0-527956cd4c54",
+     "value": [
+      5,
+      7178,
+      7202,
+      "genunix set_errno",
+      0.041803107364314085
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e1b7e05d-9138-4086-8c31-c62b9767a4cf",
+     "value": [
+      5,
+      7202,
+      7389,
+      "genunix setf",
+      0.32571587821361386
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "bd50cfe4-287b-454a-9169-496288a64ddb",
+     "value": [
+      6,
+      7202,
+      7233,
+      "genunix audit_getstate",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a235a3c5-e53c-4d58-b7a2-8c01b8d49001",
+     "value": [
+      6,
+      7233,
+      7258,
+      "genunix cv_broadcast",
+      0.04354490350449383
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6ed6ede4-52dd-4bfd-93a3-324bde62b0e2",
+     "value": [
+      6,
+      7258,
+      7293,
+      "genunix fd_reserve",
+      0.06096286490629136
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "05775a1b-d5c3-4da9-aa71-1140c45f5a57",
+     "value": [
+      5,
+      7389,
+      7399,
+      "genunix ufalloc",
+      0.017417961401797532
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8d85c436-3755-4e11-8c0f-ea0df4684a52",
+     "value": [
+      5,
+      7399,
+      8128,
+      "genunix unfalloc",
+      1.2697693861910402
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3e701b08-5fd7-4594-af64-e5afaa1e5f29",
+     "value": [
+      6,
+      7399,
+      7739,
+      "genunix audit_unfalloc",
+      0.5922106876611161
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e08b64dc-886f-4776-be5e-d04f48143f81",
+     "value": [
+      7,
+      7399,
+      7404,
+      "genunix kmem_cache_free",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "aba568d5-4b43-441d-9045-57a757e07f1e",
+     "value": [
+      7,
+      7404,
+      7692,
+      "genunix kmem_free",
+      0.501637288371769
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5ab68757-09bc-4fcd-84b6-40ee15374a20",
+     "value": [
+      8,
+      7404,
+      7477,
+      "genunix kmem_cache_free",
+      0.127151118233122
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f6d1defc-b288-49fb-bb8c-8e9beeacd58f",
+     "value": [
+      8,
+      7477,
+      7588,
+      "unix mutex_enter",
+      0.19333937155995262
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7fe30f19-0776-47eb-b1eb-99e5dbb32383",
+     "value": [
+      8,
+      7588,
+      7643,
+      "unix mutex_exit",
+      0.09579878770988644
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "fd4e01ee-10ad-470d-9864-a7bbea53904b",
+     "value": [
+      6,
+      7739,
+      7752,
+      "genunix crfree",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d9248709-b87d-4f46-9d6e-058867460ada",
+     "value": [
+      6,
+      7752,
+      7803,
+      "genunix kmem_cache_free",
+      0.08883160314916742
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b17735a3-249d-4e89-aed5-b7792ba70175",
+     "value": [
+      6,
+      7803,
+      7814,
+      "genunix kmem_free",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "455048e7-e867-42db-a165-35d42bfbc9f9",
+     "value": [
+      6,
+      7814,
+      7914,
+      "unix atomic_add_32_nv",
+      0.17417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f9ac39dc-7488-4ac2-8e41-49abd725d17b",
+     "value": [
+      6,
+      7914,
+      8011,
+      "unix mutex_enter",
+      0.16895422559743606
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "467cb5a3-04d1-4b12-ac9d-43f9e7fd44fd",
+     "value": [
+      6,
+      8011,
+      8067,
+      "unix mutex_exit",
+      0.09754058385006618
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7a3134f1-4410-4f1b-899b-ac99e0f0a35a",
+     "value": [
+      5,
+      8128,
+      54470,
+      "genunix vn_openat",
+      80.71831672821013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0a5d9655-c556-4808-91fa-7fe8c0e25ca5",
+     "value": [
+      6,
+      8128,
+      54203,
+      "genunix lookupnameat",
+      80.25325715878213
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "89ce7522-0eb7-44d4-b889-bb1a13f51106",
+     "value": [
+      7,
+      8128,
+      54106,
+      "genunix lookupnameatcred",
+      80.0843029331847
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d14ed328-2a9f-451d-a7f4-a257f70b7d8a",
+     "value": [
+      8,
+      8128,
+      52809,
+      "genunix lookuppnatcred",
+      77.82519333937155
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4032bade-6367-440c-9644-d670737535d1",
+     "value": [
+      9,
+      8128,
+      8144,
+      "genunix audit_getstate",
+      0.027868738242876053
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "06881713-bd6e-4f75-9433-cb8388820dad",
+     "value": [
+      9,
+      8144,
+      8199,
+      "genunix fop_lookup",
+      0.09579878770988644
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9ec7a385-4654-4792-ad3c-2e52347c071f",
+     "value": [
+      9,
+      8199,
+      52441,
+      "genunix lookuppnvp",
+      77.06054483383265
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "511df6db-944f-485f-b9a3-7b975963b6f0",
+     "value": [
+      10,
+      8199,
+      8220,
+      "genunix audit_getstate",
+      0.036577718943774824
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "84eda64e-eaf7-42e9-bc4d-54ef2045c289",
+     "value": [
+      10,
+      8220,
+      8275,
+      "genunix crgetmapped",
+      0.09579878770988644
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f48a005b-cf10-4f07-83a2-fd36fbf45df8",
+     "value": [
+      10,
+      8275,
+      8314,
+      "genunix fop_inactive",
+      0.06793004946701038
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9ccf9a48-f596-4087-bd18-5d223b5bf114",
+     "value": [
+      10,
+      8314,
+      37530,
+      "genunix fop_lookup",
+      50.88831603149168
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "014dcda0-6be2-4ed3-8a54-3f9c9d00e111",
+     "value": [
+      11,
+      8314,
+      8371,
+      "genunix crgetmapped",
+      0.09928237999024594
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c83c4184-7fa7-45ac-a132-f9274bdf229e",
+     "value": [
+      11,
+      8371,
+      8397,
+      "genunix dnlc_lookup",
+      0.04528669964467359
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8a6f4f33-cba5-4297-8914-ed41878a154c",
+     "value": [
+      11,
+      8397,
+      8482,
+      "genunix fop_lookup",
+      0.14805267191527902
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f649e376-cf02-4d5b-9d6f-d2a96e81d402",
+     "value": [
+      11,
+      8482,
+      8555,
+      "genunix kmem_alloc",
+      0.127151118233122
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "28e4cdbd-26cb-4b3d-844d-6e8bb5114664",
+     "value": [
+      11,
+      8555,
+      8585,
+      "genunix traverse",
+      0.052253884205392606
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7b7582c2-078b-4738-a183-2c8d958e9fdd",
+     "value": [
+      11,
+      8585,
+      8613,
+      "genunix vfs_matchops",
+      0.04877029192503309
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0441243e-5212-46aa-9499-6894bb6efb62",
+     "value": [
+      11,
+      8613,
+      10582,
+      "genunix vn_setpath",
+      3.4295966000139346
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e629373e-1f8a-47e2-8142-a6a34bc70584",
+     "value": [
+      12,
+      8613,
+      9547,
+      "genunix kmem_alloc",
+      1.6268375949278897
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e94c8798-008f-4049-af6f-c1263374b700",
+     "value": [
+      13,
+      8613,
+      8854,
+      "genunix kmem_cache_alloc",
+      0.41977286978332057
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "43511735-93c7-4018-a1f2-7ab3ded9ecb2",
+     "value": [
+      13,
+      8854,
+      9220,
+      "unix mutex_enter",
+      0.6374973873057898
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "187aa1a2-7089-431b-b78e-a447aec1e35e",
+     "value": [
+      13,
+      9220,
+      9369,
+      "unix mutex_exit",
+      0.25952762488678327
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "2b9c66dd-0250-4388-aad1-d5fab2e9dc1f",
+     "value": [
+      12,
+      9547,
+      9579,
+      "genunix kmem_cache_alloc",
+      0.055737476485752106
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ca17bc13-9201-4055-9fd6-e24fcd19c32a",
+     "value": [
+      11,
+      10582,
+      30469,
+      "lofs lo_lookup",
+      34.639099839754756
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "34ddd4e8-ca36-44b5-8ff0-0e4e27f89020",
+     "value": [
+      12,
+      10582,
+      10618,
+      "genunix crgetmapped",
+      0.06270466104647113
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "cb867458-5016-4d4d-9037-42db148d21a8",
+     "value": [
+      12,
+      10618,
+      17088,
+      "genunix fop_lookup",
+      11.269421026963004
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "613812d8-3a6f-41fa-9fc6-df43409a3c6d",
+     "value": [
+      13,
+      10618,
+      10676,
+      "genunix crgetmapped",
+      0.10102417613042569
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "80e77df0-7bd8-4df6-a3bf-93b6c839f21a",
+     "value": [
+      13,
+      10676,
+      10746,
+      "genunix dnlc_lookup",
+      0.12192572981258272
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "af69b67c-8ca6-4a02-abfe-429a99b950b0",
+     "value": [
+      13,
+      10746,
+      10760,
+      "genunix vn_rele",
+      0.024385145962516546
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b7a3ea59-3a94-4a84-aed9-307eda5d7237",
+     "value": [
+      13,
+      10760,
+      10851,
+      "ufs ufs_iaccess",
+      0.15850344875635755
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "b8eb9a11-e8ef-478a-b679-80d196c5c3b4",
+     "value": [
+      13,
+      10851,
+      16250,
+      "ufs ufs_lookup",
+      9.403957360830487
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "ae90ff1b-4ea4-409c-99f2-9dd4ef205354",
+     "value": [
+      14,
+      10851,
+      10881,
+      "genunix crgetuid",
+      0.052253884205392606
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "53cc6713-b46a-413f-988d-4904ade11179",
+     "value": [
+      14,
+      10881,
+      12724,
+      "genunix dnlc_lookup",
+      3.2101302863512857
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "30ce7774-250a-4cca-a93d-2d92e06e28ea",
+     "value": [
+      15,
+      10881,
+      10919,
+      "genunix memcmp",
+      0.06618825332683063
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "fbdf7bfe-f6c1-4211-a6a9-e09c344c2213",
+     "value": [
+      15,
+      10919,
+      11214,
+      "unix bcmp",
+      0.5138298613530272
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8a237863-62dd-4163-8eb3-bf535d9a2898",
+     "value": [
+      16,
+      10919,
+      11196,
+      "genunix memcmp",
+      0.48247753082979167
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "44355eb3-57a1-41c2-a6e5-1d7fe6d8dadc",
+     "value": [
+      14,
+      12724,
+      12796,
+      "genunix secpolicy_vnode_access2",
+      0.12540932209294225
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5097e296-2e70-49fc-8353-88dfcfaa888f",
+     "value": [
+      14,
+      12796,
+      12835,
+      "genunix vn_rele",
+      0.06793004946701038
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "698065bf-d8b7-4761-a758-c841c4631c80",
+     "value": [
+      14,
+      12835,
+      13483,
+      "ufs ufs_iaccess",
+      1.1286838988364802
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "670d38b1-ffd4-45a8-96d5-331386f47fb9",
+     "value": [
+      15,
+      12835,
+      12857,
+      "genunix crgetuid",
+      0.03831951508395457
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "36c3b93c-4825-42ef-8eef-033070219a50",
+     "value": [
+      15,
+      12857,
+      13074,
+      "genunix secpolicy_vnode_access2",
+      0.3779697624190065
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6097981b-5199-4db7-9eb5-ca78cee2b0c6",
+     "value": [
+      14,
+      13483,
+      13525,
+      "unix bcmp",
+      0.07315543788754965
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "2cf13825-1100-4e82-8906-680e1fa0ca49",
+     "value": [
+      14,
+      13525,
+      14505,
+      "unix mutex_enter",
+      1.7069602173761584
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ab2a8e93-c9b1-4483-a86c-5e70d7d2dce0",
+     "value": [
+      14,
+      14505,
+      14855,
+      "unix mutex_exit",
+      0.6096286490629137
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "42012ce8-7337-45fe-aa73-9a50dbe96149",
+     "value": [
+      14,
+      14855,
+      15380,
+      "unix rw_enter",
+      0.9144429735943704
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b1f30acc-48ed-484d-8db0-b6965e2fa564",
+     "value": [
+      14,
+      15380,
+      15819,
+      "unix rw_exit",
+      0.7646485055389117
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1d32f7f9-d99c-48d1-9b0a-2293a7d264b7",
+     "value": [
+      12,
+      17088,
+      17127,
+      "genunix kmem_cache_alloc",
+      0.06793004946701038
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "390dc8d5-3fd1-40f0-ac91-a2a8abc171fe",
+     "value": [
+      12,
+      17127,
+      24370,
+      "genunix traverse",
+      12.615829443321955
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "45df4256-9150-4377-8e5e-ebc36aa501e4",
+     "value": [
+      13,
+      17127,
+      17145,
+      "genunix rwst_exit",
+      0.031352330523235564
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "21edcc4a-7033-4853-a529-995d0b14a546",
+     "value": [
+      13,
+      17145,
+      17177,
+      "genunix rwst_tryenter",
+      0.055737476485752106
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c71cda62-bc01-4ecf-889d-eabd96a4839c",
+     "value": [
+      13,
+      17177,
+      17188,
+      "genunix vn_mountedvfs",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8eb9c8d7-490b-4bfc-af47-1855139e2499",
+     "value": [
+      13,
+      17188,
+      17250,
+      "genunix vn_vfslocks_getlock",
+      0.10799136069114472
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "fb2fa4f2-ede1-4c58-ad99-7d03b1a6b042",
+     "value": [
+      13,
+      17250,
+      17300,
+      "genunix vn_vfslocks_rele",
+      0.08708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "492e35b8-4af0-44b3-8f54-37b6557e3f2a",
+     "value": [
+      13,
+      17300,
+      20642,
+      "genunix vn_vfsrlock",
+      5.821082700480735
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3c41a554-9c11-4359-a58f-aff01afe7696",
+     "value": [
+      14,
+      17300,
+      17332,
+      "genunix kmem_alloc",
+      0.055737476485752106
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7cc7fe16-090a-41f7-a12e-1889e4b31ed4",
+     "value": [
+      14,
+      17332,
+      17364,
+      "genunix rwst_enter_common",
+      0.055737476485752106
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6f014483-40d1-49cb-8bf8-1f3aed6d92bb",
+     "value": [
+      14,
+      17364,
+      17392,
+      "genunix rwst_init",
+      0.04877029192503309
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2f9bd7cd-b8de-4f70-b104-cd2b0201bc1a",
+     "value": [
+      14,
+      17392,
+      18126,
+      "genunix rwst_tryenter",
+      1.278478366891939
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "dc2ac010-661f-4513-ad79-fd7648ba5d3e",
+     "value": [
+      15,
+      17392,
+      17656,
+      "genunix rwst_enter_common",
+      0.4598341810074549
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "905f6e73-369e-47f5-8eb6-396323c2d9f0",
+     "value": [
+      15,
+      17656,
+      17993,
+      "unix mutex_enter",
+      0.5869852992405769
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1d1e69b0-4b5b-4746-bc20-8f0f480e0f32",
+     "value": [
+      15,
+      17993,
+      18098,
+      "unix mutex_exit",
+      0.1828885947188741
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "e0a0af92-f535-4eb5-8f5d-bf650c672da3",
+     "value": [
+      14,
+      18126,
+      19483,
+      "genunix vn_vfslocks_getlock",
+      2.363617362223925
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1139bb86-d668-4299-8140-084520b1f233",
+     "value": [
+      15,
+      18126,
+      18179,
+      "genunix cv_init",
+      0.09231519542952693
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "57484350-c6b7-4606-849a-253d188102c3",
+     "value": [
+      15,
+      18179,
+      18974,
+      "genunix kmem_alloc",
+      1.384727931442904
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0800cda7-ed73-48ee-85c3-2341970dc7f3",
+     "value": [
+      16,
+      18179,
+      18347,
+      "genunix kmem_cache_alloc",
+      0.2926217515501986
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b5692a4e-b425-4d3d-ae32-a55d1f2cdbdd",
+     "value": [
+      17,
+      18179,
+      18181,
+      "genunix kmem_cpu_reload",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7c31ca8e-bccc-4d0a-bf95-f3b636ab13bc",
+     "value": [
+      16,
+      18347,
+      18726,
+      "unix mutex_enter",
+      0.6601407371281265
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1c8aa0c1-8124-44f2-aeb0-31acb0fd703a",
+     "value": [
+      16,
+      18726,
+      18881,
+      "unix mutex_exit",
+      0.26997840172786175
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5b74b95d-c730-46a0-997b-a7f283bf5f77",
+     "value": [
+      15,
+      18974,
+      19003,
+      "genunix kmem_cache_alloc",
+      0.050512088065212846
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "729ddebe-356f-4e6f-9f0d-b8b6137b8a35",
+     "value": [
+      15,
+      19003,
+      19239,
+      "genunix rwst_init",
+      0.4110638890824218
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "713c7472-9f63-43f7-aebb-9157b641a23e",
+     "value": [
+      16,
+      19003,
+      19068,
+      "genunix cv_init",
+      0.11321674911168396
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "214302fb-d8f3-40ca-a112-e3eb74e47ecc",
+     "value": [
+      16,
+      19068,
+      19121,
+      "unix mutex_init",
+      0.09231519542952693
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "729fc7a5-5df4-4cd5-bd40-54702d3fdf26",
+     "value": [
+      15,
+      19239,
+      19285,
+      "unix mutex_init",
+      0.08012262244826865
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a94726ad-4d85-4adb-95e8-da1981f69137",
+     "value": [
+      14,
+      19483,
+      20210,
+      "unix mutex_enter",
+      1.2662857939106809
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "4dfa5cd0-bf7a-43c7-9187-5c6ddc88c273",
+     "value": [
+      14,
+      20210,
+      20581,
+      "unix mutex_exit",
+      0.6462063680066885
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ee75c996-34ba-4b00-aa1e-59d5e7fb8589",
+     "value": [
+      13,
+      20642,
+      24220,
+      "genunix vn_vfsunlock",
+      6.232146589563158
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3bc8b2ad-baa9-45c3-af0c-3c5bb18ee9b7",
+     "value": [
+      14,
+      20642,
+      20667,
+      "genunix cv_broadcast",
+      0.04354490350449383
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a52bee67-c7e5-4391-9573-02c7114bc931",
+     "value": [
+      14,
+      20667,
+      20702,
+      "genunix kmem_free",
+      0.06096286490629136
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "90295063-e6bb-40ac-89fd-f8cddaa84b54",
+     "value": [
+      14,
+      20702,
+      20734,
+      "genunix rwst_destroy",
+      0.055737476485752106
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "08c8b83a-3c91-43ec-8567-b66c93803c4c",
+     "value": [
+      14,
+      20734,
+      20901,
+      "genunix rwst_exit",
+      0.2908799554100188
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e32d19b0-9ddb-4189-b1a3-bb65c5b1101f",
+     "value": [
+      15,
+      20734,
+      20774,
+      "genunix cv_broadcast",
+      0.06967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c127369d-0e5a-4fac-9185-f9a55524f13e",
+     "value": [
+      14,
+      20901,
+      21021,
+      "genunix vn_vfslocks_getlock",
+      0.20901553682157042
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5ef37046-3a15-4192-bf95-1e8c0383fdb6",
+     "value": [
+      14,
+      21021,
+      22441,
+      "genunix vn_vfslocks_rele",
+      2.47335051905525
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0e5b5823-27f9-4736-bc4b-6536d7aa0be8",
+     "value": [
+      15,
+      21021,
+      21098,
+      "genunix cv_destroy",
+      0.13411830279384102
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2664b2a6-cb08-4a82-b2e1-5fcf0a2e495c",
+     "value": [
+      15,
+      21098,
+      21120,
+      "genunix kmem_cache_free",
+      0.03831951508395457
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a15de236-45e1-4535-9f47-00d7d804a2ee",
+     "value": [
+      15,
+      21120,
+      21813,
+      "genunix kmem_free",
+      1.2070647251445692
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "afd50050-6b05-4cb6-a15d-47dd57edeef2",
+     "value": [
+      16,
+      21120,
+      21274,
+      "genunix kmem_cache_free",
+      0.26823660558768203
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "709a353a-3e99-4050-9f4a-9b2a80c156a3",
+     "value": [
+      16,
+      21274,
+      21590,
+      "unix mutex_enter",
+      0.550407580296802
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a8bd5ffd-12bf-4c0f-a421-8868cec440c2",
+     "value": [
+      16,
+      21590,
+      21738,
+      "unix mutex_exit",
+      0.2577858287466035
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "bf12f021-5322-4ca3-96b7-c9ce8e8c23de",
+     "value": [
+      15,
+      21813,
+      22109,
+      "genunix rwst_destroy",
+      0.515571657493207
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c3439e03-6517-4a1c-9f45-9a8063fb84c1",
+     "value": [
+      16,
+      21813,
+      21855,
+      "genunix cv_destroy",
+      0.07315543788754965
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f30c4404-0c09-43e9-a614-75e29cee64f3",
+     "value": [
+      16,
+      21855,
+      22031,
+      "unix mutex_destroy",
+      0.30655612067163657
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "58aaa5d8-48b7-4731-9dbf-e426fa4d5acb",
+     "value": [
+      15,
+      22109,
+      22140,
+      "unix mutex_destroy",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f9897b5d-4647-495e-9da9-ec12b1878c50",
+     "value": [
+      14,
+      22441,
+      23643,
+      "unix mutex_enter",
+      2.0936389604960635
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "2b45366c-a425-404f-84c9-275637ef8339",
+     "value": [
+      14,
+      23643,
+      24155,
+      "unix mutex_exit",
+      0.8917996237720337
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a4d97e22-718e-4756-965f-399c3f651375",
+     "value": [
+      12,
+      24370,
+      24391,
+      "genunix vfs_getops",
+      0.036577718943774824
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4d13fa1e-9d38-411b-ba12-7b019a472f0e",
+     "value": [
+      12,
+      24391,
+      24727,
+      "genunix vfs_matchops",
+      0.5852435031003972
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9867d6fe-462f-4bd4-859e-05c2d30d8755",
+     "value": [
+      13,
+      24391,
+      24548,
+      "genunix vfs_getops",
+      0.2734619940082213
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9da06620-a7f4-4cff-9329-84f909a5f03c",
+     "value": [
+      13,
+      24548,
+      24671,
+      "unix membar_consumer",
+      0.21424092524210966
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b48f7371-7ed5-4710-ba1f-27f558a6a5e4",
+     "value": [
+      12,
+      24727,
+      24747,
+      "genunix vn_alloc",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f9c01196-b29a-493e-ad67-1d316cecbc4b",
+     "value": [
+      12,
+      24747,
+      24764,
+      "genunix vn_exists",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9df687d8-1266-4a68-9409-3e3054a717bf",
+     "value": [
+      12,
+      24764,
+      24794,
+      "genunix vn_mountedvfs",
+      0.052253884205392606
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2df30347-5e55-4f91-8059-ef21b49fd358",
+     "value": [
+      12,
+      24794,
+      24835,
+      "genunix vn_setops",
+      0.07141364174736989
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ef84b242-6dd6-49e6-8467-77f0d6589f1b",
+     "value": [
+      12,
+      24835,
+      24848,
+      "genunix vn_vfsrlock",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "910b89e7-5ef1-479a-a6eb-6c85ddb7504e",
+     "value": [
+      12,
+      24848,
+      24888,
+      "genunix vn_vfsunlock",
+      0.06967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "0148f1c1-8ac9-4272-9cb8-155ce1e11022",
+     "value": [
+      12,
+      24888,
+      24914,
+      "lofs lfind",
+      0.04528669964467359
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "bd97cde8-58a6-4cf2-a22b-a9b9c25fd0be",
+     "value": [
+      12,
+      24914,
+      24941,
+      "lofs lsave",
+      0.04702849578485334
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "4a626694-f894-4e81-865e-4c31a5be62b7",
+     "value": [
+      12,
+      24941,
+      24969,
+      "lofs makelfsnode",
+      0.04877029192503309
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "0f877b23-e5d6-47b5-8fc9-6a03407e7d06",
+     "value": [
+      12,
+      24969,
+      29181,
+      "lofs makelonode",
+      7.336445342437122
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "322f716e-f06d-44ea-8e99-7107e4fb3f5c",
+     "value": [
+      13,
+      24969,
+      25203,
+      "genunix kmem_cache_alloc",
+      0.40758029680206226
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "de6a889d-70e9-4d87-bad9-6f42de5bdb2c",
+     "value": [
+      13,
+      25203,
+      25204,
+      "genunix kmem_cpu_reload",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "719dc23e-7258-46e4-8203-f2cd5d006ff6",
+     "value": [
+      13,
+      25204,
+      26393,
+      "genunix vn_alloc",
+      2.0709956106737266
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "c3a5eb82-e772-4aae-b91e-28bedb236f0f",
+     "value": [
+      14,
+      25204,
+      25383,
+      "genunix kmem_cache_alloc",
+      0.31178150909217583
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "005f31ff-e843-4339-9094-ec22212fb228",
+     "value": [
+      14,
+      25383,
+      25416,
+      "genunix vn_recycle",
+      0.05747927262593186
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6fd36c6d-fd46-42a6-8c9e-bda486860ae6",
+     "value": [
+      14,
+      25416,
+      25840,
+      "genunix vn_reinit",
+      0.7385215634362154
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "42a3a4aa-24be-4b5b-8453-2ef30abc7a04",
+     "value": [
+      15,
+      25416,
+      25735,
+      "genunix vn_recycle",
+      0.5556329687173414
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e3b86e58-be9f-4106-9a98-e7289b6d109f",
+     "value": [
+      16,
+      25416,
+      25571,
+      "genunix vsd_free",
+      0.26997840172786175
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "17ee9939-ceb8-43a9-90a8-9dfb7a95e149",
+     "value": [
+      15,
+      25735,
+      25749,
+      "genunix vsd_free",
+      0.024385145962516546
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4845e0ec-971e-4a4f-b5d5-d192fb3e1404",
+     "value": [
+      14,
+      25840,
+      26158,
+      "unix mutex_enter",
+      0.5538911725771616
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "4588bf5e-13eb-4ffa-a905-dcd8f9f52200",
+     "value": [
+      14,
+      26158,
+      26300,
+      "unix mutex_exit",
+      0.247335051905525
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "b4b573e1-cf48-46f7-8697-d7bba9f04c38",
+     "value": [
+      13,
+      26393,
+      26443,
+      "genunix vn_exists",
+      0.08708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "306e81d1-fb69-4946-87ba-006919ece06b",
+     "value": [
+      13,
+      26443,
+      26491,
+      "genunix vn_reinit",
+      0.08360621472862817
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "942aa72e-b9e8-4c93-a656-7df62b3c1580",
+     "value": [
+      13,
+      26491,
+      26651,
+      "genunix vn_setops",
+      0.2786873824287605
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8d63eb8a-eae0-4f9b-8c1c-87830bdea3bb",
+     "value": [
+      13,
+      26651,
+      26929,
+      "lofs lfind",
+      0.48421932696997144
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "58beba1c-999d-418e-bdad-24e9c6613a94",
+     "value": [
+      13,
+      26929,
+      27091,
+      "lofs lsave",
+      0.28217097470912006
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "23dc0a9e-39d7-4c73-98e4-928ecc3cddb1",
+     "value": [
+      13,
+      27091,
+      27173,
+      "lofs makelfsnode",
+      0.14282728349473978
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "d2c71ac2-5b80-4112-9b40-a7855b0923ce",
+     "value": [
+      13,
+      27173,
+      27393,
+      "lofs table_lock_enter",
+      0.38319515083954575
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "78e047ec-16f5-4fe8-aa2b-ae26b296dc8d",
+     "value": [
+      13,
+      27393,
+      27711,
+      "unix atomic_cas_64",
+      0.5538911725771616
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d9ff317f-982b-418c-a4b7-fd1257744cce",
+     "value": [
+      13,
+      27711,
+      27948,
+      "unix membar_consumer",
+      0.4128056852226015
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f29206c5-b47a-4ef0-a1e8-7e4931e6ed3f",
+     "value": [
+      13,
+      27948,
+      28588,
+      "unix mutex_enter",
+      1.114749529715042
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "bc2e2b72-51db-4c5c-88c4-d46165dbcef4",
+     "value": [
+      13,
+      28588,
+      28726,
+      "unix mutex_exit",
+      0.24036786734480597
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "0aeb2d68-679c-42a7-aea1-465d11440b90",
+     "value": [
+      12,
+      29181,
+      29224,
+      "lofs table_lock_enter",
+      0.0748972340277294
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "95d9efb7-d8de-4a7f-b208-e1086e1f65ab",
+     "value": [
+      12,
+      29224,
+      29270,
+      "ufs ufs_lookup",
+      0.08012262244826865
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "6c69fe4d-b15d-4dae-b3e0-52544bcde559",
+     "value": [
+      12,
+      29270,
+      29595,
+      "unix atomic_add_32",
+      0.5660837455584198
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "16f8be71-9564-4562-af72-31e5acb17f7c",
+     "value": [
+      12,
+      29595,
+      29621,
+      "unix mutex_exit",
+      0.04528669964467359
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d2bf8c23-a667-4143-8af9-9ca80f29b190",
+     "value": [
+      11,
+      30469,
+      30508,
+      "lofs makelonode",
+      0.06793004946701038
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "7ee42001-7a84-4e1d-b12f-c454e7248812",
+     "value": [
+      11,
+      30508,
+      31404,
+      "unix bcopy",
+      1.560649341601059
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "579db000-21af-4c1a-8251-0fa9db9848d2",
+     "value": [
+      11,
+      31404,
+      32351,
+      "unix mutex_enter",
+      1.6494809447502263
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "0652c65b-6bd5-491d-b90c-9ec1a608e912",
+     "value": [
+      11,
+      32351,
+      32688,
+      "unix mutex_exit",
+      0.5869852992405769
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "03344a70-6eb3-453f-8a24-897b33310815",
+     "value": [
+      11,
+      32688,
+      35347,
+      "unix strlen",
+      4.631435936737964
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "20fe8d9d-663d-4cb4-9dd3-558916f2386e",
+     "value": [
+      12,
+      32688,
+      32689,
+      "unix _interrupt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "6efe3953-0bde-46a3-ae38-b25decfdd4ec",
+     "value": [
+      13,
+      32688,
+      32689,
+      "unix do_interrupt",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "4e1e4819-89ec-48e3-b497-4891e4749991",
+     "value": [
+      14,
+      32688,
+      32689,
+      "unix dispatch_hilevel",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "23edf53e-9c56-4a8b-8394-7e73b33867bf",
+     "value": [
+      11,
+      35347,
+      35357,
+      "zfs specvp_check",
+      0.017417961401797532
+     ],
+     "itemStyle": {
+      "color": "#1bca93"
+     }
+    },
+    {
+     "name": "4c429124-49a4-424b-a36f-c855687b15cf",
+     "value": [
+      11,
+      35357,
+      35361,
+      "zfs zfs_fastaccesschk_execute",
+      0.006967184560719013
+     ],
+     "itemStyle": {
+      "color": "#1bca93"
+     }
+    },
+    {
+     "name": "40b79cc6-90ec-45a2-8ef1-74d9549ce034",
+     "value": [
+      11,
+      35361,
+      36307,
+      "zfs zfs_lookup",
+      1.6477391486100466
+     ],
+     "itemStyle": {
+      "color": "#1bca93"
+     }
+    },
+    {
+     "name": "8fa2c88c-b38a-4113-b48a-49ed563e9e40",
+     "value": [
+      12,
+      35361,
+      35367,
+      "genunix crgetuid",
+      0.010450776841078521
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f60a38dc-7465-4f6d-8a0b-5cef1e8173ed",
+     "value": [
+      12,
+      35367,
+      35630,
+      "genunix dnlc_lookup",
+      0.45809238486727516
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "56078e04-f065-4912-a7a0-c0a505c18eeb",
+     "value": [
+      13,
+      35367,
+      35370,
+      "genunix memcmp",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4df2671b-ba95-4ba4-bbc0-753e0a8da57a",
+     "value": [
+      13,
+      35370,
+      35415,
+      "unix bcmp",
+      0.0783808263080889
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8374023f-6e3c-469f-9b7d-38290fd7486e",
+     "value": [
+      14,
+      35370,
+      35408,
+      "genunix memcmp",
+      0.06618825332683063
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "964f0cce-81f1-4fbb-8001-19f68a56aefa",
+     "value": [
+      12,
+      35630,
+      35641,
+      "unix bcmp",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "26c8e48f-658d-46cb-a19d-005c8ef119ea",
+     "value": [
+      12,
+      35641,
+      35950,
+      "unix mutex_enter",
+      0.5382150073155438
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "fe5f580c-1fdb-4529-8442-63df5c8eaa28",
+     "value": [
+      12,
+      35950,
+      36085,
+      "unix mutex_exit",
+      0.23514247892426668
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "2b3bd5ec-b15c-45c6-ac6e-aad71f0ff8cc",
+     "value": [
+      12,
+      36085,
+      36105,
+      "zfs specvp_check",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#1bca93"
+     }
+    },
+    {
+     "name": "ad53f72e-f3d8-41a5-ba1c-a7e7ea038f10",
+     "value": [
+      12,
+      36105,
+      36155,
+      "zfs zfs_fastaccesschk_execute",
+      0.08708980700898766
+     ],
+     "itemStyle": {
+      "color": "#1bca93"
+     }
+    },
+    {
+     "name": "e82f6f0e-18f7-4d73-8136-ffa6f3b03a8a",
+     "value": [
+      13,
+      36105,
+      36107,
+      "genunix crgetuid",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4e41a5e7-0915-4ace-9cdd-db08a65bd618",
+     "value": [
+      10,
+      37530,
+      37592,
+      "genunix fsop_root",
+      0.10799136069114472
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9902bf29-da69-4b29-a05a-49167afc7368",
+     "value": [
+      10,
+      37592,
+      37636,
+      "genunix pn_fixslash",
+      0.07663903016790914
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8defa4aa-19b4-428b-b813-30777ccee4f1",
+     "value": [
+      10,
+      37636,
+      38090,
+      "genunix pn_getcomponent",
+      0.790775447641608
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1f89dd19-c476-4b09-a286-8044ccceb683",
+     "value": [
+      10,
+      38090,
+      43647,
+      "genunix traverse",
+      9.679161150978889
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "50fd86b9-e58f-4fb9-a253-fbc74a2bf465",
+     "value": [
+      11,
+      38090,
+      38387,
+      "genunix fsop_root",
+      0.5173134536333868
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3386af0b-2c05-4e3e-85cc-ace9ac3c64e0",
+     "value": [
+      12,
+      38090,
+      38170,
+      "lofs lo_root",
+      0.13934369121438026
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "deda077a-2214-4d46-a668-6768accd2d30",
+     "value": [
+      12,
+      38170,
+      38265,
+      "unix mutex_enter",
+      0.16547063331707657
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "6ac2348c-22dc-473c-b349-0407174f141d",
+     "value": [
+      12,
+      38265,
+      38324,
+      "unix mutex_exit",
+      0.10276597227060545
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "37c94bdb-91a5-48b8-8757-32e384ac0101",
+     "value": [
+      11,
+      38387,
+      38399,
+      "genunix rwst_exit",
+      0.020901553682157042
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "44840eb3-2b34-4542-be7a-d841eb13180b",
+     "value": [
+      11,
+      38399,
+      38436,
+      "genunix rwst_tryenter",
+      0.06444645718665087
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9c72f9d6-b9cc-4a27-9bfc-214e89b0e257",
+     "value": [
+      11,
+      38436,
+      38456,
+      "genunix vn_mountedvfs",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "071b3780-663e-48fc-a320-d74d82425a2a",
+     "value": [
+      11,
+      38456,
+      38475,
+      "genunix vn_rele",
+      0.03309412666341532
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4cb8b2c2-d9b6-4146-a0af-211c289128a6",
+     "value": [
+      11,
+      38475,
+      38522,
+      "genunix vn_vfslocks_getlock",
+      0.08186441858844841
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3ce2c402-5d82-42ae-9c9b-002860263e29",
+     "value": [
+      11,
+      38522,
+      38556,
+      "genunix vn_vfslocks_rele",
+      0.05922106876611161
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1231ccfe-a96d-47f2-8d07-248c92535bad",
+     "value": [
+      11,
+      38556,
+      40970,
+      "genunix vn_vfsrlock",
+      4.204695882393924
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ad55a738-0f02-4ee6-94e4-9d453853ed3a",
+     "value": [
+      12,
+      38556,
+      38567,
+      "genunix kmem_alloc",
+      0.019159757541977285
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "db05794a-6348-4980-81d6-0345a02b025b",
+     "value": [
+      12,
+      38567,
+      38595,
+      "genunix rwst_enter_common",
+      0.04877029192503309
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3833ec3e-09cd-4c2f-b81f-6fb0776e0305",
+     "value": [
+      12,
+      38595,
+      38608,
+      "genunix rwst_init",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "00002e42-23c9-4c53-8343-73ff3d3f354b",
+     "value": [
+      12,
+      38608,
+      39236,
+      "genunix rwst_tryenter",
+      1.0938479760328852
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6a9248b5-7b0e-4a8a-95c8-0d647eb7514c",
+     "value": [
+      13,
+      38608,
+      38922,
+      "genunix rwst_enter_common",
+      0.5469239880164426
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "24a5499b-2cbe-42db-8246-1ceceabb1525",
+     "value": [
+      13,
+      38922,
+      39160,
+      "unix mutex_enter",
+      0.4145474813627813
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d956a033-773d-4d4a-a94f-e641d097f4e1",
+     "value": [
+      13,
+      39160,
+      39209,
+      "unix mutex_exit",
+      0.08534801086880792
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "aa085d32-2dbf-4d77-bb7f-4b5030828bf6",
+     "value": [
+      12,
+      39236,
+      40209,
+      "genunix vn_vfslocks_getlock",
+      1.6947676443949
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ba05b8df-fbe0-46c9-a0e7-3d2ebceba08a",
+     "value": [
+      13,
+      39236,
+      39292,
+      "genunix cv_init",
+      0.09754058385006618
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a78c761b-bbe3-4b86-a120-3a97ad8ef7fe",
+     "value": [
+      13,
+      39292,
+      39825,
+      "genunix kmem_alloc",
+      0.9283773427158085
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4f5d975c-13c1-4fe1-8268-e70e84a2de6e",
+     "value": [
+      14,
+      39292,
+      39418,
+      "genunix kmem_cache_alloc",
+      0.2194663136626489
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "22f165e2-c9de-41d8-90e7-76679c97d097",
+     "value": [
+      14,
+      39418,
+      39670,
+      "unix mutex_enter",
+      0.4389326273252978
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a8b690a6-b393-4a08-ad85-661cc28a5289",
+     "value": [
+      14,
+      39670,
+      39765,
+      "unix mutex_exit",
+      0.16547063331707657
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "9e2ec19f-0826-4481-8196-9be7ea706763",
+     "value": [
+      13,
+      39825,
+      39842,
+      "genunix kmem_cache_alloc",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "95fd78c1-aa88-491c-b729-4f16236383da",
+     "value": [
+      13,
+      39842,
+      40015,
+      "genunix rwst_init",
+      0.30133073225109736
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "859985b6-f6d8-4016-8cfd-09c659cb3cfd",
+     "value": [
+      14,
+      39842,
+      39891,
+      "genunix cv_init",
+      0.08534801086880792
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e9b2d40c-13d4-4457-a072-c2f3d63a1fa2",
+     "value": [
+      14,
+      39891,
+      39929,
+      "unix mutex_init",
+      0.06618825332683063
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8a9001ca-4768-4de9-91c2-10501c93746b",
+     "value": [
+      13,
+      40015,
+      40046,
+      "unix mutex_init",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7cf6f689-6947-444e-9cae-796f092ac89e",
+     "value": [
+      12,
+      40209,
+      40664,
+      "unix mutex_enter",
+      0.7925172437817879
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "139463eb-804a-4c70-bb9e-283aa9159eb5",
+     "value": [
+      12,
+      40664,
+      40914,
+      "unix mutex_exit",
+      0.4354490350449383
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "9f5ff3fb-2029-4ee7-870a-a8704f96f326",
+     "value": [
+      11,
+      40970,
+      43342,
+      "genunix vn_vfsunlock",
+      4.131540444506375
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "941e43dd-e1a2-4aa5-8831-bff7d4a86a4c",
+     "value": [
+      12,
+      40970,
+      40984,
+      "genunix cv_broadcast",
+      0.024385145962516546
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "adf1b9cf-5886-4141-b32c-ee6b3618730c",
+     "value": [
+      12,
+      40984,
+      41001,
+      "genunix kmem_free",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d35195df-9ce5-4091-aa26-a0ad4ee62dd9",
+     "value": [
+      12,
+      41001,
+      41021,
+      "genunix rwst_destroy",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a599b768-398f-4abe-9243-0f15d251853c",
+     "value": [
+      12,
+      41021,
+      41131,
+      "genunix rwst_exit",
+      0.19159757541977288
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "29d92bbd-b75a-4f41-bef9-313377419d46",
+     "value": [
+      13,
+      41021,
+      41040,
+      "genunix cv_broadcast",
+      0.03309412666341532
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9ba7dd6d-beae-44e6-9a40-8b33a20defd5",
+     "value": [
+      12,
+      41131,
+      41210,
+      "genunix vn_vfslocks_getlock",
+      0.1376018950742005
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "cfc330c8-7984-4d97-848f-1c7d9572f896",
+     "value": [
+      12,
+      41210,
+      42113,
+      "genunix vn_vfslocks_rele",
+      1.5728419145823174
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a39d3caf-98e3-4b40-92b0-583d7b3fb5ba",
+     "value": [
+      13,
+      41210,
+      41291,
+      "genunix cv_destroy",
+      0.14108548735456003
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6e8561cb-9a0e-4ba3-81c5-b833f4c1831c",
+     "value": [
+      13,
+      41291,
+      41309,
+      "genunix kmem_cache_free",
+      0.031352330523235564
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "beb241a1-167d-4842-919b-094bc402e298",
+     "value": [
+      13,
+      41309,
+      41766,
+      "genunix kmem_free",
+      0.7960008360621473
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "578a8cd5-08ad-4a91-a33b-5108f4aab269",
+     "value": [
+      14,
+      41309,
+      41425,
+      "genunix kmem_cache_free",
+      0.20204835226085138
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7dfc88ce-73ad-4bca-ba6f-75a096ca678f",
+     "value": [
+      14,
+      41425,
+      41620,
+      "unix mutex_enter",
+      0.3396502473350519
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "09af65bc-d345-4302-aa96-382927c5eadc",
+     "value": [
+      14,
+      41620,
+      41710,
+      "unix mutex_exit",
+      0.1567616526161778
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "e6af8223-b0b5-42b5-9320-88396743b470",
+     "value": [
+      13,
+      41766,
+      41912,
+      "genunix rwst_destroy",
+      0.254302236466244
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f478f236-6fb6-4776-b823-9675ad02bddd",
+     "value": [
+      14,
+      41766,
+      41797,
+      "genunix cv_destroy",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6ecd962e-c977-4982-8783-2268c115bc74",
+     "value": [
+      14,
+      41797,
+      41850,
+      "unix mutex_destroy",
+      0.09231519542952693
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "4a98a760-2732-4bf6-874f-59467e9d0c7d",
+     "value": [
+      13,
+      41912,
+      41929,
+      "unix mutex_destroy",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "986fd595-7886-4b35-9fd5-f2e326ae28a0",
+     "value": [
+      12,
+      42113,
+      42936,
+      "unix mutex_enter",
+      1.433498223367937
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "56a166cb-94e2-40fe-aaa0-cffb892a019e",
+     "value": [
+      12,
+      42936,
+      43292,
+      "unix mutex_exit",
+      0.6200794259039922
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "3ae778de-fa04-43b1-b4a1-cc49c50266bc",
+     "value": [
+      11,
+      43342,
+      43373,
+      "lofs lo_root",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "a17540fd-85a9-415f-aed8-ad958f6a6c85",
+     "value": [
+      11,
+      43373,
+      43468,
+      "unix mutex_enter",
+      0.16547063331707657
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "c7e3a2a1-bc02-41b8-bcee-2012f7828fbe",
+     "value": [
+      11,
+      43468,
+      43524,
+      "unix mutex_exit",
+      0.09754058385006618
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5d5c4013-ce01-403f-a0da-d0d2e369a6e0",
+     "value": [
+      10,
+      43647,
+      43690,
+      "genunix vn_mountedvfs",
+      0.0748972340277294
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ef63f48a-f2c3-4f8a-b65a-4b80522641f1",
+     "value": [
+      10,
+      43690,
+      50633,
+      "genunix vn_rele",
+      12.093290601268029
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "78fdb50e-992c-409b-b095-969e398b34f1",
+     "value": [
+      11,
+      43690,
+      43721,
+      "genunix crgetmapped",
+      0.05399568034557236
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e32482aa-304e-4709-8474-a1a4481caba5",
+     "value": [
+      11,
+      43721,
+      50410,
+      "genunix fop_inactive",
+      11.65087438166237
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "66279e74-c4f6-4599-b211-b399e4478d2a",
+     "value": [
+      12,
+      43721,
+      43762,
+      "genunix crgetmapped",
+      0.07141364174736989
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "82c8c792-fa05-4110-94df-54a72d77404f",
+     "value": [
+      12,
+      43762,
+      43797,
+      "lofs freelonode",
+      0.06096286490629136
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "d0f64677-976c-4f24-8e04-0a22f1aaf377",
+     "value": [
+      12,
+      43797,
+      50104,
+      "lofs lo_inactive",
+      10.985508256113704
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "518a142a-cba3-434e-b4f1-73b364b70e28",
+     "value": [
+      13,
+      43797,
+      43826,
+      "genunix kmem_cache_free",
+      0.050512088065212846
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5c06a8b2-e803-410d-92a4-c34cc9600480",
+     "value": [
+      13,
+      43826,
+      43852,
+      "genunix vn_free",
+      0.04528669964467359
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b4a59671-3082-420f-94c7-e1c163bc7d2b",
+     "value": [
+      13,
+      43852,
+      43872,
+      "genunix vn_invalid",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7d5f1dd0-a75c-4535-b7b2-087d7ce6879e",
+     "value": [
+      13,
+      43872,
+      43897,
+      "genunix vn_rele",
+      0.04354490350449383
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d3ceadb7-e251-4ee1-8043-2d9956b5f180",
+     "value": [
+      13,
+      43897,
+      49210,
+      "lofs freelonode",
+      9.25416289277503
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "a1d8b58c-b122-4527-bead-b051041b27e3",
+     "value": [
+      14,
+      43897,
+      44081,
+      "genunix kmem_cache_free",
+      0.3204904897930746
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6d59ffb0-6821-41f9-b4df-9f1d815298de",
+     "value": [
+      15,
+      43897,
+      43898,
+      "genunix kmem_cpu_reload",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2a7b224b-92de-42e8-b73d-9ade5cb7576a",
+     "value": [
+      14,
+      44081,
+      44196,
+      "genunix kmem_free",
+      0.20030655612067166
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "07e8c635-88bb-4d4f-a1ee-0e005a5827ee",
+     "value": [
+      14,
+      44196,
+      45859,
+      "genunix vn_free",
+      2.89660698111893
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d77c9af5-983f-4afd-9a65-99b0a3ce0b50",
+     "value": [
+      15,
+      44196,
+      44411,
+      "genunix kmem_cache_free",
+      0.374486170138647
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "d10f4999-97e2-4b5f-8ef4-b4299c994bb4",
+     "value": [
+      16,
+      44196,
+      44200,
+      "genunix kmem_cpu_reload",
+      0.006967184560719013
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "cf8bba7b-13f6-4a4b-9dcf-a084cc46b19e",
+     "value": [
+      15,
+      44411,
+      44416,
+      "genunix kmem_cpu_reload",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e6009b9a-ee73-41f6-9fa3-0067ab41552b",
+     "value": [
+      15,
+      44416,
+      45201,
+      "genunix kmem_free",
+      1.3673099700411064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "21c63df6-0df3-4db9-8368-e7844c1457c2",
+     "value": [
+      16,
+      44416,
+      44625,
+      "genunix kmem_cache_free",
+      0.36403539329756845
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5bb49346-f2c1-4e4d-9e29-1502926ef932",
+     "value": [
+      16,
+      44625,
+      44924,
+      "unix mutex_enter",
+      0.5207970459137462
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5f8e61ad-f6ae-41a7-be00-43461f547ce2",
+     "value": [
+      16,
+      44924,
+      45084,
+      "unix mutex_exit",
+      0.2786873824287605
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d7d98ca9-7a62-4b42-a087-b535860de210",
+     "value": [
+      15,
+      45201,
+      45249,
+      "genunix vsd_free",
+      0.08360621472862817
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "55a14161-380b-4737-9567-434174bb6842",
+     "value": [
+      15,
+      45249,
+      45563,
+      "unix mutex_enter",
+      0.5469239880164426
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "47ae383d-4866-4fe8-a739-e75deddc7afc",
+     "value": [
+      15,
+      45563,
+      45734,
+      "unix mutex_exit",
+      0.2978471399707378
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "c81e11d5-661c-425c-9373-2f3699f596f8",
+     "value": [
+      14,
+      45859,
+      45906,
+      "genunix vn_invalid",
+      0.08186441858844841
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "32103cfd-3c6c-4e7d-9f81-c9cf5d77852e",
+     "value": [
+      14,
+      45906,
+      45970,
+      "genunix vn_rele",
+      0.11147495297150421
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "efa43c8f-7d70-4d62-b04e-c80e12c23ceb",
+     "value": [
+      14,
+      45970,
+      45987,
+      "genunix vsd_free",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3995f25c-7111-4903-a76e-333781ac4fd0",
+     "value": [
+      14,
+      45987,
+      46176,
+      "lofs table_lock_enter",
+      0.32919947049397336
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "58d1b6bb-7b8a-49b1-8c3b-fc4d3d8c93d7",
+     "value": [
+      14,
+      46176,
+      46282,
+      "unix membar_consumer",
+      0.18463039085905386
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "f6306c3e-38cc-47d8-93ba-0b517948bf08",
+     "value": [
+      14,
+      46282,
+      47187,
+      "unix mutex_enter",
+      1.5763255068626767
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8524a419-cd81-4ccf-987d-e885fceae80c",
+     "value": [
+      14,
+      47187,
+      47545,
+      "unix mutex_exit",
+      0.6235630181843517
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "5b2d2767-df54-47ad-9647-afe98f8f95c8",
+     "value": [
+      14,
+      47545,
+      48783,
+      "unix strlen",
+      2.1563436215425344
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "56a51e5b-10bc-4d20-ab9d-d7c040da1125",
+     "value": [
+      13,
+      49210,
+      49254,
+      "lofs table_lock_enter",
+      0.07663903016790914
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "7c0d651e-58e3-4a6b-a4b9-e23404f115f7",
+     "value": [
+      13,
+      49254,
+      49546,
+      "unix atomic_add_32",
+      0.508604472932488
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "df369a42-b490-4d7c-a797-2e19afe5c605",
+     "value": [
+      13,
+      49546,
+      49825,
+      "unix mutex_enter",
+      0.48596112311015116
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d85b821e-cbd2-4cfb-a34b-3b5e2c67b85e",
+     "value": [
+      13,
+      49825,
+      50037,
+      "unix mutex_exit",
+      0.3692607817181077
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "8f9b11ef-888c-4d18-a64c-1e9f89bed4b3",
+     "value": [
+      11,
+      50410,
+      50431,
+      "lofs lo_inactive",
+      0.036577718943774824
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "d414dcf4-1755-4111-8cba-6db54340a1db",
+     "value": [
+      10,
+      50633,
+      50691,
+      "genunix vn_setpath",
+      0.10102417613042569
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "20291737-a61b-4356-8cbd-2ec5b341498b",
+     "value": [
+      10,
+      50691,
+      50703,
+      "genunix vn_vfsrlock",
+      0.020901553682157042
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "dbdae0dd-c611-4a26-a61b-4579236038bf",
+     "value": [
+      10,
+      50703,
+      50723,
+      "genunix vn_vfsunlock",
+      0.034835922803595064
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "28aa3ebf-e94a-411d-9a7f-f7df980e1a21",
+     "value": [
+      10,
+      50723,
+      50788,
+      "lofs lo_lookup",
+      0.11321674911168396
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "aa3da954-6f36-423e-9a3d-55e9a648bf13",
+     "value": [
+      10,
+      50788,
+      51363,
+      "unix mutex_enter",
+      1.001532780603358
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "7ec114d4-1dc2-4dc3-a77d-832a2561ca43",
+     "value": [
+      10,
+      51363,
+      51742,
+      "unix mutex_exit",
+      0.6601407371281265
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "190208c4-e5dd-4d77-892a-30adaf6bddb7",
+     "value": [
+      10,
+      51742,
+      51849,
+      "unix strlen",
+      0.1863721869992336
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "3e12db99-383d-45bf-8275-9f0c2b8ed9c4",
+     "value": [
+      10,
+      51849,
+      51871,
+      "zfs zfs_lookup",
+      0.03831951508395457
+     ],
+     "itemStyle": {
+      "color": "#1bca93"
+     }
+    },
+    {
+     "name": "ab579366-257f-432b-882a-f9bcf0cc0a9a",
+     "value": [
+      9,
+      52441,
+      52455,
+      "genunix pn_fixslash",
+      0.024385145962516546
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ae137295-d4c0-40d5-b3da-bf49edde9ecc",
+     "value": [
+      9,
+      52455,
+      52496,
+      "genunix pn_getcomponent",
+      0.07141364174736989
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3e92a477-f28f-4363-a7cc-d49a173e7d7f",
+     "value": [
+      9,
+      52496,
+      52513,
+      "genunix traverse",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1b87fc1d-fef3-4614-b6cc-e6691f88327b",
+     "value": [
+      9,
+      52513,
+      52569,
+      "genunix vn_mountedvfs",
+      0.09754058385006618
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e95fdfd2-4fb6-4307-8471-50c139c267db",
+     "value": [
+      9,
+      52569,
+      52642,
+      "genunix vn_rele",
+      0.127151118233122
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f7b12ca0-4a4b-43b5-a2f0-2d1a3bdd00ce",
+     "value": [
+      9,
+      52642,
+      52644,
+      "unix mutex_vector_enter",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "a91220c7-1e91-46b9-bd1d-8154c8a9c304",
+     "value": [
+      10,
+      52642,
+      52643,
+      "unix mutex_delay_default",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "dfff3909-5adf-4556-a446-132d20fa8da9",
+     "value": [
+      10,
+      52643,
+      52644,
+      "unix tsc_read",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "3ae57200-bf78-4a91-9693-cf22259f432d",
+     "value": [
+      8,
+      52809,
+      52819,
+      "genunix lookuppnvp",
+      0.017417961401797532
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4304a1b0-97df-412f-bd26-225b3c23e3b3",
+     "value": [
+      8,
+      52819,
+      53506,
+      "genunix pn_get_buf",
+      1.1966139483034905
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "b2a913d8-b3af-4903-b08a-8984ecbb8de8",
+     "value": [
+      9,
+      52819,
+      52844,
+      "unix copyinstr",
+      0.04354490350449383
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "6d096f54-7d91-45a8-a35b-72ee74ed5fe4",
+     "value": [
+      9,
+      52844,
+      53442,
+      "unix copystr",
+      1.0415940918274924
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "86e3dae7-75c5-42eb-ae19-8296676dfa93",
+     "value": [
+      8,
+      53506,
+      53524,
+      "unix copyinstr",
+      0.031352330523235564
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "16fd576b-8529-469d-803b-cdade40c64b5",
+     "value": [
+      8,
+      53524,
+      53844,
+      "unix mutex_enter",
+      0.557374764857521
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d29ca990-f904-485c-809e-d8acfc194897",
+     "value": [
+      8,
+      53844,
+      54007,
+      "unix mutex_exit",
+      0.28391277084929983
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "422dc123-9e1b-4805-a318-f9b681e1c645",
+     "value": [
+      7,
+      54106,
+      54118,
+      "genunix lookuppnatcred",
+      0.020901553682157042
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "70deac83-6b90-4d03-806e-ca9499bb78cb",
+     "value": [
+      7,
+      54118,
+      54131,
+      "genunix pn_get_buf",
+      0.022643349822336796
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4da21705-d19d-4354-bb71-ac9fa0515906",
+     "value": [
+      6,
+      54203,
+      54225,
+      "genunix lookupnameatcred",
+      0.03831951508395457
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "178376b5-74d0-4a2a-ab5c-7300d7affb76",
+     "value": [
+      5,
+      54470,
+      54773,
+      "unix mutex_enter",
+      0.5277642304744653
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "1f092bb9-f47c-41e7-9083-75404f7812d5",
+     "value": [
+      5,
+      54773,
+      54811,
+      "unix mutex_exit",
+      0.06618825332683063
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "353917da-6143-497b-87ee-41977ab1c718",
+     "value": [
+      4,
+      55032,
+      55068,
+      "genunix falloc",
+      0.06270466104647113
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ba03f485-9260-4959-a815-824d5e106900",
+     "value": [
+      4,
+      55068,
+      55077,
+      "genunix set_errno",
+      0.015676165261617782
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "605999dc-a6ee-4295-9ac8-d9187605f3d3",
+     "value": [
+      4,
+      55077,
+      55093,
+      "genunix setf",
+      0.027868738242876053
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3c74eea0-1a17-4d72-a4d8-4afabeca9faf",
+     "value": [
+      4,
+      55093,
+      55132,
+      "genunix unfalloc",
+      0.06793004946701038
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "4cee8747-dd4e-4b3c-b4bc-d46ef75279a3",
+     "value": [
+      4,
+      55132,
+      55146,
+      "genunix vn_openat",
+      0.024385145962516546
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "1eadd3d9-5d98-4a56-8ef2-77e8f4725cb1",
+     "value": [
+      2,
+      55188,
+      55205,
+      "genunix openat",
+      0.029610534383055807
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2d274b8e-d0d0-4884-9012-741fc87a2304",
+     "value": [
+      2,
+      55205,
+      55206,
+      "genunix priocntlsys",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "98cfa55e-c587-41e8-9973-a7e3e5b9195b",
+     "value": [
+      3,
+      55205,
+      55206,
+      "genunix priocntl_common",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "cc064bb4-5e0b-4a48-be58-574a1bf117d6",
+     "value": [
+      4,
+      55205,
+      55206,
+      "genunix doprio",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ef4f9a07-aba6-454b-85e1-8281519729f2",
+     "value": [
+      5,
+      55205,
+      55206,
+      "genunix dotoprocs",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a22bf58b-805a-493a-a05d-9c9bba44b6c6",
+     "value": [
+      2,
+      55206,
+      55207,
+      "genunix resolvepath",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e5a29f1a-0874-4f21-8143-6edfb110753f",
+     "value": [
+      3,
+      55206,
+      55207,
+      "genunix lookuppn",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "dc69e914-5716-45d8-a333-1fa9600de949",
+     "value": [
+      4,
+      55206,
+      55207,
+      "genunix lookuppnatcred",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "dcfdec6d-893e-4da9-9706-2db8176c3a92",
+     "value": [
+      5,
+      55206,
+      55207,
+      "genunix lookuppnvp",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3f94a25f-77c7-4aec-a2a2-f7160c4f705b",
+     "value": [
+      6,
+      55206,
+      55207,
+      "genunix fop_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ce76e9d8-190a-4e60-b671-fd5688ae4168",
+     "value": [
+      7,
+      55206,
+      55207,
+      "lofs lo_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#b5c334"
+     }
+    },
+    {
+     "name": "ec8daf03-8b20-48ce-9eb9-ea5e2e54e75e",
+     "value": [
+      8,
+      55206,
+      55207,
+      "genunix fop_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "fc4cf152-8f4e-4aa5-be96-7567fd2d6ee0",
+     "value": [
+      9,
+      55206,
+      55207,
+      "ufs ufs_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#ffb248"
+     }
+    },
+    {
+     "name": "ca8ffd48-694d-44b9-9b89-d62d85314d45",
+     "value": [
+      10,
+      55206,
+      55207,
+      "genunix dnlc_lookup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "65a5fde2-c96a-4493-a7e8-04c21fc1cfd6",
+     "value": [
+      2,
+      55207,
+      55212,
+      "genunix rexit",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "e9d9ea8a-3043-4b04-96da-7a8e05003f88",
+     "value": [
+      3,
+      55207,
+      55212,
+      "genunix exit",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "ec040275-69e5-4761-91a6-e1021450c711",
+     "value": [
+      4,
+      55207,
+      55212,
+      "genunix proc_exit",
+      0.008708980700898766
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "057d3a99-da36-4616-a167-5d726d78d1b8",
+     "value": [
+      5,
+      55207,
+      55208,
+      "genunix exitlwps",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "de1b6674-94a0-40c8-a853-04ead3c3b176",
+     "value": [
+      6,
+      55207,
+      55208,
+      "genunix schedctl_lwp_cleanup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "18839a21-c7ed-41a5-ba92-d9966371fd33",
+     "value": [
+      7,
+      55207,
+      55208,
+      "genunix removectx",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "7f95fc1e-fe68-49f2-bf3c-6cc7c4361d72",
+     "value": [
+      8,
+      55207,
+      55208,
+      "genunix kmem_free",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6acaa650-de49-4a16-872a-d359e5db3a8b",
+     "value": [
+      9,
+      55207,
+      55208,
+      "genunix kmem_cache_free",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "f13d4c99-6b05-457f-a9af-9330ff45ac64",
+     "value": [
+      5,
+      55208,
+      55211,
+      "genunix relvm",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "69ed49ea-03dc-4c70-a4c4-96c8d5e3338b",
+     "value": [
+      6,
+      55208,
+      55211,
+      "genunix as_free",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "228e790d-61ea-4fed-a6f7-5a12f10835b0",
+     "value": [
+      7,
+      55208,
+      55211,
+      "genunix segvn_unmap",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "3b7c27d6-c03a-4b0a-b1f2-f76d61134bea",
+     "value": [
+      8,
+      55208,
+      55211,
+      "unix hat_unload_callback",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "945f97b8-26b6-4196-8c39-37f450043314",
+     "value": [
+      9,
+      55208,
+      55211,
+      "unix hat_pte_unmap",
+      0.005225388420539261
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "096f1173-a513-4308-bc8f-9cbc90650244",
+     "value": [
+      10,
+      55208,
+      55210,
+      "unix hment_remove",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "4ab57416-bab5-4541-b247-5d49c988e4b9",
+     "value": [
+      11,
+      55208,
+      55210,
+      "genunix avl_find",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "60bc0307-d6eb-4698-bdff-dec584d589b5",
+     "value": [
+      12,
+      55208,
+      55210,
+      "unix hment_compare",
+      0.0034835922803595066
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "e776530d-a2ac-4c2a-a247-6dcc1d9fc41b",
+     "value": [
+      10,
+      55210,
+      55211,
+      "unix page_numtopp_nolock",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "78068bee-3278-4752-a8f6-07eaf993db2b",
+     "value": [
+      5,
+      55211,
+      55212,
+      "genunix schedctl_proc_cleanup",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "8566d055-c73c-4aa9-9115-c8f57d0612bf",
+     "value": [
+      6,
+      55211,
+      55212,
+      "genunix schedctl_freepage",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "a2cb4021-f0a7-429d-ac34-5b11ee9eac98",
+     "value": [
+      7,
+      55211,
+      55212,
+      "genunix segkp_release",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "9892c1d5-b1dd-4f00-9259-ac86eee557d7",
+     "value": [
+      8,
+      55211,
+      55212,
+      "genunix segkp_release_internal",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "6ef35c81-49b1-43f0-903f-ca7fbbe1d2b8",
+     "value": [
+      9,
+      55211,
+      55212,
+      "genunix vmem_free",
+      0.0017417961401797533
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "46d5d300-6ff3-4e0c-80aa-c98e7889e8dc",
+     "value": [
+      2,
+      55212,
+      56548,
+      "genunix syscall_mstate",
+      2.3270396432801506
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "5b025936-fe2e-4525-b8aa-4ffa8dfc5929",
+     "value": [
+      3,
+      55212,
+      55632,
+      "genunix gethrtime_unscaled",
+      0.7315543788754963
+     ],
+     "itemStyle": {
+      "color": "#d95850"
+     }
+    },
+    {
+     "name": "2990c2bb-4679-40a3-924f-c6fb78e520e7",
+     "value": [
+      4,
+      55212,
+      55255,
+      "unix tsc_gethrtimeunscaled",
+      0.0748972340277294
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "ab12868a-7beb-405f-bae6-d8f2725be404",
+     "value": [
+      4,
+      55255,
+      55622,
+      "unix tsc_read",
+      0.6392391834459695
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "d3a31df8-1a12-4f8f-8cfd-0ccbca627cbf",
+     "value": [
+      3,
+      55632,
+      55691,
+      "unix tsc_gethrtimeunscaled",
+      0.10276597227060545
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    },
+    {
+     "name": "0b38a311-dc64-472d-b9e9-0a90a173e609",
+     "value": [
+      2,
+      56548,
+      56753,
+      "unix atomic_add_64",
+      0.3570682087368494
+     ],
+     "itemStyle": {
+      "color": "#eb8146"
+     }
+    }
+   ]
+  }
+ ]
+}

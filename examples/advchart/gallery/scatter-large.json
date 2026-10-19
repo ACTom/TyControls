@@ -1,0 +1,61 @@
+{
+ "title": {
+  "text": "1,000,000 Points"
+ },
+ "tooltip": {},
+ "toolbox": {
+  "left": "center",
+  "feature": {
+   "dataZoom": {}
+  }
+ },
+ "legend": {
+  "orient": "vertical",
+  "right": 10
+ },
+ "xAxis": [
+  {}
+ ],
+ "yAxis": [
+  {}
+ ],
+ "dataZoom": [
+  {
+   "type": "inside"
+  },
+  {
+   "type": "slider"
+  }
+ ],
+ "animation": false,
+ "series": [
+  {
+   "name": "A",
+   "type": "scatter",
+   "data": [],
+   "dimensions": [
+    "x",
+    "y"
+   ],
+   "symbolSize": 3,
+   "itemStyle": {
+    "opacity": 0.4
+   },
+   "large": true
+  },
+  {
+   "name": "B",
+   "type": "scatter",
+   "data": [],
+   "dimensions": [
+    "x",
+    "y"
+   ],
+   "symbolSize": 3,
+   "itemStyle": {
+    "opacity": 0.4
+   },
+   "large": true
+  }
+ ]
+}

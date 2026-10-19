@@ -309,6 +309,8 @@ type
     EmphasisDisabled, TooltipDisabled: Boolean;
     { an image's source when made }
     ImagePath: string;
+    { [R2-J] a path's: the SVG path data it was made from (customPathData) }
+    PathData: string;
     { [F3c] `morph: false`: disableMorphing (the universal transition passes
       it by) }
     NoMorph: Boolean;
@@ -409,7 +411,8 @@ implementation
 
 uses
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.AnimView, tyControls.AdvChart.Color;
+  tyControls.AdvChart.AnimView, tyControls.AdvChart.Color,
+  tyControls.AdvChart.ZrPath;
 
 { ==================== JSON ==================== }
 
@@ -977,17 +980,64 @@ begin
   TyGfxAddChild(AGroup, AEl);
 end;
 
+{ getPathData: `shape.pathData || shape.d` (d the SVG spelling) }
+function CuPathDataOf(AShape: TJSONObject): string;
+begin
+  Result := '';
+  if AShape = nil then Exit;
+  if Truthy(AShape.Find('pathData')) then Result := StrOf(AShape.Find('pathData'))
+  else Result := StrOf(AShape.Find('d'));
+end;
+
+{ hasOwnPathData }
+function CuHasPathData(AShape: TJSONObject): Boolean;
+begin
+  Result := (AShape <> nil) and ((AShape.IndexOfName('pathData') >= 0)
+    or (AShape.IndexOfName('d') >= 0));
+end;
+
+{ [R2-J] createEl's 'path': graphicUtil.makePath(pathData, null, pathRect,
+  shape.layout || 'center') -- the path data parsed, and fitted into the
+  rect {x || 0, y || 0, width, height} when both sizes are written (the
+  'center' layout keeping its aspect, any other stretching it) }
+function CuMakeSvgPath(AShape: TJSONObject; out APathData: string): TTyGfxEl;
+var
+  x, y: Double;
+  layout: string;
+  box: TTyXYWH;
+  f32: Boolean;
+begin
+  APathData := CuPathDataOf(AShape);
+  Result := TTyGfxEl.Create(gkPath, 'path');
+  if (AShape <> nil) and not JNull(AShape.Find('width'))
+    and not JNull(AShape.Find('height')) then
+  begin
+    if Truthy(AShape.Find('x')) then x := JsNum(AShape.Find('x')) else x := 0;
+    if Truthy(AShape.Find('y')) then y := JsNum(AShape.Find('y')) else y := 0;
+    box := TyXYWH(x, y, JsNum(AShape.Find('width')), JsNum(AShape.Find('height')));
+    if Truthy(AShape.Find('layout')) then layout := StrOf(AShape.Find('layout'))
+    else layout := 'center';
+    if layout = 'center' then Result.PathData := TyZrMakePathCenter(APathData, box)
+    else Result.PathData := TyZrMakePathCover(APathData, box);
+  end
+  else
+    Result.PathData := TyZrParseSvg(APathData, f32);
+end;
+
 function TTyCustomView.CreateEl(AOpt: TJSONObject): TTyGfxEl;
 var
-  tp: string;
+  tp, pd: string;
   info: TTyCustomElInfo;
   has: Boolean;
   st: TJSONObject;
 begin
   tp := StrOf(AOpt.Find('type'));
-  { path and compoundPath have no element here; an unknown type has no
-    class upstream either -- both throw there }
-  Result := TyGfxCreate(tp);
+  { compoundPath has no element here (upstream throws without
+    shape.paths); an unknown type has no class upstream either -- it throws
+    there. [R2-J] A path is made from its SVG path data. }
+  pd := '';
+  if tp = 'path' then Result := CuMakeSvgPath(ObjOf(AOpt, 'shape'), pd)
+  else Result := TyGfxCreate(tp);
   if Result = nil then
   begin
     FError := 'graphic type "' + tp + '" can not be found.';
@@ -997,6 +1047,7 @@ begin
   info := TTyCustomElInfo.Create;
   Result.Custom := info;
   info.GType := tp;
+  info.PathData := pd;
   { its animators join the chart's driver [Batch 124] }
   Result.Animation := FAnim.Driver;
   Result.Name := TyGfxIdOf(AOpt.Find('name'), has);
@@ -1008,8 +1059,8 @@ begin
   end;
 end;
 
-{ doesElNeedRecreate: a type written and not the element's, an image whose
-  source changed }
+{ doesElNeedRecreate: a type written and not the element's, a path whose
+  path data changed [R2-J], an image whose source changed }
 function TTyCustomView.NeedRecreate(AEl: TTyGfxEl; AOpt: TJSONObject): Boolean;
 var
   tp: TJSONData;
@@ -1022,6 +1073,10 @@ begin
   tp := AOpt.Find('type');
   if not JNull(tp) and ((info = nil) or (StrOf(tp) <> info.GType)) then Exit(True);
   Result := False;
+  { [R2-J] the type written 'path', its own pathData / d another }
+  if (StrOf(tp) = 'path') and CuHasPathData(ObjOf(AOpt, 'shape'))
+    and ((info = nil) or (CuPathDataOf(ObjOf(AOpt, 'shape')) <> info.PathData)) then
+    Exit(True);
   if (info <> nil) and (info.GType = 'image') then
   begin
     st := ObjOf(AOpt, 'style');
