@@ -250,6 +250,15 @@ const PICK = {
   // [R2-I3] a graph's node symbols (the Symbol's path), with the pen's colour
   graphNode: chart => { const r = []; eachSeriesOf(chart, 'graph', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('node', sm.seriesIndex, i, el.childAt(0).style, { stroke: el.childAt(0).style.stroke || null })); })); return r; },
   // [R2-I3] bars with the pen's colour
+  // [R2-I4] a bar's pen whatever it is: a colour string, or a gradient as
+  // its type, coordinates, global and stops
+  barPen: chart => { const r = []; eachSeriesOf(chart, 'bar', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (!el) return;
+    const s = el.style.stroke;
+    const extra = s && typeof s === 'object' && s.colorStops
+      ? { strokeGrad: { type: s.type, x: s.x, y: s.y, x2: s.x2 == null ? null : s.x2, y2: s.y2 == null ? null : s.y2, r: s.r == null ? null : s.r,
+        global: !!s.global, stops: s.colorStops.map(c => [c.offset, c.color]) } }
+      : { stroke: s || null };
+    r.push(strokeRec('bar', sm.seriesIndex, i, el.style, extra)); })); return r; },
   barStroke: chart => { const r = []; eachSeriesOf(chart, 'bar', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('bar', sm.seriesIndex, i, el.style, { stroke: el.style.stroke || null })); })); return r; },
   // [R2-I3] an SVG map's own stroked shapes, in the geo view's order
   svgGeo: chart => {
@@ -315,6 +324,12 @@ const SERIES = [
         { value: 4, itemStyle: { borderType: 'dotted', borderDashOffset: 5 } }] }] } },
   { id: 'svgGeo', note: "[R2-I3] an SVG map's own stroke-dashoffset (parseAttributes keeps the string, the canvas reads a number): a rect [4 2] at 3, a path [5 5] at -2, a circle whose group says 6; the geo at the SVG's own size (an unnamed shape has no strokeNoScale)",
     pick: 'svgGeo', option: { geo: { map: 'r2i3svg', left: 0, top: 0, width: 100, height: 100 } } },
+  // [R2-I4]
+  { id: 'barItemLong', note: "[R2-I4] bars: the series' border #000 at 2, dashed; item 0 its own borderType of six numbers, item 1 of five; item 2 its own borderColor a linear gradient; item 3 a radial one at width 3 with its own dotted -- the store kept neither",
+    pick: 'barPen', option: { xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'] }, yAxis: VAL, series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed' },
+      data: [{ value: 5, itemStyle: { borderType: [6, 2, 3, 1, 2, 4] } }, { value: 7, itemStyle: { borderType: [5, 1, 1, 1, 1] } },
+        { value: 3, itemStyle: { borderColor: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } } },
+        { value: 4, itemStyle: { borderWidth: 3, borderType: 'dotted', borderColor: { type: 'radial', x: 0.5, y: 0.5, r: 0.5, colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#ff00ff' }] } } }] }] } },
 ];
 // [R2-I3] an SVG map whose shapes carry their own dash and phase
 const SVGMAP = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
@@ -391,6 +406,10 @@ function generate() {
       && JSON.stringify(sr('barItem')[1].pattern.map(num)) === '[16,8]' && sr('barItem')[2].pattern === null
       && JSON.stringify(sr('barItem')[3].pattern.map(num)) === '[2]' && off(sr('barItem')[3]) === 5 },
     { name: 'svgGeo: the strings 3, -2 and 6', ok: sr('svgGeo').map(r => r.raw).join() === '3,-2,6' },
+    // [R2-I4]
+    { name: 'barItemLong: six and five numbers as written, a linear and a radial pen', ok: JSON.stringify(sr('barItemLong')[0].pattern.map(num)) === '[6,2,3,1,2,4]'
+      && JSON.stringify(sr('barItemLong')[1].pattern.map(num)) === '[5,1,1,1,1]' && sr('barItemLong')[2].strokeGrad.type === 'linear'
+      && sr('barItemLong')[3].strokeGrad.type === 'radial' && JSON.stringify(sr('barItemLong')[3].pattern.map(num)) === '[3]' },
   );
   return out;
 }
