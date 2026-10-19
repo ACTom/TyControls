@@ -4850,6 +4850,20 @@ begin
     AX, AY, ARot, AHAlign, AVAlign, ABlockH);
 end;
 
+{ [R2-I2] A LEVEL AXIS LABEL'S LINES: each one at the block's alignment
+  (zrender's TSpans share the text's textAlign) -- a line shorter than the
+  block is not centred in it. One line keeps its centre in its own measured
+  box, as it always did. }
+function LevelLinesAlign(const AText: string; AH: TTyTextAnchorH): TAlignment;
+begin
+  if Pos(#10, AText) = 0 then Exit(taCenter);
+  case AH of
+    tahLeft: Result := taLeftJustify;
+    tahRight: Result := taRightJustify;
+  else Result := taCenter;
+  end;
+end;
+
 { the FPU's traps masked over a stretch that meets NaN (a point off the
   map), and the flags the stretch left cleared again }
 function GeoMaskFpu: TFPUExceptionMask;

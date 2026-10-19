@@ -709,7 +709,8 @@ begin
         AnchorBox(lx, ly, lblW, lblH,
                   places[i].AnchorH, places[i].AnchorV),
         places[i].Text, lblStyle.FontName, ResolveFontSize(lblStyle),
-        lblStyle.FontWeight, lblStyle.TextColor, taCenter, tlCenter,
+        lblStyle.FontWeight, lblStyle.TextColor,
+        LevelLinesAlign(places[i].Text, places[i].AnchorH), tlCenter,
         { ELLIPSIS AND MULTI-LINE, both of which the painter has always had and
           this never asked for: a label was drawn as one clipped line whatever
           it contained, so a wrapped one lost every row after the first. }

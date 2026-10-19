@@ -437,8 +437,9 @@ begin
       APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
         lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
         sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, sp.Placements[q].Text) > 0);
+        labelS.FontWeight, labelS.TextColor,
+        LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
+        False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
   end;
 end;
@@ -1172,8 +1173,9 @@ var
       APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
         lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
         sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, sp.Placements[q].Text) > 0);
+        labelS.FontWeight, labelS.TextColor,
+        LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
+        False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
   end;
 
@@ -1206,8 +1208,9 @@ var
       APainter.DrawText(AnchorBox(AView.Labels[q].X, AView.Labels[q].Y, lblW,
         lblH, AView.Labels[q].AnchorH, AView.Labels[q].AnchorV),
         AView.Labels[q].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, AView.Labels[q].Text) > 0);
+        labelS.FontWeight, labelS.TextColor,
+        LevelLinesAlign(AView.Labels[q].Text, AView.Labels[q].AnchorH), tlCenter,
+        False, 0, False, Pos(#10, AView.Labels[q].Text) > 0);
     end;
   end;
 
@@ -2468,8 +2471,9 @@ begin
         APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
           lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
           sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
-          labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-          Pos(#10, sp.Placements[q].Text) > 0);
+          labelS.FontWeight, labelS.TextColor,
+          LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
+          False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
       end;
     end;
   end;
