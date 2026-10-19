@@ -443,6 +443,9 @@ type
     NoScale: Boolean;
     HasDash: Boolean;
     Dash: TTyDoubleArray;
+    { [R2-I3] its own stroke-dashoffset (parseAttributes keeps the string;
+      the canvas reads it as a number), its own units; 0 where none or NaN }
+    DashOffset: Double;
     Styled: Boolean;
     Opt: TTyGeoPaint;
     StateOpt: array[TTyStName] of TTyGeoPaint;
@@ -5179,6 +5182,14 @@ begin
   if N.St.NumHas[gnStrokeOpacity] then L.StrokeOpacity := N.St.Num[gnStrokeOpacity];
   L.HasDash := N.St.HasDash;
   L.Dash := Copy(N.St.Dash, 0, Length(N.St.Dash));
+  { [R2-I3] the canvas's lineDashOffset setter is ToNumber of the string,
+    and a NaN it ignores }
+  L.DashOffset := 0;
+  if N.St.StrHas[gsLineDashOffset] then
+  begin
+    L.DashOffset := TyJsToNumber(N.St.Str[gsLineDashOffset]);
+    if IsNan(L.DashOffset) or IsInfinite(L.DashOffset) then L.DashOffset := 0;
+  end;
 end;
 
 { MapDraw._buildSVG's per-node picture for an ink: every named shape's style
@@ -5953,6 +5964,10 @@ var
                   dash := look.StateOpt[sn].Dash;
                   dashLogical := look.StateOpt[sn].DashLogical;
                 end;
+            { [R2-I3] the SVG's own phase first (the option's setStyle only
+              writes what it says), in the same units as its own dash }
+            if look.NoScale then el.Style.DashOffsetLogical := look.DashOffset
+            else el.Style.DashOffsetLogical := look.DashOffset * det / scale;
             { [R2-I2] the option's phase the same way }
             if look.Styled then
             begin

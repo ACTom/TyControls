@@ -851,6 +851,16 @@ type
     SvgLabel: Boolean;
   end;
 
+  { [R2-I3] A TEXT AS ITS EMPHASIS STATE LAYS IT OUT: the caption and the
+    box a marker's label takes while its item is hovered -- the emphasis
+    label's style merged over the normal one and placed by the emphasis
+    textConfig (setLabelStyle), built with the label }
+  TTyEmphTwin = record
+    Caption: TTyElementCaption;
+    Shape: TTyChartShape;
+  end;
+  TTyEmphTwinArray = array of TTyEmphTwin;
+
   TTyChartElement = record
     Shape: TTyChartShape;
     Style: TTyChartElementStyle;
@@ -963,6 +973,8 @@ type
       or an image's rectContain). Neither PathHit nor the shape is asked
       then. }
     ZrHit: TTyZrHit;
+    { [R2-I3] a marker label's emphasis twin (none, or one) }
+    EmphTwin: TTyEmphTwinArray;
   end;
   PTyChartElement = ^TTyChartElement;
 

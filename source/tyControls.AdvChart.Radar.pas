@@ -1557,7 +1557,10 @@ begin
     { A RING IS ONE ELEMENT FOR A WHOLE ROW, so it answers with the row and no
       spoke -- the same shape a line series' run has. }
     el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
-    el.HitSlopLogical := AVisual.LineWidthLogical / 2 + 4;
+    { [R2-I3] zrender's Path.contain on a stroke with no fill: max(lineWidth,
+      strokeContainThreshold 5), half each side -- the ring's own width, as a
+      line series' run and a graph's edge [was: the series' width / 2 + 4] }
+    el.HitSlopLogical := Math.Max(el.Style.StrokeWidthLogical, Double(5)) / 2;
     el.Anim.Role := carRadarLine;
     el.Anim.Series := ABinding.SeriesIndex;
     el.Anim.Index := k;
@@ -1653,7 +1656,9 @@ begin
         el.Z2 := AVisual.Z2 + 100;
         el.Silent := False;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
-        el.HitSlopLogical := 4;
+        { [R2-I3] a Symbol path: upstream's reach and the port's mouse pad,
+          as every other symbol [was: a fixed 4 px] }
+        TySymbolHitSlop(el);
         { [F3c] the symbol path RadarView makes (createSymbol(-1, -1, 2, 2)
           under half its size, turned, at the point; strokeNoScale), after
           the line and the area in the item's group }

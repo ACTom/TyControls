@@ -2603,6 +2603,11 @@ begin
   AVisual.DashExplicit := item.DashLogical;
   { [R2-I2] and its phase (borderDashOffset) }
   AVisual.DashOffset := item.DashOffset;
+  { [R2-I3] kept apart for a line's symbols, which the lineStyle's below
+    does not reach }
+  AVisual.ItemDash := item.Dash;
+  AVisual.ItemDashExplicit := item.DashLogical;
+  AVisual.ItemDashOffset := item.DashOffset;
   if not IsNan(item.Opacity) then
     AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity))
   else if st = 'scatter' then

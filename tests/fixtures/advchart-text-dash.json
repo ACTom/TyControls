@@ -1625,12 +1625,332 @@
      "n": 0
     }
    ]
+  },
+  {
+   "id": "graphNode",
+   "note": "[R2-I3] graph nodes: the series' border #333333 at 2, dashed, at 3; a its own borderDashOffset 7; b in category k by NAME ([2, 1] at 1); c an emptyCircle (its colour at 2, the series' dash against 2); d its own borderType 'solid'; e its own borderColor and width 5",
+   "option": {
+    "color": [
+     "#5070dd"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": 20,
+      "itemStyle": {
+       "borderColor": "#333333",
+       "borderWidth": 2,
+       "borderType": "dashed",
+       "borderDashOffset": 3
+      },
+      "categories": [
+       {
+        "name": "k",
+        "itemStyle": {
+         "borderType": [
+          2,
+          1
+         ],
+         "borderDashOffset": 1
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "itemStyle": {
+         "borderDashOffset": 7
+        }
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 0,
+        "category": "k"
+       },
+       {
+        "name": "c",
+        "x": 50,
+        "y": 80,
+        "symbol": "emptyCircle"
+       },
+       {
+        "name": "d",
+        "x": 150,
+        "y": 80,
+        "itemStyle": {
+         "borderType": "solid"
+        }
+       },
+       {
+        "name": "e",
+        "x": 200,
+        "y": 0,
+        "itemStyle": {
+         "borderColor": "#ff0000",
+         "borderWidth": 5
+        }
+       }
+      ],
+      "links": []
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "node",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "401c000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ],
+     "stroke": "#333333"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4000000000000000",
+      "3ff0000000000000"
+     ],
+     "lineDashOffset": "3ff0000000000000",
+     "pattern": [
+      "4000000000000000",
+      "3ff0000000000000"
+     ],
+     "stroke": "#333333"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ],
+     "stroke": "#5070dd"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 3,
+     "lineWidth": "4000000000000000",
+     "lineDash": "solid",
+     "lineDashOffset": "4008000000000000",
+     "pattern": null,
+     "stroke": "#333333"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 4,
+     "lineWidth": "4014000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4034000000000000",
+      "4024000000000000"
+     ],
+     "stroke": "#ff0000"
+    }
+   ]
+  },
+  {
+   "id": "barItem",
+   "note": "[R2-I3] bars: the series' border #000 at 2, dashed; item 0 its own borderType [6, 2]; item 1 its own borderColor #ff0000 and width 4 (the dash against 4); item 2 its own 'solid'; item 3 its own borderType 'dotted' and borderDashOffset 5",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderType": "dashed"
+      },
+      "data": [
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderType": [
+          6,
+          2
+         ]
+        }
+       },
+       {
+        "value": 7,
+        "itemStyle": {
+         "borderColor": "#ff0000",
+         "borderWidth": 4
+        }
+       },
+       {
+        "value": 3,
+        "itemStyle": {
+         "borderType": "solid"
+        }
+       },
+       {
+        "value": 4,
+        "itemStyle": {
+         "borderType": "dotted",
+         "borderDashOffset": 5
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4018000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4018000000000000",
+      "4000000000000000"
+     ],
+     "stroke": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4010000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4030000000000000",
+      "4020000000000000"
+     ],
+     "stroke": "#ff0000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": "solid",
+     "lineDashOffset": "0000000000000000",
+     "pattern": null,
+     "stroke": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 3,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "4014000000000000",
+     "pattern": [
+      "4000000000000000"
+     ],
+     "stroke": "#000"
+    }
+   ]
+  },
+  {
+   "id": "svgGeo",
+   "note": "[R2-I3] an SVG map's own stroke-dashoffset (parseAttributes keeps the string, the canvas reads a number): a rect [4 2] at 3, a path [5 5] at -2, a circle whose group says 6; the geo at the SVG's own size (an unnamed shape has no strokeNoScale)",
+   "option": {
+    "geo": {
+     "map": "r2i3svg",
+     "left": 0,
+     "top": 0,
+     "width": 100,
+     "height": 100
+    }
+   },
+   "items": [
+    {
+     "role": "svg",
+     "s": -1,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "raw": "3"
+    },
+    {
+     "role": "svg",
+     "s": -1,
+     "i": 1,
+     "lineWidth": "3ff0000000000000",
+     "lineDash": [
+      "4014000000000000",
+      "4014000000000000"
+     ],
+     "lineDashOffset": "c000000000000000",
+     "pattern": [
+      "4014000000000000",
+      "4014000000000000"
+     ],
+     "raw": "-2"
+    },
+    {
+     "role": "svg",
+     "s": -1,
+     "i": 2,
+     "lineWidth": "3ff0000000000000",
+     "lineDash": [
+      "4008000000000000",
+      "4008000000000000"
+     ],
+     "lineDashOffset": "4018000000000000",
+     "pattern": [
+      "4008000000000000",
+      "4008000000000000"
+     ],
+     "raw": "6"
+    }
+   ]
   }
  ],
  "maps": [
   {
    "name": "r2i2dash",
    "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}"
+  },
+  {
+   "name": "r2i3svg",
+   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"><rect x=\"0\" y=\"0\" width=\"40\" height=\"40\" fill=\"#cccccc\" stroke=\"#000000\" stroke-width=\"2\" stroke-dasharray=\"4 2\" stroke-dashoffset=\"3\"/><path d=\"M50 0 L90 0 L90 40 Z\" fill=\"#cccccc\" stroke=\"#000000\" stroke-width=\"1\" stroke-dasharray=\"5,5\" stroke-dashoffset=\"-2\"/><g stroke-dashoffset=\"6\"><circle cx=\"20\" cy=\"70\" r=\"15\" fill=\"none\" stroke=\"#0000ff\" stroke-width=\"1\" stroke-dasharray=\"3 3\"/></g></svg>"
   }
  ],
  "guards": [
@@ -1688,6 +2008,18 @@
   },
   {
    "name": "graphicBox: [6, 2] at 4, dotted at -3",
+   "ok": true
+  },
+  {
+   "name": "graphNode: every node has a pen; the empty one at 2 in its colour; d solid",
+   "ok": true
+  },
+  {
+   "name": "barItem: the own borderType of each item borderType and the width it goes against",
+   "ok": true
+  },
+  {
+   "name": "svgGeo: the strings 3, -2 and 6",
    "ok": true
   }
  ]

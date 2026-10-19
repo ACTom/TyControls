@@ -3483,18 +3483,26 @@ end;
   told) }
 procedure TTyAdvanceChart.GraphNodeLooks(ASlot: Integer; var AInk: TTyGraphInk);
 var
-  i, raw: Integer;
-  sNode, item, cat: TJSONObject;
+  i, raw, j: Integer;
+  sNode, item, cat, styleCat: TJSONObject;
   arr, d: TJSONData;
   spec: TTyLabelSpec;
   has, emShow: Boolean;
   v: Double;
+  chain: array[0..2] of TJSONObject;
+  one, b: TTyOptStyle;
 begin
   AInk.NodeOpacity := nil;
   AInk.NodeLabels := nil;
+  AInk.NodeBorder := nil;
   if (ASlot < 0) or (ASlot > High(FGraphNodes)) then Exit;
   SetLength(AInk.NodeOpacity, Length(FGraphNodes[ASlot]));
   SetLength(AInk.NodeLabels, Length(FGraphNodes[ASlot]));
+  SetLength(AInk.NodeBorder, Length(FGraphNodes[ASlot]));
+  { the ground an empty symbol's hole takes, the skin's own (as a scatter's) }
+  AInk.EmptyFill := TTyChartColor(
+    ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+      [tysNormal]).Background.Color);
   sNode := StSeriesNode(FBindings[ASlot].SeriesIndex);
   arr := nil;
   if sNode <> nil then
@@ -3510,9 +3518,38 @@ begin
       and (TJSONArray(arr).Items[raw] is TJSONObject) then
       item := TJSONObject(TJSONArray(arr).Items[raw]);
     cat := GraphCategoryNode(ASlot, FGraphNodes[ASlot][i].ModelCategory);
-    v := TyStReadNumber([item, cat, sNode], ['itemStyle', 'opacity'], has);
+    { [R2-I3] THE STYLE'S CATEGORY, which categoryVisual finds by its name
+      as well as by its index -- unlike the model's parent above }
+    styleCat := GraphCategoryNode(ASlot, FGraphNodes[ASlot][i].Category);
+    v := TyStReadNumber([item, styleCat, sNode], ['itemStyle', 'opacity'], has);
     if not has or IsNan(v) then v := 1;
     AInk.NodeOpacity[i] := v;
+    { [R2-I3] its border, key by key down the same three }
+    chain[0] := item;
+    chain[1] := styleCat;
+    chain[2] := sNode;
+    b := Default(TTyOptStyle);
+    b.BorderWidthLogical := NaN;
+    b.Opacity := NaN;
+    b.Dash := todNone;
+    for j := 2 downto 0 do
+    begin
+      if chain[j] = nil then Continue;
+      one := TyReadOptStyle(chain[j], 'itemStyle');
+      if one.BorderColor.Written then b.BorderColor := one.BorderColor;
+      if not IsNan(one.BorderWidthLogical) then b.BorderWidthLogical := one.BorderWidthLogical;
+      if one.Dash <> todNone then
+      begin
+        b.Dash := one.Dash;
+        b.DashLogical := one.DashLogical;
+      end;
+      if one.DashOffsetHas then
+      begin
+        b.DashOffsetHas := True;
+        b.DashOffset := one.DashOffset;
+      end;
+    end;
+    AInk.NodeBorder[i] := b;
     spec := AInk.Label_;
     if cat <> nil then
     begin

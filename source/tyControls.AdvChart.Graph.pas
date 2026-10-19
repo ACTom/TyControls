@@ -1067,6 +1067,13 @@ type
       after the edges': ItemSpec = Length(EdgeLabelSpecs) + node + 1) }
     NodeOpacity: TTyDoubleArray;
     NodeLabels: TTyLabelSpecArray;
+    { [R2-I3] per node: its itemStyle border -- the node's own over its
+      category's over the series', key by key, as categoryVisual and
+      dataStyleTask lay the style objects over one another -- which the
+      Symbol path draws (Symbol.ts useStyle, strokeNoScale). Empty: none. }
+    NodeBorder: array of TTyOptStyle;
+    { the hole an empty symbol takes (symbolPathSetColor: neutral00) }
+    EmptyFill: TTyChartColor;
   end;
 
 { WHAT ONE EDGE IS DRAWN IN -- the builder's own answer, and the one the
@@ -6285,6 +6292,53 @@ var
   edgeAnim: TTyChartAnim;
   hw, hh: Double;
 
+  { [R2-I3] A NODE'S PEN, as a Symbol path takes its style: the visual's
+    stroke (borderColor) and lineWidth (borderWidth, zrender's 1 where none
+    is written), its dash and phase; an empty symbol's pen is its colour at
+    two wide over the hole's ground, a 'line' symbol's its colour
+    (symbolPathSetColor). [Was: no pen at all -- a border, an empty symbol's
+    ring and a node's dash never drew.] }
+  procedure NodeBorder(var AEl: TTyChartElement; const ASym: TTySymbolSpec;
+    AAt: Integer; AFill: TTyChartColor);
+  var
+    b: TTyOptStyle;
+    w: Double;
+  begin
+    if (AAt >= 0) and (AAt <= High(AInk.NodeBorder)) then b := AInk.NodeBorder[AAt]
+    else
+    begin
+      b := Default(TTyOptStyle);
+      b.BorderWidthLogical := NaN;
+      b.Dash := todNone;
+    end;
+    w := b.BorderWidthLogical;
+    if IsNan(w) then w := 1;
+    if ASym.Empty then
+    begin
+      AEl.Style.StrokeColor := AFill;
+      AEl.Style.StrokeWidthLogical := 2;
+      AEl.Style.HasFill := True;
+      AEl.Style.FillColor := AInk.EmptyFill;
+    end
+    else if ASym.Kind = tsyLine then
+    begin
+      AEl.Style.StrokeColor := AFill;
+      AEl.Style.StrokeWidthLogical := w;
+    end
+    else if b.BorderColor.Written and not b.BorderColor.IsNone
+      and not b.BorderColor.IsAuto then
+    begin
+      AEl.Style.StrokeColor := b.BorderColor.Color;
+      AEl.Style.StrokeGradient := b.BorderColor.Gradient;
+      AEl.Style.StrokeWidthLogical := w;
+    end
+    else
+      Exit;
+    AEl.Style.DashLogical := TyDashPattern(b.Dash, b.DashLogical,
+      AEl.Style.StrokeWidthLogical);
+    AEl.Style.DashOffsetLogical := b.DashOffset;
+  end;
+
   { THE EDGE'S ENTER TAG [F3a]: its line in the frame beforeUpdate works
     in -- the trimmed ends in data space and the view's frame on a view,
     the pixels and no frame on axes -- and its label's placing }
@@ -6618,6 +6672,7 @@ begin
     el := TyChartElement(shape);
     el.Style.HasFill := fill <> 0;
     el.Style.FillColor := fill;
+    NodeBorder(el, sym, i, fill);
     { the node's style.opacity [F2a] }
     el.Style.Alpha := 1;
     if i <= High(AInk.NodeOpacity) then el.Style.Alpha := AInk.NodeOpacity[i];

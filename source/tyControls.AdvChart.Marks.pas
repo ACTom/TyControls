@@ -175,6 +175,12 @@ type
     DashExplicit: TTyDoubleArray;
     { [R2-I2] the pen's phase, px (lineDashOffset) }
     DashOffset: Double;
+    { [R2-I3] THE itemStyle's DASH AND PHASE, kept apart: on a line the pen
+      above is its lineStyle's, and its symbols draw the itemStyle's
+      (Symbol.ts: the data's visual style) }
+    ItemDash: TTyOptDash;
+    ItemDashExplicit: TTyDoubleArray;
+    ItemDashOffset: Double;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -906,7 +912,7 @@ end;
 function RowVisualEarly(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
 var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
-  rf: TTyRowFill;
+  rf: TTyRowFill; k, n: Integer;
 begin
   Result := AVisual;
   if AStore = nil then Exit;
@@ -968,6 +974,73 @@ begin
   begin
     v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset'));
     if v.Kind = dvkNumber then Result.DashOffset := v.Num;
+  end;
+  { [R2-I3] AND ITS OWN borderType (getItemStyle's lineDash, the item's key
+    over the series'): a word, a number, or a short array the store keeps
+    item by item. 'solid' and a word normalizeLineDash does not know are
+    written all the same, and draw solid. [Was: the series' alone.] }
+  k := TyOverrideKey('itemStyle.borderType');
+  if AStore.HasOverride(ARow, k) then
+  begin
+    v := AStore.GetOverride(ARow, k);
+    Result.DashExplicit := nil;
+    if v.Kind = dvkNumber then
+    begin
+      Result.Dash := todExplicit;
+      SetLength(Result.DashExplicit, 1);
+      Result.DashExplicit[0] := v.Num;
+    end
+    else if (v.Kind = dvkText) and (v.Text = 'dashed') then Result.Dash := todDashed
+    else if (v.Kind = dvkText) and (v.Text = 'dotted') then Result.Dash := todDotted
+    else Result.Dash := todSolid;
+  end
+  else if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderType.0')) then
+  begin
+    n := 0;
+    while (n < 4) and AStore.HasOverride(ARow,
+      TyOverrideKey('itemStyle.borderType.' + IntToStr(n))) do Inc(n);
+    SetLength(Result.DashExplicit, n);
+    for k := 0 to n - 1 do
+    begin
+      v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderType.' + IntToStr(k)));
+      { a dash entry that is not a number contributes nothing (ReadDash) }
+      if v.Kind = dvkNumber then Result.DashExplicit[k] := v.Num
+      else Result.DashExplicit[k] := 0;
+    end;
+    Result.Dash := todExplicit;
+  end;
+  { [R2-I3] ITS OWN PEN, likewise: borderColor ('none' none, 'auto' the
+    row's colour) and borderWidth over the series' (dataStyleTask extends
+    the item's style over the series'). [Was: read for a heatmap's cell and
+    a boxplot only; a bar's, a symbol's own border never drew.] }
+  k := TyOverrideKey('itemStyle.borderColor');
+  if AStore.HasOverride(ARow, k) then
+  begin
+    v := AStore.GetOverride(ARow, k);
+    if v.Kind = dvkText then
+    begin
+      if TyChartColorIsNone(v.Text) then
+      begin
+        Result.Stroke := 0;
+        Result.StrokeGradient := Default(TTyChartGradient);
+      end
+      else if v.Text = 'auto' then
+      begin
+        Result.Stroke := Result.Fill;
+        Result.StrokeGradient := Default(TTyChartGradient);
+      end
+      else if TyTryParseChartColor(v.Text, c) then
+      begin
+        Result.Stroke := c;
+        Result.StrokeGradient := Default(TTyChartGradient);
+      end;
+    end;
+  end;
+  k := TyOverrideKey('itemStyle.borderWidth');
+  if AStore.HasOverride(ARow, k) then
+  begin
+    v := AStore.GetOverride(ARow, k);
+    if (v.Kind = dvkNumber) and not IsNan(v.Num) then Result.StrokeWidthLogical := v.Num;
   end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
   v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.color'));
@@ -1539,6 +1612,9 @@ var
   pol: TTyPolar;
   pcx, pcy, pr0, pr1, psa, pea, symCur, ar0, ar1: Double;
   pcw: Boolean;
+  { [R2-I3] the symbols' visual: the itemStyle's dash and phase, not the
+    lineStyle's the polyline draws -- made once, below }
+  symVis: TTySeriesVisual;
 
   { One marker, answering for its own row. False when the symbol draws
     nothing. }
@@ -1557,7 +1633,9 @@ var
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     { THE ROW'S COLOUR, not the series': a visualMap's, or the datum's own
       itemStyle.color. [Batch 56: every marker was the series colour.] }
-    sv := RowVisual(AVisual, AStore, ARow);
+    { [R2-I3] over the itemStyle's dash [was: the lineStyle's -- a dashed
+      line's symbols were dashed rings] }
+    sv := RowVisual(symVis, AStore, ARow);
     lineW := sv.StrokeWidthLogical;
     { An `empty` marker is a RING: the colour becomes the pen and the hole is
       the theme's own ground. A line's default symbol is emptyCircle, so this
@@ -2167,6 +2245,10 @@ var
 
 begin
   Result := 0;
+  symVis := AVisual;
+  symVis.Dash := AVisual.ItemDash;
+  symVis.DashExplicit := AVisual.ItemDashExplicit;
+  symVis.DashOffset := AVisual.ItemDashOffset;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;

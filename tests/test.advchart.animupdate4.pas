@@ -71,6 +71,7 @@ type
     procedure ProbeGeo(ARec: TJSONObject);
     procedure ProbeLine(ARec: TJSONObject);
     procedure ProbeRadar(ARec: TJSONObject);
+    procedure ProbeTreeHit(ARec: TJSONObject);
     function HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
     function HDur300(ADataIndex: Integer; AHasIndex: Boolean): Double;
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
@@ -87,6 +88,7 @@ type
     procedure TestAStepChangeEntersAgainAsUpstream;
     procedure TestATreesDataMergeWalksTheOldTreeAsUpstream;
     procedure TestARadarsSymbolsSlideAsUpstream;
+    procedure TestATreesEdgeInFlightIsHitWhereItIsDrawn;
   end;
 
 implementation
@@ -918,6 +920,54 @@ end;
 
 { ---- [R2-I2] a radar's item: its rings, its symbols where the frame draws
   them, the labels on them ---- }
+{ ---- [R2-I3] a tree's edges hit in flight: what the chart's own hit test
+  finds at upstream's points (the middle of each edge as drawn, and 4 px off
+  it) -- the edge of node i, node i, another element or nothing ---- }
+procedure TAdvChartAnimUpdate4OracleTest.ProbeTreeHit(ARec: TJSONObject);
+var
+  k: Integer;
+  leaf: TJSONObject;
+  name: string;
+
+  { the list's own containment WITHOUT the port's mouse pad round a symbol
+    (a deviation of long standing; upstream's answer is the shape's), on
+    the frame where one is drawn -- the chart's hit test walks the same }
+  function HitAt(AX, AY: Integer): string;
+  var idx: Integer; el: TTyChartElement; L: TTyPaintList;
+  begin
+    if (FChart.Frame <> nil) and (FChart.Frame.Count = FChart.List.Count) then L := FChart.Frame
+    else L := FChart.List;
+    idx := L.HitTestElement(AX, AY, 96, False);
+    if idx < 0 then Exit('null');
+    el := FChart.List.Element(idx);
+    if el.Anim.Role = carTreeEdge then Exit('edge' + IntToStr(el.Anim.Index));
+    if (el.Datum.SeriesIndex >= 0) and (el.Datum.DataIndex >= 0) then
+      Exit('node' + IntToStr(el.Datum.DataIndex));
+    Result := 'other';
+  end;
+
+  procedure One(const AWhat, AKey: string; AX, AY: Integer);
+  var want, got: string;
+  begin
+    if leaf.Find(AKey).JSONType = jtNull then want := 'null'
+    else want := leaf.Strings[AKey];
+    got := HitAt(AX, AY);
+    Inc(FCompared);
+    if got <> want then
+      Bad(Format('%s (%d, %d): %s, upstream %s', [AWhat, AX, AY, got, want]));
+  end;
+
+begin
+  for k := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[k];
+    if Copy(name, 1, 2) <> 'th' then Continue;
+    leaf := ARec.Objects[name];
+    One(name + ' middle', 'hit', leaf.Integers['x'], leaf.Integers['y']);
+    One(name + ' 4 px off', 'hit4', leaf.Integers['x4'], leaf.Integers['y4']);
+  end;
+end;
+
 procedure TAdvChartAnimUpdate4OracleTest.ProbeRadar(ARec: TJSONObject);
 var
   i, s, row, slash, k, j, h: Integer;
@@ -1061,6 +1111,7 @@ begin
     else if AProbes.Strings[i] = 'geo' then ProbeGeo(ARec)
     else if AProbes.Strings[i] = 'line' then ProbeLine(ARec)
     else if AProbes.Strings[i] = 'radar' then ProbeRadar(ARec)
+    else if AProbes.Strings[i] = 'treeHit' then ProbeTreeHit(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 
@@ -1171,6 +1222,11 @@ end;
 procedure TAdvChartAnimUpdate4OracleTest.TestARadarsSymbolsSlideAsUpstream;
 begin
   RunGroup('radar', 5000);
+end;
+
+procedure TAdvChartAnimUpdate4OracleTest.TestATreesEdgeInFlightIsHitWhereItIsDrawn;
+begin
+  RunGroup('treeHit', 100);
 end;
 
 procedure TAdvChartAnimUpdate4OracleTest.TestATreesDataMergeWalksTheOldTreeAsUpstream;

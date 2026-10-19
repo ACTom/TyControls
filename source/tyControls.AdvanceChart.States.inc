@@ -146,12 +146,25 @@ begin
   { ON A PROXY the animatable keys are the frame's: the list keeps the rest
     values, and only the paint order and the visibility are written
     [Batch 94] }
+  { [R2-I3] A STATE'S DASH is no animation prop (DEFAULT_PATH_ANIMATION_PROPS
+    has lineDashOffset, not lineDash): set at the state's start, proxy or
+    not, normalised against the width the state draws }
+  if c.Has[stkDash] then
+  begin
+    if c.Has[stkLineWidth] and StPositive(c.Num[stkLineWidth]) then
+      AEl.Style.DashLogical := TyStDashOf(c, c.Num[stkLineWidth])
+    else
+      AEl.Style.DashLogical := TyStDashOf(c, AEl.Style.StrokeWidthLogical);
+  end;
   if AProxied then
   begin
     AEl.Z2 := Round(c.Num[stkZ2]);
     AEl.Ignore := c.Num[stkIgnore] <> 0;
     Exit;
   end;
+  { [R2-I3] and its phase, at once where nothing tweens it }
+  if c.Has[stkDashOffset] and not StSameNum(c.Num[stkDashOffset], r.Num[stkDashOffset]) then
+    AEl.Style.DashOffsetLogical := c.Num[stkDashOffset];
   if not SameColourKey(c, r, stkFill) then
   begin
     if c.None[stkFill] then AEl.Style.HasFill := False
@@ -1448,7 +1461,14 @@ begin
         if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
         { a markPoint's words where its scaled path puts them; [R2-I1] a
           markPoint's or a markArea's where the emphasis textConfig does }
-        if (n = stnEmphasis) and ((el.Anim.Role = carMarkPointLabel)
+        { [R2-I3] where the emphasis twin stands, any marker's (a
+          markLine's too) }
+        if (n = stnEmphasis) and (Length(el.EmphTwin) > 0) then
+        begin
+          TyStSetNum(obj, stkX, el.EmphTwin[0].Caption.X);
+          TyStSetNum(obj, stkY, el.EmphTwin[0].Caption.Y);
+        end
+        else if (n = stnEmphasis) and ((el.Anim.Role = carMarkPointLabel)
           or (el.Datum.Kind = ctkMarkArea)) and (el.Anim.G[4] <> 0) then
         begin
           TyStSetNum(obj, stkX, el.Caption.X + el.Anim.G[2]);
@@ -1560,9 +1580,27 @@ begin
         else
         begin
           StWriteLabel(el, FSt[s].Marks[k], False);
+          { [R2-I3] THE LABEL AS THE HOVER LAYS IT OUT, whole: its font, its
+            block, its place, its box and its ink (the emphasis style merged
+            over the normal one; updateInnerText's ink where it now is) --
+            a state's opacity, paint order and visibility stay the state's }
+          if (stnEmphasis in FSt[s].Marks[k].States) and (Length(el.EmphTwin) > 0) then
+          begin
+            el.Caption := el.EmphTwin[0].Caption;
+            el.Shape := el.EmphTwin[0].Shape;
+            { a colour the states declare, select's under emphasis' }
+            if TyStHasColour(FSt[s].Marks[k].Cur, stkFill) then
+            begin
+              el.Caption.Colour := FSt[s].Marks[k].Cur.Color[stkFill];
+              if Length(el.Caption.RtPieces) > 0 then
+                el.Caption.RtPieces := TyRtReink(el.Caption.RtPieces,
+                  FSt[s].Marks[k].Cur.Color[stkFill], False, el.Caption.StrokeColour,
+                  el.Caption.StrokeWidthLogical);
+            end;
+          end
           { [R2-I1] UNDER THE EMPHASIS textConfig: the alignment, the turn and
             the box of the label as the hover lays it out }
-          if (stnEmphasis in FSt[s].Marks[k].States) and (el.Anim.G[4] = 2)
+          else if (stnEmphasis in FSt[s].Marks[k].States) and (el.Anim.G[4] = 2)
             and ((el.Anim.Role = carMarkPointLabel) or (el.Datum.Kind = ctkMarkArea)) then
           begin
             el.Caption.AnchorH := TTyTextAnchorH(Round(el.Anim.G[5]));
@@ -2528,6 +2566,9 @@ begin
       TyAnimPropPut(Result.Props, 'style.stroke', StColourValue(AM, stkStroke));
     if AM.Has[stkLineWidth] and P.HasStKey('style.lineWidth') then
       TyAnimPropPut(Result.Props, 'style.lineWidth', TyAnimNum(AM.Num[stkLineWidth]));
+    { [R2-I3] the pen's phase }
+    if AM.Has[stkDashOffset] and P.HasStKey('style.lineDashOffset') then
+      TyAnimPropPut(Result.Props, 'style.lineDashOffset', TyAnimNum(AM.Num[stkDashOffset]));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
   end;
@@ -2703,6 +2744,10 @@ begin
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
     Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
+    { [R2-I3] the pen's phase, where some state says one: it tweens }
+    if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
+      or AEl.Decl[stnBlur].Has[stkDashOffset] then
+      Seed('style.lineDashOffset', TyAnimNum(AEl.Rest.Num[stkDashOffset]));
     if isPie and (AKind in [cStPxPath, cStPxGuide]) then
     begin
       Seed('x', TyAnimNum(0));

@@ -27,6 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.JsMath,
      tyControls.AdvChart.Anim, tyControls.AdvChart.AnimView,
      tyControls.AdvChart.States, tyControls.AdvChart.Events, tyControls.AdvanceChart,
+     tyControls.FontUnits,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TSkProbe = class(TTyAdvanceChart)
@@ -65,6 +66,8 @@ type
       FMarksCompared: Integer;
     { [R2-I1] labels hidden at rest, compared where a state shows them }
     FHiddenPlaces: Integer;
+    { [R2-I3] text boxes and dashes compared }
+    FBoxes, FDashes: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -75,6 +78,8 @@ type
     procedure CompareSelection(const AWhere: string; ACase: TJSONObject; ASample: Integer);
     procedure CompareElement(const AWhere: string; AEl: TJSONObject; ASample: Integer);
     procedure CompareMarker(const AWhere: string; AEl: TJSONObject; ASample: Integer);
+    procedure BoxAt(const AWhere, APart: string; AEl: TJSONObject; ASample: Integer;
+      const ABox: TTyRectF);
     procedure RunCase(ACase: TJSONObject);
   protected
     procedure SetUp; override;
@@ -577,6 +582,39 @@ begin
   else Result := AV.AsFloat;
 end;
 
+const
+  cAlignNames: array[TTyTextAnchorH] of string = ('left', 'center', 'right');
+  cVAlignNames: array[TTyTextAnchorV] of string = ('top', 'middle', 'bottom');
+
+{ [R2-I3] normalizeLineDash's lengths as the fixture writes them }
+function DashText(const A: TTyDoubleArray): string;
+var j: Integer;
+begin
+  if Length(A) = 0 then Exit('null');
+  Result := '[';
+  for j := 0 to High(A) do
+  begin
+    if j > 0 then Result := Result + ',';
+    Result := Result + TyJsNumberToString(A[j]);
+  end;
+  Result := Result + ']';
+end;
+
+procedure TAdvChartStatesMarksOracleTest.BoxAt(const AWhere, APart: string;
+  AEl: TJSONObject; ASample: Integer; const ABox: TTyRectF);
+var vx, vy, vw, vh: TJSONData;
+begin
+  if not (ValueAt(AEl, 'bx', ASample, vx) and ValueAt(AEl, 'by', ASample, vy)
+    and ValueAt(AEl, 'bw', ASample, vw) and ValueAt(AEl, 'bh', ASample, vh)) then Exit;
+  if (Abs(ABox.Left - NumOf(vx)) > 1e-6) or (Abs(ABox.Top - NumOf(vy)) > 1e-6)
+    or (Abs((ABox.Right - ABox.Left) - NumOf(vw)) > 1e-6)
+    or (Abs((ABox.Bottom - ABox.Top) - NumOf(vh)) > 1e-6) then
+    Miss(Format('%s %s: box (%s, %s, %s, %s), upstream (%s, %s, %s, %s)', [AWhere, APart,
+      FloatToStr(ABox.Left), FloatToStr(ABox.Top), FloatToStr(ABox.Right - ABox.Left),
+      FloatToStr(ABox.Bottom - ABox.Top), FloatToStr(NumOf(vx)), FloatToStr(NumOf(vy)),
+      FloatToStr(NumOf(vw)), FloatToStr(NumOf(vh))]), AWhere + APart + 'box');
+end;
+
 procedure TAdvChartStatesMarksOracleTest.CompareMarker(const AWhere: string;
   AEl: TJSONObject; ASample: Integer);
 const
@@ -670,7 +708,40 @@ begin
       and ColourOf(v.AsString, cf) and (el.Caption.Colour <> cf) then
       Miss(Format('%s %s: ink %s, upstream %s', [AWhere, part,
         IntToHex(el.Caption.Colour, 8), v.AsString]), AWhere + part + 'ink');
+    { [R2-I3] A textBox case: the merged style's size, the alignment the
+      style says, and the box through the transform -- the text as the
+      state lays it out }
+    if not el.Ignore and ValueAt(AEl, 'fs', ASample, v) and ValueAt(AEl, 'bx', ASample, rv) then
+    begin
+      Inc(FBoxes);
+      { the caption's size in css px (a skin's points or the author's px) }
+      if Abs(TyFontPxOf(el.Caption.FontSizeLogical) - NumOf(v)) > 1e-9 then
+        Miss(Format('%s %s: font size %s px, upstream %s', [AWhere, part,
+          FloatToStr(TyFontPxOf(el.Caption.FontSizeLogical)), FloatToStr(NumOf(v))]),
+          AWhere + part + 'fs');
+      if ValueAt(AEl, 'al', ASample, v) and (v.AsString <> '')
+        and (v.AsString <> cAlignNames[el.Caption.AnchorH]) then
+        Miss(Format('%s %s: align %s, upstream %s', [AWhere, part,
+          cAlignNames[el.Caption.AnchorH], v.AsString]), AWhere + part + 'al');
+      if ValueAt(AEl, 'va', ASample, v) and (v.AsString <> '')
+        and (v.AsString <> cVAlignNames[el.Caption.AnchorV]) then
+        Miss(Format('%s %s: vertical align %s, upstream %s', [AWhere, part,
+          cVAlignNames[el.Caption.AnchorV], v.AsString]), AWhere + part + 'va');
+      BoxAt(AWhere, part, AEl, ASample, el.Shape.Bounds);
+    end;
     Exit;
+  end;
+  { [R2-I3] a dash case: the dash as the list draws it, and its phase }
+  if ValueAt(AEl, 'dash', ASample, v) then
+  begin
+    Inc(FDashes);
+    if DashText(el.Style.DashLogical) <> v.AsString then
+      Miss(Format('%s %s: dash %s, upstream %s', [AWhere, part,
+        DashText(el.Style.DashLogical), v.AsString]), AWhere + part + 'dash');
+    if ValueAt(AEl, 'dashOff', ASample, rv) and (rv.JSONType <> jtNull)
+      and (Abs(el.Style.DashOffsetLogical - NumOf(rv)) > 1e-12) then
+      Miss(Format('%s %s: dash phase %s, upstream %s', [AWhere, part,
+        FloatToStr(el.Style.DashOffsetLogical), FloatToStr(NumOf(rv))]), AWhere + part + 'doff');
   end;
   { the colours: the rest's as the port's rest, its lift as the port's lift,
     a declared one as written }
@@ -931,9 +1002,11 @@ begin
     Fail(Format('%d mismatches over %d samples (%s):%s', [FBad, FCompared,
       FTally.CommaText, FReport]));
   AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
-    + 'hidden labels shown %d',
-    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FHiddenPlaces]),
-    (FEventsCompared > 30) and (FMarksCompared > 1000) and (FHiddenPlaces > 20));
+    + 'hidden labels shown %d, text boxes %d, dashes %d',
+    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FHiddenPlaces,
+      FBoxes, FDashes]),
+    (FEventsCompared > 30) and (FMarksCompared > 1000) and (FHiddenPlaces > 20)
+    and (FBoxes > 100) and (FDashes > 50));
 end;
 
 { ==================== by hand ==================== }
