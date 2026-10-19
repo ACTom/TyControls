@@ -227,7 +227,7 @@ begin
     ctx.beginPath;
     ctx.moveTo(R.Left, y);
     ctx.lineTo(R.Right, y);
-    ctx.stroke;
+    TyCtxStroke(ctx);
     Exit;
   end;
   ctx.beginPath;
@@ -237,7 +237,7 @@ begin
     y := TySparklineY(FValues[i], AMin, AMax, yTop, h);
     if i = 0 then ctx.moveTo(x, y) else ctx.lineTo(x, y);
   end;
-  ctx.stroke;
+  TyCtxStroke(ctx);
 end;
 
 procedure TTyCustomSparkline.DrawBars(P: TTyPainter; const R: TRect; AMin, AMax: Double;
@@ -285,7 +285,7 @@ begin
   ctx.fillStyle(TyColorToBGRA(ADotS.Background.Color));
   ctx.beginPath;
   ctx.arc(x, y, rad, 0, 2 * Pi, False);
-  ctx.fill;
+  TyCtxFill(ctx);
 end;
 
 procedure TTyCustomSparkline.Paint;
@@ -326,7 +326,7 @@ begin
         ctx.beginPath;
         ctx.moveTo(band.Left, baseY + 0.5);
         ctx.lineTo(band.Right, baseY + 0.5);
-        ctx.stroke;
+        TyCtxStroke(ctx);
       end;
 
       case FStyle of

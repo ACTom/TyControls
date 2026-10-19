@@ -209,18 +209,18 @@ begin
         ctx.lineTo(cx + tipR * Cos(tAng + halfW * 0.6), cy + tipR * Sin(tAng + halfW * 0.6));
         ctx.lineTo(cx + rimR * Cos(tAng + halfW), cy + rimR * Sin(tAng + halfW));
         ctx.closePath;
-        ctx.fill;
+        TyCtxFill(ctx);
       end;
       // Gear body: accent disc.
       ctx.beginPath;
       ctx.arc(cx, cy, radius, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(fillS.Background.Color));
-      ctx.fill;
+      TyCtxFill(ctx);
       // Centre hole: the faint track colour, so it reads as a gear (and the spin is visible).
       ctx.beginPath;
       ctx.arc(cx, cy, radius * 0.4, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(trackS.Background.Color));
-      ctx.fill;
+      TyCtxFill(ctx);
     end;
     P.EndPaint;
   finally

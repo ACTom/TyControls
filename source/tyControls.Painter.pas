@@ -650,6 +650,12 @@ function TyPainterKeptStrokeReplaysForTest: Integer;
   was. Main thread only, like everything else that paints. }
 function TyPinBgraRandom: LongWord;
 procedure TyUnpinBgraRandom(ASaved: LongWord);
+{ [R2-H] A Canvas2D's own fill, stroke and clip with the generator pinned, as
+  the painter's are: for a control that draws its path straight on the
+  bitmap's Canvas2D (an arc, a long line) }
+procedure TyCtxFill(ACtx: TBGRACanvas2D);
+procedure TyCtxStroke(ACtx: TBGRACanvas2D);
+procedure TyCtxClip(ACtx: TBGRACanvas2D);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -5292,6 +5298,21 @@ begin
   {$push}{$R-}{$Q-}
   RandSeed := (ASaved xor LongWord($9E3779B9)) * 1103515245 + 12345;
   {$pop}
+end;
+
+procedure TyCtxFill(ACtx: TBGRACanvas2D);
+begin
+  CtxFill(ACtx);
+end;
+
+procedure TyCtxStroke(ACtx: TBGRACanvas2D);
+begin
+  CtxStroke(ACtx);
+end;
+
+procedure TyCtxClip(ACtx: TBGRACanvas2D);
+begin
+  CtxClip(ACtx);
 end;
 
 procedure TyPainterClipReuseForTest(AOn: Boolean);

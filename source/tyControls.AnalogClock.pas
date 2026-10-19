@@ -215,7 +215,7 @@ begin
   ctx.beginPath;
   ctx.moveTo(cx, cy);
   ctx.lineTo(cx + ALen * Cos(ang), cy + ALen * Sin(ang));
-  ctx.stroke;
+  TyCtxStroke(ctx);
 end;
 
 procedure TTyCustomAnalogClock.Paint;
@@ -260,7 +260,7 @@ begin
           ctx.moveTo(cx + radius * Cos(ang), cy + radius * Sin(ang));
           rr := radius - P.Scale(7);
           ctx.lineTo(cx + rr * Cos(ang), cy + rr * Sin(ang));
-          ctx.stroke;
+          TyCtxStroke(ctx);
         end;
       end;
 
@@ -278,7 +278,7 @@ begin
       ctx.fillStyle(TyColorToBGRA(secondS.Background.Color));
       ctx.beginPath;
       ctx.arc(cx, cy, Math.Max(2, P.Scale(3)), 0, 2 * Pi, False);
-      ctx.fill;
+      TyCtxFill(ctx);
     end;
     P.EndPaint;
   finally

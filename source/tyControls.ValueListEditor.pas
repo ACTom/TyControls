@@ -1954,7 +1954,7 @@ begin
       ctx.lineTo(tri.Left + sz * 0.7, cy);
     end;
     ctx.closePath;
-    ctx.fill;
+    TyCtxFill(ctx);
   end;
 
   { A heading's key runs across both columns; there is no divider and no value. }

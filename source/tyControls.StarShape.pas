@@ -437,7 +437,7 @@ begin
       if doFill then
       begin
         ctx.fillStyle(TyColorToBGRA(S.Background.Color));
-        ctx.fill;
+        TyCtxFill(ctx);
       end;
 
       // BORDER: the resolved border colour at max(1, scaled border-width). Gated on the
@@ -447,7 +447,7 @@ begin
       begin
         ctx.lineWidth := G.StrokeWidth;
         ctx.strokeStyle(TyColorToBGRA(S.BorderColor));
-        ctx.stroke;
+        TyCtxStroke(ctx);
       end;
     end;
 

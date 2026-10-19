@@ -333,7 +333,7 @@ begin
       ctx.beginPath;
       ctx.arc(cx, cy, radius, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(bodyS.Background.Color));
-      ctx.fill;
+      TyCtxFill(ctx);
       // Subtle body border: theme border WIDTH but the text colour, so the rim is chained to
       // the label colour and TyDial's own border-color is unreachable. Left as-is here because
       // this pass is a pure key split and must not move a pixel; switching the stroke to
@@ -343,7 +343,7 @@ begin
       ctx.strokeStyle(TyColorToBGRA(bodyS.TextColor));
       ctx.beginPath;
       ctx.arc(cx, cy, radius - bw / 2, 0, 2 * Pi, False);
-      ctx.stroke;
+      TyCtxStroke(ctx);
 
       // Pointer/notch from an inner radius out to the rim at the value angle.
       frac := TyGaugeFraction(FValue, FMin, FMax);
@@ -355,7 +355,7 @@ begin
       ctx.beginPath;
       ctx.moveTo(cx + r0 * Cos(ang), cy + r0 * Sin(ang));
       ctx.lineTo(cx + r1 * Cos(ang), cy + r1 * Sin(ang));
-      ctx.stroke;
+      TyCtxStroke(ctx);
     end;
 
     if FShowValue then

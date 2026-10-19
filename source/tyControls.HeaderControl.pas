@@ -893,7 +893,7 @@ begin
         ctx.lineTo(tri[2].X + 0.5, tri[2].Y + 0.5);
         ctx.closePath;
         ctx.fillStyle(TyColorToBGRA(txtColor));
-        ctx.fill;
+        TyCtxFill(ctx);
       end;
 
       { The divider on the side this section shares with its successor -- its right when

@@ -295,7 +295,7 @@ begin
         bodyRect.Top + padT + P.Scale(CIconLogical) div 2,
         P.Scale(CIconLogical) div 2, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(disc));
-      ctx.fill;
+      TyCtxFill(ctx);
       P.DrawText(Rect(bodyRect.Left + padL, bodyRect.Top + padT,
         bodyRect.Left + padL + P.Scale(CIconLogical),
         bodyRect.Top + padT + P.Scale(CIconLogical)),

@@ -1469,7 +1469,7 @@ begin
       ctx.lineTo(APlot.Right, y + 0.5);
       ctx.lineWidth := 1;
       ctx.strokeStyle(gridPx);
-      ctx.stroke;
+      TyCtxStroke(ctx);
     end;
     if Abs(v) < 1e9 then lbl := FormatFloat('0.###', v, fs) else lbl := '';
     P.DrawText(Rect(APlot.Left - P.Scale(34), y - P.Scale(8), APlot.Left - P.Scale(3), y + P.Scale(8)),
@@ -1484,7 +1484,7 @@ begin
   ctx.lineTo(APlot.Right, APlot.Bottom + 0.5);
   ctx.lineWidth := 1;
   ctx.strokeStyle(axisPx);
-  ctx.stroke;
+  TyCtxStroke(ctx);
 
   // X category labels
   for ci := 0 to catCount - 1 do
@@ -1534,7 +1534,7 @@ begin
         if first then begin ctx.moveTo(ctr.X, ctr.Y); first := False; end
         else ctx.lineTo(ctr.X, ctr.Y);
       end;
-      ctx.stroke;
+      TyCtxStroke(ctx);
       // point markers + optional values
       for ci := 0 to High(vals) do
       begin
@@ -1545,7 +1545,7 @@ begin
         ctx.beginPath;
         ctx.arc(px, py, P.Scale(3), 0, 2 * Pi, False);
         ctx.fillStyle(seriesPx);
-        ctx.fill;
+        TyCtxFill(ctx);
         if FShowValues then
           P.DrawText(Rect(px - P.Scale(16), py - P.Scale(15), px + P.Scale(16), py - P.Scale(2)),
             FormatFloat('0.###', vals[ci], fs), Font.Name, 8, 400, S.TextColor,
@@ -1595,12 +1595,12 @@ begin
       ctx.arc(cx, cy, hole, a1, a0, True);
     ctx.closePath;
     ctx.fillStyle(ColorToBGRA(SliceColor(i)));
-    ctx.fill;
+    TyCtxFill(ctx);
     // Thin separator in the surface colour. It traces the ring's inner edge too, so the
     // donut's hole gets a clean rim for free.
     ctx.lineWidth := P.Scale(1);
     ctx.strokeStyle(sepPx);
-    ctx.stroke;
+    TyCtxStroke(ctx);
     if FShowValues and (total > 0) then
     begin
       mid := DegToRad(slices[i].StartDeg + slices[i].SweepDeg / 2 - 90);

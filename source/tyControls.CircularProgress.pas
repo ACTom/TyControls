@@ -268,14 +268,14 @@ begin
       ctx.beginPath;
       ctx.arc(cx, cy, radius, DegToRad(-90), DegToRad(270), False);
       ctx.strokeStyle(TyColorToBGRA(trackS.Background.Color));
-      ctx.stroke;
+      TyCtxStroke(ctx);
       // value ring (from top, clockwise by fraction)
       if frac > 0 then
       begin
         ctx.beginPath;
         ctx.arc(cx, cy, radius, DegToRad(-90), DegToRad(-90 + 360 * frac), False);
         ctx.strokeStyle(TyColorToBGRA(fillS.Background.Color));
-        ctx.stroke;
+        TyCtxStroke(ctx);
       end;
     end;
 
