@@ -346,8 +346,8 @@ begin
     end
   else if (p = 'font-weight') and (tpFontWeight in AStyle.Present) then
   begin
-    if AStyle.FontWeight = 700 then Result := 'bold'
-    else if AStyle.FontWeight = 400 then Result := 'normal'
+    if TyFontWeightOf(AStyle.FontWeight) = 700 then Result := 'bold'
+    else if TyFontWeightOf(AStyle.FontWeight) = 400 then Result := 'normal'
     else Result := IntToStr(AStyle.FontWeight);
   end
   else if (p = 'opacity') and (tpOpacity in AStyle.Present) then Result := OpacityStr(AStyle.Opacity)

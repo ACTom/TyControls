@@ -343,7 +343,7 @@ end;
 { ---- font configuration shared by measure + draw ---- }
 
 procedure ConfigRunFont(ABmp: TBGRABitmap; const ARun: TTyHtmlRun;
-  const AFontName: string; ABaseSize, APPI: Integer);
+  const AFontName: string; ABaseSize, ABaseWeight, APPI: Integer);
 var
   sz: Integer;
   fs: TFontStyles;
@@ -354,7 +354,8 @@ begin
   ABmp.FontHeight := MulDiv(Round(sz * 96 / 72), APPI, 96);
   ABmp.FontQuality := TyTextFontQuality;   // the painter's answer, not a copy of an old one
   TyUseTextRenderer(ABmp);
-  fs := [];
+  { the label's own font style (#92: a control Font laid over the style), then the markup's }
+  fs := TyFontStylesOf(ABaseWeight);
   if ARun.Bold then Include(fs, fsBold);
   if ARun.Italic then Include(fs, fsItalic);
   ABmp.FontStyle := fs;
@@ -482,14 +483,14 @@ begin
       begin
         if curLineH = 0 then
         begin
-          ConfigRunFont(bmp, run, fontName, baseSize, APPI);
+          ConfigRunFont(bmp, run, fontName, baseSize, S.FontWeight, APPI);
           curLineH := bmp.TextSize('Ag').cy;   // an empty line still has height
         end;
         NewLine;
         Continue;
       end;
       if run.Text = '' then Continue;
-      ConfigRunFont(bmp, run, fontName, baseSize, APPI);
+      ConfigRunFont(bmp, run, fontName, baseSize, S.FontWeight, APPI);
       rh := bmp.TextSize('Ag').cy;
       jj := 1;
       sLen := Length(run.Text);
@@ -666,7 +667,7 @@ begin
     begin
       run := FLayout[ii].Run;
       isLink := run.Href <> '';
-      ConfigRunFont(fb, run, fontName, baseSize, P.RasterPPI);
+      ConfigRunFont(fb, run, fontName, baseSize, S.FontWeight, P.RasterPPI);
       rr := P.Dev(FLayout[ii].Rect);
       if isLink then col := linkColor
       else if run.HasColor then col := LclColorToTy(run.Color)

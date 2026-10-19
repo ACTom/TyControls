@@ -201,6 +201,26 @@ const
 
 function TyRGB(R, G, B: Byte): TTyColor;
 function TyRGBA(R, G, B, A: Byte): TTyColor;
+
+const
+  { A STYLE'S FontWeight CARRIES THE FONT'S STYLE (#92). Every text call in the library passes
+    a style's FontWeight on as it is -- a hundred and fifty of them -- and a control's own
+    Font can be italic, underlined or struck out, which a CSS weight cannot say. So those three
+    ride above the weight's range (1..1000) and only the two font set-ups in tyControls.Painter
+    read them. Anything that wants the weight as a number takes TyFontWeightOf first; a bare
+    `FontWeight >= 600` would call an italic regular font bold (test.controlfont guards it). }
+  TyFontItalic     = $10000;
+  TyFontUnderline  = $20000;
+  TyFontStrikeOut  = $40000;
+  TyFontWeightMask = $FFFF;
+
+{ The CSS weight of a style's FontWeight, without the style flags. }
+function TyFontWeightOf(AWeight: Integer): Integer;
+{ The font style a style's FontWeight draws: bold from a weight of 600 and up, and the flags. }
+function TyFontStylesOf(AWeight: Integer): TFontStyles;
+{ AWeight with a font's style laid over it: bold makes the weight 700, no bold keeps AWeight's
+  own; italic, underline and strikeout set their flags. }
+function TyFontWeightWithStyle(AWeight: Integer; AStyle: TFontStyles): Integer;
 function TyAlphaOf(c: TTyColor): Byte;
 function TyRedOf(c: TTyColor): Byte;
 function TyGreenOf(c: TTyColor): Byte;
@@ -243,6 +263,34 @@ function TyRGB(R, G, B: Byte): TTyColor;
 begin
   Result := TTyColor((Cardinal($FF) shl 24) or (Cardinal(R) shl 16) or
                      (Cardinal(G) shl 8) or Cardinal(B));
+end;
+
+function TyFontWeightOf(AWeight: Integer): Integer;
+begin
+  Result := AWeight and TyFontWeightMask;
+end;
+
+function TyFontStylesOf(AWeight: Integer): TFontStyles;
+var
+  css: Integer;
+begin
+  css := AWeight and TyFontWeightMask;
+  Result := [];
+  if css >= 600 then Include(Result, fsBold);
+  if (AWeight and TyFontItalic) <> 0 then Include(Result, fsItalic);
+  if (AWeight and TyFontUnderline) <> 0 then Include(Result, fsUnderline);
+  if (AWeight and TyFontStrikeOut) <> 0 then Include(Result, fsStrikeOut);
+end;
+
+function TyFontWeightWithStyle(AWeight: Integer; AStyle: TFontStyles): Integer;
+begin
+  if fsBold in AStyle then
+    Result := 700
+  else
+    Result := AWeight and TyFontWeightMask;
+  if fsItalic in AStyle then Result := Result or TyFontItalic;
+  if fsUnderline in AStyle then Result := Result or TyFontUnderline;
+  if fsStrikeOut in AStyle then Result := Result or TyFontStrikeOut;
 end;
 
 function TyRGBA(R, G, B, A: Byte): TTyColor;
