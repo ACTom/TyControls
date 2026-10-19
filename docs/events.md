@@ -139,7 +139,7 @@ macOS 的 Retina 屏上，绘制器按屏幕的实际像素画：图层是控件
 不用换算的：
 
 - 绘制器自己的方法：`FillBackground`、`StrokeBorder`、`DrawText`、`DrawGlyph` 等，照旧用控件坐标。
-- `Bitmap.Canvas2D`：已经设好 S 倍的变换，照旧用控件坐标，线宽也一样。
+- `Bitmap.Canvas2D`：已经设好 S 倍的变换，照旧用控件坐标，线宽也一样。这个变换是绘制器设的，不要整个换掉：`resetTransform`、`setTransform` 会把坐标的 S 倍一起清掉，Retina 上画出来挤在左上角、只有一半大；`strokeResetTransform` 会清掉线宽的 S 倍，线只有一半粗。只是临时要平移、旋转、缩放的话，用 `save` / `restore` 包起来，在中间调 `translate`、`rotate`、`scale`；确实要从头设，设完补一句 `scale(P.DeviceScale, P.DeviceScale)`，线宽同样用 `strokeScale` 补回来。
 - 绘制器的路径接口（`BeginPath`、`MoveTo` / `LineTo`、`FillPath`、`StrokePath`、`PathContains`、`Translate` 等）：照旧用控件坐标。`ResetTransform` 回到的是这个 S 倍的变换，不是单位矩阵，之后的路径仍按控件坐标画。
 
 要换算的，是直接操作 `Bitmap` 的那些调用（`FillRect`、`PutImage`、`ClipRect`、`DrawLine` 等），它们按图层像素算：
