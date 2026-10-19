@@ -2267,12 +2267,29 @@ var
   d: TJSONData;
   w, dist, x, y: Double;
 
+  { [R2-I4] getBoundingRect's stroke allowance in the port's device units:
+    the LOGICAL width -- max(width, 5) for a path of no fill -- and then the
+    scale the path itself is drawn at. An end symbol (Line.ts createSymbol)
+    has no strokeNoScale: its pen grows its box in its own coordinates,
+    before its turn; the line's strokeNoScale meets a line scale of 1. [Was:
+    the symbol's logical width taken as device px, and the line's floor of 5
+    applied after the scale -- a corner short by both at 192 PPI.] }
+  function Grown(const ABox: TTyXYWH; AHasFill: Boolean; AWidth: Double): TTyXYWH;
+  var g: Double;
+  begin
+    Result := ABox;
+    if not (AWidth > 0) then Exit;
+    g := AWidth;
+    if (not AHasFill) and (g < 5) then g := 5;
+    Result := TyGrowByStroke(ABox, True, g * AScale);
+  end;
+
   procedure Sym(const S: TTyMkSymbolPic);
   begin
     if not S.Present or (Length(S.Path) = 0) then Exit;
     r := TyZrBBox(S.Path);
     if (S.Stroke <> '') and (S.Stroke <> 'none') then
-      r := TyGrowByStroke(r, (S.Fill <> '') and (S.Fill <> 'none'), S.LineWidth);
+      r := Grown(r, (S.Fill <> '') and (S.Fill <> 'none'), S.LineWidth);
     ZrUnion(box, has, RectThrough(r, S.HasTransform, S.Transform));
   end;
 
@@ -2285,7 +2302,7 @@ begin
     if d <> nil then w := NumOf(d) else w := P.LineWidth;
     r := TyZrBBox(P.Path);
     if (P.Stroke <> '') and (P.Stroke <> 'none') then
-      r := TyGrowByStroke(r, False, w * AScale);
+      r := Grown(r, False, w);
     ZrUnion(box, has, r);
   end;
   Sym(P.FromSym);

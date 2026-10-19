@@ -116,6 +116,8 @@ type
     { [R2-I1] }
     procedure TestAHoveredMarkerLabelIsLaidOutByItsEmphasisTextConfig;
     procedure TestATreeEdgeIsATargetOfNoData;
+    { [R2-I4] }
+    procedure TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
   end;
 
 implementation
@@ -1283,6 +1285,65 @@ begin
     AssertEquals(parts[k] + ' ink', IntToHex(want[k].Caption.Colour, 8), IntToHex(got[k].Caption.Colour, 8));
   end;
   AssertTrue('the turn is the config''s', Abs(got[0].Caption.RotationRad) > 0.5);
+end;
+
+{ [R2-I4] THE LINE GROUP'S BOX UNDER AN EMPHASIS POSITION (R2-I3's
+  EmphLinePlace), at 96 and at 192 PPI: an end symbol has no strokeNoScale,
+  so its box grows by its pen in its own coordinates -- the logical 2 of an
+  emptyCircle, which the port's device units make 2 x the scale; the line
+  (strokeNoScale, a line scale of 1) by max(width, 5) logical, scaled the
+  same. A word calculateTextPosition does not know ('start') leaves the
+  label's anchor on the box's corner. [Was: the symbol's pen and the line's
+  floor taken in device px -- a 1 px and a 2.5 px short corner at 192.] }
+procedure TAdvChartStatesMarksTest.TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
+const
+  cOpt = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[5,30,12],'
+    + '"markLine":{"symbol":["emptyCircle","emptyCircle"],"symbolSize":10,"lineStyle":{"width":1},'
+    + '"emphasis":{"lineStyle":{"width":2},"label":{"position":"start"}},'
+    + '"data":[{"yAxis":20,"name":"ring"}]}},'
+    + '{"type":"bar","data":[3,6,9],'
+    + '"markLine":{"symbol":"none","lineStyle":{"width":1},'
+    + '"emphasis":{"lineStyle":{"width":2},"label":{"position":"start"}},'
+    + '"data":[{"yAxis":30,"name":"bare"}]}}]}';
+var
+  ppi, s: Integer;
+  lbl, sym, line: TTyChartElement;
+  b: TTyRectF;
+  k, q: Integer;
+begin
+  for q := 0 to 1 do
+  begin
+    if q = 0 then ppi := 96 else ppi := 192;
+    s := ppi div 96;
+    NewChart(camOff);
+    FChart.SetBounds(0, 0, cW * s, cH * s);
+    FBmp.SetSize(cW * s, cH * s);
+    FChart.Option := cOpt;
+    AssertEquals('the option parses', '', FChart.OptionError);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, cW * s, cH * s), ppi);
+    { the ring's line: its from-symbol, a circle of 10 at the line's start,
+      grown by the logical 2 }
+    AssertTrue('ring label', FindRole(carMarkLineLabel, 0, 0, lbl) >= 0);
+    AssertTrue('ring from-symbol', FindRole(carMarkLineFrom, 0, 0, sym) >= 0);
+    AssertEquals('ring twin', 1, Length(lbl.EmphTwin));
+    AssertEquals(Format('ring corner x at %d', [ppi]), sym.Anim.G[0] - 5 * s - 2 * s / 2,
+      lbl.EmphTwin[0].Caption.X, 1e-9);
+    AssertEquals(Format('ring corner y at %d', [ppi]), sym.Anim.G[1] - 5 * s - 2 * s / 2,
+      lbl.EmphTwin[0].Caption.Y, 1e-9);
+    { the bare line: its own path box, grown by max(2, 5) logical }
+    AssertTrue('bare label', FindRole(carMarkLineLabel, 1, 0, lbl) >= 0);
+    AssertTrue('no bare from-symbol', FindRole(carMarkLineFrom, 1, 0, sym) < 0);
+    k := FindRole(carMarkLine, 1, 0, line);
+    AssertTrue('bare line', k >= 0);
+    AssertEquals('bare twin', 1, Length(lbl.EmphTwin));
+    b := TyShapeBounds(line.Shape);
+    AssertEquals(Format('bare corner x at %d', [ppi]), b.Left - 5 * s / 2,
+      lbl.EmphTwin[0].Caption.X, 1e-9);
+    AssertEquals(Format('bare corner y at %d', [ppi]), b.Top - 5 * s / 2,
+      lbl.EmphTwin[0].Caption.Y, 1e-9);
+  end;
+  FBmp.SetSize(cW, cH);
 end;
 
 { [R2-I1] A TREE EDGE IS NO SILENT ELEMENT (TreeView.drawEdge): the pointer
