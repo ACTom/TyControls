@@ -2183,11 +2183,18 @@ end;
 function TTyAdvanceChart.StatePartRecord(ASeries, ARow: Integer;
   const APart: string; out AEl: TTyStElement): Boolean;
 var
-  item: TTyStItem;
+  item, area: TTyStItem;
   idx, k: Integer;
 begin
   AEl := Default(TTyStElement);
   Result := False;
+  { [R2-I3] a line's polyline and its area, the series' own two }
+  if (APart = 'poly') or (APart = 'area') then
+  begin
+    if not LineStates(ASeries, item, area) then Exit;
+    if APart = 'poly' then AEl := item.Host else AEl := area.Host;
+    Exit(AEl.Exists);
+  end;
   if APart = 'peer' then
   begin
     if not PeerStates(ASeries, ARow, item) then Exit;

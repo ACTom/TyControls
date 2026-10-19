@@ -28,7 +28,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Render, tyControls.AdvChart.RichText,
      tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
-     tyControls.AdvChart.Geo,
+     tyControls.AdvChart.Geo, tyControls.AdvChart.Color,
      tyControls.AdvanceChart,
      test.advchart.graphic;
 type
@@ -381,6 +381,7 @@ var
   bx: TTyRtPieceArray;
   pat: TTyDoubleArray;
   gel: TTyGfxEl;
+  wantColour: TTyChartColor;
 
   procedure Bordered(const APieces: TTyRtPieceArray);
   var q: Integer;
@@ -469,9 +470,44 @@ begin
           Inc(seen);
           Continue;
         end;
+        { [R2-I3] an SVG map's own stroked shape: the n-th, in the list's
+          order, of the drawn shapes that stroke }
+        if role = 'svg' then
+        begin
+          found := False;
+          n := 0;
+          for j := 0 to FChart.List.Count - 1 do
+          begin
+            el := FChart.List.Element(j);
+            if (el.ZrHit.SvgNode <= 0) or el.ZrHit.SvgLabel or (el.Caption.FontSizeLogical > 0)
+              or not (el.Style.StrokeWidthLogical > 0) or ((el.Style.StrokeColor shr 24) = 0) then
+              Continue;
+            if n = idx then
+            begin
+              found := True;
+              Break;
+            end;
+            Inc(n);
+          end;
+          Inc(FCompared);
+          if not found then
+          begin
+            Bad(what + ': no such shape');
+            Continue;
+          end;
+          Inc(FCompared);
+          if not SameBits(el.Style.StrokeWidthLogical, FromHex(it.Strings['lineWidth'])) then
+            Bad(Format('%s: width %g, upstream %g', [what, el.Style.StrokeWidthLogical,
+              FromHex(it.Strings['lineWidth'])]));
+          CheckStroke(what, el.Style.DashLogical, el.Style.DashOffsetLogical, it);
+          Inc(seen);
+          Continue;
+        end;
         if role = 'bar' then want := carBar
         else if role = 'line' then want := carLineRun
         else if role = 'symbol' then want := carSymbol
+        { [R2-I3] a graph node's Symbol path }
+        else if role = 'node' then want := carSymbol
         else if role = 'radar' then want := carRadarLine
         else if role = 'edge' then want := carGraphEdge
         else if role = 'lines' then want := carLinesLine
@@ -503,6 +539,16 @@ begin
           Bad(Format('%s: width %g, upstream %g', [what, el.Style.StrokeWidthLogical,
             FromHex(it.Strings['lineWidth'])]));
         CheckStroke(what, el.Style.DashLogical, el.Style.DashOffsetLogical, it);
+        { [R2-I3] the pen's colour, where the record says it }
+        if (it.Find('stroke') <> nil) and (it.Find('stroke').JSONType = jtString) then
+        begin
+          Inc(FCompared);
+          if not TyTryParseChartColor(it.Strings['stroke'], wantColour) then
+            Bad(what + ': cannot read the stroke ' + it.Strings['stroke'])
+          else if el.Style.StrokeColor <> wantColour then
+            Bad(Format('%s: stroke %s, upstream %s', [what, IntToHex(el.Style.StrokeColor, 8),
+              it.Strings['stroke']]));
+        end;
         Inc(seen);
       end;
     end;

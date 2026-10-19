@@ -1734,7 +1734,12 @@ begin
           AInk.FontWeight, cw);
         if not hasWidth then cw := labs[k].W;
       end;
-      if (cw <= 0) or (h <= 0) then Continue;
+      { [R2-I3] A LABEL THE SOLVER'S WIDTH CUT TO NOTHING IS STILL A TEXT:
+        upstream keeps the element (its states, its opacity, its place)
+        and draws an empty line -- a box of no width. [Was: not built, so
+        no state reached it; R2-I1 took it for a test's locator.] }
+      if h <= 0 then Continue;
+      if cw < 0 then cw := 0;
       case place.AnchorH of
         tahCentre: box.Left := place.X - cw / 2;
         tahRight: box.Left := place.X - cw;

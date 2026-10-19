@@ -146,12 +146,25 @@ begin
   { ON A PROXY the animatable keys are the frame's: the list keeps the rest
     values, and only the paint order and the visibility are written
     [Batch 94] }
+  { [R2-I3] A STATE'S DASH is no animation prop (DEFAULT_PATH_ANIMATION_PROPS
+    has lineDashOffset, not lineDash): set at the state's start, proxy or
+    not, normalised against the width the state draws }
+  if c.Has[stkDash] then
+  begin
+    if c.Has[stkLineWidth] and StPositive(c.Num[stkLineWidth]) then
+      AEl.Style.DashLogical := TyStDashOf(c, c.Num[stkLineWidth])
+    else
+      AEl.Style.DashLogical := TyStDashOf(c, AEl.Style.StrokeWidthLogical);
+  end;
   if AProxied then
   begin
     AEl.Z2 := Round(c.Num[stkZ2]);
     AEl.Ignore := c.Num[stkIgnore] <> 0;
     Exit;
   end;
+  { [R2-I3] and its phase, at once where nothing tweens it }
+  if c.Has[stkDashOffset] and not StSameNum(c.Num[stkDashOffset], r.Num[stkDashOffset]) then
+    AEl.Style.DashOffsetLogical := c.Num[stkDashOffset];
   if not SameColourKey(c, r, stkFill) then
   begin
     if c.None[stkFill] then AEl.Style.HasFill := False
@@ -2528,6 +2541,9 @@ begin
       TyAnimPropPut(Result.Props, 'style.stroke', StColourValue(AM, stkStroke));
     if AM.Has[stkLineWidth] and P.HasStKey('style.lineWidth') then
       TyAnimPropPut(Result.Props, 'style.lineWidth', TyAnimNum(AM.Num[stkLineWidth]));
+    { [R2-I3] the pen's phase }
+    if AM.Has[stkDashOffset] and P.HasStKey('style.lineDashOffset') then
+      TyAnimPropPut(Result.Props, 'style.lineDashOffset', TyAnimNum(AM.Num[stkDashOffset]));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
   end;
@@ -2703,6 +2719,10 @@ begin
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
     Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
+    { [R2-I3] the pen's phase, where some state says one: it tweens }
+    if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
+      or AEl.Decl[stnBlur].Has[stkDashOffset] then
+      Seed('style.lineDashOffset', TyAnimNum(AEl.Rest.Num[stkDashOffset]));
     if isPie and (AKind in [cStPxPath, cStPxGuide]) then
     begin
       Seed('x', TyAnimNum(0));

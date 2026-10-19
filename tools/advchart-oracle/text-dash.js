@@ -247,6 +247,19 @@ const PICK = {
   },
   barLabelBox: chart => { const r = []; eachSeriesOf(chart, 'bar', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); const t = el && el.getTextContent(); if (t) r.push(...boxRecs('labelBox', sm.seriesIndex, i, t)); })); return r; },
   graphicBox: chart => graphicTexts(chart).reduce((a, t) => a.concat(boxRecs('graphicBox', -1, t.id, t.el)), []),
+  // [R2-I3] a graph's node symbols (the Symbol's path), with the pen's colour
+  graphNode: chart => { const r = []; eachSeriesOf(chart, 'graph', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('node', sm.seriesIndex, i, el.childAt(0).style, { stroke: el.childAt(0).style.stroke || null })); })); return r; },
+  // [R2-I3] bars with the pen's colour
+  barStroke: chart => { const r = []; eachSeriesOf(chart, 'bar', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('bar', sm.seriesIndex, i, el.style, { stroke: el.style.stroke || null })); })); return r; },
+  // [R2-I3] an SVG map's own stroked shapes, in the geo view's order
+  svgGeo: chart => {
+    const r = [];
+    for (const v of chart._componentsViews) {
+      if (!v || v.type !== 'geo') continue;
+      v.group.traverse(el => { if (!el.isGroup && el.type !== 'tspan' && el.type !== 'text' && el.style && el.style.stroke) { const st = Object.create(el.style); if (el.style.lineDashOffset != null) st.lineDashOffset = Number(el.style.lineDashOffset); r.push(strokeRec('svg', -1, r.length, st, { raw: el.style.lineDashOffset == null ? null : String(el.style.lineDashOffset) })); } });
+    }
+    return r;
+  },
 };
 const CAT = { type: 'category', data: ['a', 'b', 'c'] };
 const VAL = { type: 'value' };
@@ -290,9 +303,38 @@ const SERIES = [
   { id: 'graphicBox', note: 'a graphic text\'s box: style.borderDash [6, 2] and borderDashOffset 4 as written; a negative offset on another',
     pick: 'graphicBox', option: { graphic: [g('gb', { text: 'Box', borderColor: '#000', borderWidth: 2, borderDash: [6, 2], borderDashOffset: 4, padding: 3 }),
       g('gn', { text: 'Neg', y: 80, borderColor: '#00f', borderWidth: 1, borderDash: 'dotted', borderDashOffset: -3, backgroundColor: '#ff0' })] } },
+  // [R2-I3]
+  { id: 'graphNode', note: "[R2-I3] graph nodes: the series' border #333333 at 2, dashed, at 3; a its own borderDashOffset 7; b in category k by NAME ([2, 1] at 1); c an emptyCircle (its colour at 2, the series' dash against 2); d its own borderType 'solid'; e its own borderColor and width 5",
+    pick: 'graphNode', option: { color: ['#5070dd'], series: [{ type: 'graph', layout: 'none', symbolSize: 20, itemStyle: { borderColor: '#333333', borderWidth: 2, borderType: 'dashed', borderDashOffset: 3 },
+      categories: [{ name: 'k', itemStyle: { borderType: [2, 1], borderDashOffset: 1 } }],
+      data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderDashOffset: 7 } }, { name: 'b', x: 100, y: 0, category: 'k' }, { name: 'c', x: 50, y: 80, symbol: 'emptyCircle' },
+        { name: 'd', x: 150, y: 80, itemStyle: { borderType: 'solid' } }, { name: 'e', x: 200, y: 0, itemStyle: { borderColor: '#ff0000', borderWidth: 5 } }], links: [] }] } },
+  { id: 'barItem', note: "[R2-I3] bars: the series' border #000 at 2, dashed; item 0 its own borderType [6, 2]; item 1 its own borderColor #ff0000 and width 4 (the dash against 4); item 2 its own 'solid'; item 3 its own borderType 'dotted' and borderDashOffset 5",
+    pick: 'barStroke', option: { xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'] }, yAxis: VAL, series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed' },
+      data: [{ value: 5, itemStyle: { borderType: [6, 2] } }, { value: 7, itemStyle: { borderColor: '#ff0000', borderWidth: 4 } }, { value: 3, itemStyle: { borderType: 'solid' } },
+        { value: 4, itemStyle: { borderType: 'dotted', borderDashOffset: 5 } }] }] } },
+  { id: 'svgGeo', note: "[R2-I3] an SVG map's own stroke-dashoffset (parseAttributes keeps the string, the canvas reads a number): a rect [4 2] at 3, a path [5 5] at -2, a circle whose group says 6; the geo at the SVG's own size (an unnamed shape has no strokeNoScale)",
+    pick: 'svgGeo', option: { geo: { map: 'r2i3svg', left: 0, top: 0, width: 100, height: 100 } } },
 ];
+// [R2-I3] an SVG map whose shapes carry their own dash and phase
+const SVGMAP = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+  + '<rect x="0" y="0" width="40" height="40" fill="#cccccc" stroke="#000000" stroke-width="2" stroke-dasharray="4 2" stroke-dashoffset="3"/>'
+  + '<path d="M50 0 L90 0 L90 40 Z" fill="#cccccc" stroke="#000000" stroke-width="1" stroke-dasharray="5,5" stroke-dashoffset="-2"/>'
+  + '<g stroke-dashoffset="6"><circle cx="20" cy="70" r="15" fill="none" stroke="#0000ff" stroke-width="1" stroke-dasharray="3 3"/></g>'
+  + '</svg>';
+// [R2-I3] node has no DOMParser: jsdom's (as geo-svg.js), set only when the
+// SVG map is registered
+let svgDomReady = false;
+function svgDom() {
+  if (svgDomReady) return;
+  const { JSDOM } = require(process.env.JSDOM_PATH || 'D:/Projects/xterm.js/node_modules/jsdom');
+  global.DOMParser = new JSDOM('').window.DOMParser;
+  svgDomReady = true;
+}
 function runSeries(c) {
   echarts.registerMap('r2i2dash', MAPJSON);
+  svgDom();
+  echarts.registerMap('r2i3svg', { svg: SVGMAP });
   const chart = mk(400, 300);
   try {
     chart.setOption(Object.assign({ animation: false }, c.option));
@@ -312,7 +354,7 @@ function generate() {
     anim: runAnim(),
   };
   out.series = SERIES.map(runSeries);
-  out.maps = [{ name: 'r2i2dash', text: JSON.stringify(MAPJSON) }];
+  out.maps = [{ name: 'r2i2dash', text: JSON.stringify(MAPJSON) }, { name: 'r2i3svg', text: SVGMAP }];
   const st = id => out.static.find(c => c.id === id);
   const at = t => out.anim.samples.find(s => s.t === t);
   const arr = h => (h == null ? null : h.map(num));
@@ -341,6 +383,14 @@ function generate() {
     { name: 'labelBox: the block\'s dashed against twice the width, at 2; the token\'s [3, 1] at 5', ok: sr('labelBox').some(r => off(r) === 2
       && JSON.stringify(r.pattern.map(num)) === '[8,4]') && sr('labelBox').some(r => off(r) === 5 && JSON.stringify(r.pattern.map(num)) === '[3,1]') },
     { name: 'graphicBox: [6, 2] at 4, dotted at -3', ok: sr('graphicBox').map(off).join() === '4,-3' },
+    // [R2-I3]
+    { name: 'graphNode: every node has a pen; the empty one at 2 in its colour; d solid', ok: sr('graphNode').length === 5
+      && sr('graphNode').map(off).join() === '7,1,3,3,3' && num(sr('graphNode')[2].lineWidth) === 2 && sr('graphNode')[3].pattern === null
+      && sr('graphNode')[4].stroke === '#ff0000' },
+    { name: 'barItem: the own borderType of each item borderType and the width it goes against', ok: JSON.stringify(sr('barItem')[0].pattern.map(num)) === '[6,2]'
+      && JSON.stringify(sr('barItem')[1].pattern.map(num)) === '[16,8]' && sr('barItem')[2].pattern === null
+      && JSON.stringify(sr('barItem')[3].pattern.map(num)) === '[2]' && off(sr('barItem')[3]) === 5 },
+    { name: 'svgGeo: the strings 3, -2 and 6', ok: sr('svgGeo').map(r => r.raw).join() === '3,-2,6' },
   );
   return out;
 }

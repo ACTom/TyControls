@@ -52,7 +52,12 @@ type
     stkR, stkScale, stkIgnore,
     { a label line's shape.smooth: every state sets it, nought unless the
       state's labelLine says (setLabelLineState) [Batch 112] }
-    stkSmooth);
+    stkSmooth,
+    { [R2-I3] a state's lineDash (borderType / type: Num the TTyOptDash,
+      GradJson the explicit lengths as 'a,b,...') -- not animated, set at
+      the state's start -- and its lineDashOffset (borderDashOffset /
+      dashOffset), which a transition tweens }
+    stkDash, stkDashOffset);
 
   { A state object, sparse: a key the state does not set is absent. A colour
     key can be the word 'none' (None) -- zrender's hasFillOrStroke reads it as
@@ -253,6 +258,9 @@ function TyStBlursSeries(const AFocus: TTyStFocus; AScope: TTyStScope;
   reads the block at the node itself. }
 function TyStReadStyle(const ANodes: array of TJSONObject; const AState,
   ABlock: string; out AWidthBolder: Boolean): TTyStObject;
+{ [R2-I3] the dash a state object holds (stkDash) as lengths against
+  AWidthLogical -- normalizeLineDash; nil for none or solid }
+function TyStDashOf(const AObj: TTyStObject; AWidthLogical: Double): TTyDoubleArray;
 { The first node that writes the path (a boolean, or a truthy value):
   AHas False when none writes it. }
 function TyStReadBool(const ANodes: array of TJSONObject;
@@ -915,6 +923,81 @@ begin
   if has and not IsNan(v) then TyStSetNum(AObj, AKey, v);
 end;
 
+{ [R2-I3] a state's dash, as getItemStyle / getLineStyle take it: the first
+  node that writes the key (null falls through); a word, a number, an
+  array; 'solid' and a word nobody knows written all the same (solid) }
+var
+  { the dash lengths' text: '.' whatever the locale, every digit kept }
+  GStFmt: TFormatSettings;
+
+procedure ReadDashKey(const ANodes: array of TJSONObject; const AState, ABlock,
+  AName: string; var AObj: TTyStObject);
+var
+  d, e: TJSONData;
+  i, k: Integer;
+  txt: string;
+begin
+  d := nil;
+  for i := 0 to High(ANodes) do
+  begin
+    if ANodes[i] = nil then Continue;
+    if AState = '' then d := TyStFind([ANodes[i]], [ABlock, AName])
+    else d := TyStFind([ANodes[i]], [AState, ABlock, AName]);
+    if (d <> nil) and (d.JSONType <> jtNull) then Break;
+    d := nil;
+  end;
+  if d = nil then Exit;
+  AObj.Has[stkDash] := True;
+  AObj.GradJson[stkDash] := '';
+  case d.JSONType of
+    jtNumber:
+      begin
+        AObj.Num[stkDash] := Ord(todExplicit);
+        AObj.GradJson[stkDash] := FloatToStrF(d.AsFloat, ffGeneral, 17, 0, GStFmt);
+      end;
+    jtArray:
+      if d.Count = 0 then AObj.Num[stkDash] := Ord(todSolid)
+      else
+      begin
+        AObj.Num[stkDash] := Ord(todExplicit);
+        txt := '';
+        for k := 0 to d.Count - 1 do
+        begin
+          e := d.Items[k];
+          if k > 0 then txt := txt + ',';
+          if e.JSONType = jtNumber then txt := txt + FloatToStrF(e.AsFloat, ffGeneral, 17, 0, GStFmt)
+          else txt := txt + '0';
+        end;
+        AObj.GradJson[stkDash] := txt;
+      end;
+    jtString:
+      if d.AsString = 'dashed' then AObj.Num[stkDash] := Ord(todDashed)
+      else if d.AsString = 'dotted' then AObj.Num[stkDash] := Ord(todDotted)
+      else AObj.Num[stkDash] := Ord(todSolid);
+  else
+    AObj.Num[stkDash] := Ord(todSolid);
+  end;
+end;
+
+function TyStDashOf(const AObj: TTyStObject; AWidthLogical: Double): TTyDoubleArray;
+var
+  parts: TStringArray;
+  ex: TTyDoubleArray;
+  k: Integer;
+begin
+  Result := nil;
+  if not AObj.Has[stkDash] then Exit;
+  ex := nil;
+  if TTyOptDash(Round(AObj.Num[stkDash])) = todExplicit then
+  begin
+    parts := AObj.GradJson[stkDash].Split([',']);
+    SetLength(ex, Length(parts));
+    for k := 0 to High(parts) do
+      ex[k] := StrToFloatDef(parts[k], 0, GStFmt);
+  end;
+  Result := TyDashPattern(TTyOptDash(Round(AObj.Num[stkDash])), ex, AWidthLogical);
+end;
+
 function TyStReadStyle(const ANodes: array of TJSONObject; const AState,
   ABlock: string; out AWidthBolder: Boolean): TTyStObject;
 var s: string; has: Boolean;
@@ -927,6 +1010,9 @@ begin
     ReadColour(ANodes, AState, 'lineStyle', 'borderColor', stkStroke, False, Result);
     ReadNum(ANodes, AState, 'lineStyle', 'borderWidth', stkLineWidth, Result);
     ReadNum(ANodes, AState, 'lineStyle', 'opacity', stkOpacity, Result);
+    { [R2-I3] its getItemStyle's lineDash and lineDashOffset }
+    ReadDashKey(ANodes, AState, 'lineStyle', 'borderType', Result);
+    ReadNum(ANodes, AState, 'lineStyle', 'borderDashOffset', stkDashOffset, Result);
   end
   else if ABlock = 'lineStyle' then
   begin
@@ -936,6 +1022,9 @@ begin
     if has and (s = 'bolder') then AWidthBolder := True
     else ReadNum(ANodes, AState, ABlock, 'width', stkLineWidth, Result);
     ReadNum(ANodes, AState, ABlock, 'opacity', stkOpacity, Result);
+    { [R2-I3] getLineStyle's lineDash and lineDashOffset }
+    ReadDashKey(ANodes, AState, ABlock, 'type', Result);
+    ReadNum(ANodes, AState, ABlock, 'dashOffset', stkDashOffset, Result);
   end
   else if ABlock = 'areaStyle' then
   begin
@@ -948,6 +1037,9 @@ begin
     ReadColour(ANodes, AState, ABlock, 'borderColor', stkStroke, False, Result);
     ReadNum(ANodes, AState, ABlock, 'borderWidth', stkLineWidth, Result);
     ReadNum(ANodes, AState, ABlock, 'opacity', stkOpacity, Result);
+    { [R2-I3] getItemStyle's lineDash and lineDashOffset }
+    ReadDashKey(ANodes, AState, ABlock, 'borderType', Result);
+    ReadNum(ANodes, AState, ABlock, 'borderDashOffset', stkDashOffset, Result);
   end;
 end;
 
@@ -1230,5 +1322,10 @@ begin
     end;
   end;
 end;
+
+initialization
+  GStFmt := DefaultFormatSettings;
+  GStFmt.DecimalSeparator := '.';
+  GStFmt.ThousandSeparator := #0;
 
 end.

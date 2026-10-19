@@ -6066,6 +6066,12 @@ begin
       if not Off(key, v, rest) then Continue;
       if v.Kind = avkNumber then AEl.Style.StrokeWidthLogical := v.Num;
     end
+    { [R2-I3] a state's dashOffset, tweening }
+    else if key = 'style.lineDashOffset' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if v.Kind = avkNumber then AEl.Style.DashOffsetLogical := v.Num;
+    end
     else if key = 'style.opacity' then
     begin
       if RoleHas(key) then Continue;

@@ -4978,6 +4978,8 @@ begin
   else TyStSetNum(Result, stkR, 0);
   TyStSetNum(Result, stkScale, 1);
   TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
+  { [R2-I3] the pen's phase at rest, which a state's dashOffset tweens from }
+  TyStSetNum(Result, stkDashOffset, AEl.Style.DashOffsetLogical);
 end;
 
 { the edge data after Graph.update's filterSelf: an edge whose two ends both

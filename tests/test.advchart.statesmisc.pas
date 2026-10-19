@@ -69,6 +69,8 @@ type
     FBmp: TBGRABitmap;
     FBad, FCompared, FKeysCompared, FTrackedCompared, FEventsCompared,
       FMarksCompared, FPlaces, FOrders, FDashes: Integer;
+    { [R2-I3] the pens' phases compared as drawn }
+    FDashOffs: Integer;
     { [R2-I1] labels' opacities: a factor over a rest other than 1, as drawn }
     FFactored, FDrawnOpacities: Integer;
     FReport: string;
@@ -680,6 +682,19 @@ begin
       Miss(Format('%s %s: dash %s, upstream %s', [AWhere, id, got, fv.AsString]),
         AWhere + id + 'dash');
   end;
+  { [R2-I3] THE PEN'S PHASE as drawn (a dashOff case): the frame's where a
+    state's tweens it, the list's otherwise -- recorded only where a dash is }
+  if ValueAt(AEl, 'dashOff', ASample, fv) and (fv.JSONType <> jtNull) then
+  begin
+    if (FChart.Frame <> nil) and (FChart.Frame.Count = FChart.List.Count) then
+      fel := FChart.Frame.Element(idx)
+    else
+      fel := el;
+    Inc(FDashOffs);
+    if Abs(fel.Style.DashOffsetLogical - NumOf(fv)) > 1e-9 then
+      Miss(Format('%s %s: dash phase %s, upstream %s', [AWhere, id,
+        FloatToStr(fel.Style.DashOffsetLogical), FloatToStr(NumOf(fv))]), AWhere + id + 'doff');
+  end;
   { visible as upstream }
   if ValueAt(AEl, 'ignore', ASample, fv) and (fv.AsBoolean <> el.Ignore) then
     Miss(Format('%s %s: ignore %s, upstream %s', [AWhere, id, BoolToStr(el.Ignore, True),
@@ -949,9 +964,11 @@ begin
     + 'label places %d, paint orders %d',
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders])
     + Format(', dashes %d, factored label opacities %d, drawn label opacities %d',
-      [FDashes, FFactored, FDrawnOpacities]),
+      [FDashes, FFactored, FDrawnOpacities])
+    + Format(', dash phases %d', [FDashOffs]),
     (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100)
     and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50) and (FFactored > 200)
+    and (FDashOffs > 50)
     and (FDrawnOpacities > 1000));
 end;
 

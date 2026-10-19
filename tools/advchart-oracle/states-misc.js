@@ -147,6 +147,8 @@ function snap(el, zi) {
   }
   if (CUR_CASE && CUR_CASE.order && zi != null) put('zi', zi);
   if (CUR_CASE && CUR_CASE.dash && el.style && el.type !== 'text') put('dash', JSON.stringify(normalizeLineDash(el.style.lineDash, el.style.lineWidth)));
+  // [R2-I3] the pen's phase as drawn (a state's dashOffset tweens)
+  if (CUR_CASE && CUR_CASE.dashOff && el.style && el.type !== 'text' && el.style.lineDash) put('dashOff', el.style.lineDashOffset == null ? 0 : el.style.lineDashOffset);
   if (el.invisible != null) put('invisible', !!el.invisible);
   if (typeof el.z2 === 'number') put('z2', el.z2);
   put('states', (el.currentStates || []).join(','));
@@ -221,6 +223,8 @@ function seriesParts(chart) {
       });
       return;
     }
+    // [R2-I3] a line's polyline, in a case that asks for the pens' phases
+    if (type === 'line' && CUR_CASE && CUR_CASE.dashOff && view._polyline) put(view._polyline, s, 0, 'poly');
     if (type === 'pictorialBar') {
       data.each(i => {
         const g = data.getItemGraphicEl(i);
@@ -941,6 +945,38 @@ const R2I1 = [
     events: [over(0, ['rsym', 0, 0, 1]), out(500), over(800, ['rsym', 0, 1, 2]), out(1200)] },
 ];
 
+// [R2-I3] the leftovers: a pie beside a bar (its squeezed label), states' dashes
+const R2I3 = [
+  { id: 'bar-pie-label', note: '[R2-I3] a bar and a pie in one chart (R2-I1 split them): the pie at 30% beside the bars, '
+    + 'itemStyle.opacity 0.5, slice b a label.opacity 0.2 of its own -- avoidOverlap leaves b\'s label a width of 3, so its '
+    + 'truncated text is empty and the Text is there all the same; hover slice b at 0, out at 500',
+    option: { color: [C0, C1, C2, C3], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      grid: { left: 40, width: 150 },
+      series: [{ type: 'bar', label: { show: true, position: 'top' }, data: [10, 20, 30] },
+        { type: 'pie', radius: '30%', center: ['75%', '50%'], itemStyle: { opacity: 0.5 },
+          data: [{ name: 'a', value: 10 }, { name: 'b', value: 20, label: { opacity: 0.2 } }, { name: 'c', value: 30 }] }] },
+    events: [over(0, ['item', 1, 1]), out(500)] },
+  { id: 'bar-state-dash', dash: true, dashOff: true, note: '[R2-I3] a state\'s borderType (lineDash: no animation prop, set '
+    + 'at once) and borderDashOffset (lineDashOffset: tweened): bars bordered #000 at 2, emphasis [6, 3] at 4, bar 1 its own '
+    + 'emphasis borderDashOffset 9; select dotted in #000 (selectedMode single; no theme colour). Hover bar 0 at 0, out at 500, click bar 1 at 800, out '
+    + 'at 1200',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', selectedMode: 'single', itemStyle: { borderColor: '#000', borderWidth: 2 },
+        emphasis: { itemStyle: { borderType: [6, 3], borderDashOffset: 4 } }, select: { itemStyle: { borderType: 'dotted', borderColor: '#000' } },
+        data: [10, { value: 20, emphasis: { itemStyle: { borderDashOffset: 9 } } }, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500), click(800, ['item', 0, 1]), out(1200)] },
+  { id: 'line-state-dash', dash: true, dashOff: true, note: '[R2-I3] a line\'s emphasis lineStyle: type [3, 3] and dashOffset '
+    + '6 over its dashed at 2 (emphasis width bolder); highlight the series by action at 0, downplay at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'line', lineStyle: { type: 'dashed', width: 2 }, emphasis: { lineStyle: { type: [3, 3], dashOffset: 6 } },
+        data: [10, 20, 30] }] },
+    events: [act(0, { type: 'highlight', seriesIndex: 0 }), act(500, { type: 'downplay', seriesIndex: 0 })] },
+  { id: 'radar-state-dash', dash: true, dashOff: true, note: '[R2-I3] a radar ring\'s emphasis lineStyle: type dotted and '
+    + 'dashOffset 2 (R2-B: the states\' type was not read); hover a symbol of p at 0, out at 500',
+    option: radar({ lineStyle: { width: 2 }, emphasis: { lineStyle: { type: 'dotted', dashOffset: 2 } } }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1141,6 +1177,20 @@ function guards(cases) {
       && numAt(q, 'ignore', 450) === true && numAt(q, 'ignore', 1000) === true && numAt(q, 'ignore', 1600) === false,
       p && q && [numAt(p, 'style.lineWidth', 450), numAt(q, 'ignore', 450), numAt(q, 'ignore', 1000)].join(' '));
   }
+  // [R2-I3]
+  {
+    const c = byId(cases, 'bar-pie-label');
+    const l = elRow(c, 1, 1, 'label');
+    g('pie-squeezed-label-present', l && numAt(l, 'ignore', 1600) === false && statesAt(l, 450) === 'emphasis', 'bar-pie-label');
+  }
+  {
+    const c = byId(cases, 'bar-state-dash');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 0, 1, 'host');
+    g('state-dash-set-at-once', b0 && numAt(b0, 'dash', 1) === '[6,3]' && numAt(b0, 'dash', 1600) === 'null', 'bar-state-dash');
+    g('state-dash-offset-tweens', b0 && Number(numAt(b0, 'dashOff', 100)) > 0 && Number(numAt(b0, 'dashOff', 100)) < 4
+      && Number(numAt(b0, 'dashOff', 450)) === 4 && b1 && Number(numAt(b1, 'dashOff', 1200)) === 9, 'bar-state-dash phases');
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -1148,7 +1198,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,
