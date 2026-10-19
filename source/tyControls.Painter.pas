@@ -438,6 +438,17 @@ type
     { A width <= 0 draws NOTHING. Falling back to a default width would put a
       hairline everywhere a theme meant to switch a border off. }
     procedure StrokePath(AColor: TTyColor; AWidthLogical: Double);
+    { [R2-P] StrokePath, its coverage KEPT. What BGRA fills for a stroke is the polygon its
+      pen makes of the path, and what the antialiased fill does with it -- the brush calls,
+      position by position, before any colour -- depends on that polygon and the bitmap's
+      clip rect alone. A polygon met again (a chart label's halo on the next hover frame)
+      replays those calls through this stroke's own brush instead of filling again: the same
+      calls on the same brush, so the same pixels, and the global Random left as the fill
+      would have left it. Kept per process, main thread only, and dropped whole past a cap.
+      Whatever the replay does not model -- a clip mask, a stroke texture, a shadow, no
+      antialiasing, an ink that draws nothing, another thread -- strokes as StrokePath. Worth
+      it only where the same path comes back; every miss records as it fills. }
+    procedure StrokePathKept(AColor: TTyColor; AWidthLogical: Double);
     { Stroke the current path with the same ramp FillPathGradient fills with.
       Its own entry point rather than a flag on the fill: a stroke needs a
       width and a fill does not, and one procedure taking both would have a
@@ -613,6 +624,11 @@ function TyGdiTextRunsKeptForTest: Integer;
   does not count), and a switch that turns the reuse off -- the reference it must match. }
 function TyPainterClipMasksBuiltForTest: Integer;
 procedure TyPainterClipReuseForTest(AOn: Boolean);
+{ [R2-P] StrokePathKept's kept fills: a switch (off: every stroke goes through Canvas2D,
+  and what is kept is dropped), how many fills were recorded and how many replayed. }
+procedure TyPainterKeptStrokesForTest(AOn: Boolean);
+function TyPainterKeptStrokeFillsForTest: Integer;
+function TyPainterKeptStrokeReplaysForTest: Integer;
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -797,6 +813,10 @@ procedure TyInvalidateTextMeasureCache;
   AEntries is both caches' live entries; ResetStats zeroes the counters, not the caches. }
 procedure TyTextMeasureCacheStats(out AHits, AMisses: Int64; out AEntries: Integer);
 procedure TyResetTextMeasureCacheStats;
+{ How many times TyInvalidateTextMeasureCache has run. A cache kept outside this unit
+  whose entries come out of drawn or measured text (a chart's traced label outlines)
+  drops them when this moves -- the same staleness rule, without a hook list. }
+function TyTextMeasureGeneration: Cardinal;
 
 { The prefix the ellipsis fitter uses when it has narrowed the text to ACharCount CHARACTERS.
   A named function purely so the invariant is testable: the version this replaced shortened by
@@ -889,8 +909,8 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText,
-  tyControls.PlatformWS;
+  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, BGRAPolygon, BGRABlend,
+  tyControls.CanvasText, tyControls.PlatformWS;
 
 { Canvas2D's own fill, stroke and clip with the generator pinned. }
 procedure CtxFill(ACtx: TBGRACanvas2D);
@@ -1039,6 +1059,7 @@ var
   GBlockCache: TStringList = nil;    // sorted; Objects[] OWN TTyTextBlockMeasure
   GRenderCache: TStringList = nil;   // sorted; Objects[] hold a plain Integer width
   GMeasHits: Int64 = 0;
+  GMeasGeneration: Cardinal = 0;
   GMeasMisses: Int64 = 0;
 
 function TyTextMeasureCacheList(var AList: TStringList): TStringList;
@@ -1074,6 +1095,7 @@ procedure TyInvalidateTextMeasureCache;
 var
   i: Integer;
 begin
+  Inc(GMeasGeneration);
   if GBlockCache <> nil then
   begin
     for i := 0 to GBlockCache.Count - 1 do
@@ -1100,6 +1122,11 @@ begin
   AEntries := 0;
   if GBlockCache <> nil then Inc(AEntries, GBlockCache.Count);
   if GRenderCache <> nil then Inc(AEntries, GRenderCache.Count);
+end;
+
+function TyTextMeasureGeneration: Cardinal;
+begin
+  Result := GMeasGeneration;
 end;
 
 procedure TyResetTextMeasureCacheStats;
@@ -5312,6 +5339,245 @@ begin
     Result := TBGRACanvasState2D(p);
 end;
 
+{ [R2-P] THE KEPT FILLS (StrokePathKept). One per stroke polygon and clip rect met: the
+  polygon, the clip rect, and the brush calls the antialiased fill made -- -1, x, y for a
+  MoveTo at (x, y); alpha, count for a PutNextPixels -- and whether the fill drew from the
+  pinned Random. Found by a hash of the polygon and the rect, then compared whole. }
+type
+  TTyKeptFill = class
+    Pts: array of TPointF;
+    Clip: TRect;
+    Ops: array of LongInt;
+    NOps: Integer;
+    UsedRandom: Boolean;
+    Next: TTyKeptFill;      // another polygon with the same hash
+    procedure Add(A: LongInt);
+  end;
+
+procedure TTyKeptFill.Add(A: LongInt);
+begin
+  if NOps >= Length(Ops) then SetLength(Ops, Length(Ops) * 2 + 64);
+  Ops[NOps] := A;
+  Inc(NOps);
+end;
+
+const
+  KeptFillsMaxCount = 8192;
+  KeptFillsMaxBytes = 48 * 1024 * 1024;
+
+var
+  GKeptFills: specialize TDictionary<QWord, TTyKeptFill> = nil;
+  GKeptFillCount: Integer = 0;
+  GKeptFillBytes: Int64 = 0;
+  GKeptFillsOff: Boolean = False;
+  GKeptFillsMade: Integer = 0;
+  GKeptFillsReplayed: Integer = 0;
+
+procedure DropKeptFills;
+var
+  f, n, nx: TTyKeptFill;
+begin
+  if GKeptFills <> nil then
+  begin
+    for f in GKeptFills.Values do
+    begin
+      n := f;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GKeptFills.Clear;
+  end;
+  GKeptFillCount := 0;
+  GKeptFillBytes := 0;
+end;
+
+procedure TyPainterKeptStrokesForTest(AOn: Boolean);
+begin
+  DropKeptFills;
+  GKeptFillsOff := not AOn;
+end;
+
+function TyPainterKeptStrokeFillsForTest: Integer;
+begin
+  Result := GKeptFillsMade;
+end;
+
+function TyPainterKeptStrokeReplaysForTest: Integer;
+begin
+  Result := GKeptFillsReplayed;
+end;
+
+{ FNV-1a over the rect and the points, a point (two Singles) at a time }
+function KeptFillHash(const APts: ArrayOfTPointF; const AClip: TRect): QWord;
+var
+  q: PQWord;
+  i: Integer;
+begin
+  {$push}{$R-}{$Q-}
+  Result := QWord($CBF29CE484222325);
+  Result := (Result xor QWord(LongWord(AClip.Left)) xor (QWord(LongWord(AClip.Top)) shl 32))
+    * QWord($100000001B3);
+  Result := (Result xor QWord(LongWord(AClip.Right)) xor (QWord(LongWord(AClip.Bottom)) shl 32))
+    * QWord($100000001B3);
+  if Length(APts) > 0 then
+  begin
+    q := PQWord(@APts[0]);
+    for i := 0 to High(APts) do
+      Result := (Result xor q[i]) * QWord($100000001B3);
+  end;
+  {$pop}
+end;
+
+{ the recording brush: its fixed data holds the fill it records into }
+procedure KeptFillRecMove(AFixedData: Pointer; AContextData: PUniBrushContext);
+var f: TTyKeptFill;
+begin
+  f := TTyKeptFill(PPointer(AFixedData)^);
+  f.Add(-1);
+  f.Add(AContextData^.Ofs.X);
+  f.Add(AContextData^.Ofs.Y);
+end;
+
+procedure KeptFillRecPut(AFixedData: Pointer; AContextData: PUniBrushContext;
+  AAlpha: Word; ACount: Integer);
+var f: TTyKeptFill;
+begin
+  f := TTyKeptFill(PPointer(AFixedData)^);
+  f.Add(AAlpha);
+  f.Add(ACount);
+end;
+
+procedure TTyPainter.StrokePathKept(AColor: TTyColor; AWidthLogical: Double);
+var
+  ctx: TBGRACanvas2D;
+  st: TBGRACanvasState2D;
+  w: Double;
+  devDash: array of Single;
+  i, k: Integer;
+  pts, contour: ArrayOfTPointF;
+  h: QWord;
+  f, first: TTyKeptFill;
+  clip: TRect;
+  saved, before: LongWord;
+  rb, b: TUniversalBrush;
+  c: TBGRAPixel;
+  uctx: TUniBrushContext;
+  mode: TDrawMode;
+begin
+  if FBmp = nil then Exit;
+  w := ScaleF(AWidthLogical);
+  if w <= 0 then Exit;
+  ctx := FBmp.Canvas2D;
+  { the state StrokePath sets, set the same way }
+  ctx.lineWidth := w;
+  SetLength(devDash, Length(FVecDash));
+  for i := 0 to High(FVecDash) do
+    devDash[i] := ScaleF(FVecDash[i]) / w;
+  ctx.lineStyle(devDash);
+  ctx.strokeStyle(TyColorToBGRA(AColor));
+  st := nil;
+  if not GKeptFillsOff and (GetCurrentThreadId = MainThreadID) then
+    st := CanvasStateOf(ctx);
+  if (st = nil) or (st.clipMaskReadOnly <> nil) or (st.strokeTextureProvider <> nil)
+    or ctx.hasShadow or not ctx.antialiasing or (st.lineWidth = 0)
+    or (ctx.surface <> FBmp) or (st.penStroker.Arrow <> nil) then
+  begin
+    CtxStroke(ctx);
+    Exit;
+  end;
+  { the brush StrokePoly's fill makes (AnyBrush): the stroke colour at the global alpha }
+  c := st.strokeColor;
+  c.alpha := ApplyOpacity(c.alpha, st.globalAlpha);
+  if ctx.linearBlend then mode := dmLinearBlend else mode := dmDrawWithTransparency;
+  FBmp.SolidBrush(b, c, mode);
+  if b.DoesNothing then
+  begin
+    CtxStroke(ctx);
+    Exit;
+  end;
+  pts := ctx.currentPath;
+  if Length(pts) = 0 then Exit;
+  saved := TyPinBgraRandom;
+  try
+    contour := st.penStroker.ComputePolylineAutocycle(pts, st.lineWidth);
+    if Length(contour) < 3 then Exit;   // FillPolyAntialias draws nothing
+    clip := FBmp.ClipRect;
+    h := KeptFillHash(contour, clip);
+    first := nil;
+    if GKeptFills <> nil then GKeptFills.TryGetValue(h, first);
+    f := first;
+    while f <> nil do
+    begin
+      if (Length(f.Pts) = Length(contour)) and EqualRect(f.Clip, clip)
+        and CompareMem(@f.Pts[0], @contour[0], Length(contour) * SizeOf(TPointF)) then
+        Break;
+      f := f.Next;
+    end;
+    if f = nil then
+    begin
+      { RECORDED: the fill StrokePoly would run, through a brush that writes down its calls }
+      f := TTyKeptFill.Create;
+      f.Pts := contour;
+      f.Clip := clip;
+      rb := Default(TUniversalBrush);
+      rb.Colorspace := FBmp.Colorspace;
+      rb.InternalInitContext := @KeptFillRecMove;
+      rb.InternalPutNextPixels := @KeptFillRecPut;
+      PPointer(@rb.FixedData[0])^ := Pointer(f);
+      before := RandSeed;
+      BGRAPolygon.FillPolyAntialias(FBmp, contour, rb, True, True);
+      f.UsedRandom := RandSeed <> before;
+      SetLength(f.Ops, f.NOps);
+      Inc(GKeptFillsMade);
+      if GKeptFills = nil then
+        GKeptFills := specialize TDictionary<QWord, TTyKeptFill>.Create;
+      if (GKeptFillCount >= KeptFillsMaxCount)
+        or (GKeptFillBytes + Int64(Length(f.Pts)) * SizeOf(TPointF) + f.NOps * 4 > KeptFillsMaxBytes) then
+      begin
+        DropKeptFills;
+        first := nil;
+      end;
+      f.Next := first;
+      GKeptFills.AddOrSetValue(h, f);
+      Inc(GKeptFillCount);
+      Inc(GKeptFillBytes, Int64(Length(f.Pts)) * SizeOf(TPointF) + f.NOps * 4);
+    end
+    else
+    begin
+      Inc(GKeptFillsReplayed);
+      { the fill drew from the pinned generator: say so, so that unpinning reseeds the
+        application's as after a fill }
+      if f.UsedRandom and (RandSeed = CBgraPinnedSeed) then
+        RandSeed := CBgraPinnedSeed xor 1;
+    end;
+  finally
+    TyUnpinBgraRandom(saved);
+  end;
+  { REPLAYED through the real brush: FillShapeAntialias's own calls, its own LoadFromBitmap
+    and InvalidateBitmap around them }
+  if f.NOps = 0 then Exit;
+  FBmp.LoadFromBitmapIfNeeded;
+  uctx := Default(TUniBrushContext);
+  k := 0;
+  while k < f.NOps do
+    if f.Ops[k] = -1 then
+    begin
+      b.MoveTo(@uctx, FBmp.GetPixelAddress(f.Ops[k + 1], f.Ops[k + 2]), f.Ops[k + 1],
+        f.Ops[k + 2]);
+      Inc(k, 3);
+    end
+    else
+    begin
+      b.PutNextPixels(@uctx, Word(f.Ops[k]), f.Ops[k + 1]);
+      Inc(k, 2);
+    end;
+  FBmp.InvalidateBitmap;
+end;
+
 { Every state on ACtx (the current one and the saved ones) that shares AMask gets a copy
   of its own, so AMask can be freed. }
 procedure CanvasDisownMask(ACtx: TBGRACanvas2D; AMask: TGrayscaleMask);
@@ -5519,5 +5785,7 @@ finalization
     pool's masks are no state's now }
   ClipPoolFreeAll;
   GRasterCanvases := nil;
+  DropKeptFills;
+  FreeAndNil(GKeptFills);
 
 end.

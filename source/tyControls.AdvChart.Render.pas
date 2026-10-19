@@ -111,11 +111,24 @@ procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
 
+{ [R2-P] FOR THE TESTS. A label's halo traces its glyphs' outline off a mask
+  once and keeps it (see HaloOutlineKept): how many masks were traced since
+  the start; how many outlines are kept now; the keeping switched off (and
+  everything kept dropped) or on again. }
+function TyAdvChartHaloTracesForTest: Integer;
+function TyAdvChartHaloOutlinesKeptForTest: Integer;
+procedure TyAdvChartHaloCacheForTest(AOn: Boolean);
+{ [R2-P] FOR THE TESTS: the outline traced off AMask (alpha at half
+  coverage, AScale mask px per device px), as the halo strokes it with the
+  mask's origin at (0, 0) -- per contour its point count, then its points
+  x, y in turn. }
+function TyTraceMaskOutlineForTest(AMask: TBGRABitmap; AScale: Integer): TTyDoubleArray;
+
 implementation
 
-uses base64, BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Symbol,
-  tyControls.AdvChart.Decal, tyControls.AdvChart.Images, tyControls.AdvChart.ZrPath,
-  tyControls.AdvChart.GfxEl;
+uses base64, BGRABitmapTypes, Generics.Collections, tyControls.AdvChart.Large,
+  tyControls.AdvChart.Symbol, tyControls.AdvChart.Decal, tyControls.AdvChart.Images,
+  tyControls.AdvChart.ZrPath, tyControls.AdvChart.GfxEl;
 
 var
   GDecalCache: TStringList = nil;
@@ -847,46 +860,101 @@ begin
   Result := Length(APattern) > 0;
 end;
 
+type
+  { [R2-P] A TRACED OUTLINE: the closed contours marching squares found on a
+    halo's mask, every point in the mask's own px divided by the device
+    scale -- what the halo's path is given is a point plus the mask's
+    origin, so one outline serves wherever the same mask is drawn. }
+  TTyHaloOutline = class
+  public
+    Pts: array of Double;      // x, y of every point, contour after contour
+    Starts: array of Integer;  // contour k: points Starts[k] .. Starts[k + 1] - 1
+    Contours: Integer;
+  end;
+
+  { the trace's scratch: the padded alpha, the crossings and the segment
+    slots per edge key; kept on the main thread (TraceMaskOutline), grown as
+    a mask needs, never shrunk below what the largest kept one asked }
+  TTraceWork = class
+  public
+    Al: array of Byte;
+    Ex, Ey: array of Double;
+    Adj: array of Integer;
+    procedure Fit(AAlpha, AKeys: Integer);
+  end;
+
+procedure TTraceWork.Fit(AAlpha, AKeys: Integer);
+begin
+  if Length(Al) < AAlpha then SetLength(Al, AAlpha);
+  if Length(Ex) < AKeys then
+  begin
+    SetLength(Ex, AKeys);
+    SetLength(Ey, AKeys);
+  end;
+  if Length(Adj) < 2 * AKeys then SetLength(Adj, 2 * AKeys);
+end;
+
+const
+  { a box past this many edge keys gets scratch of its own, freed after }
+  TraceWorkMaxKeys = 1024 * 1024;
+
+var
+  GHaloTraces: Integer = 0;
+  GTraceWork: TTraceWork = nil;
+
 { THE GLYPHS' OUTLINES from their coverage: marching squares over the mask's
   alpha at half coverage, each crossing placed by linear interpolation
-  between the pixel centres, the segments chained into closed contours and
-  traced on P in DEVICE px (the mask's (0, 0) at (AOX, AOY)). A contour is a
-  glyph's outline as the painter drew the glyph -- which is what zrender
-  strokes: the text's own path. The mask holds AScale of its pixels per
-  device px -- P's device scale, the glyphs drawn on it as on P's layer
-  (#83) -- so a crossing is divided by it. }
-procedure TraceMaskOutline(P: TTyPainter; AMask: TBGRABitmap; AOX, AOY: Integer;
-  const ADashDevice: TTyDoubleArray; AScale: Integer);
+  between the pixel centres, the segments chained into closed contours. A
+  contour is a glyph's outline as the painter drew the glyph -- which is
+  what zrender strokes: the text's own path. The mask holds AScale of its
+  pixels per device px -- P's device scale, the glyphs drawn on it as on
+  P's layer (#83) -- so a crossing is divided by it. Only its AWidth x
+  AHeight corner is the mask (a kept one may be larger: MaskPainter).
+
+  [R2-P] ONLY ROUND THE INK. A cell makes a segment only where its four
+  corners are not all on one side of the half, so no cell without a corner
+  at half coverage or more makes any: the walk is the box of those pixels
+  grown by a cell up and left, in the same row-by-row order, so the
+  segments come in the same order and chain into the same contours. The
+  alpha is read once into a padded copy of that box -- a rotated label's
+  mask is a square round the anchor, its ink a thin strip across it, and
+  the whole-mask walk with a GetPixel per corner was most of a radial
+  tree's first frame. An edge's key is its place in the box's grid, not
+  the mask's; keys are only compared. }
+function TraceMaskOutline(AMask: TBGRABitmap; AWidth, AHeight, AScale: Integer): TTyHaloOutline;
 const
   cT = 127.5;
 var
-  w, h, gw, gh, nKeys, cx, cy, i, k, cur, seg, startKey, key, nSeg: Integer;
-  ex, ey: array of Double;
+  w, h, x0, y0, x1, y1, aw, ah, nKeys, cx, cy, i, k, cur, seg, startKey, key, nSeg: Integer;
+  xMin, yMin, xMax, yMax, x, y, np, nPts: Integer;
+  al: PByte;
+  row: PBGRAPixel;
+  ex, ey: PDouble;
   segA, segB: array of Integer;
-  adj: array of Integer;     // two segment slots per key
+  adj: PInteger;             // two segment slots per key
   used: array of Boolean;
+  wk: TTraceWork;
+  ownWork: Boolean;
   v0, v1, v2, v3, centre: Double;
   b0, b1, b2, b3: Boolean;
   kTop, kRight, kBottom, kLeft: Integer;
-  px, py: array of Double;
-  np: Integer;
+  o: TTyHaloOutline;
 
   function A(AX, AY: Integer): Double;
   begin
-    if (AX < 0) or (AY < 0) or (AX >= w) or (AY >= h) then Exit(0);
-    Result := AMask.GetPixel(AX, AY).alpha;
+    Result := al[(AY - y0) * aw + (AX - x0)];
   end;
 
   { an edge's key: the horizontal edge from sample (AX, AY) to (AX + 1, AY),
     or the vertical one down to (AX, AY + 1) }
   function KeyH(AX, AY: Integer): Integer;
   begin
-    Result := ((AY + 1) * gw + (AX + 1)) * 2;
+    Result := ((AY - y0) * aw + (AX - x0)) * 2;
   end;
 
   function KeyV(AX, AY: Integer): Integer;
   begin
-    Result := ((AY + 1) * gw + (AX + 1)) * 2 + 1;
+    Result := ((AY - y0) * aw + (AX - x0)) * 2 + 1;
   end;
 
   procedure Cross(AKey: Integer; AX0, AY0, AV0, AX1, AY1, AV1: Double);
@@ -897,10 +965,184 @@ var
     ey[AKey] := AY0 + (AY1 - AY0) * t + 0.5;
   end;
 
-  { THE DASHES, laid along the closed contour by its length -- the
-    pattern's phase starting afresh on each contour, as a canvas starts it
-    on each subpath (an odd pattern is said twice); each dash an open
-    subpath of its own }
+  procedure Seg2(AK0, AK1: Integer);
+  begin
+    if nSeg > High(segA) then
+    begin
+      SetLength(segA, Length(segA) * 2 + 16);
+      SetLength(segB, Length(segA));
+    end;
+    segA[nSeg] := AK0;
+    segB[nSeg] := AK1;
+    if adj[AK0 * 2] < 0 then adj[AK0 * 2] := nSeg else adj[AK0 * 2 + 1] := nSeg;
+    if adj[AK1 * 2] < 0 then adj[AK1 * 2] := nSeg else adj[AK1 * 2 + 1] := nSeg;
+    Inc(nSeg);
+  end;
+
+  procedure AddPoint(AKey: Integer);
+  begin
+    if 2 * nPts + 1 > High(o.Pts) then SetLength(o.Pts, Length(o.Pts) * 2 + 64);
+    o.Pts[2 * nPts] := ex[AKey] / AScale;
+    o.Pts[2 * nPts + 1] := ey[AKey] / AScale;
+    Inc(nPts);
+  end;
+
+begin
+  Inc(GHaloTraces);
+  o := TTyHaloOutline.Create;
+  Result := o;
+  SetLength(o.Starts, 1);
+  o.Starts[0] := 0;
+  o.Contours := 0;
+  if AMask = nil then Exit;
+  w := Min(AWidth, AMask.Width);
+  h := Min(AHeight, AMask.Height);
+  { the ink: the pixels at half coverage or more }
+  xMin := w;
+  yMin := h;
+  xMax := -1;
+  yMax := -1;
+  for y := 0 to h - 1 do
+  begin
+    row := AMask.ScanLine[y];
+    for x := 0 to w - 1 do
+    begin
+      if row^.alpha >= 128 then
+      begin
+        if x < xMin then xMin := x;
+        if x > xMax then xMax := x;
+        if y < yMin then yMin := y;
+        yMax := y;
+      end;
+      Inc(row);
+    end;
+  end;
+  if xMax < 0 then Exit;
+  { the cells from (x0, y0) to (x1, y1); their corners one further }
+  x0 := xMin - 1;
+  y0 := yMin - 1;
+  x1 := xMax;
+  y1 := yMax;
+  aw := x1 - x0 + 2;
+  ah := y1 - y0 + 2;
+  nKeys := aw * ah * 2;
+  ownWork := (GetCurrentThreadId <> MainThreadID) or (nKeys > TraceWorkMaxKeys);
+  if ownWork then
+    wk := TTraceWork.Create
+  else
+  begin
+    if GTraceWork = nil then GTraceWork := TTraceWork.Create;
+    wk := GTraceWork;
+  end;
+  try
+    wk.Fit(aw * ah, nKeys);
+    al := @wk.Al[0];
+    ex := @wk.Ex[0];
+    ey := @wk.Ey[0];
+    adj := @wk.Adj[0];
+    FillChar(al^, aw * ah, 0);     // the padding is 0
+    for y := y0 to y1 + 1 do
+    begin
+      if (y < 0) or (y >= h) then Continue;
+      row := AMask.ScanLine[y];
+      for x := x0 to x1 + 1 do
+        if (x >= 0) and (x < w) then
+          al[(y - y0) * aw + (x - x0)] := row[x].alpha;
+    end;
+    { every slot empty; a crossing is written before it is read }
+    FillDWord(adj^, nKeys * 2, LongWord(-1));
+    segA := nil;
+    segB := nil;
+    nSeg := 0;
+    for cy := y0 to y1 do
+      for cx := x0 to x1 do
+      begin
+        v0 := A(cx, cy);
+        v1 := A(cx + 1, cy);
+        v2 := A(cx + 1, cy + 1);
+        v3 := A(cx, cy + 1);
+        b0 := v0 >= cT;
+        b1 := v1 >= cT;
+        b2 := v2 >= cT;
+        b3 := v3 >= cT;
+        if (b0 = b1) and (b1 = b2) and (b2 = b3) then Continue;
+        kTop := KeyH(cx, cy);
+        kBottom := KeyH(cx, cy + 1);
+        kLeft := KeyV(cx, cy);
+        kRight := KeyV(cx + 1, cy);
+        if b0 <> b1 then Cross(kTop, cx, cy, v0, cx + 1, cy, v1);
+        if b1 <> b2 then Cross(kRight, cx + 1, cy, v1, cx + 1, cy + 1, v2);
+        if b3 <> b2 then Cross(kBottom, cx, cy + 1, v3, cx + 1, cy + 1, v2);
+        if b0 <> b3 then Cross(kLeft, cx, cy, v0, cx, cy + 1, v3);
+        if (b0 = b2) and (b1 = b3) and (b0 <> b1) then
+        begin
+          { a saddle: the centre decides which corners join }
+          centre := (v0 + v1 + v2 + v3) / 4;
+          if (centre >= cT) = b0 then
+          begin
+            Seg2(kTop, kRight);     // b1's corner cut off
+            Seg2(kBottom, kLeft);   // b3's
+          end
+          else
+          begin
+            Seg2(kLeft, kTop);      // b0's
+            Seg2(kRight, kBottom);  // b2's
+          end;
+          Continue;
+        end;
+        { two crossings: one segment }
+        k := -1;
+        cur := -1;
+        if b0 <> b1 then begin if k < 0 then k := kTop else cur := kTop; end;
+        if b1 <> b2 then begin if k < 0 then k := kRight else cur := kRight; end;
+        if b3 <> b2 then begin if k < 0 then k := kBottom else cur := kBottom; end;
+        if b0 <> b3 then begin if k < 0 then k := kLeft else cur := kLeft; end;
+        if (k >= 0) and (cur >= 0) then Seg2(k, cur);
+      end;
+    if nSeg = 0 then Exit;     // the finally lets go of the scratch
+    SetLength(used, nSeg);
+    for i := 0 to nSeg - 1 do used[i] := False;
+    nPts := 0;
+    for i := 0 to nSeg - 1 do
+    begin
+      if used[i] then Continue;
+      used[i] := True;
+      startKey := segA[i];
+      np := 1;
+      AddPoint(startKey);
+      key := segB[i];
+      { follow the contour round to where it began }
+      while key <> startKey do
+      begin
+        AddPoint(key);
+        Inc(np);
+        seg := adj[key * 2];
+        if (seg < 0) or used[seg] then seg := adj[key * 2 + 1];
+        if (seg < 0) or used[seg] then Break;
+        used[seg] := True;
+        if segA[seg] = key then key := segB[seg] else key := segA[seg];
+      end;
+      Inc(o.Contours);
+      SetLength(o.Starts, o.Contours + 1);
+      o.Starts[o.Contours] := nPts;
+    end;
+    SetLength(o.Pts, 2 * nPts);
+  finally
+    if ownWork then wk.Free;
+  end;
+end;
+
+{ The outline on P, in DEVICE px, the mask's (0, 0) at (AOX, AOY): each
+  contour closed, or -- with a pattern -- in dashes laid along it by its
+  length, the pattern's phase starting afresh on each contour, as a canvas
+  starts it on each subpath (an odd pattern is said twice); each dash an
+  open subpath of its own. }
+procedure TraceHaloOutline(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
+  const ADashDevice: TTyDoubleArray);
+var
+  px, py: array of Double;
+  c, s, np, k: Integer;
+
   procedure DashContour(ACount: Integer);
   var
     pat: array of Double;
@@ -971,109 +1213,19 @@ var
     end;
   end;
 
-  procedure Seg2(AK0, AK1: Integer);
-  begin
-    if nSeg > High(segA) then
-    begin
-      SetLength(segA, Length(segA) * 2 + 16);
-      SetLength(segB, Length(segA));
-    end;
-    segA[nSeg] := AK0;
-    segB[nSeg] := AK1;
-    if adj[AK0 * 2] < 0 then adj[AK0 * 2] := nSeg else adj[AK0 * 2 + 1] := nSeg;
-    if adj[AK1 * 2] < 0 then adj[AK1 * 2] := nSeg else adj[AK1 * 2 + 1] := nSeg;
-    Inc(nSeg);
-  end;
-
 begin
-  if AMask = nil then Exit;
-  w := AMask.Width;
-  h := AMask.Height;
-  gw := w + 2;
-  gh := h + 2;
-  nKeys := gw * gh * 2;
-  SetLength(ex, nKeys);
-  SetLength(ey, nKeys);
-  SetLength(adj, nKeys * 2);
-  for i := 0 to High(adj) do adj[i] := -1;
-  segA := nil;
-  segB := nil;
-  nSeg := 0;
-  for cy := -1 to h - 1 do
-    for cx := -1 to w - 1 do
-    begin
-      v0 := A(cx, cy);
-      v1 := A(cx + 1, cy);
-      v2 := A(cx + 1, cy + 1);
-      v3 := A(cx, cy + 1);
-      b0 := v0 >= cT;
-      b1 := v1 >= cT;
-      b2 := v2 >= cT;
-      b3 := v3 >= cT;
-      if (b0 = b1) and (b1 = b2) and (b2 = b3) then Continue;
-      kTop := KeyH(cx, cy);
-      kBottom := KeyH(cx, cy + 1);
-      kLeft := KeyV(cx, cy);
-      kRight := KeyV(cx + 1, cy);
-      if b0 <> b1 then Cross(kTop, cx, cy, v0, cx + 1, cy, v1);
-      if b1 <> b2 then Cross(kRight, cx + 1, cy, v1, cx + 1, cy + 1, v2);
-      if b3 <> b2 then Cross(kBottom, cx, cy + 1, v3, cx + 1, cy + 1, v2);
-      if b0 <> b3 then Cross(kLeft, cx, cy, v0, cx, cy + 1, v3);
-      if (b0 = b2) and (b1 = b3) and (b0 <> b1) then
-      begin
-        { a saddle: the centre decides which corners join }
-        centre := (v0 + v1 + v2 + v3) / 4;
-        if (centre >= cT) = b0 then
-        begin
-          Seg2(kTop, kRight);     // b1's corner cut off
-          Seg2(kBottom, kLeft);   // b3's
-        end
-        else
-        begin
-          Seg2(kLeft, kTop);      // b0's
-          Seg2(kRight, kBottom);  // b2's
-        end;
-        Continue;
-      end;
-      { two crossings: one segment }
-      k := -1;
-      cur := -1;
-      if b0 <> b1 then begin if k < 0 then k := kTop else cur := kTop; end;
-      if b1 <> b2 then begin if k < 0 then k := kRight else cur := kRight; end;
-      if b3 <> b2 then begin if k < 0 then k := kBottom else cur := kBottom; end;
-      if b0 <> b3 then begin if k < 0 then k := kLeft else cur := kLeft; end;
-      if (k >= 0) and (cur >= 0) then Seg2(k, cur);
-    end;
-  if nSeg = 0 then Exit;
-  SetLength(used, nSeg);
-  for i := 0 to nSeg - 1 do used[i] := False;
-  for i := 0 to nSeg - 1 do
+  if AOutline = nil then Exit;
+  for c := 0 to AOutline.Contours - 1 do
   begin
-    if used[i] then Continue;
-    used[i] := True;
-    startKey := segA[i];
-    np := 1;
-    SetLength(px, 16);
-    SetLength(py, 16);
-    px[0] := ex[startKey] / AScale + AOX;
-    py[0] := ey[startKey] / AScale + AOY;
-    key := segB[i];
-    { follow the contour round to where it began }
-    while key <> startKey do
+    s := AOutline.Starts[c];
+    np := AOutline.Starts[c + 1] - s;
+    if np <= 0 then Continue;
+    SetLength(px, np);
+    SetLength(py, np);
+    for k := 0 to np - 1 do
     begin
-      if np > High(px) then
-      begin
-        SetLength(px, Length(px) * 2);
-        SetLength(py, Length(px));
-      end;
-      px[np] := ex[key] / AScale + AOX;
-      py[np] := ey[key] / AScale + AOY;
-      Inc(np);
-      seg := adj[key * 2];
-      if (seg < 0) or used[seg] then seg := adj[key * 2 + 1];
-      if (seg < 0) or used[seg] then Break;
-      used[seg] := True;
-      if segA[seg] = key then key := segB[seg] else key := segA[seg];
+      px[k] := AOutline.Pts[2 * (s + k)] + AOX;
+      py[k] := AOutline.Pts[2 * (s + k) + 1] + AOY;
     end;
     if Length(ADashDevice) = 0 then
     begin
@@ -1086,17 +1238,168 @@ begin
   end;
 end;
 
+function TyTraceMaskOutlineForTest(AMask: TBGRABitmap; AScale: Integer): TTyDoubleArray;
+var
+  o: TTyHaloOutline;
+  c, k, n, s, np: Integer;
+begin
+  Result := nil;
+  o := TraceMaskOutline(AMask, AMask.Width, AMask.Height, AScale);
+  try
+    n := 0;
+    for c := 0 to o.Contours - 1 do
+    begin
+      s := o.Starts[c];
+      np := o.Starts[c + 1] - s;
+      SetLength(Result, n + 1 + 2 * np);
+      Result[n] := np;
+      Inc(n);
+      for k := 0 to 2 * np - 1 do
+      begin
+        Result[n] := o.Pts[2 * s + k];
+        Inc(n);
+      end;
+    end;
+  finally
+    o.Free;
+  end;
+end;
+
+{ [R2-P] THE OUTLINES, KEPT. A chart repaints its labels on every hover
+  and animation frame, and a halo used to draw its glyphs on a fresh mask
+  and trace them every time. The outline is the mask's, and the mask is
+  the drawing's arguments: the key is all of them -- the words, the font,
+  its size and weight, where on the mask the run is put (to the last bit,
+  so the sub-pixel offset is in it), its turn and alignment or its box,
+  truncation and line breaking, the mask's size, the PPI and the device
+  scale (#83). The pen -- width, dash, colour -- is not: it is laid on the
+  outline afterwards. What else reaches the glyphs is the painter's text
+  state, whose every change TyInvalidateTextMeasureCache announces: its
+  generation moving drops them all. Main thread only, as the painter's own
+  run cache; past HaloOutlineMaxCount outlines or HaloOutlineMaxPoints
+  points everything is dropped (the measurement memo's clear-not-evict). }
+const
+  HaloOutlineMaxCount = 4096;
+  HaloOutlineMaxPoints = 1024 * 1024;
+
+var
+  GHaloOutlines: specialize TDictionary<string, TTyHaloOutline> = nil;
+  GHaloPoints: Int64 = 0;
+  GHaloGeneration: Cardinal = 0;
+  GHaloCacheOff: Boolean = False;
+
+procedure DropHaloOutlines;
+var o: TTyHaloOutline;
+begin
+  if GHaloOutlines <> nil then
+  begin
+    for o in GHaloOutlines.Values do o.Free;
+    GHaloOutlines.Clear;
+  end;
+  GHaloPoints := 0;
+end;
+
+function HaloCacheOn: Boolean;
+begin
+  Result := not GHaloCacheOff and (GetCurrentThreadId = MainThreadID);
+end;
+
+{ the outline kept under AKey, or nil }
+function HaloOutlineKept(const AKey: string): TTyHaloOutline;
+begin
+  Result := nil;
+  if GHaloOutlines = nil then Exit;
+  if GHaloGeneration <> TyTextMeasureGeneration then
+  begin
+    DropHaloOutlines;
+    GHaloGeneration := TyTextMeasureGeneration;
+    Exit;
+  end;
+  GHaloOutlines.TryGetValue(AKey, Result);
+end;
+
+procedure KeepHaloOutline(const AKey: string; AOutline: TTyHaloOutline);
+begin
+  if GHaloOutlines = nil then
+    GHaloOutlines := specialize TDictionary<string, TTyHaloOutline>.Create;
+  if GHaloGeneration <> TyTextMeasureGeneration then
+  begin
+    DropHaloOutlines;
+    GHaloGeneration := TyTextMeasureGeneration;
+  end;
+  if (GHaloOutlines.Count >= HaloOutlineMaxCount)
+    or (GHaloPoints + Length(AOutline.Pts) div 2 > HaloOutlineMaxPoints) then
+    DropHaloOutlines;
+  GHaloOutlines.Add(AKey, AOutline);
+  Inc(GHaloPoints, Length(AOutline.Pts) div 2);
+end;
+
+function TyAdvChartHaloTracesForTest: Integer;
+begin
+  Result := GHaloTraces;
+end;
+
+function TyAdvChartHaloOutlinesKeptForTest: Integer;
+begin
+  Result := 0;
+  if GHaloOutlines <> nil then Result := GHaloOutlines.Count;
+end;
+
+procedure TyAdvChartHaloCacheForTest(AOn: Boolean);
+begin
+  DropHaloOutlines;
+  GHaloCacheOff := not AOn;
+end;
+
+{ a Double in a key, to the bit }
+function KeyBits(AV: Double): string;
+begin
+  Result := IntToHex(PInt64(@AV)^, 16);
+end;
+
 { A PAINTER ON A MASK of AW x AH at P's PPI: the glyphs are drawn on it
   exactly as on P, only moved by whole pixels. At P's device scale too: the
   mask is that many times the size, its painter draws at that scale, and the
-  outline traced from it is as fine as the glyphs on P's layer (#83). }
-function MaskPainter(P: TTyPainter; AW, AH: Integer; out AMask: TBGRABitmap): TTyPainter;
+  outline traced from it is as fine as the glyphs on P's layer (#83).
+
+  [R2-P] ONE MASK, KEPT, on the main thread: a fresh bitmap per halo was a
+  DIB section made and freed per label. The kept one only grows (up to
+  HaloMaskMaxPixels; a larger mask is made and freed as before), and its
+  top-left AW x AH -- times the scale -- is cleared to transparent before
+  each use, which is what a fresh one holds. What is drawn there is the
+  same; what lands beyond it is never read (TraceMaskOutline reads that
+  corner only). AOwned: the caller frees AMask. }
+const
+  HaloMaskMaxPixels = 2048 * 2048;
+
+var
+  GHaloMask: TBGRABitmap = nil;
+
+function MaskPainter(P: TTyPainter; AW, AH: Integer; out AMask: TBGRABitmap;
+  out AOwned: Boolean): TTyPainter;
 var
   sc: TTyCanvasScale;
+  w, h: Integer;
 begin
   sc.Scale := P.DeviceScale;
   sc.DeviceUnits := False;
-  AMask := TBGRABitmap.Create(AW * sc.Scale, AH * sc.Scale, BGRAPixelTransparent);
+  w := AW * sc.Scale;
+  h := AH * sc.Scale;
+  AOwned := not HaloCacheOn or (Int64(w) * h > HaloMaskMaxPixels);
+  if AOwned then
+    AMask := TBGRABitmap.Create(w, h, BGRAPixelTransparent)
+  else
+  begin
+    if GHaloMask = nil then
+      GHaloMask := TBGRABitmap.Create(w, h, BGRAPixelTransparent)
+    else
+    begin
+      if (GHaloMask.Width < w) or (GHaloMask.Height < h) then
+        GHaloMask.SetSize(Max(GHaloMask.Width, w), Max(GHaloMask.Height, h));
+      GHaloMask.FillRect(0, 0, w, h, BGRAPixelTransparent, dmSet);
+    end;
+    AMask := GHaloMask;
+  end;
   Result := TTyPainter.Create;
   Result.BeginPaintOnScaled(nil, Rect(0, 0, AW, AH), P.PPI, AMask, sc);
 end;
@@ -1104,7 +1407,7 @@ end;
 { the stroke along the mask's contours, under the glyphs: one path, so
   where two strokes meet the ink is laid once and a translucent halo does
   not darken; dashed as the type says }
-procedure StrokeMaskHalo(P: TTyPainter; AMask: TBGRABitmap; AOX, AOY: Integer;
+procedure StrokeMaskHalo(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
   AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
 var
   pat: TTyDoubleArray;
@@ -1122,8 +1425,10 @@ begin
     else
       pat := nil;
     P.BeginPath;
-    TraceMaskOutline(P, AMask, AOX, AOY, pat, P.DeviceScale);
-    P.StrokePath(AColour, AWidthLogical);
+    TraceHaloOutline(P, AOutline, AOX, AOY, pat);
+    { [R2-P] kept: the next frame's halo of the same label at the same place
+      replays this one's coverage }
+    P.StrokePathKept(AColour, AWidthLogical);
     P.BeginPath;
   finally
     P.RestoreState;
@@ -1137,8 +1442,12 @@ procedure HaloRotated(P: TTyPainter; const AText, AFont: string; ASize, AWeight:
 var
   sz: TSize;
   r, ox, oy, mw, mh: Integer;
+  mx, my: Double;
   mp: TTyPainter;
   mask: TBGRABitmap;
+  owned: Boolean;
+  ol: TTyHaloOutline;
+  key: string;
 begin
   sz := P.MeasureText(AText, AFont, ASize, AWeight);
   { round the anchor, any turn: the text's diagonal, and the stroke }
@@ -1147,15 +1456,36 @@ begin
   oy := Floor(AY) - r;
   mw := 2 * r + 2;
   mh := 2 * r + 2;
-  mp := MaskPainter(P, mw, mh, mask);
+  mx := AX - ox;
+  my := AY - oy;
+  ol := nil;
+  key := '';
+  if HaloCacheOn then
+  begin
+    key := 'R' + IntToStr(P.PPI) + ',' + IntToStr(P.DeviceScale) + ',' + IntToStr(mw)
+      + ',' + IntToStr(mh) + ',' + IntToStr(ASize) + ',' + IntToStr(AWeight) + ','
+      + KeyBits(mx) + KeyBits(my) + KeyBits(ARotationRad) + IntToStr(Ord(AH))
+      + IntToStr(Ord(AV)) + ',' + IntToStr(Length(AFont)) + ',' + AFont + AText;
+    ol := HaloOutlineKept(key);
+  end;
+  if ol = nil then
+  begin
+    mp := MaskPainter(P, mw, mh, mask, owned);
+    try
+      mp.DrawTextRotated(AText, AFont, ASize, AWeight, TTyColor($FFFFFFFF),
+        mx, my, ARotationRad, AH, AV);
+      mp.EndPaint;
+      ol := TraceMaskOutline(mask, mw * P.DeviceScale, mh * P.DeviceScale, P.DeviceScale);
+    finally
+      mp.Free;
+      if owned then mask.Free;
+    end;
+    if key <> '' then KeepHaloOutline(key, ol);
+  end;
   try
-    mp.DrawTextRotated(AText, AFont, ASize, AWeight, TTyColor($FFFFFFFF),
-      AX - ox, AY - oy, ARotationRad, AH, AV);
-    mp.EndPaint;
-    StrokeMaskHalo(P, mask, ox, oy, AColour, AWidthLogical, ADashType);
+    StrokeMaskHalo(P, ol, ox, oy, AColour, AWidthLogical, ADashType);
   finally
-    mp.Free;
-    mask.Free;
+    if key = '' then ol.Free;
   end;
 end;
 
@@ -1194,8 +1524,39 @@ begin
   Result.Bottom := Result.Top + Round(AH);
 end;
 
+type
+  { [R2-P] WHAT DrawCaptionAt HANDS THE PAINTER, worked out once: the halo's
+    outline is kept by it, so its key is the drawing's own arguments. Kind 0
+    a turned run at an anchor; 1 the shape's rect; 2 a box hung off the
+    anchor (no line breaking). }
+  TCaptionDraw = record
+    Kind: Integer;
+    Text, FontName: string;
+    Size, Weight: Integer;
+    X, Y, Rot: Double;
+    R: TRect;
+    H: TAlignment;
+    V: TTextLayout;
+    Truncate, MultiLine: Boolean;
+  end;
+
+function CaptionDrawOf(const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw; forward;
+procedure PaintCaptionDraw(P: TTyPainter; const AD: TCaptionDraw; AInk: TTyColor); forward;
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer); forward;
+
+function CaptionDrawKey(const AD: TCaptionDraw): string;
+begin
+  Result := IntToStr(AD.Kind) + ',' + IntToStr(AD.Size) + ',' + IntToStr(AD.Weight) + ',';
+  if AD.Kind = 0 then
+    Result := Result + KeyBits(AD.X) + KeyBits(AD.Y) + KeyBits(AD.Rot)
+  else
+    Result := Result + IntToStr(AD.R.Left) + ',' + IntToStr(AD.R.Top) + ','
+      + IntToStr(AD.R.Right) + ',' + IntToStr(AD.R.Bottom) + ','
+      + IntToStr(Ord(AD.Truncate)) + IntToStr(Ord(AD.MultiLine));
+  Result := Result + IntToStr(Ord(AD.H)) + IntToStr(Ord(AD.V)) + ','
+    + IntToStr(Length(AD.FontName)) + ',' + AD.FontName + AD.Text;
+end;
 
 { zrender's roundRect: the radii spread CSS-wise already, cut down so that
   every side holds the two corners on it (roundRect.ts:30-76) }
@@ -1354,6 +1715,10 @@ var
   m, ox, oy, mw, mh: Integer;
   mp: TTyPainter;
   mask: TBGRABitmap;
+  owned: Boolean;
+  d: TCaptionDraw;
+  ol: TTyHaloOutline;
+  key: string;
 begin
   m := Ceil(AElement.Caption.StrokeWidthLogical * P.PPI / 96) + 4;
   b := AElement.Shape.Bounds;
@@ -1376,15 +1741,33 @@ begin
   end;
   { the mask's own pixels are the device scale times these (MaskPainter) }
   if (mw <= 0) or (mh <= 0) or (mw * P.DeviceScale > 8192) or (mh * P.DeviceScale > 8192) then Exit;
-  mp := MaskPainter(P, mw, mh, mask);
+  d := CaptionDrawOf(AElement, -ox, -oy);
+  ol := nil;
+  key := '';
+  if HaloCacheOn then
+  begin
+    key := 'C' + IntToStr(P.PPI) + ',' + IntToStr(P.DeviceScale) + ',' + IntToStr(mw)
+      + ',' + IntToStr(mh) + ',' + CaptionDrawKey(d);
+    ol := HaloOutlineKept(key);
+  end;
+  if ol = nil then
+  begin
+    mp := MaskPainter(P, mw, mh, mask, owned);
+    try
+      PaintCaptionDraw(mp, d, TTyColor($FFFFFFFF));
+      mp.EndPaint;
+      ol := TraceMaskOutline(mask, mw * P.DeviceScale, mh * P.DeviceScale, P.DeviceScale);
+    finally
+      mp.Free;
+      if owned then mask.Free;
+    end;
+    if key <> '' then KeepHaloOutline(key, ol);
+  end;
   try
-    DrawCaptionAt(mp, AElement, TTyColor($FFFFFFFF), -ox, -oy);
-    mp.EndPaint;
-    StrokeMaskHalo(P, mask, ox, oy, AHalo, AElement.Caption.StrokeWidthLogical,
+    StrokeMaskHalo(P, ol, ox, oy, AHalo, AElement.Caption.StrokeWidthLogical,
       AElement.Caption.StrokeType);
   finally
-    mp.Free;
-    mask.Free;
+    if key = '' then ol.Free;
   end;
 end;
 
@@ -1418,23 +1801,30 @@ end;
 { The caption's glyphs, in one ink, moved by (ADX, ADY) device px. }
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer);
+begin
+  PaintCaptionDraw(P, CaptionDrawOf(AElement, ADX, ADY), AInk);
+end;
+
+function CaptionDrawOf(const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw;
 var
   b: TTyRectF;
-  ink: TTyColor;
-  box: TRect;
 begin
-  ink := AInk;
+  Result := Default(TCaptionDraw);
+  Result.Text := TyInkText(AElement.Caption.Text);
+  Result.FontName := AElement.Caption.FontName;
+  Result.Size := AElement.Caption.FontSizeLogical;
+  Result.Weight := AElement.Caption.FontWeight;
+  Result.H := TyAnchorToAlignment(AElement.Caption.AnchorH);
+  Result.V := TyAnchorToLayout(AElement.Caption.AnchorV);
   if AElement.Caption.RotationRad <> 0 then
   begin
     { NO RECT, so no clip and no ellipsis -- the rotated entry takes an anchor.
       A truncating caption that is also rotated therefore overflows, and the
       caption record says so where it is declared rather than here. }
-    P.DrawTextRotated(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
-      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
-      AElement.Caption.X + ADX, AElement.Caption.Y + ADY,
-      AElement.Caption.RotationRad,
-      TyAnchorToAlignment(AElement.Caption.AnchorH),
-      TyAnchorToLayout(AElement.Caption.AnchorV));
+    Result.Kind := 0;
+    Result.X := AElement.Caption.X + ADX;
+    Result.Y := AElement.Caption.Y + ADY;
+    Result.Rot := AElement.Caption.RotationRad;
     Exit;
   end;
   { THE SHAPE'S OWN RECT, not a box recomputed here. The label pass already put
@@ -1442,25 +1832,31 @@ begin
     ink describe the same rectangle; recomputing would be a second answer to a
     question that already has one. }
   b := AElement.Shape.Bounds;
+  Result.Truncate := AElement.Caption.Truncate;
   if TyRectFIsValid(b) then
-    P.DrawText(Rect(Round(b.Left) + ADX, Round(b.Top) + ADY,
-      Round(b.Right) + ADX, Round(b.Bottom) + ADY),
-      TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
-      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
-      TyAnchorToAlignment(AElement.Caption.AnchorH),
-      TyAnchorToLayout(AElement.Caption.AnchorV),
-      AElement.Caption.Truncate, 0, False, AElement.Caption.MultiLine)
+  begin
+    Result.Kind := 1;
+    Result.R := Rect(Round(b.Left) + ADX, Round(b.Top) + ADY,
+      Round(b.Right) + ADX, Round(b.Bottom) + ADY);
+    Result.MultiLine := AElement.Caption.MultiLine;
+  end
   else
   begin
-    box := CaptionBox(AElement.Caption, 0, 0);
-    OffsetRect(box, ADX, ADY);
-    P.DrawText(box,
-      TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
-      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
-      TyAnchorToAlignment(AElement.Caption.AnchorH),
-      TyAnchorToLayout(AElement.Caption.AnchorV),
-      AElement.Caption.Truncate);
+    Result.Kind := 2;
+    Result.R := CaptionBox(AElement.Caption, 0, 0);
+    OffsetRect(Result.R, ADX, ADY);
+    Result.MultiLine := False;
   end;
+end;
+
+procedure PaintCaptionDraw(P: TTyPainter; const AD: TCaptionDraw; AInk: TTyColor);
+begin
+  if AD.Kind = 0 then
+    P.DrawTextRotated(AD.Text, AD.FontName, AD.Size, AD.Weight, AInk, AD.X, AD.Y,
+      AD.Rot, AD.H, AD.V)
+  else
+    P.DrawText(AD.R, AD.Text, AD.FontName, AD.Size, AD.Weight, AInk, AD.H, AD.V,
+      AD.Truncate, 0, False, AD.MultiLine);
 end;
 
 { the sector an element's HasClipSector names, run forward as zrender's arc
@@ -2070,5 +2466,9 @@ end;
 
 finalization
   FreeAndNil(GDecalCache);
+  DropHaloOutlines;
+  FreeAndNil(GHaloOutlines);
+  FreeAndNil(GHaloMask);
+  FreeAndNil(GTraceWork);
 
 end.
