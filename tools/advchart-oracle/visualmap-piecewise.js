@@ -1408,6 +1408,9 @@ function seriesDiffs(c, models, mut) {
         if (raw.symbol != null) run.symbol = raw.symbol;
         if (raw.symbolSize != null) run.symbolSize = raw.symbolSize;
       }
+      // [R2-F] getItemVisual: an item visual set to null / undefined (a category list's default
+      // slot that holds none) reads the data's own (SeriesData.getItemVisual)
+      if (run.symbolSize == null && s.symbolSize != null) run.symbolSize = clone(s.symbolSize);
       if (recColKey(row.fill) !== colKey(run.color)) diffs.push({ field: tag + 'fill', upstream: row.fill.css, mutated: run.color == null ? null : run.color });
       if (row.opacity !== hexOrNull(run.opacity)) diffs.push({ field: tag + 'opacity', upstream: row.opacityText, mutated: textOrNull(run.opacity) });
       if (json(row.symbol) !== json(run.symbol == null ? null : run.symbol)) diffs.push({ field: tag + 'symbol', upstream: row.symbol, mutated: run.symbol });
@@ -1739,6 +1742,13 @@ function recordSeries(chart, def, vms) {
       const iss = data.getItemVisual(i, 'symbolSize');
       row.symbol = isym == null ? null : clone(isym);
       row.symbolSize = iss == null ? null : clone(iss);
+      // [R2-F] a case that asks: the symbol as drawn (Symbol.ts: the path's scale is half the
+      // size normalizeSymbolSize made, `|| 0`) -- what a size that is no number comes to
+      if (def.drawn) {
+        const g = data.getItemGraphicEl(i);
+        const pth = g && g.childAt ? g.childAt(0) : null;
+        row.drawn = pth ? [hex(pth.scaleX * 2), hex(pth.scaleY * 2)] : null;
+      }
       s.rows.push(row);
     }
     Object.defineProperty(s, 'rawItems', { value: Array.from({ length: data.count() }, (_, i) => data.getRawDataItem(i)), enumerable: false });
@@ -1917,6 +1927,38 @@ const CASES = [
     option: scatterCat(P({ categories: ['a', 'c', 'e'], dimension: 2, inRange: { symbolSize: [12, 'abc', [16, 8]] },
       controller: { inRange: { symbolSize: 14 }, outOfRange: { symbolSize: 14 } } }),
       [[1, 2, 'a'], [2, 3, 'c'], [3, 4, 'e']]) },
+  // [R2-F] symbolSize as drawn (row.drawn): words and pairs in inRange / outOfRange, categories
+  // and pieces, and a category no visual names
+  { id: 'D1', groups: ['D1'], drawn: true, note: "categories, inRange symbolSize [12, 'abc', [16, 8]]; 'z' in no category (outOfRange's default)",
+    option: scatterCat(P({ categories: ['a', 'c', 'e'], dimension: 2, inRange: { symbolSize: [12, 'abc', [16, 8]] },
+      controller: { inRange: { symbolSize: 14 }, outOfRange: { symbolSize: 14 } } }),
+      [[1, 2, 'a'], [2, 3, 'c'], [3, 4, 'e'], [4, 5, 'z']]) },
+  { id: 'D2', groups: ['D2'], drawn: true, note: "categories, inRange symbolSize 12, outOfRange [16, 8]: 'z' reads the category default of a list -- none",
+    option: scatterCat(P({ categories: ['a', 'c'], dimension: 2, inRange: { symbolSize: 12 }, outOfRange: { symbolSize: [16, 8] },
+      controller: { inRange: { symbolSize: 14 }, outOfRange: { symbolSize: 14 } } }),
+      [[1, 2, 'a'], [2, 3, 'c'], [4, 5, 'z']]) },
+  { id: 'D3', groups: ['D3'], drawn: true, note: "categories, outOfRange symbolSize 'abc': 'z' sets the word",
+    option: scatterCat(P({ categories: ['a', 'c'], dimension: 2, inRange: { symbolSize: 12 }, outOfRange: { symbolSize: 'abc' },
+      controller: { inRange: { symbolSize: 14 }, outOfRange: { symbolSize: 14 } } }),
+      [[1, 2, 'a'], [2, 3, 'c'], [4, 5, 'z']]) },
+  { id: 'D4', groups: ['D4'], drawn: true, note: 'pieces, inRange symbolSize [10, 30] mapped across the pieces, outOfRange [4, 6] for a value in none',
+    option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ lt: 3 }, { gte: 3, lt: 4.5 }], dimension: 1, inRange: { symbolSize: [10, 30] },
+      outOfRange: { symbolSize: [4, 6] } }), series: [{ type: 'scatter', data: [[0, 2], [1, 3], [2, 4], [3, 5]] }] } },
+  { id: 'D5', groups: ['D5'], drawn: true, note: "pieces, inRange symbolSize 'abc', outOfRange [[4, 6], 9]",
+    option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ lt: 3 }, { gte: 3, lt: 4.5 }], dimension: 1, inRange: { symbolSize: 'abc' },
+      outOfRange: { symbolSize: [[4, 6], 9] } }), series: [{ type: 'scatter', data: [[0, 2], [1, 3], [2, 4], [3, 5]] }] } },
+  { id: 'D6', groups: ['D6'], drawn: true, note: "a piece's own [16, 8] over inRange's [10, 30]",
+    option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ lt: 3, symbolSize: [16, 8] }, { gte: 3 }], dimension: 1, inRange: { symbolSize: [10, 30] } }),
+      series: [{ type: 'scatter', data: [[0, 2], [1, 3], [2, 4]] }] } },
+  { id: 'D7', groups: ['D7'], drawn: true, note: "three pieces, inRange symbolSize [[4, 6], 9]: the first piece lands on the pair (4 x 6), the middle one does arithmetic with it (no number), the last on 9",
+    option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ lt: 3 }, { gte: 3, lt: 6 }, { gte: 6 }], dimension: 1, inRange: { symbolSize: [[4, 6], 9] } }),
+      series: [{ type: 'scatter', data: [[0, 1], [1, 3], [2, 5], [3, 8]] }] } },
+  { id: 'D8', groups: ['D8'], drawn: true, note: "one piece, outOfRange symbolSize [[4, 6], 9]: the closest piece's single index does arithmetic (no number)",
+    option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ gte: 3, lt: 6 }], dimension: 1, outOfRange: { symbolSize: [[4, 6], 9] } }),
+      series: [{ type: 'scatter', data: [[0, 1], [1, 3], [2, 5], [3, 8]] }] } },
+  { id: 'D9', groups: ['D9'], drawn: true, note: "inRange symbolSize ['5', 20] over two pieces: a word that is a number, handed on at its end",
+    option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ lt: 3 }, { gte: 3 }], dimension: 1, inRange: { symbolSize: ['5', 20] } }),
+      series: [{ type: 'scatter', data: [[0, 1], [1, 3]] }] } },
 ];
 
 // ---------- the guards ----------

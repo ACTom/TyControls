@@ -1,0 +1,807 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "clock": {
+  "T0": 1700000000000
+ },
+ "static": [
+  {
+   "id": "plain",
+   "note": "a graphic text with lineDash [4, 2] and lineDashOffset 3",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "t",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Abc",
+       "stroke": "#ff0000",
+       "lineWidth": 2,
+       "lineDash": [
+        4,
+        2
+       ],
+       "lineDashOffset": 3
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "id": "t",
+     "spans": [
+      {
+       "text": "Abc",
+       "stroke": "#ff0000",
+       "lineWidth": "4000000000000000",
+       "lineDash": [
+        "4010000000000000",
+        "4000000000000000"
+       ],
+       "lineDashOffset": "4008000000000000",
+       "pattern": [
+        "4010000000000000",
+        "4000000000000000"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "words",
+   "note": "lineDash 'dashed' and 'dotted' on a graphic text (normalizeLineDash against lineWidth 3), no offset",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "a",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Ab",
+       "stroke": "#ff0000",
+       "lineWidth": 3,
+       "lineDash": "dashed"
+      }
+     },
+     {
+      "type": "text",
+      "id": "b",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Cd",
+       "stroke": "#00ff00",
+       "lineWidth": 3,
+       "lineDash": "dotted",
+       "y": 80
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "id": "a",
+     "spans": [
+      {
+       "text": "Ab",
+       "stroke": "#ff0000",
+       "lineWidth": "4008000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "pattern": [
+        "4028000000000000",
+        "4018000000000000"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "spans": [
+      {
+       "text": "Cd",
+       "stroke": "#00ff00",
+       "lineWidth": "4008000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "pattern": [
+        "4008000000000000"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zeros",
+   "note": "lineDash [0, 200], the gallery start: a dash of no length",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "z",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Ab",
+       "stroke": "#000",
+       "lineWidth": 1,
+       "lineDash": [
+        0,
+        200
+       ],
+       "lineDashOffset": 0
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "id": "z",
+     "spans": [
+      {
+       "text": "Ab",
+       "stroke": "#000",
+       "lineWidth": "3ff0000000000000",
+       "lineDash": [
+        "0000000000000000",
+        "4069000000000000"
+       ],
+       "lineDashOffset": "0000000000000000",
+       "pattern": [
+        "0000000000000000",
+        "4069000000000000"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "no-stroke",
+   "note": "lineDash with no stroke: the TSpan has no lineDash (Text.ts sets it only with a stroke)",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "n",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Ab",
+       "lineDash": [
+        4,
+        2
+       ],
+       "lineDashOffset": 5
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "id": "n",
+     "spans": [
+      {
+       "text": "Ab",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "lineDash": null,
+       "lineDashOffset": "0000000000000000",
+       "pattern": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "negative",
+   "note": "a negative lineDashOffset",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "m",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Ab",
+       "stroke": "#000",
+       "lineWidth": 2,
+       "lineDash": [
+        6,
+        3
+       ],
+       "lineDashOffset": -4
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "id": "m",
+     "spans": [
+      {
+       "text": "Ab",
+       "stroke": "#000",
+       "lineWidth": "4000000000000000",
+       "lineDash": [
+        "4018000000000000",
+        "4008000000000000"
+       ],
+       "lineDashOffset": "c010000000000000",
+       "pattern": [
+        "4018000000000000",
+        "4008000000000000"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rich",
+   "note": "a rich graphic text: the block lineDash [5, 1] and offset 2, token a's own lineDash [1, 1] and offset 9 (the phase stays the block's), token b nothing",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "r",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "{a|Aa}{b|Bb}",
+       "stroke": "#0000ff",
+       "lineWidth": 2,
+       "lineDash": [
+        5,
+        1
+       ],
+       "lineDashOffset": 2,
+       "rich": {
+        "a": {
+         "lineDash": [
+          1,
+          1
+         ],
+         "lineDashOffset": 9
+        },
+        "b": {}
+       }
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "id": "r",
+     "spans": [
+      {
+       "text": "Aa",
+       "stroke": "#0000ff",
+       "lineWidth": "4000000000000000",
+       "lineDash": [
+        "3ff0000000000000",
+        "3ff0000000000000"
+       ],
+       "lineDashOffset": "4000000000000000",
+       "pattern": [
+        "3ff0000000000000",
+        "3ff0000000000000"
+       ]
+      },
+      {
+       "text": "Bb",
+       "stroke": "#0000ff",
+       "lineWidth": "4000000000000000",
+       "lineDash": [
+        "4014000000000000",
+        "3ff0000000000000"
+       ],
+       "lineDashOffset": "4000000000000000",
+       "pattern": [
+        "4014000000000000",
+        "3ff0000000000000"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "anim": {
+  "gallery": "graphic-stroke-animation",
+  "W": 800,
+  "H": 500,
+  "samples": [
+   {
+    "t": 0,
+    "style": {
+     "lineDash": [
+      "0000000000000000",
+      "4069000000000000"
+     ],
+     "lineDashOffset": "0000000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "0000000000000000",
+       "4069000000000000"
+      ],
+      "lineDashOffset": "0000000000000000",
+      "pattern": [
+       "0000000000000000",
+       "4069000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 1,
+    "style": {
+     "lineDash": [
+      "3fb8618618618618",
+      "4068fcf3cf3cf3cf"
+     ],
+     "lineDashOffset": "3fb8618618618618",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "3fb8618618618618",
+       "4068fcf3cf3cf3cf"
+      ],
+      "lineDashOffset": "3fb8618618618618",
+      "pattern": [
+       "3fb8618618618618",
+       "4068fcf3cf3cf3cf"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 300,
+    "style": {
+     "lineDash": [
+      "403c924924924926",
+      "40656db6db6db6db"
+     ],
+     "lineDashOffset": "403c924924924926",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "403c924924924926",
+       "40656db6db6db6db"
+      ],
+      "lineDashOffset": "403c924924924926",
+      "pattern": [
+       "403c924924924926",
+       "40656db6db6db6db"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 1050,
+    "style": {
+     "lineDash": [
+      "4059000000000000",
+      "4059000000000000"
+     ],
+     "lineDashOffset": "4059000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4059000000000000",
+       "4059000000000000"
+      ],
+      "lineDashOffset": "4059000000000000",
+      "pattern": [
+       "4059000000000000",
+       "4059000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 1800,
+    "style": {
+     "lineDash": [
+      "40656db6db6db6dc",
+      "403c924924924920"
+     ],
+     "lineDashOffset": "40656db6db6db6dc",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "40656db6db6db6dc",
+       "403c924924924920"
+      ],
+      "lineDashOffset": "40656db6db6db6dc",
+      "pattern": [
+       "40656db6db6db6dc",
+       "403c924924924920"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2099,
+    "style": {
+     "lineDash": [
+      "4068fcf3cf3cf3d0",
+      "3fb8618618618000"
+     ],
+     "lineDashOffset": "4068fcf3cf3cf3d0",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4068fcf3cf3cf3d0",
+       "3fb8618618618000"
+      ],
+      "lineDashOffset": "4068fcf3cf3cf3d0",
+      "pattern": [
+       "4068fcf3cf3cf3d0",
+       "3fb8618618618000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2100,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2250,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2399,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2400,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2700,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,0.5)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 2999,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,0.9983333333333335)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 3000,
+    "style": {
+     "lineDash": [
+      "4069000000000000",
+      "0000000000000000"
+     ],
+     "lineDashOffset": "4069000000000000",
+     "fill": "rgba(0,0,0,1)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4069000000000000",
+       "0000000000000000"
+      ],
+      "lineDashOffset": "4069000000000000",
+      "pattern": [
+       "4069000000000000",
+       "0000000000000000"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 3001,
+    "style": {
+     "lineDash": [
+      "3fb8618618618618",
+      "4068fcf3cf3cf3cf"
+     ],
+     "lineDashOffset": "3fb8618618618618",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "3fb8618618618618",
+       "4068fcf3cf3cf3cf"
+      ],
+      "lineDashOffset": "3fb8618618618618",
+      "pattern": [
+       "3fb8618618618618",
+       "4068fcf3cf3cf3cf"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 3300,
+    "style": {
+     "lineDash": [
+      "403c924924924926",
+      "40656db6db6db6db"
+     ],
+     "lineDashOffset": "403c924924924926",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "403c924924924926",
+       "40656db6db6db6db"
+      ],
+      "lineDashOffset": "403c924924924926",
+      "pattern": [
+       "403c924924924926",
+       "40656db6db6db6db"
+      ]
+     }
+    ]
+   },
+   {
+    "t": 4050,
+    "style": {
+     "lineDash": [
+      "4059000000000000",
+      "4059000000000000"
+     ],
+     "lineDashOffset": "4059000000000000",
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#000"
+    },
+    "spans": [
+     {
+      "text": "Apache ECharts",
+      "stroke": "#000",
+      "lineWidth": "3ff0000000000000",
+      "lineDash": [
+       "4059000000000000",
+       "4059000000000000"
+      ],
+      "lineDashOffset": "4059000000000000",
+      "pattern": [
+       "4059000000000000",
+       "4059000000000000"
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "guards": [
+  {
+   "name": "plain: [4, 2] and 3",
+   "ok": true
+  },
+  {
+   "name": "words: 'dashed' against 3 is [12, 6]",
+   "ok": true
+  },
+  {
+   "name": "no stroke: no lineDash",
+   "ok": true
+  },
+  {
+   "name": "rich: token a's own dash, the block's phase",
+   "ok": true
+  },
+  {
+   "name": "anim: the dash grows",
+   "ok": true
+  },
+  {
+   "name": "anim: the phase moves",
+   "ok": true
+  },
+  {
+   "name": "anim: it loops",
+   "ok": true
+  }
+ ]
+}

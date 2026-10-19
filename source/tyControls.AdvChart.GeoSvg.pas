@@ -1940,7 +1940,12 @@ begin
           lastX := ax;
           lastY := ay;
           Pt(ax, ay);
-          n := Ceil(Abs(sweep) / (Pi / 2) - 1e-9);
+          { [R2-F] a sixteenth of a turn a cubic at most: its distance from
+            the true arc is 6.6e-8 of the radius (a quarter turn's was
+            2.7e-4: a pixel at a radius of 3 700, which a map zoomed in
+            reaches), under a twentieth of a device pixel for any radius to
+            750 000 -- the arc a canvas draws, at any zoom }
+          n := Ceil(Abs(sweep) / (Pi / 8) - 1e-9);
           if n < 1 then n := 1;
           th := sweep / n;
           kk := 4 / 3 * Tan(th / 4);

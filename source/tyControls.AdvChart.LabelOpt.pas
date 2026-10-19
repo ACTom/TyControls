@@ -279,6 +279,20 @@ begin
         end;
     end;
   end;
+  { textBorderDashOffset the same way [R2-F] }
+  if not Result.HasBorderDashOffset and (AOption.Root is TJSONObject) then
+  begin
+    d := ObjOf(TJSONObject(AOption.Root).Find('textStyle'));
+    if d <> nil then
+    begin
+      d := TJSONObject(d).Find('textBorderDashOffset');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        Result.HasBorderDashOffset := True;
+        Result.BorderDashOffset := d.AsFloat;
+      end;
+    end;
+  end;
 end;
 
 function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
@@ -545,6 +559,13 @@ begin
         jtString: ASpec.BorderType := d.AsString;
         jtNumber, jtArray: ASpec.BorderType := d.AsJSON;
       end;
+    { textBorderDashOffset as written [R2-F] }
+    d := ALabel.Find('textBorderDashOffset');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      ASpec.HasBorderDashOffset := True;
+      ASpec.BorderDashOffset := d.AsFloat;
+    end;
     d := ALabel.Find('textBorderWidth');
     if (d <> nil) and (d.JSONType = jtNumber) then
     begin

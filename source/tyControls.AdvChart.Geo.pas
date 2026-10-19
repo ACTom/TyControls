@@ -414,6 +414,9 @@ type
     Opt: TJSONObject;
     HasFill: Boolean;
     Fill: TTyChartColor;
+    { [R2-F] the region's decal: data.getItemVisual(dataIndex, 'decal') --
+      the item's own, else the series' (a name with no data item too) }
+    Decal: TTyChartDecal;
     LabelOn: Boolean;
     Params: TTyChartCallbackParams;
   end;
@@ -440,6 +443,8 @@ type
     Styled: Boolean;
     Opt: TTyGeoPaint;
     StateOpt: array[TTyStName] of TTyGeoPaint;
+    { [R2-F] a styled named shape's decal from the series' data }
+    Decal: TTyChartDecal;
   end;
 
   { [F6b] an SVG map's node flags, kept over a render (MapDraw keeps its
@@ -5166,6 +5171,9 @@ begin
         { applyOptionStyleForRegion }
         look.Styled := True;
         look.NoScale := True;
+        { [R2-F] the data's decal on the normal style }
+        if FSeriesData.Active and (g >= 0) and (g <= High(FSeriesData.Groups)) then
+          look.Decal := FSeriesData.Groups[g].Decal;
         np := PaintFor(Self, ropt, -1, AInk, False, g);
         look.Opt := np;
         if np.FillHas then
@@ -5584,6 +5592,16 @@ end;
   zrender's storage adds them -- a group's children, then a host's text --
   with the current state values, the global transforms, upstream's own
   contain, the root's clip (the bounding rect) and the geo's }
+{ [R2-F] a turn and one scale (a reflection with them too): what a text's
+  rotation and size can say }
+function SvgSimilar(const M: TTyMat2D): Boolean;
+var tol: Double;
+begin
+  tol := 1e-9 * Max(1.0, Max(Abs(M[0]) + Abs(M[1]), Abs(M[2]) + Abs(M[3])));
+  Result := ((Abs(M[0] - M[3]) <= tol) and (Abs(M[1] + M[2]) <= tol))
+    or ((Abs(M[0] + M[3]) <= tol) and (Abs(M[1] - M[2]) <= tol));
+end;
+
 function TyBuildGeoSvg(AGeo: TTyGeo; const AInk: TTyGeoInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
   AApplyStates: Boolean): Integer;
@@ -5743,14 +5761,27 @@ var
               el.Caption.AnchorH := tahLeft;
             if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'middle') then
               el.Caption.AnchorV := tavMiddle
-            else if nd.St.StrHas[gsTextBaseline]
-              and ((nd.St.Str[gsTextBaseline] = 'bottom') or (nd.St.Str[gsTextBaseline] = 'alphabetic')
-                or (nd.St.Str[gsTextBaseline] = 'ideographic')) then
+            else if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'bottom') then
               el.Caption.AnchorV := tavBottom
             else
               el.Caption.AnchorV := tavTop;
+            { [R2-F] a canvas draws the alphabetic baseline at y (the box's
+              top a baseline above), the ideographic one at the box's bottom
+              -- they were the bottom of the TSpan's rect, a line low }
+            if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'alphabetic') then
+              el.Caption.BaselineKind := 1
+            else if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'ideographic') then
+              el.Caption.BaselineKind := 2;
             el.Caption.RotationRad := -TyJsAtan2(m[1], m[0]);
             el.Caption.Truncate := False;
+            { [R2-F] a skew or unequal scales: the whole map, the text in its
+              own units }
+            if not SvgSimilar(m) then
+            begin
+              el.Caption.HasAffine := True;
+              el.Caption.FontSizeLogical := TyFontSizeFromPx(nd.St.Font.SizePx);
+              for k := 0 to 5 do el.Caption.Affine[k] := m[k];
+            end;
             if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
             begin
               el.Caption.StrokeColour := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
@@ -5821,6 +5852,9 @@ var
               if look.HasOptGrad then el.Style.FillGradient := look.OptGrad
               else if look.FillGrad >= 0 then el.Style.FillGradient := SvgGradient(look.FillGrad, ANode, m);
             end;
+            { [R2-F] the series' decal over the fill (a state's style keeps it:
+              getFixedItemStyle has none to put over it) }
+            el.Style.Decal := look.Decal;
           end;
           if hasStroke then
           begin
@@ -6130,6 +6164,10 @@ begin
           el.Style.FillColor := c.Color[stkFill];
           if el.Style.HasFill and not it.Host.Merged.Has[stkFill] then
             el.Style.FillGradient := p.Paint.FillGradient;
+          { [R2-F] MapDraw's applyOptionStyleForRegion: the data's decal on
+            the normal style, which no state's style takes away }
+          if AGeo.Data.Active and (g <= High(AGeo.Data.Groups)) then
+            el.Style.Decal := AGeo.Data.Groups[g].Decal;
           lw := 0;
           if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
           begin

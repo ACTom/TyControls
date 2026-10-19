@@ -42,7 +42,7 @@ begin
     Exit(Default(TTyChartDecal));
   skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).TextColor);
-  Result := TyDecalResolve(TyDecalRawOf(own), skin);
+  Result := TyDecalResolve(TyDecalRawOf(own), skin, DecalGround);
 end;
 
 function TTyAdvanceChart.LegendLayoutCount: Integer;

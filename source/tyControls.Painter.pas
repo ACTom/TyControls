@@ -83,6 +83,16 @@ type
       ctx.save/restore cannot carry it, hence the parallel stack. }
     FVecDash: TTyDashPattern;
     FVecDashStack: array of TTyDashPattern;
+    { [R2-F] the dash's phase (a canvas' lineDashOffset), LOGICAL px, and its
+      save/restore stack beside the pattern's }
+    FVecDashOffset: Double;
+    FVecDashOffsetStack: array of Double;
+    { [R2-F] whether the current path holds anything since BeginPath: a circle
+      or an ellipse added to it starts a sub-path of its own (zrender's
+      Circle.buildPath moves to (cx + r, cy) first); BGRA's arc has no move,
+      and joined every circle traced into one path to the one before. An
+      empty path takes none, so a lone circle draws as it always did. }
+    FPathOpen: Boolean;
     { #83: the layer holds FScale device pixels per layout pixel. FLayoutPPI is the PPI callers
       paint at; FPPI is the PPI the drawing code scales by, which is the layout PPI except
       inside a raster scope (RasterEnter), where it is FLayoutPPI * FScale. FDeviceUnits: the
@@ -469,8 +479,16 @@ type
       ARule: TTyFillRule = tfrNonZero): Boolean;
 
     { ---- stroke state ---- }
-    { On/off lengths in LOGICAL px; an empty array restores a solid line. }
-    procedure SetLineDash(const APatternLogical: array of Double);
+    { On/off lengths in LOGICAL px; an empty array restores a solid line. The
+      phase starts again at nought. }
+    procedure SetLineDash(const APatternLogical: array of Double); overload;
+    { The same with a phase: a canvas' lineDashOffset, LOGICAL px -- each
+      sub-path's pattern starts AOffsetLogical along it (negative: before
+      it). A phase of nought (or of whole periods) strokes exactly as the
+      pattern alone; any other lays the dashes along each sub-path itself,
+      each dash a sub-path of its own with its caps, as a canvas does. }
+    procedure SetLineDash(const APatternLogical: array of Double;
+      AOffsetLogical: Double); overload;
     procedure SetLineCap(ACap: TTyLineCap);
     procedure SetLineJoin(AJoin: TTyLineJoin; AMiterLimit: Double = 10);
 
@@ -500,6 +518,10 @@ type
       exactly where the unrotated path would. Goes through TextOutAngle rather
       than the canvas' own text so it keeps TyConfigureTextFont's font cascade
       and fallback (empty-fontname-gotcha). }
+    { [R2-F] Where a run's ALPHABETIC BASELINE lies under the top of the box
+      DrawTextRotated and DrawText hang it by: the renderer's baseline for
+      the font, LOGICAL px. }
+    function TextBaseline(const AFontName: string; AFontSizeLogical, AWeight: Integer): Double;
     procedure DrawTextRotated(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AColor: TTyColor;
       AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
@@ -2561,6 +2583,9 @@ begin
     not survive from the previous paint. }
   FVecDash := nil;
   FVecDashStack := nil;
+  FVecDashOffset := 0;
+  FVecDashOffsetStack := nil;
+  FPathOpen := False;
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
@@ -2637,6 +2662,9 @@ begin
     not survive from the previous paint. }
   FVecDash := nil;
   FVecDashStack := nil;
+  FVecDashOffset := 0;
+  FVecDashOffsetStack := nil;
+  FPathOpen := False;
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
@@ -3385,6 +3413,7 @@ begin
   if FBmp = nil then Exit;
   ctx := FBmp.Canvas2D;
   ctx.beginPath;
+  FPathOpen := True;
   for k := 0 to 9 do
   begin
     if (k mod 2) = 0 then rr := AOuter else rr := AInner;
@@ -4665,6 +4694,7 @@ procedure TTyPainter.BeginPath;
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.beginPath;
+  FPathOpen := False;
 end;
 
 procedure TTyPainter.ClosePath;
@@ -4677,24 +4707,28 @@ procedure TTyPainter.MoveTo(AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.moveTo(AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.LineTo(AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.lineTo(AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.CurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.bezierCurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.QuadTo(ACX, ACY, AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.quadraticCurveTo(ACX, ACY, AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.ArcTo(ACX, ACY, ARadius, AStartRad, AEndRad: Double;
@@ -4702,6 +4736,7 @@ procedure TTyPainter.ArcTo(ACX, ACY, ARadius, AStartRad, AEndRad: Double;
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.arc(ACX, ACY, ARadius, AStartRad, AEndRad, AAnticlockwise);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.PolylineTo(const APoints: array of TTyVecPoint);
@@ -4711,12 +4746,14 @@ begin
   if (FBmp = nil) or (Length(APoints) = 0) then Exit;
   for i := 0 to High(APoints) do
     FBmp.Canvas2D.lineTo(APoints[i].X, APoints[i].Y);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.RectPath(AL, AT, AR, AB: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.rect(AL, AT, AR - AL, AB - AT);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.RoundRectPath(AL, AT, AR, AB, ARadiusLogical: Double);
@@ -4729,24 +4766,34 @@ begin
     removing a clamp here changed nothing. NOTE this is not the same entry point
     as FillRoundRectAntialias, which is the one TyClampRadiusPx exists for. }
   FBmp.Canvas2D.roundRect(AL, AT, AR - AL, AB - AT, ScaleF(ARadiusLogical));
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.EllipsePath(ACX, ACY, ARX, ARY: Double);
 begin
   if FBmp = nil then Exit;
+  { a sub-path of its own after anything else in the path [R2-F] }
+  if FPathOpen then FBmp.Canvas2D.moveTo(ACX + ARX, ACY);
   FBmp.Canvas2D.ellipse(ACX, ACY, ARX, ARY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.CirclePath(ACX, ACY, AR: Double);
 begin
   if FBmp = nil then Exit;
+  { a sub-path of its own after anything else in the path: zrender's
+    Circle.buildPath moves to (cx + r, cy) before its arc, where BGRA's
+    circle is an arc from the current point [R2-F] }
+  if FPathOpen then FBmp.Canvas2D.moveTo(ACX + AR, ACY);
   FBmp.Canvas2D.circle(ACX, ACY, AR);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.SvgPath(const APathData: string);
 begin
   if (FBmp = nil) or (APathData = '') then Exit;
   FBmp.Canvas2D.addPath(APathData);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.SvgPathIn(const APathData: string; const ARect: TRect;
@@ -4789,6 +4836,7 @@ begin
     FBmp.Canvas2D.translate(ox, oy);
     FBmp.Canvas2D.scale(sx, sy);
     FBmp.Canvas2D.addPath(APathData);
+    FPathOpen := True;
   finally
     { The path keeps the points the transform produced; restoring here leaves
       the CTM as the caller left it, so a later fill is not scaled twice. }
@@ -5040,6 +5088,225 @@ begin
   end;
 end;
 
+{ [R2-F] A DASH WITH A PHASE. BGRA's pen starts every pattern at its head
+  (bgrapen.pas, ComputeWidePolylinePoints' FlushLine: posstyle := 0) and has
+  no way in for a phase, and it refuses a pattern with a zero entry (it
+  raises). Those are laid here: each sub-path of the current path walked by
+  its length in the pen's space (where BGRA measures a pattern, in widths),
+  the pattern starting APhase widths along it -- a canvas starts every
+  sub-path's pattern at the offset -- each dash an open sub-path of its own,
+  its caps on it as a canvas draws a dash (a dash of no length shows only
+  where the cap has a size), and the lot stroked solid; then the path is put
+  back as it was. False, with nothing done, where there is nothing to lay:
+  no pattern, an entry negative or not a number, a pattern of no length, or
+  -- no zero entry and -- a phase of whole periods: the pen's own dashing
+  then, as ever, to the pixel. }
+function StrokeDashPhased(ACtx: TBGRACanvas2D; const ADash: array of Single;
+  APhase: Double): Boolean;
+var
+  pat: array of Double;
+  n, i, j, s, e, di, nd: Integer;
+  period, pos, left, segLen, zoom, unitLen, ox, oy: Double;
+  pts, pen, dash: ArrayOfTPointF;
+  sm, m, mi: TAffineMatrix;
+  hasZero, on, open, flat: Boolean;
+  dir: TPointF;
+  dashes: array of ArrayOfTPointF;
+
+  procedure Put(const AP: TPointF);
+  begin
+    if nd >= Length(dash) then SetLength(dash, nd * 2 + 8);
+    dash[nd] := AP;
+    Inc(nd);
+  end;
+
+  procedure Emit;
+  var q: Integer;
+  begin
+    if nd = 0 then Exit;
+    { a dash of no length: nothing under a butt cap; under a square or a
+      round one, a stub along the way it was going }
+    q := 1;
+    while (q < nd) and (dash[q] = dash[0]) do Inc(q);
+    if q = nd then
+    begin
+      if flat then
+      begin
+        nd := 0;
+        Exit;
+      end;
+      Put(dash[0] + dir * Single(unitLen * 1e-3));
+    end;
+    SetLength(dashes, Length(dashes) + 1);
+    dashes[High(dashes)] := Copy(dash, 0, nd);
+    nd := 0;
+  end;
+
+  function Along(const A, B: TPointF; AFrac: Double): TPointF;
+  begin
+    Result := PointF(A.x + (B.x - A.x) * AFrac, A.y + (B.y - A.y) * AFrac);
+  end;
+
+begin
+  Result := False;
+  n := Length(ADash);
+  if n = 0 then Exit;
+  hasZero := False;
+  for i := 0 to n - 1 do
+  begin
+    if IsNan(ADash[i]) or IsInfinite(ADash[i]) or (ADash[i] < 0) then Exit;
+    if ADash[i] = 0 then hasZero := True;
+  end;
+  { an odd pattern said twice, as the canvas' lineStyle does }
+  if Odd(n) then
+  begin
+    SetLength(pat, 2 * n);
+    for i := 0 to n - 1 do
+    begin
+      pat[i] := ADash[i];
+      pat[n + i] := ADash[i];
+    end;
+  end
+  else
+  begin
+    SetLength(pat, n);
+    for i := 0 to n - 1 do pat[i] := ADash[i];
+  end;
+  period := 0;
+  for i := 0 to High(pat) do period := period + pat[i];
+  if not (period > 0) then Exit;
+  if IsNan(APhase) or IsInfinite(APhase) then APhase := 0;
+  pos := APhase - Floor(APhase / period) * period;
+  if (pos >= period) or (pos < 0) then pos := 0;
+  if (pos = 0) and not hasZero then Exit;
+  pts := ACtx.currentPath;
+  Result := True;
+  if Length(pts) = 0 then Exit;
+  { the pen's space: the stroke matrix without its move, its zoom taken out
+    (TBGRAPenStroker.SetStrokeMatrix); a pattern's unit is the width there }
+  sm := ACtx.strokeMatrix;
+  sm[1, 3] := 0;
+  sm[2, 3] := 0;
+  zoom := Max(Sqrt(Sqr(sm[1, 1]) + Sqr(sm[2, 1])), Sqrt(Sqr(sm[1, 2]) + Sqr(sm[2, 2])));
+  m := AffineMatrixIdentity;
+  if zoom > 0 then m := sm * AffineMatrixScale(1 / zoom, 1 / zoom);
+  if IsAffineMatrixInversible(m) then mi := AffineMatrixInverse(m)
+  else
+  begin
+    m := AffineMatrixIdentity;
+    mi := AffineMatrixIdentity;
+  end;
+  if zoom <= 0 then zoom := 1;
+  unitLen := ACtx.lineWidth * zoom;
+  if not (unitLen > 0) then
+  begin
+    Result := False;
+    Exit;
+  end;
+  pen := mi * pts;
+  flat := ACtx.lineCapLCL = pecFlat;
+  dashes := nil;
+  dash := nil;
+  nd := 0;
+  dir := PointF(1, 0);
+  s := 0;
+  while s <= High(pen) do
+  begin
+    if isEmptyPointF(pen[s]) then
+    begin
+      Inc(s);
+      Continue;
+    end;
+    e := s;
+    while (e < High(pen)) and not isEmptyPointF(pen[e + 1]) do Inc(e);
+    { the sub-path's pattern from the phase }
+    di := 0;
+    left := pat[0] * unitLen;
+    ox := pos * unitLen;
+    while ox > 0 do
+    begin
+      if ox < left then
+      begin
+        left := left - ox;
+        ox := 0;
+      end
+      else
+      begin
+        ox := ox - left;
+        di := (di + 1) mod Length(pat);
+        left := pat[di] * unitLen;
+      end;
+    end;
+    on := not Odd(di);
+    open := False;
+    nd := 0;
+    for j := s to e - 1 do
+    begin
+      segLen := Sqrt(Sqr(Double(pen[j + 1].x) - pen[j].x) + Sqr(Double(pen[j + 1].y) - pen[j].y));
+      if not (segLen > 0) then Continue;
+      dir := PointF((pen[j + 1].x - pen[j].x) / segLen, (pen[j + 1].y - pen[j].y) / segLen);
+      ox := 0;
+      while ox < segLen do
+      begin
+        if on and not open then
+        begin
+          Put(Along(pen[j], pen[j + 1], ox / segLen));
+          open := True;
+        end;
+        if segLen - ox <= left then
+        begin
+          left := left - (segLen - ox);
+          ox := segLen;
+          if on then Put(pen[j + 1]);
+        end
+        else
+        begin
+          ox := ox + left;
+          if on then
+          begin
+            Put(Along(pen[j], pen[j + 1], ox / segLen));
+            Emit;
+            open := False;
+          end;
+          di := (di + 1) mod Length(pat);
+          left := pat[di] * unitLen;
+          on := not Odd(di);
+        end;
+      end;
+    end;
+    if open then Emit;
+    nd := 0;
+    s := e + 1;
+  end;
+  ACtx.save;
+  try
+    ACtx.resetTransform;
+    ACtx.beginPath;
+    for i := 0 to High(dashes) do
+    begin
+      dash := m * dashes[i];
+      ACtx.moveTo(dash[0]);
+      for j := 1 to High(dash) do ACtx.lineTo(dash[j]);
+    end;
+    ACtx.lineStyle(psSolid);
+    if Length(dashes) > 0 then CtxStroke(ACtx);
+    { the path as the caller left it }
+    ACtx.beginPath;
+    open := False;
+    for i := 0 to High(pts) do
+      if isEmptyPointF(pts[i]) then open := False
+      else if not open then
+      begin
+        ACtx.moveTo(pts[i]);
+        open := True;
+      end
+      else
+        ACtx.lineTo(pts[i]);
+  finally
+    ACtx.restore;
+  end;
+end;
+
 procedure TTyPainter.StrokePath(AColor: TTyColor; AWidthLogical: Double);
 var
   ctx: TBGRACanvas2D;
@@ -5061,8 +5328,10 @@ begin
   SetLength(devDash, Length(FVecDash));
   for i := 0 to High(FVecDash) do
     devDash[i] := ScaleF(FVecDash[i]) / w;
-  ctx.lineStyle(devDash);
   ctx.strokeStyle(TyColorToBGRA(AColor));
+  { [R2-F] a phase: the dashes laid here, stroked solid }
+  if StrokeDashPhased(ctx, devDash, ScaleF(FVecDashOffset) / w) then Exit;
+  ctx.lineStyle(devDash);
   CtxStroke(ctx);
 end;
 
@@ -5102,6 +5371,15 @@ begin
   SetLength(FVecDash, Length(APatternLogical));
   for i := 0 to High(APatternLogical) do
     FVecDash[i] := APatternLogical[i];
+  FVecDashOffset := 0;
+end;
+
+procedure TTyPainter.SetLineDash(const APatternLogical: array of Double;
+  AOffsetLogical: Double);
+begin
+  SetLineDash(APatternLogical);
+  if not (IsNan(AOffsetLogical) or IsInfinite(AOffsetLogical)) then
+    FVecDashOffset := AOffsetLogical;
 end;
 
 procedure TTyPainter.SetLineCap(ACap: TTyLineCap);
@@ -5143,6 +5421,8 @@ begin
   SetLength(FVecDashStack[n], Length(FVecDash));
   for i := 0 to High(FVecDash) do
     FVecDashStack[n][i] := FVecDash[i];
+  SetLength(FVecDashOffsetStack, n + 1);
+  FVecDashOffsetStack[n] := FVecDashOffset;
 end;
 
 procedure TTyPainter.RestoreState;
@@ -5157,6 +5437,11 @@ begin
   for i := 0 to High(FVecDash) do
     FVecDash[i] := FVecDashStack[n - 1][i];
   SetLength(FVecDashStack, n - 1);
+  if n <= Length(FVecDashOffsetStack) then
+  begin
+    FVecDashOffset := FVecDashOffsetStack[n - 1];
+    SetLength(FVecDashOffsetStack, n - 1);
+  end;
 end;
 
 procedure TTyPainter.Translate(ADX, ADY: Double);
@@ -5477,8 +5762,10 @@ begin
   SetLength(devDash, Length(FVecDash));
   for i := 0 to High(FVecDash) do
     devDash[i] := ScaleF(FVecDash[i]) / w;
-  ctx.lineStyle(devDash);
   ctx.strokeStyle(TyColorToBGRA(AColor));
+  { [R2-F] a phase: the dashes laid here, stroked solid, not kept }
+  if StrokeDashPhased(ctx, devDash, ScaleF(FVecDashOffset) / w) then Exit;
+  ctx.lineStyle(devDash);
   st := nil;
   if not GKeptFillsOff and (GetCurrentThreadId = MainThreadID) then
     st := CanvasStateOf(ctx);
@@ -5652,6 +5939,7 @@ begin
           { what the clip below leaves behind besides the mask }
           ctx.fillMode := fmWinding;
           ctx.beginPath;
+          FPathOpen := False;
           st.SetClipMask(TGrayscaleMask(Mask), False);
           Exit;
         end;
@@ -5663,6 +5951,7 @@ begin
   ctx.fillMode := fmWinding;
   CtxClip(ctx);
   ctx.beginPath;   // leave no half-built path behind for the caller to trip on
+  FPathOpen := False;
   if not (fresh and (st.clipMaskReadOnly <> nil)) then Exit;
   Inc(GClipMasksBuilt);
   { a slot that is spare or this painter's own, round the pool from where the last
@@ -5707,6 +5996,33 @@ begin
 end;
 
 { ---- rotated text ---- }
+
+function TTyPainter.TextBaseline(const AFontName: string;
+  AFontSizeLogical, AWeight: Integer): Double;
+var
+  m: TFontPixelMetric;
+  raster: Boolean;
+  sz: TSize;
+begin
+  Result := 0;
+  if FBmp = nil then Exit;
+  raster := RasterEnter;
+  try
+    TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+    m := FBmp.FontPixelMetric;
+    if m.Defined then Result := m.Baseline
+    else
+    begin
+      { no metric from the renderer: the box's height less a fifth, the
+        usual descent }
+      sz := FBmp.TextSize('Hg');
+      Result := sz.cy * 0.8;
+    end;
+    if raster then Result := Result / FScale;
+  finally
+    RasterLeave;
+  end;
+end;
 
 procedure TTyPainter.DrawTextRotated(const AText, AFontName: string;
   AFontSizeLogical, AWeight: Integer; AColor: TTyColor;

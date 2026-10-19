@@ -85,6 +85,10 @@ type
     Kind: string;
     Colors: TTyVisualColorArray;
     Nums: TTyDoubleArray;
+    { [R2-F] the same values as written: a symbolSize entry may be a pair
+      (an array), which the linear map hands on whole where it lands on
+      that end, and a word }
+    NumVals: TTyVisualPieceVisualArray;
     { `symbol`: the names, not paired }
     Strs: TTyStringArray;
     Method: TTyVisualMethod;
@@ -750,6 +754,18 @@ begin
             Result.Num2 := TyJsToNumber(AData.Items[1].AsString);
         end;
       end;
+  end;
+end;
+
+{ [R2-F] a size value as JavaScript's arithmetic reads it: a number, a word
+  as its number, anything else NaN }
+function JsSizeOf(AData: TJSONData): Double;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := AData.AsFloat;
+    jtString: Result := TyJsToNumber(AData.AsString);
   end;
 end;
 
@@ -1517,11 +1533,15 @@ begin
     end;
     if list.Count = 1 then list.Add(list.Items[0].Clone);
     SetLength(Result.Nums, list.Count);
+    SetLength(Result.NumVals, list.Count);
     for i := 0 to list.Count - 1 do
+    begin
       if list.Items[i].JSONType = jtNumber then
         Result.Nums[i] := list.Items[i].AsFloat
       else
         Result.Nums[i] := NaN;
+      Result.NumVals[i] := PieceVisualOf(list.Items[i]);
+    end;
   finally
     list.Free;
   end;
@@ -1993,14 +2013,22 @@ begin
           mx := NegInfinity;
           if d.JSONType = jtArray then
           begin
+            { [R2-F] JavaScript's `value > max` and linearMap take a word
+              as its number ('5' is 5) and anything else -- a word that is
+              none, a pair -- as NaN, which compares false and maps to NaN }
             for i := 0 to TJSONArray(d).Count - 1 do
-              if (TJSONArray(d).Items[i].JSONType = jtNumber)
-                and (TJSONArray(d).Items[i].AsFloat > mx) then
-                mx := TJSONArray(d).Items[i].AsFloat;
+              if not IsNan(JsSizeOf(TJSONArray(d).Items[i]))
+                and (JsSizeOf(TJSONArray(d).Items[i]) > mx) then
+                mx := JsSizeOf(TJSONArray(d).Items[i]);
             for i := 0 to TJSONArray(d).Count - 1 do
               if TJSONArray(d).Items[i].JSONType = jtNumber then
                 TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
-                  TJSONArray(d).Items[i].AsFloat, 0, mx, 0, itemW, True));
+                  TJSONArray(d).Items[i].AsFloat, 0, mx, 0, itemW, True))
+              else if IsNan(JsSizeOf(TJSONArray(d).Items[i])) then
+                TJSONArray(d).Items[i] := TJSONNull.Create
+              else
+                TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
+                  JsSizeOf(TJSONArray(d).Items[i]), 0, mx, 0, itemW, True));
             { ContinuousModel: a pair that differs starts at a third }
             if (Result.SubType = 'continuous') and (TJSONArray(d).Count >= 2)
               and (TJSONArray(d).Items[0].JSONType = jtNumber)
@@ -2126,6 +2154,57 @@ end;
 function PairAt(const ANums: TTyDoubleArray; AIndex: Integer): Double;
 begin
   if AIndex <= High(ANums) then Result := ANums[AIndex] else Result := NaN;
+end;
+
+{ [R2-F] WHICH WAY linearMap(AValue, [0, 1], [r0, r1], true) goes: 0 when it
+  hands back r0 as it is (at or below the domain's start), 1 for r1, -1 when
+  it does the arithmetic -- where an end that is an array (a symbolSize
+  pair) makes no number ("NaN4,6") }
+function LinearPick(AValue: Double): Integer;
+begin
+  if AValue <= 0 then Result := 0
+  else if AValue >= 1 then Result := 1
+  else Result := -1;
+end;
+
+{ symbolSize through the linear map over a mapping's values, as upstream
+  hands it on: an end the map lands on exactly, whole -- a pair as a pair,
+  a word as its number; any arithmetic with a pair at either end no number }
+procedure LinearSize(const AM: TTyVisualMapping; AN: Double; var ARow: TTyVisualRow);
+var
+  k: Integer;
+  pv: TTyVisualPieceVisual;
+begin
+  ARow.SizePair := False;
+  if Length(AM.NumVals) < 2 then
+  begin
+    ARow.Size := TyVmLinearMap(AN, 0, 1, PairAt(AM.Nums, 0), PairAt(AM.Nums, 1), True);
+    Exit;
+  end;
+  k := LinearPick(AN);
+  if IsNan(AN) then k := -1;
+  if k >= 0 then
+  begin
+    pv := AM.NumVals[k];
+    if pv.IsPair then
+    begin
+      ARow.Size := pv.Num;
+      ARow.SizePair := True;
+      ARow.SizeH := pv.Num2;
+      Exit;
+    end;
+    if pv.Defined and not pv.IsNum then
+    begin
+      ARow.Size := pv.Num;
+      Exit;
+    end;
+  end
+  else if AM.NumVals[0].IsPair or AM.NumVals[1].IsPair then
+  begin
+    ARow.Size := NaN;
+    Exit;
+  end;
+  ARow.Size := TyVmLinearMap(AN, 0, 1, PairAt(AM.Nums, 0), PairAt(AM.Nums, 1), True);
 end;
 
 procedure TyVisualApply(const ASpec: TTyVisualMapSpec; AState: TTyVisualState;
@@ -2360,7 +2439,8 @@ begin
           ARow.SizeH := pv.Num2;
         end;
       end
-      else ARow.Size := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
+      { [R2-F] a pair or a word at the end the map lands on, whole }
+      else LinearSize(m, n, ARow);
       ARow.SizeSet := True;
     end
     else if m.Kind = 'liftZ' then

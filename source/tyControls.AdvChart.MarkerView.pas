@@ -1695,6 +1695,7 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := Copy(APics[i].Dash);
+      el.Style.DashOffsetLogical := APics[i].DashOffset;
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
       { THE POINTER'S RIBBON: zrender's Path.contain widens a stroke with no
         fill to its strokeContainThreshold, 5 -- a 1 px line is hit within
@@ -2553,6 +2554,7 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].StyleLineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].StyleDash, APics[i].StyleLineWidth);
+      el.Style.DashOffsetLogical := APics[i].StyleDashOffset;
     end;
     if not IsNan(APics[i].StyleOpacity) then
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].StyleOpacity));
@@ -2807,6 +2809,7 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
+      el.Style.DashOffsetLogical := APics[i].DashOffset;
     end
     else if (APics[i].LineWidth > 0) and (APics[i].Stroke = '')
       and (APics[i].StrokeData <> nil) and TyTryReadGradient(APics[i].StrokeData, g) then
@@ -2815,6 +2818,7 @@ begin
       el.Style.StrokeGradient := g;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
+      el.Style.DashOffsetLogical := APics[i].DashOffset;
     end;
     { getBoundingRect: the polygon's box grown by its stroke [Batch 105] }
     el.Style.GradBoxSet := True;

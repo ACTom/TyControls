@@ -137,6 +137,9 @@ function walk(e, f) {
 // keeps them only as a Float32 path proxy: the lines are caught as mergePath
 // reads them (getUpdatedPathProxy(true) on a Line no group holds).
 let MERGED = [];
+// [R2-F] the lines the single's view last merged: a step that does not render it again (a click
+// on a label that only makes an event) keeps them
+let LAST_MERGED = [];
 {
   const L = echarts.graphic.Line.prototype;
   const orig = L.getUpdatedPathProxy;
@@ -254,7 +257,10 @@ function recordAxis(chart, key) {
     });
   });
   rec.splitLines = splitLines;
-  if (key[0] === 's') rec.singleSplit = MERGED.map(l => [hex(l.shape.x1), hex(l.shape.y1), hex(l.shape.x2), hex(l.shape.y2)]);
+  if (key[0] === 's') {
+    if (MERGED.length) LAST_MERGED = MERGED;
+    rec.singleSplit = LAST_MERGED.map(l => [hex(l.shape.x1), hex(l.shape.y1), hex(l.shape.x2), hex(l.shape.y2)]);
+  }
   rec.axisTicks = axisTicks;
   rec.axisLine = axisLine;
   rec.breakAreas = breakAreas;
@@ -398,6 +404,23 @@ add('params', 'p-event', 'triggerEvent: a click on a break label: params.break {
   { steps: [{ type: 'click', at: { kind: 'label', axis: 'y0', value: 50 } },
     { type: 'click', at: { kind: 'label', axis: 'y0', value: 1000 } }] });
 
+// ---- [R2-F] a singleAxis' labels that trigger events: a click on a label is a click event of
+// componentType 'singleAxis' (singleAxisIndex, the label's value, its tickIndex, a category's
+// dataIndex); a break label's carries the break and expands it (addBreakEventHandler)
+add('single', 's-label-event', 'triggerEvent on a value singleAxis: a plain label, then a break label (the break, and the break expands)',
+  { singleAxis: { type: 'value', triggerEvent: true, breaks: [{ start: 20, end: 80, gap: '10%' }] },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 10, 90, 95, 100] }] },
+  { axes: ['s0'], steps: [{ type: 'click', at: { kind: 'label', axis: 's0', value: 0 } },
+    { type: 'click', at: { kind: 'label', axis: 's0', value: 80 } }] });
+add('single', 's-label-cat', 'triggerEvent on a category singleAxis: the label of b (dataIndex 1)',
+  { singleAxis: { type: 'category', triggerEvent: true, data: ['a', 'b', 'c'] },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 2, 0] }] },
+  { axes: ['s0'], steps: [{ type: 'click', at: { kind: 'label', axis: 's0', value: 1 } }] });
+add('single', 's-label-silent', 'no triggerEvent: a click on a break label is no event and expands nothing',
+  { singleAxis: { type: 'value', breaks: [{ start: 20, end: 80, gap: '10%' }] },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 10, 90, 95, 100] }] },
+  { axes: ['s0'], steps: [{ type: 'click', at: { kind: 'label', axis: 's0', value: 80 } }] });
+
 // ---- the break areas in a transition
 const ANIM = [];
 function addAnim(id, note, option, action, axis, more) {
@@ -465,13 +488,21 @@ function runCase(c) {
       payload: payloadRec(e.fromActionPayload) });
   });
   chart.on('click', p => {
-    clicks.push({ componentType: p.componentType, targetType: p.targetType == null ? null : p.targetType,
+    const ck = { componentType: p.componentType, targetType: p.targetType == null ? null : p.targetType,
       value: p.value == null ? null : J(p.value), tickIndex: p.tickIndex == null ? null : p.tickIndex,
-      break: p.break == null ? null : J(p.break) });
+      break: p.break == null ? null : J(p.break) };
+    // [R2-F] a singleAxis' click: its index and a category's dataIndex (only there, so the
+    // records of the other axes stay as they were)
+    if (p.componentType === 'singleAxis') {
+      ck.singleAxisIndex = p.singleAxisIndex == null ? null : p.singleAxisIndex;
+      ck.dataIndex = p.dataIndex == null ? null : p.dataIndex;
+    }
+    clicks.push(ck);
   });
   try {
     CALLS = [];
     MERGED = [];
+    LAST_MERGED = [];
     chart.setOption(materialize(c.option));
     chart.renderToSVGString();
     const renders = [recordRender(chart, c, DRAWS, [], [], CALLS.slice(), null)];

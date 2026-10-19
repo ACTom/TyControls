@@ -84,7 +84,7 @@ function TyRtHasMarkup(const AText: string): Boolean;
 
 implementation
 
-uses tyControls.FontUnits, tyControls.AdvChart.Labels;
+uses tyControls.FontUnits, tyControls.AdvChart.Labels, tyControls.AdvChart.Symbol;
 
 const
   cGuo = #$E5#$9B#$BD;   // U+56FD: zrender's measure of a font's height
@@ -471,7 +471,7 @@ function ParseRich(const AText: string; const AStyle: TTyRtStyle;
 var
   wrap: TWrapInfo;
   i, j, k: Integer;
-  lnH, lnW, calcH, calcW, padH, remain: Double;
+  lnH, lnW, calcH, calcW, padH, remain, iw, ih: Double;
   ts: TTyRtStyle;
   found, truncLine, stop: Boolean;
   fam: string;
@@ -562,6 +562,13 @@ begin
         end
         else
         begin
+          { [R2-F] a width not written ('auto' or none) and a picture that
+            is there (parseText: isImageReady -- the port's are at once):
+            as wide as the picture at the token's height, at least }
+          if found and (ts.WidthKind in [rtwNone, rtwAuto]) and (ts.BgImage <> '')
+            and Assigned(TySymbolImageSize) and TySymbolImageSize(ts.BgImage, iw, ih)
+            and (ih > 0) then
+            Width := Math.Max(Width, iw * Height / ih);
           if (AStyle.Overflow = rtoTruncate) and (AStyle.WidthKind = rtwNumber) then
             remain := AStyle.Width - lnW
           else
@@ -641,7 +648,7 @@ end;
 
 function NeedBackground(const S: TTyRtStyle): Boolean;
 begin
-  Result := S.HasBackground or S.HasLineHeight
+  Result := S.HasBackground or (S.BgImage <> '') or S.HasLineHeight
     or ((S.BorderWidth <> 0) and S.HasBorderColor);
 end;
 
@@ -681,6 +688,18 @@ begin
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
   if S.HasOpacity then Result.Opacity := S.Opacity else Result.Opacity := AOpacityFallback;
   Result.Drawn := Result.HasFill or Result.HasStroke;
+  { [R2-F] a picture: a ZRImage of the box after the rect -- which is made
+    only for a lineHeight or a border, and then takes the opacity (the
+    common style is the rect's), the picture keeping its own 1 }
+  if S.BgImage <> '' then
+  begin
+    Result.Image := S.BgImage;
+    Result.Drawn := True;
+    if S.HasLineHeight or ((S.BorderWidth <> 0) and S.HasBorderColor) then
+      Result.ImageOpacity := 1
+    else
+      Result.ImageOpacity := Result.Opacity;
+  end;
 end;
 
 function TyRtLayout(const AText: string; const AStyle: TTyRtStyle;
@@ -718,7 +737,7 @@ var
       end;
       AddPiece(Result, RectPiece(ts, rx0, y - tk.Height / 2, tk.Width, tk.Height,
         ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1)));
-      tokenBg := ts.HasBackground;
+      tokenBg := ts.HasBackground or (ts.BgImage <> '');
     end;
     if tk.HasPadding then
     begin
@@ -787,6 +806,9 @@ var
       { [F4c] the token's textBorderType, else the block's }
       if found and (ts.LineDash <> '') then p.LineDash := ts.LineDash
       else p.LineDash := AStyle.LineDash;
+      { [R2-F] the phase is the block's, whatever the token says
+        (Text.ts: style.lineDashOffset || 0) }
+      if AStyle.HasLineDashOffset then p.LineDashOffset := AStyle.LineDashOffset;
     end;
     if found and ts.HasOpacity then p.Opacity := ts.Opacity
     else if AStyle.HasOpacity then p.Opacity := AStyle.Opacity
@@ -887,7 +909,7 @@ var
     begin
       AddPiece(Result, RectPiece(AStyle, bx, by, Result.Block.OuterWidth,
         Result.Block.OuterHeight, -1, -1, 1));
-      bgDrawn := AStyle.HasBackground;
+      bgDrawn := AStyle.HasBackground or (AStyle.BgImage <> '');
     end;
     textY := textY + lh / 2;
     if AStyle.HasPadding then
@@ -947,6 +969,7 @@ var
       begin
         if AStyle.HasLineWidth then p.LineWidth := AStyle.LineWidth else p.LineWidth := 2;
         p.LineDash := AStyle.LineDash;
+        if AStyle.HasLineDashOffset then p.LineDashOffset := AStyle.LineDashOffset;
       end;
       if AStyle.HasOpacity then p.Opacity := AStyle.Opacity else p.Opacity := 1;
       p.ShadowBlur := AStyle.ShadowBlur;
@@ -992,7 +1015,7 @@ begin
   begin
     AddPiece(Result, RectPiece(AStyle, boxX, boxY, Result.Block.OuterWidth,
       Result.Block.OuterHeight, -1, -1, 1));
-    blockBg := AStyle.HasBackground;
+    blockBg := AStyle.HasBackground or (AStyle.BgImage <> '');
   end;
   for i := 0 to High(Result.Block.Lines) do
   begin

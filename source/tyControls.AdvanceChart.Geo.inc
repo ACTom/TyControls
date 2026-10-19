@@ -1549,6 +1549,10 @@ begin
       end;
     if raw >= 0 then row := st.IndexOfRawIndex(raw) else row := -1;
     Result.Groups[g].Row := row;
+    { [R2-F] getItemVisual(dataIdx, 'decal'): the row's, else the series'
+      (indexOfName's -1 reads the data's own visual) }
+    if row >= 0 then Result.Groups[g].Decal := RowDecalOf(ASlot, raw)
+    else Result.Groups[g].Decal := RowDecalOf(ASlot, -1);
     if (row >= 0) and (dimV >= 0) then v := st.GetByRaw(dimV, raw) else v := NaN;
     { the visual's fill: a visualMap's colour of a number }
     if encoded and (row >= 0) and not IsNan(v) and (ASlot <= High(FVisualRows))

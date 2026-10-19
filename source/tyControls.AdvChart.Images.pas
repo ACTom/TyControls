@@ -84,6 +84,14 @@ procedure TyChartImageRegisterBitmap(const AKey: string; ABmp: TBGRABitmap);
 { every cached image-list bitmap dropped (a test's fresh start) }
 procedure TyChartImageFlush;
 
+{ [R2-F] WHAT A PICTURE OF AN IMAGE LIST IS NOW, for a cache built on top of
+  one (a decal's tile): '' for a source that is no list reference (a data
+  URL is its own content), '-' for a reference that finds no list, else the
+  list it finds and the generation of the lists' pictures -- which moves
+  whenever a list a picture was taken from changes or is freed. Equal
+  stamps, the same picture. }
+function TyChartImageStamp(const ASource: string): string;
+
 implementation
 
 uses tyControls.AdvChart.Symbol;
@@ -110,6 +118,8 @@ var
   GDataCache: TStringList = nil;  { data URL -> TBGRABitmap (or nil), owned }
   GWatch: TTyImgWatch = nil;
   GScope: TComponent = nil;
+  { [R2-F] moves with every list change or free (DropList) and every flush }
+  GImageGeneration: Cardinal = 0;
 
 function Watcher: TTyImgWatch;
 begin
@@ -140,6 +150,7 @@ var
   i: Integer;
   pre: string;
 begin
+  Inc(GImageGeneration);
   if GListCache = nil then Exit;
   pre := ListKeyPrefix(AList);
   for i := GListCache.Count - 1 downto 0 do
@@ -508,7 +519,23 @@ end;
 
 procedure TyChartImageFlush;
 begin
+  Inc(GImageGeneration);
   if GListCache <> nil then GListCache.Clear;
+end;
+
+function TyChartImageStamp(const ASource: string): string;
+var
+  nm: string;
+  idx: Integer;
+  lst: TCustomImageList;
+begin
+  Result := '';
+  if not TyChartImageListRef(ASource, nm, idx) then Exit;
+  lst := TyChartFindImageList(nm);
+  if lst = nil then Exit('-');
+  { watched, so that its next change moves the generation }
+  Watcher.Watch(lst);
+  Result := ListKeyPrefix(lst) + IntToStr(GImageGeneration);
 end;
 
 initialization

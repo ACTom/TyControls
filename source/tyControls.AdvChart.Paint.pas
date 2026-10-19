@@ -126,6 +126,9 @@ type
     { radians, the pattern's own: zrender turns the repeat, not the symbols }
     Rotation: Double;
     MaxTileW, MaxTileH: Double;
+    { [R2-F] the ground of an `empty*` symbol in the tile: upstream's
+      neutral00, the skin's TyAdvChartDecal background here }
+    EmptyFill: TTyChartColor;
   end;
   TTyChartDecalArray = array of TTyChartDecal;
 
@@ -158,6 +161,8 @@ type
     GradBox: TTyXYWH;
     FillEvenOdd: Boolean;
     DashLogical: TTyDoubleArray;
+    { [R2-F] the dash's phase, LOGICAL px: zrender's lineDashOffset }
+    DashOffsetLogical: Double;
     Alpha: Double;                    // 0..1; 1 = opaque
   end;
 
@@ -244,6 +249,10 @@ type
     LineWidth: Double;
     { [F4c] textBorderType as written ('' none) }
     LineDash: string;
+    { [R2-F] textBorderDashOffset (a graphic text's lineDashOffset), when
+      written: a block's goes to every piece (Text.ts: style.lineDashOffset) }
+    HasLineDashOffset: Boolean;
+    LineDashOffset: Double;
     Align: TTyRtAlign;
     VAlign: TTyRtVAlign;
     HasLineHeight: Boolean;
@@ -256,6 +265,10 @@ type
     Padding: array[0..3] of Double;   // top, right, bottom, left
     HasBackground: Boolean;
     Background: TTyChartColor;
+    { [R2-F] backgroundColor: {image}: the picture's source ('' none) --
+      a ZRImage over the box, the box's own rect only for a lineHeight or a
+      border (Text.ts _renderBackground) }
+    BgImage: string;
     HasBorderColor: Boolean;
     BorderColor: TTyChartColor;
     BorderWidth: Double;
@@ -315,9 +328,16 @@ type
     LineWidth: Double;
     { [F4c] a text's textBorderType as written ('' a solid halo) }
     LineDash: string;
+    { [R2-F] its phase (lineDashOffset), px }
+    LineDashOffset: Double;
     StrokeFirst: Boolean;
     Radius: array[0..3] of Double;
     Opacity: Double;
+    { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the
+      rect's border, at ImageOpacity: the style's opacity where the picture
+      is the box's only element, else zrender's own 1 }
+    Image: string;
+    ImageOpacity: Double;
     Text: string;
     TextAlign: TTyRtAlign;     // left/center/right; the baseline is middle
     FontFamily: string;
@@ -366,6 +386,9 @@ type
     LineWidth: Double;
     { [F4c] the global textStyle's textBorderType ('' none) }
     LineDash: string;
+    { [R2-F] and its textBorderDashOffset }
+    HasLineDashOffset: Boolean;
+    LineDashOffset: Double;
     HasOpacity: Boolean;
     Opacity: Double;
     HasShadowColor: Boolean;
@@ -408,6 +431,17 @@ type
 
   TTyElementCaption = record
     Text: string;
+    { [R2-F] Y IS A BASELINE, not the box's edge AnchorV names: 1 the
+      alphabetic one (where a canvas puts it), 2 the ideographic (the box's
+      bottom); drawn from the anchor, X / Y, turned by RotationRad. An SVG
+      map's text. }
+    BaselineKind: Integer;
+    { [R2-F] A TEXT UNDER A WHOLE AFFINE MAP: Affine takes the text's own
+      frame (its anchor at the origin, FontSizeLogical in its units) to the
+      list's px -- skew and unequal scales a turn and one size cannot say.
+      Drawn upright on a bitmap of its own and laid down through the map. }
+    HasAffine: Boolean;
+    Affine: array[0..5] of Double;
     { [F4c] a text of several lines drawn line by line in its rect, each
       line aligned on its own (a visualMap's end text with a line break) }
     MultiLine: Boolean;
@@ -515,6 +549,8 @@ type
       JSON array of numbers; '' (or 'solid') a solid halo. normalizeLineDash
       turns it into a pattern against the halo's width when it is drawn. }
     StrokeType: string;
+    { [R2-F] textBorderDashOffset: the dashes' phase, LOGICAL px }
+    StrokeDashOffset: Double;
     { THE SAME THREE UNDER A HOVER, worked out when the caption is: the host's
       fill lifted (or the emphasis colour it declares) can land in another
       band, and the halo is the lifted fill. HasEmph False keeps the normal

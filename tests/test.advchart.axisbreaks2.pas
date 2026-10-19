@@ -278,6 +278,9 @@ begin
       + JsNum(AEvent.Params.BreakEnd) + '}'
   else
     s := s + 'null';
+  { [R2-F] a singleAxis' click: its index and a category's dataIndex }
+  if AEvent.Params.ComponentType = 'singleAxis' then
+    s := s + '|' + IntToStr(AEvent.Params.AxisIndex) + '|' + IntToStr(AEvent.Params.DataIndex);
   FClickLog.Add(s);
 end;
 
@@ -444,6 +447,12 @@ begin
     if o.Find('break').JSONType = jtNull then want := want + 'null'
     else want := want + '{"start":' + JsNum(o.Objects['break'].Floats['start'])
       + ',"end":' + JsNum(o.Objects['break'].Floats['end']) + '}';
+    if o.Find('singleAxisIndex') <> nil then
+    begin
+      want := want + '|' + IntToStr(o.Integers['singleAxisIndex']) + '|';
+      if o.Find('dataIndex').JSONType = jtNull then want := want + '-1'
+      else want := want + IntToStr(o.Integers['dataIndex']);
+    end;
     SameStr(Format('%s click %d', [ATag, i]), FClickLog[i], want);
   end;
 end;

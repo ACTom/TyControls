@@ -272,8 +272,10 @@ begin
     { symbolPathSetColor }
     if empty then
     begin
+      { the ground the skin gives a hollow (a dark skin's is no white hole)
+        [R2-F: it was a literal white] }
       m.HasFill := True;
-      m.Fill := TTyChartColor($FFFFFFFF);
+      m.Fill := ADecal.EmptyFill;
       m.HasStroke := True;
       m.Stroke := ADecal.Color;
       m.LineWidth := 2;
@@ -319,6 +321,12 @@ begin
     GDecalCache.CaseSensitive := True;
   end;
   key := TyDecalCacheKey(ADecal, AScale);
+  { [R2-F] an image list's picture in the tile: what the list holds now --
+    a tile drawn before the list changed is not the one wanted }
+  for i := 0 to High(ADecal.Symbols) do
+    for w := 0 to High(ADecal.Symbols[i]) do
+      if Copy(ADecal.Symbols[i][w], 1, 8) = 'image://' then
+        key := key + '|' + TyChartImageStamp(Copy(ADecal.Symbols[i][w], 9, MaxInt));
   if GDecalCache.Find(key, k) then Exit(TBGRABitmap(GDecalCache.Objects[k]));
   tile := TyDecalTile(ADecal);
   { canvas.width = pSize.width * dpr: an unsigned long, the fraction cut }
@@ -1156,9 +1164,10 @@ end;
   contour closed, or -- with a pattern -- in dashes laid along it by its
   length, the pattern's phase starting afresh on each contour, as a canvas
   starts it on each subpath (an odd pattern is said twice); each dash an
-  open subpath of its own. }
+  open subpath of its own. [R2-F] The phase is ADashOffsetDevice along the
+  pattern (a canvas' lineDashOffset), on every contour. }
 procedure TraceHaloOutline(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
-  const ADashDevice: TTyDoubleArray);
+  const ADashDevice: TTyDoubleArray; ADashOffsetDevice: Double = 0);
 var
   px, py: array of Double;
   c, s, np, k: Integer;
@@ -1167,8 +1176,24 @@ var
   var
     pat: array of Double;
     j, di, n: Integer;
-    x0, y0, x1, y1, segLen, pos, left, t: Double;
-    on, open: Boolean;
+    x0, y0, x1, y1, segLen, pos, left, t, sx, sy: Double;
+    on, open, moved: Boolean;
+
+    { [R2-F] a dash's next point: its move made at its first point that goes
+      anywhere, so a dash of no length (a zero in the pattern) is no
+      subpath at all -- under the halo's butt cap a canvas draws nothing
+      there either }
+    procedure DashTo(AX, AY: Double);
+    begin
+      if not moved then
+      begin
+        if (AX = sx) and (AY = sy) then Exit;
+        P.MoveTo(sx, sy);
+        moved := True;
+      end;
+      P.LineTo(AX, AY);
+    end;
+
   begin
     n := Length(ADashDevice);
     if Odd(n) then
@@ -1194,7 +1219,25 @@ var
     end;
     di := 0;
     left := pat[0];
-    on := True;
+    { [R2-F] the phase: where on the pattern the contour starts }
+    if not (IsNan(ADashOffsetDevice) or IsInfinite(ADashOffsetDevice)) then
+    begin
+      pos := ADashOffsetDevice - Floor(ADashOffsetDevice / t) * t;
+      if (pos < 0) or (pos >= t) then pos := 0;
+      while pos > 0 do
+        if pos < left then
+        begin
+          left := left - pos;
+          pos := 0;
+        end
+        else
+        begin
+          pos := pos - left;
+          di := (di + 1) mod Length(pat);
+          left := pat[di];
+        end;
+    end;
+    on := not Odd(di);
     open := False;
     for j := 0 to ACount - 1 do
     begin
@@ -1208,21 +1251,23 @@ var
       begin
         if on and not open then
         begin
-          P.MoveTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
+          sx := x0 + (x1 - x0) * (pos / segLen);
+          sy := y0 + (y1 - y0) * (pos / segLen);
+          moved := False;
           open := True;
         end;
         if segLen - pos <= left then
         begin
           left := left - (segLen - pos);
           pos := segLen;
-          if on then P.LineTo(x1, y1);
+          if on then DashTo(x1, y1);
         end
         else
         begin
           pos := pos + left;
           if on then
           begin
-            P.LineTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
+            DashTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
             open := False;
           end;
           di := (di + 1) mod Length(pat);
@@ -1428,7 +1473,8 @@ end;
   where two strokes meet the ink is laid once and a translucent halo does
   not darken; dashed as the type says }
 procedure StrokeMaskHalo(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
-  AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
+  AColour: TTyColor; AWidthLogical: Double; const ADashType: string;
+  ADashOffsetLogical: Double = 0);
 var
   pat: TTyDoubleArray;
   k: Integer;
@@ -1445,7 +1491,7 @@ begin
     else
       pat := nil;
     P.BeginPath;
-    TraceHaloOutline(P, AOutline, AOX, AOY, pat);
+    TraceHaloOutline(P, AOutline, AOX, AOY, pat, ADashOffsetLogical * P.PPI / 96);
     { [R2-P] kept: the next frame's halo of the same label at the same place
       replays this one's coverage }
     P.StrokePathKept(AColour, AWidthLogical);
@@ -1458,7 +1504,8 @@ end;
 { a rotated or anchored text's halo: its glyphs as DrawTextRotated puts them }
 procedure HaloRotated(P: TTyPainter; const AText, AFont: string; ASize, AWeight: Integer;
   AX, AY, ARotationRad: Double; AH: TAlignment; AV: TTextLayout;
-  AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
+  AColour: TTyColor; AWidthLogical: Double; const ADashType: string;
+  ADashOffsetLogical: Double = 0);
 var
   sz: TSize;
   r, ox, oy, mw, mh: Integer;
@@ -1503,7 +1550,7 @@ begin
     if key <> '' then KeepHaloOutline(key, ol);
   end;
   try
-    StrokeMaskHalo(P, ol, ox, oy, AColour, AWidthLogical, ADashType);
+    StrokeMaskHalo(P, ol, ox, oy, AColour, AWidthLogical, ADashType, ADashOffsetLogical);
   finally
     if key = '' then ol.Free;
   end;
@@ -1560,7 +1607,7 @@ type
     Truncate, MultiLine: Boolean;
   end;
 
-function CaptionDrawOf(const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw; forward;
+function CaptionDrawOf(P: TTyPainter; const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw; forward;
 procedure PaintCaptionDraw(P: TTyPainter; const AD: TCaptionDraw; AInk: TTyColor); forward;
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer); forward;
@@ -1626,6 +1673,31 @@ begin
   end;
 end;
 
+{ [R2-F] a rich box's picture (backgroundColor: {image}): a ZRImage of the
+  box -- its corners through the text's anchor and turn -- drawn like any
+  picture element (PaintImageInto), at AAlpha }
+procedure RtPicture(P: TTyPainter; const APiece: TTyRtPiece; AX, AY, ARotationRad,
+  AScale, AAlpha: Double);
+var
+  c: TTyPointFArray;
+  i: Integer;
+begin
+  SetLength(c, 4);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X, APiece.Y, c[0].X, c[0].Y);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X + APiece.W, APiece.Y, c[1].X, c[1].Y);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X + APiece.W, APiece.Y + APiece.H, c[2].X, c[2].Y);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X, APiece.Y + APiece.H, c[3].X, c[3].Y);
+  for i := 0 to 3 do
+    if IsNan(c[i].X) or IsNan(c[i].Y) then Exit;
+  P.SaveState;
+  try
+    if AAlpha < 1 then P.SetElementAlpha(Max(0.0, AAlpha));
+    PaintImageInto(P, APiece.Image, c);
+  finally
+    P.RestoreState;
+  end;
+end;
+
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
@@ -1647,6 +1719,29 @@ begin
     if pc.Kind = rpkRect then
     begin
       if not pc.Drawn then Continue;
+      { [R2-F] the box's picture, over the rect's border }
+      if pc.Image <> '' then
+      begin
+        P.SaveState;
+        try
+          if a < 1 then P.SetElementAlpha(a);
+          P.SetLineDash([]);
+          P.Translate(AX, AY);
+          if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
+          for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;
+          if pc.HasStroke then
+          begin
+            P.BeginPath;
+            TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
+              pc.H * AScale, radii);
+            P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
+          end;
+        finally
+          P.RestoreState;
+        end;
+        RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity * AAlpha);
+        Continue;
+      end;
       P.SaveState;
       try
         if a < 1 then P.SetElementAlpha(a);
@@ -1714,7 +1809,8 @@ begin
       halo := CaptionInk(pc.Stroke, a);
       HaloRotated(P, TyInkText(pc.Text), pc.FontFamily,
         TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
-        RtAlign(pc.TextAlign), tlCenter, halo, pc.LineWidth, pc.LineDash);
+        RtAlign(pc.TextAlign), tlCenter, halo, pc.LineWidth, pc.LineDash,
+        pc.LineDashOffset);
     end;
     if not hasInk then Continue;
     s := a;
@@ -1799,7 +1895,8 @@ var
 begin
   m := Ceil(AElement.Caption.StrokeWidthLogical * P.PPI / 96) + 4;
   b := AElement.Shape.Bounds;
-  if (AElement.Caption.RotationRad <> 0) or not TyRectFIsValid(b) then
+  if (AElement.Caption.RotationRad <> 0) or (AElement.Caption.BaselineKind <> 0)
+    or not TyRectFIsValid(b) then
   begin
     { round the anchor, any turn or alignment: the text's diagonal -- a
       block's, where it has several lines [R2-A] }
@@ -1824,7 +1921,7 @@ begin
   end;
   { the mask's own pixels are the device scale times these (MaskPainter) }
   if (mw <= 0) or (mh <= 0) or (mw * P.DeviceScale > 8192) or (mh * P.DeviceScale > 8192) then Exit;
-  d := CaptionDrawOf(AElement, -ox, -oy);
+  d := CaptionDrawOf(P, AElement, -ox, -oy);
   ol := nil;
   key := '';
   if HaloCacheOn then
@@ -1848,9 +1945,114 @@ begin
   end;
   try
     StrokeMaskHalo(P, ol, ox, oy, AHalo, AElement.Caption.StrokeWidthLogical,
-      AElement.Caption.StrokeType);
+      AElement.Caption.StrokeType, AElement.Caption.StrokeDashOffset);
   finally
     if key = '' then ol.Free;
+  end;
+end;
+
+{ [R2-F] A CAPTION UNDER A WHOLE AFFINE MAP (an SVG map's skewed or
+  unequally scaled text): drawn upright -- halo and glyphs, the caption's own
+  way -- on a bitmap of its own at the map's largest scale, then laid down
+  through the map as a picture (PaintImageInto). The picture is kept under a
+  key of everything it was drawn from, as the chart's own pictures are. }
+procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement); forward;
+
+procedure RenderAffineCaption(P: TTyPainter; const AElement: TTyChartElement);
+var
+  a: array[0..5] of Double;
+  s, w, h, bl, lx, ly, mg: Double;
+  ppi, bw, bh: Integer;
+  e: TTyChartElement;
+  sz: TSize;
+  bmp: TBGRABitmap;
+  mp: TTyPainter;
+  key: string;
+  c: TTyPointFArray;
+  k: Integer;
+  nw, nh: Double;
+
+  procedure Corner(AIndex: Integer; AX, AY: Double);
+  begin
+    c[AIndex].X := a[0] * AX + a[2] * AY + a[4];
+    c[AIndex].Y := a[1] * AX + a[3] * AY + a[5];
+  end;
+
+begin
+  for k := 0 to 5 do a[k] := AElement.Caption.Affine[k];
+  { the map's largest scale, device px per text unit }
+  s := Max(Sqrt(Sqr(a[0]) + Sqr(a[1])), Sqrt(Sqr(a[2]) + Sqr(a[3]))) * P.DeviceScale;
+  if not (s > 0) or IsNan(s) or IsInfinite(s) then Exit;
+  ppi := Max(1, Min(9600, Round(96 * s)));
+  s := ppi / 96;
+  sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
+    AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
+  { the box in text units (the main painter's px at its PPI) }
+  w := sz.cx * 96 / P.PPI;
+  h := sz.cy * 96 / P.PPI;
+  case AElement.Caption.AnchorH of
+    tahCentre: lx := -w / 2;
+    tahRight: lx := -w;
+  else
+    lx := 0;
+  end;
+  if AElement.Caption.BaselineKind = 1 then
+  begin
+    bl := P.TextBaseline(AElement.Caption.FontName, AElement.Caption.FontSizeLogical,
+      AElement.Caption.FontWeight);
+    ly := -bl;
+  end
+  else if AElement.Caption.BaselineKind = 2 then ly := -h
+  else
+    case AElement.Caption.AnchorV of
+      tavMiddle: ly := -h / 2;
+      tavBottom: ly := -h;
+    else
+      ly := 0;
+    end;
+  mg := Ceil(Max(0.0, AElement.Caption.StrokeWidthLogical)) + 2;
+  bw := Ceil((w + 2 * mg) * s);
+  bh := Ceil((h + 2 * mg) * s);
+  if (bw <= 0) or (bh <= 0) or (bw > 4096) or (bh > 4096) then Exit;
+  key := 'data:tyaffinetext,' + IntToStr(ppi) + ',' + IntToStr(bw) + ',' + IntToStr(bh) + ','
+    + IntToStr(AElement.Caption.FontSizeLogical) + ',' + IntToStr(AElement.Caption.FontWeight) + ','
+    + IntToHex(AElement.Caption.Colour, 8) + ',' + IntToHex(AElement.Caption.StrokeColour, 8) + ','
+    + KeyBits(AElement.Caption.StrokeWidthLogical) + IntToStr(Length(AElement.Caption.FontName)) + ','
+    + AElement.Caption.FontName + AElement.Caption.Text;
+  if TyChartImage(key, 0, nw, nh) = nil then
+  begin
+    bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
+    mp := TTyPainter.Create;
+    try
+      mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
+      e := AElement;
+      e.Caption.HasAffine := False;
+      e.Caption.BaselineKind := 0;
+      e.Caption.RotationRad := 0;
+      e.Caption.AnchorH := tahLeft;
+      e.Caption.AnchorV := tavTop;
+      e.Caption.Truncate := False;
+      e.Style.Alpha := 1;
+      { the upright box, mg text units in from the bitmap's edge, in its px }
+      e.Shape := TyShapeRect(TyRectF(mg * s, mg * s, (mg + w) * s, (mg + h) * s));
+      TyRenderCaption(mp, e);
+      mp.EndPaint;
+    finally
+      mp.Free;
+    end;
+    TyChartImageRegisterBitmap(key, bmp);
+  end;
+  SetLength(c, 4);
+  Corner(0, lx - mg, ly - mg);
+  Corner(1, lx + w + mg, ly - mg);
+  Corner(2, lx + w + mg, ly + h + mg);
+  Corner(3, lx - mg, ly + h + mg);
+  P.SaveState;
+  try
+    if AElement.Style.Alpha < 1 then P.SetElementAlpha(Max(0.0, AElement.Style.Alpha));
+    PaintImageInto(P, key, c);
+  finally
+    P.RestoreState;
   end;
 end;
 
@@ -1859,6 +2061,12 @@ var
   ink, halo: TTyColor;
 begin
   if (P = nil) or (AElement.Caption.Text = '') then Exit;
+  { [R2-F] a whole affine map: drawn upright, laid down through it }
+  if AElement.Caption.HasAffine then
+  begin
+    RenderAffineCaption(P, AElement);
+    Exit;
+  end;
   { A BLOCK DRAWS ITS PIECES, and nothing of the one-run caption }
   if Length(AElement.Caption.RtPieces) > 0 then
   begin
@@ -1885,12 +2093,13 @@ end;
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer);
 begin
-  PaintCaptionDraw(P, CaptionDrawOf(AElement, ADX, ADY), AInk);
+  PaintCaptionDraw(P, CaptionDrawOf(P, AElement, ADX, ADY), AInk);
 end;
 
-function CaptionDrawOf(const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw;
+function CaptionDrawOf(P: TTyPainter; const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw;
 var
   b: TTyRectF;
+  bl: Double;
 begin
   Result := Default(TCaptionDraw);
   Result.Text := TyInkText(AElement.Caption.Text);
@@ -1899,6 +2108,29 @@ begin
   Result.Weight := AElement.Caption.FontWeight;
   Result.H := TyAnchorToAlignment(AElement.Caption.AnchorH);
   Result.V := TyAnchorToLayout(AElement.Caption.AnchorV);
+  { [R2-F] A BASELINE AT Y: from the anchor, the box's top a baseline above
+    it (alphabetic), or its bottom there (ideographic), along the turn }
+  if AElement.Caption.BaselineKind <> 0 then
+  begin
+    Result.Kind := 0;
+    Result.Rot := AElement.Caption.RotationRad;
+    Result.X := AElement.Caption.X + ADX;
+    Result.Y := AElement.Caption.Y + ADY;
+    if AElement.Caption.BaselineKind = 2 then
+      Result.V := tlBottom
+    else
+    begin
+      Result.V := tlTop;
+      bl := 0;
+      if P <> nil then
+        bl := P.TextBaseline(Result.FontName, Result.Size, Result.Weight) * P.PPI / 96;
+      { DrawTextRotated turns an offset (ox, oy) to (ox ca + oy sa,
+        -ox sa + oy ca) }
+      Result.X := Result.X - bl * Sin(Result.Rot);
+      Result.Y := Result.Y - bl * Cos(Result.Rot);
+    end;
+    Exit;
+  end;
   if AElement.Caption.RotationRad <> 0 then
   begin
     { NO RECT, so no clip and no ellipsis -- the rotated entry takes an anchor.
@@ -2500,7 +2732,7 @@ begin
     end;
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
-    P.SetLineDash(AElement.Style.DashLogical);
+    P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
     if (AElement.Shape.Kind = cskLarge) and (P.Bitmap <> nil) and IdentityMatrix
       and LayerFits then
     begin

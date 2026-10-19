@@ -84,6 +84,7 @@ type
     procedure TestTheScansFindTheRightRow;
     procedure TestABatchIsOneElementNotOnePerRow;
     procedure TestTheBatchIsPainted;
+    procedure TestTiledCirclesAreSubPathsOfTheirOwn;
     procedure TestLeavingLargeModeBringsTheStatesBack;
     procedure TestAPathSymbolStaysOneElementPerRow;
     procedure TestABatchHasNoEnterAnimation;
@@ -900,6 +901,53 @@ begin
       (p.red > 200) and (p.green < 60) and (p.blue < 60));
     p := bmp.GetPixel(Round(g.Pts[0] + g.BarW + 2), y);
     AssertTrue('the gap beside it is not', p.green > 200);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ [R2-F] A GRADIENT BATCH IS DRAWN IN TILES, every row of a tile traced into
+  one path (64 px tiles from the layer's corner). zrender's Circle.buildPath
+  moves to (cx + r, cy) before its arc; BGRA's circle is an arc with no
+  move, so each circle used to join the one before into one polygon --
+  three points in one tile filled the triangle between them. }
+procedure TAdvChartLargeModeTest.TestTiledCirclesAreSubPathsOfTheirOwn;
+var
+  bmp: TBGRABitmap;
+  g: TTyLargeGeom;
+  k, cx, cy, ink: Integer;
+  p: TBGRAPixel;
+begin
+  Show('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10},"yAxis":{"type":"value","min":0,"max":10},'
+    + '"series":[{"type":"scatter","large":true,"largeThreshold":1,"symbolSize":6,'
+    + '"itemStyle":{"color":{"type":"linear","x":0,"y":0,"x2":1,"y2":0,"colorStops":['
+    + '{"offset":0,"color":"#ff0000"},{"offset":1,"color":"#0000ff"}]}},'
+    + '"data":[[1,0.6],[1.6,0.6],[1.3,1.1]]}]}');
+  g := Default(TTyLargeGeom);
+  for k := 0 to FChart.List.Count - 1 do
+    if FChart.List.Element(k).Shape.Kind = cskLarge then g := FChart.List.Element(k).Shape.Large;
+  AssertTrue('a batch of symbols', g.Kind = lgkSymbol);
+  { the triangle's centroid, far from every circle }
+  cx := Round((g.Pts[0] + g.Pts[2] + g.Pts[4]) / 3);
+  cy := Round((g.Pts[1] + g.Pts[3] + g.Pts[5]) / 3);
+  bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    AssertTrue(Format('the three in one tile (%d, %d)', [cx, cy]),
+      (cx div 64 = Round(g.Pts[0]) div 64) and (cy div 64 = Round(g.Pts[1]) div 64)
+      and (cx div 64 = Round(g.Pts[2]) div 64) and (cy div 64 = Round(g.Pts[5]) div 64));
+    p := bmp.GetPixel(cx, cy);
+    AssertTrue(Format('nothing between the circles at (%d, %d): %d %d %d',
+      [cx, cy, p.red, p.green, p.blue]), (p.red > 240) and (p.green > 240) and (p.blue > 240));
+    { and every circle is drawn: its centre inked }
+    ink := 0;
+    for k := 0 to 2 do
+    begin
+      p := bmp.GetPixel(Round(g.Pts[2 * k]), Round(g.Pts[2 * k + 1]));
+      if p.green < 100 then Inc(ink);
+    end;
+    AssertEquals('three circles drawn', 3, ink);
   finally
     bmp.Free;
   end;

@@ -174,6 +174,8 @@ uses
   test.advchart.axistooltip,
   test.advchart.visualmaptext,
   test.advchart.labelhalo,
+  test.advchart.textdash,
+  test.advchart.richimage,
   test.advchart.halokeep,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
