@@ -543,6 +543,18 @@ end;
 { echarts' _onframe: the hover's emphasis changes applied -- entering brings
   the state's adjusted position and align, leaving takes them away }
 procedure TTyAdvanceChart.TbFrame;
+begin
+  if not TbFrameApply then Exit;
+  { [R2-E] a repaint, nothing marked: upstream enters the emphasis in the
+    zrender frame that flushed the mouseover's title -- that frame's
+    `rendered` was the one the port's paint after the mouseover said }
+  DropStatic;
+  inherited Invalidate;
+end;
+
+{ the emphasis an icon's mouseover / mouseout left pending: entered at the
+  next frame -- here the next pointer event's }
+function TTyAdvanceChart.TbFrameApply: Boolean;
 var
   t, i: Integer;
   any: Boolean;
@@ -568,7 +580,7 @@ begin
         any := True;
       end;
     end;
-  if any then TbChanged;
+  Result := any;
 end;
 
 procedure TTyAdvanceChart.TbClick(ATb, AIcon: Integer);

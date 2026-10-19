@@ -1485,6 +1485,18 @@ begin
   Result := DoBatchGeneric(APayload, t);
 end;
 
+{ [R2-E] the actions whose update is 'none' or a component's own
+  (`component:method`, updateDirectly per item): doDispatchAction runs no
+  update after the items, a batch of none included }
+function TyBatchRunsNoUpdate(const AType: string): Boolean;
+begin
+  Result := (AType = 'brushEnd') or (AType = 'brushSelect') or (AType = 'graphRoam')
+    or (AType = 'sankeyRoam') or (AType = 'treeRoam') or (AType = 'sunburstHighlight')
+    or (AType = 'focusNodeAdjacency') or (AType = 'unfocusNodeAdjacency')
+    or (AType = 'updateAxisPointer') or (AType = 'showTip') or (AType = 'hideTip')
+    or (AType = 'geoToggleSelect') or (AType = 'geoSelect') or (AType = 'geoUnSelect');
+end;
+
 function TTyAdvanceChart.DoBatchGeneric(APayload: TJSONObject;
   const AType: string): Boolean;
 var
@@ -1499,6 +1511,7 @@ var
   nLine, nCol: Integer;
   it: TJSONObject;
   tp: TJSONData;
+  aasFirst: Integer;
 begin
   Result := False;
   { the action's non-refined event: its entry in the connect table }
@@ -1528,11 +1541,21 @@ begin
   Inc(FBatchCapDepth);
   Inc(FBatchDefer);
   FBatchDue := False;
+  FBatchConvertDue := False;
   FBatchBrushHas := False;
   FBatchBrushJson := '';
   { no item at all: the update still runs (with the payload) -- here the
-    one whose visual stage the brush hears }
-  if (items.Count = 0) and FBrushPayload then FBatchDue := True;
+    one whose visual stage the brush hears
+    [R2-E: and every other action's whose update is not none nor a
+    component's own; its visual stage dispatches brushSelect too, but for
+    geoRoam's updateTransform] }
+  if (items.Count = 0) and (FBrushPayload or not TyBatchRunsNoUpdate(AType)) then
+  begin
+    if not FBrushPayload then FBrushPayload := AType <> 'geoRoam';
+    FBatchDue := True;
+    FBatchDuePayload := TyAnimNoOverride;
+    FBatchDueHas := False;
+  end;
   try
     first := '';
     if items.Count > 0 then first := CopyWithType(TJSONObject(items.Items[0]), ev);
@@ -1578,10 +1601,33 @@ begin
   end;
   { THE UPDATE, once: updateMethods[update](payload) }
   FBatchBrushQueued := False;
+  { [R2-E] the items' timeline merges: prepareAndUpdate renders once, from
+    the render before the batch }
+  if FBatchConvertDue and (FBatchDefer = 0) then
+  begin
+    FBatchConvertDue := False;
+    FBatchDue := False;
+    ConvertReady;
+  end;
   if FBatchDue and (FBatchDefer = 0) then
   begin
     FBatchDue := False;
-    FullUpdateWith(FBatchDuePayload, FBatchDueHas);
+    if AType = 'axisAreaSelect' then
+    begin
+      { [R2-E] fromAxisAreaSelect with the OUTER payload: the update
+        renders every parallelAxis view but the first that payload's query
+        finds -- that one keeps the covers it had }
+      ParallelAreaSelect(APayload, aasFirst, False);
+      FParBrushSkip := aasFirst;
+      FParBrushInAas := True;
+      try
+        FullUpdateWith(FBatchDuePayload, FBatchDueHas);
+      finally
+        FParBrushInAas := False;
+      end;
+    end
+    else
+      FullUpdateWith(FBatchDuePayload, FBatchDueHas);
   end;
   { the brushSelect the items' own updates asked for, when the one above
     gave none }

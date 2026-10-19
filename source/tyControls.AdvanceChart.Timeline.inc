@@ -473,8 +473,12 @@ begin
     Invalidate;
     { and rendered now, inside the dispatch, as prepareAndUpdate does: the
       brushSelect its visual stage dispatches goes with the action
-      [milestone D5-D8: the render waited for the next frame] }
-    ConvertReady;
+      [milestone D5-D8: the render waited for the next frame]
+      [R2-E: a batch's item resets the option and no more -- the update
+      renders once, after the last item, from the render before the batch
+      (DoBatchGeneric)] }
+    if FBatchDefer > 0 then FBatchConvertDue := True
+    else ConvertReady;
   end
   else
     FullUpdate;

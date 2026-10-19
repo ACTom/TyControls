@@ -1264,6 +1264,12 @@ end;
   a move to the new one, an over when it changed -- each only where the
   target carries data }
 procedure TTyAdvanceChart.EventMove(AX, AY: Integer);
+begin
+  EventMoveOnly(AX, AY);
+  EventOver;
+end;
+
+procedure TTyAdvanceChart.EventMoveOnly(AX, AY: Integer);
 var
   t: TTyChartEventTarget;
   cancel: Boolean;
@@ -1327,22 +1333,40 @@ begin
     found under the pointer before the picture moved }
   if not cancel then GeoRoamMove(AX, AY);
   if t.HasData and not cancel then EmitChartEvent('mousemove', t, AX, AY);
-  if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
-  begin
-    VmElementEvent('mouseover', t, AX, AY);
-    TbMouseOver(t);
-    TlMouseOver(t);
-    cancel := GfxElementEvent('mouseover', t, AX, AY);
-    if not cancel then StHoverOver(t);
-    if t.HasData and not cancel then EmitChartEvent('mouseover', t, AX, AY);
-    VmZrMouseOver(t);
-  end;
+  { [R2-E] THE OVER WAITS for the zr-level mousemove listeners -- the
+    pointer's global one (updateAxisPointer, the tooltip's), the brush's,
+    the parallel's: Handler.mousemove dispatches the move (its zr-level
+    trigger with it) before the over. A legend item's highlight, a
+    chart's mouseover come after the pointer's actions (EventOver). }
+  FEvOverDue := (t.Id <> 0) and (t.Id <> FEvHover.Id);
+  FEvOverT := t;
+  FEvOverX := AX;
+  FEvOverY := AY;
   FEvHover := t;
   FEvHoverX := AX;
   FEvHoverY := AY;
+end;
+
+procedure TTyAdvanceChart.EventOver;
+var
+  t: TTyChartEventTarget;
+  cancel: Boolean;
+begin
+  if FEvOverDue then
+  begin
+    FEvOverDue := False;
+    t := FEvOverT;
+    VmElementEvent('mouseover', t, FEvOverX, FEvOverY);
+    TbMouseOver(t);
+    TlMouseOver(t);
+    cancel := GfxElementEvent('mouseover', t, FEvOverX, FEvOverY);
+    if not cancel then StHoverOver(t);
+    if t.HasData and not cancel then EmitChartEvent('mouseover', t, FEvOverX, FEvOverY);
+    VmZrMouseOver(t);
+  end;
   { zrender's Draggable on the timeline's checkpoint, after the hover was
     found [Batch 129] }
-  TlDragMove(AX, AY);
+  TlDragMove(FEvOverX, FEvOverY);
   { the frame's states [Batch 116] }
   VmApplyStates;
   TlApplyStates;
@@ -1589,7 +1613,7 @@ begin
   { the chart's own mouse events [Batch 84] -- zrender hears the chart's
     listeners before the pointer's global one }
   FEvPreset := pre;
-  EventMove(X, Y);
+  EventMoveOnly(X, Y);
   { THE AXIS POINTER AND THE BOX THROUGH THEIR ACTIONS [Batch 153]: the
     global listener turns the move into updateAxisPointer (the pointer's
     hits, an independent piece of state held in FTipHits -- live whenever
@@ -1605,6 +1629,8 @@ begin
   BrushPointerMove(X, Y);
   { ParallelView's mousemove, after the axes' controllers [Batch 140] }
   ParExpMove(X, Y);
+  { [R2-E] then zrender's mouseover }
+  EventOver;
   { an icon's pointer, the brush's crosshair [Batch 125] }
   TbApplyCursor(X, Y);
   { [F6a] the chart's cursor, all of it }

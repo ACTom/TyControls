@@ -2462,7 +2462,7 @@ end;
   all) whose parallel was built takes `intervals` (setActiveIntervals: a
   clone, each pair ascending) }
 function TTyAdvanceChart.ParallelAreaSelect(APayload: TJSONObject;
-  out AFirst: Integer): Boolean;
+  out AFirst: Integer; AWrite: Boolean): Boolean;
 var
   n, k, j, q: Integer;
   hit: array of Boolean;
@@ -2569,6 +2569,8 @@ begin
         Break;
       end;
   end;
+  { [R2-E] the query alone (fromAxisAreaSelect's findComponents) }
+  if not AWrite then Exit;
   iv := TyParallelIntervalsOf(APayload.Find('intervals'));
   if Length(FParIntervals) < n then SetLength(FParIntervals, n);
   for k := 0 to n - 1 do

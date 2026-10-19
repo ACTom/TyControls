@@ -1440,10 +1440,26 @@ type
     FTipBox, FTipRect: TTyRectF;
     { [Batch 104] what the last paint's string or handler formatter said }
     FTipFormatterText: string;
+    { [R2-E] what the box last painted said, and what a frozen box says:
+      TooltipView.render leaves the content element as it was until a show
+      sets it again }
+    FTipLastHas, FTipFrozenHas: Boolean;
+    FTipLastSpec, FTipFrozenSpec: TTyTooltipSpec;
+    FTipLastInk, FTipFrozenInk: TTyTooltipInk;
+    FTipLastLines, FTipFrozenLines: TTyTooltipLineArray;
+    FTipLastOnAxis, FTipFrozenOnAxis: Boolean;
+    FTipLastFmt, FTipFrozenFmt: string;
+    FTipLastBorder, FTipFrozenBorder: TTyColor;
     { [Batch 100] the option's own `status: 'show'` pointers are gone: the
       first pointer event rewrites every status, and an option set brings
       them back }
     FOptPtrGone: Boolean;
+    { [R2-E] the over EventMove found, for EventOver }
+    FEvOverDue: Boolean;
+    FEvOverT: TTyChartEventTarget;
+    FEvOverX, FEvOverY: Integer;
+    { [R2-E] the axes ('mainType#index') a merge wrote a status on since }
+    FOptPtrBack: TTyStringArray;
     { [Batch 153] THE ACTIONS THAT DRIVE THE TOOLTIP AND THE POINTER.
       FActCycle is upstream's IN_EC_CYCLE for them: an action dispatched
       while one of them runs waits in FActPending and is flushed after it,
@@ -1489,6 +1505,9 @@ type
       (the update runs once); and whether the update after them gave one }
     FBatchBrushJson: string;
     FBatchBrushHas, FBatchBrushQueued: Boolean;
+    { [R2-E] an item's timeline merge (TlMerge): the render it would have
+      run now waits for the batch's end, once }
+    FBatchConvertDue: Boolean;
     { [F4b] a view action (graphRoam, sankeyRoam, dragNode) running as an
       action: the roam helpers leave the event and `updated` to it }
     FViewActionDepth: Integer;
@@ -2076,6 +2095,8 @@ type
     procedure TbBrushClick(const AIcon: string);
     procedure TbApplyCursor(AX, AY: Integer);
     procedure TbFrame;
+    { [R2-E] the icons' pending emphasis entered or left: True when any }
+    function TbFrameApply: Boolean;
     { the brush components [Batch 126] }
     function BrushViewOf: TTyBrushView;
     procedure BrushCss(AX, AY: Double; out X, Y: Double);
@@ -2605,7 +2626,8 @@ type
     procedure SolveParallels(APPI: Integer);
     procedure PaintParallels(APainter: TTyPainter; APPI: Integer;
       const AMeasurer: ITyTextMeasurer);
-    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer): Boolean;
+    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer;
+      AWrite: Boolean = True): Boolean;
     function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
@@ -3348,6 +3370,11 @@ type
     procedure EmitChartEvent(const AType: string; const ATarget: TTyChartEventTarget;
       AX, AY: Integer; AHasOffset: Boolean = True);
     procedure EventMove(AX, AY: Integer);
+    { [R2-E] EventMove in its two halves: the out and the move, then
+      zrender's mouseover after every zr-level mousemove listener
+      (MouseMove runs the pointer's, the brush's, the parallel's between) }
+    procedure EventMoveOnly(AX, AY: Integer);
+    procedure EventOver;
     procedure EventDown(AButton: TMouseButton; AX, AY: Integer);
     procedure EventUp(AButton: TMouseButton; AX, AY: Integer);
     procedure EventDblClick(AX, AY: Integer);

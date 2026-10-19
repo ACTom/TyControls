@@ -756,6 +756,19 @@ begin
   end;
   { a synchronous update takes a pending lazy one with it }
   FLazyPending := False;
+  { [R2-E] setOption ends with zr.flush() before its updated: the layout
+    now (ConvertReady, as a convertToPixel would) and the flush's
+    `rendered` -- and `finished` when nothing is left -- with the paint
+    that follows owing nothing. Only where a listener hears them, and only
+    once the chart has been laid out at a size. }
+  if (FLastPPI > 0) and not (csDesigning in ComponentState)
+    and (HasChartHandler('rendered') or HasChartHandler('finished')) then
+  begin
+    FPaintT0 := AnimClock;
+    ConvertReady;
+    FFlushDue := True;
+    EmitFlush;
+  end;
   if not ASilent then EmitUpdated;
 end;
 
