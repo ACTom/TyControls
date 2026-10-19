@@ -184,7 +184,7 @@ uses
   test.advchart.builder,
   test.advchart.series,
   test.advchart.style,
-  test.advancechart,
+  test.advancechart, test.advchart.devicescale,
   test.unicode.width,
   test.terminal.oracle, test.terminal.parser, test.terminal.buffer, test.terminal.core,
   test.terminal.keyboard, test.terminal.render, test.terminal.view, test.terminal.view.paint,

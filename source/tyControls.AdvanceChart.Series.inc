@@ -2596,6 +2596,7 @@ var
   a: Double;
   any: Boolean;
   rest: TTyPaintList;
+  sc: TTyCanvasScale;
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   bmp := APainter.Bitmap;
@@ -2628,7 +2629,12 @@ begin
   rest := TTyPaintList.Create;
   P := TTyPainter.Create;
   try
-    P.BeginPaintOn(nil, Rect(0, 0, bmp.Width, bmp.Height), FPaintListPPI, FTrailLayer);
+    { the layer the size of the painter's bitmap, drawn at its device scale
+      over the device-px rect (#83) }
+    sc.Scale := APainter.DeviceScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, bmp.Width div sc.Scale, bmp.Height div sc.Scale),
+      FPaintListPPI, FTrailLayer, sc);
     for i := 0 to AList.Count - 1 do
     begin
       idx := AList.PaintOrder(i);

@@ -713,6 +713,7 @@ type
     FProgLayer: TBGRABitmap;
     FProgLayerOk: Boolean;
     FProgLayerPPI: Integer;
+    FProgLayerScale: Integer;   { the device scale it holds, its pixels per device px (#83) }
     FProgPainted: TTyIntegerArray;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
@@ -1366,6 +1367,10 @@ type
     FDrSnapOk: Boolean;
     FDrDyn: TBGRABitmap;
     FDrDynTiles: TTyZrRectArray;
+    { the device scale of this frame (#83): FDrWork, FDrBase, FDrDyn and the
+      static cache hold that many pixels per device px; the snapshot, the
+      repaint pool, FDrDynTiles and FDrLastRects stay in device px }
+    FDrScale: Integer;
     FDrMode: Integer;
     FDrStaticList: TTyPaintList;
     FDrPrepDone: Boolean;
@@ -2383,7 +2388,7 @@ type
     procedure EmitPlain(const AType: string);
     procedure EmitFlush;
     function ProgIsLayered(const AEl: TTyChartElement): Boolean;
-    procedure ProgLayerBuild(AW, AH, APPI: Integer);
+    procedure ProgLayerBuild(AW, AH, APPI, AScale: Integer);
     procedure ProgLayerDelta;
     procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
     { the row a large element's own handler gives the pointer: the batch's
@@ -3135,7 +3140,7 @@ type
     { ---- the dirty-rect path [Batch 142] ---- }
     { the frame: the static layer (whole, or in rects), the dynamic layer,
       the flush events; FDrLastFull / FDrLastRects say what changed }
-    procedure DrPrepare(const ARect: TRect; APPI: Integer);
+    procedure DrPrepare(const ARect: TRect; APPI: Integer; const AScale: TTyCanvasScale);
     { what changed onto ACanvas: everything, or the rects }
     procedure DrComposite(ACanvas: TCanvas; const ARect: TRect);
     { the window's paint: composite the clip, preparing first unless a
@@ -3148,6 +3153,13 @@ type
     procedure DrStaticFull(const R: TRect; APPI: Integer);
     procedure DrDynamic(const R: TRect; APPI: Integer; var APool: TTyRepaintPool;
       var AFull: Boolean);
+    { a frame's rect of device px on its layers: FDrScale times it (#83) }
+    function DrRaster(const R: TRect): TRect;
+    { the static cache's APx onto ACanvas at APx (client px), and the
+      dynamic layer's APx at (ADstX, ADstY): one layer pixel per canvas pixel
+      on a raster canvas, into the device-px rect on one in device px }
+    procedure DrCopyStatic(ACanvas: TCanvas; const APx: TRect);
+    procedure DrDrawDynamic(ACanvas: TCanvas; const APx: TRect; ADstX, ADstY: Integer);
     procedure DrCaptureBase(ABmp: TBGRABitmap);
     procedure StaticDrop;
     procedure SetUseDirtyRect(AValue: Boolean);

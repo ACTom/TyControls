@@ -330,11 +330,12 @@ begin
   Result := (AEl.ProgChunk > 0) and not AEl.ProgHidden and not AEl.Ignore;
 end;
 
-procedure TTyAdvanceChart.ProgLayerBuild(AW, AH, APPI: Integer);
+procedure TTyAdvanceChart.ProgLayerBuild(AW, AH, APPI, AScale: Integer);
 var
   P: TTyPainter;
   i, idx: Integer;
   el: TTyChartElement;
+  sc: TTyCanvasScale;
 begin
   if (FProgLayer = nil) or (FProgLayer.Width <> AW) or (FProgLayer.Height <> AH) then
   begin
@@ -344,11 +345,17 @@ begin
   else
     FProgLayer.Fill(BGRAPixelTransparent);
   FProgLayerPPI := APPI;
+  { the layer the size of the painter's bitmap, AScale of its pixels per
+    device px: drawn at that scale over the device-px rect (#83) }
+  FProgLayerScale := Max(1, AScale);
   FProgPainted := nil;
   SetLength(FProgPainted, FPaintList.Count);
   P := TTyPainter.Create;
   try
-    P.BeginPaintOn(nil, Rect(0, 0, AW, AH), APPI, FProgLayer);
+    sc.Scale := FProgLayerScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, AW div FProgLayerScale, AH div FProgLayerScale), APPI,
+      FProgLayer, sc);
     for i := 0 to FPaintList.Count - 1 do
     begin
       idx := FPaintList.PaintOrder(i);
@@ -374,6 +381,7 @@ var
   i, idx, have, rows: Integer;
   el, part: TTyChartElement;
   started: Boolean;
+  sc: TTyCanvasScale;
 begin
   if not FProgLayerOk or (FProgLayer = nil) or (FPaintList = nil) then Exit;
   if Length(FProgPainted) <> FPaintList.Count then
@@ -396,8 +404,10 @@ begin
       if not started then
       begin
         P := TTyPainter.Create;
-        P.BeginPaintOn(nil, Rect(0, 0, FProgLayer.Width, FProgLayer.Height),
-          FProgLayerPPI, FProgLayer);
+        sc.Scale := FProgLayerScale;
+        sc.DeviceUnits := False;
+        P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayer.Width div FProgLayerScale,
+          FProgLayer.Height div FProgLayerScale), FProgLayerPPI, FProgLayer, sc);
         started := True;
       end;
       if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol) then
@@ -449,8 +459,9 @@ begin
     Exit;
   end;
   if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
-    or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI) then
-    ProgLayerBuild(bmp.Width, bmp.Height, APPI);
+    or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
+    or (FProgLayerScale <> APainter.DeviceScale) then
+    ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale);
   blitted := False;
   for i := 0 to AList.Count - 1 do
   begin

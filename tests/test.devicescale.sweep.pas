@@ -40,10 +40,10 @@ type
   end;
 
 const
-  { Classes known not to draw at the device scale yet: on the 3.0 line none since #83 was ported;
-    on main the AdvanceChart until plan B's Task 10. The list and the assertion stay -- a new
-    failure must be fixed or listed here on purpose. }
-  CKnownUnported: array of string = ('TTyAdvanceChart');
+  { Classes known not to draw at the device scale yet: none since #83 was ported (on main, plan
+    B's Task 10 took the AdvanceChart off). The list and the assertion stay -- a new failure must
+    be fixed or listed here on purpose. }
+  CKnownUnported: array of string = ();
 
 implementation
 
