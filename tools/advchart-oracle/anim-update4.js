@@ -257,7 +257,55 @@ function rectOf(el) {
   return { sh: arr([el.shape.x, el.shape.y, el.shape.width, el.shape.height]), t: arr([m[4], m[5]]),
     op: hx(el.style.opacity == null ? 1 : el.style.opacity), n: nClip(el) };
 }
+// [R2-I3] where a tree's edge in flight is hit: the target findHover gives
+// at the middle of the edge's curve AS DRAWN (its global place, rounded) and
+// 4 px off it along the normal -- 'edge<i>' (node i's __edge), 'node<i>',
+// 'other' or null
+function treeHitOf(chart, v, data, t) {
+  if (!t) return null;
+  let k = null;
+  data.each(i => { const el = data.getItemGraphicEl(i); if (el && el.__edge === t) k = i; });
+  if (k !== null) return 'edge' + k;
+  const ec = ecDataOf(t) || (t.parent && ecDataOf(t.parent));
+  if (ec && ec.dataIndex != null) return 'node' + ec.dataIndex;
+  return 'other';
+}
 const PROBES = {
+  treeHit(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'tree') return;
+      const v = chart.getViewOfSeriesModel(sm);
+      const data = sm.getData();
+      const h = zr(chart).handler;
+      data.each(i => {
+        const el = data.getItemGraphicEl(i);
+        const e = el && el.__edge;
+        if (!e || e.parent !== v._mainGroup || e.shape.parentPoint) return;
+        const s = e.shape;
+        const cub = (a, b, c, d) => 0.125 * a + 0.375 * b + 0.375 * c + 0.125 * d;
+        const der = (a, b, c, d) => 0.75 * (b - a) + 1.5 * (c - b) + 0.75 * (d - c);
+        const lx = cub(s.x1, s.cpx1, s.cpx2, s.x2);
+        const ly = cub(s.y1, s.cpy1, s.cpy2, s.y2);
+        const tx = der(s.x1, s.cpx1, s.cpx2, s.x2);
+        const ty = der(s.y1, s.cpy1, s.cpy2, s.y2);
+        e.updateTransform();
+        const m = e.getComputedTransform() || [1, 0, 0, 1, 0, 0];
+        const gx = m[0] * lx + m[2] * ly + m[4];
+        const gy = m[1] * lx + m[3] * ly + m[5];
+        let nx = -(m[1] * tx + m[3] * ty);
+        let ny = m[0] * tx + m[2] * ty;
+        const len = Math.sqrt(nx * nx + ny * ny) || 1;
+        nx /= len;
+        ny /= len;
+        const x = Math.round(gx);
+        const y = Math.round(gy);
+        const x4 = Math.round(gx + 4 * nx);
+        const y4 = Math.round(gy + 4 * ny);
+        rec['th' + sm.seriesIndex + '/edge' + i] = { x, y, hit: treeHitOf(chart, v, data, h.findHover(x, y).target),
+          x4, y4, hit4: treeHitOf(chart, v, data, h.findHover(x4, y4).target) };
+      });
+    });
+  },
   graph(chart, rec) {
     chart.getModel().eachSeries(sm => {
       if (sm.subType !== 'graph') return;
@@ -719,6 +767,16 @@ add('radar', 'rd-off', "a series with animation off: the symbols are set at thei
     { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, RQ] }] } },
     ...after([0, 1, 100], T1)]);
 
+// ---- [R2-I3] a tree's edges hit in flight ----
+add('treeHit', 'tree-edge-hit', "[R2-I3] curve edges in flight are hit where they are drawn: a merge adds d under the root (1000 ms linear): d's edge grows out of the root, far from where it comes to rest; at each sample findHover at the middle of each edge's curve as drawn finds the edge, 4 px off it nothing",
+  { animation: true, series: [Object.assign({ type: 'tree', data: TREE, initialTreeDepth: -1, label: { show: false } }, LIN)] },
+  ['treeHit'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'root', children: [
+      { name: 'a', children: [{ name: 'a1' }, { name: 'a2', children: [{ name: 'a21' }] }] },
+      { name: 'b', children: [{ name: 'b1' }, { name: 'b2' }] },
+      { name: 'c' }, { name: 'd' }] }] }] } }, ...after([0, 1, 250, 500, 750, 999, 1000, 1001], T1)]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -862,6 +920,12 @@ function guards(out) {
   })());
   guard('rd-rows: the new row\'s symbols stand at their points', sym('rd-rows', T1, 1, 0).n === 0);
   guard('rd-off: no slide', sym('rd-off', T1, 0, 0).n === 0);
+  // [R2-I3]
+  guard('tree-edge-hit: in flight, the drawn middle is the edge and 4 px off is not', (() => {
+    const r = rec('tree-edge-hit', T1 + 500, 'th0/edge10');
+    const r1 = rec('tree-edge-hit', T1 + 1000, 'th0/edge10');
+    return r && r.hit === 'edge10' && r.hit4 === null && r1 && (Math.abs(r.y - r1.y) > 8 || Math.abs(r.x - r1.x) > 8);
+  })());
   return g;
 }
 

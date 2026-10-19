@@ -5299,6 +5299,31 @@ end;
   TreePath's parent and child points (TreePath.buildPath, the fork on the
   dimension and at the place the tag says), each point through the main
   group's frame to the canvas }
+{ [R2-I3] A STROKE'S zrender TARGET FOLLOWS ITS PATH AS DRAWN: a tree edge
+  carries its own Path.contain (EdgeHit), built from the path at rest; a
+  frame that moves the path takes the containment along -- the same
+  commands, the same width. [Was: the edge in flight was hit where it would
+  come to rest.] }
+procedure RehitStroke(var AEl: TTyChartElement);
+var
+  zp: TTyZrPath;
+  k: Integer;
+begin
+  if not (AEl.ZrHit.Active and AEl.ZrHit.Stroke) or AEl.ZrHit.Fill then Exit;
+  zp := nil;
+  for k := 0 to High(AEl.Shape.Cmds) do
+    case AEl.Shape.Cmds[k].Kind of
+      pckMove: TyZrMoveTo(zp, AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
+      pckLine: TyZrLineTo(zp, AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
+      pckCurve: TyZrCubic(zp, AEl.Shape.Cmds[k].X1, AEl.Shape.Cmds[k].Y1,
+        AEl.Shape.Cmds[k].X2, AEl.Shape.Cmds[k].Y2, AEl.Shape.Cmds[k].X,
+        AEl.Shape.Cmds[k].Y);
+    end;
+  if Length(zp) = 0 then Exit;
+  AEl.ZrHit.Path := zp;
+  AEl.ZrHit.Box := TyGrowByStroke(TyZrBBox(zp), False, AEl.ZrHit.LineWidth);
+end;
+
 procedure TreeEdgeFrom(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   cmds: TTyPathCmdArray;
@@ -5429,7 +5454,10 @@ begin
     carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo:
       GraphEdgeFrom(AEl, AProxy.Num('shape.percent'), AProxy, nil);
     carTreeEdge:
-      TreeEdgeFrom(AEl, AProxy);
+      begin
+        TreeEdgeFrom(AEl, AProxy);
+        RehitStroke(AEl);
+      end;
     carGraphEdgeLabel:
       begin
         { [F3a] the fade, over the opacity the list gives it (a state's) }

@@ -42381,6 +42381,813 @@
      }
     }
    ]
+  },
+  {
+   "id": "tree-edge-hit",
+   "group": "treeHit",
+   "note": "[R2-I3] curve edges in flight are hit where they are drawn: a merge adds d under the root (1000 ms linear): d's edge grows out of the root, far from where it comes to rest; at each sample findHover at the middle of each edge's curve as drawn finds the edge, 4 px off it nothing",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "series": [
+     {
+      "type": "tree",
+      "data": [
+       {
+        "name": "root",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1"
+           },
+           {
+            "name": "a2",
+            "children": [
+             {
+              "name": "a21"
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "name": "b",
+          "children": [
+           {
+            "name": "b1"
+           },
+           {
+            "name": "b2"
+           }
+          ]
+         },
+         {
+          "name": "c"
+         }
+        ]
+       }
+      ],
+      "initialTreeDepth": -1,
+      "label": {
+       "show": false
+      },
+      "animationDurationUpdate": 1000,
+      "animationEasingUpdate": "linear"
+     }
+    ]
+   },
+   "probes": [
+    "treeHit"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 124,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 126,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 80,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 84,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 97,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 101,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 106,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 110,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 176,
+       "hit": "edge6",
+       "x4": 96,
+       "y4": 180,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 185,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 189,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 203,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 206,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 194,
+       "hit": "edge9",
+       "x4": 95,
+       "y4": 196,
+       "hit4": null
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         {
+          "name": "root",
+          "children": [
+           {
+            "name": "a",
+            "children": [
+             {
+              "name": "a1"
+             },
+             {
+              "name": "a2",
+              "children": [
+               {
+                "name": "a21"
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "name": "b",
+            "children": [
+             {
+              "name": "b1"
+             },
+             {
+              "name": "b2"
+             }
+            ]
+           },
+           {
+            "name": "c"
+           },
+           {
+            "name": "d"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 124,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 126,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 80,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 84,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 97,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 101,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 106,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 110,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 176,
+       "hit": "edge6",
+       "x4": 96,
+       "y4": 180,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 185,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 189,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 203,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 206,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 194,
+       "hit": "edge9",
+       "x4": 95,
+       "y4": 196,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 48,
+       "y": 159,
+       "hit": "node1",
+       "x4": 48,
+       "y4": 159,
+       "hit4": "node1"
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 124,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 126,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 80,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 84,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 97,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 101,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 106,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 110,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 176,
+       "hit": "edge6",
+       "x4": 96,
+       "y4": 180,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 185,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 189,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 203,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 206,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 194,
+       "hit": "edge9",
+       "x4": 95,
+       "y4": 196,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 48,
+       "y": 159,
+       "hit": "node10",
+       "x4": 45,
+       "y4": 161,
+       "hit4": "node1"
+      }
+     }
+    },
+    {
+     "t": 3250,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 123,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 125,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 78,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 82,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 95,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 99,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 104,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 108,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 174,
+       "hit": "edge6",
+       "x4": 97,
+       "y4": 177,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 180,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 184,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 197,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 201,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 190,
+       "hit": "edge9",
+       "x4": 96,
+       "y4": 193,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 61,
+       "y": 168,
+       "hit": "edge10",
+       "x4": 57,
+       "y4": 170,
+       "hit4": null
+      }
+     }
+    },
+    {
+     "t": 3500,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 122,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 124,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 77,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 81,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 93,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 97,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 101,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 105,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 171,
+       "hit": "edge6",
+       "x4": 97,
+       "y4": 174,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 175,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 179,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 192,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 195,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 187,
+       "hit": "edge9",
+       "x4": 96,
+       "y4": 190,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 73,
+       "y": 177,
+       "hit": "edge10",
+       "x4": 70,
+       "y4": 179,
+       "hit4": null
+      }
+     }
+    },
+    {
+     "t": 3750,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 121,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 123,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 75,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 79,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 91,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 95,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 99,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 103,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 168,
+       "hit": "edge6",
+       "x4": 97,
+       "y4": 172,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 170,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 174,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 186,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 190,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 184,
+       "hit": "edge9",
+       "x4": 96,
+       "y4": 187,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 86,
+       "y": 186,
+       "hit": "edge10",
+       "x4": 83,
+       "y4": 189,
+       "hit4": null
+      }
+     }
+    },
+    {
+     "t": 3999,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 120,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 122,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 74,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 78,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 89,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 93,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 97,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 101,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 165,
+       "hit": "edge6",
+       "x4": 98,
+       "y4": 169,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 165,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 169,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 180,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 184,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 180,
+       "hit": "edge9",
+       "x4": 96,
+       "y4": 183,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 99,
+       "y": 196,
+       "hit": "edge10",
+       "x4": 95,
+       "y4": 198,
+       "hit4": null
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 120,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 122,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 74,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 78,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 89,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 93,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 97,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 101,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 165,
+       "hit": "edge6",
+       "x4": 98,
+       "y4": 169,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 165,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 169,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 180,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 184,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 180,
+       "hit": "edge9",
+       "x4": 96,
+       "y4": 183,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 99,
+       "y": 196,
+       "hit": "edge10",
+       "x4": 95,
+       "y4": 198,
+       "hit4": null
+      }
+     }
+    },
+    {
+     "t": 4001,
+     "do": "sample",
+     "rec": {
+      "th0/edge2": {
+       "x": 99,
+       "y": 120,
+       "hit": "edge2",
+       "x4": 102,
+       "y4": 122,
+       "hit4": null
+      },
+      "th0/edge3": {
+       "x": 200,
+       "y": 74,
+       "hit": "edge3",
+       "x4": 201,
+       "y4": 78,
+       "hit4": null
+      },
+      "th0/edge4": {
+       "x": 200,
+       "y": 89,
+       "hit": "edge4",
+       "x4": 199,
+       "y4": 93,
+       "hit4": null
+      },
+      "th0/edge5": {
+       "x": 301,
+       "y": 97,
+       "hit": "edge5",
+       "x4": 301,
+       "y4": 101,
+       "hit4": null
+      },
+      "th0/edge6": {
+       "x": 99,
+       "y": 165,
+       "hit": "edge6",
+       "x4": 98,
+       "y4": 169,
+       "hit4": null
+      },
+      "th0/edge7": {
+       "x": 200,
+       "y": 165,
+       "hit": "edge7",
+       "x4": 201,
+       "y4": 169,
+       "hit4": null
+      },
+      "th0/edge8": {
+       "x": 200,
+       "y": 180,
+       "hit": "edge8",
+       "x4": 199,
+       "y4": 184,
+       "hit4": null
+      },
+      "th0/edge9": {
+       "x": 99,
+       "y": 180,
+       "hit": "edge9",
+       "x4": 96,
+       "y4": 183,
+       "hit4": null
+      },
+      "th0/edge10": {
+       "x": 99,
+       "y": 196,
+       "hit": "edge10",
+       "x4": 95,
+       "y4": 198,
+       "hit4": null
+      }
+     }
+    }
+   ]
   }
  ],
  "themeCheck": {
@@ -42486,6 +43293,10 @@
   },
   {
    "name": "rd-off: no slide",
+   "ok": true
+  },
+  {
+   "name": "tree-edge-hit: in flight, the drawn middle is the edge and 4 px off is not",
    "ok": true
   }
  ]
