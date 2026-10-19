@@ -1008,6 +1008,31 @@ begin
   Result.Strings['targetNode'] := AId;
 end;
 
+{ [R2-I1] THE VIEW'S OWN ROAM DISPATCH (TreemapView._onPan's treemapMove,
+  _onZoom's treemapRender): {type, from: the view's uid, seriesId, rootRect}
+  -- and AJs, the same as the event prints it (JavaScript's numbers) [was:
+  {type, seriesIndex, rootRect}, the public method's] }
+function TTyAdvanceChart.TreemapRoamPayload(const AType: string; ASeries: Integer;
+  AX, AY, AW, AH: Double; out AJs: string): TJSONObject;
+var r: TJSONObject; from: string;
+begin
+  from := 'ec_' + IntToStr(FInstanceNo) + '_treemap' + IntToStr(ASeries);
+  Result := TJSONObject.Create;
+  Result.Strings['type'] := AType;
+  Result.Strings['from'] := from;
+  Result.Strings['seriesId'] := SeriesModelId(ASeries);
+  r := TJSONObject.Create;
+  r.Floats['x'] := AX;
+  r.Floats['y'] := AY;
+  r.Floats['width'] := AW;
+  r.Floats['height'] := AH;
+  Result.Objects['rootRect'] := r;
+  AJs := '{"type":"' + AType + '","from":"' + StringToJSONString(from)
+    + '","seriesId":"' + StringToJSONString(SeriesModelId(ASeries))
+    + '","rootRect":{"x":' + TyJsNumberToString(AX) + ',"y":' + TyJsNumberToString(AY)
+    + ',"width":' + TyJsNumberToString(AW) + ',"height":' + TyJsNumberToString(AH) + '}}';
+end;
+
 function TTyAdvanceChart.TreemapZoomToNode(ASeriesIndex, ARow: Integer): Boolean;
 var p: TJSONObject; slot: Integer;
 begin
@@ -1271,29 +1296,15 @@ var
   nd: TTyTreemapNode;
   js: string;
   p: TJSONObject;
-  r: TJSONObject;
 begin
   Result := False;
   if not TmRowsOf(ASeries, slot) then Exit;
   if TreemapAnimating(ASeries) then Exit;
   if not ((Abs(ADX) > 3) or (Abs(ADY) > 3)) then Exit;
   nd := FTreemaps[slot].Nodes[0];
-  p := TJSONObject.Create;
+  { the view's own payload, the event's numbers as JavaScript prints them }
+  p := TreemapRoamPayload('treemapMove', ASeries, nd.X + ADX, nd.Y + ADY, nd.W, nd.H, js);
   try
-    p.Strings['type'] := 'treemapMove';
-    p.Integers['seriesIndex'] := ASeries;
-    r := TJSONObject.Create;
-    r.Floats['x'] := nd.X + ADX;
-    r.Floats['y'] := nd.Y + ADY;
-    r.Floats['width'] := nd.W;
-    r.Floats['height'] := nd.H;
-    p.Objects['rootRect'] := r;
-    { the event's numbers as JavaScript prints them }
-    js := '{"type":"treemapMove","seriesIndex":' + IntToStr(ASeries)
-      + ',"rootRect":{"x":' + TyJsNumberToString(nd.X + ADX)
-      + ',"y":' + TyJsNumberToString(nd.Y + ADY)
-      + ',"width":' + TyJsNumberToString(nd.W)
-      + ',"height":' + TyJsNumberToString(nd.H) + '}}';
     DoTreemapAction(p.Strings['type'], p, js);
     Result := True;
     EmitUpdated;
@@ -1312,7 +1323,7 @@ var
   bx: TTyXYWH;
   cur, nz, zs, mx, my, m4, m5, x, y, w, h: Double;
   js: string;
-  p, r: TJSONObject;
+  p: TJSONObject;
 begin
   Result := False;
   if not TmRowsOf(ASeries, slot) then Exit;
@@ -1341,19 +1352,8 @@ begin
     y := y + h;
     h := -h;
   end;
-  p := TJSONObject.Create;
+  p := TreemapRoamPayload('treemapRender', ASeries, x, y, w, h, js);
   try
-    p.Strings['type'] := 'treemapRender';
-    p.Integers['seriesIndex'] := ASeries;
-    r := TJSONObject.Create;
-    r.Floats['x'] := x;
-    r.Floats['y'] := y;
-    r.Floats['width'] := w;
-    r.Floats['height'] := h;
-    p.Objects['rootRect'] := r;
-    js := '{"type":"treemapRender","seriesIndex":' + IntToStr(ASeries)
-      + ',"rootRect":{"x":' + TyJsNumberToString(x) + ',"y":' + TyJsNumberToString(y)
-      + ',"width":' + TyJsNumberToString(w) + ',"height":' + TyJsNumberToString(h) + '}}';
     DoTreemapAction(p.Strings['type'], p, js);
     Result := True;
     EmitUpdated;

@@ -239,6 +239,31 @@ const disp = (pred, nth, aim, dx, dy) => chart => {
   const p = centre(displayFind(chart, pred, nth, aim), dx, dy);
   return { x: p[0], y: p[1], aim };
 };
+// [R2-I1] a point OFF px off the tree edge into node D (the node's __edge,
+// from its parent) a quarter of the way along it (where the curve is not its
+// chord), along the curve's normal: the edge is no
+// silent element (TreeView.drawEdge), Path.contain takes its stroke within
+// max(lineWidth, 5) / 2
+const treeEdge = (s, d, off, aim) => chart => {
+  const sym = chart.getModel().getSeriesByIndex(s).getData().getItemGraphicEl(d);
+  must(sym && sym.__edge, 'no tree edge into ' + d);
+  const e = sym.__edge;
+  e.updateTransform();
+  const m = e.getComputedTransform();
+  const pt = t => {
+    const p = e.pointAt(t);
+    return m ? [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]] : p;
+  };
+  const a = pt(0.24);
+  const b = pt(0.26);
+  const c = pt(0.25);
+  let tx = b[0] - a[0];
+  let ty = b[1] - a[1];
+  const len = Math.hypot(tx, ty);
+  tx /= len;
+  ty /= len;
+  return { x: Math.round(c[0] - ty * off), y: Math.round(c[1] + tx * off), aim };
+};
 const mv = a => ({ type: 'move', at: a });
 const down = a => ({ type: 'down', at: a });
 const up = a => ({ type: 'up', at: a });
@@ -430,6 +455,14 @@ const CASES = [
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] }] },
     steps: [mv(at(300, 200, 'the area')), { type: 'action', payload: { type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'rect', brushMode: 'single' } } },
       mv(at(300, 200, 'the area, the brush on')), down(at(300, 200, 'press')), up(at(300, 200, 'release under the brush')), mv(at(305, 200, 'a move after'))] },
+  { id: 'tree-edges',
+    note: '[R2-I1] a tree edge is a target of no data: pointer on it (the prototype\'s -- not the cursor of the node it leads to), within max(lineWidth, 5) / 2 of its curve; off it the roam grabs. The edge into x is 1.5 wide (reach 2.5), the one into y 8 (reach 4); a press on an edge still pans',
+    option: { animation: false, series: [{ type: 'tree', roam: true, expandAndCollapse: false, top: 60, bottom: 60, left: 80, right: 120, symbolSize: 12, label: { show: false },
+      data: [{ name: 'root', children: [{ name: 'x', cursor: 'help' }, { name: 'y', lineStyle: { width: 8 } }] }] }] },
+    steps: [mv(treeEdge(0, 2, 0, 'on the edge into x')), mv(treeEdge(0, 2, 1, '1 px off the edge into x')), mv(treeEdge(0, 2, 5, '5 px off the edge into x')),
+      mv(treeEdge(0, 3, 2, '2 px off the edge into y')), mv(treeEdge(0, 3, 7, '7 px off the edge into y')),
+      down(treeEdge(0, 2, 0, 'press on the edge into x')), mv(chart => { const p = treeEdge(0, 2, 0, '')(chart); return { x: p.x + 20, y: p.y + 10, aim: 'panning' }; }),
+      up(chart => { const p = treeEdge(0, 2, 0, '')(chart); return { x: p.x, y: p.y, aim: 'release on the edge where it went' }; })] },
 ];
 
 // ---------- the picture cases ----------
@@ -605,6 +638,9 @@ function check(g) {
     ['roam-overlap', 15, 'grabbing', null], ['roam-overlap', 16, 'grab', null],
     ['roam-overlap-z', 3, 'default', null], ['roam-overlap-z', 7, 'grab', null],
     ['roam-globalpan', 2, 'crosshair', null], ['roam-globalpan', 4, 'grab', null], ['roam-globalpan', 5, 'crosshair', null],
+    // [R2-I1] a tree edge
+    ['tree-edges', 0, 'pointer', 'bezier-curve'], ['tree-edges', 1, 'pointer', 'bezier-curve'], ['tree-edges', 2, 'grab', null],
+    ['tree-edges', 3, 'pointer', 'bezier-curve'], ['tree-edges', 4, 'grab', null], ['tree-edges', 6, 'grabbing', null],
   ];
   let n = 0;
   for (const [id, i, c, h] of expect) {

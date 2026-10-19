@@ -1065,6 +1065,13 @@ function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 { [F6b] an SVG map element's zrender contain (ZrHit) at a point }
 function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
+{ [R2-I1] A SYMBOL'S TARGET in two parts [Batch 142]: the pen's own reach,
+  upstream's (Path.contain strokes with the line width, max(width, 5)
+  without a fill; nothing without a stroke), and the rest of the four
+  logical px as the port's pad (HitPadLogical), which a coarse pointer
+  leaves out. Moved here from the marks so a graph's and a tree's node take
+  it too [they had a fixed 4 px of slop]. }
+procedure TySymbolHitSlop(var AEl: TTyChartElement);
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
@@ -1503,6 +1510,22 @@ begin
   finally
     TyZrRestoreFpu(old);
   end;
+end;
+
+procedure TySymbolHitSlop(var AEl: TTyChartElement);
+const
+  cSymbolTargetLogical = 4;
+var reach: Double;
+begin
+  reach := 0;
+  if AEl.Style.StrokeWidthLogical > 0 then
+  begin
+    if AEl.Style.HasFill then reach := AEl.Style.StrokeWidthLogical / 2
+    else reach := Max(AEl.Style.StrokeWidthLogical, Double(5)) / 2;
+  end;
+  if reach > cSymbolTargetLogical then reach := cSymbolTargetLogical;
+  AEl.HitSlopLogical := reach;
+  AEl.HitPadLogical := cSymbolTargetLogical - reach;
 end;
 
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;

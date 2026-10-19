@@ -41,6 +41,8 @@ type
     function Frame: TTyPaintList;
     function Primary: TTyChartColor;
     procedure Update;
+    { [R2-I1] the event target under a point }
+    function TargetAt(AX, AY: Integer): TTyChartEventTarget;
   end;
 
   TSkLogger = class
@@ -103,6 +105,7 @@ type
     procedure TestAHoveredMarkerTakesNoOverlay;
     { [R2-I1] }
     procedure TestAHoveredMarkerLabelIsLaidOutByItsEmphasisTextConfig;
+    procedure TestATreeEdgeIsATargetOfNoData;
   end;
 
 implementation
@@ -244,6 +247,11 @@ end;
 function TSkProbe.Primary: TTyChartColor;
 begin
   Result := StPrimaryInk;
+end;
+
+function TSkProbe.TargetAt(AX, AY: Integer): TTyChartEventTarget;
+begin
+  Result := EventTargetAt(AX, AY);
 end;
 
 procedure TSkProbe.Update;
@@ -1181,6 +1189,56 @@ begin
     AssertEquals(parts[k] + ' ink', IntToHex(want[k].Caption.Colour, 8), IntToHex(got[k].Caption.Colour, 8));
   end;
   AssertTrue('the turn is the config''s', Abs(got[0].Caption.RotationRad) > 0.5);
+end;
+
+{ [R2-I1] A TREE EDGE IS NO SILENT ELEMENT (TreeView.drawEdge): the pointer
+  on it finds the edge -- its curve, within max(lineWidth, 5) / 2 of it, a
+  quarter of the way along where the curve is off its chord -- and the
+  chart reads no datum there (no ecData: no tooltip, no event, no
+  dispatcher) and shows the prototype's pointer, not the cursor of the node
+  the edge leads to }
+procedure TAdvChartStatesMarksTest.TestATreeEdgeIsATargetOfNoData;
+var
+  k, e: Integer;
+  el: TTyChartElement;
+  t, mt, x, y: Double;
+  c: TTyPathCmd;
+  x0, y0: Double;
+  tg: TTyChartEventTarget;
+begin
+  NewChart(camOff);
+  Load('{"animation":false,"series":[{"type":"tree","expandAndCollapse":false,"top":60,"bottom":60,'
+    + '"left":80,"right":120,"symbolSize":12,"label":{"show":false},'
+    + '"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y","cursor":"help"}]}]}]}');
+  e := -1;
+  for k := 0 to FChart.List.Count - 1 do
+    if FChart.List.Element(k).Anim.Role = carTreeEdge then
+    begin
+      e := k;
+      Break;
+    end;
+  AssertTrue('an edge', e >= 0);
+  el := FChart.List.Element(e);
+  AssertFalse('not silent', el.Silent);
+  AssertEquals('a curve', 2, Length(el.Shape.Cmds));
+  { a quarter of the way along the cubic }
+  x0 := el.Shape.Cmds[0].X;
+  y0 := el.Shape.Cmds[0].Y;
+  c := el.Shape.Cmds[1];
+  t := 0.25;
+  mt := 1 - t;
+  x := mt * mt * mt * x0 + 3 * mt * mt * t * c.X1 + 3 * mt * t * t * c.X2 + t * t * t * c.X;
+  y := mt * mt * mt * y0 + 3 * mt * mt * t * c.Y1 + 3 * mt * t * t * c.Y2 + t * t * t * c.Y;
+  AssertEquals('the list finds the edge there', e,
+    FChart.List.HitTestElement(Round(x), Round(y), 96, False));
+  AssertFalse('the chart reads no datum there',
+    TyChartDatumValid(FChart.HitTestAt(Round(x), Round(y))));
+  tg := FChart.TargetAt(Round(x), Round(y));
+  AssertTrue('a target', tg.Id <> 0);
+  AssertFalse('of no data', tg.HasData);
+  AssertEquals('and no dispatcher', 0, tg.HdKind);
+  FChart.Move(Round(x), Round(y));
+  AssertEquals('the prototype''s cursor', 'pointer', FChart.CursorName);
 end;
 
 initialization

@@ -1070,8 +1070,6 @@ end;
   or a three-pixel line is hittable only along its centre line -- half of
   zrender's max(pen, 5) [Batch 90]. }
 const
-  cHitSlopSymbolLogical = 4;
-
   { zrender's strokeContainThreshold [Batch 90] }
   cLineContainThreshold: Double = 5;
 
@@ -1081,17 +1079,9 @@ const
   which a coarse pointer leaves out. Together they are the four px the
   target has always had. }
 procedure SymbolHitSlop(var AEl: TTyChartElement);
-var reach: Double;
 begin
-  reach := 0;
-  if AEl.Style.StrokeWidthLogical > 0 then
-  begin
-    if AEl.Style.HasFill then reach := AEl.Style.StrokeWidthLogical / 2
-    else reach := Max(AEl.Style.StrokeWidthLogical, Double(5)) / 2;
-  end;
-  if reach > cHitSlopSymbolLogical then reach := cHitSlopSymbolLogical;
-  AEl.HitSlopLogical := reach;
-  AEl.HitPadLogical := cHitSlopSymbolLogical - reach;
+  { [R2-I1] the shared split (the graph's and the tree's nodes take it too) }
+  TySymbolHitSlop(AEl);
 end;
 
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;

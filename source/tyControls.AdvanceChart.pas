@@ -2955,6 +2955,8 @@ type
     procedure TreemapClick(ASeries, AX, AY: Integer);
     procedure TreemapCrumbSelect(ASeries, AIndex: Integer);
     { [R2-B] the payload the treemap view dispatches itself }
+    function TreemapRoamPayload(const AType: string; ASeries: Integer;
+      AX, AY, AW, AH: Double; out AJs: string): TJSONObject;
     function TreemapViewPayload(const AType: string; ASeries: Integer;
       const AId: string): TJSONObject;
     function TreemapPan(ASeries, ADX, ADY: Integer): Boolean;

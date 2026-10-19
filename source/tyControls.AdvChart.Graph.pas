@@ -6607,7 +6607,9 @@ begin
     { THE ROW IT WAS WRITTEN AT AS WELL: under a legend filter the two differ,
       and what a datum reports is the author's numbering. }
     el.Datum := TyChartDatum(ASeriesIndex, ANodes[i].Row, ANodes[i].RawRow);
-    el.HitSlopLogical := 4;
+    { [R2-I1] a Symbol path: upstream's reach and the port's symbol pad [was:
+      a fixed 4 px, upstream's answer to no pointer] }
+    TySymbolHitSlop(el);
     { A SYMBOL'S POP-IN, the scatter's (Symbol.ts:184-200): the path scales
       from nothing to its half size about its place and fades in, at the
       node's row; G[2..3] that half size, which is also what a state's
