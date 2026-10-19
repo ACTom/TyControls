@@ -161,6 +161,12 @@ type
     GradBox: TTyXYWH;
     FillEvenOdd: Boolean;
     DashLogical: TTyDoubleArray;
+    { [R2-I4] THE WORD THE DASH WAS WRITTEN AS: 0 lengths as they are (or
+      none), 1 'dashed', 2 'dotted'. zrender keeps the word in the style and
+      the canvas normalises it against the width it strokes at, frame by
+      frame: where a state tweens the width, the dash follows it
+      (TyDashOfWord). }
+    DashWord: Byte;
     { [R2-F] the dash's phase, LOGICAL px: zrender's lineDashOffset }
     DashOffsetLogical: Double;
     Alpha: Double;                    // 0..1; 1 = opaque
@@ -1124,6 +1130,11 @@ procedure TyPatternMatrix(const APat: TTyChartPattern; out AM: TTyDoubleArray);
 function TyGrowByStroke(const ABox: TTyXYWH; AHasFill: Boolean;
   ALineWidth: Double): TTyXYWH;
 
+{ [R2-I4] normalizeLineDash of a WORD (TTyChartStyle.DashWord) against the
+  width drawn now: 'dashed' [4w, 2w], 'dotted' [w]; nothing for 0 or for a
+  width that is not above nought. }
+function TyDashOfWord(AWord: Byte; AWidthLogical: Double): TTyDoubleArray;
+
 { A box as zrender's BoundingRect holds it: x, y and max - min. }
 function TyRectToXYWH(const ARect: TTyRectF): TTyXYWH;
 
@@ -1670,6 +1681,25 @@ begin
   Result.H := ABox.H + w;
   Result.X := ABox.X - w / 2;
   Result.Y := ABox.Y - w / 2;
+end;
+
+function TyDashOfWord(AWord: Byte; AWidthLogical: Double): TTyDoubleArray;
+begin
+  Result := nil;
+  if not (AWidthLogical > 0) then Exit;
+  case AWord of
+    1:
+      begin
+        SetLength(Result, 2);
+        Result[0] := 4 * AWidthLogical;
+        Result[1] := 2 * AWidthLogical;
+      end;
+    2:
+      begin
+        SetLength(Result, 1);
+        Result[0] := AWidthLogical;
+      end;
+  end;
 end;
 
 function TyRectToXYWH(const ARect: TTyRectF): TTyXYWH;

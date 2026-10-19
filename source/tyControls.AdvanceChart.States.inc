@@ -155,6 +155,9 @@ begin
       AEl.Style.DashLogical := TyStDashOf(c, c.Num[stkLineWidth])
     else
       AEl.Style.DashLogical := TyStDashOf(c, AEl.Style.StrokeWidthLogical);
+    { [R2-I4] a word stays a word: the frame measures it against the width
+      it draws (TyAnimApplyState) }
+    AEl.Style.DashWord := TyDashWord(TTyOptDash(Round(c.Num[stkDash])));
   end;
   if AProxied then
   begin
@@ -201,6 +204,10 @@ begin
   if TyStHasColour(c, stkStroke)
     or not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]) then
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+  { [R2-I4] A DASH WRITTEN AS A WORD, the state's or the rest's, against the
+    width the state draws [was: the rest's word kept the rest's lengths] }
+  if AEl.Style.DashWord <> 0 then
+    AEl.Style.DashLogical := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical);
   if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then AEl.Style.Alpha := c.Num[stkOpacity];
   AEl.Z2 := Round(c.Num[stkZ2]);
   StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);

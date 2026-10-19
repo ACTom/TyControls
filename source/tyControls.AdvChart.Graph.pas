@@ -6336,6 +6336,7 @@ var
       Exit;
     AEl.Style.DashLogical := TyDashPattern(b.Dash, b.DashLogical,
       AEl.Style.StrokeWidthLogical);
+    AEl.Style.DashWord := TyDashWord(b.Dash);
     AEl.Style.DashOffsetLogical := b.DashOffset;
   end;
 
@@ -6598,6 +6599,9 @@ begin
     el.Style.StrokeWidthLogical := TyGraphEdgeWidth(ASpec, AEdges[i]);
     el.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[i]);
     el.Style.DashLogical := TyGraphEdgeDash(ASpec, AEdges[i]);
+    { [R2-I4] the word, measured again where a state tweens the width }
+    if AEdges[i].HasOwnDash then el.Style.DashWord := TyDashWord(AEdges[i].OwnDash)
+    else el.Style.DashWord := TyDashWord(ASpec.LineDash);
     el.Style.DashOffsetLogical := TyGraphEdgeDashOffset(ASpec, AEdges[i]);
     el.Z := ASpec.Z;
     el.Z2 := ASpec.Z2;

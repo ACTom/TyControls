@@ -1194,6 +1194,9 @@ begin
   Result.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
   Result.Style.DashLogical := TyDashPattern(AVisual.Dash, AVisual.DashExplicit,
     AVisual.StrokeWidthLogical);
+  { [R2-I4] and the word it was, which a state's tweening width measures
+    again frame by frame }
+  Result.Style.DashWord := TyDashWord(AVisual.Dash);
   Result.Style.DashOffsetLogical := AVisual.DashOffset;
   { `itemStyle.opacity` is a whole-element alpha and MULTIPLIES the
     colour's own -- upstream writes it to globalAlpha, so an 80% opacity
@@ -4267,6 +4270,7 @@ begin
     el := LargeElement(ABg, v, ABinding.SeriesIndex);
     el.Silent := True;
     el.Style.DashLogical := nil;
+    el.Style.DashWord := 0;
     if col.Clip then
     begin
       el.HasClip := True;
@@ -4283,6 +4287,7 @@ begin
     the whole batch -- every chunk of a progressive one too [F4a] }
   el.Style.Decal := AVisual.Decal;
   el.Style.DashLogical := nil;
+  el.Style.DashWord := 0;
   el.Z2 := AVisual.Z2 + 1;
   if col.Clip then
   begin

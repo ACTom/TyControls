@@ -662,18 +662,23 @@ begin
         FloatToStr(fel.Caption.X), FloatToStr(fel.Caption.Y), FloatToStr(NumOf(fv)),
         FloatToStr(NumOf(rv))]), AWhere + id + 'place');
   end;
-  { [R2-B] A PATH'S DASH (a dash case): normalizeLineDash's lengths, as the
-    list draws them }
+  { [R2-B] A PATH'S DASH (a dash case): normalizeLineDash's lengths, as
+    drawn -- [R2-I4] the frame's where there is one (a word follows the width
+    a state tweens), the list's otherwise [was: the list's] }
   if ValueAt(AEl, 'dash', ASample, fv) then
   begin
+    if (FChart.Frame <> nil) and (FChart.Frame.Count = FChart.List.Count) then
+      fel := FChart.Frame.Element(idx)
+    else
+      fel := el;
     got := 'null';
-    if Length(el.Style.DashLogical) > 0 then
+    if Length(fel.Style.DashLogical) > 0 then
     begin
       got := '[';
-      for j := 0 to High(el.Style.DashLogical) do
+      for j := 0 to High(fel.Style.DashLogical) do
       begin
         if j > 0 then got := got + ',';
-        got := got + TyJsNumberToString(el.Style.DashLogical[j]);
+        got := got + TyJsNumberToString(fel.Style.DashLogical[j]);
       end;
       got := got + ']';
     end;

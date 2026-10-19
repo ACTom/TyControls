@@ -1537,15 +1537,24 @@ begin
       if not IsNan(AVisual.RowLineWidth[raw]) then
         el.Style.StrokeWidthLogical := AVisual.RowLineWidth[raw];
       if AVisual.RowLineDash[raw] <> todNone then
+      begin
         el.Style.DashLogical := TyDashPattern(AVisual.RowLineDash[raw],
-          AVisual.RowLineDashExplicit[raw], el.Style.StrokeWidthLogical)
+          AVisual.RowLineDashExplicit[raw], el.Style.StrokeWidthLogical);
+        el.Style.DashWord := TyDashWord(AVisual.RowLineDash[raw]);
+      end
       else
+      begin
         el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
           el.Style.StrokeWidthLogical);
+        el.Style.DashWord := TyDashWord(AVisual.LineDash);
+      end;
     end
     else
+    begin
       el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
         el.Style.StrokeWidthLogical);
+      el.Style.DashWord := TyDashWord(AVisual.LineDash);
+    end;
     { [R2-I2] its phase, key by key the same way }
     el.Style.DashOffsetLogical := AVisual.LineDashOffset;
     if (raw >= 0) and (raw <= High(AVisual.RowLineDashOffsetSet))
