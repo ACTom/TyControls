@@ -160,7 +160,9 @@ begin
   { The whole no-data contract in one line: a missing value must not be a
     number, on any of the four dimension types. }
   AssertTrue('float', IsNan(TyParseDataValue(TyDataNone, ddtFloat)));
-  AssertTrue('int', IsNan(TyParseDataValue(TyDataNone, ddtInt)));
+  { [R2-G: an 'int' column is an Int32Array upstream -- its gap is the
+    nought ToInt32 makes of NaN] }
+  AssertEquals('int', 0, TyParseDataValue(TyDataNone, ddtInt), 0);
   AssertTrue('time', IsNan(TyParseDataValue(TyDataNone, ddtTime)));
 end;
 
@@ -210,7 +212,9 @@ begin
   AssertEquals('positive', 3, TyParseDataValue(TyDataNum(3.7), ddtInt), 0);
   AssertEquals('negative', -3, TyParseDataValue(TyDataNum(-3.7), ddtInt), 0);
   AssertEquals('from text', 3, TyParseDataValue(TyDataText('3.7'), ddtInt), 0);
-  AssertTrue('a gap survives truncation', IsNan(TyParseDataValue(TyDataNone, ddtInt)));
+  { [R2-G: an Int32Array holds no gap: NaN is nought] }
+  AssertEquals('a gap is nought', 0, TyParseDataValue(TyDataNone, ddtInt), 0);
+  AssertEquals('2^32 + 3 wraps', 3, TyParseDataValue(TyDataNum(4294967299.0), ddtInt), 0);
 end;
 
 procedure TAdvChartDataTest.TestBooleanCountsAsOneOrZero;
@@ -1208,8 +1212,10 @@ begin
     option text, because every JSON number becomes a TyDataNum. }
   AssertTrue('a NaN is a gap, not an exception',
     IsNan(TyParseDataValue(TyDataNum(NaN), ddtTime)));
-  AssertTrue('so is an infinity',
-    IsNan(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
+  { [R2-G: upstream keeps an infinity -- a number is not parsed -- and the
+    time axis' extent then has no finite end and goes blank] }
+  AssertTrue('an infinity is kept',
+    IsInfinite(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
   { A number past what an Int64 can hold is still a number: nothing rounds
     it on the way in any more, so there is nothing for it to overflow.
     [Revised in batch 42: this was a gap, when the branch still rounded.] }

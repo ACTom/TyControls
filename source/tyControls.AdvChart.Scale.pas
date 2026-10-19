@@ -404,6 +404,7 @@ type
       while there is none }
     FByTick, FByOrdinal: TTyIntegerArray;
     FSorted: Boolean;
+    FOverData: Boolean;
   public
     constructor Create;
     { The one place the extent comes from: [0, CategoryCount-1]. NEVER from the
@@ -445,6 +446,10 @@ type
     procedure SetSortInfo(const AOrdinals: TTyIntegerArray; ASet: Boolean);
     property Sorted: Boolean read FSorted;
     property ByTick: TTyIntegerArray read FByTick;
+    { blank, and yet over a window: an axis declared `data: []`, whose ends
+      are the series data's -- it counts its categories and has a band
+      [R2-G] }
+    property OverData: Boolean read FOverData write FOverData;
 
     function Normalize(AValue: Double): Double; override;
     function Denormalize(ANorm: Double): Double; override;
@@ -1739,7 +1744,10 @@ end;
 function TTyOrdinalScale.Count: Integer;
 var e: TTyRange;
 begin
-  if Blank then Exit(0);
+  { OrdinalScale.count() is the extent's: an axis declared with `data: []`
+    is blank over the window the series data spans, and its bars still take
+    a band of it [R2-G] }
+  if Blank and not FOverData then Exit(0);
   e := GetExtent;
   if IsNan(e.Start) or IsNan(e.Stop) then Exit(0);
   { INCLUSIVE at both ends -- [0,5] is six categories. }

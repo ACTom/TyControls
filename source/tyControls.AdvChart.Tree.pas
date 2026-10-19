@@ -130,9 +130,17 @@ procedure TyTreeFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
 { SunburstSeries' completeTreeValue, by row: a node without a value (null,
   NaN, a non-number) takes its children's sum, a negative one 0, the virtual
   root the sum of the roots. An array value's first entry is its value.
-  String values are numbers here -- upstream's JS `+` concatenates them.
-  [Batch 75] }
+  [Batch 75] The value as the store parses it (parseDataValue: null and ''
+  are not numbers, anything else Number()). }
 function TyTreeCompletedValues(const AHier: TTyHierarchy): TTyDoubleArray;
+{ The same completion as JavaScript does it, one JSON value per row (the
+  caller frees them) [R2-G]: the sum starts at the number 0 and adds each
+  child's completed value with JS `+` -- a string anywhere makes the rest a
+  concatenation ('5' and '3' are '053', which the store reads as 53), an
+  array adds as its joined text, a boolean as 0 or 1; the node's own value
+  stands unless it is null or isNaN, and is 0 when it compares below 0.
+  TreemapSeries' completeTreeValue is the same code. }
+function TyTreeCompletedRaw(const AHier: TTyHierarchy): TJSONArray;
 function TyTreeSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer): TTyTreeSpec;
 { TreeSeries.getInitialData's isExpand. }
 procedure TyTreeApplyExpand(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -299,34 +307,177 @@ begin
   end;
 end;
 
-function TyTreeCompletedValues(const AHier: TTyHierarchy): TTyDoubleArray;
+{ ---- completeTreeValue's JavaScript ---- }
+
+type
+  TJsPrimKind = (jpNum, jpStr, jpBool, jpNull, jpUndef);
+  TJsPrim = record
+    Kind: TJsPrimKind;
+    Num: Double;
+    Str: string;
+  end;
+
+function PrimStr(const P: TJsPrim): string; forward;
+
+{ ToPrimitive: an array is its join (a null or absent element as nothing),
+  an object '[object Object]' }
+function PrimOf(A: TJSONData): TJsPrim;
+var i: Integer; e: TJsPrim;
+begin
+  Result.Num := NaN;
+  Result.Str := '';
+  if A = nil then
+  begin
+    Result.Kind := jpUndef;
+    Exit;
+  end;
+  case A.JSONType of
+    jtNull: Result.Kind := jpNull;
+    jtNumber:
+      begin
+        Result.Kind := jpNum;
+        Result.Num := A.AsFloat;
+      end;
+    jtString:
+      begin
+        Result.Kind := jpStr;
+        Result.Str := A.AsString;
+      end;
+    jtBoolean:
+      begin
+        Result.Kind := jpBool;
+        if A.AsBoolean then Result.Num := 1 else Result.Num := 0;
+      end;
+    jtArray:
+      begin
+        Result.Kind := jpStr;
+        for i := 0 to A.Count - 1 do
+        begin
+          if i > 0 then Result.Str := Result.Str + ',';
+          if (A.Items[i] <> nil) and (A.Items[i].JSONType <> jtNull) then
+          begin
+            e := PrimOf(A.Items[i]);
+            Result.Str := Result.Str + PrimStr(e);
+          end;
+        end;
+      end;
+  else
+    Result.Kind := jpStr;
+    Result.Str := '[object Object]';
+  end;
+end;
+
+function PrimStr(const P: TJsPrim): string;
+begin
+  case P.Kind of
+    jpNum: Result := TyJsNumberToString(P.Num);
+    jpStr: Result := P.Str;
+    jpBool: if P.Num <> 0 then Result := 'true' else Result := 'false';
+    jpNull: Result := 'null';
+  else
+    Result := 'undefined';
+  end;
+end;
+
+function PrimNum(const P: TJsPrim): Double;
+begin
+  case P.Kind of
+    jpNum, jpBool: Result := P.Num;
+    jpStr: Result := TyJsToNumber(P.Str);
+    jpNull: Result := 0;
+  else
+    Result := NaN;
+  end;
+end;
+
+function TyTreeCompletedRaw(const AHier: TTyHierarchy): TJSONArray;
 var
   row, k: Integer;
-  sum, v: Double;
+  sum, c: TJsPrim;
+  own: TJSONData;
+  cell: array of TJSONData;
+  mask: TFPUExceptionMask;
+begin
+  Result := TJSONArray.Create;
+  cell := nil;
+  SetLength(cell, Length(AHier.Nodes));
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    { children's rows come after their parent's: bottom up is post-order }
+    for row := High(AHier.Nodes) downto 0 do
+    begin
+      sum.Kind := jpNum;
+      sum.Num := 0;
+      sum.Str := '';
+      for k := 0 to High(AHier.Nodes[row].Children) do
+      begin
+        { `sum += childValue`, the child's completed (first) value }
+        c := PrimOf(cell[AHier.Nodes[row].Children[k]]);
+        if (sum.Kind = jpStr) or (c.Kind = jpStr) then
+        begin
+          sum.Str := PrimStr(sum) + PrimStr(c);
+          sum.Kind := jpStr;
+        end
+        else
+        begin
+          sum.Num := PrimNum(sum) + PrimNum(c);
+          sum.Kind := jpNum;
+        end;
+      end;
+      own := nil;
+      if (row > 0) and (AHier.Nodes[row].Item <> nil)
+        and (AHier.Nodes[row].Item.JSONType = jtObject) then
+      begin
+        own := TJSONObject(AHier.Nodes[row].Item).Find('value');
+        if (own <> nil) and (own.JSONType = jtArray) then
+        begin
+          if own.Count > 0 then own := own.Items[0] else own := nil;
+        end;
+      end;
+      { `thisValue == null || isNaN(thisValue)`: the sum }
+      if (own = nil) or (own.JSONType = jtNull) or IsNan(PrimNum(PrimOf(own))) then
+      begin
+        if sum.Kind = jpStr then cell[row] := TJSONString.Create(sum.Str)
+        else cell[row] := TJSONFloatNumber.Create(sum.Num);
+      end
+      { `thisValue < 0`: its number against nought }
+      else if PrimNum(PrimOf(own)) < 0 then
+        cell[row] := TJSONFloatNumber.Create(0)
+      else
+        cell[row] := own.Clone;
+    end;
+  finally
+    SetExceptionMask(mask);
+  end;
+  for row := 0 to High(cell) do Result.Add(cell[row]);
+end;
+
+function TyTreeCompletedValues(const AHier: TTyHierarchy): TTyDoubleArray;
+var
+  row: Integer;
+  raw: TJSONArray;
   d: TJSONData;
+  mask: TFPUExceptionMask;
 begin
   Result := nil;
   SetLength(Result, Length(AHier.Nodes));
-  { children's rows come after their parent's: bottom up is post-order }
-  for row := High(AHier.Nodes) downto 0 do
-  begin
-    sum := 0;
-    for k := 0 to High(AHier.Nodes[row].Children) do
-      sum := sum + Result[AHier.Nodes[row].Children[k]];
-    v := NaN;
-    if (row > 0) and (AHier.Nodes[row].Item <> nil)
-      and (AHier.Nodes[row].Item.JSONType = jtObject) then
+  raw := TyTreeCompletedRaw(AHier);
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    for row := 0 to High(Result) do
     begin
-      d := TJSONObject(AHier.Nodes[row].Item).Find('value');
-      if (d <> nil) and (d.JSONType = jtArray) then
-      begin
-        if d.Count > 0 then d := d.Items[0] else d := nil;
-      end;
-      if (d <> nil) and (d.JSONType <> jtNull) then v := JsNum(d);
+      d := raw.Items[row];
+      { parseDataValue: null, undefined and '' are not numbers }
+      if (d.JSONType = jtNull) or ((d.JSONType = jtString) and (d.AsString = '')) then
+        Result[row] := NaN
+      else
+        Result[row] := PrimNum(PrimOf(d));
     end;
-    if IsNan(v) then v := sum;
-    if v < 0 then v := 0;
-    Result[row] := v;
+  finally
+    SetExceptionMask(mask);
+    raw.Free;
   end;
 end;
 
@@ -339,12 +490,14 @@ var
   node, nm, d: TJSONData;
   row, k: Integer;
   dims: TTySeriesDimArray;
-  done: TTyDoubleArray;
+  done: TJSONArray;
 begin
   if AStore = nil then Exit;
   hier := TyHierarchyOf(AOption, ASeriesIndex);
   done := nil;
-  if ACompleteValues then done := TyTreeCompletedValues(hier);
+  { the completed values as JavaScript left them -- a concatenated string
+    stays one, for the store to parse and a label's {c} to print [R2-G] }
+  if ACompleteValues then done := TyTreeCompletedRaw(hier);
   AStore.AddDimension('value', ddtFloat);
   SetLength(dims, 1);
   dims[0] := Default(TTySeriesDim);
@@ -363,7 +516,7 @@ begin
     end;
     { THE VIRTUAL ROOT'S VALUE IS COMPLETED TOO -- the sum of what it holds,
       which a treemap's drilled-out root label prints as its c [Batch 83] }
-    if (done <> nil) and (Length(done) > 0) then o.Floats['value'] := done[0];
+    if (done <> nil) and (done.Count > 0) then o.Elements['value'] := done.Items[0].Clone;
     arr.Add(o);
     for row := 1 to High(hier.Nodes) do
     begin
@@ -380,9 +533,9 @@ begin
         begin
           d := o.Find('value');
           if (d <> nil) and (d.JSONType = jtArray) and (d.Count > 0) then
-            TJSONArray(d).Items[0] := TJSONFloatNumber.Create(done[row])
+            TJSONArray(d).Items[0] := done.Items[row].Clone
           else
-            o.Floats['value'] := done[row];
+            o.Elements['value'] := done.Items[row].Clone;
         end;
         arr.Add(o);
       end
@@ -392,6 +545,7 @@ begin
     TyFillSeriesStoreArray(AOption, ASeriesIndex, arr, dims, AStore);
   finally
     arr.Free;
+    done.Free;
   end;
 end;
 
