@@ -6264,11 +6264,10 @@ begin
     end;
     if attr.HasTextColor then Result.TextColor := attr.TextColor;
     if attr.HasAlignment then Result.HAlign := attr.Alignment;
-    { 逐格字体样式:粗体走字重(本库的文字层按字重画,没有独立的 bold 开关),
-      斜体/下划线本库的文字层暂不支持 —— 存得住、但只有粗体画得出来。
-      这一条写在这里而不是悄悄丢掉:存了却不画是最容易的假完成。 }
-    if attr.HasFontStyle and (fsBold in attr.FontStyle) then
-      Result.FontWeight := 700;
+    { 逐格字体样式:粗体走字重;斜体、下划线、删除线作为标志位跟在字重上
+      (TyFontItalic 等,#92),文字层画的时候一起画出来。没勾粗体就保留原字重。 }
+    if attr.HasFontStyle then
+      Result.FontWeight := TyFontWeightWithStyle(Result.FontWeight, attr.FontStyle);
   end;
 
   { **焦点格**要和选区区分开:gsmRow 模式下整行都是选中底色,不区分的话
