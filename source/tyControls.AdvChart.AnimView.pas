@@ -9703,25 +9703,6 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   end;
 
 var
-  nc: Integer;
-  combEl: array of TTyChartElement;
-  combAt: TTyIntegerArray;
-
-  { [R2-D] the element a combining host is, before its first child takes
-    its place in the frame: what its text is laid out on }
-  function CombHostOf(AAt: Integer; out AHost: TTyChartElement): Boolean;
-  var k2: Integer;
-  begin
-    for k2 := 0 to nc - 1 do
-      if combAt[k2] = AAt then
-      begin
-        AHost := combEl[k2];
-        Exit(True);
-      end;
-    Result := False;
-  end;
-
-var
   i, h, k, nx: Integer;
   el, hostS, hostF, tmpEl: TTyChartElement;
   x0, y0, x1, y1, dx, dy, vsx, vsy, vx, vy: Double;
@@ -9735,9 +9716,6 @@ begin
   ADest.Clear;
   extras := nil;
   nx := 0;
-  combEl := nil;
-  combAt := nil;
-  nc := 0;
   for i := 0 to ASource.Count - 1 do
   begin
     { one copy, the one the frame keeps: read in place [P2] }
@@ -9815,16 +9793,6 @@ begin
       a child has its own style -- the element's states are not its }
     if (bp <> nil) and bp.FCombineOn and (Length(bp.FPieces) > 0) then
     begin
-      { [R2-D] combineMorph leaves the host's own path and transform as they
-        are (only the children are drawn): its text is laid out on that }
-      if nc >= Length(combEl) then
-      begin
-        SetLength(combEl, nc * 2 + 4);
-        SetLength(combAt, nc * 2 + 4);
-      end;
-      combEl[nc] := el;
-      combAt[nc] := i;
-      Inc(nc);
       for k := 1 to High(bp.FPieces) do
       begin
         if nx >= Length(extras) then SetLength(extras, nx * 2 + 8);
@@ -9910,9 +9878,7 @@ begin
         or viewMoves) then
     begin
       AnchorOn(ASource.Ref(h)^, el, x0, y0);
-      { [R2-D] a combining host's own shape, not its first child's }
-      if CombHostOf(h, tmpEl) then AnchorOn(tmpEl, el, x1, y1)
-      else AnchorOn(ADest.Ref(h)^, el, x1, y1);
+      AnchorOn(ADest.Ref(h)^, el, x1, y1);
       dx := x1 - x0;
       dy := y1 - y0;
       moved := (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0));
