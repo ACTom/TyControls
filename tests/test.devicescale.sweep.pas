@@ -44,7 +44,8 @@ const
     shell tree, whose drive icons are drawn on the canvas after the layer (TyDrawImage, Task 16),
     and the panels whose paint cache is still one-times (TTyPaintCache). }
   CKnownUnported: array of string = ('TTyShellTreeView', 'TTyPanel', 'TTyRelativePanel',
-    'TTyCoolBar', 'TTyControlBar');
+    'TTyCoolBar', 'TTyControlBar',
+    'TTyAdvanceChart');   // main: its static cache and layers, plan B Task 10
 
 implementation
 
