@@ -1654,6 +1654,9 @@ begin
         el.Anim.UtOrder := 2 + i;
         el.Anim.UtBase := TTyDoubleArray.Create(3);
         el.Anim.UtNoScale := True;
+        { [R2-I2] its spoke + 1: an update slides it on the proxy of that
+          spoke (TyRadarSymRole) }
+        el.Anim.Sub := i + 1;
         el.Caption.LgSymbol := TyGuideSymbolName(rowSym);
         el.Caption.LgKeepAspect := rowSym.KeepAspect;
         el.Caption.LgG[0] := rowSym.WidthPx;

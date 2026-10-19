@@ -20,6 +20,9 @@ unit test.advchart.animupdate4;
               again, every symbol pops in again);
     treeData  a tree's data merge: the diff by name, the removals walking
               the old tree.
+    radar     [R2-I2] a radar's update: every symbol made anew at the
+              polyline's point now and sliding to its new one at update
+              timing and its row, its label riding it; the rings' points.
 
   This replays every case through the control and compares, bit for bit,
   the proxies the control animates (and, for a static piece or a node's
@@ -30,6 +33,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Anim,
      tyControls.AdvChart.AnimView, tyControls.AdvChart.Shape, tyControls.AdvChart.Geo,
+     tyControls.AdvChart.AnimOpt,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax,
      test.advchart.graphic;
@@ -66,6 +70,9 @@ type
     procedure ProbeTm(ARec: TJSONObject);
     procedure ProbeGeo(ARec: TJSONObject);
     procedure ProbeLine(ARec: TJSONObject);
+    procedure ProbeRadar(ARec: TJSONObject);
+    function HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
+    function HDur300(ADataIndex: Integer; AHasIndex: Boolean): Double;
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
@@ -79,6 +86,7 @@ type
     procedure TestAForceLayoutGoesOnFromItsPreservedPointsAsUpstream;
     procedure TestAStepChangeEntersAgainAsUpstream;
     procedure TestATreesDataMergeWalksTheOldTreeAsUpstream;
+    procedure TestARadarsSymbolsSlideAsUpstream;
   end;
 
 implementation
@@ -134,7 +142,38 @@ begin
   if IsNull(AData) then Result := NaN else Result := FromHex(AData.AsString);
 end;
 
+{ [R2-I2] {"$fn": name} -> '@name', in place, everywhere: the control's
+  timing registry knows the name }
+procedure Au4Fns(AData: TJSONData);
+var
+  i: Integer;
+  child: TJSONData;
+begin
+  if (AData = nil) or not (AData.JSONType in [jtArray, jtObject]) then Exit;
+  for i := 0 to AData.Count - 1 do
+  begin
+    child := AData.Items[i];
+    if (child.JSONType = jtObject) and (TJSONObject(child).Count = 1)
+      and (TJSONObject(child).Find('$fn') <> nil) then
+      AData.Items[i] := TJSONString.Create('@' + TJSONObject(child).Strings['$fn'])
+    else
+      Au4Fns(child);
+  end;
+end;
+
 { ==================== the oracle ==================== }
+
+function TAdvChartAnimUpdate4OracleTest.HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
+begin
+  { (idx) => idx * 30; undefined * 30 is not a number }
+  if AHasIndex then Result := ADataIndex * 30 else Result := NaN;
+end;
+
+function TAdvChartAnimUpdate4OracleTest.HDur300(ADataIndex: Integer; AHasIndex: Boolean): Double;
+begin
+  { (idx) => 300 + idx * 400 }
+  if AHasIndex then Result := 300 + ADataIndex * 400 else Result := NaN;
+end;
 
 procedure TAdvChartAnimUpdate4OracleTest.SetUp;
 var
@@ -156,6 +195,9 @@ begin
   finally
     sl.Free;
   end;
+  Au4Fns(FRoot);
+  TyChartRegisterAnimTiming('idx*30', @HIdx30);
+  TyChartRegisterAnimTiming('dur:300+idx*400', @HDur300);
   maps := TJSONObject(FRoot).Arrays['maps'];
   for i := 0 to maps.Count - 1 do
     AssertTrue('the map registers', TyChartRegisterMap(maps.Objects[i].Strings['name'],
@@ -174,6 +216,8 @@ var
 begin
   if FChart <> nil then FChart.Measurer := nil;
   FreeAndNil(FChart);
+  TyChartUnregisterAnimTiming('idx*30');
+  TyChartUnregisterAnimTiming('dur:300+idx*400');
   if FRoot <> nil then
   begin
     maps := TJSONObject(FRoot).Arrays['maps'];
@@ -872,6 +916,130 @@ begin
   end;
 end;
 
+{ ---- [R2-I2] a radar's item: its rings, its symbols where the frame draws
+  them, the labels on them ---- }
+procedure TAdvChartAnimUpdate4OracleTest.ProbeRadar(ARec: TJSONObject);
+var
+  i, s, row, slash, k, j, h: Integer;
+  name: string;
+  leaf, sj, lj: TJSONObject;
+  l: TTyPaintList;
+  el, lab: TTyChartElement;
+  syms: array of Integer;
+  arr: TJSONArray;
+  p: TTyChartAnimProxy;
+  found: Boolean;
+
+  procedure Ring(const AWhat: string; ARole: TTyChartAnimRole; AWant: TJSONArray;
+    AClosedHere: Boolean);
+  var
+    e: TTyChartElement;
+    q, m: Integer;
+  begin
+    Inc(FCompared);
+    if not FrameEl(s, row, ARole, e) then
+    begin
+      Bad(AWhat + ': not drawn');
+      Exit;
+    end;
+    { the area drops the closing point upstream's polygon carries }
+    m := Length(e.Shape.Points);
+    if not AClosedHere then Inc(m);
+    if m * 2 <> AWant.Count then
+    begin
+      Bad(Format('%s: %d points, upstream %d', [AWhat, m, AWant.Count div 2]));
+      Exit;
+    end;
+    for q := 0 to Length(e.Shape.Points) - 1 do
+    begin
+      SameNum(Format('%s[%d].x', [AWhat, q]), e.Shape.Points[q].X, AWant.Items[q * 2]);
+      SameNum(Format('%s[%d].y', [AWhat, q]), e.Shape.Points[q].Y, AWant.Items[q * 2 + 1]);
+    end;
+  end;
+
+begin
+  l := FChart.Frame;
+  if (l = nil) or (l.Count = 0) then l := FChart.List;
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 2) <> 'rd' then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 3, slash - 3));
+    row := StrToInt(Copy(name, slash + 1, MaxInt));
+    leaf := TJSONObject(ARec.Items[i]);
+    Ring(name + ' line', carRadarLine, leaf.Arrays['line'], True);
+    Ring(name + ' area', carRadarArea, leaf.Arrays['area'], False);
+    { the rings' points are compared above, frame by frame; a tween to the
+      points it already has runs a clip upstream (zrender keeps a track of
+      equal values) and none here -- nothing drawn differs }
+    p := FChart.AnimFindProxy(s, row, 'radarLine');
+    Inc(FCompared);
+    if (leaf.Integers['ln'] = 0) and (p <> nil) and not p.AtFinal then
+      Bad(name + ': the port tweens the polyline, upstream does not');
+    { THE SYMBOLS of the item, in the group's order (their spokes) }
+    syms := nil;
+    for k := 0 to l.Count - 1 do
+    begin
+      el := l.Element(k);
+      if (el.Anim.Role <> carNone) or (el.Anim.UtTag <> 1) or (el.Anim.Sub <= 0)
+        or (el.Anim.Series <> s) or (el.Anim.UtRow <> row) then Continue;
+      SetLength(syms, Length(syms) + 1);
+      syms[High(syms)] := k;
+    end;
+    arr := leaf.Arrays['syms'];
+    Inc(FCompared);
+    if Length(syms) <> arr.Count then
+    begin
+      Bad(Format('%s: %d symbols, upstream %d', [name, Length(syms), arr.Count]));
+      Continue;
+    end;
+    for j := 0 to arr.Count - 1 do
+    begin
+      sj := arr.Objects[j];
+      el := l.Element(syms[j]);
+      SameNum(Format('%s sym%d.x', [name, j]), el.Caption.LgG[5], sj.Find('x'));
+      SameNum(Format('%s sym%d.y', [name, j]), el.Caption.LgG[6], sj.Find('y'));
+      p := FChart.AnimFindProxy(s, row, TyRadarSymRole(el.Anim.Sub - 1));
+      Inc(FCompared);
+      if (sj.Integers['n'] > 0) and ((p = nil) or p.AtFinal) then
+        Bad(Format('%s sym%d: upstream slides it, the port does not', [name, j]))
+      else if (sj.Integers['n'] = 0) and (p <> nil) and not p.AtFinal then
+        Bad(Format('%s sym%d: the port slides it, upstream does not', [name, j]));
+      { ITS LABEL, riding it }
+      if leaf.Arrays['labs'].Items[j].JSONType = jtNull then Continue;
+      lj := leaf.Arrays['labs'].Objects[j];
+      { an empty text paints nothing upstream; here there is no label }
+      if lj.Strings['tx'] = '' then Continue;
+      found := False;
+      for h := 0 to l.Count - 1 do
+      begin
+        lab := l.Element(h);
+        if (lab.Anim.Role = carLabel) and (lab.Anim.HostPlus1 = syms[j] + 1) then
+        begin
+          found := True;
+          Break;
+        end;
+      end;
+      Inc(FCompared);
+      if not found then
+      begin
+        Bad(Format('%s lab%d: a label upstream, none on the symbol here', [name, j]));
+        Continue;
+      end;
+      NearNum(Format('%s lab%d.x', [name, j]), lab.Caption.X, lj.Find('x'), 1e-9);
+      NearNum(Format('%s lab%d.y', [name, j]), lab.Caption.Y, lj.Find('y'), 1e-9);
+      { a frame draws a label faded to nought as no words at all }
+      if lab.Caption.Text = '' then SameNum(Format('%s lab%d.op', [name, j]), 0, lj.Find('op'))
+      else SameNum(Format('%s lab%d.op', [name, j]), lab.Style.Alpha, lj.Find('op'));
+      Inc(FCompared);
+      if lab.Ignore <> lj.Booleans['ig'] then
+        Bad(Format('%s lab%d: ignore %s, upstream %s', [name, j,
+          BoolToStr(lab.Ignore, True), BoolToStr(lj.Booleans['ig'], True)]));
+    end;
+  end;
+end;
+
 procedure TAdvChartAnimUpdate4OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -883,6 +1051,7 @@ begin
     else if AProbes.Strings[i] = 'tm' then ProbeTm(ARec)
     else if AProbes.Strings[i] = 'geo' then ProbeGeo(ARec)
     else if AProbes.Strings[i] = 'line' then ProbeLine(ARec)
+    else if AProbes.Strings[i] = 'radar' then ProbeRadar(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 
@@ -988,6 +1157,11 @@ end;
 procedure TAdvChartAnimUpdate4OracleTest.TestAStepChangeEntersAgainAsUpstream;
 begin
   RunGroup('step', 300);
+end;
+
+procedure TAdvChartAnimUpdate4OracleTest.TestARadarsSymbolsSlideAsUpstream;
+begin
+  RunGroup('radar', 5000);
 end;
 
 procedure TAdvChartAnimUpdate4OracleTest.TestATreesDataMergeWalksTheOldTreeAsUpstream;
