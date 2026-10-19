@@ -132,7 +132,7 @@ On a macOS Retina screen the painter draws at the screen's real pixels: its laye
 No change needed:
 
 - The painter's own methods (`FillBackground`, `StrokeBorder`, `DrawText`, `DrawGlyph`, …) take control coordinates as before.
-- `Bitmap.Canvas2D` comes with an S-times transform already set: control coordinates and line widths as before.
+- `Bitmap.Canvas2D` comes with an S-times transform already set: control coordinates and line widths as before. The painter set that transform, so do not replace it wholesale: `resetTransform` and `setTransform` drop the S from coordinates (on Retina the drawing lands in the top-left quarter, at half size), and `strokeResetTransform` drops it from line widths (lines come out half as thick). For a temporary translate, rotate or scale, wrap it in `save` / `restore` and call `translate`, `rotate` or `scale` in between; if you really must start from scratch, follow it with `scale(P.DeviceScale, P.DeviceScale)`, and put line widths back with `strokeScale`.
 
 Calls that work on `Bitmap` directly (`FillRect`, `PutImage`, `ClipRect`, `DrawLine`, …) count layer pixels, so convert:
 
