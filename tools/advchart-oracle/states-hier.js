@@ -342,6 +342,19 @@ const CASES = [
   { id: 'm-node-click-payload', note: "[R2-B] a click on a leaf (nodeClick zoomToNode): the view's own dispatch, {type, from: its uid, seriesId, targetNode: the TreeNode}",
     option: { animation: false, series: [tmS({ nodeClick: 'zoomToNode' })] },
     steps: [ck(tmrect(0, 4, 'content'))] },
+  // ------------------------------------------------------------------ R2-I3
+  { id: 'g-border', note: "[R2-I3] a node's itemStyle border, the node's own over its category's over the series' (categoryVisual extends the category style, found by name or index; dataStyleTask the item's own): the series #333333 at 2; a by the category k0's NAME (border C3 at 4, opacity 0.6); b its own width 5; c an emptyCircle (its colour at 2 over the ground); d category 0 by index; e the series'. emphasis width 6 and focus self, selectedMode single (the primary border). Hover b, click e, hover c, leave",
+    option: { animation: false, series: [graphS({ itemStyle: { borderColor: '#333333', borderWidth: 2 }, selectedMode: 'single',
+      emphasis: { focus: 'self', itemStyle: { borderWidth: 6 } },
+      categories: [{ name: 'k0', itemStyle: { borderColor: C[3], borderWidth: 4, opacity: 0.6 } }],
+      data: [
+        { name: 'a', x: 100, y: 100, category: 'k0', itemStyle: { color: C[0] } },
+        { name: 'b', x: 300, y: 100, itemStyle: { color: C[1], borderWidth: 5 } },
+        { name: 'c', x: 200, y: 250, symbol: 'emptyCircle', itemStyle: { color: C[2] } },
+        { name: 'd', x: 400, y: 250, category: 0, itemStyle: { color: C[3] } },
+        { name: 'e', x: 400, y: 130, itemStyle: { color: C[4] } },
+      ] })] },
+    steps: [mv(node(0, 1)), ck(node(0, 4)), mv(node(0, 2)), leave()] },
 ];
 
 // ============================================================================
@@ -715,6 +728,9 @@ function checks(fx) {
   const counts = {};
   const count = k => { counts[k] = (counts[k] || 0) + 1; };
   const lift = c => {
+    // [R2-I3] '#rgb' too (an empty symbol's hole, neutral00 '#fff')
+    const m3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+    if (m3) c = '#' + m3[1] + m3[1] + m3[2] + m3[2] + m3[3] + m3[3];
     const m = /^#([0-9a-f]{6})$/i.exec(c);
     if (!m) return null;
     const v = parseInt(m[1], 16);
@@ -738,6 +754,8 @@ function checks(fx) {
             if (/emphasis/.test(n.path.st)) count('graph node emphasis');
             if (/select/.test(n.path.st)) count('graph node selected');
             if (n.hbo) count('graph hbo');
+            // [R2-I3]
+            if (n.path.rest.stroke) count('graph node border');
           });
           s.edges.forEach((e, i) => {
             if (!e) return;
@@ -792,7 +810,7 @@ function checks(fx) {
   const want = ['graph lift', 'graph node blurred', 'graph node emphasis', 'graph node selected', 'graph hbo', 'graph edge selected',
     'graph edge emphasis', 'graph edge key in map', 'tree edge apart', 'tree node blurred', 'tree selected', 'treemap blurred',
     'treemap emphasis', 'treemap selected', 'treemap upper label opacity', 'treemap label opacity', 'crumb emphasis', 'crumb event', 'crumb action',
-    'other blurred by hier'];
+    'other blurred by hier', 'graph node border'];
   for (const k of want) if (!(counts[k] >= 1)) fail('discriminating count ' + k + ' is ' + (counts[k] || 0));
   return { fails, counts };
 }
