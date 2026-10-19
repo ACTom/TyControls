@@ -1130,8 +1130,8 @@ begin
     Exit;
   end;
   { THE AXES that say triggerEvent: a label's box, the name's }
-  if FBuild = nil then Exit;
   meas := nil;
+  if FBuild <> nil then
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
@@ -1228,6 +1228,95 @@ begin
       Result.Model := Default(TTyEventModel);
       Result.Params := TyChartBlankParams;
     end;
+  end;
+  { [R2-F] THE SINGLE AXES that say triggerEvent: AxisBuilder gives a
+    singleAxis' labels and name the same eventData -- componentType
+    'singleAxis', singleAxisIndex -- and a break label its break and the
+    click that expands it (addBreakEventHandler) }
+  for a := 0 to High(FSingles) do
+  begin
+    if (FSingles[a] = nil) or not FSingles[a].View.Shown then Continue;
+    if not TriggersEvent(FOption.ComponentAt('singleAxis', a)) then Continue;
+    axObj := FSingles[a].Axis;
+    if axObj = nil then Continue;
+    spec := @FSingles[a].View.Spec;
+    AxisTextStyles(spec, lblS, nameS);
+    Result.Model.Valid := True;
+    Result.Model.MainType := 'singleAxis';
+    case axObj.AxisType of
+      atCategory: Result.Model.SubType := 'category';
+      atTime: Result.Model.SubType := 'time';
+      atLog: Result.Model.SubType := 'log';
+    else
+      Result.Model.SubType := 'value';
+    end;
+    Result.Model.Index := a;
+    Result.Params.ComponentType := 'singleAxis';
+    Result.Params.ComponentIndex := a;
+    Result.Params.AxisIndex := a;
+    Result.Params.AxisDimension := 'single';
+    if spec^.NamePlacement.Shown
+      and Inside(TyRectF(spec^.NamePlacement.Rect.X, spec^.NamePlacement.Rect.Y,
+        spec^.NamePlacement.Rect.X + spec^.NamePlacement.Rect.W,
+        spec^.NamePlacement.Rect.Y + spec^.NamePlacement.Rect.H)) then
+    begin
+      Result.Id := -((Int64(12) shl 44) + Int64(a) * 100000 + 99999);
+      Result.HasData := True;
+      Result.Params.TargetType := 'axisName';
+      Result.Params.Name := spec^.NamePlacement.Text;
+      Exit;
+    end;
+    for q := 0 to High(spec^.Placements) do
+    begin
+      if not spec^.Placements[q].Shown then Continue;
+      if Length(spec^.Placements[q].Rt) > 0 then
+      begin
+        if not Inside(TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
+          spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)) then Continue;
+      end
+      else
+      begin
+        if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+        fw := 0;
+        fh := 0;
+        if meas <> nil then
+          meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
+            ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
+        if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
+          spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
+      end;
+      Result.Id := -((Int64(12) shl 44) + Int64(a) * 100000 + q);
+      Result.HasData := True;
+      Result.Params.TargetType := 'axisLabel';
+      Result.Params.TickIndex := q;
+      if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
+      begin
+        if spec^.LabelBreakKind[q] = 1 then Result.Params.BreakType := 'start'
+        else Result.Params.BreakType := 'end';
+        if q <= High(spec^.LabelBreakLo) then
+        begin
+          Result.Params.BreakStart := spec^.LabelBreakLo[q];
+          Result.Params.BreakEnd := spec^.LabelBreakHi[q];
+        end;
+        { its click expands the break, by singleAxisIndex [F4a's key] }
+        Result.HdKind := 13;
+        Result.HdSeries := cBreakSingleKey + a;
+        Result.HdRow := spec^.LabelBreakIndex[q];
+      end;
+      if axObj.Scale is TTyOrdinalScale then
+      begin
+        Result.Params.ValueText := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[q]);
+        Result.Params.DataIndex := Round(TTyOrdinalScale(axObj.Scale).TickToOrdinal(spec^.TickValues[q]));
+        Result.Params.RawDataIndex := Result.Params.DataIndex;
+      end
+      else if axObj.Scale is TTyTimeScale then
+        Result.Params.ValueText := TTyTimeScale(axObj.Scale).GetLabel(spec^.TickValues[q])
+      else
+        Result.Params.ValueText := TyAxisTickLabel(axObj, spec^.TickValues[q], False, '');
+      Exit;
+    end;
+    Result.Model := Default(TTyEventModel);
+    Result.Params := TyChartBlankParams;
   end;
 end;
 
