@@ -3020,6 +3020,9 @@ type
     { a re-render: the hover goes; the box stays, frozen, and _keepShow
       arms its timer [F4b] }
     procedure TipReset;
+    { [R2-E] a rebuild where upstream renders no tooltip view (a roam, a
+      node drag, a dataZoom slider's hover): the box frozen, nothing kept }
+    procedure TipResetQuiet;
     procedure TipDropDisplay;
     { [F4b] a new tooltip view (notMerge): the box, the last point and the
       kept pointer all go }

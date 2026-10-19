@@ -3938,6 +3938,7 @@ end;
 
 procedure TTyAdvanceChart.TipDropDisplay;
 begin
+  FTipFrozenHas := False;
   FTipShown := False;
   FTipShowFlag := False;
   FTipShowAt := NaN;
@@ -3961,6 +3962,16 @@ begin
     about to be rebuilt), not their meaning. }
   TipFreeze;
   TipRendered;
+end;
+
+procedure TTyAdvanceChart.TipResetQuiet;
+begin
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  { the build is about to be new: the snapshots lose their pointers into
+    it -- and the view does not render, so nothing is kept for a tick
+    later and the last dataByCoordSys stays }
+  TipFreeze;
 end;
 
 procedure TTyAdvanceChart.TipForget;
@@ -3990,6 +4001,14 @@ procedure TTyAdvanceChart.TipFreeze;
       ASnap.Frozen := True;
       ASnap.FrozenX := FTipBox.Left;
       ASnap.FrozenY := FTipBox.Top;
+      { [R2-E] and what it said: the content stays the last show's }
+      FTipFrozenHas := FTipLastHas;
+      FTipFrozenSpec := FTipLastSpec;
+      FTipFrozenInk := FTipLastInk;
+      FTipFrozenLines := FTipLastLines;
+      FTipFrozenOnAxis := FTipLastOnAxis;
+      FTipFrozenFmt := FTipLastFmt;
+      FTipFrozenBorder := FTipLastBorder;
     end;
     ASnap.Stale := True;
     ASnap.Element := -1;
@@ -4828,6 +4847,7 @@ var
   pin: TTyTooltipPlaceIn;
   at: TTyPointF;
   elRect: TTyRectF;
+  frozenPic: Boolean;
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
@@ -4841,20 +4861,34 @@ begin
   TipSnapRefresh;
   snap := FTipSnap;
   onAxis := Length(snap.Hits) > 0;
-  if not TipTargetValid(snap.Datum) and not onAxis then Exit;
-  { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
-    tooltip's model from the global component and a positioning hint and
-    nothing else -- no series level, no data item -- so every option but
-    valueFormatter is global there. }
-  spec := TipSpecOf(snap);
-  if not spec.HasComponent then Exit;
-  if not spec.Show or not spec.ShowContent then Exit;
-  { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's SHAPE --
-    if a coordinate system reported axes, the axis path runs and the item
-    trigger is never consulted. }
-  if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-    and not IsAxisTextDatum(snap.Datum) then Exit;
-  ink := TooltipInk(spec);
+  { [R2-E] A FROZEN BOX SAYS WHAT IT SAID: TooltipView.render does not
+    touch the content element -- a row gone, a value changed, the box keeps
+    the last show's text, ink and border until a show sets them again }
+  frozenPic := snap.Frozen and FTipFrozenHas;
+  if frozenPic then
+  begin
+    spec := FTipFrozenSpec;
+    ink := FTipFrozenInk;
+    onAxis := FTipFrozenOnAxis;
+    FTipFormatterText := FTipFrozenFmt;
+  end
+  else
+  begin
+    if not TipTargetValid(snap.Datum) and not onAxis then Exit;
+    { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
+      tooltip's model from the global component and a positioning hint and
+      nothing else -- no series level, no data item -- so every option but
+      valueFormatter is global there. }
+    spec := TipSpecOf(snap);
+    if not spec.HasComponent then Exit;
+    if not spec.Show or not spec.ShowContent then Exit;
+    { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's
+      SHAPE -- if a coordinate system reported axes, the axis path runs and
+      the item trigger is never consulted. }
+    if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
+      and not IsAxisTextDatum(snap.Datum) then Exit;
+    ink := TooltipInk(spec);
+  end;
 
   st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
     [tysNormal]);
@@ -4866,6 +4900,10 @@ begin
 
   block := nil;
   try
+    if frozenPic then
+      lines := FTipFrozenLines
+    else
+    begin
     if (not onAxis) and IsGeoDatum(snap.Datum) then
     begin
       { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
@@ -4944,8 +4982,8 @@ begin
     else
       block := TooltipContent(snap.Datum, spec);
     if block = nil then Exit;
-
     lines := TyTooltipFlatten(block, ink);
+    end;
     if Length(lines) = 0 then Exit;
 
     if spec.HasPadding then
@@ -4997,7 +5035,7 @@ begin
         elRect.Right - elRect.Left, elRect.Bottom - elRect.Top);
       FTipRect := elRect;
     end;
-    if spec.PositionHandler <> '' then
+    if (spec.PositionHandler <> '') and not snap.Frozen then
     begin
       if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
       else if IsGeoDatum(snap.Datum) then
@@ -5006,14 +5044,15 @@ begin
         pin.Params := TyChartOneParams(AxisTipParams(snap.Datum))
       else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
     end;
-    at := TyTooltipPlace(spec, pin);
     { [F4b] the box a re-render left up stays where it was until a show
-      places it again }
+      places it again [R2-E: the position is not asked again] }
     if snap.Frozen then
     begin
       at.X := snap.FrozenX - ARect.Left;
       at.Y := snap.FrozenY - ARect.Top;
-    end;
+    end
+    else
+      at := TyTooltipPlace(spec, pin);
     box := TyRectF(ARect.Left + at.X, ARect.Top + at.Y,
       ARect.Left + at.X + w, ARect.Top + at.Y + h);
     FTipBox := box;
@@ -5053,7 +5092,8 @@ begin
       signature ECharts 6 look and is easy to miss: the grey token is the
       fallback for an AXIS tooltip, and an item tooltip takes the datum's own
       colour. A written borderColor still wins over both. }
-    if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
+    if frozenPic then borderCol := FTipFrozenBorder
+    else if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
     else if not onAxis and not IsGeoDatum(snap.Datum) and not IsAxisTextDatum(snap.Datum)
       and (DatumColour(snap.Datum) <> 0) then
       borderCol := TTyColor(DatumColour(snap.Datum))
@@ -5061,6 +5101,17 @@ begin
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
         describing several series cannot take one of their colours. }
       borderCol := st.BorderColor;
+    { [R2-E] what this show says, for a re-render to freeze }
+    if not frozenPic then
+    begin
+      FTipLastHas := True;
+      FTipLastSpec := spec;
+      FTipLastInk := ink;
+      FTipLastLines := lines;
+      FTipLastOnAxis := onAxis;
+      FTipLastFmt := FTipFormatterText;
+      FTipLastBorder := borderCol;
+    end;
     if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
       APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
 

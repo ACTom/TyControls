@@ -140,8 +140,9 @@ begin
     the force answer stay. The hover names an element of a list about to be
     rebuilt. The list is built again at once [Milestone D9-D14]: the next
     pointer event -- this drag's release, the next move's hover -- finds the
-    picture where it moved, as zrender's storage holds it. }
-  TipReset;
+    picture where it moved, as zrender's storage holds it.
+    [R2-E] A roam (update none) renders no tooltip view: nothing kept. }
+  TipResetQuiet;
   DropStaticKeepList;
   FZrDirty := True;
   inherited Invalidate;
@@ -327,8 +328,9 @@ begin
       AnimArmTimer;
     end;
   end;
-  { A NEW PICTURE, NOT A NEW LAYOUT -- as a roam step }
-  TipReset;
+  { A NEW PICTURE, NOT A NEW LAYOUT -- as a roam step [R2-E: nothing
+    kept] }
+  TipResetQuiet;
   DropStatic;
   FZrDirty := True;
   inherited Invalidate;
@@ -2410,7 +2412,8 @@ begin
   Relayout(nil, FLastRect, FLastPPI, m);
   DropStatic;
   BuildSeriesList(m, FLastPPI);
-  TipReset;
+  { [R2-E] a roam renders no tooltip view: nothing kept }
+  TipResetQuiet;
   FZrDirty := True;
   inherited Invalidate;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
