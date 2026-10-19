@@ -962,6 +962,9 @@ type
     procedure JournalRewind;
     { a session closed since the last Clear, and not tainted }
     function JournalReady: Boolean;
+    { [R2-P] how many elements the open session has kept -- one per index
+      however often it was written (FOR THE TESTS) }
+    property JournalCount: Integer read FJrN;
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
