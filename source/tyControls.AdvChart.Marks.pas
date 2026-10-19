@@ -1420,6 +1420,11 @@ begin
       bgEl.Z := AVisual.Z;
       bgEl.Z2 := AVisual.Z2;
       bgEl.Silent := True;
+      { [R2-D] a path of the view no animator runs: faded in where a
+        universal transition morphs }
+      bgEl.Anim.Series := ABinding.SeriesIndex;
+      bgEl.Anim.UtTag := 2;
+      bgEl.Anim.UtRow := -2 - i;
       AList.Add(bgEl);
       Inc(Result);
     end;
@@ -2728,6 +2733,9 @@ begin
     if IsNan(lay.ContentRect.Left) or IsNan(lay.ContentRect.Top) then Continue;
     el := HeatCell(ABinding, AStore, AVisual, i, lay.ContentRect);
     el.Z2 := 1;
+    { [R2-D] the cell's Rect for the universal transition }
+    UtTagRect(el, ABinding.SeriesIndex, i, lay.ContentRect.Left, lay.ContentRect.Top,
+      lay.ContentRect.Right - lay.ContentRect.Left, lay.ContentRect.Bottom - lay.ContentRect.Top);
     AList.Add(el);
     Inc(Result);
   end;
@@ -2756,6 +2764,9 @@ begin
     if IsNan(lay.Rect.Left) or IsNan(lay.Rect.Top) then Continue;
     el := HeatCell(ABinding, AStore, AVisual, i, lay.Rect);
     el.Z2 := 1;
+    { [R2-D] the cell's Rect for the universal transition }
+    UtTagRect(el, ABinding.SeriesIndex, i, lay.Rect.Left, lay.Rect.Top,
+      lay.Rect.Right - lay.Rect.Left, lay.Rect.Bottom - lay.Rect.Top);
     AList.Add(el);
     Inc(Result);
   end;
@@ -2787,7 +2798,7 @@ function BuildCandlestick(const ABinding: TTySeriesBinding; AStore: TTyDataStore
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
-  i, colBase, colOpen, colClose, colLow, colHigh: Integer;
+  i, colBase, colOpen, colClose, colLow, colHigh, before: Integer;
   baseHoriz, simple, clipOn: Boolean;
   band, width, at, openV, closeV, lowV, highV, prevClose: Double;
   sign: Integer;
@@ -2941,7 +2952,27 @@ begin
     begin
       { No body to speak of: one stroke from highest to lowest. }
       anim := Default(TTyChartAnim);
+      before := AList.Count;
       Wick(ce.Ends[4], ce.Ends[6], carNone);
+      { [R2-D] THE ONE PATH upstream draws a simple box with (NormalBoxPath,
+        __simpleBox: moveTo the high end, lineTo the low end) -- for the
+        universal transition }
+      if AList.Count > before then
+      begin
+        el := AList.Element(AList.Count - 1);
+        el.Anim.Series := ABinding.SeriesIndex;
+        el.Anim.Index := i;
+        el.Anim.UtTag := 1;
+        el.Anim.UtRow := i;
+        el.Anim.UtOrder := 0;
+        el.Anim.UtData := TTyDoubleArray.Create(1, ce.Ends[4].X, ce.Ends[4].Y,
+          2, ce.Ends[6].X, ce.Ends[6].Y);
+        { the box's style: its fill too, which the line does not show and
+          a morph frame does }
+        el.Style.HasFill := True;
+        el.Style.FillColor := v.Fill;
+        AList.SetElement(AList.Count - 1, el);
+      end;
     end
     else
     begin
@@ -3733,6 +3764,9 @@ begin
       bgEl.Anim.G[3] := bgS.R;
       bgEl.Anim.G[4] := bgS.SA;
       bgEl.Anim.G[5] := bgS.EA;
+      { [R2-D] faded in where a universal transition morphs }
+      bgEl.Anim.UtTag := 2;
+      bgEl.Anim.UtRow := -2 - i;
       AList.Add(bgEl);
       Inc(Result);
     end;
