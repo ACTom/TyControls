@@ -588,7 +588,11 @@ begin
   item^.Host.IsPath := True;
   { a symbol (a line's, a scatter's): the group dispatches, the path draws
     [Batch 90] }
-  item^.HasGroup := FSt[s].Kind in [sskSymbol, sskGraph, sskTree];
+  item^.HasGroup := FSt[s].Kind in [sskSymbol, sskGraph, sskTree,
+    { [R2-B] a radar item's group, likewise: the dispatcher -- the one an
+      action's bits are on -- apart from its polyline, polygon and symbols,
+      which a focus self blurSeries blurs while the group is held }
+    sskRadar];
   { a gauge's pointer: z2EmphasisLift 0 [F2b] }
   item^.Host.NoEmphLift := FSt[s].Kind = sskGauge;
   { emphasis.disabled: no hover dispatcher and no default proxy }
@@ -2171,8 +2175,9 @@ end;
 procedure TTyAdvanceChart.StWriteRows(AList: TTyPaintList);
 var
   s, raw, k: Integer;
-  el: TTyChartElement;
+  el, hostRest, hostNow: TTyChartElement;
   item: PTyStItem;
+  scaled: Boolean;
 begin
   for s := 0 to High(FSt) do
   begin
@@ -2183,10 +2188,16 @@ begin
     begin
       if FSt[s].HostIdx[raw] < 0 then Continue;
       item := @FSt[s].Rows[raw];
+      scaled := False;
       if item^.Host.States <> [] then
       begin
         el := AList.Element(FSt[s].HostIdx[raw]);
+        { [R2-B] a symbol its state scales, before and after }
+        scaled := not FStProxied and item^.Host.Cur.Has[stkScale]
+          and not StSameNum(item^.Host.Cur.Num[stkScale], 1);
+        if scaled then hostRest := el;
         StWriteHost(el, item^.Host, FStProxied);
+        if scaled then hostNow := el;
         AList.SetElement(FSt[s].HostIdx[raw], el);
         { the rest of the same path: the host's changes [Batch 90] }
         if raw <= High(FSt[s].FollowIdx) then
@@ -2215,6 +2226,13 @@ begin
       begin
         el := AList.Element(FSt[s].LabelIdx[raw]);
         StWriteLabel(el, item^.Label_, FStProxied);
+        { [R2-B] A LABEL ON A SCALED SYMBOL rides it: updateInnerText lays it
+          out on the path as drawn, its emphasis scale too (a graph's or a
+          tree's node, a scatter's or a line's symbol). On a proxy the frame
+          does it, from the scale as it is then. [Was: only a radial tree's,
+          and only through the enter animation.] }
+        if scaled then
+          TyLabelRideScale(el, hostRest, hostNow, item^.Host.Cur.Num[stkScale]);
         AList.SetElement(FSt[s].LabelIdx[raw], el);
       end;
       if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists
@@ -4261,6 +4279,8 @@ begin
   end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
+  { [R2-B] a map series' SVG element: the pointer is off it }
+  if FSt[s].Kind = sskMap then MapSvgPointer(s, -1);
   StAllLeaveBlur;
   if part = 0 then
   begin
@@ -4340,6 +4360,8 @@ begin
   end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
+  { [R2-B] a map series' SVG element: the one the pointer is over }
+  if FSt[s].Kind = sskMap then MapSvgPointer(s, Integer(ATarget.Id) - 1);
   if (part = 0) and ATarget.HdEdge and (FSt[s].Kind = sskGraph) then
     focus := StEdgeFocus(s, StGraphEdgeOfRow(SlotOfSeries(s), ATarget.HdRow), scope)
   else if (part = 0) and ATarget.HdEdge then

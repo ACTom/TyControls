@@ -535,6 +535,9 @@ type
     FSvgIsDisp: array of Boolean;
     FSvgSilentOpt: TTyIntegerArray;
     FSvgHbo: array of Cardinal;
+    { [R2-B] a map series' element under the pointer (its dispatcher's
+      node; -1 none) }
+    FSvgPointer: Integer;
     FSvgEl, FSvgLbl: array of TTyStElement;
     FSvgLook: array of TTyGeoSvgLook;
     FSvgLabel: array of TTyGeoLabel;
@@ -730,6 +733,9 @@ type
     function SvgGlobal(ANode: Integer; out AM: TTyMat2D): Boolean;
     function SvgEventGroup(ANode: Integer): Integer;
     function SvgHoverGroup(ANode: Integer): Integer;
+    { [R2-B] A MAP SERIES' POINTER: the dispatcher over the node the pointer
+      is on (-1 none) -- SetFlags lifts it alone of its name }
+    procedure SetSvgPointer(ANode: Integer);
     { the current per-node stroke Path.getBoundingRect reads }
     function SvgStrokes: TTyGsStrokeArray;
     { getBoundingRect of a node now }
@@ -2448,6 +2454,7 @@ var d: TJSONData; root: TJSONObject; k: Integer;
 begin
   inherited Create;
   FIndex := AIndex;
+  FSvgPointer := -1;
   FSpec := TyGeoSpecOf(AOption, AIndex);
   FNode := nil;
   FNameMap := nil;
@@ -2484,6 +2491,7 @@ begin
   inherited Create;
   FKind := gkMapSeries;
   FIndex := AIndex;
+  FSvgPointer := -1;
   FNode := nil;
   FNameMap := nil;
   root := nil;
@@ -2538,25 +2546,49 @@ begin
 end;
 
 function TTyGeo.SetFlags(AGroup, AHover: Integer; AHbo: Cardinal; ASelected: Boolean): Boolean;
-var k: Integer;
+var k, last, h: Integer; onName: Boolean;
 begin
   Result := False;
   EnsureGroups;
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
   if FIsSvg then
   begin
-    { [F6b] a map series' row flags on every self-named element of the name }
+    { [F6b] a map series' row flags on the self-named elements of the name.
+      [R2-B] EACH IS A DISPATCHER OF THE ITEM (resetEventTriggerForRegion; a
+      series has no high-down by name): a blur reaches them all, the pointer
+      lifts the one it is over, and an action -- getItemGraphicEl -- the last
+      one registered, which alone holds its bits. [Was: every element of the
+      name took the row's flags.] }
     FSvgChanged := FSt[AGroup].Selected <> ASelected;
     FSt[AGroup].Selected := ASelected;
     FSt[AGroup].Hover := AHover;
     FSt[AGroup].Hbo := AHbo;
     if Length(FSvgEl) > 0 then
+    begin
+      last := -1;
+      for k := 0 to High(FSvgSelf) do
+        if (FSvgSelf[k] >= 0) and (FSvgEvent[k] = AGroup) then last := k;
+      onName := (FSvgPointer >= 0) and (FSvgPointer <= High(FSvgEvent))
+        and (FSvgEvent[FSvgPointer] = AGroup);
       for k := 0 to High(FSvgSelf) do
         if (FSvgSelf[k] >= 0) and (FSvgEvent[k] = AGroup) then
         begin
-          FSvgHbo[k] := AHbo;
-          SvgTraverse(k, cSvgSetHover, AHover);
+          h := AHover;
+          if h = TyStHoverEmphasis then
+          begin
+            { the pointer's own; the held one; with neither known, all }
+            if onName then
+            begin
+              if not ((k = FSvgPointer) or ((AHbo <> 0) and (k = last))) then
+                h := TyStHoverNormal;
+            end
+            else if (AHbo <> 0) and (k <> last) then
+              h := TyStHoverNormal;
+          end;
+          if k = last then FSvgHbo[k] := AHbo else FSvgHbo[k] := 0;
+          SvgTraverse(k, cSvgSetHover, h);
         end;
+    end;
     Exit(FSvgChanged);
   end;
   Result := (FSt[AGroup].Hover <> AHover) or (FSt[AGroup].Hbo <> AHbo)
@@ -4974,6 +5006,20 @@ function TTyGeo.SvgHoverGroup(ANode: Integer): Integer;
 begin
   if (ANode >= 0) and (ANode <= High(FSvgHover)) then Result := FSvgHover[ANode]
   else Result := -1;
+end;
+
+procedure TTyGeo.SetSvgPointer(ANode: Integer);
+var k: Integer;
+begin
+  { the outermost self-named dispatcher over the node: findEventDispatcher's
+    highDownDispatcher, walked up from the element hit }
+  FSvgPointer := -1;
+  k := ANode;
+  while (k >= 0) and (k <= High(FSvgSelf)) do
+  begin
+    if FSvgIsDisp[k] and (FSvgSelf[k] >= 0) then FSvgPointer := k;
+    k := FSvg.Nodes[k].Parent;
+  end;
 end;
 
 { updateTransform down the tree: the transform group (the roam), the SVG

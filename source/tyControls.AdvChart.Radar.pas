@@ -223,6 +223,15 @@ type
     Fills: TTyChartColorArray;
     Fill: TTyChartColor;
     LineWidthLogical: Double;
+    { [R2-B] lineStyle.type (getLineStyle's lineDash, drawn as zrender's
+      normalizeLineDash against the width), the series' and -- RowLineSet --
+      an item's own lineStyle width and type over it }
+    LineDash: TTyOptDash;
+    LineDashExplicit: TTyDoubleArray;
+    RowLineSet: array of Boolean;
+    RowLineWidth: TTyDoubleArray;
+    RowLineDash: array of TTyOptDash;
+    RowLineDashExplicit: array of TTyDoubleArray;
     { areaStyle. Absent means no filled polygon at all, which is upstream's
       rule and not a style detail: a radar with no areaStyle is a wire. }
     HasArea: Boolean;
@@ -1514,10 +1523,46 @@ begin
     for i := 0 to m - 1 do ring[i] := pts[i];
     ring[m] := pts[0];
 
-    { THE AREA FIRST, so the ring is drawn over its own fill. Equal z and z2,
-      so the order in the list is the order on the screen. Without an
-      areaStyle it is built ignored when a state has one [F2b]. An item's
-      own areaStyle shows it too [F4a]. }
+    el := TyChartElement(TyShapePolyline(ring));
+    el.Style.StrokeColor := rowColour;
+    el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
+    { [R2-B] the ring's lineStyle width and type: the item's own over the
+      series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }
+    if (raw >= 0) and (raw <= High(AVisual.RowLineSet)) and AVisual.RowLineSet[raw] then
+    begin
+      if not IsNan(AVisual.RowLineWidth[raw]) then
+        el.Style.StrokeWidthLogical := AVisual.RowLineWidth[raw];
+      if AVisual.RowLineDash[raw] <> todNone then
+        el.Style.DashLogical := TyDashPattern(AVisual.RowLineDash[raw],
+          AVisual.RowLineDashExplicit[raw], el.Style.StrokeWidthLogical)
+      else
+        el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
+          el.Style.StrokeWidthLogical);
+    end
+    else
+      el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
+        el.Style.StrokeWidthLogical);
+    el.Z := AVisual.Z;
+    el.Z2 := AVisual.Z2;
+    el.Silent := False;
+    { A RING IS ONE ELEMENT FOR A WHOLE ROW, so it answers with the row and no
+      spoke -- the same shape a line series' run has. }
+    el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
+    el.HitSlopLogical := AVisual.LineWidthLogical / 2 + 4;
+    el.Anim.Role := carRadarLine;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := k;
+    el.Anim.G[0] := ARadar.CX;
+    el.Anim.G[1] := ARadar.CY;
+    AList.Add(el);
+    Inc(Result);
+
+    { THE AREA AFTER THE RING, as RadarView adds them to the item's group
+      (polyline, polygon, symbols): equal z and z2, so the order in the list
+      is the order on the screen and the fill covers the ring [R2-B: it was
+      drawn first, the ring over it]. Without an areaStyle it is built
+      ignored when a state has one [F2b]. An item's own areaStyle shows it
+      too [F4a]. }
     rowArea := AVisual.HasArea;
     if (raw >= 0) and (raw <= High(AVisual.RowArea)) and AVisual.RowArea[raw] then
       rowArea := True;
@@ -1553,24 +1598,6 @@ begin
       AList.Add(el);
       Inc(Result);
     end;
-
-    el := TyChartElement(TyShapePolyline(ring));
-    el.Style.StrokeColor := rowColour;
-    el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
-    el.Z := AVisual.Z;
-    el.Z2 := AVisual.Z2;
-    el.Silent := False;
-    { A RING IS ONE ELEMENT FOR A WHOLE ROW, so it answers with the row and no
-      spoke -- the same shape a line series' run has. }
-    el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
-    el.HitSlopLogical := AVisual.LineWidthLogical / 2 + 4;
-    el.Anim.Role := carRadarLine;
-    el.Anim.Series := ABinding.SeriesIndex;
-    el.Anim.Index := k;
-    el.Anim.G[0] := ARadar.CX;
-    el.Anim.G[1] := ARadar.CY;
-    AList.Add(el);
-    Inc(Result);
 
     rowSym := AVisual.Symbol;
     { [R2-A] the item's own symbol over the series' -- placed as RadarView's

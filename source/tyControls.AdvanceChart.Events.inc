@@ -35,8 +35,9 @@ begin
   FPressArmed := True;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
-  { A BREADCRUMB ITEM is over everything: its own click [Batch 115] }
-  FCrumbPressed := CrumbAt(X, Y, FCrumbPressSeries, FCrumbPressIndex);
+  { A BREADCRUMB ITEM: its own click [Batch 115]; [R2-B] where it is the
+    element under the pointer, not under what is drawn over it }
+  FCrumbPressed := CrumbOfElement(el, FCrumbPressSeries, FCrumbPressIndex);
   FCrumbPressX := X;
   FCrumbPressY := Y;
   { A PRESS ON A BRUSH COVER'S PIECE is zrender's Draggable's: the cover
@@ -154,17 +155,15 @@ begin
       and (Sqrt(Sqr(X - FPressX) + Sqr(Y - FPressY)) <= 4) then
     begin
       slot := SlotOfSeries(d.SeriesIndex);
-      { [Batch 115] a sunburst's piece or return circle; a treemap's
-        container -- the target found under the point -- unless the press
-        was the breadcrumb's; never outside the canvas (zrender's
-        isOutsideBoundary hovers nothing there) }
+      { [Batch 115] a sunburst's piece or return circle; never outside the
+        canvas (zrender's isOutsideBoundary hovers nothing there). [R2-B] A
+        treemap's container is EventUp's: its onclick before the chart's own
+        click, which still names what was pressed. }
       if (X < FLastRect.Left) or (X > FLastRect.Right) or (Y < FLastRect.Top)
         or (Y > FLastRect.Bottom) then
       else if (slot >= 0) and (FBindings[slot].SeriesType = TySunburstSeriesTypeName) then
         SunburstClick(d.SeriesIndex, d.DataIndex)
-      else if (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
-        and not FCrumbPressed then
-        TreemapClick(d.SeriesIndex, X, Y)
+      else if (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName) then
       else if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName) then
       begin
         n := FOption.ComponentAt('series', d.SeriesIndex);
@@ -340,6 +339,9 @@ begin
   idx := ListHitAt(AX, AY);
   if idx < 0 then Exit;
   AElement := idx;
+  { [R2-B] a breadcrumb item names no datum (its ecData has no dataIndex):
+    no tooltip, no select, and nothing under it either }
+  if CrumbOfElement(idx, slot, row) then Exit;
   Result := FPaintList.Element(idx).Datum;
   if Result.SeriesIndex < 0 then Exit;
   { A LARGE BATCH: the row is its own scan's, and a hit without one (a
@@ -781,6 +783,63 @@ begin
   Result.HdRow := d.DataIndex;
 end;
 
+{ [R2-B] the breadcrumb item the list element at AIdx is (its polygon, or its
+  words hung off it) }
+function TTyAdvanceChart.CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
+var el: PTyChartElement; h: Integer;
+begin
+  Result := False;
+  ASeries := -1;
+  AIndex := -1;
+  if (FPaintList = nil) or (AIdx < 0) or (AIdx >= FPaintList.Count) then Exit;
+  el := FPaintList.Ref(AIdx);
+  if (el^.Anim.Role <> carTmCrumb) and (el^.Caption.FontSizeLogical > 0) then
+  begin
+    h := el^.Caption.LmHostPlus1 - 1;
+    if (h < 0) or (h >= FPaintList.Count) then Exit;
+    el := FPaintList.Ref(h);
+  end;
+  if el^.Anim.Role <> carTmCrumb then Exit;
+  ASeries := el^.Anim.Series;
+  AIndex := el^.Anim.Index;
+  Result := True;
+end;
+
+{ [F2a] A TREEMAP'S BREADCRUMB ITEM: a highDownDispatcher whose ecData holds
+  only eventData -- componentType 'series', selfType 'breadcrumb', nodeData
+  (Breadcrumb.ts packEventData) -- no dataIndex, so no select and no
+  tooltip; HdGen the solve that drew it }
+function TTyAdvanceChart.CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;
+var slot, i: Integer; nm: string;
+begin
+  Result := Default(TTyChartEventTarget);
+  Result.Params := TyChartBlankParams;
+  slot := SlotOfSeries(ASeries);
+  Result.Id := -(11000000000 + Int64(FTmCrumbGen) * 1000000 + Int64(ASeries) * 1000 + AIndex);
+  Result.HdKind := 15;
+  Result.HdSeries := ASeries;
+  Result.HdRow := AIndex;
+  Result.HdGen := FTmCrumbGen;
+  Result.HasData := True;
+  Result.Params.ComponentType := 'series';
+  Result.Params.ComponentSubType := TyTreemapSeriesTypeName;
+  Result.Params.ComponentIndex := ASeries;
+  Result.Params.SeriesType := TyTreemapSeriesTypeName;
+  Result.Params.SeriesIndex := ASeries;
+  Result.Params.SeriesName := SeriesModelName(ASeries);
+  Result.Params.SelfType := 'breadcrumb';
+  if (slot >= 0) and (slot <= High(FTreemaps)) and (AIndex <= High(FTreemaps[slot].Crumbs)) then
+  begin
+    i := FTreemaps[slot].Crumbs[AIndex].Row;
+    nm := '';
+    if (i >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil)
+      and (i < FStores[slot].Count) then nm := FStores[slot].GetItemName(i);
+    Result.Params.NodeData := '{"dataIndex":' + IntToStr(i) + ',"name":"'
+      + StringToJSONString(nm) + '"}';
+  end;
+  Result.Model := SeriesEventModel(ASeries);
+end;
+
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 var
   i, k, g, a, q, idx, slot: Integer;
@@ -942,38 +1001,6 @@ begin
     if k <= High(FVmLive) then Result.HdGen := FVmLive[k].Gen;
     Exit;
   end;
-  { [F2a] A TREEMAP'S BREADCRUMB ITEM, over its series: a highDownDispatcher
-    whose ecData holds only eventData -- componentType 'series', selfType
-    'breadcrumb', nodeData (Breadcrumb.ts packEventData) -- no dataIndex, so
-    no select and no tooltip; HdGen the solve that drew it }
-  if CrumbAt(AX, AY, k, q) then
-  begin
-    slot := SlotOfSeries(k);
-    Result.Id := -(11000000000 + Int64(FTmCrumbGen) * 1000000 + Int64(k) * 1000 + q);
-    Result.HdKind := 15;
-    Result.HdSeries := k;
-    Result.HdRow := q;
-    Result.HdGen := FTmCrumbGen;
-    Result.HasData := True;
-    Result.Params.ComponentType := 'series';
-    Result.Params.ComponentSubType := TyTreemapSeriesTypeName;
-    Result.Params.ComponentIndex := k;
-    Result.Params.SeriesType := TyTreemapSeriesTypeName;
-    Result.Params.SeriesIndex := k;
-    Result.Params.SeriesName := SeriesModelName(k);
-    Result.Params.SelfType := 'breadcrumb';
-    if (slot >= 0) and (slot <= High(FTreemaps)) and (q <= High(FTreemaps[slot].Crumbs)) then
-    begin
-      i := FTreemaps[slot].Crumbs[q].Row;
-      nm := '';
-      if (i >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil)
-        and (i < FStores[slot].Count) then nm := FStores[slot].GetItemName(i);
-      Result.Params.NodeData := '{"dataIndex":' + IntToStr(i) + ',"name":"'
-        + StringToJSONString(nm) + '"}';
-    end;
-    Result.Model := SeriesEventModel(k);
-    Exit;
-  end;
   { THE DISPLAY LIST: series items, their labels, markers, legend items --
     as DRAWN: in motion, or on a state proxy, the frame (its insertion
     indices are the list's) [Batch 94] }
@@ -981,6 +1008,10 @@ begin
   idx := ListHitAt(AX, AY);
   if idx >= 0 then
   begin
+    { [R2-B] A BREADCRUMB ITEM is in the treemap view's own group (its z,
+      z2 1e5): what is drawn over it -- a legend, a marker -- takes the
+      pointer first [F2a: it was tested before the whole list] }
+    if CrumbOfElement(idx, k, q) then Exit(CrumbTarget(k, q));
     el := FPaintList.Element(idx);
     d := el.Datum;
     Result.Id := idx + 1;
@@ -1451,6 +1482,15 @@ begin
   { [F2a] a breadcrumb item's onclick: the zoom or the drill, before the
     chart's own click }
   else if t.HdKind = 15 then TreemapCrumbSelect(t.HdSeries, t.HdRow)
+  { [R2-B] a treemap's container group's onclick (TreemapView._initEvents:
+    the zoom or the drill at the point), before the chart's own click and
+    select -- which name the element pressed, the render between them
+    notwithstanding [was: in MouseUp, before EventUp, whose target the
+    zoom's new render had already replaced: no select, no click] }
+  else if (t.HdKind = 1) and not t.HdEdge and IsTreemapSeries(t.HdSeries)
+    and (AX >= FLastRect.Left) and (AX <= FLastRect.Right) and (AY >= FLastRect.Top)
+    and (AY <= FLastRect.Bottom) then
+    TreemapClick(t.HdSeries, AX, AY)
   else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)

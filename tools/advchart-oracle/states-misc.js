@@ -19,6 +19,14 @@
 //      isLabelShown): built, laid out and ignored at rest
 //   F. a pictorialBar's hit target: the glyphs (the bar rect is silent,
 //      PictorialBarView.ts:692-696), clipped as drawn
+//   G. [R2-B] a radar item's paint order (polyline, polygon, symbols in its
+//      group), a radar item held by an action under another's focus self
+//      hover, and a label riding its hovered symbol through the state
+//      transition (a scatter's, a graph's, a tree's): a case with `order`
+//      records each element's place in the display list (zi), one with
+//      `labelPlace` a label's computed transform (tx / ty); a radar's
+//      lineStyle.type (a case with `dash` records a path's dash as
+//      canvas/dashStyle.ts normalizeLineDash draws it)
 //
 // The harness is state-anim.js' own, copied (that script generates and exits
 // on load): the replaced Date before the dist, chart._ssr = false,
@@ -106,7 +114,17 @@ function enc(v) {
   }
   return undefined;
 }
-function snap(el) {
+let CUR_CASE = null;
+// zrender canvas/dashStyle.ts normalizeLineDash, transcribed
+function normalizeLineDash(lineType, lineWidth) {
+  if (!lineType || lineType === 'solid' || !(lineWidth > 0)) return null;
+  lineWidth = lineWidth || 1;
+  return lineType === 'dashed' ? [4 * lineWidth, 2 * lineWidth]
+    : lineType === 'dotted' ? [lineWidth]
+    : typeof lineType === 'number' ? [lineType]
+    : Array.isArray(lineType) ? lineType : null;
+}
+function snap(el, zi) {
   const o = {};
   const put = (k, v) => {
     const e = enc(v);
@@ -114,6 +132,13 @@ function snap(el) {
   };
   for (const k of TRANSFORM_KEYS) if (typeof el[k] === 'number') put(k, el[k]);
   put('ignore', !!el.ignore);
+  // [R2-B] the case's own extra records
+  if (CUR_CASE && CUR_CASE.labelPlace && el.type === 'text' && el.transform) {
+    put('tx', el.transform[4]);
+    put('ty', el.transform[5]);
+  }
+  if (CUR_CASE && CUR_CASE.order && zi != null) put('zi', zi);
+  if (CUR_CASE && CUR_CASE.dash && el.style && el.type !== 'text') put('dash', JSON.stringify(normalizeLineDash(el.style.lineDash, el.style.lineWidth)));
   if (el.invisible != null) put('invisible', !!el.invisible);
   if (typeof el.z2 === 'number') put('z2', el.z2);
   put('states', (el.currentStates || []).join(','));
@@ -539,7 +564,9 @@ function loopOn(chart, c, t1) {
       else must(false, 'unknown event ' + e.type);
     }
     zr.animation.update();
-    zr.storage.getDisplayList(true);
+    const zList = zr.storage.getDisplayList(true);
+    const zIndex = new Map();
+    zList.forEach((el, i) => zIndex.set(el, i));
     clips.push(clipCount(zr));
     selection.push(selectionOf(chart));
     const parts = seriesParts(chart);
@@ -572,7 +599,7 @@ function loopOn(chart, c, t1) {
           ids.set(it.el, rec);
           recs.push(rec);
         }
-        rec.snaps[si] = snap(it.el);
+        rec.snaps[si] = snap(it.el, zIndex.get(it.el));
         rec.anim[si] = it.el.animators ? it.el.animators.length : 0;
         rec.stateAnim[si] = stateAnims(it.el).join(' ');
         const st = it.el.stateTransition;
@@ -598,6 +625,7 @@ function loopOn(chart, c, t1) {
 // waiting on a timer that never runs
 let caseBase = T_BASE;
 function runCase(c) {
+  CUR_CASE = c;
   caseBase += CASE_STRIDE;
   NOW = caseBase;
   rngState = SEED;
@@ -804,6 +832,52 @@ const PICTORIAL = [
     events: [over(0, ['pclip', 0, 1, 0]), over(400, ['glyph', 0, 1, 0, 4]), out(800)] },
 ];
 
+// G. [R2-B]
+const R2B = [
+  { id: 'radar-order', order: true, note: 'a radar item\'s group is polyline, polygon, symbols: at one z2 the polygon (areaStyle, '
+    + 'opaque) is painted over the polyline -- at rest and lifted together under the hover of item 1 at 0; out at 500',
+    option: radar({ areaStyle: { opacity: 1 }, lineStyle: { width: 4 } }), events: [over(0, ['rsym', 0, 1, 2]), out(500)] },
+  { id: 'radar-held-self', note: 'emphasis.focus self: item 0 highlighted by action at 0 (the others blur, its group holds the '
+    + 'bit); hovering item 1 at 300 runs blurSeries again -- it spares only an element that holds the bit itself, so item 0\'s '
+    + 'polyline, polygon and symbols enter blur under the held group; out at 700 (allLeaveBlur: they go to normal, the group '
+    + 'still held); downplay at 1100',
+    option: radar({ emphasis: { focus: 'self' }, areaStyle: {},
+      data: [{ value: [6, 8, 4, 7, 5], name: 'p' }, { value: [3, 4, 9, 2, 8], name: 'q' }, { value: [8, 2, 6, 5, 3], name: 'r' }] }),
+    events: [act(0, { type: 'highlight', seriesIndex: 0, dataIndex: 0 }), over(300, ['rsym', 0, 1, 0]), out(700),
+      act(1100, { type: 'downplay', seriesIndex: 0, dataIndex: 0 })] },
+  { id: 'scatter-label-follows', labelPlace: true, note: 'a scatter\'s top label rides its symbol as the hover scales it '
+    + '(updateInnerText every frame on the path as drawn): over point 1 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { opacity: 1 }, label: { show: true, position: 'top', formatter: 'p{c}' },
+        data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'graph-label-follows', labelPlace: true, note: 'a graph node\'s right label rides the node\'s emphasis scale (the '
+    + 'state runs on the symbol\'s own proxy) through the transition and at rest: over node 1 at 0, out at 500',
+    option: { color: [C0], series: [{ type: 'graph', layout: 'none', symbolSize: 30, label: { show: true, position: 'right' },
+      left: 60, top: 60, width: 280, height: 180,
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 200, y: 0 }],
+      links: [{ source: 'a', target: 'b' }] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'radial-label-follows', labelPlace: true, note: 'a radial tree\'s turned label rides its hovered node (the box '
+    + 'scaled about its centre, the turn kept): over A at 0, out at 500',
+    option: { series: [{ type: 'tree', layout: 'radial', left: 60, top: 40, bottom: 40, right: 60, symbolSize: 14,
+      expandAndCollapse: false, label: { show: true },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }, { name: 'A2' }] }, { name: 'B' }, { name: 'C' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'radar-dash', dash: true, note: 'lineStyle.type: the series\' dashed, an item\'s own dotted at width 3, an item\'s '
+    + 'own [6, 3] array; hovering the dotted one keeps its dash (the emphasis states write no type)',
+    option: radar({ lineStyle: { type: 'dashed', width: 2 },
+      data: [{ value: [6, 8, 4, 7, 5], name: 'p' }, { value: [3, 4, 9, 2, 8], name: 'q', lineStyle: { type: 'dotted', width: 3 } },
+        { value: [8, 2, 6, 5, 3], name: 'r', lineStyle: { type: [6, 3] } }] }),
+    events: [over(0, ['rline', 0, 1]), out(500)] },
+  { id: 'tree-label-follows', labelPlace: true, note: 'a tree node\'s label rides its scaled symbol (its own label box): '
+    + 'over A at 0, out at 500',
+    option: { series: [{ type: 'tree', left: 40, top: 30, bottom: 30, right: 120, symbolSize: 16, expandAndCollapse: false,
+      label: { show: true, position: 'left' }, leaves: { label: { position: 'right' } },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }] }, { name: 'B' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -966,6 +1040,23 @@ function guards(cases) {
     const ev = c.published.filter(e => e.type === 'mouseover').map(e => e.at).join(',');
     g('pictorial-clip-target', ev === '400', ev);
   }
+  // G. [R2-B]
+  {
+    const c = byId(cases, 'radar-order');
+    const zi = (row, part, ms) => numAt(elRow(c, 0, row, part), 'zi', ms);
+    g('radar-polygon-over-line', Number(zi(0, 'rarea', 1600)) > Number(zi(0, 'host', 1600))
+      && Number(zi(1, 'rarea', 450)) > Number(zi(1, 'host', 450)), [zi(0, 'host', 1600), zi(0, 'rarea', 1600)].join(' '));
+  }
+  {
+    const c = byId(cases, 'radar-held-self');
+    g('radar-held-children-blur', statesAt(elRow(c, 0, 0, 'host'), 650) === 'blur', statesAt(elRow(c, 0, 0, 'host'), 650));
+  }
+  {
+    const c = byId(cases, 'scatter-label-follows');
+    const l = elRow(c, 0, 1, 'label');
+    g('scatter-label-rides', l && numAt(l, 'ty', 450) !== numAt(l, 'ty', 1600) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 450),
+      'scatter-label-follows');
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -973,7 +1064,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

@@ -755,7 +755,7 @@ var
   ev, rr: TJSONObject;
   got: TJSONData;
   gp: TJSONObject;
-  k, si, slot, row, r: Integer;
+  k, si, slot, row, r, gsi: Integer;
   ids: TTyStringArray;
   hier: TTyHierarchy;
   ser: TJSONData;
@@ -805,8 +805,19 @@ begin
       begin
         si := ev.Get('seriesIndex', -1);
         Inc(FCompared);
-        if gp.Get('seriesIndex', -1) <> si then
-          Miss(Format('%s: series %d upstream, %d here', [w, si, gp.Get('seriesIndex', -1)]));
+        { [R2-B] a treemap view's own dispatch names its series by id, as
+          upstream's (the fixture turned that into the index) }
+        gsi := gp.Get('seriesIndex', -1);
+        if gp.Find('seriesId') <> nil then
+          for r := 0 to 15 do
+            if StringReplace(FChart.SeriesModelId(r), #0, '', [rfReplaceAll])
+              = StringReplace(gp.Strings['seriesId'], #0, '', [rfReplaceAll]) then
+            begin
+              gsi := r;
+              Break;
+            end;
+        if gsi <> si then
+          Miss(Format('%s: series %d upstream, %d here', [w, si, gsi]));
         id := StrOr(gp, 'targetNode');
         row := -1;
         if FChart.SunburstSolved(si).Valid then hier := FChart.SunburstSolved(si).Hier

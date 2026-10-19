@@ -750,6 +750,13 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   const AStBind: TTyChartAnimProxyArray = nil);
 { A shape scaled by (AFX, AFY) about (ACX, ACY). }
 procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Double);
+{ [R2-B] A LABEL ON A SYMBOL A STATE SCALED: placed again on its host as
+  drawn (zrender's updateInnerText lays a textContent out on its host's
+  bounding rect through the host's transform, its scale too) -- a label
+  hung off the host's box by the anchor's move from AHostRest to AHostNow,
+  a radial tree's turned one on its box scaled by AScale about its node }
+procedure TyLabelRideScale(var ALabel: TTyChartElement; const AHostRest,
+  AHostNow: TTyChartElement; AScale: Double);
 { ... turned by ARad about (ACX, ACY), zrender's sense (anticlockwise on the
   screen for a positive angle): points and commands turn, a path's draw-time
   turn grows and its box moves, a circle's or an ellipse's centre turns (an
@@ -5329,7 +5336,7 @@ end;
 
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
-  x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh, rest: Double;
+  x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh, rest, infl: Double;
   r: TTyRectF;
   v: TTyAnimValue;
   i, n, ah, av, ah1, av1, flags: Integer;
@@ -5460,10 +5467,24 @@ begin
           TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
         if AEl.Caption.HasHostBox then
         begin
-          AEl.Caption.HostBox.X := AEl.Anim.G[0] + (AEl.Caption.HostBox.X - AEl.Anim.G[0]) * fx;
-          AEl.Caption.HostBox.Y := AEl.Anim.G[1] + (AEl.Caption.HostBox.Y - AEl.Anim.G[1]) * fy;
-          AEl.Caption.HostBox.W := AEl.Caption.HostBox.W * fx;
-          AEl.Caption.HostBox.H := AEl.Caption.HostBox.H * fy;
+          { [R2-B] the path's own box scales, the stroke's margin around it
+            stays (strokeNoScale: on the canvas half the line width; none at
+            a scale of nought) -- as RideBox places a radial tree's label.
+            [Was: the margin scaled with it -- a hovered tree node's label sat
+            a tenth of the margin too far out.] }
+          infl := AEl.Caption.FixedInfl;
+          if not (Abs(AEl.Caption.FixedHalfW) > 1e-10) then infl := 0;
+          AEl.Caption.HostBox.X := AEl.Anim.G[0] + (AEl.Caption.HostBox.X + infl - AEl.Anim.G[0]) * fx;
+          AEl.Caption.HostBox.Y := AEl.Anim.G[1] + (AEl.Caption.HostBox.Y + infl - AEl.Anim.G[1]) * fy;
+          AEl.Caption.HostBox.W := (AEl.Caption.HostBox.W - 2 * infl) * fx;
+          AEl.Caption.HostBox.H := (AEl.Caption.HostBox.H - 2 * infl) * fy;
+          if Abs(fx * AEl.Caption.FixedHalfW) > 1e-10 then
+          begin
+            AEl.Caption.HostBox.X := AEl.Caption.HostBox.X - infl;
+            AEl.Caption.HostBox.Y := AEl.Caption.HostBox.Y - infl;
+            AEl.Caption.HostBox.W := AEl.Caption.HostBox.W + 2 * infl;
+            AEl.Caption.HostBox.H := AEl.Caption.HostBox.H + 2 * infl;
+          end;
         end;
         { THE GROUP'S PLACE [Batch 90]: a scatter symbol's group moves on an
           update, a line symbol's follows its polyline }
@@ -6211,6 +6232,60 @@ begin
   if ALabel.Anim.LabelAtYPct then atY := atY * (b.Bottom - b.Top);
   TyLabelAnchor(b, TTyLabelPosition(ALabel.Anim.LabelPos), ALabel.Anim.LabelDist,
     atX, atY, AX, AY, ah, av);
+end;
+
+{ [R2-B] a move of no length but the arithmetic's: none (an axis the scale
+  does not move -- a box's middle -- comes back an ulp off) }
+function RideSnap(A: Double): Double;
+begin
+  if Abs(A) < 1e-9 then Result := 0 else Result := A;
+end;
+
+{ [R2-B] A HOST'S LABEL BOX ON ITS PATH SCALED BY AScale: the path's own box
+  about the symbol's place, the stroke's margin around it as it was (the
+  stroke is strokeNoScale; none where the path is of no size) -- as RideBox
+  places a radial tree's }
+function ScaledHostBox(const AHost: TTyChartElement; AScale: Double): TTyXYWH;
+var box: TTyXYWH; infl, cx, cy: Double;
+begin
+  box := AHost.Caption.HostBox;
+  Result := box;
+  infl := AHost.Caption.FixedInfl;
+  if not (Abs(AHost.Caption.FixedHalfW) > 1e-10) then infl := 0;
+  { about the box's middle: a symbol's unit box is about its place (a tree's
+    node, the one host that keeps a box of its own and scales) }
+  cx := box.X + box.W / 2;
+  cy := box.Y + box.H / 2;
+  Result.X := cx + ((box.X + infl) - cx) * AScale - infl;
+  Result.Y := cy + ((box.Y + infl) - cy) * AScale - infl;
+  Result.W := (box.W - 2 * infl) * AScale + 2 * infl;
+  Result.H := (box.H - 2 * infl) * AScale + 2 * infl;
+end;
+
+procedure TyLabelRideScale(var ALabel: TTyChartElement; const AHostRest,
+  AHostNow: TTyChartElement; AScale: Double);
+var
+  x0, y0, x1, y1: Double;
+  now_: TTyChartElement;
+begin
+  if IsNan(AScale) or (AScale = 1) then Exit;
+  if ALabel.Anim.RideTree then
+  begin
+    RideBox(ALabel, AScale, AScale, 0, 0);
+    Exit;
+  end;
+  if ALabel.Anim.HostPlus1 <= 0 then Exit;
+  AnchorOn(AHostRest, ALabel, x0, y0);
+  { a host whose label box is its own (a tree's node): that box scaled }
+  if AHostNow.Caption.HasHostBox then
+  begin
+    now_ := AHostNow;
+    now_.Caption.HostBox := ScaledHostBox(AHostNow, AScale);
+    AnchorOn(now_, ALabel, x1, y1);
+  end
+  else
+    AnchorOn(AHostNow, ALabel, x1, y1);
+  MoveCaption(ALabel, RideSnap(x1 - x0), RideSnap(y1 - y0));
 end;
 
 { ==================== the universal transition [Batch 136, D5 UT1] ==================== }

@@ -68,7 +68,7 @@ type
     FMeasure: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared, FKeysCompared, FTrackedCompared, FEventsCompared,
-      FMarksCompared: Integer;
+      FMarksCompared, FPlaces, FOrders, FDashes: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -79,6 +79,7 @@ type
     procedure CompareSelection(const AWhere: string; ACase: TJSONObject; ASample: Integer);
     procedure CompareElement(const AWhere: string; AEl: TJSONObject; ASample: Integer);
     procedure CompareMarker(const AWhere: string; AEl: TJSONObject; ASample: Integer);
+    procedure CompareOrder(const AWhere: string; AEls: TJSONArray; ASample: Integer);
     procedure RunCase(ACase: TJSONObject);
   protected
     procedure SetUp; override;
@@ -625,7 +626,7 @@ var
   restOk: Boolean;
   cf, cp, cr, crp: TTyChartColor;
   st: TTyAnimCfg;
-  el: TTyChartElement;
+  el, fel: TTyChartElement;
   rec: TTyStElement;
 begin
   map := AEl.Objects['map'];
@@ -643,6 +644,40 @@ begin
     Exit;
   end;
   el := FChart.List.Element(idx);
+  { [R2-B] A LABEL WHERE IT IS DRAWN (a labelPlace case): its computed
+    transform's translation, the frame's caption anchor -- to 1e-9 }
+  if ValueAt(AEl, 'tx', ASample, fv) and ValueAt(AEl, 'ty', ASample, rv) then
+  begin
+    if (FChart.Frame <> nil) and (FChart.Frame.Count = FChart.List.Count) then
+      fel := FChart.Frame.Element(idx)
+    else
+      fel := el;
+    Inc(FPlaces);
+    if (Abs(fel.Caption.X - NumOf(fv)) > 1e-9) or (Abs(fel.Caption.Y - NumOf(rv)) > 1e-9) then
+      Miss(Format('%s %s: drawn at (%s, %s), upstream (%s, %s)', [AWhere, id,
+        FloatToStr(fel.Caption.X), FloatToStr(fel.Caption.Y), FloatToStr(NumOf(fv)),
+        FloatToStr(NumOf(rv))]), AWhere + id + 'place');
+  end;
+  { [R2-B] A PATH'S DASH (a dash case): normalizeLineDash's lengths, as the
+    list draws them }
+  if ValueAt(AEl, 'dash', ASample, fv) then
+  begin
+    got := 'null';
+    if Length(el.Style.DashLogical) > 0 then
+    begin
+      got := '[';
+      for j := 0 to High(el.Style.DashLogical) do
+      begin
+        if j > 0 then got := got + ',';
+        got := got + TyJsNumberToString(el.Style.DashLogical[j]);
+      end;
+      got := got + ']';
+    end;
+    Inc(FDashes);
+    if got <> fv.AsString then
+      Miss(Format('%s %s: dash %s, upstream %s', [AWhere, id, got, fv.AsString]),
+        AWhere + id + 'dash');
+  end;
   { visible as upstream }
   if ValueAt(AEl, 'ignore', ASample, fv) and (fv.AsBoolean <> el.Ignore) then
     Miss(Format('%s %s: ignore %s, upstream %s', [AWhere, id, BoolToStr(el.Ignore, True),
@@ -760,6 +795,65 @@ begin
   end;
 end;
 
+{ [R2-B] THE PAINT ORDER (an order case): the elements upstream records a
+  display-list place for, in that order, are painted in that order here }
+procedure TAdvChartStatesMiscOracleTest.CompareOrder(const AWhere: string;
+  AEls: TJSONArray; ASample: Integer);
+var
+  k, i, n, idx: Integer;
+  el, map: TJSONObject;
+  v: TJSONData;
+  pos: TTyIntegerArray;
+  zi, at: array of Integer;
+  ids: TTyStringArray;
+  swapped: Boolean;
+  tz, ta: Integer;
+  ts: string;
+begin
+  n := 0;
+  zi := nil;
+  at := nil;
+  ids := nil;
+  for k := 0 to AEls.Count - 1 do
+  begin
+    el := AEls.Objects[k];
+    if el.Find('map').JSONType = jtNull then Continue;
+    if not Present(el, ASample) or not ValueAt(el, 'zi', ASample, v) then Continue;
+    map := el.Objects['map'];
+    idx := FChart.StatePartIndex(map.Integers['s'], map.Integers['row'], map.Strings['part']);
+    if idx < 0 then Continue;
+    SetLength(zi, n + 1);
+    SetLength(at, n + 1);
+    SetLength(ids, n + 1);
+    zi[n] := Round(NumOf(v));
+    at[n] := idx;
+    ids[n] := el.Strings['id'];
+    Inc(n);
+  end;
+  if n < 2 then Exit;
+  SetLength(pos, FChart.List.Count);
+  for i := 0 to FChart.List.Count - 1 do pos[FChart.List.PaintOrder(i)] := i;
+  { by upstream's place }
+  repeat
+    swapped := False;
+    for i := 0 to n - 2 do
+      if zi[i] > zi[i + 1] then
+      begin
+        tz := zi[i]; zi[i] := zi[i + 1]; zi[i + 1] := tz;
+        ta := at[i]; at[i] := at[i + 1]; at[i + 1] := ta;
+        ts := ids[i]; ids[i] := ids[i + 1]; ids[i + 1] := ts;
+        swapped := True;
+      end;
+  until not swapped;
+  for i := 0 to n - 2 do
+  begin
+    Inc(FOrders);
+    if pos[at[i]] > pos[at[i + 1]] then
+      Miss(Format('%s: %s is painted over %s, upstream under it', [AWhere, ids[i], ids[i + 1]]),
+        AWhere + ids[i] + 'ord');
+  end;
+end;
+
 procedure TAdvChartStatesMiscOracleTest.RunCase(ACase: TJSONObject);
 var
   name, s, where: string;
@@ -804,6 +898,7 @@ begin
       if el.Objects['map'].Integers['row'] < 0 then CompareMarker(where, el, si)
       else CompareElement(where, el, si);
     end;
+    CompareOrder(where, els, si);
   end;
 end;
 
@@ -818,9 +913,11 @@ begin
   if FBad > 0 then
     Fail(Format('%d mismatches over %d samples (%s):%s', [FBad, FCompared,
       FTally.CommaText, FReport]));
-  AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d',
-    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared]),
-    (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100));
+  AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
+    + 'label places %d, paint orders %d',
+    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders]) + Format(', dashes %d', [FDashes]),
+    (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100)
+    and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50));
 end;
 
 { ==================== by hand ==================== }

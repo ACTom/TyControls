@@ -33,6 +33,11 @@ Steps (case.steps[]):
                                    "the pointer left" (the port: MouseLeave)
   {type: 'action', payload}        chart.dispatchAction(payload)
   step 0 is {type: 'init'}: right after setOption and a frame.
+  [R2-B] a step's aim may be a plain point ({xy: [x, y]}: the hit test's
+  reach around a graph edge) or a breadcrumb item's point that something
+  else covers ({crumbUnder: [s]}: a legend over it); a case with labelPlace
+  also records a graph or tree node label's transform (label.m), where
+  updateInnerText put it on the path as drawn (scaled under emphasis)
   hit (pointer steps, before the step): {hd: the OUTERMOST highDownDispatcher
     on the host / parent chain as {s, i, dt?} (series, INNER data index, data
     type) or {crumb: k} (a treemap breadcrumb item, k from the root) or null}
@@ -311,6 +316,32 @@ const CASES = [
   { id: 'm-breadcrumb-default', note: "the breadcrumb's own emphasis: no declared emphasis text colour (createTextStyle of an empty model), the default emphasis item colour; a leaf drilled into (rootToNode) gives three crumbs",
     option: { animation: false, series: [tmS({ nodeClick: 'zoomToNode', breadcrumb: { show: true, bottom: 10, itemStyle: { color: '#eeeeee', textStyle: { color: '#333333' } } }, height: 300 })] },
     steps: [act({ type: 'treemapRootToNode', seriesIndex: 0, targetNodeId: 'a1' }), mv(crumb(0, 2)), mv(crumb(0, 1)), leave()] },
+  // ------------------------------------------------------------------ R2-B
+  { id: 'g-label-follows', labelPlace: true, note: "[R2-B] a hovered node's label rides its scaled symbol (updateInnerText on the path as drawn): right (b), top (c), inside (d: stays), left (e, symbolSize 20: ratio max(1.1, 3 / 10))",
+    option: { animation: false, series: [graphS({ label: { show: true, position: 'right' },
+      data: [
+        { name: 'a', x: 100, y: 100, itemStyle: { color: C[0] } },
+        { name: 'b', x: 300, y: 100, itemStyle: { color: C[1] } },
+        { name: 'c', x: 200, y: 250, itemStyle: { color: C[2] }, label: { position: 'top' } },
+        { name: 'd', x: 400, y: 250, itemStyle: { color: C[3] }, label: { position: 'inside' } },
+        { name: 'e', x: 400, y: 130, itemStyle: { color: C[4] }, symbolSize: 20, label: { position: 'left' } },
+      ] })] },
+    steps: [mv(node(0, 1)), mv(node(0, 2)), mv(node(0, 3)), mv(node(0, 4)), leave()] },
+  { id: 't-label-follows', labelPlace: true, note: "[R2-B] a hovered tree node's label rides its scaled symbol: A (left), A1 (a leaf: right), B1x",
+    option: { animation: false, series: [treeS()] },
+    steps: [mv(tnode(0, 2)), mv(tnode(0, 3)), mv(tnode(0, 7)), leave()] },
+  { id: 'g-edge-reach', note: "[R2-B] a graph edge takes the pointer within zrender's stroke threshold, max(lineWidth, 5) / 2 a side (Path.contain, no fill): a-b is 2 wide -- 3 px off it nothing, 2 px off it the edge; c-d is 12 wide -- 5 px off it the edge, 7 px off it nothing",
+    option: { animation: false, series: [graphS({ label: { show: false },
+      links: [{ source: 'a', target: 'b' }, { source: 'b', target: 'c' }, { source: 'c', target: 'd', lineStyle: { width: 12 } }, { source: 'a', target: 'c' }] })] },
+    steps: [mv({ xy: [200, 103] }), mv({ xy: [200, 102] }), mv({ xy: [300, 255] }), mv({ xy: [300, 257] }), leave()] },
+  { id: 'm-crumb-under-legend', note: "[R2-B] a legend (z 4) over the breadcrumb (the treemap's own group, z 2): the pointer on both is the legend's -- its hover highlights the pie -- not the crumb's; a crumb in the clear is its own",
+    option: { animation: false, legend: { data: ['P'], bottom: 12, left: 'center', itemHeight: 16 },
+      series: [tmS({ width: 440, height: 300, nodeClick: 'zoomToNode', breadcrumb: { show: true, bottom: 10, itemStyle: { color: '#eeeeee', textStyle: { color: '#333333' } } } }),
+        pieS({ label: { show: false } })] },
+    steps: [mv({ crumbUnder: [0] }), leave(), mv(crumb(0, 0)), leave()] },
+  { id: 'm-node-click-payload', note: "[R2-B] a click on a leaf (nodeClick zoomToNode): the view's own dispatch, {type, from: its uid, seriesId, targetNode: the TreeNode}",
+    option: { animation: false, series: [tmS({ nodeClick: 'zoomToNode' })] },
+    steps: [ck(tmrect(0, 4, 'content'))] },
 ];
 
 // ============================================================================
@@ -388,6 +419,12 @@ function textRec(t) {
 }
 const I6 = [1, 0, 0, 1, 0, 0];
 
+// [R2-B] the case being run: a labelPlace case records node labels' transforms
+let CUR_DEF = null;
+function labelPlaced(rec, t) {
+  if (rec && CUR_DEF && CUR_DEF.labelPlace) rec.m = Array.from(t.transform || I6).map(num);
+  return rec;
+}
 function snapGraph(chart, sm) {
   const out = { nodes: [], edges: [] };
   const d = sm.getData();
@@ -397,7 +434,7 @@ function snapGraph(chart, sm) {
     const p = g.childAt(0);
     const r = Object.assign({ raw: d.getRawIndex(i), name: d.getName(i), hs: g.hoverState || 0, hbo: g.__highByOuter || 0 },
       { path: Object.assign(elRec(p), { sx: num(p.scaleX), sy: num(p.scaleY), rsx: num(restOf(p).kv('scaleX')) }) });
-    r.label = textRec(p.getTextContent());
+    r.label = labelPlaced(textRec(p.getTextContent()), p.getTextContent());
     out.nodes.push(r);
   }
   const e = sm.getEdgeData();
@@ -427,7 +464,7 @@ function snapTree(chart, sm) {
     const p = g.childAt(0);
     out.nodes.push({ name: d.getName(i), hs: g.hoverState || 0, hbo: g.__highByOuter || 0,
       path: Object.assign(elRec(p), { sx: num(p.scaleX), sy: num(p.scaleY), rsx: num(restOf(p).kv('scaleX')) }),
-      label: textRec(p.getTextContent()), edge: g.__edge ? elRec(g.__edge) : null });
+      label: labelPlaced(textRec(p.getTextContent()), p.getTextContent()), edge: g.__edge ? elRec(g.__edge) : null });
   }
   return out;
 }
@@ -483,6 +520,7 @@ const EVENT_TYPES = ['highlight', 'downplay', 'select', 'unselect', 'toggleselec
 const MOUSE_TYPES = ['mouseover', 'mouseout', 'click'];
 
 function runCase(def) {
+  CUR_DEF = def;
   const chart = newChart();
   const option = clone(def.option);
   const events = [];
@@ -578,6 +616,26 @@ function runCase(def) {
         const p = aimIn(el, r, 'item');
         return { x: p[0], y: p[1], aim: 'item s' + s + ' i' + i };
       }
+      if (at.xy) {
+        return { x: at.xy[0], y: at.xy[1], aim: 'xy' };
+      }
+      if (at.crumbUnder) {
+        // a point of a crumb's polygon where the hover is something else's
+        const view = chart.getViewOfSeriesModel(series(at.crumbUnder[0]));
+        const items = view._breadcrumb.group.childrenRef();
+        for (let k = 0; k < items.length; k++) {
+          const r = globalRect(items[k]);
+          const cx = Math.round(r.x + r.width / 2);
+          const cy = Math.round(r.y + r.height / 2);
+          for (let d = 0; d <= Math.ceil(r.width / 2); d++) {
+            for (const x of [cx - d, cx + d]) {
+              const t = hd().findHover(x, cy).target;
+              if (items[k].contain(x, cy) && t && !owns(items[k], t)) return { x, y: cy, aim: 'under crumb ' + k };
+            }
+          }
+        }
+        throw new OracleError(def.id + ': no crumb point is covered');
+      }
       if (at.empty) {
         must(!hd().findHover(at.empty[0], at.empty[1]).target, def.id + ': the empty point hits an element');
         return { x: at.empty[0], y: at.empty[1], aim: 'empty' };
@@ -591,6 +649,8 @@ function runCase(def) {
       for (let e = t; e; e = e.__hostTarget || e.parent) if (e.__highDownDispatcher) hdEl = e;
       if (!hdEl) return { hd: null };
       const ecd = ecDataOf(hdEl);
+      // [R2-B] a dispatcher of no data (a legend item)
+      if (!ecd) return { hd: { other: true } };
       if (ecd && ecd.eventData && ecd.eventData.selfType === 'breadcrumb') return { hd: { crumb: hdEl.parent.childrenRef().indexOf(hdEl) } };
       const o = { s: ecd.seriesIndex, i: ecd.dataIndex };
       if (ecd.dataType) o.dt = ecd.dataType;

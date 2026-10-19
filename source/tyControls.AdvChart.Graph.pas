@@ -6529,7 +6529,11 @@ begin
       tooltip that read it as a node index would name whichever node happened
       to share the number. }
     el.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[i].Row);
-    el.HitSlopLogical := 4;
+    { [R2-B] zrender's stroke threshold: a path with no fill takes the
+      pointer within max(lineWidth, strokeContainThreshold 5) / 2 of its line
+      (Path.contain; the line is strokeNoScale, so in canvas px) [was a
+      fixed 4] }
+    el.HitSlopLogical := Math.Max(el.Style.StrokeWidthLogical, Double(5)) / 2;
 
     { THE LABEL, at the place Line.beforeUpdate gives it [Batch 114] }
     EdgeLabel(i, el);

@@ -1814,6 +1814,23 @@ begin
   end;
 end;
 
+{ [R2-B] the element of a map series' SVG picture the pointer is over: the
+  list element AIdx's node (-1, or no SVG element: none) on the geo that
+  draws the series }
+procedure TTyAdvanceChart.MapSvgPointer(ASeriesIndex, AIdx: Integer);
+var k, node: Integer; geo: TTyGeo;
+begin
+  node := -1;
+  if (FPaintList <> nil) and (AIdx >= 0) and (AIdx < FPaintList.Count) then
+    node := FPaintList.Element(AIdx).ZrHit.SvgNode - 1;
+  for k := 0 to High(FGeoDraws) do
+  begin
+    geo := TTyGeo(FGeoDraws[k].Geo);
+    if (geo <> nil) and geo.Data.Active and (geo.Data.SeriesIndex = ASeriesIndex) then
+      geo.SetSvgPointer(node);
+  end;
+end;
+
 function TTyAdvanceChart.MapApplyChanged: Boolean;
 var k, ppi: Integer; geo: TTyGeo; ink: TTyGeoInk;
 begin

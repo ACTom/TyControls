@@ -2632,6 +2632,8 @@ type
       flags moved takes its states again, its elements in place }
     procedure MapRepatch(APPI: Integer; AForce: Boolean = False);
     function MapApplyChanged: Boolean;
+    { [R2-B] a map series' SVG element under the pointer (list index; -1 none) }
+    procedure MapSvgPointer(ASeriesIndex, AIdx: Integer);
     { MapSeries.formatTooltip }
     function MapTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
     { createLegacyDataSelectAction: pieToggleSelect, mapSelect ... as the
@@ -2948,8 +2950,10 @@ type
     procedure HierUpdate(const AEventType, APayloadJson: string);
     procedure SunburstClick(ASeries, ARow: Integer);
     procedure TreemapClick(ASeries, AX, AY: Integer);
-    function CrumbAt(AX, AY: Integer; out ASeries, AIndex: Integer): Boolean;
     procedure TreemapCrumbSelect(ASeries, AIndex: Integer);
+    { [R2-B] the payload the treemap view dispatches itself }
+    function TreemapViewPayload(const AType: string; ASeries: Integer;
+      const AId: string): TJSONObject;
     function TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
     function TreemapWheel(ASeries: Integer; AScale: Double; AX, AY: Integer): Boolean;
     function TreemapRoamOk(ASlot: Integer; AZoom: Boolean): Boolean;
@@ -3408,6 +3412,9 @@ type
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     { the chart's mouse events [Batch 84] }
     function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+    { [R2-B] the breadcrumb item a list element is, and its target }
+    function CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
+    function CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;
     { [R2-B] the target of the marker element at AIdx in the list }
     function MarkerEventTarget(AIdx: Integer): TTyChartEventTarget;
     function SeriesEventTarget(const ADatum: TTyChartDatumRef;
