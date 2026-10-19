@@ -1501,6 +1501,46 @@ begin
   if anyChange then DropStatic;
 end;
 
+{ [R2-H] A TREEMAP RENDERED AGAIN (a drill, a zoom, a roam, a setOption, a
+  plain render) styles every kept element's words anew -- prepareText ->
+  setLabelStyle -> useStyle -- unless the node has moved out of the view
+  (thisInvisible: processInvisible, its words left alone). A fade still
+  running on those words (the first render's, LabelManager's initProps on
+  the text's style) writes into the style the render replaced: the words
+  stand at their rest at once. So the set's fades of the rows the render
+  styles again end here, before the update carries them; a deleted row's
+  goes on with its ghost (TmAnimArm). The set keys a row's words by the
+  row alone: a content's words where the old render had them and the
+  content is kept, a header's where it had one and the background is kept.
+  AMap: a new tree's old row of each new row (nil: the same rows). }
+procedure TTyAdvanceChart.TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
+  const AOldHave, AHave: TTyTreemapHave; const AMap: TTyIntegerArray);
+var
+  si, row, o: Integer;
+  p: TTyChartAnimProxy;
+
+  function Was(const AArr: TTyBoolArray; ARow: Integer): Boolean;
+  begin
+    Result := (ARow >= 0) and (ARow <= High(AArr)) and AArr[ARow];
+  end;
+
+begin
+  if FAnimSet = nil then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  for row := 0 to High(FTreemaps[ASlot].Nodes) do
+  begin
+    if FTreemaps[ASlot].Nodes[row].Invisible then Continue;
+    if AMap = nil then o := row
+    else if row <= High(AMap) then o := AMap[row]
+    else o := -1;
+    if (o < 0) or (o > High(AOld.Nodes)) then Continue;
+    if not ((AOld.Nodes[o].HasLabel and Was(AHave.Ct, row) and Was(AOldHave.Ct, o))
+      or (AOld.Nodes[o].HasUpper and Was(AHave.Bg, row) and Was(AOldHave.Bg, o))) then Continue;
+    p := FAnimSet.DetachProxy(si, o, 'label');
+    p.Free;
+  end;
+end;
+
 procedure TTyAdvanceChart.TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
   const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
   const AMap: TTyIntegerArray);
@@ -1704,8 +1744,9 @@ var
 
 begin
   si := FBindings[ASlot].SeriesIndex;
-  { a label's fade is its Text's: it runs on whatever the render does with
-    the element (LabelManager starts none for a kept one) }
+  { a label's fade is its Text's style's: a deleted element's goes on, a
+    kept one's ends with the render's new style (LabelManager starts none
+    for a kept one) }
   oldLabels := nil;
   if si <= High(FTmAnim) then
   begin
@@ -1840,7 +1881,12 @@ begin
         begin
           A.Ghosts[High(A.Ghosts)].LP := oldLabels[row][2 - kind];
           oldLabels[row][2 - kind] := nil;
-        end;
+        end
+        { [R2-H] or the first render's fade (LabelManager's, on the set): a
+          deleted element is not rendered again, so its words go on fading
+          in while it fades out }
+        else if A.Ghosts[High(A.Ghosts)].HasLabel and (FAnimSet <> nil) then
+          A.Ghosts[High(A.Ghosts)].LP := FAnimSet.DetachProxy(si, row, 'label');
         if drill then
         begin
           if (row = AView.Target) and Was(AOldHave.Group, AView.Target) then
@@ -1904,18 +1950,27 @@ begin
         TS^.Nodes[row].UpperInside := AOld.Nodes[OldOf(row)].UpperInside;
       end;
   end;
-  { a kept element's fade goes on }
-  for row := 0 to Math.Min(High(oldLabels), nn - 1) do
+  { [R2-H] A KEPT ELEMENT'S FADE GOES ON ONLY WHERE THE RENDER LEAVES ITS
+    WORDS ALONE -- a node moved out of the view (renderNode's thisInvisible:
+    processInvisible, no prepareText). Anywhere else the render styles the
+    words anew (prepareText -> setLabelStyle -> useStyle), the fade's tween
+    writes into the style it replaced and the words are at their rest at
+    once: the old proxy goes in the finally below (TmStrandLabelFades does
+    the same to the first render's fades on the set). }
+  for row := 0 to nn - 1 do
   begin
-    if Was(have.Ct, row) and Was(AOldHave.Ct, row) and (oldLabels[row][0] <> nil) then
+    if not TS^.Nodes[row].Invisible then Continue;
+    par := OldOf(row);
+    if (par < 0) or (par > High(oldLabels)) then Continue;
+    if Was(have.Ct, row) and Was(AOldHave.Ct, par) and (oldLabels[par][0] <> nil) then
     begin
-      A.Labels[row][0] := oldLabels[row][0];
-      oldLabels[row][0] := nil;
+      A.Labels[row][0] := oldLabels[par][0];
+      oldLabels[par][0] := nil;
     end;
-    if Was(have.Bg, row) and Was(AOldHave.Bg, row) and (oldLabels[row][1] <> nil) then
+    if Was(have.Bg, row) and Was(AOldHave.Bg, par) and (oldLabels[par][1] <> nil) then
     begin
-      A.Labels[row][1] := oldLabels[row][1];
-      oldLabels[row][1] := nil;
+      A.Labels[row][1] := oldLabels[par][1];
+      oldLabels[par][1] := nil;
     end;
   end;
   { LabelManager: a label on an element this render made fades in, the
@@ -2860,6 +2915,11 @@ begin
       TyTreemapBreadcrumb(FTreemaps[i],
         FTreemapInks[i].ItemLabels[Length(FTreemaps[i].Nodes)], AMeasurer,
         FLastRect, target, have, prevHave, prev);
+    { [R2-H] a render again ends the running fades of the words it styles }
+    if (view.Kind <> tpkKeep) and prev.Valid then
+      TmStrandLabelFades(i, prev, prevHave, have, nil)
+    else if fromOld then
+      TmStrandLabelFades(i, FTmOld[si], FTmOldHave[si], have, map);
     { THE DRILL-DOWN of a render for a gesture or an action [Batch 115] }
     if view.Kind = tpkKeep then
     else if prev.Valid and (view.Kind <> tpkNone) then

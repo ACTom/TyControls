@@ -754,6 +754,18 @@ const CASES = [
     W: 600, H: 400, option: tm({ animation: true, leafDepth: 1 }, { animation: true }),
     steps: [{ tick: 5000 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 150 }, { click: { tm: 2 } }, { tick: 300 }, { tick: 450 },
       { click: { crumb: 0 } }, { tick: 16 }, { tick: 250 }, { tick: 300 }, { tick: 400 }] },
+  // [R2-H] a drill while the first render's labels still fade in (LabelManager, enter timing): the treemap is not
+  // 'animating' (its own transition is the update's), so the click drills
+  { id: 'tm-anim-early', group: 'tm-anim', note: 'zoomToNode 100 ms into the first render, its labels still fading in: the click drills; the kept labels\' fade and the transition',
+    W: 600, H: 400, option: tm({ animation: true }, { animation: true }),
+    steps: [{ tick: 16 }, { tick: 84 }, { click: { tm: 3 } }, { tick: 16 }, { tick: 84 }, { tick: 200 }, { tick: 300 }, { tick: 400 },
+      { tick: 1000 }] },
+  { id: 'tm-anim-early-drill', group: 'tm-anim', note: 'leafDepth 1: a rootToNode drill 300 ms into the first render, the labels still fading in',
+    W: 600, H: 400, option: tm({ animation: true, leafDepth: 1 }, { animation: true }),
+    steps: [{ tick: 16 }, { tick: 284 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 150 }, { tick: 300 }, { tick: 450 }, { tick: 1000 }] },
+  { id: 'tm-anim-early-pan', group: 'tm-anim', note: 'a pan 100 ms into the first render, its labels still fading in: treemapMove renders again, the kept words at their rest at once',
+    W: 600, H: 400, option: tm({ animation: true }, { animation: true }),
+    steps: [{ tick: 16 }, { tick: 84 }, { drag: [[300, 200], [320, 210]] }, { tick: 16 }, { tick: 300 }, { tick: 1000 }] },
   { id: 'tm-anim-opts', group: 'tm-anim', note: "animationDurationUpdate 400, animationEasing 'linear' (the treemap animates with animationEasing); a pan while it runs does nothing, after it pans and does not animate (the pointer leaves the canvas: no hover, whose state transition is not ported)",
     W: 600, H: 400, option: tm({ animation: true, animationDurationUpdate: 400, animationEasing: 'linear' }, { animation: true }),
     steps: [{ tick: 5000 }, { action: { type: 'treemapZoomToNode', targetNode: 'b1' } }, { tick: 16 }, { tick: 100 }, { tick: 200 }, { tick: 200 },

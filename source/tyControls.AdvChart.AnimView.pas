@@ -682,6 +682,9 @@ type
     function Count: Integer;
     function Item(AIndex: Integer): TTyChartAnimProxy;
     function Find(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
+    { [R2-H] the proxy of (ASeries, AIndex, ARole) taken out of the set, its
+      clips still on the driver: the caller owns it now (nil for none) }
+    function DetachProxy(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
     { a proxy of the states' own, keyed as given [Batch 94] }
     function MakeState(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
     { The enter animation of everything in AList that asks for one and has
@@ -1311,6 +1314,16 @@ function TTyChartAnimSet.Find(ASeries, AIndex: Integer;
   const ARole: string): TTyChartAnimProxy;
 begin
   Result := TTyChartAnimProxy(FIndex.Find(KeyOf(ASeries, AIndex, ARole)));
+end;
+
+function TTyChartAnimSet.DetachProxy(ASeries, AIndex: Integer;
+  const ARole: string): TTyChartAnimProxy;
+begin
+  Result := Find(ASeries, AIndex, ARole);
+  if Result = nil then Exit;
+  FIndex.Remove(Result);
+  FItems.Remove(Result);
+  Unfollow(Result);
 end;
 
 function TTyChartAnimSet.MakeState(ASeries, AIndex: Integer;
