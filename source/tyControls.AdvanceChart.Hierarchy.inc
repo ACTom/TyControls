@@ -639,6 +639,14 @@ end;
 
 procedure TTyAdvanceChart.HierDrillReset;
 begin
+  { [R2-C] the treemaps as last drawn, for the merge's transition from the
+    old tree (the first reset since a render keeps them) }
+  if Length(FTmPrev) > 0 then
+  begin
+    FTmOld := FTmPrev;
+    FTmOldHave := FTmHave;
+    FTmOldKeys := FTmViewKeys;
+  end;
   FSunRoot := nil;
   FSunVirt := nil;
   FSunHandlers := nil;
@@ -1056,6 +1064,18 @@ begin
   if ARow < 0 then Exit;
   if (AKind = 'group') and (ARow <= High(FTmAnim[ASeriesIndex].Groups)) then
     Result := FTmAnim[ASeriesIndex].Groups[ARow]
+  { [R2-C] a deleted group by its OLD row }
+  else if AKind = 'delGroup' then
+  begin
+    if FTmAnim[ASeriesIndex].Map <> nil then
+    begin
+      if ARow <= High(FTmAnim[ASeriesIndex].OldGroups) then
+        Result := FTmAnim[ASeriesIndex].OldGroups[ARow];
+    end
+    else if (ARow <= High(FTmAnim[ASeriesIndex].GhostGroup))
+      and FTmAnim[ASeriesIndex].GhostGroup[ARow] then
+      Result := FTmAnim[ASeriesIndex].Groups[ARow];
+  end
   else if (AKind = 'bg') and (ARow <= High(FTmAnim[ASeriesIndex].Rects)) then
     Result := FTmAnim[ASeriesIndex].Rects[ARow][0]
   else if (AKind = 'ct') and (ARow <= High(FTmAnim[ASeriesIndex].Rects)) then
@@ -1071,6 +1091,19 @@ begin
   Result := 0;
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim)) then
     Result := Length(FTmAnim[ASeriesIndex].Ghosts);
+end;
+
+function TTyAdvanceChart.TreemapGhost(ASeriesIndex, AIndex: Integer;
+  out ARow, AKind: Integer): TTyChartAnimProxy;
+begin
+  Result := nil;
+  ARow := -1;
+  AKind := -1;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FTmAnim)) then Exit;
+  if (AIndex < 0) or (AIndex > High(FTmAnim[ASeriesIndex].Ghosts)) then Exit;
+  ARow := FTmAnim[ASeriesIndex].Ghosts[AIndex].Row;
+  AKind := FTmAnim[ASeriesIndex].Ghosts[AIndex].Kind;
+  Result := FTmAnim[ASeriesIndex].Ghosts[AIndex].P;
 end;
 
 { ---- the gestures ---- }
@@ -1386,6 +1419,7 @@ begin
   { the proxies before their wrap: a proxy freed stops its animators, and a
     stopped one counts down on the wrap }
   for k := 0 to High(FTmAnim[ASeries].Groups) do FreeAndNil(FTmAnim[ASeries].Groups[k]);
+  for k := 0 to High(FTmAnim[ASeries].OldGroups) do FreeAndNil(FTmAnim[ASeries].OldGroups[k]);
   for k := 0 to High(FTmAnim[ASeries].Rects) do
     for j := 0 to 1 do FreeAndNil(FTmAnim[ASeries].Rects[k][j]);
   for k := 0 to High(FTmAnim[ASeries].Labels) do
@@ -1427,6 +1461,7 @@ begin
     if (FTmAnim[si].Wrap = nil) or FTmAnim[si].Wrap.Live then Continue;
     if Length(FTmAnim[si].Ghosts) = 0 then
     begin
+      for row := 0 to High(FTmAnim[si].OldGroups) do FreeAndNil(FTmAnim[si].OldGroups[row]);
       slot := SlotOfSeries(si);
       if (slot < 0) or (slot > High(FTreemaps)) then Continue;
       { invisible from now on }
@@ -1454,6 +1489,7 @@ begin
         FreeAndNil(FTmAnim[si].Groups[row]);
         FTmAnim[si].GhostGroup[row] := False;
       end;
+    for row := 0 to High(FTmAnim[si].OldGroups) do FreeAndNil(FTmAnim[si].OldGroups[row]);
     slot := SlotOfSeries(si);
     if (slot >= 0) and (slot <= High(FTreemaps)) then
       for row := 0 to High(FTreemaps[slot].Nodes) do
@@ -1464,7 +1500,8 @@ begin
 end;
 
 procedure TTyAdvanceChart.TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
-  const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer);
+  const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
+  const AMap: TTyIntegerArray);
 type
   TTask = record
     P: TTyChartAnimProxy;
@@ -1488,10 +1525,27 @@ var
   oldLabels: array of TTyTmProxyPair;
   el, lel: TTyChartElement;
   props: TTyAnimProps;
+  { [R2-C] old -> new rows of a new tree }
+  o2n: TTyIntegerArray;
+  no: Integer;
 
   function Was(const AArr: TTyBoolArray; ARow: Integer): Boolean;
   begin
     Result := (ARow >= 0) and (ARow <= High(AArr)) and AArr[ARow];
+  end;
+
+  { [R2-C] a new row's old row and an old row's new one: the same row on
+    the same tree }
+  function OldOf(ARow: Integer): Integer;
+  begin
+    if AMap = nil then Exit(ARow);
+    if (ARow >= 0) and (ARow <= High(AMap)) then Result := AMap[ARow] else Result := -1;
+  end;
+
+  function NewOf(ARow: Integer): Integer;
+  begin
+    if AMap = nil then Exit(ARow);
+    if (ARow >= 0) and (ARow <= High(o2n)) then Result := o2n[ARow] else Result := -1;
   end;
 
   procedure Task(AP: TTyChartAnimProxy; const AProps: TTyAnimProps);
@@ -1577,10 +1631,11 @@ var
     if not Was(have.Group, ARow) then Exit;
     pr := TS^.Hier.Nodes[ARow].Parent;
     { the group }
-    if Was(AOldHave.Group, ARow) then
+    if Was(AOldHave.Group, OldOf(ARow)) then
     begin
       q := TmProxy(FAnim, si, ARow, 'tmGroup');
-      q.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[ARow].X)), TmNum('y', TmOr0(AOld.Nodes[ARow].Y))]));
+      q.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[OldOf(ARow)].X)),
+        TmNum('y', TmOr0(AOld.Nodes[OldOf(ARow)].Y))]));
       A.Groups[ARow] := q;
       Task(q, TyAnimProps([TmNum('x', TmOr0(TS^.Nodes[ARow].X)), TmNum('y', TmOr0(TS^.Nodes[ARow].Y))]));
     end
@@ -1602,15 +1657,15 @@ var
       if (c = 1) and not Was(have.Bg, ARow) then Continue;
       if (c = 2) and not Was(have.Ct, ARow) then Continue;
       q := TmProxy(FAnim, si, ARow, 'tmRect');
-      if ((c = 1) and Was(AOldHave.Bg, ARow)) or ((c = 2) and Was(AOldHave.Ct, ARow)) then
+      if ((c = 1) and Was(AOldHave.Bg, OldOf(ARow))) or ((c = 2) and Was(AOldHave.Ct, OldOf(ARow))) then
       begin
         { kept: from its old shape }
-        q.Attr(With1(OldShape(ARow, c), 'style.opacity', 1));
+        q.Attr(With1(OldShape(OldOf(ARow), c), 'style.opacity', 1));
         if c = 1 then
         begin
           lastHas[ARow] := True;
-          lastW[ARow] := AOld.Nodes[ARow].W;
-          lastH[ARow] := AOld.Nodes[ARow].H;
+          lastW[ARow] := AOld.Nodes[OldOf(ARow)].W;
+          lastH[ARow] := AOld.Nodes[OldOf(ARow)].H;
         end;
         Task(q, NewShape(ARow, c));
       end
@@ -1660,15 +1715,26 @@ begin
   if not AnimAllowed then Exit;
   TS := @FTreemaps[ASlot];
   nn := Length(TS^.Nodes);
-  if (not AOld.Valid) or (Length(AOld.Nodes) <> nn) then Exit;
-  have := TyTreemapHaveOf(TS^, AOldHave);
+  no := Length(AOld.Nodes);
+  if not AOld.Valid then Exit;
+  if (AMap = nil) and (no <> nn) then Exit;
+  o2n := nil;
+  if AMap <> nil then
+  begin
+    SetLength(o2n, no);
+    for row := 0 to no - 1 do o2n[row] := -1;
+    for row := 0 to High(AMap) do
+      if (AMap[row] >= 0) and (AMap[row] < no) then o2n[AMap[row]] := row;
+  end;
+  have := TyTreemapHaveOf(TS^, AOldHave, AMap);
   cnt := nn;
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then cnt := FStores[ASlot].Count;
   model := TyAnimSeriesModel(FOption.Root, si, cnt);
   { hasAnimation is `get('animation')` -- no threshold -- and only a zoom or
     a drill transitions; LabelManager fades a new label whenever the series
     animates }
-  wrapOn := (AView.Kind in [tpkZoomToNode, tpkRootToNode])
+  { [R2-C] and a setOption's render (no payload), from the old tree }
+  wrapOn := ((AView.Kind in [tpkZoomToNode, tpkRootToNode]) or (AMap <> nil))
     and TyAnimOptTruthy(TyAnimGetShallow(model, 'animation'));
   labelsOn := TyAnimIsEnabled(model);
   if not (wrapOn or labelsOn) then Exit;
@@ -1680,6 +1746,9 @@ begin
   SetLength(A.GhostGroup, nn);
   A.Old := AOld;
   A.OldHave := AOldHave;
+  A.Map := AMap;
+  A.O2N := o2n;
+  if AMap <> nil then SetLength(A.OldGroups, no);
   if wrapOn then
   begin
     { the duration the series' update one, a function none; the easing its
@@ -1703,20 +1772,20 @@ begin
     { THE DELETED, first: groups, backgrounds, contents of the old storage
       the render did not take }
     for kind := 0 to 2 do
-      for row := 0 to nn - 1 do
+      for row := 0 to no - 1 do
       begin
         case kind of
-          0: if not (Was(AOldHave.Group, row) and not Was(have.Group, row)) then Continue;
-          1: if not (Was(AOldHave.Bg, row) and not Was(have.Bg, row)) then Continue;
+          0: if not (Was(AOldHave.Group, row) and not Was(have.Group, NewOf(row))) then Continue;
+          1: if not (Was(AOldHave.Bg, row) and not Was(have.Bg, NewOf(row))) then Continue;
         else
-          if not (Was(AOldHave.Ct, row) and not Was(have.Ct, row)) then Continue;
+          if not (Was(AOldHave.Ct, row) and not Was(have.Ct, NewOf(row))) then Continue;
         end;
         { an element already invisible leaves at the end, unanimated }
         if (kind > 0) and AOld.Nodes[row].Invisible then Continue;
         { the parent group's store: its node's size at its last render }
         if kind = 0 then par := AOld.Hier.Nodes[row].Parent else par := row;
         if par < 0 then Continue;
-        parDel := not Was(have.Group, par);
+        parDel := not Was(have.Group, NewOf(par));
         if parDel then
         begin
           pw := AOld.Nodes[par].W;
@@ -1724,15 +1793,20 @@ begin
         end
         else
         begin
-          pw := TS^.Nodes[par].W;
-          ph := TS^.Nodes[par].H;
+          pw := TS^.Nodes[NewOf(par)].W;
+          ph := TS^.Nodes[NewOf(par)].H;
         end;
         if kind = 0 then
         begin
-          A.GhostGroup[row] := True;
           p := TmProxy(FAnim, si, row, 'tmGroup');
           p.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[row].X)), TmNum('y', TmOr0(AOld.Nodes[row].Y))]));
-          A.Groups[row] := p;
+          { [R2-C] a new tree's deleted group, by its old row }
+          if AMap <> nil then A.OldGroups[row] := p
+          else
+          begin
+            A.GhostGroup[row] := True;
+            A.Groups[row] := p;
+          end;
           { a drill fades a group's style, which a group has not: it stays }
           if drill then Task(nil, nil)
           else
@@ -1804,27 +1878,28 @@ begin
       old visual (processInvisible sets none) }
     for row := 0 to nn - 1 do
       if TS^.Nodes[row].Invisible and (Was(have.Bg, row) or Was(have.Ct, row))
-        and not AOld.Nodes[row].Invisible and AOld.Nodes[row].HasLayout then
+        and (OldOf(row) >= 0) and not AOld.Nodes[OldOf(row)].Invisible
+        and AOld.Nodes[OldOf(row)].HasLayout then
       begin
         TS^.Nodes[row].DrawInvisible := True;
-        TS^.Nodes[row].HasStroke := AOld.Nodes[row].HasStroke;
-        TS^.Nodes[row].Stroke := AOld.Nodes[row].Stroke;
-        TS^.Nodes[row].HasFill := AOld.Nodes[row].HasFill;
-        TS^.Nodes[row].Fill := AOld.Nodes[row].Fill;
-        TS^.Nodes[row].HasLabel := AOld.Nodes[row].HasLabel;
-        TS^.Nodes[row].LabelText := AOld.Nodes[row].LabelText;
-        TS^.Nodes[row].LabelX := AOld.Nodes[row].LabelX - AOld.Nodes[row].TX + TS^.Nodes[row].TX;
-        TS^.Nodes[row].LabelY := AOld.Nodes[row].LabelY - AOld.Nodes[row].TY + TS^.Nodes[row].TY;
-        TS^.Nodes[row].LabelAH := AOld.Nodes[row].LabelAH;
-        TS^.Nodes[row].LabelAV := AOld.Nodes[row].LabelAV;
-        TS^.Nodes[row].LabelRaw := AOld.Nodes[row].LabelRaw;
-        TS^.Nodes[row].HasLabelRaw := AOld.Nodes[row].HasLabelRaw;
-        TS^.Nodes[row].HasUpper := AOld.Nodes[row].HasUpper;
-        TS^.Nodes[row].UpperText := AOld.Nodes[row].UpperText;
-        TS^.Nodes[row].UpperX := AOld.Nodes[row].UpperX - AOld.Nodes[row].TX + TS^.Nodes[row].TX;
-        TS^.Nodes[row].UpperY := AOld.Nodes[row].UpperY - AOld.Nodes[row].TY + TS^.Nodes[row].TY;
-        TS^.Nodes[row].UpperCentre := AOld.Nodes[row].UpperCentre;
-        TS^.Nodes[row].UpperInside := AOld.Nodes[row].UpperInside;
+        TS^.Nodes[row].HasStroke := AOld.Nodes[OldOf(row)].HasStroke;
+        TS^.Nodes[row].Stroke := AOld.Nodes[OldOf(row)].Stroke;
+        TS^.Nodes[row].HasFill := AOld.Nodes[OldOf(row)].HasFill;
+        TS^.Nodes[row].Fill := AOld.Nodes[OldOf(row)].Fill;
+        TS^.Nodes[row].HasLabel := AOld.Nodes[OldOf(row)].HasLabel;
+        TS^.Nodes[row].LabelText := AOld.Nodes[OldOf(row)].LabelText;
+        TS^.Nodes[row].LabelX := AOld.Nodes[OldOf(row)].LabelX - AOld.Nodes[OldOf(row)].TX + TS^.Nodes[row].TX;
+        TS^.Nodes[row].LabelY := AOld.Nodes[OldOf(row)].LabelY - AOld.Nodes[OldOf(row)].TY + TS^.Nodes[row].TY;
+        TS^.Nodes[row].LabelAH := AOld.Nodes[OldOf(row)].LabelAH;
+        TS^.Nodes[row].LabelAV := AOld.Nodes[OldOf(row)].LabelAV;
+        TS^.Nodes[row].LabelRaw := AOld.Nodes[OldOf(row)].LabelRaw;
+        TS^.Nodes[row].HasLabelRaw := AOld.Nodes[OldOf(row)].HasLabelRaw;
+        TS^.Nodes[row].HasUpper := AOld.Nodes[OldOf(row)].HasUpper;
+        TS^.Nodes[row].UpperText := AOld.Nodes[OldOf(row)].UpperText;
+        TS^.Nodes[row].UpperX := AOld.Nodes[OldOf(row)].UpperX - AOld.Nodes[OldOf(row)].TX + TS^.Nodes[row].TX;
+        TS^.Nodes[row].UpperY := AOld.Nodes[OldOf(row)].UpperY - AOld.Nodes[OldOf(row)].TY + TS^.Nodes[row].TY;
+        TS^.Nodes[row].UpperCentre := AOld.Nodes[OldOf(row)].UpperCentre;
+        TS^.Nodes[row].UpperInside := AOld.Nodes[OldOf(row)].UpperInside;
       end;
   end;
   { a kept element's fade goes on }
@@ -1846,14 +1921,14 @@ begin
   if labelsOn then
     for row := 0 to nn - 1 do
     begin
-      if Was(have.Ct, row) and not Was(AOldHave.Ct, row) and TS^.Nodes[row].HasLabel then
+      if Was(have.Ct, row) and not Was(AOldHave.Ct, OldOf(row)) and TS^.Nodes[row].HasLabel then
       begin
         p := TmProxy(FAnim, si, row, 'tmLabel');
         p.Attr(TyAnimProps([TmNum('style.opacity', 0)]));
         TyInitProps(p, TyAnimProps([TmNum('style.opacity', 1)]), model, TyAnimCallAt(row));
         A.Labels[row][0] := p;
       end;
-      if Was(have.Bg, row) and not Was(AOldHave.Bg, row) and TS^.Nodes[row].HasUpper then
+      if Was(have.Bg, row) and not Was(AOldHave.Bg, OldOf(row)) and TS^.Nodes[row].HasUpper then
       begin
         p := TmProxy(FAnim, si, row, 'tmUpper');
         p.Attr(TyAnimProps([TmNum('style.opacity', 0)]));
@@ -1886,6 +1961,8 @@ type
 var
   si, slot, nn, i, row, sub: Integer;
   T: array of TTmT;
+  { [R2-C] a new tree's deleted elements: composed down the OLD tree }
+  OT: array of TTmT;
   A: ^TTyTmAnim;
   TS: ^TTyTreemapSolved;
   m: ITyTextMeasurer;
@@ -1970,6 +2047,81 @@ var
     T[ARow].Done := True;
   end;
 
+  { [R2-C] an OLD row's group as a merge's frame has it: the group a new row
+    took over (its own composition), else the deleted group itself under
+    its old parent -- zrender's composition as Compose's }
+  procedure OCompose(ARow: Integer);
+  var par, nr: Integer; x, y, ptx, pty: Double; pHas: Boolean;
+  begin
+    if OT[ARow].Done then Exit;
+    nr := -1;
+    if ARow <= High(A^.O2N) then nr := A^.O2N[ARow];
+    if (nr >= 0) and (nr < nn) and (si <= High(FTmHave)) and (nr <= High(FTmHave[si].Group))
+      and FTmHave[si].Group[nr] then
+    begin
+      Compose(nr);
+      OT[ARow] := T[nr];
+      Exit;
+    end;
+    par := A^.Old.Hier.Nodes[ARow].Parent;
+    if (par >= 0) and (par <= High(OT)) then
+    begin
+      OCompose(par);
+      pHas := OT[par].HasT;
+      ptx := OT[par].TX;
+      pty := OT[par].TY;
+    end
+    else
+    begin
+      pHas := not ((not ((TS^.ContainerX > 5e-5) or (TS^.ContainerX < -5e-5)))
+        and (not ((TS^.ContainerY > 5e-5) or (TS^.ContainerY < -5e-5))));
+      if pHas then
+      begin
+        ptx := 0 + (0 + TS^.ContainerX);
+        pty := 0 + (0 + TS^.ContainerY);
+      end
+      else
+      begin
+        ptx := 0;
+        pty := 0;
+      end;
+    end;
+    if (ARow <= High(A^.OldGroups)) and (A^.OldGroups[ARow] <> nil) then
+    begin
+      x := A^.OldGroups[ARow].Num('x');
+      y := A^.OldGroups[ARow].Num('y');
+    end
+    else
+    begin
+      x := TmOr0(A^.Old.Nodes[ARow].X);
+      y := TmOr0(A^.Old.Nodes[ARow].Y);
+    end;
+    if (not ((x > 5e-5) or (x < -5e-5))) and (not ((y > 5e-5) or (y < -5e-5))) then
+    begin
+      OT[ARow].HasT := pHas;
+      OT[ARow].TX := ptx;
+      OT[ARow].TY := pty;
+    end
+    else if not pHas then
+    begin
+      OT[ARow].HasT := True;
+      OT[ARow].TX := 0 + (0 + x);
+      OT[ARow].TY := 0 + (0 + y);
+    end
+    else
+    begin
+      OT[ARow].HasT := True;
+      OT[ARow].TX := x + ptx;
+      OT[ARow].TY := y + pty;
+    end;
+    if not OT[ARow].HasT then
+    begin
+      OT[ARow].TX := 0;
+      OT[ARow].TY := 0;
+    end;
+    OT[ARow].Done := True;
+  end;
+
   procedure RectOf(AP: TTyChartAnimProxy; const AEl: TTyChartElement);
   begin
     if AP <> nil then
@@ -2034,6 +2186,8 @@ begin
     if Length(A^.Groups) <> nn then Continue;
     T := nil;
     SetLength(T, nn);
+    OT := nil;
+    SetLength(OT, Length(A^.Old.Nodes));
     for i := 0 to AFrame.Count - 1 do
     begin
       el := AFrame.Element(i);
@@ -2083,6 +2237,34 @@ begin
       row := A^.Ghosts[i].Row;
       el := A^.Ghosts[i].El;
       RectOf(A^.Ghosts[i].P, el);
+      if A^.Map <> nil then
+      begin
+        { [R2-C] a merge's deleted rect, under the old tree's groups; its
+          words ride the rect's corner (the old option is gone: they are
+          not cut again) }
+        if (row < 0) or (row > High(OT)) then Continue;
+        OCompose(row);
+        ox0 := el.Shape.Bounds.Left;
+        oy0 := el.Shape.Bounds.Top;
+        el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+          (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
+        el.Style.Alpha := op;
+        AFrame.Add(el);
+        if A^.Ghosts[i].HasLabel then
+        begin
+          ox0 := el.Shape.Bounds.Left - ox0;
+          oy0 := el.Shape.Bounds.Top - oy0;
+          el := A^.Ghosts[i].LabelEl;
+          if A^.Stepped then
+          begin
+            el.Caption.X := el.Caption.X + ox0;
+            el.Caption.Y := el.Caption.Y + oy0;
+          end;
+          if A^.Ghosts[i].LP <> nil then el.Style.Alpha := A^.Ghosts[i].LP.Num('style.opacity');
+          AFrame.Add(el);
+        end;
+        Continue;
+      end;
       Place(el, row);
       AFrame.Add(el);
       if A^.Ghosts[i].HasLabel then
@@ -2591,9 +2773,16 @@ var
   prevHave, have: TTyTreemapHave;
   ref: TTyXYWH;
   boxed, fc: Boolean;
+  { [R2-C] a setOption's new tree over the old one }
+  keys: TTyStringArray;
+  fromOld: Boolean;
+  map: TTyIntegerArray;
 begin
   FTreemaps := nil;
   FTreemapInks := nil;
+  keys := AnimViewKeys;
+  for k := 0 to High(keys) do
+    if (k <= High(FAnimFresh)) and FAnimFresh[k] then keys[k] := 'n:' + keys[k];
   SetLength(FTreemaps, Length(FBindings));
   SetLength(FTreemapInks, Length(FBindings));
   pal := TyChartPaletteOf(FOption, -1, declared);
@@ -2631,7 +2820,20 @@ begin
     else
       FTreemaps[i] := TyTreemapSolve(FOption, si, FLastRect, APPI, view, prev);
     if not FTreemaps[i].Valid then Continue;
-    have := TyTreemapHaveOf(FTreemaps[i], prevHave);
+    { [R2-C] A RENDER WITH NO PAYLOAD AFTER A setOption: the same view, a new
+      tree -- _doRender's dualTravel pairs its rows with the old tree's by
+      getId, the storage it takes is the old render's, and _doAnimation
+      transitions it (a view a new id or type made anew has no old tree) }
+    fromOld := (not prev.Valid) and (si <= High(FTmOld)) and FTmOld[si].Valid
+      and (si <= High(FTmOldHave)) and (si <= High(FTmOldKeys)) and (si <= High(keys))
+      and (FTmOldKeys[si] = keys[si]);
+    map := nil;
+    if fromOld then
+    begin
+      map := TyTreemapPairRows(FTmOld[si], FTreemaps[i]);
+      prevHave := FTmOldHave[si];
+    end;
+    have := TyTreemapHaveOf(FTreemaps[i], prevHave, map);
     TyTreemapColour(FTreemaps[i], pal, border);
     FTreemapInks[i] := TreemapInk(i);
     dim := -1;
@@ -2658,9 +2860,12 @@ begin
     { THE DRILL-DOWN of a render for a gesture or an action [Batch 115] }
     if view.Kind = tpkKeep then
     else if prev.Valid and (view.Kind <> tpkNone) then
-      TmAnimArm(i, view, prev, prevHave, view.Direction)
+      TmAnimArm(i, view, prev, prevHave, view.Direction, nil)
+    else if fromOld then
+      TmAnimArm(i, view, FTmOld[si], FTmOldHave[si], 0, map)
     else
       TmAnimDrop(si);
+    if si <= High(FTmOld) then FTmOld[si] := Default(TTyTreemapSolved);
     if Length(FTmView) <= si then
     begin
       k := Length(FTmView);
@@ -2685,6 +2890,11 @@ begin
   end;
   { new breadcrumb items: no hover on them [F2a] }
   Inc(FTmCrumbGen);
+  { [R2-C] a stash no solve took is stale from now on }
+  FTmOld := nil;
+  FTmOldHave := nil;
+  FTmOldKeys := nil;
+  FTmViewKeys := keys;
 end;
 
 { THE SANKEYS: each laid out in its box on the whole canvas, its nodes

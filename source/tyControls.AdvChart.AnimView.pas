@@ -152,8 +152,10 @@ unit tyControls.AdvChart.AnimView;
   that is new (and the return circle, the first time) is created with r at
   r0 and initProps r, enter timing at its row; a piece the view drops is
   removed at once. Its label moves from its old layout (LabelManager) and a
-  new one fades. Only the drill's own render does this (HierDrill): the
-  sunburst's first render and its other updates stay unanimated here.
+  new one fades. [R2-C] Every other update the same way: SunburstView's
+  DataDiffer runs on every render (a merge pairs the old tree's pieces with
+  the new tree's by getId); HierDrill only lets a drill's new piece grow
+  where the series' animation is off.
   A TREEMAP'S rects (carTmRect) are not this set's: TreemapView animates
   them with its own wrap, which the control runs.
 
@@ -424,6 +426,10 @@ type
     { [Batch 115] this render is the series' drill-down (a sunburst's
       sunburstRootToNode): its pieces and labels transition }
     HierDrill: Boolean;
+    { [R2-C] the series' data was made anew for this render (a setOption
+      that visited the series: getInitialData again) -- a tree's is a new
+      Tree, so its removals walk the old one }
+    DataFresh: Boolean;
     { A BAR RACE [Batch 135]: shouldRealtimeSort, and the base axis' model
       (the axis tween's -- Present False where the series does not
       animate) }
@@ -522,6 +528,17 @@ type
 
   { THE RENDER BEFORE AN UPDATE: its series by series index, the elements
     its list tagged, and its coordinate systems [Batch 90] }
+  { [R2-C] ONE MAP VIEW'S TRANSFORM GROUP (MapDraw's): its key
+    (TTyChartAnim.GeoView), its roam transform -- the old render's at rest in
+    GeoOld, the new render's in GeoNew -- and in GeoNew the model whose
+    update timing tweens it (the geo component's, a map series') }
+  TTyChartGeoView = record
+    Key: Integer;
+    X, Y, SX, SY: Double;
+    Model: TTyAnimModel;
+  end;
+  TTyChartGeoViewArray = array of TTyChartGeoView;
+
   TTyChartAnimPrev = record
     Valid: Boolean;
     { A FULL UPDATE OF THE SAME OPTION (a legend toggle, a dataZoom)
@@ -550,6 +567,10 @@ type
       it takes the series it names instead of the keys' batches }
     UtHasTransition: Boolean;
     UtTransition: TTyUtTransitionArray;
+    { [R2-C] the map views of the old render, and those of the new one whose
+      group this update tweens (MapDraw.draw on a view that drew before, with
+      no payload: a setOption's render) }
+    GeoOld, GeoNew: TTyChartGeoViewArray;
   end;
 
   { AN OLD ITEM ELEMENT AS A UNIVERSAL TRANSITION READS IT [Batch 136]:
@@ -2277,10 +2298,10 @@ begin
       begin
         { a drill-down's new piece: created with r at r0, initProps r at its
           row (SunburstPiece.updateData's firstCreate) [Batch 115]; and
-          [F3a] every piece of a first render the same way -- an update that
-          is not a drill stays still here }
-        if AUpdate and not AC.HierDrill then Exit;
-        if not AUpdate and not AC.Enabled then Exit;
+          [F3a] every piece of a first render the same way; [R2-C] and a new
+          piece of any update (SunburstView.render's DataDiffer runs on
+          every render, a merge's too) }
+        if not (AUpdate and AC.HierDrill) and not AC.Enabled then Exit;
         p := Make(AEl.Anim.Series, idx, 'sunPiece');
         props := SunPieceProps(AEl);
         p.Attr(props);
@@ -2562,6 +2583,8 @@ var
   ediff: TTyDataDiffCmdArray;
   diffs: array of TTyDataDiffCmdArray;
   upd: array of Boolean;
+  { [R2-C] a line whose render takes LineView's init branch again }
+  lineInit: array of Boolean;
   i, s, o, q, r, k: Integer;
   el: TTyChartElement;
   role: string;
@@ -2703,13 +2726,22 @@ var
     to no scale and no opacity, its label to no opacity, all on the update's
     duration and easing (removeOpt); removeNodeEdge -- a curve to
     getEdgeShape(that ancestor, that ancestor), a TreePath to its owner's
-    nearest drawn place (one child point), both to no opacity. }
+    nearest drawn place (one child point), both to no opacity.
+    [R2-C] THE ROWS ARE PAIRED BY THE DATA DIFF (getId: the name) -- the
+    identity for a toggle, which keeps the tree. A render whose data is new
+    (a setOption that visited the series: AC.DataFresh) has a new tree:
+    removeNode / removeNodeEdge then walk the OLD tree's parent chain and
+    read the OLD data's layout -- a removed node goes to its old parent's
+    old place + 1, its edges to that place. }
   procedure UpdateTree(ASer, AOld: Integer; const AC: TTyChartAnimSeries);
   var
-    j, row, par, a, maxRow, k: Integer;
+    j, row, par, a, maxRow, k, q, na: Integer;
     nv, ov, le: TTyChartElement;
     newNode, oldNode, newCurve, oldCurve, newPoly, oldPoly: array of Integer;
     oldParent: array of Integer;
+    { [R2-C] new row -> old row, old row -> new row }
+    n2o, o2n: array of Integer;
+    fresh: Boolean;
     ox, oy, rx, ry: TTyDoubleArray;
     hasOx, isNew: TTyBoolArray;
     props, rprops: TTyAnimProps;
@@ -2749,12 +2781,36 @@ var
     begin
       if ASelf then Result := ARow else Result := At(oldParent, ARow);
       guard := 0;
-      while (Result > 0) and (At(newNode, Result) < 0) and (guard < 10000) do
+      while (Result > 0) and (At(newNode, At(o2n, Result)) < 0) and (guard < 10000) do
       begin
         Result := At(oldParent, Result);
         Inc(guard);
       end;
-      if (Result > 0) and (At(newNode, Result) < 0) then Result := -1;
+      if (Result > 0) and (At(newNode, At(o2n, Result)) < 0) then Result := -1;
+    end;
+
+    { [R2-C] getSourceNode on the OLD tree, reading the OLD layout (a new
+      tree: the old one keeps its data): the old parent (the row itself when
+      its parent is the virtual root), up while it was not laid out -- an
+      old row with an element of the last render, or -1 }
+    function OldSource(ARow: Integer): Integer;
+    var guard: Integer;
+    begin
+      Result := At(oldParent, ARow);
+      if Result <= 0 then Result := ARow;
+      guard := 0;
+      while (Result > 0) and (At(oldNode, Result) < 0) and (guard < 10000) do
+      begin
+        Result := At(oldParent, Result);
+        Inc(guard);
+      end;
+      if (Result <= 0) or (At(oldNode, Result) < 0) then Result := -1;
+    end;
+
+    { [R2-C] whether the old row's node is drawn now (paired and drawn) }
+    function DrawnNow(AOldRow: Integer): Boolean;
+    begin
+      Result := At(newNode, At(o2n, AOldRow)) >= 0;
     end;
 
     function NewEl(AIdx: Integer): TTyChartElement;
@@ -2869,13 +2925,28 @@ var
         else Grow(oldCurve, ov.Anim.Index, j);
       end;
     end;
-    { a new node's parent, for the walk up (the tree is the same one) }
-    for j := 0 to High(newNode) do
-      if newNode[j] >= 0 then
-      begin
-        Grow(oldParent, j, -1);
-        if oldParent[j] < 0 then oldParent[j] := NewEl(newNode[j]).Anim.Sub;
-      end;
+    { [R2-C] the rows paired by the diff: new -> old, old -> new }
+    fresh := AC.DataFresh;
+    n2o := nil;
+    o2n := nil;
+    if ASer <= High(rowMap) then
+      for j := 0 to High(rowMap[ASer]) do
+        if rowMap[ASer][j] >= 0 then
+        begin
+          Grow(n2o, j, rowMap[ASer][j]);
+          Grow(o2n, rowMap[ASer][j], j);
+        end;
+    { a new node's parent, for the walk up (the tree is the same one; a new
+      tree's walk is the old tree's alone) }
+    if not fresh then
+      for j := 0 to High(newNode) do
+        if newNode[j] >= 0 then
+        begin
+          q := At(n2o, j);
+          if q < 0 then Continue;
+          Grow(oldParent, q, -1);
+          if oldParent[q] < 0 then oldParent[q] := At(n2o, NewEl(newNode[j]).Anim.Sub);
+        end;
     maxRow := Max(Max(Length(newNode), Length(oldNode)),
       Max(Max(Length(newCurve), Length(oldCurve)), Max(Length(newPoly), Length(oldPoly))));
     SetLength(ox, maxRow);
@@ -2895,11 +2966,12 @@ var
       props := TyAnimProps([Num1('x', nv.Anim.G[5]), Num1('y', nv.Anim.G[6])]);
       rprops := TyAnimProps([Num1('scaleX', nv.Anim.G[2]), Num1('scaleY', nv.Anim.G[3]),
         Num1('style.opacity', nv.Anim.G[4])]);
-      if At(oldNode, row) >= 0 then
+      q := At(n2o, row);
+      if At(oldNode, q) >= 0 then
       begin
-        ov := APrev.Elements[oldNode[row]];
+        ov := APrev.Elements[oldNode[q]];
         { the Symbol kept: its group from where it is }
-        gp := OldProxy(AOld, row, 'treeGroup');
+        gp := OldProxy(AOld, q, 'treeGroup');
         if gp <> nil then Carry(gp, ASer, row)
         else
         begin
@@ -2916,7 +2988,7 @@ var
         TyUpdateProps(gp, props, AC.Model, TyAnimCallNoIndex);
         { its path: Symbol.updateData's scale at the row; useStyle strands
           an opacity tween }
-        sp := Take(AOld, row, ASer, row, 'symbol', TyAnimProps([Num1('scaleX', ov.Anim.G[2]),
+        sp := Take(AOld, q, ASer, row, 'symbol', TyAnimProps([Num1('scaleX', ov.Anim.G[2]),
           Num1('scaleY', ov.Anim.G[3]), Num1('style.opacity', ov.Anim.G[4])]), rprops, True);
         for k := sp.AnimatorCount - 1 downto 0 do
           if (k < sp.AnimatorCount) and (sp.AnimatorAt(k).TargetName = 'style') then
@@ -2977,10 +3049,11 @@ var
         par := At(oldParent, row);
         radial := False;
       end;
-      if (At(oldCurve, row) >= 0) and (At(newNode, row) >= 0) and not isNew[row] then
+      q := At(n2o, row);
+      if (At(oldCurve, q) >= 0) and (At(newNode, row) >= 0) and not isNew[row] then
       begin
-        ov := APrev.Elements[oldCurve[row]];
-        ep := Take(AOld, row, ASer, row, 'treeEdge', CurveProps(ov), props, True);
+        ov := APrev.Elements[oldCurve[q]];
+        ep := Take(AOld, q, ASer, row, 'treeEdge', CurveProps(ov), props, True);
       end
       else
       begin
@@ -3016,10 +3089,11 @@ var
       if newPoly[row] < 0 then Continue;
       nv := NewEl(newPoly[row]);
       props := PathProps(nv);
-      if At(oldPoly, row) >= 0 then
+      q := At(n2o, row);
+      if At(oldPoly, q) >= 0 then
       begin
-        ov := APrev.Elements[oldPoly[row]];
-        ep := Take(AOld, row, ASer, row, 'treeEdge', PathProps(ov), props, True);
+        ov := APrev.Elements[oldPoly[q]];
+        ep := Take(AOld, q, ASer, row, 'treeEdge', PathProps(ov), props, True);
       end
       else
       begin
@@ -3027,17 +3101,18 @@ var
         ep := Make(ASer, row, 'treeEdge');
         { an edge a removal still takes away: the same TreePath, from where
           it is (the removal's own end is not modelled) }
-        lp := FindGhost(AOld, row, 'treeEdge');
+        lp := nil;
+        if q >= 0 then lp := FindGhost(AOld, q, 'treeEdge');
         if (lp <> nil) and (lp.GetAnimProp('shape.parentPoint').Kind = avkArray) then
         begin
           ep.Attr(TyAnimProps([TyAnimProp('shape.parentPoint', lp.GetAnimProp('shape.parentPoint')),
             TyAnimProp('shape.childPoints', lp.GetAnimProp('shape.childPoints'))]));
           lp.StopAnimation;
           lp.LeaveDone;
-          TakeStale(AOld, row, sx, sy);
+          TakeStale(AOld, q, sx, sy);
         end
         { one a removal took to its point }
-        else if TakeStale(AOld, row, sx, sy) then
+        else if (q >= 0) and TakeStale(AOld, q, sx, sy) then
           ep.Attr(OnePathProps(sx, sy))
         else
           ep.Attr(OnePathProps(nv.Anim.G[0], nv.Anim.G[1]));
@@ -3051,11 +3126,21 @@ var
     if not AC.Enabled then Exit;
     for row := 0 to High(oldNode) do
     begin
-      if (oldNode[row] < 0) or (At(newNode, row) >= 0) then Continue;
+      if (oldNode[row] < 0) or DrawnNow(row) then Continue;
       ov := APrev.Elements[oldNode[row]];
-      a := Drawn(row, False);
-      if a < 0 then Continue;
-      nv := NewEl(newNode[a]);
+      if fresh then
+      begin
+        { [R2-C] the old tree's source, its old layout }
+        a := OldSource(row);
+        if a < 0 then Continue;
+        nv := APrev.Elements[oldNode[a]];
+      end
+      else
+      begin
+        a := Drawn(row, False);
+        if a < 0 then Continue;
+        nv := NewEl(newNode[At(o2n, a)]);
+      end;
       tx := nv.Anim.G[5] + 1;
       ty := nv.Anim.G[6] + 1;
       { the Symbol as it is: its group's place, its path's scale and
@@ -3090,11 +3175,22 @@ var
     for row := 0 to High(oldCurve) do
     begin
       if oldCurve[row] < 0 then Continue;
-      if (At(newCurve, row) >= 0) and not ((row < maxRow) and isNew[row]) then Continue;
+      na := At(o2n, row);
+      if (At(newCurve, na) >= 0) and not ((na < maxRow) and isNew[na]) then Continue;
       ov := APrev.Elements[oldCurve[row]];
-      a := Drawn(row, False);
-      if a < 0 then Continue;
-      nv := NewEl(newNode[a]);
+      if fresh then
+      begin
+        { [R2-C] removeNodeEdge(child): getSourceNode on the old tree }
+        a := OldSource(row);
+        if a < 0 then Continue;
+        nv := APrev.Elements[oldNode[a]];
+      end
+      else
+      begin
+        a := Drawn(row, False);
+        if a < 0 then Continue;
+        nv := NewEl(newNode[At(o2n, a)]);
+      end;
       if (Length(ov.Anim.Vals) >= 4) and (ov.Anim.Vals[3] <> 0) then
       begin
         tx := R0(nv.Anim.G[5]);
@@ -3127,11 +3223,46 @@ var
     end;
     for row := 0 to High(oldPoly) do
     begin
-      if (oldPoly[row] < 0) or (At(newPoly, row) >= 0) then Continue;
+      if (oldPoly[row] < 0) or (At(newPoly, At(o2n, row)) >= 0) then Continue;
       ov := APrev.Elements[oldPoly[row]];
-      a := Drawn(row, True);
-      if a < 0 then Continue;
-      nv := NewEl(newNode[a]);
+      if fresh then
+      begin
+        { [R2-C] THE OLD TREE'S TreePath (its owner's): the first
+          removeElement wins -- removeNode of a removed parent reaches it
+          through removeNodeEdge(owner) (to the parent's old place); else the
+          owner's own removeNode reaches it through its only child that has
+          no TreePath of its own (to the owner's old place), or through
+          removeNodeEdge(owner) (to the parent's). An owner kept whose
+          TreePath no render updates again stays upstream unless that only
+          child left (deviation: it goes at once here) }
+        a := At(oldParent, row);
+        if a <= 0 then a := row;
+        k := -1;
+        par := 0;
+        for j := 0 to High(oldParent) do
+          if (oldParent[j] = row) and (At(oldNode, j) >= 0) then
+          begin
+            Inc(par);
+            k := j;
+          end;
+        if DrawnNow(row) then
+        begin
+          if not ((par = 1) and (At(oldPoly, k) < 0) and not DrawnNow(k)) then Continue;
+          a := row;
+        end
+        else if DrawnNow(a) or (a = row) then
+        begin
+          if (par = 1) and (At(oldPoly, k) < 0) then a := row;
+        end;
+        if At(oldNode, a) < 0 then Continue;
+        nv := APrev.Elements[oldNode[a]];
+      end
+      else
+      begin
+        a := Drawn(row, True);
+        if a < 0 then Continue;
+        nv := NewEl(newNode[At(o2n, a)]);
+      end;
       tx := nv.Anim.G[5];
       ty := nv.Anim.G[6];
       ep := NewGhost(row, 'treeEdge');
@@ -3152,7 +3283,7 @@ var
       props[High(props)] := Num1('style.opacity', 0);
       Ghost(ep, ov, props);
       { it stays the node's __edge: an expand tweens it from there }
-      SetStale(AOld, row, tx, ty);
+      if not fresh then SetStale(AOld, row, tx, ty);
     end;
   end;
 
@@ -3434,8 +3565,9 @@ var
         begin
           { a drill-down's piece: kept -- updateProps of the whole shape
             from where it is, update timing, no row; new -- ArmOne's
-            [Batch 115] }
-          if not AC.HierDrill then Exit;
+            [Batch 115]; [R2-C] any update's the same way (the DataDiffer
+            pairs the pieces by getId on every render -- a merge's across
+            the old tree and the new one) }
           hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'sunPiece', oe);
           if not hasOld then
           begin
@@ -3604,8 +3736,9 @@ var
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
                 else if (AEl.Anim.HostPlus1 = 0)
                   and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree
-                    { a sunburst's in its drill-down [Batch 115] }
-                    or (AC.HierDrill and (AC.SeriesType = 'sunburst'))) then
+                    { a sunburst's in its drill-down [Batch 115], and
+                      [R2-C] in any update }
+                    or (AC.SeriesType = 'sunburst')) then
                   MoveLabel(p, oe, AEl, s, r, AC.Model);
               end;
               Exit;
@@ -3873,8 +4006,9 @@ var
     hasO := OldEl(AOld, -1, 'lineClip', orr) and (Length(orr.Anim.Pts) > 0);
     { NOTHING TO TWEEN without both polylines, or with the series' own
       `animation` off (setShape). A STEP that changed (`step !==
-      this._step`) is a new polyline upstream, which enters; here it is set
-      [F3b: a step kept is tweened below] }
+      this._step`) is a new polyline upstream, which enters -- [R2-C] the
+      main pass arms it so (LineReinit) and this is never reached [F3b: a
+      step kept is tweened below] }
     if not (hasN and hasO) then Exit;
     if not AC.On_ then Exit;
     if Round(nr.Anim.G[7]) <> Round(orr.Anim.G[7]) then Exit;
@@ -4100,6 +4234,36 @@ var
     if poly.AnimatorCount > 0 then poly.AnimatorAt(0).During(@poly.FollowDuring);
   end;
 
+  { [R2-C] LINEVIEW'S INIT BRANCH IN AN UPDATE: `!(polyline &&
+    prevCoordSys.type === coordSys.type && step === this._step)` -- a step
+    kind or a coordinate system type that changed makes a new polyline (and
+    polygon), a clip grown again (createLineClipPath with its animation), and
+    every symbol popped in again on its delay (_initSymbolLabelAnimation,
+    its label's fade) -- the whole line enters as on its first render }
+  function LineReinit(ASer, AOld: Integer): Boolean;
+  var
+    j: Integer;
+    nr, orr: TTyChartElement;
+    hasN: Boolean;
+  begin
+    Result := False;
+    hasN := False;
+    for j := 0 to AList.Count - 1 do
+    begin
+      nr := AList.Element(j);
+      if (nr.Anim.Role in [carLineRun, carLineArea]) and (nr.Anim.Series = ASer)
+        and (Length(nr.Anim.Pts) > 0) then
+      begin
+        hasN := True;
+        Break;
+      end;
+    end;
+    if not hasN then Exit;
+    if not (OldEl(AOld, -1, 'lineClip', orr) and (Length(orr.Anim.Pts) > 0)) then Exit;
+    Result := (Round(nr.Anim.G[7]) <> Round(orr.Anim.G[7]))
+      or ((Round(nr.Anim.G[5]) and 8) <> (Round(orr.Anim.G[5]) and 8));
+  end;
+
   { ---- a removed element: the ghost that fades ---- }
   procedure Leave(ASer, AOld, AOldRow: Integer; const AModel: TTyAnimModel);
   const
@@ -4225,6 +4389,31 @@ begin
       timing with no row }
     for s := 0 to High(ASeries) do
       if upd[s] then ArmView(s, oldOf[s], ASeries[s]);
+    { [R2-C] A MAP'S TRANSFORM GROUP KEPT: MapDraw.draw with no payload on a
+      view that drew before -- applyViewCoordSysTransToElement with the
+      model, an updateProps of the roam transform (update timing, no row) }
+    for k := 0 to High(APrev.GeoNew) do
+      for o := 0 to High(APrev.GeoOld) do
+        if APrev.GeoOld[o].Key = APrev.GeoNew[k].Key then
+        begin
+          p := OldProxy(-1, APrev.GeoNew[k].Key, 'geoView');
+          if p <> nil then Carry(p, -1, APrev.GeoNew[k].Key)
+          else
+          begin
+            p := Make(-1, APrev.GeoNew[k].Key, 'geoView');
+            p.Attr(TyAnimProps([Num1('x', APrev.GeoOld[o].X), Num1('y', APrev.GeoOld[o].Y),
+              Num1('scaleX', APrev.GeoOld[o].SX), Num1('scaleY', APrev.GeoOld[o].SY)]));
+          end;
+          p.SetFinal(TyAnimProps([Num1('x', APrev.GeoNew[k].X), Num1('y', APrev.GeoNew[k].Y),
+            Num1('scaleX', APrev.GeoNew[k].SX), Num1('scaleY', APrev.GeoNew[k].SY)]));
+          TyUpdateProps(p, TyAnimProps([Num1('x', APrev.GeoNew[k].X), Num1('y', APrev.GeoNew[k].Y),
+            Num1('scaleX', APrev.GeoNew[k].SX), Num1('scaleY', APrev.GeoNew[k].SY)]),
+            APrev.GeoNew[k].Model, TyAnimCallNoIndex);
+          Break;
+        end;
+    SetLength(lineInit, Length(ASeries));
+    for s := 0 to High(ASeries) do
+      lineInit[s] := upd[s] and (ASeries[s].SeriesType = 'line') and LineReinit(s, oldOf[s]);
 
     { EVERY ELEMENT OF THE NEW RENDER, in list order }
     for i := 0 to AList.Count - 1 do
@@ -4247,6 +4436,12 @@ begin
         carMarkLineTo, carMarkLineLabel] then
       begin
         UpdateMarker(i, el, ASeries[s], oldOf[s], r);
+        Continue;
+      end;
+      { [R2-C] a line in its init branch again: its own elements enter }
+      if lineInit[s] then
+      begin
+        if Find(s, r, role) = nil then ArmOne(AList, i, el, ASeries[s]);
         Continue;
       end;
       if (el.Anim.Role in [carLineRun, carLineArea]) then q := -1
@@ -4273,7 +4468,7 @@ begin
         UpdateTree(s, oldOf[s], ASeries[s]);
     { THE LINES, once their symbols are carried }
     for s := 0 to High(ASeries) do
-      if upd[s] and (ASeries[s].SeriesType = 'line') then
+      if upd[s] and (ASeries[s].SeriesType = 'line') and not lineInit[s] then
         UpdateLine(s, oldOf[s], ASeries[s]);
     { THE REMOVED ROWS of every kept series leave (a tree's in its own pass) }
     for s := 0 to High(ASeries) do
@@ -4732,8 +4927,11 @@ begin
   ASY := AEl.Anim.VSY;
   AX := AEl.Anim.VX;
   AY := AEl.Anim.VY;
-  if (ASet = nil) or not AEl.Anim.InView then Exit;
-  g := ASet.Find(AEl.Anim.Series, -1, 'viewGroup');
+  if ASet = nil then Exit;
+  { [R2-C] a map's transform group }
+  if AEl.Anim.GeoView <> 0 then g := ASet.Find(-1, AEl.Anim.GeoView, 'geoView')
+  else if not AEl.Anim.InView then Exit
+  else g := ASet.Find(AEl.Anim.Series, -1, 'viewGroup');
   if g = nil then Exit;
   ASX := NumOr(g, 'scaleX', ASX);
   ASY := NumOr(g, 'scaleY', ASY);

@@ -823,6 +823,9 @@ function TyGeoDrawOf(AGeo: TTyGeo; const AInk: TTyGeoInk; APPI: Integer): TTyGeo
 function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
   AApplyStates: Boolean = True): Integer;
+{ [R2-C] the key a map view's elements carry (TTyChartAnim.GeoView): a geo
+  component's index + 1, a map series' own geo -(the series index + 1) }
+function TyGeoViewKey(AGeo: TTyGeo): Integer;
 
 implementation
 
@@ -6012,7 +6015,7 @@ begin
   end;
 end;
 
-function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
+function BuildGeoUntagged(AGeo: TTyGeo; const AInk: TTyGeoInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
   AApplyStates: Boolean): Integer;
 var
@@ -6323,6 +6326,45 @@ begin
     end;
   finally
     UnmaskFpu(mask);
+  end;
+end;
+
+{ [R2-C] every element of the map's transform group carries the group's
+  roam transform at rest and the map view's key: an animated merge that
+  moves the view tweens the group (MapDraw.draw's
+  applyViewCoordSysTransToElement with the model), and a frame carries the
+  elements with it }
+function TyGeoViewKey(AGeo: TTyGeo): Integer;
+begin
+  if AGeo.Kind = gkComponent then Result := AGeo.Index + 1
+  { a map series' own: its MapView's (the series drawing it) }
+  else if AGeo.Data.Active then Result := -(AGeo.Data.SeriesIndex + 1)
+  else Result := -(1000000 + AGeo.Index);
+end;
+
+function TyBuildGeo(AGeo: TTyGeo; const AInk: TTyGeoInk;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
+  AApplyStates: Boolean): Integer;
+var
+  n0, i: Integer;
+  el: TTyChartElement;
+  rt: TTyGeoTrans;
+begin
+  if AList <> nil then n0 := AList.Count else n0 := 0;
+  Result := BuildGeoUntagged(AGeo, AInk, AMeasurer, APPI, AList, AApplyStates);
+  if (AGeo = nil) or (AList = nil) then Exit;
+  rt := AGeo.RoamTrans;
+  { a roam that turns or skews is not a scale and a move }
+  if (rt.Rotation <> 0) or (rt.SkewX <> 0) or (rt.SkewY <> 0) then Exit;
+  for i := n0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    el.Anim.GeoView := TyGeoViewKey(AGeo);
+    el.Anim.VX := rt.X;
+    el.Anim.VY := rt.Y;
+    el.Anim.VSX := rt.ScaleX;
+    el.Anim.VSY := rt.ScaleY;
+    AList.SetElement(i, el);
   end;
 end;
 

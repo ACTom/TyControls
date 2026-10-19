@@ -733,11 +733,60 @@ begin
       FAnimPrev.UtStale[High(FAnimPrev.UtStale)] := FUtStale[i];
     end;
   FAnimPrev.ToOldPoint := @AnimToOldPoint;
+  { [R2-C] the map views as drawn }
+  FAnimPrev.GeoOld := AnimGeoViews(False);
   { THE OLD BUILD STAYS ALIVE for its coordinate systems; Rebuild's
     DropBuild finds nothing to free }
   FAnimOldBuild := FBuild;
   FBuild := nil;
   FAnimOldBindings := Copy(FBindings, 0, Length(FBindings));
+end;
+
+function TTyAdvanceChart.AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
+var
+  k, n, slot: Integer;
+  geo: TTyGeo;
+  rt: TTyGeoTrans;
+  r: TTyChartGeoView;
+begin
+  Result := nil;
+  for k := 0 to High(FGeoDraws) do
+  begin
+    geo := TTyGeo(FGeoDraws[k].Geo);
+    { MapDraw's isFirstDraw: a view that drew nothing has no group to tween }
+    if (geo = nil) or (FGeoDraws[k].Count <= 0) then Continue;
+    rt := geo.RoamTrans;
+    if (rt.Rotation <> 0) or (rt.SkewX <> 0) or (rt.SkewY <> 0) then Continue;
+    r := Default(TTyChartGeoView);
+    r.Key := TyGeoViewKey(geo);
+    r.X := rt.X;
+    r.Y := rt.Y;
+    r.SX := rt.ScaleX;
+    r.SY := rt.ScaleY;
+    if ANew then
+    begin
+      if geo.Kind = gkComponent then
+      begin
+        { a merge keeps the geo model and its view; a notMerge makes both
+          anew (their first draw) }
+        if not FAnimPrev.Merge then Continue;
+        r.Model := TyAnimComponentModel(FOption.ComponentAt('geo', geo.Index),
+          FOption.Root, 'geo');
+      end
+      else
+      begin
+        slot := SlotOfSeries(FGeoDraws[k].Series);
+        n := 0;
+        if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+          n := FStores[slot].Count;
+        r.Model := TyAnimSeriesModel(FOption.Root, FGeoDraws[k].Series, n);
+      end;
+      r.Model.Payload := FAnimPayload;
+      r.Model.HasPayload := FAnimHasPayload;
+    end;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := r;
+  end;
 end;
 
 function TTyAdvanceChart.AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
@@ -801,6 +850,8 @@ begin
       [Batch 115] }
     r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];
     if r.HierDrill then r.LabelFade := True;
+    { [R2-C] the data rebuilt since the render this one updates }
+    r.DataFresh := FAnimDataFresh;
     ser := r.Model.Own;
     if ser is TJSONObject then
     begin
@@ -911,6 +962,10 @@ begin
         { [F3c] the setOption's transition option }
         FAnimPrev.UtHasTransition := FAnimUtHas;
         FAnimPrev.UtTransition := FAnimUtTrans;
+        { [R2-C] an action's render (a payload) sets the map groups at once;
+          a setOption's tweens them }
+        if FAnimPrev.FullUpdate then FAnimPrev.GeoNew := nil
+        else FAnimPrev.GeoNew := AnimGeoViews(True);
         FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev);
       end
       else
@@ -938,6 +993,7 @@ begin
       FAnimRtChange := 0;
       FAnimFull := False;
       FAnimMerge := False;
+      FAnimDataFresh := False;
       FAnimHasPayload := False;
       AnimDropPrev;
       { the views are paired: __requireNewView works once }
@@ -954,6 +1010,7 @@ begin
       FAnimPending := False;
       FAnimFull := False;
       FAnimMerge := False;
+      FAnimDataFresh := False;
       FAnimHasPayload := False;
       AnimDropPrev;
       FAnimFresh := nil;
