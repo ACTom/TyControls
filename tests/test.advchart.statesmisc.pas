@@ -69,6 +69,8 @@ type
     FBmp: TBGRABitmap;
     FBad, FCompared, FKeysCompared, FTrackedCompared, FEventsCompared,
       FMarksCompared, FPlaces, FOrders, FDashes: Integer;
+    { [R2-I1] labels' opacities: a factor over a rest other than 1, as drawn }
+    FFactored, FDrawnOpacities: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -682,6 +684,21 @@ begin
   if ValueAt(AEl, 'ignore', ASample, fv) and (fv.AsBoolean <> el.Ignore) then
     Miss(Format('%s %s: ignore %s, upstream %s', [AWhere, id, BoolToStr(el.Ignore, True),
       fv.AsJSON]), AWhere + id + 'ign');
+  { [R2-I1] A LABEL'S OPACITY AS DRAWN: the frame's (in motion or on a
+    state proxy), the list's otherwise -- upstream's style.opacity, the
+    host's at rest (defaultOpacity) }
+  if (AEl.Strings['role'] = 'label') and not el.Ignore
+    and ValueAt(AEl, 'style.opacity', ASample, fv) and IsHex16(fv) then
+  begin
+    if (FChart.Frame <> nil) and (FChart.Frame.Count = FChart.List.Count) then
+      fel := FChart.Frame.Element(idx)
+    else
+      fel := el;
+    Inc(FDrawnOpacities);
+    if Abs(fel.Style.Alpha - FromHex(fv.AsString)) > 1e-9 then
+      Miss(Format('%s %s: drawn at opacity %s, upstream %s', [AWhere, id,
+        FloatToStr(fel.Style.Alpha), FloatToStr(FromHex(fv.AsString))]), AWhere + id + 'dop');
+  end;
   { the paint order against the rest, as the state machine holds it, and
     what the list draws }
   rs := RestSample(AEl);
@@ -749,6 +766,21 @@ begin
     end;
     Inc(FKeysCompared);
     if Tracked(AEl, key) then Inc(FTrackedCompared);
+    { [R2-I1] A LABEL'S OPACITY ON A PROXY IT SHARES WITH ITS FADE is a
+      factor over the label's own (the host's style.opacity, handed over as
+      defaultOpacity): upstream's is the factor times that rest [was: the
+      factor against upstream's, which held only where the rest is 1] }
+    if (key = 'style.opacity') and IsHex16(fv) and (v.Kind = avkNumber)
+      and not p.StAbsOpacity and (rec.Exists) and not rec.IsPath
+      and (rec.Rest.Num[stkOpacity] <> 1) then
+    begin
+      Inc(FFactored);
+      if Abs(v.Num * rec.Rest.Num[stkOpacity] - FromHex(fv.AsString)) > 1e-12 then
+        Miss(Format('%s %s %s: %s x rest %s, upstream %s', [AWhere, id, key,
+          TyJsNumberToString(v.Num), TyJsNumberToString(rec.Rest.Num[stkOpacity]),
+          TyJsNumberToString(FromHex(fv.AsString))]), AWhere + id + key);
+      Continue;
+    end;
     if IsHex16(fv) then
     begin
       if v.Kind <> avkNumber then
@@ -915,9 +947,12 @@ begin
       FTally.CommaText, FReport]));
   AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
     + 'label places %d, paint orders %d',
-    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders]) + Format(', dashes %d', [FDashes]),
+    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders])
+    + Format(', dashes %d, factored label opacities %d, drawn label opacities %d',
+      [FDashes, FFactored, FDrawnOpacities]),
     (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100)
-    and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50));
+    and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50) and (FFactored > 200)
+    and (FDrawnOpacities > 1000));
 end;
 
 { ==================== by hand ==================== }

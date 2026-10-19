@@ -1009,6 +1009,9 @@ begin
     guide.Anim.Role := carGuide;
     guide.Anim.Series := si;
     guide.Anim.Index := el.Datum.DataIndex;
+    { [R2-I1] one of the datum's several labels' (a radar item's points):
+      its own proxy and its own states }
+    guide.Anim.Sub := el.Anim.Sub;
     { updateZ: under its host, or over it with showAbove }
     above := TyStReadBool(nodes, ['labelLine', 'showAbove'], has) and has;
     guide.Z := host.Z;
@@ -1016,6 +1019,65 @@ begin
     { hidden where its label is, or where the normal labelLine does not show }
     guide.Ignore := el.Ignore or not showN;
     AList.Add(guide);
+  end;
+end;
+
+procedure TTyAdvanceChart.OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList;
+  ALo, AHi: Integer);
+var
+  k, j, si, raw: Integer;
+  pe: PTyChartElement;
+  nodes: TTyStNodeArray;
+  op, glob: Double;
+  has, hasGlob: Boolean;
+  d: TJSONData;
+begin
+  if (AList = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  { the global textStyle.opacity, under every label's own }
+  hasGlob := False;
+  glob := 1;
+  if (FOption <> nil) and (FOption.Root is TJSONObject) then
+  begin
+    d := TJSONObject(FOption.Root).Find('textStyle');
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('opacity');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        hasGlob := True;
+        glob := d.AsFloat;
+      end;
+    end;
+  end;
+  for k := AHi to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Caption.FontSizeLogical <= 0) or pe^.IsGuide then Continue;
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.SeriesIndex <> si) then Continue;
+    raw := pe^.Datum.RawDataIndex;
+    if raw < 0 then raw := pe^.Datum.DataIndex;
+    nodes := StNodes(si, raw);
+    op := TyStReadNumber(nodes, ['label', 'opacity'], has);
+    if has and not IsNan(op) then
+    begin
+      pe^.Style.Alpha := op;
+      Continue;
+    end;
+    if hasGlob then
+    begin
+      pe^.Style.Alpha := glob;
+      Continue;
+    end;
+    { the mark's: the slice or band of the same datum }
+    for j := ALo to AHi - 1 do
+      if (AList.Ref(j)^.Datum.Kind = ctkSeries) and (AList.Ref(j)^.Datum.SeriesIndex = si)
+        and (AList.Ref(j)^.Datum.DataIndex = pe^.Datum.DataIndex)
+        and (AList.Ref(j)^.Caption.FontSizeLogical <= 0) and not AList.Ref(j)^.IsGuide then
+      begin
+        pe^.Style.Alpha := AList.Ref(j)^.Style.Alpha;
+        Break;
+      end;
   end;
 end;
 

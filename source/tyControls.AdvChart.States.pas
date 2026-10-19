@@ -79,6 +79,9 @@ type
     { a Path: the emphasis proxy lifts its colours (a label is Text and
       does not) }
     IsPath: Boolean;
+    { [R2-I1] a label line (a radar point label's, among the item's parts):
+      it writes and animates as one }
+    IsGuide: Boolean;
     { echarts' default state proxy is installed: emphasis not disabled }
     Proxy: Boolean;
     { an element a custom series made: its z2EmphasisLift and z2SelectLift

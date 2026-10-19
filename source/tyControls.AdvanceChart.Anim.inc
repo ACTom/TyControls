@@ -2281,6 +2281,19 @@ begin
       if (k >= 0) and (k <= High(FSt[ASeries].PartIdx[raw])) then
         idx := FSt[ASeries].PartIdx[raw][k];
     end
+    { [R2-I1] 'rsym<j>#label' / 'rsym<j>#guide': point j's label and its
+      line, by the point (the label's LabelSub) }
+    else if (Copy(APart, 1, 4) = 'rsym') and (Pos('#', APart) > 0)
+      and (raw <= High(FSt[ASeries].PartIdx)) and (FPaintList <> nil) then
+    begin
+      j := StrToIntDef(Copy(APart, 5, Pos('#', APart) - 5), -1);
+      for k := 0 to High(FSt[ASeries].PartIdx[raw]) do
+        with FPaintList.Ref(FSt[ASeries].PartIdx[raw][k])^ do
+          if (Anim.Sub = j + 1) and (((Copy(APart, Pos('#', APart), MaxInt) = '#label')
+            and (Caption.FontSizeLogical > 0))
+            or ((Copy(APart, Pos('#', APart), MaxInt) = '#guide') and IsGuide)) then
+            idx := FSt[ASeries].PartIdx[raw][k];
+    end
     else if ((APart = 'rarea') or (Copy(APart, 1, 4) = 'rsym')
       or (Copy(APart, 1, 4) = 'rlab'))
       and (raw <= High(FSt[ASeries].PartIdx)) and (FPaintList <> nil) then
@@ -2293,6 +2306,8 @@ begin
         begin
           if APart = 'rarea' then idx := FSt[ASeries].PartIdx[raw][k];
         end
+        { [R2-I1] a label line is neither }
+        else if FPaintList.Element(FSt[ASeries].PartIdx[raw][k]).IsGuide then
         else if (FPaintList.Element(FSt[ASeries].PartIdx[raw][k]).Caption.FontSizeLogical > 0)
           = (Copy(APart, 1, 4) = 'rlab') then
         begin

@@ -107,6 +107,9 @@ type
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
     Alpha: Double;
+    { [R2-I1] per RAW row: the band's itemStyle.opacity (the series', the
+      row's own over it), NaN where neither writes one (Alpha then) }
+    Alphas: TTyDoubleArray;
     Z, Z2: Integer;
   end;
 
@@ -717,6 +720,10 @@ begin
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
     el.Style.Alpha := AVisual.Alpha;
+    { the band's own opacity [R2-I1: itemStyle.opacity was not read] }
+    if (ALayout.Items[i].RawIndex >= 0) and (ALayout.Items[i].RawIndex <= High(AVisual.Alphas))
+      and not IsNan(AVisual.Alphas[ALayout.Items[i].RawIndex]) then
+      el.Style.Alpha := Min(Double(1), Max(Double(0), AVisual.Alphas[ALayout.Items[i].RawIndex]));
     el.Z := AVisual.Z;
     el.Z2 := AVisual.Z2;
     el.Silent := False;

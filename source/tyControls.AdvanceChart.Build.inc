@@ -3312,7 +3312,7 @@ var
   fv: TTyFunnelVisual;
   rv: TTyRadarVisual;
   pls: TTyPieLabelSpec;
-  pn: Integer;
+  pn, lo, hi: Integer;
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
   ti: TTyTreeInk;
@@ -3646,7 +3646,9 @@ begin
         if i <= High(FFunnels) then
         begin
           fv := FunnelVisual(i);
+          lo := list.Count;
           Inc(drawn, TyBuildFunnelMarks(FBindings[i], FFunnels[i], fv, list));
+          hi := list.Count;
           { ITS OWN PASS, not TyExpandLabels -- for the same reason a pie's is.
             A band's words are placed from the trapezoid's CORNERS and from a
             guide line that has to be drawn with them; the box-placed
@@ -3657,6 +3659,7 @@ begin
               TyFunnelLabelSpecDefault),
             FunnelLabelInk, fv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim), AMeasurer, APPI, list));
+          OwnLabelOpacity(i, list, lo, hi);
         end;
         Continue;
       end;
@@ -3665,8 +3668,10 @@ begin
         if i <= High(FPies) then
         begin
           pv := PieVisual(i);
+          lo := list.Count;
           Inc(drawn, TyBuildPieMarks(FBindings[i], FPies[i], FPieSpecs[i],
             pv, list));
+          hi := list.Count;
           { ITS OWN PASS, not TyExpandLabels. A pie label is placed from the
             slice's ANGLES and the series radius, none of which survive into
             the sector's bounding box -- the box of a wedge is the whole
@@ -3682,6 +3687,7 @@ begin
             PieLabelInk, pv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim),
             FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));
+          OwnLabelOpacity(i, list, lo, hi);
         end;
         Continue;
       end;

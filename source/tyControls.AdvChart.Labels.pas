@@ -218,6 +218,11 @@ type
       [top, right, bottom, left], LOGICAL px. [Batch 103] }
     MarginType: Integer;
     MarginLogical: array[0..3] of Double;
+    { [R2-I1] `opacity`: the label's own (retrieve2 of its model's, the
+      global textStyle's) -- over the host's style.opacity, which
+      setLabelStyle hands over as defaultOpacity otherwise }
+    HasOpacity: Boolean;
+    Opacity: Double;
   end;
   TTyLabelSpecArray = array of TTyLabelSpec;
   TTyLabelSpecTable = array of TTyLabelSpecArray;
@@ -1202,7 +1207,10 @@ begin
     TyLabelStampEmphasis(spec, hostFill, hostHasFill,
       host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
       LabelInside(host, pos), cap.Caption);
-    cap.Style.Alpha := host.Style.Alpha;
+    { createTextStyle: the label's own opacity, else the host's
+      (defaultOpacity) [R2-I1: a written label.opacity was not read] }
+    if spec.HasOpacity then cap.Style.Alpha := spec.Opacity
+    else cap.Style.Alpha := host.Style.Alpha;
     cap.Z := host.Z;
     { ABOVE ITS OWN MARK. Without the lift the two tie on (Z, Z2) and fall back
       to insertion order, which puts the caption on top anyway -- but only
