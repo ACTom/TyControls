@@ -110,9 +110,7 @@ var
   ink: TTyGraphInk;
   haveInk: Boolean;
   dataArr, cats: TJSONData;
-  bw, op: Double;
-  bc: TJSONData;
-  c: TTyChartColor;
+  op: Double;
 
   { the item model's itemStyle key: the node's own, its category's, the
     series' (getItemModel's parent chain); nil when none writes it }
@@ -137,9 +135,11 @@ var
       o := TJSONArray(dataArr).Items[nodes[ANode].RawRow];
     Result := KeyIn(o);
     if Result <> nil then Exit;
-    if (cats is TJSONArray) and (nodes[ANode].ModelCategory >= 0)
-      and (nodes[ANode].ModelCategory < cats.Count) then
-      Result := KeyIn(TJSONArray(cats).Items[nodes[ANode].ModelCategory]);
+    { [R2-I4] the style's category, which categoryVisual finds by name as
+      well as by index [was: the model's, by index alone] }
+    if (cats is TJSONArray) and (nodes[ANode].Category >= 0)
+      and (nodes[ANode].Category < cats.Count) then
+      Result := KeyIn(TJSONArray(cats).Items[nodes[ANode].Category]);
     if Result <> nil then Exit;
     Result := KeyIn(ser);
   end;
@@ -156,6 +156,7 @@ var
     else AItem.LineWidth := 0;
     AItem.Opacity := e.Style.Alpha;
     AItem.Dash := Copy(e.Style.DashLogical);
+    AItem.DashOffset := e.Style.DashOffsetLogical;
   end;
 
 begin
@@ -232,36 +233,17 @@ begin
     it.Y := nodes[i].Y - it.H / 2;
     it.CPX := NaN;
     it.CPY := NaN;
+    { THE SUB-PATH'S OWN STYLE, cloned (GraphView._renderThumbnail): the pen
+      the list's node draws -- the visual's borderColor at its borderWidth,
+      zrender's 1 where only a colour is written, its dash and phase; an
+      `empty` symbol's ring in its colour, 2 px wide, over the ground
+      (R2-I3's NodeBorder) -- and the opacity, the style category's (found by
+      name too). [R2-I4; was: a rim only where borderWidth > 0, no dash, an
+      opacity by the model's category, the empty ring made again here.] }
     StyleFrom(nodeEl[row], it);
-    { THE SUB-PATH'S OWN STYLE: Symbol._updateCommon's itemStyle -- the rim
-      a borderColor and a borderWidth above nought make, the opacity --
-      then setColor, which strokes an `empty` symbol in its colour, 2 px
-      wide, over the neutral00 fill }
-    bw := 0;
-    if NodeStyle(i, 'borderWidth') is TJSONNumber then
-      bw := NodeStyle(i, 'borderWidth').AsFloat;
-    bc := NodeStyle(i, 'borderColor');
-    it.HasStroke := (bw > 0) and (bc <> nil) and (bc.JSONType = jtString)
-      and not TyChartColorIsNone(bc.AsString) and TyTryParseChartColor(bc.AsString, c);
-    if it.HasStroke then
-    begin
-      it.Stroke := c;
-      it.LineWidth := bw;
-    end
-    else
-      it.LineWidth := 0;
     op := 1;
     if NodeStyle(i, 'opacity') is TJSONNumber then op := NodeStyle(i, 'opacity').AsFloat;
     it.Opacity := op;
-    if Copy(symName, 1, 5) = 'empty' then
-    begin
-      it.HasStroke := True;
-      it.Stroke := it.Fill;
-      it.LineWidth := 2;
-      it.HasFill := True;
-      it.Fill := TTyChartColor(ActiveController.Model.ResolveStyle(
-        'TyAdvChartEmptyCircle', '', []).Background.Color);
-    end;
     Result[n] := it;
     Inc(n);
   end;
@@ -306,6 +288,7 @@ begin
       it.LineWidth := TyGraphEdgeWidth(spec, edges[i]);
       it.Opacity := TyGraphEdgeOpacity(spec, edges[i]);
       it.Dash := TyGraphEdgeDash(spec, edges[i]);
+      it.DashOffset := TyGraphEdgeDashOffset(spec, edges[i]);
     end;
     { a line has no fill and always a stroke }
     it.HasFill := False;
@@ -496,6 +479,7 @@ begin
         el.Style.StrokeColor := st.Items[i].Stroke;
         el.Style.StrokeWidthLogical := st.Items[i].LineWidth;
         el.Style.DashLogical := Copy(st.Items[i].Dash);
+        el.Style.DashOffsetLogical := st.Items[i].DashOffset;
       end;
       el.Style.Alpha := st.Items[i].Opacity;
       el.Z := Round(st.Model.Z);

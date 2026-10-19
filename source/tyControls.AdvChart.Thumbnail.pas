@@ -96,6 +96,8 @@ type
     LineWidth: Double;
     Opacity: Double;
     Dash: TTyDoubleArray;
+    { [R2-I4] the dash's phase (the cloned style's lineDashOffset) }
+    DashOffset: Double;
   end;
   TTyThumbItemArray = array of TTyThumbItem;
 
