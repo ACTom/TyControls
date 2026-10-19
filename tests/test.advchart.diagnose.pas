@@ -7,8 +7,9 @@ unit test.advchart.diagnose;
   question each one answers is not "does the code work" but "is this the right
   thing to SAY, in the right order, pointing at the right place". }
 interface
-uses Classes, SysUtils, fpcunit, testregistry,
-     tyControls.AdvChart.Diagnose, tyControls.AdvChart.Series;
+uses Classes, SysUtils, fpcunit, testregistry, fpjson, jsonparser,
+     tyControls.AdvChart.Diagnose, tyControls.AdvChart.Series,
+     tyControls.AdvanceChart;
 type
   TAdvChartDiagnoseTest = class(TTestCase)
   private
@@ -43,11 +44,41 @@ type
     procedure TestACustomSeriesWithNoRenderItemSaysSo;
     procedure TestAMapNobodyRegisteredSaysSo;
     procedure TestACutListSaysHowManyItHidAndIsNotAProblem;
+    { ---- a setOption sequence's step [R2-G] ---- }
+    procedure TestASequenceStepIsDiagnosedAsTheChartHoldsIt;
   end;
 
 implementation
 
 uses tyControls.StrConsts, tyControls.AdvChart.Geo;
+
+{ the rows of a kind -- an untyped series, a build problem }
+type
+  TTyOptDiagKinds = set of TTyOptDiagKind;
+
+function RowsOf(const AText: string; AKinds: TTyOptDiagKinds): Integer;
+var
+  all: TTyOptDiagArray;
+  i: Integer;
+begin
+  Result := 0;
+  all := TyOptDiagnose(AText);
+  for i := 0 to High(all) do
+    if all[i].Kind in AKinds then Inc(Result);
+end;
+
+function GalleryText(const AFile: string): string;
+var sl: TStringList;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples'
+      + PathDelim + 'advchart' + PathDelim + 'gallery' + PathDelim + AFile);
+    Result := sl.Text;
+  finally
+    sl.Free;
+  end;
+end;
 
 function TAdvChartDiagnoseTest.Kinds(const AText: string): string;
 const
@@ -558,6 +589,67 @@ begin
     AssertTrue('row ' + IntToStr(i), all[i].Kind = odkUnknownOption);
     AssertEquals(0, all[i].Hidden);
   end;
+end;
+
+{ [R2-G] THE DEMO DIAGNOSED A STEP FILE ON ITS OWN. A step a page merges is
+  often a fragment -- scatter-symbol-morph's `{"series":[{"symbol":...}]}`
+  names no type, its second step no grid -- so the status line said "has no
+  type yet" and "names an axis that does not exist" under a chart that drew.
+  The demo now diagnoses what the chart holds after the merge
+  (GetOptionJson); this holds that answer to the same rows the whole first
+  option gets, for every merge step in the gallery -- no untyped series,
+  and no build problem the step itself does not bring (a custom series with
+  no renderItem is one, pie-parliament-transition's) -- and the fragments
+  to saying otherwise (or the test would prove nothing). }
+procedure TAdvChartDiagnoseTest.TestASequenceStepIsDiagnosedAsTheChartHoldsIt;
+var
+  idx: TJSONData;
+  arr, steps: TJSONArray;
+  entry, step: TJSONObject;
+  i, k, merges, fragmentsBroken: Integer;
+  chart: TTyAdvanceChart;
+  text: string;
+begin
+  idx := GetJSON(GalleryText('index.json'));
+  chart := TTyAdvanceChart.Create(nil);
+  merges := 0;
+  fragmentsBroken := 0;
+  try
+    arr := TJSONArray(TJSONObject(idx).Find('entries'));
+    for i := 0 to arr.Count - 1 do
+    begin
+      entry := arr.Objects[i];
+      if not (entry.Find('sequence') is TJSONObject) then Continue;
+      steps := TJSONObject(entry.Find('sequence')).Arrays['steps'];
+      text := GalleryText(steps.Objects[0].Strings['file']);
+      chart.Option := text;
+      for k := 1 to steps.Count - 1 do
+      begin
+        step := steps.Objects[k];
+        text := GalleryText(step.Strings['file']);
+        if step.Find('opts') is TJSONObject then
+          chart.SetOption(text, step.Objects['opts'].AsJSON)
+        else
+        begin
+          chart.SetOption(text, False);
+          Inc(merges);
+          if RowsOf(text, [odkNoSeriesType, odkBuild]) > 0 then Inc(fragmentsBroken);
+        end;
+        { what the chart holds: every series typed, and no build problem the
+          step does not bring itself }
+        AssertEquals(Format('%s step %d: an untyped series in the merged option',
+          [entry.Strings['id'], k + 1]), 0, RowsOf(chart.GetOptionJson, [odkNoSeriesType]));
+        AssertTrue(Format('%s step %d: a build problem only the fragment had',
+          [entry.Strings['id'], k + 1]),
+          RowsOf(chart.GetOptionJson, [odkBuild]) <= RowsOf(text, [odkBuild]));
+      end;
+    end;
+  finally
+    chart.Free;
+    idx.Free;
+  end;
+  AssertTrue('there are merge steps', merges >= 10);
+  AssertTrue('and fragments that alone would be told they are broken', fragmentsBroken >= 10);
 end;
 
 initialization
