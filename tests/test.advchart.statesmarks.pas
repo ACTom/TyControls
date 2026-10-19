@@ -27,6 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.JsMath,
      tyControls.AdvChart.Anim, tyControls.AdvChart.AnimView,
      tyControls.AdvChart.States, tyControls.AdvChart.Events, tyControls.AdvanceChart,
+     tyControls.AdvChart.Handlers,
      tyControls.FontUnits,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -52,6 +53,8 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Handle(Sender: TObject; const AEvent: TTyChartEvent);
+    { [R2-I4] the oracle's '@mkWords' }
+    function MkWords(const AParams: TTyChartParams): string;
   end;
 
   TAdvChartStatesMarksOracleTest = class(TTestCase)
@@ -68,6 +71,8 @@ type
     FHiddenPlaces: Integer;
     { [R2-I3] text boxes and dashes compared }
     FBoxes, FDashes: Integer;
+    { [R2-I4] a state's words compared }
+    FWords: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -297,6 +302,12 @@ begin
   end;
 end;
 
+function TSkLogger.MkWords(const AParams: TTyChartParams): string;
+begin
+  Result := AParams[0].ComponentType + ':' + AParams[0].Name + ':' + AParams[0].Status
+    + ':' + IntToStr(AParams[0].DataIndex);
+end;
+
 function JsonText(AData: TJSONData): string;
 begin
   if AData = nil then Result := '(none)' else Result := AData.AsJSON;
@@ -365,6 +376,7 @@ begin
   end;
   FChart := nil;
   FLogger := TSkLogger.Create;
+  TyChartRegisterFormatter('mkWords', @FLogger.MkWords);
   FSeen := TStringList.Create;
   FTally := TStringList.Create;
 end;
@@ -378,6 +390,7 @@ begin
   FreeAndNil(FCtl);
   FreeAndNil(FBmp);
   FreeAndNil(FMeasure);
+  TyChartUnregisterFormatter('mkWords');
   FreeAndNil(FLogger);
   inherited TearDown;
 end;
@@ -708,6 +721,14 @@ begin
       and ColourOf(v.AsString, cf) and (el.Caption.Colour <> cf) then
       Miss(Format('%s %s: ink %s, upstream %s', [AWhere, part,
         IntToHex(el.Caption.Colour, 8), v.AsString]), AWhere + part + 'ink');
+    { [R2-I4] A words case: the text the state shows (its formatter's) }
+    if not el.Ignore and ValueAt(AEl, 'txt', ASample, v) then
+    begin
+      Inc(FWords);
+      if el.Caption.Text <> v.AsString then
+        Miss(Format('%s %s: text "%s", upstream "%s"', [AWhere, part, el.Caption.Text,
+          v.AsString]), AWhere + part + 'txt');
+    end;
     { [R2-I3] A textBox case: the merged style's size, the alignment the
       style says, and the box through the transform -- the text as the
       state lays it out }
@@ -1002,11 +1023,11 @@ begin
     Fail(Format('%d mismatches over %d samples (%s):%s', [FBad, FCompared,
       FTally.CommaText, FReport]));
   AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
-    + 'hidden labels shown %d, text boxes %d, dashes %d',
+    + 'hidden labels shown %d, text boxes %d, dashes %d, words %d',
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FHiddenPlaces,
-      FBoxes, FDashes]),
+      FBoxes, FDashes, FWords]),
     (FEventsCompared > 30) and (FMarksCompared > 1000) and (FHiddenPlaces > 20)
-    and (FBoxes > 100) and (FDashes > 50));
+    and (FBoxes > 100) and (FDashes > 50) and (FWords > 100));
 end;
 
 { ==================== by hand ==================== }

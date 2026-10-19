@@ -24,6 +24,11 @@
 // shown only in a state (needsCreateText: built and ignored at rest; the
 // state's ignore = !show where it differs from the normal one).
 //
+// [R2-I4] a marker label's emphasis formatter (getLabelText: each state's
+// text is getFormattedLabel(idx, state, ..., the state model's formatter),
+// the normal text where it answers nothing): a template, and a named handler
+// ('@Name', a function here, given params.status).
+//
 // The harness is states-misc.js', copied (that script generates and exits on
 // load): the replaced Date before the dist, chart._ssr = false,
 // env.node = false, the seeded Math.random, hand-stepped frames, one frame a
@@ -147,6 +152,8 @@ function snap(el) {
     }
     put('spans', spans.join('|'));
   }
+  // [R2-I4] a text's words as its state shows them
+  if (CUR_CASE && CUR_CASE.words && el.type === 'text') put('txt', el.style.text == null ? '' : String(el.style.text));
   // [R2-I3] a path's dash as drawn and its phase
   if (CUR_CASE && CUR_CASE.dash && el.style && el.type !== 'text') {
     put('dash', JSON.stringify(normalizeLineDash(el.style.lineDash, el.style.lineWidth)));
@@ -650,13 +657,29 @@ function runCase(c) {
   rngState = SEED;
   const chart = newChart();
   try {
-    chart.setOption(JSON.parse(JSON.stringify(c.option)));
+    chart.setOption(withHandlers(JSON.parse(JSON.stringify(c.option))));
     settle(chart, caseBase);
     return loopOn(chart, c, caseBase + T1_OFFSET);
   }
   finally {
     chart.dispose();
   }
+}
+
+// [R2-I4] the named handlers an option may say ('@Name'): the port's test
+// registers the same
+const FMT = {
+  mkWords: p => p.componentType + ':' + p.name + ':' + p.status + ':' + p.dataIndex,
+};
+function withHandlers(v) {
+  if (typeof v === 'string' && v.startsWith('@') && FMT[v.slice(1)]) return FMT[v.slice(1)];
+  if (Array.isArray(v)) return v.map(x => withHandlers(x));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = withHandlers(v[k]);
+    return o;
+  }
+  return v;
 }
 
 // ---------- the cases ----------
@@ -845,6 +868,33 @@ const R2I3 = [
     events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'mp0')), out(800)] },
 ];
 
+// [R2-I4] the emphasis formatter: each state's text is the state model's
+// formatter's (getFormattedLabel), the normal text where it says none
+const R2I4 = [
+  { id: 'mp-emph-formatter', textBox: true, words: true, note: '[R2-I4] markPoint labels at the top of circles of 20 '
+    + '(scale false) formatted {b}: {c}; mp0 its own emphasis formatter, a template; mp1 its own emphasis formatter, a named '
+    + 'handler (params.status emphasis); mp2 a named handler at rest and no emphasis formatter (the normal text stays, the '
+    + 'handler asked once, normal). Hover mp0 at 0, mp1 at 400, mp2 at 800, out at 1200',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top', formatter: '{b}: {c}' },
+      emphasis: { scale: false } }, [
+      { type: 'max', name: 'max', emphasis: { label: { formatter: 'hi {b} ({c})' } } },
+      { type: 'min', name: 'min', emphasis: { label: { formatter: '@mkWords' } } },
+      { coord: ['C', 30], name: 'c', value: 30, label: { formatter: '@mkWords' } }]) }),
+    events: [over(0, mark(0, 'mp0')), over(400, mark(0, 'mp1')), over(800, mark(0, 'mp2')), out(1200)] },
+  { id: 'ml-emph-formatter', textBox: true, words: true, note: '[R2-I4] markLine labels: the markLine\'s emphasis formatter '
+    + '{b} = {c} over the default value text; ml1 its own, a named handler; hover ml0 at 0, ml1 at 400, out at 800',
+    option: bars({ markLine: ML({ emphasis: { label: { formatter: '{b} = {c}' } } }, [
+      { type: 'average', name: 'avg' },
+      { yAxis: 30, name: 'thirty', emphasis: { label: { formatter: '@mkWords' } } }]) }),
+    events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'ml1')), out(800)] },
+  { id: 'ma-emph-formatter', textBox: true, words: true, note: '[R2-I4] markArea labels: the markArea\'s emphasis formatter '
+    + '[{b}] over the name; ma1 its own, a named handler; hover ma0 at 0, ma1 at 400, out at 800',
+    option: bars({ markArea: MA({ emphasis: { label: { formatter: '[{b}]' } } }, [
+      [{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }],
+      [{ xAxis: 'D', name: 'two', emphasis: { label: { formatter: '@mkWords' } } }, { xAxis: 'E' }]]) }),
+    events: [over(0, mark(0, 'ma0')), over(400, mark(0, 'ma1')), out(800)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -994,13 +1044,34 @@ function guards(cases) {
     g('ma-label-state-only', l && numAt(l, 'ignore', 250) === false && numAt(l, 'ignore', 1600) === true
       && numAt(l1, 'ty', 650) !== numAt(l1, 'ty', 1600), 'ma-label-state-only');
   }
+  // [R2-I4]
+  {
+    const c = byId(cases, 'mp-emph-formatter');
+    const t = (part, ms) => numAt(mk(c, 0, part), 'txt', ms);
+    g('mp-emph-formatter', t('mp0#label', 250) === 'hi max (36)' && t('mp0#label', 1600) === 'max: 36'
+      && t('mp1#label', 650) === 'markPoint:min:emphasis:1' && t('mp1#label', 1600) === 'min: 5'
+      && t('mp2#label', 1000) === 'markPoint:c:normal:2' && t('mp2#label', 1600) === 'markPoint:c:normal:2',
+      [t('mp0#label', 250), t('mp1#label', 650), t('mp2#label', 1000)].join(' | '));
+  }
+  {
+    const c = byId(cases, 'ml-emph-formatter');
+    const t = (part, ms) => numAt(mk(c, 0, part), 'txt', ms);
+    g('ml-emph-formatter', t('ml0#label', 250) !== t('ml0#label', 1600) && t('ml1#label', 650) === 'markLine:thirty:emphasis:1',
+      [t('ml0#label', 250), t('ml0#label', 1600), t('ml1#label', 650)].join(' | '));
+  }
+  {
+    const c = byId(cases, 'ma-emph-formatter');
+    const t = (part, ms) => numAt(mk(c, 0, part), 'txt', ms);
+    g('ma-emph-formatter', t('ma0#label', 250) === '[one]' && t('ma0#label', 1600) === 'one'
+      && t('ma1#label', 650) === 'markArea:two:emphasis:1', [t('ma0#label', 250), t('ma1#label', 650)].join(' | '));
+  }
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,
