@@ -1,0 +1,1167 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "bar.turned.two",
+   "note": "a bar label of two lines turned 45 degrees, top",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "rotate": 45,
+       "formatter": "{b}\n{c}"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 0,
+     "text": "Mon\n120",
+     "mat": [
+      "3fe6a09e667f3bcd",
+      "bfe6a09e667f3bcc",
+      "3fe6a09e667f3bcc",
+      "3fe6a09e667f3bcd",
+      "4062480000000000",
+      "4064400000000000"
+     ],
+     "rotation": "3fe921fb54442d18",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "120",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 1,
+     "text": "Tue\n200",
+     "mat": [
+      "3fe6a09e667f3bcd",
+      "bfe6a09e667f3bcc",
+      "3fe6a09e667f3bcc",
+      "3fe6a09e667f3bcd",
+      "40702c0000000000",
+      "404e000000000000"
+     ],
+     "rotation": "3fe921fb54442d18",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "200",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 2,
+     "text": "Wed\n150",
+     "mat": [
+      "3fe6a09e667f3bcd",
+      "bfe6a09e667f3bcc",
+      "3fe6a09e667f3bcc",
+      "3fe6a09e667f3bcd",
+      "4077340000000000",
+      "405ef00000000000"
+     ],
+     "rotation": "3fe921fb54442d18",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "150",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 3,
+     "text": "Thu\n80",
+     "mat": [
+      "3fe6a09e667f3bcd",
+      "bfe6a09e667f3bcc",
+      "3fe6a09e667f3bcc",
+      "3fe6a09e667f3bcd",
+      "407e3c0000000000",
+      "406aa00000000000"
+     ],
+     "rotation": "3fe921fb54442d18",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "80",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.turned.three",
+   "note": "three lines turned -30, insideTop, centred on the middle",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": true,
+       "position": "insideTop",
+       "rotate": -30,
+       "verticalAlign": "middle",
+       "formatter": "{b}\nx\n{c}"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 0,
+     "text": "Mon\nx\n120",
+     "mat": [
+      "3febb67ae8584cab",
+      "3fdfffffffffffff",
+      "bfdfffffffffffff",
+      "3febb67ae8584cab",
+      "4062480000000000",
+      "4065800000000000"
+     ],
+     "rotation": "bfe0c152382d7365",
+     "align": "center",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "120",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 1,
+     "text": "Tue\nx\n200",
+     "mat": [
+      "3febb67ae8584cab",
+      "3fdfffffffffffff",
+      "bfdfffffffffffff",
+      "3febb67ae8584cab",
+      "40702c0000000000",
+      "4051800000000000"
+     ],
+     "rotation": "bfe0c152382d7365",
+     "align": "center",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "200",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 2,
+     "text": "Wed\nx\n150",
+     "mat": [
+      "3febb67ae8584cab",
+      "3fdfffffffffffff",
+      "bfdfffffffffffff",
+      "3febb67ae8584cab",
+      "4077340000000000",
+      "4060b80000000000"
+     ],
+     "rotation": "bfe0c152382d7365",
+     "align": "center",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "150",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 3,
+     "text": "Thu\nx\n80",
+     "mat": [
+      "3febb67ae8584cab",
+      "3fdfffffffffffff",
+      "bfdfffffffffffff",
+      "3febb67ae8584cab",
+      "407e3c0000000000",
+      "406be00000000000"
+     ],
+     "rotation": "bfe0c152382d7365",
+     "align": "center",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "80",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.turned.bottom",
+   "note": "two lines turned 90, aligned right and bottom",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": true,
+       "position": "insideBottom",
+       "rotate": 90,
+       "align": "right",
+       "verticalAlign": "bottom",
+       "formatter": "{c}\n{b}"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 0,
+     "text": "120\nMon",
+     "mat": [
+      "3c91a62633145c07",
+      "bff0000000000000",
+      "3ff0000000000000",
+      "3c91a62633145c07",
+      "4062480000000000",
+      "4073b00000000000"
+     ],
+     "rotation": "3ff921fb54442d18",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "120",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 1,
+     "text": "200\nTue",
+     "mat": [
+      "3c91a62633145c07",
+      "bff0000000000000",
+      "3ff0000000000000",
+      "3c91a62633145c07",
+      "40702c0000000000",
+      "4073b00000000000"
+     ],
+     "rotation": "3ff921fb54442d18",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "200",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 2,
+     "text": "150\nWed",
+     "mat": [
+      "3c91a62633145c07",
+      "bff0000000000000",
+      "3ff0000000000000",
+      "3c91a62633145c07",
+      "4077340000000000",
+      "4073b00000000000"
+     ],
+     "rotation": "3ff921fb54442d18",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "150",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 3,
+     "text": "80\nThu",
+     "mat": [
+      "3c91a62633145c07",
+      "bff0000000000000",
+      "3ff0000000000000",
+      "3c91a62633145c07",
+      "407e3c0000000000",
+      "4073b00000000000"
+     ],
+     "rotation": "3ff921fb54442d18",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "80",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.level",
+   "note": "two lines, level",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{b}\n{c}"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 0,
+     "text": "Mon\n120",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4062480000000000",
+      "4064400000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "120",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 1,
+     "text": "Tue\n200",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "40702c0000000000",
+      "404e000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "200",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 2,
+     "text": "Wed\n150",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4077340000000000",
+      "405ef00000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "150",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "series",
+     "s": 0,
+     "d": 3,
+     "text": "Thu\n80",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407e3c0000000000",
+      "406aa00000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "80",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "axis.turned",
+   "note": "a category axis' labels of three lines turned 40 degrees",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     "axisLabel": {
+      "rotate": 40,
+      "formatter": "{value}\nday\nend"
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday\nend",
+     "mat": [
+      "3fe8836fa2cf5039",
+      "bfe491b7523c161d",
+      "3fe491b7523c161d",
+      "3fe8836fa2cf5039",
+      "4062480000000000",
+      "4074800000000000"
+     ],
+     "rotation": "3fe657184ae74488",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday\nend",
+     "mat": [
+      "3fe8836fa2cf5039",
+      "bfe491b7523c161d",
+      "3fe491b7523c161d",
+      "3fe8836fa2cf5039",
+      "40702c0000000000",
+      "4074800000000000"
+     ],
+     "rotation": "3fe657184ae74488",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday\nend",
+     "mat": [
+      "3fe8836fa2cf5039",
+      "bfe491b7523c161d",
+      "3fe491b7523c161d",
+      "3fe8836fa2cf5039",
+      "4077340000000000",
+      "4074800000000000"
+     ],
+     "rotation": "3fe657184ae74488",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday\nend",
+     "mat": [
+      "3fe8836fa2cf5039",
+      "bfe491b7523c161d",
+      "3fe491b7523c161d",
+      "3fe8836fa2cf5039",
+      "407e3c0000000000",
+      "4074800000000000"
+     ],
+     "rotation": "3fe657184ae74488",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "axis.turned.value",
+   "note": "a value axis' labels of two lines turned -20 degrees",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "rotate": -20,
+      "formatter": "{value}\nunits"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "0\nunits",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4054800000000000",
+      "4074000000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "0",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "50\nunits",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4054800000000000",
+      "4070040000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "50",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "100\nunits",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4054800000000001",
+      "4068100000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "100",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "150\nunits",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4054800000000001",
+      "4060180000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "150",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "200\nunits",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4054800000000001",
+      "4050400000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "200",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "every series case has four texts",
+   "ok": true
+  },
+  {
+   "name": "the axis cases have their labels",
+   "ok": true
+  },
+  {
+   "name": "a line height of 12 (the font size)",
+   "ok": true
+  },
+  {
+   "name": "spans middle-based",
+   "ok": true
+  },
+  {
+   "name": "the turned ones are turned",
+   "ok": true
+  }
+ ]
+}

@@ -111,6 +111,26 @@ procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
 
+{ [R2-A] A TURNED TEXT OF SEVERAL LINES as zrender lays a plain block out
+  (Text._updatePlainTexts) and its transform turns it: the lines stack in
+  the text's own frame, one line height apart, the block aligned vertically
+  as a whole -- from the anchor down (top), half of it above (middle), all
+  of it above (bottom) -- and each line drawn on its own, aligned
+  horizontally at the anchor's x and centred on its line (textBaseline
+  'middle'); the frame turned by ARotationRad about the anchor
+  (counter-clockwise positive, DrawTextRotated's sense). The centres of
+  ALines lines ALineH apart, in the order drawn. }
+function TyRotatedLineCentres(AX, AY, ARotationRad: Double; AVAlign: TTextLayout;
+  ALineH: Double; ALines: Integer): TTyPointFArray;
+{ ... and drawn: AText split at its line breaks (one line is
+  DrawTextRotated's own call, unchanged), ABlockH the block's height the
+  layout measured (each line's ABlockH / lines), or 0 to measure it as
+  TyMeasureTextBlock does. The axis labels and names and the series
+  captions draw through it. }
+procedure TyDrawTextRotatedLines(P: TTyPainter; const AText, AFontName: string;
+  AFontSize, AWeight: Integer; AColor: TTyColor; AX, AY, ARotationRad: Double;
+  AHAlign: TAlignment; AVAlign: TTextLayout; ABlockH: Double);
+
 { [R2-P] FOR THE TESTS. A label's halo traces its glyphs' outline off a mask
   once and keeps it (see HaloOutlineKept): how many masks were traced since
   the start; how many outlines are kept now; the keeping switched off (and
@@ -1704,6 +1724,63 @@ begin
   end;
 end;
 
+function TyRotatedLineCentres(AX, AY, ARotationRad: Double; AVAlign: TTextLayout;
+  ALineH: Double; ALines: Integer): TTyPointFArray;
+var
+  i: Integer;
+  top, dy, sa, ca, blockH: Double;
+begin
+  Result := nil;
+  if ALines <= 0 then Exit;
+  SetLength(Result, ALines);
+  { adjustTextY over the content height }
+  blockH := ALines * ALineH;
+  case AVAlign of
+    tlCenter: top := -blockH / 2;
+    tlBottom: top := -blockH;
+  else
+    top := 0;
+  end;
+  sa := Sin(ARotationRad);
+  ca := Cos(ARotationRad);
+  for i := 0 to ALines - 1 do
+  begin
+    { the line's middle, (0, dy) in the text's frame, turned the way
+      DrawTextRotated turns its own offsets }
+    dy := top + (i + 0.5) * ALineH;
+    Result[i].X := AX + dy * sa;
+    Result[i].Y := AY + dy * ca;
+  end;
+end;
+
+procedure TyDrawTextRotatedLines(P: TTyPainter; const AText, AFontName: string;
+  AFontSize, AWeight: Integer; AColor: TTyColor; AX, AY, ARotationRad: Double;
+  AHAlign: TAlignment; AVAlign: TTextLayout; ABlockH: Double);
+var
+  lines: TStringArray;
+  c: TTyPointFArray;
+  i, bw, bh: Integer;
+begin
+  if Pos(#10, AText) = 0 then
+  begin
+    P.DrawTextRotated(AText, AFontName, AFontSize, AWeight, AColor, AX, AY,
+      ARotationRad, AHAlign, AVAlign);
+    Exit;
+  end;
+  lines := AText.Split([#10]);
+  if ABlockH <= 0 then
+  begin
+    TyMeasureTextBlock(AText, AFontName, AFontSize, AWeight, P.PPI, 0, 0, bw, bh);
+    ABlockH := bh;
+  end;
+  c := TyRotatedLineCentres(AX, AY, ARotationRad, AVAlign, ABlockH / Length(lines),
+    Length(lines));
+  for i := 0 to High(lines) do
+    if lines[i] <> '' then
+      P.DrawTextRotated(lines[i], AFontName, AFontSize, AWeight, AColor,
+        c[i].X, c[i].Y, ARotationRad, AHAlign, tlCenter);
+end;
+
 { [F4c] a caption's halo: its glyphs drawn on a mask exactly as
   DrawCaptionAt draws them, moved by whole pixels, and a stroke along their
   outlines -- StrokeWidthLogical wide, centred on them (zrender's
@@ -1724,9 +1801,15 @@ begin
   b := AElement.Shape.Bounds;
   if (AElement.Caption.RotationRad <> 0) or not TyRectFIsValid(b) then
   begin
-    { round the anchor, any turn or alignment: the text's diagonal }
-    sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
-      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
+    { round the anchor, any turn or alignment: the text's diagonal -- a
+      block's, where it has several lines [R2-A] }
+    if Pos(#10, AElement.Caption.Text) > 0 then
+      TyMeasureTextBlock(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
+        AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, P.PPI, 0, 0,
+        sz.cx, sz.cy)
+    else
+      sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
+        AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
     ox := Floor(AElement.Caption.X) - (sz.cx + sz.cy + m);
     oy := Floor(AElement.Caption.Y) - (sz.cx + sz.cy + m);
     mw := 2 * (sz.cx + sz.cy + m) + 2;
@@ -1838,7 +1921,10 @@ begin
     Result.Kind := 1;
     Result.R := Rect(Round(b.Left) + ADX, Round(b.Top) + ADY,
       Round(b.Right) + ADX, Round(b.Bottom) + ADY);
-    Result.MultiLine := AElement.Caption.MultiLine;
+    { a caption of several lines draws them line by line in its box, which
+      was measured as the block [R2-A: only a visualMap's said so; a series
+      label's break drew as nothing, on one line] }
+    Result.MultiLine := AElement.Caption.MultiLine or (Pos(#10, Result.Text) > 0);
   end
   else
   begin
@@ -1851,9 +1937,11 @@ end;
 
 procedure PaintCaptionDraw(P: TTyPainter; const AD: TCaptionDraw; AInk: TTyColor);
 begin
+  { a turned caption of several lines draws every one [R2-A: the first
+    line only, the break drawn as nothing] }
   if AD.Kind = 0 then
-    P.DrawTextRotated(AD.Text, AD.FontName, AD.Size, AD.Weight, AInk, AD.X, AD.Y,
-      AD.Rot, AD.H, AD.V)
+    TyDrawTextRotatedLines(P, AD.Text, AD.FontName, AD.Size, AD.Weight, AInk,
+      AD.X, AD.Y, AD.Rot, AD.H, AD.V, 0)
   else
     P.DrawText(AD.R, AD.Text, AD.FontName, AD.Size, AD.Weight, AInk, AD.H, AD.V,
       AD.Truncate, 0, False, AD.MultiLine);

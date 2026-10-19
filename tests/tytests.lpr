@@ -177,6 +177,7 @@ uses
   test.advchart.halokeep,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
+  test.advchart.multiline,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,
