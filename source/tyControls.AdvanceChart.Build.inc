@@ -3303,6 +3303,8 @@ var
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
   rv: TTyRadarVisual;
+  pls: TTyPieLabelSpec;
+  pn: Integer;
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
   ti: TTyTreeInk;
@@ -3662,9 +3664,13 @@ begin
             the sector's bounding box -- the box of a wedge is the whole
             outer disc, so a label placed from it would sit at the disc's
             centre for every slice. }
-          Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i],
-            TyPieLabelSpecOf(FOption, FBindings[i].SeriesIndex,
-              TyPieLabelSpecDefault),
+          { each item's own label and line over the series' [R2-A] }
+          pls := TyPieLabelSpecOf(FOption, FBindings[i].SeriesIndex,
+            TyPieLabelSpecDefault);
+          pn := 0;
+          if FStores[i] <> nil then pn := FStores[i].RawCount;
+          Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i], pls,
+            TyPieItemLabelSpecs(FOption, FBindings[i].SeriesIndex, pls, pn),
             PieLabelInk, pv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim),
             FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));

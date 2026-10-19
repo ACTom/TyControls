@@ -116,6 +116,12 @@ type
       two strings. Any other value -- 'top', say -- takes the outer placement
       and gets no line. }
     PositionWord: string;
+    { [R2-A] THE LABEL'S OWN POSITION WAS FALSY -- '' or null on the series,
+      '' on an item: labelLayout then takes the emphasis position (or none)
+      for PositionWord, while PieView tests the falsy word for the guide
+      line and finds no line. False, the zero value: the word is the line's
+      word too. }
+    PositionFalsy: Boolean;
     { `avoidLabelOverlap: false` (the series'): the default true runs
       avoidOverlap, whose last step stands the line off the label's x again
       [Batch 96] }
@@ -130,6 +136,7 @@ type
       percentage is not a number there) [Batch 112] }
     MinTurnAngle, MaxSurfaceAngle, Smooth, RouteLength2: Double;
   end;
+  TTyPieLabelSpecArray = array of TTyPieLabelSpec;
 
   { One placed label, DEVICE px. AnchorV is always the middle -- upstream forces
     it unconditionally after everything else has been decided. }
@@ -228,6 +235,13 @@ function TyPieLabelGlobalRect(const ARaw: TTyXYWH; ALabelX, ALabelY, AOffX,
   const AMargin: TTyPieMargin): TTyXYWH;
 
 function TyPieLabelSpecDefault: TTyPieLabelSpec;
+{ [R2-A] EACH DATA ITEM'S OWN SPEC, by raw row: its `label`, `labelLine`
+  and states' label.show / labelLine.show read over ASeries (the series'
+  spec TyPieLabelSpecOf made), its position resolved through the item's
+  model -- pie/labelLayout.ts reads every label option through
+  data.getItemModel. A row whose item writes none of them is ASeries. }
+function TyPieItemLabelSpecs(AOption: TTyChartOption; ASlot: Integer;
+  const ASeries: TTyPieLabelSpec; ACount: Integer): TTyPieLabelSpecArray;
 function TyPieLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyPieLabelSpec): TTyPieLabelSpec;
 
@@ -273,7 +287,16 @@ function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
   AStore: TTyDataStore; const ASeriesName: string; AValueDim,
   APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer; AList: TTyPaintList): Integer;
+  APPI: Integer; AList: TTyPaintList): Integer; overload;
+{ [R2-A] ... AItems by RAW row (TyPieItemLabelSpecs): a slice's label and
+  line read through its item; a row past it ASpec's }
+function TyBuildPieLabels(const ABinding: TTySeriesBinding;
+  const ALayout: TTyPieLayout; const ASpec: TTyPieLabelSpec;
+  const AItems: TTyPieLabelSpecArray;
+  const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
+  AStore: TTyDataStore; const ASeriesName: string; AValueDim,
+  APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer; overload;
 
 { bleedMargin's computed default: ten on a normal chart, two on a small one.
 
@@ -406,14 +429,259 @@ begin
   Result := d.AsString;
 end;
 
+{ [R2-A] A `position` a label node WRITES: the word and whether it is
+  truthy, as `labelModel.get('position') || ...` weighs it. A null is
+  unwritten where Model.get falls through to the parent (an item's), and
+  written where the parent has nothing either: the series' own null stays
+  over the default 'outer' (merge does not overwrite a key that is there),
+  and the series' parent has no label (ANullWritten). }
+function PiePosOf(ANode: TJSONObject; ANullWritten: Boolean; out AWord: string;
+  out ATruthy: Boolean): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  AWord := '';
+  ATruthy := False;
+  if ANode = nil then Exit;
+  d := ANode.Find('position');
+  if d = nil then Exit;
+  if d.JSONType = jtNull then
+  begin
+    Result := ANullWritten;
+    Exit;
+  end;
+  Result := True;
+  case d.JSONType of
+    jtString:
+      begin
+        AWord := d.AsString;
+        ATruthy := AWord <> '';
+      end;
+    jtNumber:
+      begin
+        AWord := d.AsJSON;
+        ATruthy := (not IsNan(d.AsFloat)) and (d.AsFloat <> 0);
+      end;
+    jtBoolean:
+      begin
+        AWord := d.AsJSON;
+        ATruthy := d.AsBoolean;
+      end;
+  else
+    { an array or an object: truthy, and no word labelLayout knows }
+    AWord := d.AsJSON;
+    ATruthy := True;
+  end;
+end;
+
+{ THE POSITION through a model chain (ALabels the label nodes, AEmph the
+  emphasis.label nodes, most specific first, the series' last): the first
+  written one, else the default 'outer'; a falsy one gives way to the first
+  written emphasis position, else none -- `labelModel.get('position') ||
+  itemModel.get(['emphasis', 'label', 'position'])` (labelLayout.ts). The
+  last node's null is written (PiePosOf). }
+procedure PieResolvePosition(const ALabels, AEmph: array of TJSONObject;
+  var R: TTyPieLabelSpec);
+var
+  i: Integer;
+  w, w2: string;
+  t, t2, found: Boolean;
+begin
+  found := False;
+  w := '';
+  t := False;
+  for i := 0 to High(ALabels) do
+    if PiePosOf(ALabels[i], i = High(ALabels), w, t) then
+    begin
+      found := True;
+      Break;
+    end;
+  if not found then
+  begin
+    w := 'outer';
+    t := True;
+  end;
+  R.PositionFalsy := not t;
+  if not t then
+  begin
+    w := '';
+    for i := 0 to High(AEmph) do
+      if PiePosOf(AEmph[i], False, w2, t2) then
+      begin
+        w := w2;
+        Break;
+      end;
+  end;
+  R.PositionWord := w;
+  { `inside` and `inner` are the same; `center` is its own case; EVERY other
+    value falls through to outer, INCLUDING one nobody recognises and none
+    at all. Upstream has no table here, only two equality tests and an
+    else. }
+  if (w = 'inside') or (w = 'inner') then R.Position := tplInside
+  else if w = 'center' then R.Position := tplCentre
+  else R.Position := tplOuter;
+end;
+
+{ ONE `label` node's keys over R, the position aside (PieResolvePosition):
+  the series' or an item's }
+procedure PieReadLabelNode(ANode, ASeries: TJSONObject; var R: TTyPieLabelSpec);
+var
+  d: TJSONData;
+  s: string;
+  base, margins: TTyLabelSpec;
+  k: Integer;
+  hadBg: Boolean;
+begin
+  if ANode = nil then Exit;
+  { the ink over what is there: a node that writes no backgroundColor keeps
+    the one under it }
+  hadBg := R.Ink.HasBackground;
+  TyLabelReadInk(ANode, ASeries, R.Ink);
+  if ANode.Find('backgroundColor') = nil then R.Ink.HasBackground := hadBg;
+  d := ANode.Find('show');
+  if (d <> nil) and (d.JSONType = jtBoolean) then R.Show := d.AsBoolean;
+
+  s := StrIn(ANode, 'alignTo');
+  if s = 'labelLine' then R.AlignTo := tpaLabelLine
+  else if s = 'edge' then R.AlignTo := tpaEdge
+  else if s = 'none' then R.AlignTo := tpaNone;
+
+  d := ANode.Find('rotate');
+  if d <> nil then
+    case d.JSONType of
+      jtNumber:
+        begin
+          R.Rotate := tprNumber;
+          R.RotateDeg := d.AsFloat;
+        end;
+      jtBoolean:
+        { `true` is radial. The catalog types this boolean|number|string and
+          gives no enum for the three words, so nothing but the source says
+          they exist. }
+        if d.AsBoolean then R.Rotate := tprRadial
+        else R.Rotate := tprNone;
+      jtString:
+        begin
+          s := d.AsString;
+          if s = 'radial' then R.Rotate := tprRadial
+          else if s = 'tangential' then R.Rotate := tprTangential
+          else if s = 'tangential-noflip' then
+            R.Rotate := tprTangentialNoFlip;
+        end;
+    end;
+
+  R.DistanceToLineLogical := NumIn(ANode, 'distanceToLabelLine',
+    R.DistanceToLineLogical);
+  d := ANode.Find('offset');
+  if (d <> nil) and (d is TJSONArray) then
+  begin
+    if TJSONArray(d).Count > 0 then
+      R.OffsetXLogical := NumAt(TJSONArray(d), 0, R.OffsetXLogical);
+    if TJSONArray(d).Count > 1 then
+      R.OffsetYLogical := NumAt(TJSONArray(d), 1, R.OffsetYLogical);
+  end;
+  R.EdgeDistance := LengthIn(ANode, 'edgeDistance', R.EdgeDistance);
+  d := ANode.Find('bleedMargin');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    R.BleedMargin := d.AsFloat;
+  d := ANode.Find('formatter');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    R.Formatter := d.AsString;
+    R.HasFormatter := True;
+  end
+  else if (d <> nil) and (d.JSONType = jtNull) then
+  begin
+    R.Formatter := '';
+    R.HasFormatter := False;
+  end;
+  s := StrIn(ANode, 'overflow');
+  if s = 'truncate' then R.Overflow := tloTruncate
+  { 'break' / 'breakAll' wrap rather than cut -- the block's to do, and
+    the plain label does not wrap [Batch 109] }
+  else if s <> '' then R.Overflow := tloNone;
+  d := ANode.Find('ellipsis');
+  if (d <> nil) and (d.JSONType = jtString) then R.Ellipsis := d.AsString;
+  { minMargin / textMargin: the solver's rect counts them, and so does the
+    label layout after it [Batch 109] -- over what the series' read
+    [R2-A] }
+  base := TyLabelSpecNone;
+  base.MarginType := R.Ink.MarginType;
+  for k := 0 to 3 do base.MarginLogical[k] := R.Ink.MarginLogical[k];
+  margins := TyLabelSpecOfNode(ANode, ASeries, base);
+  R.Ink.MarginType := margins.MarginType;
+  for k := 0 to 3 do R.Ink.MarginLogical[k] := margins.MarginLogical[k];
+end;
+
+{ ONE `labelLine` node's keys over R }
+procedure PieReadLineNode(ALine: TJSONObject; var R: TTyPieLabelSpec);
+var d: TJSONData;
+begin
+  if ALine = nil then Exit;
+  d := ALine.Find('show');
+  if (d <> nil) and (d.JSONType = jtBoolean) then
+    R.ShowLine := d.AsBoolean;
+  R.LineLength := LengthIn(ALine, 'length', R.LineLength);
+  R.LineLength2 := LengthIn(ALine, 'length2', R.LineLength2);
+  { the limits and the smooth [Batch 112] }
+  R.MinTurnAngle := TyGuideJsNumber(ALine.Find('minTurnAngle'), R.MinTurnAngle);
+  R.MaxSurfaceAngle := TyGuideJsNumber(ALine.Find('maxSurfaceAngle'),
+    R.MaxSurfaceAngle);
+  if ALine.Find('smooth') <> nil then
+    R.Smooth := TyLabelLineSmoothOf(ALine.Find('smooth'));
+  R.RouteLength2 := TyGuideLength2(ALine.Find('length2'), R.RouteLength2);
+end;
+
+{ the states that show what the normal label hides [F2b]: AOwner's (the
+  series' or an item's) emphasis / select / blur label.show and
+  labelLine.show }
+procedure PieReadStateShows(AOwner: TJSONObject; var R: TTyPieLabelSpec);
+var
+  k: Integer;
+  st, node: TJSONObject;
+  d: TJSONData;
+begin
+  if AOwner = nil then Exit;
+  for k := 0 to 2 do
+  begin
+    case k of
+      0: st := ObjOf(AOwner.Find('emphasis'));
+      1: st := ObjOf(AOwner.Find('select'));
+    else
+      st := ObjOf(AOwner.Find('blur'));
+    end;
+    if st = nil then Continue;
+    node := ObjOf(st.Find('label'));
+    if node <> nil then
+    begin
+      d := node.Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        R.StateShow := True;
+    end;
+    node := ObjOf(st.Find('labelLine'));
+    if node <> nil then
+    begin
+      d := node.Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        R.StateLineShow := True;
+    end;
+  end;
+end;
+
+{ an owner's emphasis.label node }
+function EmphLabelOf(AOwner: TJSONObject): TJSONObject;
+begin
+  Result := nil;
+  if AOwner = nil then Exit;
+  Result := ObjOf(AOwner.Find('emphasis'));
+  if Result <> nil then Result := ObjOf(Result.Find('label'));
+end;
+
 function TyPieLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyPieLabelSpec): TTyPieLabelSpec;
 var
-  series, node, line: TJSONObject;
+  series, node: TJSONObject;
   d: TJSONData;
-  s: string;
-  margins: TTyLabelSpec;
-  k: Integer;
 begin
   Result := ABase;
   if AOption = nil then Exit;
@@ -432,134 +700,63 @@ begin
   TyLabelReadInk(node, series, Result.Ink);
   { its text block [Batch 86] }
   TyLabelReadBlock(node, AOption.Root, Result.Ink);
-  if node <> nil then
+  PieReadLabelNode(node, series, Result);
+  { [R2-A] a null or empty position takes the emphasis one }
+  PieResolvePosition([node], [EmphLabelOf(series)], Result);
+  PieReadStateShows(series, Result);
+  PieReadLineNode(ObjOf(series.Find('labelLine')), Result);
+end;
+
+function TyPieItemLabelSpecs(AOption: TTyChartOption; ASlot: Integer;
+  const ASeries: TTyPieLabelSpec; ACount: Integer): TTyPieLabelSpecArray;
+var
+  series, it, lab, slab: TJSONObject;
+  data: TJSONData;
+  k, n: Integer;
+  r: TTyPieLabelSpec;
+  chain: array of TJSONObject;
+begin
+  Result := nil;
+  if (AOption = nil) or (ACount <= 0) then Exit;
+  series := ObjOf(AOption.ComponentAt('series', ASlot));
+  if series = nil then Exit;
+  data := series.Find('data');
+  if not (data is TJSONArray) then Exit;
+  slab := ObjOf(series.Find('label'));
+  SetLength(Result, ACount);
+  for k := 0 to ACount - 1 do
   begin
-    d := node.Find('show');
-    if (d <> nil) and (d.JSONType = jtBoolean) then Result.Show := d.AsBoolean;
-
-    { `inside` and `inner` are the same; `center` is its own case; EVERY other
-      value falls through to outer, INCLUDING one nobody recognises. Upstream
-      has no table here, only two equality tests and an else. }
-    s := StrIn(node, 'position');
-    if s <> '' then
+    Result[k] := ASeries;
+    if k >= TJSONArray(data).Count then Continue;
+    it := ObjOf(TJSONArray(data).Items[k]);
+    if it = nil then Continue;
+    if (it.Find('label') = nil) and (it.Find('labelLine') = nil)
+      and (it.Find('emphasis') = nil) and (it.Find('select') = nil)
+      and (it.Find('blur') = nil) then Continue;
+    r := ASeries;
+    lab := ObjOf(it.Find('label'));
+    PieReadLabelNode(lab, series, r);
+    { the block over the item's chain, the item's label first }
+    if (lab <> nil) and (TyRtNodeWantsBlock(lab)
+      or ((slab <> nil) and TyRtNodeWantsBlock(slab))) then
     begin
-      Result.PositionWord := s;
-      if (s = 'inside') or (s = 'inner') then Result.Position := tplInside
-      else if s = 'center' then Result.Position := tplCentre
-      else Result.Position := tplOuter;
-    end;
-
-    s := StrIn(node, 'alignTo');
-    if s = 'labelLine' then Result.AlignTo := tpaLabelLine
-    else if s = 'edge' then Result.AlignTo := tpaEdge
-    else if s = 'none' then Result.AlignTo := tpaNone;
-
-    d := node.Find('rotate');
-    if d <> nil then
-      case d.JSONType of
-        jtNumber:
-          begin
-            Result.Rotate := tprNumber;
-            Result.RotateDeg := d.AsFloat;
-          end;
-        jtBoolean:
-          { `true` is radial. The catalog types this boolean|number|string and
-            gives no enum for the three words, so nothing but the source says
-            they exist. }
-          if d.AsBoolean then Result.Rotate := tprRadial
-          else Result.Rotate := tprNone;
-        jtString:
-          begin
-            s := d.AsString;
-            if s = 'radial' then Result.Rotate := tprRadial
-            else if s = 'tangential' then Result.Rotate := tprTangential
-            else if s = 'tangential-noflip' then
-              Result.Rotate := tprTangentialNoFlip;
-          end;
+      n := 0;
+      chain := nil;
+      SetLength(chain, 2);
+      chain[n] := lab;
+      Inc(n);
+      if slab <> nil then
+      begin
+        chain[n] := slab;
+        Inc(n);
       end;
-
-    Result.DistanceToLineLogical := NumIn(node, 'distanceToLabelLine',
-      Result.DistanceToLineLogical);
-    d := node.Find('offset');
-    if (d <> nil) and (d is TJSONArray) then
-    begin
-      if TJSONArray(d).Count > 0 then
-        Result.OffsetXLogical := NumAt(TJSONArray(d), 0,
-          Result.OffsetXLogical);
-      if TJSONArray(d).Count > 1 then
-        Result.OffsetYLogical := NumAt(TJSONArray(d), 1,
-          Result.OffsetYLogical);
+      SetLength(chain, n);
+      r.Ink.Rt := TyRtResolve(chain, r.Ink.RtGlobal, TyRtResolveOpt(True));
     end;
-    Result.EdgeDistance := LengthIn(node, 'edgeDistance', Result.EdgeDistance);
-    d := node.Find('bleedMargin');
-    if (d <> nil) and (d.JSONType = jtNumber) then
-      Result.BleedMargin := d.AsFloat;
-    d := node.Find('formatter');
-    if (d <> nil) and (d.JSONType = jtString) then
-    begin
-      Result.Formatter := d.AsString;
-      Result.HasFormatter := True;
-    end
-    else if (d <> nil) and (d.JSONType = jtNull) then
-    begin
-      Result.Formatter := '';
-      Result.HasFormatter := False;
-    end;
-    s := StrIn(node, 'overflow');
-    if s = 'truncate' then Result.Overflow := tloTruncate
-    { 'break' / 'breakAll' wrap rather than cut -- the block's to do, and
-      the plain label does not wrap [Batch 109] }
-    else if s <> '' then Result.Overflow := tloNone;
-    d := node.Find('ellipsis');
-    if (d <> nil) and (d.JSONType = jtString) then Result.Ellipsis := d.AsString;
-    { minMargin / textMargin: the solver's rect counts them, and so does the
-      label layout after it [Batch 109] }
-    margins := TyLabelSpecOfNode(node, series, TyLabelSpecNone);
-    Result.Ink.MarginType := margins.MarginType;
-    for k := 0 to 3 do Result.Ink.MarginLogical[k] := margins.MarginLogical[k];
-  end;
-
-  { the states that show what the normal label hides [F2b] }
-  for k := 0 to 2 do
-  begin
-    case k of
-      0: line := ObjOf(series.Find('emphasis'));
-      1: line := ObjOf(series.Find('select'));
-    else
-      line := ObjOf(series.Find('blur'));
-    end;
-    if line = nil then Continue;
-    node := ObjOf(line.Find('label'));
-    if node <> nil then
-    begin
-      d := node.Find('show');
-      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
-        Result.StateShow := True;
-    end;
-    node := ObjOf(line.Find('labelLine'));
-    if node <> nil then
-    begin
-      d := node.Find('show');
-      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
-        Result.StateLineShow := True;
-    end;
-  end;
-
-  line := ObjOf(series.Find('labelLine'));
-  if line <> nil then
-  begin
-    d := line.Find('show');
-    if (d <> nil) and (d.JSONType = jtBoolean) then
-      Result.ShowLine := d.AsBoolean;
-    Result.LineLength := LengthIn(line, 'length', Result.LineLength);
-    Result.LineLength2 := LengthIn(line, 'length2', Result.LineLength2);
-    { the limits and the smooth [Batch 112] }
-    Result.MinTurnAngle := TyGuideJsNumber(line.Find('minTurnAngle'), Result.MinTurnAngle);
-    Result.MaxSurfaceAngle := TyGuideJsNumber(line.Find('maxSurfaceAngle'),
-      Result.MaxSurfaceAngle);
-    if line.Find('smooth') <> nil then
-      Result.Smooth := TyLabelLineSmoothOf(line.Find('smooth'));
-    Result.RouteLength2 := TyGuideLength2(line.Find('length2'), Result.RouteLength2);
+    PieResolvePosition([lab, slab], [EmphLabelOf(it), EmphLabelOf(series)], r);
+    PieReadStateShows(it, r);
+    PieReadLineNode(ObjOf(it.Find('labelLine')), r);
+    Result[k] := r;
   end;
 end;
 
@@ -727,6 +924,7 @@ begin
         for it. So `position: 'top'` on a pie puts the label out past the rim
         with nothing pointing at it. }
       Result.HasLine := (ASpec.ShowLine or ASpec.StateLineShow)
+        and not ASpec.PositionFalsy
         and ((ASpec.PositionWord = 'outer') or (ASpec.PositionWord = 'outside'));
       Result.P1 := TyPointF(x1, y1);
       Result.P2 := TyPointF(x2, y2);
@@ -1151,42 +1349,62 @@ end;
 
 type
   { WHAT A PIE LABEL IS MEASURED FROM, for the solver's rect and for the
-    marks after it: one entry per label in the solver's list. [Batch 109] }
+    marks after it: one entry per label in the solver's list -- each its
+    own item's spec [Batch 109; R2-A: the series' for all] }
   TPieFit = class
   public
     Measurer: ITyTextMeasurer;
     FontName: string;
     FontSize, FontWeight: Integer;
     Scale: Double;
-    { a plain label is cut under a width (overflow 'truncate', the pie's
-      default), ending in Ellipsis }
-    Truncate: Boolean;
-    Ellipsis: string;
-    { the block's spec, the fonts set; Rich: the label is a block }
-    Lbl: TTyLabelSpec;
-    Rich: Boolean;
-    MarginType: Integer;
-    Margin: TTyPieMargin;
-    OffX, OffY: Double;
     Words: array of string;
     Fills: array of TTyChartColor;
     Rots: array of Double;
     LineH: array of Double;
-    { the block's spec under a width the solver set }
-    function SpecUnder(AHasWidth: Boolean; AWidth: Double): TTyLabelSpec;
+    { a plain label is cut under a width (overflow 'truncate', the pie's
+      default), ending in its Ellipsis }
+    Truncs: array of Boolean;
+    Ellipses: array of string;
+    { the block's spec, the fonts set; Richs: the label is a block }
+    Lbls: array of TTyLabelSpec;
+    Richs: array of Boolean;
+    MarginTypes: array of Integer;
+    Margins: array of TTyPieMargin;
+    OffXs, OffYs: array of Double;
+    procedure Grow(AIndex: Integer);
     { the label's own box, as the solver measures it (left, middle) }
     function Raw(AIndex: Integer; AHasWidth: Boolean; AWidth: Double): TTyXYWH;
     { computeLabelGlobalRect }
     function RectOf(const AItem: TTyPieAvoidItem; AIndex: Integer): TTyXYWH;
   end;
 
-function TPieFit.SpecUnder(AHasWidth: Boolean; AWidth: Double): TTyLabelSpec;
+{ the block's spec under a width the solver set }
+function PieSpecUnder(const ALbl: TTyLabelSpec; AScale: Double; AHasWidth: Boolean;
+  AWidth: Double): TTyLabelSpec;
 begin
-  Result := Lbl;
+  Result := ALbl;
   if not AHasWidth then Exit;
   Result.Rt.Style.WidthKind := rtwNumber;
   { the block's numbers are CSS px }
-  Result.Rt.Style.Width := AWidth / Scale;
+  Result.Rt.Style.Width := AWidth / AScale;
+end;
+
+procedure TPieFit.Grow(AIndex: Integer);
+var n: Integer;
+begin
+  n := AIndex + 1;
+  SetLength(Words, n);
+  SetLength(Fills, n);
+  SetLength(Rots, n);
+  SetLength(LineH, n);
+  SetLength(Truncs, n);
+  SetLength(Ellipses, n);
+  SetLength(Lbls, n);
+  SetLength(Richs, n);
+  SetLength(MarginTypes, n);
+  SetLength(Margins, n);
+  SetLength(OffXs, n);
+  SetLength(OffYs, n);
 end;
 
 function TPieFit.Raw(AIndex: Integer; AHasWidth: Boolean; AWidth: Double): TTyXYWH;
@@ -1197,27 +1415,40 @@ var
 begin
   { an empty text has no lines, and its box is the empty one at the origin }
   if Words[AIndex] = '' then Exit(TyXYWH(0, 0, 0, 0));
-  if Rich then
+  if Richs[AIndex] then
   begin
-    pieces := TyLabelBlockPieces(SpecUnder(AHasWidth, AWidth), Words[AIndex],
-      Fills[AIndex], True, False, False, tahLeft, tavMiddle, Scale, Measurer);
+    pieces := TyLabelBlockPieces(PieSpecUnder(Lbls[AIndex], Scale, AHasWidth, AWidth),
+      Words[AIndex], Fills[AIndex], True, False, False, tahLeft, tavMiddle, Scale, Measurer);
     b := TyRtBounds(pieces);
     if Scale = 1 then Exit(b);
     Exit(TyXYWH(b.X * Scale, b.Y * Scale, b.W * Scale, b.H * Scale));
   end;
-  TyPiePlainFit(Words[AIndex], AHasWidth, AWidth, Truncate, Ellipsis, Measurer,
-    FontName, FontSize, FontWeight, cw);
+  TyPiePlainFit(Words[AIndex], AHasWidth, AWidth, Truncs[AIndex], Ellipses[AIndex],
+    Measurer, FontName, FontSize, FontWeight, cw);
   Result := PiePlainRaw(cw, LineH[AIndex]);
 end;
 
 function TPieFit.RectOf(const AItem: TTyPieAvoidItem; AIndex: Integer): TTyXYWH;
 begin
   Result := TyPieLabelGlobalRect(Raw(AIndex, AItem.HasWidth, AItem.Width),
-    AItem.LabelX, AItem.LabelY, OffX, OffY, Rots[AIndex], MarginType, Margin);
+    AItem.LabelX, AItem.LabelY, OffXs[AIndex], OffYs[AIndex], Rots[AIndex],
+    MarginTypes[AIndex], Margins[AIndex]);
 end;
 
 function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   const ALayout: TTyPieLayout; const ASpec: TTyPieLabelSpec;
+  const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
+  AStore: TTyDataStore; const ASeriesName: string; AValueDim,
+  APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+begin
+  Result := TyBuildPieLabels(ABinding, ALayout, ASpec, nil, AInk, AFills, AStore,
+    ASeriesName, AValueDim, APercentPrecision, AMeasurer, APPI, AList);
+end;
+
+function TyBuildPieLabels(const ABinding: TTySeriesBinding;
+  const ALayout: TTyPieLayout; const ASpec: TTyPieLabelSpec;
+  const AItems: TTyPieLabelSpecArray;
   const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
   AStore: TTyDataStore; const ASeriesName: string; AValueDim,
   APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
@@ -1242,52 +1473,66 @@ var
   box: TTyRectF;
   el: TTyChartElement;
   fill: TTyChartColor;
-  lbl: TTyLabelSpec;
   ink, stroke: TTyChartColor;
   strokeW: Double;
   pts: array[0..2] of TTyPointF;
   labs: array of TPieLab;
   items: TTyPieAvoidItemArray;
   fit: TPieFit;
-  hasWidth, hasRotate: Boolean;
+  hasWidth, hasRotate, any: Boolean;
   width: Double;
-begin
-  Result := 0;
-  if (AList = nil) or (AMeasurer = nil) then Exit;
-  if not ALayout.Valid then Exit;
-  { built when a state shows it, ignored at rest [F2b] }
-  if not (ASpec.Show or ASpec.StateShow) then Exit;
-  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  { [R2-A] each sector's spec (its item's) and label ink spec }
+  sps: TTyPieLabelSpecArray;
+  lbls: array of TTyLabelSpec;
+  sp: TTyPieLabelSpec;
+  lbl: TTyLabelSpec;
+  rich: Boolean;
 
   { The three bands and the outside ink, packed into the shape the shared
     chooser wants. A pie has no use for the rest of a label spec -- its
     geometry came from somewhere else entirely -- so only the colour fields
     are filled in. }
-  lbl := ASpec.Ink;
-  lbl.InsideColour[0] := AInk.InsideColour[0];
-  lbl.InsideColour[1] := AInk.InsideColour[1];
-  lbl.InsideColour[2] := AInk.InsideColour[2];
-  lbl.OutsideColour := AInk.OutsideColour;
-  lbl.Ground := AInk.Ground;
-  lbl.GroundDark := AInk.GroundDark;
-  lbl.FontName := AInk.FontName;
-  lbl.FontSizeLogical := AInk.FontSizeLogical;
-  lbl.FontWeight := AInk.FontWeight;
-  { THE PIE'S DEFAULT OVERFLOW IS 'truncate', and it is the label style's:
-    a block cuts under any width -- the author's or the solver's -- unless the
-    label wrote another overflow (the block reads only what was written)
-    [Batch 109] }
-  if lbl.Rt.Needed and (ASpec.Overflow = tloTruncate)
-    and (lbl.Rt.Style.Overflow = rtoNone) then
-    lbl.Rt.Style.Overflow := rtoTruncate;
-  percents := TyPieSectorPercents(ALayout, APercentPrecision);
+  function LblOf(const S: TTyPieLabelSpec): TTyLabelSpec;
+  begin
+    Result := S.Ink;
+    Result.InsideColour[0] := AInk.InsideColour[0];
+    Result.InsideColour[1] := AInk.InsideColour[1];
+    Result.InsideColour[2] := AInk.InsideColour[2];
+    Result.OutsideColour := AInk.OutsideColour;
+    Result.Ground := AInk.Ground;
+    Result.GroundDark := AInk.GroundDark;
+    Result.FontName := AInk.FontName;
+    Result.FontSizeLogical := AInk.FontSizeLogical;
+    Result.FontWeight := AInk.FontWeight;
+    { THE PIE'S DEFAULT OVERFLOW IS 'truncate', and it is the label style's:
+      a block cuts under any width -- the author's or the solver's -- unless
+      the label wrote another overflow (the block reads only what was
+      written) [Batch 109] }
+    if Result.Rt.Needed and (S.Overflow = tloTruncate)
+      and (Result.Rt.Style.Overflow = rtoNone) then
+      Result.Rt.Style.Overflow := rtoTruncate;
+  end;
 
-  { bleedMargin's computed default, from the view in CSS px [Batch 109] }
-  if IsNan(ASpec.BleedMargin) then
-    bleed := TyPieBleedMargin(TyRectF(0, 0, TyRectFWidth(ALayout.ViewRect) / scale,
-      TyRectFHeight(ALayout.ViewRect) / scale)) * scale
-  else
-    bleed := ASpec.BleedMargin * scale;
+begin
+  Result := 0;
+  if (AList = nil) or (AMeasurer = nil) then Exit;
+  if not ALayout.Valid then Exit;
+  { each slice's spec: its item's, where it wrote one [R2-A] }
+  SetLength(sps, Length(ALayout.Sectors));
+  SetLength(lbls, Length(ALayout.Sectors));
+  any := False;
+  for i := 0 to High(ALayout.Sectors) do
+  begin
+    row := ALayout.Sectors[i].RawIndex;
+    if (row >= 0) and (row <= High(AItems)) then sps[i] := AItems[row]
+    else sps[i] := ASpec;
+    lbls[i] := LblOf(sps[i]);
+    if sps[i].Show or sps[i].StateShow then any := True;
+  end;
+  { built when a state shows it, ignored at rest [F2b] }
+  if not (any or ASpec.Show or ASpec.StateShow) then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  percents := TyPieSectorPercents(ALayout, APercentPrecision);
 
   fit := TPieFit.Create;
   try
@@ -1296,16 +1541,6 @@ begin
     fit.FontSize := AInk.FontSizeLogical;
     fit.FontWeight := AInk.FontWeight;
     fit.Scale := scale;
-    fit.Truncate := ASpec.Overflow = tloTruncate;
-    fit.Ellipsis := ASpec.Ellipsis;
-    fit.Lbl := lbl;
-    fit.Rich := lbl.Rt.Needed;
-    TyPieLabelMargin(ASpec.Ink, scale, fit.MarginType, fit.Margin);
-    if APPI > 0 then
-    begin
-      fit.OffX := ASpec.OffsetXLogical * scale;
-      fit.OffY := ASpec.OffsetYLogical * scale;
-    end;
 
     { ---- every label placed, and the solver's list: the outer and centre
       ones, in data order ---- }
@@ -1322,7 +1557,9 @@ begin
         radius on an ordinary pie and only goes NaN under roseType, so a radius
         test would label every gap on a plain pie. }
       if not ALayout.Sectors[i].Valid then Continue;
-      place := PlacePie(ASpec, ALayout, ALayout.Sectors[i], APPI, False);
+      sp := sps[i];
+      lbl := lbls[i];
+      place := PlacePie(sp, ALayout, ALayout.Sectors[i], APPI, False);
       if not place.Valid then Continue;
       { upstream keeps the LAST label's turn, inside ones included, and the
         last label's centre }
@@ -1335,7 +1572,7 @@ begin
         is the VIEW row, the one the store's accessors answer for: with a slice
         deselected in the legend the raw index named the next slice along. `{a}`
         is the series' NAME, `{c}` its value, `{d}` its share. }
-      words := TyLabelText(ASpec.Formatter, ASpec.HasFormatter, tldName, AStore,
+      words := TyLabelText(sp.Formatter, sp.HasFormatter, tldName, AStore,
         ALayout.Sectors[i].Index, ASeriesName, AValueDim, percents[i], True,
         ABinding.SeriesIndex, ABinding.SeriesType);
       if Length(AFills) > 0 then fill := AFills[i mod Length(AFills)]
@@ -1353,20 +1590,28 @@ begin
       labs[nl].W := w;
       labs[nl].H := h;
       labs[nl].Avoid := -1;
-      if ASpec.Position <> tplInside then
+      if sp.Position <> tplInside then
       begin
+        { bleedMargin's computed default, from the view in CSS px -- the
+          item's own (labelModel.get('bleedMargin')) [Batch 109] }
+        if IsNan(sp.BleedMargin) then
+          bleed := TyPieBleedMargin(TyRectF(0, 0, TyRectFWidth(ALayout.ViewRect) / scale,
+            TyRectFHeight(ALayout.ViewRect) / scale)) * scale
+        else
+          bleed := sp.BleedMargin * scale;
+        rich := lbl.Rt.Needed;
         labs[nl].Avoid := na;
         items[na] := Default(TTyPieAvoidItem);
-        items[na].Centre := ASpec.Position = tplCentre;
-        items[na].OuterWord := ASpec.PositionWord = 'outer';
-        items[na].HasLine := ASpec.Position = tplOuter;
-        items[na].AlignTo := ASpec.AlignTo;
+        items[na].Centre := sp.Position = tplCentre;
+        items[na].OuterWord := sp.PositionWord = 'outer';
+        items[na].HasLine := sp.Position = tplOuter;
+        items[na].AlignTo := sp.AlignTo;
         items[na].Len := place.LineLen;
         items[na].Len2 := place.LineLen2;
         items[na].LabelDistance := place.DistToLine;
         items[na].EdgeDistance := place.EdgeDist;
         items[na].BleedMargin := bleed;
-        if fit.Rich then
+        if rich then
         begin
           items[na].HasStyleWidth := lbl.Rt.Style.WidthKind <> rtwNone;
           if lbl.Rt.Style.HasPadding then
@@ -1378,14 +1623,23 @@ begin
         items[na].Line[0] := place.P1;
         items[na].Line[1] := place.P2;
         items[na].Line[2] := place.P3;
-        SetLength(fit.Words, na + 1);
-        SetLength(fit.Fills, na + 1);
-        SetLength(fit.Rots, na + 1);
-        SetLength(fit.LineH, na + 1);
+        fit.Grow(na);
         fit.Words[na] := words;
         fit.Fills[na] := fill;
         fit.Rots[na] := place.RotationRad;
         fit.LineH[na] := h;
+        fit.Truncs[na] := sp.Overflow = tloTruncate;
+        fit.Ellipses[na] := sp.Ellipsis;
+        fit.Lbls[na] := lbl;
+        fit.Richs[na] := rich;
+        TyPieLabelMargin(sp.Ink, scale, fit.MarginTypes[na], fit.Margins[na]);
+        fit.OffXs[na] := 0;
+        fit.OffYs[na] := 0;
+        if APPI > 0 then
+        begin
+          fit.OffXs[na] := sp.OffsetXLogical * scale;
+          fit.OffYs[na] := sp.OffsetYLogical * scale;
+        end;
         items[na].Rect := fit.RectOf(items[na], na);
         items[na].UnconstrainedWidth := items[na].Rect.W;
         Inc(na);
@@ -1406,6 +1660,9 @@ begin
     for k := 0 to nl - 1 do
     begin
       i := labs[k].Sector;
+      sp := sps[i];
+      lbl := lbls[i];
+      rich := lbl.Rt.Needed;
       place := labs[k].Place;
       words := labs[k].Words;
       fill := labs[k].Fill;
@@ -1422,7 +1679,7 @@ begin
         place.P3 := items[a].Line[2];
         hasWidth := items[a].HasWidth;
         width := items[a].Width;
-        PieApplyOffset(place, ASpec, APPI);
+        PieApplyOffset(place, sp, APPI);
       end;
       row := ALayout.Sectors[i].RawIndex;
 
@@ -1434,11 +1691,11 @@ begin
         pts[2] := place.P3;
         { THE LAST PASS BENDS EVERY LINE, moved or not: the turn, then the
           angle to the slice's surface (labelLayout.ts:579-583) [Batch 112] }
-        TyLimitTurnAngle(pts, ASpec.MinTurnAngle);
-        TyLimitSurfaceAngle(pts, place.NX, place.NY, ASpec.MaxSurfaceAngle);
+        TyLimitTurnAngle(pts, sp.MinTurnAngle);
+        TyLimitSurfaceAngle(pts, place.NX, place.NY, sp.MaxSurfaceAngle);
         el := TyChartElement(TyShapePolyline(pts));
-        el.Shape.Cmds := TyLabelLineCmds(pts, ASpec.Smooth);
-        el.Caption.LgSmooth := ASpec.Smooth;
+        el.Shape.Cmds := TyLabelLineCmds(pts, sp.Smooth);
+        el.Caption.LgSmooth := sp.Smooth;
         el.Style.StrokeColor := fill;
         el.Style.StrokeWidthLogical := AInk.LineWidthLogical;
         { SILENT. A leader line is a pointer at the slice, not a target of its
@@ -1446,7 +1703,7 @@ begin
         el.Silent := True;
         { at rest where the label or the line is hidden (PieSeries
           _defaultLabelLine: labelLine.show and label.show) [F2b] }
-        el.Ignore := not (ASpec.Show and ASpec.ShowLine);
+        el.Ignore := not (sp.Show and sp.ShowLine);
         { but it is the slice's: its select state moves it [Batch 88] }
         el.IsGuide := True;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Sectors[i].Index, row);
@@ -1464,7 +1721,7 @@ begin
       h := labs[k].H;
       { THE WORDS AS DRAWN: cut where the solver gave the label a width --
         zrender truncates under style.width and nowhere else [Batch 109] }
-      if fit.Rich then
+      if rich then
       begin
         { the block cuts itself, below }
         drawn := words;
@@ -1472,8 +1729,9 @@ begin
       end
       else
       begin
-        drawn := TyPiePlainFit(words, hasWidth, width, fit.Truncate, ASpec.Ellipsis,
-          AMeasurer, AInk.FontName, AInk.FontSizeLogical, AInk.FontWeight, cw);
+        drawn := TyPiePlainFit(words, hasWidth, width, sp.Overflow = tloTruncate,
+          sp.Ellipsis, AMeasurer, AInk.FontName, AInk.FontSizeLogical,
+          AInk.FontWeight, cw);
         if not hasWidth then cw := labs[k].W;
       end;
       if (cw <= 0) or (h <= 0) then Continue;
@@ -1494,18 +1752,18 @@ begin
       el.Caption.FontName := AInk.FontName;
       el.Caption.FontSizeLogical := AInk.FontSizeLogical;
       el.Caption.FontWeight := AInk.FontWeight;
-      TyLabelInk(lbl, fill, True, False, ASpec.Position = tplInside, ink, stroke,
+      TyLabelInk(lbl, fill, True, False, sp.Position = tplInside, ink, stroke,
         strokeW);
-      TyLabelStampEmphasis(lbl, fill, True, False, ASpec.Position = tplInside,
+      TyLabelStampEmphasis(lbl, fill, True, False, sp.Position = tplInside,
         el.Caption);
       { THE BLOCK, where the label's style needs one: laid out about the place
         the pie gave it, 'inherit' the slice's colour [Batch 86], under the
         width the solver gave it [Batch 109] }
-      if fit.Rich then
+      if rich then
       begin
         el.Caption.RtScale := scale;
-        el.Caption.RtPieces := TyLabelBlockPieces(fit.SpecUnder(hasWidth, width),
-          words, fill, True, False, ASpec.Position = tplInside, place.AnchorH,
+        el.Caption.RtPieces := TyLabelBlockPieces(PieSpecUnder(lbl, scale, hasWidth, width),
+          words, fill, True, False, sp.Position = tplInside, place.AnchorH,
           tavMiddle, el.Caption.RtScale, AMeasurer);
         if Length(el.Caption.RtPieces) > 0 then
         begin
@@ -1544,21 +1802,21 @@ begin
       el.Caption.LmTextH := h;
       { the label's own minMargin / textMargin, as LabelManager reads them
         [Batch 109] }
-      el.Caption.LmMarginType := ASpec.Ink.MarginType;
-      el.Caption.LmMargin[0] := ASpec.Ink.MarginLogical[0] * scale;
-      el.Caption.LmMargin[1] := ASpec.Ink.MarginLogical[1] * scale;
-      el.Caption.LmMargin[2] := ASpec.Ink.MarginLogical[2] * scale;
-      el.Caption.LmMargin[3] := ASpec.Ink.MarginLogical[3] * scale;
+      el.Caption.LmMarginType := sp.Ink.MarginType;
+      el.Caption.LmMargin[0] := sp.Ink.MarginLogical[0] * scale;
+      el.Caption.LmMargin[1] := sp.Ink.MarginLogical[1] * scale;
+      el.Caption.LmMargin[2] := sp.Ink.MarginLogical[2] * scale;
+      el.Caption.LmMargin[3] := sp.Ink.MarginLogical[3] * scale;
       el.Caption.LmInkFill := fill;
       el.Caption.LmInkHasFill := True;
-      el.Caption.LmInkInside := ASpec.Position = tplInside;
+      el.Caption.LmInkInside := sp.Position = tplInside;
       el.Silent := False;
       { `row` is the RAW index -- see TyBuildPieMarks for why a pie needs both. }
       el.Datum := TyChartDatum(ABinding.SeriesIndex,
         ALayout.Sectors[i].Index, row);
       el.Z2 := 1;
       { only a state shows it [F2b] }
-      el.Ignore := not ASpec.Show;
+      el.Ignore := not sp.Show;
       { it fades in on entering, where it stands (LabelManager) [Batch 89] }
       el.Anim.Role := carLabel;
       el.Anim.Series := ABinding.SeriesIndex;
