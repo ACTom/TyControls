@@ -406,6 +406,21 @@ const PROBES = {
       });
     });
   },
+  // [R2-H] every data item's label that is shown: its opacity as drawn
+  labels(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      const data = sm.getData();
+      data.each(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        let t = el.getTextContent && el.getTextContent();
+        if (!t && el.isGroup) el.traverse(c => { if (!t && c.getTextContent && c.getTextContent()) t = c.getTextContent(); });
+        if (!t || t.ignore || t.invisible || !t.style.text) return;
+        rec['lb' + sm.seriesIndex + '/' + i] = { op: hx(t.style.opacity == null ? 1 : t.style.opacity),
+          text: String(t.style.text) };
+      });
+    });
+  },
   state(chart, rec) {
     chart.getModel().eachSeries(sm => {
       const data = sm.getData();
@@ -669,6 +684,41 @@ add('stateGrad', 'state-gradient-lift', "a series whose colour is a gradient wit
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'action', action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }, ...after([0, 1, 50, 150, 299, 300, 301], T1)]);
 
+// ---- [R2-H] a render while the enter's label fades run ----
+// Every view renders a kept item's label through setLabelStyle -> useStyle:
+// LabelManager's fade (initProps on the text's style) writes into the style
+// the render replaced, and the label stands at its rest at once; a label the
+// render made anew fades in at enter timing.
+const LF_AT = (from, ts) => ts.map(t => ({ t: from + t, do: 'sample' }));
+add('labelFade', 'lf-bar', "bars with labels, a merge 100 ms into the enter (a value changes): the kept labels are at rest at once",
+  { animation: true, xAxis: { data: ['a', 'b', 'c'] }, yAxis: {}, series: [{ type: 'bar', label: { show: true }, data: [3, 5, 2] }] },
+  ['labels'],
+  [...LF_AT(0, [16, 100]), { t: 100, do: 'merge', option: { series: [{ data: [3, 6, 2] }] } }, ...LF_AT(0, [100, 116, 300, 1200])]);
+add('labelFade', 'lf-bar-add', "the same merge adding a bar: its new label fades in at enter timing while the kept ones are at rest",
+  { animation: true, xAxis: { data: ['a', 'b', 'c', 'd'] }, yAxis: {}, series: [{ type: 'bar', label: { show: true }, data: [3, 5, 2] }] },
+  ['labels'],
+  [...LF_AT(0, [100]), { t: 100, do: 'merge', option: { series: [{ data: [3, 6, 2, 4] }] } }, ...LF_AT(0, [100, 116, 300, 600, 1200])]);
+add('labelFade', 'lf-pie', "a pie, a merge 300 ms into the enter: the sectors' labels at rest at once",
+  { animation: true, series: [{ type: 'pie', data: [{ name: 'a', value: 3 }, { name: 'b', value: 5 }, { name: 'c', value: 2 }] }] },
+  ['labels'],
+  [...LF_AT(0, [100, 300]), { t: 300, do: 'merge', option: { series: [{ data: [{ name: 'a', value: 3 }, { name: 'b', value: 6 }, { name: 'c', value: 2 }] }] } },
+    ...LF_AT(0, [300, 316, 600, 1500])]);
+add('labelFade', 'lf-line', "a line with its symbols' labels (each fades in over 300 ms after its symbol's delay), a merge 700 ms into the enter",
+  { animation: true, xAxis: { data: ['a', 'b', 'c'] }, yAxis: {}, series: [{ type: 'line', label: { show: true }, data: [3, 5, 2] }] },
+  ['labels'],
+  [...LF_AT(0, [100, 700]), { t: 700, do: 'merge', option: { series: [{ data: [3, 6, 2] }] } }, ...LF_AT(0, [700, 716, 900, 1500])]);
+add('labelFade', 'lf-sunburst', "a sunburst, a merge 300 ms into the enter",
+  { animation: true, series: [{ type: 'sunburst', data: [{ name: 'a', value: 3, children: [{ name: 'a1', value: 3 }] }, { name: 'b', value: 5 }] }] },
+  ['labels'],
+  [...LF_AT(0, [100, 300]), { t: 300, do: 'merge', option: { series: [{ data: [{ name: 'a', value: 3, children: [{ name: 'a1', value: 3 }] }, { name: 'b', value: 6 }] }] } },
+    ...LF_AT(0, [300, 316, 600, 1500])]);
+add('labelFade', 'lf-graph', "a graph with labels (layout none), a merge 200 ms into the enter",
+  { animation: true, series: [{ type: 'graph', layout: 'none', symbolSize: 20, label: { show: true },
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 50, y: 100 }], links: [{ source: 'a', target: 'b' }] }] },
+  ['labels'],
+  [...LF_AT(0, [100, 200]), { t: 200, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 120, y: 50 }, { name: 'c', x: 50, y: 100 }] }] } },
+    ...LF_AT(0, [200, 216, 500, 1500])]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -750,6 +800,14 @@ function guards(out) {
   guard('graph-enter-update: useStyle strands the opacity tween',
     n(rec('graph-enter-update', 0, 'g0/node0').op) === 0 && n(rec('graph-enter-update', 151, 'g0/node0').op) === 1
     && n(rec('graph-enter-update', 151, 'g0/node0').sx) < 6);
+  // [R2-H] the render ends the kept labels' fades
+  for (const [id, t0, t1, key] of [['lf-bar', 100, 116, 'lb0/1'], ['lf-pie', 300, 316, 'lb0/1'], ['lf-line', 700, 716, 'lb0/1'],
+    ['lf-sunburst', 300, 316, 'lb0/2'], ['lf-graph', 200, 216, 'lb0/1']]) {
+    const before = cs(id).events.filter(q => q.do === 'sample' && q.t === t0)[0].rec[key];
+    guard(id + ': a fade runs, then the render ends it', before && n(before.op) > 0 && n(before.op) < 1
+      && n(rec(id, t0, key).op) === 1 && n(rec(id, t1, key).op) === 1);
+  }
+  guard('lf-bar-add: the new label fades in', n(rec('lf-bar-add', 116, 'lb0/3').op) < 1 && n(rec('lf-bar-add', 116, 'lb0/1').op) === 1);
   guard('graph-force: no line draws out', n(rec('graph-force', 0, 'g0/edge0').percent) === 1
     && rec('graph-force', 0, 'g0/edge0').n === 0);
   guard('graph-force: the paths still pop in', n(rec('graph-force', 0, 'g0/node0').sx) === 0

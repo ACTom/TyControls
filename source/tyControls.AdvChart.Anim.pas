@@ -471,6 +471,11 @@ type
     { Stop the animators of AScope ('' all), each at its last frame when
       AForwardToLast. }
     procedure StopAnimation(const AScope: string = ''; AForwardToLast: Boolean = False);
+    { [R2-H] the tracks of AKeys on the animators of ATopKey stopped where
+      they are, as a new animateTo on those keys stops them (an animator
+      left with no track is dropped) -- the tween of a style the view
+      replaced (useStyle), whose animator writes into the old object }
+    procedure StopKeys(const ATopKey: string; const AKeys: array of string);
     { set directly (Element.attr) }
     procedure Attr(const AProps: TTyAnimProps);
     function AnimatorCount: Integer;
@@ -2086,6 +2091,32 @@ begin
   finally
     left.Free;
     snap.Free;
+    LeaveEngine(g);
+  end;
+end;
+
+procedure TTyAnimElement.StopKeys(const ATopKey: string; const AKeys: array of string);
+var
+  i, idx: Integer;
+  a: TTyAnimator;
+  g: TEngineGuard;
+begin
+  if Length(AKeys) = 0 then Exit;
+  g := EnterEngine;
+  try
+    i := 0;
+    while i < FAnimators.Count do
+    begin
+      a := TTyAnimator(FAnimators[i]);
+      if (a.FTargetName = ATopKey) and not a.FNoTarget and a.StopTracks(AKeys) then
+      begin
+        idx := FAnimators.IndexOf(a);
+        if idx >= 0 then FAnimators.Delete(idx);
+        Continue;
+      end;
+      Inc(i);
+    end;
+  finally
     LeaveEngine(g);
   end;
 end;

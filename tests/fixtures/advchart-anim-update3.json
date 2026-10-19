@@ -90328,6 +90328,1036 @@
      }
     }
    ]
+  },
+  {
+   "id": "lf-bar",
+   "group": "labelFade",
+   "note": "bars with labels, a merge 100 ms into the enter (a value changes): the kept labels are at rest at once",
+   "W": 400,
+   "H": 300,
+   "ring": false,
+   "placeFrom": null,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "labels"
+   ],
+   "events": [
+    {
+     "t": 16,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ef12e0be826d695",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ef12e0be826d695",
+       "text": "5"
+      },
+      "lb0/2": {
+       "op": "3ef12e0be826d695",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "5"
+      },
+      "lb0/2": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 100,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         3,
+         6,
+         2
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 116,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 1200,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lf-bar-add",
+   "group": "labelFade",
+   "note": "the same merge adding a bar: its new label fades in at enter timing while the kept ones are at rest",
+   "W": 400,
+   "H": 300,
+   "ring": false,
+   "placeFrom": null,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "labels"
+   ],
+   "events": [
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "5"
+      },
+      "lb0/2": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 100,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         3,
+         6,
+         2,
+         4
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      },
+      "lb0/3": {
+       "op": "0000000000000000",
+       "text": "4"
+      }
+     }
+    },
+    {
+     "t": 116,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      },
+      "lb0/3": {
+       "op": "3ef12e0be826d695",
+       "text": "4"
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      },
+      "lb0/3": {
+       "op": "3fa0624dd2f1a9fd",
+       "text": "4"
+      }
+     }
+    },
+    {
+     "t": 600,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      },
+      "lb0/3": {
+       "op": "3fe0000000000000",
+       "text": "4"
+      }
+     }
+    },
+    {
+     "t": 1200,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      },
+      "lb0/3": {
+       "op": "3ff0000000000000",
+       "text": "4"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lf-pie",
+   "group": "labelFade",
+   "note": "a pie, a merge 300 ms into the enter: the sectors' labels at rest at once",
+   "W": 400,
+   "H": 300,
+   "ring": false,
+   "placeFrom": null,
+   "option": {
+    "animation": true,
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 5
+       },
+       {
+        "name": "c",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "labels"
+   ],
+   "events": [
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3fbba5e353f7ced9",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3fbba5e353f7ced9",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3fbba5e353f7ced9",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         {
+          "name": "a",
+          "value": 3
+         },
+         {
+          "name": "b",
+          "value": 6
+         },
+         {
+          "name": "c",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 316,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 600,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 1500,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lf-line",
+   "group": "labelFade",
+   "note": "a line with its symbols' labels (each fades in over 300 ms after its symbol's delay), a merge 700 ms into the enter",
+   "W": 400,
+   "H": 300,
+   "ring": false,
+   "placeFrom": null,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "label": {
+       "show": true
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "labels"
+   ],
+   "events": [
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "0000000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "0000000000000000",
+       "text": "5"
+      },
+      "lb0/2": {
+       "op": "0000000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 700,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3fe5555555555555",
+       "text": "5"
+      },
+      "lb0/2": {
+       "op": "0000000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 700,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         3,
+         6,
+         2
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 700,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 716,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 900,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    },
+    {
+     "t": 1500,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "3"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "6"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lf-sunburst",
+   "group": "labelFade",
+   "note": "a sunburst, a merge 300 ms into the enter",
+   "W": 400,
+   "H": 300,
+   "ring": false,
+   "placeFrom": null,
+   "option": {
+    "animation": true,
+    "series": [
+     {
+      "type": "sunburst",
+      "data": [
+       {
+        "name": "a",
+        "value": 3,
+        "children": [
+         {
+          "name": "a1",
+          "value": 3
+         }
+        ]
+       },
+       {
+        "name": "b",
+        "value": 5
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "labels"
+   ],
+   "events": [
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/1": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "a"
+      },
+      "lb0/2": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "a1"
+      },
+      "lb0/3": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "b"
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "lb0/1": {
+       "op": "3fbba5e353f7ced9",
+       "text": "a"
+      },
+      "lb0/2": {
+       "op": "3fbba5e353f7ced9",
+       "text": "a1"
+      },
+      "lb0/3": {
+       "op": "3fbba5e353f7ced9",
+       "text": "b"
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         {
+          "name": "a",
+          "value": 3,
+          "children": [
+           {
+            "name": "a1",
+            "value": 3
+           }
+          ]
+         },
+         {
+          "name": "b",
+          "value": 6
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "a1"
+      },
+      "lb0/3": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      }
+     }
+    },
+    {
+     "t": 316,
+     "do": "sample",
+     "rec": {
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "a1"
+      },
+      "lb0/3": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      }
+     }
+    },
+    {
+     "t": 600,
+     "do": "sample",
+     "rec": {
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "a1"
+      },
+      "lb0/3": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      }
+     }
+    },
+    {
+     "t": 1500,
+     "do": "sample",
+     "rec": {
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "a1"
+      },
+      "lb0/3": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lf-graph",
+   "group": "labelFade",
+   "note": "a graph with labels (layout none), a merge 200 ms into the enter",
+   "W": 400,
+   "H": 300,
+   "ring": false,
+   "placeFrom": null,
+   "option": {
+    "animation": true,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": 20,
+      "label": {
+       "show": true
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 50
+       },
+       {
+        "name": "c",
+        "x": 50,
+        "y": 100
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "labels"
+   ],
+   "events": [
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3f70624dd2f1a9fd",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 200,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3fa0624dd2f1a9fd",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3fa0624dd2f1a9fd",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3fa0624dd2f1a9fd",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 200,
+     "do": "merge",
+     "option": {
+      "series": [
+       {
+        "data": [
+         {
+          "name": "a",
+          "x": 0,
+          "y": 0
+         },
+         {
+          "name": "b",
+          "x": 120,
+          "y": 50
+         },
+         {
+          "name": "c",
+          "x": 50,
+          "y": 100
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "t": 200,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 216,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 500,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    },
+    {
+     "t": 1500,
+     "do": "sample",
+     "rec": {
+      "lb0/0": {
+       "op": "3ff0000000000000",
+       "text": "a"
+      },
+      "lb0/1": {
+       "op": "3ff0000000000000",
+       "text": "b"
+      },
+      "lb0/2": {
+       "op": "3ff0000000000000",
+       "text": "c"
+      }
+     }
+    }
+   ]
   }
  ],
  "guards": [
@@ -90353,6 +91383,30 @@
   },
   {
    "name": "graph-enter-update: useStyle strands the opacity tween",
+   "ok": true
+  },
+  {
+   "name": "lf-bar: a fade runs, then the render ends it",
+   "ok": true
+  },
+  {
+   "name": "lf-pie: a fade runs, then the render ends it",
+   "ok": true
+  },
+  {
+   "name": "lf-line: a fade runs, then the render ends it",
+   "ok": true
+  },
+  {
+   "name": "lf-sunburst: a fade runs, then the render ends it",
+   "ok": true
+  },
+  {
+   "name": "lf-graph: a fade runs, then the render ends it",
+   "ok": true
+  },
+  {
+   "name": "lf-bar-add: the new label fades in",
    "ok": true
   },
   {

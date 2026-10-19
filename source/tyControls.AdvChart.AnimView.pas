@@ -2641,6 +2641,18 @@ var
     if (Result <> nil) and Result.FClaimed then Result := nil;
   end;
 
+  { [R2-H] a text's fade ended where the view styled the text anew: its
+    opacity at the rest the fade was going to }
+  procedure StrandFade(AP: TTyChartAnimProxy);
+  var fin: TTyAnimValue;
+  begin
+    fin := AP.FinalOf('style.opacity');
+    if fin.Kind <> avkNumber then Exit;
+    if TyAnimValueSame(AP.GetAnimProp('style.opacity'), fin) then Exit;
+    AP.StopKeys('style', ['opacity']);
+    AP.SetNum('style.opacity', fin.Num);
+  end;
+
   { carried to the new render at (ASer, ARow) }
   procedure Carry(AP: TTyChartAnimProxy; ASer, ARow: Integer);
   begin
@@ -3746,6 +3758,14 @@ var
             begin
               p := OldProxy(AOld, AOldRow, 'label');
               if p <> nil then Carry(p, s, r);
+              { [R2-H] THE RENDER STYLES THE KEPT TEXT ANEW (setLabelStyle ->
+                useStyle): a fade still running -- LabelManager's initProps
+                on the old style object -- writes into what was replaced,
+                and the text is at its rest at once. A treemap's own
+                (TmStrandLabelFades: a node moved out of the view keeps
+                its words), a count (the text, not the style) aside. }
+              if (p <> nil) and (AC.SeriesType <> 'treemap') and not AEl.Caption.ValAnim then
+                StrandFade(p);
               { the count, or a pie's words from their old layout [Batch 92]
                 -- and any label a labelLayout put at its own x / y, which
                 LabelManager moves from its old layout the same way

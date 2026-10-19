@@ -73,6 +73,7 @@ type
     procedure DrawnOutline(const AWhat: string; const AEl: TTyChartElement; ALeaf: TJSONObject);
     procedure ProbePictorial(ARec: TJSONObject);
     procedure ProbeState(ARec: TJSONObject);
+    procedure ProbeLabels(ARec: TJSONObject);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
@@ -87,6 +88,7 @@ type
     procedure TestAnItemsArraySymbolSizeAsUpstream;
     procedure TestAStatesGradientTweensAsUpstream;
     procedure TestATreeToggleIsTheAction;
+    procedure TestARenderEndsTheLabelsFadesAsUpstream;
   end;
 
 implementation
@@ -959,6 +961,48 @@ begin
   end;
 end;
 
+{ [R2-H] every shown label of a data item: its opacity as the frame draws
+  it, against upstream's (the text's style.opacity) }
+procedure TAdvChartAnimUpdate3OracleTest.ProbeLabels(ARec: TJSONObject);
+var
+  i, k, s, idx, slash: Integer;
+  name: string;
+  leaf: TJSONObject;
+  l: TTyPaintList;
+  e: PTyChartElement;
+  found: Boolean;
+begin
+  l := FChart.Frame;
+  if (l = nil) or (l.Count = 0) then l := FChart.List;
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 2) <> 'lb' then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 3, slash - 3));
+    idx := StrToInt(Copy(name, slash + 1, MaxInt));
+    leaf := TJSONObject(ARec.Items[i]);
+    found := False;
+    if l <> nil then
+      for k := 0 to l.Count - 1 do
+      begin
+        e := l.Ref(k);
+        if (e^.Anim.Role <> carLabel) or (e^.Caption.FontSizeLogical <= 0) or e^.Ignore
+          or (e^.Datum.SeriesIndex <> s) or (e^.Datum.DataIndex <> idx) then Continue;
+        found := True;
+        { at opacity 0 the frame keeps the label inkless (no text): drawn
+          at nothing }
+        if (e^.Caption.Text = '') and (Length(e^.Caption.RtPieces) = 0) then
+          NearNum(name + ' opacity', 0, leaf.Find('op'), 1e-9)
+        else
+          NearNum(name + ' opacity', e^.Style.Alpha, leaf.Find('op'), 1e-9);
+        Break;
+      end;
+    Inc(FCompared);
+    if not found then Bad(name + ': upstream draws the label, the frame has none');
+  end;
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -968,6 +1012,7 @@ begin
     else if AProbes.Strings[i] = 'tree' then ProbeTree(ARec)
     else if AProbes.Strings[i] = 'pictorial' then ProbePictorial(ARec)
     else if AProbes.Strings[i] = 'state' then ProbeState(ARec)
+    else if AProbes.Strings[i] = 'labels' then ProbeLabels(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 
@@ -1094,6 +1139,13 @@ end;
 procedure TAdvChartAnimUpdate3OracleTest.TestAStatesGradientTweensAsUpstream;
 begin
   RunGroup('stateGrad', 300);
+end;
+
+{ [R2-H] a render while the enter's label fades run: a kept label is at
+  its rest at once (useStyle strands the fade), a new one fades in }
+procedure TAdvChartAnimUpdate3OracleTest.TestARenderEndsTheLabelsFadesAsUpstream;
+begin
+  RunGroup('labelFade', 60);
 end;
 
 { [fin] TreeToggle -- the public method, and a node's click -- is the
