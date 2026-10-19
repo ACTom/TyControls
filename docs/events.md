@@ -140,6 +140,7 @@ macOS 的 Retina 屏上，绘制器按屏幕的实际像素画：图层是控件
 
 - 绘制器自己的方法：`FillBackground`、`StrokeBorder`、`DrawText`、`DrawGlyph` 等，照旧用控件坐标。
 - `Bitmap.Canvas2D`：已经设好 S 倍的变换，照旧用控件坐标，线宽也一样。
+- 绘制器的路径接口（`BeginPath`、`MoveTo` / `LineTo`、`FillPath`、`StrokePath`、`PathContains`、`Translate` 等）：照旧用控件坐标。`ResetTransform` 回到的是这个 S 倍的变换，不是单位矩阵，之后的路径仍按控件坐标画。
 
 要换算的，是直接操作 `Bitmap` 的那些调用（`FillRect`、`PutImage`、`ClipRect`、`DrawLine` 等），它们按图层像素算：
 

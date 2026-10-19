@@ -133,6 +133,7 @@ No change needed:
 
 - The painter's own methods (`FillBackground`, `StrokeBorder`, `DrawText`, `DrawGlyph`, …) take control coordinates as before.
 - `Bitmap.Canvas2D` comes with an S-times transform already set: control coordinates and line widths as before.
+- The painter's path API (`BeginPath`, `MoveTo` / `LineTo`, `FillPath`, `StrokePath`, `PathContains`, `Translate` and the rest) takes control coordinates as before. `ResetTransform` goes back to that S-times transform, not to the identity, so paths after it are still in control coordinates.
 
 Calls that work on `Bitmap` directly (`FillRect`, `PutImage`, `ClipRect`, `DrawLine`, …) count layer pixels, so convert:
 
