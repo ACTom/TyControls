@@ -2823,6 +2823,14 @@ begin
       [tysNormal]).Background.Color);
   Result.Symbol := SymbolFor(ASlot);
   if FOption = nil then Exit;
+  { [R2-A] the points' labels: the series' and each item's own over it; each
+    item's own symbol }
+  Result.Label_ := LabelSpecFor(ASlot);
+  ItemLabelSpecs(FBindings[ASlot].SeriesIndex, Result.Label_, Result.ItemLabels,
+    Result.HasItemLabel);
+  Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  SymbolItems(FBindings[ASlot].SeriesIndex, Result.Symbol, Result.RowSyms,
+    Result.RowSymSet);
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   node := TJSONObject(d);

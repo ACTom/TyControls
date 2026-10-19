@@ -417,6 +417,10 @@ type
       of its own, read over its series' into the expansion's per-item table;
       0, the zero value, is "the series' label". [Batch 68] }
     ItemSpec: Integer;
+    { [R2-A] ONE OF SEVERAL LABELS OF ONE DATUM (a radar item's points):
+      1 + its place among them, carried to the label's Anim.Sub so each has
+      its own animation proxy; 0, the zero value, the datum's one label }
+    LabelSub: Integer;
     { THE RECT A LABEL IS PLACED AGAINST, when the mark knows it better than
       its shape's bounds do: zrender's layoutRect for a symbol is its UNIT
       path box grown by the stroke in unit space and carried through the

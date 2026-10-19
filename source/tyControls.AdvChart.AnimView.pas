@@ -1443,6 +1443,9 @@ begin
   { a ripple's number; a pictorial glyph's place in its column [F3a] }
   if AEl.Anim.Role in [carRipple, carPictorialGlyph] then
     Result := Result + IntToStr(AEl.Anim.Sub);
+  { [R2-A] one of a datum's several labels (a radar item's points) }
+  if (AEl.Anim.Role = carLabel) and (AEl.Anim.Sub > 0) then
+    Result := Result + IntToStr(AEl.Anim.Sub);
 end;
 
 { [F3b] a row's ITEM model: the series' with the data item's own option
@@ -2447,7 +2450,8 @@ begin
         { [F3a] A TREEMAP'S DRILL fades its new words with its own wrap; its
           breadcrumb's words never fade (disableLabelAnimation) }
         if AEl.Anim.NoFade or ((AC.SeriesType = 'treemap') and AUpdate) then Exit;
-        p := Make(AEl.Anim.Series, idx, 'label');
+        { its own proxy where it is one of its datum's several [R2-A] }
+        p := Make(AEl.Anim.Series, idx, TyChartAnimRoleKey(AEl));
         p.Attr(props);
         p.SetFinal(props);
         p.SetNum('style.opacity', 0);
@@ -3723,15 +3727,19 @@ var
         begin
           { THE SAME TEXT when its host was there before: LabelManager has its
             old layout and starts no fade (the move from it is AN4's). A
-            heatmap's labels are new every render. }
-          if (AOldRow >= 0) and (AC.SeriesType <> 'heatmap') then
+            heatmap's labels are new every render, and so are a radar's
+            (RadarView rebuilds every symbol, label and all) [R2-A]. }
+          if (AOldRow >= 0) and (AC.SeriesType <> 'heatmap')
+            and (AC.SeriesType <> 'radar') then
           begin
             host := Default(TTyChartElement);
             if (AEl.Anim.HostPlus1 > 0) and (AEl.Anim.HostPlus1 <= AList.Count) then
               host := AList.Element(AEl.Anim.HostPlus1 - 1);
-            if OldEl(AOld, AOldRow, 'label', oe) then
+            { by its own key: one of a datum's several labels is matched to
+              the same one of the old [R2-A] }
+            if OldEl(AOld, AOldRow, TyChartAnimRoleKey(AEl), oe) then
             begin
-              p := OldProxy(AOld, AOldRow, 'label');
+              p := OldProxy(AOld, AOldRow, TyChartAnimRoleKey(AEl));
               if p <> nil then Carry(p, s, r);
               { the count, or a pie's words from their old layout [Batch 92]
                 -- and any label a labelLayout put at its own x / y, which

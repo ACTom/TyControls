@@ -255,6 +255,17 @@ type
     RowAreaColour: TTyChartColorArray;
     RowAreaOpacitySet: TTyBoolArray;
     RowAreaOpacity: TTyDoubleArray;
+    { [R2-A] THE POINTS' LABELS: the series' `label` (position 'top' unless
+      written, RadarSeries' default) and, per RAW row, an item's own over it;
+      the series' name for `{a}`. A zero Label_ shows nothing. }
+    Label_: TTyLabelSpec;
+    ItemLabels: TTyLabelSpecArray;
+    HasItemLabel: TTyBoolArray;
+    SeriesName: string;
+    { [R2-A] AN ITEM'S OWN symbol, symbolSize, symbolRotate over the
+      series', per RAW row (data.getItemVisual) }
+    RowSyms: TTySymbolSpecArray;
+    RowSymSet: TTyBoolArray;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -1384,18 +1395,58 @@ end;
 
 { ==================== the series ==================== }
 
+{ [R2-A] ONE POINT'S WORDS (RadarView: setLabelStyle on the symbol with
+  labelDimIndex the spoke): no formatter, the spoke's STORED value -- a
+  number, printed as String() prints it, and nothing for NaN; a template,
+  with `{c}` the spoke's RAW value as written (getFormattedLabel takes
+  params.value[labelDimIndex]: '12.50', '-', null, undefined past the end). }
+function RadarLabelText(const ASpec: TTyLabelSpec; AStore: TTyDataStore;
+  ARow, ADim, ASeriesIndex: Integer; const ASeriesName: string;
+  AColour: TTyChartColor): string;
+var
+  it: TTyRawItem;
+  cell: TTyDataValue;
+  v: Double;
+  vt: string;
+begin
+  vt := '';
+  if ASpec.HasFormatter then
+  begin
+    it := AStore.RawItem(ARow);
+    if it.Shape = rshNone then
+    begin
+      v := AStore.Get(ADim, ARow);
+      vt := TyJsNumberToString(v);
+    end
+    else if TTyDataStore.RawCell(it, AStore.RawDimPos(ADim), cell) then
+      vt := TyJsValueText(cell, 'null')
+    else
+      vt := 'undefined';
+  end
+  else
+  begin
+    v := AStore.Get(ADim, ARow);
+    if not IsNan(v) then vt := TyJsNumberToString(v);
+  end;
+  Result := TyLabelText(ASpec.Formatter, ASpec.HasFormatter, tldValue, AStore,
+    ARow, ASeriesName, -1, 0, False, ASeriesIndex, TyRadarSeriesTypeName,
+    AColour, '', True, vt);
+end;
+
 function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
   const AVisual: TTyRadarVisual; AStore: TTyDataStore;
   const ADims: TTyIntegerArray; APPI: Integer; AList: TTyPaintList): Integer;
 var
   k, i, n, rows, raw, m: Integer;
   pts, ring: TTyPointFArray;
+  spoke: TTyIntegerArray;
   rowColour: TTyChartColor;
   v: Double;
   el: TTyChartElement;
   sym: TTyChartShape;
   rowSym: TTySymbolSpec;
-  rowArea: Boolean;
+  rowArea, rowItemLabel: Boolean;
+  rowLabel: TTyLabelSpec;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or (ARadar = nil) then Exit;
@@ -1413,6 +1464,7 @@ begin
     else
       rowColour := AVisual.Fill;
     SetLength(pts, n);
+    SetLength(spoke, n);
     m := 0;
     for i := 0 to n - 1 do
     begin
@@ -1424,12 +1476,15 @@ begin
       if (i > High(ADims)) or (ADims[i] < 0) or (ADims[i] >= AStore.DimCount) then
         Continue;
       v := AStore.Get(ADims[i], k);
-      { A MISSING VALUE LEAVES THE RING RATHER THAN COLLAPSING IT. Upstream
-        pushes a NaN point and the canvas silently skips it, joining the two
-        neighbours; the same picture, reached deliberately. }
-      if IsNan(v) then Continue;
+      { A MISSING VALUE IS A POINT AT THE CENTRE: radarLayout replaces a point
+        it cannot place with getValueMissingPoint, [cx, cy], and the ring,
+        its symbol and its label go there.
+        [R2-A: the spoke was skipped and its neighbours joined, on the belief
+        that upstream pushed a NaN point the canvas then skipped.] }
       pts[m] := ARadar.ValueToPoint(v, i);
-      if IsNan(pts[m].X) or IsNan(pts[m].Y) then Continue;
+      if IsNan(v) or IsNan(pts[m].X) or IsNan(pts[m].Y) then
+        pts[m] := TyPointF(ARadar.CX, ARadar.CY);
+      spoke[m] := i;
       Inc(m);
     end;
     if m < 2 then Continue;
@@ -1496,23 +1551,36 @@ begin
     Inc(Result);
 
     rowSym := AVisual.Symbol;
+    { [R2-A] the item's own symbol over the series' -- placed as RadarView's
+      createSymbol places it: no offset, no kept aspect }
+    if (raw >= 0) and (raw <= High(AVisual.RowSymSet)) and AVisual.RowSymSet[raw]
+      and (raw <= High(AVisual.RowSyms)) then
+      rowSym := AVisual.RowSyms[raw];
+    rowSym.OffsetX := 0;
+    rowSym.OffsetY := 0;
+    rowSym.KeepAspect := False;
     if (raw >= 0) and (raw <= High(AVisual.Sizes)) and not IsNan(AVisual.Sizes[raw]) then
     begin
       rowSym.WidthPx := AVisual.Sizes[raw];
       rowSym.HeightPx := AVisual.Sizes[raw];
     end;
-    if AVisual.Symbol.Kind <> tsyNone then
+    { [R2-A] the row's label: its item's own over the series' }
+    rowLabel := AVisual.Label_;
+    rowItemLabel := (raw >= 0) and (raw <= High(AVisual.HasItemLabel))
+      and AVisual.HasItemLabel[raw] and (raw <= High(AVisual.ItemLabels));
+    if rowItemLabel then rowLabel := AVisual.ItemLabels[raw];
+    if rowSym.Kind <> tsyNone then
       for i := 0 to m - 1 do
       begin
         sym := TyBuildSymbol(rowSym, pts[i].X, pts[i].Y);
         if not TyRectFIsValid(TyShapeBounds(sym)) then Continue;
         el := TyChartElement(sym);
         el.Style.HasFill := True;
-        if AVisual.Symbol.Empty or (AVisual.Symbol.Kind = tsyLine) then
+        if rowSym.Empty or (rowSym.Kind = tsyLine) then
         begin
           el.Style.StrokeColor := rowColour;
           el.Style.StrokeWidthLogical := 2;
-          if AVisual.Symbol.Kind = tsyLine then
+          if rowSym.Kind = tsyLine then
             el.Style.FillColor := 0
           else
             el.Style.FillColor := AVisual.EmptyFill;
@@ -1546,6 +1614,24 @@ begin
         el.Caption.LgG[4] := 0;
         el.Caption.LgG[5] := pts[i].X;
         el.Caption.LgG[6] := pts[i].Y;
+        { [R2-A] THE POINT'S LABEL, hung on its symbol (RadarView's
+          setLabelStyle): the expansion places it off the box zrender lays a
+          symbol's text against -- the unit path's box grown by the stroke,
+          through the symbol's scale and turn -- and fades it in. Built when
+          a state shows it too; an empty text (NaN, no formatter) is none. }
+        if (rowLabel.Show or rowLabel.StateShow) and (rowLabel.Position <> tlpNone) then
+        begin
+          el.Caption.Text := RadarLabelText(rowLabel, AStore, k, ADims[spoke[i]],
+            ABinding.SeriesIndex, AVisual.SeriesName, rowColour);
+          if rowItemLabel then el.Caption.ItemSpec := raw + 1;
+          { one of the item's several labels }
+          el.Caption.LabelSub := i + 1;
+          el.Caption.HasSymBox := True;
+          el.Caption.SymBox := TySymbolLabelBox(rowSym, pts[i].X, pts[i].Y,
+            el.Style.StrokeWidthLogical,
+            (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0),
+            el.Style.HasFill);
+        end;
         AList.Add(el);
         Inc(Result);
       end;

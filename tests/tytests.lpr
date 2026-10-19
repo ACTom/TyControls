@@ -175,6 +175,7 @@ uses
   test.advchart.visualmaptext,
   test.advchart.labelhalo,
   test.advchart.halokeep,
+  test.advchart.radarlabel,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

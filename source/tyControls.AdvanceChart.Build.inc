@@ -3302,6 +3302,7 @@ var
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
+  rv: TTyRadarVisual;
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
   ti: TTyTreeInk;
@@ -3594,9 +3595,20 @@ begin
       if FBindings[i].RadarIndex >= 0 then
       begin
         if FBindings[i].RadarIndex <= High(FRadars) then
+        begin
+          rv := RadarVisual(i);
           Inc(drawn, TyBuildRadarMarks(FBindings[i],
-            FRadars[FBindings[i].RadarIndex], RadarVisual(i), FStores[i],
+            FRadars[FBindings[i].RadarIndex], rv, FStores[i],
             FRadarDims[i], APPI, list));
+          { [R2-A] its points' labels go through the expansion, the item's
+            own over the series' }
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := rv.Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := rv.ItemLabels;
+        end;
         Continue;
       end;
       { A GAUGE IS NOT ON A COORDINATE SYSTEM EITHER, and it splits its

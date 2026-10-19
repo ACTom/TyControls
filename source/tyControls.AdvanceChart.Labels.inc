@@ -343,6 +343,8 @@ begin
     a default position; every other falls to `inside`. [Revised in batch 47:
     a line's label sat inside its symbol.] }
   if FBindings[ASlot].SeriesType = 'line' then base.Position := tlpTop;
+  { a radar's too (RadarSeries' label.position) [R2-A] }
+  if FBindings[ASlot].SeriesType = 'radar' then base.Position := tlpTop;
   Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
 end;
 

@@ -1222,6 +1222,8 @@ begin
     cap.Anim.Role := carLabel;
     cap.Anim.Series := host.Datum.SeriesIndex;
     cap.Anim.Index := host.Datum.DataIndex;
+    { one of the datum's several labels, its own proxy [R2-A] }
+    cap.Anim.Sub := host.Caption.LabelSub;
     { [F3d] the host's roam group: the label is carried with it }
     cap.Anim.InView := host.Anim.InView;
     cap.Anim.VSX := host.Anim.VSX;

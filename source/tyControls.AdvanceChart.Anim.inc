@@ -845,7 +845,9 @@ begin
         fades a drill's), a pictorial bar's, a graph's nodes' and a tree's }
       or (t = TySunburstSeriesTypeName) or (t = TyTreemapSeriesTypeName)
       or (t = TyPictorialSeriesTypeName) or (t = TyGraphSeriesTypeName)
-      or (t = TyTreeSeriesTypeName);
+      or (t = TyTreeSeriesTypeName)
+      { [R2-A] a radar's point labels }
+      or (t = TyRadarSeriesTypeName);
     { A SUNBURST'S DRILL-DOWN: its pieces transition, its new labels fade
       [Batch 115] }
     r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];
@@ -2279,9 +2281,11 @@ begin
       if (k >= 0) and (k <= High(FSt[ASeries].PartIdx[raw])) then
         idx := FSt[ASeries].PartIdx[raw][k];
     end
-    else if ((APart = 'rarea') or (Copy(APart, 1, 4) = 'rsym'))
+    else if ((APart = 'rarea') or (Copy(APart, 1, 4) = 'rsym')
+      or (Copy(APart, 1, 4) = 'rlab'))
       and (raw <= High(FSt[ASeries].PartIdx)) and (FPaintList <> nil) then
     begin
+      { [R2-A] 'rlab<j>': its j-th point label, which the symbols do not count }
       j := StrToIntDef(Copy(APart, 5, MaxInt), -1);
       n := 0;
       for k := 0 to High(FSt[ASeries].PartIdx[raw]) do
@@ -2289,7 +2293,8 @@ begin
         begin
           if APart = 'rarea' then idx := FSt[ASeries].PartIdx[raw][k];
         end
-        else
+        else if (FPaintList.Element(FSt[ASeries].PartIdx[raw][k]).Caption.FontSizeLogical > 0)
+          = (Copy(APart, 1, 4) = 'rlab') then
         begin
           if n = j then idx := FSt[ASeries].PartIdx[raw][k];
           Inc(n);
