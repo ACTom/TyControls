@@ -86,8 +86,9 @@ begin
     Result[n].SeriesIndex := si;
     Result[n].Count := FStores[slot].Count;
     Result[n].Edge := False;
-    { [F5] a graph's edges: a list of their own after its nodes }
-    if FBindings[slot].SeriesType = TyGraphSeriesTypeName then
+    { [F5] a graph's edges: a list of their own after its nodes; [R2-G] a
+      sankey's links and a chord's ribbons the same way }
+    if KbEdgeKind(slot) > 0 then
     begin
       e := KbEdgeCount(slot);
       if e > 0 then
@@ -107,11 +108,15 @@ begin
   Result := -1;
   slot := SlotOfSeries(ASeries);
   if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
-  { [F5] an edge's raw index: its place among the links as written }
+  { [F5] an edge's raw index: its place among the links as written;
+    [R2-G] a sankey's link and a chord's ribbon are their edge data's own
+    index }
   if AEdge then
   begin
     j := KbEdgeOf(ASeries, ARow);
-    if j >= 0 then Result := FGraphEdges[slot][j].RawIndex;
+    if j < 0 then Exit;
+    if KbEdgeKind(slot) = 1 then Result := FGraphEdges[slot][j].RawIndex
+    else Result := j;
     Exit;
   end;
   if (ARow < 0) or (ARow >= FStores[slot].Count) then Exit;
@@ -149,13 +154,17 @@ begin
   begin
     j := KbEdgeOf(ASeries, ARow);
     if j < 0 then Exit;
-    if (ASeries <= High(FSt)) and (FSt[ASeries].Kind = sskGraph)
+    { a sankey's and a chord's hosts are by the edge's index too [R2-G] }
+    if (ASeries <= High(FSt)) and (FSt[ASeries].Kind in [sskGraph, sskSankey, sskChord])
       and (j <= High(FSt[ASeries].EdgeHostIdx)) then
     begin
       h := FSt[ASeries].EdgeHostIdx[j];
       if (h >= 0) and (h < FPaintList.Count) then Exit(h);
     end;
-    row := FGraphEdges[SlotOfSeries(ASeries)][j].Row;
+    if KbEdgeKind(SlotOfSeries(ASeries)) = 1 then
+      row := FGraphEdges[SlotOfSeries(ASeries)][j].Row
+    else
+      row := j;
     for i := 0 to FPaintList.Count - 1 do
     begin
       el := FPaintList.Element(i);
@@ -280,13 +289,15 @@ begin
   t.HdSeries := FKbSeries;
   t.HdRow := FKbRow;
   t.HdEdge := False;
-  { [F5] an edge: its element's row, the edge flag -- the click's target }
+  { [F5] an edge: its element's row, the edge flag -- the click's target;
+    [R2-G] a sankey's link's and a chord's ribbon's is the edge's index }
   if FKbEdge then
   begin
     j := KbEdgeOf(FKbSeries, FKbRow);
     if j < 0 then Exit;
     t.HdEdge := True;
-    t.HdRow := FGraphEdges[slot][j].Row;
+    if KbEdgeKind(slot) = 1 then t.HdRow := FGraphEdges[slot][j].Row
+    else t.HdRow := j;
   end;
   StClickSelect(t);
   Result := True;
@@ -555,22 +566,58 @@ begin
   Result := '"' + StringToJSONString(AName) + '"';
 end;
 
+function TTyAdvanceChart.KbEdgeKind(ASlot: Integer): Integer;
+begin
+  Result := 0;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].SeriesType = TyGraphSeriesTypeName then Result := 1
+  else if StSankeySlot(ASlot) then Result := 2
+  else if StChordSlot(ASlot) then Result := 3;
+end;
+
 function TTyAdvanceChart.KbEdgeCount(ASlot: Integer): Integer;
 var j: Integer;
 begin
   Result := 0;
-  if (ASlot < 0) or (ASlot > High(FGraphEdges)) or (ASlot > High(FGraphNodes)) then Exit;
-  for j := 0 to High(FGraphEdges[ASlot]) do
-    if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Inc(Result);
+  case KbEdgeKind(ASlot) of
+    1:
+      begin
+        if (ASlot > High(FGraphEdges)) or (ASlot > High(FGraphNodes)) then Exit;
+        for j := 0 to High(FGraphEdges[ASlot]) do
+          if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Inc(Result);
+      end;
+    { [R2-G] a sankey's every link; a chord's ribbons between kept nodes }
+    2: Result := Length(FSankeys[ASlot].Edges);
+    3:
+      for j := 0 to High(FChords[ASlot].Edges) do
+        if FChords[ASlot].Edges[j].Kept then Inc(Result);
+  end;
 end;
 
 function TTyAdvanceChart.KbEdgeOf(ASeries, ARow: Integer): Integer;
-var slot: Integer;
+var slot, j, n: Integer;
 begin
   Result := -1;
   slot := SlotOfSeries(ASeries);
-  if (slot < 0) or (slot > High(FGraphNodes)) then Exit;
-  Result := StGraphEdgeOfInner(slot, ARow);
+  if ARow < 0 then Exit;
+  case KbEdgeKind(slot) of
+    1:
+      begin
+        if slot > High(FGraphNodes) then Exit;
+        Result := StGraphEdgeOfInner(slot, ARow);
+      end;
+    2: if ARow <= High(FSankeys[slot].Edges) then Result := ARow;
+    3:
+      begin
+        n := 0;
+        for j := 0 to High(FChords[slot].Edges) do
+          if FChords[slot].Edges[j].Kept then
+          begin
+            if n = ARow then Exit(j);
+            Inc(n);
+          end;
+      end;
+  end;
 end;
 
 function TTyAdvanceChart.KbIsSlider(AIndex: Integer): Boolean;
@@ -1177,6 +1224,18 @@ begin
             moved := TyDzInsideZoom(r, dir, sc, mn, mx);
           end;
         end;
+      { [R2-G] Shift+Home / Shift+End: the window's start out to the
+        data's start, its end out to the data's end -- the slider's handle
+        drags, through the same sliderMove and its span limits; nothing
+        under zoomLock }
+      kbcGrowStart, kbcGrowEnd:
+        if not FDzInteract[AIndex].ZoomLock then
+        begin
+          DzSpans(AIndex, mn, mx);
+          if ACmd = kbcGrowStart then TyDzSliderMove(-200, r, 0, 100, 0, mn, mx)
+          else TyDzSliderMove(200, r, 0, 100, 1, mn, mx);
+          moved := (r[0] <> FDzInLo[AIndex]) or (r[1] <> FDzInHi[AIndex]);
+        end;
     end;
     if moved then
     begin
@@ -1230,14 +1289,20 @@ begin
       if FTlView.Inverse then TlChange(cur + 1, True) else TlChange(cur - 1, True);
     kbcNext, kbcNextSeries:
       if FTlView.Inverse then TlChange(cur - 1, True) else TlChange(cur + 1, True);
-    { a tick's click }
-    kbcFirst: TlChange(0, True);
-    kbcLast: TlChange(n - 1, True);
+    { a tick's click: Home the first tick on the axis, End the last --
+      an inverse timeline's first is its last item [R2-G] }
+    kbcFirst:
+      if FTlView.Inverse then TlChange(n - 1, True) else TlChange(0, True);
+    kbcLast:
+      if FTlView.Inverse then TlChange(0, True) else TlChange(n - 1, True);
     kbcPagePrev, kbcPageNext:
       begin
         step := TyKbPageStep(n);
         if IsNan(cur) then cur := 0;
-        if ACmd = kbcPagePrev then target := cur - step else target := cur + step;
+        { the way the arrows go: an inverse timeline's back is up the
+          items [R2-G] }
+        if (ACmd = kbcPagePrev) <> FTlView.Inverse then target := cur - step
+        else target := cur + step;
         if target < 0 then target := 0;
         if target > n - 1 then target := n - 1;
         TlChange(target, True);
@@ -1252,6 +1317,7 @@ var
   multi: Boolean;
   t: TTyChartEventTarget;
   regs, pcs: TTyIntegerArray;
+  mSer, mKind, mIdx, mEls: TTyIntegerArray;
   node: TJSONData;
 begin
   Result := False;
@@ -1392,6 +1458,26 @@ begin
           if (i > High(FVisualViews)) or FVisualViews[i].Silent then Exit;
           pcs := KbVmPieces(i);
           VmPieceClick(i, pcs[FKbPart]);
+          Result := True;
+        end;
+      { [R2-G] A MARKER'S CLICK: its ECData names the host series and the
+        marker's own data index, and echarts' click handler dispatches
+        select for that item of the host -- when the host selects at all
+        (else the key is the form's, as on a data item) }
+      ksMarkers:
+        begin
+          if KbMarkerList(mSer, mKind, mIdx, mEls) <= FKbPart then Exit;
+          k := SlotOfSeries(mSer[FKbPart]);
+          if k < 0 then Exit;
+          SelEnsure(k);
+          if (mSer[FKbPart] > High(FSel)) or not FSelInit[mSer[FKbPart]]
+            or (FSel[mSer[FKbPart]].Mode = ssmOff) then Exit;
+          t := Default(TTyChartEventTarget);
+          t.Params := TyChartBlankParams;
+          t.HdKind := 3;
+          t.HdSeries := mSer[FKbPart];
+          t.HdRow := mIdx[FKbPart];
+          StClickSelect(t);
           Result := True;
         end;
     end;
@@ -1686,6 +1772,20 @@ function TTyAdvanceChart.KbEdgeName(ASlot, AEdge: Integer): string;
 var e: TTyGraphEdge;
 begin
   Result := '';
+  { [R2-G] a sankey's link and a chord's ribbon: the edge data's name -- its
+    id, else 'source > target' }
+  case KbEdgeKind(ASlot) of
+    2:
+      begin
+        if (AEdge < 0) or (AEdge > High(FSankeys[ASlot].Edges)) then Exit;
+        Exit(FSankeys[ASlot].Edges[AEdge].DataName);
+      end;
+    3:
+      begin
+        if (AEdge < 0) or (AEdge > High(FChords[ASlot].Edges)) then Exit;
+        Exit(FChords[ASlot].Edges[AEdge].Name);
+      end;
+  end;
   if (ASlot < 0) or (ASlot > High(FGraphEdges)) or (AEdge < 0)
     or (AEdge > High(FGraphEdges[ASlot])) then Exit;
   e := FGraphEdges[ASlot][AEdge];
@@ -1950,8 +2050,7 @@ begin
       { [F5] a graph's edges after its nodes, in the same list }
       slot := SlotOfSeries(facts.Series[i].Index);
       ec := 0;
-      if (slot >= 0) and (slot <= High(FBindings))
-        and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+      if KbEdgeKind(slot) > 0 then
         ec := KbEdgeCount(slot);
       if cnt + ec > cTyAccMaxItems then ec := cTyAccMaxItems - cnt;
       iObjs := TyAccAddChildren(sObjs[i], cnt + ec);
@@ -2111,8 +2210,10 @@ begin
   if (s > High(FSel)) or not FSelInit[s] then Exit;
   if FAccItemEdge[i] then
   begin
-    { [F5] an edge: the edge data's own map, by its inner index }
+    { [F5] an edge: the edge data's own map, by its inner index; [R2-G] a
+      chord's by its ribbon's index }
     inner := FAccItemRows[i];
+    if KbEdgeKind(slot) = 3 then inner := KbEdgeOf(s, inner);
     Result := TySelIsSelected(FSel[s], SelEdgeData(slot), inner);
   end
   else

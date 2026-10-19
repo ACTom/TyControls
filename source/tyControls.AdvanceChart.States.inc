@@ -4896,10 +4896,12 @@ begin
     map [F2a] }
   if (ATarget.HdKind = 1) and ATarget.HdEdge
     and ((FBindings[slot].SeriesType = TyGraphSeriesTypeName)
-      or (FBindings[slot].SeriesType = TySankeySeriesTypeName)) then
+      or (FBindings[slot].SeriesType = TySankeySeriesTypeName)
+      or (FBindings[slot].SeriesType = TyChordSeriesTypeName)) then
   begin
-    { [F3a] a sankey's link: its index is the edge data's }
-    if FBindings[slot].SeriesType = TySankeySeriesTypeName then inner := ATarget.HdRow
+    { [F3a] a sankey's link: its index is the edge data's; [R2-G] and a
+      chord's ribbon's (ChordEdge's ECData: dataType 'edge') }
+    if FBindings[slot].SeriesType <> TyGraphSeriesTypeName then inner := ATarget.HdRow
     else inner := StGraphEdgeInner(slot, StGraphEdgeOfRow(slot, ATarget.HdRow));
     SelEnsure(slot);
     if (s <= High(FSel)) and FSelInit[s] and (inner >= 0) then
@@ -4909,8 +4911,10 @@ begin
   { a graph's data type rides along (and a sankey's [F3a]); a tree's and a
     treemap's data is 'main' [F2a] }
   if (ATarget.HdKind = 1) and ((FBindings[slot].SeriesType = TyGraphSeriesTypeName)
-    or (FBindings[slot].SeriesType = TySankeySeriesTypeName)) then
+    or (FBindings[slot].SeriesType = TySankeySeriesTypeName)
+    or (FBindings[slot].SeriesType = TyChordSeriesTypeName)) then
   begin
+    { a chord's too: ChordPiece 'node', ChordEdge 'edge' [R2-G] }
     if ATarget.HdEdge then p := p + ',"dataType":"edge"'
     else p := p + ',"dataType":"node"';
   end
