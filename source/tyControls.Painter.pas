@@ -91,6 +91,10 @@ type
     FDeviceUnits: Boolean;
     FLayoutPPI: Integer;
     FRasterDepth: Integer;
+    { A caller's surface (BeginPaintOn) at S > 1: its Canvas2D transforms from before the
+      preset, which EndPaint puts back. }
+    FKeptC2D: Boolean;
+    FKeptMatrix, FKeptStrokeMatrix: TAffineMatrix;
     { The rect clip masks it holds in the kept pool (GClipPool) are the entries that
       name it as their owner: see ClipRect. }
     procedure ReleaseClipMasks;
@@ -2550,6 +2554,7 @@ begin
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
+  FKeptC2D := False;
   FBmp.Fill(BGRAPixelTransparent);
   if FScale > 1 then PresetCanvas2D;
 end;
@@ -2558,46 +2563,6 @@ procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
 begin
   BeginPaintOnScaled(ACanvas, ARect, APPI, ABmp, TyCanvasDeviceScale(ACanvas), ARightToLeft);
-end;
-
-var
-  { Callers' bitmaps (BeginPaintOn) whose Canvas2D carries the scale(S) preset. Main thread
-    only, like every painter. Bounded: past the cap the oldest entries go -- a bitmap that has
-    since been freed would otherwise stay listed for ever. }
-  GKeptPreset: array of TBGRABitmap;
-
-const
-  KeptPresetCap = 256;
-
-{ ASet: note ABmp as preset. Not ASet: answer whether it was, and forget it. }
-function NoteKeptPreset(ABmp: TBGRABitmap; ASet: Boolean): Boolean;
-var
-  i, n: Integer;
-begin
-  Result := False;
-  n := Length(GKeptPreset);
-  for i := 0 to n - 1 do
-    if GKeptPreset[i] = ABmp then
-    begin
-      Result := True;
-      if not ASet then
-      begin
-        GKeptPreset[i] := GKeptPreset[n - 1];
-        SetLength(GKeptPreset, n - 1);
-      end;
-      Exit;
-    end;
-  if not ASet then Exit;
-  if n >= KeptPresetCap then
-  begin
-    Move(GKeptPreset[1], GKeptPreset[0], (n - 1) * SizeOf(Pointer));
-    GKeptPreset[n - 1] := ABmp;
-  end
-  else
-  begin
-    SetLength(GKeptPreset, n + 1);
-    GKeptPreset[n] := ABmp;
-  end;
 end;
 
 procedure TTyPainter.BeginPaintOnScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
@@ -2632,20 +2597,15 @@ begin
   if (FBmp <> nil) and ((FBmp.Width < w) or (FBmp.Height < h)) then
     FBmp.SetSize(Max(FBmp.Width, w), Max(FBmp.Height, h));
   FOwnsBmp := False;
-  if FBmp = nil then Exit;
-  if FScale > 1 then
+  { The surface outlives the frame, and BGRA keeps its Canvas2D -- transform and stroke
+    transform -- across SetSize: note what the caller had, so that EndPaint puts it back and a
+    frame at S = 1 (the window moved to a one-times screen) does not find scale(S) there. }
+  FKeptC2D := (FBmp <> nil) and (FScale > 1);
+  if FKeptC2D then
   begin
+    FKeptMatrix := FBmp.Canvas2D.matrix;
+    FKeptStrokeMatrix := FBmp.Canvas2D.strokeMatrix;
     PresetCanvas2D;
-    NoteKeptPreset(FBmp, True);
-  end
-  else if NoteKeptPreset(FBmp, False) then
-  begin
-    { BGRA keeps a bitmap's Canvas2D -- matrix, stroke matrix and all -- across SetSize, and
-      main's vector API draws through it: a bitmap last painted at S = 2 would draw this
-      S = 1 frame twice as large. Only the bitmaps this unit preset are put back, so an
-      S = 1 frame on any other bitmap runs as it always did. }
-    FBmp.Canvas2D.resetTransform;
-    FBmp.Canvas2D.strokeResetTransform;
   end;
 end;
 
@@ -2714,6 +2674,16 @@ var
 begin
   { before the bitmap goes: a kept bitmap's canvas must not be left sharing them }
   ReleaseClipMasks;
+  if FKeptC2D then
+  begin
+    { The two transforms only: a path the caller has open holds device points already. }
+    FKeptC2D := False;
+    if FBmp <> nil then
+    begin
+      FBmp.Canvas2D.matrix := FKeptMatrix;
+      FBmp.Canvas2D.strokeMatrix := FKeptStrokeMatrix;
+    end;
+  end;
   if Assigned(FBmp) then
   begin
     { What lands is the raster rect. A caller's bitmap larger than it (BeginPaintOn) keeps the
