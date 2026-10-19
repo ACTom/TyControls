@@ -38,6 +38,10 @@ type
     { Review: on a Retina window's canvas (device px) the S-times surface is stretched into the
       device-px rect; the picture must be the S = 1 one. }
     procedure TestTerminalOnALayoutCanvas;
+    { Review: the surface only grows, so a drag resize does not make it again every frame;
+      but back on a one-times screen it was left S^2 the size it needs. A change of scale
+      makes it again; a resize at one scale still keeps it. }
+    procedure TestTheSurfaceShrinksBackWithTheScale;
   end;
 
 implementation
@@ -348,6 +352,31 @@ begin
     bmp.Free;
     F2.Free;
     F1.Free;
+  end;
+end;
+
+procedure TTerminalViewDeviceScaleTest.TestTheSurfaceShrinksBackWithTheScale;
+var
+  F: TTyTermViewFixture;
+  w1, h1: Integer;
+begin
+  F := TTyTermViewFixture.Create;
+  try
+    F.View.RasterBudgetMs := 0;
+    F.SizeTo(30, 6);
+    F.View.WriteSync(CScreen);
+    SnapAt(F, 1).Free;
+    w1 := F.View.Surface.Width;
+    h1 := F.View.Surface.Height;
+    SnapAt(F, 2).Free;
+    AssertTrue(Format('precondition: at S = 2 the surface is twice as wide (%d against %d)',
+      [F.View.Surface.Width, w1]), F.View.Surface.Width >= 2 * F.View.ClientWidth);
+    SnapAt(F, 1).Free;
+    AssertEquals('back at S = 1: as wide as a surface that was never at S = 2', w1,
+      F.View.Surface.Width);
+    AssertEquals('and as high', h1, F.View.Surface.Height);
+  finally
+    F.Free;
   end;
 end;
 

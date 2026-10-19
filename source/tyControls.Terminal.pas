@@ -145,6 +145,7 @@ type
     { 画到的大小(客户区);位图本身按块向上取整,拖动改尺寸时不每次重建 }
     FSurfaceW, FSurfaceH: Integer;   { layout pixels; the bitmap holds FSurfaceScale times that }
     FSurfaceScale: Integer;          { device pixels per layout pixel the surface is drawn at (#83) }
+    FSurfaceBuiltScale: Integer;     { the scale FSurface was made for: a change makes it again }
     FFrameDirty, FAllDirty: Boolean;
     FDirty: array of Boolean;
     { 行复用:上一帧每个视口行的键、帧级参数的签名、这一帧新算的键、搬行的草稿 }
@@ -2451,12 +2452,16 @@ begin
     w := ARect.Right - ARect.Left;
     h := ARect.Bottom - ARect.Top;
     if (w <= 0) or (h <= 0) then Exit;
-    { 表面位图按块向上取整、只长不缩:拖着改尺寸不每次重建。块按光栅像素取整 }
-    if (FSurface = nil) or (FSurface.Width < w * ds) or (FSurface.Height < h * ds) then
+    { 表面位图按块向上取整、只长不缩:拖着改尺寸不每次重建。块按光栅像素取整。
+      倍率变了才重建(窗口从 Retina 屏拖回普通屏,否则留着 S² 倍大的表面);倍率恒为 1 的
+      平台走不到这一条 }
+    if (FSurface = nil) or (FSurface.Width < w * ds) or (FSurface.Height < h * ds)
+      or (ds <> FSurfaceBuiltScale) then
     begin
       FreeAndNil(FSurface);
       FSurface := TBGRABitmap.Create((w * ds + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock,
         (h * ds + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock);
+      FSurfaceBuiltScale := ds;
       FFrameDirty := True;
     end;
     if (w <> FSurfaceW) or (h <> FSurfaceH) then
