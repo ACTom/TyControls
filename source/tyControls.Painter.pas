@@ -101,6 +101,10 @@ type
     FDeviceUnits: Boolean;
     FLayoutPPI: Integer;
     FRasterDepth: Integer;
+    { A caller's surface (BeginPaintOn) at S > 1: its Canvas2D transforms from before the
+      preset, which EndPaint puts back. }
+    FKeptC2D: Boolean;
+    FKeptMatrix, FKeptStrokeMatrix: TAffineMatrix;
     { The rect clip masks it holds in the kept pool (GClipPool) are the entries that
       name it as their owner: see ClipRect. }
     procedure ReleaseClipMasks;
@@ -2608,6 +2612,7 @@ begin
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
+  FKeptC2D := False;
   FBmp.Fill(BGRAPixelTransparent);
   if FScale > 1 then PresetCanvas2D;
 end;
@@ -2616,46 +2621,6 @@ procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
 begin
   BeginPaintOnScaled(ACanvas, ARect, APPI, ABmp, TyCanvasDeviceScale(ACanvas), ARightToLeft);
-end;
-
-var
-  { Callers' bitmaps (BeginPaintOn) whose Canvas2D carries the scale(S) preset. Main thread
-    only, like every painter. Bounded: past the cap the oldest entries go -- a bitmap that has
-    since been freed would otherwise stay listed for ever. }
-  GKeptPreset: array of TBGRABitmap;
-
-const
-  KeptPresetCap = 256;
-
-{ ASet: note ABmp as preset. Not ASet: answer whether it was, and forget it. }
-function NoteKeptPreset(ABmp: TBGRABitmap; ASet: Boolean): Boolean;
-var
-  i, n: Integer;
-begin
-  Result := False;
-  n := Length(GKeptPreset);
-  for i := 0 to n - 1 do
-    if GKeptPreset[i] = ABmp then
-    begin
-      Result := True;
-      if not ASet then
-      begin
-        GKeptPreset[i] := GKeptPreset[n - 1];
-        SetLength(GKeptPreset, n - 1);
-      end;
-      Exit;
-    end;
-  if not ASet then Exit;
-  if n >= KeptPresetCap then
-  begin
-    Move(GKeptPreset[1], GKeptPreset[0], (n - 1) * SizeOf(Pointer));
-    GKeptPreset[n - 1] := ABmp;
-  end
-  else
-  begin
-    SetLength(GKeptPreset, n + 1);
-    GKeptPreset[n] := ABmp;
-  end;
 end;
 
 procedure TTyPainter.BeginPaintOnScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
@@ -2693,20 +2658,15 @@ begin
   if (FBmp <> nil) and ((FBmp.Width < w) or (FBmp.Height < h)) then
     FBmp.SetSize(Max(FBmp.Width, w), Max(FBmp.Height, h));
   FOwnsBmp := False;
-  if FBmp = nil then Exit;
-  if FScale > 1 then
+  { The surface outlives the frame, and BGRA keeps its Canvas2D -- transform and stroke
+    transform -- across SetSize: note what the caller had, so that EndPaint puts it back and a
+    frame at S = 1 (the window moved to a one-times screen) does not find scale(S) there. }
+  FKeptC2D := (FBmp <> nil) and (FScale > 1);
+  if FKeptC2D then
   begin
+    FKeptMatrix := FBmp.Canvas2D.matrix;
+    FKeptStrokeMatrix := FBmp.Canvas2D.strokeMatrix;
     PresetCanvas2D;
-    NoteKeptPreset(FBmp, True);
-  end
-  else if NoteKeptPreset(FBmp, False) then
-  begin
-    { BGRA keeps a bitmap's Canvas2D -- matrix, stroke matrix and all -- across SetSize, and
-      main's vector API draws through it: a bitmap last painted at S = 2 would draw this
-      S = 1 frame twice as large. Only the bitmaps this unit preset are put back, so an
-      S = 1 frame on any other bitmap runs as it always did. }
-    FBmp.Canvas2D.resetTransform;
-    FBmp.Canvas2D.strokeResetTransform;
   end;
 end;
 
@@ -2775,6 +2735,16 @@ var
 begin
   { before the bitmap goes: a kept bitmap's canvas must not be left sharing them }
   ReleaseClipMasks;
+  if FKeptC2D then
+  begin
+    { The two transforms only: a path the caller has open holds device points already. }
+    FKeptC2D := False;
+    if FBmp <> nil then
+    begin
+      FBmp.Canvas2D.matrix := FKeptMatrix;
+      FBmp.Canvas2D.strokeMatrix := FKeptStrokeMatrix;
+    end;
+  end;
   if Assigned(FBmp) then
   begin
     { What lands is the raster rect. A caller's bitmap larger than it (BeginPaintOn) keeps the
@@ -3257,7 +3227,9 @@ end;
 
 const
   { Pixels the shadow cache may hold, all entries together (4 bytes each: 16 MB). A shadow
-    bigger than that on its own is drawn every time, as before. }
+    bigger than that on its own is drawn every time, as before. Counted in LAYOUT pixels: a
+    layer at device scale S holds S^2 raster pixels for each, so on that screen the cache
+    keeps as many shadows as at S = 1, in S^2 the bytes; at S = 1 nothing changes (#83). }
   ShadowCacheMaxPixels = 4 * 1024 * 1024;
 
 var
@@ -3327,9 +3299,11 @@ var
   useCache: Boolean;
   entry: TTyShadowEntry;
   ink: TRect;
+  sq, cost: Int64;
 begin
   if FBmp = nil then
     Exit;
+  sq := Int64(FScale) * FScale;   // raster pixels per layout pixel
   r := Scale(ARadiusLogical);
   r := TyClampRadiusPx(r, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   blur := Scale(ABlurLogical);
@@ -3337,7 +3311,7 @@ begin
   oy := Scale(AOffsetLogical.Y);
   px := TyColorToBGRA(AColor);
   useCache := TyShadowCacheEnabled and (GetCurrentThreadId = MainThreadID)
-    and (Int64(FBmp.Width) * FBmp.Height <= ShadowCacheMaxPixels);
+    and (Int64(FBmp.Width) * FBmp.Height <= ShadowCacheMaxPixels * sq);
   key := '';
   if useCache then
   begin
@@ -3394,9 +3368,10 @@ begin
       end;
       if entry.Bmp <> nil then
       begin
-        if GShadowCachePixels + Int64(entry.Bmp.Width) * entry.Bmp.Height > ShadowCacheMaxPixels then
+        cost := Int64(entry.Bmp.Width) * entry.Bmp.Height div sq;
+        if GShadowCachePixels + cost > ShadowCacheMaxPixels then
           TyClearShadowCache;
-        Inc(GShadowCachePixels, Int64(entry.Bmp.Width) * entry.Bmp.Height);
+        Inc(GShadowCachePixels, cost);
       end;
       GShadowCache.AddObject(key, entry);
     end;
@@ -5516,7 +5491,9 @@ end;
   When a painter lets go (EndPaint, BeginPaint*, its destructor) the states of its canvas
   that share its entries get copies, as before, and the entries become spare -- a mask
   larger than cClipPoolKeepPx is freed then rather than kept. Main thread only, like the
-  rest of the painter's caches. }
+  rest of the painter's caches.
+  cClipPoolKeepPx counts LAYOUT pixels: a mask built at device scale S has S^2 raster pixels
+  for each, and is kept up to S^2 cClipPoolKeepPx of them -- on that screen only (#83). }
 const
   cClipPool = 4;
   cClipPoolKeepPx = 2 * 1024 * 1024;
@@ -5531,6 +5508,7 @@ var
     R: TRect;
     M: TAffineMatrix;
     W, H: Integer;
+    S: Integer;   // the device scale it was built at
     AA, PC: Boolean;
     Owner: TObject;
   end;
@@ -5922,7 +5900,7 @@ begin
         if Mask = nil then Continue;
         if FBmp <> nil then
           CanvasDisownMask(FBmp.Canvas2D, TGrayscaleMask(Mask));
-        if Int64(W) * H > cClipPoolKeepPx then FreeAndNil(Mask);
+        if Int64(W) * H > Int64(cClipPoolKeepPx) * S * S then FreeAndNil(Mask);
       end;
 end;
 
@@ -5999,6 +5977,7 @@ begin
     M := cur;
     W := FBmp.Width;
     H := FBmp.Height;
+    S := FScale;
     AA := ctx.antialiasing;
     PC := ctx.pixelCenteredCoordinates;
     Owner := Self;

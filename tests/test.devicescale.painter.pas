@@ -104,6 +104,17 @@ type
     procedure TestDegenerateRects;
     procedure TestNilCanvasIsScaleOne;
     procedure TestBeginPaintOnResizesToRaster;
+    { A caller's surface outlives the frame: the scale(S) preset must not (follow-up to #83). }
+    procedure TestKeptSurfaceDrawsAtOneTimesAfterARetinaFrame;
+    procedure TestKeptSurfaceGetsTheCallersTransformBack;
+    { The process-wide caches count what a layer holds in LAYOUT pixels: at S = 2 they keep as
+      many shadows and masks as at S = 1 (S^2 the bytes, on that screen only), and at S = 1
+      their limits are what they were. }
+    procedure TestShadowCacheHoldsAsManyAtTwoTimes;
+    procedure TestShadowCacheTakesALargeLayerAtTwoTimes;
+    procedure TestShadowCacheLimitsAtOneTimesAreUnchanged;
+    procedure TestClipMaskOfALargeLayerIsKeptAtTwoTimes;
+    procedure TestClipMaskKeepLimitAtOneTimesIsUnchanged;
     procedure TestScaleOneEndPaintUnchanged;
     { Task 3: fills, borders, glyphs and shadows inside the raster scope. }
     procedure TestFillBackgroundSolidRounded;
@@ -666,6 +677,209 @@ begin
     P.Free;
     surf.Free;
   end;
+end;
+
+procedure TDeviceScalePainterTest.TestKeptSurfaceDrawsAtOneTimesAfterARetinaFrame;
+{ A caller's surface (BeginPaintOn) outlives the frame, and BGRA keeps a bitmap's Canvas2D --
+  transform and stroke transform -- across SetSize. A frame at S = 2 presets scale(2) on it; if
+  that is still there when the window has moved to a one-times screen, Canvas2D drawing in the
+  next frame (a grid's OnDrawCell, say) comes out twice as large. }
+var
+  P: TTyPainter;
+  surf: TBGRABitmap;
+begin
+  surf := TBGRABitmap.Create(40, 30, BGRAPixelTransparent);
+  P := TTyPainter.Create;
+  try
+    TyForceDeviceScaleForTest(2, False);
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    P.EndPaint;
+    TyForceDeviceScaleForTest(0, False);   // the one-times screen
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    AssertEquals('precondition: this frame is at S = 1', 1, P.DeviceScale);
+    P.Bitmap.Fill(BGRAPixelTransparent);
+    P.Bitmap.Canvas2D.fillStyle(BGRA(255, 0, 0));
+    P.Bitmap.Canvas2D.fillRect(0, 0, 10, 10);
+    P.EndPaint;
+    AssertTrue('(5,5) is inside the 10 x 10 square, got ' + PxStr(surf.GetPixel(5, 5)),
+      IsRed(surf.GetPixel(5, 5)));
+    AssertEquals('(15,15) is not -- at a kept scale(2) the square would reach (20,20)',
+      0, surf.GetPixel(15, 15).alpha);
+  finally
+    P.Free;
+    surf.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestKeptSurfaceGetsTheCallersTransformBack;
+{ What EndPaint puts back is what the caller had before BeginPaintOn -- its own transform and
+  stroke transform -- not the identity. At S = 1 nothing is preset and nothing is put back: the
+  painter leaves the caller's Canvas2D alone, as it always did. }
+var
+  P: TTyPainter;
+  surf: TBGRABitmap;
+
+  function Same(const A, B: TAffineMatrix): Boolean;
+  var
+    i, j: Integer;
+  begin
+    Result := True;
+    for i := 1 to 2 do
+      for j := 1 to 3 do
+        if Abs(A[i, j] - B[i, j]) > 1e-6 then Exit(False);
+  end;
+
+begin
+  surf := TBGRABitmap.Create(40, 30, BGRAPixelTransparent);
+  P := TTyPainter.Create;
+  try
+    surf.Canvas2D.translate(3, 4);
+    surf.Canvas2D.strokeScale(5, 5);
+    TyForceDeviceScaleForTest(2, False);
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    AssertTrue('in the frame: the scale(2) preset',
+      Same(surf.Canvas2D.matrix, AffineMatrixScale(2, 2)));
+    P.EndPaint;
+    AssertTrue('after it: the caller''s translate(3, 4)',
+      Same(surf.Canvas2D.matrix, AffineMatrixTranslation(3, 4)));
+    AssertTrue('and the caller''s strokeScale(5, 5)',
+      Same(surf.Canvas2D.strokeMatrix, AffineMatrixScale(5, 5)));
+    TyForceDeviceScaleForTest(0, False);
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    surf.Canvas2D.translate(1, 1);
+    P.EndPaint;
+    AssertTrue('S = 1: a transform set in the frame is still there after it',
+      Same(surf.Canvas2D.matrix, AffineMatrixTranslation(4, 5)));
+  finally
+    P.Free;
+    surf.Free;
+  end;
+end;
+
+{ One frame on a fresh AW x AH (layout) surface at AScale, with one drop shadow of ARect, AColor,
+  blur 2 and no offset; answers how many shadows were rendered rather than taken from the cache. }
+function ShadowFrame(AScale, AW, AH: Integer; const ARect: TRect; AColor: TTyColor): Integer;
+var
+  P: TTyPainter;
+  surf: TBGRABitmap;
+  before: Integer;
+begin
+  TyForceDeviceScaleForTest(AScale, False);
+  surf := TBGRABitmap.Create(1, 1);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(nil, Rect(0, 0, AW, AH), 96, surf);
+    if P.DeviceScale <> AScale then
+      raise Exception.CreateFmt('precondition: the frame is at S = %d, not %d', [AScale, P.DeviceScale]);
+    before := TyShadowsRendered;
+    P.DropShadow(ARect, 0, AColor, 2, Point(0, 0));
+    Result := TyShadowsRendered - before;
+    P.EndPaint;
+  finally
+    P.Free;
+    surf.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestShadowCacheHoldsAsManyAtTwoTimes;
+{ Two shadows of 800 x 780 layout pixels on a 1000 x 1000 layer: together well inside the
+  budget (4 Mpx) at S = 1. At S = 2 each is 2.5 M raster pixels, and a budget counted in
+  raster pixels emptied the cache for the second -- the first was rendered again. }
+var
+  n: Integer;
+begin
+  TyClearShadowCache;
+  try
+    n := ShadowFrame(2, 1000, 1000, Rect(0, 0, 800, 780), TyRGB(200, 0, 0));
+    Inc(n, ShadowFrame(2, 1000, 1000, Rect(0, 0, 800, 780), TyRGB(0, 0, 200)));
+    Inc(n, ShadowFrame(2, 1000, 1000, Rect(0, 0, 800, 780), TyRGB(200, 0, 0)));
+    AssertEquals('the third is the first again, from the cache', 2, n);
+  finally
+    TyClearShadowCache;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestShadowCacheTakesALargeLayerAtTwoTimes;
+{ A 1100 x 1000 layer is 1.1 M layout pixels -- cached at S = 1 -- and 4.4 M raster pixels at
+  S = 2, past the 4 M a single layer may have. }
+var
+  n: Integer;
+begin
+  TyClearShadowCache;
+  try
+    n := ShadowFrame(2, 1100, 1000, Rect(10, 10, 110, 110), TyRGB(200, 0, 0));
+    Inc(n, ShadowFrame(2, 1100, 1000, Rect(10, 10, 110, 110), TyRGB(200, 0, 0)));
+    AssertEquals('rendered once, then taken from the cache', 1, n);
+  finally
+    TyClearShadowCache;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestShadowCacheLimitsAtOneTimesAreUnchanged;
+var
+  n: Integer;
+begin
+  TyClearShadowCache;
+  try
+    { a layer of 2100 x 2000 = 4.2 M pixels is past what a single layer may have }
+    n := ShadowFrame(1, 2100, 2000, Rect(10, 10, 110, 110), TyRGB(200, 0, 0));
+    Inc(n, ShadowFrame(1, 2100, 2000, Rect(10, 10, 110, 110), TyRGB(200, 0, 0)));
+    AssertEquals('S = 1: a layer past the limit is not cached', 2, n);
+    { two shadows of 2.5 M pixels each are past the budget together }
+    TyClearShadowCache;
+    n := ShadowFrame(1, 2000, 2000, Rect(0, 0, 1600, 1560), TyRGB(200, 0, 0));
+    Inc(n, ShadowFrame(1, 2000, 2000, Rect(0, 0, 1600, 1560), TyRGB(0, 0, 200)));
+    Inc(n, ShadowFrame(1, 2000, 2000, Rect(0, 0, 1600, 1560), TyRGB(200, 0, 0)));
+    AssertEquals('S = 1: the second empties the cache, the first is rendered again', 3, n);
+  finally
+    TyClearShadowCache;
+  end;
+end;
+
+{ Two frames on one AW x AH (layout) surface at AScale, each with the same first clip in a
+  saved state; answers how many masks the SECOND frame built. }
+function ClipFrames(AScale, AW, AH: Integer): Integer;
+var
+  P: TTyPainter;
+  surf: TBGRABitmap;
+  i, before: Integer;
+begin
+  Result := 0;
+  TyForceDeviceScaleForTest(AScale, False);
+  TyPainterClipReuseForTest(True);   // from an empty pool
+  surf := TBGRABitmap.Create(1, 1);
+  try
+    for i := 1 to 2 do
+    begin
+      P := TTyPainter.Create;
+      try
+        P.BeginPaintOn(nil, Rect(0, 0, AW, AH), 96, surf);
+        before := TyPainterClipMasksBuiltForTest;
+        P.SaveState;
+        P.ClipRect(Rect(10, 10, 500, 300));
+        P.RestoreState;
+        Result := TyPainterClipMasksBuiltForTest - before;
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
+    end;
+  finally
+    surf.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestClipMaskOfALargeLayerIsKeptAtTwoTimes;
+{ A 1000 x 600 layer's mask is 0.6 M layout pixels -- kept at S = 1 -- and 2.4 M raster pixels
+  at S = 2, past the 2 M a kept mask may have: it was freed and built again every frame. }
+begin
+  AssertEquals('the second frame builds nothing', 0, ClipFrames(2, 1000, 600));
+end;
+
+procedure TDeviceScalePainterTest.TestClipMaskKeepLimitAtOneTimesIsUnchanged;
+begin
+  { 1500 x 1500 = 2.25 M pixels: past the limit at S = 1, freed when the frame ends }
+  AssertEquals('S = 1: the second frame builds it again', 1, ClipFrames(1, 1500, 1500));
 end;
 
 procedure TDeviceScalePainterTest.TestScaleOneEndPaintUnchanged;
