@@ -442,6 +442,9 @@ function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
 // (in TTyPainter.DrawText) exactly: same BGRA engine, same height semantics.
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
+{ AWeight, here and in every text call that passes a style's FontWeight on, is the CSS
+  weight with italic, underline and strikeout above it (TyFontItalic & co., #92); the two
+  font set-ups decode it with TyFontStylesOf. }
 
 { How TEXT is rasterized on this widgetset -- the one answer, for every surface that draws
   words (the painter, the HTML label). Icons drawn from an icon font are pictures, not text,
@@ -1300,10 +1303,7 @@ begin
     Font.PixelsPerInch is deliberately left alone: TFont.SetPixelsPerInch RESCALES a non-zero
     Height, so touching it after this line would put the PPI back in a second time. }
   ACanvas.Font.Height := -TyFontHeightPx(AFontSizeLogical, APPI);
-  if AWeight >= 600 then
-    ACanvas.Font.Style := [fsBold]
-  else
-    ACanvas.Font.Style := [];
+  ACanvas.Font.Style := TyFontStylesOf(AWeight);
 end;
 
 function TyNaturalLineHeight(ACanvas: TCanvas): Integer;
@@ -2294,7 +2294,7 @@ begin
   ABmp.FontHeight := TyFontHeightPx(AFontSizeLogical, APPI);
   ABmp.FontQuality := TyTextFontQuality;
   TyUseTextRenderer(ABmp);
-  if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
+  ABmp.FontStyle := TyFontStylesOf(AWeight);
 end;
 
 function TyWrapTextToWidth(const AText, AFontName: string;

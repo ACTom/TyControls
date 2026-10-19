@@ -348,6 +348,7 @@ type
     procedure TestCalcFooter;
     procedure TestColumnCalcHook;
     procedure TestCellFontStyles;
+    procedure TestCellItalicAndUnderlineAreDrawn;
     procedure TestGetFormatHook;
     procedure TestPickListArrowWhenNotEditing;
     procedure TestFilterValuesHook;
@@ -11674,6 +11675,36 @@ begin
   { 走属性存储 → 可撤销、跟着行走。 }
   G.InsertRow(0);
   AssertTrue('跟着行走', fsBold in G.CellFontStyles[1, 2]);
+end;
+
+{ #92: a cell's italic and underline used to be kept but not drawn -- the text layer had no
+  way to say them. They ride on the weight now, like a control Font's. }
+procedure TTyStringGridTest.TestCellItalicAndUnderlineAreDrawn;
+var
+  G: TStrGridAccess;
+  plain, italic, under: TBGRABitmap;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 1] := 'sample';
+  r := G.CellRect(1, 1);
+  plain := G.RenderToBitmap;
+  italic := nil;
+  under := nil;
+  try
+    G.CellFontStyles[1, 1] := [fsItalic];
+    italic := G.RenderToBitmap;
+    AssertTrue('italic is drawn', G.DiffPixels(plain, italic, r) > 0);
+    G.CellFontStyles[1, 1] := [fsUnderline];
+    under := G.RenderToBitmap;
+    AssertTrue('underline is drawn', G.DiffPixels(plain, under, r) > 0);
+    AssertEquals('the other cells are not', 0, G.DiffPixels(plain, under, G.CellRect(1, 2)));
+  finally
+    under.Free;
+    italic.Free;
+    plain.Free;
+  end;
 end;
 
 procedure TTyStringGridTest.HandleGetFormat(Sender: TObject; ACol, ARow: Integer;

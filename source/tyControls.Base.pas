@@ -378,6 +378,18 @@ type
     property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
+{ THE CONTROL'S OWN FONT OVER THE THEME (#92). With ParentFont False -- the author set
+  something on this control's Font -- what they set is laid over the theme's style: the name
+  unless it is LCL's 'default'; bold, italic, underline and strikeout (TyFontWeightWithStyle;
+  a font with none of them leaves the theme's weight alone, since "not bold" and "never set"
+  look the same); the colour unless it is clDefault, in every state but disabled, where the
+  theme's disabled colour stays, as a native control greys out. The size has its own rule
+  (TyResolveFontSize). With ParentFont True the theme decides, as it always has. CurrentStyle
+  calls this between the theme and StyleOverride, so a per-control override still wins and
+  measuring and drawing read the same style. }
+procedure TyApplyControlFont(var AStyle: TTyStyleSet; AFont: TFont; AParentFont: Boolean;
+  const AStates: TTyStateSet);
+
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
     1. the typeKey's own theme font-size (AStyle.FontSize);
@@ -820,6 +832,7 @@ begin
   model := ActiveController.Model;
   Result := model.ResolveStyle(GetStyleTypeKey,
     TyStyleClassFor(Self, FStyleClass), CurrentStates);
+  TyApplyControlFont(Result, Font, ParentFont, CurrentStates);   // #92
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
@@ -1994,6 +2007,7 @@ begin
   model := ActiveController.Model;
   Result := model.ResolveStyle(GetStyleTypeKey,
     TyStyleClassFor(Self, FStyleClass), CurrentStates);
+  TyApplyControlFont(Result, Font, ParentFont, CurrentStates);   // #92
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
@@ -2007,6 +2021,30 @@ begin
       FOvrCacheValid := True;
     end;
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
+end;
+
+procedure TyApplyControlFont(var AStyle: TTyStyleSet; AFont: TFont; AParentFont: Boolean;
+  const AStates: TTyStateSet);
+var
+  c: TColor;
+begin
+  if AParentFont or (AFont = nil) then Exit;
+  if (AFont.Name <> '') and not SameText(AFont.Name, 'default') then
+  begin
+    AStyle.FontName := AFont.Name;
+    Include(AStyle.Present, tpFontName);
+  end;
+  if AFont.Style <> [] then
+  begin
+    AStyle.FontWeight := TyFontWeightWithStyle(AStyle.FontWeight, AFont.Style);
+    Include(AStyle.Present, tpFontWeight);
+  end;
+  if (AFont.Color <> clDefault) and not (tysDisabled in AStates) then
+  begin
+    c := ColorToRGB(AFont.Color);
+    AStyle.TextColor := TyRGBA(Red(c), Green(c), Blue(c), 255);
+    Include(AStyle.Present, tpTextColor);
   end;
 end;
 
