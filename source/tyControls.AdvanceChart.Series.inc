@@ -35,7 +35,7 @@ begin
     if SeriesBoxRef(i, True, cell, fromCentre) then
     begin
       FPies[i] := TyPieLayoutInView(FPieSpecs[i], TyGetLayoutRect(
-        TyBoxSpecRaw(FPieSpecs[i].Box), cell.X, cell.Y, cell.W, cell.H, []),
+        FPieSpecs[i].BoxRaw, cell.X, cell.Y, cell.W, cell.H, []),
         FStores[i], dim);
       if fromCentre then
       begin
@@ -90,7 +90,7 @@ begin
     begin
       { getLayoutRect of the series' box in the cell, as upstream holds both }
       FFunnels[i] := TyFunnelLayoutInView(FFunnelSpecs[i],
-        TyGetLayoutRect(TyBoxSpecRaw(FFunnelSpecs[i].Box), cell.X, cell.Y, cell.W,
+        TyGetLayoutRect(FFunnelSpecs[i].BoxRaw, cell.X, cell.Y, cell.W,
         cell.H, []), FStores[i], dim);
       { a cell of no size draws nothing; one of no place is at the canvas'
         edge (getLayoutRect's `x || 0`) [Batch 151] }

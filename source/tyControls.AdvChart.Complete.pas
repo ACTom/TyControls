@@ -1290,13 +1290,30 @@ end;
   MarkLineView.ts:437), `progressive` / `progressiveThreshold` (model/
   Series.ts:591 getProgressive and its threshold, the global defaults sit
   there) and `progressiveChunkMode` (Scheduler.ts). The port reads every
-  one of them there too. }
+  one of them there too.
+  [R2-G] And more, each read there by the port as well: a series' `cursor`
+  (getShallow up the item model), `colorBy` (where its type has no
+  default), `dataGroupId` (universalTransition.ts), `stack` and the bar sizes
+  (barGrid.ts, polar's, the candlestick's), `legendHoverLink` (where its type
+  has no default), `symbol` (a scatter's) and `symbolRotate` /
+  `symbolKeepAspect` / `symbolOffset` (no default anywhere), and `z` (a
+  treemap's and the graphic component's: no default). Not here, so still
+  reported: the object keys a getModel reaches the root by (`label`,
+  `itemStyle` ...), `zlevel`, which the port does not read there, and
+  `selectedMode`, which reaches get() but not the selection
+  (Series._innerSelect reads the option's own). }
 function RootInheritedKey(const AKey: string): Boolean;
 begin
   Result := (AKey = 'left') or (AKey = 'top') or (AKey = 'right')
     or (AKey = 'bottom') or (AKey = 'width') or (AKey = 'height')
     or (AKey = 'silent') or (AKey = 'progressive')
-    or (AKey = 'progressiveThreshold') or (AKey = 'progressiveChunkMode');
+    or (AKey = 'progressiveThreshold') or (AKey = 'progressiveChunkMode')
+    or (AKey = 'cursor') or (AKey = 'colorBy') or (AKey = 'dataGroupId')
+    or (AKey = 'stack') or (AKey = 'barWidth')
+    or (AKey = 'barMaxWidth') or (AKey = 'barMinWidth') or (AKey = 'barGap')
+    or (AKey = 'barCategoryGap') or (AKey = 'legendHoverLink')
+    or (AKey = 'symbol') or (AKey = 'symbolRotate') or (AKey = 'symbolKeepAspect')
+    or (AKey = 'symbolOffset') or (AKey = 'z');
 end;
 
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;

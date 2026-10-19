@@ -306,10 +306,12 @@ begin
   Result := ObjOf(AOption.ComponentAt('series', ASlot));
 end;
 
-function StackIdOf(ANode: TJSONObject; ASeriesIndex: Integer): string;
+function StackIdOf(ANode: TJSONObject; ASeriesIndex: Integer;
+  ARoot: TJSONData): string;
 var d: TJSONData;
 begin
-  d := FindIn(ANode, 'stack');
+  { the option root's under the series' own [R2-G] }
+  d := TyGetShallowRoot(ANode, ARoot, 'stack');
   Result := '';
   if (d <> nil) and JsTruthy(d) then
   begin
@@ -424,18 +426,20 @@ var
       si := onIt[k];
       node := SeriesNode(AOption, ABindings[si].SeriesIndex);
       m := 0;
-      while (m <= High(cols)) and (cols[m].Id <> StackIdOf(node, ABindings[si].SeriesIndex)) do Inc(m);
+      while (m <= High(cols)) and (cols[m].Id <> StackIdOf(node, ABindings[si].SeriesIndex, AOption.Root)) do Inc(m);
       if m > High(cols) then
       begin
         Inc(autoCount);
         SetLength(cols, m + 1);
-        cols[m].Id := StackIdOf(node, ABindings[si].SeriesIndex);
+        cols[m].Id := StackIdOf(node, ABindings[si].SeriesIndex, AOption.Root);
         cols[m].Width := 0;
         cols[m].MaxWidth := 0;
       end;
       slotCol[k] := m;
-      bw := PctOf(FindIn(node, 'barWidth'), band);
-      mw := PctOf(FindIn(node, 'barMaxWidth'), band);
+      { the option root's under the series' own: a bar has no default for
+        either, nor for the gaps [R2-G] }
+      bw := PctOf(TyGetShallowRoot(node, AOption.Root, 'barWidth'), band);
+      mw := PctOf(TyGetShallowRoot(node, AOption.Root, 'barMaxWidth'), band);
       if Truthy(bw) and not Truthy(cols[m].Width) then
       begin
         bw := JMin(remained, bw);
@@ -443,9 +447,9 @@ var
         remained := remained - bw;
       end;
       if Truthy(mw) then cols[m].MaxWidth := mw;
-      d := FindIn(node, 'barGap');
+      d := TyGetShallowRoot(node, AOption.Root, 'barGap');
       if (d <> nil) and (d.JSONType <> jtNull) then gapOpt := d;
-      d := FindIn(node, 'barCategoryGap');
+      d := TyGetShallowRoot(node, AOption.Root, 'barCategoryGap');
       if (d <> nil) and (d.JSONType <> jtNull) then catGapOpt := d;
     end;
     if catGapOpt = nil then catGap := 0.2 * band

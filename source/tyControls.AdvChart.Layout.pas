@@ -215,6 +215,10 @@ procedure TyRawClimbRoot(var AV: TTyBoxRaw; ARoot: TJSONData; const AKey: string
   option's own (a null, or nil). }
 function TyBoxKeyClimb(ANode: TJSONObject; ARoot: TJSONData; const AKey: string;
   AHasDefault: Boolean): TJSONData;
+{ [R2-G] the six keys of a pie's or a funnel's box into ABox, raw: each
+  where TyBoxKeyClimb finds one (the edges have defaults, the size none),
+  ABox's own (the defaults) elsewhere }
+procedure TyBoxRawClimbInto(var ABox: TTyRawBox; ANode: TJSONObject; ARoot: TJSONData);
 { parsePositionOption: the four words exactly, a trimmed string ending in
   `%` a percentage, other strings parseFloat, null not-a-number, anything
   else a unary plus. }
@@ -1837,6 +1841,23 @@ begin
     d := TJSONObject(ARoot).Find(AKey);
     if d <> nil then Result := d;
   end;
+end;
+
+procedure TyBoxRawClimbInto(var ABox: TTyRawBox; ANode: TJSONObject; ARoot: TJSONData);
+var d: TJSONData;
+begin
+  d := TyBoxKeyClimb(ANode, ARoot, 'left', True);
+  if d <> nil then ABox.Left := TyBoxRawOf(d);
+  d := TyBoxKeyClimb(ANode, ARoot, 'top', True);
+  if d <> nil then ABox.Top := TyBoxRawOf(d);
+  d := TyBoxKeyClimb(ANode, ARoot, 'right', True);
+  if d <> nil then ABox.Right := TyBoxRawOf(d);
+  d := TyBoxKeyClimb(ANode, ARoot, 'bottom', True);
+  if d <> nil then ABox.Bottom := TyBoxRawOf(d);
+  d := TyBoxKeyClimb(ANode, ARoot, 'width', False);
+  if d <> nil then ABox.Width := TyBoxRawOf(d);
+  d := TyBoxKeyClimb(ANode, ARoot, 'height', False);
+  if d <> nil then ABox.Height := TyBoxRawOf(d);
 end;
 
 procedure TyBoxClimbRoot(var ABox: TTyRawBox; ARoot: TJSONData);

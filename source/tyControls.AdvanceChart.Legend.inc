@@ -1073,6 +1073,9 @@ begin
       linked := False;
       for k := 0 to High(cLinked) do
         if cLinked[k] = tp then linked := True;
+      { a type with no default reads the option root's [R2-G] }
+      if not linked then
+        linked := JsTruthy(TyGetShallowRoot(nil, FOption.Root, 'legendHoverLink'));
     end;
     if linked then Continue;
     if Result <> '[' then Result := Result + ',';

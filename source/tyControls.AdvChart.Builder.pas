@@ -1112,7 +1112,7 @@ end;
 function MakeScale(AType: TTyAxisType; ANode: TJSONObject): TTyScale;
 var
   iv: TTyIntervalScale;
-  logBase: Double;
+  logBase, v: Double;
   d: TJSONData;
 begin
   case AType of
@@ -1121,10 +1121,18 @@ begin
     atLog:
       begin
         iv := TTyIntervalScale.Create;
+        { `setting.logBase || 10` [R2-G]: a falsy base (0, null, '') is
+          ten, and a written one is read as Number() reads it -- '2' is
+          two. A base the logarithm cannot use (1, under 1, negative, a
+          word) stays ten here, ON PURPOSE: upstream draws every value at
+          one tick, or points off the grid, or none at all }
         logBase := 10;
         d := FindIn(ANode, 'logBase');
-        if (d <> nil) and (d.JSONType = jtNumber) then logBase := d.AsFloat;
-        if logBase <= 1 then logBase := 10;
+        if TyOptTruthy(d) then
+        begin
+          v := TyJsonToNumber(d);
+          if not IsNan(v) and (v > 1) and not IsInfinite(v) then logBase := v;
+        end;
         { A replacement mapper brings its own extents, so anything already set
           would be lost -- nothing is set yet at this point, and the extent is
           written in phase B. }

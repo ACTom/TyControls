@@ -337,6 +337,9 @@ type
     { A PLAIN VALUE AXIS INCLUDES ZERO unless `scale` says otherwise -- the
       rule that gave Lo and Hi their zero, which alignment asks again. }
     Incl0: Boolean;
+    { a category axis declared with `data: []`: its ends are the series
+      data's, and it is blank over them [R2-G] }
+    CatsFromData: Boolean;
   end;
 
 { ADataLo/ADataHi are the series' own extent, +Infinity/-Infinity when there
@@ -1736,6 +1739,21 @@ end;
   cent); a string ending in '%' is its number over a hundred; any other
   string is parseFloat'd, and 'center', 'left' and the rest are the ratios a
   box position would give them. A boolean is nothing. }
+{ [CATEGORY_AXIS_MODEL_DATA_IS_EMPTY_ARRAY] `axisModelDataArray &&
+  !axisModelDataArray.length`: a truthy `data` with no length -- an empty
+  array, or anything that is neither an array nor a string [R2-G] }
+function CategoryDataIsEmpty(AData: TJSONData): Boolean;
+begin
+  Result := False;
+  if (AData = nil) or not TyOptTruthy(AData) then Exit;
+  case AData.JSONType of
+    jtArray: Result := AData.Count = 0;
+    jtString: Result := False;
+  else
+    Result := True;
+  end;
+end;
+
 function GapRatio(AData: TJSONData): Double;
 var s: string;
 begin
@@ -1780,7 +1798,7 @@ function TyAxisRawExtent(ANode: TJSONObject; AAxis: TTyAxis;
 var
   d: TJSONData;
   dLo, dHi, v, span, sv: Double;
-  hasLo, hasHi, interval, needZero, svSpecified, ordinal: Boolean;
+  hasLo, hasHi, interval, needZero, svSpecified, ordinal, emptyCats: Boolean;
   nCat: Integer;
   mask: TFPUExceptionMask;
 begin
@@ -1793,6 +1811,10 @@ begin
   nCat := 0;
   if ordinal and (AAxis.Scale is TTyOrdinalScale) then
     nCat := TTyOrdinalScale(AAxis.Scale).CategoryCount;
+  { `xxxAxis: {data: []}` -- upstream's backward-compatibility path: the
+    axis is a category one whose free ends are the SERIES data's, and it is
+    blank (the axis line only) while the series still stand on it [R2-G] }
+  emptyCats := ordinal and (ANode <> nil) and CategoryDataIsEmpty(ANode.Find('data'));
   { Not-a-number is a legal value all the way through, as in JavaScript, and
     comparing one with the traps on raises. }
   mask := GetExceptionMask;
@@ -1857,9 +1879,11 @@ begin
     if ordinal then
     begin
       if not hasLo then
-        if nCat > 0 then Result.Lo := 0 else Result.Lo := NaN;
+        if emptyCats then Result.Lo := dLo
+        else if nCat > 0 then Result.Lo := 0 else Result.Lo := NaN;
       if not hasHi then
-        if nCat > 0 then Result.Hi := nCat - 1 else Result.Hi := NaN;
+        if emptyCats then Result.Hi := dHi
+        else if nCat > 0 then Result.Hi := nCat - 1 else Result.Hi := NaN;
       hasLo := True;
       hasHi := True;
     end;
@@ -1901,7 +1925,8 @@ begin
     if not Finite(Result.Hi) then Result.Hi := NaN;
     { (a category axis with no categories at all keeps the ends it was
       given and is blank all the same -- the scale answers that one) }
-    Result.Blank := IsNan(Result.Lo) or IsNan(Result.Hi);
+    Result.Blank := IsNan(Result.Lo) or IsNan(Result.Hi) or emptyCats;
+    Result.CatsFromData := emptyCats;
 
     { (5) ZERO, on a plain value axis unless `scale` is truthy -- and only
       pulling an end nobody pinned, when both ends share a sign. }
@@ -2215,7 +2240,7 @@ var
   sub2: TJSONData;
   lo, hi, minIvl, maxIvl: Double;
   e: TTyRange;
-  blank: Boolean;
+  blank, over: Boolean;
 begin
   AToggleInverse := False;
   if AAxis = nil then Exit;
@@ -2311,14 +2336,19 @@ begin
       e.Start := ARaw.Lo;
       e.Stop := ARaw.Hi;
       blank := ARaw.Blank;
-      if (not blank) and (ARaw.Hi - ARaw.Lo + 1 > cMaxWindow) then
+      { BLANK OVER THE SERIES' WINDOW: `data: []` -- no labels, no ticks,
+        and the bars still a band wide each [R2-G] }
+      over := ARaw.CatsFromData and not (IsNan(ARaw.Lo) or IsNan(ARaw.Hi));
+      if ((not blank) or over) and (ARaw.Hi - ARaw.Lo + 1 > cMaxWindow) then
       begin
         blank := True;
+        over := False;
         e.Start := NaN;
         e.Stop := NaN;
       end;
       AAxis.Scale.SetExtent(e);
       AAxis.Scale.MarkedBlank := blank;
+      TTyOrdinalScale(AAxis.Scale).OverData := over;
       { startValue has already moved the extent; nothing stands on this axis }
       AAxis.Scale.StartValue := NaN;
     end;

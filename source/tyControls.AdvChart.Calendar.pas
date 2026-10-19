@@ -85,6 +85,7 @@ type
     SplitShow: Boolean;
     Split: TTyOptStyle;
     DayShow, DayStart: Boolean;
+    { parsePercent's reading of dayLabel.margin [R2-G] }
     DayMargin: Double;
     DayMarginPct: Boolean;
     DayNames: TTyCalNames;
@@ -92,6 +93,10 @@ type
     DayText: TTyCalText;
     MonthShow, MonthStart, MonthCentre: Boolean;
     MonthMargin: Double;
+    { a margin WRITTEN AS A STRING [R2-G]: `y + margin` concatenates where
+      the label is past the end, so the text is kept }
+    MonthMarginIsText: Boolean;
+    MonthMarginText: string;
     MonthFormatter: string;
     MonthNames: TTyCalNames;
     MonthArray: TTyStringArray;
@@ -99,6 +104,8 @@ type
     YearShow: Boolean;
     YearPos: TTyCalYearPos;
     YearMargin: Double;
+    YearMarginIsText: Boolean;
+    YearMarginText: string;
     YearFormatter: string;
     YearText: TTyCalText;
     Z: Integer;
@@ -133,7 +140,6 @@ type
   private
     FSpec: TTyCalendarSpec;
     FUTC: Boolean;
-    FOffsetMs: Int64;
     FRange: TTyCalRangeInfo;
     FValid: Boolean;
     FRect: TTyXYWH;
@@ -152,6 +158,10 @@ type
     function ParseDate(const AValue: TTyDataValue): Double;
     function DateInfo(AMs: Double): TTyCalDateInfo;
     function NextNDay(AMs: Double; AN: Integer): Double;
+    { a wall clock (ms read as UTC) to the instant, and back: the zone at
+      that date, or nothing in UTC [R2-G] }
+    function WallToInstant(AWall: Double): Double;
+    function InstantToWall(AMs: Double): Double;
     function RangeInfo(AMs0, AMs1: Double): TTyCalRangeInfo;
     { dataToPoint: the centre of the date's cell, NaN when AClamp and the date
       is outside the range }
@@ -567,6 +577,7 @@ var
   cellArr: array[0..1] of TJSONData;
   ignW, ignH: Boolean;
   s: string;
+  pos: TTyPos;
 
   function CellIsAuto(AData: TJSONData): Boolean;
   begin
@@ -721,13 +732,13 @@ begin
     d := sub.Find('margin');
     if d <> nil then
     begin
-      if (d.JSONType = jtString) and (Pos('%', d.AsString) > 0) then
-      begin
-        Result.DayMarginPct := True;
-        Result.DayMargin := TyJsToNumber(Trim(StringReplace(d.AsString, '%', '', []))) / 100;
-      end
-      else
-        Result.DayMargin := NumOf(d, 0);
+      { parsePercent: a percentage (or a position word) of the smaller cell
+        side, anything else parseFloat's pixels -- '5px' is 5; null and a
+        word that is no number are not a number, and nothing is drawn [R2-G] }
+      pos := TyBoxRawPos(TyBoxRawOf(d));
+      Result.DayMarginPct := pos.Kind = tpkPct;
+      if pos.Kind = tpkPct then Result.DayMargin := pos.V / 100
+      else Result.DayMargin := pos.V;
     end;
     ReadNames(sub, Result.DayNames, Result.DayArray);
     ReadText(sub, Result.DayText);
@@ -743,6 +754,8 @@ begin
       Result.MonthCentre := StrOf(sub.Find('align')) = 'center';
     d := sub.Find('margin');
     if d <> nil then Result.MonthMargin := NumOf(d, 0);
+    Result.MonthMarginIsText := (d <> nil) and (d.JSONType = jtString);
+    if Result.MonthMarginIsText then Result.MonthMarginText := d.AsString;
     Result.MonthFormatter := StrOf(sub.Find('formatter'));
     ReadNames(sub, Result.MonthNames, Result.MonthArray);
     ReadText(sub, Result.MonthText);
@@ -759,6 +772,8 @@ begin
     else if s = 'right' then Result.YearPos := tcyRight;
     d := sub.Find('margin');
     if d <> nil then Result.YearMargin := NumOf(d, 0);
+    Result.YearMarginIsText := (d <> nil) and (d.JSONType = jtString);
+    if Result.YearMarginIsText then Result.YearMarginText := d.AsString;
     Result.YearFormatter := StrOf(sub.Find('formatter'));
     ReadText(sub, Result.YearText);
   end;
@@ -821,10 +836,18 @@ end;
 
 procedure TTyCalendar.SetUTC(AValue: Boolean);
 begin
+  { the zone is asked at each date now (WallToInstant) [R2-G] }
   FUTC := AValue;
-  { the offset the date parser applies: today's, UTC minus local }
-  if FUTC then FOffsetMs := 0
-  else FOffsetMs := Int64(GetLocalTimeOffset) * 60000;
+end;
+
+function TTyCalendar.WallToInstant(AWall: Double): Double;
+begin
+  if FUTC then Result := AWall else Result := TyLocalToUtcMs(AWall);
+end;
+
+function TTyCalendar.InstantToWall(AMs: Double): Double;
+begin
+  if FUTC then Result := AMs else Result := TyUtcToLocalMs(AMs);
 end;
 
 function TTyCalendar.ParseDate(const AValue: TTyDataValue): Double;
@@ -857,18 +880,21 @@ begin
     Exit;
   end;
   Result.Valid := True;
-  w := Round(AMs) - FOffsetMs;
+  w := Round(InstantToWall(Round(AMs)));
   Result.DayNum := FloorDiv(w, TyCalDayMs);
   CivilOf(Result.DayNum, Result.Y, Result.M, Result.D);
   dow := Integer(((Result.DayNum mod 7) + 7 + 4) mod 7);
   Result.Day := Abs(JsRem(dow + 7 - FSpec.FirstDay, 7));
-  Result.Midnight := Result.DayNum * TyCalDayMs + FOffsetMs;
+  Result.Midnight := WallToInstant(Result.DayNum * TyCalDayMs);
 end;
 
 function TTyCalendar.NextNDay(AMs: Double; AN: Integer): Double;
 begin
-  { a wall clock has no DST, so setDate(getDate() + n) is n whole days }
-  Result := AMs + Int64(AN) * TyCalDayMs;
+  { setDate(getDate() + n): n days on the wall clock, the same hour -- a
+    summer-time change makes one of them 23 or 25 hours long [R2-G] }
+  if FUTC or IsNan(AMs) or IsInfinite(AMs) then
+    Exit(AMs + Int64(AN) * TyCalDayMs);
+  Result := WallToInstant(InstantToWall(AMs) + Int64(AN) * TyCalDayMs);
 end;
 
 function TTyCalendar.RangeInfo(AMs0, AMs1: Double): TTyCalRangeInfo;
@@ -990,7 +1016,7 @@ begin
           m := 1;
           Inc(y);
         end;
-        next := DateInfo(CivilMs(y, m, 1) + FOffsetMs);
+        next := DateInfo(WallToInstant(CivilMs(y, m, 1)));
         AA := start.Midnight;
         AB := NextNDay(next.Midnight, -1);
       end;
@@ -1452,6 +1478,39 @@ var
     AddPolyline(rs);
   end;
 
+  { `v + margin` with a margin written as text: String(v) and the text,
+    read back as a number -- in logical px, as upstream adds them [R2-G] }
+  function CatAdd(AV: Double; AIsText: Boolean; const AText: string;
+    AMarginDev: Double): Double;
+  begin
+    if not AIsText then Exit(AV + AMarginDev);
+    Result := TyJsToNumber(TyJsNumberToString(AV / scale) + AText) * scale;
+  end;
+
+  { a top-aligned single line whose y is such a text: zrender's
+    `textY += lineHeight / 2` concatenates once more, and the span's middle
+    is that text as a number }
+  function CatMiddle(AY: Double; const AText, AWords: string;
+    const ATextSpec: TTyCalText; const ADefFont: string;
+    ADefSize, ADefWeight: Integer): Double;
+  var
+    w, h: Double;
+    fname: string;
+    fsize, fweight: Integer;
+  begin
+    fname := ADefFont;
+    if ATextSpec.HasFontName then fname := ATextSpec.FontName;
+    fsize := ADefSize;
+    if ATextSpec.HasFontSize then fsize := ATextSpec.FontSizeLogical;
+    fweight := ADefWeight;
+    if ATextSpec.HasWeight then fweight := ATextSpec.FontWeight;
+    w := 0;
+    h := 0;
+    if AMeasurer <> nil then AMeasurer.MeasureLine(AWords, fname, fsize, fweight, w, h);
+    Result := TyJsToNumber(TyJsNumberToString(AY / scale) + AText
+      + TyJsNumberToString(h / scale / 2)) * scale;
+  end;
+
 var
   pts2: array[0..1] of TTyPointF;
   xc, yc, x, y, margin, rot, startMs: Double;
@@ -1462,6 +1521,7 @@ var
   tmpP: TTyPointF;
   day: Integer;
   info: TTyCalDateInfo;
+  catY: Boolean;
 begin
   Result := 0;
   if (ACal = nil) or not ACal.Valid or (AList = nil) then Exit;
@@ -1537,9 +1597,9 @@ begin
       the start's month and then does setMonth(getMonth() + 1); stepping
       straight to the next first is the same date from any day of a month }
     if fd.M = 12 then
-      fd := ACal.DateInfo(CivilMs(fd.Y + 1, 1, 1) + ACal.FOffsetMs)
+      fd := ACal.DateInfo(ACal.WallToInstant(CivilMs(fd.Y + 1, 1, 1)))
     else
-      fd := ACal.DateInfo(CivilMs(fd.Y, fd.M + 1, 1) + ACal.FOffsetMs);
+      fd := ACal.DateInfo(ACal.WallToInstant(CivilMs(fd.Y, fd.M + 1, 1)));
     Inc(i);
     if i > 12 * 400 then Break;
   end;
@@ -1584,10 +1644,13 @@ begin
       content := name;
     ah := tahCentre;
     av := tavBottom;
+    { `y += margin` and `x += margin` with a string margin are
+      concatenations -- the text '240' and '5' is the anchor 2405, which
+      zrender's transform reads as a number; `-=` reads the margin as one }
     case pos of
-      tcyBottom: begin y := y + margin; av := tavTop; end;
+      tcyBottom: begin y := CatAdd(y, spec.YearMarginIsText, spec.YearMarginText, margin); av := tavTop; end;
       tcyLeft:   x := x - margin;
-      tcyRight:  begin x := x + margin; av := tavTop; end;
+      tcyRight:  begin x := CatAdd(x, spec.YearMarginIsText, spec.YearMarginText, margin); av := tavTop; end;
     else
       y := y - margin;
     end;
@@ -1625,17 +1688,31 @@ begin
       y := tmpP.Y;
       ah := tahLeft;
       av := tavTop;
+      { past the end a string margin is still a string (`-margin` made a
+        number of it at the start): `y + margin` concatenates, and so does
+        the text's own `textY += lineHeight / 2` after it, top-aligned --
+        the line's middle is that last text read as a number; an x stays
+        the concatenation, which the span's draw reads as one }
+      catY := False;
       if horiz then
       begin
-        y := y + margin;
+        if spec.MonthStart or not spec.MonthMarginIsText then y := y + margin
+        else catY := True;
         if spec.MonthCentre then ah := tahCentre;
         if spec.MonthStart then av := tavBottom;
       end
       else
       begin
-        x := x + margin;
+        if spec.MonthStart or not spec.MonthMarginIsText then x := x + margin
+        else x := CatAdd(x, True, spec.MonthMarginText, margin);
         if spec.MonthCentre then av := tavMiddle;
         if spec.MonthStart then ah := tahRight;
+      end;
+      if catY then
+      begin
+        y := CatMiddle(y, spec.MonthMarginText, content, spec.MonthText,
+          AInk.LabelFontName, AInk.LabelFontSizeLogical, AInk.LabelFontWeight);
+        av := tavMiddle;
       end;
       AddText(content, x, y, ah, av, 0, spec.MonthText, AInk.LabelColour,
         AInk.LabelFontName, AInk.LabelFontSizeLogical, AInk.LabelFontWeight);

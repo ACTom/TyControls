@@ -2330,7 +2330,11 @@ type
     function KbActivate: Boolean;
     procedure PaintKbRing(APainter: TTyPainter);
     { ==== [F5] THE COMPONENT KEYBOARD ==== }
-    { a graph's edges that survive the legend (Graph.update's filterSelf) }
+    { [R2-G] whose edges the data-item keys walk: 1 a graph's, 2 a sankey's,
+      3 a chord's; 0 none }
+    function KbEdgeKind(ASlot: Integer): Integer;
+    { a graph's edges that survive the legend (Graph.update's filterSelf);
+      [R2-G] a sankey's links, a chord's kept ribbons }
     function KbEdgeCount(ASlot: Integer): Integer;
     { an edge row's place in the solved edge list; -1 for none }
     function KbEdgeOf(ASeries, ARow: Integer): Integer;

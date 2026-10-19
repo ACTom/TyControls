@@ -2428,10 +2428,25 @@ begin
       Result[raw] := AStore.GetByRaw(AStoreCol, raw);
     Exit;
   end;
-  if AStore.RawPosType(d) = ddtTime then typ := ddtTime else typ := ddtFloat;
+  typ := AStore.RawPosType(d);
   for raw := 0 to High(Result) do
     if TTyDataStore.RawCell(AStore.RawItemByRaw(raw), d, cell) then
-      Result[raw] := TyParseDataValue(cell, typ)
+      case typ of
+        { AN ORDINAL COLUMN NO AXIS READS keeps what was written, and the
+          visual's own arithmetic reads it as JavaScript does -- a gap (null)
+          and '' are nought, a boolean 0 or 1, a word not a number [R2-G] }
+        ddtOrdinal:
+          case cell.Kind of
+            dvkNone: Result[raw] := 0;
+            dvkNumber, dvkBool: Result[raw] := cell.Num;
+          else
+            Result[raw] := TyJsToNumber(cell.Text);
+          end;
+        { an 'int' one is an Int32Array; a time one a time; the rest data }
+        ddtInt, ddtTime: Result[raw] := TyParseDataValue(cell, typ);
+      else
+        Result[raw] := TyParseDataValue(cell, ddtFloat);
+      end
     else
       Result[raw] := NaN;
 end;

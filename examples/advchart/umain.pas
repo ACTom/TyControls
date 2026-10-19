@@ -484,7 +484,12 @@ begin
     LblStatus.Caption := Chart.OptionError;
     Exit;
   end;
-  ShowNotes(OptionMemo.Text);
+  { THE NOTES ARE THE CHART'S, NOT THE STEP FILE'S. A step merged into the
+    chart is often a fragment -- `{"series":[{"symbol":...}]}` names no type
+    and no grid -- and diagnosed on its own it reads as a broken option ("has
+    no type yet", "names an axis that does not exist"). What the chart now
+    holds is the merged option, so that is what is diagnosed. }
+  ShowNotes(Chart.GetOptionJson);
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);

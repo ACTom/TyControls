@@ -170,6 +170,7 @@ uses
   test.advchart.tooltipparams,
   test.advchart.actionsbatch,
   test.advchart.rootinherit,
+  test.advchart.dataedge,
   test.advchart.axistooltip,
   test.advchart.visualmaptext,
   test.advchart.labelhalo,

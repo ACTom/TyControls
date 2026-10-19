@@ -541,11 +541,12 @@ begin
       node := NodeOf(i);
       Result[i].Solved := True;
       Result[i].Clip := ClipOf(node);
-      if node <> nil then
-        Result[i].CandleWidth := TyCandleWidthOf(band, node.Find('barWidth'),
-          node.Find('barMaxWidth'), node.Find('barMinWidth'))
-      else
-        Result[i].CandleWidth := TyCandleWidthOf(band, nil, nil, nil);
+      { get() on a candlestick's model: no default for the three, so the
+        option root's reach it [R2-G] }
+      Result[i].CandleWidth := TyCandleWidthOf(band,
+        TyGetShallowRoot(node, AOption.Root, 'barWidth'),
+        TyGetShallowRoot(node, AOption.Root, 'barMaxWidth'),
+        TyGetShallowRoot(node, AOption.Root, 'barMinWidth'));
       done[i] := True;
     end
     else if ABindings[i].SeriesType = 'boxplot' then

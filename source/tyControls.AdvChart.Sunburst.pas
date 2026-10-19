@@ -780,7 +780,12 @@ begin
     if not nd.Placed then Continue;
     { a node of no value is not drawn -- the return circle always is
       (SunburstView's renderRollUp has no such test) }
-    if (row <> 0) and (not ASolved.RenderZero) and ((nd.Value = 0) or IsNan(nd.Value)) then
+    if (row <> 0) and (not ASolved.RenderZero) and (IsNan(nd.Value) or (nd.Value = 0)) then
+      Continue;
+    { A PIECE WITH NO ANGLES -- after a value JavaScript made '' of, the
+      unit angle is not a number -- has a sector zrender cannot trace, and
+      its label no place: neither is drawn [R2-G] }
+    if IsNan(nd.StartRad) or IsNan(nd.EndRad) or IsNan(nd.R0) or IsNan(nd.R) then
       Continue;
     s0 := Min(nd.StartRad, nd.EndRad);
     s1 := Max(nd.StartRad, nd.EndRad);

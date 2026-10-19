@@ -45,7 +45,7 @@ type
   published
     procedure TestTheSunburstAsUpstreamDrawsIt;
     procedure TestTheGallerySunburstsAsUpstream;
-    procedure TestStringValuesAddAsNumbers;
+    procedure TestStringValuesConcatenateAsJavaScriptAddsThem;
     procedure TestAnArrayValueCountsItsFirstEntry;
   end;
 
@@ -377,9 +377,13 @@ begin
     [FPieces, FLabels, FSkipped]), FPieces >= 100);
 end;
 
-procedure TAdvChartSunburstOracleTest.TestStringValuesAddAsNumbers;
+procedure TAdvChartSunburstOracleTest.TestStringValuesConcatenateAsJavaScriptAddsThem;
 var lst: TTyPaintList; k: Integer; seen: Boolean;
 begin
+  { [R2-G: this pinned the port's sum, 8. completeTreeValue's `sum +=
+    childValue` starts from the number 0: 0 + '5' + '3' is '053', which the
+    store reads as 53, and the root '00538' as 538 -- upstream's answer,
+    advchart-data-edge.json t-concat.] }
   FChart.Option := '{"animation":false,"series":[{"type":"sunburst","sort":null,'
     + '"label":{"formatter":"{b}: {c}"},"data":[{"name":"S","children":['
     + '{"name":"s1","value":"5"},{"name":"s2","value":"3"}]},{"name":"U","value":"8"}]}]}';
@@ -388,12 +392,12 @@ begin
   lst := FChart.List;
   seen := False;
   for k := 0 to lst.Count - 1 do
-    if lst.Element(k).Caption.Text = 'S: 8' then seen := True;
-  AssertTrue('the parent of "5" and "3" is 8, not "053"', seen);
-  { S and U are 8 each: S takes the upper half, from twelve o'clock }
+    if lst.Element(k).Caption.Text = 'S: 053' then seen := True;
+  AssertTrue('the parent of "5" and "3" prints "053"', seen);
+  { S is 53 of 538: from twelve o'clock to -0.9518208225560154 }
   for k := 0 to lst.Count - 1 do
     if (lst.Element(k).Shape.Kind = cskSector) and (lst.Element(k).Datum.DataIndex = 1) then
-      AssertEquals('S ends half way round', Pi / 2,
+      AssertEquals('S ends at 53 / 538 of the way round', -0.9518208225560154,
         lst.Element(k).Shape.EndRad, 1e-12);
 end;
 

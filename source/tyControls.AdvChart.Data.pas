@@ -156,6 +156,9 @@ function TyJsParseFloat(const AText: string): Double;
   read off something with an `x` past the first character; anything else is
   not-a-number. }
 function TyJsNumericToNumber(const AValue: TTyDataValue): Double;
+{ ToInt32, as a value written into an Int32Array [R2-G]: NaN and the
+  infinities nought, the fraction dropped, 2^32 wrapped into a signed range. }
+function TyToInt32(AValue: Double): Double;
 { JavaScript's String() of one value: a number as it prints, text verbatim,
   a boolean as its word, a gap as ANone. }
 function TyJsValueText(const AValue: TTyDataValue; const ANone: string): string;
@@ -183,6 +186,9 @@ function TyReadableCell(const ACell: TTyDataValue; AType: TTyDimType): string;
   CURRENT UTC offset, because FPC 3.2.2 exposes no offset-at-a-given-date. A
   timestamp on the far side of a daylight-saving switch is therefore an hour
   out. Data that cares should carry an explicit designator.
+  [R2-G: the offset AT THE DATE now, as V8's Date has it -- TyLocalToUtcMs:
+  the zone's history where the system keeps one, a skipped or repeated local
+  time read with the offset before the change.]
 
   Out-of-range components are REJECTED, where JavaScript would wrap them: month
   13 is a typo, and a gap shows it while silently becoming next January does
@@ -196,6 +202,31 @@ function TyParseDateMs(const AText: string; out AMs: Double;
   AAssumeUTC: Boolean = False): Boolean;
 function TyDateTimeToMs(ADateTime: TDateTime; AIsUTC: Boolean = True): Double;
 function TyMsToDateTime(AMs: Double; AWantUTC: Boolean = True): TDateTime;
+
+{ ---- the local zone, AT A DATE [R2-G] ----
+  JavaScript's Date reads the zone's whole history: Shanghai's 1900 is local
+  mean time (+8:05:43), its 1988 summer +9, Berlin's winter +1 and summer
+  +2. The port asked the machine for TODAY's offset and used it for every
+  date. }
+type
+  { local minus UTC, in ms, at a UTC instant }
+  TTyLocalOffsetFunc = function(AUtcMs: Double): Double;
+var
+  { A replacement for the system's zone -- for tests, which must not depend
+    on the machine's; nil is the system's. }
+  TyLocalOffsetHook: TTyLocalOffsetFunc = nil;
+
+{ The local zone's offset (local minus UTC, ms) at a UTC instant: the hook's,
+  else the system's -- Windows' per-year rules where it has them, the C
+  library's localtime_r (the IANA history) elsewhere; today's when neither
+  answers. }
+function TyLocalOffsetAt(AUtcMs: Double): Double;
+{ A local wall-clock instant (ms since 1970 as if it were UTC) to the UTC one
+  -- ES LocalTZA(t, false): a local time the clocks skipped, or one they
+  repeated, is read with the offset in force BEFORE the change. }
+function TyLocalToUtcMs(ALocalMs: Double): Double;
+{ The UTC instant's local wall clock, as ms since 1970 read as UTC. }
+function TyUtcToLocalMs(AUtcMs: Double): Double;
 
 type
   { A category list plus the interning that turns names into ordinal indices.
@@ -571,7 +602,10 @@ function TyOverrideKeyCount: Integer;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses
+  {$IFDEF MSWINDOWS}dynlibs,{$ENDIF}
+  {$IFDEF UNIX}ctypes, unixtype,{$ENDIF}
+  tyControls.AdvChart.Scale;
 
 const
   MsPerDay = 86400000.0;
@@ -932,11 +966,9 @@ begin
             in the extent. The time scale rounds -- Math.round, half up -- only
             where it places a value on the axis.
             [Revised in batch 42: this rounded, banker's way, as it read.] }
-          dvkNumber:
-            if IsNan(AValue.Num) or IsInfinite(AValue.Num) then
-              Exit(NaN)
-            else
-              Exit(AValue.Num);
+          { an infinity too: upstream keeps it, and the axis' extent then
+            has no finite end and is blank -- today [R2-G] }
+          dvkNumber: Exit(AValue.Num);
           dvkText:
             if TyParseDateMs(AValue.Text, n) then Exit(n) else Exit(NaN);
         end;
@@ -952,28 +984,289 @@ begin
     n := NaN;
   end;
 
-  if (AType = ddtInt) and (not IsNan(n)) and (not IsInfinite(n)) then
-    n := Trunc(n);
+  { AN 'int' COLUMN IS AN Int32Array [R2-G]: the parsed number goes in by
+    ToInt32 -- not-a-number and the infinities are nought, the fraction is
+    dropped towards nought, and 2^32 wraps. (A column an axis reads is the
+    axis' type, never this.) }
+  if AType = ddtInt then n := TyToInt32(n);
   Result := n;
+end;
+
+function TyToInt32(AValue: Double): Double;
+const cTwo32 = 4294967296.0;
+var mask: TFPUExceptionMask;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(0);
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exPrecision]);
+  try
+    { towards nought, then modulo 2^32 -- every step exact: a division by
+      a power of two, a floor, a product by one, a difference that fits }
+    Result := Int(AValue);
+    Result := Result - cTwo32 * JsFloor(Result / cTwo32);
+    if Result >= cTwo32 / 2 then Result := Result - cTwo32;
+    { -0 is nought in an Int32Array }
+    if Result = 0 then Result := 0;
+  finally
+    SetExceptionMask(mask);
+  end;
 end;
 
 { ==================== time ==================== }
 
 function TyDateTimeToMs(ADateTime: TDateTime; AIsUTC: Boolean): Double;
 begin
-  if not AIsUTC then
-    ADateTime := LocalTimeToUniversal(ADateTime);
   { Whole milliseconds. A TDateTime is a count of DAYS, so scaling it lands a
     fraction of a millisecond either side of the integer, and two timestamps
     that name the same instant then fail to compare equal. }
   Result := Round((ADateTime - UnixEpochDT) * MsPerDay);
+  { a local one through the zone AT THAT DATE [R2-G] }
+  if not AIsUTC then
+    Result := TyLocalToUtcMs(Result);
 end;
 
 function TyMsToDateTime(AMs: Double; AWantUTC: Boolean): TDateTime;
 begin
-  Result := UnixEpochDT + AMs / MsPerDay;
   if not AWantUTC then
-    Result := UniversalTimeToLocal(Result);
+    AMs := TyUtcToLocalMs(AMs);
+  Result := UnixEpochDT + AMs / MsPerDay;
+end;
+
+{ ---- the local zone at a date ---- }
+
+{$IFDEF MSWINDOWS}
+type
+  {$PUSH}{$PACKRECORDS C}
+  TTyWinSysTime = record
+    wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond,
+      wMilliseconds: Word;
+  end;
+  { TIME_ZONE_INFORMATION }
+  TTyWinTzi = record
+    Bias: LongInt;
+    StandardName: array[0..31] of WideChar;
+    StandardDate: TTyWinSysTime;
+    StandardBias: LongInt;
+    DaylightName: array[0..31] of WideChar;
+    DaylightDate: TTyWinSysTime;
+    DaylightBias: LongInt;
+  end;
+  { DYNAMIC_TIME_ZONE_INFORMATION }
+  TTyWinDynTzi = record
+    Tzi: TTyWinTzi;
+    TimeZoneKeyName: array[0..127] of WideChar;
+    DynamicDaylightTimeDisabled: ByteBool;
+  end;
+  {$POP}
+  TTyGetDynTzi = function(var ADtzi: TTyWinDynTzi): LongWord; stdcall;
+  TTyGetTzi = function(var ATzi: TTyWinTzi): LongWord; stdcall;
+  TTyGetTziForYear = function(AYear: Word; ADtzi: Pointer;
+    var ATzi: TTyWinTzi): LongBool; stdcall;
+  TTySysToTzLocal = function(ATzi: Pointer;
+    var AUtc, ALocal: TTyWinSysTime): LongBool; stdcall;
+  TTyTziSlot = record
+    Year: Integer;
+    Tzi: TTyWinTzi;
+  end;
+const
+  cTzIdInvalid = $FFFFFFFF;
+var
+  GTzLoaded: Boolean = False;
+  GGetDynTzi: TTyGetDynTzi = nil;
+  GGetTzi: TTyGetTzi = nil;
+  GGetTziForYear: TTyGetTziForYear = nil;
+  GSysToTzLocal: TTySysToTzLocal = nil;
+  GDynTzi: TTyWinDynTzi;
+  GDynOk: Boolean = False;
+  { the per-year rules, a few years kept: the registry is read once a year }
+  GTziSlots: array[0..15] of TTyTziSlot;
+  GTziNext: Integer = 0;
+  GTziCount: Integer = 0;
+
+procedure TzLoad;
+var k32: TLibHandle;
+begin
+  if GTzLoaded then Exit;
+  GTzLoaded := True;
+  k32 := LoadLibrary('kernel32.dll');
+  if k32 = NilHandle then Exit;
+  Pointer(GGetDynTzi) := GetProcedureAddress(k32, 'GetDynamicTimeZoneInformation');
+  Pointer(GGetTzi) := GetProcedureAddress(k32, 'GetTimeZoneInformation');
+  Pointer(GGetTziForYear) := GetProcedureAddress(k32, 'GetTimeZoneInformationForYear');
+  Pointer(GSysToTzLocal) := GetProcedureAddress(k32, 'SystemTimeToTzSpecificLocalTime');
+  if Assigned(GGetDynTzi) then
+  begin
+    FillChar(GDynTzi, SizeOf(GDynTzi), 0);
+    GDynOk := GGetDynTzi(GDynTzi) <> cTzIdInvalid;
+  end;
+end;
+
+function TziOfYear(AYear: Integer; out ATzi: TTyWinTzi): Boolean;
+var i: Integer;
+begin
+  for i := 0 to GTziCount - 1 do
+    if GTziSlots[i].Year = AYear then
+    begin
+      ATzi := GTziSlots[i].Tzi;
+      Exit(True);
+    end;
+  FillChar(ATzi, SizeOf(ATzi), 0);
+  if GDynOk and Assigned(GGetTziForYear) then
+    Result := GGetTziForYear(Word(AYear), @GDynTzi, ATzi)
+  else if Assigned(GGetTzi) then
+    Result := GGetTzi(ATzi) <> cTzIdInvalid
+  else
+    Result := False;
+  if not Result then Exit;
+  GTziSlots[GTziNext].Year := AYear;
+  GTziSlots[GTziNext].Tzi := ATzi;
+  GTziNext := (GTziNext + 1) mod Length(GTziSlots);
+  if GTziCount < Length(GTziSlots) then Inc(GTziCount);
+end;
+
+{ ms since 1970 (UTC) to a SYSTEMTIME's fields, and back, proleptic
+  Gregorian (Hinnant) }
+procedure MsToSysTime(AMs: Int64; out ASt: TTyWinSysTime);
+var days, rem, z, era, doe, yoe, doy, mp, y, m: Int64;
+begin
+  days := AMs div 86400000;
+  rem := AMs mod 86400000;
+  if rem < 0 then
+  begin
+    Inc(rem, 86400000);
+    Dec(days);
+  end;
+  z := days + 719468;
+  if z >= 0 then era := z div 146097 else era := (z - 146096) div 146097;
+  doe := z - era * 146097;
+  yoe := (doe - doe div 1460 + doe div 36524 - doe div 146096) div 365;
+  y := yoe + era * 400;
+  doy := doe - (365 * yoe + yoe div 4 - yoe div 100);
+  mp := (5 * doy + 2) div 153;
+  ASt.wDay := Word(doy - (153 * mp + 2) div 5 + 1);
+  if mp < 10 then m := mp + 3 else m := mp - 9;
+  if m <= 2 then Inc(y);
+  ASt.wYear := Word(y);
+  ASt.wMonth := Word(m);
+  ASt.wDayOfWeek := Word(((days mod 7) + 7 + 4) mod 7);
+  ASt.wHour := Word(rem div 3600000);
+  ASt.wMinute := Word((rem div 60000) mod 60);
+  ASt.wSecond := Word((rem div 1000) mod 60);
+  ASt.wMilliseconds := Word(rem mod 1000);
+end;
+
+function SysTimeToMs(const ASt: TTyWinSysTime): Int64;
+var y, m, era, yoe, doy, doe: Int64;
+begin
+  y := ASt.wYear;
+  m := ASt.wMonth;
+  if m <= 2 then Dec(y);
+  if y >= 0 then era := y div 400 else era := (y - 399) div 400;
+  yoe := y - era * 400;
+  if m > 2 then doy := (153 * (m - 3) + 2) div 5 + ASt.wDay - 1
+  else doy := (153 * (m + 9) + 2) div 5 + ASt.wDay - 1;
+  doe := yoe * 365 + yoe div 4 - yoe div 100 + doy;
+  Result := (era * 146097 + doe - 719468) * 86400000
+    + ((Int64(ASt.wHour) * 60 + ASt.wMinute) * 60 + ASt.wSecond) * 1000
+    + ASt.wMilliseconds;
+end;
+
+function SystemOffsetAt(AUtcMs: Double; out AOffset: Double): Boolean;
+var
+  ms: Int64;
+  utc, loc: TTyWinSysTime;
+  tzi: TTyWinTzi;
+begin
+  Result := False;
+  AOffset := 0;
+  TzLoad;
+  if not Assigned(GSysToTzLocal) then Exit;
+  { SYSTEMTIME holds the years 1601 to 30827 }
+  if (AUtcMs < -11644473600000.0) or (AUtcMs > 910692730000000.0) then Exit;
+  ms := Trunc(JsFloor(AUtcMs));
+  MsToSysTime(ms, utc);
+  if not TziOfYear(utc.wYear, tzi) then Exit;
+  FillChar(loc, SizeOf(loc), 0);
+  if not GSysToTzLocal(@tzi, utc, loc) then Exit;
+  AOffset := SysTimeToMs(loc) - ms;
+  Result := True;
+end;
+{$ELSE}
+{$IFDEF UNIX}
+type
+  {$PUSH}{$PACKRECORDS C}
+  { struct tm with the BSD / glibc tm_gmtoff }
+  TTyCTm = record
+    tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, tm_wday, tm_yday,
+      tm_isdst: cint;
+    tm_gmtoff: clong;
+    tm_zone: PAnsiChar;
+  end;
+  {$POP}
+  PTyCTm = ^TTyCTm;
+
+function ty_localtime_r(ATimer: Ptime_t; AResult: PTyCTm): PTyCTm; cdecl;
+  external 'c' name 'localtime_r';
+
+function SystemOffsetAt(AUtcMs: Double; out AOffset: Double): Boolean;
+var
+  t: time_t;
+  tm: TTyCTm;
+  s: Double;
+begin
+  Result := False;
+  AOffset := 0;
+  s := JsFloor(AUtcMs / 1000);
+  { a time_t of this platform's width, and years the C library can name }
+  if (s < -67768040609740800.0) or (s > 67767976233316800.0) then Exit;
+  if (SizeOf(time_t) < 8) and ((s < -2147483648.0) or (s > 2147483647.0)) then Exit;
+  t := time_t(Trunc(s));
+  FillChar(tm, SizeOf(tm), 0);
+  if ty_localtime_r(@t, @tm) = nil then Exit;
+  AOffset := Double(tm.tm_gmtoff) * 1000;
+  Result := True;
+end;
+{$ELSE}
+function SystemOffsetAt(AUtcMs: Double; out AOffset: Double): Boolean;
+begin
+  AOffset := 0;
+  Result := False;
+end;
+{$ENDIF}
+{$ENDIF}
+
+function TyLocalOffsetAt(AUtcMs: Double): Double;
+begin
+  if Assigned(TyLocalOffsetHook) then Exit(TyLocalOffsetHook(AUtcMs));
+  if IsNan(AUtcMs) or IsInfinite(AUtcMs) or not SystemOffsetAt(AUtcMs, Result) then
+    { GetLocalTimeOffset is UTC minus local, in minutes, today's }
+    Result := -GetLocalTimeOffset * 60000.0;
+end;
+
+function TyUtcToLocalMs(AUtcMs: Double): Double;
+begin
+  if IsNan(AUtcMs) or IsInfinite(AUtcMs) then Exit(AUtcMs);
+  Result := AUtcMs + TyLocalOffsetAt(AUtcMs);
+end;
+
+function TyLocalToUtcMs(ALocalMs: Double): Double;
+const cWindow = 6 * 3600000.0;
+var g, oB, oA, uB, uA: Double;
+begin
+  if IsNan(ALocalMs) or IsInfinite(ALocalMs) then Exit(ALocalMs);
+  { a first guess, then the offsets either side of it: a change of offset
+    lies within the window whenever the guess and the answer straddle one }
+  g := ALocalMs - TyLocalOffsetAt(ALocalMs);
+  oB := TyLocalOffsetAt(g - cWindow);
+  oA := TyLocalOffsetAt(g + cWindow);
+  uB := ALocalMs - oB;
+  if oB = oA then Exit(uB);
+  uA := ALocalMs - oA;
+  { repeated (both read back) and skipped (neither does): the offset before
+    the change; otherwise the one that reads back }
+  if TyLocalOffsetAt(uB) = oB then Exit(uB);
+  if TyLocalOffsetAt(uA) = oA then Exit(uA);
+  Result := uB;
 end;
 
 { Reads AMax digits at most, and at least one. }
@@ -1146,9 +1439,8 @@ begin
   days := DaysFromCivil(y, mo + 1) + (d - 1);
   total := days * Int64(86400000) + ((h * 60 + mi) * 60 + sec) * 1000 + ms;
   if (not haveZone) and (not AAssumeUTC) then
-    { LOCAL: new Date(...). GetLocalTimeOffset is UTC-minus-local in
-      minutes -- today's, since FPC 3.2.2 has no offset-at-a-date. }
-    total := total + Int64(GetLocalTimeOffset) * 60000;
+    { LOCAL: new Date(...), through the zone at that date [R2-G] }
+    total := Round(TyLocalToUtcMs(total));
   { No TimeClip: a four-digit year and two-digit fields reach year 10007 at
     most, nowhere near the +-8.64e15 ms a Date can hold. }
   AMs := total;

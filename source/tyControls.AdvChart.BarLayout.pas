@@ -269,6 +269,23 @@ begin
   if (d <> nil) and (d is TJSONObject) then Result := TJSONObject(d);
 end;
 
+{ [R2-G] the object to read AKey from: the series' own when it holds a
+  value there, else the option root (the series model's parent) }
+function ClimbView(ANode: TJSONObject; AOption: TTyChartOption;
+  const AKey: string): TJSONObject;
+var d: TJSONData;
+begin
+  Result := ANode;
+  if ANode <> nil then
+  begin
+    d := ANode.Find(AKey);
+    if (d <> nil) and (d.JSONType <> jtNull) then Exit;
+  end;
+  if (AOption <> nil) and (AOption.Root is TJSONObject)
+    and (TJSONObject(AOption.Root).Find(AKey) <> nil) then
+    Result := TJSONObject(AOption.Root);
+end;
+
 function StringIn(ANode: TJSONObject; const AKey: string): string;
 var d: TJSONData;
 begin
@@ -569,7 +586,9 @@ var
         barGap.Value := defGap;
       end;
 
-      stackId := StringIn(node, 'stack');
+      { stack and the five sizes: getShallow on a bar's model -- none has a
+        default, so the option root's reach every bar [R2-G] }
+      stackId := StringIn(ClimbView(node, AOption, 'stack'), 'stack');
       if stackId = '' then stackId := '__ty_stack_' + IntToStr(si);
 
       found := False;
@@ -598,11 +617,11 @@ var
 
       { barWidth is FIRST-wins within a column: only the first series of a
         stack that supplies one is heard. }
-      v := SizeIn(node, 'barWidth');
+      v := SizeIn(ClimbView(node, AOption, 'barWidth'), 'barWidth');
       if v.Present and not Truthy(cols[m].Width) then
         cols[m].Width := Resolve(v, band);
 
-      v := SizeIn(node, 'barMaxWidth');
+      v := SizeIn(ClimbView(node, AOption, 'barMaxWidth'), 'barMaxWidth');
       if v.Present then cols[m].MaxWidth := Resolve(v, band);
 
       { LAST-WINS, INCLUDING THE DEFAULT, which is not obvious and matters. The
@@ -612,7 +631,7 @@ var
         explicit barMinWidth with the default 1. Treating the default as
         "leave what is there" would keep the earlier value and quietly draw a
         wider bar than the chart being copied. }
-      v := SizeIn(node, 'barMinWidth');
+      v := SizeIn(ClimbView(node, AOption, 'barMinWidth'), 'barMinWidth');
       if v.Present then
         cols[m].MinWidth := Resolve(v, band)
       else if (si >= 0) and (si <= High(ALarge)) and ALarge[si] then
@@ -620,9 +639,9 @@ var
       else
         cols[m].MinWidth := cDefaultBarMinWidth;
 
-      v := SizeIn(node, 'barGap');
+      v := SizeIn(ClimbView(node, AOption, 'barGap'), 'barGap');
       if v.Present then barGap := v;
-      v := SizeIn(node, 'barCategoryGap');
+      v := SizeIn(ClimbView(node, AOption, 'barCategoryGap'), 'barCategoryGap');
       if v.Present then catGap := v;
     end;
 

@@ -6865,8 +6865,6 @@
     "grid": {"left":50,"right":50,"top":40,"bottom":40,"outerBoundsMode":"none"},
     "animation": false
    },
-   "deferred": true,
-   "why": "declared-empty category list: extent from the series data (upstream's backward-compatibility path; the port draws nothing)",
    "rect": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
    "rectText": {"x":"50","y":"40","width":"500","height":"320"},
    "area": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
@@ -7044,8 +7042,6 @@
     "grid": {"left":50,"right":50,"top":40,"bottom":40,"outerBoundsMode":"none"},
     "animation": false
    },
-   "deferred": true,
-   "why": "declared-empty category list: extent from the series data (upstream's backward-compatibility path; the port draws nothing)",
    "rect": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
    "rectText": {"x":"50","y":"40","width":"500","height":"320"},
    "area": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
@@ -7222,7 +7218,7 @@
     "animation": false
    },
    "deferred": true,
-   "why": "category count past the port's cap: guarded, a documented divergence",
+   "why": "category count past the port's cap (2^20): upstream steps through the window by the label interval and never walks it, the port builds a label per category before it thins them -- a guard the port needs and upstream does not, a documented divergence",
    "rect": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
    "rectText": {"x":"50","y":"40","width":"500","height":"320"},
    "area": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},

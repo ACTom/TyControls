@@ -516,7 +516,10 @@ var
 begin
   Result := 0;
   if not (FScale is TTyOrdinalScale) then Exit;
-  if TTyOrdinalScale(FScale).Blank then Exit;
+  { an axis declared `data: []` is blank over the series' window and its
+    bars are a band wide each, as upstream's getBandWidth reads the extent
+    alone [R2-G] }
+  if TTyOrdinalScale(FScale).Blank and not TTyOrdinalScale(FScale).OverData then Exit;
   { The mapping extent when one is set, else the effective one. For N categories
     this span is N-1, while Count is N -- two routes to the same N, which is
     exactly why they are computed in one place. }
