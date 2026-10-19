@@ -19,7 +19,8 @@ uses
   tyControls.ListView, tyControls.ListBox, tyControls.AdvancedListBox, tyControls.TabSet,
   tyControls.ListGroupPanel, tyControls.ValueListEditor, tyControls.ListView.Layout,
   tyControls.Columns, tyControls.TreeView, tyControls.TabSheet, tyControls.Controller,
-  tyControls.Types, StdCtrls, tyControls.ScrollBar, tyControls.Memo, test.devicescale.support;
+  tyControls.Types, StdCtrls, tyControls.ScrollBar, tyControls.Memo, tyControls.ToolWindows,
+  tyControls.Icons.Lucide, tyControls.DB.Navigator, test.devicescale.support;
 
 type
   TDeviceScaleControlsTest = class(TDeviceScaleCase)
@@ -32,6 +33,9 @@ type
     function BarTheme: TTyStyleController;
     function BuildEmbeddedBar(AParent: TWinControl; APPI: Integer): TControl;
     function BuildFadingBar(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildToolWindow(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildToolWindowBar(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildDBNavigator(AParent: TWinControl; APPI: Integer): TControl;
     function IconFont: TTyIconFont;
     function Images: TImageList;
     function BuildImage(AParent: TWinControl; APPI: Integer): TControl;
@@ -119,6 +123,12 @@ type
       S = 2: every pixel of the bar's rect that the host itself draws as frame -- border, its
       antialiasing, the parent's background outside the arc -- is the same on the bar. }
     procedure TestEmbeddedBarRedrawsTheHostFrameAtTheDeviceScale;
+    { plan B Task 8: the palette sweep sees a tool-window bar with no windows (it draws nothing at
+      8 x 8) and a navigator with no images. A tool window paints through its cache, like a
+      panel; the bar's strip draws each window's icon; the navigator its images. }
+    procedure TestToolWindowThroughItsCache;
+    procedure TestToolWindowBarStripIcons;
+    procedure TestDBNavigatorImages;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -939,6 +949,74 @@ end;
 procedure TDeviceScaleControlsTest.TestFadingBarComposesAtTheDeviceScale;
 begin
   CheckScale('TTyScrollBar-fading', @BuildFadingBar, 14, 120);
+end;
+
+function TDeviceScaleControlsTest.BuildToolWindow(AParent: TWinControl; APPI: Integer): TControl;
+var
+  w: TTyToolWindow;
+begin
+  if FSheetTheme = nil then
+  begin
+    FSheetTheme := TTyStyleController.Create(nil);
+    FSheetTheme.LoadThemeCss('TyTabSheet { background: #DCE6F0; border-width: 2px; ' +
+      'border-color: #506070; border-radius: 8px; }' +
+      'TyToolWindow { background: #DCE6F0; border-width: 2px; border-color: #506070; ' +
+      'border-radius: 8px; color: #102030; }');
+  end;
+  w := TTyToolWindow.Create(AParent);
+  w.Parent := AParent;
+  TControlAccess(w).Font.PixelsPerInch := APPI;
+  w.Controller := FSheetTheme;
+  w.Caption := 'Explorer';
+  Result := w;
+end;
+
+function TDeviceScaleControlsTest.BuildToolWindowBar(AParent: TWinControl; APPI: Integer): TControl;
+var
+  bar: TTyToolWindowBar;
+  list: TTyLucideImageList;
+  a, b: TTyToolWindow;
+begin
+  bar := TTyToolWindowBar.Create(AParent);
+  bar.Parent := AParent;
+  TControlAccess(bar).Font.PixelsPerInch := APPI;
+  list := TTyLucideImageList.Create(AParent);
+  list.Names.Text := 'house';
+  bar.Images := list;
+  a := TTyToolWindow.Create(AParent);
+  a.Parent := bar;
+  a.ImageName := 'house';
+  b := TTyToolWindow.Create(AParent);
+  b.Parent := bar;
+  b.ImageName := 'house';
+  bar.ActiveWindow := a;
+  Result := bar;
+end;
+
+function TDeviceScaleControlsTest.BuildDBNavigator(AParent: TWinControl; APPI: Integer): TControl;
+var
+  n: TTyDBNavigator;
+begin
+  n := TTyDBNavigator.Create(AParent);
+  n.Parent := AParent;
+  TControlAccess(n).Font.PixelsPerInch := APPI;
+  n.Images := Images;   // one picture: the first button's
+  Result := n;
+end;
+
+procedure TDeviceScaleControlsTest.TestToolWindowThroughItsCache;
+begin
+  CheckScale('TTyToolWindow', @BuildToolWindow, 200, 140);
+end;
+
+procedure TDeviceScaleControlsTest.TestToolWindowBarStripIcons;
+begin
+  CheckScale('TTyToolWindowBar-strip', @BuildToolWindowBar, 200, 160);
+end;
+
+procedure TDeviceScaleControlsTest.TestDBNavigatorImages;
+begin
+  CheckScale('TTyDBNavigator-images', @BuildDBNavigator, 240, 28);
 end;
 
 procedure TDeviceScaleControlsTest.TestEmbeddedBarRedrawsTheHostFrameAtTheDeviceScale;

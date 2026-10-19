@@ -189,6 +189,8 @@ end;
 | `OnUserCheckboxState(Sender, Column, var AState)` | 勾选框要画（或要读）它的状态时 | — |
 | `OnEditButtonClick` | 点了 `gekEllipsis` 列的「…」按钮 | — |
 
+`OnDrawColumnCell`、`OnDrawColumnTitle` 交出来的画家在 macOS 的 Retina 屏上按屏幕的实际像素画：直接动 `APainter.Bitmap` 时坐标要换成图层像素，见[在 Retina 屏上直接画图层](../events.md#在-retina-屏上直接画图层)。
+
 底层表格已有、对数据表格也有用的事件照样发布：`OnGetCellStyle`、`OnGetCellBorder`、`OnGetHeaderStyle`、`OnColumnSizing`、`OnEndColumnSize`、`OnColumnMove`、`OnClickCell`、`OnDblClickCell`、`OnRightClickCell`、`OnHeaderClick`、`OnHeaderRightClick`、`OnTopLeftChanged`，以及鼠标、键盘、滚轮事件。
 
 ---

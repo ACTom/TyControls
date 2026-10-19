@@ -2733,7 +2733,8 @@ begin
   w := ClientWidth; h := ClientHeight;
   if (w <= 0) or (h <= 0) then Exit;
   if FPaintCache = nil then FPaintCache := TTyPaintCache.Create;
-  if FPaintCache.NeedsRender(w, h) then
+  { 缓存按画布的设备倍率开 S 倍大小(#83),与 TTyPanel 同一条路。 }
+  if FPaintCache.NeedsRender(w, h, TyCanvasDeviceScale(Canvas)) then
     RenderTo(FPaintCache.Canvas, Rect(0, 0, w, h), Font.PixelsPerInch);
   FPaintCache.Blit(Canvas);
 end;
@@ -4440,7 +4441,8 @@ begin
         idx := ResolvedImageIndex(w);
         if (list <> nil) and (idx >= 0) and (glyphPx > 0) then
         begin
-          bmp := TyRenderImage(list, idx, glyphPx, APPI, False);
+          { 图标按画家的光栅尺寸要(#83):glyphPx 是布局像素,出来的位图是 S 倍。 }
+          bmp := TyRenderImageScaled(P, list, idx, glyphPx, False);
           if bmp <> nil then
           try
             { 本库的列表出来的是列表自己的 GlyphColor,不是墨色 —— 着成这一格状态的墨色。
@@ -4453,8 +4455,9 @@ begin
               TyTintBitmapAlpha(bmp, ink);
               if TyAlphaOf(ink) < 255 then TyFadeBitmapAlpha(bmp, TyAlphaOf(ink));
             end;
-            P.Bitmap.PutImage(cell.Left + (cell.Right - cell.Left - bmp.Width) div 2,
-              cell.Top + (cell.Bottom - cell.Top - bmp.Height) div 2, bmp,
+            { 直接落在层上,所以按光栅坐标居中。 }
+            P.Bitmap.PutImage(P.Dev(cell.Left) + (P.Dev(cell.Right - cell.Left) - bmp.Width) div 2,
+              P.Dev(cell.Top) + (P.Dev(cell.Bottom - cell.Top) - bmp.Height) div 2, bmp,
               dmDrawWithTransparency);
           finally
             bmp.Free;
