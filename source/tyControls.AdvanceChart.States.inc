@@ -253,16 +253,20 @@ begin
   { blur: the label's opacity, a tenth of it by default [Batch 90] }
   if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
-  { the ink: a colour a state declares, else the hover's own under emphasis }
+  { the ink: the hover's own under emphasis -- its colour, and the halo that
+    goes with it: none where the hover's label writes a colour, a written
+    border where it writes one -- then a colour a state declares over it
+    [R2-A: a declared colour was taken INSTEAD of the hover's ink, keeping
+    the rest state's automatic halo and losing the hover's border] }
+  if stnEmphasis in AState.States then
+    TyCaptionToEmphasis(AEl.Caption);
   if TyStHasColour(c, stkFill) then
   begin
     AEl.Caption.Colour := c.Color[stkFill];
     if Length(AEl.Caption.RtPieces) > 0 then
       AEl.Caption.RtPieces := TyRtReink(AEl.Caption.RtPieces, c.Color[stkFill],
         False, AEl.Caption.StrokeColour, AEl.Caption.StrokeWidthLogical);
-  end
-  else if stnEmphasis in AState.States then
-    TyCaptionToEmphasis(AEl.Caption);
+  end;
 end;
 
 procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement;
