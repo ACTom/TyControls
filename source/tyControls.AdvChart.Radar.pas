@@ -232,6 +232,10 @@ type
     RowLineWidth: TTyDoubleArray;
     RowLineDash: array of TTyOptDash;
     RowLineDashExplicit: array of TTyDoubleArray;
+    { [R2-I2] lineStyle.dashOffset: the series', an item's own over it }
+    LineDashOffset: Double;
+    RowLineDashOffsetSet: array of Boolean;
+    RowLineDashOffset: TTyDoubleArray;
     { areaStyle. Absent means no filled polygon at all, which is upstream's
       rule and not a style detail: a radar with no areaStyle is a wire. }
     HasArea: Boolean;
@@ -1542,6 +1546,11 @@ begin
     else
       el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
         el.Style.StrokeWidthLogical);
+    { [R2-I2] its phase, key by key the same way }
+    el.Style.DashOffsetLogical := AVisual.LineDashOffset;
+    if (raw >= 0) and (raw <= High(AVisual.RowLineDashOffsetSet))
+      and AVisual.RowLineDashOffsetSet[raw] then
+      el.Style.DashOffsetLogical := AVisual.RowLineDashOffset[raw];
     el.Z := AVisual.Z;
     el.Z2 := AVisual.Z2;
     el.Silent := False;

@@ -924,7 +924,8 @@ var
   name: string;
   leaf, sj, lj: TJSONObject;
   l: TTyPaintList;
-  el, lab: TTyChartElement;
+  el, lab, rest: TTyChartElement;
+  b0, b1: TTyRectF;
   syms: array of Integer;
   arr: TJSONArray;
   p: TTyChartAnimProxy;
@@ -1000,6 +1001,14 @@ begin
       el := l.Element(syms[j]);
       SameNum(Format('%s sym%d.x', [name, j]), el.Caption.LgG[5], sj.Find('x'));
       SameNum(Format('%s sym%d.y', [name, j]), el.Caption.LgG[6], sj.Find('y'));
+      { the path drawn there: the one at rest moved by as much }
+      rest := FChart.List.Element(syms[j]);
+      b0 := TyShapeBounds(rest.Shape);
+      b1 := TyShapeBounds(el.Shape);
+      NearVal(Format('%s sym%d drawn dx', [name, j]), b1.Left - b0.Left,
+        WantNum(sj.Find('x')) - rest.Caption.LgG[5]);
+      NearVal(Format('%s sym%d drawn dy', [name, j]), b1.Top - b0.Top,
+        WantNum(sj.Find('y')) - rest.Caption.LgG[6]);
       p := FChart.AnimFindProxy(s, row, TyRadarSymRole(el.Anim.Sub - 1));
       Inc(FCompared);
       if (sj.Integers['n'] > 0) and ((p = nil) or p.AtFinal) then

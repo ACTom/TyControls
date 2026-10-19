@@ -1838,6 +1838,9 @@ begin
     R.HasBorderColor := True;
     R.BorderColor := c;
   end;
+  { [R2-I2] the box's borderDash and borderDashOffset, zrender's own keys }
+  R.BorderDash := TyDashTextOf(S.Find('borderDash'));
+  if NumOf(S.Find('borderDashOffset'), x) then R.BorderDashOffset := x;
   if NumOf(S.Find('opacity'), x) then
   begin
     R.HasOpacity := True;

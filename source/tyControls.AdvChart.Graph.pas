@@ -199,6 +199,9 @@ type
     HasOwnDash: Boolean;
     OwnDash: TTyOptDash;
     OwnDashExplicit: TTyDoubleArray;
+    { [R2-I2] lineStyle.dashOffset on the edge itself }
+    HasOwnDashOffset: Boolean;
+    OwnDashOffset: Double;
     { `symbol` and `symbolSize` on the edge itself -- getShallow(key, TRUE),
       the edge's own and nothing above it, each end taken only where it is
       truthy: a size of nought keeps the series' size. '' / nought: not set
@@ -321,6 +324,8 @@ type
     { `lineStyle.type` on the series [Batch 114]. }
     LineDash: TTyOptDash;
     LineDashExplicit: TTyDoubleArray;
+    { [R2-I2] and its dashOffset }
+    LineDashOffset: Double;
     Z, Z2: Integer;
     ZLevel: Integer;
     Draggable: Boolean;
@@ -728,6 +733,8 @@ function TyGraphEdgeHasSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEd
 { The dash pattern, in LOGICAL px: the edge's `type` or the series', made into
   lengths for the edge's own width (zrender's normalizeLineDash). }
 function TyGraphEdgeDash(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): TTyDoubleArray;
+{ [R2-I2] the edge's dash phase: its own, else the series' }
+function TyGraphEdgeDashOffset(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): Double;
 
 { ==================== edge labels [Batch 114] ==================== }
 
@@ -2311,6 +2318,7 @@ begin
     { `type`, the dash [Batch 114] }
     Result.LineDash := TyReadOptStyle(node, 'lineStyle').Dash;
     Result.LineDashExplicit := TyReadOptStyle(node, 'lineStyle').DashLogical;
+    Result.LineDashOffset := TyReadOptStyle(node, 'lineStyle').DashOffset;
     s := StrIn(sub, 'color', '');
     if s = 'source' then Result.ColourBy := gecSource
     else if s = 'target' then Result.ColourBy := gecTarget
@@ -3041,6 +3049,14 @@ begin
     AEdge.HasOwnDash := os.Dash <> todNone;
     AEdge.OwnDash := os.Dash;
     AEdge.OwnDashExplicit := os.DashLogical;
+  end;
+  { [R2-I2] the edge's own phase over the series' (edgeVisual extends the
+    series' style with the item's getLineStyle, key by key) }
+  d := AStyle.Find('dashOffset');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    AEdge.HasOwnDashOffset := True;
+    AEdge.OwnDashOffset := d.AsFloat;
   end;
 end;
 
@@ -5372,6 +5388,12 @@ begin
     Result := TyDashPattern(ASpec.LineDash, ASpec.LineDashExplicit, TyGraphEdgeWidth(ASpec, AEdge));
 end;
 
+function TyGraphEdgeDashOffset(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): Double;
+begin
+  if AEdge.HasOwnDashOffset then Result := AEdge.OwnDashOffset
+  else Result := ASpec.LineDashOffset;
+end;
+
 { ==================== edge labels [Batch 114] ==================== }
 
 function TyGraphLabelPosOf(const AWord: string): TTyGraphLabelPos;
@@ -6522,6 +6544,7 @@ begin
     el.Style.StrokeWidthLogical := TyGraphEdgeWidth(ASpec, AEdges[i]);
     el.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[i]);
     el.Style.DashLogical := TyGraphEdgeDash(ASpec, AEdges[i]);
+    el.Style.DashOffsetLogical := TyGraphEdgeDashOffset(ASpec, AEdges[i]);
     el.Z := ASpec.Z;
     el.Z2 := ASpec.Z2;
     el.Silent := False;

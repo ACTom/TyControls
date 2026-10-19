@@ -684,6 +684,11 @@ begin
       Result.StrokeFirst := True;
       Result.LineWidth := Result.LineWidth * 2;
     end;
+    { [R2-I2] rectStyle.lineDash = style.borderDash, lineDashOffset =
+      style.borderDashOffset || 0 }
+    Result.BorderDash := S.BorderDash;
+    Result.BorderDashOffset := S.BorderDashOffset;
+    if IsNan(Result.BorderDashOffset) then Result.BorderDashOffset := 0;
   end;
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
   if S.HasOpacity then Result.Opacity := S.Opacity else Result.Opacity := AOpacityFallback;

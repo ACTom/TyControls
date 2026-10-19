@@ -268,6 +268,9 @@ type
     Dash: TTyOptDash;
     DashLogical: TTyDoubleArray;
     DashRaw: string;
+    { [R2-I2] borderDashOffset, px (DashOffsetHas: the style sets it) }
+    DashOffsetHas: Boolean;
+    DashOffset: Double;
     { [Batch 148] A STATE'S STYLE IS SPARSE: which keys it sets (the
       opacity's is HasOpacity), the token a default colour is, and an
       emphasis fill written 'inherit' (the proxy's own word). The normal
@@ -3762,6 +3765,13 @@ begin
       tmp.Free;
     end;
   end;
+  { [R2-I2] borderDashOffset (getItemStyle's lineDashOffset) }
+  d := Get('borderDashOffset');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.DashOffsetHas := True;
+    Result.DashOffset := d.AsFloat;
+  end;
   { fixLineStyle on a line's state object: `stroke = stroke || fill` -- an
     undefined set, which the merge carries -- and `fill = null` }
   if AIsLine and (AState >= 0) then
@@ -5925,6 +5935,14 @@ var
                   dash := look.StateOpt[sn].Dash;
                   dashLogical := look.StateOpt[sn].DashLogical;
                 end;
+            { [R2-I2] the option's phase the same way }
+            if look.Styled then
+            begin
+              if look.Opt.DashOffsetHas then el.Style.DashOffsetLogical := look.Opt.DashOffset;
+              for sn := Low(TTyStName) to High(TTyStName) do
+                if (sn in st.States) and look.StateOpt[sn].DashOffsetHas then
+                  el.Style.DashOffsetLogical := look.StateOpt[sn].DashOffset;
+            end;
             if optDash then
               el.Style.DashLogical := TyDashPattern(dash, dashLogical, lw)
             else if look.HasDash and (Length(look.Dash) > 0) then
@@ -6235,6 +6253,11 @@ begin
                 dashLogical := p.StatePaint[s].DashLogical;
               end;
             el.Style.DashLogical := TyDashPattern(dash, dashLogical, c.Num[stkLineWidth]);
+            { [R2-I2] its phase: the normal one, a state's over it }
+            if p.Paint.DashOffsetHas then el.Style.DashOffsetLogical := p.Paint.DashOffset;
+            for s := Low(TTyStName) to High(TTyStName) do
+              if (s in it.Host.States) and p.StatePaint[s].DashOffsetHas then
+                el.Style.DashOffsetLogical := p.StatePaint[s].DashOffset;
             { Path.contain's stroke: the width, at least
               strokeContainThreshold where there is no fill }
             lw := c.Num[stkLineWidth] * scale;

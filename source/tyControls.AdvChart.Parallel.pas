@@ -171,6 +171,8 @@ type
     { the dash as the style holds it: '' none, 'solid', 'dashed', 'dotted',
       or '[...]' for a list }
     DashWord: string;
+    { [R2-I2] lineStyle.dashOffset, px: the item's else the series' }
+    DashOffset: Double;
   end;
   TTyParallelRowArray = array of TTyParallelRow;
 
@@ -1466,6 +1468,7 @@ begin
     el.Style.StrokeWidthLogical := r.Width;
     el.Style.Alpha := r.Opacity;
     el.Style.DashLogical := r.Dash;
+    el.Style.DashOffsetLogical := r.DashOffset;
     el.Z := ASolved.Z;
     el.Z2 := ASolved.Z2;
     el.Silent := False;

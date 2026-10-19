@@ -173,6 +173,8 @@ type
       the moment both are known. }
     Dash: TTyOptDash;
     DashExplicit: TTyDoubleArray;
+    { [R2-I2] the pen's phase, px (lineDashOffset) }
+    DashOffset: Double;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -960,6 +962,13 @@ begin
     if (v.Kind = dvkNumber) and not IsNan(v.Num) then
       Result.Alpha := Min(Double(1), Max(Double(0), v.Num));
   end;
+  { [R2-I2] the item's own borderDashOffset over the series' (getItemStyle
+    key by key) }
+  if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset')) then
+  begin
+    v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset'));
+    if v.Kind = dvkNumber then Result.DashOffset := v.Num;
+  end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
   v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.color'));
   if v.Kind <> dvkText then Exit;
@@ -1108,6 +1117,7 @@ begin
   Result.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
   Result.Style.DashLogical := TyDashPattern(AVisual.Dash, AVisual.DashExplicit,
     AVisual.StrokeWidthLogical);
+  Result.Style.DashOffsetLogical := AVisual.DashOffset;
   { `itemStyle.opacity` is a whole-element alpha and MULTIPLIES the
     colour's own -- upstream writes it to globalAlpha, so an 80% opacity
     over a half-transparent colour is 40%, not 80%. Set on every mark from

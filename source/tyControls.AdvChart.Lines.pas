@@ -143,6 +143,8 @@ type
     Stroke: TTyChartColor;
     Width, Opacity: Double;
     Dash: TTyDoubleArray;
+    { [R2-I2] lineStyle.dashOffset, px }
+    DashOffset: Double;
     Sym: array[0..1] of TTyLinesSym;
     { the label: shown, its words, where (Line.beforeUpdate), how far, the
       alignment the author wrote (1 horizontal, 2 vertical) and its spec in
@@ -1289,6 +1291,7 @@ begin
     el.Style.StrokeWidthLogical := ink.Width;
     el.Style.Alpha := ink.Opacity;
     el.Style.DashLogical := ink.Dash;
+    el.Style.DashOffsetLogical := ink.DashOffset;
     el.Z := ASolved.Z;
     el.Z2 := ASolved.Z2;
     el.Silent := False;
