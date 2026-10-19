@@ -1399,7 +1399,8 @@ end;
   labelDimIndex the spoke): no formatter, the spoke's STORED value -- a
   number, printed as String() prints it, and nothing for NaN; a template,
   with `{c}` the spoke's RAW value as written (getFormattedLabel takes
-  params.value[labelDimIndex]: '12.50', '-', null, undefined past the end). }
+  params.value[labelDimIndex]: '12.50', '-', null, undefined past the end).
+  A handler is called once per point with that value. }
 function RadarLabelText(const ASpec: TTyLabelSpec; AStore: TTyDataStore;
   ARow, ADim, ASeriesIndex: Integer; const ASeriesName: string;
   AColour: TTyChartColor): string;
@@ -1408,20 +1409,41 @@ var
   cell: TTyDataValue;
   v: Double;
   vt: string;
+  prm: TTyChartCallbackParams;
+  has: Boolean;
 begin
   vt := '';
   if ASpec.HasFormatter then
   begin
     it := AStore.RawItem(ARow);
+    has := False;
     if it.Shape = rshNone then
     begin
       v := AStore.Get(ADim, ARow);
       vt := TyJsNumberToString(v);
     end
     else if TTyDataStore.RawCell(it, AStore.RawDimPos(ADim), cell) then
-      vt := TyJsValueText(cell, 'null')
+    begin
+      vt := TyJsValueText(cell, 'null');
+      has := True;
+    end
     else
       vt := 'undefined';
+    if TyChartIsHandlerRef(ASpec.Formatter) then
+    begin
+      { getFormattedLabel narrows params.value to the point's
+        (labelDimIndex) before the handler sees it }
+      prm := TyLabelParams(AStore, ARow, ASeriesName, ADim, 0, False,
+        ASeriesIndex, TyRadarSeriesTypeName, AColour, '');
+      prm.ValueText := vt;
+      prm.Raw := Default(TTyRawItem);
+      if has then
+      begin
+        prm.Raw.Shape := rshScalar;
+        prm.Raw.Scalar := cell;
+      end;
+      Exit(TyChartRunHandler(ASpec.Formatter, TyChartOneParams(prm)));
+    end;
   end
   else
   begin
