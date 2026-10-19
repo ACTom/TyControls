@@ -952,6 +952,7 @@ begin
       FAnimPending := False;
       if FAnim = nil then FAnim := NewAnimDriver;
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+      FAnimSet.OnUtStop := @AnimUtStopCustom;
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }
       if FAnimPrev.Valid then
@@ -966,7 +967,15 @@ begin
           a setOption's tweens them }
         if FAnimPrev.FullUpdate then FAnimPrev.GeoNew := nil
         else FAnimPrev.GeoNew := AnimGeoViews(True);
+        FCustomUtStopped := False;
         FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev);
+        { [R2-D] a custom item the transition stopped is drawn where it rests:
+          the list is built again }
+        if FCustomUtStopped then
+        begin
+          FCustomUtStopped := False;
+          DropStatic;
+        end;
       end
       else
       begin

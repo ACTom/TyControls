@@ -604,6 +604,16 @@ type
     Order: Integer;
     ElRole: TTyChartAnimRole;
     Sym: string;
+    { [R2-D] A GRAPH NODE OF A VIEW the update keeps: removeEl bakes it
+      under the main group as the new render left it (its updateProps set
+      the group to its new transform at once, setToFinal) -- VnSer its old
+      series, VnGX / VnGY its symbol group's place in the main group, VnComp
+      its compensation scale (the old one: the render rescales only the
+      nodes it keeps), VnSX / VnSY its path's scale, VnRot / VnOffX / VnOffY
+      / VnKeep its symbol's turn, offset and keepAspect }
+    VnOn, VnKeep: Boolean;
+    VnSer: Integer;
+    VnGX, VnGY, VnComp, VnSX, VnSY, VnRot, VnOffX, VnOffY: Double;
   end;
   TTyUtOldSnapArray = array of TTyUtOldSnap;
   { [F3c] per old item, the snaps of its paths in getPathList's order }
@@ -615,6 +625,11 @@ type
     NewIdx, OldIdx: Integer;
   end;
   TTyDataDiffCmdArray = array of TTyDataDiffCmd;
+
+  { [R2-D] a new item a universal transition takes over: its view stops its
+    own animations of it (stopAnimation(newEl)) -- a custom series' -- and
+    lays its paths out where they are then }
+  TTyUtStopEvent = procedure(ASeries, ARow: Integer) of object;
 
   TTyChartAnimSet = class
   private
@@ -658,6 +673,8 @@ type
       const AC: TTyChartAnimSeries; AUpdate: Boolean = False);
     procedure Unfollow(AProxy: TTyChartAnimProxy);
   public
+    { [R2-D] see TTyUtStopEvent }
+    OnUtStop: TTyUtStopEvent;
     constructor Create(AAnimation: TTyAnimation);
     destructor Destroy; override;
     { every proxy freed, its clips taken off the driver }
@@ -816,6 +833,8 @@ uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.C
   tyControls.AdvChart.Graph;
 
 function UtHostRole(const AEl: TTyChartElement): string; forward;
+procedure UtRebakeViewNodes(AList: TTyPaintList; const AOldOf: TTyIntegerArray;
+  var ASnaps: TTyUtOldSnapArray); forward;
 
 { ==================== the proxy ==================== }
 
@@ -4504,6 +4523,8 @@ begin
         for k := 0 to High(APrev.Series[o].Keys) do
           Leave(o, o, k, APrev.Series[o].Model);
       end;
+    { [R2-D] the old nodes of a kept view under its new transform }
+    UtRebakeViewNodes(AList, oldOf, utSnaps);
     { THE UNIVERSAL TRANSITION, once every view has armed [Batch 136] }
     ArmUniversal(AList, ASeries, APrev, utIdx, utSnaps, utItems, oldOf, rowMap, upd);
     { THE STATES' OWN PROXIES of a reused element go with it [Batch 96]: a
@@ -7418,11 +7439,20 @@ begin
         AData := TyGuidePathData(TyZrSectorPath(s, corners));
       end;
     carSymbol:
-      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
-        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
-        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
-        UtSymbolPlaceX(AEl, P), UtSymbolPlaceY(AEl, P), 1, 1,
-        AData, AHasM, AM, AHasLocal, ALocal);
+      { [R2-D] a graph node on a view: its symbol group's scale is the
+        compensation (G[9]) under the main group's (VSX / VSY) }
+      if AEl.Anim.InView and (AEl.Anim.G[10] = 1) then
+        UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+          NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+          AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+          UtSymbolPlaceX(AEl, P), UtSymbolPlaceY(AEl, P), AEl.Anim.VSX * AEl.Anim.G[9],
+          AEl.Anim.VSY * AEl.Anim.G[9], AData, AHasM, AM, AHasLocal, ALocal)
+      else
+        UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+          NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+          AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+          UtSymbolPlaceX(AEl, P), UtSymbolPlaceY(AEl, P), 1, 1,
+          AData, AHasM, AM, AHasLocal, ALocal);
     carLineSymbol:
       UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
         AEl.Caption.LgG[0] / 2, AEl.Caption.LgG[1] / 2,
@@ -7592,7 +7622,9 @@ begin
   { [F3c] a lines row's line: `line.style.fill = null`, an own key of null
     (it wins a merge, and animates nothing); a radar's line: `fill:
     'none'`, a string no colour parses (the same) }
-  if AEl.Anim.Role = carLinesLine then
+  if (AEl.Anim.Role = carLinesLine)
+    { [R2-D] a lines series' Polyline: `line.style.fill = null` the same }
+    or ((AEl.Anim.UtTag = 1) and (Length(AEl.Anim.UtBase) > 0) and (AEl.Anim.UtBase[0] = 4)) then
   begin
     if AOwn then Put('style.fill', Default(TTyAnimValue))
     else Put('style.fill', TyAnimStr('#000'));
@@ -8196,6 +8228,54 @@ begin
   Result := Length(APieces) = ACount;
 end;
 
+{ [R2-D] THE OLD NODES OF A GRAPH VIEW THE UPDATE KEEPS, under its main
+  group as the new render left it: GraphView's render runs before the
+  transition, its updateProps sets the group to the new view transform at
+  once (setToFinal) -- whatever tween it was in -- and removeEl bakes each
+  old node's computed transform under that. The new transform is any new
+  element's of the series on the view (VSX .. VY); a view with none left
+  keeps the old one. }
+procedure UtRebakeViewNodes(AList: TTyPaintList; const AOldOf: TTyIntegerArray;
+  var ASnaps: TTyUtOldSnapArray);
+var
+  i, s, k: Integer;
+  found: Boolean;
+  el: TTyChartElement;
+  sx, sy, x, y: Double;
+begin
+  for i := 0 to High(ASnaps) do
+  begin
+    if not ASnaps[i].VnOn then Continue;
+    found := False;
+    sx := 1;
+    sy := 1;
+    x := 0;
+    y := 0;
+    for s := 0 to High(AOldOf) do
+    begin
+      if AOldOf[s] <> ASnaps[i].VnSer then Continue;
+      for k := 0 to AList.Count - 1 do
+      begin
+        el := AList.Element(k);
+        if (el.Anim.Series <> s) or not el.Anim.InView then Continue;
+        sx := el.Anim.VSX;
+        sy := el.Anim.VSY;
+        x := el.Anim.VX;
+        y := el.Anim.VY;
+        found := True;
+        Break;
+      end;
+      Break;
+    end;
+    if not found then Continue;
+    UtSymbolPath(ASnaps[i].Sym, ASnaps[i].VnKeep, ASnaps[i].VnSX, ASnaps[i].VnSY,
+      ASnaps[i].VnRot, ASnaps[i].VnOffX, ASnaps[i].VnOffY,
+      x + sx * ASnaps[i].VnGX, y + sy * ASnaps[i].VnGY,
+      sx * ASnaps[i].VnComp, sy * ASnaps[i].VnComp,
+      ASnaps[i].Data, ASnaps[i].HasM, ASnaps[i].M, ASnaps[i].HasLocal, ASnaps[i].Local);
+  end;
+end;
+
 procedure TTyChartAnimSet.SnapUniversal(const ASeries: TTyChartAnimSeriesArray;
   const APrev: TTyChartAnimPrev; AOldIndex, AIdx: TFPHashList;
   out ASnaps: TTyUtOldSnapArray; out AItems: TTyUtItemPathsArray);
@@ -8301,7 +8381,24 @@ begin
     if (TyChartAnimRoleKey(el) = key) or (TyChartAnimRoleKey(el) = '') then sp := op;
     SetLength(ASnaps, n + 1);
     UtSnapEl(el, sp, op, ASnaps[n]);
-    if (not ASnaps[n].Morphing) and Disposed(el.Anim.Series) then Detach(el, sp, ASnaps[n]);
+    if (not ASnaps[n].Morphing) and Disposed(el.Anim.Series) then Detach(el, sp, ASnaps[n])
+    else if (not ASnaps[n].Morphing) and (el.Anim.Role = carSymbol) and el.Anim.InView
+      and (el.Anim.G[10] = 1) then
+    begin
+      { [R2-D] a node of a view that is kept: baked under the main group's
+        new transform once the new render is known (UtRebakeViewNodes) }
+      ASnaps[n].VnOn := True;
+      ASnaps[n].VnSer := el.Anim.Series;
+      ASnaps[n].VnGX := NumOr(sp, 'x', el.Anim.G[5]);
+      ASnaps[n].VnGY := NumOr(sp, 'y', el.Anim.G[6]);
+      ASnaps[n].VnComp := el.Anim.G[9];
+      ASnaps[n].VnSX := NumOr(sp, 'scaleX', el.Caption.LgG[0] / 2);
+      ASnaps[n].VnSY := NumOr(sp, 'scaleY', el.Caption.LgG[1] / 2);
+      ASnaps[n].VnRot := el.Caption.LgG[2];
+      ASnaps[n].VnOffX := el.Caption.LgG[3];
+      ASnaps[n].VnOffY := el.Caption.LgG[4];
+      ASnaps[n].VnKeep := el.Caption.LgKeepAspect;
+    end;
     { [F3c] removeEl: an item element that is a path with a parent takes
       its computed transform as its own (setLocalTransform, decomposed and
       composed again) before the morph reads it -- a gauge's pointer, a
@@ -8518,8 +8615,13 @@ var
   function NewRefs(ASer, ARow: Integer): TNewRefArray;
   var
     els: TTyIntegerArray;
-    k2: Integer;
+    k2, q: Integer;
   begin
+    { [R2-D] stopAnimation(newEl) stops a custom item's own animations too
+      (renderItem's enterFrom, transition), before their first step }
+    if Assigned(OnUtStop) and (ASer >= 0) and (ASer <= High(ASeries))
+      and (ASeries[ASer].SeriesType = 'custom') then
+      OnUtStop(ASer, ARow);
     els := NewEls(ASer, ARow);
     SetLength(Result, Length(els));
     for k2 := 0 to High(els) do
@@ -8531,8 +8633,21 @@ var
     end;
     { read once every path is stopped: a role's proxy may be shared }
     for k2 := 0 to High(Result) do
+    begin
       UtSnapEl(Result[k2].El, UtShapeProxy(Self, Result[k2].El, Result[k2].P), Result[k2].P,
         Result[k2].S);
+      { [R2-D] A LINES ROW'S END SYMBOLS on a Line group this render made:
+        their place, turn and scale are Line.beforeUpdate's, which no frame
+        has run yet -- the morph reads them with no transform (they end at
+        the origin, and take their place on the frame after) }
+      if (Result[k2].El.Anim.Role in [carLinesFrom, carLinesTo])
+        and not ((ASer <= High(AUpd)) and AUpd[ASer] and (ARow <= High(ARowMap[ASer]))
+          and (ARowMap[ASer][ARow] >= 0)) then
+      begin
+        Result[k2].S.HasM := False;
+        for q := 0 to 5 do Result[k2].S.M[q] := 0;
+      end;
+    end;
   end;
 
   { universalTransition.delay(index, count) of the series ASer }
@@ -9588,8 +9703,27 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
   end;
 
 var
+  nc: Integer;
+  combEl: array of TTyChartElement;
+  combAt: TTyIntegerArray;
+
+  { [R2-D] the element a combining host is, before its first child takes
+    its place in the frame: what its text is laid out on }
+  function CombHostOf(AAt: Integer; out AHost: TTyChartElement): Boolean;
+  var k2: Integer;
+  begin
+    for k2 := 0 to nc - 1 do
+      if combAt[k2] = AAt then
+      begin
+        AHost := combEl[k2];
+        Exit(True);
+      end;
+    Result := False;
+  end;
+
+var
   i, h, k, nx: Integer;
-  el, hostS, hostF: TTyChartElement;
+  el, hostS, hostF, tmpEl: TTyChartElement;
   x0, y0, x1, y1, dx, dy, vsx, vsy, vx, vy: Double;
   moved, viewMoves, edgeDone: Boolean;
   g, bp, hostP: TTyChartAnimProxy;
@@ -9601,6 +9735,9 @@ begin
   ADest.Clear;
   extras := nil;
   nx := 0;
+  combEl := nil;
+  combAt := nil;
+  nc := 0;
   for i := 0 to ASource.Count - 1 do
   begin
     { one copy, the one the frame keeps: read in place [P2] }
@@ -9678,6 +9815,16 @@ begin
       a child has its own style -- the element's states are not its }
     if (bp <> nil) and bp.FCombineOn and (Length(bp.FPieces) > 0) then
     begin
+      { [R2-D] combineMorph leaves the host's own path and transform as they
+        are (only the children are drawn): its text is laid out on that }
+      if nc >= Length(combEl) then
+      begin
+        SetLength(combEl, nc * 2 + 4);
+        SetLength(combAt, nc * 2 + 4);
+      end;
+      combEl[nc] := el;
+      combAt[nc] := i;
+      Inc(nc);
       for k := 1 to High(bp.FPieces) do
       begin
         if nx >= Length(extras) then SetLength(extras, nx * 2 + 8);
@@ -9687,6 +9834,25 @@ begin
         Inc(nx);
       end;
       UtPieceApply(el, bp.FPieces[0], 0);
+    end;
+    { [R2-D] A CANDLE'S WICKS are in its box's one path upstream
+      (NormalBoxPath): while the box morphs or combines they are in its
+      frames, not drawn on their own; while its style runs they take its
+      stroke and opacity }
+    if (ASet <> nil) and (el.Anim.Role in [carCandleWickHigh, carCandleWickLow]) then
+    begin
+      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'utx0');
+      if (g <> nil) and (g.FMorphOn or g.FCombineOn) then
+        el.Ignore := True
+      else if (g <> nil) and g.FUtStyleOn then
+      begin
+        tmpEl := el;
+        UtApplyStyle(tmpEl, g);
+        el.Style.StrokeColor := tmpEl.Style.StrokeColor;
+        el.Style.StrokeGradient := tmpEl.Style.StrokeGradient;
+        el.Style.StrokeWidthLogical := tmpEl.Style.StrokeWidthLogical;
+        el.Style.Alpha := tmpEl.Style.Alpha;
+      end;
     end;
     { A LINE'S POINTS IN AN UPDATE [Batch 90] }
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
@@ -9744,7 +9910,9 @@ begin
         or viewMoves) then
     begin
       AnchorOn(ASource.Ref(h)^, el, x0, y0);
-      AnchorOn(ADest.Ref(h)^, el, x1, y1);
+      { [R2-D] a combining host's own shape, not its first child's }
+      if CombHostOf(h, tmpEl) then AnchorOn(tmpEl, el, x1, y1)
+      else AnchorOn(ADest.Ref(h)^, el, x1, y1);
       dx := x1 - x0;
       dy := y1 - y0;
       moved := (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0));

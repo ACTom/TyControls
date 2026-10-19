@@ -857,6 +857,11 @@ type
       the slot, its handler, its params and its api }
     FCustomViews: array of TTyCustomView;
     FCustomPaintEls: TTyGfxElArray;
+    { [R2-D] the device scale the custom paths were tagged at, and whether a
+      universal transition stopped a custom item's own animations (the list
+      is laid out again) }
+    FCustomUtScale: Double;
+    FCustomUtStopped: Boolean;
     FCustomAction: string;
     FCustomClipOn: TTyBoolArray;
     FCustomClip: array of TTyXYWH;
@@ -2661,6 +2666,7 @@ type
       row for a custom item; whether a paint element sits under an element
       with tooltipDisabled }
     function CuLive: Boolean;
+    procedure AnimUtStopCustom(ASeries, ARow: Integer);
     function CustomOnNone(ASlot: Integer): Boolean;
     function CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
     function CustomVisualRow(ASlot, ARow: Integer; out AVisual: TTyVisualRow): Boolean;

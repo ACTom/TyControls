@@ -406,6 +406,92 @@ begin
   Result := (FCuAnim <> nil) and (FCuAnim.ClipCount > 0);
 end;
 
+procedure CustomUtPath(var APe: TTyChartElement; AEl: TTyGfxEl; ASeries, ARow: Integer;
+  var APlace: Integer; AScale: Double); forward;
+
+{ [R2-D] A UNIVERSAL TRANSITION TAKES OVER A CUSTOM ITEM (ASeries, its row
+  inside the data): stopAnimation(newEl) stops what renderItem animates on
+  it -- an enterFrom, a transition -- before its first step, so it rests
+  where renderItem put it (forwarded to the end here, where the render's
+  flush already stepped it). The item's paths in the list are laid out
+  again from there for the transition to read; the list is built again at
+  the next paint. }
+procedure TTyAdvanceChart.AnimUtStopCustom(ASeries, ARow: Integer);
+var
+  view: TTyCustomView;
+  root, gel: TTyGfxEl;
+  k, q, place, slot, raw: Integer;
+  pe, drawn: TTyChartElement;
+  inItem: Boolean;
+  meas: ITyTextMeasurer;
+  ctx: TTyGfxPaintCtx;
+  decal: TTyChartDecal;
+
+  procedure Stop(AEl: TTyGfxEl);
+  var q: Integer;
+  begin
+    AEl.StopAnimation('', True);
+    if AEl.TextContent <> nil then AEl.TextContent.StopAnimation('', True);
+    for q := 0 to High(AEl.Children) do Stop(AEl.Children[q]);
+  end;
+
+begin
+  view := CustomView(ASeries);
+  if view = nil then Exit;
+  root := view.ElOf(ARow);
+  if root = nil then Exit;
+  Stop(root);
+  FCustomUtStopped := True;
+  if FPaintList = nil then Exit;
+  TyGfxUpdateTransforms(view.Root);
+  { the paint as CustomBuild makes it }
+  meas := NewTextMeasurer(96);
+  ctx := Default(TTyGfxPaintCtx);
+  ctx.Scale := FCustomUtScale;
+  ctx.HasInk := True;
+  ctx.Ink := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).TextColor);
+  ctx.ImageSize := @GfxImageSize;
+  for k := 0 to Math.Min(FPaintList.Count - 1, High(FCustomPaintEls)) do
+  begin
+    pe := FPaintList.Element(k);
+    if (pe.Anim.Role <> carCustomPath) or (pe.Anim.Series <> ASeries) or (pe.Anim.Index <> ARow) then
+      Continue;
+    gel := FCustomPaintEls[k];
+    { (the element is the item's: its root or under it) }
+    inItem := False;
+    while gel <> nil do
+    begin
+      if gel = root then inItem := True;
+      gel := gel.Parent;
+    end;
+    if not inItem then Continue;
+    { its shape and style where they rest (an opacity entering from 0 is
+      1), its decal kept }
+    if TyGfxPaintElement(FCustomPaintEls[k], meas, ctx, drawn) then
+    begin
+      decal := pe.Style.Decal;
+      pe.Shape := drawn.Shape;
+      pe.Style := drawn.Style;
+      pe.Style.Decal := decal;
+    end;
+    place := pe.Anim.Sub;
+    { (CustomUtPath writes a transform only where there is one) }
+    for q := 0 to 6 do pe.Anim.G[q] := 0;
+    CustomUtPath(pe, FCustomPaintEls[k], ASeries, ARow, place, FCustomUtScale);
+    FPaintList.SetElement(k, pe);
+  end;
+  { the item's states declared again over its paths as they rest now (a
+    state proxy seeds its rest from them) }
+  slot := SlotOfSeries(ASeries);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  raw := FStores[slot].GetRawIndex(ARow);
+  if (ASeries <= High(FSt)) and (FSt[ASeries].Kind = sskCustom) and (raw >= 0)
+    and (raw <= High(FSt[ASeries].Rows)) and (raw <= High(FSt[ASeries].HostIdx))
+    and (FSt[ASeries].HostIdx[raw] >= 0) then
+    StDeclareCustom(slot, raw, FPaintList);
+end;
+
 { `coordinateSystem: 'none'` (or ''): resolved on nothing, its dimensions
   getCoordSysDimDefs' x and y }
 function TTyAdvanceChart.CustomOnNone(ASlot: Integer): Boolean;
@@ -2097,6 +2183,7 @@ begin
   if (view = nil) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
   if APPI <= 0 then APPI := 96;
   scale := APPI / 96;
+  FCustomUtScale := scale;
   meas := NewTextMeasurer(96);
   decalSkin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).TextColor);

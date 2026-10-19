@@ -1327,6 +1327,24 @@ begin
           el.Caption.FixedRotationRad := lrot;
         end;
       end;
+    end
+    else if Length(g.Pts) >= 2 then
+    begin
+      { [R2-D] A POLYLINE'S ONE PATH for the universal transition: the
+        Polyline Polyline.ts makes (moveTo, lineTo, no smooth), its fill
+        an own key of null and strokeNoScale -- UtBase [4] says so }
+      el.Anim.UtTag := 1;
+      el.Anim.UtRow := g.Row;
+      el.Anim.UtOrder := 0;
+      SetLength(el.Anim.UtData, Length(g.Pts) * 3);
+      for e := 0 to High(g.Pts) do
+      begin
+        if e = 0 then el.Anim.UtData[0] := 1 else el.Anim.UtData[e * 3] := 2;
+        el.Anim.UtData[e * 3 + 1] := g.Pts[e].X;
+        el.Anim.UtData[e * 3 + 2] := g.Pts[e].Y;
+      end;
+      el.Anim.UtBase := TTyDoubleArray.Create(4);
+      el.Anim.UtNoScale := True;
     end;
     AList.Add(el);
     Inc(Result);
