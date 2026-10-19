@@ -143,7 +143,8 @@ type
     FRowPainter: TTyTermRowPainter;
     FSurface: TBGRABitmap;
     { 画到的大小(客户区);位图本身按块向上取整,拖动改尺寸时不每次重建 }
-    FSurfaceW, FSurfaceH: Integer;
+    FSurfaceW, FSurfaceH: Integer;   { layout pixels; the bitmap holds FSurfaceScale times that }
+    FSurfaceScale: Integer;          { device pixels per layout pixel the surface is drawn at (#83) }
     FFrameDirty, FAllDirty: Boolean;
     FDirty: array of Boolean;
     { 行复用:上一帧每个视口行的键、帧级参数的签名、这一帧新算的键、搬行的草稿 }
@@ -193,6 +194,9 @@ type
     FSpecKey: string;
     FSpecValid: Boolean;
     FMetrics: TTyTermCellMetrics;
+    FRasterMetrics: TTyTermCellMetrics;   { the surface's cell: FMetrics' times FSurfaceScale (#83) }
+    FRasterSpec: TTyTermFontSpec;         { FSpec at the raster PPI: what the glyphs are drawn with }
+    FRasterValid: Boolean;
     { 色表:259 项 + 光标墨色,键 = (模型, ThemeVersion, StyleClass, StyleOverride) }
     FPalette: array[0..258] of Cardinal;
     FCursorInkRgb: Cardinal;
@@ -363,6 +367,10 @@ type
     function ResolveFontSpec(APPI: Integer): TTyTermFontSpec;
     function SpecKey(APPI: Integer): string;
     function EnsureMetrics(APPI: Integer): Boolean;
+    { The raster metrics and font spec for the device scale AScale, after EnsureMetrics: the
+      cell exactly AScale times the layout cell. A change drops the glyph cache and repaints
+      everything (#83). }
+    procedure EnsureSurfaceMetrics(AScale: Integer);
     function ContentInsets(APPI: Integer): TRect;
     function ScrollBarWidth(APPI: Integer): Integer;
     procedure RequestRelayout;
@@ -608,6 +616,9 @@ type
     function ContrastCache: TTyTermContrastCache;
     function HalfContrastCache: TTyTermContrastCache;
     function Metrics: TTyTermCellMetrics;
+    { the metrics the surface was last drawn with: Metrics at S = 1, the raster cell (S times
+      Metrics' cell) at a device scale (#83) }
+    function SurfaceMetrics: TTyTermCellMetrics;
     function FontSpec: TTyTermFontSpec;
     function SurfaceBitmap: TBGRABitmap;
     function BlinkTimerActive: Boolean;
@@ -937,6 +948,7 @@ begin
   FSyncFirst := -1;
   FSyncLast := -1;
   FGlyphCache := TTyTermGlyphCache.Create;
+  FSurfaceScale := 1;
   FMinContrast := 1;
   FContrastCache := TTyTermContrastCache.Create;
   FHalfContrastCache := TTyTermContrastCache.Create;
@@ -1808,6 +1820,7 @@ begin
   FSpec := spec;
   FMetrics := TyTermMeasureCell(spec);
   FSpecValid := True;
+  FRasterValid := False;
   FGlyphCache.Clear;
   FAllDirty := True;
   FFrameDirty := True;
@@ -1815,6 +1828,30 @@ begin
   { 谁问出来的度量变了(CellRect、CellAt、SizeForGrid、14t 应答……),网格都跟着重排:
     不能让一次查询把「格子变了」这个信号吃掉。在绘制里经 QueueAsyncCall 延后。 }
   RequestRelayout;
+end;
+
+procedure TTyCustomTerminalView.EnsureSurfaceMetrics(AScale: Integer);
+var
+  want: TTyTermFontSpec;
+begin
+  if AScale < 1 then AScale := 1;
+  want := FSpec;
+  want.PPI := FSpec.PPI * AScale;
+  if FRasterValid and (AScale = FSurfaceScale) and (want = FRasterSpec)
+    and (FRasterMetrics.CellW = FMetrics.CellW * AScale)
+    and (FRasterMetrics.CellH = FMetrics.CellH * AScale) then Exit;
+  FRasterSpec := want;
+  if AScale = 1 then
+    FRasterMetrics := FMetrics
+  else
+    FRasterMetrics := TyTermMeasureCellIn(want, FMetrics.CellW * AScale, FMetrics.CellH * AScale);
+  if FRasterValid then
+    { the glyphs were drawn for another raster: none of them fits this one }
+    FGlyphCache.Clear;
+  FRasterValid := True;
+  FSurfaceScale := AScale;
+  FAllDirty := True;
+  FFrameDirty := True;
 end;
 
 function TTyCustomTerminalView.ContentInsets(APPI: Integer): TRect;
@@ -2227,6 +2264,7 @@ var
   P: TTyPainter;
   st: TTyStyleSet;
   bg: Cardinal;
+  sc: TTyCanvasScale;
 
   function Dim(AColor: TTyColor): TTyColor;
   var
@@ -2241,7 +2279,8 @@ begin
     禁用时已经预混)。外框的其余颜色同样预混,opacity 不再交给画笔(表面上画的外框
     EndPaint 时不经画布,画笔的 opacity 本来就落不下来) }
   bg := FFrameColors[257];
-  FSurface.FillRect(0, 0, FSurfaceW, FSurfaceH, TyTermRgbToPixel(bg), dmSet);
+  FSurface.FillRect(0, 0, FSurfaceW * FSurfaceScale, FSurfaceH * FSurfaceScale,
+    TyTermRgbToPixel(bg), dmSet);
   st := CurrentStyle;
   st.Background := Default(TTyFill);
   st.Background.Kind := tfkSolid;
@@ -2256,8 +2295,11 @@ begin
   end;
   P := TTyPainter.Create;
   try
-    { 画布给 nil:EndPaint 不往任何画布上贴(贴由 RenderTo 末尾做) }
-    P.BeginPaintOn(nil, Rect(0, 0, FSurfaceW, FSurfaceH), APPI, FSurface);
+    { 画布给 nil:EndPaint 不往任何画布上贴(贴由 RenderTo 末尾做)。没有画布可问倍率,
+      按表面的倍率画(#83) }
+    sc.Scale := FSurfaceScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, FSurfaceW, FSurfaceH), APPI, FSurface, sc);
     DrawFrame(P, Rect(0, 0, FSurfaceW, FSurfaceH), st);
     P.EndPaint;
   finally
@@ -2281,11 +2323,29 @@ const
 var
   info: TTyDibHeader;
   w, h, ySrc: Integer;
+  s: Integer;
+  src, dst: TRect;
+{$ELSE}
+var
+  s: Integer;
+  src, dst: TRect;
+  piece: TBGRACustomBitmap;
 {$ENDIF}
 begin
+  { APart and the destination are layout pixels. The surface holds S device pixels per layout
+    pixel (#83): its part is S times APart; it lands 1:1 at S = 1 or on a canvas in device
+    units, into the layout rectangle on one in layout units (a Retina window). }
+  s := FSurfaceScale;
+  if s < 1 then s := 1;
+  src := Rect(APart.Left * s, APart.Top * s, APart.Right * s, APart.Bottom * s);
+  if (s = 1) or TyCanvasDeviceScale(ACanvas).DeviceUnits then
+    dst := Rect(ADstX * s, ADstY * s, ADstX * s + (src.Right - src.Left),
+      ADstY * s + (src.Bottom - src.Top))
+  else
+    dst := Rect(ADstX, ADstY, ADstX + (APart.Right - APart.Left), ADstY + (APart.Bottom - APart.Top));
   {$IFDEF LCLWin32}
-  w := APart.Right - APart.Left;
-  h := APart.Bottom - APart.Top;
+  w := src.Right - src.Left;
+  h := src.Bottom - src.Top;
   if (w <= 0) or (h <= 0) then Exit;
   FillChar(info, SizeOf(info), 0);
   info.biSize := SizeOf(info);
@@ -2297,17 +2357,27 @@ begin
   begin
     { 自下而上的 DIB:源矩形的原点在左下角 }
     info.biHeight := FSurface.Height;
-    ySrc := FSurface.Height - APart.Bottom;
+    ySrc := FSurface.Height - src.Bottom;
   end
   else
   begin
     info.biHeight := -FSurface.Height;
-    ySrc := APart.Top;
+    ySrc := src.Top;
   end;
-  TyStretchDIBits(ACanvas.Handle, ADstX, ADstY, w, h, APart.Left, ySrc, w, h,
-    FSurface.Data, info, DIB_RGB_COLORS, SRCCOPY);
+  TyStretchDIBits(ACanvas.Handle, dst.Left, dst.Top, dst.Right - dst.Left, dst.Bottom - dst.Top,
+    src.Left, ySrc, w, h, FSurface.Data, info, DIB_RGB_COLORS, SRCCOPY);
   {$ELSE}
-  FSurface.DrawPart(APart, ACanvas, ADstX, ADstY, True);
+  if (dst.Right - dst.Left = src.Right - src.Left) and (dst.Bottom - dst.Top = src.Bottom - src.Top) then
+    FSurface.DrawPart(src, ACanvas, dst.Left, dst.Top, True)
+  else
+  begin
+    piece := FSurface.GetPart(src);
+    try
+      piece.Draw(ACanvas, dst, True);
+    finally
+      piece.Free;
+    end;
+  end;
   {$ENDIF}
 end;
 
@@ -2347,23 +2417,46 @@ var
   line: TTyTerminalLine;
   rowAction: array of Byte;             { 0 不动,1 从别的行搬,2 画 }
   moved: TIntegerDynArray;
+  sc: TTyCanvasScale;
+  ds: Integer;                          { the device scale this frame is drawn at (#83) }
+  rins, rinner: TRect;                  { ins and inner in the surface's raster pixels }
+
+  function ToRaster(const R: TRect): TRect;
+  begin
+    Result := Rect(R.Left * ds, R.Top * ds, R.Right * ds, R.Bottom * ds);
+  end;
+
+  { the canvas's clip in layout pixels: a canvas in device units clips in device pixels }
+  function LayoutClip: TRect;
+  begin
+    Result := ACanvas.ClipRect;
+    if sc.DeviceUnits and (ds > 1) and not IsRectEmpty(Result) then
+      Result := Rect(Result.Left div ds, Result.Top div ds, (Result.Right + ds - 1) div ds,
+        (Result.Bottom + ds - 1) div ds);
+  end;
+
 begin
   FInRender := True;
   frameStart := NowMs;
   try
     EnsureThemeCurrent;
     EnsureMetrics(APPI);           { 度量变了它自己排队重排 }
+    { 表面按画布的设备倍率画:光栅度量是布局的 ds 倍(#83)。网格、命中、选区、光标仍按布局 }
+    sc := TyCanvasDeviceScale(ACanvas);
+    ds := sc.Scale;
+    if ds < 1 then ds := 1;
+    EnsureSurfaceMetrics(ds);
     { 追上被挤出头部的行(只动选区的行号,不发宿主事件;脏行这一帧画掉) }
     SyncSelectionTrim;
     w := ARect.Right - ARect.Left;
     h := ARect.Bottom - ARect.Top;
     if (w <= 0) or (h <= 0) then Exit;
-    { 表面位图按块向上取整、只长不缩:拖着改尺寸不每次重建 }
-    if (FSurface = nil) or (FSurface.Width < w) or (FSurface.Height < h) then
+    { 表面位图按块向上取整、只长不缩:拖着改尺寸不每次重建。块按光栅像素取整 }
+    if (FSurface = nil) or (FSurface.Width < w * ds) or (FSurface.Height < h * ds) then
     begin
       FreeAndNil(FSurface);
-      FSurface := TBGRABitmap.Create((w + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock,
-        (h + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock);
+      FSurface := TBGRABitmap.Create((w * ds + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock,
+        (h * ds + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock);
       FFrameDirty := True;
     end;
     if (w <> FSurfaceW) or (h <> FSurfaceH) then
@@ -2385,15 +2478,15 @@ begin
     if FFrameDirty then
       PaintFrame(APPI);
     { 行绘制器的这一帧参数 }
-    FRowPainter.Metrics := FMetrics;
-    FRowPainter.Spec := FSpec;
+    FRowPainter.Metrics := FRasterMetrics;
+    FRowPainter.Spec := FRasterSpec;
     FRowPainter.Resolver := @FrameColor;
     FRowPainter.GlyphCache := FGlyphCache;
     FRowPainter.Rasterizer := FRasterizer;
     FRowPainter.DrawBoldBright := FDrawBoldBright;
     FRowPainter.CursorColor := FFrameColors[258];
     FRowPainter.CursorInk := FCursorInkFrame;
-    FRowPainter.CursorWidthPx := Max(1, MulDiv(FSpec.CursorWidthLogical, APPI, 96));
+    FRowPainter.CursorWidthPx := Max(1, MulDiv(FSpec.CursorWidthLogical, APPI, 96)) * ds;
     FRowPainter.RasterBudgetMs := FRasterBudgetMs;
     { output still waiting (a flood): rows scroll away within frames, their new glyphs are
       mostly drawn for nothing -- a smaller budget, the frame comes back sooner }
@@ -2415,6 +2508,7 @@ begin
     FRowPainter.HalfContrastCache := FHalfContrastCache;
     FRowPainter.BeginFrame;
     ins := ContentInsets(APPI);
+    rins := ToRaster(ins);
     buf := FCore.Buffer;
     { 光标:显示、视口在底部、闪烁相位为显示 }
     cursorRow := -1;
@@ -2429,7 +2523,8 @@ begin
     { 帧级参数:色表(含禁用预混)、度量与字体、PPI、列数、聚焦(选区两色跟着它)、粗体变亮、
       网格的位置、最低对比度。任何一个变了,上一帧的键全部作废(主题换了经
       EnsureThemeCurrent 整屏) }
-    frameKey := IntToHex(FPremixSig, 8) + '|' + FSpecKey + '|' + IntToStr(APPI) + '|' + IntToStr(FCore.Cols)
+    frameKey := IntToHex(FPremixSig, 8) + '|' + FSpecKey + '|' + IntToStr(APPI) + 'x' + IntToStr(ds)
+      + '|' + IntToStr(FCore.Cols)
       + '|' + BoolToStr(FHasFocus, '1', '0') + BoolToStr(FDrawBoldBright, '1', '0')
       + '|' + IntToStr(ins.Left) + ',' + IntToStr(ins.Top)
       + '|' + IntToHex(PQWord(@FMinContrast)^, 16);
@@ -2516,7 +2611,8 @@ begin
     { rows are drawn and moved inside the frame only: a grid still waiting to be applied
       (header) can be larger than the client area for a moment }
     inner := Rect(ins.Left, ins.Top, Max(ins.Left, w - ins.Right - ScrollBarWidth(APPI)), Max(ins.Top, h - ins.Bottom));
-    FSurface.ClipRect := inner;
+    rinner := ToRaster(inner);
+    FSurface.ClipRect := rinner;
     if not holding then
     begin
       SetLength(rowAction, FCore.Rows);
@@ -2540,7 +2636,7 @@ begin
         rowAction[r] := 2;
         for s := 0 to FCore.Rows - 1 do
           if (s <> r) and SameRowKey(FRowKeys[s], FNewKeys[r])
-            and ((not FRowKeys[s].YPhase) or ((r - s) * FMetrics.CellH mod period = 0)) then
+            and ((not FRowKeys[s].YPhase) or ((r - s) * FRasterMetrics.CellH mod period = 0)) then
           begin
             rowAction[r] := 1;
             moved[r] := s;
@@ -2548,7 +2644,7 @@ begin
             Break;
           end;
       end;
-      MoveRows(moved, ins);
+      MoveRows(moved, rins);
       incomplete := False;
       for r := 0 to FCore.Rows - 1 do
       begin
@@ -2557,7 +2653,7 @@ begin
         FRowPainter.SelTo := FNewKeys[r].Overlay.SelTo;
         FRowPainter.LinkFrom := FNewKeys[r].Overlay.LinkFrom;
         FRowPainter.LinkTo := FNewKeys[r].Overlay.LinkTo;
-        if not FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
+        if not FRowPainter.PaintRow(FSurface, rins.Left, rins.Top + r * FRasterMetrics.CellH, buf.GetLine(buf.YDisp + r),
           FCore.Cols, FNewKeys[r].Overlay.CursorCol, FNewKeys[r].Overlay.CursorShape) then
         begin
           { 光栅化超了这一帧的预算:这一行缺字,键作废,下一帧整行重画 }
@@ -2582,7 +2678,7 @@ begin
       { 画了或搬了、却不在这次画布裁剪区里的行:补一次失效,下一次 Paint 把它贴上去 }
       if ACanvas <> nil then
       begin
-        clip := ACanvas.ClipRect;
+        clip := LayoutClip;
         if not IsRectEmpty(clip) then
           for r := 0 to FCore.Rows - 1 do
             if (rowAction[r] <> 0) and ((ARect.Top + ins.Top + r * FMetrics.CellH < clip.Top)
@@ -2619,7 +2715,7 @@ begin
     begin
       FLastPaintMs := NowMs;
       FLastFrameCostMs := FLastPaintMs - frameStart;
-      clip := ACanvas.ClipRect;
+      clip := LayoutClip;
       if IsRectEmpty(clip) then
         clip := ARect;
       if not IntersectRect(part, clip, ARect) then
@@ -2656,9 +2752,10 @@ begin
       Inc(cnt);
     end;
   if cnt = 0 then Exit;
-  { inside the frame (RenderTo's clip): a waiting grid larger than the client area }
-  w := Min(FCore.Cols * FMetrics.CellW, FSurface.ClipRect.Right - AInsets.Left);
-  h := FMetrics.CellH;
+  { inside the frame (RenderTo's clip): a waiting grid larger than the client area. In the
+    surface's raster pixels: AInsets are, and a row is the raster cell high (#83) }
+  w := Min(FCore.Cols * FRasterMetrics.CellW, FSurface.ClipRect.Right - AInsets.Left);
+  h := FRasterMetrics.CellH;
   if w <= 0 then Exit;
   if uniform then
   begin
@@ -2741,24 +2838,29 @@ begin
     if tpTextColor in st.Present then fg := Cardinal(st.TextColor) and $FFFFFF;
   end;
   if tpBorderColor in st.Present then line := Cardinal(st.BorderColor) and $FFFFFF;
+  { on the surface: raster pixels, the raster cell and font (#83) }
   ins := ContentInsets(APPI);
-  x := ins.Left + Min(FCore.Buffer.X, FCore.Cols - 1) * FMetrics.CellW;
-  y := ins.Top + CursorViewRow * FMetrics.CellH;
+  ins := Rect(ins.Left * FSurfaceScale, ins.Top * FSurfaceScale, ins.Right * FSurfaceScale,
+    ins.Bottom * FSurfaceScale);
+  x := ins.Left + Min(FCore.Buffer.X, FCore.Cols - 1) * FRasterMetrics.CellW;
+  y := ins.Top + CursorViewRow * FRasterMetrics.CellH;
   cells := TyUnicodeStringCellWidth(FPreedit, UnicodeVersion, AmbiguousWide);
   cells := Max(1, Min(cells, FCore.Cols - Min(FCore.Buffer.X, FCore.Cols - 1)));
-  w := cells * FMetrics.CellW;
-  FSurface.FillRect(x, y, x + w, y + FMetrics.CellH, TyTermRgbToPixel(bg), dmSet);
+  w := cells * FRasterMetrics.CellW;
+  FSurface.FillRect(x, y, x + w, y + FRasterMetrics.CellH, TyTermRgbToPixel(bg), dmSet);
   key := Default(TTyTermGlyphKey);
   key.Text := FPreedit;
   key.Cells := cells;
   glyph := FGlyphCache.Find(key);
   if glyph = nil then
   begin
-    glyph := FRasterizer.Rasterize(key, FSpec, FMetrics);
+    glyph := FRasterizer.Rasterize(key, FRasterSpec, FRasterMetrics);
     FGlyphCache.Add(key, glyph);
   end;
-  TyTermBlendMask(FSurface, x + glyph.OffsetX, y + glyph.OffsetY, glyph.Mask, fg, Rect(x, y, x + w, y + FMetrics.CellH));
-  FSurface.FillRect(x, y + FMetrics.CellH - FMetrics.LineW, x + w, y + FMetrics.CellH, TyTermRgbToPixel(line), dmSet);
+  TyTermBlendMask(FSurface, x + glyph.OffsetX, y + glyph.OffsetY, glyph.Mask, fg,
+    Rect(x, y, x + w, y + FRasterMetrics.CellH));
+  FSurface.FillRect(x, y + FRasterMetrics.CellH - FRasterMetrics.LineW, x + w,
+    y + FRasterMetrics.CellH, TyTermRgbToPixel(line), dmSet);
   FSurface.InvalidateBitmap;
 end;
 
@@ -3753,6 +3855,11 @@ end;
 function TTyCustomTerminalView.Metrics: TTyTermCellMetrics;
 begin
   Result := FMetrics;
+end;
+
+function TTyCustomTerminalView.SurfaceMetrics: TTyTermCellMetrics;
+begin
+  Result := FRasterMetrics;
 end;
 
 function TTyCustomTerminalView.FontSpec: TTyTermFontSpec;

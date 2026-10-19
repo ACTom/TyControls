@@ -294,6 +294,10 @@ type
 
 { The cell for a font (design spec 10.2); not cached here -- the caller keys it. }
 function TyTermMeasureCell(const ASpec: TTyTermFontSpec): TTyTermCellMetrics;
+{ The glyph box measured at ASpec's font, laid in a cell of ACellW x ACellH given by the
+  caller: the raster cell, exactly S times the layout one, with the font at S times the PPI
+  (#83) -- a cell measured on its own at that PPI is often a pixel off. }
+function TyTermMeasureCellIn(const ASpec: TTyTermFontSpec; ACellW, ACellH: Integer): TTyTermCellMetrics;
 { 0..15 Tango (only for tests and a missing theme), 16..231 the cube, 232..255 the
   greys -- src/browser/Types.ts:183-227 }
 function TyTermDefaultPaletteColor(AIndex: Integer): Cardinal;
@@ -568,10 +572,63 @@ begin
     and (A.CursorWidthLogical = B.CursorWidthLogical);
 end;
 
-function TyTermMeasureCell(const ASpec: TTyTermFontSpec): TTyTermCellMetrics;
+{ The glyph box of ASpec's font: CharW, CharH, and the baseline and x-line below its top. }
+procedure MeasureGlyphBox(const ASpec: TTyTermFontSpec; var M: TTyTermCellMetrics;
+  out ABase, AXLine: Integer);
 var
   bmp: TBGRABitmap;
-  m: TFontPixelMetric;
+  fm: TFontPixelMetric;
+  ppi, xLine, base: Integer;
+begin
+  ppi := ASpec.PPI;
+  if ppi <= 0 then ppi := 96;
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(bmp, ASpec.MainName, ASpec.SizeLogical, 400, ppi);
+    M.CharW := Ceil(bmp.TextSize(StringOfChar('W', 32)).cx / 32);
+    fm := bmp.FontPixelMetric;
+    { The cell is the font's line height (design spec 10.2). Measured on Windows
+      (Consolas 9/12 pt at 96/144 PPI, plan experiment E1): Lineheight = TextSize('Ag').cy
+      = TextSize of a CJK character, 14 / 22 / 19 / 28 px, and the CJK glyphs ink
+      inside it; where the metric is undefined, TextSize('Ag') stands in. }
+    if fm.Defined and (fm.Lineheight > 0) then
+    begin
+      M.CharH := fm.Lineheight;
+      base := fm.Baseline;
+      xLine := fm.xLine;
+    end
+    else
+    begin
+      M.CharH := bmp.TextSize('Ag').cy;
+      base := M.CharH * 4 div 5;
+      xLine := M.CharH * 2 div 5;
+    end;
+  finally
+    bmp.Free;
+  end;
+  if M.CharW < 1 then M.CharW := 1;
+  if M.CharH < 1 then M.CharH := 1;
+  ABase := base;
+  AXLine := xLine;
+end;
+
+{ Everything below the cell's top, for M's CellW x CellH. }
+procedure PlaceInCell(const ASpec: TTyTermFontSpec; var M: TTyTermCellMetrics; ABase, AXLine: Integer);
+var
+  ppi: Integer;
+begin
+  ppi := ASpec.PPI;
+  if ppi <= 0 then ppi := 96;
+  M.TextTop := (M.CellH - M.CharH) div 2;
+  M.Baseline := M.TextTop + ABase;
+  M.LineW := Max(1, MulDiv(ASpec.UnderlineWidthLogical, ppi, 96));
+  M.UnderlineY := Min(M.CellH - M.LineW, M.Baseline + M.LineW);
+  M.StrikeY := M.TextTop + (AXLine + ABase) div 2 - M.LineW div 2;
+  M.OverlineY := M.TextTop;
+end;
+
+function TyTermMeasureCell(const ASpec: TTyTermFontSpec): TTyTermCellMetrics;
+var
   ppi, pct, xLine, base: Integer;
 begin
   Result := Default(TTyTermCellMetrics);
@@ -579,40 +636,21 @@ begin
   if ppi <= 0 then ppi := 96;
   pct := ASpec.LineHeightPercent;
   if pct < 100 then pct := 100;
-  bmp := TBGRABitmap.Create(1, 1);
-  try
-    TyConfigureTextFont(bmp, ASpec.MainName, ASpec.SizeLogical, 400, ppi);
-    Result.CharW := Ceil(bmp.TextSize(StringOfChar('W', 32)).cx / 32);
-    m := bmp.FontPixelMetric;
-    { The cell is the font's line height (design spec 10.2). Measured on Windows
-      (Consolas 9/12 pt at 96/144 PPI, plan experiment E1): Lineheight = TextSize('Ag').cy
-      = TextSize of a CJK character, 14 / 22 / 19 / 28 px, and the CJK glyphs ink
-      inside it; where the metric is undefined, TextSize('Ag') stands in. }
-    if m.Defined and (m.Lineheight > 0) then
-    begin
-      Result.CharH := m.Lineheight;
-      base := m.Baseline;
-      xLine := m.xLine;
-    end
-    else
-    begin
-      Result.CharH := bmp.TextSize('Ag').cy;
-      base := Result.CharH * 4 div 5;
-      xLine := Result.CharH * 2 div 5;
-    end;
-  finally
-    bmp.Free;
-  end;
-  if Result.CharW < 1 then Result.CharW := 1;
-  if Result.CharH < 1 then Result.CharH := 1;
+  MeasureGlyphBox(ASpec, Result, base, xLine);
   Result.CellW := Max(1, Result.CharW + MulDiv(ASpec.LetterSpacingLogical, ppi, 96));
   Result.CellH := Max(Result.CharH, Ceil(Result.CharH * pct / 100));
-  Result.TextTop := (Result.CellH - Result.CharH) div 2;
-  Result.Baseline := Result.TextTop + base;
-  Result.LineW := Max(1, MulDiv(ASpec.UnderlineWidthLogical, ppi, 96));
-  Result.UnderlineY := Min(Result.CellH - Result.LineW, Result.Baseline + Result.LineW);
-  Result.StrikeY := Result.TextTop + (xLine + base) div 2 - Result.LineW div 2;
-  Result.OverlineY := Result.TextTop;
+  PlaceInCell(ASpec, Result, base, xLine);
+end;
+
+function TyTermMeasureCellIn(const ASpec: TTyTermFontSpec; ACellW, ACellH: Integer): TTyTermCellMetrics;
+var
+  xLine, base: Integer;
+begin
+  Result := Default(TTyTermCellMetrics);
+  MeasureGlyphBox(ASpec, Result, base, xLine);
+  Result.CellW := Max(1, ACellW);
+  Result.CellH := Max(1, ACellH);
+  PlaceInCell(ASpec, Result, base, xLine);
 end;
 
 { ---- colours --------------------------------------------------------------------- }
