@@ -936,6 +936,9 @@ type
     constructor Create;
     procedure Clear;
     function Add(const AElement: TTyChartElement): Integer;
+    { [R2-H] Add, answering the new element's slot: a caller that builds the
+      element further works on it there (valid until the next Add or Clear) }
+    function AddRef(const AElement: TTyChartElement): PTyChartElement;
     { The element at its INSERTION index. }
     function Element(AIndex: Integer): TTyChartElement;
     { The same element BY REFERENCE, for a loop that only reads it [P2]:
@@ -1290,6 +1293,15 @@ begin
   Result := FCount;
   Inc(FCount);
   FOrdered := False;
+end;
+
+function TTyPaintList.AddRef(const AElement: TTyChartElement): PTyChartElement;
+var k: Integer;
+begin
+  { Add first, on its own: Add can grow FItems, and FItems[Add(...)] may
+    take the array's address before the call moves it }
+  k := Add(AElement);
+  Result := @FItems[k];
 end;
 
 procedure TTyPaintList.SetElement(AIndex: Integer;

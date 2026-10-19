@@ -9718,6 +9718,7 @@ procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
 var
   i, h, k, nx: Integer;
   el, hostS, hostF, tmpEl: TTyChartElement;
+  pel: PTyChartElement;
   x0, y0, x1, y1, dx, dy, vsx, vsy, vx, vy: Double;
   moved, viewMoves, edgeDone: Boolean;
   g, bp, hostP: TTyChartAnimProxy;
@@ -9731,75 +9732,77 @@ begin
   nx := 0;
   for i := 0 to ASource.Count - 1 do
   begin
-    { one copy, the one the frame keeps: read in place [P2] }
-    el := ASource.Ref(i)^;
+    { one copy, the one the frame keeps: read in place [P2] -- and [R2-H]
+      made in the frame's own slot, worked on there (no second copy into
+      the list, no finalising of a local) }
+    pel := ADest.AddRef(ASource.Ref(i)^);
     { [F3d] THE ROAM GROUP'S TWEEN: a graph's edges are laid out again in the
       group as it is now (their own percent and shape over it); everything
       else of the group is carried after its own frame }
-    viewMoves := ViewNow(ASet, el, vsx, vsy, vx, vy);
+    viewMoves := ViewNow(ASet, pel^, vsx, vsy, vx, vy);
     edgeDone := False;
-    if viewMoves and (el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo]) then
+    if viewMoves and (pel^.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo]) then
     begin
       bp := nil;
       if i <= High(ABind) then bp := ABind[i];
-      if bp <> nil then GraphEdgeFrom(el, bp.Num('shape.percent'), bp, ASet)
-      else GraphEdgeFrom(el, 1, nil, ASet);
+      if bp <> nil then GraphEdgeFrom(pel^, bp.Num('shape.percent'), bp, ASet)
+      else GraphEdgeFrom(pel^, 1, nil, ASet);
       edgeDone := True;
     end;
     if (i <= High(ABind)) and (ABind[i] <> nil) and not edgeDone then
-      TyAnimApply(el, ABind[i]);
+      TyAnimApply(pel^, ABind[i]);
     { A MORPH and a universal transition's style [Batch 136]; a treemap
       rect's from the set, its proxy role being none [Batch 138] }
     { [F3c] the proxy of the path's own key: its role's where that is the
       one, else the set's }
     bp := nil;
-    key := UtElKey(el);
-    if key = '' then key := UtFadeKey(el);
+    key := UtElKey(pel^);
+    if key = '' then key := UtFadeKey(pel^);
     if key <> '' then
     begin
       if (i <= High(ABind)) and (ABind[i] <> nil) and (ABind[i].FRole = key) then bp := ABind[i]
-      else if ASet <> nil then bp := ASet.Find(el.Anim.Series, UtRowOf(el), key);
+      else if ASet <> nil then bp := ASet.Find(pel^.Anim.Series, UtRowOf(pel^), key);
     end;
-    if bp <> nil then TyUtApply(el, bp);
-    if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
+    if bp <> nil then TyUtApply(pel^, bp);
+    if (ASet <> nil) and (pel^.Anim.Role in [carLineRun, carLineArea]) then
     begin
-      if el.Anim.Role = carLineRun then g := ASet.Find(el.Anim.Series, -1, 'utFadeRun')
-      else g := ASet.Find(el.Anim.Series, -1, 'utFadeArea');
+      if pel^.Anim.Role = carLineRun then g := ASet.Find(pel^.Anim.Series, -1, 'utFadeRun')
+      else g := ASet.Find(pel^.Anim.Series, -1, 'utFadeArea');
       if (g <> nil) and g.FUtStyleOn then
-        el.Style.Alpha := NumOr(g, 'style.opacity', el.Style.Alpha);
+        pel^.Style.Alpha := NumOr(g, 'style.opacity', pel^.Style.Alpha);
     end;
     { THE STATES [Batch 94] }
     if (i <= High(AStBind)) and (AStBind[i] <> nil) then
-      TyAnimApplyState(el, AStBind[i], (i <= High(ABind)) and (ABind[i] = AStBind[i]));
+      TyAnimApplyState(pel^, AStBind[i], (i <= High(ABind)) and (ABind[i] = AStBind[i]));
     { [F3a] A TREE NODE'S GROUP slides on a proxy of its own; a label placed
       on its own rides it too -- [F3d] placed again on the box its host's
       path draws now (the pop-in's scale too) }
-    if (ASet <> nil) and ((el.Anim.Role = carTreeNode) or el.Anim.RideTree) then
+    if (ASet <> nil) and ((pel^.Anim.Role = carTreeNode) or pel^.Anim.RideTree) then
     begin
-      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'treeGroup');
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'treeGroup');
       dx := 0;
       dy := 0;
       if (g <> nil) and not g.AtFinal then
       begin
-        x1 := NumOr(g, 'x', el.Anim.G[5]);
-        y1 := NumOr(g, 'y', el.Anim.G[6]);
+        x1 := NumOr(g, 'x', pel^.Anim.G[5]);
+        y1 := NumOr(g, 'y', pel^.Anim.G[6]);
         ZrGroupPlace(x1, y1);
-        dx := (x1 - el.Anim.G[5]) * el.Anim.G[7];
-        dy := (y1 - el.Anim.G[6]) * el.Anim.G[7];
+        dx := (x1 - pel^.Anim.G[5]) * pel^.Anim.G[7];
+        dy := (y1 - pel^.Anim.G[6]) * pel^.Anim.G[7];
       end;
-      if el.Anim.RideTree then
+      if pel^.Anim.RideTree then
       begin
-        g := ASet.Find(el.Anim.Series, el.Anim.Index, 'symbol');
+        g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'symbol');
         x0 := 1;
         y0 := 1;
         if (g <> nil) and not g.AtFinal then
         begin
-          if el.Anim.G[2] <> 0 then x0 := NumOr(g, 'scaleX', el.Anim.G[2]) / el.Anim.G[2];
-          if el.Anim.G[3] <> 0 then y0 := NumOr(g, 'scaleY', el.Anim.G[3]) / el.Anim.G[3];
+          if pel^.Anim.G[2] <> 0 then x0 := NumOr(g, 'scaleX', pel^.Anim.G[2]) / pel^.Anim.G[2];
+          if pel^.Anim.G[3] <> 0 then y0 := NumOr(g, 'scaleY', pel^.Anim.G[3]) / pel^.Anim.G[3];
         end;
-        if (dx <> 0) or (dy <> 0) or (x0 <> 1) or (y0 <> 1) then RideBox(el, x0, y0, dx, dy);
+        if (dx <> 0) or (dy <> 0) or (x0 <> 1) or (y0 <> 1) then RideBox(pel^, x0, y0, dx, dy);
       end
-      else if (dx <> 0) or (dy <> 0) then MoveSymbol(el, dx, dy);
+      else if (dx <> 0) or (dy <> 0) then MoveSymbol(pel^, dx, dy);
     end;
     { A COMBINING ELEMENT IS DRAWN AS ITS CHILDREN [Batch 137]: the first in
       its place, the others after the list, silent (insertion indices kept);
@@ -9809,101 +9812,100 @@ begin
       for k := 1 to High(bp.FPieces) do
       begin
         if nx >= Length(extras) then SetLength(extras, nx * 2 + 8);
-        extras[nx] := el;
+        extras[nx] := pel^;
         UtPieceApply(extras[nx], bp.FPieces[k], k);
         extras[nx].Silent := True;
         Inc(nx);
       end;
-      UtPieceApply(el, bp.FPieces[0], 0);
+      UtPieceApply(pel^, bp.FPieces[0], 0);
     end;
     { [R2-D] A CANDLE'S WICKS are in its box's one path upstream
       (NormalBoxPath): while the box morphs or combines they are in its
       frames, not drawn on their own; while its style runs they take its
       stroke and opacity }
-    if (ASet <> nil) and (el.Anim.Role in [carCandleWickHigh, carCandleWickLow]) then
+    if (ASet <> nil) and (pel^.Anim.Role in [carCandleWickHigh, carCandleWickLow]) then
     begin
-      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'utx0');
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'utx0');
       if (g <> nil) and (g.FMorphOn or g.FCombineOn) then
-        el.Ignore := True
+        pel^.Ignore := True
       else if (g <> nil) and g.FUtStyleOn then
       begin
-        tmpEl := el;
+        tmpEl := pel^;
         UtApplyStyle(tmpEl, g);
-        el.Style.StrokeColor := tmpEl.Style.StrokeColor;
-        el.Style.StrokeGradient := tmpEl.Style.StrokeGradient;
-        el.Style.StrokeWidthLogical := tmpEl.Style.StrokeWidthLogical;
-        el.Style.Alpha := tmpEl.Style.Alpha;
+        pel^.Style.StrokeColor := tmpEl.Style.StrokeColor;
+        pel^.Style.StrokeGradient := tmpEl.Style.StrokeGradient;
+        pel^.Style.StrokeWidthLogical := tmpEl.Style.StrokeWidthLogical;
+        pel^.Style.Alpha := tmpEl.Style.Alpha;
       end;
     end;
     { A LINE'S POINTS IN AN UPDATE [Batch 90] }
-    if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
-      ApplyLine(el, ASet.Find(el.Anim.Series, -1, 'linePoly'),
-        ASet.Find(el.Anim.Series, -1, 'lineArea'));
+    if (ASet <> nil) and (pel^.Anim.Role in [carLineRun, carLineArea]) then
+      ApplyLine(pel^, ASet.Find(pel^.Anim.Series, -1, 'linePoly'),
+        ASet.Find(pel^.Anim.Series, -1, 'lineArea'));
     { A RIPPLE IS IN ITS SYMBOL'S GROUP, and the group moves in an update
       [Batch 92] }
-    if (ASet <> nil) and (el.Anim.Role = carRipple) then
+    if (ASet <> nil) and (pel^.Anim.Role = carRipple) then
     begin
-      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'effectSymbol');
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'effectSymbol');
       if (g <> nil) and not g.AtFinal then
-        TyShapeMove(el.Shape, NumOr(g, 'x', el.Anim.G[8]) - el.Anim.G[8],
-          NumOr(g, 'y', el.Anim.G[9]) - el.Anim.G[9]);
+        TyShapeMove(pel^.Shape, NumOr(g, 'x', pel^.Anim.G[8]) - pel^.Anim.G[8],
+          NumOr(g, 'y', pel^.Anim.G[9]) - pel^.Anim.G[9]);
     end;
     { [F3a] A GRAPH EDGE'S LABEL is placed from its line's percent, whatever
       its own fade does }
-    if (ASet <> nil) and (el.Anim.Role = carGraphEdgeLabel) then
+    if (ASet <> nil) and (pel^.Anim.Role = carGraphEdgeLabel) then
     begin
-      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'gedge');
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'gedge');
       if (g <> nil) and (not g.AtFinal or viewMoves) then
-        GraphEdgeFrom(el, g.Num('shape.percent'), g, ASet)
+        GraphEdgeFrom(pel^, g.Num('shape.percent'), g, ASet)
       else if viewMoves then
-        GraphEdgeFrom(el, 1, nil, ASet);
+        GraphEdgeFrom(pel^, 1, nil, ASet);
     end;
     { [F3d] the rest of a roam group that moves: carried by the transform
       now over the one at rest -- a label that follows its host follows it
       as drawn (below) }
-    if viewMoves and not (el.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo,
-      carGraphEdgeLabel]) and not ((el.Anim.Role = carLabel) and (el.Anim.HostPlus1 > 0)) then
-      ViewMap(el, vsx, vsy, vx, vy);
-    h := el.Anim.HostPlus1 - 1;
+    if viewMoves and not (pel^.Anim.Role in [carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo,
+      carGraphEdgeLabel]) and not ((pel^.Anim.Role = carLabel) and (pel^.Anim.HostPlus1 > 0)) then
+      ViewMap(pel^, vsx, vsy, vx, vy);
+    h := pel^.Anim.HostPlus1 - 1;
     { [F3c] A TEXT ON A MORPHING HOST rides the morph frame: zrender lays a
       textContent out on its host's bounding rect, which the replaced
       buildPath draws (with no transform) -- its stroke in it as
       Path.getBoundingRect grows it. A sector's own positions read the
       shape, which a morph leaves as it is. }
-    if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
-      and LabelOnMorph(ASource.Element(h), ADest.Element(h), el, h, x0, y0, x1, y1) then
+    if (pel^.Anim.Role = carLabel) and (h >= 0) and (h < i)
+      and LabelOnMorph(ASource.Element(h), ADest.Element(h), pel^, h, x0, y0, x1, y1) then
     begin
       dx := x1 - x0;
       dy := y1 - y0;
       if (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0)) then
       begin
-        el.Caption.X := el.Caption.X + dx;
-        el.Caption.Y := el.Caption.Y + dy;
-        el.Shape.Bounds := TyRectF(el.Shape.Bounds.Left + dx, el.Shape.Bounds.Top + dy,
-          el.Shape.Bounds.Right + dx, el.Shape.Bounds.Bottom + dy);
+        pel^.Caption.X := pel^.Caption.X + dx;
+        pel^.Caption.Y := pel^.Caption.Y + dy;
+        pel^.Shape.Bounds := TyRectF(pel^.Shape.Bounds.Left + dx, pel^.Shape.Bounds.Top + dy,
+          pel^.Shape.Bounds.Right + dx, pel^.Shape.Bounds.Bottom + dy);
       end;
     end
     { (a tree node's group slides on after its symbol rests) }
-    else if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
+    else if (pel^.Anim.Role = carLabel) and (h >= 0) and (h < i)
       and (((h <= High(ABind)) and (ABind[h] <> nil)
         and (not ABind[h].AtFinal or (ASource.Ref(h)^.Anim.Role = carTreeNode)))
         { [F3d] or its host carried by its roam group }
         or viewMoves) then
     begin
-      AnchorOn(ASource.Ref(h)^, el, x0, y0);
-      AnchorOn(ADest.Ref(h)^, el, x1, y1);
+      AnchorOn(ASource.Ref(h)^, pel^, x0, y0);
+      AnchorOn(ADest.Ref(h)^, pel^, x1, y1);
       dx := x1 - x0;
       dy := y1 - y0;
       moved := (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0));
       if moved then
       begin
-        el.Caption.X := el.Caption.X + dx;
-        el.Caption.Y := el.Caption.Y + dy;
-        el.Shape.Bounds := TyRectF(el.Shape.Bounds.Left + dx, el.Shape.Bounds.Top + dy,
-          el.Shape.Bounds.Right + dx, el.Shape.Bounds.Bottom + dy);
+        pel^.Caption.X := pel^.Caption.X + dx;
+        pel^.Caption.Y := pel^.Caption.Y + dy;
+        pel^.Shape.Bounds := TyRectF(pel^.Shape.Bounds.Left + dx, pel^.Shape.Bounds.Top + dy,
+          pel^.Shape.Bounds.Right + dx, pel^.Shape.Bounds.Bottom + dy);
       end;
     end;
-    ADest.Add(el);
   end;
   for i := 0 to nx - 1 do ADest.Add(extras[i]);
   { THE GHOSTS, after the list: silent, so a hit never lands on one }
