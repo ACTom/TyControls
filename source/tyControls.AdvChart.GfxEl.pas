@@ -1771,6 +1771,14 @@ begin
     R.HasLineWidth := True;
     R.LineWidth := x;
   end;
+  { [R2-F] the stroke's dashes and their phase, as written (Text.ts hands
+    lineDash and lineDashOffset to every TSpan that strokes) }
+  R.LineDash := TyDashTextOf(S.Find('lineDash'));
+  if NumOf(S.Find('lineDashOffset'), x) then
+  begin
+    R.HasLineDashOffset := True;
+    R.LineDashOffset := x;
+  end;
   R.Align := AlignWord(S.Find('align'));
   R.VAlign := VAlignWord(S.Find('verticalAlign'));
   if NumOf(S.Find('lineHeight'), x) then
@@ -2667,6 +2675,10 @@ begin
         SetLength(dash, d.Count);
         for i := 0 to d.Count - 1 do dash[i] := JsNum(d.Items[i]) * us / ACtx.Scale;
         AOut.Style.DashLogical := dash;
+        { [R2-F] lineDashOffset, scaled as the pattern is }
+        d := AEl.Style.Find('lineDashOffset');
+        if (d <> nil) and (d.JSONType = jtNumber) then
+          AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale;
       end;
     end;
   end;

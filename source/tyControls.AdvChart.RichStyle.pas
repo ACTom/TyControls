@@ -136,6 +136,10 @@ type
       AV: TTyTextAnchorV): TTyRectF;
   end;
 
+{ [F4c] a textBorderType (or a graphic text's lineDash) as written: a word
+  as itself, a number or an array as its JSON text, anything else '' }
+function TyDashTextOf(AData: TJSONData): string;
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvChart.Option,
@@ -322,6 +326,12 @@ begin
     Result.LineWidth := x;
   end;
   Result.LineDash := TyDashTextOf(ts.Find('textBorderType'));
+  { [R2-F] textBorderDashOffset }
+  if NumOf(ts.Find('textBorderDashOffset'), x) then
+  begin
+    Result.HasLineDashOffset := True;
+    Result.LineDashOffset := x;
+  end;
   if NumOf(ts.Find('opacity'), x) then
   begin
     Result.HasOpacity := True;
@@ -421,6 +431,17 @@ begin
   { textBorderType: retrieve2(the style's own, the global's) [F4c] }
   S.LineDash := TyDashTextOf(Get(AOwn, 'textBorderType'));
   if S.LineDash = '' then S.LineDash := AGlobal.LineDash;
+  { textBorderDashOffset: retrieve2 the same way (labelStyle.ts) [R2-F] }
+  if NumOf(Get(AOwn, 'textBorderDashOffset'), x) then
+  begin
+    S.HasLineDashOffset := True;
+    S.LineDashOffset := x;
+  end
+  else if AGlobal.HasLineDashOffset then
+  begin
+    S.HasLineDashOffset := True;
+    S.LineDashOffset := AGlobal.LineDashOffset;
+  end;
   if NumOf(Get(AOwn, 'opacity'), x) then
   begin
     S.HasOpacity := True;

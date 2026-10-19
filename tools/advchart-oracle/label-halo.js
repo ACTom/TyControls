@@ -59,6 +59,13 @@ const CASES = [
   { id: 'offset', option: bar({ textBorderType: 'dashed', textBorderDashOffset: 4 }) },
   { id: 'global', option: bar({}, { textStyle: { textBorderType: 'dotted' } }) },
   { id: 'rich', option: bar({ formatter: '{a|A}{b|B}', rich: { a: { textBorderType: 'dashed' }, b: {} } }) },
+  // [R2-F] textBorderDashOffset: the global textStyle's under the label's, and a rich
+  // label's phase -- the block's, whatever a token writes (Text.ts: style.lineDashOffset)
+  { id: 'offset-global', option: bar({ textBorderType: 'dashed' }, { textStyle: { textBorderDashOffset: 5 } }) },
+  { id: 'offset-own', option: bar({ textBorderType: [3, 2], textBorderDashOffset: 2 }, { textStyle: { textBorderDashOffset: 5 } }) },
+  { id: 'offset-negative', option: bar({ textBorderType: 'dotted', textBorderDashOffset: -7 }) },
+  { id: 'rich-offset', option: bar({ formatter: '{a|A}{b|B}', textBorderDashOffset: 3,
+    rich: { a: { textBorderType: 'dashed', textBorderDashOffset: 7 }, b: { textBorderType: [1, 2] } } }) },
 ];
 
 function textsOf(chart) {
@@ -103,6 +110,10 @@ function generate() {
     { name: 'solid none', ok: by('solid').texts[0].pattern === null },
     { name: 'global dotted', ok: by('global').texts[0].lineDash === 'dotted' },
     { name: 'rich: the token a dashed, b not', ok: by('rich').texts.some(t => t.text === 'A' && t.lineDash === 'dashed') && by('rich').texts.some(t => t.text === 'B' && t.lineDash == null) },
+    // [R2-F]
+    { name: 'the global offset under the label', ok: by('offset-global').texts[0].lineDashOffset === hex(5) },
+    { name: "the label's own offset over the global's", ok: by('offset-own').texts[0].lineDashOffset === hex(2) },
+    { name: "rich: every token the block's phase", ok: by('rich-offset').texts.every(t => t.lineDashOffset === hex(3)) },
   ];
   return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, cases: recs, guards };
 }

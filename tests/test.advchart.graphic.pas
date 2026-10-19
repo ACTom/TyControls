@@ -48,6 +48,8 @@ type
     Log: array of TGfxLogEntry;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
+    { the measurer the chart lays its texts out with [R2-F] }
+    function NewTextMeasurerForTest: ITyTextMeasurer;
     procedure Down(AX, AY: Integer);
     procedure Move(AX, AY: Integer);
     procedure Up(AX, AY: Integer);
@@ -133,6 +135,11 @@ end;
 function TGfxProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
+end;
+
+function TGfxProbe.NewTextMeasurerForTest: ITyTextMeasurer;
+begin
+  Result := NewTextMeasurer(96);
 end;
 
 procedure TGfxProbe.Down(AX, AY: Integer);

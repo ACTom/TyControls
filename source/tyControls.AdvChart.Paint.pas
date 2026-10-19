@@ -158,6 +158,8 @@ type
     GradBox: TTyXYWH;
     FillEvenOdd: Boolean;
     DashLogical: TTyDoubleArray;
+    { [R2-F] the dash's phase, LOGICAL px: zrender's lineDashOffset }
+    DashOffsetLogical: Double;
     Alpha: Double;                    // 0..1; 1 = opaque
   end;
 
@@ -244,6 +246,10 @@ type
     LineWidth: Double;
     { [F4c] textBorderType as written ('' none) }
     LineDash: string;
+    { [R2-F] textBorderDashOffset (a graphic text's lineDashOffset), when
+      written: a block's goes to every piece (Text.ts: style.lineDashOffset) }
+    HasLineDashOffset: Boolean;
+    LineDashOffset: Double;
     Align: TTyRtAlign;
     VAlign: TTyRtVAlign;
     HasLineHeight: Boolean;
@@ -315,6 +321,8 @@ type
     LineWidth: Double;
     { [F4c] a text's textBorderType as written ('' a solid halo) }
     LineDash: string;
+    { [R2-F] its phase (lineDashOffset), px }
+    LineDashOffset: Double;
     StrokeFirst: Boolean;
     Radius: array[0..3] of Double;
     Opacity: Double;
@@ -366,6 +374,9 @@ type
     LineWidth: Double;
     { [F4c] the global textStyle's textBorderType ('' none) }
     LineDash: string;
+    { [R2-F] and its textBorderDashOffset }
+    HasLineDashOffset: Boolean;
+    LineDashOffset: Double;
     HasOpacity: Boolean;
     Opacity: Double;
     HasShadowColor: Boolean;
@@ -511,6 +522,8 @@ type
       JSON array of numbers; '' (or 'solid') a solid halo. normalizeLineDash
       turns it into a pattern against the halo's width when it is drawn. }
     StrokeType: string;
+    { [R2-F] textBorderDashOffset: the dashes' phase, LOGICAL px }
+    StrokeDashOffset: Double;
     { THE SAME THREE UNDER A HOVER, worked out when the caption is: the host's
       fill lifted (or the emphasis colour it declares) can land in another
       band, and the halo is the lifted fill. HasEmph False keeps the normal

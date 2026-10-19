@@ -1136,9 +1136,10 @@ end;
   contour closed, or -- with a pattern -- in dashes laid along it by its
   length, the pattern's phase starting afresh on each contour, as a canvas
   starts it on each subpath (an odd pattern is said twice); each dash an
-  open subpath of its own. }
+  open subpath of its own. [R2-F] The phase is ADashOffsetDevice along the
+  pattern (a canvas' lineDashOffset), on every contour. }
 procedure TraceHaloOutline(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
-  const ADashDevice: TTyDoubleArray);
+  const ADashDevice: TTyDoubleArray; ADashOffsetDevice: Double = 0);
 var
   px, py: array of Double;
   c, s, np, k: Integer;
@@ -1147,8 +1148,24 @@ var
   var
     pat: array of Double;
     j, di, n: Integer;
-    x0, y0, x1, y1, segLen, pos, left, t: Double;
-    on, open: Boolean;
+    x0, y0, x1, y1, segLen, pos, left, t, sx, sy: Double;
+    on, open, moved: Boolean;
+
+    { [R2-F] a dash's next point: its move made at its first point that goes
+      anywhere, so a dash of no length (a zero in the pattern) is no
+      subpath at all -- under the halo's butt cap a canvas draws nothing
+      there either }
+    procedure DashTo(AX, AY: Double);
+    begin
+      if not moved then
+      begin
+        if (AX = sx) and (AY = sy) then Exit;
+        P.MoveTo(sx, sy);
+        moved := True;
+      end;
+      P.LineTo(AX, AY);
+    end;
+
   begin
     n := Length(ADashDevice);
     if Odd(n) then
@@ -1174,7 +1191,25 @@ var
     end;
     di := 0;
     left := pat[0];
-    on := True;
+    { [R2-F] the phase: where on the pattern the contour starts }
+    if not (IsNan(ADashOffsetDevice) or IsInfinite(ADashOffsetDevice)) then
+    begin
+      pos := ADashOffsetDevice - Floor(ADashOffsetDevice / t) * t;
+      if (pos < 0) or (pos >= t) then pos := 0;
+      while pos > 0 do
+        if pos < left then
+        begin
+          left := left - pos;
+          pos := 0;
+        end
+        else
+        begin
+          pos := pos - left;
+          di := (di + 1) mod Length(pat);
+          left := pat[di];
+        end;
+    end;
+    on := not Odd(di);
     open := False;
     for j := 0 to ACount - 1 do
     begin
@@ -1188,21 +1223,23 @@ var
       begin
         if on and not open then
         begin
-          P.MoveTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
+          sx := x0 + (x1 - x0) * (pos / segLen);
+          sy := y0 + (y1 - y0) * (pos / segLen);
+          moved := False;
           open := True;
         end;
         if segLen - pos <= left then
         begin
           left := left - (segLen - pos);
           pos := segLen;
-          if on then P.LineTo(x1, y1);
+          if on then DashTo(x1, y1);
         end
         else
         begin
           pos := pos + left;
           if on then
           begin
-            P.LineTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
+            DashTo(x0 + (x1 - x0) * (pos / segLen), y0 + (y1 - y0) * (pos / segLen));
             open := False;
           end;
           di := (di + 1) mod Length(pat);
@@ -1408,7 +1445,8 @@ end;
   where two strokes meet the ink is laid once and a translucent halo does
   not darken; dashed as the type says }
 procedure StrokeMaskHalo(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
-  AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
+  AColour: TTyColor; AWidthLogical: Double; const ADashType: string;
+  ADashOffsetLogical: Double = 0);
 var
   pat: TTyDoubleArray;
   k: Integer;
@@ -1425,7 +1463,7 @@ begin
     else
       pat := nil;
     P.BeginPath;
-    TraceHaloOutline(P, AOutline, AOX, AOY, pat);
+    TraceHaloOutline(P, AOutline, AOX, AOY, pat, ADashOffsetLogical * P.PPI / 96);
     { [R2-P] kept: the next frame's halo of the same label at the same place
       replays this one's coverage }
     P.StrokePathKept(AColour, AWidthLogical);
@@ -1438,7 +1476,8 @@ end;
 { a rotated or anchored text's halo: its glyphs as DrawTextRotated puts them }
 procedure HaloRotated(P: TTyPainter; const AText, AFont: string; ASize, AWeight: Integer;
   AX, AY, ARotationRad: Double; AH: TAlignment; AV: TTextLayout;
-  AColour: TTyColor; AWidthLogical: Double; const ADashType: string);
+  AColour: TTyColor; AWidthLogical: Double; const ADashType: string;
+  ADashOffsetLogical: Double = 0);
 var
   sz: TSize;
   r, ox, oy, mw, mh: Integer;
@@ -1483,7 +1522,7 @@ begin
     if key <> '' then KeepHaloOutline(key, ol);
   end;
   try
-    StrokeMaskHalo(P, ol, ox, oy, AColour, AWidthLogical, ADashType);
+    StrokeMaskHalo(P, ol, ox, oy, AColour, AWidthLogical, ADashType, ADashOffsetLogical);
   finally
     if key = '' then ol.Free;
   end;
@@ -1694,7 +1733,8 @@ begin
       halo := CaptionInk(pc.Stroke, a);
       HaloRotated(P, TyInkText(pc.Text), pc.FontFamily,
         TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
-        RtAlign(pc.TextAlign), tlCenter, halo, pc.LineWidth, pc.LineDash);
+        RtAlign(pc.TextAlign), tlCenter, halo, pc.LineWidth, pc.LineDash,
+        pc.LineDashOffset);
     end;
     if not hasInk then Continue;
     s := a;
@@ -1765,7 +1805,7 @@ begin
   end;
   try
     StrokeMaskHalo(P, ol, ox, oy, AHalo, AElement.Caption.StrokeWidthLogical,
-      AElement.Caption.StrokeType);
+      AElement.Caption.StrokeType, AElement.Caption.StrokeDashOffset);
   finally
     if key = '' then ol.Free;
   end;
@@ -2412,7 +2452,7 @@ begin
     end;
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
-    P.SetLineDash(AElement.Style.DashLogical);
+    P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
     if (AElement.Shape.Kind = cskLarge) and (P.Bitmap <> nil) and IdentityMatrix
       and LayerFits then
     begin

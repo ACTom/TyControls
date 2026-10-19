@@ -787,6 +787,9 @@ var
       { [F4c] the token's textBorderType, else the block's }
       if found and (ts.LineDash <> '') then p.LineDash := ts.LineDash
       else p.LineDash := AStyle.LineDash;
+      { [R2-F] the phase is the block's, whatever the token says
+        (Text.ts: style.lineDashOffset || 0) }
+      if AStyle.HasLineDashOffset then p.LineDashOffset := AStyle.LineDashOffset;
     end;
     if found and ts.HasOpacity then p.Opacity := ts.Opacity
     else if AStyle.HasOpacity then p.Opacity := AStyle.Opacity
@@ -947,6 +950,7 @@ var
       begin
         if AStyle.HasLineWidth then p.LineWidth := AStyle.LineWidth else p.LineWidth := 2;
         p.LineDash := AStyle.LineDash;
+        if AStyle.HasLineDashOffset then p.LineDashOffset := AStyle.LineDashOffset;
       end;
       if AStyle.HasOpacity then p.Opacity := AStyle.Opacity else p.Opacity := 1;
       p.ShadowBlur := AStyle.ShadowBlur;

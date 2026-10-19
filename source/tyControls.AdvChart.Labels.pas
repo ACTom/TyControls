@@ -154,6 +154,10 @@ type
     BorderWidthLogical: Double;
     { [F4c] textBorderType as written ('' a solid halo) }
     BorderType: string;
+    { [R2-F] textBorderDashOffset, LOGICAL px: the label's, else the global
+      textStyle's (HasBorderDashOffset: written somewhere) }
+    HasBorderDashOffset: Boolean;
+    BorderDashOffset: Double;
     { A label with its own `backgroundColor` gets no automatic halo. }
     HasBackground: Boolean;
     { A FUNNEL'S `inherit`, which upstream does not route through
@@ -1194,6 +1198,7 @@ begin
     cap.Caption.StrokeColour := stroke;
     cap.Caption.StrokeWidthLogical := strokeW;
     cap.Caption.StrokeType := spec.BorderType;
+    cap.Caption.StrokeDashOffset := spec.BorderDashOffset;
     TyLabelStampEmphasis(spec, hostFill, hostHasFill,
       host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
       LabelInside(host, pos), cap.Caption);
