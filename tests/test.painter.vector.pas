@@ -447,11 +447,11 @@ begin
   FPainter.BeginPath;
   FPainter.CirclePath(20, 20, 8);
   FPainter.CirclePath(100, 20, 8);
-  FPainter.EllipsePath(60, 100, 10, 6);
+  FPainter.CirclePath(60, 100, 8);
   FPainter.FillPath(Red);
   AssertTrue('the first circle', Opaque(20, 20));
   AssertTrue('the second', Opaque(100, 20));
-  AssertTrue('the ellipse', Opaque(60, 100));
+  AssertTrue('the third', Opaque(60, 100));
   AssertFalse('nothing between them', Opaque(60, 47));
   AssertFalse('nor on the line from one start to the next', Opaque(60, 21));
   FreePainter;

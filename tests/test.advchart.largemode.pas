@@ -907,10 +907,10 @@ begin
 end;
 
 { [R2-F] A GRADIENT BATCH IS DRAWN IN TILES, every row of a tile traced into
-  one path. zrender's Circle.buildPath moves to (cx + r, cy) before its arc;
-  BGRA's circle is an arc with no move, so each circle used to join the one
-  before into one polygon -- three points far apart filled the triangle
-  between them. }
+  one path (64 px tiles from the layer's corner). zrender's Circle.buildPath
+  moves to (cx + r, cy) before its arc; BGRA's circle is an arc with no
+  move, so each circle used to join the one before into one polygon --
+  three points in one tile filled the triangle between them. }
 procedure TAdvChartLargeModeTest.TestTiledCirclesAreSubPathsOfTheirOwn;
 var
   bmp: TBGRABitmap;
@@ -920,10 +920,10 @@ var
 begin
   Show('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
     + '"xAxis":{"type":"value","min":0,"max":10},"yAxis":{"type":"value","min":0,"max":10},'
-    + '"series":[{"type":"scatter","large":true,"largeThreshold":1,"symbolSize":16,'
+    + '"series":[{"type":"scatter","large":true,"largeThreshold":1,"symbolSize":6,'
     + '"itemStyle":{"color":{"type":"linear","x":0,"y":0,"x2":1,"y2":0,"colorStops":['
     + '{"offset":0,"color":"#ff0000"},{"offset":1,"color":"#0000ff"}]}},'
-    + '"data":[[1,1],[9,1],[5,9]]}]}');
+    + '"data":[[1,0.6],[1.6,0.6],[1.3,1.1]]}]}');
   g := Default(TTyLargeGeom);
   for k := 0 to FChart.List.Count - 1 do
     if FChart.List.Element(k).Shape.Kind = cskLarge then g := FChart.List.Element(k).Shape.Large;
@@ -934,6 +934,9 @@ begin
   bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
   try
     FChart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    AssertTrue(Format('the three in one tile (%d, %d)', [cx, cy]),
+      (cx div 64 = Round(g.Pts[0]) div 64) and (cy div 64 = Round(g.Pts[1]) div 64)
+      and (cx div 64 = Round(g.Pts[2]) div 64) and (cy div 64 = Round(g.Pts[5]) div 64));
     p := bmp.GetPixel(cx, cy);
     AssertTrue(Format('nothing between the circles at (%d, %d): %d %d %d',
       [cx, cy, p.red, p.green, p.blue]), (p.red > 240) and (p.green > 240) and (p.blue > 240));
