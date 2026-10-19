@@ -11,6 +11,7 @@
  "series": [
   {
    "type": "custom",
+   "renderItem": "@custom-profit",
    "label": {
     "show": true,
     "position": "top"

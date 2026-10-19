@@ -1,0 +1,55 @@
+{
+ "title": {
+  "text": "500,000 Data",
+  "left": 10
+ },
+ "toolbox": {
+  "feature": {
+   "dataZoom": {
+    "yAxisIndex": false
+   },
+   "saveAsImage": {
+    "pixelRatio": 2
+   }
+  }
+ },
+ "tooltip": {
+  "trigger": "axis",
+  "axisPointer": {
+   "type": "shadow"
+  }
+ },
+ "grid": {
+  "bottom": 90
+ },
+ "dataZoom": [
+  {
+   "type": "inside"
+  },
+  {
+   "type": "slider"
+  }
+ ],
+ "xAxis": {
+  "data": [],
+  "silent": false,
+  "splitLine": {
+   "show": false
+  },
+  "splitArea": {
+   "show": false
+  }
+ },
+ "yAxis": {
+  "splitArea": {
+   "show": false
+  }
+ },
+ "series": [
+  {
+   "type": "bar",
+   "data": [],
+   "large": true
+  }
+ ]
+}

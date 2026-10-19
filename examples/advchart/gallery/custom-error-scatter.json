@@ -208,6 +208,7 @@
   {
    "type": "custom",
    "name": "error",
+   "renderItem": "@custom-error-scatter",
    "dimensions": [
     "name",
     "Price",

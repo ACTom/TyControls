@@ -72,6 +72,7 @@
    "name": "Punch Card",
    "type": "custom",
    "coordinateSystem": "polar",
+   "renderItem": "@custom-polar-heatmap",
    "data": [
     [
      0,

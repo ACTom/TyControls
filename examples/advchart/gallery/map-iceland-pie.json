@@ -1,0 +1,164 @@
+{
+ "geo": {
+  "map": "iceland",
+  "roam": true,
+  "aspectScale": 0.42261826174069944,
+  "itemStyle": {
+   "areaColor": "#e7e8ea"
+  },
+  "emphasis": {
+   "label": {
+    "show": false
+   }
+  }
+ },
+ "tooltip": {},
+ "legend": {},
+ "series": [
+  {
+   "type": "pie",
+   "coordinateSystem": "geo",
+   "tooltip": {
+    "formatter": "{b}: {c} ({d}%)"
+   },
+   "label": {
+    "show": false
+   },
+   "labelLine": {
+    "show": false
+   },
+   "animationDuration": 0,
+   "radius": 45,
+   "center": [
+    -19.007740346534653,
+    64.1780281585128
+   ],
+   "data": [
+    {
+     "value": 17,
+     "name": "Category A"
+    },
+    {
+     "value": 58,
+     "name": "Category B"
+    },
+    {
+     "value": 48,
+     "name": "Category C"
+    },
+    {
+     "value": 47,
+     "name": "Category D"
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "geo",
+   "tooltip": {
+    "formatter": "{b}: {c} ({d}%)"
+   },
+   "label": {
+    "show": false
+   },
+   "labelLine": {
+    "show": false
+   },
+   "animationDuration": 0,
+   "radius": 25,
+   "center": [
+    -17.204666089108912,
+    65.44804833928391
+   ],
+   "data": [
+    {
+     "value": 82,
+     "name": "Category A"
+    },
+    {
+     "value": 9,
+     "name": "Category B"
+    },
+    {
+     "value": 31,
+     "name": "Category C"
+    },
+    {
+     "value": 16,
+     "name": "Category D"
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "geo",
+   "tooltip": {
+    "formatter": "{b}: {c} ({d}%)"
+   },
+   "label": {
+    "show": false
+   },
+   "labelLine": {
+    "show": false
+   },
+   "animationDuration": 0,
+   "radius": 30,
+   "center": [
+    -15.264995297029705,
+    64.8592208009264
+   ],
+   "data": [
+    {
+     "value": 17,
+     "name": "Category A"
+    },
+    {
+     "value": 62,
+     "name": "Category B"
+    },
+    {
+     "value": 27,
+     "name": "Category C"
+    },
+    {
+     "value": 73,
+     "name": "Category D"
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "geo",
+   "tooltip": {
+    "formatter": "{b}: {c} ({d}%)"
+   },
+   "label": {
+    "show": false
+   },
+   "labelLine": {
+    "show": false
+   },
+   "animationDuration": 0,
+   "radius": 30,
+   "center": "Vestfirðir",
+   "data": [
+    {
+     "value": 67,
+     "name": "Category A"
+    },
+    {
+     "value": 89,
+     "name": "Category B"
+    },
+    {
+     "value": 46,
+     "name": "Category C"
+    },
+    {
+     "value": 58,
+     "name": "Category D"
+    }
+   ]
+  }
+ ]
+}

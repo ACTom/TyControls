@@ -1,0 +1,13 @@
+{
+ "series": [
+  {
+   "type": "gauge",
+   "data": [
+    {
+     "value": 61.79,
+     "name": "PLP"
+    }
+   ]
+  }
+ ]
+}

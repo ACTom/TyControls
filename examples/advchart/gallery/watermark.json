@@ -1,0 +1,287 @@
+{
+ "backgroundColor": {
+  "type": "pattern",
+  "image": null,
+  "repeat": "repeat"
+ },
+ "tooltip": {},
+ "title": [
+  {
+   "text": "在线构建",
+   "subtext": "总计 10887",
+   "left": "25%",
+   "textAlign": "center"
+  },
+  {
+   "text": "各版本下载",
+   "subtext": "总计 43263",
+   "left": "75%",
+   "textAlign": "center"
+  },
+  {
+   "text": "主题下载",
+   "subtext": "总计 9009",
+   "left": "75%",
+   "top": "50%",
+   "textAlign": "center"
+  }
+ ],
+ "grid": [
+  {
+   "top": 50,
+   "width": "50%",
+   "bottom": "45%",
+   "left": 10,
+   "containLabel": true
+  },
+  {
+   "top": "55%",
+   "width": "50%",
+   "bottom": 0,
+   "left": 10,
+   "containLabel": true
+  }
+ ],
+ "xAxis": [
+  {
+   "type": "value",
+   "max": 10887,
+   "splitLine": {
+    "show": false
+   }
+  },
+  {
+   "type": "value",
+   "max": 10887,
+   "gridIndex": 1,
+   "splitLine": {
+    "show": false
+   }
+  }
+ ],
+ "yAxis": [
+  {
+   "type": "category",
+   "data": [
+    "map",
+    "lines",
+    "bar",
+    "line",
+    "pie",
+    "scatter",
+    "candlestick",
+    "radar",
+    "heatmap",
+    "treemap",
+    "graph",
+    "boxplot",
+    "parallel",
+    "gauge",
+    "funnel",
+    "sankey"
+   ],
+   "axisLabel": {
+    "interval": 0,
+    "rotate": 30
+   },
+   "splitLine": {
+    "show": false
+   }
+  },
+  {
+   "gridIndex": 1,
+   "type": "category",
+   "data": [
+    "geo",
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "markPoint",
+    "markLine",
+    "timeline",
+    "dataZoom",
+    "visualMap",
+    "toolbox",
+    "polar"
+   ],
+   "axisLabel": {
+    "interval": 0,
+    "rotate": 30
+   },
+   "splitLine": {
+    "show": false
+   }
+  }
+ ],
+ "series": [
+  {
+   "type": "bar",
+   "stack": "chart",
+   "z": 3,
+   "label": {
+    "position": "right",
+    "show": true
+   },
+   "data": [
+    3237,
+    2164,
+    7561,
+    7778,
+    7355,
+    2405,
+    1842,
+    2090,
+    1762,
+    1593,
+    2060,
+    1537,
+    1908,
+    2107,
+    1692,
+    1568
+   ]
+  },
+  {
+   "type": "bar",
+   "stack": "chart",
+   "silent": true,
+   "itemStyle": {
+    "color": "#eee"
+   },
+   "data": [
+    7650,
+    8723,
+    3326,
+    3109,
+    3532,
+    8482,
+    9045,
+    8797,
+    9125,
+    9294,
+    8827,
+    9350,
+    8979,
+    8780,
+    9195,
+    9319
+   ]
+  },
+  {
+   "type": "bar",
+   "stack": "component",
+   "xAxisIndex": 1,
+   "yAxisIndex": 1,
+   "z": 3,
+   "label": {
+    "position": "right",
+    "show": true
+   },
+   "data": [
+    2788,
+    9575,
+    9400,
+    9466,
+    9266,
+    3419,
+    2984,
+    2739,
+    2744,
+    2466,
+    3034,
+    1945
+   ]
+  },
+  {
+   "type": "bar",
+   "stack": "component",
+   "silent": true,
+   "xAxisIndex": 1,
+   "yAxisIndex": 1,
+   "itemStyle": {
+    "color": "#eee"
+   },
+   "data": [
+    8099,
+    1312,
+    1487,
+    1421,
+    1621,
+    7468,
+    7903,
+    8148,
+    8143,
+    8421,
+    7853,
+    8942
+   ]
+  },
+  {
+   "type": "pie",
+   "radius": [
+    0,
+    "30%"
+   ],
+   "center": [
+    "75%",
+    "25%"
+   ],
+   "data": [
+    {
+     "name": "echarts.min",
+     "value": 17365
+    },
+    {
+     "name": "echarts.simple.min",
+     "value": 4079
+    },
+    {
+     "name": "echarts.common.min",
+     "value": 6929
+    },
+    {
+     "name": "echarts",
+     "value": 14890
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "radius": [
+    0,
+    "30%"
+   ],
+   "center": [
+    "75%",
+    "75%"
+   ],
+   "data": [
+    {
+     "name": "dark",
+     "value": 1594
+    },
+    {
+     "name": "infographic",
+     "value": 925
+    },
+    {
+     "name": "shine",
+     "value": 1608
+    },
+    {
+     "name": "roma",
+     "value": 721
+    },
+    {
+     "name": "macarons",
+     "value": 2179
+    },
+    {
+     "name": "vintage",
+     "value": 1982
+    }
+   ]
+  }
+ ]
+}
