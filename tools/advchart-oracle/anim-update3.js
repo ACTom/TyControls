@@ -222,6 +222,40 @@ function ecDataOf(el) {
   return null;
 }
 
+// [R2-H] a path's outline as drawn: its PathProxy data (buildPath into a fresh
+// proxy) through its global transform -- the vertices of its moveTo / lineTo,
+// an arc's centre and its radius times the transform's scale
+const PathProxy = new echarts.graphic.Rect({ shape: { x: 0, y: 0, width: 1, height: 1 } }).getUpdatedPathProxy().constructor;
+function drawnOutline(el) {
+  const pp = new PathProxy(false);
+  pp.beginPath();
+  el.buildPath(pp, el.shape, false);
+  const d = Array.from(pp.data.slice(0, pp.len()));
+  const m = el.transform || [1, 0, 0, 1, el.x, el.y];
+  const tx = (x, y) => m[0] * x + m[2] * y + m[4];
+  const ty = (x, y) => m[1] * x + m[3] * y + m[5];
+  const pts = [];
+  const arcs = [];
+  let i = 0;
+  while (i < d.length) {
+    const c = d[i++];
+    if (c === 1 || c === 2) { pts.push(tx(d[i], d[i + 1]), ty(d[i], d[i + 1])); i += 2; }
+    else if (c === 3) i += 6;
+    else if (c === 4) i += 4;
+    else if (c === 5) {
+      arcs.push(tx(d[i], d[i + 1]), ty(d[i], d[i + 1]), d[i + 2] * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])));
+      i += 8;
+    }
+    else if (c === 6) { /* close */ }
+    else if (c === 7) i += 4;
+    else must(false, 'a path command ' + c);
+  }
+  const o = {};
+  if (pts.length) o.pts = arr(pts);
+  if (arcs.length) o.arcs = arr(arcs);
+  return o;
+}
+
 // a fill or a stroke: a string as it is, a gradient with its numbers in hex
 function paint(v) {
   if (v == null) return null;
@@ -289,8 +323,9 @@ const PROBES = {
         for (const nm of ['fromSymbol', 'toSymbol']) {
           const sym = g.childOfName(nm);
           if (sym) {
-            rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'from' : 'to')] = glob({ x: hx(sym.x), y: hx(sym.y),
-              scale: hx(sym.scaleX), rotation: hx(sym.rotation) }, sym);
+            rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'from' : 'to')] = Object.assign(glob({ x: hx(sym.x), y: hx(sym.y),
+              scale: hx(sym.scaleX), rotation: hx(sym.rotation) }, sym), sym.ignore || sym.invisible ? { hidden: true }
+              : drawnOutline(sym));
           }
         }
         const label = g.getTextContent();
@@ -517,6 +552,16 @@ add('tree', 'tree-midway', "collapse 'a' and expand it again 300 ms in, before t
     { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } }, ...after([0, 1, 300], T1),
     { t: T1 + 300, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 2 } },
     ...after([300, 301, 500, 999], T1)]);
+
+add('tree', 'tree-polyline-midway', "[R2-H] orient TB, polyline edges: collapse 'b' and expand it again 300 ms in, while its TreePath is still being removed: drawEdge finds b's __edge (removeNodeEdge left it on b) and updateProps it from where it is -- the shape track of the removal stops, its opacity track goes on to 0, and when the removal ends its done takes the TreePath off the group",
+  { animation: true, series: [Object.assign({ type: 'tree', orient: 'TB', edgeShape: 'polyline', data: TREE, initialTreeDepth: -1 }, TLIN)] },
+  ['tree'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } }, ...after([0, 1, 300], T1),
+    { t: T1 + 300, do: 'action', action: { type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: 6 } },
+    ...after([300, 301, 500, 750, 999], T1),
+    ...[1000, 1016, 1032, 1048, 1064, 1080, 1096, 1112, 1128, 1144].map(t => ({ t: T1 + t, do: 'frame' })),
+    ...after([1300, 1500, 2000], T1)]);
 
 add('tree', 'tree-zoom', "a tree zoomed by its option (zoom 1.6): the view group is not the identity, and collapsing 'a' (its a21 the deepest node) changes the nodes' bounding rect -- the view group tweens (update timing, no row) under the nodes' own slides, and the compensation scale is set at once",
   { animation: true, series: [Object.assign({ type: 'tree', data: TREE, initialTreeDepth: -1, zoom: 1.6, roam: true }, TLIN)] },

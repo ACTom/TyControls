@@ -614,6 +614,94 @@
       ]
     },
     {
+      "id": "graph-cartesian",
+      "note": "a graph on a cartesian2d: a draggable node with no cursor option is \"move\" (setDraggable whatever the coordinate system), an item cursor wins, draggable false keeps pointer; a drag moves the node (the pointer outruns it on the move of the drag: default there), \"move\" again over it; no roam here",
+      "option": {"animation":false,"xAxis":{"type":"value","min":0,"max":10},"yAxis":{"type":"value","min":0,"max":10},"series":[{"type":"graph","coordinateSystem":"cartesian2d","draggable":true,"symbolSize":20,"data":[{"name":"a","value":[2,2]},{"name":"b","value":[5,8],"cursor":"help"},{"name":"c","value":[8,3],"draggable":false}],"links":[{"source":"a","target":"b"}],"lineStyle":{"width":4}}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 180,
+          "y": 269,
+          "aim": "item s0 d0",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 315,
+          "y": 116,
+          "aim": "item s0 d1",
+          "hover": "path:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 450,
+          "y": 244,
+          "aim": "item s0 d2",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 180,
+          "y": 269,
+          "aim": "item s0 d0",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "down",
+          "x": 180,
+          "y": 269,
+          "aim": "item s0 d0",
+          "hover": "tspan:pointer",
+          "calls": [],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 210,
+          "y": 249,
+          "aim": "dragging a",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "up",
+          "x": 210,
+          "y": 249,
+          "aim": "released a where it went",
+          "hover": "path:move",
+          "calls": [],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 210,
+          "y": 249,
+          "aim": "a where it went",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "the grid, nothing",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
       "id": "tree",
       "note": "a tree node is pointer (its item cursor where it has one); roam grabs where nothing is hovered",
       "option": {"animation":false,"series":[{"type":"tree","roam":true,"expandAndCollapse":false,"top":40,"bottom":40,"left":80,"right":120,"symbolSize":12,"label":{"show":false},"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y"}]}]}]},
@@ -1655,5 +1743,5 @@
       ]
     }
   ],
-  "checks": {"expectations":91}
+  "checks": {"expectations":98}
 }

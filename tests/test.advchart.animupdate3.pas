@@ -70,6 +70,7 @@ type
     procedure ProbeGraph(ARec: TJSONObject);
     procedure ProbeTree(ARec: TJSONObject);
     procedure DrawnCentre(const AWhat: string; ASeries, AIndex: Integer; ALeaf: TJSONObject);
+    procedure DrawnOutline(const AWhat: string; const AEl: TTyChartElement; ALeaf: TJSONObject);
     procedure ProbePictorial(ARec: TJSONObject);
     procedure ProbeState(ARec: TJSONObject);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
@@ -395,6 +396,54 @@ begin
   end;
 end;
 
+{ [R2-H] AN EDGE'S END SYMBOL AS DRAWN, point by point: upstream's outline
+  (its built path through its global transform -- the vertices of an arrow,
+  a circle's centre and radius) against the frame's element (a polygon's
+  points from the first, a circle's centre and radius) }
+procedure TAdvChartAnimUpdate3OracleTest.DrawnOutline(const AWhat: string;
+  const AEl: TTyChartElement; ALeaf: TJSONObject);
+var
+  pts, arcs: TJSONArray;
+  n, k: Integer;
+  bx: TTyRectF;
+begin
+  pts := nil;
+  arcs := nil;
+  if ALeaf.Find('pts') is TJSONArray then pts := TJSONArray(ALeaf.Find('pts'));
+  if ALeaf.Find('arcs') is TJSONArray then arcs := TJSONArray(ALeaf.Find('arcs'));
+  if arcs <> nil then
+  begin
+    { a circle: the moveTo before its arc is the arc's start, not a vertex }
+    Inc(FCompared);
+    if AEl.Shape.Kind <> cskCircle then
+    begin
+      Bad(AWhat + ': upstream draws a circle, the port another shape');
+      Exit;
+    end;
+    bx := TyShapeBounds(AEl.Shape);
+    NearNum(AWhat + ' drawn cx', (bx.Left + bx.Right) / 2, arcs.Items[0], 1e-6);
+    NearNum(AWhat + ' drawn cy', (bx.Top + bx.Bottom) / 2, arcs.Items[1], 1e-6);
+    NearNum(AWhat + ' drawn r', (bx.Right - bx.Left) / 2, arcs.Items[2], 1e-6);
+    Exit;
+  end;
+  if pts = nil then Exit;
+  { the closing lineTo back to the first point is not a vertex of its own }
+  n := pts.Count div 2;
+  if (n > 1) and (pts.Items[0].AsString = pts.Items[2 * n - 2].AsString)
+    and (pts.Items[1].AsString = pts.Items[2 * n - 1].AsString) then Dec(n);
+  Inc(FCompared);
+  if Length(AEl.Shape.Points) <> n then
+  begin
+    Bad(Format('%s: %d points drawn, upstream %d', [AWhat, Length(AEl.Shape.Points), n]));
+    Exit;
+  end;
+  for k := 0 to n - 1 do
+  begin
+    NearNum(Format('%s drawn x%d', [AWhat, k]), AEl.Shape.Points[k].X, pts.Items[2 * k], 1e-6);
+    NearNum(Format('%s drawn y%d', [AWhat, k]), AEl.Shape.Points[k].Y, pts.Items[2 * k + 1], 1e-6);
+  end;
+end;
+
 { ---- a graph: the view group, the nodes, the ghosts, the edges ---- }
 procedure TAdvChartAnimUpdate3OracleTest.ProbeGraph(ARec: TJSONObject);
 var
@@ -545,6 +594,25 @@ begin
       begin
         NearNum(name + ' drawn x', el.Caption.X, leaf.Find('wx'), 1e-6);
         NearNum(name + ' drawn y', el.Caption.Y, leaf.Find('wy'), 1e-6);
+      end
+      { [R2-H] THE FRAME: an end symbol point by point, where the line has
+        drawn out (at percent 0 its scale is 0: nothing to draw) }
+      else if ((sub = 'from') or (sub = 'to')) and (leaf.Find('hidden') = nil)
+        and (ARec.Find('g' + IntToStr(s) + '/edge' + IntToStr(idx)) is TJSONObject)
+        and (WantNum(TJSONObject(ARec.Find('g' + IntToStr(s) + '/edge' + IntToStr(idx))).Find('percent')) > 0) then
+      begin
+        Inc(FCompared);
+        if sub = 'to' then
+        begin
+          if not FrameEl(s, idx, carGraphEdgeTo, el) then
+            Bad(name + ': upstream draws the end symbol, the frame has none')
+          else
+            DrawnOutline(name, el, leaf);
+        end
+        else if not FrameEl(s, idx, carGraphEdgeFrom, el) then
+          Bad(name + ': upstream draws the end symbol, the frame has none')
+        else
+          DrawnOutline(name, el, leaf);
       end;
     end;
   end;

@@ -748,6 +748,17 @@ function chartCases() {
     [s(parlPie), s(parl, null, true)], { samples: SAMPLES_BIG, digest: true });
   add('gal.parl-pie', 'and the seats combine into the slices', [s(parlPie), s(parl, null, true), s(parlPie, null, true)],
     { samples: SAMPLES_BIG, digest: true });
+  // [R2-H] a graph on a cartesian2d has no view: GraphView.dispose -> SymbolDraw.remove takes its nodes off a
+  // group with no transform, so a node's own transform is already on the canvas
+  const grC = (vals, dx) => ({ type: 'graph', id: 'k', coordinateSystem: 'cartesian2d', universalTransition: true,
+    symbolSize: 20, data: NAMES.map((n, i) => ({ name: n, value: [i + 0.5 + dx, vals[i]] })),
+    links: [{ source: 'A', target: 'B' }, { source: 'C', target: 'D' }] });
+  add('graphc-bar', 'a graph on a cartesian2d into bars: the nodes off the disposed view morph from the canvas',
+    [s(vcart([grC(VALS, 0)])), s(cart([barS()]))]);
+  add('graphc-bar.inflight', '200 ms into an update of a graph on a cartesian2d (its nodes move across and up), bars: '
+    + 'the nodes morph from where they are', [s(vcart([grC(VALS, 0)])), s(vcart([grC([2, 9, 6, 1], 0.3)])),
+    s(cart([barS()]), 200)]);
+  add('bar-graphc', 'and bars into the graph on a cartesian2d', [s(cart([barS()])), s(vcart([grC(VALS, 0)]))]);
   return list;
 }
 
@@ -790,6 +801,14 @@ function guards(charts) {
   must(byId('pie-polar.sausage').newRest.every(r => r.type === 'sausage'), 'pie-polar.sausage: not sausages');
   must(byId('polar.sausage-bar').oldRest.every(r => r.type === 'sausage'), 'polar.sausage-bar: not sausages');
   // the other types: bars into each morph, each into bars morphs or combines
+  // [R2-H] a graph on a cartesian2d: its nodes morph from the canvas (x 40 .. 360 here), both ways
+  {
+    const fr = byId('graphc-bar').elements.filter(e => e.item && e.morph).map(e => e.d[0]);
+    const xs = fr.map(d => { bits.setUint32(0, parseInt(d[1].slice(0, 8), 16)); bits.setUint32(4, parseInt(d[1].slice(8), 16)); return bits.getFloat64(0); });
+    must(xs.length === 4 && xs.every(x => x > 35), 'graphc-bar: the nodes do not morph from the canvas ' + xs);
+    atLeast('graphc-bar.inflight', 4, morphs);
+    atLeast('bar-graphc', 4, morphs);
+  }
   for (const tid of ['heatmap', 'boxplot', 'candle', 'gauge', 'graph', 'tree', 'parallel', 'sankey', 'chord']) {
     atLeast('bar-' + tid, 4, morphs);
     atLeast(tid + '-bar', 4, morphs);
