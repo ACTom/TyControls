@@ -697,10 +697,12 @@ begin
         carries; AnchorBox exists only because the flat path needs a rect. }
       if spec^.RotationRad <> 0 then
       begin
-        APainter.DrawTextRotated(places[i].Text, lblStyle.FontName,
+        { every line of a label of several, the block as the layout
+          measured it [R2-A: the first line only] }
+        DrawRotatedNameLines(APainter, places[i].Text, lblStyle.FontName,
           ResolveFontSize(lblStyle), lblStyle.FontWeight, lblStyle.TextColor,
           lx, ly, spec^.RotationRad,
-          AnchorAlign(places[i].AnchorH), AnchorLayout(places[i].AnchorV));
+          AnchorAlign(places[i].AnchorH), AnchorLayout(places[i].AnchorV), lblH);
         Continue;
       end;
       APainter.DrawText(

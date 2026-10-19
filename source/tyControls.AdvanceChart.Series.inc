@@ -424,10 +424,13 @@ begin
       end;
       if sp.RotationRad <> 0 then
       begin
-        APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+        { every line of a label of several [R2-A] }
+        TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+        DrawRotatedNameLines(APainter, sp.Placements[q].Text, labelS.FontName,
           ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
           sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
-          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV),
+          lblH);
         Continue;
       end;
       TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
@@ -1156,10 +1159,13 @@ var
       end;
       if sp.RotationRad <> 0 then
       begin
-        APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+        { every line of a label of several [R2-A] }
+        TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+        DrawRotatedNameLines(APainter, sp.Placements[q].Text, labelS.FontName,
           ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
           sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
-          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV),
+          lblH);
         Continue;
       end;
       TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
@@ -2440,10 +2446,13 @@ begin
         end;
         if sp.RotationRad <> 0 then
         begin
-          APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+          { every line of a label of several [R2-A] }
+          TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+          DrawRotatedNameLines(APainter, sp.Placements[q].Text, labelS.FontName,
             ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
             sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
-            AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+            AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV),
+            lblH);
           Continue;
         end;
         TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
@@ -2823,6 +2832,14 @@ begin
       [tysNormal]).Background.Color);
   Result.Symbol := SymbolFor(ASlot);
   if FOption = nil then Exit;
+  { [R2-A] the points' labels: the series' and each item's own over it; each
+    item's own symbol }
+  Result.Label_ := LabelSpecFor(ASlot);
+  ItemLabelSpecs(FBindings[ASlot].SeriesIndex, Result.Label_, Result.ItemLabels,
+    Result.HasItemLabel);
+  Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  SymbolItems(FBindings[ASlot].SeriesIndex, Result.Symbol, Result.RowSyms,
+    Result.RowSymSet);
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   node := TJSONObject(d);

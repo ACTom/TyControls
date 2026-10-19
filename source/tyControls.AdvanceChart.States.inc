@@ -253,16 +253,20 @@ begin
   { blur: the label's opacity, a tenth of it by default [Batch 90] }
   if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
-  { the ink: a colour a state declares, else the hover's own under emphasis }
+  { the ink: the hover's own under emphasis -- its colour, and the halo that
+    goes with it: none where the hover's label writes a colour, a written
+    border where it writes one -- then a colour a state declares over it
+    [R2-A: a declared colour was taken INSTEAD of the hover's ink, keeping
+    the rest state's automatic halo and losing the hover's border] }
+  if stnEmphasis in AState.States then
+    TyCaptionToEmphasis(AEl.Caption);
   if TyStHasColour(c, stkFill) then
   begin
     AEl.Caption.Colour := c.Color[stkFill];
     if Length(AEl.Caption.RtPieces) > 0 then
       AEl.Caption.RtPieces := TyRtReink(AEl.Caption.RtPieces, c.Color[stkFill],
         False, AEl.Caption.StrokeColour, AEl.Caption.StrokeWidthLogical);
-  end
-  else if stnEmphasis in AState.States then
-    TyCaptionToEmphasis(AEl.Caption);
+  end;
 end;
 
 procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement;
@@ -482,6 +486,73 @@ var
   txt: string;
   c: TTyChartColor;
   k: Integer;
+  { [R2-A] ONE LABEL'S STATES, from its element at AIdx: the item's
+    (labelStyle.ts:255-273) -- the datum's one label, or each of a radar
+    item's point labels }
+  procedure DeclLabel(var AL: TTyStElement; AIdx: Integer);
+  var
+    pc: PTyChartElement;
+    n: TTyStName;
+    obj: TTyStObject;
+    has, stShow, normalShow: Boolean;
+    txt: string;
+    c: TTyChartColor;
+    ss: Double;
+  begin
+    pc := AList.Ref(AIdx);
+    AL.Exists := True;
+    AL.IsPath := False;
+    AL.Proxy := not disabled;
+    for n := Low(TTyStName) to High(TTyStName) do AL.HasState[n] := True;
+    AL.Rest := StLabelRestOf(pc^);
+    { NORMAL SHOW AS THE LABEL WAS STYLED: hideOverlap hides it later, and
+      that is no `show: false` [Batch 103] }
+    normalShow := (not pc^.Ignore) or pc^.Caption.LmOverlapHidden;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      obj := TyStNoObject;
+      { ignore = !show only when the state's show differs from the normal one }
+      stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
+      { a themeRiver's model shows the emphasis label unless told
+        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118]; a funnel's
+        too (FunnelSeries.defaultOption) [F2b]; a graph's by
+        GraphSeries.ts emphasis.label.show [F2a] }
+      if (n = stnEmphasis) and (FSt[s].Kind in [sskRiver, sskFunnel]) then
+        stShow := StEmphLabelShow(nodes, True, has)
+      else if (n = stnEmphasis) and (FSt[s].Kind = sskGraph) then
+      begin
+        stShow := GraphEmLabelShow(nodes[0], nodes[1], nodes[2]);
+        has := True;
+      end
+      else if n = stnEmphasis then
+        stShow := StEmphLabelShow(nodes, False, has);
+      if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+      { hideOverlap's hideEl: a label it hid shows again under emphasis,
+        unless that state already says (LabelLayoutHelper.ts hideOverlap)
+        [Batch 103] }
+      if (n = stnEmphasis) and pc^.Caption.LmEmphShow and not obj.Has[stkIgnore] then
+        TyStSetNum(obj, stkIgnore, 0);
+      txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
+      if has and (txt <> 'inherit') and (txt <> 'auto')
+        and TyTryParseChartColor(txt, c) then
+        TyStSetColor(obj, stkFill, c);
+      { a declared opacity, the blur proxy's tenth otherwise [Batch 90] }
+      ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
+      if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss)
+      { a sunburst's label blurs to 0.1 by its series' default }
+      else if (n = stnBlur) and (FSt[s].Kind = sskSunburst) then
+        TyStSetNum(obj, stkOpacity, 0.1);
+      { a pie's label rides with its slice: the laid-out place plus the offset
+        (pie/labelLayout.ts:541-544) }
+      if (n = stnSelect) and (FSt[s].Kind = sskPie) then
+      begin
+        TyStSetNum(obj, stkX, pc^.Caption.X + dx);
+        TyStSetNum(obj, stkY, pc^.Caption.Y + dy);
+      end;
+      AL.Decl[n] := obj;
+    end;
+  end;
+
 begin
   s := FBindings[ASlot].SeriesIndex;
   if FSt[s].Kind = sskCustom then
@@ -687,6 +758,21 @@ begin
   SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
   for k := 0 to High(item^.Parts) do
   begin
+    { [R2-A] A RADAR'S POINT LABEL: the text on that point's symbol, its
+      own label states over the item's list }
+    if (FSt[s].Kind = sskRadar)
+      and (AList.Ref(FSt[s].PartIdx[ARaw][k])^.Caption.FontSizeLogical > 0) then
+    begin
+      DeclLabel(item^.Parts[k], FSt[s].PartIdx[ARaw][k]);
+      if not was then
+      begin
+        item^.Parts[k].Cur := item^.Parts[k].Rest;
+        item^.Parts[k].States := [];
+        if item^.Host.States <> [] then
+          TyStUseStates(item^.Parts[k], item^.Host.States);
+      end;
+      Continue;
+    end;
     item^.Parts[k].Exists := True;
     item^.Parts[k].IsPath := True;
     item^.Parts[k].Proxy := item^.Host.Proxy;
@@ -798,58 +884,7 @@ begin
     item^.Label_ := Default(TTyStElement)
   else
   begin
-    pc := AList.Ref(idx);
-    item^.Label_.Exists := True;
-    item^.Label_.IsPath := False;
-    item^.Label_.Proxy := not disabled;
-    for n := Low(TTyStName) to High(TTyStName) do item^.Label_.HasState[n] := True;
-    item^.Label_.Rest := StLabelRestOf(pc^);
-    { NORMAL SHOW AS THE LABEL WAS STYLED: hideOverlap hides it later, and
-      that is no `show: false` [Batch 103] }
-    normalShow := (not pc^.Ignore) or pc^.Caption.LmOverlapHidden;
-    for n := Low(TTyStName) to High(TTyStName) do
-    begin
-      obj := TyStNoObject;
-      { ignore = !show only when the state's show differs from the normal one }
-      stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
-      { a themeRiver's model shows the emphasis label unless told
-        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118]; a funnel's
-        too (FunnelSeries.defaultOption) [F2b]; a graph's by
-        GraphSeries.ts emphasis.label.show [F2a] }
-      if (n = stnEmphasis) and (FSt[s].Kind in [sskRiver, sskFunnel]) then
-        stShow := StEmphLabelShow(nodes, True, has)
-      else if (n = stnEmphasis) and (FSt[s].Kind = sskGraph) then
-      begin
-        stShow := GraphEmLabelShow(nodes[0], nodes[1], nodes[2]);
-        has := True;
-      end
-      else if n = stnEmphasis then
-        stShow := StEmphLabelShow(nodes, False, has);
-      if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
-      { hideOverlap's hideEl: a label it hid shows again under emphasis,
-        unless that state already says (LabelLayoutHelper.ts hideOverlap)
-        [Batch 103] }
-      if (n = stnEmphasis) and pc^.Caption.LmEmphShow and not obj.Has[stkIgnore] then
-        TyStSetNum(obj, stkIgnore, 0);
-      txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
-      if has and (txt <> 'inherit') and (txt <> 'auto')
-        and TyTryParseChartColor(txt, c) then
-        TyStSetColor(obj, stkFill, c);
-      { a declared opacity, the blur proxy's tenth otherwise [Batch 90] }
-      ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
-      if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss)
-      { a sunburst's label blurs to 0.1 by its series' default }
-      else if (n = stnBlur) and (FSt[s].Kind = sskSunburst) then
-        TyStSetNum(obj, stkOpacity, 0.1);
-      { a pie's label rides with its slice: the laid-out place plus the offset
-        (pie/labelLayout.ts:541-544) }
-      if (n = stnSelect) and (FSt[s].Kind = sskPie) then
-      begin
-        TyStSetNum(obj, stkX, pc^.Caption.X + dx);
-        TyStSetNum(obj, stkY, pc^.Caption.Y + dy);
-      end;
-      item^.Label_.Decl[n] := obj;
-    end;
+    DeclLabel(item^.Label_, idx);
     if not was then
     begin
       item^.Label_.Cur := item^.Label_.Rest;
@@ -1525,9 +1560,11 @@ begin
     end;
     { A RADAR ITEM: its polyline hosts, its polygon and its symbols are
       parts of the same dispatcher, in the order they were built [F2b] }
+    { [R2-A] and its points' labels, after them; a point label's line is
+      no part (its states are not modelled) }
     if FSt[s].Kind = sskRadar then
     begin
-      if pe^.Caption.FontSizeLogical > 0 then Continue;
+      if pe^.IsGuide then Continue;
       if pe^.Anim.Role = carRadarLine then
       begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
@@ -1897,7 +1934,11 @@ begin
           if item^.Parts[k].States <> [] then
           begin
             el := AList.Element(FSt[s].PartIdx[raw][k]);
-            StWriteHost(el, item^.Parts[k], FStProxied);
+            { [R2-A] a radar's point label writes as a label }
+            if item^.Parts[k].IsPath then
+              StWriteHost(el, item^.Parts[k], FStProxied)
+            else
+              StWriteLabel(el, item^.Parts[k], FStProxied);
             AList.SetElement(FSt[s].PartIdx[raw][k], el);
           end;
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists
@@ -2414,8 +2455,13 @@ begin
           FAnimStBind[FSt[s].FollowIdx[raw][k]] := hostP;
       if raw <= High(FSt[s].PartIdx) then
         for k := 0 to Min(High(FSt[s].PartIdx[raw]), High(item^.Parts)) do
-          StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
-            'part' + IntToStr(k), cStPxPart, cfg, hasCfg, over);
+          if item^.Parts[k].IsPath then
+            StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
+              'part' + IntToStr(k), cStPxPart, cfg, hasCfg, over)
+          else
+            { [R2-A] a radar's point label: a Text's proxy }
+            StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
+              'part' + IntToStr(k), cStPxLabel, cfg, hasCfg, over);
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists then
         StAnimEl(item^.Label_, FSt[s].LabelIdx[raw], s, raw, 'label', cStPxLabel,
           cfg, hasCfg, over);

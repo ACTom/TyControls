@@ -4806,36 +4806,12 @@ function BatchEventHead(APayload: TJSONObject; const AType: string): string; for
 procedure DrawRotatedNameLines(APainter: TTyPainter; const AText, AFontName: string;
   AFontSize, AWeight: Integer; AColor: TTyColor; AX, AY, ARot: Double;
   AHAlign: TAlignment; AVAlign: TTextLayout; ABlockH: Double);
-var
-  lines: TStringArray;
-  i, n: Integer;
-  lineH, top, dy, sa, ca: Double;
 begin
-  if Pos(#10, AText) = 0 then
-  begin
-    APainter.DrawTextRotated(AText, AFontName, AFontSize, AWeight, AColor,
-      AX, AY, ARot, AHAlign, AVAlign);
-    Exit;
-  end;
-  lines := AText.Split([#10]);
-  n := Length(lines);
-  lineH := ABlockH / n;
-  case AVAlign of
-    tlCenter: top := -ABlockH / 2;
-    tlBottom: top := -ABlockH;
-  else
-    top := 0;
-  end;
-  sa := Sin(ARot);
-  ca := Cos(ARot);
-  for i := 0 to n - 1 do
-  begin
-    { (0, dy) in the text's frame, turned the way DrawTextRotated turns its
-      own offsets }
-    dy := top + i * lineH;
-    APainter.DrawTextRotated(lines[i], AFontName, AFontSize, AWeight, AColor,
-      AX + dy * sa, AY + dy * ca, ARot, AHAlign, tlTop);
-  end;
+  { [R2-A] the one routine the turned axis labels and the captions draw
+    through too: each line centred on its line box, as zrender's
+    textBaseline 'middle' (it was hung from its top) }
+  TyDrawTextRotatedLines(APainter, AText, AFontName, AFontSize, AWeight, AColor,
+    AX, AY, ARot, AHAlign, AVAlign, ABlockH);
 end;
 
 { the FPU's traps masked over a stretch that meets NaN (a point off the
