@@ -99,6 +99,17 @@ function enc(v) {
   }
   return undefined;
 }
+// [R2-I3] the case being run: its flags ask for extra records
+let CUR_CASE = null;
+// zrender canvas/dashStyle.ts normalizeLineDash, transcribed
+function normalizeLineDash(lineType, lineWidth) {
+  if (!lineType || lineType === 'solid' || !(lineWidth > 0)) return null;
+  lineWidth = lineWidth || 1;
+  return lineType === 'dashed' ? [4 * lineWidth, 2 * lineWidth]
+    : lineType === 'dotted' ? [lineWidth]
+    : typeof lineType === 'number' ? [lineType]
+    : Array.isArray(lineType) ? lineType : null;
+}
 function snap(el) {
   const o = {};
   const put = (k, v) => {
@@ -111,6 +122,35 @@ function snap(el) {
   if (el.type === 'text' && el.transform) {
     put('tx', el.transform[4]);
     put('ty', el.transform[5]);
+  }
+  // [R2-I3] a text's merged style -- its size, weight, alignment -- and its
+  // box through its transform (getBoundingRect: the TSpans' and the
+  // backgrounds' union); every TSpan's text and place in the canvas
+  if (CUR_CASE && CUR_CASE.textBox && el.type === 'text' && el.transform) {
+    put('fs', el.style.fontSize == null ? -1 : Number(el.style.fontSize));
+    put('fw', el.style.fontWeight == null ? '' : String(el.style.fontWeight));
+    put('al', el.style.align == null ? '' : el.style.align);
+    put('va', el.style.verticalAlign == null ? '' : el.style.verticalAlign);
+    const r = el.getBoundingRect().clone();
+    r.applyTransform(el.transform);
+    put('bx', r.x);
+    put('by', r.y);
+    put('bw', r.width);
+    put('bh', r.height);
+    const spans = [];
+    for (const k of el.childrenRef()) {
+      if (k.type !== 'tspan') continue;
+      const m = k.transform || el.transform;
+      const x = m[0] * k.style.x + m[2] * k.style.y + m[4];
+      const y = m[1] * k.style.x + m[3] * k.style.y + m[5];
+      spans.push(k.style.text + '@' + x.toFixed(6) + ',' + y.toFixed(6) + ':' + (k.style.font || ''));
+    }
+    put('spans', spans.join('|'));
+  }
+  // [R2-I3] a path's dash as drawn and its phase
+  if (CUR_CASE && CUR_CASE.dash && el.style && el.type !== 'text') {
+    put('dash', JSON.stringify(normalizeLineDash(el.style.lineDash, el.style.lineWidth)));
+    if (el.style.lineDash) put('dashOff', el.style.lineDashOffset == null ? 0 : el.style.lineDashOffset);
   }
   if (el.invisible != null) put('invisible', !!el.invisible);
   if (typeof el.z2 === 'number') put('z2', el.z2);
@@ -604,6 +644,7 @@ function loopOn(chart, c, t1) {
 // waiting on a timer that never runs
 let caseBase = T_BASE;
 function runCase(c) {
+  CUR_CASE = c;
   caseBase += CASE_STRIDE;
   NOW = caseBase;
   rngState = SEED;
@@ -764,6 +805,46 @@ const R2I1 = [
     events: [over(0, mark(0, 'ma0')), over(400, mark(0, 'ma1')), out(800)] },
 ];
 
+// [R2-I3] the emphasis label's text style, laid out again; rich markers; a
+// markLine label under an emphasis position; the states' dashes
+const R2I3 = [
+  { id: 'mp-emph-font', textBox: true, note: '[R2-I3] the emphasis label\'s text style merged over the normal one and laid '
+    + 'out again (setLabelStyle\'s state style): mp0 (a circle of 20, its label at the top) emphasis fontSize 20, bold, '
+    + '#cc0000; mp1 its own emphasis fontSize 16 at the right (normal left); emphasis.scale false. Hover mp0 at 0, mp1 at 400, '
+    + 'out at 800',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top' },
+      emphasis: { scale: false, label: { fontSize: 20, fontWeight: 'bold', color: '#cc0000' } } }, [
+      { type: 'max', name: 'max' },
+      { type: 'min', name: 'min', label: { position: 'left' }, emphasis: { label: { fontSize: 16, position: 'right' } } }]) }),
+    events: [over(0, mark(0, 'mp0')), over(400, mark(0, 'mp1')), out(800)] },
+  { id: 'mp-emph-rich', textBox: true, note: '[R2-I3] a rich markPoint label in emphasis: {a|A}{b|B} with a 14 and b 10 and blue at '
+    + 'the right; the emphasis position left and a rich of its own, a 18 -- the state style\'s rich replaces the normal one '
+    + '(b loses its 10 and its blue: the 12 of the block); hover mp0 at 0, out at 500',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20,
+      label: { position: 'right', formatter: '{a|A}{b|B}', rich: { a: { fontSize: 14 }, b: { fontSize: 10, color: '#0000ff' } } },
+      emphasis: { scale: false, label: { position: 'left', rich: { a: { fontSize: 18 } } } } }) }),
+    events: [over(0, mark(0, 'mp0')), out(500)] },
+  { id: 'ml-emph-position', textBox: true, note: '[R2-I3] a markLine label under an emphasis position: the Line group\'s '
+    + 'emphasis textConfig puts it by calculateTextPosition on the group\'s own box (the line grown by max(3, 5), the end '
+    + 'symbols) after Line.beforeUpdate -- ml0 inside (and fontSize 16), ml1 a markLine word, start (the box\'s corner); '
+    + 'hover ml0 at 0, ml1 at 400, out at 800',
+    option: bars({ markLine: ML({ emphasis: { label: { position: 'inside', fontSize: 16 } } }, [
+      { type: 'average', name: 'avg' },
+      { yAxis: 30, name: 'thirty', emphasis: { label: { position: 'start', distance: 9 } } }]) }),
+    events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'ml1')), out(800)] },
+  { id: 'ma-emph-font', textBox: true, note: '[R2-I3] a markArea label\'s emphasis fontSize 18 (its default emphasis position '
+    + 'top); hover ma0 at 0, out at 500',
+    option: bars({ markArea: MA({ emphasis: { label: { fontSize: 18 } } }, [[{ xAxis: 'A', name: 'area' }, { xAxis: 'B' }]]) }),
+    events: [over(0, mark(0, 'ma0')), out(500)] },
+  { id: 'marks-state-dash', dash: true, note: '[R2-I3] the markers\' states\' dashes, set at once (a marker does not animate): '
+    + 'the markLine\'s emphasis lineStyle [8, 2] at 5 over its dashed; a pin\'s emphasis borderType dotted at 3; hover ml0 '
+    + 'at 0, mp0 at 400, out at 800',
+    option: bars({ markLine: ML({ emphasis: { lineStyle: { type: [8, 2], dashOffset: 5 } } }),
+      markPoint: MP({ itemStyle: { borderColor: '#000000', borderWidth: 2 },
+        emphasis: { scale: false, itemStyle: { borderType: 'dotted', borderDashOffset: 3 } } }) }),
+    events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'mp0')), out(800)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -919,7 +1000,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

@@ -84,6 +84,8 @@ type
     AuthorAlign, AuthorVAlign: Boolean;
     { [R2-I1] built for a state only (needsCreateText): ignored at rest }
     Hidden: Boolean;
+    { [R2-I3] see TTyMkPtLabelPic.Hold }
+    Hold: IInterface;
   end;
 
   TTyMkLinePic = record
@@ -103,6 +105,11 @@ type
     Z2: Double;
     FromSym, ToSym: TTyMkSymbolPic;
     Lbl: TTyMkLabelPic;
+    { [R2-I3] the label as the hover lays it out (Present False: as at
+      rest) -- the emphasis label's text style over the normal one, and
+      where the emphasis textConfig writes a position, calculateTextPosition
+      over the Line group's own box instead of Line.beforeUpdate's place }
+    EmphLbl: TTyMkLabelPic;
   end;
   TTyMkLinePicArray = array of TTyMkLinePic;
 
@@ -207,6 +214,9 @@ type
     EmphDX, EmphDY: Double;
     { [R2-I1] built for a state only (needsCreateText): ignored at rest }
     Hidden: Boolean;
+    { [R2-I3] the JSON an emphasis overlay is made of, which the picture's
+      references point into (nil for none) }
+    Hold: IInterface;
   end;
 
   TTyMkPointPic = record
@@ -505,31 +515,6 @@ begin
     or StateLabelShow(lv, 'select', has);
 end;
 
-{ [R2-I1] THE EMPHASIS STATE'S TEXT CONFIG (setLabelStyle: createTextConfig
-  of the state's label model, which extends the normal one key by key where
-  it says one): position (a truthy one), distance, offset and rotate down the
-  item's emphasis.label chain, as one object to stand as a level over the
-  label's; nil where the state says none of them. The caller frees it. }
-function EmphTextConfig(const lv: TMkLevels): TJSONObject;
-const
-  cKeys: array[0..3] of string = ('position', 'distance', 'offset', 'rotate');
-var
-  EL: TMkLevels;
-  k: Integer;
-  d: TJSONData;
-begin
-  Result := nil;
-  EL := Sub(Sub(lv, 'emphasis'), 'label');
-  for k := 0 to High(cKeys) do
-  begin
-    d := Chain(EL, cKeys[k]);
-    if d = nil then Continue;
-    if (k = 0) and not Truthy(d) then Continue;
-    if Result = nil then Result := TJSONObject.Create;
-    Result.Add(cKeys[k], d.Clone);
-  end;
-end;
-
 { [R2-I1] AObj as a level of its own over L }
 function OverLevels(AObj: TJSONObject; const L: TMkLevels): TMkLevels;
 var i: Integer;
@@ -537,6 +522,144 @@ begin
   SetLength(Result, Length(L) + 1);
   Result[0] := View1(AObj);
   for i := 0 to High(L) do Result[i + 1] := L[i];
+end;
+
+type
+  { [R2-I3] the JSON an emphasis overlay is made of, alive as long as a
+    picture that points into it }
+  TMkHold = class(TInterfacedObject)
+  public
+    Objs: array of TJSONData;
+    procedure Keep(A: TJSONData);
+    destructor Destroy; override;
+  end;
+
+procedure TMkHold.Keep(A: TJSONData);
+begin
+  SetLength(Objs, Length(Objs) + 1);
+  Objs[High(Objs)] := A;
+end;
+
+destructor TMkHold.Destroy;
+var i: Integer;
+begin
+  for i := 0 to High(Objs) do Objs[i].Free;
+  inherited Destroy;
+end;
+
+{ [R2-I3] THE EMPHASIS LABEL OVER THE NORMAL ONE, as setLabelStyle's
+  emphasis state merges into the normal style and textConfig: every key the
+  item's emphasis.label chain writes (getShallow down the chain; show and
+  formatter aside, a falsy position aside, and the keys AExclude names) as
+  one level over LB. A `rich` there holds only the token names the
+  emphasis chain writes (getRichItemNames climbs its chain alone), each
+  token's font keys falling back to the emphasis label's own; zrender's Text
+  merges a state's rich INTO the normal one token by token (_mergeRich), so
+  the levels below keep theirs and the overlay's tokens win key by key.
+  [A first draft replaced the normal rich: the fixture says merge.] False
+  where the emphasis says nothing;
+  AHold owns what ALevels points into. [R2-I1's EmphTextConfig took
+  position, distance, offset and rotate alone.] }
+function EmphLevels(const lv, LB: TMkLevels; const AExclude: array of string;
+  out ALevels: TMkLevels; out AHold: IInterface): Boolean;
+const
+  { TEXT_PROPS_WITH_GLOBAL }
+  cInherit: array[0..7] of string = ('fontStyle', 'fontWeight', 'fontSize', 'fontFamily',
+    'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY');
+var
+  EL: TMkLevels;
+  ov, rich, tok: TJSONObject;
+  names: array of string;
+  j, i, k, m, q, z: Integer;
+  key: string;
+  d, e: TJSONData;
+  hold: TMkHold;
+  skip: Boolean;
+begin
+  Result := False;
+  ALevels := LB;
+  AHold := nil;
+  EL := Sub(Sub(lv, 'emphasis'), 'label');
+  names := nil;
+  for j := 0 to High(EL) do
+    for i := 0 to High(EL[j]) do
+      if EL[j][i] <> nil then
+        for k := 0 to EL[j][i].Count - 1 do
+        begin
+          skip := False;
+          for z := 0 to High(names) do
+            if names[z] = EL[j][i].Names[k] then skip := True;
+          if not skip then
+          begin
+            SetLength(names, Length(names) + 1);
+            names[High(names)] := EL[j][i].Names[k];
+          end;
+        end;
+  ov := nil;
+  rich := nil;
+  begin
+    for k := 0 to High(names) do
+    begin
+      key := names[k];
+      if (key = 'show') or (key = 'formatter') then Continue;
+      skip := False;
+      for q := 0 to High(AExclude) do
+        if key = AExclude[q] then skip := True;
+      if skip then Continue;
+      if key = 'rich' then
+      begin
+        { every token name down the chain, each token's keys first-wins }
+        for j := 0 to High(EL) do
+          for i := 0 to High(EL[j]) do
+          begin
+            if EL[j][i] = nil then Continue;
+            d := EL[j][i].Find('rich');
+            if not (d is TJSONObject) then Continue;
+            if rich = nil then rich := TJSONObject.Create;
+            for m := 0 to TJSONObject(d).Count - 1 do
+            begin
+              e := TJSONObject(d).Items[m];
+              if not (e is TJSONObject) then Continue;
+              if rich.IndexOfName(TJSONObject(d).Names[m]) < 0 then
+                rich.Add(TJSONObject(d).Names[m], TJSONObject.Create);
+              tok := TJSONObject(rich.Find(TJSONObject(d).Names[m]));
+              for q := 0 to TJSONObject(e).Count - 1 do
+                if (tok.IndexOfName(TJSONObject(e).Names[q]) < 0)
+                  and not JNull(TJSONObject(e).Items[q]) then
+                  tok.Add(TJSONObject(e).Names[q], TJSONObject(e).Items[q].Clone);
+            end;
+          end;
+        Continue;
+      end;
+      d := Chain(EL, key);
+      if d = nil then Continue;
+      if (key = 'position') and not Truthy(d) then Continue;
+      if ov = nil then ov := TJSONObject.Create;
+      ov.Add(key, d.Clone);
+    end;
+    if rich <> nil then
+    begin
+      if ov = nil then ov := TJSONObject.Create;
+      ov.Add('rich', rich);
+    end;
+  end;
+  if ov = nil then Exit;
+  { an emphasis token takes what it does not say of the font from the
+    emphasis label itself (setTokenTextStyle: retrieve3(token, plain, the
+    global -- none in a state)) }
+  if rich <> nil then
+    for m := 0 to rich.Count - 1 do
+    begin
+      tok := TJSONObject(rich.Items[m]);
+      for q := 0 to High(cInherit) do
+        if (tok.IndexOfName(cInherit[q]) < 0) and (ov.IndexOfName(cInherit[q]) >= 0) then
+          tok.Add(cInherit[q], ov.Find(cInherit[q]).Clone);
+    end;
+  hold := TMkHold.Create;
+  AHold := hold;
+  hold.Keep(ov);
+  ALevels := OverLevels(ov, LB);
+  Result := True;
 end;
 
 { THE LABEL'S TEXT BLOCK over its levels, the most specific object first,
@@ -829,6 +952,10 @@ end;
 
 { ---- the pictures ---- }
 
+{ [R2-I3] the hover's markLine label under an emphasis position (below) }
+procedure EmphLinePlace(const P: TTyMkLinePic; const AItemLv, ALB: TMkLevels;
+  APos: TJSONData; AScale: Double; var ALab: TTyMkLabelPic); forward;
+
 function TyMkLinePictures(const ABlock: TTyMkBlock;
   const AIn: TTyMkPicInput): TTyMkLinePicArray;
 var
@@ -979,97 +1106,20 @@ var
     inkStroke: string;
     dlw: Double;
     label_: TTyMkLabelPic;
-  begin
-    lineV := View2(L.From.Src, L.To_.Src);
-    itemLv := Levels3(lineV, own, master);
-    fromFill := EndFill(L.From);
-    { the line: lineStyle through the merged item, the stroke falling back
-      to the start end's fill }
-    LS := Sub(itemLv, 'lineStyle');
-    d := Chain(LS, 'color');
-    if d <> nil then stroke := StrOf(d) else stroke := fromFill;
-    d := Chain(LS, 'width');
-    if d <> nil then P.LineWidth := NumOf(d) else P.LineWidth := 1;
-    d := Chain(LS, 'opacity');
-    if d <> nil then lsOpacity := NumOf(d) else lsOpacity := NaN;
-    lineType := Chain(LS, 'type');
-    P.DashType := lineType;
-    P.Dash := ResolveDash(lineType, P.LineWidth);
-    d := Chain(LS, 'dashOffset');
-    if d <> nil then P.DashOffset := NumOf(d) else P.DashOffset := 0;
-    if IsNan(lsOpacity) then P.Opacity := 1 else P.Opacity := lsOpacity;
-    d := Chain(LS, 'cap');
-    if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
-    d := Chain(LS, 'join');
-    if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
-    P.Stroke := stroke;
-    d := Chain(itemLv, 'z2');
-    if d <> nil then P.Z2 := NumOf(d) else P.Z2 := 0;
-    P.X1 := L.From.Point.X;
-    P.Y1 := L.From.Point.Y;
-    P.X2 := L.To_.Point.X;
-    P.Y2 := L.To_.Point.Y;
-    P.Path := LinePath(P.X1, P.Y1, P.X2, P.Y2, P.LineWidth * s);
-    RunZ2(P.Z2);
-    { the tangent: LinePath.tangentAt, the un-snapped shape }
-    tx := P.X2 - P.X1;
-    ty := P.Y2 - P.Y1;
-    len := Sqrt(tx * tx + ty * ty);
-    if len = 0 then
-    begin
-      tx := 0;
-      ty := 0;
-    end
-    else
-    begin
-      tx := tx / len;
-      ty := ty / len;
-    end;
-    Symbol(L.From, False, stroke, lsOpacity, tx, ty, P.FromSym);
-    Symbol(L.To_, True, stroke, lsOpacity, tx, ty, P.ToSym);
+    { [R2-I3] the hover's }
+    EL, LBE: TMkLevels;
+    hold: IInterface;
+    lab2: TTyMkLabelPic;
+    emphPos: TJSONData;
 
-    { ---- the label ---- }
-    label_ := Default(TTyMkLabelPic);
-    LB := Sub(itemLv, 'label');
-    { [R2-I1] built where a state shows it too (needsCreateText), ignored at
-      rest [was: not built] }
-    if not Truthy(Chain(LB, 'show')) and not AnyStateLabelShows(itemLv) then
-    begin
-      P.Lbl := label_;
-      Exit;
-    end;
-    label_.Present := True;
-    label_.Hidden := not Truthy(Chain(LB, 'show'));
-    { the default text: the value rounded to ten places, else the name }
-    rawVal := L.LineValue;
-    case L.LineName.Kind of
-      mvkStr: name := L.LineName.Str;
-      mvkNum: name := TyJsNumberToString(L.LineName.Num);
-    else
-      name := '';
-    end;
-    d := Chain(LB, 'formatter');
-    if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
-      str := MkHandlerText(d.AsString, AIn, 'markLine', name, ValString(rawVal),
-        L.DataIndex)
-    else if (d <> nil) and (d.JSONType = jtString) then
-    begin
-      if AIn.SeriesName.Kind = mvkUndef then
-        str := FormatTpl(d.AsString, ['undefined', name, ValString(rawVal)])
-      else
-        str := FormatTpl(d.AsString, [ValString(AIn.SeriesName), name, ValString(rawVal)]);
-    end
-    else if rawVal.Kind in [mvkUndef, mvkNull] then
-      str := name
-    else
-    begin
-      v := TyMkJsNumber(rawVal);
-      if (not IsNan(v)) and (not IsInfinite(v)) then
-        str := TyJsNumberToString(TyJsToFixed(v, 10))
-      else
-        str := ValString(rawVal);
-    end;
-    label_.Text := str;
+  { THE TEXT'S STYLE AND LINE.beforeUpdate's PLACE over the label levels
+    ALB -- the rest label's, and [R2-I3] the hover's (the emphasis text
+    style over them) }
+  procedure LayText(const ALB: TMkLevels; var ALabel: TTyMkLabelPic);
+  var LB: TMkLevels; label_: TTyMkLabelPic;
+  begin
+    LB := ALB;
+    label_ := ALabel;
     { createTextStyle, attached }
     fc := '';
     sc := '';
@@ -1326,6 +1376,119 @@ var
     label_.Silent := Truthy(Chain(LB, 'silent'));
     MkRt(LB, AIn, stroke, s, label_.Rt, label_.RtHasInherit, label_.RtInherit,
       label_.RtScale);
+    ALabel := label_;
+  end;
+
+  begin
+    lineV := View2(L.From.Src, L.To_.Src);
+    itemLv := Levels3(lineV, own, master);
+    fromFill := EndFill(L.From);
+    { the line: lineStyle through the merged item, the stroke falling back
+      to the start end's fill }
+    LS := Sub(itemLv, 'lineStyle');
+    d := Chain(LS, 'color');
+    if d <> nil then stroke := StrOf(d) else stroke := fromFill;
+    d := Chain(LS, 'width');
+    if d <> nil then P.LineWidth := NumOf(d) else P.LineWidth := 1;
+    d := Chain(LS, 'opacity');
+    if d <> nil then lsOpacity := NumOf(d) else lsOpacity := NaN;
+    lineType := Chain(LS, 'type');
+    P.DashType := lineType;
+    P.Dash := ResolveDash(lineType, P.LineWidth);
+    d := Chain(LS, 'dashOffset');
+    if d <> nil then P.DashOffset := NumOf(d) else P.DashOffset := 0;
+    if IsNan(lsOpacity) then P.Opacity := 1 else P.Opacity := lsOpacity;
+    d := Chain(LS, 'cap');
+    if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
+    d := Chain(LS, 'join');
+    if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+    P.Stroke := stroke;
+    d := Chain(itemLv, 'z2');
+    if d <> nil then P.Z2 := NumOf(d) else P.Z2 := 0;
+    P.X1 := L.From.Point.X;
+    P.Y1 := L.From.Point.Y;
+    P.X2 := L.To_.Point.X;
+    P.Y2 := L.To_.Point.Y;
+    P.Path := LinePath(P.X1, P.Y1, P.X2, P.Y2, P.LineWidth * s);
+    RunZ2(P.Z2);
+    { the tangent: LinePath.tangentAt, the un-snapped shape }
+    tx := P.X2 - P.X1;
+    ty := P.Y2 - P.Y1;
+    len := Sqrt(tx * tx + ty * ty);
+    if len = 0 then
+    begin
+      tx := 0;
+      ty := 0;
+    end
+    else
+    begin
+      tx := tx / len;
+      ty := ty / len;
+    end;
+    Symbol(L.From, False, stroke, lsOpacity, tx, ty, P.FromSym);
+    Symbol(L.To_, True, stroke, lsOpacity, tx, ty, P.ToSym);
+
+    { ---- the label ---- }
+    label_ := Default(TTyMkLabelPic);
+    LB := Sub(itemLv, 'label');
+    { [R2-I1] built where a state shows it too (needsCreateText), ignored at
+      rest [was: not built] }
+    if not Truthy(Chain(LB, 'show')) and not AnyStateLabelShows(itemLv) then
+    begin
+      P.Lbl := label_;
+      Exit;
+    end;
+    label_.Present := True;
+    label_.Hidden := not Truthy(Chain(LB, 'show'));
+    { the default text: the value rounded to ten places, else the name }
+    rawVal := L.LineValue;
+    case L.LineName.Kind of
+      mvkStr: name := L.LineName.Str;
+      mvkNum: name := TyJsNumberToString(L.LineName.Num);
+    else
+      name := '';
+    end;
+    d := Chain(LB, 'formatter');
+    if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+      str := MkHandlerText(d.AsString, AIn, 'markLine', name, ValString(rawVal),
+        L.DataIndex)
+    else if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      if AIn.SeriesName.Kind = mvkUndef then
+        str := FormatTpl(d.AsString, ['undefined', name, ValString(rawVal)])
+      else
+        str := FormatTpl(d.AsString, [ValString(AIn.SeriesName), name, ValString(rawVal)]);
+    end
+    else if rawVal.Kind in [mvkUndef, mvkNull] then
+      str := name
+    else
+    begin
+      v := TyMkJsNumber(rawVal);
+      if (not IsNan(v)) and (not IsInfinite(v)) then
+        str := TyJsNumberToString(TyJsToFixed(v, 10))
+      else
+        str := ValString(rawVal);
+    end;
+    label_.Text := str;
+    LayText(LB, label_);
+    { [R2-I3] AS THE HOVER LAYS IT OUT: the emphasis label's text style over
+      the rest one (its place, align and distance are Line.beforeUpdate's,
+      from the normal model), and where the emphasis textConfig writes a
+      position, calculateTextPosition over the Line group's own box in
+      place of beforeUpdate's -- updateInnerText runs after it }
+    EL := Sub(Sub(itemLv, 'emphasis'), 'label');
+    emphPos := Chain(EL, 'position');
+    if not Truthy(emphPos) then emphPos := nil;
+    if EmphLevels(itemLv, LB, ['position', 'distance', 'align', 'verticalAlign',
+      'baseline'], LBE, hold) or (emphPos <> nil) then
+    begin
+      lab2 := label_;
+      LayText(LBE, lab2);
+      lab2.Hold := hold;
+      lab2.Hidden := False;
+      if emphPos <> nil then EmphLinePlace(P, itemLv, LB, emphPos, s, lab2);
+      P.EmphLbl := lab2;
+    end;
     P.Lbl := label_;
   end;
 
@@ -1654,7 +1817,7 @@ var
     Inc(Result);
   end;
 
-  procedure Lbl(const B: TTyMkLabelPic);
+  procedure Lbl(const B: TTyMkLabelPic; ATarget: TTyPaintList);
   var
     x, y, w, h: Double;
     ah: TTyTextAnchorH;
@@ -1733,8 +1896,8 @@ var
       el.Shape := TyShapeRect(TyRtDeviceBox(pieces, x, y,
         el.Caption.RotationRad, B.RtScale));
     end;
-    AList.Add(el);
-    Inc(Result);
+    ATarget.Add(el);
+    if ATarget = AList then Inc(Result);
   end;
 
   { THE ANIMATION'S VIEW of what was just added: one proxy per line, its
@@ -1774,7 +1937,10 @@ var
     AList.SetElement(AList.Count - 1, e);
   end;
 
-var at: Integer;
+var
+  at: Integer;
+  tmp: TTyPaintList;
+  lel: TTyChartElement;
 begin
   Result := 0;
   if AList = nil then Exit;
@@ -1811,8 +1977,26 @@ begin
     Symbol(APics[i].ToSym);
     TagLast(at, carMarkLineTo, APics[i]);
     at := AList.Count;
-    Lbl(APics[i].Lbl);
+    Lbl(APics[i].Lbl, AList);
     TagLast(at, carMarkLineLabel, APics[i]);
+    { [R2-I3] the label as the hover lays it out, its twin }
+    if APics[i].EmphLbl.Present and (AList.Count > at) then
+    begin
+      tmp := TTyPaintList.Create;
+      try
+        Lbl(APics[i].EmphLbl, tmp);
+        if tmp.Count > 0 then
+        begin
+          lel := AList.Element(at);
+          SetLength(lel.EmphTwin, 1);
+          lel.EmphTwin[0].Caption := tmp.Element(0).Caption;
+          lel.EmphTwin[0].Shape := tmp.Element(0).Shape;
+          AList.SetElement(at, lel);
+        end;
+      finally
+        tmp.Free;
+      end;
+    end;
     MkTarget(AList, first, ctkMarkLine, AHostSeries,
       ABlock.Lines[APics[i].Item].DataIndex, ABlock.Silent);
   end;
@@ -1938,6 +2122,155 @@ end;
   (the pin's 0.4 rule when APin), updateInnerText's rotate and offset, and
   the inside ink against the host fill (AFillStr when AFillIsString, else a
   gradient) or the outside ink. The text is the caller's. }
+{ [R2-I3] zrender's BoundingRect.union: this widened to take R in }
+procedure ZrUnion(var A: TTyXYWH; var AHas: Boolean; const R: TTyXYWH);
+var x, y: Double;
+begin
+  if not AHas then
+  begin
+    A := R;
+    AHas := True;
+    Exit;
+  end;
+  x := Min(R.X, A.X);
+  y := Min(R.Y, A.Y);
+  if not IsInfinite(A.X) and not IsNan(A.X) and not IsInfinite(A.W) and not IsNan(A.W) then
+    A.W := Max(R.X + R.W, A.X + A.W) - x
+  else
+    A.W := R.W;
+  if not IsInfinite(A.Y) and not IsNan(A.Y) and not IsInfinite(A.H) and not IsNan(A.H) then
+    A.H := Max(R.Y + R.H, A.Y + A.H) - y
+  else
+    A.H := R.H;
+  A.X := x;
+  A.Y := y;
+end;
+
+{ [R2-I3] zrender contain/text.ts calculateTextPosition: where the text's
+  anchor goes on the rect R (its alignment the caller keeps); a word it does
+  not know leaves the rect's corner }
+procedure ZrCalcTextPos(APos: TJSONData; ADist: Double; const R: TTyXYWH;
+  out AX, AY: Double);
+var w: string;
+begin
+  AX := R.X;
+  AY := R.Y;
+  if (APos <> nil) and (APos.JSONType = jtArray) then
+  begin
+    if APos.Count > 0 then AX := AX + ZrPercent(APos.Items[0], R.W) else AX := NaN;
+    if APos.Count > 1 then AY := AY + ZrPercent(APos.Items[1], R.H) else AY := NaN;
+    Exit;
+  end;
+  if (APos <> nil) and (APos.JSONType = jtString) then w := APos.AsString else w := 'inside';
+  if w = 'left' then
+  begin
+    AX := AX - ADist; AY := AY + R.H / 2;
+  end
+  else if w = 'right' then
+  begin
+    AX := AX + ADist + R.W; AY := AY + R.H / 2;
+  end
+  else if w = 'top' then
+  begin
+    AX := AX + R.W / 2; AY := AY - ADist;
+  end
+  else if w = 'bottom' then
+  begin
+    AX := AX + R.W / 2; AY := AY + R.H + ADist;
+  end
+  else if w = 'inside' then
+  begin
+    AX := AX + R.W / 2; AY := AY + R.H / 2;
+  end
+  else if w = 'insideLeft' then
+  begin
+    AX := AX + ADist; AY := AY + R.H / 2;
+  end
+  else if w = 'insideRight' then
+  begin
+    AX := AX + R.W - ADist; AY := AY + R.H / 2;
+  end
+  else if w = 'insideTop' then
+  begin
+    AX := AX + R.W / 2; AY := AY + ADist;
+  end
+  else if w = 'insideBottom' then
+  begin
+    AX := AX + R.W / 2; AY := AY + R.H - ADist;
+  end
+  else if w = 'insideTopLeft' then
+  begin
+    AX := AX + ADist; AY := AY + ADist;
+  end
+  else if w = 'insideTopRight' then
+  begin
+    AX := AX + R.W - ADist; AY := AY + ADist;
+  end
+  else if w = 'insideBottomLeft' then
+  begin
+    AX := AX + ADist; AY := AY + R.H - ADist;
+  end
+  else if w = 'insideBottomRight' then
+  begin
+    AX := AX + R.W - ADist; AY := AY + R.H - ADist;
+  end;
+end;
+
+{ [R2-I3] A markLine LABEL UNDER AN EMPHASIS POSITION. The Line group's
+  emphasis state carries the label's textConfig (setLabelStyle), so
+  updateInnerText -- after Line.beforeUpdate placed the text -- puts it by
+  calculateTextPosition on the group's own box: the line's path grown by its
+  stroke at the emphasis width (max(width, 5), no fill) and each end symbol's
+  path box through its transform, in the group's order; the distance the
+  emphasis label's, else the normal one's (textConfig merges). The text's
+  alignment stays beforeUpdate's (it sets the style's), its turn and offset
+  ride along: the move is the anchor's. }
+procedure EmphLinePlace(const P: TTyMkLinePic; const AItemLv, ALB: TMkLevels;
+  APos: TJSONData; AScale: Double; var ALab: TTyMkLabelPic);
+var
+  box, r: TTyXYWH;
+  has: Boolean;
+  d: TJSONData;
+  w, dist, x, y: Double;
+
+  procedure Sym(const S: TTyMkSymbolPic);
+  begin
+    if not S.Present or (Length(S.Path) = 0) then Exit;
+    r := TyZrBBox(S.Path);
+    if (S.Stroke <> '') and (S.Stroke <> 'none') then
+      r := TyGrowByStroke(r, (S.Fill <> '') and (S.Fill <> 'none'), S.LineWidth);
+    ZrUnion(box, has, RectThrough(r, S.HasTransform, S.Transform));
+  end;
+
+begin
+  has := False;
+  box := Default(TTyXYWH);
+  if Length(P.Path) > 0 then
+  begin
+    d := Chain(Sub(Sub(AItemLv, 'emphasis'), 'lineStyle'), 'width');
+    if d <> nil then w := NumOf(d) else w := P.LineWidth;
+    r := TyZrBBox(P.Path);
+    if (P.Stroke <> '') and (P.Stroke <> 'none') then
+      r := TyGrowByStroke(r, False, w * AScale);
+    ZrUnion(box, has, r);
+  end;
+  Sym(P.FromSym);
+  Sym(P.ToSym);
+  d := Chain(Sub(Sub(AItemLv, 'emphasis'), 'label'), 'distance');
+  if d = nil then d := Chain(ALB, 'distance');
+  if d = nil then dist := 5
+  else if d.JSONType = jtArray then dist := NaN
+  else dist := NumOf(d);
+  dist := dist * AScale;
+  ZrCalcTextPos(APos, dist, box, x, y);
+  ALab.InnerX := ALab.InnerX + (x - ALab.X);
+  ALab.InnerY := ALab.InnerY + (y - ALab.Y);
+  ALab.X := x;
+  ALab.Y := y;
+  ALab.HasTransform := LocalTransform(ALab.InnerX, ALab.InnerY,
+    ALab.InnerRotation, ALab.InnerOriginX, ALab.InnerOriginY, ALab.Transform);
+end;
+
 procedure StyleLabel(const LB: TMkLevels; const gts: TMkView; const AIn: TTyMkPicInput;
   AScale: Double; const ARect: TTyXYWH; const AInherit: string;
   AHasFill, AFillIsString: Boolean; const AFillStr: string; ADefaultOpacity: Double;
@@ -2222,7 +2555,8 @@ var
     defOp, ls2, x1, y1, x2, y2, lw2, ratio2: Double;
     hasL2, hasG2, hasStroke2: Boolean;
     ES, LBE: TMkLevels;
-    ecfg: TJSONObject;
+    hasOv: Boolean;
+    hold: IInterface;
     sc2: string;
     l2, g2: TTyMat2D;
   begin
@@ -2463,12 +2797,12 @@ var
     { [R2-B] AND ON THE PATH THE HOVER SCALES: the same layout on the rect of
       the path at its emphasis scale (the stroke's margin by that scale's
       line scale) -- the move from the rest place; [R2-I1] under the
-      emphasis textConfig too (its position, distance, offset, rotate) }
+      emphasis textConfig too (its position, distance, offset, rotate);
+      [R2-I3] under the whole emphasis label (its text style too) }
     ratio2 := P.EmphRatio;
     if IsNan(ratio2) or IsInfinite(ratio2) then ratio2 := 1;
-    ecfg := EmphTextConfig(lv);
-    try
-    if (ratio2 <> 1) or (ecfg <> nil) then
+    hasOv := EmphLevels(lv, LB, [], LBE, hold);
+    if (ratio2 <> 1) or hasOv then
     begin
       hasL2 := LocalTransformS(P.X, P.Y, P.Rotation, P.ScaleX * ratio2,
         P.ScaleY * ratio2, l2);
@@ -2491,12 +2825,11 @@ var
       if d <> nil then lw2 := NumOf(d);
       hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
       lp2 := lp;
-      if ecfg <> nil then LBE := OverLevels(ecfg, LB) else LBE := LB;
       StyleLabel(LBE, gts, AIn, s, RectThrough(TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke2,
         hasFill, lw2, ls2), hasG2, g2), fill, hasFill, True, P.StyleFill, defOp,
         P.ShapeType = 'pin', maxZ2, lp2);
-      { the option's own objects outlive the overlay; its position does not }
-      lp2.Position := nil;
+      { [R2-I3] what it points into lives with it }
+      lp2.Hold := hold;
       lp2.Hidden := False;
       P.EmphLbl := lp2;
       x1 := 0;
@@ -2516,9 +2849,6 @@ var
       lp.HasEmphPlace := True;
       lp.EmphDX := x2 - x1;
       lp.EmphDY := y2 - y1;
-    end;
-    finally
-      ecfg.Free;
     end;
     P.Lbl := lp;
   end;
@@ -2705,6 +3035,12 @@ begin
   finally
     tmp.Free;
   end;
+  { [R2-I3] THE WHOLE LABEL as the hover lays it out -- its font, its
+    block's pieces, its box -- which the states put in place of the rest
+    one under emphasis }
+  SetLength(AEl.EmphTwin, 1);
+  AEl.EmphTwin[0].Caption := e2.Caption;
+  AEl.EmphTwin[0].Shape := e2.Shape;
   AEl.Anim.G[2] := e2.Caption.X - AEl.Caption.X;
   AEl.Anim.G[3] := e2.Caption.Y - AEl.Caption.Y;
   AEl.Anim.G[4] := 1;
@@ -2863,7 +3199,8 @@ var
   hasStroke, hasFill: Boolean;
   inherit, name, str: string;
   lp, lp2: TTyMkPtLabelPic;
-  ecfg: TJSONObject;
+  LBE: TMkLevels;
+  hold: IInterface;
 begin
   Result := nil;
   if (not ABlock.Present) or (ABlock.Kind <> mkArea) then Exit;
@@ -2982,20 +3319,16 @@ begin
         else inherit := TyMkModifyAlpha(P.Fill, 1);
         StyleLabel(LB, gts, AIn, s, P.Rect, inherit, hasFill, P.FillData = nil, P.Fill,
           NaN, False, maxZ2, lp);
-        { [R2-I1] and under the emphasis textConfig, where it says a key }
-        ecfg := EmphTextConfig(lv);
-        try
-          if ecfg <> nil then
-          begin
-            lp2 := lp;
-            StyleLabel(OverLevels(ecfg, LB), gts, AIn, s, P.Rect, inherit, hasFill,
-              P.FillData = nil, P.Fill, NaN, False, maxZ2, lp2);
-            lp2.Position := nil;
-            lp2.Hidden := False;
-            P.EmphLbl := lp2;
-          end;
-        finally
-          ecfg.Free;
+        { [R2-I1] and under the emphasis textConfig, where it says a key;
+          [R2-I3] under the whole emphasis label }
+        if EmphLevels(lv, LB, [], LBE, hold) then
+        begin
+          lp2 := lp;
+          StyleLabel(LBE, gts, AIn, s, P.Rect, inherit, hasFill,
+            P.FillData = nil, P.Fill, NaN, False, maxZ2, lp2);
+          lp2.Hold := hold;
+          lp2.Hidden := False;
+          P.EmphLbl := lp2;
         end;
       end;
       P.Lbl := lp;
