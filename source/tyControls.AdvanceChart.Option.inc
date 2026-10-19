@@ -406,6 +406,8 @@ begin
   { notMerge: new series models, so no roam survives either, nor a toggle. }
   FGraphRoam := nil;
   FTreeToggled := nil;
+  { [R2-C] new series models, new data: the next update's trees are new }
+  FAnimDataFresh := True;
   FTreeRoam := nil;
   FTreeBox := nil;
   FTreeBoxHas := nil;
@@ -964,6 +966,8 @@ begin
     every option the preprocessors saw; the media default they never see
     visits the series only where it writes them [Batch 107] }
   if si >= 0 then FTreeToggled := nil;
+  { [R2-C] and the next update's trees are new ones }
+  if si >= 0 then FAnimDataFresh := True;
   { and resetViewRoot finds its node in no new tree [Batch 115] }
   if si >= 0 then HierDrillReset;
 

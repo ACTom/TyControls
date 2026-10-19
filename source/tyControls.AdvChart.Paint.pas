@@ -755,6 +755,11 @@ type
       (the series' 'viewGroup' proxy) }
     InView: Boolean;
     VSX, VSY, VX, VY: Double;
+    { [R2-C] AN ELEMENT OF A MAP'S TRANSFORM GROUP (MapDraw's, a geo
+      component's or a map series' own): 0 none, else the map view's key --
+      VSX .. VY its roam transform at rest, the 'geoView' proxy (series -1,
+      index the key) the transform now }
+    GeoView: Integer;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;

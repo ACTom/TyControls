@@ -222,7 +222,16 @@ function TyTreemapFindTarget(const ASolved: TTyTreemapSolved; const AHave: TTyTr
 { The storage after a render: what was kept from APrev, and what is new
   (not made for a node outside the canvas) [Batch 115]. }
 function TyTreemapHaveOf(const ASolved: TTyTreemapSolved;
-  const APrev: TTyTreemapHave): TTyTreemapHave;
+  const APrev: TTyTreemapHave): TTyTreemapHave; overload;
+{ [R2-C] the same over a NEW tree: AMap pairs each new row with the old row
+  whose elements it takes (-1: none) }
+function TyTreemapHaveOf(const ASolved: TTyTreemapSolved;
+  const APrev: TTyTreemapHave; const AMap: TTyIntegerArray): TTyTreemapHave; overload;
+{ [R2-C] _doRender's dualTravel between an OLD tree and a NEW one (a merge
+  made the data anew): from the two roots down, each pair's viewChildren
+  through a DataDiffer by getId (the first new row of a key takes the old
+  one); per new row the old row it takes the elements of, -1 for none }
+function TyTreemapPairRows(const AOld, ANew: TTyTreemapSolved): TTyIntegerArray;
 { A content label's words and anchor on a content rect at (AX0, AY0) --
   shape x * 1 + the group's tx -- of ACW by ACH: zrender's cut and the
   position table, as a frame of the drill-down places it [Batch 115]. }
@@ -1996,10 +2005,57 @@ end;
 
 function TyTreemapHaveOf(const ASolved: TTyTreemapSolved;
   const APrev: TTyTreemapHave): TTyTreemapHave;
+begin
+  Result := TyTreemapHaveOf(ASolved, APrev, nil);
+end;
+
+function TyTreemapPairRows(const AOld, ANew: TTyTreemapSolved): TTyIntegerArray;
+var k: Integer;
+
+  procedure Pair(const ANewKids, AOldKids: TTyIntegerArray);
+  var
+    used: array of Boolean;
+    i, j, nr, orow: Integer;
+  begin
+    used := nil;
+    SetLength(used, Length(ANewKids));
+    for i := 0 to High(AOldKids) do
+    begin
+      orow := AOldKids[i];
+      if (orow < 0) or (orow > High(AOld.Nodes)) then Continue;
+      for j := 0 to High(ANewKids) do
+      begin
+        nr := ANewKids[j];
+        if used[j] or (nr < 0) or (nr > High(ANew.Nodes)) then Continue;
+        if ANew.Nodes[nr].Id <> AOld.Nodes[orow].Id then Continue;
+        used[j] := True;
+        Result[nr] := orow;
+        Pair(ANew.Nodes[nr].View, AOld.Nodes[orow].View);
+        Break;
+      end;
+    end;
+  end;
+
+begin
+  Result := nil;
+  SetLength(Result, Length(ANew.Nodes));
+  for k := 0 to High(Result) do Result[k] := -1;
+  if (Length(ANew.Nodes) = 0) or (Length(AOld.Nodes) = 0) then Exit;
+  Pair(TTyIntegerArray.Create(0), TTyIntegerArray.Create(0));
+end;
+
+function TyTreemapHaveOf(const ASolved: TTyTreemapSolved;
+  const APrev: TTyTreemapHave; const AMap: TTyIntegerArray): TTyTreemapHave;
 var n: Integer;
 
   function Was(const A: array of Boolean; ARow: Integer): Boolean;
   begin
+    { [R2-C] a new tree's row reads the old row it is paired with }
+    if AMap <> nil then
+    begin
+      if (ARow < 0) or (ARow > High(AMap)) then Exit(False);
+      ARow := AMap[ARow];
+    end;
     Result := (ARow >= 0) and (ARow <= High(A)) and A[ARow];
   end;
 

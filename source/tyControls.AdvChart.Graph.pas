@@ -620,7 +620,21 @@ type
     InstFriction: Double;
     Layouting: Boolean;
     InstSteps: Integer;
+    { [R2-C] UPSTREAM'S preservedPoints, BY NODE ID: every node a pass laid
+      out, under its getId, at its p -- the live instance's array itself
+      upstream, so a later step or a drag moves it too; a node a legend
+      filtered out keeps its last place there. A later pass starts every
+      node from it (one it has not: not a number, the random box) instead of
+      the initial layout. Ids: the instance's nodes' keys, by node. }
+    Ids: TTyStringArray;
+    PKeys: TTyStringArray;
+    PX, PY: TTyDoubleArray;
   end;
+
+{ [R2-C] The nodes' getId as the force layout's preservedPoints keys them:
+  the node's id; else its name, '__ec__' and its count from the second time
+  on; else 'e', two NULs and its raw row. }
+function TyGraphForceKeys(const ANodes: TTyGraphNodeArray): TTyStringArray;
 
 { How many steps upstream's driver runs from a given starting friction: until
   the friction, shrunk by 0.992 a step, is under a hundredth -- and never fewer
@@ -3845,6 +3859,72 @@ begin
   TyGraphLayoutNone(ANodes, AView);
 end;
 
+function TyGraphForceKeys(const ANodes: TTyGraphNodeArray): TTyStringArray;
+var
+  i, j, c: Integer;
+begin
+  SetLength(Result, Length(ANodes));
+  for i := 0 to High(ANodes) do
+  begin
+    if ANodes[i].Id <> '' then
+    begin
+      Result[i] := ANodes[i].Id;
+      Continue;
+    end;
+    if ANodes[i].Name_ = '' then
+    begin
+      Result[i] := 'e'#0#0 + IntToStr(ANodes[i].RawRow);
+      Continue;
+    end;
+    c := 1;
+    for j := 0 to i - 1 do
+      if (ANodes[j].Id = '') and (ANodes[j].Name_ = ANodes[i].Name_) then Inc(c);
+    if c > 1 then Result[i] := ANodes[i].Name_ + '__ec__' + IntToStr(c)
+    else Result[i] := ANodes[i].Name_;
+  end;
+end;
+
+{ [R2-C] preservedPoints[id] }
+function ForcePreservedAt(const AState: TTyGraphForceState; const AKey: string): Integer;
+var k: Integer;
+begin
+  for k := 0 to High(AState.PKeys) do
+    if AState.PKeys[k] = AKey then Exit(k);
+  Result := -1;
+end;
+
+{ [R2-C] what the last instance's nodes are now (upstream's preserved arrays
+  ARE its nodes' p), written into preservedPoints by their ids }
+procedure ForcePreserve(var AState: TTyGraphForceState);
+var i, k: Integer;
+begin
+  if not AState.HasInst then Exit;
+  for i := 0 to High(AState.Ids) do
+  begin
+    if (i > High(AState.InstPX)) or (i > High(AState.InstPY)) then Break;
+    k := ForcePreservedAt(AState, AState.Ids[i]);
+    if k < 0 then
+    begin
+      k := Length(AState.PKeys);
+      SetLength(AState.PKeys, k + 1);
+      SetLength(AState.PX, k + 1);
+      SetLength(AState.PY, k + 1);
+      AState.PKeys[k] := AState.Ids[i];
+    end;
+    AState.PX[k] := AState.InstPX[i];
+    AState.PY[k] := AState.InstPY[i];
+  end;
+end;
+
+function SameKeyList(const A, B: TTyStringArray): Boolean;
+var i: Integer;
+begin
+  if Length(A) <> Length(B) then Exit(False);
+  for i := 0 to High(A) do
+    if A[i] <> B[i] then Exit(False);
+  Result := True;
+end;
+
 procedure TyGraphLayoutForce(var ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; AView: TTyGraphView;
   const ASpec: TTyGraphSpec; ASeed: LongWord;
@@ -3855,6 +3935,7 @@ var
   width, height, cx, cy, friction, lo, hi: Double;
   ox, oy: TTyDoubleArray;
   mask: TFPUExceptionMask;
+  keys: TTyStringArray;
 begin
   if AView = nil then Exit;
   n := Length(ANodes);
@@ -3866,6 +3947,10 @@ begin
       TyGraphLayoutNone(ANodes, AView);
       Exit;
     end;
+    { [R2-C] the nodes' ids, and preservedPoints brought up to the last
+      instance's nodes as they are now }
+    keys := TyGraphForceKeys(ANodes);
+    ForcePreserve(AState);
 
     { NOTHING THE SOLVER CAN SEE HAS MOVED, so the answer is the last one. A
       theme change or a focus change lays the chart out again; upstream would
@@ -3873,6 +3958,7 @@ begin
       where the last run stopped would nudge every node for no reason. The
       instance -- what a drag steps again -- stays as it is. }
     if AState.Valid and (Length(AState.X) = n) and (Length(AState.Y) = n)
+      and SameKeyList(AState.Ids, keys)
       and (AState.Rect.Left = rect.Left) and (AState.Rect.Top = rect.Top)
       and (AState.Rect.Right = rect.Right)
       and (AState.Rect.Bottom = rect.Bottom)
@@ -3892,14 +3978,25 @@ begin
 
     { WHERE EVERY NODE STARTS -- its LAYOUT, in upstream's word, which is also
       where a pinned node stays. Three sources, and the previous pass beats
-      both init layouts. }
+      both init layouts: [R2-C] preservedPoints by the node's id -- a node
+      it has no place for starts at not a number (the random box), whatever
+      its option wrote (`preservedPoints[id] || [NaN, NaN]`). }
     SetLength(ox, n);
     SetLength(oy, n);
-    if AState.Valid and (Length(AState.X) = n) and (Length(AState.Y) = n) then
+    if AState.Valid and (Length(AState.PKeys) > 0) then
       for i := 0 to n - 1 do
       begin
-        ox[i] := AState.X[i];
-        oy[i] := AState.Y[i];
+        k := ForcePreservedAt(AState, keys[i]);
+        if k >= 0 then
+        begin
+          ox[i] := AState.PX[k];
+          oy[i] := AState.PY[k];
+        end
+        else
+        begin
+          ox[i] := NaN;
+          oy[i] := NaN;
+        end;
       end
     else
       case ASpec.Force.InitLayout of
@@ -4050,7 +4147,9 @@ begin
     AState.Rect := rect;
     AState.ViewRect := AView.GetRect;
     AState.Valid := True;
+    AState.Ids := keys;
     ForceAnswer(ANodes, AState, AView);
+    ForcePreserve(AState);
   finally
     UnmaskFP(mask);
   end;
@@ -4938,10 +5037,14 @@ var
   { Which pass this force layout is: 0 fresh, 1 reusing the answer, 2
     continuing from it -- the same test TyGraphLayoutForce makes. }
   function ForcePassKind(const ARect, AViewRect: TTyRectF;
-    ACount: Integer): Integer;
+    ACount: Integer; const AKeys: TTyStringArray): Integer;
   begin
-    if not (AForce.Valid and (Length(AForce.X) = ACount)
-      and (Length(AForce.Y) = ACount)) then Exit(0);
+    { [R2-C] preservedPoints, by id: any earlier pass of the model leaves
+      them -- a pass after a legend filter continues too (2); the same
+      answer only for the same nodes (1) }
+    if not AForce.Valid then Exit(0);
+    if not ((Length(AForce.X) = ACount) and (Length(AForce.Y) = ACount)
+      and SameKeyList(AForce.Ids, AKeys)) then Exit(2);
     if (AForce.Rect.Left = ARect.Left) and (AForce.Rect.Top = ARect.Top)
       and (AForce.Rect.Right = ARect.Right)
       and (AForce.Rect.Bottom = ARect.Bottom)
@@ -5073,7 +5176,8 @@ begin
         begin
           { WHERE THE INITIAL LAYOUT PUT EVERY SURVIVOR, taken before the
             solver moves them: the written positions, or the ring by value. }
-          kind := ForcePassKind(dataRect, viewRect, Length(Result.Nodes));
+          kind := ForcePassKind(dataRect, viewRect, Length(Result.Nodes),
+            TyGraphForceKeys(Result.Nodes));
           SetLength(initX, Length(Result.Nodes));
           SetLength(initY, Length(Result.Nodes));
           for i := 0 to High(Result.Nodes) do

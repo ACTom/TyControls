@@ -571,6 +571,13 @@ type
     Ghosts: array of TTyTmGhost;
     Old: TTyTreemapSolved;
     OldHave: TTyTreemapHave;
+    { [R2-C] A MERGE'S TRANSITION, from the OLD tree to a new one: the new
+      rows' old rows (Map) and back (O2N) -- nil for the same tree; the
+      deleted node groups by their OLD row (OldGroups: Groups is by the new
+      row). Old's borrowed option pieces are the replaced option's -- never
+      read through them }
+    Map, O2N: TTyIntegerArray;
+    OldGroups: array of TTyChartAnimProxy;
     { a frame has been stepped since the arming: until then a leaving
       element is not dirty and its words stand where they were (setToFinal
       copies the values without marking it) }
@@ -807,6 +814,15 @@ type
     FTmPrev: array of TTyTreemapSolved;
     FTmHave: array of TTyTreemapHave;
     FTmAnim: array of TTyTmAnim;
+    { [R2-C] THE LAST SOLVE AND STORAGE a setOption's new tree takes over
+      (TreemapView keeps _oldTree and _storage across it), by series index,
+      with the view keys of the render they were drawn in; consumed by the
+      next solve }
+    FTmOld: array of TTyTreemapSolved;
+    FTmOldHave: array of TTyTreemapHave;
+    FTmOldKeys: TTyStringArray;
+    { the series' view keys when the treemaps were last solved }
+    FTmViewKeys: TTyStringArray;
     { a press on a breadcrumb item: its series, its index, where }
     FCrumbPressSeries, FCrumbPressIndex, FCrumbPressX, FCrumbPressY: Integer;
     { a press that started on a breadcrumb item is not a treemap click }
@@ -1581,6 +1597,10 @@ type
       maps onto are the old ones, so are their views -- a series kept as a
       full update keeps it, the axes groupTransition, the markers update }
     FAnimMerge: Boolean;
+    { [R2-C] a setOption since the render the waiting update starts from
+      visited the series (notMerge, or a merge with `series` -- every
+      option, through backwardCompat): their data, a tree's Tree, is new }
+    FAnimDataFresh: Boolean;
     { THE AXIS VIEWS the update starts from, 'xAxis0=' + model id + #1 +
       subtype (prepareView's '_ec_' + id + '_' + type), read before the
       option changes; and the axes a replaceMerge made brand new since --
@@ -1719,6 +1739,9 @@ type
       before setOption's flush) [Batch 94] }
     procedure AnimFlushArmed;
     function AnimSeriesInfo: TTyChartAnimSeriesArray;
+    { [R2-C] the map views the last build drew, and (ANew) the model each
+      one's transform group tweens on }
+    function AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
     { ---- the states on the proxies [Batch 94, AN3b] ---- }
     { after the build and its arming: every state element's proxy found or
       made, seeded with the rest values, given the series' stateTransition,
@@ -2893,7 +2916,8 @@ type
     function TmRowsOf(ASeries: Integer; out ASlot: Integer): Boolean;
     { the drill-down's animation: armed by a render, a frame of it, its end }
     procedure TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
-      const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer);
+      const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
+      const AMap: TTyIntegerArray);
     procedure TmAnimDrop(ASeries: Integer);
     procedure TmAnimDropAll;
     function TmAnimAny: Boolean;
@@ -4215,6 +4239,9 @@ type
       'bg', 'ct', 'label' (the content's words), 'upper'; nil for none }
     function TreemapAnimProxy(ASeriesIndex, ARow: Integer; const AKind: string): TTyChartAnimProxy;
     function TreemapGhostCount(ASeriesIndex: Integer): Integer;
+    { [R2-C] the AIndex-th deleted rect still leaving: its old row and kind
+      (0 the background, 1 the content); nil past the end }
+    function TreemapGhost(ASeriesIndex, AIndex: Integer; out ARow, AKind: Integer): TTyChartAnimProxy;
     { whether the row is expanded now, the toggles applied }
     function TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
     { The centre and zoom as the OPTION now says them -- the series' own
