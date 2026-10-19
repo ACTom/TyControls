@@ -3166,7 +3166,9 @@ end;
 
 const
   { Pixels the shadow cache may hold, all entries together (4 bytes each: 16 MB). A shadow
-    bigger than that on its own is drawn every time, as before. }
+    bigger than that on its own is drawn every time, as before. Counted in LAYOUT pixels: a
+    layer at device scale S holds S^2 raster pixels for each, so on that screen the cache
+    keeps as many shadows as at S = 1, in S^2 the bytes; at S = 1 nothing changes (#83). }
   ShadowCacheMaxPixels = 4 * 1024 * 1024;
 
 var
@@ -3236,9 +3238,11 @@ var
   useCache: Boolean;
   entry: TTyShadowEntry;
   ink: TRect;
+  sq, cost: Int64;
 begin
   if FBmp = nil then
     Exit;
+  sq := Int64(FScale) * FScale;   // raster pixels per layout pixel
   r := Scale(ARadiusLogical);
   r := TyClampRadiusPx(r, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   blur := Scale(ABlurLogical);
@@ -3246,7 +3250,7 @@ begin
   oy := Scale(AOffsetLogical.Y);
   px := TyColorToBGRA(AColor);
   useCache := TyShadowCacheEnabled and (GetCurrentThreadId = MainThreadID)
-    and (Int64(FBmp.Width) * FBmp.Height <= ShadowCacheMaxPixels);
+    and (Int64(FBmp.Width) * FBmp.Height <= ShadowCacheMaxPixels * sq);
   key := '';
   if useCache then
   begin
@@ -3303,9 +3307,10 @@ begin
       end;
       if entry.Bmp <> nil then
       begin
-        if GShadowCachePixels + Int64(entry.Bmp.Width) * entry.Bmp.Height > ShadowCacheMaxPixels then
+        cost := Int64(entry.Bmp.Width) * entry.Bmp.Height div sq;
+        if GShadowCachePixels + cost > ShadowCacheMaxPixels then
           TyClearShadowCache;
-        Inc(GShadowCachePixels, Int64(entry.Bmp.Width) * entry.Bmp.Height);
+        Inc(GShadowCachePixels, cost);
       end;
       GShadowCache.AddObject(key, entry);
     end;
@@ -5168,7 +5173,9 @@ end;
   When a painter lets go (EndPaint, BeginPaint*, its destructor) the states of its canvas
   that share its entries get copies, as before, and the entries become spare -- a mask
   larger than cClipPoolKeepPx is freed then rather than kept. Main thread only, like the
-  rest of the painter's caches. }
+  rest of the painter's caches.
+  cClipPoolKeepPx counts LAYOUT pixels: a mask built at device scale S has S^2 raster pixels
+  for each, and is kept up to S^2 cClipPoolKeepPx of them -- on that screen only (#83). }
 const
   cClipPool = 4;
   cClipPoolKeepPx = 2 * 1024 * 1024;
@@ -5183,6 +5190,7 @@ var
     R: TRect;
     M: TAffineMatrix;
     W, H: Integer;
+    S: Integer;   // the device scale it was built at
     AA, PC: Boolean;
     Owner: TObject;
   end;
@@ -5318,7 +5326,7 @@ begin
         if Mask = nil then Continue;
         if FBmp <> nil then
           CanvasDisownMask(FBmp.Canvas2D, TGrayscaleMask(Mask));
-        if Int64(W) * H > cClipPoolKeepPx then FreeAndNil(Mask);
+        if Int64(W) * H > Int64(cClipPoolKeepPx) * S * S then FreeAndNil(Mask);
       end;
 end;
 
@@ -5393,6 +5401,7 @@ begin
     M := cur;
     W := FBmp.Width;
     H := FBmp.Height;
+    S := FScale;
     AA := ctx.antialiasing;
     PC := ctx.pixelCenteredCoordinates;
     Owner := Self;
