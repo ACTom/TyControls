@@ -43,7 +43,9 @@ uses
   tyControls.Painter;
 
 type
-  { Builds the control on AParent at APPI, in the state the check is about. The caller sizes it. }
+  { Builds the control on AParent at APPI, in the state the check is about. The caller sizes it,
+    unless the check passes AW <= 0: then the builder does (a part its host lays out, such as an
+    embedded scroll bar). }
   TTyBuildForScale = function(AParent: TWinControl; APPI: Integer): TControl of object;
   TTyIntArray = array of Integer;
 
@@ -89,7 +91,8 @@ function TyRulesText(const A: TTyIntArray): string;
 
 { The control's OWN surface (no children), painted the way test.dpi.support's PaintOne paints it:
   at S = AScale through the seam with DeviceUnits, into a W*S x H*S bitmap that starts white.
-  AScale = 1 paints with the seam off. The caller frees the result. }
+  AScale = 1 paints with the seam off. The seam answers for canvases only: a sub-painter with no
+  canvas gets scale 1, as on a real Retina window (plan B Task 6). The caller frees the result. }
 function TyPaintOwnSurface(AControl: TControl; AScale: Integer): TBGRABitmap;
 { A 2:1 box average: every output pixel the mean of the 2 x 2 block it covers. }
 function TyHalve(B: TBGRABitmap): TBGRABitmap;
@@ -143,7 +146,7 @@ begin
     bmp.SetSize(w, h);
     bmp.Canvas.Brush.Color := clWhite;
     bmp.Canvas.FillRect(0, 0, w, h);
-    if AScale > 1 then TyForceDeviceScaleForTest(AScale, True);
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, True, False);
     try
       if AControl is TWinControl then
         TWinControlAccess(AControl).PaintWindow(bmp.Canvas.Handle)
@@ -461,10 +464,10 @@ begin
     f1.SetBounds(0, 0, AW + 40, AH + 40);
     f2.SetBounds(0, 0, AW + 40, AH + 40);
     c1 := ABuild(f1, 96);
-    c1.SetBounds(0, 0, AW, AH);
+    if AW > 0 then c1.SetBounds(0, 0, AW, AH);
     ARaster := TyPaintOwnSurface(c1, 2);
     c2 := ABuild(f2, 96);
-    c2.SetBounds(0, 0, AW, AH);
+    if AW > 0 then c2.SetBounds(0, 0, AW, AH);
     ARef := TyPaintOwnSurface(c2, 1);
   finally
     f2.Free;

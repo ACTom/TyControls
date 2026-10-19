@@ -19,7 +19,7 @@ uses
   tyControls.ListView, tyControls.ListBox, tyControls.AdvancedListBox, tyControls.TabSet,
   tyControls.ListGroupPanel, tyControls.ValueListEditor, tyControls.ListView.Layout,
   tyControls.Columns, tyControls.TreeView, tyControls.TabSheet, tyControls.Controller,
-  tyControls.Types, test.devicescale.support;
+  tyControls.Types, StdCtrls, tyControls.ScrollBar, tyControls.Memo, test.devicescale.support;
 
 type
   TDeviceScaleControlsTest = class(TDeviceScaleCase)
@@ -28,6 +28,10 @@ type
     FImages: TImageList;
     FMode: Integer;
     FSheetTheme: TTyStyleController;
+    FBarTheme: TTyStyleController;
+    function BarTheme: TTyStyleController;
+    function BuildEmbeddedBar(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildFadingBar(AParent: TWinControl; APPI: Integer): TControl;
     function IconFont: TTyIconFont;
     function Images: TImageList;
     function BuildImage(AParent: TWinControl; APPI: Integer): TControl;
@@ -105,6 +109,16 @@ type
       8 x 8. Drawn with a coloured, bordered, rounded theme: on the default white it would look
       the same in any quarter. }
     procedure TestTabSheetThroughItsCache;
+    { plan B Task 6: a scroll bar docked on its host's edge paints the host's background, its
+      own body and the host's frame in three layers of its own (RenderOverHostFrame); a
+      standalone bar fading out composes its body as a layer too. Both layers at the raster. }
+    procedure TestEmbeddedBarComposesAtTheDeviceScale;
+    procedure TestFadingBarComposesAtTheDeviceScale;
+    { The averaged comparison cannot see a sliver of the bar's body left outside the host's
+      rounded corner, next to the border's strong ink. test.scrollbar.hostframe's criterion, at
+      S = 2: every pixel of the bar's rect that the host itself draws as frame -- border, its
+      antialiasing, the parent's background outside the arc -- is the same on the bar. }
+    procedure TestEmbeddedBarRedrawsTheHostFrameAtTheDeviceScale;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -116,6 +130,28 @@ type
   TControlAccess = class(TControl);
   TListViewAccess = class(TTyListView);
   TTreeAccess = class(TTyTreeView);
+
+  TMemoAccess = class(TTyMemo)
+  public
+    { The bar the memo builds, laid out where it docks: LCL skips the realign on a form that was
+      never shown, but the align engine runs when called (test.scrollbar.hostframe ForceAlign). }
+    function SettledBar: TTyScrollBar;
+  end;
+
+function TMemoAccess.SettledBar: TTyScrollBar;
+var
+  r: TRect;
+  i: Integer;
+begin
+  UpdateScrollBar;
+  r := Rect(0, 0, Width, Height);
+  AdjustClientRect(r);
+  AlignControls(nil, r);
+  Result := nil;
+  for i := 0 to ControlCount - 1 do
+    if (Controls[i] is TTyScrollBar) and (TTyScrollBar(Controls[i]).Kind = sbVertical) then
+      Exit(TTyScrollBar(Controls[i]));
+end;
 
 const
   CTreeW = 240;
@@ -138,6 +174,7 @@ begin
   FreeAndNil(FIconFont);
   FreeAndNil(FImages);
   FreeAndNil(FSheetTheme);
+  FreeAndNil(FBarTheme);
   inherited TearDown;
 end;
 
@@ -832,6 +869,130 @@ end;
 procedure TDeviceScaleControlsTest.TestTabSheetThroughItsCache;
 begin
   CheckScale('TTyTabSheet', @BuildTabSheet, 160, 100);
+end;
+
+{ ---- plan B Task 6: the scroll bar's layers ---- }
+
+function TDeviceScaleControlsTest.BarTheme: TTyStyleController;
+begin
+  { A coloured, rounded host frame and a bar unlike the host's face, so the bar's three layers
+    -- host background, body, host frame -- each have ink of their own. }
+  if FBarTheme = nil then
+  begin
+    FBarTheme := TTyStyleController.Create(nil);
+    FBarTheme.LoadThemeCss(':root { --scrollbar-size: 14; --scrollbar-auto-hide: 1000; }' +
+      'TyMemo { background: #FFFFFF; color: #000000; border-color: #506070; ' +
+      'border-width: 2px; border-radius: 8px; padding: 6px; }' +
+      'TyScrollBar { background: #C8D0D8; color: #404040; border-width: 0px; }' +
+      'TyScrollThumb { background: #304050; }');
+  end;
+  Result := FBarTheme;
+end;
+
+function TDeviceScaleControlsTest.BuildEmbeddedBar(AParent: TWinControl; APPI: Integer): TControl;
+var
+  m: TMemoAccess;
+  bar: TTyScrollBar;
+  i: Integer;
+begin
+  m := TMemoAccess.Create(AParent);
+  m.Parent := AParent;
+  m.Controller := BarTheme;
+  m.Font.PixelsPerInch := APPI;
+  m.SetBounds(0, 0, 160, 100);
+  m.ScrollBars := ssAutoVertical;
+  for i := 1 to 40 do m.Lines.Add('line ' + IntToStr(i));
+  bar := m.SettledBar;
+  AssertNotNull('precondition: the memo docks a vertical bar', bar);
+  AssertEquals('precondition: the bar touches the memo''s right edge', m.Width,
+    bar.Left + bar.Width);
+  AssertTrue('precondition: the bar is embedded', bar.IsEmbedded);
+  bar.NoteActivity;
+  Result := bar;
+end;
+
+function TDeviceScaleControlsTest.BuildFadingBar(AParent: TWinControl; APPI: Integer): TControl;
+var
+  bar: TTyScrollBar;
+begin
+  bar := TTyScrollBar.Create(AParent);
+  bar.Parent := AParent;
+  bar.Controller := BarTheme;
+  TControlAccess(bar).Font.PixelsPerInch := APPI;
+  bar.Kind := sbVertical;
+  bar.Max := 100;
+  bar.PageSize := 20;
+  bar.Position := 30;
+  bar.NoteActivity;
+  bar.AutoHideTick(2000);
+  bar.AutoHideTick(TyScrollBarFadeOutMs div 3);
+  AssertTrue('precondition: the bar is part way through its fade',
+    (bar.FadeLevel > 0.01) and (bar.FadeLevel < 0.99));
+  Result := bar;
+end;
+
+procedure TDeviceScaleControlsTest.TestEmbeddedBarComposesAtTheDeviceScale;
+begin
+  CheckScale('TTyScrollBar-embedded', @BuildEmbeddedBar, 0, 0);
+end;
+
+procedure TDeviceScaleControlsTest.TestFadingBarComposesAtTheDeviceScale;
+begin
+  CheckScale('TTyScrollBar-fading', @BuildFadingBar, 14, 120);
+end;
+
+procedure TDeviceScaleControlsTest.TestEmbeddedBarRedrawsTheHostFrameAtTheDeviceScale;
+var
+  f: TForm;
+  bar: TTyScrollBar;
+  hostRaster, barRaster: TBGRABitmap;
+  ph, pb: TBGRAPixel;
+  x, y, checked, outside, dr, dg, db: Integer;
+  bad: string;
+begin
+  f := TForm.CreateNew(nil);
+  hostRaster := nil;
+  barRaster := nil;
+  try
+    f.SetBounds(0, 0, 200, 140);
+    bar := TTyScrollBar(BuildEmbeddedBar(f, 96));
+    AssertEquals('precondition: the bar runs the host''s whole height', bar.Parent.Height, bar.Height);
+    hostRaster := TyPaintOwnSurface(bar.Parent, 2);
+    barRaster := TyPaintOwnSurface(bar, 2);
+    checked := 0;
+    outside := 0;
+    bad := '';
+    for y := 0 to barRaster.Height - 1 do
+      for x := 0 to barRaster.Width - 1 do
+      begin
+        ph := hostRaster.GetPixel(2 * bar.Left + x, 2 * bar.Top + y);
+        { the host's face (#FFFFFF): the bar's body goes there }
+        if (ph.red = 255) and (ph.green = 255) and (ph.blue = 255) then Continue;
+        Inc(checked);
+        { the parent's background outside the corner's arc, as far from the border as from the
+          face: the body must not be there }
+        if (ph.red > 200) and (ph.red < 250) then Inc(outside);
+        pb := barRaster.GetPixel(x, y);
+        dr := ph.red;
+        dr := Abs(dr - pb.red);
+        dg := ph.green;
+        dg := Abs(dg - pb.green);
+        db := ph.blue;
+        db := Abs(db - pb.blue);
+        if (bad = '') and ((dr > 8) or (dg > 8) or (db > 8)) then
+          bad := Format('(%d,%d): the host draws (%d,%d,%d), the bar (%d,%d,%d)',
+            [x, y, ph.red, ph.green, ph.blue, pb.red, pb.green, pb.blue]);
+      end;
+    AssertTrue(Format('precondition: the frame runs under the whole bar (%d frame pixels, %d rows)',
+      [checked, barRaster.Height]), checked >= barRaster.Height);
+    AssertTrue(Format('precondition: the bar covers the host''s corners (%d pixels outside the arc)',
+      [outside]), outside >= 8);
+    AssertEquals('the bar redraws the host''s frame at S = 2', '', bad);
+  finally
+    barRaster.Free;
+    hostRaster.Free;
+    f.Free;
+  end;
 end;
 
 initialization

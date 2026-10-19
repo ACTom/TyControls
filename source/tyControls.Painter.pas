@@ -524,8 +524,13 @@ function TyCanvasRect(ACanvas: TCanvas; const ALayout: TRect): TRect;
 { The scale ACanvas is registered with, 0 when it is not. Compares the pointer only, so it may be
   asked about a canvas that is already freed. }
 function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
-{ FOR THE TESTS: answer (AScale, ADeviceUnits) for every canvas; AScale = 0 turns it off. }
-procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean);
+{ FOR THE TESTS: answer (AScale, ADeviceUnits) for every canvas; AScale = 0 turns it off.
+  ANilCanvasToo = False keeps the real answer for a nil canvas (scale 1): a control drawn as on a
+  Retina window, whose sub-painters with no canvas must take the window's scale from their caller
+  (BeginPaintOnScaled) and are not handed it by the seam. A painter test drawing with no canvas
+  leaves it True. }
+procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean;
+  ANilCanvasToo: Boolean = True);
 function TyVecPoint(AX, AY: Double): TTyVecPoint;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
@@ -4470,6 +4475,7 @@ var
   GRasterCanvases: array of TTyRasterCanvasEntry;
   GForcedScale: Integer = 0;
   GForcedDeviceUnits: Boolean = False;
+  GForcedNilCanvas: Boolean = True;
 
 function RasterCanvasIndex(ACanvas: TCanvas): Integer;
 var
@@ -4495,7 +4501,7 @@ begin
   Result.Scale := 1;
   Result.DeviceUnits := False;
   if not TyDeviceScaleRendering then Exit;
-  if GForcedScale > 0 then
+  if (GForcedScale > 0) and ((ACanvas <> nil) or GForcedNilCanvas) then
   begin
     Result.Scale := GForcedScale;
     Result.DeviceUnits := GForcedDeviceUnits;
@@ -4560,10 +4566,12 @@ begin
   if i < 0 then Result := 0 else Result := GRasterCanvases[i].Scale;
 end;
 
-procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean);
+procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean;
+  ANilCanvasToo: Boolean = True);
 begin
   GForcedScale := AScale;
   GForcedDeviceUnits := ADeviceUnits;
+  GForcedNilCanvas := ANilCanvasToo;
 end;
 
 { ============================ VECTOR PATH API ============================
