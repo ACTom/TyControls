@@ -54,6 +54,9 @@ type
     procedure TestZeroWidthStrokeWithADashDoesNotDivideByZero;
     procedure TestDashLengthIsLogicalNotDevice;
     procedure TestEmptyDashRestoresASolidLine;
+    procedure TestADashPhaseShiftsThePattern;
+    procedure TestADashWithAZeroEntryDrawsTheOthers;
+    procedure TestCirclesInOnePathAreSubPathsOfTheirOwn;
     procedure TestSquareCapExtendsPastTheEndpoint;
     { ---- state, transform, clip, alpha ---- }
     procedure TestClipRectHonoursTheCurrentTransform;
@@ -360,6 +363,108 @@ begin
   FPainter.LineTo(250, 10);
   FPainter.StrokePath(Red, 3);
   AssertEquals('one unbroken run', 1, InkRunsAlongRow(10, 0, 259));
+end;
+
+{ [R2-F] A canvas' lineDashOffset: the pattern starts that far along the
+  sub-path. [10, 10] along x from 10 with a butt cap: unmoved the dashes
+  are 10-20, 30-40, ...; 5 along they are 10-15, 25-35, ...; a whole period
+  along is the pattern unmoved, to the pixel; a negative phase runs the
+  other way (-5 is 15 along: 15-25, ...). }
+procedure TPainterVectorTest.TestADashPhaseShiftsThePattern;
+var
+  base: array of TBGRAPixel;
+  x, i: Integer;
+
+  procedure Line(AOffset: Double);
+  begin
+    MakePainter(130, 20, 96);
+    FPainter.SetLineCap(tlcButt);
+    FPainter.SetLineDash([10, 10], AOffset);
+    FPainter.BeginPath;
+    FPainter.MoveTo(10, 10);
+    FPainter.LineTo(110, 10);
+    FPainter.StrokePath(Red, 4);
+  end;
+
+begin
+  Line(0);
+  AssertTrue('unmoved: 12 inked', Opaque(12, 10));
+  AssertTrue('unmoved: 17 inked', Opaque(17, 10));
+  AssertFalse('unmoved: 27 a gap', Opaque(27, 10));
+  SetLength(base, 130 * 20);
+  i := 0;
+  for x := 0 to 130 * 20 - 1 do
+  begin
+    base[i] := PixelAt(x mod 130, x div 130);
+    Inc(i);
+  end;
+  FreePainter;
+  Line(5);
+  AssertTrue('5 along: 12 inked', Opaque(12, 10));
+  AssertFalse('5 along: 17 a gap', Opaque(17, 10));
+  AssertTrue('5 along: 27 inked', Opaque(27, 10));
+  AssertTrue('5 along: still dashed', InkRunsAlongRow(10, 0, 129) >= 5);
+  FreePainter;
+  Line(20);
+  for x := 0 to 130 * 20 - 1 do
+    if PixelAt(x mod 130, x div 130) <> base[x] then
+      Fail(Format('a whole period along differs from unmoved at (%d, %d)', [x mod 130, x div 130]));
+  FreePainter;
+  Line(-5);
+  AssertFalse('-5: 12 a gap', Opaque(12, 10));
+  AssertTrue('-5: 17 inked', Opaque(17, 10));
+  AssertFalse('-5: 27 a gap', Opaque(27, 10));
+  AssertTrue('-5: 37 inked', Opaque(37, 10));
+end;
+
+{ [R2-F] BGRA's pen refuses a pattern with a zero in it (it raises); a
+  canvas draws the other entries -- [0, 10, 10, 10]: a dash of no length,
+  then a gap, a dash, a gap -- 20-30, 50-60, ... with a butt cap. }
+procedure TPainterVectorTest.TestADashWithAZeroEntryDrawsTheOthers;
+begin
+  MakePainter(130, 20, 96);
+  FPainter.SetLineCap(tlcButt);
+  FPainter.SetLineDash([0, 10, 10, 10]);
+  FPainter.BeginPath;
+  FPainter.MoveTo(10, 10);
+  FPainter.LineTo(110, 10);
+  FPainter.StrokePath(Red, 4);
+  AssertFalse('the dash of no length draws nothing', Opaque(11, 10));
+  AssertFalse('then the gap', Opaque(15, 10));
+  AssertTrue('then the dash', Opaque(25, 10));
+  AssertFalse('then a gap', Opaque(35, 10));
+  AssertFalse('and the next zero', Opaque(45, 10));
+  AssertTrue('and on', Opaque(55, 10));
+end;
+
+{ [R2-F] zrender's Circle.buildPath moves to (cx + r, cy) before its arc;
+  BGRA's circle is an arc from the current point, and three circles traced
+  into one path used to come out one polygon, the triangle between them
+  filled. A lone circle draws as ever. }
+procedure TPainterVectorTest.TestCirclesInOnePathAreSubPathsOfTheirOwn;
+begin
+  MakePainter(120, 120, 96);
+  FPainter.BeginPath;
+  FPainter.CirclePath(20, 20, 8);
+  FPainter.CirclePath(100, 20, 8);
+  FPainter.EllipsePath(60, 100, 10, 6);
+  FPainter.FillPath(Red);
+  AssertTrue('the first circle', Opaque(20, 20));
+  AssertTrue('the second', Opaque(100, 20));
+  AssertTrue('the ellipse', Opaque(60, 100));
+  AssertFalse('nothing between them', Opaque(60, 47));
+  AssertFalse('nor on the line from one start to the next', Opaque(60, 21));
+  FreePainter;
+  { three ellipses: each its own sub-path too }
+  MakePainter(120, 120, 96);
+  FPainter.BeginPath;
+  FPainter.EllipsePath(20, 20, 8, 5);
+  FPainter.EllipsePath(100, 20, 8, 5);
+  FPainter.EllipsePath(60, 100, 10, 6);
+  FPainter.FillPath(Red);
+  AssertTrue('the first ellipse', Opaque(20, 20));
+  AssertTrue('the last', Opaque(60, 100));
+  AssertFalse('nothing between the ellipses', Opaque(60, 47));
 end;
 
 procedure TPainterVectorTest.TestSquareCapExtendsPastTheEndpoint;
