@@ -2038,6 +2038,12 @@ begin
       TJSONObject(Result).Add(TyDecalKeyNames[k], r.Keys[k].Clone);
 end;
 
+function TTyAdvanceChart.DecalGround: TTyChartColor;
+begin
+  Result := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
+    []).Background.Color);
+end;
+
 function TTyAdvanceChart.RawRowDecals(ASlot: Integer): TTyChartDecalArray;
 var k, n: Integer;
 begin
@@ -2077,7 +2083,7 @@ function TTyAdvanceChart.TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarch
   const AOrder: TTyIntegerArray): TTyChartDecalArray;
 var
   n, r, k, cur, pick, palN: Integer;
-  skin: TTyChartColor;
+  skin, ground: TTyChartColor;
   pal, d, node: TJSONData;
   scope: TTyDecalScope;
   nm: string;
@@ -2088,6 +2094,7 @@ begin
   if (ASlot < 0) or (ASlot > High(FBindings)) or FBindings[ASlot].Hidden then Exit;
   skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).TextColor);
+  ground := DecalGround;
   if AriaDecalPalette(pal, palN) then
   begin
     scope := Default(TTyDecalScope);
@@ -2113,7 +2120,7 @@ begin
       end;
       if nm = '' then nm := IntToStr(cur);
       pick := TyDecalFromPalette(scope, palN, nm);
-      Result[r] := TyDecalResolve(TyDecalRawOf(TyDecalPaletteItem(pal, pick)), skin);
+      Result[r] := TyDecalResolve(TyDecalRawOf(TyDecalPaletteItem(pal, pick)), skin, ground);
     end;
     Exit;
   end;
@@ -2128,7 +2135,7 @@ begin
     if not (d is TJSONObject) then Continue;
     d := TJSONObject(d).Find('decal');
     if TyDecalTruthy(d) and not TyDecalIsPrimitive(d) then
-      Result[r] := TyDecalResolve(TyDecalRawOf(d), skin);
+      Result[r] := TyDecalResolve(TyDecalRawOf(d), skin, ground);
   end;
 end;
 
@@ -2183,7 +2190,7 @@ var
   aria, pal, d: TJSONData;
   palN, si, slot, n, k, rawN, pick, t: Integer;
   useDecal, noItems: Boolean;
-  skin: TTyChartColor;
+  skin, ground: TTyChartColor;
   node, item: TJSONObject;
   typ, path, nm: string;
   seriesRaw, palRaw: TTyDecalRaw;
@@ -2219,6 +2226,7 @@ begin
   if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
   skin := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).TextColor);
+  ground := DecalGround;
   aria := TJSONObject(FOption.Root).Find('aria');
   useDecal := FAriaEnabled and (aria is TJSONObject);
   if useDecal then
@@ -2300,7 +2308,7 @@ begin
     end;
     { decalVisual: nothing for a series the legend filtered }
     if FBindings[slot].Hidden then Continue;
-    FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin);
+    FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin, ground);
     FSeriesDecalRaws[slot] := seriesRaw;
     SetLength(FRowDecals[slot], rawN);
     SetLength(FRowDecalSet[slot], rawN);
@@ -2309,7 +2317,7 @@ begin
       if rowSet[k] then
       begin
         FRowDecalSet[slot][k] := True;
-        FRowDecals[slot][k] := TyDecalResolve(rows[k], skin);
+        FRowDecals[slot][k] := TyDecalResolve(rows[k], skin, ground);
         FRowDecalRaws[slot][k] := rows[k];
       end;
   end;

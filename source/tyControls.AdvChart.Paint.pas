@@ -126,6 +126,9 @@ type
     { radians, the pattern's own: zrender turns the repeat, not the symbols }
     Rotation: Double;
     MaxTileW, MaxTileH: Double;
+    { [R2-F] the ground of an `empty*` symbol in the tile: upstream's
+      neutral00, the skin's TyAdvChartDecal background here }
+    EmptyFill: TTyChartColor;
   end;
   TTyChartDecalArray = array of TTyChartDecal;
 

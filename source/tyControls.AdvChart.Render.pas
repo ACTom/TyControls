@@ -252,8 +252,10 @@ begin
     { symbolPathSetColor }
     if empty then
     begin
+      { the ground the skin gives a hollow (a dark skin's is no white hole)
+        [R2-F: it was a literal white] }
       m.HasFill := True;
-      m.Fill := TTyChartColor($FFFFFFFF);
+      m.Fill := ADecal.EmptyFill;
       m.HasStroke := True;
       m.Stroke := ADecal.Color;
       m.LineWidth := 2;
@@ -299,6 +301,12 @@ begin
     GDecalCache.CaseSensitive := True;
   end;
   key := TyDecalCacheKey(ADecal, AScale);
+  { [R2-F] an image list's picture in the tile: what the list holds now --
+    a tile drawn before the list changed is not the one wanted }
+  for i := 0 to High(ADecal.Symbols) do
+    for w := 0 to High(ADecal.Symbols[i]) do
+      if Copy(ADecal.Symbols[i][w], 1, 8) = 'image://' then
+        key := key + '|' + TyChartImageStamp(Copy(ADecal.Symbols[i][w], 9, MaxInt));
   if GDecalCache.Find(key, k) then Exit(TBGRABitmap(GDecalCache.Objects[k]));
   tile := TyDecalTile(ADecal);
   { canvas.width = pSize.width * dpr: an unsigned long, the fraction cut }

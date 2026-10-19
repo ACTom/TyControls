@@ -2284,6 +2284,9 @@ type
     function RowDecalJson(ASlot, ARaw: Integer): TJSONData;
     { [F4a] every raw row's decal, by raw index }
     function RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+    { [R2-F] the ground of a decal's `empty*` symbols: the skin's
+      TyAdvChartDecal background (upstream's neutral00) }
+    function DecalGround: TTyChartColor;
     { [F4a] aria.decal on: the palette, else False }
     function AriaDecalPalette(out APal: TJSONData; out APalN: Integer): Boolean;
     { [F4a] a treemap's or a sunburst's node decals by row: the node's own

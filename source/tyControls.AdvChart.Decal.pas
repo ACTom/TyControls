@@ -93,8 +93,10 @@ function TyDecalIsPrimitive(AData: TJSONData): Boolean;
 function TyDecalMerge(const APalette, ASpecified: TTyDecalRaw): TTyDecalRaw;
 
 { createOrUpdatePatternFromDecal's defaults and normalisation. ASkin is the
-  colour of a decal that wrote none. }
-function TyDecalResolve(const ARaw: TTyDecalRaw; ASkin: TTyChartColor): TTyChartDecal;
+  colour of a decal that wrote none; AEmptyFill the ground of its `empty*`
+  symbols (upstream's neutral00, #fff, where none is given) [R2-F]. }
+function TyDecalResolve(const ARaw: TTyDecalRaw; ASkin: TTyChartColor): TTyChartDecal; overload;
+function TyDecalResolve(const ARaw: TTyDecalRaw; ASkin, AEmptyFill: TTyChartColor): TTyChartDecal; overload;
 
 { getPatternSize and brushDecal, verbatim. }
 function TyDecalTile(const ADecal: TTyChartDecal): TTyDecalTile;
@@ -356,11 +358,17 @@ begin
 end;
 
 function TyDecalResolve(const ARaw: TTyDecalRaw; ASkin: TTyChartColor): TTyChartDecal;
+begin
+  Result := TyDecalResolve(ARaw, ASkin, TTyChartColor($FFFFFFFF));
+end;
+
+function TyDecalResolve(const ARaw: TTyDecalRaw; ASkin, AEmptyFill: TTyChartColor): TTyChartDecal;
 var d: TJSONData;
 begin
   Result := Default(TTyChartDecal);
   if not ARaw.Present then Exit;
   Result.Present := True;
+  Result.EmptyFill := AEmptyFill;
   { defaults(decalObject, the defaults): a key that is absent or null takes the
     default; anything else stays as written }
   d := ARaw.Keys[dkSymbol];
@@ -558,7 +566,8 @@ begin
   Result := HexOf(AScale) + '|' + HexOf(ADecal.SymbolSize) + '|'
     + IntToHex(ADecal.Color, 8) + '|';
   if ADecal.HasBackground then Result := Result + IntToHex(ADecal.Background, 8);
-  Result := Result + '|' + HexOf(ADecal.MaxTileW) + HexOf(ADecal.MaxTileH) + '|';
+  Result := Result + '|' + HexOf(ADecal.MaxTileW) + HexOf(ADecal.MaxTileH) + '|'
+    + IntToHex(ADecal.EmptyFill, 8) + '|';
   for i := 0 to High(ADecal.Symbols) do
   begin
     for j := 0 to High(ADecal.Symbols[i]) do

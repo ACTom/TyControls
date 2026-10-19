@@ -8083,6 +8083,495 @@
      }
     }
    ]
+  },
+  {
+   "id": "map",
+   "note": "map series regions: an item's own decal, the series' on the rest (a region with no data item too); aria; a geo drawn with a map series' data; a geo alone",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "series": [
+       {
+        "type": "map",
+        "map": "decalSquares",
+        "itemStyle": {
+         "decal": {
+          "symbol": "triangle",
+          "dashArrayX": 6
+         }
+        },
+        "data": [
+         {
+          "name": "A",
+          "value": 1,
+          "itemStyle": {
+           "decal": {
+            "symbol": "circle"
+           }
+          }
+         },
+         {
+          "name": "B",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "circle",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 12,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "c024000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "triangle",
+          "empty": false,
+          "x": "4028000000000000",
+          "y": "0000000000000000",
+          "w": "4018000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "map",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "compound",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "compound",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "compound",
+          "p": 1
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "aria": {
+       "decal": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "map",
+        "map": "decalSquares",
+        "data": [
+         {
+          "name": "A",
+          "value": 1
+         },
+         {
+          "name": "C",
+          "value": 3
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 1,
+        "h": 7,
+        "rotation": "3fe0c152382d7365",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "c01c000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "3ff0000000000000",
+          "y": "0000000000000000",
+          "w": "3ff0000000000000",
+          "h": "4000000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "map",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "compound",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "compound",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "compound",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 2,
+     "merge": false,
+     "option": {
+      "geo": {
+       "map": "decalSquares"
+      },
+      "series": [
+       {
+        "type": "map",
+        "geoIndex": 0,
+        "itemStyle": {
+         "decal": {
+          "symbol": "diamond"
+         }
+        },
+        "data": [
+         {
+          "name": "B",
+          "value": 2,
+          "itemStyle": {
+           "decal": {
+            "symbol": "rect",
+            "dashArrayX": 4
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "patterns": [
+       {
+        "w": 10,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "c024000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "diamond",
+          "empty": false,
+          "x": "4024000000000000",
+          "y": "0000000000000000",
+          "w": "4014000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       },
+       {
+        "w": 8,
+        "h": 10,
+        "rotation": "0000000000000000",
+        "symbols": [
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "c024000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "c024000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         },
+         {
+          "type": "rect",
+          "empty": false,
+          "x": "4020000000000000",
+          "y": "0000000000000000",
+          "w": "4010000000000000",
+          "h": "4014000000000000",
+          "fill": "rgba(0, 0, 0, 0.2)",
+          "stroke": null,
+          "lineWidth": "3ff0000000000000",
+          "bbox": null
+         }
+        ]
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "map",
+        "drawn": [
+         {
+          "t": "",
+          "i": 0,
+          "k": "compound",
+          "p": 1
+         },
+         {
+          "t": "",
+          "i": 1,
+          "k": "compound",
+          "p": 0
+         },
+         {
+          "t": "",
+          "i": 2,
+          "k": "compound",
+          "p": 0
+         }
+        ]
+       }
+      ],
+      "legend": []
+     }
+    },
+    {
+     "i": 3,
+     "merge": false,
+     "option": {
+      "geo": {
+       "map": "decalSquares",
+       "itemStyle": {
+        "decal": {
+         "symbol": "circle"
+        }
+       }
+      }
+     },
+     "record": {
+      "error": null,
+      "patterns": [],
+      "series": [],
+      "legend": []
+     }
+    }
+   ]
   }
  ],
  "anchors": [

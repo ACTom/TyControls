@@ -2140,7 +2140,7 @@ var
     begin
       d := AEl.Style.Find('decal');
       if d is TJSONObject then
-        pe.Style.Decal := TyDecalResolve(TyDecalRawOf(d), decalSkin);
+        pe.Style.Decal := TyDecalResolve(TyDecalRawOf(d), decalSkin, DecalGround);
     end;
     pe.Silent := ASilent;
     pe.Datum := datum;
