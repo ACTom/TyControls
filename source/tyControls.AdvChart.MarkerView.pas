@@ -198,6 +198,11 @@ type
     RtHasInherit: Boolean;
     RtInherit: TTyChartColor;
     RtScale: Double;
+    { [R2-B] WHERE THE HOVER PUTS IT: the label laid out again on its
+      symbol path scaled by the emphasis ratio (updateInnerText runs on the
+      path as drawn), as a move from its rest place }
+    HasEmphPlace: Boolean;
+    EmphDX, EmphDY: Double;
   end;
 
   TTyMkPointPic = record
@@ -230,6 +235,9 @@ type
     PaintDash: TTyDoubleArray;
     Z2: Double;
     Lbl: TTyMkPtLabelPic;
+    { [R2-B] Symbol._updateCommon's emphasis ratio: the path's emphasis
+      scale is ScaleX / ScaleY times it }
+    EmphRatio: Double;
   end;
   TTyMkPointPicArray = array of TTyMkPointPic;
 
@@ -2114,12 +2122,16 @@ var
     w, h, ox, oy, rot, lw, ls, gw, dist, lrot, rx, ry, op: Double;
     hasStroke, hasFill, hasFc, hasSc, useDefault, bgDrawn, lblDim, rich: Boolean;
     rectLocal, rect: TTyXYWH;
-    lp: TTyMkPtLabelPic;
+    lp, lp2: TTyMkPtLabelPic;
     calcX, calcY: Double;
     calcA, calcV: string;
     dimIdx, k: Integer;
     dl: TTyDoubleArray;
-    defOp: Double;
+    defOp, ls2, x1, y1, x2, y2, lw2: Double;
+    hasL2, hasG2, hasStroke2: Boolean;
+    ES: TMkLevels;
+    sc2: string;
+    l2, g2: TTyMat2D;
   begin
     lv := nil;
     SetLength(lv, 3);
@@ -2162,6 +2174,23 @@ var
     { the unit box, scaled by size / 2; the turn (r || 0) * PI / 180 || 0 }
     P.ScaleX := w / 2;
     P.ScaleY := h / 2;
+    { [R2-B] THE EMPHASIS RATIO (Symbol._updateCommon): emphasis.scale
+      through the item's chain -- null, undefined or true the default
+      max(1.1, 3 / _sizeY); a finite positive number (Number() of it) as it
+      is; anything else no scale }
+    d := Chain(Sub(lv, 'emphasis'), 'scale');
+    if (d = nil) or ((d.JSONType = jtBoolean) and d.AsBoolean) then
+    begin
+      { a symbol of no height: 3 / 0 upstream, a scale of NaN -- none here }
+      if h > 0 then P.EmphRatio := Math.Max(Double(1.1), 3 / (h / s / 2))
+      else P.EmphRatio := 1;
+    end
+    else
+    begin
+      P.EmphRatio := NumOf(d);
+      if IsNan(P.EmphRatio) or IsInfinite(P.EmphRatio) or not (P.EmphRatio > 0) then
+        P.EmphRatio := 1;
+    end;
     d := Chain(lv, 'symbolRotate');
     if Truthy(d) then rot := NumOf(d) * Pi / 180 else rot := 0;
     if IsNan(rot) then rot := 0;
@@ -2335,6 +2364,53 @@ var
     if d <> nil then defOp := NumOf(d) else defOp := NaN;
     StyleLabel(LB, gts, AIn, s, RectThrough(rectLocal, P.HasGlobal, P.Global), fill,
       hasFill, True, P.StyleFill, defOp, P.ShapeType = 'pin', maxZ2, lp);
+    { [R2-B] AND ON THE PATH THE HOVER SCALES: the same layout on the rect of
+      the path at its emphasis scale (the stroke's margin by that scale's
+      line scale) -- the move from the rest place }
+    if (P.EmphRatio <> 1) and not IsNan(P.EmphRatio) and not IsInfinite(P.EmphRatio) then
+    begin
+      hasL2 := LocalTransformS(P.X, P.Y, P.Rotation, P.ScaleX * P.EmphRatio,
+        P.ScaleY * P.EmphRatio, l2);
+      hasG2 := hasL2 or P.HasGroupTransform;
+      if P.HasGroupTransform and hasL2 then g2 := MatMul(P.GroupTransform, l2)
+      else if hasL2 then g2 := l2
+      else if P.HasGroupTransform then g2 := P.GroupTransform;
+      if hasG2 and (Abs(g2[0] - 1) > 1e-10) and (Abs(g2[3] - 1) > 1e-10) then
+        ls2 := Sqrt(Abs(g2[0] * g2[3] - g2[2] * g2[1]))
+      else
+        ls2 := 1;
+      { the stroke the emphasis style draws: its own borderColor and
+        borderWidth over the rest's -- the rect grows by it }
+      ES := Sub(Sub(lv, 'emphasis'), 'itemStyle');
+      sc2 := P.StyleStroke;
+      lw2 := P.StyleLineWidth;
+      d := Chain(ES, 'borderColor');
+      if d <> nil then sc2 := StrOf(d);
+      d := Chain(ES, 'borderWidth');
+      if d <> nil then lw2 := NumOf(d);
+      hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
+      lp2 := lp;
+      StyleLabel(LB, gts, AIn, s, RectThrough(TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke2,
+        hasFill, lw2, ls2), hasG2, g2), fill, hasFill, True, P.StyleFill, defOp,
+        P.ShapeType = 'pin', maxZ2, lp2);
+      x1 := 0;
+      y1 := 0;
+      x2 := 0;
+      y2 := 0;
+      if lp.HasTransform then
+      begin
+        x1 := lp.Transform[4];
+        y1 := lp.Transform[5];
+      end;
+      if lp2.HasTransform then
+      begin
+        x2 := lp2.Transform[4];
+        y2 := lp2.Transform[5];
+      end;
+      lp.HasEmphPlace := True;
+      lp.EmphDX := x2 - x1;
+      lp.EmphDY := y2 - y1;
+    end;
     P.Lbl := lp;
   end;
 
@@ -2577,6 +2653,8 @@ begin
         el.Anim.G[3] := APics[i].ScaleY;
         if IsNan(APics[i].StyleOpacity) then el.Anim.G[4] := 1
         else el.Anim.G[4] := APics[i].StyleOpacity;
+        { [R2-B] the emphasis ratio, for the states }
+        el.Anim.G[5] := APics[i].EmphRatio;
       end;
       AList.Add(el);
       Inc(Result);
@@ -2595,6 +2673,13 @@ begin
         lel.Anim.Index := ABlock.Points[APics[i].Item].DataIndex;
         lel.Anim.G[0] := AList.Element(first).Anim.G[0];
         lel.Anim.G[1] := AList.Element(first).Anim.G[1];
+        { [R2-B] where the hover puts it, as a move (G[4] says there is one) }
+        if APics[i].Lbl.HasEmphPlace then
+        begin
+          lel.Anim.G[2] := APics[i].Lbl.EmphDX;
+          lel.Anim.G[3] := APics[i].Lbl.EmphDY;
+          lel.Anim.G[4] := 1;
+        end;
         AList.SetElement(k, lel);
       end;
     MkTarget(AList, first, ctkMarkPoint, AHostSeries,

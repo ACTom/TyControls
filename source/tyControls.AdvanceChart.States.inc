@@ -1083,77 +1083,329 @@ begin
   TyStApplyItem(item^);
 end;
 
-function TTyAdvanceChart.StMarkNode(ASeriesIndex: Integer;
-  AKind: TTyChartTargetKind): TJSONObject;
-var s: TJSONObject; d: TJSONData;
+{ [R2-B] A MARKER ELEMENT'S ITEM: its part name without an end symbol's or
+  a label's suffix (mp0, ml0, ma0) -- the Symbol group, the Line group or the
+  markArea polygon every element of the item hangs off, and so the one
+  highDownDispatcher they share }
+function StMarkItemKey(const APart: string): string;
+var p: Integer;
 begin
-  Result := nil;
-  s := StSeriesNode(ASeriesIndex);
-  if s = nil then Exit;
-  case AKind of
-    ctkMarkPoint: d := s.Find('markPoint');
-    ctkMarkLine: d := s.Find('markLine');
-  else
-    d := s.Find('markArea');
-  end;
-  if d is TJSONObject then Result := TJSONObject(d);
+  Result := APart;
+  p := Pos('#', Result);
+  if p > 0 then Result := Copy(Result, 1, p - 1);
+  p := Pos('.', Result);
+  if p > 0 then Result := Copy(Result, 1, p - 1);
 end;
 
-{ THE MARKERS OF A SERIES [F2b] (MarkerView.ts:77-92, util/states.ts):
-  blurSeries hands the series it blurred to every component view, and a
-  marker view enters blur on all its elements of those series -- the
-  markPoint's Symbol (its path and its words), the markLine's Line (the
-  segment, the end symbols, the words), the markArea's polygon and words;
-  allLeaveBlur takes them out again. Each element's blur state is its
-  model's (`blur.itemStyle`, a markLine's `blur.lineStyle`, the end symbols
-  taking that line's stroke and opacity, `blur.label`), under the default
-  proxy's tenth of its opacity -- unless the marker's emphasis is disabled:
-  no proxy, the declared state alone. Markers have no stateTransition
-  (MarkerModel.isAnimationEnabled is false here): the list is written. Their
-  own hover and the select / emphasis states stay as they were. }
-procedure TTyAdvanceChart.StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
+{ [R2-B] THE MODEL CHAIN OF A MARKER ITEM, nearest first: the data item --
+  a markLine's start item over its end item (markLineTransform merges them
+  without overwriting, the start's keys first), a markArea's top-left over
+  its bottom-right (mergeAll, the same) -- then the series' own marker
+  option, the top-level one and the marker defaults (MarkerModel's parent
+  chain) }
+function TTyAdvanceChart.StMarkItemNodes(ASeriesIndex: Integer;
+  AKind: TTyChartTargetKind; ADataIndex: Integer): TTyStNodeArray;
+var
+  m, q: Integer;
+  mk: TTyMarkerKind;
+  b: TTyMkBlock;
+  a0, a1: TJSONObject;
+begin
+  Result := nil;
+  case AKind of
+    ctkMarkPoint: mk := mkPoint;
+    ctkMarkLine: mk := mkLine;
+  else
+    mk := mkArea;
+  end;
+  for m := 0 to High(FMarkers) do
+    if FMarkers[m].SeriesIndex = ASeriesIndex then
+    begin
+      b := FMarkers[m].Blocks[mk];
+      if not b.Present then Exit;
+      a0 := nil;
+      a1 := nil;
+      case mk of
+        mkPoint:
+          for q := 0 to High(b.Points) do
+            if b.Points[q].Survived and (b.Points[q].DataIndex = ADataIndex) then
+              a0 := b.Points[q].E.Src;
+        mkLine:
+          for q := 0 to High(b.Lines) do
+            if b.Lines[q].Survived and (b.Lines[q].DataIndex = ADataIndex) then
+            begin
+              a0 := b.Lines[q].From.Src;
+              a1 := b.Lines[q].To_.Src;
+            end;
+      else
+        for q := 0 to High(b.Areas) do
+          if b.Areas[q].Survived and (b.Areas[q].DataIndex = ADataIndex) then
+          begin
+            a0 := b.Areas[q].LtSrc;
+            a1 := b.Areas[q].RbSrc;
+          end;
+      end;
+      SetLength(Result, 5);
+      Result[0] := a0;
+      Result[1] := a1;
+      Result[2] := b.Own;
+      Result[3] := b.Top;
+      Result[4] := TyMkDefaults(mk);
+      Exit;
+    end;
+end;
+
+{ [R2-B] the item's hoverState, as the flags keep it across renders (the
+  Symbol, Line and polygon are updated in place, not made anew) }
+function TTyAdvanceChart.StMarkFlag(ASeriesIndex: Integer; const AKey: string): Integer;
+var k: Integer;
+begin
+  Result := TyStHoverNormal;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  for k := 0 to High(FSt[ASeriesIndex].MarkFlagKey) do
+    if FSt[ASeriesIndex].MarkFlagKey[k] = AKey then
+      Exit(FSt[ASeriesIndex].MarkFlagHover[k]);
+end;
+
+procedure TTyAdvanceChart.StSetMarkFlag(ASeriesIndex: Integer; const AKey: string;
+  AHover: Integer);
+var k, n: Integer;
+begin
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  n := Length(FSt[ASeriesIndex].MarkFlagKey);
+  for k := 0 to n - 1 do
+    if FSt[ASeriesIndex].MarkFlagKey[k] = AKey then
+    begin
+      if FSt[ASeriesIndex].MarkFlagHover[k] <> AHover then FStDirty := True;
+      if AHover = TyStHoverNormal then
+      begin
+        { a normal item keeps no entry }
+        FSt[ASeriesIndex].MarkFlagKey[k] := FSt[ASeriesIndex].MarkFlagKey[n - 1];
+        FSt[ASeriesIndex].MarkFlagHover[k] := FSt[ASeriesIndex].MarkFlagHover[n - 1];
+        SetLength(FSt[ASeriesIndex].MarkFlagKey, n - 1);
+        SetLength(FSt[ASeriesIndex].MarkFlagHover, n - 1);
+      end
+      else
+        FSt[ASeriesIndex].MarkFlagHover[k] := AHover;
+      Exit;
+    end;
+  if AHover = TyStHoverNormal then Exit;
+  SetLength(FSt[ASeriesIndex].MarkFlagKey, n + 1);
+  SetLength(FSt[ASeriesIndex].MarkFlagHover, n + 1);
+  FSt[ASeriesIndex].MarkFlagKey[n] := AKey;
+  FSt[ASeriesIndex].MarkFlagHover[n] := AHover;
+  FStDirty := True;
+end;
+
+{ [R2-B] MarkerView.toggleBlurSeries: every marker item of a series
+  blurSeries reached enters blur -- whatever it was, the hovered one too
+  (enterBlur has no __highByOuter test); allLeaveBlur takes the blurred
+  ones out again }
+procedure TTyAdvanceChart.StMarksBlur(ASeriesIndex: Integer; AEnter: Boolean);
 var
   k: Integer;
+  key: string;
+  done: TTyStringArray;
+
+  function Seen(const AK: string): Boolean;
+  var j: Integer;
+  begin
+    for j := 0 to High(done) do
+      if done[j] = AK then Exit(True);
+    Result := False;
+  end;
+
+begin
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  done := nil;
+  if AEnter then
+  begin
+    for k := 0 to High(FSt[ASeriesIndex].MarkPart) do
+    begin
+      key := StMarkItemKey(FSt[ASeriesIndex].MarkPart[k]);
+      if Seen(key) then Continue;
+      SetLength(done, Length(done) + 1);
+      done[High(done)] := key;
+      StSetMarkFlag(ASeriesIndex, key, TyStHoverBlur);
+    end;
+  end
+  else
+    for k := High(FSt[ASeriesIndex].MarkFlagKey) downto 0 do
+      if (k <= High(FSt[ASeriesIndex].MarkFlagHover))
+        and (FSt[ASeriesIndex].MarkFlagHover[k] = TyStHoverBlur) then
+        StSetMarkFlag(ASeriesIndex, FSt[ASeriesIndex].MarkFlagKey[k], TyStHoverNormal);
+end;
+
+{ [R2-B] the marker item a target is, by its series and key; False when it
+  has no element or is no highDownDispatcher (emphasis.disabled) }
+function TTyAdvanceChart.StMarkTarget(const ATarget: TTyChartEventTarget;
+  out AKey: string; out AFirst: Integer): Boolean;
+var
+  s, k: Integer;
+  pre: string;
+begin
+  Result := False;
+  AKey := '';
+  AFirst := -1;
+  s := ATarget.HdSeries;
+  if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Exit;
+  if ATarget.Params.ComponentType = 'markPoint' then pre := 'mp'
+  else if ATarget.Params.ComponentType = 'markLine' then pre := 'ml'
+  else if ATarget.Params.ComponentType = 'markArea' then pre := 'ma'
+  else Exit;
+  AKey := pre + IntToStr(ATarget.HdRow);
+  for k := 0 to Min(High(FSt[s].MarkPart), High(FSt[s].Marks)) do
+    if StMarkItemKey(FSt[s].MarkPart[k]) = AKey then
+    begin
+      AFirst := k;
+      { isHighDownDispatcher: emphasis not disabled }
+      Exit(FSt[s].Marks[k].Proxy);
+    end;
+end;
+
+{ [R2-B] handleGlobalMouseOverForHighDown on a marker item: its ecData has
+  the host's seriesIndex (MarkerModel takes it) and its own focus and
+  blurScope -- blurSeries around the host, then the item enters emphasis
+  (no action ever holds a marker). A markArea's polygon is a dispatcher of
+  no focus (toggleHoverEmphasis(polygon, null, null, ...)). }
+procedure TTyAdvanceChart.StMarkHoverOver(const ATarget: TTyChartEventTarget);
+var
+  key: string;
+  k, s: Integer;
+  nodes: TTyStNodeArray;
+  focus: TTyStFocus;
+  scope: TTyStScope;
   el: TTyChartElement;
-  node: TJSONObject;
-  nodes: array[0..0] of TJSONObject;
-  has, bolder, proxy: Boolean;
+begin
+  if not StMarkTarget(ATarget, key, k) then Exit;
+  s := ATarget.HdSeries;
+  el := FPaintList.Element(FSt[s].MarkIdx[k]);
+  focus := Default(TTyStFocus);
+  scope := sbsCoordinateSystem;
+  if el.Datum.Kind <> ctkMarkArea then
+  begin
+    nodes := StMarkItemNodes(s, el.Datum.Kind, el.Datum.DataIndex);
+    focus := TyStFocusOf(TyStFind(nodes, ['emphasis', 'focus']));
+    scope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
+  end;
+  StBlurSeries(s, focus, scope);
+  StSetMarkFlag(s, key, TyStHoverEmphasis);
+  if FStDirty then InvalidateFrame;
+end;
+
+{ handleGlobalMouseOutForHighDown: allLeaveBlur, then the item leaves
+  emphasis }
+procedure TTyAdvanceChart.StMarkHoverOut(const ATarget: TTyChartEventTarget);
+var key: string; k: Integer;
+begin
+  if not StMarkTarget(ATarget, key, k) then Exit;
+  StAllLeaveBlur;
+  if StMarkFlag(ATarget.HdSeries, key) = TyStHoverEmphasis then
+    StSetMarkFlag(ATarget.HdSeries, key, TyStHoverNormal);
+  if FStDirty then InvalidateFrame;
+end;
+
+{ THE MARKERS OF A SERIES [F2b; R2-B their own states]. A markPoint is a
+  Symbol over the marker's data (MarkPointView), a markLine a Line
+  (MarkLineView), a markArea a polygon (MarkAreaView): each item a
+  highDownDispatcher whose elements carry emphasis, blur and select states of
+  the item's model -- the data item, then the marker option, the top-level
+  one and the defaults (StMarkItemNodes):
+    a markPoint's path `[state].itemStyle`, its emphasis scale the ratio
+      the build worked out (Anim.G[5]: Symbol._updateCommon), its label the
+      label states, placed where the scaled path puts it (Anim.G[2..4]);
+    a markLine's line `[state].lineStyle` (the defaults' emphasis width 3),
+      its end symbols taking the line state's stroke as their fill (their
+      stroke when empty) and its opacity (Line.ts:267-290), its label;
+    a markArea's polygon `[state].itemStyle`, its label.
+  The default proxy unless the item's emphasis is disabled: the lift, the
+  z2 + 10, a blur of a tenth. A label's emphasis show is the first that
+  says of the item's and the marker option's emphasis.label.show and --
+  fillLabel's defaultEmphasis -- their label.show, then the top-level's and
+  the defaults' emphasis.label.show. The flags are the item's (StMarkFlag),
+  set by the hover and by blurSeries / allLeaveBlur. A marker model does
+  not animate here (MarkerModel.isAnimationEnabled reads its own
+  `animation`): no transition, the list is written. }
+procedure TTyAdvanceChart.StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
+var
+  k, j: Integer;
+  el: TTyChartElement;
+  nodes: TTyStNodeArray;
+  has, bolder, proxy, emShow, normalShow: Boolean;
   line, obj: TTyStObject;
+  n: TTyStName;
   ss: Double;
+  txt: string;
+  c: TTyChartColor;
   m: ^TTyStElement;
+  d: TJSONData;
 begin
   SetLength(FSt[ASeriesIndex].Marks, Length(FSt[ASeriesIndex].MarkIdx));
   for k := 0 to High(FSt[ASeriesIndex].MarkIdx) do
   begin
     el := AList.Element(FSt[ASeriesIndex].MarkIdx[k]);
-    node := StMarkNode(ASeriesIndex, el.Datum.Kind);
-    nodes[0] := node;
+    nodes := StMarkItemNodes(ASeriesIndex, el.Datum.Kind, el.Datum.DataIndex);
     proxy := not TyStReadBool(nodes, ['emphasis', 'disabled'], has);
     m := @FSt[ASeriesIndex].Marks[k];
+    m^ := Default(TTyStElement);
+    m^.Exists := True;
+    m^.Proxy := proxy;
+    for n := Low(TTyStName) to High(TTyStName) do m^.HasState[n] := True;
+    if el.Caption.FontSizeLogical > 0 then
     begin
-      m^ := Default(TTyStElement);
-      m^.Exists := True;
-      m^.Proxy := proxy;
-      m^.HasState[stnBlur] := True;
-      obj := TyStNoObject;
-      if el.Caption.FontSizeLogical > 0 then
+      m^.IsPath := False;
+      m^.Rest := StLabelRestOf(el);
+      { the emphasis emShow: item and marker option with fillLabel's copy of
+        label.emShow, then the top-level and the defaults }
+      normalShow := not el.Ignore;
+      emShow := True;
+      has := False;
+      for j := 0 to High(nodes) do
       begin
-        m^.IsPath := False;
-        m^.Rest := StLabelRestOf(el);
-        ss := TyStReadNumber(nodes, ['blur', 'label', 'opacity'], has);
-        if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
-      end
-      else
-      begin
-        m^.IsPath := True;
-        m^.Rest := StRestOf(el);
-        if el.Datum.Kind = ctkMarkLine then
+        if nodes[j] = nil then Continue;
+        d := TyStFind([nodes[j]], ['emphasis', 'label', 'emShow']);
+        if (d = nil) and (j <= 2) then d := TyStFind([nodes[j]], ['label', 'emShow']);
+        if d <> nil then
         begin
-          line := TyStReadStyle(nodes, 'blur', 'lineStyle', bolder);
+          if d.JSONType = jtBoolean then emShow := d.AsBoolean
+          else emShow := (d.JSONType <> jtNull) and not ((d.JSONType = jtNumber) and (d.AsFloat = 0))
+            and not ((d.JSONType = jtString) and (d.AsString = ''));
+          Break;
+        end;
+      end;
+      for n := Low(TTyStName) to High(TTyStName) do
+      begin
+        obj := TyStNoObject;
+        if (n = stnEmphasis) and (emShow <> normalShow) then
+          TyStSetNum(obj, stkIgnore, Ord(not emShow));
+        txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
+        if has and (txt <> 'inherit') and (txt <> 'auto')
+          and TyTryParseChartColor(txt, c) then
+          TyStSetColor(obj, stkFill, c);
+        ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
+        if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
+        { a markPoint's words where its scaled path puts them }
+        if (n = stnEmphasis) and (el.Anim.Role = carMarkPointLabel) and (el.Anim.G[4] <> 0) then
+        begin
+          TyStSetNum(obj, stkX, el.Caption.X + el.Anim.G[2]);
+          TyStSetNum(obj, stkY, el.Caption.Y + el.Anim.G[3]);
+        end;
+        m^.Decl[n] := obj;
+      end;
+    end
+    else
+    begin
+      m^.IsPath := True;
+      m^.Rest := StRestOf(el);
+      if el.Datum.Kind = ctkMarkLine then
+        for n := Low(TTyStName) to High(TTyStName) do
+        begin
+          line := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
           if el.Anim.Role in [carMarkLineFrom, carMarkLineTo] then
           begin
             { Line.ts:267-290: the line's stroke as the symbol's fill (its
               stroke for an empty one), the line's opacity }
+            obj := TyStNoObject;
             if line.Has[stkStroke] then
             begin
               if el.Style.HasFill then
@@ -1170,17 +1422,21 @@ begin
               end;
             end;
             if line.Has[stkOpacity] then TyStSetNum(obj, stkOpacity, line.Num[stkOpacity]);
+            m^.Decl[n] := obj;
           end
           else
-            obj := line;
+            m^.Decl[n] := line;
         end
-        else
-          obj := TyStReadStyle(nodes, 'blur', 'itemStyle', bolder);
-      end;
-      m^.Decl[stnBlur] := obj;
-      m^.Cur := m^.Rest;
-      m^.States := [];
+      else
+        for n := Low(TTyStName) to High(TTyStName) do
+          m^.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'itemStyle', bolder);
+      { a markPoint's emphasis scale: _sizeX * ratio over its rest _sizeX }
+      if (el.Anim.Role = carMarkPoint) and StPositive(el.Anim.G[5])
+        and not IsInfinite(el.Anim.G[5]) and (el.Anim.G[5] <> 1) then
+        TyStSetNum(m^.Decl[stnEmphasis], stkScale, el.Anim.G[5]);
     end;
+    m^.Cur := m^.Rest;
+    m^.States := [];
   end;
   StApplyMarks(ASeriesIndex);
 end;
@@ -1190,6 +1446,8 @@ var
   s, k: Integer;
   el: TTyChartElement;
   pe: PTyChartElement;
+  st: TTyStElement;
+  sc: Double;
 begin
   if AList = nil then Exit;
   for s := 0 to High(FSt) do
@@ -1222,8 +1480,21 @@ begin
       begin
         if FSt[s].Marks[k].States = [] then Continue;
         el := AList.Element(FSt[s].MarkIdx[k]);
-        if FSt[s].Marks[k].IsPath then StWriteHost(el, FSt[s].Marks[k], False)
-        else StWriteLabel(el, FSt[s].Marks[k], False);
+        if FSt[s].Marks[k].IsPath then
+        begin
+          { [R2-B] a markPoint's path scales about its own origin (the
+            symbol's place), not its box's middle: a pin hangs below it }
+          st := FSt[s].Marks[k];
+          sc := st.Cur.Num[stkScale];
+          if st.Cur.Has[stkScale] and (el.Anim.Role = carMarkPoint) then
+            TyStSetNum(st.Cur, stkScale, 1);
+          StWriteHost(el, st, False);
+          if st.Cur.Has[stkScale] and (el.Anim.Role = carMarkPoint) and StPositive(sc)
+            and (sc <> 1) then
+            TyShapeScaleAbout(el.Shape, el.Anim.G[0], el.Anim.G[1], sc, sc);
+        end
+        else
+          StWriteLabel(el, FSt[s].Marks[k], False);
         AList.SetElement(FSt[s].MarkIdx[k], el);
       end;
     finally
@@ -1236,12 +1507,10 @@ function TTyAdvanceChart.StApplyMarks(ASeriesIndex: Integer): Boolean;
 var k: Integer;
 begin
   Result := False;
-  for k := 0 to High(FSt[ASeriesIndex].Marks) do
+  for k := 0 to Min(High(FSt[ASeriesIndex].Marks), High(FSt[ASeriesIndex].MarkPart)) do
   begin
-    if FSt[ASeriesIndex].IsBlured then
-      FSt[ASeriesIndex].Marks[k].HoverState := TyStHoverBlur
-    else
-      FSt[ASeriesIndex].Marks[k].HoverState := TyStHoverNormal;
+    FSt[ASeriesIndex].Marks[k].HoverState := StMarkFlag(ASeriesIndex,
+      StMarkItemKey(FSt[ASeriesIndex].MarkPart[k]));
     if TyStUseStates(FSt[ASeriesIndex].Marks[k],
       TyStTargetStates(FSt[ASeriesIndex].Marks[k])) then Result := True;
   end;
@@ -3807,6 +4076,8 @@ begin
     end;
     FSt[s].IsBlured := True;
     FStDirty := True;
+    { [R2-B] its markers with it (toggleBlurSeries) }
+    StMarksBlur(s, True);
   end;
 end;
 
@@ -3844,6 +4115,8 @@ begin
       { the area on its own, should it be blurred apart from the polyline }
       if FSt[s].Area.Host.HoverState = TyStHoverBlur then
         FSt[s].Area.Host.HoverState := TyStHoverNormal;
+      { [R2-B] its markers (toggleBlurSeries) }
+      StMarksBlur(s, False);
       FStDirty := True;
     end;
     FSt[s].IsBlured := False;
@@ -3980,6 +4253,12 @@ begin
     if FStDirty or FTmCrumbDirty then InvalidateFrame;
     Exit;
   end;
+  { [R2-B] a marker item }
+  if ATarget.HdKind = 3 then
+  begin
+    StMarkHoverOut(ATarget);
+    Exit;
+  end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   StAllLeaveBlur;
@@ -4053,6 +4332,12 @@ begin
     InvalidateFrame;
     Exit;
   end;
+  { [R2-B] a marker item: its own focus around its host }
+  if ATarget.HdKind = 3 then
+  begin
+    StMarkHoverOver(ATarget);
+    Exit;
+  end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   if (part = 0) and ATarget.HdEdge and (FSt[s].Kind = sskGraph) then
@@ -4087,6 +4372,10 @@ begin
   Result := False;
   if (FPaintList = nil) or (AIndex < 0) or (AIndex >= FPaintList.Count) then Exit;
   d := FPaintList.Element(AIndex).Datum;
+  { [R2-B] a marker's: its states are its host's series record's }
+  if (d.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea]) and (d.ComponentIndex >= 0)
+    and (d.ComponentIndex <= High(FSt)) then
+    Exit(FSt[d.ComponentIndex].Kind <> sskNone);
   if (d.Kind <> ctkSeries) or (d.SeriesIndex < 0) or (d.SeriesIndex > High(FSt)) then Exit;
   Result := FSt[d.SeriesIndex].Kind <> sskNone;
 end;
@@ -5273,7 +5562,6 @@ var
   list: TTyPaintList;
   el: TTyChartElement;
   i, j, k, slot: Integer;
-  kmS, kmK, kmI, kmE: TTyIntegerArray;
 
   procedure Lift(AIndex: Integer);
   var j: Integer; cap: TTyChartElement;
@@ -5331,13 +5619,8 @@ begin
       it is one the states draw, whose hover is its flag [Batch 88]. }
     if (Length(AHits) = 0) and not StOwnsElement(FTipElement) then
       Lift(FTipElement);
-    { [F5] THE KEYBOARD'S MARKER, lifted as the pointer's would be }
-    if FKbStopOn and (FKbStop.Kind = ksMarkers) then
-    begin
-      if (KbMarkerList(kmS, kmK, kmI, kmE) > FKbPart) and (FKbPart >= 0)
-        and (kmE[FKbPart] <> FTipElement) and not StOwnsElement(kmE[FKbPart]) then
-        Lift(kmE[FKbPart]);
-    end;
+    { [F5] THE KEYBOARD'S MARKER is the pointer over it: the states
+      [R2-B] }
     if list.Count > 0 then TyRenderPaintList(APainter, list);
   finally
     list.Free;

@@ -358,6 +358,11 @@ type
     Marks: array of TTyStElement;
     MarkIdx: TTyIntegerArray;
     MarkPart: TTyStringArray;
+    { [R2-B] THE MARKER ITEMS' hoverStates (the Symbol / Line / polygon
+      flags), by item key (mp0, ml0, ma0) -- kept across renders, as the
+      updated elements keep theirs; an item at normal has no entry }
+    MarkFlagKey: TTyStringArray;
+    MarkFlagHover: TTyIntegerArray;
   end;
 
   { WHAT A notMerge OPTION CARRIES OVER of a series' state records
@@ -3403,6 +3408,8 @@ type
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     { the chart's mouse events [Batch 84] }
     function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+    { [R2-B] the target of the marker element at AIdx in the list }
+    function MarkerEventTarget(AIdx: Integer): TTyChartEventTarget;
     function SeriesEventTarget(const ADatum: TTyChartDatumRef;
       AElement: Integer): TTyChartEventTarget;
     function SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
@@ -3469,9 +3476,22 @@ type
     { [F2b] the series' marker elements: their blur state, their flag the
       series' isBlured (MarkerView.toggleBlurSeries) }
     procedure StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
-    function StMarkNode(ASeriesIndex: Integer; AKind: TTyChartTargetKind): TJSONObject;
-    { the marks' flags from the series' isBlured, then their lists: True
-      when a list changed }
+    { [R2-B] a marker item's model chain, nearest first }
+    function StMarkItemNodes(ASeriesIndex: Integer; AKind: TTyChartTargetKind;
+      ADataIndex: Integer): TTyStNodeArray;
+    { [R2-B] a marker item's hoverState, and setting it }
+    function StMarkFlag(ASeriesIndex: Integer; const AKey: string): Integer;
+    procedure StSetMarkFlag(ASeriesIndex: Integer; const AKey: string; AHover: Integer);
+    { [R2-B] toggleBlurSeries on a series' markers: in, or out of blur }
+    procedure StMarksBlur(ASeriesIndex: Integer; AEnter: Boolean);
+    { [R2-B] the marker item a target is: False for none or no dispatcher }
+    function StMarkTarget(const ATarget: TTyChartEventTarget; out AKey: string;
+      out AFirst: Integer): Boolean;
+    { [R2-B] a marker item's hover in and out }
+    procedure StMarkHoverOver(const ATarget: TTyChartEventTarget);
+    procedure StMarkHoverOut(const ATarget: TTyChartEventTarget);
+    { the marks' flags from their items' (StMarkFlag), then their lists:
+      True when a list changed }
     function StApplyMarks(ASeriesIndex: Integer): Boolean;
     { after the markers are built: every marker element by its host series,
       its state declared, applied and written into the list }
@@ -4060,6 +4080,10 @@ type
     { [F2b] a gauge's progress arc, by inner row }
     function PeerStates(ASeriesIndex, ADataIndex: Integer;
       out AItem: TTyStItem): Boolean;
+    { [R2-B] FOR TESTS: the keyboard's markers stop taken up at its part
+      APart (False: no such part), and let go again }
+    function KbTakeMarkerForTest(APart: Integer): Boolean;
+    procedure KbLeaveForTest;
     { [F2b] a marker element of series ASeriesIndex by its name (mp0,
       ml0.from, ma0#label ...): its state record and its index in the list }
     function MarkerStates(ASeriesIndex: Integer; const APart: string;

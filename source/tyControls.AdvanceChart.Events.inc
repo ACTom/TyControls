@@ -707,13 +707,83 @@ begin
   Result := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
 end;
 
-function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+{ [R2-B] THE TARGET A MARKER ELEMENT IS (EventTargetAt's marker branch, by
+  list index): the marker model's own index among its kind and its HOST's
+  series fields; HdKind 3 }
+function TTyAdvanceChart.MarkerEventTarget(AIdx: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
     'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo',
     'axis');
 var
-  i, k, g, a, q, idx, slot, nth: Integer;
+  k, q, slot, nth: Integer;
+  d: TTyChartDatumRef;
+  kind: TTyMarkerKind;
+  mk: TTyMkBlock;
+begin
+  Result := Default(TTyChartEventTarget);
+  Result.Params := TyChartBlankParams;
+  if (FPaintList = nil) or (AIdx < 0) or (AIdx >= FPaintList.Count) then Exit;
+  d := FPaintList.Element(AIdx).Datum;
+  if not (d.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea]) then Exit;
+  Result.Id := AIdx + 1;
+  slot := SlotOfSeries(d.ComponentIndex);
+  if slot < 0 then Exit;
+  if d.Kind = ctkMarkPoint then kind := mkPoint
+  else if d.Kind = ctkMarkLine then kind := mkLine
+  else kind := mkArea;
+  { THE MARKER MODEL'S OWN INDEX among its kind, and its HOST's
+    series fields: MarkerModel.getDataParams }
+  nth := 0;
+  for k := 0 to High(FMarkers) do
+  begin
+    if FMarkers[k].SeriesIndex = d.ComponentIndex then Break;
+    if FMarkers[k].Blocks[kind].Present then Inc(nth);
+  end;
+  Result.HasData := True;
+  Result.Params.ComponentType := cKindWord[d.Kind];
+  Result.Params.ComponentSubType := '';
+  Result.Params.ComponentIndex := nth;
+  Result.Params.SeriesType := FBindings[slot].SeriesType;
+  Result.Params.SeriesIndex := d.ComponentIndex;
+  Result.Params.SeriesName := SeriesModelName(d.ComponentIndex);
+  Result.Params.SeriesId := SeriesIdOf(FOption, d.ComponentIndex);
+  Result.Params.DataIndex := d.DataIndex;
+  Result.Params.RawDataIndex := d.DataIndex;
+  for k := 0 to High(FMarkers) do
+    if FMarkers[k].SeriesIndex = d.ComponentIndex then
+    begin
+      mk := FMarkers[k].Blocks[kind];
+      if kind = mkPoint then
+      begin
+        for q := 0 to High(mk.Points) do
+          if mk.Points[q].DataIndex = d.DataIndex then
+          begin
+            if mk.Points[q].E.Name.Kind = mvkStr then
+              Result.Params.Name := mk.Points[q].E.Name.Str
+            else if mk.Points[q].E.Name.Kind = mvkNum then
+              Result.Params.Name := TyChartValueText(mk.Points[q].E.Name.Num);
+            if mk.Points[q].E.Value.Kind = mvkNum then
+              Result.Params.ValueText := TyChartValueText(mk.Points[q].E.Value.Num)
+            else if mk.Points[q].E.Value.Kind = mvkStr then
+              Result.Params.ValueText := mk.Points[q].E.Value.Str;
+          end;
+      end;
+      Break;
+    end;
+  { a query is matched against the host series }
+  Result.Model := SeriesEventModel(d.ComponentIndex);
+  { ITS ECData HAS A dataIndex, the marker's, and the host's
+    seriesIndex: a click on it dispatches select for the HOST
+    series' item at that index [Batch 88] }
+  Result.HdKind := 3;
+  Result.HdSeries := d.ComponentIndex;
+  Result.HdRow := d.DataIndex;
+end;
+
+function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+var
+  i, k, g, a, q, idx, slot: Integer;
   lay: TTyTitleLayout;
   r: TTyRectF;
   el: TTyChartElement;
@@ -725,8 +795,6 @@ var
   meas: ITyTextMeasurer;
   lblS, nameS: TTyStyleSet;
   fw, fh: Double;
-  kind: TTyMarkerKind;
-  mk: TTyMkBlock;
   nm, mainT: string;
   gel: TTyGfxEl;
   piece: TTyBrushPiece;
@@ -949,60 +1017,8 @@ begin
           if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
         end;
       ctkMarkPoint, ctkMarkLine, ctkMarkArea:
-        begin
-          slot := SlotOfSeries(d.ComponentIndex);
-          if slot < 0 then Exit;
-          if d.Kind = ctkMarkPoint then kind := mkPoint
-          else if d.Kind = ctkMarkLine then kind := mkLine
-          else kind := mkArea;
-          { THE MARKER MODEL'S OWN INDEX among its kind, and its HOST's
-            series fields: MarkerModel.getDataParams }
-          nth := 0;
-          for k := 0 to High(FMarkers) do
-          begin
-            if FMarkers[k].SeriesIndex = d.ComponentIndex then Break;
-            if FMarkers[k].Blocks[kind].Present then Inc(nth);
-          end;
-          Result.HasData := True;
-          Result.Params.ComponentType := cKindWord[d.Kind];
-          Result.Params.ComponentSubType := '';
-          Result.Params.ComponentIndex := nth;
-          Result.Params.SeriesType := FBindings[slot].SeriesType;
-          Result.Params.SeriesIndex := d.ComponentIndex;
-          Result.Params.SeriesName := SeriesModelName(d.ComponentIndex);
-          Result.Params.SeriesId := SeriesIdOf(FOption, d.ComponentIndex);
-          Result.Params.DataIndex := d.DataIndex;
-          Result.Params.RawDataIndex := d.DataIndex;
-          for k := 0 to High(FMarkers) do
-            if FMarkers[k].SeriesIndex = d.ComponentIndex then
-            begin
-              mk := FMarkers[k].Blocks[kind];
-              if kind = mkPoint then
-              begin
-                for q := 0 to High(mk.Points) do
-                  if mk.Points[q].DataIndex = d.DataIndex then
-                  begin
-                    if mk.Points[q].E.Name.Kind = mvkStr then
-                      Result.Params.Name := mk.Points[q].E.Name.Str
-                    else if mk.Points[q].E.Name.Kind = mvkNum then
-                      Result.Params.Name := TyChartValueText(mk.Points[q].E.Name.Num);
-                    if mk.Points[q].E.Value.Kind = mvkNum then
-                      Result.Params.ValueText := TyChartValueText(mk.Points[q].E.Value.Num)
-                    else if mk.Points[q].E.Value.Kind = mvkStr then
-                      Result.Params.ValueText := mk.Points[q].E.Value.Str;
-                  end;
-              end;
-              Break;
-            end;
-          { a query is matched against the host series }
-          Result.Model := SeriesEventModel(d.ComponentIndex);
-          { ITS ECData HAS A dataIndex, the marker's, and the host's
-            seriesIndex: a click on it dispatches select for the HOST
-            series' item at that index [Batch 88] }
-          Result.HdKind := 3;
-          Result.HdSeries := d.ComponentIndex;
-          Result.HdRow := d.DataIndex;
-        end;
+        { [R2-B] its own function: the keyboard's marker stop takes it too }
+        Result := MarkerEventTarget(idx);
       ctkLegend:
         begin
           if (d.ComponentIndex > High(FLegends))

@@ -931,8 +931,15 @@ begin
     ksMarkers:
       begin
         n := KbMarkerList(s, kd, ix, els);
-        { its lift is the overlay's (PaintEmphasis) }
-        if (APart >= 0) and (APart < n) then KbTipAtElement(els[APart]);
+        if (APart >= 0) and (APart < n) then
+        begin
+          { [R2-B] the pointer over it: the item's hover on the states (its
+            own focus too), then its tooltip }
+          FKbHoverT := MarkerEventTarget(els[APart]);
+          FKbHoverHas := FKbHoverT.HdKind = 3;
+          if FKbHoverHas then StHoverOver(FKbHoverT);
+          KbTipAtElement(els[APart]);
+        end;
       end;
     ksGeo:
       begin
@@ -1027,7 +1034,11 @@ begin
   FKbStopOn := False;
   i := FKbStop.Index;
   case FKbStop.Kind of
-    ksMarkers: KbHideTip;
+    ksMarkers:
+      begin
+        if FKbHoverHas then StHoverOut(FKbHoverT);
+        KbHideTip;
+      end;
     ksGeo:
       if FKbGeoName <> '' then
       begin
@@ -1073,6 +1084,20 @@ begin
   end;
   FKbHoverHas := False;
   InvalidateFrame;
+end;
+
+function TTyAdvanceChart.KbTakeMarkerForTest(APart: Integer): Boolean;
+var st: TTyKbStop;
+begin
+  st := Default(TTyKbStop);
+  st.Kind := ksMarkers;
+  Result := (APart >= 0) and (KbPartCount(st) > APart);
+  if Result then KbSwitchStop(st, APart);
+end;
+
+procedure TTyAdvanceChart.KbLeaveForTest;
+begin
+  KbStopLeave;
 end;
 
 procedure TTyAdvanceChart.KbSwitchStop(const AStop: TTyKbStop; APart: Integer);
