@@ -40,6 +40,7 @@ type
     function BuildChart(AParent: TWinControl; APPI: Integer): TControl;
     function NewChart(AOwner: TWinControl; const AOption: string; AW, AH: Integer): TDsChart;
     function PatternOption: string;
+    procedure DirtyRectAcrossScales(AFrom, ATo: Integer);
   protected
     procedure TearDown; override;
   published
@@ -55,6 +56,12 @@ type
       window's layers are put into device-px rects there, the S-times pixels stretched. Every
       other check paints on a raster canvas, 1:1. The picture must be the S = 1 one. }
     procedure TestDirtyRectOnALayoutCanvas;
+    { Review: the window moved between a Retina screen and a normal one. The dirty-rect
+      window's layers were made at the old scale; at the new one they are made again, and
+      every frame from then on -- the first, which also takes a hover, and a partial one --
+      is the one painted afresh at the new scale. Both ways. }
+    procedure TestDirtyRectLayersForgetTheScale;
+    procedure TestDirtyRectLayersFollowTheScaleUp;
   end;
 
 implementation
@@ -560,6 +567,101 @@ begin
     hostA.Free;
     f.Free;
   end;
+end;
+
+{ A (dirty-rect) and B (full paint) hovered alike: A painted at AFrom -- a full frame, then a
+  hover -- and then at ATo on a canvas of its own that it keeps, the first frame there taking a
+  hover of its own and the second another; each frame at ATo against B's full frame at ATo. }
+procedure TAdvChartDeviceScaleTest.DirtyRectAcrossScales(AFrom, ATo: Integer);
+var
+  f: TForm;
+  a, b: TDsChart;
+  hostFrom, hostTo: TBitmap;
+  pa, pb: TBGRABitmap;
+  n: Integer;
+  first: string;
+
+  function NewHost(AScale: Integer): TBitmap;
+  begin
+    Result := TBitmap.Create;
+    Result.PixelFormat := pf32bit;
+    Result.SetSize(AScale * a.Width, AScale * a.Height);
+    Result.Canvas.Brush.Color := RGBToColor(1, 2, 3);
+    Result.Canvas.FillRect(0, 0, Result.Width, Result.Height);
+  end;
+
+  procedure PaintA(AHost: TBitmap; AScale: Integer);
+  begin
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, True, False);
+    try
+      a.Layered(AHost.Canvas, Rect(0, 0, a.Width, a.Height), 96);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  end;
+
+  procedure HoverBoth(AIndex: Integer);
+  begin
+    a.Hover(a.DatumCentre(AIndex).X, a.DatumCentre(AIndex).Y);
+    b.Hover(b.DatumCentre(AIndex).X, b.DatumCentre(AIndex).Y);
+  end;
+
+  procedure FrameAtTo(const AWhat: string);
+  begin
+    FreeAndNil(pa);
+    FreeAndNil(pb);
+    PaintA(hostTo, ATo);
+    pa := TBGRABitmap.Create(hostTo);
+    pb := ShotAt(b, ATo);
+    n := DiffCount(pa, pb, first);
+    AssertEquals(Format('%s: S = %d after S = %d, the dirty-rect frame is the full one (%s)',
+      [AWhat, ATo, AFrom, first]), 0, n);
+  end;
+
+begin
+  f := TForm.CreateNew(nil);
+  hostFrom := nil;
+  hostTo := nil;
+  pa := nil;
+  pb := nil;
+  try
+    f.SetBounds(0, 0, 500, 400);
+    a := NewChart(f, cBarsPointer, 320, 200);
+    b := NewChart(f, cBarsPointer, 320, 200);
+    a.UseDirtyRect := True;
+    ShotAt(b, 1).Free;   { B laid out: its datum centres come from its last frame }
+    { on the first screen: a full frame, then a hover -- the work, ground and dynamic layers
+      all made at AFrom }
+    hostFrom := NewHost(AFrom);
+    PaintA(hostFrom, AFrom);
+    HoverBoth(2);
+    PaintA(hostFrom, AFrom);
+    AssertFalse('precondition: the hover on the first screen was a partial repaint', a.LastRepaintFull);
+    { on the other: the move and a hover in one frame, then a hover alone }
+    hostTo := NewHost(ATo);
+    HoverBoth(1);
+    FrameAtTo('the first frame, with a hover');
+    HoverBoth(0);
+    FrameAtTo('a hover');
+    AssertFalse('precondition: the hover on the other screen was a partial repaint', a.LastRepaintFull);
+    AssertTrue('precondition: ...of something', a.RepaintRectCount > 0);
+  finally
+    pb.Free;
+    pa.Free;
+    hostTo.Free;
+    hostFrom.Free;
+    f.Free;
+  end;
+end;
+
+procedure TAdvChartDeviceScaleTest.TestDirtyRectLayersForgetTheScale;
+begin
+  DirtyRectAcrossScales(2, 1);
+end;
+
+procedure TAdvChartDeviceScaleTest.TestDirtyRectLayersFollowTheScaleUp;
+begin
+  DirtyRectAcrossScales(1, 2);
 end;
 
 initialization
