@@ -393,6 +393,30 @@ const CASES = [
     note: 'a toolbox icon: pointer',
     option: { animation: false, toolbox: { feature: { restore: {}, saveAsImage: {} } }, xAxis: { type: 'category', data: CAT }, yAxis: {}, series: [{ type: 'bar', data: [1, 2, 3, 4] }] },
     steps: [mv(comp('toolbox', 0, e => e.type === 'path', 0, 'restore icon')), mv(at(300, 10, 'nothing'))] },
+  // [R2-E] RoamControllers that overlap: their zr listeners run in z order, the highest first (a tie: the one enabled later
+  // first); a pan consumes the move (the ones after it do nothing); a release is decided by the last (the lowest)
+  { id: 'roam-overlap',
+    note: 'two graphs whose roam areas overlap, equal z: the second (enabled later) runs first; a release is for the first to decide -- grab inside its area where nothing is hovered, default outside it',
+    option: { animation: false, series: [
+      { type: 'graph', layout: 'none', roam: true, left: 50, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] },
+      { type: 'graph', layout: 'none', roam: true, left: 250, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'c', x: 0, y: 0 }, { name: 'd', x: 100, y: 100 }] }] },
+    steps: [mv(at(300, 200, 'in both areas')), down(at(300, 200, 'press in both')), mv(at(320, 205, 'panning')), up(at(320, 205, 'release in both')),
+      mv(at(300, 200, 'in both again')), down(at(300, 200, 'press in both')), mv(at(450, 210, 'panning into the second only')), up(at(450, 210, 'release in the second only')),
+      mv(at(470, 230, 'the second only')), mv(at(100, 200, 'the first only')), down(at(100, 200, 'press')), mv(at(110, 205, 'panning')), up(at(110, 205, 'release in the first only')),
+      mv(at(535, 200, 'the second only, past the first')), down(at(535, 200, 'press in the second only')), mv(at(540, 205, 'the second pans')), up(at(540, 205, 'release in the second only: its word'))] },
+  { id: 'roam-overlap-z',
+    note: 'the same with the first graph above (z 3): it runs first; a release is for the second to decide',
+    option: { animation: false, series: [
+      { type: 'graph', layout: 'none', roam: true, z: 3, left: 50, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] },
+      { type: 'graph', layout: 'none', roam: true, left: 250, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'c', x: 0, y: 0 }, { name: 'd', x: 100, y: 100 }] }] },
+    steps: [mv(at(300, 200, 'in both areas')), down(at(300, 200, 'press in both')), mv(at(150, 205, 'panning into the first only')), up(at(150, 205, 'release in the first only')),
+      mv(at(300, 200, 'in both again')), down(at(300, 200, 'press in both')), mv(at(450, 210, 'panning into the second only')), up(at(450, 210, 'release in the second only'))] },
+  { id: 'roam-globalpan',
+    note: 'a graph roam with the brush holding globalPan: a move leaves the brush crosshair; the RoamController mouseup does not look at globalPan',
+    option: { animation: false, brush: {}, series: [{ type: 'graph', layout: 'none', roam: true, left: 100, width: 400, top: 50, height: 300, symbolSize: 10,
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] }] },
+    steps: [mv(at(300, 200, 'the area')), { type: 'action', payload: { type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'rect', brushMode: 'single' } } },
+      mv(at(300, 200, 'the area, the brush on')), down(at(300, 200, 'press')), up(at(300, 200, 'release under the brush')), mv(at(305, 200, 'a move after'))] },
 ];
 
 // ---------- the picture cases ----------
@@ -465,6 +489,15 @@ function runCase(def) {
     };
     const steps = [];
     for (const st of def.steps) {
+      // [R2-E] an action between the pointer steps
+      if (st.type === 'action') {
+        calls = [];
+        chart.dispatchAction(JSON.parse(JSON.stringify(st.payload)));
+        frame(chart);
+        steps.push({ type: 'action', payload: st.payload, calls: calls.slice(), cursor: current });
+        calls = null;
+        continue;
+      }
       let p;
       try {
         p = st.at(chart);
@@ -550,6 +583,11 @@ function check(g) {
     ['datazoom-inside', 0, 'grab', null], ['datazoom-inside', 1, 'pointer', 'rect'], ['datazoom-inside', 4, 'grabbing', null], ['datazoom-inside', 5, 'grab', null],
     ['toolbox', 0, 'pointer', 'path'],
     ['thumbnail', 0, 'grab', 'rect'], ['thumbnail', 1, 'grab', 'rect'],
+    // [R2-E] the first graph (enabled first, equal z) runs first and pans; the last decides a release
+    ['roam-overlap', 2, 'grabbing', null], ['roam-overlap', 7, 'grab', null], ['roam-overlap', 9, 'default', null], ['roam-overlap', 12, 'default', null],
+    ['roam-overlap', 15, 'grabbing', null], ['roam-overlap', 16, 'grab', null],
+    ['roam-overlap-z', 3, 'default', null], ['roam-overlap-z', 7, 'grab', null],
+    ['roam-globalpan', 2, 'crosshair', null], ['roam-globalpan', 4, 'grab', null], ['roam-globalpan', 5, 'crosshair', null],
   ];
   let n = 0;
   for (const [id, i, c, h] of expect) {

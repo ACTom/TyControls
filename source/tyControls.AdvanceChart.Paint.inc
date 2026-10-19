@@ -1143,7 +1143,7 @@ begin
     find out costs more than the pass it would save. }
   Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
     or FAnimLive or FTipShown or FLoadShown
-    or ((not FOptPtrGone) and (Length(OptionPointerHits) > 0))
+    or (Length(OptionPointerHits) > 0)
     { the keyboard's ring [Batch 144] }
     or FKbActive
     { a component's part [F5] }

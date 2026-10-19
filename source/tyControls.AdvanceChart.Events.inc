@@ -1264,6 +1264,12 @@ end;
   a move to the new one, an over when it changed -- each only where the
   target carries data }
 procedure TTyAdvanceChart.EventMove(AX, AY: Integer);
+begin
+  EventMoveOnly(AX, AY);
+  EventOver;
+end;
+
+procedure TTyAdvanceChart.EventMoveOnly(AX, AY: Integer);
 var
   t: TTyChartEventTarget;
   cancel: Boolean;
@@ -1327,22 +1333,40 @@ begin
     found under the pointer before the picture moved }
   if not cancel then GeoRoamMove(AX, AY);
   if t.HasData and not cancel then EmitChartEvent('mousemove', t, AX, AY);
-  if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
-  begin
-    VmElementEvent('mouseover', t, AX, AY);
-    TbMouseOver(t);
-    TlMouseOver(t);
-    cancel := GfxElementEvent('mouseover', t, AX, AY);
-    if not cancel then StHoverOver(t);
-    if t.HasData and not cancel then EmitChartEvent('mouseover', t, AX, AY);
-    VmZrMouseOver(t);
-  end;
+  { [R2-E] THE OVER WAITS for the zr-level mousemove listeners -- the
+    pointer's global one (updateAxisPointer, the tooltip's), the brush's,
+    the parallel's: Handler.mousemove dispatches the move (its zr-level
+    trigger with it) before the over. A legend item's highlight, a
+    chart's mouseover come after the pointer's actions (EventOver). }
+  FEvOverDue := (t.Id <> 0) and (t.Id <> FEvHover.Id);
+  FEvOverT := t;
+  FEvOverX := AX;
+  FEvOverY := AY;
   FEvHover := t;
   FEvHoverX := AX;
   FEvHoverY := AY;
+end;
+
+procedure TTyAdvanceChart.EventOver;
+var
+  t: TTyChartEventTarget;
+  cancel: Boolean;
+begin
+  if FEvOverDue then
+  begin
+    FEvOverDue := False;
+    t := FEvOverT;
+    VmElementEvent('mouseover', t, FEvOverX, FEvOverY);
+    TbMouseOver(t);
+    TlMouseOver(t);
+    cancel := GfxElementEvent('mouseover', t, FEvOverX, FEvOverY);
+    if not cancel then StHoverOver(t);
+    if t.HasData and not cancel then EmitChartEvent('mouseover', t, FEvOverX, FEvOverY);
+    VmZrMouseOver(t);
+  end;
   { zrender's Draggable on the timeline's checkpoint, after the hover was
     found [Batch 129] }
-  TlDragMove(AX, AY);
+  TlDragMove(FEvOverX, FEvOverY);
   { the frame's states [Batch 116] }
   VmApplyStates;
   TlApplyStates;
@@ -1589,7 +1613,7 @@ begin
   { the chart's own mouse events [Batch 84] -- zrender hears the chart's
     listeners before the pointer's global one }
   FEvPreset := pre;
-  EventMove(X, Y);
+  EventMoveOnly(X, Y);
   { THE AXIS POINTER AND THE BOX THROUGH THEIR ACTIONS [Batch 153]: the
     global listener turns the move into updateAxisPointer (the pointer's
     hits, an independent piece of state held in FTipHits -- live whenever
@@ -1605,6 +1629,8 @@ begin
   BrushPointerMove(X, Y);
   { ParallelView's mousemove, after the axes' controllers [Batch 140] }
   ParExpMove(X, Y);
+  { [R2-E] then zrender's mouseover }
+  EventOver;
   { an icon's pointer, the brush's crosshair [Batch 125] }
   TbApplyCursor(X, Y);
   { [F6a] the chart's cursor, all of it }
@@ -1635,7 +1661,7 @@ begin
     hideDelay, or never under alwaysShowContent }
   if not (csDesigning in ComponentState) then
   begin
-    if not FOptPtrGone then wasOn := True;
+    if Length(OptionPointerHits) > 0 then wasOn := True;
     PtrListener('leave', 0, 0, TyChartNoDatum, -1);
   end;
   { the pointer left the canvas: a mouseout to what it was over }
@@ -1702,6 +1728,132 @@ begin
   if not Result then Result := g >= 0;
 end;
 
+{ [R2-E] THE RELEASE IS THE LAST CONTROLLER'S. RoamController's zr
+  listeners run as addRoamZrListener sorted them: zlevel, then z,
+  descending -- and on a tie the comparison is NaN (z2 is -Infinity on both
+  sides), so the one enabled later goes after. Every pan controller's
+  mouseup sets the cursor (grab where nothing is hovered inside its area,
+  else the target's or default), so the last one's stands: the lowest, and
+  among equals the one enabled last. Enabled in this order: an inside
+  dataZoom's (coordsys:aftercreate, its grid's z), then the components'
+  (a geo's), then the series' (a graph's, a tree's, a sankey's, a
+  treemap's, a map's), each in its index order. }
+function TTyAdvanceChart.RoamReleaseArea(AX, AY: Integer): Integer;
+var
+  found, bestIn: Boolean;
+  bestZL, bestZ, bestSeq: Integer;
+  i, g, zl, z: Integer;
+  sp: TTyGraphSpec;
+  gg: TTyGeo;
+  node, d: TJSONData;
+  s, x, y: Double;
+  inArea: Boolean;
+
+  procedure Consider(AZL, AZ, ASeq: Integer; AIn: Boolean);
+  begin
+    if (not found) or (AZL < bestZL) or ((AZL = bestZL) and (AZ < bestZ))
+      or ((AZL = bestZL) and (AZ = bestZ) and (ASeq > bestSeq)) then
+    begin
+      found := True;
+      bestZL := AZL;
+      bestZ := AZ;
+      bestSeq := ASeq;
+      bestIn := AIn;
+    end;
+  end;
+
+  function NumOr(AObj: TJSONData; const AKey: string; ADefault: Integer): Integer;
+  var v: TJSONData;
+  begin
+    Result := ADefault;
+    if not (AObj is TJSONObject) then Exit;
+    v := TJSONObject(AObj).Find(AKey);
+    if (v <> nil) and (v.JSONType = jtNumber) then Result := Round(v.AsFloat);
+  end;
+
+begin
+  found := False;
+  bestIn := False;
+  bestZL := 0;
+  bestZ := 0;
+  bestSeq := -1;
+  { the inside dataZooms' controllers: one per grid, its z and zlevel }
+  if (FBuild <> nil) and (Length(FDzState) > 0) then
+  begin
+    s := DzScale;
+    x := (AX - FLastRect.Left) / s;
+    y := (AY - FLastRect.Top) / s;
+    for g := 0 to FBuild.GridCount - 1 do
+      if DzControlType(g) >= 1 then
+      begin
+        node := nil;
+        if FOption <> nil then
+          node := FOption.ComponentAt('grid', FBuild.Grid(g).ComponentIndex);
+        Consider(NumOr(node, 'zlevel', 0), NumOr(node, 'z', 0), g, DzGridContains(g, x, y));
+      end;
+  end;
+  { the geos' }
+  for i := 0 to High(FGeos) do
+  begin
+    gg := FGeos[i];
+    if (gg = nil) or not gg.Valid or not gg.Spec.Show then Continue;
+    if not (gg.Spec.Roam in [grmPan, grmBoth]) then Continue;
+    inArea := gg.RoamPointerIn(AX, AY) and not GeoIrrelevant(i, AX, AY);
+    Consider(gg.Spec.ZLevel, gg.Spec.Z, 1000 + i, inArea);
+  end;
+  { the series': by their index }
+  for i := 0 to High(FGraphs) do
+  begin
+    if (FGraphs[i] = nil) or (i > High(FGraphLaidOut)) or not FGraphLaidOut[i] then Continue;
+    sp := FGraphSpecs[i];
+    if not (sp.Roam in [grmPan, grmBoth]) then Continue;
+    Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
+      sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY));
+  end;
+  for i := 0 to High(FTreeViews) do
+  begin
+    if FTreeViews[i] = nil then Continue;
+    sp := FTreeSpecs[i];
+    if not (sp.Roam in [grmPan, grmBoth]) then Continue;
+    Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
+      sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY));
+  end;
+  for i := 0 to High(FSankeyViews) do
+  begin
+    if FSankeyViews[i] = nil then Continue;
+    sp := FSankeySpecs[i];
+    if not (sp.Roam in [grmPan, grmBoth]) then Continue;
+    Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
+      sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY));
+  end;
+  for i := 0 to High(FTreemaps) do
+  begin
+    if not FTreemaps[i].Valid or not TreemapRoamOk(i, False) then Continue;
+    z := NumOr(FTreemaps[i].Series, 'z', 2);
+    zl := NumOr(FTreemaps[i].Series, 'zlevel', 0);
+    d := FTreemaps[i].Series.Find('roamTrigger');
+    inArea := (d = nil) or (d.JSONType <> jtString) or (d.AsString <> 'selfRect');
+    if not inArea then
+      inArea := (AX - FTreemaps[i].Box.X >= FTreemaps[i].Nodes[0].X)
+        and (AX - FTreemaps[i].Box.X <= FTreemaps[i].Nodes[0].X + FTreemaps[i].Nodes[0].W)
+        and (AY - FTreemaps[i].Box.Y >= FTreemaps[i].Nodes[0].Y)
+        and (AY - FTreemaps[i].Box.Y <= FTreemaps[i].Nodes[0].Y + FTreemaps[i].Nodes[0].H);
+    Consider(zl, z, 100000 + FBindings[i].SeriesIndex, inArea);
+  end;
+  for i := 0 to High(FMapGeos) do
+  begin
+    if (i > High(FMapGroups)) or (FMapGroups[i].Main < 0) then Continue;
+    gg := FMapGeos[i];
+    if (gg = nil) or not gg.Valid or not gg.Spec.Show then Continue;
+    if not (gg.Spec.Roam in [grmPan, grmBoth]) then Continue;
+    Consider(gg.Spec.ZLevel, gg.Spec.Z, 100000 + FBindings[FMapGroups[i].Main].SeriesIndex,
+      gg.RoamPointerIn(AX, AY));
+  end;
+  if not found then Result := -1
+  else if bestIn then Result := 1
+  else Result := 0;
+end;
+
 { some RoamController listens to the release: one that pans }
 function TTyAdvanceChart.AnyPanRoam: Boolean;
 var
@@ -1766,7 +1918,9 @@ end;
 
 { RoamController._mouseupHandler, with a pan controller in the chart: 'grab'
   where nothing is hovered inside a roam area, else the released-on
-  element's own cursor -- the pan's 'grabbing' given back }
+  element's own cursor -- the pan's 'grabbing' given back.
+  [R2-E] The last controller's word (RoamReleaseArea), and whatever holds
+  globalPan: the mouseup handler does not ask. }
 procedure TTyAdvanceChart.CursorAfterUp(AX, AY: Integer);
 var
   t: TTyChartEventTarget;
@@ -1775,7 +1929,7 @@ var
   c: string;
 begin
   if csDesigning in ComponentState then Exit;
-  if PanTaken or not AnyPanRoam then Exit;
+  if not AnyPanRoam then Exit;
   t := Default(TTyChartEventTarget);
   if (AX >= FLastRect.Left) and (AY >= FLastRect.Top) and (AX <= FLastRect.Right)
     and (AY <= FLastRect.Bottom) then
@@ -1798,7 +1952,7 @@ begin
       c := 'pointer';
     end;
   end
-  else if (t.Id = 0) and (RoamGrabAt(AX, AY) or DzGrabAt(AX, AY)) then
+  else if (t.Id = 0) and (RoamReleaseArea(AX, AY) = 1) then
     c := 'grab'
   else
     c := TargetCursor(t);

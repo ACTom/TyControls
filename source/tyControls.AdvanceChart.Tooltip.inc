@@ -679,6 +679,8 @@ begin
   if slot < 0 then Exit;
   Result.SeriesType := FBindings[slot].SeriesType;
   Result.SeriesName := SeriesModelName(ADatum.SeriesIndex);
+  { [R2-E] a sunburst's, a treemap's and a sankey's own getDataParams }
+  if HierTipParams(ADatum, slot, Result) then Exit;
   if slot > High(FStores) then Exit;
   st := FStores[slot];
   if st = nil then Exit;
@@ -3704,6 +3706,7 @@ begin
       { updateModelActually: what is not shown hides }
       FTipHits := hits;
       FOptPtrGone := True;
+      FOptPtrBack := nil;
       PtrAnimSync;
       TipInvalidate;
       { the event: the first row a processed axis took (the first pass's,
@@ -3938,6 +3941,7 @@ end;
 
 procedure TTyAdvanceChart.TipDropDisplay;
 begin
+  FTipFrozenHas := False;
   FTipShown := False;
   FTipShowFlag := False;
   FTipShowAt := NaN;
@@ -3961,6 +3965,16 @@ begin
     about to be rebuilt), not their meaning. }
   TipFreeze;
   TipRendered;
+end;
+
+procedure TTyAdvanceChart.TipResetQuiet;
+begin
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  { the build is about to be new: the snapshots lose their pointers into
+    it -- and the view does not render, so nothing is kept for a tick
+    later and the last dataByCoordSys stays }
+  TipFreeze;
 end;
 
 procedure TTyAdvanceChart.TipForget;
@@ -3990,6 +4004,14 @@ procedure TTyAdvanceChart.TipFreeze;
       ASnap.Frozen := True;
       ASnap.FrozenX := FTipBox.Left;
       ASnap.FrozenY := FTipBox.Top;
+      { [R2-E] and what it said: the content stays the last show's }
+      FTipFrozenHas := FTipLastHas;
+      FTipFrozenSpec := FTipLastSpec;
+      FTipFrozenInk := FTipLastInk;
+      FTipFrozenLines := FTipLastLines;
+      FTipFrozenOnAxis := FTipLastOnAxis;
+      FTipFrozenFmt := FTipLastFmt;
+      FTipFrozenBorder := FTipLastBorder;
     end;
     ASnap.Stale := True;
     ASnap.Element := -1;
@@ -4243,15 +4265,10 @@ end;
 
 function TTyAdvanceChart.OptionPointerHits: TTyAxisHitArray;
 var
-  g, c, k, n: Integer;
+  g, c, k: Integer;
   gb: TTyGridBuild;
   cart: TTyCartesian2D;
-  ax: TTyAxis;
-  node, ap, d, st, sh: TJSONData;
   tipSpec: TTyTooltipSpec;
-  isCat, fromTip: Boolean;
-  v: Double;
-  hit: TTyAxisHit;
   seen: array of TTyAxis;
 
   function Seen_(AAxis: TTyAxis): Boolean;
@@ -4264,15 +4281,79 @@ var
     Result := False;
   end;
 
+  { one axis: its own status 'show' with a value, through its scale's
+    parse [R2-E: an ordinal's name its ordinal and a number rounded, a
+    time's date string parsed (a number rounded), a value's string as `+`
+    reads it] }
+  procedure TryAxis(AAxis, ABase: TTyAxis; const APlot: TTyRectF;
+    APolar: TTyPolar; ASingle: TTySingle);
+  var
+    node, ap, d, st, sh: TJSONData;
+    isCat, fromTip: Boolean;
+    v, ms: Double;
+    n: Integer;
+    hit: TTyAxisHit;
+  begin
+    if (AAxis = nil) or Seen_(AAxis) then Exit;
+    { a pointer event rewrote every status: back only where a setOption
+      wrote one since [R2-E] }
+    if FOptPtrGone and not OptPtrIsBack(AAxis.MainType, AAxis.ComponentIndex) then Exit;
+    node := FOption.ComponentAt(AAxis.MainType, AAxis.ComponentIndex);
+    if not (node is TJSONObject) then Exit;
+    ap := TJSONObject(node).Find('axisPointer');
+    if not (ap is TJSONObject) then Exit;
+    st := TJSONObject(ap).Find('status');
+    if (st = nil) or (st.JSONType <> jtString) or (st.AsString <> 'show') then Exit;
+    d := TJSONObject(ap).Find('value');
+    if (d = nil) or not (d.JSONType in [jtNumber, jtString]) then Exit;
+    sh := TJSONObject(ap).Find('show');
+    fromTip := tipSpec.HasComponent and (tipSpec.Trigger = tttAxis) and (AAxis = ABase);
+    if not (fromTip or ((sh <> nil) and (sh.JSONType = jtBoolean) and sh.AsBoolean)) then Exit;
+    isCat := AAxis.Scale is TTyOrdinalScale;
+    v := NaN;
+    if isCat then
+    begin
+      if d.JSONType = jtNumber then v := TyJsRound(d.AsFloat)
+      else if AAxis.Categories <> nil then
+      begin
+        n := AAxis.Categories.GetOrdinal(d.AsString);
+        if n >= 0 then v := n;
+      end;
+    end
+    else if AAxis.Scale is TTyTimeScale then
+    begin
+      if d.JSONType = jtNumber then v := TyJsRound(d.AsFloat)
+      else if TyParseDateMs(d.AsString, ms, False) then v := ms;
+    end
+    else if d.JSONType = jtNumber then v := d.AsFloat
+    else if d.AsString <> '' then v := TyJsToNumber(d.AsString);
+    if IsNan(v) or IsInfinite(v) then Exit;
+    hit := Default(TTyAxisHit);
+    hit.Axis := AAxis;
+    hit.Plot := APlot;
+    hit.Polar := APolar;
+    hit.Single := ASingle;
+    hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType, AAxis.ComponentIndex,
+      isCat, fromTip, fromTip, False);
+    if hit.Spec.Show = apsNo then Exit;
+    hit.Value := v;
+    hit.SnapValue := v;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := hit;
+  end;
+
 begin
   { BaseAxisPointer.render reads `status` and `value` off the axis'
     axisPointer model: an axis that HAS a pointer (its own `show: true`, or
     the base axis of an axis-triggered tooltip) and whose option writes
     status 'show' with a value is drawn there before anything moves. Its
-    seriesDataIndices are empty -- no series data for a label formatter. }
+    seriesDataIndices are empty -- no series data for a label formatter.
+    [R2-E] Every coordinate system's axes: a grid's, a polar's, a single
+    axis. }
   Result := nil;
   seen := nil;
-  if FOptPtrGone or (FBuild = nil) or (FOption = nil) then Exit;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  if FOptPtrGone and (Length(FOptPtrBack) = 0) then Exit;
   tipSpec := TyTooltipSpecOf(FOption, -1, -1);
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -4282,44 +4363,65 @@ begin
       cart := gb.CartesianByIndex(c);
       if cart = nil then Continue;
       for k := 0 to 1 do
-      begin
-        if k = 0 then ax := cart.AxisByDim('x') else ax := cart.AxisByDim('y');
-        if (ax = nil) or Seen_(ax) then Continue;
-        node := FOption.ComponentAt(ax.MainType, ax.ComponentIndex);
-        if not (node is TJSONObject) then Continue;
-        ap := TJSONObject(node).Find('axisPointer');
-        if not (ap is TJSONObject) then Continue;
-        st := TJSONObject(ap).Find('status');
-        if (st = nil) or (st.JSONType <> jtString) or (st.AsString <> 'show') then
-          Continue;
-        d := TJSONObject(ap).Find('value');
-        if (d = nil) or not (d.JSONType in [jtNumber, jtString]) then Continue;
-        sh := TJSONObject(ap).Find('show');
-        fromTip := tipSpec.HasComponent and (tipSpec.Trigger = tttAxis)
-          and (ax = cart.GetBaseAxis);
-        if not (fromTip or ((sh <> nil) and (sh.JSONType = jtBoolean)
-          and sh.AsBoolean)) then Continue;
-        isCat := ax.Scale is TTyOrdinalScale;
-        v := NaN;
-        if d.JSONType = jtNumber then v := d.AsFloat
-        else if isCat and (ax.Categories <> nil) then
-        begin
-          n := ax.Categories.GetOrdinal(d.AsString);
-          if n >= 0 then v := n;
-        end;
-        if IsNan(v) or IsInfinite(v) then Continue;
-        hit := Default(TTyAxisHit);
-        hit.Axis := ax;
-        hit.Plot := gb.PlotRect;
-        hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
-          isCat, fromTip, fromTip, False);
-        if hit.Spec.Show = apsNo then Continue;
-        hit.Value := v;
-        hit.SnapValue := v;
-        SetLength(Result, Length(Result) + 1);
-        Result[High(Result)] := hit;
-      end;
+        if k = 0 then TryAxis(cart.AxisByDim('x'), cart.GetBaseAxis, gb.PlotRect, nil, nil)
+        else TryAxis(cart.AxisByDim('y'), cart.GetBaseAxis, gb.PlotRect, nil, nil);
     end;
+  end;
+  for g := 0 to High(FPolars) do
+    if FPolars[g] <> nil then
+    begin
+      TryAxis(FPolars[g].AxisByDim('radius'), FPolars[g].BaseAxis, Default(TTyRectF), FPolars[g], nil);
+      TryAxis(FPolars[g].AxisByDim('angle'), FPolars[g].BaseAxis, Default(TTyRectF), FPolars[g], nil);
+    end;
+  for g := 0 to High(FSingles) do
+    if FSingles[g] <> nil then
+      TryAxis(FSingles[g].Axis, FSingles[g].Axis, FSingles[g].GetRect, nil, FSingles[g]);
+end;
+
+{ [R2-E] an axis a merged setOption wrote `axisPointer.status` on since a
+  pointer event rewrote every status }
+function TTyAdvanceChart.OptPtrIsBack(const AMainType: string; AIndex: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FOptPtrBack) do
+    if FOptPtrBack[i] = AMainType + '#' + IntToStr(AIndex) then Exit(True);
+end;
+
+{ [R2-E] the merge's piece: every axis component it writes a status on
+  (an object is index 0, a list each its own) takes the option's status
+  again -- the rest keep what the pointer wrote }
+procedure TTyAdvanceChart.OptPtrTakePiece(APiece: TJSONData);
+const
+  cMain: array[0..4] of string = ('xAxis', 'yAxis', 'angleAxis', 'radiusAxis', 'singleAxis');
+var
+  m, i: Integer;
+  d: TJSONData;
+
+  procedure Take(AItem: TJSONData; AIndex: Integer);
+  var ap: TJSONData; key: string; n: Integer;
+  begin
+    if not (AItem is TJSONObject) then Exit;
+    ap := TJSONObject(AItem).Find('axisPointer');
+    if not (ap is TJSONObject) or (TJSONObject(ap).Find('status') = nil) then Exit;
+    key := cMain[m] + '#' + IntToStr(AIndex);
+    if OptPtrIsBack(cMain[m], AIndex) then Exit;
+    n := Length(FOptPtrBack);
+    SetLength(FOptPtrBack, n + 1);
+    FOptPtrBack[n] := key;
+  end;
+
+begin
+  if not FOptPtrGone or not (APiece is TJSONObject) then Exit;
+  for m := 0 to High(cMain) do
+  begin
+    d := TJSONObject(APiece).Find(cMain[m]);
+    if d is TJSONArray then
+    begin
+      for i := 0 to d.Count - 1 do Take(d.Items[i], i);
+    end
+    else
+      Take(d, 0);
   end;
 end;
 
@@ -4677,6 +4779,130 @@ begin
   end;
 end;
 
+{ getDataParams of the three series whose rows are nodes [R2-E]:
+  SeriesModel's -- the component's type, subtype and index, the series'
+  id, the node's name, its dataIndex and value -- and then the series'
+  own: a sunburst's and a treemap's treePathInfo (wrapTreePathInfo: from
+  the virtual root, named as the series, down to the node; each value
+  getRawValue, the value completeTreeValue settled), a sankey node's
+  value its layout value when it wrote none, an edge's name `source >
+  target` (the edge data's) and its value. False: not one of them. }
+function TTyAdvanceChart.HierTipParams(const ADatum: TTyChartDatumRef;
+  ASlot: Integer; var AParams: TTyChartCallbackParams): Boolean;
+var
+  st: string;
+  row, k, n: Integer;
+  v: Double;
+  d: TJSONData;
+  path: TTyIntegerArray;
+  hier: TTyHierarchy;
+  vals: TTyDoubleArray;
+
+  function JsonNum(A: Double): string;
+  begin
+    { JSON.stringify: a number that is none is null }
+    if IsNan(A) or IsInfinite(A) then Result := 'null'
+    else Result := TyJsNumberToString(A);
+  end;
+
+  function PathJson: string;
+  var j: Integer; nm: string;
+  begin
+    Result := '[';
+    for j := High(path) downto 0 do
+    begin
+      if j < High(path) then Result := Result + ',';
+      if path[j] = 0 then
+        nm := HierItemName(FOption.ComponentAt('series', ADatum.SeriesIndex))
+      else
+        nm := HierItemName(hier.Nodes[path[j]].Item);
+      Result := Result + '{"name":' + TyJsonQuote(nm) + ',"dataIndex":'
+        + IntToStr(path[j]) + ',"value":' + JsonNum(vals[path[j]]) + '}';
+    end;
+    Result := Result + ']';
+  end;
+
+begin
+  Result := False;
+  st := FBindings[ASlot].SeriesType;
+  row := ADatum.DataIndex;
+  hier := Default(TTyHierarchy);
+  vals := nil;
+  if (st = TySunburstSeriesTypeName) and (ASlot <= High(FSunbursts))
+    and FSunbursts[ASlot].Valid then
+  begin
+    hier := FSunbursts[ASlot].Hier;
+    SetLength(vals, Length(FSunbursts[ASlot].Nodes));
+    for k := 0 to High(vals) do vals[k] := FSunbursts[ASlot].Nodes[k].Value;
+  end
+  else if (st = TyTreemapSeriesTypeName) and (ASlot <= High(FTreemaps))
+    and FTreemaps[ASlot].Valid then
+  begin
+    hier := FTreemaps[ASlot].Hier;
+    SetLength(vals, Length(FTreemaps[ASlot].Nodes));
+    for k := 0 to High(vals) do vals[k] := FTreemaps[ASlot].Nodes[k].Value;
+  end
+  else if not ((st = TySankeySeriesTypeName) and (ASlot <= High(FSankeys))
+    and FSankeys[ASlot].Valid) then
+    Exit;
+  Result := True;
+  AParams.ComponentSubType := st;
+  AParams.ComponentIndex := ADatum.SeriesIndex;
+  if (FOption <> nil) and (FOption.ComponentAt('series', ADatum.SeriesIndex) is TJSONObject) then
+  begin
+    d := TJSONObject(FOption.ComponentAt('series', ADatum.SeriesIndex)).Find('id');
+    if (d <> nil) and (d.JSONType = jtString) then AParams.SeriesId := d.AsString
+    else if (d <> nil) and (d.JSONType = jtNumber) then
+      AParams.SeriesId := TyJsNumberToString(d.AsFloat);
+  end;
+  v := NaN;
+  if st = TySankeySeriesTypeName then
+  begin
+    if ADatum.IsEdge then
+    begin
+      AParams.DataType := 'edge';
+      if (row < 0) or (row > High(FSankeys[ASlot].Edges)) then Exit;
+      AParams.Name := FSankeys[ASlot].Edges[row].DataName;
+      v := FSankeys[ASlot].Edges[row].Value;
+    end
+    else
+    begin
+      AParams.DataType := 'node';
+      if (row < 0) or (row > High(FSankeys[ASlot].Nodes)) then Exit;
+      AParams.Name := HierItemName(FSankeys[ASlot].Nodes[row].Item);
+      { `params.value == null`: the layout value }
+      d := nil;
+      if FSankeys[ASlot].Nodes[row].Item <> nil then
+        d := FSankeys[ASlot].Nodes[row].Item.Find('value');
+      if (d <> nil) and (d.JSONType = jtNumber) then v := d.AsFloat
+      else v := FSankeys[ASlot].Nodes[row].Value;
+    end;
+  end
+  else
+  begin
+    if (row < 0) or (row > High(hier.Nodes)) or (row > High(vals)) then Exit;
+    if row = 0 then
+      AParams.Name := HierItemName(FOption.ComponentAt('series', ADatum.SeriesIndex))
+    else
+      AParams.Name := HierItemName(hier.Nodes[row].Item);
+    v := vals[row];
+    { the node and its ancestors, from the node up }
+    path := nil;
+    k := row;
+    while (k >= 0) and (k <= High(hier.Nodes)) do
+    begin
+      n := Length(path);
+      SetLength(path, n + 1);
+      path[n] := k;
+      k := hier.Nodes[k].Parent;
+    end;
+    AParams.TreePathInfo := PathJson;
+  end;
+  SetLength(AParams.Values, 1);
+  AParams.Values[0] := v;
+  AParams.ValueText := TyChartValueText(v);
+end;
+
 function TTyAdvanceChart.HierTooltipContent(const ADatum: TTyChartDatumRef;
   const AColour: TTyChartColor; out ABlock: TTyTooltipBlock): Boolean;
 var
@@ -4828,6 +5054,7 @@ var
   pin: TTyTooltipPlaceIn;
   at: TTyPointF;
   elRect: TTyRectF;
+  frozenPic: Boolean;
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
@@ -4841,20 +5068,34 @@ begin
   TipSnapRefresh;
   snap := FTipSnap;
   onAxis := Length(snap.Hits) > 0;
-  if not TipTargetValid(snap.Datum) and not onAxis then Exit;
-  { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
-    tooltip's model from the global component and a positioning hint and
-    nothing else -- no series level, no data item -- so every option but
-    valueFormatter is global there. }
-  spec := TipSpecOf(snap);
-  if not spec.HasComponent then Exit;
-  if not spec.Show or not spec.ShowContent then Exit;
-  { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's SHAPE --
-    if a coordinate system reported axes, the axis path runs and the item
-    trigger is never consulted. }
-  if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-    and not IsAxisTextDatum(snap.Datum) then Exit;
-  ink := TooltipInk(spec);
+  { [R2-E] A FROZEN BOX SAYS WHAT IT SAID: TooltipView.render does not
+    touch the content element -- a row gone, a value changed, the box keeps
+    the last show's text, ink and border until a show sets them again }
+  frozenPic := snap.Frozen and FTipFrozenHas;
+  if frozenPic then
+  begin
+    spec := FTipFrozenSpec;
+    ink := FTipFrozenInk;
+    onAxis := FTipFrozenOnAxis;
+    FTipFormatterText := FTipFrozenFmt;
+  end
+  else
+  begin
+    if not TipTargetValid(snap.Datum) and not onAxis then Exit;
+    { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
+      tooltip's model from the global component and a positioning hint and
+      nothing else -- no series level, no data item -- so every option but
+      valueFormatter is global there. }
+    spec := TipSpecOf(snap);
+    if not spec.HasComponent then Exit;
+    if not spec.Show or not spec.ShowContent then Exit;
+    { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's
+      SHAPE -- if a coordinate system reported axes, the axis path runs and
+      the item trigger is never consulted. }
+    if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
+      and not IsAxisTextDatum(snap.Datum) then Exit;
+    ink := TooltipInk(spec);
+  end;
 
   st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
     [tysNormal]);
@@ -4866,6 +5107,10 @@ begin
 
   block := nil;
   try
+    if frozenPic then
+      lines := FTipFrozenLines
+    else
+    begin
     if (not onAxis) and IsGeoDatum(snap.Datum) then
     begin
       { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
@@ -4944,8 +5189,8 @@ begin
     else
       block := TooltipContent(snap.Datum, spec);
     if block = nil then Exit;
-
     lines := TyTooltipFlatten(block, ink);
+    end;
     if Length(lines) = 0 then Exit;
 
     if spec.HasPadding then
@@ -4997,7 +5242,7 @@ begin
         elRect.Right - elRect.Left, elRect.Bottom - elRect.Top);
       FTipRect := elRect;
     end;
-    if spec.PositionHandler <> '' then
+    if (spec.PositionHandler <> '') and not snap.Frozen then
     begin
       if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
       else if IsGeoDatum(snap.Datum) then
@@ -5006,14 +5251,15 @@ begin
         pin.Params := TyChartOneParams(AxisTipParams(snap.Datum))
       else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
     end;
-    at := TyTooltipPlace(spec, pin);
     { [F4b] the box a re-render left up stays where it was until a show
-      places it again }
+      places it again [R2-E: the position is not asked again] }
     if snap.Frozen then
     begin
       at.X := snap.FrozenX - ARect.Left;
       at.Y := snap.FrozenY - ARect.Top;
-    end;
+    end
+    else
+      at := TyTooltipPlace(spec, pin);
     box := TyRectF(ARect.Left + at.X, ARect.Top + at.Y,
       ARect.Left + at.X + w, ARect.Top + at.Y + h);
     FTipBox := box;
@@ -5053,7 +5299,8 @@ begin
       signature ECharts 6 look and is easy to miss: the grey token is the
       fallback for an AXIS tooltip, and an item tooltip takes the datum's own
       colour. A written borderColor still wins over both. }
-    if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
+    if frozenPic then borderCol := FTipFrozenBorder
+    else if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
     else if not onAxis and not IsGeoDatum(snap.Datum) and not IsAxisTextDatum(snap.Datum)
       and (DatumColour(snap.Datum) <> 0) then
       borderCol := TTyColor(DatumColour(snap.Datum))
@@ -5061,6 +5308,17 @@ begin
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
         describing several series cannot take one of their colours. }
       borderCol := st.BorderColor;
+    { [R2-E] what this show says, for a re-render to freeze }
+    if not frozenPic then
+    begin
+      FTipLastHas := True;
+      FTipLastSpec := spec;
+      FTipLastInk := ink;
+      FTipLastLines := lines;
+      FTipLastOnAxis := onAxis;
+      FTipLastFmt := FTipFormatterText;
+      FTipLastBorder := borderCol;
+    end;
     if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
       APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
 

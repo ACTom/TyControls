@@ -15,7 +15,15 @@ unit test.advchart.tooltipkeep;
 
   This replays them through TTyAdvanceChart exactly as
   test.advchart.tooltipactions does (its probe), with one more step:
-  setOption (SetOption with the step's notMerge). }
+  setOption (SetOption with the step's notMerge).
+
+  [R2-E] More of the same oracle: the frozen box says what it said until
+  the keep timer shows it again (the content's text, a template
+  formatter's); a roam and a dataZoom handle's hover render no tooltip view
+  (nothing kept), a legendScroll does (kept); and an axis' own status
+  'show' -- cartesian, polar, single, a time axis' date string -- drawn
+  before anything moves, rewritten by a pointer event, back only where a
+  setOption writes it (or a notMerge). }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -35,6 +43,7 @@ type
     FReport, FWhere: string;
     FLog: TStrings;
     FSkipRows: Boolean;
+    FText, FPtr: Boolean;
     procedure Bad(const AWhat: string);
     procedure Same(const AWhat: string; AGot: Double; const AHex: string);
     procedure Finish(const AWhat: string);
@@ -64,6 +73,18 @@ type
     procedure TestTheKeptShowWaitsOutShowDelayAsUpstream;
     procedure TestAShowTipPointIsKeptAsUpstream;
     procedure TestAnAxisTipTurnedItemKeepsNoDataByCoordSysAsUpstream;
+    { [R2-E] }
+    procedure TestTheFrozenBoxKeepsItsTextAsUpstream;
+    procedure TestTheFrozenAxisBoxKeepsItsTextAsUpstream;
+    procedure TestTheFrozenBoxOfAGoneRowAsUpstream;
+    procedure TestARoamKeepsNothingAsUpstream;
+    procedure TestALegendScrollKeepsTheBoxAsUpstream;
+    procedure TestADataZoomHandleHoverKeepsNothingAsUpstream;
+    procedure TestACartesianStatusShowAsUpstream;
+    procedure TestAPolarAngleStatusShowAsUpstream;
+    procedure TestAPolarRadiusStatusShowAsUpstream;
+    procedure TestASingleAxisStatusShowAsUpstream;
+    procedure TestATimeAxisStatusShowAsUpstream;
   end;
 
 implementation
@@ -72,6 +93,11 @@ const
   cW = 600;
   cH = 400;
   cNulMark = #$E2#$90#$80;
+
+type
+  { an axis' own status 'show' [R2-E] }
+  TTkProbe = class(TTaProbe)
+  end;
 
 function FixturePath(const AName: string): string;
 begin
@@ -240,7 +266,7 @@ end;
 function TAdvChartTooltipKeepOracleTest.NewProbe(const AOptionJson: string;
   ATag: Integer): TTaProbe;
 begin
-  Result := TTaProbe.Create(FForm);
+  Result := TTkProbe.Create(FForm);
   Result.Parent := FForm;
   Result.Controller := FCtl;
   Result.Measurer := Ssr;
@@ -323,6 +349,9 @@ var
 begin
   who := 'chart ' + IntToStr(AIndex);
   hits := AChart.Hits;
+  { [R2-E] what is drawn: the pointer's hits, else the axes' own status
+    'show' }
+  if FPtr and (Length(hits) = 0) then hits := TTkProbe(AChart).OptionPointerHits;
   axes := AState.Arrays['axes'];
   n := 0;
   for k := 0 to axes.Count - 1 do
@@ -341,7 +370,11 @@ begin
     end;
     if h < 0 then Continue;
     Inc(n);
-    Same(who + ' ' + ax.Strings['key'] + ' value', AChart.PointerValueOf(hits[h]), ax.Strings['value']);
+    { [R2-E] the value through the axis' scale where the oracle gives it }
+    if (ax.Find('parsed') <> nil) and (ax.Find('parsed').JSONType = jtString) then
+      Same(who + ' ' + ax.Strings['key'] + ' parsed', AChart.PointerValueOf(hits[h]), ax.Strings['parsed'])
+    else
+      Same(who + ' ' + ax.Strings['key'] + ' value', AChart.PointerValueOf(hits[h]), ax.Strings['value']);
     { a pointer kept across a dataZoom: the model's seriesDataIndices keep
       the raw dataIndex they were written with beside dataIndexInside; the
       port keeps the view row (the deviation the spec records) }
@@ -378,6 +411,14 @@ begin
   box := AChart.TooltipBox;
   Same(who + ' box x', box.Left, tip.Arrays['box'].Strings[0]);
   Same(who + ' box y', box.Top, tip.Arrays['box'].Strings[1]);
+  { [R2-E] the content's text: a template formatter's }
+  if FText and (tip.Find('text') <> nil) and (tip.Find('text').JSONType = jtString) then
+  begin
+    Inc(FCompared);
+    if TTkProbe(AChart).TooltipFormatterText <> tip.Strings['text'] then
+      Bad(Format('%s: the box says %s, upstream %s', [who, TTkProbe(AChart).TooltipFormatterText,
+        tip.Strings['text']]));
+  end;
 end;
 
 procedure TAdvChartTooltipKeepOracleTest.RunCase(const AId: string);
@@ -398,9 +439,17 @@ begin
   SetLength(probes, charts.Count);
   for i := 0 to High(probes) do probes[i] := nil;
   FSkipRows := False;
+  FText := (cs.Find('text') <> nil) and cs.Booleans['text'];
+  FPtr := (cs.Find('ptr') <> nil) and cs.Booleans['ptr'];
   try
     for i := 0 to charts.Count - 1 do
       probes[i] := NewProbe(charts.Objects[i].Objects['option'].AsJSON, i);
+    { [R2-E] the state before any step }
+    if cs.Find('initial') <> nil then
+    begin
+      FWhere := AId + ' initial';
+      CompareState(probes[0], cs.Objects['initial'], 0);
+    end;
     now_ := 0;
     steps := cs.Arrays['steps'];
     for j := 0 to steps.Count - 1 do
@@ -524,6 +573,61 @@ end;
 procedure TAdvChartTooltipKeepOracleTest.TestAnAxisTipTurnedItemKeepsNoDataByCoordSysAsUpstream;
 begin
   RunCase('keep-axis-to-item');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestTheFrozenBoxKeepsItsTextAsUpstream;
+begin
+  RunCase('keep-frozen-text');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestTheFrozenAxisBoxKeepsItsTextAsUpstream;
+begin
+  RunCase('keep-frozen-axis-text');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestTheFrozenBoxOfAGoneRowAsUpstream;
+begin
+  RunCase('keep-frozen-gone');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestARoamKeepsNothingAsUpstream;
+begin
+  RunCase('keep-roam');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestALegendScrollKeepsTheBoxAsUpstream;
+begin
+  RunCase('keep-legend-scroll');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestADataZoomHandleHoverKeepsNothingAsUpstream;
+begin
+  RunCase('keep-dz-hover');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestACartesianStatusShowAsUpstream;
+begin
+  RunCase('ptr-cartesian');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestAPolarAngleStatusShowAsUpstream;
+begin
+  RunCase('ptr-polar');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestAPolarRadiusStatusShowAsUpstream;
+begin
+  RunCase('ptr-radius');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestASingleAxisStatusShowAsUpstream;
+begin
+  RunCase('ptr-single');
+end;
+
+procedure TAdvChartTooltipKeepOracleTest.TestATimeAxisStatusShowAsUpstream;
+begin
+  RunCase('ptr-time');
 end;
 
 initialization

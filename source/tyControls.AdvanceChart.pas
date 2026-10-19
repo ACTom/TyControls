@@ -1456,10 +1456,26 @@ type
     FTipBox, FTipRect: TTyRectF;
     { [Batch 104] what the last paint's string or handler formatter said }
     FTipFormatterText: string;
+    { [R2-E] what the box last painted said, and what a frozen box says:
+      TooltipView.render leaves the content element as it was until a show
+      sets it again }
+    FTipLastHas, FTipFrozenHas: Boolean;
+    FTipLastSpec, FTipFrozenSpec: TTyTooltipSpec;
+    FTipLastInk, FTipFrozenInk: TTyTooltipInk;
+    FTipLastLines, FTipFrozenLines: TTyTooltipLineArray;
+    FTipLastOnAxis, FTipFrozenOnAxis: Boolean;
+    FTipLastFmt, FTipFrozenFmt: string;
+    FTipLastBorder, FTipFrozenBorder: TTyColor;
     { [Batch 100] the option's own `status: 'show'` pointers are gone: the
       first pointer event rewrites every status, and an option set brings
       them back }
     FOptPtrGone: Boolean;
+    { [R2-E] the over EventMove found, for EventOver }
+    FEvOverDue: Boolean;
+    FEvOverT: TTyChartEventTarget;
+    FEvOverX, FEvOverY: Integer;
+    { [R2-E] the axes ('mainType#index') a merge wrote a status on since }
+    FOptPtrBack: TTyStringArray;
     { [Batch 153] THE ACTIONS THAT DRIVE THE TOOLTIP AND THE POINTER.
       FActCycle is upstream's IN_EC_CYCLE for them: an action dispatched
       while one of them runs waits in FActPending and is flushed after it,
@@ -1505,6 +1521,9 @@ type
       (the update runs once); and whether the update after them gave one }
     FBatchBrushJson: string;
     FBatchBrushHas, FBatchBrushQueued: Boolean;
+    { [R2-E] an item's timeline merge (TlMerge): the render it would have
+      run now waits for the batch's end, once }
+    FBatchConvertDue: Boolean;
     { [F4b] a view action (graphRoam, sankeyRoam, dragNode) running as an
       action: the roam helpers leave the event and `updated` to it }
     FViewActionDepth: Integer;
@@ -2022,6 +2041,9 @@ type
     function DzGrabAt(AX, AY: Integer): Boolean;
     function AnyPanRoam: Boolean;
     function RoamGrabAt(AX, AY: Integer): Boolean;
+    { [R2-E] the RoamController that has the last word on a release: -1
+      none that pans, 0 the point outside its area, 1 inside }
+    function RoamReleaseArea(AX, AY: Integer): Integer;
     procedure CursorAfterMove(AX, AY: Integer);
     procedure CursorAfterUp(AX, AY: Integer);
     procedure ApplyCursorName(const AName: string);
@@ -2099,6 +2121,8 @@ type
     procedure TbBrushClick(const AIcon: string);
     procedure TbApplyCursor(AX, AY: Integer);
     procedure TbFrame;
+    { [R2-E] the icons' pending emphasis entered or left: True when any }
+    function TbFrameApply: Boolean;
     { the brush components [Batch 126] }
     function BrushViewOf: TTyBrushView;
     procedure BrushCss(AX, AY: Double; out X, Y: Double);
@@ -2628,7 +2652,8 @@ type
     procedure SolveParallels(APPI: Integer);
     procedure PaintParallels(APainter: TTyPainter; APPI: Integer;
       const AMeasurer: ITyTextMeasurer);
-    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer): Boolean;
+    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer;
+      AWrite: Boolean = True): Boolean;
     function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
@@ -3022,6 +3047,9 @@ type
     { a re-render: the hover goes; the box stays, frozen, and _keepShow
       arms its timer [F4b] }
     procedure TipReset;
+    { [R2-E] a rebuild where upstream renders no tooltip view (a roam, a
+      node drag, a dataZoom slider's hover): the box frozen, nothing kept }
+    procedure TipResetQuiet;
     procedure TipDropDisplay;
     { [F4b] a new tooltip view (notMerge): the box, the last point and the
       kept pointer all go }
@@ -3320,6 +3348,9 @@ type
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     { hit -> the record a formatter is given. }
     function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    { a sunburst's, a treemap's and a sankey's own getDataParams [R2-E] }
+    function HierTipParams(const ADatum: TTyChartDatumRef; ASlot: Integer;
+      var AParams: TTyChartCallbackParams): Boolean;
     { [Batch 104] THE TEXT THE LAST PAINT'S FORMATTER GAVE THE BOX -- a
       template after the time format and formatTpl, or a handler's answer --
       '' when the box was not drawn or had no formatter. }
@@ -3332,6 +3363,8 @@ type
     { [Batch 100] THE POINTERS THE OPTION SHOWS BY ITSELF: an axis'
       `axisPointer: {status: 'show', value}` before any pointer event }
     function OptionPointerHits: TTyAxisHitArray;
+    function OptPtrIsBack(const AMainType: string; AIndex: Integer): Boolean;
+    procedure OptPtrTakePiece(APiece: TJSONData);
     procedure PointerStateChanged; override;
     { WHERE THE POINTER IS, every pixel of the way. The tooltip's anchor is the
       cursor, so this repaints on movement and not only when the datum under it
@@ -3372,6 +3405,11 @@ type
     procedure EmitChartEvent(const AType: string; const ATarget: TTyChartEventTarget;
       AX, AY: Integer; AHasOffset: Boolean = True);
     procedure EventMove(AX, AY: Integer);
+    { [R2-E] EventMove in its two halves: the out and the move, then
+      zrender's mouseover after every zr-level mousemove listener
+      (MouseMove runs the pointer's, the brush's, the parallel's between) }
+    procedure EventMoveOnly(AX, AY: Integer);
+    procedure EventOver;
     procedure EventDown(AButton: TMouseButton; AX, AY: Integer);
     procedure EventUp(AButton: TMouseButton; AX, AY: Integer);
     procedure EventDblClick(AX, AY: Integer);
