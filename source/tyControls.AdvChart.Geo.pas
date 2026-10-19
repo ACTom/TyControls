@@ -5444,6 +5444,11 @@ begin
   if Length(FSvgPlace) <> Length(FSvg.Nodes) then SetLength(FSvgPlace, Length(FSvg.Nodes));
   FSvgPlace[ANode] := Default(TTyGeoSvgPlace);
   if not SvgHasLabel(ANode) then Exit;
+  { [R2-H] no rotate written, no turn: left unset, the turn was whatever
+    the stack held -- two charts of one option differed in a label's
+    rotation (geo-beef-cuts, a hidden one), a shown one took the turned
+    path }
+  ARot := 0;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   lbl := FSvgLabel[ANode];
   strokes := SvgStrokes;
