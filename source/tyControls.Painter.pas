@@ -518,6 +518,10 @@ type
       exactly where the unrotated path would. Goes through TextOutAngle rather
       than the canvas' own text so it keeps TyConfigureTextFont's font cascade
       and fallback (empty-fontname-gotcha). }
+    { [R2-F] Where a run's ALPHABETIC BASELINE lies under the top of the box
+      DrawTextRotated and DrawText hang it by: the renderer's baseline for
+      the font, LOGICAL px. }
+    function TextBaseline(const AFontName: string; AFontSizeLogical, AWeight: Integer): Double;
     procedure DrawTextRotated(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AColor: TTyColor;
       AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
@@ -5992,6 +5996,33 @@ begin
 end;
 
 { ---- rotated text ---- }
+
+function TTyPainter.TextBaseline(const AFontName: string;
+  AFontSizeLogical, AWeight: Integer): Double;
+var
+  m: TFontPixelMetric;
+  raster: Boolean;
+  sz: TSize;
+begin
+  Result := 0;
+  if FBmp = nil then Exit;
+  raster := RasterEnter;
+  try
+    TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+    m := FBmp.FontPixelMetric;
+    if m.Defined then Result := m.Baseline
+    else
+    begin
+      { no metric from the renderer: the box's height less a fifth, the
+        usual descent }
+      sz := FBmp.TextSize('Hg');
+      Result := sz.cy * 0.8;
+    end;
+    if raster then Result := Result / FScale;
+  finally
+    RasterLeave;
+  end;
+end;
 
 procedure TTyPainter.DrawTextRotated(const AText, AFontName: string;
   AFontSizeLogical, AWeight: Integer; AColor: TTyColor;

@@ -5592,6 +5592,16 @@ end;
   zrender's storage adds them -- a group's children, then a host's text --
   with the current state values, the global transforms, upstream's own
   contain, the root's clip (the bounding rect) and the geo's }
+{ [R2-F] a turn and one scale (a reflection with them too): what a text's
+  rotation and size can say }
+function SvgSimilar(const M: TTyMat2D): Boolean;
+var tol: Double;
+begin
+  tol := 1e-9 * Max(1.0, Max(Abs(M[0]) + Abs(M[1]), Abs(M[2]) + Abs(M[3])));
+  Result := ((Abs(M[0] - M[3]) <= tol) and (Abs(M[1] + M[2]) <= tol))
+    or ((Abs(M[0] + M[3]) <= tol) and (Abs(M[1] - M[2]) <= tol));
+end;
+
 function TyBuildGeoSvg(AGeo: TTyGeo; const AInk: TTyGeoInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList;
   AApplyStates: Boolean): Integer;
@@ -5751,14 +5761,27 @@ var
               el.Caption.AnchorH := tahLeft;
             if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'middle') then
               el.Caption.AnchorV := tavMiddle
-            else if nd.St.StrHas[gsTextBaseline]
-              and ((nd.St.Str[gsTextBaseline] = 'bottom') or (nd.St.Str[gsTextBaseline] = 'alphabetic')
-                or (nd.St.Str[gsTextBaseline] = 'ideographic')) then
+            else if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'bottom') then
               el.Caption.AnchorV := tavBottom
             else
               el.Caption.AnchorV := tavTop;
+            { [R2-F] a canvas draws the alphabetic baseline at y (the box's
+              top a baseline above), the ideographic one at the box's bottom
+              -- they were the bottom of the TSpan's rect, a line low }
+            if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'alphabetic') then
+              el.Caption.BaselineKind := 1
+            else if nd.St.StrHas[gsTextBaseline] and (nd.St.Str[gsTextBaseline] = 'ideographic') then
+              el.Caption.BaselineKind := 2;
             el.Caption.RotationRad := -TyJsAtan2(m[1], m[0]);
             el.Caption.Truncate := False;
+            { [R2-F] a skew or unequal scales: the whole map, the text in its
+              own units }
+            if not SvgSimilar(m) then
+            begin
+              el.Caption.HasAffine := True;
+              el.Caption.FontSizeLogical := TyFontSizeFromPx(nd.St.Font.SizePx);
+              for k := 0 to 5 do el.Caption.Affine[k] := m[k];
+            end;
             if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
             begin
               el.Caption.StrokeColour := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);

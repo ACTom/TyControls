@@ -1587,7 +1587,7 @@ type
     Truncate, MultiLine: Boolean;
   end;
 
-function CaptionDrawOf(const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw; forward;
+function CaptionDrawOf(P: TTyPainter; const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw; forward;
 procedure PaintCaptionDraw(P: TTyPainter; const AD: TCaptionDraw; AInk: TTyColor); forward;
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer); forward;
@@ -1818,7 +1818,8 @@ var
 begin
   m := Ceil(AElement.Caption.StrokeWidthLogical * P.PPI / 96) + 4;
   b := AElement.Shape.Bounds;
-  if (AElement.Caption.RotationRad <> 0) or not TyRectFIsValid(b) then
+  if (AElement.Caption.RotationRad <> 0) or (AElement.Caption.BaselineKind <> 0)
+    or not TyRectFIsValid(b) then
   begin
     { round the anchor, any turn or alignment: the text's diagonal }
     sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
@@ -1837,7 +1838,7 @@ begin
   end;
   { the mask's own pixels are the device scale times these (MaskPainter) }
   if (mw <= 0) or (mh <= 0) or (mw * P.DeviceScale > 8192) or (mh * P.DeviceScale > 8192) then Exit;
-  d := CaptionDrawOf(AElement, -ox, -oy);
+  d := CaptionDrawOf(P, AElement, -ox, -oy);
   ol := nil;
   key := '';
   if HaloCacheOn then
@@ -1867,11 +1868,122 @@ begin
   end;
 end;
 
+{ [R2-F] A CAPTION UNDER A WHOLE AFFINE MAP (an SVG map's skewed or
+  unequally scaled text): drawn upright -- halo and glyphs, the caption's own
+  way -- on a bitmap of its own at the map's largest scale, then laid down
+  through the map as a picture (PaintImageInto). The picture is kept under a
+  key of everything it was drawn from, as the chart's own pictures are. }
+procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement); forward;
+
+procedure RenderAffineCaption(P: TTyPainter; const AElement: TTyChartElement);
+var
+  a: array[0..5] of Double;
+  s, w, h, bl, lx, ly, mg: Double;
+  ppi, bw, bh: Integer;
+  e: TTyChartElement;
+  sz: TSize;
+  bmp: TBGRABitmap;
+  mp: TTyPainter;
+  key: string;
+  c: TTyPointFArray;
+  k: Integer;
+  nw, nh: Double;
+
+  procedure Corner(AIndex: Integer; AX, AY: Double);
+  begin
+    c[AIndex].X := a[0] * AX + a[2] * AY + a[4];
+    c[AIndex].Y := a[1] * AX + a[3] * AY + a[5];
+  end;
+
+begin
+  for k := 0 to 5 do a[k] := AElement.Caption.Affine[k];
+  { the map's largest scale, device px per text unit }
+  s := Max(Sqrt(Sqr(a[0]) + Sqr(a[1])), Sqrt(Sqr(a[2]) + Sqr(a[3]))) * P.DeviceScale;
+  if not (s > 0) or IsNan(s) or IsInfinite(s) then Exit;
+  ppi := Max(1, Min(9600, Round(96 * s)));
+  s := ppi / 96;
+  sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
+    AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
+  { the box in text units (the main painter's px at its PPI) }
+  w := sz.cx * 96 / P.PPI;
+  h := sz.cy * 96 / P.PPI;
+  case AElement.Caption.AnchorH of
+    tahCentre: lx := -w / 2;
+    tahRight: lx := -w;
+  else
+    lx := 0;
+  end;
+  if AElement.Caption.BaselineKind = 1 then
+  begin
+    bl := P.TextBaseline(AElement.Caption.FontName, AElement.Caption.FontSizeLogical,
+      AElement.Caption.FontWeight);
+    ly := -bl;
+  end
+  else if AElement.Caption.BaselineKind = 2 then ly := -h
+  else
+    case AElement.Caption.AnchorV of
+      tavMiddle: ly := -h / 2;
+      tavBottom: ly := -h;
+    else
+      ly := 0;
+    end;
+  mg := Ceil(Max(0.0, AElement.Caption.StrokeWidthLogical)) + 2;
+  bw := Ceil((w + 2 * mg) * s);
+  bh := Ceil((h + 2 * mg) * s);
+  if (bw <= 0) or (bh <= 0) or (bw > 4096) or (bh > 4096) then Exit;
+  key := 'data:tyaffinetext,' + IntToStr(ppi) + ',' + IntToStr(bw) + ',' + IntToStr(bh) + ','
+    + IntToStr(AElement.Caption.FontSizeLogical) + ',' + IntToStr(AElement.Caption.FontWeight) + ','
+    + IntToHex(AElement.Caption.Colour, 8) + ',' + IntToHex(AElement.Caption.StrokeColour, 8) + ','
+    + KeyBits(AElement.Caption.StrokeWidthLogical) + IntToStr(Length(AElement.Caption.FontName)) + ','
+    + AElement.Caption.FontName + AElement.Caption.Text;
+  if TyChartImage(key, 0, nw, nh) = nil then
+  begin
+    bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
+    mp := TTyPainter.Create;
+    try
+      mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
+      e := AElement;
+      e.Caption.HasAffine := False;
+      e.Caption.BaselineKind := 0;
+      e.Caption.RotationRad := 0;
+      e.Caption.AnchorH := tahLeft;
+      e.Caption.AnchorV := tavTop;
+      e.Caption.Truncate := False;
+      e.Style.Alpha := 1;
+      { the upright box, mg text units in from the bitmap's edge, in its px }
+      e.Shape := TyShapeRect(TyRectF(mg * s, mg * s, (mg + w) * s, (mg + h) * s));
+      TyRenderCaption(mp, e);
+      mp.EndPaint;
+    finally
+      mp.Free;
+    end;
+    TyChartImageRegisterBitmap(key, bmp);
+  end;
+  SetLength(c, 4);
+  Corner(0, lx - mg, ly - mg);
+  Corner(1, lx + w + mg, ly - mg);
+  Corner(2, lx + w + mg, ly + h + mg);
+  Corner(3, lx - mg, ly + h + mg);
+  P.SaveState;
+  try
+    if AElement.Style.Alpha < 1 then P.SetElementAlpha(Max(0.0, AElement.Style.Alpha));
+    PaintImageInto(P, key, c);
+  finally
+    P.RestoreState;
+  end;
+end;
+
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
   ink, halo: TTyColor;
 begin
   if (P = nil) or (AElement.Caption.Text = '') then Exit;
+  { [R2-F] a whole affine map: drawn upright, laid down through it }
+  if AElement.Caption.HasAffine then
+  begin
+    RenderAffineCaption(P, AElement);
+    Exit;
+  end;
   { A BLOCK DRAWS ITS PIECES, and nothing of the one-run caption }
   if Length(AElement.Caption.RtPieces) > 0 then
   begin
@@ -1898,12 +2010,13 @@ end;
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer);
 begin
-  PaintCaptionDraw(P, CaptionDrawOf(AElement, ADX, ADY), AInk);
+  PaintCaptionDraw(P, CaptionDrawOf(P, AElement, ADX, ADY), AInk);
 end;
 
-function CaptionDrawOf(const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw;
+function CaptionDrawOf(P: TTyPainter; const AElement: TTyChartElement; ADX, ADY: Integer): TCaptionDraw;
 var
   b: TTyRectF;
+  bl: Double;
 begin
   Result := Default(TCaptionDraw);
   Result.Text := TyInkText(AElement.Caption.Text);
@@ -1912,6 +2025,29 @@ begin
   Result.Weight := AElement.Caption.FontWeight;
   Result.H := TyAnchorToAlignment(AElement.Caption.AnchorH);
   Result.V := TyAnchorToLayout(AElement.Caption.AnchorV);
+  { [R2-F] A BASELINE AT Y: from the anchor, the box's top a baseline above
+    it (alphabetic), or its bottom there (ideographic), along the turn }
+  if AElement.Caption.BaselineKind <> 0 then
+  begin
+    Result.Kind := 0;
+    Result.Rot := AElement.Caption.RotationRad;
+    Result.X := AElement.Caption.X + ADX;
+    Result.Y := AElement.Caption.Y + ADY;
+    if AElement.Caption.BaselineKind = 2 then
+      Result.V := tlBottom
+    else
+    begin
+      Result.V := tlTop;
+      bl := 0;
+      if P <> nil then
+        bl := P.TextBaseline(Result.FontName, Result.Size, Result.Weight) * P.PPI / 96;
+      { DrawTextRotated turns an offset (ox, oy) to (ox ca + oy sa,
+        -ox sa + oy ca) }
+      Result.X := Result.X - bl * Sin(Result.Rot);
+      Result.Y := Result.Y - bl * Cos(Result.Rot);
+    end;
+    Exit;
+  end;
   if AElement.Caption.RotationRad <> 0 then
   begin
     { NO RECT, so no clip and no ellipsis -- the rotated entry takes an anchor.

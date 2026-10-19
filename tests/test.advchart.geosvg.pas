@@ -124,6 +124,9 @@ type
     procedure TestZrenderContainQuirks;
     procedure TestTheMapIsPainted;
     procedure TestTheGallerySvgExamplesDraw;
+    procedure TestATextSitsOnItsBaseline;
+    procedure TestASkewedTextIsDrawnSkewed;
+    procedure TestAnArcIsDrawnAsTheArc;
   end;
 
 implementation
@@ -1446,6 +1449,124 @@ begin
   px := FBmp.GetPixel(Round(a.X), Round(a.Y));
   AssertFalse(Format('the hover changed A (%d %d %d)', [px.red, px.green, px.blue]),
     (px.blue > 200) and (px.red < 60));
+end;
+
+{ the red ink's extent in rows / its mean column per row band }
+procedure RedInk(ABmp: TBGRABitmap; out ATop, ABottom: Integer);
+var x, y: Integer; p: TBGRAPixel;
+begin
+  ATop := MaxInt;
+  ABottom := -1;
+  for y := 0 to ABmp.Height - 1 do
+    for x := 0 to ABmp.Width - 1 do
+    begin
+      p := ABmp.GetPixel(x, y);
+      if (p.red > 150) and (p.green < 110) and (p.blue < 110) then
+      begin
+        if y < ATop then ATop := y;
+        if y > ABottom then ABottom := y;
+      end;
+    end;
+end;
+
+function RedMeanX(ABmp: TBGRABitmap; AY0, AY1: Integer): Double;
+var x, y, n: Integer; p: TBGRAPixel; s: Double;
+begin
+  s := 0;
+  n := 0;
+  for y := AY0 to AY1 do
+    for x := 0 to ABmp.Width - 1 do
+    begin
+      p := ABmp.GetPixel(x, y);
+      if (p.red > 150) and (p.green < 110) and (p.blue < 110) then
+      begin
+        s := s + x;
+        Inc(n);
+      end;
+    end;
+  if n = 0 then Result := NaN else Result := s / n;
+end;
+
+{ [R2-F] AN SVG TEXT ON ITS BASELINE: with no alignment-baseline the
+  TSpan's is 'alphabetic', and a canvas draws the baseline at y -- the
+  capital's foot at y, its head a cap height above. It used to hang the
+  text's box from the bottom of the TSpan's rect, a whole line low. }
+procedure TAdvChartGeoSvgTest.TestATextSitsOnItsBaseline;
+var top, bottom: Integer;
+begin
+  AssertTrue(TyChartRegisterMap('base', '<svg width="200" height="100">'
+    + '<text x="20" y="60" font-size="30" fill="#ff0000">HH</text></svg>'));
+  NewChart('{"animation": false, "geo": {"map": "base", "silent": true, "left": 0, "top": 0, '
+    + '"width": 200, "height": 100}}', 200, 100);
+  RedInk(FBmp, top, bottom);
+  AssertTrue('the text is drawn', bottom >= 0);
+  AssertTrue(Format('the foot on the baseline: ink to row %d, y 60', [bottom]),
+    (bottom >= 57) and (bottom <= 61));
+  AssertTrue(Format('the head a cap height above: from row %d', [top]),
+    (top >= 30) and (top <= 45));
+end;
+
+{ [R2-F] A SKEWED TEXT IS DRAWN SKEWED: transform skewX(-30) moves a
+  point tan 30 x its y to the left -- an upright stem leans, its top
+  further right than its foot by tan 30 x its height. A turn and one size
+  used to be all a text took of its matrix. }
+procedure TAdvChartGeoSvgTest.TestASkewedTextIsDrawnSkewed;
+var top, bottom: Integer; xt, xb, lean: Double;
+begin
+  AssertTrue(TyChartRegisterMap('skew', '<svg width="200" height="100">'
+    + '<text x="80" y="80" font-size="60" fill="#ff0000" transform="skewX(-30)">I</text></svg>'));
+  NewChart('{"animation": false, "geo": {"map": "skew", "silent": true, "left": 0, "top": 0, '
+    + '"width": 200, "height": 100}}', 200, 100);
+  RedInk(FBmp, top, bottom);
+  AssertTrue('the text is drawn', bottom > top + 10);
+  xt := RedMeanX(FBmp, top, top + 4);
+  xb := RedMeanX(FBmp, bottom - 4, bottom);
+  lean := (xt - xb) / (bottom - top);
+  AssertTrue(Format('the stem leans as tan 30 (%.3f; top %.1f, foot %.1f)', [lean, xt, xb]),
+    (lean > 0.45) and (lean < 0.7));
+end;
+
+{ [R2-F] AN SVG ARC IS THE ARC: a sixteenth of a turn a cubic at most, every
+  cubic's middle within 1e-7 of the radius off the circle -- a quarter
+  turn's was 2.7e-4, a pixel at a radius a zoomed map reaches }
+procedure TAdvChartGeoSvgTest.TestAnArcIsDrawnAsTheArc;
+var
+  p: TTyZrPath;
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+  ident: TTyMat2D;
+  i, curves: Integer;
+  x0, y0, mx, my, worst: Double;
+begin
+  p := nil;
+  TyZrMoveTo(p, 1000, 0);
+  TyZrArc(p, 0, 0, 1000, 0, 2 * Pi, False);
+  ident[0] := 1; ident[1] := 0; ident[2] := 0; ident[3] := 1; ident[4] := 0; ident[5] := 0;
+  TyGsPathCmds(p, ident, cmds, pts);
+  curves := 0;
+  worst := 0;
+  x0 := 1000;
+  y0 := 0;
+  for i := 0 to High(cmds) do
+    case cmds[i].Kind of
+      pckMove, pckLine:
+        begin
+          x0 := cmds[i].X;
+          y0 := cmds[i].Y;
+        end;
+      pckCurve:
+        begin
+          Inc(curves);
+          { the cubic at t = 1/2 }
+          mx := (x0 + 3 * cmds[i].X1 + 3 * cmds[i].X2 + cmds[i].X) / 8;
+          my := (y0 + 3 * cmds[i].Y1 + 3 * cmds[i].Y2 + cmds[i].Y) / 8;
+          worst := Max(worst, Abs(Sqrt(Sqr(mx) + Sqr(my)) - 1000));
+          x0 := cmds[i].X;
+          y0 := cmds[i].Y;
+        end;
+    end;
+  AssertEquals('a turn is sixteen cubics', 16, curves);
+  AssertTrue(Format('every one on the circle (%.3g off at r 1000)', [worst]), worst < 1e-4);
 end;
 
 { the gallery's seven SVG examples (their options as harvested) draw with

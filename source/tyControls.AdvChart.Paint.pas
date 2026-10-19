@@ -431,6 +431,17 @@ type
 
   TTyElementCaption = record
     Text: string;
+    { [R2-F] Y IS A BASELINE, not the box's edge AnchorV names: 1 the
+      alphabetic one (where a canvas puts it), 2 the ideographic (the box's
+      bottom); drawn from the anchor, X / Y, turned by RotationRad. An SVG
+      map's text. }
+    BaselineKind: Integer;
+    { [R2-F] A TEXT UNDER A WHOLE AFFINE MAP: Affine takes the text's own
+      frame (its anchor at the origin, FontSizeLogical in its units) to the
+      list's px -- skew and unequal scales a turn and one size cannot say.
+      Drawn upright on a bitmap of its own and laid down through the map. }
+    HasAffine: Boolean;
+    Affine: array[0..5] of Double;
     { [F4c] a text of several lines drawn line by line in its rect, each
       line aligned on its own (a visualMap's end text with a line break) }
     MultiLine: Boolean;
