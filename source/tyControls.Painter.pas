@@ -521,6 +521,13 @@ procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
 { ALayout in ACanvas's own units: S times it on a canvas in device units (a raster cache), as it is
   on one in layout units. For code that draws on the canvas outside a painter (#83). }
 function TyCanvasRect(ACanvas: TCanvas; const ALayout: TRect): TRect;
+{ Lays ABmp down over ALayout the way the painter's EndPaint lays its layer down. ABmp holds S
+  device pixels per layout pixel, S = TyCanvasDeviceScale(ACanvas).Scale: 1:1 at S = 1 or on a
+  canvas in device units, into the layout rectangle on one in layout units (a Retina window: the
+  system puts each layout pixel back on S device pixels). For a caller that rendered with a
+  canvas-less painter at the canvas's scale (#83). }
+procedure TyDrawRasterBitmap(ACanvas: TCanvas; const ALayout: TRect; ABmp: TBGRABitmap;
+  AOpaque: Boolean);
 { The scale ACanvas is registered with, 0 when it is not. Compares the pointer only, so it may be
   asked about a canvas that is already freed. }
 function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
@@ -4556,6 +4563,20 @@ begin
       ALayout.Right * sc.Scale, ALayout.Bottom * sc.Scale)
   else
     Result := ALayout;
+end;
+
+procedure TyDrawRasterBitmap(ACanvas: TCanvas; const ALayout: TRect; ABmp: TBGRABitmap;
+  AOpaque: Boolean);
+var
+  sc: TTyCanvasScale;
+begin
+  if (ACanvas = nil) or (ABmp = nil) then Exit;
+  sc := TyCanvasDeviceScale(ACanvas);
+  if (sc.Scale <= 1) or sc.DeviceUnits then
+    ABmp.Draw(ACanvas, TyCanvasRect(ACanvas, ALayout).Left, TyCanvasRect(ACanvas, ALayout).Top,
+      AOpaque)
+  else
+    ABmp.Draw(ACanvas, ALayout, AOpaque);
 end;
 
 function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
