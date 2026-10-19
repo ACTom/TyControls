@@ -203,6 +203,8 @@ type
       给需要跨帧复用表面的调用方用(网格的滚动脏区重绘)。 }
     procedure BeginPaintOn(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
       ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+    procedure BeginPaintOnScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+      ABmp: TBGRABitmap; const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
     { BeginPaint at a device scale the caller already knows -- a painter with no canvas that
       still has to draw for one (TTyForm's glass backdrop). BeginPaint asks TyCanvasDeviceScale. }
     procedure BeginPaintScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
@@ -2537,8 +2539,53 @@ end;
 
 procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+begin
+  BeginPaintOnScaled(ACanvas, ARect, APPI, ABmp, TyCanvasDeviceScale(ACanvas), ARightToLeft);
+end;
+
 var
-  sc: TTyCanvasScale;
+  { Callers' bitmaps (BeginPaintOn) whose Canvas2D carries the scale(S) preset. Main thread
+    only, like every painter. Bounded: past the cap the oldest entries go -- a bitmap that has
+    since been freed would otherwise stay listed for ever. }
+  GKeptPreset: array of TBGRABitmap;
+
+const
+  KeptPresetCap = 256;
+
+{ ASet: note ABmp as preset. Not ASet: answer whether it was, and forget it. }
+function NoteKeptPreset(ABmp: TBGRABitmap; ASet: Boolean): Boolean;
+var
+  i, n: Integer;
+begin
+  Result := False;
+  n := Length(GKeptPreset);
+  for i := 0 to n - 1 do
+    if GKeptPreset[i] = ABmp then
+    begin
+      Result := True;
+      if not ASet then
+      begin
+        GKeptPreset[i] := GKeptPreset[n - 1];
+        SetLength(GKeptPreset, n - 1);
+      end;
+      Exit;
+    end;
+  if not ASet then Exit;
+  if n >= KeptPresetCap then
+  begin
+    Move(GKeptPreset[1], GKeptPreset[0], (n - 1) * SizeOf(Pointer));
+    GKeptPreset[n - 1] := ABmp;
+  end
+  else
+  begin
+    SetLength(GKeptPreset, n + 1);
+    GKeptPreset[n] := ABmp;
+  end;
+end;
+
+procedure TTyPainter.BeginPaintOnScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+  ABmp: TBGRABitmap; const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
+var
   w, h: Integer;
 begin
   ReleaseClipMasks;
@@ -2551,23 +2598,38 @@ begin
   FRightToLeft := ARightToLeft;
   if APPI <= 0 then FPPI := 96 else FPPI := APPI;
   FLayoutPPI := FPPI;
-  sc := TyCanvasDeviceScale(ACanvas);
-  FScale := sc.Scale;
+  FScale := AScale.Scale;
   if FScale < 1 then FScale := 1;
-  FDeviceUnits := sc.DeviceUnits;
+  FDeviceUnits := AScale.DeviceUnits;
   FRasterDepth := 0;
   Opacity := 1.0;
   OpacityBase := 0;
   FBmp := ABmp;
   { **不清空** —— 上一帧的像素正是要复用的东西;清哪一块由调用方决定。
-    The caller keeps the surface at the raster size; one that does not is given it here (a
-    resized surface holds nothing the frame can reuse anyway). }
+    The raster rect has to fit: a bitmap smaller than it is grown (a resized surface holds
+    nothing the frame can reuse anyway). One that is LARGER keeps its size and its pixels --
+    a terminal surface rounded up to 64-px blocks, a scroll bar's host frame: what lies
+    outside the rect is the caller's (plan B Task 4; the 3.0 line resized it to the rect). }
   w := (ARect.Right - ARect.Left) * FScale;
   h := (ARect.Bottom - ARect.Top) * FScale;
-  if (FBmp <> nil) and ((FBmp.Width <> w) or (FBmp.Height <> h)) then
-    FBmp.SetSize(w, h);
+  if (FBmp <> nil) and ((FBmp.Width < w) or (FBmp.Height < h)) then
+    FBmp.SetSize(Max(FBmp.Width, w), Max(FBmp.Height, h));
   FOwnsBmp := False;
-  if (FBmp <> nil) and (FScale > 1) then PresetCanvas2D;
+  if FBmp = nil then Exit;
+  if FScale > 1 then
+  begin
+    PresetCanvas2D;
+    NoteKeptPreset(FBmp, True);
+  end
+  else if NoteKeptPreset(FBmp, False) then
+  begin
+    { BGRA keeps a bitmap's Canvas2D -- matrix, stroke matrix and all -- across SetSize, and
+      main's vector API draws through it: a bitmap last painted at S = 2 would draw this
+      S = 1 frame twice as large. Only the bitmaps this unit preset are put back, so an
+      S = 1 frame on any other bitmap runs as it always did. }
+    FBmp.Canvas2D.resetTransform;
+    FBmp.Canvas2D.strokeResetTransform;
+  end;
 end;
 
 procedure TTyPainter.PresetCanvas2D;
@@ -2628,13 +2690,24 @@ end;
 
 procedure TTyPainter.EndPaint;
 var
-  baseBmp: TBGRABitmap;
+  baseBmp, layer: TBGRABitmap;
   c: TBGRAPixel;
+  rw, rh: Integer;
+  partOnly: Boolean;
 begin
   { before the bitmap goes: a kept bitmap's canvas must not be left sharing them }
   ReleaseClipMasks;
   if Assigned(FBmp) then
   begin
+    { What lands is the raster rect. A caller's bitmap larger than it (BeginPaintOn) keeps the
+      rest for itself: that part is neither drawn nor dimmed. }
+    layer := FBmp;
+    rw := (FRect.Right - FRect.Left) * FScale;
+    rh := (FRect.Bottom - FRect.Top) * FScale;
+    partOnly := Assigned(FCanvas) and (not FOwnsBmp) and ((FBmp.Width > rw) or (FBmp.Height > rh));
+    if partOnly then
+      layer := FBmp.GetPart(Rect(0, 0, rw, rh)) as TBGRABitmap;
+    try
     if Assigned(FCanvas) then
     begin
       if (Opacity < 1.0) and (TyAlphaOf(OpacityBase) > 0) then
@@ -2648,7 +2721,7 @@ begin
         // result stays alpha-255, and untouched areas show the opaque base, never glass.
         c := TyColorToBGRA(OpacityBase);
         c.alpha := 255;
-        baseBmp := TBGRABitmap.Create(FBmp.Width, FBmp.Height, c);
+        baseBmp := TBGRABitmap.Create(layer.Width, layer.Height, c);
         try
           if FScale = 1 then
             baseBmp.Draw(FCanvas, FRect.Left, FRect.Top, True)
@@ -2657,21 +2730,24 @@ begin
         finally
           baseBmp.Free;
         end;
-        FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
+        layer.ApplyGlobalOpacity(Round(Opacity * 255));
         if FScale = 1 then
-          FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False)
+          layer.Draw(FCanvas, FRect.Left, FRect.Top, False)
         else
-          BlitScaled(FBmp, False);
+          BlitScaled(layer, False);
         if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
         FScale := 1;
         Exit;
       end;
       if Opacity < 1.0 then
-        FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
+        layer.ApplyGlobalOpacity(Round(Opacity * 255));
       if FScale = 1 then
-        FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False)
+        layer.Draw(FCanvas, FRect.Left, FRect.Top, False)
       else
-        BlitScaled(FBmp, False);
+        BlitScaled(layer, False);
+    end;
+    finally
+      if partOnly then layer.Free;   // the copy; FBmp itself may be gone by now (the Exit above)
     end;
     if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
   end;

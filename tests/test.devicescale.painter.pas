@@ -78,6 +78,13 @@ type
     procedure TearDown; override;
   published
     procedure TestRasterIsScaleTimesLayout;
+    { plan B Task 4: BeginPaintOn on main -- a caller's bitmap larger than the rect keeps its
+      size and pixels; BeginPaintOnScaled draws at the scale it is given; a bitmap kept
+      across frames does not carry a scale(2) preset into an S = 1 frame. }
+    procedure TestBeginPaintOnKeepsALargerBitmap;
+    procedure TestBeginPaintOnScaledDrawsAtTheGivenScale;
+    procedure TestAKeptBitmapForgetsTheScale;
+    procedure TestEndPaintLandsOnlyTheRectOfALargerBitmap;
     procedure TestScaleOneLeavesCanvas2DAlone;
     procedure TestDeviceUnitsLandOneToOne;
     procedure TestStretchIntoLayoutRect;
@@ -203,6 +210,149 @@ begin
   FreeAndNil(FCanvasBmp);
   FreeAndNil(FBackdrop);
   inherited TearDown;
+end;
+
+function SolidFill(AColor: TTyColor): TTyFill; forward;
+
+procedure TDeviceScalePainterTest.TestBeginPaintOnKeepsALargerBitmap;
+var
+  P: TTyPainter;
+  b: TBGRABitmap;
+  x, y, bad: Integer;
+begin
+  { A terminal surface rounded up to 64-px blocks, a scroll bar's host frame: the caller's
+    bitmap is larger than the rect it paints, and what lies outside the rect is its own. }
+  b := TBGRABitmap.Create(300, 200, BGRA(1, 2, 3, 255));
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(nil, Rect(0, 0, 100, 50), 96, b);
+    P.FillBackground(Rect(0, 0, 100, 50), SolidFill(TyRGBA(200, 40, 40, 255)), 0);
+    P.EndPaint;
+    AssertEquals('the width stays the caller''s', 300, b.Width);
+    AssertEquals('the height stays the caller''s', 200, b.Height);
+    bad := 0;
+    for y := 0 to 199 do
+      for x := 0 to 299 do
+        if ((x >= 100) or (y >= 50)) and (b.GetPixel(x, y) <> BGRA(1, 2, 3, 255)) then Inc(bad);
+    AssertEquals('outside the rect the pixels are untouched', 0, bad);
+    AssertTrue('inside it the frame was painted', b.GetPixel(50, 25).red = 200);
+  finally
+    P.Free;
+    b.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestBeginPaintOnScaledDrawsAtTheGivenScale;
+var
+  P: TTyPainter;
+  b, ref: TBGRABitmap;
+  sc: TTyCanvasScale;
+begin
+  { A sub-painter with no canvas -- a chart layer, a terminal surface -- drawing for a
+    window at S = 2: the caller says the scale. }
+  b := TBGRABitmap.Create(1, 1);
+  ref := nil;
+  P := TTyPainter.Create;
+  try
+    sc.Scale := 2;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, 60, 40), 96, b, sc);
+    DrawFillSolid(P, 1);
+    P.EndPaint;
+    P.BeginPaint(nil, Rect(0, 0, 120, 80), 192);
+    DrawFillSolid(P, 2);
+    ref := P.Bitmap.Duplicate as TBGRABitmap;
+    P.EndPaint;
+    AssertSamePixels('S = 2 given by the caller as S = 1 at twice the size', b, ref);
+  finally
+    P.Free;
+    ref.Free;
+    b.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestEndPaintLandsOnlyTheRectOfALargerBitmap;
+var
+  P: TTyPainter;
+  b, shot: TBGRABitmap;
+  host: TBitmap;
+  x, y, bad: Integer;
+begin
+  { The caller's bitmap is larger than the rect and the painter has a canvas: only the rect's
+    pixels land on it, not the rest of the caller's surface. }
+  host := TBitmap.Create;
+  b := TBGRABitmap.Create(300, 200, BGRA(200, 40, 40, 255));
+  P := TTyPainter.Create;
+  try
+    host.SetSize(300, 200);
+    host.Canvas.Brush.Color := clWhite;
+    host.Canvas.FillRect(0, 0, 300, 200);
+    P.BeginPaintOn(host.Canvas, Rect(0, 0, 100, 50), 96, b);
+    P.EndPaint;
+    shot := TBGRABitmap.Create(host);
+    try
+      bad := 0;
+      for y := 0 to 199 do
+        for x := 0 to 299 do
+          if ((x >= 100) or (y >= 50)) and (shot.GetPixel(x, y) <> BGRAWhite) then Inc(bad);
+      AssertEquals('the canvas outside the rect is untouched', 0, bad);
+      AssertTrue('the rect landed', shot.GetPixel(50, 25).red = 200);
+    finally
+      shot.Free;
+    end;
+    { the dimmed path leaves through an Exit: the caller's bitmap is still the caller's }
+    P.BeginPaintOn(host.Canvas, Rect(0, 0, 100, 50), 96, b);
+    P.Opacity := 0.5;
+    P.OpacityBase := TyRGBA(255, 255, 255, 255);
+    P.EndPaint;
+    AssertEquals('the caller''s bitmap is alive and its own size', 300, b.Width);
+    AssertTrue('and outside the rect it is not dimmed', b.GetPixel(200, 150) = BGRA(200, 40, 40, 255));
+  finally
+    P.Free;
+    b.Free;
+    host.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestAKeptBitmapForgetsTheScale;
+var
+  P: TTyPainter;
+  kept, fresh, keptRect: TBGRABitmap;
+
+  procedure Square(ABmp: TBGRABitmap; AScale: Integer);
+  var sc: TTyCanvasScale;
+  begin
+    sc.Scale := AScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, 60, 40), 96, ABmp, sc);
+    P.Bitmap.FillTransparent;
+    P.BeginPath;
+    P.RectPath(10, 8, 30, 24);
+    P.FillPath(TyRGBA(20, 120, 220, 255));
+    P.EndPaint;
+  end;
+
+begin
+  { BGRA keeps a bitmap's Canvas2D, matrix and all, across SetSize; main's vector API draws
+    through it. A bitmap painted at S = 2 and then at S = 1 must draw as a new one would. }
+  kept := TBGRABitmap.Create(1, 1);
+  fresh := TBGRABitmap.Create(1, 1);
+  P := TTyPainter.Create;
+  try
+    Square(kept, 2);
+    Square(kept, 1);   // the bitmap keeps its S = 2 size (larger than the rect): compare the rect
+    Square(fresh, 1);
+    keptRect := kept.GetPart(Rect(0, 0, 60, 40)) as TBGRABitmap;
+    try
+      AssertSamePixels('S = 1 after S = 2 as on a new bitmap', keptRect, fresh);
+    finally
+      keptRect.Free;
+    end;
+  finally
+    P.Free;
+    fresh.Free;
+    kept.Free;
+  end;
 end;
 
 procedure TDeviceScalePainterTest.TestRasterIsScaleTimesLayout;
