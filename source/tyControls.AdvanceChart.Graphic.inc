@@ -566,6 +566,11 @@ type
   private
     function Row(AInside: Integer; out ARow: Integer): Boolean;
     function ColumnAt(ADim: Integer): Integer;
+    { [R2-J] the series' own dimensions name ADim of type 'ordinal' }
+    function DeclaredOrdinal(ADim: Integer): Boolean;
+    { the type a raw cell of ADim is read as: the declared ordinal, else the
+      store's }
+    function RawType(ADim: Integer): TTyDimType;
     function ItemNode(ARow: Integer): TJSONObject;
     function Lookup(AItem, ASeries: TJSONObject; const APath: array of string): TJSONData;
     function GlobalText(const AKey: string): TJSONData;
@@ -663,13 +668,42 @@ begin
 end;
 
 { the store column that reads data dimension ADim (its raw position) }
+function TTyChartCustomApi.DeclaredOrdinal(ADim: Integer): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if (Node = nil) or (ADim < 0) then Exit;
+  d := Node.Find('dimensions');
+  if not (d is TJSONArray) or (ADim >= d.Count) then Exit;
+  d := TJSONArray(d).Items[ADim];
+  Result := (d is TJSONObject) and (TJSONObject(d).Get('type', '') = 'ordinal');
+end;
+
+function TTyChartCustomApi.RawType(ADim: Integer): TTyDimType;
+begin
+  if DeclaredOrdinal(ADim) then Result := ddtOrdinal
+  else Result := Store.RawPosType(ADim);
+end;
+
 function TTyChartCustomApi.ColumnAt(ADim: Integer): Integer;
 var c: Integer;
 begin
   Result := -1;
   if Store = nil then Exit;
   for c := 0 to Store.DimCount - 1 do
-    if Store.RawDimPos(c) = ADim then Exit(c);
+    if Store.RawDimPos(c) = ADim then
+    begin
+      { [R2-J] A COLUMN THE SERIES' OWN dimensions DECLARE ORDINAL, which no
+        axis interns: createDimensions keeps the type the series wrote (the
+        coordinate system's outranks only a dataset's), and an ordinal one
+        without an ordinal meta keeps the value as written --
+        custom-calendar-icon declares its second dimension of type 'ordinal'
+        and reads its events '2|3|0' back as that text, where the calendar's
+        own value column parsed them to NaN. The cell is read raw instead
+        (RawType). }
+      if (Store.DimType(c) <> ddtOrdinal) and DeclaredOrdinal(ADim) then Exit(-1);
+      Exit(c);
+    end;
 end;
 
 function TTyChartCustomApi.ItemNode(ARow: Integer): TJSONObject;
@@ -743,7 +777,7 @@ begin
   col := ColumnAt(ADim);
   if col >= 0 then Exit(Store.Get(col, r));
   if not TTyDataStore.RawCell(Store.RawItem(r), ADim, cell) then Exit;
-  t := Store.RawPosType(ADim);
+  t := RawType(ADim);
   { an ordinal dimension no axis interns keeps the value as written }
   if t = ddtOrdinal then
   begin
@@ -763,7 +797,7 @@ begin
   col := ColumnAt(ADim);
   if col >= 0 then Exit(TyJsNumberToString(Store.Get(col, r)));
   if not TTyDataStore.RawCell(Store.RawItem(r), ADim, cell) then Exit;
-  if (Store.RawPosType(ADim) = ddtOrdinal) or (cell.Kind = dvkNone) then
+  if (RawType(ADim) = ddtOrdinal) or (cell.Kind = dvkNone) then
     Exit(TyJsValueText(cell, 'undefined'));
   Result := TyJsNumberToString(Value(ADim, r));
 end;
@@ -1278,18 +1312,22 @@ begin
       if d <> nil then ts.Add('stroke', d.Clone);
       d := LabelOf('textBorderWidth');
       if d <> nil then ts.Add('lineWidth', d.Clone);
-      { the text: shown, the default label (the label dimensions' values) }
+      { the text: shown, the default label (the label dimensions' values):
+        getDefaultLabel -- [R2-J] undefined with no label dimension (a
+        matrix's x and y are categories) and null for the one dimension's
+        null; several are joined, a null one as '' }
       show := CuTruthy(LabelOf('show'));
       hasText := False;
       txt := '';
       if show then
       begin
-        hasText := True;
         if Store.HasLabelPositions then cells := Store.LabelPositions else cells := nil;
+        hasText := Length(cells) > 0;
         for k := 0 to High(cells) do
         begin
           if not TTyDataStore.RawCell(Store.RawItem(ARow), cells[k], cell) then
             cell := Default(TTyDataValue);
+          if (Length(cells) = 1) and (cell.Kind = dvkNone) then hasText := False;
           if k > 0 then txt := txt + ' ';
           txt := txt + TyJsValueText(cell, '');
         end;
@@ -1355,18 +1393,12 @@ begin
           if CuTruthy(d) then CuPut(Result, 'textFill', d.Clone)
           else CuPut(Result, 'textFill', TJSONString.Create('#000'));
         end;
-      end
-      else if isInside then
-      begin
-        if not CuTruthy(Result.Find('textStroke')) then
-        begin
-          d := Result.Find('fill');
-          if CuTruthy(d) then CuPut(Result, 'textStroke', d.Clone)
-          else CuPut(Result, 'textStroke', TJSONString.Create('#000'));
-        end;
-        if CuNull(Result.Find('textStrokeWidth')) then
-          CuPut(Result, 'textStrokeWidth', TJSONIntegerNumber.Create(2));
       end;
+      { [R2-J] an inside label whose fill IS set gets no stroke: the host's
+        fill as its stroke (and a stroke width of 2) belongs to the default
+        fill only -- styleCompat.ts' textFillNotSet branch. A label colour
+        written under the label (matrix-periodic-table's #555) drew outlined
+        in the series colour. }
       if hasText then CuPut(Result, 'text', TJSONString.Create(txt))
       else CuPut(Result, 'text', TJSONNull.Create);
     finally
