@@ -1205,7 +1205,7 @@ begin
     begin
       c2d.beginPath;
       c2d.rect(ACellRect.Left, ACellRect.Top, W, H);
-      c2d.clip;
+      TyCtxClip(c2d);
     end;
     c2d.beginPath;
     k := TyTermGlyphParts[APart, 2];
@@ -1233,12 +1233,12 @@ begin
     begin
       c2d.strokeStyle(AColor);
       c2d.lineWidth := APPI / 96 * TyTermGlyphParts[APart, 1];
-      c2d.stroke;
+      TyCtxStroke(c2d);
     end
     else
     begin
       c2d.fillStyle(AColor);
-      c2d.fill;
+      TyCtxFill(c2d);
     end;
   finally
     c2d.restore;
@@ -1348,7 +1348,7 @@ begin
   try
     c2d.beginPath;
     c2d.rect(ACellRect.Left, ACellRect.Top, W, H);
-    c2d.clip;
+    TyCtxClip(c2d);
     c2d.beginPath;
     c2d.lineWidth := dpr * cssLine;
     curX := 0; curY := 0; ctlX := 0; ctlY := 0;
@@ -1414,13 +1414,13 @@ begin
     if TyTermGlyphParts[APart, 1] = 1 then
     begin
       c2d.strokeStyle(AColor);
-      c2d.stroke;
+      TyCtxStroke(c2d);
     end
     else
     begin
       c2d.fillMode := fmWinding;
       c2d.fillStyle(AColor);
-      c2d.fill;
+      TyCtxFill(c2d);
     end;
   finally
     c2d.restore;
@@ -1456,7 +1456,7 @@ begin
         c2d.beginPath;
         c2d.arc(ACellRect.Left + (BrailleDotX[bit] + 1) * xe, ACellRect.Top + padY + (BrailleDotY[bit] + 1) * ye,
           radius, 0, Pi * 2);
-        c2d.fill;
+        TyCtxFill(c2d);
       end;
   finally
     c2d.restore;

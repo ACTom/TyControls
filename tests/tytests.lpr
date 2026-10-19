@@ -179,7 +179,7 @@ uses
   test.advchart.halokeep,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
-  test.advchart.multiline,
+  test.advchart.multiline, test.bgrarandompin,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

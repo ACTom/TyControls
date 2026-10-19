@@ -368,7 +368,7 @@ begin
   ctx.beginPath;
   ctx.arc(cx, cy, radius, DegToRad(startDeg), DegToRad(startDeg + sweepDeg), False);
   ctx.strokeStyle(TyColorToBGRA(ATrackS.Background.Color));
-  ctx.stroke;
+  TyCtxStroke(ctx);
   // value arc
   if AFrac > 0 then
   begin
@@ -376,7 +376,7 @@ begin
     ctx.arc(cx, cy, radius, DegToRad(startDeg),
       DegToRad(TyGaugeSweepEnd(startDeg, sweepDeg, AFrac)), False);
     ctx.strokeStyle(TyColorToBGRA(AFillS.Background.Color));
-    ctx.stroke;
+    TyCtxStroke(ctx);
   end;
   DrawValueText(P, R, ATrackS.TextColor);
 end;

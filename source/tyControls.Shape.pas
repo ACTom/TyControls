@@ -853,7 +853,7 @@ begin
       ctx.beginPath;
       ctx.moveTo(R.Left, R.Top);
       ctx.lineTo(R.Right, R.Bottom);
-      ctx.stroke;
+      TyCtxStroke(ctx);
       P.EndPaint;
       Exit;
     end;
@@ -887,14 +887,14 @@ begin
     if hasFill then
     begin
       ctx.fillStyle(fillPx);
-      ctx.fill;
+      TyCtxFill(ctx);
     end;
     if G.Stroked then
     begin
       ctx.lineJoin := 'miter';
       ctx.lineWidth := bw;
       ctx.strokeStyle(strokePx);
-      ctx.stroke;
+      TyCtxStroke(ctx);
     end;
 
     P.EndPaint;

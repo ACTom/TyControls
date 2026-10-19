@@ -2957,6 +2957,8 @@ type
       const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
       const AMap: TTyIntegerArray);
     procedure TmAnimDrop(ASeries: Integer);
+    procedure TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
+      const AOldHave, AHave: TTyTreemapHave; const AMap: TTyIntegerArray);
     procedure TmAnimDropAll;
     function TmAnimAny: Boolean;
     procedure TmWrapCheck;

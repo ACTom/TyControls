@@ -531,7 +531,7 @@ begin
     ctx.lineTo(tri[2].X + 0.5, tri[2].Y + 0.5);
     ctx.closePath;
     ctx.fillStyle(TyColorToBGRA(HS.TextColor));
-    ctx.fill;
+    TyCtxFill(ctx);
 
     // Caption text to the right of the chevron gutter, vertically centered in the band.
     if Caption <> '' then

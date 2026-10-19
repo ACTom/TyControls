@@ -127,6 +127,7 @@ type
     procedure TestATextSitsOnItsBaseline;
     procedure TestASkewedTextIsDrawnSkewed;
     procedure TestAnArcIsDrawnAsTheArc;
+    procedure TestALabelWithNoRotateIsNotTurned;
   end;
 
 implementation
@@ -1567,6 +1568,60 @@ begin
     end;
   AssertEquals('a turn is sixteen cubics', 16, curves);
   AssertTrue(Format('every one on the circle (%.3g off at r 1000)', [worst]), worst < 1e-4);
+end;
+
+{ [R2-H] the stack where the next calls will put their locals, filled with
+  0x7F bytes: a local read before it is written reads 0x7F7F..., never 0 }
+procedure PoisonTheStack;
+var a: array[0..65535] of Byte;
+begin
+  FillChar(a, SizeOf(a), $7F);
+  if a[1000] = 0 then WriteLn('never');
+end;
+
+{ [R2-H] AN SVG REGION'S LABEL WITH NO rotate IS NOT TURNED: updateInnerText's
+  rotation is the label's own (or a state's), none when neither writes one.
+  SvgPlaceLabel left its turn unset when nothing wrote one -- the stack's
+  garbage: two charts of the same option differed in a hidden label's
+  rotation (geo-beef-cuts), a shown one drew through the turned path. Every
+  label of a map series and of a geo component, each built on a poisoned
+  stack, turns by exactly nothing -- the label placed after one that turns
+  (A turns 30 degrees: its call leaves its turn where the next call's local
+  is) as well. }
+procedure TAdvChartGeoSvgTest.TestALabelWithNoRotateIsNotTurned;
+const
+  cOpts: array[0..1] of string = (
+    '{"animation": false, "series": [{"type": "map", "map": "sqlbl", "label": {"show": true},'
+      + ' "left": 0, "top": 0, "width": 600, "height": 300, "data": [{"name": "A", "value": 1, "label": {"rotate": 30}},'
+      + ' {"name": "G", "value": 2}]}]}',
+    '{"animation": false, "geo": {"map": "sqlbl", "label": {"show": true}, "left": 0, "top": 0, "width": 600, "height": 300,'
+      + ' "regions": [{"name": "A", "label": {"rotate": 30}}]}}');
+var
+  i, k, n: Integer;
+  lst: TTyPaintList;
+  el: TTyChartElement;
+begin
+  AssertTrue(TyChartRegisterMap('sqlbl', cSquare));
+  n := 0;
+  for i := 0 to High(cOpts) do
+  begin
+    PoisonTheStack;
+    NewChart(cOpts[i]);
+    PoisonTheStack;
+    FChart.Option := cOpts[i];
+    Paint;
+    lst := FChart.List;
+    AssertNotNull('a list', lst);
+    for k := 0 to lst.Count - 1 do
+    begin
+      el := lst.Element(k);
+      if el.Caption.Text <> 'G' then Continue;
+      Inc(n);
+      AssertEquals(Format('option %d: the label "%s" turns by', [i, el.Caption.Text]),
+        '0000000000000000', IntToHex(PQWord(@el.Caption.RotationRad)^, 16));
+    end;
+  end;
+  AssertTrue(Format('labels seen (%d)', [n]), n >= 2);
 end;
 
 { the gallery's seven SVG examples (their options as harvested) draw with

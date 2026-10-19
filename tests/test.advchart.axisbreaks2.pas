@@ -897,7 +897,23 @@ begin
       Same(Format('%s s%d[%d] y', [ATag, si, k]), e.Shape.CY, TJSONArray(items.Items[k]).Items[1]);
       Inc(n);
     end;
-    SameInt(ATag + ' scatter points', n, items.Count);
+    { [R2-H] a symbol the grid clips is not drawn (SymbolDraw's clipShape is
+      the grid's area, its edges inside): upstream records every item's
+      point, drawn or not -- count those inside (a single axis' scatter has
+      no grid: every one) }
+    i := items.Count;
+    if FChart.Build.GridCount > 0 then
+    begin
+      g := FChart.Build.Grid(0).PlotXYWH;
+      i := 0;
+      for k := 0 to items.Count - 1 do
+      begin
+        x := NumOf(TJSONArray(items.Items[k]).Items[0]);
+        y := NumOf(TJSONArray(items.Items[k]).Items[1]);
+        if (x >= g.X) and (x <= g.X + g.W) and (y >= g.Y) and (y <= g.Y + g.H) then Inc(i);
+      end;
+    end;
+    SameInt(ATag + ' scatter points', n, i);
     Exit;
   end;
   { a line: its polyline, vertex by vertex, as singles }
@@ -1065,7 +1081,16 @@ var
   v: TTyAnimValue;
   akey, anid: string;
   t1: Double;
-  act2: TJSONObject;
+  act2, act3: TJSONObject;
+
+  procedure DoAct(A: TJSONObject);
+  begin
+    if A.Strings['type'] = 'dataZoom' then
+      AssertTrue(FName + ' zooms again', FChart.DispatchDataZoom(0, A.Floats['start'], A.Floats['end']))
+    else
+      AssertTrue(FName + ' acts again', FChart.DispatchAction(A.AsJSON));
+  end;
+
 begin
   FFrames := 0;
   anims := TJSONObject(FRoot).Arrays['anim'];
@@ -1099,6 +1124,7 @@ begin
     else
       AssertTrue(FName + ' acts', FChart.DispatchAction(act.AsJSON));
     act2 := an.Find('action2') as TJSONObject;
+    act3 := an.Find('action3') as TJSONObject;
     akey := an.Strings['axis'];
     if akey[1] = 'y' then akey := 'yAxis' + Copy(akey, 2, MaxInt)
     else akey := 'xAxis' + Copy(akey, 2, MaxInt);
@@ -1139,11 +1165,12 @@ begin
             v.Arr[2 * q + 1], TJSONArray(pts.Items[q]).Items[1]);
         end;
       end;
-      { the second action right after the sample at at2: a transition that
-        starts while the first one moves }
+      { the second action right after the sample at at2 (and [R2-H] a third
+        at at3): a transition that starts while the one before moves }
       if (act2 <> nil) and (fr.Floats['t'] = an.Floats['at2']) then
-        AssertTrue(FName + ' zooms again', FChart.DispatchDataZoom(0, act2.Floats['start'],
-          act2.Floats['end']));
+        DoAct(act2);
+      if (act3 <> nil) and (fr.Floats['t'] = an.Floats['at3']) then
+        DoAct(act3);
     end;
   end;
   Report;
