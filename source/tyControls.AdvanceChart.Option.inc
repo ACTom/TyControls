@@ -343,6 +343,9 @@ begin
   { [F4b] new models, a new tooltip view: the old one's box, last point and
     the axisPointer models' state go with it }
   TipForget;
+  { [R2-E] and every axis' own status 'show' holds again }
+  FOptPtrGone := False;
+  FOptPtrBack := nil;
   { EVERY visualMap VIEW GOES with its model [Batch 116] }
   VmDisposeAll;
   { THE OLD OPTION'S SERIES VIEWS, before the text goes: an update keeps a
@@ -570,6 +573,8 @@ begin
   if (FOption.MergedPiece is TJSONObject)
     and (TJSONObject(FOption.MergedPiece).Find('dataset') <> nil) then
     FTransformSeedTaken := False;
+  { [R2-E] the axes whose status the piece writes again }
+  OptPtrTakePiece(FOption.MergedPiece);
   FOptionText := FOption.OptionJson;
   { AN UPDATE: the series keep their views where their ids and types do }
   FAnimPending := True;
@@ -744,8 +749,10 @@ begin
   FProgFresh := True;
   FStreamPending := False;
   { an axis' `axisPointer.status: 'show'` holds again until a pointer moves
-    [Batch 100] }
-  FOptPtrGone := False;
+    [Batch 100] -- [R2-E] not after any setOption: a merge keeps the
+    status a pointer event wrote but where its piece writes one
+    (OptPtrTakePiece, DoMerge); new models (ApplyNotMerge) take the
+    option's again }
   if ALazy then
   begin
     { the next frame does the update: one pending at a time, its silent the

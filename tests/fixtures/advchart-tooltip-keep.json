@@ -5573,6 +5573,2384 @@
      ]
     }
    ]
+  },
+  {
+   "id": "keep-frozen-text",
+   "note": "an item tooltip and a setOption: until the keep timer shows it again the box says what it said (TooltipView.render does not touch the content), then the new value",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "formatter": "{b}: {c}"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 5"
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 5"
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 6"
+       }
+      }
+     ]
+    }
+   ],
+   "text": true
+  },
+  {
+   "id": "keep-frozen-axis-text",
+   "note": "the same under an axis trigger",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis",
+       "formatter": "{b}: {c0} / {c1}"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ],
+        "text": "b: 5 / 4"
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ],
+        "text": "b: 5 / 4"
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ],
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ],
+        "text": "b: 6 / 5"
+       }
+      }
+     ]
+    }
+   ],
+   "text": true
+  },
+  {
+   "id": "keep-frozen-gone",
+   "note": "the row the box spoke of is gone: the box still says it until the keep timer finds nothing at the point and hides it",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "formatter": "{b}: {c}"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      484,
+      244
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 3,
+        "dataIndex": 3,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ],
+        "text": "d: 6"
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         3,
+         5
+        ]
+       },
+       {}
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ],
+        "text": "d: 6"
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "item:0:3",
+        "anchor": [
+         "407e400000000000",
+         "406e800000000000"
+        ],
+        "anchorText": [
+         "484",
+         "244"
+        ],
+        "box": [
+         "407f800000000000",
+         "4070800000000000"
+        ],
+        "boxText": [
+         "504",
+         "264"
+        ],
+        "text": "d: 6"
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null,
+        "text": null
+       }
+      }
+     ]
+    }
+   ],
+   "text": true
+  },
+  {
+   "id": "keep-roam",
+   "note": "a graph's roam (update none): the tooltip view does not render, nothing is kept",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "series": [
+       {
+        "type": "graph",
+        "layout": "none",
+        "roam": true,
+        "symbolSize": 30,
+        "data": [
+         {
+          "name": "u",
+          "x": 0,
+          "y": 0
+         },
+         {
+          "name": "v",
+          "x": 10,
+          "y": 10
+         }
+        ],
+        "links": [
+         {
+          "source": "u",
+          "target": "v"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      140,
+      40
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 0,
+        "dataIndex": 0,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:0:node",
+        "anchor": [
+         "4061800000000000",
+         "4044000000000000"
+        ],
+        "anchorText": [
+         "140",
+         "40"
+        ],
+        "box": [
+         "4064000000000000",
+         "404e000000000000"
+        ],
+        "boxText": [
+         "160",
+         "60"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "graphRoam",
+      "seriesIndex": 0,
+      "dx": 5,
+      "dy": 0
+     },
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:0:node",
+        "anchor": [
+         "4061800000000000",
+         "4044000000000000"
+        ],
+        "anchorText": [
+         "140",
+         "40"
+        ],
+        "box": [
+         "4064000000000000",
+         "404e000000000000"
+        ],
+        "boxText": [
+         "160",
+         "60"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:0:node",
+        "anchor": [
+         "4061800000000000",
+         "4044000000000000"
+        ],
+        "anchorText": [
+         "140",
+         "40"
+        ],
+        "box": [
+         "4064000000000000",
+         "404e000000000000"
+        ],
+        "boxText": [
+         "160",
+         "60"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:0:node",
+        "anchor": [
+         "4061800000000000",
+         "4044000000000000"
+        ],
+        "anchorText": [
+         "140",
+         "40"
+        ],
+        "box": [
+         "4064000000000000",
+         "404e000000000000"
+        ],
+        "boxText": [
+         "160",
+         "60"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-legend-scroll",
+   "note": "a legendScroll's update (the default, update) renders the tooltip view: kept",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L1",
+        "data": [
+         1,
+         1,
+         1,
+         1
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L2",
+        "data": [
+         1,
+         1,
+         1,
+         1
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L3",
+        "data": [
+         1,
+         1,
+         1,
+         1
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L4",
+        "data": [
+         1,
+         1,
+         1,
+         1
+        ]
+       },
+       {
+        "type": "line",
+        "name": "L5",
+        "data": [
+         1,
+         1,
+         1,
+         1
+        ]
+       }
+      ],
+      "legend": {
+       "type": "scroll",
+       "width": 150
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendScroll",
+      "scrollDataIndex": 3
+     },
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keep-dz-hover",
+   "note": "an axis tooltip, then the pointer over a slider dataZoom's handle (its labels shown, no render of the tooltip view): nothing kept",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ],
+      "dataZoom": [
+       {
+        "type": "slider",
+        "start": 20,
+        "end": 80
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      250,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 0,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 250,
+        "y": 200,
+        "dataIndexInside": 0,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 0,
+              "dataIndex": 1
+             },
+             {
+              "seriesIndex": 1,
+              "dataIndexInside": 0,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           0
+          ],
+          [
+           1,
+           1,
+           0
+          ]
+         ]
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      184,
+      370
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "axis:0/1@x0,1/1@x0",
+        "anchor": [
+         "406f400000000000",
+         "4069000000000000"
+        ],
+        "anchorText": [
+         "250",
+         "200"
+        ],
+        "box": [
+         "4070e00000000000",
+         "406b800000000000"
+        ],
+        "boxText": [
+         "270",
+         "220"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 150,
+     "events": [],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": []
+        }
+       ],
+       "tip": {
+        "visible": false,
+        "show": false,
+        "which": null,
+        "anchor": null,
+        "anchorText": null,
+        "box": null,
+        "boxText": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ptr-cartesian",
+   "note": "a category axis' status show: drawn before anything moves; a move off the grid rewrites every status; a setOption that does not write one leaves it so; one that writes it brings it back",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ],
+       "axisPointer": {
+        "show": true,
+        "status": "show",
+        "value": "c"
+       }
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "parsed": null
+        }
+       ],
+       "tip": null
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "parsed": null
+        }
+       ],
+       "tip": null
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "xAxis": {
+       "axisPointer": {
+        "status": "show",
+        "value": "b"
+       }
+      }
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [],
+         "parsed": "3ff0000000000000"
+        }
+       ],
+       "tip": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      6,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "parsed": null
+        }
+       ],
+       "tip": null
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ],
+       "axisPointer": {
+        "show": true,
+        "status": "show",
+        "value": "d"
+       }
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     },
+     "notMerge": true,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [],
+         "parsed": "4008000000000000"
+        }
+       ],
+       "tip": null
+      }
+     ]
+    }
+   ],
+   "ptr": true,
+   "initial": {
+    "axes": [
+     {
+      "key": "x0",
+      "dim": "x",
+      "index": 0,
+      "status": "show",
+      "value": "4000000000000000",
+      "valueText": "2",
+      "sdi": [],
+      "parsed": "4000000000000000"
+     }
+    ],
+    "tip": null
+   }
+  },
+  {
+   "id": "ptr-polar",
+   "note": "a polar angle axis' status show",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "polar": {},
+      "angleAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ],
+       "axisPointer": {
+        "show": true,
+        "status": "show",
+        "value": "c"
+       }
+      },
+      "radiusAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "coordinateSystem": "polar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "angle0",
+         "dim": "angle",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "parsed": null
+        }
+       ],
+       "tip": null
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "angleAxis": {
+       "axisPointer": {
+        "status": "show",
+        "value": "a"
+       }
+      }
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "angle0",
+         "dim": "angle",
+         "index": 0,
+         "status": "show",
+         "value": null,
+         "valueText": "a",
+         "sdi": [],
+         "parsed": "0000000000000000"
+        }
+       ],
+       "tip": null
+      }
+     ]
+    }
+   ],
+   "ptr": true,
+   "initial": {
+    "axes": [
+     {
+      "key": "angle0",
+      "dim": "angle",
+      "index": 0,
+      "status": "show",
+      "value": null,
+      "valueText": "c",
+      "sdi": [],
+      "parsed": "4000000000000000"
+     }
+    ],
+    "tip": null
+   }
+  },
+  {
+   "id": "ptr-radius",
+   "note": "a polar radius axis' status show with a number",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "polar": {},
+      "angleAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "radiusAxis": {
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": true,
+        "status": "show",
+        "value": 4
+       }
+      },
+      "series": [
+       {
+        "type": "bar",
+        "coordinateSystem": "polar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [],
+   "ptr": true,
+   "initial": {
+    "axes": [
+     {
+      "key": "radius0",
+      "dim": "radius",
+      "index": 0,
+      "status": "show",
+      "value": "4010000000000000",
+      "valueText": "4",
+      "sdi": [],
+      "parsed": "4010000000000000"
+     }
+    ],
+    "tip": null
+   }
+  },
+  {
+   "id": "ptr-single",
+   "note": "a single axis' status show",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "singleAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 100,
+       "axisPointer": {
+        "show": true,
+        "status": "show",
+        "value": 30
+       }
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "coordinateSystem": "singleAxis",
+        "data": [
+         10,
+         40,
+         70
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "single0",
+         "dim": "single",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "parsed": null
+        }
+       ],
+       "tip": null
+      }
+     ]
+    }
+   ],
+   "ptr": true,
+   "initial": {
+    "axes": [
+     {
+      "key": "single0",
+      "dim": "single",
+      "index": 0,
+      "status": "show",
+      "value": "403e000000000000",
+      "valueText": "30",
+      "sdi": [],
+      "parsed": "403e000000000000"
+     }
+    ],
+    "tip": null
+   }
+  },
+  {
+   "id": "ptr-time",
+   "note": "a time axis' status show with a date string: parsed (an explicit zone)",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "time",
+       "axisPointer": {
+        "show": true,
+        "status": "show",
+        "value": "2024-01-03T06:00:00Z"
+       }
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         [
+          "2024-01-01T00:00:00Z",
+          1
+         ],
+         [
+          "2024-01-05T00:00:00Z",
+          3
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [],
+   "ptr": true,
+   "initial": {
+    "axes": [
+     {
+      "key": "x0",
+      "dim": "x",
+      "index": 0,
+      "status": "show",
+      "value": "4278ccde84300000",
+      "valueText": "1704261600000",
+      "sdi": [],
+      "parsed": "4278ccde84300000"
+     }
+    ],
+    "tip": null
+   }
   }
  ],
  "guards": [
@@ -5675,6 +8053,51 @@
    "id": "ka-notmerge-drops",
    "ok": true,
    "what": "a notMerge setOption: a new view, the box gone, nothing kept"
+  },
+  {
+   "id": "kft-frozen",
+   "ok": true,
+   "what": "frozen: the old text until the keep timer"
+  },
+  {
+   "id": "kfa-frozen",
+   "ok": true,
+   "what": "the axis box the same"
+  },
+  {
+   "id": "kfg-old",
+   "ok": true,
+   "what": "the row gone: the old text until hideDelay"
+  },
+  {
+   "id": "kr-none",
+   "ok": true,
+   "what": "a roam renders no tooltip view: nothing kept"
+  },
+  {
+   "id": "kls-kept",
+   "ok": true,
+   "what": "a legendScroll updates: kept"
+  },
+  {
+   "id": "kdz-none",
+   "ok": true,
+   "what": "a dataZoom handle's hover renders no tooltip view: nothing kept"
+  },
+  {
+   "id": "pc-back",
+   "ok": true,
+   "what": "a status the pointer rewrote stays through a setOption that writes none; one that writes it, or a notMerge, brings it back"
+  },
+  {
+   "id": "pp-angle",
+   "ok": true,
+   "what": "a polar angle axis' own status show"
+  },
+  {
+   "id": "ptt-parsed",
+   "ok": true,
+   "what": "a date string through the time scale"
   }
  ]
 }

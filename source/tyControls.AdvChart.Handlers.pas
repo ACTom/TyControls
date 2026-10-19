@@ -130,6 +130,11 @@ type
       everywhere else. }
     BreakType: string;
     BreakStart, BreakEnd: Double;
+    { A SUNBURST'S OR A TREEMAP'S NODE [R2-E]: upstream's treePathInfo --
+      every node from the virtual root down to this one, {name, dataIndex,
+      value} -- as JSON text; '' everywhere else (the treemap's
+      treeAncestors is the same list) }
+    TreePathInfo: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 

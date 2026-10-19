@@ -325,8 +325,13 @@ begin
     Result := 'item:' + IntToStr(snap.Datum.SeriesIndex) + ':'
       + IntToStr(snap.Datum.RawDataIndex) + ':edge'
   else
+  begin
     Result := 'item:' + IntToStr(snap.Datum.SeriesIndex) + ':'
       + IntToStr(snap.Datum.RawDataIndex);
+    { a graph's node is params.dataType 'node' [R2-E] }
+    if TooltipParams(snap.Datum).DataType <> '' then
+      Result := Result + ':' + TooltipParams(snap.Datum).DataType;
+  end;
 end;
 
 { ==================== the oracle test ==================== }

@@ -1661,7 +1661,7 @@ begin
     hideDelay, or never under alwaysShowContent }
   if not (csDesigning in ComponentState) then
   begin
-    if not FOptPtrGone then wasOn := True;
+    if Length(OptionPointerHits) > 0 then wasOn := True;
     PtrListener('leave', 0, 0, TyChartNoDatum, -1);
   end;
   { the pointer left the canvas: a mouseout to what it was over }

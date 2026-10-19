@@ -1,0 +1,655 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "notes": [
+  "Each aim: a mouseout from outside the canvas, a second later a mousemove onto the item; the formatter's last call is recorded.",
+  "valueText is String(params.value); value is params.value as JSON; treePathInfo as given (null where the series gives none); sameAncestors whether treeAncestors (the treemap's) equals it."
+ ],
+ "cases": [
+  {
+   "id": "sunburst",
+   "note": "sunburst: treePathInfo from the root down, each value getRawValue (a parent its summed value)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "formatter": "@tipParams"
+    },
+    "series": [
+     {
+      "type": "sunburst",
+      "name": "sb",
+      "id": "sbId",
+      "radius": [
+       0,
+       "90%"
+      ],
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1",
+            "value": 4
+           },
+           {
+            "name": "a2",
+            "value": 2
+           }
+          ]
+         },
+         {
+          "name": "b",
+          "value": 7,
+          "children": [
+           {
+            "name": "b1",
+            "value": 3
+           }
+          ]
+         },
+         {
+          "name": "c",
+          "value": 6
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      189,
+      303
+     ],
+     "aim": "0/4",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sunburst",
+      "componentIndex": 0,
+      "seriesType": "sunburst",
+      "seriesIndex": 0,
+      "seriesId": "sbId",
+      "seriesName": "sb",
+      "name": "a2",
+      "dataIndex": 4,
+      "dataType": "main",
+      "valueText": "2",
+      "value": 2,
+      "treePathInfo": [
+       {
+        "name": "sb",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "a",
+        "dataIndex": 2,
+        "value": 6
+       },
+       {
+        "name": "a2",
+        "dataIndex": 4,
+        "value": 2
+       }
+      ],
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      300,
+      200
+     ],
+     "aim": "0/1",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sunburst",
+      "componentIndex": 0,
+      "seriesType": "sunburst",
+      "seriesIndex": 0,
+      "seriesId": "sbId",
+      "seriesName": "sb",
+      "name": "r",
+      "dataIndex": 1,
+      "dataType": "main",
+      "valueText": "19",
+      "value": 19,
+      "treePathInfo": [
+       {
+        "name": "sb",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       }
+      ],
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      289,
+      272
+     ],
+     "aim": "0/2",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sunburst",
+      "componentIndex": 0,
+      "seriesType": "sunburst",
+      "seriesIndex": 0,
+      "seriesId": "sbId",
+      "seriesName": "sb",
+      "name": "a",
+      "dataIndex": 2,
+      "dataType": "main",
+      "valueText": "6",
+      "value": 6,
+      "treePathInfo": [
+       {
+        "name": "sb",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "a",
+        "dataIndex": 2,
+        "value": 6
+       }
+      ],
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      375,
+      77
+     ],
+     "aim": "0/6",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sunburst",
+      "componentIndex": 0,
+      "seriesType": "sunburst",
+      "seriesIndex": 0,
+      "seriesId": "sbId",
+      "seriesName": "sb",
+      "name": "b1",
+      "dataIndex": 6,
+      "dataType": "main",
+      "valueText": "3",
+      "value": 3,
+      "treePathInfo": [
+       {
+        "name": "sb",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "b",
+        "dataIndex": 5,
+        "value": 7
+       },
+       {
+        "name": "b1",
+        "dataIndex": 6,
+        "value": 3
+       }
+      ],
+      "sameAncestors": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "treemap",
+   "note": "treemap: treePathInfo (and treeAncestors) the same way; the leaves are what the pointer finds",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "formatter": "@tipParams"
+    },
+    "series": [
+     {
+      "type": "treemap",
+      "top": 10,
+      "bottom": 60,
+      "left": 10,
+      "right": 10,
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1",
+            "value": 4
+           },
+           {
+            "name": "a2",
+            "value": 2
+           }
+          ]
+         },
+         {
+          "name": "b",
+          "value": 7,
+          "children": [
+           {
+            "name": "b1",
+            "value": 3
+           }
+          ]
+         },
+         {
+          "name": "c",
+          "value": 6
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      498,
+      120
+     ],
+     "aim": "0/3",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "treemap",
+      "componentIndex": 0,
+      "seriesType": "treemap",
+      "seriesIndex": 0,
+      "seriesId": "␀series␀0␀0",
+      "seriesName": "series␀0",
+      "name": "a1",
+      "dataIndex": 3,
+      "dataType": "main",
+      "valueText": "4",
+      "value": 4,
+      "treePathInfo": [
+       {
+        "name": "",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "a",
+        "dataIndex": 2,
+        "value": 6
+       },
+       {
+        "name": "a1",
+        "dataIndex": 3,
+        "value": 4
+       }
+      ],
+      "sameAncestors": true
+     }
+    },
+    {
+     "at": [
+      498,
+      285
+     ],
+     "aim": "0/4",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "treemap",
+      "componentIndex": 0,
+      "seriesType": "treemap",
+      "seriesIndex": 0,
+      "seriesId": "␀series␀0␀0",
+      "seriesName": "series␀0",
+      "name": "a2",
+      "dataIndex": 4,
+      "dataType": "main",
+      "valueText": "2",
+      "value": 2,
+      "treePathInfo": [
+       {
+        "name": "",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "a",
+        "dataIndex": 2,
+        "value": 6
+       },
+       {
+        "name": "a2",
+        "dataIndex": 4,
+        "value": 2
+       }
+      ],
+      "sameAncestors": true
+     }
+    },
+    {
+     "at": [
+      208,
+      99
+     ],
+     "aim": "0/6",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "treemap",
+      "componentIndex": 0,
+      "seriesType": "treemap",
+      "seriesIndex": 0,
+      "seriesId": "␀series␀0␀0",
+      "seriesName": "series␀0",
+      "name": "b1",
+      "dataIndex": 6,
+      "dataType": "main",
+      "valueText": "3",
+      "value": 3,
+      "treePathInfo": [
+       {
+        "name": "",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "b",
+        "dataIndex": 5,
+        "value": 7
+       },
+       {
+        "name": "b1",
+        "dataIndex": 6,
+        "value": 3
+       }
+      ],
+      "sameAncestors": true
+     }
+    },
+    {
+     "at": [
+      208,
+      264
+     ],
+     "aim": "0/7",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "treemap",
+      "componentIndex": 0,
+      "seriesType": "treemap",
+      "seriesIndex": 0,
+      "seriesId": "␀series␀0␀0",
+      "seriesName": "series␀0",
+      "name": "c",
+      "dataIndex": 7,
+      "dataType": "main",
+      "valueText": "6",
+      "value": 6,
+      "treePathInfo": [
+       {
+        "name": "",
+        "dataIndex": 0,
+        "value": 19
+       },
+       {
+        "name": "r",
+        "dataIndex": 1,
+        "value": 19
+       },
+       {
+        "name": "c",
+        "dataIndex": 7,
+        "value": 6
+       }
+      ],
+      "sameAncestors": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "sankey",
+   "note": "sankey: a node without a value takes its layout value, one with a value keeps it; an edge its own",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "formatter": "@tipParams"
+    },
+    "series": [
+     {
+      "type": "sankey",
+      "name": "sk",
+      "left": 40,
+      "right": 140,
+      "top": 40,
+      "bottom": 40,
+      "data": [
+       {
+        "name": "n0"
+       },
+       {
+        "name": "n1",
+        "value": 2
+       },
+       {
+        "name": "n2"
+       },
+       {
+        "name": "n3"
+       }
+      ],
+      "links": [
+       {
+        "source": "n0",
+        "target": "n1",
+        "value": 5
+       },
+       {
+        "source": "n0",
+        "target": "n2",
+        "value": 3
+       },
+       {
+        "source": "n1",
+        "target": "n3",
+        "value": 4
+       },
+       {
+        "source": "n2",
+        "target": "n3",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      50,
+      196
+     ],
+     "aim": "0/0 node",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sankey",
+      "componentIndex": 0,
+      "seriesType": "sankey",
+      "seriesIndex": 0,
+      "seriesId": "␀sk␀0",
+      "seriesName": "sk",
+      "name": "n0",
+      "dataIndex": 0,
+      "dataType": "node",
+      "valueText": "8",
+      "value": 8,
+      "treePathInfo": null,
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      250,
+      138
+     ],
+     "aim": "0/1 node",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sankey",
+      "componentIndex": 0,
+      "seriesType": "sankey",
+      "seriesIndex": 0,
+      "seriesId": "␀sk␀0",
+      "seriesName": "sk",
+      "name": "n1",
+      "dataIndex": 1,
+      "dataType": "node",
+      "valueText": "2",
+      "value": 2,
+      "treePathInfo": null,
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      450,
+      195
+     ],
+     "aim": "0/3 node",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sankey",
+      "componentIndex": 0,
+      "seriesType": "sankey",
+      "seriesIndex": 0,
+      "seriesId": "␀sk␀0",
+      "seriesName": "sk",
+      "name": "n3",
+      "dataIndex": 3,
+      "dataType": "node",
+      "valueText": "6",
+      "value": 6,
+      "treePathInfo": null,
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      150,
+      138
+     ],
+     "aim": "0/0 edge",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sankey",
+      "componentIndex": 0,
+      "seriesType": "sankey",
+      "seriesIndex": 0,
+      "seriesId": "␀sk␀0",
+      "seriesName": "sk",
+      "name": "n0 > n1",
+      "dataIndex": 0,
+      "dataType": "edge",
+      "valueText": "5",
+      "value": 5,
+      "treePathInfo": null,
+      "sameAncestors": null
+     }
+    },
+    {
+     "at": [
+      350,
+      137
+     ],
+     "aim": "0/2 edge",
+     "params": {
+      "componentType": "series",
+      "componentSubType": "sankey",
+      "componentIndex": 0,
+      "seriesType": "sankey",
+      "seriesIndex": 0,
+      "seriesId": "␀sk␀0",
+      "seriesName": "sk",
+      "name": "n1 > n3",
+      "dataIndex": 2,
+      "dataType": "edge",
+      "valueText": "4",
+      "value": 4,
+      "treePathInfo": null,
+      "sameAncestors": null
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "sb-path",
+   "ok": true,
+   "what": "sunburst: treePathInfo from the virtual root (named as the series) to the node"
+  },
+  {
+   "id": "tm-ancestors",
+   "ok": true,
+   "what": "treemap: treeAncestors is treePathInfo"
+  },
+  {
+   "id": "sk-layout",
+   "ok": true,
+   "what": "sankey: a node without a value its layout value, one with a value its own"
+  },
+  {
+   "id": "sk-edge",
+   "ok": true,
+   "what": "sankey: an edge its own value, no tree path"
+  }
+ ]
+}

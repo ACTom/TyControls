@@ -3321,6 +3321,9 @@ type
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     { hit -> the record a formatter is given. }
     function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    { a sunburst's, a treemap's and a sankey's own getDataParams [R2-E] }
+    function HierTipParams(const ADatum: TTyChartDatumRef; ASlot: Integer;
+      var AParams: TTyChartCallbackParams): Boolean;
     { [Batch 104] THE TEXT THE LAST PAINT'S FORMATTER GAVE THE BOX -- a
       template after the time format and formatTpl, or a handler's answer --
       '' when the box was not drawn or had no formatter. }
@@ -3333,6 +3336,8 @@ type
     { [Batch 100] THE POINTERS THE OPTION SHOWS BY ITSELF: an axis'
       `axisPointer: {status: 'show', value}` before any pointer event }
     function OptionPointerHits: TTyAxisHitArray;
+    function OptPtrIsBack(const AMainType: string; AIndex: Integer): Boolean;
+    procedure OptPtrTakePiece(APiece: TJSONData);
     procedure PointerStateChanged; override;
     { WHERE THE POINTER IS, every pixel of the way. The tooltip's anchor is the
       cursor, so this repaints on movement and not only when the datum under it

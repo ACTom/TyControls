@@ -1005,10 +1005,14 @@ begin
   AssertEquals('at c2', 2.0, FChart.OptionPointerValue);
   FChart.Move(5, 5);
   AssertEquals('gone after the first move', 0, FChart.OptionPointerCount);
-  { and an option set brings it back }
+  { [R2-E] a merge that writes no status leaves the one the pointer wrote
+    (upstream: the model keeps it); one that writes it brings it back }
   FChart.SetOption('{"yAxis":{"min":0}}', False);
   Frame;
-  AssertEquals('back after setOption', 1, FChart.OptionPointerCount);
+  AssertEquals('still gone after a setOption that writes none', 0, FChart.OptionPointerCount);
+  FChart.SetOption('{"xAxis":{"axisPointer":{"status":"show"}}}', False);
+  Frame;
+  AssertEquals('back after a setOption that writes it', 1, FChart.OptionPointerCount);
   { status 'hide', or no value, or an axis with no pointer: none }
   o := TJSONObject(GetJSON('{"animation":false,'
     + '"xAxis":{"type":"category","data":["c0","c1"],'
