@@ -31,7 +31,8 @@ Fixture
         labels[] {d, dim, text, ignore, x, y, mat ([6 hex], null when none),
                   rotation (hex: the turn its host's textConfig gave it),
                   align, verticalAlign, fill, stroke, lineWidth (hex | null),
-                  opacity (hex), hostX, hostY (hex), z2},
+                  opacity (hex), hostX, hostY (hex), z2,
+                  guide: null | {ignore, points [[hex, hex] ...]}},
         hover: null | {payload, labels[] {d, dim, ignore, fill, stroke,
                   lineWidth}}
   fade: {option, samples[] {t, opacity [hex per label], x, y}} -- the
@@ -119,6 +120,8 @@ const CASES = [
   { id: 'hideOverlap', note: 'labelLayout.hideOverlap: two near rings, the later labels hidden where they overlap',
     option: radar([{ type: 'radar', label: { show: true, formatter: 'value {c}' }, labelLayout: { hideOverlap: true },
       data: [P, { value: [62, 71, 79, 52, 41], name: 'p2' }] }]) },
+  { id: 'labelLine', note: 'labelLine.show with labelLayout dx / dy: each point label\'s line routed from its symbol',
+    option: radar([{ type: 'radar', label: { show: true }, labelLine: { show: true }, labelLayout: { dx: 24, dy: -16 }, data: [P] }]) },
   { id: 'fontSize', note: 'a written font size and weight',
     option: radar([{ type: 'radar', label: { show: true, fontSize: 18, fontWeight: 'bold', position: 'top' }, data: [P] }]) },
 ];
@@ -178,6 +181,7 @@ function readLabels(chart) {
       opacity: hex(t.style.opacity == null ? 1 : t.style.opacity),
       hostX: hex(sym.x), hostY: hex(sym.y),
       z2: t.z2,
+      guide: (g => (g ? { ignore: !!g.ignore, points: (g.shape.points || []).map(q => [hex(q[0]), hex(q[1])]) } : null))(sym.getTextGuideLine()),
     });
   });
   return out;
@@ -268,6 +272,7 @@ function generate() {
       ok: (() => { const r = by('missing').rows[0].points; return r[1][0] === hex(300) && r[1][1] === hex(200); })() },
     { name: 'missing: \'{b}:{c}\' prints - and null',
       ok: by('missing').labels.some(l => l.text === 'm:-') && by('missing').labels.some(l => l.text === 'm:null') },
+    { name: 'labelLine: five lines shown', ok: by('labelLine').labels.filter(l => l.guide && !l.guide.ignore).length === 5 },
     { name: 'symbol.none: no labels', ok: by('symbol.none').labels.length === 0 },
     { name: 'state.only: ignored at rest, the hovered item shown',
       ok: by('state.only').labels.every(l => l.ignore) && by('state.only').hover.labels.some(l => !l.ignore) },

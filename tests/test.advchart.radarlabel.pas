@@ -39,7 +39,7 @@ type
     FChart: TRlProbe;
     FRoot, FMeasure: TJSONData;
     FBmp: TBGRABitmap;
-    FBad, FCompared, FSeen, FEmpty: Integer;
+    FBad, FCompared, FSeen, FEmpty, FGuides: Integer;
     FReport, FName: string;
     procedure NewChart(AAnimate: Boolean);
     procedure Miss(const AWhat: string);
@@ -51,6 +51,7 @@ type
     procedure Show(ACase: TJSONObject);
     function LabelAt(AList: TTyPaintList; AS_, AD, ADim: Integer;
       out AEl: TTyChartElement): Boolean;
+    function GuideMatches(AS_, AD: Integer; AGuide: TJSONObject): Boolean;
     procedure Finish(AMin: Integer);
   protected
     procedure SetUp; override;
@@ -166,6 +167,7 @@ begin
   FCompared := 0;
   FSeen := 0;
   FEmpty := 0;
+  FGuides := 0;
   FReport := '';
 end;
 
@@ -276,6 +278,32 @@ begin
   end;
 end;
 
+{ a label line of the datum (AS_, AD) at exactly the recorded points, and
+  as shown or hidden }
+function TAdvChartRadarLabelOracleTest.GuideMatches(AS_, AD: Integer;
+  AGuide: TJSONObject): Boolean;
+var
+  i, k: Integer;
+  el: TTyChartElement;
+  pts: TJSONArray;
+  ok: Boolean;
+begin
+  Result := False;
+  pts := AGuide.Arrays['points'];
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    el := FChart.List.Element(i);
+    if (el.Anim.Role <> carGuide) or (el.Anim.Series <> AS_) or (el.Anim.Index <> AD) then Continue;
+    if (Length(el.Shape.Points) <> pts.Count) or (el.Ignore <> AGuide.Booleans['ignore']) then Continue;
+    ok := True;
+    for k := 0 to pts.Count - 1 do
+      if (Bits(el.Shape.Points[k].X) <> Bits(FromHex(TJSONArray(pts.Items[k]).Strings[0])))
+        or (Bits(el.Shape.Points[k].Y) <> Bits(FromHex(TJSONArray(pts.Items[k]).Strings[1]))) then
+        ok := False;
+    if ok then Exit(True);
+  end;
+end;
+
 procedure TAdvChartRadarLabelOracleTest.Finish(AMin: Integer);
 begin
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
@@ -350,6 +378,16 @@ begin
       host := FChart.List.Element(h);
       Num('host x', host.Caption.LgG[5], lb.Strings['hostX']);
       Num('host y', host.Caption.LgG[6], lb.Strings['hostY']);
+      { ITS LABEL LINE, routed from the symbol: one of the datum's lines
+        with these very points }
+      if not IsNull(lb.Find('guide')) then
+      begin
+        Inc(FCompared);
+        if not GuideMatches(lb.Integers['s'], lb.Integers['d'], lb.Objects['guide']) then
+          Miss('its label line upstream, none with those points here')
+        else
+          Inc(FGuides);
+      end;
     end;
     { and no label here that upstream has not }
     FName := cs.Strings['id'];
@@ -365,6 +403,7 @@ begin
   Finish(1500);
   AssertTrue(Format('labels compared (%d)', [FSeen]), FSeen >= 110);
   AssertTrue(Format('empty texts compared (%d)', [FEmpty]), FEmpty >= 3);
+  AssertTrue(Format('label lines compared (%d)', [FGuides]), FGuides >= 5);
 end;
 
 procedure TAdvChartRadarLabelOracleTest.TestTheRingsAsUpstream;

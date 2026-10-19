@@ -1626,6 +1626,10 @@ begin
           if rowItemLabel then el.Caption.ItemSpec := raw + 1;
           { one of the item's several labels }
           el.Caption.LabelSub := i + 1;
+          { and a label line's host: the symbol (LabelManager's
+            _updateLabelLine), in the item's colour }
+          el.Caption.LgKind := cTyGuideHostSymbol;
+          el.Caption.LgColor := rowColour;
           el.Caption.HasSymBox := True;
           el.Caption.SymBox := TySymbolLabelBox(rowSym, pts[i].X, pts[i].Y,
             el.Style.StrokeWidthLogical,

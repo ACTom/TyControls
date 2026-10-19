@@ -1560,9 +1560,11 @@ begin
     end;
     { A RADAR ITEM: its polyline hosts, its polygon and its symbols are
       parts of the same dispatcher, in the order they were built [F2b] }
-    { [R2-A] and its points' labels, after them }
+    { [R2-A] and its points' labels, after them; a point label's line is
+      no part (its states are not modelled) }
     if FSt[s].Kind = sskRadar then
     begin
+      if pe^.IsGuide then Continue;
       if pe^.Anim.Role = carRadarLine then
       begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
