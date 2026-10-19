@@ -41,6 +41,8 @@ type
     function Frame: TTyPaintList;
     function Primary: TTyChartColor;
     procedure Update;
+    { [R2-I1] the event target under a point }
+    function TargetAt(AX, AY: Integer): TTyChartEventTarget;
   end;
 
   TSkLogger = class
@@ -61,6 +63,8 @@ type
     FBmp: TBGRABitmap;
     FBad, FCompared, FKeysCompared, FTrackedCompared, FEventsCompared,
       FMarksCompared: Integer;
+    { [R2-I1] labels hidden at rest, compared where a state shows them }
+    FHiddenPlaces: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -99,6 +103,9 @@ type
     procedure TestAHoveredPinGrowsAboutItsOrigin;
     procedure TestTheKeyboardLiftsAMarkerAsThePointerDoes;
     procedure TestAHoveredMarkerTakesNoOverlay;
+    { [R2-I1] }
+    procedure TestAHoveredMarkerLabelIsLaidOutByItsEmphasisTextConfig;
+    procedure TestATreeEdgeIsATargetOfNoData;
   end;
 
 implementation
@@ -240,6 +247,11 @@ end;
 function TSkProbe.Primary: TTyChartColor;
 begin
   Result := StPrimaryInk;
+end;
+
+function TSkProbe.TargetAt(AX, AY: Integer): TTyChartEventTarget;
+begin
+  Result := EventTargetAt(AX, AY);
 end;
 
 procedure TSkProbe.Update;
@@ -625,13 +637,28 @@ begin
       FloatToStr(got), FloatToStr(want)]), AWhere + part + 'op');
   if isText then
   begin
+    { [R2-I1] A LABEL HIDDEN AT REST keeps the transform its last showing
+      left it (an ignored text is not laid out): shown, its place is
+      compared as it is, to 1e-9 }
+    if (rs >= 0) and ValueAt(AEl, 'ignore', rs, rv) and rv.AsBoolean then
+    begin
+      if not el.Ignore and ValueAt(AEl, 'tx', ASample, v) and ValueAt(AEl, 'ty', ASample, rv) then
+      begin
+        Inc(FHiddenPlaces);
+        if (Abs(el.Caption.X - NumOf(v)) > 1e-9) or (Abs(el.Caption.Y - NumOf(rv)) > 1e-9) then
+          Miss(Format('%s %s: shown at (%s, %s), upstream (%s, %s)', [AWhere, part,
+            FloatToStr(el.Caption.X), FloatToStr(el.Caption.Y), FloatToStr(NumOf(v)),
+            FloatToStr(NumOf(rv))]), AWhere + part + 'hp');
+      end;
+    end
     { the place against the rest: the scaled anchor added to the rest place }
-    if (rs >= 0) and ValueAt(AEl, 'tx', ASample, v) and ValueAt(AEl, 'tx', rs, rv)
+    else if (rs >= 0) and ValueAt(AEl, 'tx', ASample, v) and ValueAt(AEl, 'tx', rs, rv)
       and (Abs((el.Caption.X - st.Rest.Num[stkX]) - (NumOf(v) - NumOf(rv))) > 1e-9) then
       Miss(Format('%s %s: x moved %s, upstream %s', [AWhere, part,
         FloatToStr(el.Caption.X - st.Rest.Num[stkX]), FloatToStr(NumOf(v) - NumOf(rv))]),
         AWhere + part + 'tx');
-    if (rs >= 0) and ValueAt(AEl, 'ty', ASample, v) and ValueAt(AEl, 'ty', rs, rv)
+    if (rs >= 0) and ValueAt(AEl, 'ignore', rs, rv) and rv.AsBoolean then
+    else if (rs >= 0) and ValueAt(AEl, 'ty', ASample, v) and ValueAt(AEl, 'ty', rs, rv)
       and (Abs((el.Caption.Y - st.Rest.Num[stkY]) - (NumOf(v) - NumOf(rv))) > 1e-9) then
       Miss(Format('%s %s: y moved %s, upstream %s', [AWhere, part,
         FloatToStr(el.Caption.Y - st.Rest.Num[stkY]), FloatToStr(NumOf(v) - NumOf(rv))]),
@@ -903,9 +930,10 @@ begin
   if FBad > 0 then
     Fail(Format('%d mismatches over %d samples (%s):%s', [FBad, FCompared,
       FTally.CommaText, FReport]));
-  AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d',
-    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared]),
-    (FEventsCompared > 30) and (FMarksCompared > 1000));
+  AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
+    + 'hidden labels shown %d',
+    [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FHiddenPlaces]),
+    (FEventsCompared > 30) and (FMarksCompared > 1000) and (FHiddenPlaces > 20));
 end;
 
 { ==================== by hand ==================== }
@@ -1093,9 +1121,130 @@ begin
   AssertTrue('the frame drew the line', n > 0);
 end;
 
+{ [R2-I1] UNDER THE EMPHASIS textConfig a hovered marker's label is laid
+  out as a label at rest with that config would be: its anchor, its
+  alignment, its turn and its box -- a circle markPoint whose label sits
+  left at rest and right, turned 30 and 8 away under emphasis (emphasis.scale
+  false: the path does not grow), against one at rest right, turned, 8 away;
+  a markArea's top label against one at rest insideBottom }
+procedure TAdvChartStatesMarksTest.TestAHoveredMarkerLabelIsLaidOutByItsEmphasisTextConfig;
+const
+  cHead = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C","D"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[5,30,12,20],';
+  cHover = cHead + '"markPoint":{"symbol":"circle","symbolSize":20,"label":{"position":"left"},'
+    + '"emphasis":{"scale":false,"label":{"position":"right","rotate":30,"distance":8}},'
+    + '"data":[{"type":"max","name":"max"}]},'
+    + '"markArea":{"label":{"show":true},"emphasis":{"label":{"position":"insideBottom"}},'
+    + '"data":[[{"xAxis":"C","name":"area"},{"xAxis":"D"}]]}}]}';
+  cRest = cHead + '"markPoint":{"symbol":"circle","symbolSize":20,'
+    + '"label":{"position":"right","rotate":30,"distance":8},'
+    + '"data":[{"type":"max","name":"max"}]},'
+    + '"markArea":{"label":{"show":true,"position":"insideBottom"},'
+    + '"data":[[{"xAxis":"C","name":"area"},{"xAxis":"D"}]]}}]}';
+var
+  want, got: array[0..1] of TTyChartElement;
+  st: TTyStElement;
+  idx, k: Integer;
+  pin: TTyChartElement;
+  b0, b1: TTyRectF;
+  parts: array[0..1] of string = ('mp0#label', 'ma0#label');
+begin
+  NewChart(camOff);
+  Load(cRest);
+  for k := 0 to 1 do
+  begin
+    AssertTrue(parts[k] + ' at rest', FChart.MarkerStates(0, parts[k], st, idx));
+    want[k] := FChart.List.Element(idx);
+  end;
+  NewChart(camOff);
+  Load(cHover);
+  AssertTrue('the pin', FindRole(carMarkPoint, 0, 0, pin) >= 0);
+  b0 := TyShapeBounds(pin.Shape);
+  FChart.Move(Round((b0.Left + b0.Right) / 2), Round((b0.Top + b0.Bottom) / 2));
+  Draw;
+  AssertTrue(FChart.MarkerStates(0, parts[0], st, idx));
+  AssertEquals('the label in emphasis', 'emphasis', TyStNamesText(st.States));
+  got[0] := FChart.List.Element(idx);
+  { the markArea: hovered in its middle, away from its label }
+  AssertTrue(FChart.MarkerStates(0, 'ma0', st, idx));
+  b1 := TyShapeBounds(FChart.List.Element(idx).Shape);
+  FChart.Move(Round((b1.Left + b1.Right) / 2), Round(b1.Top + (b1.Bottom - b1.Top) * 0.3));
+  Draw;
+  AssertTrue(FChart.MarkerStates(0, parts[1], st, idx));
+  AssertEquals('the area label in emphasis', 'emphasis', TyStNamesText(st.States));
+  got[1] := FChart.List.Element(idx);
+  for k := 0 to 1 do
+  begin
+    AssertEquals(parts[k] + ' x', want[k].Caption.X, got[k].Caption.X, 1e-9);
+    AssertEquals(parts[k] + ' y', want[k].Caption.Y, got[k].Caption.Y, 1e-9);
+    AssertEquals(parts[k] + ' alignment', Ord(want[k].Caption.AnchorH), Ord(got[k].Caption.AnchorH));
+    AssertEquals(parts[k] + ' vertical alignment', Ord(want[k].Caption.AnchorV), Ord(got[k].Caption.AnchorV));
+    AssertEquals(parts[k] + ' turn', want[k].Caption.RotationRad, got[k].Caption.RotationRad, 1e-12);
+    b0 := TyShapeBounds(want[k].Shape);
+    b1 := TyShapeBounds(got[k].Shape);
+    AssertEquals(parts[k] + ' box left', b0.Left, b1.Left, 1e-9);
+    AssertEquals(parts[k] + ' box top', b0.Top, b1.Top, 1e-9);
+    AssertEquals(parts[k] + ' box right', b0.Right, b1.Right, 1e-9);
+    AssertEquals(parts[k] + ' box bottom', b0.Bottom, b1.Bottom, 1e-9);
+    AssertEquals(parts[k] + ' ink', IntToHex(want[k].Caption.Colour, 8), IntToHex(got[k].Caption.Colour, 8));
+  end;
+  AssertTrue('the turn is the config''s', Abs(got[0].Caption.RotationRad) > 0.5);
+end;
+
+{ [R2-I1] A TREE EDGE IS NO SILENT ELEMENT (TreeView.drawEdge): the pointer
+  on it finds the edge -- its curve, within max(lineWidth, 5) / 2 of it, a
+  quarter of the way along where the curve is off its chord -- and the
+  chart reads no datum there (no ecData: no tooltip, no event, no
+  dispatcher) and shows the prototype's pointer, not the cursor of the node
+  the edge leads to }
+procedure TAdvChartStatesMarksTest.TestATreeEdgeIsATargetOfNoData;
+var
+  k, e: Integer;
+  el: TTyChartElement;
+  t, mt, x, y: Double;
+  c: TTyPathCmd;
+  x0, y0: Double;
+  tg: TTyChartEventTarget;
+begin
+  NewChart(camOff);
+  Load('{"animation":false,"series":[{"type":"tree","expandAndCollapse":false,"top":60,"bottom":60,'
+    + '"left":80,"right":120,"symbolSize":12,"label":{"show":false},'
+    + '"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y","cursor":"help"}]}]}]}');
+  e := -1;
+  for k := 0 to FChart.List.Count - 1 do
+    if FChart.List.Element(k).Anim.Role = carTreeEdge then
+    begin
+      e := k;
+      Break;
+    end;
+  AssertTrue('an edge', e >= 0);
+  el := FChart.List.Element(e);
+  AssertFalse('not silent', el.Silent);
+  AssertEquals('a curve', 2, Length(el.Shape.Cmds));
+  { a quarter of the way along the cubic }
+  x0 := el.Shape.Cmds[0].X;
+  y0 := el.Shape.Cmds[0].Y;
+  c := el.Shape.Cmds[1];
+  t := 0.25;
+  mt := 1 - t;
+  x := mt * mt * mt * x0 + 3 * mt * mt * t * c.X1 + 3 * mt * t * t * c.X2 + t * t * t * c.X;
+  y := mt * mt * mt * y0 + 3 * mt * mt * t * c.Y1 + 3 * mt * t * t * c.Y2 + t * t * t * c.Y;
+  AssertEquals('the list finds the edge there', e,
+    FChart.List.HitTestElement(Round(x), Round(y), 96, False));
+  AssertFalse('the chart reads no datum there',
+    TyChartDatumValid(FChart.HitTestAt(Round(x), Round(y))));
+  tg := FChart.TargetAt(Round(x), Round(y));
+  AssertTrue('a target', tg.Id <> 0);
+  AssertFalse('of no data', tg.HasData);
+  AssertEquals('and no dispatcher', 0, tg.HdKind);
+  FChart.Move(Round(x), Round(y));
+  AssertEquals('the prototype''s cursor', 'pointer', FChart.CursorName);
+end;
+
 initialization
   RegisterTest(TAdvChartStatesMarksOracleTest);
   RegisterTest(TAdvChartStatesMarksTest);
 finalization
   FreeAndNil(GFix);
+
 end.

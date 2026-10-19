@@ -340,8 +340,10 @@ begin
   if idx < 0 then Exit;
   AElement := idx;
   { [R2-B] a breadcrumb item names no datum (its ecData has no dataIndex):
-    no tooltip, no select, and nothing under it either }
+    no tooltip, no select, and nothing under it either; [R2-I1] nor does a
+    tree's edge }
   if CrumbOfElement(idx, slot, row) then Exit;
+  if FPaintList.Element(idx).Anim.Role = carTreeEdge then Exit;
   Result := FPaintList.Element(idx).Datum;
   if Result.SeriesIndex < 0 then Exit;
   { A LARGE BATCH: the row is its own scan's, and a hit without one (a
@@ -523,6 +525,9 @@ begin
     if pe^.Silent or pe^.IsGuide then Continue;
     { a label is a text of its own: the prototype's pointer }
     if pe^.Caption.FontSizeLogical > 0 then Continue;
+    { [R2-I1] so is a tree's edge (no item cursor: the Symbol's path takes
+      that) }
+    if pe^.Anim.Role = carTreeEdge then Continue;
     si := pe^.Datum.SeriesIndex;
     slot := SlotOfSeries(si);
     if slot < 0 then Continue;
@@ -1015,6 +1020,9 @@ begin
     el := FPaintList.Element(idx);
     d := el.Datum;
     Result.Id := idx + 1;
+    { [R2-I1] A TREE'S EDGE: a target of no data (no ecData): no event, no
+      dispatcher, the prototype's pointer cursor, and nothing under it }
+    if el.Anim.Role = carTreeEdge then Exit;
     { A LARGE BATCH is one element: the pointer moving from row to row in
       it is no out and no over; the row is the element's handler's (its
       scan), and with none there is no data at all -- no event, no states

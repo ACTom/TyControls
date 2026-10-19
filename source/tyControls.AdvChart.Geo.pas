@@ -546,6 +546,11 @@ type
     { [R2-B] a map series' element under the pointer (its dispatcher's
       node; -1 none) }
     FSvgPointer: Integer;
+    { [R2-I1] the element under the pointer is in emphasis by its own hover
+      (enterEmphasisWhenMouseOver): until the pointer leaves it, or a
+      downplay of its row reaches it -- the action's element is the last
+      one of the name (leaveEmphasis there) }
+    FSvgPointerLit: Boolean;
     FSvgEl, FSvgLbl: array of TTyStElement;
     FSvgLook: array of TTyGeoSvgLook;
     FSvgLabel: array of TTyGeoLabel;
@@ -2554,13 +2559,15 @@ begin
 end;
 
 function TTyGeo.SetFlags(AGroup, AHover: Integer; AHbo: Cardinal; ASelected: Boolean): Boolean;
-var k, last, h: Integer; onName: Boolean;
+var k, last, h, wasHover: Integer; onName: Boolean; wasHbo: Cardinal;
 begin
   Result := False;
   EnsureGroups;
   if (AGroup < 0) or (AGroup > High(FSt)) then Exit;
   if FIsSvg then
   begin
+    wasHover := FSt[AGroup].Hover;
+    wasHbo := FSt[AGroup].Hbo;
     { [F6b] a map series' row flags on the self-named elements of the name.
       [R2-B] EACH IS A DISPATCHER OF THE ITEM (resetEventTriggerForRegion; a
       series has no high-down by name): a blur reaches them all, the pointer
@@ -2578,21 +2585,30 @@ begin
         if (FSvgSelf[k] >= 0) and (FSvgEvent[k] = AGroup) then last := k;
       onName := (FSvgPointer >= 0) and (FSvgPointer <= High(FSvgEvent))
         and (FSvgEvent[FSvgPointer] = AGroup);
+      { [R2-I1] A DOWNPLAY of the row while the pointer is on the name -- the
+        row's emphasis or its bits gone with the pointer still there --
+        reaches the last element alone: the pointer's own element keeps its
+        hover unless it is that one [was: the row's flag for every element,
+        so the element under the pointer went down with it] }
+      if onName and (FSvgPointer = last)
+        and (((wasHbo <> 0) and (AHbo = 0))
+          or ((wasHover = TyStHoverEmphasis) and (AHover <> TyStHoverEmphasis))) then
+        FSvgPointerLit := False;
       for k := 0 to High(FSvgSelf) do
         if (FSvgSelf[k] >= 0) and (FSvgEvent[k] = AGroup) then
         begin
           h := AHover;
-          if h = TyStHoverEmphasis then
+          if onName and (h <> TyStHoverBlur) then
           begin
-            { the pointer's own; the held one; with neither known, all }
-            if onName then
-            begin
-              if not ((k = FSvgPointer) or ((AHbo <> 0) and (k = last))) then
-                h := TyStHoverNormal;
-            end
-            else if (AHbo <> 0) and (k <> last) then
+            { the pointer's own (its hover), the held one (its bits) }
+            if ((k = FSvgPointer) and FSvgPointerLit) or ((AHbo <> 0) and (k = last)) then
+              h := TyStHoverEmphasis
+            else
               h := TyStHoverNormal;
-          end;
+          end
+          else if (h = TyStHoverEmphasis) and (AHbo <> 0) and (k <> last) then
+            { the held one; with neither known, all }
+            h := TyStHoverNormal;
           if k = last then FSvgHbo[k] := AHbo else FSvgHbo[k] := 0;
           SvgTraverse(k, cSvgSetHover, h);
         end;
@@ -5035,6 +5051,8 @@ begin
     if FSvgIsDisp[k] and (FSvgSelf[k] >= 0) then FSvgPointer := k;
     k := FSvg.Nodes[k].Parent;
   end;
+  { [R2-I1] a hover over it lifts it (it is told only on a mouseover) }
+  FSvgPointerLit := FSvgPointer >= 0;
 end;
 
 { updateTransform down the tree: the transform group (the roam), the SVG

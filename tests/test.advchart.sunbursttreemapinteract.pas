@@ -64,6 +64,8 @@ type
     FRoot: TJSONData;
     FBad, FCompared, FCases, FStates, FPieces, FRects, FGhosts, FFrames,
       FSkipped, FTips, FEvents: Integer;
+    { [R2-I1] events whose payload keys were compared }
+    FKeyed: Integer;
     FReport, FName: string;
     FClock: Double;
     procedure Miss(const AWhat: string);
@@ -760,7 +762,7 @@ var
   hier: TTyHierarchy;
   ser: TJSONData;
   opt: TJSONData;
-  w, id: string;
+  w, id, ks: string;
   keys: array[0..3] of string = ('x', 'y', 'width', 'height');
 begin
   evs := AState.Arrays['events'];
@@ -844,6 +846,23 @@ begin
         if StrOr(gp, 'targetNode') <> StrOr(ev, 'targetNode') then
           Miss(Format('%s: targetNode "%s" upstream, "%s" here', [w, StrOr(ev, 'targetNode'),
             StrOr(gp, 'targetNode')]));
+      end;
+      { [R2-I1] a case with keys: the payload's own keys in order }
+      if ev.Find('keys') <> nil then
+      begin
+        Inc(FCompared);
+        Inc(FKeyed);
+        ks := '';
+        for r := 0 to gp.Count - 1 do
+        begin
+          if r > 0 then ks := ks + ',';
+          ks := ks + gp.Names[r];
+        end;
+        if ks <> ev.Strings['keys'] then
+          Miss(Format('%s: keys "%s" upstream, "%s" here', [w, ev.Strings['keys'], ks]));
+        if ev.Booleans['fromView'] and not ((gp.Find('from') <> nil)
+          and (gp.Find('from').JSONType = jtString)) then
+          Miss(w + ': no view uid as from');
       end;
       if not IsNull(ev, 'rootRect') then
       begin
@@ -1033,7 +1052,7 @@ begin
     + '%d leaving, %d tooltips, %d events (%d theme fills passed over)',
     [FCases, FStates, FFrames, FPieces, FRects, FGhosts, FTips, FEvents, FSkipped]),
     (FCases >= 20) and (FPieces >= 300) and (FRects >= 500) and (FGhosts >= 20)
-    and (FTips >= 8) and (FEvents >= 30));
+    and (FTips >= 8) and (FEvents >= 30) and (FKeyed >= 2));
 end;
 
 { ==================== by hand ==================== }

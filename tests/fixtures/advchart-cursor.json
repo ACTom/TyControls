@@ -1501,6 +1501,85 @@
           "cursor": "crosshair"
         }
       ]
+    },
+    {
+      "id": "tree-edges",
+      "note": "[R2-I1] a tree edge is a target of no data: pointer on it (the prototype's -- not the cursor of the node it leads to), within max(lineWidth, 5) / 2 of its curve; off it the roam grabs. The edge into x is 1.5 wide (reach 2.5), the one into y 8 (reach 4); a press on an edge still pans",
+      "option": {"animation":false,"series":[{"type":"tree","roam":true,"expandAndCollapse":false,"top":60,"bottom":60,"left":80,"right":120,"symbolSize":12,"label":{"show":false},"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y","lineStyle":{"width":8}}]}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 199,
+          "y": 189,
+          "aim": "on the edge into x",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 199,
+          "y": 190,
+          "aim": "1 px off the edge into x",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 200,
+          "y": 194,
+          "aim": "5 px off the edge into x",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 198,
+          "y": 213,
+          "aim": "2 px off the edge into y",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 197,
+          "y": 218,
+          "aim": "7 px off the edge into y",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 199,
+          "y": 189,
+          "aim": "press on the edge into x",
+          "hover": "bezier-curve:pointer",
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 219,
+          "y": 199,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 219,
+          "y": 199,
+          "aim": "release on the edge where it went",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
     }
   ],
   "pictures": [
@@ -1743,5 +1822,5 @@
       ]
     }
   ],
-  "checks": {"expectations":98}
+  "checks": {"expectations":104}
 }

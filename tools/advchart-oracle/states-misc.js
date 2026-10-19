@@ -27,6 +27,14 @@
 //      `labelPlace` a label's computed transform (tx / ty); a radar's
 //      lineStyle.type (a case with `dash` records a path's dash as
 //      canvas/dashStyle.ts normalizeLineDash draws it)
+//   H. [R2-I1] a label's rest opacity: setLabelStyle's defaultOpacity, the
+//      host's style.opacity (a scatter's 0.8 by its series default, a bar's
+//      and a line's written itemStyle.opacity, an item's own; a written
+//      label.opacity over it), through a hover; a radar point label's label
+//      line on the item's states (setLabelLineStyle from LabelManager's
+//      _updateLabelLine: hidden where its label is, or where the state's
+//      labelLine.show -- the normal one by default -- is false; the state's
+//      lineStyle)
 //
 // The harness is state-anim.js' own, copied (that script generates and exits
 // on load): the replaced Date before the dist, chart._ssr = false,
@@ -878,6 +886,61 @@ const R2B = [
     events: [over(0, ['item', 0, 2]), out(500)] },
 ];
 
+// H. [R2-I1]
+const R2I1 = [
+  { id: 'scatter-label-opacity', note: 'a scatter\'s label at its symbol\'s 0.8 (ScatterSeries itemStyle.opacity, handed '
+    + 'over as defaultOpacity): at rest, through a hover of point 1 at 0 and out at 500 (the emphasis style has no opacity)',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, label: { show: true, position: 'top', formatter: 'p{c}' },
+        data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'bar-label-opacity', note: 'a bar series\' itemStyle.opacity 0.5, item 1 its own 0.3, item 2 a label.opacity 0.9 of '
+    + 'its own: the labels at 0.5, 0.3, 0.9; hover item 1 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { opacity: 0.5 }, label: { show: true, position: 'top' },
+        data: [10, { value: 20, itemStyle: { opacity: 0.3 } }, { value: 30, label: { opacity: 0.9 } }] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'line-label-opacity', note: 'a line\'s symbols at itemStyle.opacity 0.6: their labels at 0.6; hover point 2 at 0, '
+    + 'out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C', 'D'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'line', symbolSize: 10, itemStyle: { opacity: 0.6 }, label: { show: true },
+        data: [10, 25, 18, 30] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'pie-label-opacity', note: 'a pie\'s itemStyle.opacity 0.5, slice b its own 0.3, slice c a label.opacity 0.9 of its '
+    + 'own (PieView: defaultOpacity the visual opacity); the label lines go with the slices\' style; hover b at 0, out at 500',
+    option: pie({ itemStyle: { opacity: 0.5 }, data: [{ name: 'a', value: 10 }, { name: 'b', value: 20, itemStyle: { opacity: 0.3 } },
+      { name: 'c', value: 30, label: { opacity: 0.9 } }, { name: 'd', value: 15 }] }),
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'funnel-label-opacity', note: 'a funnel\'s itemStyle.opacity 0.6, item c a label.opacity 0.25 (FunnelView: '
+    + 'defaultOpacity the polygon\'s style.opacity); hover b at 0, out at 500',
+    option: funnel({ itemStyle: { opacity: 0.6 }, data: [{ name: 'a', value: 60 }, { name: 'b', value: 40 },
+      { name: 'c', value: 20, label: { opacity: 0.25 } }, { name: 'd', value: 80 }] }),
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'global-text-opacity', note: 'the root textStyle.opacity 0.7 under every label without one of its own (createTextStyle\'s '
+    + 'globalTextStyle, before defaultOpacity): a bar series at itemStyle.opacity 0.5, item 1 a label.opacity 0.2; hover bar 0 '
+    + 'at 0, out at 500',
+    option: { color: [C0, C1, C2, C3], textStyle: { opacity: 0.7 },
+      xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { opacity: 0.5 }, label: { show: true, position: 'top' },
+        data: [10, { value: 20, label: { opacity: 0.2 } }, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'pie-global-text-opacity', note: 'a pie under the root textStyle.opacity 0.7, slice b a label.opacity 0.2 of its own; '
+    + 'hover a at 0, out at 500',
+    option: Object.assign(pie({ data: [{ name: 'a', value: 10 }, { name: 'b', value: 20, label: { opacity: 0.2 } },
+      { name: 'c', value: 30 }] }), { textStyle: { opacity: 0.7 } }),
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'radar-label-line-states', note: 'radar point labels with label lines (labelLine.show, labelLayout dy -14 so the '
+    + 'line has a length), focus self: emphasis.labelLine a colour and width 3, blur.labelLine.show false; item q\'s '
+    + 'emphasis.label.show false (its lines go with its labels). Hover p at 0 (p emphasis, q blur), out at 500; hover q at '
+    + '800, out at 1200',
+    option: radar({ emphasis: { focus: 'self', labelLine: { lineStyle: { color: C3, width: 3 } } },
+      blur: { labelLine: { show: false } },
+      label: { show: true, position: 'right', distance: 12 }, labelLine: { show: true, lineStyle: { width: 1 } },
+      labelLayout: { dy: -14 },
+      data: [{ value: [6, 8, 4, 7, 5], name: 'p' }, { value: [3, 4, 9, 2, 8], name: 'q', emphasis: { label: { show: false } } }] }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500), over(800, ['rsym', 0, 1, 2]), out(1200)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1057,6 +1120,27 @@ function guards(cases) {
     g('scatter-label-rides', l && numAt(l, 'ty', 450) !== numAt(l, 'ty', 1600) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 450),
       'scatter-label-follows');
   }
+  // H. [R2-I1]
+  {
+    const c = byId(cases, 'scatter-label-opacity');
+    const l = elRow(c, 0, 1, 'label');
+    g('scatter-label-at-0.8', l && numAt(l, 'style.opacity', 1600) === '0.8' && numAt(l, 'style.opacity', 450) === '0.8'
+      && statesAt(l, 450) === 'emphasis', l && numAt(l, 'style.opacity', 1600));
+  }
+  {
+    const c = byId(cases, 'bar-label-opacity');
+    const op = row => numAt(elRow(c, 0, row, 'label'), 'style.opacity', 1600);
+    g('bar-label-opacities', op(0) === '0.5' && op(1) === '0.3' && op(2) === '0.9', [op(0), op(1), op(2)].join(' '));
+  }
+  {
+    const c = byId(cases, 'radar-label-line-states');
+    const gl = (row, j) => elRow(c, 0, row, 'rsym' + j + '#guide');
+    const p = gl(0, 1);
+    const q = gl(1, 1);
+    g('radar-guide-states', p && q && numAt(p, 'ignore', 1600) === false && numAt(p, 'style.lineWidth', 450) === '3'
+      && numAt(q, 'ignore', 450) === true && numAt(q, 'ignore', 1000) === true && numAt(q, 'ignore', 1600) === false,
+      p && q && [numAt(p, 'style.lineWidth', 450), numAt(q, 'ignore', 450), numAt(q, 'ignore', 1000)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -1064,7 +1148,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

@@ -343,12 +343,14 @@ procedure TAdvChartMarkLineOracleTest.CheckLabel(const AWhat: string;
 var o, st, ink, inner: TJSONObject;
 begin
   Inc(FCompared);
+  { [R2-I1] upstream records an ignored text as none: a label built for a
+    state only (hidden at rest) is none here too }
   if IsNull(AFx) then
   begin
-    if B.Present then Miss(AWhat + ': none upstream, one here');
+    if B.Present and not B.Hidden then Miss(AWhat + ': none upstream, one here');
     Exit;
   end;
-  if not B.Present then
+  if not B.Present or B.Hidden then
   begin
     Miss(AWhat + ': one upstream, none here');
     Exit;

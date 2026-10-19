@@ -224,6 +224,36 @@ const P_STACK = [
   [212, 150, 'both, 12 right'],
 ];
 
+// [R2-I1] a graph's and a tree's nodes: Symbol paths with a fill, which
+// Path.contain takes on the shape alone -- a stroke adds half its width, no
+// threshold. A probe ['node', series, dataIndex, dx, dy, aim] stands dx / dy
+// from the node's centre rounded (the Symbol group's place on the canvas).
+const OPT_GRAPH = {
+  animation: false,
+  series: [{ type: 'graph', layout: 'none', left: 100, top: 100, width: 200, height: 100, symbolSize: 20, label: { show: false },
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 200, y: 100 }, { name: 'c', x: 100, y: 50 }], links: [] }],
+};
+const P_GRAPH = [
+  ['node', 0, 0, 0, 0, 'on a'],
+  ['node', 0, 0, 7, 0, 'a, 7 right: inside'],
+  ['node', 0, 0, 13, 0, 'a, 13 right: 3 off its edge'],
+  ['node', 0, 2, 0, -13, 'c, 13 above'],
+  ['node', 0, 2, -12, 0, 'c, 12 left'],
+  ['node', 0, 1, 0, 30, 'b, 30 below'],
+];
+const OPT_TREE = {
+  animation: false,
+  series: [{ type: 'tree', top: 60, bottom: 60, left: 80, right: 120, symbolSize: 20, expandAndCollapse: false, label: { show: false },
+    data: [{ name: 'root', children: [{ name: 'x' }, { name: 'y', symbol: 'circle', itemStyle: { borderColor: '#333333', borderWidth: 6 } }] }] }],
+};
+const P_TREE = [
+  ['node', 0, 1, 0, -7, 'root, 7 above: inside'],
+  ['node', 0, 1, 0, -13, 'root, 13 above: off its ring'],
+  ['node', 0, 2, 0, 13, 'x, 13 below: off its ring'],
+  ['node', 0, 3, 0, -12, 'y, 12 above: on its 6 px border'],
+  ['node', 0, 3, 0, -16, 'y, 16 above: off its border'],
+];
+
 const COARSE_CASES = [
   { id: 'scatter-small', note: 'four 4 px scatter symbols, pointer 44', init: { useCoarsePointer: true }, option: OPT_SCATTER, probes: P_SCATTER },
   { id: 'scatter-20', note: 'the same at pointerSize 20', init: { useCoarsePointer: true, pointerSize: 20 }, option: OPT_SCATTER, probes: P_SCATTER },
@@ -235,6 +265,9 @@ const COARSE_CASES = [
   { id: 'thin-bars', note: 'bars 2 px wide, pointer 44', init: { useCoarsePointer: true }, option: OPT_BARS, probes: P_BARS },
   { id: 'thin-bars-30', note: 'bars 2 px wide, pointer 30', init: { useCoarsePointer: true, pointerSize: 30 }, option: OPT_BARS, probes: P_BARS },
   { id: 'stack', note: 'two series on one spot: direct is the top, coarse the bottom', init: { useCoarsePointer: true }, option: OPT_STACK, probes: P_STACK },
+  { id: 'graph-nodes-off', note: '[R2-I1] graph nodes of 20 with a fill and no stroke, a mouse: the shape alone', init: { useCoarsePointer: false }, option: OPT_GRAPH, probes: P_GRAPH },
+  { id: 'graph-nodes', note: '[R2-I1] the same, pointer 44', init: { useCoarsePointer: true }, option: OPT_GRAPH, probes: P_GRAPH },
+  { id: 'tree-nodes-off', note: '[R2-I1] tree nodes of 20 (empty circles: a 2 px ring), one a circle with a 6 px border, a mouse', init: { useCoarsePointer: false }, option: OPT_TREE, probes: P_TREE },
 ];
 
 let ecKey = null;
@@ -270,13 +303,27 @@ function newChart(init) {
   return chart;
 }
 
+// [R2-I1] a probe at a node: its Symbol group's place on the canvas, rounded,
+// plus the probe's offset
+function resolveProbe(chart, p) {
+  if (typeof p[0] !== 'string') return p;
+  const el = chart.getModel().getSeriesByIndex(p[1]).getData().getItemGraphicEl(p[2]);
+  must(el, 'no node ' + p[2]);
+  el.updateTransform();
+  const m = el.getComputedTransform();
+  const cx = m ? m[4] : el.x;
+  const cy = m ? m[5] : el.y;
+  return [Math.round(cx) + p[3], Math.round(cy) + p[4], p[5]];
+}
+
 function runCoarse(c) {
   const probes = [];
   let resolved;
-  for (const p of c.probes) {
+  for (const p0 of c.probes) {
     const chart = newChart(c.init);
     chart.setOption(c.option);
     chart.renderToSVGString();
+    const p = resolveProbe(chart, p0);
     const handler = chart.getZr().handler;
     resolved = handler._pointerSize;
     const h = handler.findHover(p[0], p[1]);
@@ -552,6 +599,14 @@ function guards(g) {
   add('six-five', D('six').frames[1].rects.length === 5, 'six disjoint: still five');
   add('twelve-le-five', D('twelve').frames[1].rects.length <= 5, 'twelve: at most five');
   add('chain-joined', D('chain').frames[1].rects.length < 7, 'the final pass joins what merging made meet');
+  // [R2-I1]
+  const at = (c, aim) => Cc(c).probes.find(p => p.aim === aim);
+  add('graph-node-shape-alone', at('graph-nodes-off', 'a, 7 right: inside').direct && !at('graph-nodes-off', 'a, 13 right: 3 off its edge').direct,
+    'a filled node with no stroke: hit on its shape, not 3 px off it');
+  add('graph-node-coarse', at('graph-nodes', 'a, 13 right: 3 off its edge').hit && !at('graph-nodes', 'a, 13 right: 3 off its edge').direct,
+    '3 px off a node: the fallback finds it');
+  add('tree-ring-border', !at('tree-nodes-off', 'root, 13 above: off its ring').direct && at('tree-nodes-off', 'y, 12 above: on its 6 px border').direct
+    && !at('tree-nodes-off', 'y, 16 above: off its border').direct, 'a tree node: its ring and border by half their width');
   return out;
 }
 

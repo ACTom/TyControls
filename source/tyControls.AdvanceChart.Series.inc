@@ -3047,7 +3047,11 @@ begin
 end;
 
 function TTyAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
-var st: TTyStyleSet; k: Integer;
+var
+  st: TTyStyleSet;
+  k: Integer;
+  bst: TTyOptStyle;
+  ov: TTyDataValue;
 begin
   Result := TyFunnelVisual;
   Result.Fills := PerDatumColours(ASlot);
@@ -3067,6 +3071,22 @@ begin
     [tysNormal]);
   Result.Stroke := TTyChartColor(st.Background.Color);
   Result.StrokeWidthLogical := 1;
+  { [R2-I1] THE OPACITY by raw row: the series' itemStyle.opacity, then the
+    row's own over it (dataStyleTask) -- a visualMap's is not kept, as the
+    pie's note says [was: never read, every band opaque] }
+  bst := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
+    FBindings[ASlot].SeriesIndex)), 'itemStyle');
+  SetLength(Result.Alphas, Length(Result.Fills));
+  for k := 0 to High(Result.Alphas) do
+  begin
+    Result.Alphas[k] := bst.Opacity;
+    if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+      and FStores[ASlot].HasOverrideByRaw(k, TyOverrideKey('itemStyle.opacity')) then
+    begin
+      ov := FStores[ASlot].GetOverrideByRaw(k, TyOverrideKey('itemStyle.opacity'));
+      if (ov.Kind = dvkNumber) and not IsNan(ov.Num) then Result.Alphas[k] := ov.Num;
+    end;
+  end;
 end;
 
 function TTyAdvanceChart.FunnelLabelInk: TTyFunnelLabelInk;

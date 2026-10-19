@@ -1467,8 +1467,9 @@ begin
   { a ripple's number; a pictorial glyph's place in its column [F3a] }
   if AEl.Anim.Role in [carRipple, carPictorialGlyph] then
     Result := Result + IntToStr(AEl.Anim.Sub);
-  { [R2-A] one of a datum's several labels (a radar item's points) }
-  if (AEl.Anim.Role = carLabel) and (AEl.Anim.Sub > 0) then
+  { [R2-A] one of a datum's several labels (a radar item's points); [R2-I1]
+    and their label lines }
+  if (AEl.Anim.Role in [carLabel, carGuide]) and (AEl.Anim.Sub > 0) then
     Result := Result + IntToStr(AEl.Anim.Sub);
 end;
 

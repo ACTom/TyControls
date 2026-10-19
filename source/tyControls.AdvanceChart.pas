@@ -2955,6 +2955,8 @@ type
     procedure TreemapClick(ASeries, AX, AY: Integer);
     procedure TreemapCrumbSelect(ASeries, AIndex: Integer);
     { [R2-B] the payload the treemap view dispatches itself }
+    function TreemapRoamPayload(const AType: string; ASeries: Integer;
+      AX, AY, AW, AH: Double; out AJs: string): TJSONObject;
     function TreemapViewPayload(const AType: string; ASeries: Integer;
       const AId: string): TJSONObject;
     function TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
@@ -3117,6 +3119,11 @@ type
     function IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
     { The chart's ground for label halos, and whether it counts as dark. }
     procedure LabelGround(out AGround: TTyChartColor; out ADark: Boolean);
+    { [R2-I1] A PIE'S OR A FUNNEL'S LABELS, built by their own passes after
+      the marks at [ALo, AHi) of AList: each at createTextStyle's opacity --
+      its own label.opacity up the item's chain, the global textStyle's, else
+      its mark's style.opacity (setLabelStyle's defaultOpacity) [was: 1] }
+    procedure OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList; ALo, AHi: Integer);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
     { Every value of one datum as one string, for a store that kept no raw

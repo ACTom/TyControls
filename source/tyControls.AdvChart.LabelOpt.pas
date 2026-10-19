@@ -279,6 +279,20 @@ begin
         end;
     end;
   end;
+  { [R2-I1] and the opacity }
+  if not Result.HasOpacity and (AOption.Root is TJSONObject) then
+  begin
+    d := ObjOf(TJSONObject(AOption.Root).Find('textStyle'));
+    if d <> nil then
+    begin
+      d := TJSONObject(d).Find('opacity');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        Result.HasOpacity := True;
+        Result.Opacity := d.AsFloat;
+      end;
+    end;
+  end;
   { textBorderDashOffset the same way [R2-F] }
   if not Result.HasBorderDashOffset and (AOption.Root is TJSONObject) then
   begin
@@ -530,6 +544,14 @@ var
 begin
   if ALabel <> nil then
   begin
+    { [R2-I1] its own opacity (a number; null falls through to the node
+      under it) }
+    d := ALabel.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      ASpec.HasOpacity := True;
+      ASpec.Opacity := d.AsFloat;
+    end;
     s := StrIn(ALabel, 'color');
     if s = 'inherit' then
     begin

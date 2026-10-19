@@ -37,7 +37,7 @@ uses
   tyControls.AdvChart.Color, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.Calendar,
-  tyControls.AdvChart.JsMath;
+  tyControls.AdvChart.JsMath, tyControls.AdvChart.ZrPath;
 
 const
   TyTreeSeriesTypeName = 'tree';
@@ -1215,6 +1215,42 @@ begin
   if IsNan(Result.Y) or (Result.Y = 0) then Result.Y := 0;
 end;
 
+{ [R2-I1] A TREE EDGE'S TARGET: not silent upstream (TreeView.drawEdge) --
+  a target of no data, whose hover is the prototype's pointer cursor and
+  hides what is under it -- taken by zrender's Path.contain over its own
+  path: the stroke at max(lineWidth, strokeContainThreshold 5), the line in
+  canvas px (strokeNoScale), no fill. The chart reads it as no datum. [Was:
+  silent.] }
+procedure EdgeHit(var AEl: TTyChartElement; AScale: Double);
+var
+  zp: TTyZrPath;
+  k: Integer;
+  lw: Double;
+begin
+  AEl.Silent := False;
+  zp := nil;
+  for k := 0 to High(AEl.Shape.Cmds) do
+    case AEl.Shape.Cmds[k].Kind of
+      pckMove: TyZrMoveTo(zp, AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
+      pckLine: TyZrLineTo(zp, AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
+      pckCurve: TyZrCubic(zp, AEl.Shape.Cmds[k].X1, AEl.Shape.Cmds[k].Y1,
+        AEl.Shape.Cmds[k].X2, AEl.Shape.Cmds[k].Y2, AEl.Shape.Cmds[k].X,
+        AEl.Shape.Cmds[k].Y);
+    end;
+  lw := Math.Max(AEl.Style.StrokeWidthLogical, Double(5));
+  AEl.HitSlopLogical := lw / 2;
+  if Length(zp) = 0 then Exit;
+  lw := lw * AScale;
+  AEl.ZrHit := Default(TTyZrHit);
+  AEl.ZrHit.Active := True;
+  AEl.ZrHit.Path := zp;
+  AEl.ZrHit.ToLocal[0] := 1;
+  AEl.ZrHit.ToLocal[3] := 1;
+  AEl.ZrHit.Box := TyGrowByStroke(TyZrBBox(zp), False, lw);
+  AEl.ZrHit.Stroke := True;
+  AEl.ZrHit.LineWidth := lw;
+end;
+
 { TreePath.buildPath: the stem from the parent to the fork, then each
   child's twig -- the first, the bar to the last, the last, then the ones
   between -- as one path of several pieces. The fork sits edgeForkPosition
@@ -1475,7 +1511,8 @@ begin
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
       el.Z := ASolved.Spec.Z;
       el.Z2 := ASolved.Spec.Z2;
-      el.Silent := True;
+      { [R2-I1] no silent element (TreeView.drawEdge): a target of no data }
+      EdgeHit(el, AScale);
       el.Datum := TyChartDatum(ASeriesIndex, row, row);
       { THE ENTER ANIMATION [F3a]: a TreePath made with one child point on
         the parent, updateProps to every child's (the arrays aligned on the
@@ -1601,7 +1638,8 @@ begin
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
       el.Z := ASolved.Spec.Z;
       el.Z2 := ASolved.Spec.Z2;
-      el.Silent := True;
+      { [R2-I1] no silent element (TreeView.drawEdge): a target of no data }
+      EdgeHit(el, AScale);
       el.Datum := TyChartDatum(ASeriesIndex, row, row);
       el.Anim := edgeTag;
       AList.Add(el);
@@ -1684,9 +1722,11 @@ begin
     if zeroSize then el.Style.StrokeWidthLogical := 0;
     el.Z := ASolved.Spec.Z;
     el.Z2 := ASolved.Spec.Z2 + cTyTreeNodeZ2;
-    el.HitSlopLogical := 4;
-    { A NODE IS HIT: a click toggles it, a hover names it. The edges stay
-      silent -- upstream's never toggle. [Batch 81] }
+    { [R2-I1] a Symbol path: upstream's reach and the port's symbol pad [was:
+      a fixed 4 px] }
+    TySymbolHitSlop(el);
+    { A NODE IS HIT: a click toggles it, a hover names it. [Batch 81] An
+      edge is a target too, of no data (EdgeHit) [R2-I1] }
     el.Silent := False;
     el.Datum := TyChartDatum(ASeriesIndex, row, row);
     { THE ENTER ANIMATION [F3a]: the symbol path pops in as a scatter's

@@ -282,9 +282,12 @@ begin
   if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
   { the state's lineStyle and smooth (a state that does not say draws it
-    straight) [Batch 112] }
-  if c.Has[stkStroke] then AEl.Style.StrokeColor := c.Color[stkStroke];
-  if c.Has[stkLineWidth] then AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+    straight) [Batch 112]; on a proxy the stroke and its width are the
+    frame's -- the state's style animates (stateTransition) [R2-I1: they
+    were written at once] }
+  if not AProxied and c.Has[stkStroke] then AEl.Style.StrokeColor := c.Color[stkStroke];
+  if not AProxied and c.Has[stkLineWidth] then
+    AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
   if c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
     AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
@@ -473,10 +476,9 @@ procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
   AList: TTyPaintList; APPI: Integer);
 var
   blk: string;
-  s, idx, labIdx: Integer;
-  lineShow, labRest, labIgn, ownLine, emphLine, seriesLine, labShow, emphLab: Boolean;
+  s, idx, j: Integer;
   item: PTyStItem;
-  ph, pc, pg, pp: PTyChartElement;
+  ph, pp: PTyChartElement;
   nodes: TTyStNodeArray;
   scale, off, mid, dx, dy, ss, half: Double;
   has, bolder, disabled, was, normalShow, stShow, doScale: Boolean;
@@ -551,6 +553,98 @@ var
       end;
       AL.Decl[n] := obj;
     end;
+  end;
+
+  { [R2-I1] ONE LABEL LINE'S STATES (setLabelLineStyle), from its element
+    at AIdx and its label's states ALab (the label at ALabIdx, -1 none): a
+    pie's, a funnel's or any series' one line, or each of a radar item's
+    point lines [was: the item's Guide only, inline] }
+  procedure DeclGuide(var AG: TTyStElement; AIdx: Integer; const ALab: TTyStElement;
+    ALabIdx: Integer);
+  var
+    pg, pc: PTyChartElement;
+    n: TTyStName;
+    obj: TTyStObject;
+    labIdx: Integer;
+    has, stShow, lineShow, labRest, labIgn, ownLine, emphLine, seriesLine,
+      labShow, emphLab: Boolean;
+    txt: string;
+    c: TTyChartColor;
+    ss: Double;
+  begin
+    pg := AList.Ref(AIdx);
+    AG.Exists := True;
+    AG.IsPath := False;
+    AG.IsGuide := True;
+    AG.Proxy := not disabled;
+    for n := Low(TTyStName) to High(TTyStName) do AG.HasState[n] := True;
+    AG.Rest := StGuideRestOf(pg^);
+    { setLabelLineStyle: EVERY STATE ITS OWN IGNORE -- hidden where the label
+      is, or where the state's labelLine.show (the normal one by default) is
+      false -- its smooth (nought unless the state says) and its lineStyle.
+      The label as the line was styled: a pie's before hideOverlap (PieView
+      styles it; a line hideOverlap hid with its label then comes back with
+      it [Batch 103]), any other's after it. [Batch 112] }
+    { a pie's and a funnel's labelLine show by default, and their views style
+      the line before the label layout runs }
+    ownLine := FSt[s].Kind in [sskPie, sskFunnel];
+    lineShow := TyStReadBool(nodes, ['labelLine', 'show'], has);
+    if not has then lineShow := ownLine;
+    { PieSeries / FunnelSeries _defaultLabelLine [F2b]: the series'
+      labelLine.show is ANDed with its label.show, and the emphasis one --
+      the normal one unless written -- with its emphasis label.show }
+    emphLine := lineShow;
+    if ownLine then
+    begin
+      seriesLine := TyStReadBool([nodes[High(nodes)]], ['labelLine', 'show'], has);
+      if not has then seriesLine := True;
+      emphLine := TyStReadBool([nodes[High(nodes)]], ['emphasis', 'labelLine', 'show'], has);
+      if not has then emphLine := seriesLine;
+      labShow := TyStReadBool([nodes[High(nodes)]], ['label', 'show'], has);
+      if not has then labShow := True;
+      { the series' emphasis label.show: written, the funnel's default, else
+        the normal one (defaultEmphasis) }
+      emphLab := StEmphLabelShow([nodes[High(nodes)]], FSt[s].Kind = sskFunnel, has);
+      if not has then emphLab := labShow;
+      emphLine := emphLine and emphLab;
+      seriesLine := seriesLine and labShow;
+      lineShow := TyStReadBool([nodes[0]], ['labelLine', 'show'], has);
+      if not has then lineShow := seriesLine;
+      stShow := TyStReadBool([nodes[0]], ['emphasis', 'labelLine', 'show'], has);
+      if has then emphLine := stShow;
+    end;
+    labIdx := ALabIdx;
+    if labIdx >= 0 then
+    begin
+      pc := AList.Ref(labIdx);
+      if ownLine then
+        labRest := pc^.Ignore and not pc^.Caption.LmOverlapHidden
+      else
+        labRest := pc^.Ignore;
+    end
+    else
+      labRest := True;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      obj := TyStNoObject;
+      stShow := TyStReadBool(nodes, [cStNames[n], 'labelLine', 'show'], has);
+      if not has then stShow := lineShow;
+      if ownLine and (n = stnEmphasis) then stShow := emphLine;
+      if ALab.Exists and ALab.Decl[n].Has[stkIgnore] then
+        labIgn := ALab.Decl[n].Num[stkIgnore] <> 0
+      else
+        labIgn := labRest;
+      TyStSetNum(obj, stkIgnore, Ord(labIgn or not stShow));
+      TyStSetNum(obj, stkSmooth,
+        TyLabelLineSmoothOf(TyStFind(nodes, [cStNames[n], 'labelLine', 'smooth'])));
+      txt := TyStReadString(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'color'], has);
+      if has and TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
+      ss := TyStReadNumber(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'width'], has);
+      if has and not IsNan(ss) then TyStSetNum(obj, stkLineWidth, ss);
+      AG.Decl[n] := obj;
+    end;
+    TyStSetNum(AG.Decl[stnSelect], stkX, dx);
+    TyStSetNum(AG.Decl[stnSelect], stkY, dy);
   end;
 
 begin
@@ -762,6 +856,33 @@ begin
   SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
   for k := 0 to High(item^.Parts) do
   begin
+    { [R2-I1] A RADAR POINT LABEL'S LINE: setLabelLineStyle over its
+      label's states (the part before it with the same point) }
+    if (FSt[s].Kind = sskRadar) and AList.Ref(FSt[s].PartIdx[ARaw][k])^.IsGuide then
+    begin
+      idx := -1;
+      for j := k - 1 downto 0 do
+        if (AList.Ref(FSt[s].PartIdx[ARaw][j])^.Caption.FontSizeLogical > 0)
+          and (AList.Ref(FSt[s].PartIdx[ARaw][j])^.Anim.Sub
+            = AList.Ref(FSt[s].PartIdx[ARaw][k])^.Anim.Sub) then
+        begin
+          idx := j;
+          Break;
+        end;
+      if idx >= 0 then
+        DeclGuide(item^.Parts[k], FSt[s].PartIdx[ARaw][k], item^.Parts[idx],
+          FSt[s].PartIdx[ARaw][idx])
+      else
+        DeclGuide(item^.Parts[k], FSt[s].PartIdx[ARaw][k], Default(TTyStElement), -1);
+      if not was then
+      begin
+        item^.Parts[k].Cur := item^.Parts[k].Rest;
+        item^.Parts[k].States := [];
+        if item^.Host.States <> [] then
+          TyStUseStates(item^.Parts[k], item^.Host.States);
+      end;
+      Continue;
+    end;
     { [R2-A] A RADAR'S POINT LABEL: the text on that point's symbol, its
       own label states over the item's list }
     if (FSt[s].Kind = sskRadar)
@@ -905,78 +1026,7 @@ begin
     item^.Guide := Default(TTyStElement)
   else
   begin
-    pg := AList.Ref(idx);
-    item^.Guide.Exists := True;
-    item^.Guide.IsPath := False;
-    item^.Guide.Proxy := not disabled;
-    for n := Low(TTyStName) to High(TTyStName) do item^.Guide.HasState[n] := True;
-    item^.Guide.Rest := StGuideRestOf(pg^);
-    { setLabelLineStyle: EVERY STATE ITS OWN IGNORE -- hidden where the label
-      is, or where the state's labelLine.show (the normal one by default) is
-      false -- its smooth (nought unless the state says) and its lineStyle.
-      The label as the line was styled: a pie's before hideOverlap (PieView
-      styles it; a line hideOverlap hid with its label then comes back with
-      it [Batch 103]), any other's after it. [Batch 112] }
-    { a pie's and a funnel's labelLine show by default, and their views style
-      the line before the label layout runs }
-    ownLine := FSt[s].Kind in [sskPie, sskFunnel];
-    lineShow := TyStReadBool(nodes, ['labelLine', 'show'], has);
-    if not has then lineShow := ownLine;
-    { PieSeries / FunnelSeries _defaultLabelLine [F2b]: the series'
-      labelLine.show is ANDed with its label.show, and the emphasis one --
-      the normal one unless written -- with its emphasis label.show }
-    emphLine := lineShow;
-    if ownLine then
-    begin
-      seriesLine := TyStReadBool([nodes[High(nodes)]], ['labelLine', 'show'], has);
-      if not has then seriesLine := True;
-      emphLine := TyStReadBool([nodes[High(nodes)]], ['emphasis', 'labelLine', 'show'], has);
-      if not has then emphLine := seriesLine;
-      labShow := TyStReadBool([nodes[High(nodes)]], ['label', 'show'], has);
-      if not has then labShow := True;
-      { the series' emphasis label.show: written, the funnel's default, else
-        the normal one (defaultEmphasis) }
-      emphLab := StEmphLabelShow([nodes[High(nodes)]], FSt[s].Kind = sskFunnel, has);
-      if not has then emphLab := labShow;
-      emphLine := emphLine and emphLab;
-      seriesLine := seriesLine and labShow;
-      lineShow := TyStReadBool([nodes[0]], ['labelLine', 'show'], has);
-      if not has then lineShow := seriesLine;
-      stShow := TyStReadBool([nodes[0]], ['emphasis', 'labelLine', 'show'], has);
-      if has then emphLine := stShow;
-    end;
-    labIdx := FSt[s].LabelIdx[ARaw];
-    if labIdx >= 0 then
-    begin
-      pc := AList.Ref(labIdx);
-      if ownLine then
-        labRest := pc^.Ignore and not pc^.Caption.LmOverlapHidden
-      else
-        labRest := pc^.Ignore;
-    end
-    else
-      labRest := True;
-    for n := Low(TTyStName) to High(TTyStName) do
-    begin
-      obj := TyStNoObject;
-      stShow := TyStReadBool(nodes, [cStNames[n], 'labelLine', 'show'], has);
-      if not has then stShow := lineShow;
-      if ownLine and (n = stnEmphasis) then stShow := emphLine;
-      if item^.Label_.Exists and item^.Label_.Decl[n].Has[stkIgnore] then
-        labIgn := item^.Label_.Decl[n].Num[stkIgnore] <> 0
-      else
-        labIgn := labRest;
-      TyStSetNum(obj, stkIgnore, Ord(labIgn or not stShow));
-      TyStSetNum(obj, stkSmooth,
-        TyLabelLineSmoothOf(TyStFind(nodes, [cStNames[n], 'labelLine', 'smooth'])));
-      txt := TyStReadString(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'color'], has);
-      if has and TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
-      ss := TyStReadNumber(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'width'], has);
-      if has and not IsNan(ss) then TyStSetNum(obj, stkLineWidth, ss);
-      item^.Guide.Decl[n] := obj;
-    end;
-    TyStSetNum(item^.Guide.Decl[stnSelect], stkX, dx);
-    TyStSetNum(item^.Guide.Decl[stnSelect], stkY, dy);
+    DeclGuide(item^.Guide, idx, item^.Label_, FSt[s].LabelIdx[ARaw]);
     if not was then
     begin
       item^.Guide.Cur := item^.Guide.Rest;
@@ -1335,7 +1385,7 @@ var
   k, j: Integer;
   el: TTyChartElement;
   nodes: TTyStNodeArray;
-  has, bolder, proxy, emShow, normalShow: Boolean;
+  has, bolder, proxy, emShow, normalShow, stShow: Boolean;
   line, obj: TTyStObject;
   n: TTyStName;
   ss: Double;
@@ -1359,16 +1409,17 @@ begin
     begin
       m^.IsPath := False;
       m^.Rest := StLabelRestOf(el);
-      { the emphasis emShow: item and marker option with fillLabel's copy of
-        label.emShow, then the top-level and the defaults }
+      { the emphasis show: item and marker option with fillLabel's copy of
+        label.show, then the top-level and the defaults [R2-I1: the keys
+        read were 'emShow', so the emphasis show was always true] }
       normalShow := not el.Ignore;
-      emShow := True;
+      emShow := normalShow;
       has := False;
       for j := 0 to High(nodes) do
       begin
         if nodes[j] = nil then Continue;
-        d := TyStFind([nodes[j]], ['emphasis', 'label', 'emShow']);
-        if (d = nil) and (j <= 2) then d := TyStFind([nodes[j]], ['label', 'emShow']);
+        d := TyStFind([nodes[j]], ['emphasis', 'label', 'show']);
+        if (d = nil) and (j <= 2) then d := TyStFind([nodes[j]], ['label', 'show']);
         if d <> nil then
         begin
           if d.JSONType = jtBoolean then emShow := d.AsBoolean
@@ -1382,14 +1433,23 @@ begin
         obj := TyStNoObject;
         if (n = stnEmphasis) and (emShow <> normalShow) then
           TyStSetNum(obj, stkIgnore, Ord(not emShow));
+        { [R2-I1] blur and select: the state's own show, the normal one
+          unless it says (retrieve2) }
+        if n <> stnEmphasis then
+        begin
+          stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
+          if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+        end;
         txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
         if has and (txt <> 'inherit') and (txt <> 'auto')
           and TyTryParseChartColor(txt, c) then
           TyStSetColor(obj, stkFill, c);
         ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
         if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
-        { a markPoint's words where its scaled path puts them }
-        if (n = stnEmphasis) and (el.Anim.Role = carMarkPointLabel) and (el.Anim.G[4] <> 0) then
+        { a markPoint's words where its scaled path puts them; [R2-I1] a
+          markPoint's or a markArea's where the emphasis textConfig does }
+        if (n = stnEmphasis) and ((el.Anim.Role = carMarkPointLabel)
+          or (el.Datum.Kind = ctkMarkArea)) and (el.Anim.G[4] <> 0) then
         begin
           TyStSetNum(obj, stkX, el.Caption.X + el.Anim.G[2]);
           TyStSetNum(obj, stkY, el.Caption.Y + el.Anim.G[3]);
@@ -1498,7 +1558,20 @@ begin
             TyShapeScaleAbout(el.Shape, el.Anim.G[0], el.Anim.G[1], sc, sc);
         end
         else
+        begin
           StWriteLabel(el, FSt[s].Marks[k], False);
+          { [R2-I1] UNDER THE EMPHASIS textConfig: the alignment, the turn and
+            the box of the label as the hover lays it out }
+          if (stnEmphasis in FSt[s].Marks[k].States) and (el.Anim.G[4] = 2)
+            and ((el.Anim.Role = carMarkPointLabel) or (el.Datum.Kind = ctkMarkArea)) then
+          begin
+            el.Caption.AnchorH := TTyTextAnchorH(Round(el.Anim.G[5]));
+            el.Caption.AnchorV := TTyTextAnchorV(Round(el.Anim.G[6]));
+            el.Caption.RotationRad := el.Anim.G[7];
+            el.Shape := TyShapeRect(TyRectF(el.Anim.G[8], el.Anim.G[9], el.Anim.G[10],
+              el.Anim.G[11]));
+          end;
+        end;
         AList.SetElement(FSt[s].MarkIdx[k], el);
       end;
     finally
@@ -1833,11 +1906,11 @@ begin
     end;
     { A RADAR ITEM: its polyline hosts, its polygon and its symbols are
       parts of the same dispatcher, in the order they were built [F2b] }
-    { [R2-A] and its points' labels, after them; a point label's line is
-      no part (its states are not modelled) }
+    { [R2-A] and its points' labels, after them; [R2-I1] and their label
+      lines, last (LabelManager adds them after the layout) [was: no part,
+      their states not modelled] }
     if FSt[s].Kind = sskRadar then
     begin
-      if pe^.IsGuide then Continue;
       if pe^.Anim.Role = carRadarLine then
       begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
@@ -2214,9 +2287,12 @@ begin
           if item^.Parts[k].States <> [] then
           begin
             el := AList.Element(FSt[s].PartIdx[raw][k]);
-            { [R2-A] a radar's point label writes as a label }
+            { [R2-A] a radar's point label writes as a label; [R2-I1] its
+              line as a line }
             if item^.Parts[k].IsPath then
               StWriteHost(el, item^.Parts[k], FStProxied)
+            else if item^.Parts[k].IsGuide then
+              StWriteGuide(el, item^.Parts[k], FStProxied)
             else
               StWriteLabel(el, item^.Parts[k], FStProxied);
             AList.SetElement(FSt[s].PartIdx[raw][k], el);
@@ -2620,11 +2696,12 @@ begin
   else
   begin
     if AKind <> cStPxGuide then
-    begin
       Seed('style.fill', StColourValue(AEl.Rest, stkFill));
-      Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
-      Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
-    end;
+    { [R2-I1] a label line's stroke and width too: its state's lineStyle
+      tweens as a path's (setLabelLineState's style) [was: a line's stroke
+      was no key of its proxy, the state's was written at once] }
+    Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
+    Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
     if isPie and (AKind in [cStPxPath, cStPxGuide]) then
     begin
@@ -2745,6 +2822,10 @@ begin
           if item^.Parts[k].IsPath then
             StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
               'part' + IntToStr(k), cStPxPart, cfg, hasCfg, over)
+          { [R2-I1] a radar point label's line: a line's proxy }
+          else if item^.Parts[k].IsGuide then
+            StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
+              'part' + IntToStr(k), cStPxGuide, cfg, hasCfg, over)
           else
             { [R2-A] a radar's point label: a Text's proxy }
             StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
