@@ -992,6 +992,22 @@ begin
   Result.Strings['targetNode'] := AId;
 end;
 
+{ [R2-B] THE VIEW'S OWN DISPATCH (TreemapView._zoomToNode / _rootToNode, for
+  a click on a node and a breadcrumb item's onclick alike): {type, from: the
+  view's uid, seriesId: the series model's id, targetNode} -- the TreeNode
+  as its id, which the action resolves the same way (retrieveTargetInfo
+  takes a string targetNode to getNodeById) [was: seriesIndex and
+  targetNode, the public methods' payload] }
+function TTyAdvanceChart.TreemapViewPayload(const AType: string; ASeries: Integer;
+  const AId: string): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.Strings['type'] := AType;
+  Result.Strings['from'] := 'ec_' + IntToStr(FInstanceNo) + '_treemap' + IntToStr(ASeries);
+  Result.Strings['seriesId'] := SeriesModelId(ASeries);
+  Result.Strings['targetNode'] := AId;
+end;
+
 function TTyAdvanceChart.TreemapZoomToNode(ASeriesIndex, ARow: Integer): Boolean;
 var p: TJSONObject; slot: Integer;
 begin
@@ -1196,9 +1212,9 @@ begin
   target := TyTreemapFindTarget(FTreemaps[slot], FTmHave[ASeries], AX, AY);
   if target < 0 then Exit;
   if FTreemaps[slot].Nodes[target].IsLeafRoot then
-    p := TreemapPayload('treemapRootToNode', ASeries, HierIdOfRow(slot, target))
+    p := TreemapViewPayload('treemapRootToNode', ASeries, HierIdOfRow(slot, target))
   else if nc = 'zoomToNode' then
-    p := TreemapPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, target))
+    p := TreemapViewPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, target))
   else
     { 'link' opens a window upstream: nothing here }
     Exit;
@@ -1207,54 +1223,6 @@ begin
     EmitUpdated;
   finally
     p.Free;
-  end;
-end;
-
-{ zrender's polygon.contain: the winding number about the point }
-function CrumbContains(const APts: array of TTyPointF; AX, AY: Double): Boolean;
-var
-  i, j: Integer;
-  x0, y0, x1, y1, t, xi, w, dir: Double;
-begin
-  w := 0;
-  for i := 0 to High(APts) do
-  begin
-    j := (i + 1) mod Length(APts);
-    x0 := APts[i].X;
-    y0 := APts[i].Y;
-    x1 := APts[j].X;
-    y1 := APts[j].Y;
-    if ((y0 > AY) and (y1 > AY)) or ((y0 < AY) and (y1 < AY)) or (y0 = y1) then Continue;
-    t := (AY - y0) / (y1 - y0);
-    { zrender's windingLine: a ray through a vertex counts each of its two
-      edges half [F2a: whole, so a breadcrumb's notch on the pointer's row
-      counted twice and its neighbour took the hover] }
-    if y1 < y0 then dir := 1 else dir := -1;
-    if (t = 1) or (t = 0) then dir := dir / 2;
-    xi := t * (x1 - x0) + x0;
-    if xi = AX then Exit(True);
-    if xi > AX then w := w + dir;
-  end;
-  Result := w <> 0;
-end;
-
-function TTyAdvanceChart.CrumbAt(AX, AY: Integer; out ASeries, AIndex: Integer): Boolean;
-var slot, k: Integer;
-begin
-  Result := False;
-  ASeries := -1;
-  AIndex := -1;
-  for slot := High(FTreemaps) downto 0 do
-  begin
-    if not FTreemaps[slot].Valid then Continue;
-    for k := High(FTreemaps[slot].Crumbs) downto 0 do
-      if (Length(FTreemaps[slot].Crumbs[k].Points) > 2)
-        and CrumbContains(FTreemaps[slot].Crumbs[k].Points, AX, AY) then
-      begin
-        ASeries := FBindings[slot].SeriesIndex;
-        AIndex := k;
-        Exit(True);
-      end;
   end;
 end;
 
@@ -1268,9 +1236,9 @@ begin
   if (AIndex < 0) or (AIndex > High(FTreemaps[slot].Crumbs)) then Exit;
   row := FTreemaps[slot].Crumbs[AIndex].Row;
   if HierAbove(FTreemaps[slot].Hier, FTreemaps[slot].ViewRoot, row) then
-    p := TreemapPayload('treemapRootToNode', ASeries, HierIdOfRow(slot, row))
+    p := TreemapViewPayload('treemapRootToNode', ASeries, HierIdOfRow(slot, row))
   else
-    p := TreemapPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, row));
+    p := TreemapViewPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, row));
   try
     DoTreemapAction(p.Strings['type'], p);
     EmitUpdated;

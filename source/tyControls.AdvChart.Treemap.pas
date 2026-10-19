@@ -2545,8 +2545,10 @@ var
   end;
 
 var
-  j: Integer;
+  j, n, q: Integer;
   el: TTyChartElement;
+  hit: TTyPathCmdArray;
+  bx: TTyRectF;
 begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
@@ -2554,9 +2556,11 @@ begin
   cnt := 0;
   Walk(0, 0);
   Result := cnt;
-  { the breadcrumb: pale arrows, their words over them; painted, hit by the
-    control's own test (CrumbAt) -- a hover and a click there are the
-    item's [F2a] }
+  { the breadcrumb: pale arrows, their words over them -- a hover and a click
+    there are the item's [F2a]; [R2-B] hit where it is in the paint order
+    (the treemap's z, z2 1e5), as zrender's polygon contains a point (the
+    nonzero winding, a ray through a vertex counting each edge half, a point
+    on an edge inside: contain/path.ts windingLine) }
   for j := 0 to High(ASolved.Crumbs) do
   begin
     el := TyChartElement(TyShapePolygon(ASolved.Crumbs[j].Points));
@@ -2564,7 +2568,30 @@ begin
     el.Style.FillColor := AInk.CrumbFill;
     el.Z := ASolved.Z;
     el.Z2 := 100000;
-    el.Silent := True;
+    el.Silent := False;
+    n := Length(ASolved.Crumbs[j].Points);
+    if n > 2 then
+    begin
+      SetLength(hit, n + 1);
+      bx := TyRectF(Infinity, Infinity, NegInfinity, NegInfinity);
+      for q := 0 to n - 1 do
+      begin
+        if q = 0 then hit[q].Kind := pckMove else hit[q].Kind := pckLine;
+        hit[q].X := ASolved.Crumbs[j].Points[q].X;
+        hit[q].Y := ASolved.Crumbs[j].Points[q].Y;
+        bx.Left := Math.Min(bx.Left, hit[q].X);
+        bx.Top := Math.Min(bx.Top, hit[q].Y);
+        bx.Right := Math.Max(bx.Right, hit[q].X);
+        bx.Bottom := Math.Max(bx.Bottom, hit[q].Y);
+      end;
+      hit[n] := Default(TTyPathCmd);
+      hit[n].Kind := pckClose;
+      el.PathHit.Active := True;
+      el.PathHit.Cmds := hit;
+      el.PathHit.Fill := True;
+      el.PathHit.StrokePx := 0;
+      el.PathHit.Box := bx;
+    end;
     el.Anim.Role := carTmCrumb;
     el.Anim.Series := ASeriesIndex;
     el.Anim.Index := j;

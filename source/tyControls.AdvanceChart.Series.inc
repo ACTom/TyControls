@@ -2809,6 +2809,7 @@ var
   d: TJSONData;
   ls, ar: TJSONObject;
   c: TTyChartColor;
+  os: TTyOptStyle;
 begin
   Result := TyRadarVisual(SeriesColor(ASlot));
   Result.Fills := PerDatumColours(ASlot);
@@ -2853,6 +2854,28 @@ begin
     d := ls.Find('color');
     if (d <> nil) and (d.JSONType = jtString)
       and TyTryParseChartColor(d.AsString, c) then Result.Fill := c;
+  end;
+  { [R2-B] lineStyle.type, the series' and each item's own (with its width) }
+  os := TyReadOptStyle(node, 'lineStyle');
+  Result.LineDash := os.Dash;
+  Result.LineDashExplicit := os.DashLogical;
+  d := node.Find('data');
+  if d is TJSONArray then
+  begin
+    SetLength(Result.RowLineSet, d.Count);
+    SetLength(Result.RowLineWidth, d.Count);
+    SetLength(Result.RowLineDash, d.Count);
+    SetLength(Result.RowLineDashExplicit, d.Count);
+    for k := 0 to d.Count - 1 do
+    begin
+      if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
+      if not (TJSONObject(TJSONArray(d).Items[k]).Find('lineStyle') is TJSONObject) then Continue;
+      os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'lineStyle');
+      Result.RowLineSet[k] := True;
+      Result.RowLineWidth[k] := os.BorderWidthLogical;
+      Result.RowLineDash[k] := os.Dash;
+      Result.RowLineDashExplicit[k] := os.DashLogical;
+    end;
   end;
   { AN AREA ONLY WHEN THE AUTHOR ASKED FOR ONE, and `areaStyle: {}` counts as
     asking -- upstream's test is whether the option object exists at all, not

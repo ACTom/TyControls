@@ -919,6 +919,15 @@ const CASES = [
     probes: [[300, 200], [200, 250]],
     steps: [{ action: { type: 'geoSelect', geoIndex: 0, name: 'route1' } }, { move: [300, 200] }, { leave: true }],
   },
+  // ---- [R2-B] ----
+  {
+    id: 'map-series-same-name',
+    note: "a map series on the SVG map: each of the two rects named B is a highDownDispatcher of the item (resetEventTriggerForRegion; no component high-down by name on a series) -- hovering one lifts it alone, then the other; highlight by name reaches getItemGraphicEl, the last one registered (the second B), alone; the pointer on the first B while the second is held lifts it too, leaving takes it down (it holds nothing); downplay",
+    maps: [{ map: 'svHit', svg: 'svHit' }],
+    option: { animation: false, series: [{ type: 'map', map: 'svHit', data: [{ name: 'A', value: 1 }, { name: 'B', value: 2 }] }] },
+    steps: [{ move: S(150, 50) }, { move: S(230, 50) }, { leave: true }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } },
+      { move: S(150, 50) }, { leave: true }, { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }],
+  },
 ];
 
 // ============================================================================
@@ -982,6 +991,13 @@ function guards(out) {
   add('custom-calls', c.states[0].series[3].calls.length === 2, 'the custom series ran');
   c = C('gallery-beef');
   add('beef-regions', c.trees[0].regions.length === 29, 'Beef cuts: 29 regions');
+  // [R2-B] a map series: the element under the pointer alone, the action's the last one
+  c = C('map-series-same-name');
+  const bs2 = c.trees[0].named.filter(x => x.name === 'B').map(x => x.el);
+  const st2 = (k, i) => c.states[k].draws[0].items.find(x => x.i === i).states;
+  add('map-dup-hover', st2(1, bs2[0]) === 'emphasis' && st2(1, bs2[1]) === '' && st2(2, bs2[1]) === 'emphasis' && st2(2, bs2[0]) === '',
+    'a map series lifts the element under the pointer alone');
+  add('map-dup-action', st2(4, bs2[1]) === 'emphasis' && st2(4, bs2[0]) === '', 'highlight by name: the last element registered alone');
   return g;
 }
 

@@ -76,6 +76,7 @@ type
       const AObj, ARest: TTyStObject; AKey: TTyStKey);
     procedure CompareCrumbs(ASeries: Integer; ACrumbs: TJSONArray);
     procedure CompareEdgeLabel(const AWhat: string; ASeries, AEdge: Integer; AWant: TJSONObject);
+    procedure CompareNodeLabel(const AWhat: string; ASeries, ARow: Integer; AWant: TJSONObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -383,11 +384,10 @@ begin
       Bad(Format('event %d is %s upstream, %s here', [i, want.Strings['type'], Copy(line, 1, t - 1)]));
       Continue;
     end;
-    { A VIEW'S OWN DISPATCH (a breadcrumb item's click): upstream's payload
-      is {from, seriesId, targetNode: the TreeNode}, the port's names the
-      series by index and the node by its id -- the type is compared }
-    if (want.Find('payload') is TJSONObject)
-      and (want.Objects['payload'].IndexOfName('from') >= 0) then Continue;
+    { A VIEW'S OWN DISPATCH (a node's or a breadcrumb item's click): its
+      payload {type, from, seriesId, targetNode} key for key -- the view uid
+      and the TreeNode (the port's its id) stand for themselves [R2-B: only
+      the type was compared, the port named the series by index] }
     got := GetJSON(Copy(line, t + 1, MaxInt));
     try
       if not SameJson(want.Find('payload'), got) then
@@ -614,6 +614,33 @@ begin
   end;
 end;
 
+{ [R2-B] A NODE'S LABEL WHERE IT IS DRAWN: its transform's translation (the
+  anchor) -- on its symbol scaled under emphasis, as updateInnerText puts
+  it; to 1e-9 (the port moves the rest anchor by the scaled box's) }
+procedure TAdvChartStatesHierOracleTest.CompareNodeLabel(const AWhat: string; ASeries,
+  ARow: Integer; AWant: TJSONObject);
+var
+  idx: Integer;
+  el: TTyChartElement;
+  m: TJSONArray;
+  m4, m5: Double;
+begin
+  m := AWant.Arrays['m'];
+  HexNum(m.Items[4], m4);
+  HexNum(m.Items[5], m5);
+  idx := FChart.StatePartIndex(ASeries, ARow, 'label');
+  Inc(FCompared);
+  if idx < 0 then
+  begin
+    if not AWant.Booleans['ignore'] then Bad(AWhat + ': no label element here');
+    Exit;
+  end;
+  el := FChart.List.Element(idx);
+  if (Abs(el.Caption.X - m4) > 1e-9) or (Abs(el.Caption.Y - m5) > 1e-9) then
+    Bad(Format('%s: at (%s, %s) upstream, (%s, %s) here', [AWhat, Fmt(m4), Fmt(m5),
+      Fmt(el.Caption.X), Fmt(el.Caption.Y)]));
+end;
+
 procedure TAdvChartStatesHierOracleTest.CompareSeries(ASer: TJSONObject);
 var
   s, i, k: Integer;
@@ -676,6 +703,8 @@ begin
         if not SameBits(rsx, v) then Bad(Format('%s: scale %s upstream, %s here', [w, Fmt(v), Fmt(rsx)]));
       end;
       CompareText(w + ' label', o.Find('label'), item.Label_);
+      if (o.Find('label') is TJSONObject) and (o.Objects['label'].Find('m') <> nil) then
+        CompareNodeLabel(w + ' label', s, i, o.Objects['label']);
     end;
     arr := ASer.Arrays['edges'];
     for i := 0 to arr.Count - 1 do
@@ -737,6 +766,8 @@ begin
         if not SameBits(rsx, v) then Bad(Format('%s: scale %s upstream, %s here', [w, Fmt(v), Fmt(rsx)]));
       end;
       CompareText(w + ' label', o.Find('label'), item.Label_);
+      if (o.Find('label') is TJSONObject) and (o.Objects['label'].Find('m') <> nil) then
+        CompareNodeLabel(w + ' label', s, i, o.Objects['label']);
       { the edge it draws }
       if o.Find('edge') is TJSONObject then
       begin
