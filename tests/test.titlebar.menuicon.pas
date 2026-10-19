@@ -74,6 +74,9 @@ type
     procedure TestIconChangeRepaints;
     procedure TestNewPictureInTheSameIconIsDrawn;
     procedure TestFormAndApplicationIconChangesReachTheBar;
+    { plan B Task 7: at S = 2 the icon is made for the raster -- twice its layout side -- and
+      the bar drawn at S = 1 afterwards does not reuse it. }
+    procedure TestTitleBarIconAtTheDeviceScale;
   end;
 
 implementation
@@ -257,6 +260,57 @@ begin
   Result := (P.green > 100) and (P.red < 60) and (P.blue < 60);
 end;
 
+{ The bar at the device scale AScale: a bitmap AScale times its size, painted as a raster canvas
+  (#83), on the same sentinel as RenderBar. }
+function RenderBarAt(ABar: TMenuProbeBar; AScale: Integer): TBGRABitmap;
+var
+  bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(ABar.Width * AScale, ABar.Height * AScale);
+    bmp.Canvas.Brush.Color := clFuchsia;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, True, False);
+    try
+      ABar.Render(bmp.Canvas, Rect(0, 0, ABar.Width, ABar.Height), ABar.Font.PixelsPerInch);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The width and height of the red pixels' bounding box. }
+function RedExtent(ABmp: TBGRABitmap): TSize;
+var
+  x, y, x0, y0, x1, y1: Integer;
+begin
+  x0 := MaxInt; y0 := MaxInt; x1 := -1; y1 := -1;
+  for y := 0 to ABmp.Height - 1 do
+    for x := 0 to ABmp.Width - 1 do
+      if IsRed(ABmp.GetPixel(x, y)) then
+      begin
+        if x < x0 then x0 := x;
+        if y < y0 then y0 := y;
+        if x > x1 then x1 := x;
+        if y > y1 then y1 := y;
+      end;
+  if x1 < 0 then
+  begin
+    Result.cx := 0;
+    Result.cy := 0;
+  end
+  else
+  begin
+    Result.cx := x1 - x0 + 1;
+    Result.cy := y1 - y0 + 1;
+  end;
+end;
+
 { The pixel at the centre of the bar's icon slot. }
 function IconCentre(ABar: TMenuProbeBar): TBGRAPixel;
 var p: TBGRABitmap; r: TRect;
@@ -271,6 +325,37 @@ begin
 end;
 
 { ==== TTitleBarWindowMenuTest ================================================= }
+
+procedure TTitleBarIconTest.TestTitleBarIconAtTheDeviceScale;
+var b: TMenuProbeBar; c: TTyStyleController; ic: TIcon; p: TBGRABitmap; r: TRect;
+    e: TSize; side: Integer;
+begin
+  c := TTyStyleController.Create(nil);
+  b := NewProbe(nil);
+  ic := SolidIcon(clRed, 64);
+  p := nil;
+  try
+    c.LoadThemeCss(cFlatCss);
+    b.Controller := c;
+    b.Icon := ic;
+    b.ShowIcon := True;
+    r := b.CaptionLayout.Icon;
+    side := r.Right - r.Left;
+    AssertTrue('precondition: an icon slot', side > 4);
+    p := RenderBarAt(b, 2);
+    e := RedExtent(p);
+    AssertEquals('S = 2: the icon is twice its layout side across', 2 * side, e.cx);
+    AssertEquals('S = 2: and down', 2 * side, e.cy);
+    FreeAndNil(p);
+    p := RenderBarAt(b, 1);
+    e := RedExtent(p);
+    AssertEquals('S = 1 afterwards: the layout side, not the S = 2 icon', side, e.cx);
+    AssertEquals('S = 1 afterwards: down', side, e.cy);
+  finally
+    p.Free;
+    ic.Free; b.Free; c.Free;
+  end;
+end;
 
 procedure TTitleBarWindowMenuTest.HitMin(Sender: TObject);
 begin FHits := FHits + 'min;'; end;

@@ -911,8 +911,8 @@ begin
   begin
     sz := (ARect.Bottom - ARect.Top) - P.Scale(6);
     if sz < P.Scale(8) then sz := P.Scale(8);
-    TyBlitImage(P.Bitmap, FImages, AImageIndex,
-      x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, P.Scale(96), False);
+    TyBlitImageScaled(P, FImages, AImageIndex,
+      x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, False);
     x := x + sz + P.Scale(4);
   end;
   textR := Rect(x, ARect.Top, ARect.Right - P.Scale(4), ARect.Bottom);
@@ -946,7 +946,7 @@ begin
   if sz < P.Scale(8) then sz := P.Scale(8);
   x := R.Left + P.Scale(4);
   y := R.Top + ((R.Bottom - R.Top - sz) div 2);
-  TyBlitImage(P.Bitmap, FImages, AItem.OverlayImageIndex, x, y, sz, P.Scale(96), False);
+  TyBlitImageScaled(P, FImages, AItem.OverlayImageIndex, x, y, sz, False);
 end;
 
 procedure TTyCustomComboBoxEx.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;

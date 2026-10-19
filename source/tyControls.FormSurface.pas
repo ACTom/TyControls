@@ -218,6 +218,7 @@ var
   key: string;
   bmp: TBGRABitmap;
   themed: Boolean;
+  sc: TTyCanvasScale;
 begin
   frm := AForm as TTyForm;
   w := ClientWidth;
@@ -235,19 +236,23 @@ begin
     FBgCache.Drop;
     FBgKey := key;
   end;
-  if FBgCache.NeedsRender(w, h) then
+  { At the device scale of the canvas it is blitted to the cache holds S times the pixels; a
+    change of S is a change of size and renders again (TTyPaintCache.NeedsRender, #83). }
+  sc := TyCanvasDeviceScale(ACanvas);
+  if sc.Scale < 1 then sc.Scale := 1;
+  if FBgCache.NeedsRender(w, h, sc) then
   begin
     Inc(FBgRenders);
-    bmp := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+    bmp := TBGRABitmap.Create(w * sc.Scale, h * sc.Scale, BGRAPixelTransparent);
     try
-      themed := frm.PaintBackgroundInto(bmp);
+      themed := frm.PaintBackgroundInto(bmp, sc.Scale);
       if themed and TyBitmapIsOpaque(bmp) then
         bmp.Draw(FBgCache.Canvas, 0, 0, True)
       else
       begin
         FBgCache.Drop;   // nothing to keep: this frame is painted the way every frame was
         if themed then
-          bmp.Draw(ACanvas, 0, 0, False)
+          TyDrawRasterBitmap(ACanvas, Rect(0, 0, w, h), bmp, False)
         else
           frm.RenderBackgroundTo(ACanvas, ClientRect);
         Exit;

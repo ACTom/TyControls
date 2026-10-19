@@ -260,6 +260,7 @@ TTyTrackDrawSegmentEvent = procedure(Sender: TObject; APainter: TTyPainter; AInd
 - `OnDrawThumb` 在画每个滑块**之前**调用，`ARect` 是滑块实际画出来的矩形（在滑块带里，横向比 `ThumbRect` 的命中矩形窄，有刻度时让出刻度那一条），`AStates` 是解析样式用的状态：`tysNormal` / `tysHover` / `tysActive` 三选一，控件有焦点时选中的那个滑块再加 `tysFocused`。`ADefaultDraw := False` 只跳过这一个滑块。接管了滑块，「将被删除」的样子也要自己画：看 `RemovingThumb` 是不是这个序号。区间控件里 `RemovingThumb` 是被拖出去的那一端，同一区间的另一端（序号 `RemovingThumb xor 1`）也该画成要删的样子（见第 10 节）。
 - 调用顺序就是绘制顺序：先轨道，再按序号画分段，再按序号画滑块，正在拖的（没有就是选中的）放到最后，压在上面。刻度、标签和读数总是由控件画。
 - `APainter` 的坐标就是控件的客户区坐标。需要区间或分段的位置可以用 `SegmentSpan`。
+- macOS 的 Retina 屏上，直接动 `APainter.Bitmap`（`FillRect`、`PutImage` 之类）要先把坐标换成图层像素，见[在 Retina 屏上直接画图层](../events.md#在-retina-屏上直接画图层)；只用画家自己的方法画就不用换。
 
 ```pascal
 procedure TMainForm.BarDrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;

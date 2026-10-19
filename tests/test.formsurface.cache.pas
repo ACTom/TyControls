@@ -38,10 +38,17 @@ type
     FForm: TTyForm;
     FSurf: TSurfaceProbe;
     procedure MakeFixture(const ACss: string);
-    { The surface painted onto a bitmap of its size, first filled with the sentinel. }
-    function Shot: TBGRABitmap;
-    { What the direct path lays down on the same ground: RenderBackgroundTo. }
-    function DirectShot: TBGRABitmap;
+    { The surface painted onto a bitmap of its size, first filled with the sentinel. At
+      AScale > 1 the bitmap is AScale times the size and is painted as a raster canvas at that
+      device scale (#83). }
+    function Shot(AScale: Integer = 1): TBGRABitmap;
+    { What the direct path lays down on the same ground: RenderBackgroundTo. With ADeviceUnits
+      False the canvas is in layout units at the device scale -- a Retina window's -- and the
+      ground is the layout size. }
+    function DirectShot(AScale: Integer = 1; ADeviceUnits: Boolean = True): TBGRABitmap;
+    { The painter's own frame of the background on the same ground (as
+      TestTheDirectPathIsThePaintersFrame writes it out). }
+    function FrameShot(AScale: Integer; ADeviceUnits: Boolean = True): TBGRABitmap;
     procedure AssertSameBytes(const AMsg: string; A, B: TBGRABitmap);
     procedure AssertShotIsDirect(const AMsg: string);
     function CentreOf(ABmp: TBGRABitmap): TBGRAPixel;
@@ -58,6 +65,13 @@ type
     procedure TestAModelChangeNobodyAnnouncedRendersAgain;
     procedure TestTheFormsPpiRendersAgain;
     procedure TestATranslucentBackgroundIsNeverKept;
+    { plan B Task 7: at S = 2 the kept and the direct background are the painter's frame at
+      S = 2, byte for byte; a change of S renders again. }
+    procedure TestAtTheDeviceScaleTheBackgroundIsThePaintersFrame;
+    procedure TestADeviceScaleChangeRendersAgain;
+    { On a canvas in layout units the S-times background goes into the layout rectangle, as the
+      painter's EndPaint puts its layer there. }
+    procedure TestOnALayoutCanvasTheDirectBackgroundIsThePaintersFrame;
   end;
 
 implementation
@@ -110,26 +124,70 @@ begin
   Result.Canvas.FillRect(0, 0, AW, AH);
 end;
 
-function TFormSurfaceCacheTest.Shot: TBGRABitmap;
+function TFormSurfaceCacheTest.Shot(AScale: Integer): TBGRABitmap;
 var
   host: TBitmap;
 begin
-  host := Ground(FSurf.ClientWidth, FSurf.ClientHeight);
+  host := Ground(FSurf.ClientWidth * AScale, FSurf.ClientHeight * AScale);
   try
-    FSurf.PaintOn(host.Canvas);
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, True, False);
+    try
+      FSurf.PaintOn(host.Canvas);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
     Result := TBGRABitmap.Create(host);
   finally
     host.Free;
   end;
 end;
 
-function TFormSurfaceCacheTest.DirectShot: TBGRABitmap;
+function TFormSurfaceCacheTest.DirectShot(AScale: Integer; ADeviceUnits: Boolean): TBGRABitmap;
 var
   host: TBitmap;
+  g: Integer;
 begin
-  host := Ground(FSurf.ClientWidth, FSurf.ClientHeight);
+  if ADeviceUnits then g := AScale else g := 1;
+  host := Ground(FSurf.ClientWidth * g, FSurf.ClientHeight * g);
   try
-    FForm.RenderBackgroundTo(host.Canvas, FSurf.ClientRect);
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, ADeviceUnits, False);
+    try
+      FForm.RenderBackgroundTo(host.Canvas, FSurf.ClientRect);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+    Result := TBGRABitmap.Create(host);
+  finally
+    host.Free;
+  end;
+end;
+
+function TFormSurfaceCacheTest.FrameShot(AScale: Integer; ADeviceUnits: Boolean): TBGRABitmap;
+var
+  host: TBitmap;
+  st: TTyStyleSet;
+  P: TTyPainter;
+  r: TRect;
+  g: Integer;
+begin
+  r := FSurf.ClientRect;
+  st := FCtl.Model.ResolveStyle('TyForm', '', []);
+  if ADeviceUnits then g := AScale else g := 1;
+  host := Ground(r.Right * g, r.Bottom * g);
+  try
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, ADeviceUnits, False);
+    P := TTyPainter.Create;
+    try
+      P.BeginPaint(host.Canvas, r, FForm.Font.PixelsPerInch);
+      P.FillBackground(r, st.Background, 0);
+      if (st.Background.Kind <> tfkImage) and (tpBorderColor in st.Present)
+         and (st.BorderWidth > 0) then
+        P.StrokeBorder(r, st.BorderRadius, st.BorderWidth, st.BorderColor);
+      P.EndPaint;
+    finally
+      P.Free;
+      TyForceDeviceScaleForTest(0, False);
+    end;
     Result := TBGRABitmap.Create(host);
   finally
     host.Free;
@@ -374,6 +432,80 @@ begin
   a := Shot;
   a.Free;
   AssertEquals('and so does the next', 3, FSurf.Renders);
+end;
+
+procedure TFormSurfaceCacheTest.TestAtTheDeviceScaleTheBackgroundIsThePaintersFrame;
+
+  procedure Check(const ACss: string; AKept: Boolean);
+  var
+    frame, direct, kept, blit: TBGRABitmap;
+  begin
+    MakeFixture(ACss);
+    frame := nil; direct := nil; kept := nil; blit := nil;
+    try
+      frame := FrameShot(2);
+      direct := DirectShot(2);
+      kept := Shot(2);
+      blit := Shot(2);
+      AssertSameBytes(ACss + ' (direct, S = 2)', direct, frame);
+      AssertSameBytes(ACss + ' (the surface rendering, S = 2)', kept, frame);
+      AssertSameBytes(ACss + ' (the surface blitting, S = 2)', blit, frame);
+      if AKept then
+        AssertEquals(ACss + ': at S = 2 the second paint blits', 1, FSurf.Renders)
+      else
+        AssertEquals(ACss + ': translucent, rendered every time', 2, FSurf.Renders);
+    finally
+      blit.Free; kept.Free; direct.Free; frame.Free;
+      FreeAndNil(FForm);
+      FSurf := nil;
+      FreeAndNil(FCtl);
+    end;
+  end;
+
+begin
+  Check(cSolidCss, True);
+  Check(cGradientCss, True);
+  { translucent: never kept, rendered every time }
+  Check('TyForm { background: #2060A080; border-color: #F0C00080; border-width: 2; }', False);
+end;
+
+procedure TFormSurfaceCacheTest.TestADeviceScaleChangeRendersAgain;
+var
+  a: TBGRABitmap;
+begin
+  MakeFixture(cSolidCss);
+  a := Shot(2);
+  a.Free;
+  AssertEquals('precondition: the S = 2 paint rendered', 1, FSurf.Renders);
+  AssertShotIsDirect('back at S = 1');
+  AssertEquals('a new device scale is rendered', 2, FSurf.Renders);
+end;
+
+procedure TFormSurfaceCacheTest.TestOnALayoutCanvasTheDirectBackgroundIsThePaintersFrame;
+
+  procedure Check(const ACss: string);
+  var
+    frame, direct: TBGRABitmap;
+  begin
+    MakeFixture(ACss);
+    frame := nil; direct := nil;
+    try
+      frame := FrameShot(2, False);
+      direct := DirectShot(2, False);
+      AssertSameBytes(ACss + ' (direct, S = 2, layout units)', direct, frame);
+    finally
+      direct.Free; frame.Free;
+      FreeAndNil(FForm);
+      FSurf := nil;
+      FreeAndNil(FCtl);
+    end;
+  end;
+
+begin
+  { a 3-px frame drawn at S = 2 and put into the layout rectangle differs from one drawn at
+    S = 1 on its antialiased inner edge only if the layer was not made at S = 2 }
+  Check('TyForm { background: #2060A0; border-color: #F0C000; border-width: 3; border-radius: 9; }');
+  Check(cGradientCss);
 end;
 
 initialization

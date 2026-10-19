@@ -329,7 +329,7 @@ begin
     if insetLogical > 0 then Inc(insetLogical);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+    P.Bitmap.ClipRect := P.Dev(Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset));
 
     for i := 0 to cnt - 1 do
     begin
@@ -649,12 +649,13 @@ begin
     if glyphPx > (ACellRect.Right - ACellRect.Left) - 2 * pad then
       glyphPx := (ACellRect.Right - ACellRect.Left) - 2 * pad;
     if glyphPx < 1 then glyphPx := 1;
-    glyph := FIconFont.RenderGlyph(gname, glyphPx, cellStyle.TextColor);
+    { Rendered for the layer (Dev(glyphPx)), placed in its glyphPx layout square (#83). }
+    glyph := FIconFont.RenderGlyph(gname, APainter.Dev(glyphPx), cellStyle.TextColor);
     try
       gx := ACellRect.Left + pad;
-      gy := ACellRect.Top + ((ACellRect.Bottom - ACellRect.Top) - glyph.Height) div 2;
-      APainter.Bitmap.PutImage(gx, gy, glyph, dmDrawWithTransparency);
-      textLeft := gx + glyph.Width + pad;
+      gy := ACellRect.Top + ((ACellRect.Bottom - ACellRect.Top) - glyphPx) div 2;
+      APainter.DrawGlyphBitmap(Rect(gx, gy, gx + glyphPx, gy + glyphPx), glyph);
+      textLeft := gx + glyphPx + pad;
     finally
       glyph.Free;
     end;
@@ -703,7 +704,7 @@ begin
     capR := BoxStyle.BorderRadius - insetLogical;
     if capR < 0 then capR := 0;
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+    P.Bitmap.ClipRect := P.Dev(Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset));
 
     // Inline cells: up to VisibleColumns, left->right, in the space left of the arrow.
     visN := FVisibleColumns;

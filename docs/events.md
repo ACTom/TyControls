@@ -132,6 +132,35 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 >
 > 与 `TTyPaintPanel.OnPaintSurface` / `TTyPreviewBox.OnPaintPreview` 的区别：那两个在**合成之前**触发、拿到的是 `TTyPainter`（可以用主题令牌参与控件自己的绘制）；`OnPaint` 在**合成之后**触发、拿到的是 LCL `Canvas`（只能覆盖在上面）。
 
+### 在 Retina 屏上直接画图层
+
+macOS 的 Retina 屏上，绘制器按屏幕的实际像素画：图层是控件尺寸的 S 倍（通常 S = 2），画完再贴回控件大小。拿到 `TTyPainter` 的地方（`OnPaintSurface`、`OnPaintPreview`、网格的 `OnDrawCell`、重写 `RenderTo` 的子类）都要注意下面几点。
+
+不用换算的：
+
+- 绘制器自己的方法：`FillBackground`、`StrokeBorder`、`DrawText`、`DrawGlyph` 等，照旧用控件坐标。
+- `Bitmap.Canvas2D`：已经设好 S 倍的变换，照旧用控件坐标，线宽也一样。
+- 绘制器的路径接口（`BeginPath`、`MoveTo` / `LineTo`、`FillPath`、`StrokePath`、`PathContains`、`Translate` 等）：照旧用控件坐标。`ResetTransform` 回到的是这个 S 倍的变换，不是单位矩阵，之后的路径仍按控件坐标画。
+
+要换算的，是直接操作 `Bitmap` 的那些调用（`FillRect`、`PutImage`、`ClipRect`、`DrawLine` 等），它们按图层像素算：
+
+| 用法 | 说明 |
+|---|---|
+| `P.Dev(x)` / `P.Dev(R)` / `P.Dev(Pt)` | 控件坐标换成图层像素 |
+| `P.DeviceScale` | 这一帧的 S；Windows、Linux 上是 1，这时 `Dev` 原样返回 |
+| `P.RasterPPI` | 给位图配字体用它，不用 `P.PPI` |
+| `P.DrawRule(x1, y1, x2, y2, c)` | 一像素宽的横线、竖线，任何 S 下都是一个控件像素宽；`Bitmap.DrawLine` 在 Retina 上只有一半粗 |
+| `P.DrawGlyphBitmap` | 传进去的位图按图层像素算 |
+
+```pascal
+// 改之前：Retina 上落在一半的位置，只有一半大
+APainter.Bitmap.FillRect(R.Left, R.Top, R.Right, R.Bottom, BGRA(255, 0, 0), dmSet);
+// 改之后：任何 S 下都对
+APainter.Bitmap.FillRect(APainter.Dev(R), BGRA(255, 0, 0), dmSet);
+```
+
+想整体退回 1 倍绘制（比如排查问题），在程序启动时设 `TyDeviceScaleRendering := False`（`tyControls.Painter` 单元）。
+
 > 这一原则的完整说明见仓库的「Theme-customizability principle」：凡视觉值必须由主题令牌驱动，永不在控件代码中写死。
 
 ---

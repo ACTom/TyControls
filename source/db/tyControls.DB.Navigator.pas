@@ -117,7 +117,7 @@ type
     { The resolved style of one button in its present state. }
     function ButtonStyle(AButton: TDBNavButtonType): TTyStyleSet;
     procedure DrawButton(APainter: TTyPainter; AButton: TDBNavButtonType; const ARect: TRect;
-      const AStrip: TTyStyleSet; APPI: Integer);
+      const AStrip: TTyStyleSet);
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
     procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
   protected
@@ -791,7 +791,7 @@ begin
 end;
 
 procedure TTyCustomDBNavigator.DrawButton(APainter: TTyPainter; AButton: TDBNavButtonType;
-  const ARect: TRect; const AStrip: TTyStyleSet; APPI: Integer);
+  const ARect: TRect; const AStrip: TTyStyleSet);
 var
   S: TTyStyleSet;
   op: Single;
@@ -826,8 +826,8 @@ begin
   box := Rect(cx - side div 2, cy - side div 2, cx - side div 2 + side, cy - side div 2 + side);
 
   if (FImages <> nil) and (Ord(AButton) < TyImageCount(FImages)) then
-    TyBlitImage(APainter.Bitmap, FImages, Ord(AButton), box.Left, box.Top, side, APPI,
-      not usable)
+    { at the painter's device scale: box and side are layout pixels (#83) }
+    TyBlitImageScaled(APainter, FImages, Ord(AButton), box.Left, box.Top, side, not usable)
   else if not TyTryDrawGlyphOverride(APainter, ActiveController, box,
     TyDBNavGlyphTokens[AButton], ink) then
     DrawNavMark(APainter, box, AButton, ink,
@@ -852,7 +852,7 @@ begin
     for b := Low(TDBNavButtonType) to High(TDBNavButtonType) do
       if (b in FVisibleButtons) and (rects[b].Right > rects[b].Left)
         and (rects[b].Bottom > rects[b].Top) then
-        DrawButton(P, b, rects[b], S, APPI);
+        DrawButton(P, b, rects[b], S);
     P.EndPaint;
   finally
     P.Free;

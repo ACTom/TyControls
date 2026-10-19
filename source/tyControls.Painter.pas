@@ -60,6 +60,11 @@ type
   { Dash on/off lengths in LOGICAL px. Kept as its own type because the painter
     stores one across SaveState/RestoreState -- see SetLineDash. }
   TTyDashPattern = array of Double;
+  { How many device pixels one unit of a canvas covers -- see TyCanvasDeviceScale below. }
+  TTyCanvasScale = record
+    Scale: Integer;        // device pixels per canvas unit, 1..4
+    DeviceUnits: Boolean;  // the canvas's own coordinates are device pixels (an S-times cache)
+  end;
 
   TTyPainter = class
   private
@@ -78,9 +83,50 @@ type
       ctx.save/restore cannot carry it, hence the parallel stack. }
     FVecDash: TTyDashPattern;
     FVecDashStack: array of TTyDashPattern;
+    { #83: the layer holds FScale device pixels per layout pixel. FLayoutPPI is the PPI callers
+      paint at; FPPI is the PPI the drawing code scales by, which is the layout PPI except
+      inside a raster scope (RasterEnter), where it is FLayoutPPI * FScale. FDeviceUnits: the
+      canvas counts device pixels, so EndPaint lands the layer 1:1 instead of stretching it. }
+    FScale: Integer;
+    FDeviceUnits: Boolean;
+    FLayoutPPI: Integer;
+    FRasterDepth: Integer;
     { The rect clip masks it holds in the kept pool (GClipPool) are the entries that
       name it as their owner: see ClipRect. }
     procedure ReleaseClipMasks;
+    function GetRasterPPI: Integer;
+    { The canvas2D of a scaled layer works in layout pixels: BeginPaint presets scale(S, S). }
+    procedure PresetCanvas2D;
+    { Draw ABmp (layer-sized) onto the canvas at the device scale: into the layout rect, or 1:1 at
+      S times its position when the canvas counts device pixels. }
+    procedure BlitScaled(ABmp: TBGRABitmap; AOpaque: Boolean);
+    { THE RASTER SCOPE. A drawing method enters it first and leaves it last. The OUTERMOST entry
+      of a scaled painter switches FPPI to the raster PPI and returns True: the method then maps
+      its own geometry (rects, points, device lengths) with Dev, and every Scale inside it --
+      and inside the painter methods it calls -- comes out in raster pixels. Nested entries
+      return False, so a method that calls another never maps twice. At S = 1 it never maps. }
+    function RasterEnter: Boolean;
+    procedure RasterLeave;
+    { The bodies of the drawing methods that map their rect in the raster scope: the public
+      method of the same name enters the scope and calls these with the mapped rect. }
+    procedure FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+    procedure StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
+    procedure DrawEdgeAt(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
+    procedure DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
+    procedure DrawGlyphAt(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer);
+    procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+    procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+    procedure EraseRectAt(const ARect: TRect);
+    procedure DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
+    procedure FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
+      ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
+      AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
+    procedure NineSliceAt(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
+    procedure DrawImageFillAt(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
+    procedure FillImageSliceAt(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
+    procedure FillGlassAt(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+    procedure DrawGlyphBitmapAt(const ARect: TRect; ABmp: TBGRABitmap);
+    procedure DrawTextAt(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean; AMultiLine: Boolean; ALineHeightLogical: Integer);
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -157,6 +203,22 @@ type
       给需要跨帧复用表面的调用方用(网格的滚动脏区重绘)。 }
     procedure BeginPaintOn(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
       ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+    procedure BeginPaintOnScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+      ABmp: TBGRABitmap; const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
+    { BeginPaint at a device scale the caller already knows -- a painter with no canvas that
+      still has to draw for one (TTyForm's glass backdrop). BeginPaint asks TyCanvasDeviceScale. }
+    procedure BeginPaintScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+      const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
+    { Device pixels per layout pixel in this frame (1 outside BeginPaint and off a Retina canvas). }
+    property DeviceScale: Integer read FScale;
+    { The PPI the layer is drawn at: PPI * DeviceScale. Code that configures a font or renders an
+      icon for Bitmap directly uses this, not PPI. }
+    property RasterPPI: Integer read GetRasterPPI;
+    { Layout pixels to the layer's raster pixels, for code that draws on Bitmap directly with
+      anything but its Canvas2D. }
+    function Dev(AValue: Integer): Integer; overload;
+    function Dev(const ARect: TRect): TRect; overload;
+    function Dev(const APoint: TPoint): TPoint; overload;
     { Which way this frame reads. Exposed because a DrawContent override receives the
       painter but not the control (TTyGlyphButtonBase.DrawContent), and asking the painter
       guarantees the slot it lays out agrees with the direction the text was armed with. }
@@ -198,7 +260,8 @@ type
       light L-shape wins the shared corners. AWidthLogical is the (logical-px) edge width. }
     procedure DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
     { v3/C5: blit a pre-rendered glyph bitmap centered in ARect (used for icon-font glyph
-      overrides; a nil/empty bitmap draws nothing). }
+      overrides; a nil/empty bitmap draws nothing). ABmp is in RASTER pixels: render it at
+      Dev(size) so it stays sharp on a scaled layer (#83); it is placed 1:1. }
     procedure DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     { AMultiLine (default False = every existing caller, byte-identical) opts into honouring
@@ -253,6 +316,16 @@ type
       after a drop shadow bled into them. No-op when there are no rounded corners. }
     procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRect(const ARect: TRect);
+    { Bitmap.DrawLine(AX1, AY1, AX2, AY2, AColor, False) for a horizontal or vertical run, in
+      layout pixels: the same pixels -- from the first point up to, not including, the second --
+      one LAYOUT pixel wide at any device scale. Bitmap.DrawLine is one DEVICE pixel wide: half
+      the weight on a 2x layer (#83). A slanted run is Bitmap.DrawLine itself, ends mapped. }
+    procedure DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
+    { The layer, DeviceScale times the layout size (#83). Two conventions on it:
+      - Bitmap.Canvas2D takes LAYOUT pixels: BeginPaint presets scale(S) and strokeScale(S).
+      - Everything else on it (FillRect, PutImage, ClipRect, DrawLine, TextRect, ...) takes
+        RASTER pixels: map with Dev(), give fonts RasterPPI, draw 1-px rules with DrawRule.
+      At S = 1 the two are the same and nothing needs mapping. }
     property Bitmap: TBGRABitmap read FBmp;
     { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
       填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。
@@ -263,7 +336,8 @@ type
     procedure DrawStar(const ARect: TRect; AColor: TTyColor; AFilled: Boolean);
     { 本次绘制的 PPI。调用方要自己往别的位图上排文字时(网格的单元格文本缓存)
       必须用同一个 PPI 配字体,否则缓存出来的字号与直接画的不一致。 }
-    property PPI: Integer read FPPI;
+    property PPI: Integer read FLayoutPPI;
+    constructor Create;
 
     { ============================ VECTOR PATH API ============================
       Added for TTyAdvanceChart (Tier 0 item 2), but general: any control needing
@@ -281,6 +355,11 @@ type
       UNITS, and they differ on purpose:
         * PATH COORDINATES are DEVICE px, Double. The chart's geometry layer has
           already converted values to device pixels; scaling again here is a bug.
+          ("Device px" throughout this block means PPI-scaled pixels -- the painter's
+          LAYOUT pixels in #83's terms. On a layer at a device scale the painter's
+          Canvas2D preset maps them to raster pixels; the entry points below that
+          step outside the matrix -- ResetTransform, FillPathPattern, PathContains,
+          DrawTextRotated -- map them themselves.)
         * WIDTHS, DASH LENGTHS and RADII are LOGICAL px, Double, and go through
           ScaleF, which does NOT round -- a 1 px axis line at 150 % must be 1.5
           device px, not the 2 the integer Scale() would give.
@@ -415,6 +494,50 @@ type
       AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
   end;
 
+{ ===== The device scale (#83) ================================================
+
+  On a Retina Mac one LCL pixel is one POINT and covers two device pixels. LCL-Cocoa says how
+  many through TControl.GetCanvasScaleFactor (there since Lazarus 3.0; every other widgetset
+  answers 1). A painter that draws its layer at the size of the control's bounds in points
+  gets stretched by the system and comes out blurred, so the painter asks how many device
+  pixels a canvas unit covers and draws its layer that many times larger. }
+var
+  { False puts every painter back at one times, as before #83: the way back for code that draws
+    on TTyPainter.Bitmap in layout coordinates and has not been taught the device scale. }
+  TyDeviceScaleRendering: Boolean = True;
+
+{ A widgetset's scale factor as a whole number of device pixels per unit: rounded, at least 1,
+  at most 4. Only whole factors are drawn at (macOS has 1 and 2); NaN and <= 0 read as 1. }
+function TyDeviceScaleOf(AFactor: Double): Integer;
+{ How many device pixels one unit of ACanvas covers, asked in this order: the switch above
+  (off = 1); the test seam; the canvases an S-times offscreen cache registered (DeviceUnits);
+  the scale factor of the control a TControlCanvas belongs to; else 1. nil = 1. }
+function TyCanvasDeviceScale(ACanvas: TCanvas): TTyCanvasScale;
+{ An offscreen cache whose bitmap holds AScale device pixels per layout pixel registers its
+  canvas, so a painter drawing onto it draws at that scale and lands 1:1 (DeviceUnits).
+  Registering again replaces the scale; unregistering a canvas that is not there does nothing. }
+procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
+procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
+{ ALayout in ACanvas's own units: S times it on a canvas in device units (a raster cache), as it is
+  on one in layout units. For code that draws on the canvas outside a painter (#83). }
+function TyCanvasRect(ACanvas: TCanvas; const ALayout: TRect): TRect;
+{ Lays ABmp down over ALayout the way the painter's EndPaint lays its layer down. ABmp holds S
+  device pixels per layout pixel, S = TyCanvasDeviceScale(ACanvas).Scale: 1:1 at S = 1 or on a
+  canvas in device units, into the layout rectangle on one in layout units (a Retina window: the
+  system puts each layout pixel back on S device pixels). For a caller that rendered with a
+  canvas-less painter at the canvas's scale (#83). }
+procedure TyDrawRasterBitmap(ACanvas: TCanvas; const ALayout: TRect; ABmp: TBGRABitmap;
+  AOpaque: Boolean);
+{ The scale ACanvas is registered with, 0 when it is not. Compares the pointer only, so it may be
+  asked about a canvas that is already freed. }
+function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
+{ FOR THE TESTS: answer (AScale, ADeviceUnits) for every canvas; AScale = 0 turns it off.
+  ANilCanvasToo = False keeps the real answer for a nil canvas (scale 1): a control drawn as on a
+  Retina window, whose sub-painters with no canvas must take the window's scale from their caller
+  (BeginPaintOnScaled) and are not handed it by the seam. A painter test drawing with no canvas
+  leaves it True. }
+procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean;
+  ANilCanvasToo: Boolean = True);
 function TyVecPoint(AX, AY: Double): TTyVecPoint;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
@@ -766,7 +889,8 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText;
+  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText,
+  tyControls.PlatformWS;
 
 { Canvas2D's own fill, stroke and clip with the generator pinned. }
 procedure CtxFill(ACtx: TBGRACanvas2D);
@@ -2390,8 +2514,20 @@ begin
   Result := BGRA(TyRedOf(c), TyGreenOf(c), TyBlueOf(c), TyAlphaOf(c));
 end;
 
+constructor TTyPainter.Create;
+begin
+  inherited Create;
+  FScale := 1;
+end;
+
 procedure TTyPainter.BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
   ARightToLeft: Boolean = False);
+begin
+  BeginPaintScaled(ACanvas, ARect, APPI, TyCanvasDeviceScale(ACanvas), ARightToLeft);
+end;
+
+procedure TTyPainter.BeginPaintScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+  const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
 begin
   ReleaseClipMasks;
   { A frame starts with no dash and an empty state stack: vector state must
@@ -2405,15 +2541,69 @@ begin
     FPPI := 96
   else
     FPPI := APPI;
+  FLayoutPPI := FPPI;
+  FScale := AScale.Scale;
+  if FScale < 1 then FScale := 1;
+  FDeviceUnits := AScale.DeviceUnits;
+  FRasterDepth := 0;
   Opacity := 1.0;
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
-  FBmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
   FBmp.Fill(BGRAPixelTransparent);
+  if FScale > 1 then PresetCanvas2D;
 end;
 
 procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+begin
+  BeginPaintOnScaled(ACanvas, ARect, APPI, ABmp, TyCanvasDeviceScale(ACanvas), ARightToLeft);
+end;
+
+var
+  { Callers' bitmaps (BeginPaintOn) whose Canvas2D carries the scale(S) preset. Main thread
+    only, like every painter. Bounded: past the cap the oldest entries go -- a bitmap that has
+    since been freed would otherwise stay listed for ever. }
+  GKeptPreset: array of TBGRABitmap;
+
+const
+  KeptPresetCap = 256;
+
+{ ASet: note ABmp as preset. Not ASet: answer whether it was, and forget it. }
+function NoteKeptPreset(ABmp: TBGRABitmap; ASet: Boolean): Boolean;
+var
+  i, n: Integer;
+begin
+  Result := False;
+  n := Length(GKeptPreset);
+  for i := 0 to n - 1 do
+    if GKeptPreset[i] = ABmp then
+    begin
+      Result := True;
+      if not ASet then
+      begin
+        GKeptPreset[i] := GKeptPreset[n - 1];
+        SetLength(GKeptPreset, n - 1);
+      end;
+      Exit;
+    end;
+  if not ASet then Exit;
+  if n >= KeptPresetCap then
+  begin
+    Move(GKeptPreset[1], GKeptPreset[0], (n - 1) * SizeOf(Pointer));
+    GKeptPreset[n - 1] := ABmp;
+  end
+  else
+  begin
+    SetLength(GKeptPreset, n + 1);
+    GKeptPreset[n] := ABmp;
+  end;
+end;
+
+procedure TTyPainter.BeginPaintOnScaled(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+  ABmp: TBGRABitmap; const AScale: TTyCanvasScale; ARightToLeft: Boolean = False);
+var
+  w, h: Integer;
 begin
   ReleaseClipMasks;
   { A frame starts with no dash and an empty state stack: vector state must
@@ -2424,22 +2614,117 @@ begin
   FRect := ARect;
   FRightToLeft := ARightToLeft;
   if APPI <= 0 then FPPI := 96 else FPPI := APPI;
+  FLayoutPPI := FPPI;
+  FScale := AScale.Scale;
+  if FScale < 1 then FScale := 1;
+  FDeviceUnits := AScale.DeviceUnits;
+  FRasterDepth := 0;
   Opacity := 1.0;
   OpacityBase := 0;
   FBmp := ABmp;
-  { **不清空** —— 上一帧的像素正是要复用的东西;清哪一块由调用方决定。 }
+  { **不清空** —— 上一帧的像素正是要复用的东西;清哪一块由调用方决定。
+    The raster rect has to fit: a bitmap smaller than it is grown (a resized surface holds
+    nothing the frame can reuse anyway). One that is LARGER keeps its size and its pixels --
+    a terminal surface rounded up to 64-px blocks, a scroll bar's host frame: what lies
+    outside the rect is the caller's (plan B Task 4; the 3.0 line resized it to the rect). }
+  w := (ARect.Right - ARect.Left) * FScale;
+  h := (ARect.Bottom - ARect.Top) * FScale;
+  if (FBmp <> nil) and ((FBmp.Width < w) or (FBmp.Height < h)) then
+    FBmp.SetSize(Max(FBmp.Width, w), Max(FBmp.Height, h));
   FOwnsBmp := False;
+  if FBmp = nil then Exit;
+  if FScale > 1 then
+  begin
+    PresetCanvas2D;
+    NoteKeptPreset(FBmp, True);
+  end
+  else if NoteKeptPreset(FBmp, False) then
+  begin
+    { BGRA keeps a bitmap's Canvas2D -- matrix, stroke matrix and all -- across SetSize, and
+      main's vector API draws through it: a bitmap last painted at S = 2 would draw this
+      S = 1 frame twice as large. Only the bitmaps this unit preset are put back, so an
+      S = 1 frame on any other bitmap runs as it always did. }
+    FBmp.Canvas2D.resetTransform;
+    FBmp.Canvas2D.strokeResetTransform;
+  end;
+end;
+
+procedure TTyPainter.PresetCanvas2D;
+begin
+  FBmp.Canvas2D.resetTransform;
+  FBmp.Canvas2D.scale(FScale, FScale);
+  { BGRA keeps the stroke geometry apart from the path transform: lineWidth is taken in device
+    pixels through strokeMatrix, not through the matrix above. Scale it too, so a lineWidth set
+    in layout pixels strokes S times as wide, as it would on an HTML canvas. }
+  FBmp.Canvas2D.strokeResetTransform;
+  FBmp.Canvas2D.strokeScale(FScale, FScale);
+end;
+
+procedure TTyPainter.BlitScaled(ABmp: TBGRABitmap; AOpaque: Boolean);
+begin
+  if FDeviceUnits then
+    ABmp.Draw(FCanvas, FRect.Left * FScale, FRect.Top * FScale, AOpaque)
+  else
+    ABmp.Draw(FCanvas, FRect, AOpaque);
+end;
+
+function TTyPainter.GetRasterPPI: Integer;
+begin
+  Result := FLayoutPPI * FScale;
+end;
+
+function TTyPainter.Dev(AValue: Integer): Integer;
+begin
+  Result := AValue * FScale;
+end;
+
+function TTyPainter.Dev(const ARect: TRect): TRect;
+begin
+  Result := Rect(ARect.Left * FScale, ARect.Top * FScale, ARect.Right * FScale, ARect.Bottom * FScale);
+end;
+
+function TTyPainter.Dev(const APoint: TPoint): TPoint;
+begin
+  Result := Point(APoint.X * FScale, APoint.Y * FScale);
+end;
+
+function TTyPainter.RasterEnter: Boolean;
+begin
+  Inc(FRasterDepth);
+  Result := (FRasterDepth = 1) and (FScale > 1);
+  if Result then FPPI := FLayoutPPI * FScale;
+end;
+
+procedure TTyPainter.RasterLeave;
+begin
+  Dec(FRasterDepth);
+  if FRasterDepth <= 0 then
+  begin
+    FRasterDepth := 0;
+    FPPI := FLayoutPPI;
+  end;
 end;
 
 procedure TTyPainter.EndPaint;
 var
-  baseBmp: TBGRABitmap;
+  baseBmp, layer: TBGRABitmap;
   c: TBGRAPixel;
+  rw, rh: Integer;
+  partOnly: Boolean;
 begin
   { before the bitmap goes: a kept bitmap's canvas must not be left sharing them }
   ReleaseClipMasks;
   if Assigned(FBmp) then
   begin
+    { What lands is the raster rect. A caller's bitmap larger than it (BeginPaintOn) keeps the
+      rest for itself: that part is neither drawn nor dimmed. }
+    layer := FBmp;
+    rw := (FRect.Right - FRect.Left) * FScale;
+    rh := (FRect.Bottom - FRect.Top) * FScale;
+    partOnly := Assigned(FCanvas) and (not FOwnsBmp) and ((FBmp.Width > rw) or (FBmp.Height > rh));
+    if partOnly then
+      layer := FBmp.GetPart(Rect(0, 0, rw, rh)) as TBGRABitmap;
+    try
     if Assigned(FCanvas) then
     begin
       if (Opacity < 1.0) and (TyAlphaOf(OpacityBase) > 0) then
@@ -2453,23 +2738,37 @@ begin
         // result stays alpha-255, and untouched areas show the opaque base, never glass.
         c := TyColorToBGRA(OpacityBase);
         c.alpha := 255;
-        baseBmp := TBGRABitmap.Create(FBmp.Width, FBmp.Height, c);
+        baseBmp := TBGRABitmap.Create(layer.Width, layer.Height, c);
         try
-          baseBmp.Draw(FCanvas, FRect.Left, FRect.Top, True);
+          if FScale = 1 then
+            baseBmp.Draw(FCanvas, FRect.Left, FRect.Top, True)
+          else
+            BlitScaled(baseBmp, True);
         finally
           baseBmp.Free;
         end;
-        FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
-        FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
+        layer.ApplyGlobalOpacity(Round(Opacity * 255));
+        if FScale = 1 then
+          layer.Draw(FCanvas, FRect.Left, FRect.Top, False)
+        else
+          BlitScaled(layer, False);
         if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
+        FScale := 1;
         Exit;
       end;
       if Opacity < 1.0 then
-        FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
-      FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
+        layer.ApplyGlobalOpacity(Round(Opacity * 255));
+      if FScale = 1 then
+        layer.Draw(FCanvas, FRect.Left, FRect.Top, False)
+      else
+        BlitScaled(layer, False);
+    end;
+    finally
+      if partOnly then layer.Free;   // the copy; FBmp itself may be gone by now (the Exit above)
     end;
     if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
   end;
+  FScale := 1;
 end;
 
 function TTyPainter.Scale(ALogical: Integer): Integer;
@@ -2484,6 +2783,8 @@ begin
   Result := MulDiv(ADevice, 96, FPPI);
 end;
 
+{ Measuring: deliberately OUTSIDE the raster scope, so the font is configured at the layout
+  PPI and the answer is in layout pixels however large the layer is (#83). }
 function TTyPainter.MeasureText(const AText, AFontName: string; AFontSizeLogical, AWeight: Integer): TSize;
 begin
   Result := Size(0, 0);
@@ -2538,6 +2839,18 @@ begin
 end;
 
 procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    FillBackgroundAt(R, AFill, ACorners);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
 var
   r: Integer;
   opts: TRoundRectangleOptions;
@@ -2626,6 +2939,55 @@ begin
 end;
 
 procedure TTyPainter.FillPointerShape(const ABody: TRect; const ACorners: TTyCorners;
+  ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
+  AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
+{ Canvas2D, but in the raster scope like the rect methods, not through the preset scale(S,S):
+  the outline follows the pixel-index convention of StrokeBorder (Right - 1, a half-line
+  inset), which a matrix would double along with everything else. So the geometry is mapped
+  here and drawn with the Canvas2D transforms set aside for the call. }
+var
+  body: TRect;
+  tip, halfBase, height: Integer;
+  ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  if RasterEnter then
+  begin
+    body := Dev(ABody);
+    tip := Dev(ATipPos);
+    halfBase := Dev(AHalfBase);
+    height := Dev(AHeight);
+  end
+  else
+  begin
+    body := ABody;
+    tip := ATipPos;
+    halfBase := AHalfBase;
+    height := AHeight;
+  end;
+  try
+    if FScale > 1 then
+    begin
+      ctx := FBmp.Canvas2D;
+      ctx.save;
+      try
+        ctx.resetTransform;
+        ctx.strokeResetTransform;
+        FillPointerShapeAt(body, ACorners, ASide, tip, halfBase, height, AFillColor,
+          ABorderColor, ABorderWidthLogical);
+      finally
+        ctx.restore;
+      end;
+    end
+    else
+      FillPointerShapeAt(body, ACorners, ASide, tip, halfBase, height, AFillColor,
+        ABorderColor, ABorderWidthLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
   ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
   AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
 var
@@ -2724,6 +3086,18 @@ end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    StrokeBorderAt(R, ACorners, AWidthLogical, AColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
+var
   w, r: Integer;
   opts: TRoundRectangleOptions;
   half: Single;
@@ -2757,6 +3131,18 @@ begin
 end;
 
 procedure TTyPainter.DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawEdgeAt(R, AWidthLogical, ATLColor, ABRColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawEdgeAt(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
 var w: Integer; tl, br: TBGRAPixel;
 begin
   if FBmp = nil then Exit;
@@ -2773,6 +3159,18 @@ begin
 end;
 
 procedure TTyPainter.DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawGlyphBitmapAt(R, ABmp);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawGlyphBitmapAt(const ARect: TRect; ABmp: TBGRABitmap);
 var x, y: Integer;
 begin
   if (FBmp = nil) or (ABmp = nil) then Exit;
@@ -2848,6 +3246,18 @@ end;
   same bytes. Main thread only (another thread renders as before); bounded by
   ShadowCacheMaxPixels, emptied whole when full. }
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DropShadowAt(R, ARadiusLogical, AColor, ABlurLogical, AOffsetLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
 var
   r, blur, ox, oy, idx: Integer;
   shadow, blurred: TBGRABitmap;
@@ -2935,6 +3345,10 @@ begin
   end;
 end;
 
+{ StarPath and DrawStar stay OUTSIDE the raster scope on purpose: their geometry is pure (a
+  centre and radii, no pixel-index convention), so the scale(S,S) BeginPaint presets on the
+  Canvas2D draws them at the device scale from layout coordinates -- which is also what lets a
+  control trace StarPath and then fill or clip with its own Canvas2D calls (TTyRating). }
 procedure TTyPainter.StarPath(ACx, ACy, AOuter, AInner: Double);
 var
   ctx: TBGRACanvas2D;
@@ -2997,6 +3411,23 @@ begin
 end;
 
 procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False; AMultiLine: Boolean = False; ALineHeightLogical: Integer = 0);
+var
+  R: TRect;
+begin
+  { The only way text gets onto the layer: DrawTextLine, DrawTextLineBidi and
+    DrawTextSupersampled are reached from here alone, so they receive the raster rect and
+    configure their fonts at the raster PPI. The measuring side (MeasureText, TextCaretX,
+    TextCharIndexAtX) stays out of the scope on purpose: it answers in layout pixels. }
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawTextAt(R, AText, AFontName, AFontSizeLogical, AWeight, AColor, AHAlign, AVAlign,
+      AEllipsis, AMnemonicPos, ASmallCrisp, AMultiLine, ALineHeightLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawTextAt(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean; AMultiLine: Boolean; ALineHeightLogical: Integer);
 var
   Lines: TStringList;
   i, lineH, blockH, yOff, boxH: Integer;
@@ -3371,6 +3802,18 @@ end;
 
 procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawGlyphAt(R, AGlyph, AColor, AThicknessLogical, APadLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawGlyphAt(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer);
+var
   px: TBGRAPixel;
   th: Single;
   pad: Integer;
@@ -3514,6 +3957,18 @@ end;
 
 procedure TTyPainter.DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(AZoneRect) else R := AZoneRect;
+  try
+    DrawDropChevronAt(R, AColor, ASizeLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+var
   w, h, cx, cy, l, r, top, bot, th: Single;
   px: TBGRAPixel;
 begin
@@ -3577,8 +4032,22 @@ begin
 end;
 
 function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap; forward;
+function GetCachedScaledImage(const APath: string; APicture: TBGRABitmap;
+  AScale: Integer): TBGRABitmap; forward;
 
 procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    NineSliceAt(R, AImagePath, AInsets, ATile);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.NineSliceAt(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
   src: TBGRABitmap;
   iw, ih: Integer;
@@ -3594,12 +4063,25 @@ begin
   if src = nil then
     Exit;
   begin
-    iw := src.Width;
-    ih := src.Height;
     sl := AInsets.Left;
     st := AInsets.Top;
     sr := AInsets.Right;
     sb := AInsets.Bottom;
+    { A theme image is a one-times asset, its pixels layout pixels (#83). On a layer at a device
+      scale it is taken S times as large, insets too, so a frame keeps its thickness in layout
+      pixels; each image pixel lands on S x S device pixels, as the system would have put it. }
+    if FScale > 1 then
+    begin
+      { the cache owns src (main's GetCachedImage): the S-times picture is kept beside it under
+        its own key, made once, and src is neither freed nor replaced in the cache }
+      src := GetCachedScaledImage(AImagePath, src, FScale);
+      sl := sl * FScale;
+      st := st * FScale;
+      sr := sr * FScale;
+      sb := sb * FScale;
+    end;
+    iw := src.Width;
+    ih := src.Height;
     sxL := sl;
     sxR := iw - sr;
     syT := st;
@@ -3623,6 +4105,30 @@ end;
 
 procedure TTyPainter.FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap;
   const ASrcOffset: TPoint);
+var
+  R: TRect;
+  O: TPoint;
+begin
+  { The backdrop is kept at the device scale too (TTyForm.RebuildBackdrop), so the
+    offset into it is mapped with the rect. }
+  if RasterEnter then
+  begin
+    R := Dev(ARect);
+    O := Dev(ASrcOffset);
+  end
+  else
+  begin
+    R := ARect;
+    O := ASrcOffset;
+  end;
+  try
+    FillImageSliceAt(R, ASrc, O);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillImageSliceAt(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
 { Blit a (clamped) slice of a backdrop bitmap 1:1 into ARect — used as the opaque
   base behind ANY control on an image-backed form, so its corners read as the same
   photo the form shows instead of a flat solid fill. }
@@ -3664,6 +4170,30 @@ end;
 
 procedure TTyPainter.FillGlass(const ARect: TRect; AGlass: TBGRABitmap;
   const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+var
+  R: TRect;
+  O: TPoint;
+begin
+  { The backdrop is kept at the device scale too (TTyForm.RebuildBackdrop), so the
+    offset into it is mapped with the rect. }
+  if RasterEnter then
+  begin
+    R := Dev(ARect);
+    O := Dev(ASrcOffset);
+  end
+  else
+  begin
+    R := ARect;
+    O := ASrcOffset;
+  end;
+  try
+    FillGlassAt(R, AGlass, O, ATint, ACorners);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillGlassAt(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
 { The glass pane itself: the BLURRED backdrop slice + tint, round-clipped to the
   control's corners and laid over the sharp base FillImageSlice already painted. }
 var
@@ -3720,6 +4250,18 @@ end;
 
 procedure TTyPainter.FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    FillCornerGapsAt(R, ACorners, AColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+var
   temp: TBGRABitmap;
   w, h, r: Integer;
   vis: TRect;
@@ -3759,13 +4301,82 @@ begin
 end;
 
 procedure TTyPainter.EraseRect(const ARect: TRect);
+var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    EraseRectAt(R);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.EraseRectAt(const ARect: TRect);
 begin
   if FBmp = nil then Exit;
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, BGRA(0,0,0,0), dmSet);
 end;
 
+procedure TTyPainter.DrawRule(AX1, AY1, AX2, AY2: Integer; const AColor: TBGRAPixel);
+var
+  R: TRect;
+  mapped: Boolean;
+begin
+  mapped := RasterEnter;
+  try
+    if (AX1 <> AX2) and (AY1 <> AY2) then
+    begin
+      { Slanted: there is no "one layout pixel wide" for it to keep, so it is the plain line. }
+      if FBmp = nil then Exit;
+      if mapped then
+        FBmp.DrawLine(Dev(AX1), Dev(AY1), Dev(AX2), Dev(AY2), AColor, False)
+      else
+        FBmp.DrawLine(AX1, AY1, AX2, AY2, AColor, False);
+      Exit;
+    end;
+    if AY1 = AY2 then
+    begin
+      if AX1 = AX2 then Exit;
+      if AX2 > AX1 then R := Rect(AX1, AY1, AX2, AY1 + 1)
+      else R := Rect(AX2 + 1, AY1, AX1 + 1, AY1 + 1);
+    end
+    else if AY2 > AY1 then R := Rect(AX1, AY1, AX1 + 1, AY2)
+    else R := Rect(AX1, AY2 + 1, AX1 + 1, AY1 + 1);
+    if mapped then R := Dev(R);
+    DrawRuleAt(R, AColor);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
+begin
+  if FBmp = nil then Exit;
+  FBmp.FillRect(ARect, AColor, dmDrawWithTransparency);
+end;
+
 var
   GImgCache: TStringList = nil;  // key 'path|blurDev' -> TBGRABitmap (OwnsObjects)
+
+{ APicture -- GetCachedImage's picture for APath -- AScale times as large, each pixel on
+  AScale x AScale (#83: a theme image is a one-times asset, NineSlice at a device scale). Kept
+  in the same cache under its own key ('path|xS'), made once: the original stays the cache's,
+  untouched. }
+function GetCachedScaledImage(const APath: string; APicture: TBGRABitmap;
+  AScale: Integer): TBGRABitmap;
+var
+  key: string;
+  idx: Integer;
+begin
+  key := APath + '|x' + IntToStr(AScale);
+  idx := GImgCache.IndexOf(key);   // there: APicture came from it
+  if idx >= 0 then
+    Exit(TBGRABitmap(GImgCache.Objects[idx]));
+  Result := APicture.Resample(APicture.Width * AScale, APicture.Height * AScale,
+    rmSimpleStretch) as TBGRABitmap;
+  GImgCache.AddObject(key, Result);
+end;
 
 { Load (and optionally blur) an image once, cached by path + device-px blur radius.
   The returned bitmap is owned by the cache — callers must not free it. }
@@ -3805,15 +4416,30 @@ end;
 procedure TTyPainter.DrawImageFill(const ARect: TRect; const AImagePath: string;
   AMode: TTyImageMode; ABlurLogical: Integer);
 var
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    DrawImageFillAt(R, AImagePath, AMode, ABlurLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawImageFillAt(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
+var
   src: TBGRABitmap;
   iw, ih, dw, dh, sw, sh, ox, oy: Integer;
   sc, scW, scH: Double;
   oldClip: TRect;
 begin
   if FBmp = nil then Exit;
-  src := GetCachedImage(AImagePath, Scale(ABlurLogical));
+  { The image is a one-times asset whose pixels are layout pixels (#83): blurred at the LAYOUT
+    radius, then stretched onto the raster with the rest of the picture; centred, it is drawn S
+    times its size. At S = 1 the layout PPI is the PPI. }
+  src := GetCachedImage(AImagePath, MulDiv(ABlurLogical, FLayoutPPI, 96));
   if src = nil then Exit;
-  iw := src.Width; ih := src.Height;
+  iw := src.Width * FScale; ih := src.Height * FScale;
   dw := ARect.Right - ARect.Left; dh := ARect.Bottom - ARect.Top;
   if (iw <= 0) or (ih <= 0) or (dw <= 0) or (dh <= 0) then Exit;
   oldClip := FBmp.ClipRect;
@@ -3823,8 +4449,12 @@ begin
       timStretch:
         FBmp.StretchPutImage(ARect, src, dmDrawWithTransparency);
       timCenter:
-        FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
-          src, dmDrawWithTransparency);
+        if FScale = 1 then
+          FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+            src, dmDrawWithTransparency)
+        else
+          FBmp.StretchPutImage(Bounds(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+            iw, ih), src, dmDrawWithTransparency);
       timCover:
         begin
           scW := dw / iw; scH := dh / ih;
@@ -3838,6 +4468,137 @@ begin
   finally
     FBmp.ClipRect := oldClip;
   end;
+end;
+
+{ ===== The device scale (#83) ================================================ }
+
+type
+  TTyRasterCanvasEntry = record
+    Canvas: TCanvas;
+    Scale: Integer;
+  end;
+
+var
+  GRasterCanvases: array of TTyRasterCanvasEntry;
+  GForcedScale: Integer = 0;
+  GForcedDeviceUnits: Boolean = False;
+  GForcedNilCanvas: Boolean = True;
+
+function RasterCanvasIndex(ACanvas: TCanvas): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to High(GRasterCanvases) do
+    if GRasterCanvases[i].Canvas = ACanvas then Exit(i);
+  Result := -1;
+end;
+
+function TyDeviceScaleOf(AFactor: Double): Integer;
+begin
+  if IsNan(AFactor) or (AFactor <= 0) then Exit(1);
+  if AFactor > 4 then Exit(4);
+  Result := Round(AFactor);
+  if Result < 1 then Result := 1;
+end;
+
+function TyCanvasDeviceScale(ACanvas: TCanvas): TTyCanvasScale;
+var
+  i: Integer;
+begin
+  Result.Scale := 1;
+  Result.DeviceUnits := False;
+  if not TyDeviceScaleRendering then Exit;
+  { A raster cache's canvas answers its own registration first, the test seam included: it is
+    in device units whatever the window it is blitted to is in, and a seam answering it as a
+    window would paint the cache at half size on a layout-units run. }
+  if ACanvas <> nil then
+  begin
+    i := RasterCanvasIndex(ACanvas);
+    if i >= 0 then
+    begin
+      Result.Scale := GRasterCanvases[i].Scale;
+      Result.DeviceUnits := True;
+      Exit;
+    end;
+  end;
+  if (GForcedScale > 0) and ((ACanvas <> nil) or GForcedNilCanvas) then
+  begin
+    Result.Scale := GForcedScale;
+    Result.DeviceUnits := GForcedDeviceUnits;
+    Exit;
+  end;
+  if ACanvas = nil then Exit;
+  { The system is asked through the platform facade, never here: a widgetset that needs its own
+    query gets it in PlatformWS and its WS unit, and this unit stays free of widgetset IFDEFs. }
+  if (ACanvas is TControlCanvas) and (TControlCanvas(ACanvas).Control <> nil) then
+    Result.Scale := TyDeviceScaleOf(TyControlDeviceScale(TControlCanvas(ACanvas).Control));
+end;
+
+procedure TyRegisterRasterCanvas(ACanvas: TCanvas; AScale: Integer);
+var
+  i: Integer;
+begin
+  if ACanvas = nil then Exit;
+  i := RasterCanvasIndex(ACanvas);
+  if i < 0 then
+  begin
+    i := Length(GRasterCanvases);
+    SetLength(GRasterCanvases, i + 1);
+    GRasterCanvases[i].Canvas := ACanvas;
+  end;
+  GRasterCanvases[i].Scale := AScale;
+end;
+
+procedure TyUnregisterRasterCanvas(ACanvas: TCanvas);
+var
+  i: Integer;
+begin
+  i := RasterCanvasIndex(ACanvas);
+  if i < 0 then Exit;
+  GRasterCanvases[i] := GRasterCanvases[High(GRasterCanvases)];
+  SetLength(GRasterCanvases, Length(GRasterCanvases) - 1);
+end;
+
+function TyCanvasRect(ACanvas: TCanvas; const ALayout: TRect): TRect;
+var
+  sc: TTyCanvasScale;
+begin
+  sc := TyCanvasDeviceScale(ACanvas);
+  if sc.DeviceUnits and (sc.Scale > 1) then
+    Result := Rect(ALayout.Left * sc.Scale, ALayout.Top * sc.Scale,
+      ALayout.Right * sc.Scale, ALayout.Bottom * sc.Scale)
+  else
+    Result := ALayout;
+end;
+
+procedure TyDrawRasterBitmap(ACanvas: TCanvas; const ALayout: TRect; ABmp: TBGRABitmap;
+  AOpaque: Boolean);
+var
+  sc: TTyCanvasScale;
+begin
+  if (ACanvas = nil) or (ABmp = nil) then Exit;
+  sc := TyCanvasDeviceScale(ACanvas);
+  if (sc.Scale <= 1) or sc.DeviceUnits then
+    ABmp.Draw(ACanvas, TyCanvasRect(ACanvas, ALayout).Left, TyCanvasRect(ACanvas, ALayout).Top,
+      AOpaque)
+  else
+    ABmp.Draw(ACanvas, ALayout, AOpaque);
+end;
+
+function TyRegisteredRasterScale(ACanvas: TCanvas): Integer;
+var
+  i: Integer;
+begin
+  i := RasterCanvasIndex(ACanvas);
+  if i < 0 then Result := 0 else Result := GRasterCanvases[i].Scale;
+end;
+
+procedure TyForceDeviceScaleForTest(AScale: Integer; ADeviceUnits: Boolean;
+  ANilCanvasToo: Boolean = True);
+begin
+  GForcedScale := AScale;
+  GForcedDeviceUnits := ADeviceUnits;
+  GForcedNilCanvas := ANilCanvasToo;
 end;
 
 { ============================ VECTOR PATH API ============================
@@ -4093,7 +4854,11 @@ begin
     the way in and put back on the way out. }
   tex := TBGRAAffineBitmapTransform.Create(AImage, rx, ry, rfLinear);
   try
+    { AMatrix maps the image to layout pixels; the scanner works on the raster, which is
+      FScale times that (#83 -- the pattern is made with the transform reset, so the
+      Canvas2D preset does not apply here) }
     m := AffineMatrixTranslation(-0.5, -0.5)
+      * AffineMatrixScale(FScale, FScale)
       * AffineMatrix(AMatrix[0], AMatrix[2], AMatrix[4],
                      AMatrix[1], AMatrix[3], AMatrix[5])
       * AffineMatrixTranslation(0.5, 0.5);
@@ -4219,8 +4984,12 @@ begin
             begin
               { Stretch means ONE tile the size of the bounds, so the image is
                 resampled rather than repeated. Freed after the fill, because
-                the pattern holds the bitmap rather than copying it. }
-              scaled := img.Resample(bw, bh) as TBGRABitmap;
+                the pattern holds the bitmap rather than copying it. At a device
+                scale it is resampled to the RASTER size and the pattern is put
+                back by 1/S under the preset, so it lands pixel for pixel rather
+                than magnified (#83). }
+              scaled := img.Resample(bw * FScale, bh * FScale) as TBGRABitmap;
+              if FScale > 1 then ctx.scale(1 / FScale, 1 / FScale);
               pat := ctx.createPattern(scaled, 'no-repeat');
             end
             else
@@ -4288,7 +5057,8 @@ begin
   { SET, not assumed. isPointInPath reads this shared state, and leaving it
     alone made the answer depend on the last thing filled. }
   ctx.fillMode := VecFillMode(ARule);
-  Result := ctx.isPointInPath(AX, AY);
+  { the path's points went through the preset onto the raster; the point does not (#83) }
+  Result := ctx.isPointInPath(AX * FScale, AY * FScale);
 end;
 
 { ---- stroke state ---- }
@@ -4384,6 +5154,9 @@ procedure TTyPainter.ResetTransform;
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.resetTransform;
+  { back to the device scale's preset, not to the identity: callers' coordinates stay layout
+    pixels (#83). BGRA's resetTransform leaves the stroke matrix alone, so widths keep theirs. }
+  if FScale > 1 then FBmp.Canvas2D.scale(FScale, FScale);
 end;
 
 procedure TTyPainter.ClipPath(ARule: TTyFillRule);
@@ -4674,9 +5447,22 @@ procedure TTyPainter.DrawTextRotated(const AText, AFontName: string;
   AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
 var
   sz: TSize;
-  ca, sa, ox, oy, rx, ry: Double;
+  ca, sa, ox, oy, rx, ry, anchorX, anchorY: Double;
 begin
   if (FBmp = nil) or (AText = '') then Exit;
+  { drawn straight on the layer, so in the raster scope: the anchor in raster pixels, the
+    font at the raster PPI (#83) }
+  if RasterEnter then
+  begin
+    anchorX := AX * FScale;
+    anchorY := AY * FScale;
+  end
+  else
+  begin
+    anchorX := AX;
+    anchorY := AY;
+  end;
+  try
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
   sz := FBmp.TextSize(AText);
 
@@ -4702,8 +5488,11 @@ begin
   rx := ox * ca + oy * sa;
   ry := -ox * sa + oy * ca;
 
-  FBmp.TextOutAngle(AX + rx, AY + ry, Round(AAngleRad * 1800 / Pi),
+  FBmp.TextOutAngle(anchorX + rx, anchorY + ry, Round(AAngleRad * 1800 / Pi),
                     AText, TyColorToBGRA(AColor), taLeftJustify, FRightToLeft);
+  finally
+    RasterLeave;
+  end;
 end;
 
 initialization
@@ -4729,5 +5518,6 @@ finalization
   { a painter still alive at exit would have let go of its entries already: the
     pool's masks are no state's now }
   ClipPoolFreeAll;
+  GRasterCanvases := nil;
 
 end.

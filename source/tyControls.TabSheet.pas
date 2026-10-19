@@ -410,7 +410,7 @@ begin
   w := ClientWidth; h := ClientHeight;
   if (w <= 0) or (h <= 0) then Exit;
   if FPaintCache = nil then FPaintCache := TTyPaintCache.Create;
-  if FPaintCache.NeedsRender(w, h) then
+  if FPaintCache.NeedsRender(w, h, TyCanvasDeviceScale(Canvas)) then
     RenderTo(FPaintCache.Canvas, Rect(0, 0, w, h), Font.PixelsPerInch);
   FPaintCache.Blit(Canvas);
 end;

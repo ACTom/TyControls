@@ -161,7 +161,8 @@ type
     { Device px at the bar's PPI, from --titlebar-icon-size / --titlebar-icon-gap. }
     function IconSizePx: Integer;
     function IconGapPx: Integer;
-    { Paint EffectiveIcon into ARect (device px of the painter's surface). }
+    { Paint EffectiveIcon into ARect (layout px of the painter's surface; the icon is made at
+      the painter's raster size, #83). }
     procedure DrawIcon(P: TTyPainter; const ARect: TRect);
   private
     { #9. The default window menu: built on first use, NO Owner -- owned by the bar it would
@@ -707,8 +708,10 @@ type
     procedure RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
     { The themed part of RenderBackgroundTo, rendered into ABmp over its whole size (the same
       pixels RenderBackgroundTo composites onto a canvas). False, ABmp untouched, when there is
-      no themed background -- RenderBackgroundTo then fills the LCL Color instead. }
-    function PaintBackgroundInto(ABmp: TBGRABitmap): Boolean;
+      no themed background -- RenderBackgroundTo then fills the LCL Color instead.
+      ABmp holds AScale device pixels per layout pixel: it is drawn at that device scale, the
+      layout size being ABmp's size divided by AScale (#83). }
+    function PaintBackgroundInto(ABmp: TBGRABitmap; AScale: Integer = 1): Boolean;
     { Everything the background depends on besides the size: the controller and its theme
       version, this form's StyleOverride, PPI and Color. The surface drops its cached
       background when this changes: a change here need not Invalidate it -- one made on the
@@ -2180,7 +2183,10 @@ var
   src: TIcon;
   side: Integer;
 begin
-  side := ARect.Right - ARect.Left;
+  { The icon is made for the raster: its side in raster pixels, so at a device scale it is
+    picked and resampled at S times the layout side and lands 1:1. The cached side is that raster
+    side, so a change of S makes the icon again (#83). }
+  side := P.Dev(ARect.Right - ARect.Left);
   if (side <= 0) or (ARect.Bottom - ARect.Top <= 0) then Exit;
   src := EffectiveIcon;
   if src = nil then Exit;
@@ -3672,6 +3678,7 @@ var
   P: TTyPainter;
   blurDev: Integer;
   newKey: string;
+  sc: TTyCanvasScale;
 begin
   // Non-image (or no controller): no photo backdrop -> drop any stale snapshot and bail.
   if FController = nil then
@@ -3696,8 +3703,14 @@ begin
   // dev-px is in the key, so an image->image switch that drops glass rebuilds + frees the old
   // blurred backdrop). When the key is unchanged the snapshot is already current — skip.
   blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
+  { The controls sample the backdrops in DEVICE pixels, at S times their layout offset (#83), so
+    the snapshot is taken at the device scale of the form's own canvas -- the screen it is on --
+    and the blur is S times as wide, for the same frost in layout pixels. A change of S (the
+    window moved to another screen) is in the key. }
+  sc := TyCanvasDeviceScale(Canvas);
+  if sc.Scale < 1 then sc.Scale := 1;
   newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
-    + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
+    + IntToStr(ClientHeight) + '|' + IntToStr(blurDev) + '|' + IntToStr(sc.Scale);
   if (FSharpBackdrop <> nil) and (newKey = FGlassKey) then Exit;
   // Build the snapshot OFFSCREEN. CRITICAL: pass a NIL canvas so EndPaint does NOT blit to
   // any DC (the form is WS_CLIPCHILDREN — drawing the photo here, outside a WM_PAINT, would
@@ -3706,7 +3719,7 @@ begin
   // Duplicate the composited image BEFORE EndPaint frees P.Bitmap.
   P := TTyPainter.Create;
   try
-    P.BeginPaint(nil, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+    P.BeginPaintScaled(nil, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch, sc);
     P.FillBackground(Rect(0, 0, ClientWidth, ClientHeight), bg.Background, 0);
     FreeAndNil(FSharpBackdrop);
     FreeAndNil(FGlassBackdrop);
@@ -3714,7 +3727,7 @@ begin
     if FGlassBlurLogical > 0 then
     begin
       if blurDev > 0 then
-        FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap
+        FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev * sc.Scale, rbFast) as TBGRABitmap
       else
         FGlassBackdrop := FSharpBackdrop.Duplicate as TBGRABitmap;
     end;
@@ -3730,20 +3743,25 @@ begin
   RebuildBackdrop;
 end;
 
-function TTyForm.PaintBackgroundInto(ABmp: TBGRABitmap): Boolean;
+function TTyForm.PaintBackgroundInto(ABmp: TBGRABitmap; AScale: Integer): Boolean;
 var
   bg: TTyStyleSet;
   P: TTyPainter;
   r: TRect;
+  sc: TTyCanvasScale;
 begin
   Result := False;
   if (ABmp = nil) or (FController = nil) then Exit;
   bg := ResolveChromeStyle(FController);
   if not (tpBackground in bg.Present) then Exit;
-  r := Rect(0, 0, ABmp.Width, ABmp.Height);
+  if AScale < 1 then AScale := 1;
+  { no canvas to ask: the scale is the caller's, the rectangle the layout one (#83) }
+  sc.Scale := AScale;
+  sc.DeviceUnits := False;
+  r := Rect(0, 0, ABmp.Width div AScale, ABmp.Height div AScale);
   P := TTyPainter.Create;
   try
-    P.BeginPaintOn(nil, r, Font.PixelsPerInch, ABmp);
+    P.BeginPaintOnScaled(nil, r, Font.PixelsPerInch, ABmp, sc);
     P.FillBackground(r, bg.Background, 0);
     // Themed window frame (non-image themes; e.g. the XP Luna blue border). The title bar
     // covers the top run; the side + bottom runs show in the client margins.
@@ -3769,6 +3787,7 @@ end;
 procedure TTyForm.RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
 var
   bmp: TBGRABitmap;
+  s: Integer;
 begin
   // Paint the themed `form` background (image / solid / gradient) OPAQUELY across ARect. Called BOTH
   // by the form's own Paint and by TTyFormSurface.Paint (onto the surface's edge-reaching canvas, so
@@ -3776,12 +3795,15 @@ begin
   // via EnsureBackdrop. App controls paint on top in their own windows.
   if (ARect.Right > ARect.Left) and (ARect.Bottom > ARect.Top) then
   begin
-    bmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top,
+    { rendered at the canvas's device scale, S times the layout size (#83) }
+    s := TyCanvasDeviceScale(ACanvas).Scale;
+    if s < 1 then s := 1;
+    bmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * s, (ARect.Bottom - ARect.Top) * s,
       BGRAPixelTransparent);
     try
-      if PaintBackgroundInto(bmp) then
+      if PaintBackgroundInto(bmp, s) then
       begin
-        bmp.Draw(ACanvas, ARect.Left, ARect.Top, False);   // as the painter's EndPaint lays it down
+        TyDrawRasterBitmap(ACanvas, ARect, bmp, False);   // as the painter's EndPaint lays it down
         Exit;
       end;
     finally

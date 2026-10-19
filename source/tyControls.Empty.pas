@@ -308,17 +308,21 @@ procedure TyDrawEmptyBox(APainter: TTyPainter; const ARect: TRect; AColor: TTyCo
 var
   px: TBGRAPixel;
   th, l, t, r, b, w, h, bodyT: Single;
+  box: TRect;
 begin
   if (ARect.Right - ARect.Left < 4) or (ARect.Bottom - ARect.Top < 4) then
     Exit;   // below this the strokes merge into a smudge; draw nothing rather than a blob
+  { Drawn straight on the layer, which counts device pixels (#83): the whole shape follows
+    the square, so mapping the square is all it needs. }
+  box := APainter.Dev(ARect);
   px := TyColorToBGRA(AColor);
-  th := (ARect.Right - ARect.Left) / 24;
+  th := (box.Right - box.Left) / 24;
   if th < 1 then th := 1;
   // The stroke is centred on the path, so inset by its width to keep it inside the square.
-  l := ARect.Left + th;
-  t := ARect.Top + th;
-  r := ARect.Right - 1 - th;
-  b := ARect.Bottom - 1 - th;
+  l := box.Left + th;
+  t := box.Top + th;
+  r := box.Right - 1 - th;
+  b := box.Bottom - 1 - th;
   w := r - l;
   h := b - t;
   if (w <= 0) or (h <= 0) then Exit;

@@ -1186,14 +1186,17 @@ var
   R: TRect;
   w, h: Integer;
   measurer: ITyTextMeasurer;
+  sc: TTyCanvasScale;
 begin
   { [F4b] the flush's start, for `rendered`'s elapsedTime }
   FPaintT0 := AnimClock;
   { THE DIRTY-RECT PATH [Batch 142]: the canvas holds the last frame, and
     only what changed is drawn on it }
+  { the layers at the device scale of the canvas they go onto (#83) }
+  sc := TyCanvasDeviceScale(ACanvas);
   if FUseDirtyRect then
   begin
-    DrPrepare(ARect, APPI);
+    DrPrepare(ARect, APPI, sc);
     DrComposite(ACanvas, ARect);
     Exit;
   end;
@@ -1221,7 +1224,10 @@ begin
     FProgReuse := StPatchList;
   end;
 
-  if FStatic.NeedsRender(w, h) then
+  { AND THE DEVICE SCALE: the cache holds S times the pixels and its canvas
+    is a raster canvas a painter draws on at S; a change of S is a change of
+    size, so it renders again (#83) }
+  if FStatic.NeedsRender(w, h, sc) then
   begin
     measurer := NewTextMeasurer(APPI);
     P := TTyPainter.Create;
@@ -1411,8 +1417,8 @@ begin
   { the cache holds the snapshot's list over the captured ground, at this
     size, with nothing to lay out again and the series at rest in it }
   Result := FDrSnapOk and FDrBaseOk and (FDrWork <> nil) and (FDrBase <> nil)
-    and (FDrWork.Width = AW) and (FDrWork.Height = AH)
-    and (FDrBase.Width = AW) and (FDrBase.Height = AH)
+    and (FDrWork.Width = AW * FDrScale) and (FDrWork.Height = AH * FDrScale)
+    and (FDrBase.Width = AW * FDrScale) and (FDrBase.Height = AH * FDrScale)
     and not FDirty and (FLastRect.Right = AW) and (FLastRect.Bottom = AH)
     and not FExporting and not FAnimLive and not FAnimContinuous;
 end;
@@ -1422,10 +1428,13 @@ var
   P: TTyPainter;
   measurer: ITyTextMeasurer;
 begin
-  if (FDrWork = nil) or (FDrWork.Width <> R.Right) or (FDrWork.Height <> R.Bottom) then
+  { the static painter's surface at the frame's device scale: the cache's
+    raster canvas is drawn on at that scale (#83) }
+  if (FDrWork = nil) or (FDrWork.Width <> R.Right * FDrScale)
+    or (FDrWork.Height <> R.Bottom * FDrScale) then
   begin
     FreeAndNil(FDrWork);
-    FDrWork := TBGRABitmap.Create(R.Right, R.Bottom);
+    FDrWork := TBGRABitmap.Create(R.Right * FDrScale, R.Bottom * FDrScale);
   end;
   { what BeginPaint's own bitmap starts as }
   FDrWork.Fill(BGRAPixelTransparent);
@@ -1460,11 +1469,12 @@ var
   snap: TTyDirtySnap;
   rects, zr: TTyZrRectArray;
   px: array of TRect;
-  pr, oldClip: TRect;
+  pr, oldClip, rp: TRect;
   box: TTyXYWH;
   i, k, n, idx: Integer;
   hit: Boolean;
   P: TTyPainter;
+  sc: TTyCanvasScale;
 begin
   Result := False;
   measurer := NewTextMeasurer(APPI);
@@ -1498,10 +1508,12 @@ begin
       Inc(n);
     end;
   if n = 0 then Exit;
-  { EACH RECT FROM THE GROUND, then what meets it in paint order }
+  { EACH RECT FROM THE GROUND, then what meets it in paint order -- the
+    layers' pixels are FDrScale times the rects' (#83) }
   for i := 0 to n - 1 do
   begin
-    FDrWork.PutImagePart(px[i].Left, px[i].Top, FDrBase, px[i], dmSet);
+    rp := DrRaster(px[i]);
+    FDrWork.PutImagePart(rp.Left, rp.Top, FDrBase, rp, dmSet);
     box.X := px[i].Left;
     box.Y := px[i].Top;
     box.W := px[i].Right - px[i].Left;
@@ -1511,7 +1523,9 @@ begin
   P := TTyPainter.Create;
   oldClip := FDrWork.ClipRect;
   try
-    P.BeginPaintOn(nil, R, APPI, FDrWork);
+    sc.Scale := FDrScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, R, APPI, FDrWork, sc);
     { ONE PASS UNDER THE RECTS' BOUNDS: the bitmap's clip is the box round
       every rect, and an element is drawn once when it meets any of them.
       zrender clips and draws rect by rect; drawn that way here an element
@@ -1522,7 +1536,8 @@ begin
     box := TyRectToXYWH(TyRectF(px[0].Left, px[0].Top, px[0].Right, px[0].Bottom));
     for k := 1 to n - 1 do
       TyZrRectUnion(box, TyRectToXYWH(TyRectF(px[k].Left, px[k].Top, px[k].Right, px[k].Bottom)));
-    FDrWork.ClipRect := Rect(Round(box.X), Round(box.Y), Round(box.X + box.W), Round(box.Y + box.H));
+    FDrWork.ClipRect := DrRaster(Rect(Round(box.X), Round(box.Y), Round(box.X + box.W),
+      Round(box.Y + box.H)));
     for i := 0 to FDrStaticList.Count - 1 do
     begin
       idx := FDrStaticList.PaintOrder(i);
@@ -1555,9 +1570,52 @@ begin
     FDrWork.ClipRect := oldClip;
     P.Free;
   end;
-  { INTO THE CACHE, those rects only, blended as EndPaint blends }
+  { INTO THE CACHE, those rects only, blended as EndPaint blends -- the
+    cache holds the layers' pixels }
   for i := 0 to n - 1 do
-    FDrWork.DrawPart(px[i], FStatic.Canvas, px[i].Left, px[i].Top, False);
+  begin
+    rp := DrRaster(px[i]);
+    FDrWork.DrawPart(rp, FStatic.Canvas, rp.Left, rp.Top, False);
+  end;
+end;
+
+function TTyAdvanceChart.DrRaster(const R: TRect): TRect;
+var
+  s: Integer;
+begin
+  s := Max(1, FDrScale);
+  Result := Rect(R.Left * s, R.Top * s, R.Right * s, R.Bottom * s);
+end;
+
+procedure TTyAdvanceChart.DrCopyStatic(ACanvas: TCanvas; const APx: TRect);
+begin
+  { the static layer at the canvas origin, as Blit puts it: its pixels from
+    the cache, into the canvas's own units }
+  ACanvas.CopyRect(TyCanvasRect(ACanvas, APx), FStatic.Canvas, DrRaster(APx));
+end;
+
+procedure TTyAdvanceChart.DrDrawDynamic(ACanvas: TCanvas; const APx: TRect;
+  ADstX, ADstY: Integer);
+var
+  src, dst: TRect;
+  piece: TBGRACustomBitmap;
+begin
+  src := DrRaster(APx);
+  dst := TyCanvasRect(ACanvas, Rect(ADstX, ADstY, ADstX + APx.Right - APx.Left,
+    ADstY + APx.Bottom - APx.Top));
+  if (dst.Right - dst.Left = src.Right - src.Left) and (dst.Bottom - dst.Top = src.Bottom - src.Top) then
+    FDrDyn.DrawPart(src, ACanvas, dst.Left, dst.Top, False)
+  else
+  begin
+    { a canvas in device px at a device scale (a Retina window): the layer's
+      pixels into the device-px rect }
+    piece := FDrDyn.GetPart(src);
+    try
+      piece.Draw(ACanvas, dst, False);
+    finally
+      piece.Free;
+    end;
+  end;
 end;
 
 const
@@ -1572,11 +1630,14 @@ var
   cur: TTyZrRectArray;
   P: TTyPainter;
   measurer: ITyTextMeasurer;
+  sc: TTyCanvasScale;
 begin
-  if (FDrDyn = nil) or (FDrDyn.Width <> R.Right) or (FDrDyn.Height <> R.Bottom) then
+  { the layer at the frame's device scale; its tiles in device px (#83) }
+  if (FDrDyn = nil) or (FDrDyn.Width <> R.Right * FDrScale)
+    or (FDrDyn.Height <> R.Bottom * FDrScale) then
   begin
     FreeAndNil(FDrDyn);
-    FDrDyn := TBGRABitmap.Create(R.Right, R.Bottom, BGRAPixelTransparent);
+    FDrDyn := TBGRABitmap.Create(R.Right * FDrScale, R.Bottom * FDrScale, BGRAPixelTransparent);
     FDrDynTiles := nil;
     AFull := True;
   end;
@@ -1584,7 +1645,7 @@ begin
   for i := 0 to High(FDrDynTiles) do
   begin
     if TyZrRectToPixels(FDrDynTiles[i], R.Right, R.Bottom, pr) then
-      FDrDyn.FillRect(pr, BGRAPixelTransparent, dmSet);
+      FDrDyn.FillRect(DrRaster(pr), BGRAPixelTransparent, dmSet);
     TyRepaintPoolAdd(APool, FDrDynTiles[i]);
   end;
   cur := nil;
@@ -1594,19 +1655,31 @@ begin
     measurer := NewTextMeasurer(APPI);
     P := TTyPainter.Create;
     try
-      P.BeginPaintOn(nil, R, APPI, FDrDyn);
+      sc.Scale := FDrScale;
+      sc.DeviceUnits := False;
+      P.BeginPaintOnScaled(nil, R, APPI, FDrDyn, sc);
       PaintDynamic(P, R, APPI, measurer);
       P.EndPaint;
     finally
       P.Free;
     end;
-    TyInkTiles(FDrDyn, cDrInkTile, cur);
-    for i := 0 to High(cur) do TyRepaintPoolAdd(APool, cur[i]);
+    { tiles of cDrInkTile device px: FDrScale times that on the layer, and
+      back to device px -- exactly, the tiles start on multiples of it }
+    TyInkTiles(FDrDyn, cDrInkTile * FDrScale, cur);
+    for i := 0 to High(cur) do
+    begin
+      cur[i].X := cur[i].X / FDrScale;
+      cur[i].Y := cur[i].Y / FDrScale;
+      cur[i].W := cur[i].W / FDrScale;
+      cur[i].H := cur[i].H / FDrScale;
+      TyRepaintPoolAdd(APool, cur[i]);
+    end;
   end;
   FDrDynTiles := cur;
 end;
 
-procedure TTyAdvanceChart.DrPrepare(const ARect: TRect; APPI: Integer);
+procedure TTyAdvanceChart.DrPrepare(const ARect: TRect; APPI: Integer;
+  const AScale: TTyCanvasScale);
 var
   w, h: Integer;
   R: TRect;
@@ -1621,6 +1694,7 @@ begin
   h := ARect.Bottom - ARect.Top;
   if (w <= 0) or (h <= 0) then Exit;
   R := Rect(0, 0, w, h);
+  FDrScale := Max(1, AScale.Scale);
   if FStatic = nil then FStatic := TTyPaintCache.Create;
   { PPI IS PART OF THE KEY -- see RenderCached }
   if APPI <> FStaticPPI then
@@ -1639,7 +1713,8 @@ begin
     partial := DrCanPartial(w, h) and DrStaticPartial(R, APPI, pool);
     if not partial then StaticDrop;
   end;
-  if FStatic.NeedsRender(w, h) then
+  { and the device scale, as RenderCached's (#83) }
+  if FStatic.NeedsRender(w, h, AScale) then
   begin
     DrStaticFull(R, APPI);
     full := True;
@@ -1670,7 +1745,7 @@ begin
   begin
     FStatic.Blit(ACanvas);
     if (FDrDyn <> nil) and (Length(FDrDynTiles) > 0) then
-      FDrDyn.Draw(ACanvas, ARect.Left, ARect.Top, False);
+      TyDrawRasterBitmap(ACanvas, ARect, FDrDyn, False);
     Exit;
   end;
   w := ARect.Right - ARect.Left;
@@ -1679,7 +1754,7 @@ begin
   begin
     if not TyZrRectToPixels(FDrLastRects[i], w, h, px) then Continue;
     { the static layer at the canvas origin, as Blit puts it }
-    ACanvas.CopyRect(px, FStatic.Canvas, px);
+    DrCopyStatic(ACanvas, px);
     ink := False;
     if FDrDyn <> nil then
       for k := 0 to High(FDrDynTiles) do
@@ -1689,7 +1764,7 @@ begin
           Break;
         end;
     if ink then
-      FDrDyn.DrawPart(px, ACanvas, ARect.Left + px.Left, ARect.Top + px.Top, False);
+      DrDrawDynamic(ACanvas, px, ARect.Left + px.Left, ARect.Top + px.Top);
   end;
 end;
 
@@ -1698,9 +1773,15 @@ var
   clip, px, client, ink: TRect;
   i: Integer;
   prepared: Boolean;
+  sc: TTyCanvasScale;
 begin
   client := ClientRect;
   clip := Canvas.ClipRect;
+  { a canvas in raster units clips in its pixels: the clip in client px (#83) }
+  sc := TyCanvasDeviceScale(Canvas);
+  if sc.DeviceUnits and (sc.Scale > 1) then
+    clip := Rect(clip.Left div sc.Scale, clip.Top div sc.Scale,
+      (clip.Right + sc.Scale - 1) div sc.Scale, (clip.Bottom + sc.Scale - 1) div sc.Scale);
   if (clip.Right <= clip.Left) or (clip.Bottom <= clip.Top) then clip := client;
   { A PAINT NOBODY FLUSHED FOR prepares its own frame: an Invalidate, a
     window uncovered, a flush overtaken by a newer request }
@@ -1708,13 +1789,13 @@ begin
   if prepared then
   begin
     TbFrame;
-    DrPrepare(client, Font.PixelsPerInch);
+    DrPrepare(client, Font.PixelsPerInch, sc);
   end;
   FDrFlushed := False;
   FDrPending := False;
   if FStatic = nil then Exit;
   { THE CLIP, whatever invalidated it }
-  Canvas.CopyRect(clip, FStatic.Canvas, clip);
+  DrCopyStatic(Canvas, clip);
   if (FDrDyn <> nil) and (Length(FDrDynTiles) > 0) then
   begin
     ink := Rect(MaxInt, MaxInt, -MaxInt, -MaxInt);
@@ -1727,7 +1808,7 @@ begin
         if px.Bottom > ink.Bottom then ink.Bottom := px.Bottom;
       end;
     if IntersectRect(px, ink, clip) then
-      FDrDyn.DrawPart(px, Canvas, px.Left, px.Top, False);
+      DrDrawDynamic(Canvas, px, px.Left, px.Top);
   end;
   { A FRAME LARGER THAN THE CLIP is invalidated again where the clip did
     not reach; that paint only composites }
@@ -1766,7 +1847,8 @@ begin
   FAnimWindow := True;
   try
     TbFrame;
-    DrPrepare(ClientRect, Font.PixelsPerInch);
+    { no canvas to hand over: the window's own says its device scale }
+    DrPrepare(ClientRect, Font.PixelsPerInch, TyCanvasDeviceScale(Canvas));
   finally
     FAnimWindow := False;
   end;

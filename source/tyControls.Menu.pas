@@ -1369,7 +1369,9 @@ var
   { Both GDI passes are COLLECTED here and run after P.EndPaint: anything drawn straight
     to ACanvas during the loop is erased by EndPaint's blit of the BGRA layer (the same
     trap the tree view's node icons hit). Rects are painter-local, offset by ARect below. }
-  pendingIcon: array of record Res: TScaledImageListResolution; Idx, X, Y: Integer;
+  { Res is the resolution to draw: the layout one at S = 1, the raster one at a device scale
+    (#83); W x H is the icon's layout size. }
+  pendingIcon: array of record Res: TScaledImageListResolution; Idx, X, Y, W, H: Integer;
     Enabled: Boolean; Clip: TRect; end;
   pendingIconCount: Integer;
   pendingDraw: array of record Item: TMenuItem; R: TRect; St: TOwnerDrawState; end;
@@ -1425,11 +1427,13 @@ begin
       P.FillBackground(Banner, BannerStyle.Background, 0);
       if FBannerCaption <> '' then
       begin
-        TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600, APPI);
+        { Drawn straight on the layer, which counts device pixels (#83). }
+        TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600,
+          P.RasterPPI);
         // 90° CCW: reads bottom-to-top up the strip, anchored near the bottom, centered across it.
         // The ROTATION is not mirrored -- a vertical banner reads bottom-to-top in either
         // direction; only which end of the popup it decorates changes.
-        P.Bitmap.TextOutAngle(Banner.Left + bannerPx div 2, R.Bottom - P.Scale(8), 900,
+        P.Bitmap.TextOutAngle(P.Dev(Banner.Left + bannerPx div 2), P.Dev(R.Bottom - P.Scale(8)), 900,
           FBannerCaption, TyColorToBGRA(BannerStyle.TextColor), taLeftJustify);
       end;
     end;
@@ -1537,7 +1541,13 @@ begin
         IconRes := FRows[i].LCLImages.ResolutionForPPI[FRows[i].LCLImagesWidth, APPI, 1];
         if pendingIconCount = Length(pendingIcon) then
           SetLength(pendingIcon, Length(pendingIcon) + 8);
-        pendingIcon[pendingIconCount].Res := IconRes;
+        if P.DeviceScale > 1 then
+          pendingIcon[pendingIconCount].Res := FRows[i].LCLImages.ResolutionForPPI[
+            FRows[i].LCLImagesWidth, APPI * P.DeviceScale, 1]
+        else
+          pendingIcon[pendingIconCount].Res := IconRes;
+        pendingIcon[pendingIconCount].W := IconRes.Width;
+        pendingIcon[pendingIconCount].H := IconRes.Height;
         pendingIcon[pendingIconCount].Idx := FRows[i].ImageIndex;
         { The GDI pass runs after EndPaint, on the composited canvas, and it has to be
           mirrored HERE with everything else: it is the only piece of a row whose position is
@@ -1561,9 +1571,9 @@ begin
         if iconSz < P.Scale(8) then iconSz := P.Scale(8);
         { In-layer, both branches: our own list renders the vector exactly at iconSz, a foreign
           list is materialised. Centred in the iconSz slot the check glyph would have used. }
-        TyBlitImage(P.Bitmap, FImages, FRows[i].ImageIndex,
+        TyBlitImageScaled(P, FImages, FRows[i].ImageIndex,
           Slot.Left + ((Slot.Right - Slot.Left) - iconSz) div 2,
-          RowRect.Top + (rowH - iconSz) div 2, iconSz, APPI, False);
+          RowRect.Top + (rowH - iconSz) div 2, iconSz, False);
       end
       else if FRows[i].GlyphVisible and FRows[i].HasThemeGlyph then
       begin
@@ -1636,11 +1646,14 @@ begin
       begin
         ACanvas.SaveHandleState;
         try
-          IntersectClipRect(ACanvas.Handle,
+          with TyCanvasRect(ACanvas, Rect(
             ARect.Left + pendingIcon[k].Clip.Left,  ARect.Top + pendingIcon[k].Clip.Top,
-            ARect.Left + pendingIcon[k].Clip.Right, ARect.Top + pendingIcon[k].Clip.Bottom);
-          pendingIcon[k].Res.Draw(ACanvas, ARect.Left + pendingIcon[k].X,
-            ARect.Top + pendingIcon[k].Y, pendingIcon[k].Idx, pendingIcon[k].Enabled);
+            ARect.Left + pendingIcon[k].Clip.Right, ARect.Top + pendingIcon[k].Clip.Bottom)) do
+            IntersectClipRect(ACanvas.Handle, Left, Top, Right, Bottom);
+          { Disabled row = the greyed icon (see the note where Enabled is collected). }
+          TyDrawResolutionScaled(ACanvas, pendingIcon[k].Res, pendingIcon[k].Idx,
+            Bounds(ARect.Left + pendingIcon[k].X, ARect.Top + pendingIcon[k].Y,
+              pendingIcon[k].W, pendingIcon[k].H), TyGhostEffect[not pendingIcon[k].Enabled]);
         finally
           ACanvas.RestoreHandleState;
         end;

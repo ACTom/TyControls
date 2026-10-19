@@ -471,8 +471,9 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    { Drawn straight on the layer, which counts device pixels (#83). }
     TyConfigureTextFont(P.Bitmap, PreviewFamily, PreviewSize,
-      IfThen(EffectiveStyle(FBold, fsBold), 700, 400), Font.PixelsPerInch);
+      IfThen(EffectiveStyle(FBold, fsBold), 700, 400), P.RasterPPI);
     extra := [];
     if EffectiveStyle(FItalic, fsItalic) then Include(extra, fsItalic);
     if EffectiveStyle(FUnderline, fsUnderline) then Include(extra, fsUnderline);
@@ -483,7 +484,7 @@ begin
     style.Layout := tlTop;
     style.SingleLine := True;
     style.Clipping := True;
-    P.Bitmap.TextRect(FPreviewRect, FPreviewRect.Left + Px(4), FPreviewRect.Top + Px(4),
+    P.Bitmap.TextRect(P.Dev(FPreviewRect), P.Dev(FPreviewRect.Left + Px(4)), P.Dev(FPreviewRect.Top + Px(4)),
       SampleText, style, TyColorToBGRA(TyColorFromLCL(FColorValue, 255)));
     P.EndPaint;
   finally P.Free; end;

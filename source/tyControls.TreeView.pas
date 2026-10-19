@@ -5301,7 +5301,7 @@ begin
     inset := P.Scale(insetLogical);
 
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
+    P.Bitmap.ClipRect := P.Dev(Rect(inset, inset, W - inset, H - inset));
 
     { ── C2: Header band paint (BEFORE node area) ─────────────────────────── }
     if hasHeader then
@@ -5442,15 +5442,15 @@ begin
         if posIdx < colCount - 1 then
         begin
           if RtlLayout then colCaptionX := cellLeft else colCaptionX := cellRight - 1;
-          P.Bitmap.DrawLine(colCaptionX, headerBandRect.Top,
-                            colCaptionX, headerBandRect.Bottom,
-                            TyColorToBGRA(S.BorderColor), False);
+          P.DrawRule(colCaptionX, headerBandRect.Top,
+                     colCaptionX, headerBandRect.Bottom,
+                     TyColorToBGRA(S.BorderColor));
         end;
       end;
 
       { Bottom border of header band }
-      P.Bitmap.DrawLine(CR.Left, CR.Top, CR.Right, CR.Top,
-                        TyColorToBGRA(S.BorderColor), False);
+      P.DrawRule(CR.Left, CR.Top, CR.Right, CR.Top,
+                 TyColorToBGRA(S.BorderColor));
 
       { D3: drag-reorder overlay — ghost of dragged column + drop-mark caret }
       if FDragging and (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) then
@@ -5475,8 +5475,7 @@ begin
         begin
           cellRect := Rect(cellLeft, headerBandRect.Top, cellRight, headerBandRect.Bottom);
           { Ghost fill: accent color at ~40% opacity over the header }
-          P.Bitmap.FillRect(cellRect.Left, cellRect.Top,
-                            cellRect.Right, cellRect.Bottom,
+          P.Bitmap.FillRect(P.Dev(cellRect),
                             BGRA(accentPx.red, accentPx.green, accentPx.blue, 100));  { accent ghost, ~40% alpha }
         end;
 
@@ -5495,12 +5494,12 @@ begin
             if cellLeft < CR.Left  then cellLeft := CR.Left;
             if cellLeft > CR.Right then cellLeft := CR.Right;
             { Draw a 2px wide vertical accent bar }
-            P.Bitmap.DrawLine(cellLeft,     headerBandRect.Top,
-                              cellLeft,     headerBandRect.Bottom,
-                              accentPx, False);
-            P.Bitmap.DrawLine(cellLeft + 1, headerBandRect.Top,
-                              cellLeft + 1, headerBandRect.Bottom,
-                              accentPx, False);
+            P.DrawRule(cellLeft,     headerBandRect.Top,
+                       cellLeft,     headerBandRect.Bottom,
+                       accentPx);
+            P.DrawRule(cellLeft + 1, headerBandRect.Top,
+                       cellLeft + 1, headerBandRect.Bottom,
+                       accentPx);
           end;
         end;
       end;
@@ -5511,7 +5510,7 @@ begin
       header band -- and, clipped only to the frame inset, it painted over the header (#19). }
     nodeClip := Rect(inset, inset, W - inset, H - inset);
     if hasHeader and (nodeClip.Top < CR.Top) then nodeClip.Top := CR.Top;
-    P.Bitmap.ClipRect := nodeClip;
+    P.Bitmap.ClipRect := P.Dev(nodeClip);
 
     { ── First on-screen node ─────────────────────────────────────────────── }
     firstNodeY := -FOffsetY;
@@ -5580,9 +5579,9 @@ begin
         the resolved control border token — the same one the tree-lines use — so a
         skin recolours both together and nothing is hardcoded here. }
       if FShowSeparators and (GetNodeLevel(node) = 0) then
-        P.Bitmap.DrawLine(rowRect.Left, rowRect.Bottom - 1,
-                          rowRect.Right, rowRect.Bottom - 1,
-                          TyColorToBGRA(S.BorderColor), False);
+        P.DrawRule(rowRect.Left, rowRect.Bottom - 1,
+                   rowRect.Right, rowRect.Bottom - 1,
+                   TyColorToBGRA(S.BorderColor));
 
       { Only the node's LEVEL is needed out here (it gates the tree-line block and
         feeds the ancestor guides); every x derived from it comes from the shared
@@ -5624,7 +5623,7 @@ begin
           if clipR.Right > CR.Right then clipR.Right := CR.Right;
           if clipR.Top < nodeClip.Top then clipR.Top := nodeClip.Top;              // not into the header
           if clipR.Bottom > nodeClip.Bottom then clipR.Bottom := nodeClip.Bottom;  // nor the frame
-          P.Bitmap.ClipRect := clipR;
+          P.Bitmap.ClipRect := P.Dev(clipR);
 
           { ③d D1: this cell is owner-drawn (default text/image skipped) when
             toOwnerDraw + OnDrawNode are active. cellRect is the SHARED device
@@ -5671,8 +5670,8 @@ begin
                               mainColBase + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
                                           - (slots.ButtonSlotW shr 1));
                 if anc^.NextSibling <> nil then
-                  P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-                    TyColorToBGRA(S.BorderColor), False);
+                  P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                    TyColorToBGRA(S.BorderColor));
                 anc := anc^.Parent;
               end;
               ancMidX := TreeLineX(mainColBase, colCellRight,
@@ -5680,14 +5679,14 @@ begin
                              + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                              - (slots.ButtonSlotW shr 1));
               ancMidY := rowTop + rowH div 2;
-              P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
-                TyColorToBGRA(S.BorderColor), False);
-              P.Bitmap.DrawLine(ancMidX, ancMidY,
+              P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
+                TyColorToBGRA(S.BorderColor));
+              P.DrawRule(ancMidX, ancMidY,
                 TreeLineX(mainColBase, colCellRight, mainColBase + slots.IndentPx), ancMidY,
-                TyColorToBGRA(S.BorderColor), False);
+                TyColorToBGRA(S.BorderColor));
               if node^.NextSibling <> nil then
-                P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
-                  TyColorToBGRA(S.BorderColor), False);
+                P.DrawRule(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+                  TyColorToBGRA(S.BorderColor));
             end;
 
             { Expand button (anchored at mainColBase) }
@@ -5759,14 +5758,14 @@ begin
                   else if node^.CheckState = csMixed then
                   begin
                     if tpTextColor in cbStyle.Present then
-                      P.Bitmap.FillRect(
+                      P.Bitmap.FillRect(P.Dev(Rect(
                         cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
-                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3))),
                         TyColorToBGRA(cbStyle.TextColor))
                     else
-                      P.Bitmap.FillRect(
+                      P.Bitmap.FillRect(P.Dev(Rect(
                         cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
-                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3))),
                         TyColorToBGRA(S.TextColor));
                   end;
                   { csUnchecked: nothing extra }
@@ -5899,7 +5898,7 @@ begin
           end;
 
           { Restore the rows' clip after each cell }
-          P.Bitmap.ClipRect := nodeClip;
+          P.Bitmap.ClipRect := P.Dev(nodeClip);
         end;
         { FRangeX is already set from TotalWidth — do NOT re-accumulate }
       end
@@ -5956,8 +5955,8 @@ begin
                           contentLeft + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
                                       - (slots.ButtonSlotW shr 1));
             if anc^.NextSibling <> nil then
-              P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-                TyColorToBGRA(S.BorderColor), False);
+              P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                TyColorToBGRA(S.BorderColor));
             anc := anc^.Parent;
           end;
 
@@ -5967,14 +5966,14 @@ begin
                          + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                          - (slots.ButtonSlotW shr 1));
           ancMidY := rowTop + rowH div 2;
-          P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
-            TyColorToBGRA(S.BorderColor), False);
-          P.Bitmap.DrawLine(ancMidX, ancMidY,
+          P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
+            TyColorToBGRA(S.BorderColor));
+          P.DrawRule(ancMidX, ancMidY,
             TreeLineX(contentLeft, CR.Right, contentLeft + slots.IndentPx), ancMidY,
-            TyColorToBGRA(S.BorderColor), False);
+            TyColorToBGRA(S.BorderColor));
           if node^.NextSibling <> nil then
-            P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
-              TyColorToBGRA(S.BorderColor), False);
+            P.DrawRule(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+              TyColorToBGRA(S.BorderColor));
         end;
 
         { ── Expand button ────────────────────────────────────────────────── }
@@ -6049,14 +6048,14 @@ begin
               else if node^.CheckState = csMixed then
               begin
                 if tpTextColor in cbStyle.Present then
-                  P.Bitmap.FillRect(
+                  P.Bitmap.FillRect(P.Dev(Rect(
                     cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
-                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3))),
                     TyColorToBGRA(cbStyle.TextColor))
                 else
-                  P.Bitmap.FillRect(
+                  P.Bitmap.FillRect(P.Dev(Rect(
                     cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
-                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3))),
                     TyColorToBGRA(S.TextColor));
               end;
             end;
@@ -6212,11 +6211,11 @@ begin
           { dmAbove / dmBelow: a Scale(2)-thick accent line at the target row's
             top / bottom, from the caption indent to the content right edge. }
           dmAbove:
-            P.Bitmap.FillRect(textRect.Left, rowRect.Top,
-                              CR.Right,      rowRect.Top + P.Scale(2), accentPx);
+            P.Bitmap.FillRect(P.Dev(Rect(textRect.Left, rowRect.Top,
+                              CR.Right,      rowRect.Top + P.Scale(2))), accentPx);
           dmBelow:
-            P.Bitmap.FillRect(textRect.Left, rowRect.Bottom - P.Scale(2),
-                              CR.Right,      rowRect.Bottom,           accentPx);
+            P.Bitmap.FillRect(P.Dev(Rect(textRect.Left, rowRect.Bottom - P.Scale(2),
+                              CR.Right,      rowRect.Bottom)),           accentPx);
           { dmOn: an accent outline around the whole target row (distinct shape
             from the line, so "make child" reads differently from "reorder"). The
             HORIZONTAL extent spans the full content width (CR.Left..CR.Right, like
@@ -6226,14 +6225,14 @@ begin
           dmOn:
             begin
               inset := P.Scale(2);   // outline thickness (reuse inset scratch)
-              P.Bitmap.FillRect(CR.Left, rowRect.Top,
-                                CR.Right, rowRect.Top + inset, accentPx);               // top
-              P.Bitmap.FillRect(CR.Left, rowRect.Bottom - inset,
-                                CR.Right, rowRect.Bottom, accentPx);                    // bottom
-              P.Bitmap.FillRect(CR.Left, rowRect.Top,
-                                CR.Left + inset, rowRect.Bottom, accentPx);             // left
-              P.Bitmap.FillRect(CR.Right - inset, rowRect.Top,
-                                CR.Right, rowRect.Bottom, accentPx);                    // right
+              P.Bitmap.FillRect(P.Dev(Rect(CR.Left, rowRect.Top,
+                                CR.Right, rowRect.Top + inset)), accentPx);               // top
+              P.Bitmap.FillRect(P.Dev(Rect(CR.Left, rowRect.Bottom - inset,
+                                CR.Right, rowRect.Bottom)), accentPx);                    // bottom
+              P.Bitmap.FillRect(P.Dev(Rect(CR.Left, rowRect.Top,
+                                CR.Left + inset, rowRect.Bottom)), accentPx);             // left
+              P.Bitmap.FillRect(P.Dev(Rect(CR.Right - inset, rowRect.Top,
+                                CR.Right, rowRect.Bottom)), accentPx);                    // right
             end;
         end;
       end;
@@ -6302,9 +6301,9 @@ begin
     begin
       ACanvas.SaveHandleState;
       try
-        IntersectClipRect(ACanvas.Handle,
-          ARect.Left + CR.Left,  ARect.Top + CR.Top,
-          ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+        with TyCanvasRect(ACanvas, Rect(ARect.Left + CR.Left, ARect.Top + CR.Top,
+          ARect.Left + CR.Right, ARect.Top + CR.Bottom)) do
+          IntersectClipRect(ACanvas.Handle, Left, Top, Right, Bottom);
         for iIcon := 0 to pendingCount - 1 do
           { One helper, both branches, Ghosted in the honest polarity. The old code passed
             `not Ghost` straight to LCL's Draw (whose flag is Enabled) -- which compiled and

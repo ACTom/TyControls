@@ -63,6 +63,8 @@ type
     function Contrast: TTyTermContrastCache;
     function HalfContrast: TTyTermContrastCache;
     function CellMetrics: TTyTermCellMetrics;
+    { #83: the cell the surface is drawn with, S times CellMetrics' }
+    function RasterMetrics: TTyTermCellMetrics;
     function Spec: TTyTermFontSpec;
     function BlinkOn: Boolean;
     function SyncOn: Boolean;
@@ -468,6 +470,11 @@ end;
 function TTyTerminalViewProbe.CellMetrics: TTyTermCellMetrics;
 begin
   Result := Metrics;
+end;
+
+function TTyTerminalViewProbe.RasterMetrics: TTyTermCellMetrics;
+begin
+  Result := SurfaceMetrics;
 end;
 
 function TTyTerminalViewProbe.Spec: TTyTermFontSpec;

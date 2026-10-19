@@ -29,6 +29,11 @@ var
     it as the one path [Batch 117]. }
   TyLargeTilePx: Integer = 64;
 
+{ FOR THE TESTS: how many times a large batch took one of its fast paths --
+  the layer (PaintLargeOnLayer) or the tiles (PaintLargeInTiles) -- since the
+  start (#83: they must still be taken at a device scale). }
+function TyAdvChartLargeFastPathsForTest: Integer;
+
 { THE BOX A LOCAL GRADIENT ON THIS ELEMENT NORMALISES AGAINST, device px at
   APPI: the builder's own when it set one, else the shape's bounds grown by
   the stroke -- upstream's getBoundingRect. [Batch 105] }
@@ -114,6 +119,12 @@ uses base64, BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Sym
 
 var
   GDecalCache: TStringList = nil;
+  GLargeFastPaths: Integer = 0;
+
+function TyAdvChartLargeFastPathsForTest: Integer;
+begin
+  Result := GLargeFastPaths;
+end;
 
 { [F6a] A PICTURE DRAWN INTO ITS CORNERS: ACorners the image's top-left,
   top-right, bottom-right and bottom-left in device px (a shape's
@@ -135,7 +146,10 @@ begin
     - (ACorners[1].Y - ACorners[0].Y) * (ACorners[3].X - ACorners[0].X)) < 1e-9 then Exit;
   if IsNan(ACorners[0].X + ACorners[0].Y + ACorners[1].X + ACorners[1].Y
     + ACorners[3].X + ACorners[3].Y) then Exit;
-  ew := Sqrt(Sqr(ACorners[1].X - ACorners[0].X) + Sqr(ACorners[1].Y - ACorners[0].Y));
+  { the resolution for the raster's pixels: the device scale times the edge (#83);
+    the map below is from whatever size comes back }
+  ew := Sqrt(Sqr(ACorners[1].X - ACorners[0].X) + Sqr(ACorners[1].Y - ACorners[0].Y))
+    * P.DeviceScale;
   img := TyChartImage(ASource, ew, nw, nh);
   if (img = nil) or (img.Width <= 0) or (img.Height <= 0) then Exit;
   pm[0] := (ACorners[1].X - ACorners[0].X) / img.Width;
@@ -838,9 +852,11 @@ end;
   between the pixel centres, the segments chained into closed contours and
   traced on P in DEVICE px (the mask's (0, 0) at (AOX, AOY)). A contour is a
   glyph's outline as the painter drew the glyph -- which is what zrender
-  strokes: the text's own path. }
+  strokes: the text's own path. The mask holds AScale of its pixels per
+  device px -- P's device scale, the glyphs drawn on it as on P's layer
+  (#83) -- so a crossing is divided by it. }
 procedure TraceMaskOutline(P: TTyPainter; AMask: TBGRABitmap; AOX, AOY: Integer;
-  const ADashDevice: TTyDoubleArray);
+  const ADashDevice: TTyDoubleArray; AScale: Integer);
 const
   cT = 127.5;
 var
@@ -1039,8 +1055,8 @@ begin
     np := 1;
     SetLength(px, 16);
     SetLength(py, 16);
-    px[0] := ex[startKey] + AOX;
-    py[0] := ey[startKey] + AOY;
+    px[0] := ex[startKey] / AScale + AOX;
+    py[0] := ey[startKey] / AScale + AOY;
     key := segB[i];
     { follow the contour round to where it began }
     while key <> startKey do
@@ -1050,8 +1066,8 @@ begin
         SetLength(px, Length(px) * 2);
         SetLength(py, Length(px));
       end;
-      px[np] := ex[key] + AOX;
-      py[np] := ey[key] + AOY;
+      px[np] := ex[key] / AScale + AOX;
+      py[np] := ey[key] / AScale + AOY;
       Inc(np);
       seg := adj[key * 2];
       if (seg < 0) or used[seg] then seg := adj[key * 2 + 1];
@@ -1071,12 +1087,18 @@ begin
 end;
 
 { A PAINTER ON A MASK of AW x AH at P's PPI: the glyphs are drawn on it
-  exactly as on P, only moved by whole pixels }
+  exactly as on P, only moved by whole pixels. At P's device scale too: the
+  mask is that many times the size, its painter draws at that scale, and the
+  outline traced from it is as fine as the glyphs on P's layer (#83). }
 function MaskPainter(P: TTyPainter; AW, AH: Integer; out AMask: TBGRABitmap): TTyPainter;
+var
+  sc: TTyCanvasScale;
 begin
-  AMask := TBGRABitmap.Create(AW, AH, BGRAPixelTransparent);
+  sc.Scale := P.DeviceScale;
+  sc.DeviceUnits := False;
+  AMask := TBGRABitmap.Create(AW * sc.Scale, AH * sc.Scale, BGRAPixelTransparent);
   Result := TTyPainter.Create;
-  Result.BeginPaintOn(nil, Rect(0, 0, AW, AH), P.PPI, AMask);
+  Result.BeginPaintOnScaled(nil, Rect(0, 0, AW, AH), P.PPI, AMask, sc);
 end;
 
 { the stroke along the mask's contours, under the glyphs: one path, so
@@ -1100,7 +1122,7 @@ begin
     else
       pat := nil;
     P.BeginPath;
-    TraceMaskOutline(P, AMask, AOX, AOY, pat);
+    TraceMaskOutline(P, AMask, AOX, AOY, pat, P.DeviceScale);
     P.StrokePath(AColour, AWidthLogical);
     P.BeginPath;
   finally
@@ -1352,7 +1374,8 @@ begin
     mw := Round(b.Right) - Round(b.Left) + 2 * m;
     mh := Round(b.Bottom) - Round(b.Top) + 2 * m;
   end;
-  if (mw <= 0) or (mh <= 0) or (mw > 8192) or (mh > 8192) then Exit;
+  { the mask's own pixels are the device scale times these (MaskPainter) }
+  if (mw <= 0) or (mh <= 0) or (mw * P.DeviceScale > 8192) or (mh * P.DeviceScale > 8192) then Exit;
   mp := MaskPainter(P, mw, mh, mask);
   try
     DrawCaptionAt(mp, AElement, TTyColor($FFFFFFFF), -ox, -oy);
@@ -1519,6 +1542,8 @@ var
           devW := nw * P.PPI / 96
         else
           devW := 0;
+        { for the raster's pixels (#83); the matrix below maps whichever comes back }
+        devW := devW * P.DeviceScale;
         img := TyChartImage(AElement.Style.FillPattern.Image, devW, nw, nh);
         if img <> nil then
         begin
@@ -1591,29 +1616,35 @@ var
     twice, once under the decal and once over it. Only where the element
     fills: `fill = style.fill ? style.decal : null`. }
   procedure PaintDecal;
-  var tile: TBGRABitmap;
+  var tile: TBGRABitmap; di: Integer;
   begin
     if not (AElement.Style.Decal.Present and AElement.Style.HasFill) then Exit;
     { the fill rule here too: a large batch reaches this without PaintTraced }
     if AElement.Style.FillEvenOdd then rule := tfrEvenOdd else rule := tfrNonZero;
-    tile := TyDecalTileImage(AElement.Style.Decal, P.PPI / 96);
+    { the tile made for the raster -- upstream's dpr: the PPI's and the device
+      scale's (#83) -- and laid one tile pixel to one raster pixel: the matrix
+      maps it to device px, so 1/S of them }
+    tile := TyDecalTileImage(AElement.Style.Decal, P.PPI / 96 * P.DeviceScale);
     P.BeginPath;
     TyTraceShape(P, AElement.Shape);
     if tile <> nil then
     begin
       TyDecalMatrix(AElement.Style.Decal, P.PPI / 96, pm);
+      for di := 0 to 3 do pm[di] := pm[di] / P.DeviceScale;
       P.FillPathPattern(tile, 'repeat', pm, rule);
     end;
     PaintPen;
   end;
 
-  { the canvas draws in the bitmap's own pixels: no transform in force }
+  { no transform in force but the device scale's preset (#83): device px
+    times the scale are the bitmap's own pixels }
   function IdentityMatrix: Boolean;
-  var m: TAffineMatrix;
+  var m: TAffineMatrix; s: Double;
   begin
     m := P.Bitmap.Canvas2D.matrix;
-    Result := (m[1, 1] = 1) and (m[1, 2] = 0) and (m[1, 3] = 0)
-      and (m[2, 1] = 0) and (m[2, 2] = 1) and (m[2, 3] = 0);
+    s := P.DeviceScale;
+    Result := (m[1, 1] = s) and (m[1, 2] = 0) and (m[1, 3] = 0)
+      and (m[2, 1] = 0) and (m[2, 2] = s) and (m[2, 3] = 0);
   end;
 
   { A LARGE BATCH IS PAINTED IN TILES, not as one path. BGRA's scanline
@@ -1644,9 +1675,10 @@ var
       and (Length(AElement.Style.DashLogical) = 0);
   end;
 
-  { a lines row as layer points: its own, or its quadratic in 16 steps }
+  { a lines row as layer points: its own, or its quadratic in 16 steps;
+    AScl the layer's pixels per device px }
   function LinesRowPoints(const AG: TTyLargeGeom; ARow: Integer;
-    AOX, AOY: Double): ArrayOfTPointF;
+    AOX, AOY, AScl: Double): ArrayOfTPointF;
   var first, cnt, k: Integer; cx, cy, t, u: Double;
   begin
     Result := nil;
@@ -1658,14 +1690,14 @@ var
       begin
         t := k / 16;
         u := 1 - t;
-        Result[k] := PointF(u * u * AG.Pts[first] + 2 * u * t * cx + t * t * AG.Pts[first + 2] - AOX,
-          u * u * AG.Pts[first + 1] + 2 * u * t * cy + t * t * AG.Pts[first + 3] - AOY);
+        Result[k] := PointF((u * u * AG.Pts[first] + 2 * u * t * cx + t * t * AG.Pts[first + 2]) * AScl - AOX,
+          (u * u * AG.Pts[first + 1] + 2 * u * t * cy + t * t * AG.Pts[first + 3]) * AScl - AOY);
       end;
       Exit;
     end;
     SetLength(Result, cnt);
     for k := 0 to cnt - 1 do
-      Result[k] := PointF(AG.Pts[first + k * 2] - AOX, AG.Pts[first + k * 2 + 1] - AOY);
+      Result[k] := PointF(AG.Pts[first + k * 2] * AScl - AOX, AG.Pts[first + k * 2 + 1] * AScl - AOY);
   end;
 
   procedure PaintLargeOnLayer(AStroke: Boolean);
@@ -1674,7 +1706,7 @@ var
     spec: TTySymbolSpec;
     bmp, layer: TBGRABitmap;
     n, i, j, op: Integer;
-    x0, y0, x1, y1, bx0, by0, bx1, by1, ox, oy, w, h, r, pen, reach: Double;
+    x0, y0, x1, y1, bx0, by0, bx1, by1, ox, oy, w, h, r, pen, reach, s: Double;
     any: Boolean;
     area: TRect;
     c: TBGRAPixel;
@@ -1700,11 +1732,15 @@ var
     end;
 
   begin
+    Inc(GLargeFastPaths);
     g := AElement.Shape.Large;
     spec := LargeSymbolSpec(g);
     bmp := P.Bitmap;
     n := LargeRowCount(g);
-    if AStroke then pen := AElement.Style.StrokeWidthLogical * P.PPI / 96
+    { ON THE LAYER: its pixels are the device scale times device px (#83) --
+      every coordinate, size and pen below is in them }
+    s := P.DeviceScale;
+    if AStroke then pen := AElement.Style.StrokeWidthLogical * P.PPI / 96 * s
     else pen := 0;
     reach := 2 + pen / 2;
     { the extent actually drawn, cut to the bitmap's clip and the element's }
@@ -1713,6 +1749,7 @@ var
     for i := 0 to n - 1 do
     begin
       if not LargeRowBox(g, i, x0, y0, x1, y1) then Continue;
+      x0 := x0 * s; y0 := y0 * s; x1 := x1 * s; y1 := y1 * s;
       if not any then
       begin
         bx0 := x0; by0 := y0; bx1 := x1; by1 := y1;
@@ -1729,10 +1766,10 @@ var
     if not any then Exit;
     area := bmp.ClipRect;
     if AElement.HasClip then
-      area := Rect(Max(area.Left, Floor(AElement.ClipRect.Left)),
-        Max(area.Top, Floor(AElement.ClipRect.Top)),
-        Min(area.Right, Ceil(AElement.ClipRect.Right)),
-        Min(area.Bottom, Ceil(AElement.ClipRect.Bottom)));
+      area := Rect(Max(area.Left, Floor(AElement.ClipRect.Left * s)),
+        Max(area.Top, Floor(AElement.ClipRect.Top * s)),
+        Min(area.Right, Ceil(AElement.ClipRect.Right * s)),
+        Min(area.Bottom, Ceil(AElement.ClipRect.Bottom * s)));
     { the antialiased edge and half the pen; far off the bitmap is no matter }
     if bx0 - reach > area.Left then area.Left := Floor(bx0 - reach);
     if by0 - reach > area.Top then area.Top := Floor(by0 - reach);
@@ -1754,13 +1791,14 @@ var
       for i := 0 to n - 1 do
       begin
         if not LargeRowBox(g, i, x0, y0, x1, y1) then Continue;
+        x0 := x0 * s; y0 := y0 * s; x1 := x1 * s; y1 := y1 * s;
         if (x1 < area.Left - reach) or (x0 > area.Right + reach)
           or (y1 < area.Top - reach) or (y0 > area.Bottom + reach) then Continue;
         if g.Kind = lgkCandle then
         begin
           if AStroke then
-            layer.DrawLineAntialias(x0 - ox, g.Pts[i * 4 + 2] - oy, x0 - ox,
-              g.Pts[i * 4 + 3] - oy, c, pen, False);
+            layer.DrawLineAntialias(x0 - ox, g.Pts[i * 4 + 2] * s - oy, x0 - ox,
+              g.Pts[i * 4 + 3] * s - oy, c, pen, False);
           Continue;
         end;
         { a lines row: its polyline, a curve sampled [Batch 121] }
@@ -1768,7 +1806,7 @@ var
         begin
           if AStroke then
           begin
-            pts := LinesRowPoints(g, i, ox, oy);
+            pts := LinesRowPoints(g, i, ox, oy, s);
             if Length(pts) >= 2 then PinnedPoly(0);
           end;
           Continue;
@@ -1779,8 +1817,8 @@ var
           else layer.FillRectAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, c);
           Continue;
         end;
-        w := g.SymW;
-        h := g.SymH;
+        w := g.SymW * s;
+        h := g.SymH * s;
         case TTySymbolKind(g.SymKind) of
           tsyNone, tsyImage: ;
           tsyCircle:
@@ -1809,12 +1847,13 @@ var
             end;
         else
           begin
-            sub := TyBuildSymbolInBox(spec, TyRectF(x0, y0, x1, y1));
+            { the symbol built in its device-px box, then onto the layer }
+            sub := TyBuildSymbolInBox(spec, TyRectF(x0 / s, y0 / s, x1 / s, y1 / s));
             if (sub.Kind in [cskPolygon, cskPolyline]) and (Length(sub.Points) >= 2) then
             begin
               SetLength(pts, Length(sub.Points));
               for j := 0 to High(sub.Points) do
-                pts[j] := PointF(sub.Points[j].X - ox, sub.Points[j].Y - oy);
+                pts[j] := PointF(sub.Points[j].X * s - ox, sub.Points[j].Y * s - oy);
               if AStroke then
               begin
                 if sub.Kind = cskPolyline then PinnedPoly(0)
@@ -1838,7 +1877,7 @@ var
     spec: TTySymbolSpec;
     bmp: TBGRABitmap;
     n, i, j, tx, ty, tx0, tx1, ty0, ty1, nx, ny, t, tile, k: Integer;
-    x0, y0, x1, y1, margin: Double;
+    x0, y0, x1, y1, margin, s: Double;
     counts, starts, rows: array of Integer;
     old, r: TRect;
 
@@ -1855,6 +1894,7 @@ var
     end;
 
   begin
+    Inc(GLargeFastPaths);
     g := AElement.Shape.Large;
     spec := LargeSymbolSpec(g);
     bmp := P.Bitmap;
@@ -1863,8 +1903,10 @@ var
     if (n = 0) or (bmp.Width <= 0) or (bmp.Height <= 0) then Exit;
     nx := (bmp.Width + tile - 1) div tile;
     ny := (bmp.Height + tile - 1) div tile;
-    { the antialiased edge and the pen reach past the shape }
-    margin := 2 + Max(Double(0), AElement.Style.StrokeWidthLogical) * P.PPI / 96;
+    { the tiles are the layer's pixels, the device scale times device px
+      (#83); the antialiased edge and the pen reach past the shape }
+    s := P.DeviceScale;
+    margin := 2 + Max(Double(0), AElement.Style.StrokeWidthLogical) * P.PPI / 96 * s;
     SetLength(counts, nx * ny);
     SetLength(starts, nx * ny + 1);
     for t := 0 to nx * ny - 1 do counts[t] := 0;
@@ -1880,6 +1922,7 @@ var
       for i := 0 to n - 1 do
       begin
         if not LargeRowBox(g, i, x0, y0, x1, y1) then Continue;
+        x0 := x0 * s; y0 := y0 * s; x1 := x1 * s; y1 := y1 * s;
         if not Span(x0, x1, bmp.Width, tx0, tx1) then Continue;
         if not Span(y0, y1, bmp.Height, ty0, ty1) then Continue;
         for ty := ty0 to ty1 do

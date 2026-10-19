@@ -163,9 +163,11 @@ type
     procedure PaintBody(APainter: TTyPainter; const ARect, ASpan: TRect;
       const AStyle: TTyStyleSet);
     { 条身单独画到一张**透明**位图上,调用方负责释放。淡出/贴边两条路都要先有这一层,
-      再按可见度合成到底下真实的背景上。底色铺满 ARect,条自己的边框/焦点环和条身按 ASpan。 }
+      再按可见度合成到底下真实的背景上。底色铺满 ARect,条自己的边框/焦点环和条身按 ASpan。
+      AScale 是要合成上去的那个画家的设备倍率:位图按光栅尺寸建(ARect 的 AScale 倍),
+      合成时逐像素落下,不被放大(#83)。 }
     function RenderBodyLayer(const ARect, ASpan: TRect; const AStyle: TTyStyleSet;
-      APPI: Integer): TBGRABitmap;
+      APPI, AScale: Integer): TBGRABitmap;
     { 贴边内嵌条的整套绘制:宿主背景 -> 条身(按 AAlpha 合成、裁进宿主的底色形状)->
       宿主的边框与焦点环。见 RenderTo。 }
     procedure RenderOverHostFrame(APainter: TTyPainter; const ARect: TRect;
@@ -1464,20 +1466,26 @@ begin
 end;
 
 function TTyCustomScrollBar.RenderBodyLayer(const ARect, ASpan: TRect; const AStyle: TTyStyleSet;
-  APPI: Integer): TBGRABitmap;
+  APPI, AScale: Integer): TBGRABitmap;
 var
   B: TTyPainter;
+  sc: TTyCanvasScale;
 begin
   { 位图是这里建、调用方释放的,所以走 BeginPaintOn:EndPaint 既不释放它,也没有画布可
     blit(画布是 nil)。条自己的底色/边框/焦点环走的是 DrawFrame 的后两段,**不含**父背景
     —— 这一层的透明处必须透出底下真实的背景,那正是分层的意义。
     底色铺满整条:贴边侧宿主框占掉的那几列里,框线沾到的像素反正要被换回宿主的,沾不到的
-    (某些 DPI 下让开的那一圈比墨宽)就该是滑道,而不是一道宿主底色的细缝。 }
-  Result := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top,
-    BGRAPixelTransparent);
+    (某些 DPI 下让开的那一圈比墨宽)就该是滑道,而不是一道宿主底色的细缝。
+    没有画布可问倍率,所以倍率由调用方给(BeginPaintOnScaled):这一层要按它合成上去的
+    那个光栅画(#83)。 }
+  if AScale < 1 then AScale := 1;
+  Result := TBGRABitmap.Create((ARect.Right - ARect.Left) * AScale,
+    (ARect.Bottom - ARect.Top) * AScale, BGRAPixelTransparent);
+  sc.Scale := AScale;
+  sc.DeviceUnits := False;
   B := TTyPainter.Create;
   try
-    B.BeginPaintOn(nil, ARect, APPI, Result);
+    B.BeginPaintOnScaled(nil, ARect, APPI, Result, sc);
     TyDrawFrameUnderlay(B, ARect, AStyle);
     TyDrawFrameChrome(Self, B, ASpan, AStyle);
     PaintBody(B, ARect, ASpan, AStyle);
@@ -1496,6 +1504,7 @@ var
   origin: TPoint;
   frame, ink, clip, body: TBGRABitmap;
   L: TTyPainter;
+  sc: TTyCanvasScale;
   w, h, x, y, band, radius: Integer;
   pd, pf, pk, pb, pc: PBGRAPixel;
 begin
@@ -1506,8 +1515,12 @@ begin
     RTL 下竖条停在左边,Left = 0,于是这里画出来的自然是宿主的**左**边和左边两个角。 }
   origin := Point(-Left, -Top);
   hostR := Rect(origin.X, origin.Y, origin.X + host.Width, origin.Y + host.Height);
-  w := ARect.Right - ARect.Left;
-  h := ARect.Bottom - ARect.Top;
+  { 下面三层位图和两段逐像素循环都在 APainter 的**光栅**上:设备倍率 S 下是布局尺寸的 S 倍。
+    几何(hostR、span、band)仍是布局像素,由各个画家自己乘上去(#83)。 }
+  sc.Scale := APainter.DeviceScale;
+  sc.DeviceUnits := False;
+  w := (ARect.Right - ARect.Left) * sc.Scale;
+  h := (ARect.Bottom - ARect.Top) * sc.Scale;
 
   { 条身看得见的那一截。条的哪条边贴着宿主外沿,那条边就让开宿主框**此刻**占掉的那一圈
     (TyChromeInsetLogical:边框或焦点环取宽的那个,再加一列抗锯齿;宿主获得焦点时大一档,
@@ -1561,13 +1574,13 @@ begin
   try
     { frame = 底层 + 框线:宿主自己在这几个像素上画出来的东西,逐字节。 }
     frame := APainter.Bitmap.Duplicate as TBGRABitmap;
-    L.BeginPaintOn(nil, ARect, APainter.PPI, frame);
+    L.BeginPaintOnScaled(nil, ARect, APainter.PPI, frame, sc);
     TyDrawFrameChrome(host, L, hostR, hs);
     L.EndPaint;
     { ink = 框线单独画在透明底上:alpha > 0 的像素就是框线(边框、焦点环、有阴影时角外的
       缺口)沾到的像素。 }
     ink := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
-    L.BeginPaintOn(nil, ARect, APainter.PPI, ink);
+    L.BeginPaintOnScaled(nil, ARect, APainter.PPI, ink, sc);
     TyDrawFrameChrome(host, L, hostR, hs);
     L.EndPaint;
     { clip = 宿主底色的形状。用 underlay 本身来画(换成不透明的纯色、去掉阴影),圆角怎么
@@ -1579,7 +1592,7 @@ begin
     Include(clipStyle.Present, tpBackground);
     Exclude(clipStyle.Present, tpShadow);
     clip := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
-    L.BeginPaintOn(nil, ARect, APainter.PPI, clip);
+    L.BeginPaintOnScaled(nil, ARect, APainter.PPI, clip, sc);
     TyDrawFrameUnderlay(L, hostR, clipStyle);
     L.EndPaint;
 
@@ -1590,7 +1603,7 @@ begin
       是宿主轮廓的一部分,宿主在那儿画的是「父背景和底色各占几成」。实测圆角上它会落在边框
       外沿**外面**(底色的弧比边框描边的弧往外多出零点几个像素),框线没沾到,按比例留条身
       的话条身就把宿主的轮廓染了一层灰。 }
-    body := RenderBodyLayer(ARect, span, bodyStyle, APainter.PPI);
+    body := RenderBodyLayer(ARect, span, bodyStyle, APainter.PPI, sc.Scale);
     for y := 0 to h - 1 do
     begin
       pb := body.ScanLine[y];
@@ -1672,7 +1685,7 @@ begin
     begin
       { 独立摆放、淡出途中:父背景的真切片 + 条身按可见度合成上去。 }
       TyFillParentBg(Self, P, R, S);
-      body := RenderBodyLayer(R, R, S, APPI);
+      body := RenderBodyLayer(R, R, S, APPI, P.DeviceScale);
       try
         P.Bitmap.PutImage(0, 0, body, dmLinearBlend, Round(alpha * 255));
       finally
