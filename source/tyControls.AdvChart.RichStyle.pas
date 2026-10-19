@@ -540,10 +540,17 @@ begin
     SpreadPadding(Get(AOwn, 'padding'), S);
     if NumOf(Get(AOwn, 'borderWidth'), x) then S.BorderWidth := x;
     SpreadRadius(Get(AOwn, 'borderRadius'), S);
-    case ColourRead(Get(AOwn, 'backgroundColor'), c) of
-      crColour: begin S.HasBackground := True; S.Background := c; end;
-      crInherit: S.BackgroundInherit := True;
-    end;
+    { [R2-F] backgroundColor: {image: src}: a picture (isImageBg) }
+    d := Get(AOwn, 'backgroundColor');
+    if (d is TJSONObject) and (TJSONObject(d).Find('image') <> nil)
+      and (TJSONObject(d).Find('image').JSONType = jtString)
+      and (TJSONObject(d).Find('image').AsString <> '') then
+      S.BgImage := TJSONObject(d).Find('image').AsString
+    else
+      case ColourRead(d, c) of
+        crColour: begin S.HasBackground := True; S.Background := c; end;
+        crInherit: S.BackgroundInherit := True;
+      end;
     case ColourRead(Get(AOwn, 'borderColor'), c) of
       crColour: begin S.HasBorderColor := True; S.BorderColor := c; end;
       crInherit: S.BorderColorInherit := True;

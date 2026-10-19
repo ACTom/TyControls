@@ -1653,6 +1653,31 @@ begin
   end;
 end;
 
+{ [R2-F] a rich box's picture (backgroundColor: {image}): a ZRImage of the
+  box -- its corners through the text's anchor and turn -- drawn like any
+  picture element (PaintImageInto), at AAlpha }
+procedure RtPicture(P: TTyPainter; const APiece: TTyRtPiece; AX, AY, ARotationRad,
+  AScale, AAlpha: Double);
+var
+  c: TTyPointFArray;
+  i: Integer;
+begin
+  SetLength(c, 4);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X, APiece.Y, c[0].X, c[0].Y);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X + APiece.W, APiece.Y, c[1].X, c[1].Y);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X + APiece.W, APiece.Y + APiece.H, c[2].X, c[2].Y);
+  TyRtPoint(AX, AY, ARotationRad, AScale, APiece.X, APiece.Y + APiece.H, c[3].X, c[3].Y);
+  for i := 0 to 3 do
+    if IsNan(c[i].X) or IsNan(c[i].Y) then Exit;
+  P.SaveState;
+  try
+    if AAlpha < 1 then P.SetElementAlpha(Max(0.0, AAlpha));
+    PaintImageInto(P, APiece.Image, c);
+  finally
+    P.RestoreState;
+  end;
+end;
+
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
@@ -1674,6 +1699,29 @@ begin
     if pc.Kind = rpkRect then
     begin
       if not pc.Drawn then Continue;
+      { [R2-F] the box's picture, over the rect's border }
+      if pc.Image <> '' then
+      begin
+        P.SaveState;
+        try
+          if a < 1 then P.SetElementAlpha(a);
+          P.SetLineDash([]);
+          P.Translate(AX, AY);
+          if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
+          for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;
+          if pc.HasStroke then
+          begin
+            P.BeginPath;
+            TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
+              pc.H * AScale, radii);
+            P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
+          end;
+        finally
+          P.RestoreState;
+        end;
+        RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity * AAlpha);
+        Continue;
+      end;
       P.SaveState;
       try
         if a < 1 then P.SetElementAlpha(a);

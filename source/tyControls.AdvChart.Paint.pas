@@ -265,6 +265,10 @@ type
     Padding: array[0..3] of Double;   // top, right, bottom, left
     HasBackground: Boolean;
     Background: TTyChartColor;
+    { [R2-F] backgroundColor: {image}: the picture's source ('' none) --
+      a ZRImage over the box, the box's own rect only for a lineHeight or a
+      border (Text.ts _renderBackground) }
+    BgImage: string;
     HasBorderColor: Boolean;
     BorderColor: TTyChartColor;
     BorderWidth: Double;
@@ -329,6 +333,11 @@ type
     StrokeFirst: Boolean;
     Radius: array[0..3] of Double;
     Opacity: Double;
+    { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the
+      rect's border, at ImageOpacity: the style's opacity where the picture
+      is the box's only element, else zrender's own 1 }
+    Image: string;
+    ImageOpacity: Double;
     Text: string;
     TextAlign: TTyRtAlign;     // left/center/right; the baseline is middle
     FontFamily: string;

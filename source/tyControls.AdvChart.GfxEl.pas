@@ -1827,7 +1827,11 @@ begin
   begin
     R.HasBackground := True;
     R.Background := c;
-  end;
+  end
+  { [R2-F] {image: src}: a picture over the box }
+  else if (d is TJSONObject) and (TJSONObject(d).Find('image') <> nil)
+    and (TJSONObject(d).Find('image').JSONType = jtString) then
+    R.BgImage := TJSONObject(d).Find('image').AsString;
   d := S.Find('borderColor');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
   begin
