@@ -10,7 +10,7 @@ unit test.advchart.catalog;
   digest can see a value edited inside the generated file, since both constants
   live in that same file. Hence the third, over the data section. }
 interface
-uses Classes, SysUtils, sha1, fpjson, jsonparser, fpcunit, testregistry,
+uses Classes, SysUtils, StrUtils, zstream, sha1, fpjson, jsonparser, fpcunit, testregistry,
      tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
      tyControls.AdvChart.Option;
 type
@@ -54,6 +54,7 @@ type
     procedure TestAnObjectTheCatalogGivesNoKeysIsNotJudged;
     procedure TestEncodeTakesAnyDimensionName;
     procedure TestTheRuntimeListIsAcceptedAndOnlyIt;
+    procedure TestATreesNodeCarriesTheAuthorsFields;
     procedure TestEnumValuesTheRuntimeAcceptsAreAccepted;
     procedure TestAnArrayIsNotCheckedAgainstItsStringFormsEnum;
     procedure TestTheRuntimeListStillNeedsToExist;
@@ -65,6 +66,31 @@ function TAdvChartCatalogTest.RepoRoot: string;
 begin
   { The test exe lives in tests/. Same idiom as test.designregistry. }
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+end;
+
+{ a gzipped gallery file's text }
+function ReadGz(const AFile: string): string;
+var
+  gz: TGZFileStream;
+  ss: TStringStream;
+  buf: array[0..65535] of Byte;
+  n: Integer;
+begin
+  ss := TStringStream.Create('');
+  try
+    gz := TGZFileStream.Create(AFile, gzOpenRead);
+    try
+      repeat
+        n := gz.Read(buf, SizeOf(buf));
+        if n > 0 then ss.WriteBuffer(buf, n);
+      until n <= 0;
+    finally
+      gz.Free;
+    end;
+    Result := ss.DataString;
+  finally
+    ss.Free;
+  end;
 end;
 
 function IssuesOf(const AText: string): string;
@@ -751,6 +777,24 @@ begin
     '{ toolbox: { feature: { mark: { show: true } } }, calculable: true }'));
 end;
 
+{ [R2-J] a tree's, a treemap's, a sunburst's node is kept whole and handed
+  back to the formatters: a field of the author's own on it is not an
+  unknown option, nested to any depth -- but a known key in the wrong case
+  is still a typo, and any other series' data item is still checked }
+procedure TAdvChartCatalogTest.TestATreesNodeCarriesTheAuthorsFields;
+begin
+  AssertEquals('', IssuesOf(
+    '{ series: [{ type: ''treemap'', data: [{ name: ''a'', value: 1, path: ''a'','
+    + ' children: [{ name: ''b'', value: 2, path: ''a/b'', size: 3 }] }] },'
+    + ' { type: ''sunburst'', data: [{ name: ''x'', discretion: 1 }] },'
+    + ' { type: ''tree'', data: [{ name: ''r'', note: ''n'' }] }] }'));
+  AssertEquals('series[0].data[0].nmae series[0].data[0].children[0].ItemStyle', IssuesOf(
+    '{ series: [{ type: ''treemap'', data: [{ nmae: ''a'','
+    + ' children: [{ name: ''b'', value: 2, ItemStyle: { color: ''red'' } }] }] }] }'));
+  AssertEquals('series[0].data[0].path', IssuesOf(
+    '{ series: [{ type: ''pie'', data: [{ value: 1, path: ''a'' }] }] }'));
+end;
+
 procedure TAdvChartCatalogTest.TestEnumValuesTheRuntimeAcceptsAreAccepted;
 begin
   AssertEquals('', IssuesOf(
@@ -830,7 +874,7 @@ const
     of `children[].` is folded to one, so a key reported at every depth of a
     tree is one entry. Every one of these is a key ECharts 6.1 does not read
     where it is written, so saying nothing would be the lie. }
-  cKnown: array[0..27] of string = (
+  cKnown: array[0..24] of string = (
     'toolbox.feature.mark',            // no such feature since ECharts 3
     'calculable',                      // ECharts 2
     'bmap',                            // the Baidu-map extension, not core
@@ -845,17 +889,16 @@ const
     'series[].label.margin',           // pie: edgeDistance since 5
     'series[].emphasis.label.position',// FunnelView.ts:116, position is not used
     'title[].width', 'title.textStyle.align', // title: unread / textAlign wins
-    'series[].data[].path',            // treemap: unread
-    'series[].data[].children[].path',
-    'series[].data[].children[].discretion', // in no upstream source
+    { [R2-J: a treemap's own `path`, `discretion` and `size` left the list --
+      a tree's node is the author's record, kept whole and handed back as
+      params.data; see IsTreeNodeRecord] }
     'tooltip.axisPointer.show',        // modelHelper.ts:241 copies other fields
+    { [R2-J] a piecewise visualMap reads neither: only ContinuousView drags
+      (heatmap-large-piecewise, parallel-nutrients, scatter-nutrients) }
+    'visualMap.realtime', 'visualMap[].realtime', 'visualMap.calculable',
     'series[].dimensions',             // lines: LinesSeries.ts:314 ignores it
-    'series[].data[].discretion',
     'series[].categories[].keyword',   // graph: the webkit dump's own fields,
     'series[].categories[].base',      // read by nothing upstream
-    { [T1] echarts-package-size.json's own field (treemap-sunburst-transition):
-      treemap and sunburst read `value` }
-    'series[].data[].size', 'series[].data[].children[].size',
     { [T1] pictorialBar-bar-transition writes its pictorialBar keys on the bar
       step too; a bar reads none of them }
     'series[].symbolRepeat', 'series[].symbolSize', 'series[].data[].symbol');
@@ -893,7 +936,9 @@ begin
       { [T1] and every step of a setOption sequence: the demo shows each of
         them, with these same notes under it }
       files.Clear;
-      files.Add(TJSONObject(arr.Items[i]).Get('id', '') + '.json');
+      { [R2-J] the entry's own file: three are gzipped }
+      files.Add(TJSONObject(arr.Items[i]).Get('file',
+        TJSONObject(arr.Items[i]).Get('id', '') + '.json'));
       if (TJSONObject(arr.Items[i]).Find('sequence') is TJSONObject)
         and (TJSONObject(TJSONObject(arr.Items[i]).Find('sequence')).Find('steps')
           is TJSONArray) then
@@ -907,8 +952,16 @@ begin
       for f := 0 to files.Count - 1 do
       begin
       id := ChangeFileExt(files[f], '');
-      sl.LoadFromFile(dir + files[f]);
-      text := sl.Text;
+      if AnsiEndsText('.gz', files[f]) then
+      begin
+        id := ChangeFileExt(id, '');
+        text := ReadGz(dir + files[f]);
+      end
+      else
+      begin
+        sl.LoadFromFile(dir + files[f]);
+        text := sl.Text;
+      end;
       AssertTrue(id + ' parses', opt.SetOptionText(text));
       issues := TyOptValidate(opt);
       for j := 0 to High(issues) do

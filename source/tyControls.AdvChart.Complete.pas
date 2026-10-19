@@ -943,7 +943,7 @@ const
     A key upstream does NOT read stays out of here and stays reported --
     toolbox.feature.mark, the root `calculable`, an inside dataZoom's
     `realtime` -- because saying nothing about it would be the lie. }
-  cRuntimeKeys: array[0..50] of TRuntimeKey = (
+  cRuntimeKeys: array[0..53] of TRuntimeKey = (
     { model/mixin/palette.ts:53 -- a series' own palette }
     (Parent: 'series-scatter'; Key: 'color'),
     { label/labelStyle.ts:551 }
@@ -1047,7 +1047,17 @@ const
     { coord/cartesian/Grid.ts:579 }
     (Parent: 'xAxis'; Key: 'gridId'),
     { coord/cartesian/Grid.ts:579 }
-    (Parent: 'yAxis'; Key: 'gridId')
+    (Parent: 'yAxis'; Key: 'gridId'),
+    { [R2-J] label/labelStyle.ts:757 -- a valueAnimation label's digits
+      (bar-race-country) }
+    (Parent: 'series-bar.label'; Key: 'precision'),
+    { [R2-J] model/Series.ts:555 isAnimationEnabled -- any series
+      (heatmap-large) }
+    (Parent: 'series-heatmap'; Key: 'animation'),
+    { [R2-J] component/axis/ParallelAxisView.ts:174, its default in
+      component/parallel/install.ts:40 -- what every parallel axis takes from
+      parallelAxisDefault (parallel-nutrients) }
+    (Parent: 'parallel.parallelAxisDefault'; Key: 'realtime')
   );
 
   { Enumerated values the runtime accepts beyond the documented list. }
@@ -1316,6 +1326,77 @@ begin
     or (AKey = 'symbolOffset') or (AKey = 'z');
 end;
 
+{ [R2-J] A TREE'S NODE IS THE AUTHOR'S RECORD. A tree, a treemap and a
+  sunburst build their hierarchy from the data items as written and keep each
+  one on its node (Tree.createTree's dataNode): the formatters, the events
+  and the breadcrumb hand it back whole as params.data / treePathInfo, which
+  is where the gallery's treemaps carry their own `path`, `size` and
+  `discretion` (treemap-disk, treemap-visual, treemap-sunburst-transition:
+  ninety-odd notes each). A key no node of the type knows is the author's
+  field there, not an unknown option -- unless it looks like a known key
+  misspelt (LooksLikeTypo: `nmae`, `ItemStyle`). Every other data item is
+  still held to the catalog: there an unknown key is far likelier a
+  misspelling. }
+var
+  GTreeNodeNodes: array of Integer;
+  GTreeNodesResolved: Boolean = False;
+
+function IsTreeNodeRecord(ANode: Integer): Boolean;
+const
+  cPaths: array[0..2] of string = ('series-tree.data', 'series-treemap.data',
+    'series-sunburst.data');
+var k: Integer;
+begin
+  if not GTreeNodesResolved then
+  begin
+    SetLength(GTreeNodeNodes, Length(cPaths));
+    for k := 0 to High(cPaths) do GTreeNodeNodes[k] := ElementNodeOf(cPaths[k]);
+    GTreeNodesResolved := True;
+  end;
+  Result := False;
+  if ANode < 0 then Exit;
+  for k := 0 to High(GTreeNodeNodes) do
+    if GTreeNodeNodes[k] = ANode then Exit(True);
+end;
+
+{ the optimal-string-alignment distance: Levenshtein's, with a swap of two
+  neighbours one edit (`nmae` is one from `name`) }
+function OsaDistance(const A, B: string): Integer;
+var
+  d: array of array of Integer;
+  i, j, cost: Integer;
+begin
+  SetLength(d, Length(A) + 1, Length(B) + 1);
+  for i := 0 to Length(A) do d[i, 0] := i;
+  for j := 0 to Length(B) do d[0, j] := j;
+  for i := 1 to Length(A) do
+    for j := 1 to Length(B) do
+    begin
+      if A[i] = B[j] then cost := 0 else cost := 1;
+      d[i, j] := Min(Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+      if (i > 1) and (j > 1) and (A[i] = B[j - 1]) and (A[i - 1] = B[j]) then
+        d[i, j] := Min(d[i, j], d[i - 2, j - 2] + 1);
+    end;
+  Result := d[Length(A), Length(B)];
+end;
+
+{ a known key of ANode, ignoring case, within a third of AKey's length (at
+  least one edit) }
+function LooksLikeTypo(ANode: Integer; const AKey: string): Boolean;
+var
+  edges: TTyOptEdgeArray;
+  k, limit: Integer;
+begin
+  Result := False;
+  limit := Length(AKey) div 3;
+  if limit < 1 then limit := 1;
+  edges := TyOptEdgesOf(ANode);
+  for k := 0 to High(edges) do
+    if (edges[k].Kind = oekProperty) and (edges[k].Name <> AKey)
+      and (OsaDistance(LowerCase(edges[k].Name), LowerCase(AKey)) <= limit) then
+      Exit(True);
+end;
+
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -1336,6 +1417,8 @@ begin
       { known to the runtime though not to the documentation: accepted, and
         not walked -- there is no schema for what is inside }
       if RuntimeKnows(ANode, key) then Continue;
+      { the author's own field on a tree's node [R2-J] }
+      if IsTreeNodeRecord(ANode) and not LooksLikeTypo(ANode, key) then Continue;
       AddIssue(C, oikUnknownOption, sub, '', '');
     end
     else if IsFreeFormKey(key) then
