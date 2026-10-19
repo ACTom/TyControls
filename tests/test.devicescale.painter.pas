@@ -13,7 +13,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes, BGRATransform,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base, test.danglingrefs;
 
 type
   TPainterDraw = procedure(P: TTyPainter; K: Integer) of object;
@@ -62,6 +62,7 @@ type
       not necessarily to the last bit of antialiasing. }
     procedure CheckClose(const AMsg: string; ADraw: TPainterDraw; ATolerance: Integer);
     function TestImagePath: string;
+    function PaintNineSliceAt(AScale: Integer; const APath: string): TBGRABitmap;
     function Backdrop: TBGRABitmap;
   protected
     procedure TearDown; override;
@@ -97,6 +98,7 @@ type
     procedure TestMeasuringStaysLayout;
     { Task 5: images, glass and glyph bitmaps. }
     procedure TestNineSlice;
+    procedure TestNineSliceKeepsTheCachedSource;
     procedure TestDrawImageFillModes;
     procedure TestFillImageSlice;
     procedure TestFillGlass;
@@ -855,6 +857,71 @@ begin
   f.ImagePath := TestImagePath;
   f.SliceInsets := Rect(4, 4, 4, 4);
   P.FillBackground(Rect(3 * K, 3 * K, 57 * K, 37 * K), f, 0);
+end;
+
+function TDeviceScalePainterTest.PaintNineSliceAt(AScale: Integer; const APath: string): TBGRABitmap;
+var
+  P: TTyPainter;
+begin
+  P := TTyPainter.Create;
+  try
+    if AScale > 1 then TyForceDeviceScaleForTest(AScale, True);
+    try
+      P.BeginPaint(nil, Rect(0, 0, 60, 40), 96);
+      P.NineSlice(Rect(2, 2, 58, 38), APath, Rect(4, 4, 4, 4), True);
+      Result := P.Bitmap.Duplicate as TBGRABitmap;
+      P.EndPaint;
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+{ On main NineSlice reads its picture from the painter's image cache (GetCachedImage), which
+  owns it. The 3.0 line resampled it for the device scale and freed the original -- the
+  cache's own bitmap there, a dangling entry from then on and a double free at exit. Freed
+  memory is poisoned (test.danglingrefs), so a second paint through the dangling entry reads
+  $7F... instead of the picture that happened to still be there. }
+procedure TDeviceScalePainterTest.TestNineSliceKeepsTheCachedSource;
+var
+  path: string;
+  img, oneBefore, twoFirst, twoAgain, oneAfter: TBGRABitmap;
+  x, y: Integer;
+begin
+  path := GetTempDir(False) + 'tydevicescale-ninekeep.png';   // no other test caches it
+  img := TBGRABitmap.Create(16, 16);
+  try
+    for y := 0 to 15 do
+      for x := 0 to 15 do
+        img.SetPixel(x, y, BGRA(255 - x * 16, y * 16, ((x * y) mod 5) * 50, 255));
+    img.SaveToFile(path);
+  finally
+    img.Free;
+  end;
+  oneBefore := nil;
+  twoFirst := nil;
+  twoAgain := nil;
+  oneAfter := nil;
+  try
+    oneBefore := PaintNineSliceAt(1, path);
+    BeginPoison;
+    try
+      twoFirst := PaintNineSliceAt(2, path);
+      twoAgain := PaintNineSliceAt(2, path);
+      oneAfter := PaintNineSliceAt(1, path);
+    finally
+      EndPoison;
+    end;
+    AssertSamePixels('S = 2 the second time as the first', twoFirst, twoAgain);
+    AssertSamePixels('S = 1 after S = 2 as before it', oneBefore, oneAfter);
+  finally
+    oneAfter.Free;
+    twoAgain.Free;
+    twoFirst.Free;
+    oneBefore.Free;
+  end;
 end;
 
 procedure TDeviceScalePainterTest.TestNineSlice;
