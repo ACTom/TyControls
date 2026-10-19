@@ -355,6 +355,11 @@ type
       UNITS, and they differ on purpose:
         * PATH COORDINATES are DEVICE px, Double. The chart's geometry layer has
           already converted values to device pixels; scaling again here is a bug.
+          ("Device px" throughout this block means PPI-scaled pixels -- the painter's
+          LAYOUT pixels in #83's terms. On a layer at a device scale the painter's
+          Canvas2D preset maps them to raster pixels; the entry points below that
+          step outside the matrix -- ResetTransform, FillPathPattern, PathContains,
+          DrawTextRotated -- map them themselves.)
         * WIDTHS, DASH LENGTHS and RADII are LOGICAL px, Double, and go through
           ScaleF, which does NOT round -- a 1 px axis line at 150 % must be 1.5
           device px, not the 2 the integer Scale() would give.
@@ -4814,7 +4819,11 @@ begin
     the way in and put back on the way out. }
   tex := TBGRAAffineBitmapTransform.Create(AImage, rx, ry, rfLinear);
   try
+    { AMatrix maps the image to layout pixels; the scanner works on the raster, which is
+      FScale times that (#83 -- the pattern is made with the transform reset, so the
+      Canvas2D preset does not apply here) }
     m := AffineMatrixTranslation(-0.5, -0.5)
+      * AffineMatrixScale(FScale, FScale)
       * AffineMatrix(AMatrix[0], AMatrix[2], AMatrix[4],
                      AMatrix[1], AMatrix[3], AMatrix[5])
       * AffineMatrixTranslation(0.5, 0.5);
@@ -4940,8 +4949,12 @@ begin
             begin
               { Stretch means ONE tile the size of the bounds, so the image is
                 resampled rather than repeated. Freed after the fill, because
-                the pattern holds the bitmap rather than copying it. }
-              scaled := img.Resample(bw, bh) as TBGRABitmap;
+                the pattern holds the bitmap rather than copying it. At a device
+                scale it is resampled to the RASTER size and the pattern is put
+                back by 1/S under the preset, so it lands pixel for pixel rather
+                than magnified (#83). }
+              scaled := img.Resample(bw * FScale, bh * FScale) as TBGRABitmap;
+              if FScale > 1 then ctx.scale(1 / FScale, 1 / FScale);
               pat := ctx.createPattern(scaled, 'no-repeat');
             end
             else
@@ -5009,7 +5022,8 @@ begin
   { SET, not assumed. isPointInPath reads this shared state, and leaving it
     alone made the answer depend on the last thing filled. }
   ctx.fillMode := VecFillMode(ARule);
-  Result := ctx.isPointInPath(AX, AY);
+  { the path's points went through the preset onto the raster; the point does not (#83) }
+  Result := ctx.isPointInPath(AX * FScale, AY * FScale);
 end;
 
 { ---- stroke state ---- }
@@ -5105,6 +5119,9 @@ procedure TTyPainter.ResetTransform;
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.resetTransform;
+  { back to the device scale's preset, not to the identity: callers' coordinates stay layout
+    pixels (#83). BGRA's resetTransform leaves the stroke matrix alone, so widths keep theirs. }
+  if FScale > 1 then FBmp.Canvas2D.scale(FScale, FScale);
 end;
 
 procedure TTyPainter.ClipPath(ARule: TTyFillRule);
@@ -5395,9 +5412,22 @@ procedure TTyPainter.DrawTextRotated(const AText, AFontName: string;
   AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
 var
   sz: TSize;
-  ca, sa, ox, oy, rx, ry: Double;
+  ca, sa, ox, oy, rx, ry, anchorX, anchorY: Double;
 begin
   if (FBmp = nil) or (AText = '') then Exit;
+  { drawn straight on the layer, so in the raster scope: the anchor in raster pixels, the
+    font at the raster PPI (#83) }
+  if RasterEnter then
+  begin
+    anchorX := AX * FScale;
+    anchorY := AY * FScale;
+  end
+  else
+  begin
+    anchorX := AX;
+    anchorY := AY;
+  end;
+  try
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
   sz := FBmp.TextSize(AText);
 
@@ -5423,8 +5453,11 @@ begin
   rx := ox * ca + oy * sa;
   ry := -ox * sa + oy * ca;
 
-  FBmp.TextOutAngle(AX + rx, AY + ry, Round(AAngleRad * 1800 / Pi),
+  FBmp.TextOutAngle(anchorX + rx, anchorY + ry, Round(AAngleRad * 1800 / Pi),
                     AText, TyColorToBGRA(AColor), taLeftJustify, FRightToLeft);
+  finally
+    RasterLeave;
+  end;
 end;
 
 initialization

@@ -25,6 +25,7 @@ type
     FDegRect, FDegMethod: Integer;
     FRtl: Boolean;   // DrawBoth begins its painters right-to-left
     FBackdrop: TBGRABitmap;   // a raster-sized backdrop for the glass/slice tests
+    FPattern: TBGRABitmap;    // the pattern-fill tests' tile
     function NewCanvas(AW, AH: Integer): TCanvas;
     function PixelAt(AX, AY: Integer): TBGRAPixel;
     { Draw the same thing twice and keep both layers. Scaled: S = 2 through the seam, layout
@@ -67,6 +68,11 @@ type
     procedure DrawPointerShapes(P: TTyPainter; K: Integer);
     procedure DrawStars(P: TTyPainter; K: Integer);
     procedure DrawFillThenPointer(P: TTyPainter; K: Integer);
+    procedure DrawAfterResetTransform(P: TTyPainter; K: Integer);
+    procedure DrawPatternFills(P: TTyPainter; K: Integer);
+    procedure DrawRotatedTexts(P: TTyPainter; K: Integer);
+    procedure DrawStretchedImagePath(P: TTyPainter; K: Integer);
+    function PatternImage: TBGRABitmap;
     { As CheckSame, but each channel may differ by up to ATolerance: Canvas2D drawn through
       the preset scale(2,2) and Canvas2D given doubled coordinates rasterise the same path, but
       not necessarily to the last bit of antialiasing. }
@@ -85,6 +91,12 @@ type
     procedure TestBeginPaintOnScaledDrawsAtTheGivenScale;
     procedure TestAKeptBitmapForgetsTheScale;
     procedure TestEndPaintLandsOnlyTheRectOfALargerBitmap;
+    { plan B Task 5: main's vector API at the device scale }
+    procedure TestResetTransformKeepsTheDeviceScale;
+    procedure TestFillPathPatternAtTheDeviceScale;
+    procedure TestPathContainsTakesLayoutPoints;
+    procedure TestDrawTextRotatedAtTheDeviceScale;
+    procedure TestFillPathWithStretchedImageAtTheDeviceScale;
     procedure TestScaleOneLeavesCanvas2DAlone;
     procedure TestDeviceUnitsLandOneToOne;
     procedure TestStretchIntoLayoutRect;
@@ -209,6 +221,7 @@ begin
   TyDeviceScaleRendering := True;
   FreeAndNil(FCanvasBmp);
   FreeAndNil(FBackdrop);
+  FreeAndNil(FPattern);
   inherited TearDown;
 end;
 
@@ -269,6 +282,111 @@ begin
     ref.Free;
     b.Free;
   end;
+end;
+
+function TDeviceScalePainterTest.PatternImage: TBGRABitmap;
+var
+  x, y: Integer;
+begin
+  { an 8 x 8 checker with a gradient, so a tile landing a pixel off shows }
+  if FPattern = nil then
+  begin
+    FPattern := TBGRABitmap.Create(8, 8);
+    for y := 0 to 7 do
+      for x := 0 to 7 do
+        if (x + y) mod 2 = 0 then
+          FPattern.SetPixel(x, y, BGRA(x * 30, 40, y * 30, 255))
+        else
+          FPattern.SetPixel(x, y, BGRA(250, 250 - x * 20, 30, 255));
+  end;
+  Result := FPattern;
+end;
+
+procedure TDeviceScalePainterTest.DrawAfterResetTransform(P: TTyPainter; K: Integer);
+begin
+  { the halo stroke's pattern in AdvChart.Render: a transform, a reset, then a path }
+  P.Translate(10 * K, 5 * K);
+  P.ResetTransform;
+  P.BeginPath;
+  P.RectPath(4 * K, 3 * K, 40 * K, 30 * K);
+  P.StrokePath(TyRGBA(200, 30, 60, 255), 2);
+  P.BeginPath;
+  P.CirclePath(48 * K, 20 * K, 8 * K);
+  P.FillPath(TyRGBA(30, 160, 90, 255));
+end;
+
+procedure TDeviceScalePainterTest.DrawPatternFills(P: TTyPainter; K: Integer);
+begin
+  P.BeginPath;
+  P.RectPath(2 * K, 2 * K, 28 * K, 38 * K);
+  P.FillPathPattern(PatternImage, 'repeat', [K, 0, 0, K, 0, 0]);
+  P.BeginPath;
+  P.RectPath(32 * K, 2 * K, 58 * K, 38 * K);
+  P.FillPathPattern(PatternImage, 'repeat', [1.5 * K, 0, 0, 1.5 * K, 3 * K, 1 * K]);
+end;
+
+procedure TDeviceScalePainterTest.DrawRotatedTexts(P: TTyPainter; K: Integer);
+begin
+  P.DrawTextRotated('Tilt', 'Segoe UI', 9, 400, TyRGBA(0, 0, 0, 255), 30 * K, 20 * K,
+    Pi / 4, taCenter, tlCenter);
+  P.DrawTextRotated('Up', 'Segoe UI', 9, 700, TyRGBA(20, 60, 200, 255), 8 * K, 36 * K,
+    Pi / 2, taLeftJustify, tlTop);
+end;
+
+procedure TDeviceScalePainterTest.DrawStretchedImagePath(P: TTyPainter; K: Integer);
+var
+  f: TTyFill;
+begin
+  f := Default(TTyFill);
+  f.Kind := tfkImage;
+  f.ImagePath := TestImagePath;
+  f.ImageMode := timStretch;
+  P.BeginPath;
+  P.RoundRectPath(4 * K, 4 * K, 56 * K, 36 * K, 6);
+  P.FillPathWith(f, Rect(4 * K, 4 * K, 56 * K, 36 * K));
+end;
+
+procedure TDeviceScalePainterTest.TestResetTransformKeepsTheDeviceScale;
+begin
+  CheckSame('a path after ResetTransform', @DrawAfterResetTransform);
+end;
+
+procedure TDeviceScalePainterTest.TestFillPathPatternAtTheDeviceScale;
+begin
+  CheckSame('pattern fills, plain and scaled', @DrawPatternFills);
+end;
+
+procedure TDeviceScalePainterTest.TestPathContainsTakesLayoutPoints;
+var
+  P: TTyPainter;
+begin
+  P := TTyPainter.Create;
+  try
+    TyForceDeviceScaleForTest(2, True);
+    try
+      P.BeginPaint(nil, Rect(0, 0, 80, 40), 96);
+      P.BeginPath;
+      P.RectPath(10, 10, 50, 30);
+      AssertTrue('inside, in layout pixels', P.PathContains(20, 20));
+      AssertTrue('near the right edge', P.PathContains(48, 28));
+      AssertFalse('right of the path (inside it if read as raster pixels)', P.PathContains(60, 20));
+      P.EndPaint;
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestDrawTextRotatedAtTheDeviceScale;
+begin
+  CheckSame('rotated text', @DrawRotatedTexts);
+end;
+
+procedure TDeviceScalePainterTest.TestFillPathWithStretchedImageAtTheDeviceScale;
+begin
+  CheckSame('an image stretched into a path', @DrawStretchedImagePath);
 end;
 
 procedure TDeviceScalePainterTest.TestEndPaintLandsOnlyTheRectOfALargerBitmap;
