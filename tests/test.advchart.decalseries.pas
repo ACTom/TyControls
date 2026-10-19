@@ -79,6 +79,7 @@ type
     procedure TestAHollowsGroundIsTheSkins;
     procedure TestAMapRegionPaintsItsDecal;
     procedure TestAListPictureInATileFollowsTheList;
+    procedure TestAReplacedListPictureIsFollowed;
   end;
 
 implementation
@@ -863,6 +864,80 @@ begin
       (p.blue > 200) and (p.red < 60));
   finally
     TyChartUnregisterImageList('decalTileList');
+    bmp.Free;
+    lst.Free;
+  end;
+end;
+
+{ [R2-I2] LCL'S Replace ANNOUNCES NOTHING (InternalReplace calls no Change):
+  the list's picture and a decal's tile over it follow it all the same, by
+  the picture's content }
+procedure TAdvChartDecalSeriesTest.TestAReplacedListPictureIsFollowed;
+var
+  lst: TImageList;
+  bmp: TBitmap;
+  d: TJSONData;
+  dec: TTyChartDecal;
+  tile, pic: TBGRABitmap;
+  p: TBGRAPixel;
+  nw, nh: Double;
+  s0, s1: string;
+
+  procedure Paint(AColor: TColor);
+  begin
+    bmp.Canvas.Brush.Color := AColor;
+    bmp.Canvas.FillRect(0, 0, 4, 4);
+  end;
+
+begin
+  lst := TImageList.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    lst.Width := 4;
+    lst.Height := 4;
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(4, 4);
+    Paint(clRed);
+    lst.Add(bmp, nil);
+    Paint(clLime);
+    lst.Add(bmp, nil);
+    TyChartRegisterImageList('replacedList', lst);
+    d := GetJSON('{"symbol":"image://replacedList/0","symbolKeepAspect":false,'
+      + '"dashArrayX":[8,8],"dashArrayY":[8,8]}');
+    try
+      dec := TyDecalResolve(TyDecalRawOf(d), 0);
+    finally
+      d.Free;
+    end;
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a tile', tile <> nil);
+    p := tile.GetPixel(3, 4);
+    AssertTrue(Format('red first (%d, %d, %d)', [p.red, p.green, p.blue]), (p.red > 200) and (p.blue < 60));
+    pic := TyChartImage('image://replacedList/0', 4, nw, nh);
+    AssertTrue('the picture', pic <> nil);
+    p := pic.GetPixel(1, 1);
+    AssertTrue(Format('the picture red (%d, %d, %d)', [p.red, p.green, p.blue]), (p.red > 200) and (p.blue < 60));
+    s0 := TyChartImageStamp('replacedList/0');
+    AssertEquals('the stamp holds while nothing changes', s0, TyChartImageStamp('replacedList/0'));
+    { Replace: no change announced }
+    Paint(clBlue);
+    lst.Replace(0, bmp, nil);
+    s1 := TyChartImageStamp('replacedList/0');
+    AssertTrue('the stamp moves with the content', s0 <> s1);
+    pic := TyChartImage('image://replacedList/0', 4, nw, nh);
+    AssertTrue('the picture again', pic <> nil);
+    p := pic.GetPixel(1, 1);
+    AssertTrue(Format('the picture blue (%d, %d, %d)', [p.red, p.green, p.blue]), (p.blue > 200) and (p.red < 60));
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a tile again', tile <> nil);
+    p := tile.GetPixel(3, 4);
+    AssertTrue(Format('the tile blue (%d, %d, %d)', [p.red, p.green, p.blue]), (p.blue > 200) and (p.red < 60));
+    { the other slot's picture is its own }
+    pic := TyChartImage('image://replacedList/1', 4, nw, nh);
+    p := pic.GetPixel(1, 1);
+    AssertTrue(Format('the other still green (%d, %d, %d)', [p.red, p.green, p.blue]), (p.green > 200) and (p.blue < 60));
+  finally
+    TyChartUnregisterImageList('replacedList');
     bmp.Free;
     lst.Free;
   end;
