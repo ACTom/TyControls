@@ -4130,6 +4130,9 @@ begin
       tb.Free;
     end;
   end
+  { [R2-G] the series' own, never the root's: a root selectedMode reaches
+    get(), but Series._innerSelect reads `option.selectedMode` and selects
+    nothing (root-inherit c-select) }
   else if node <> nil then FSel[s] := TySelNew(TySelModeOf(node.Find('selectedMode')))
   else FSel[s] := TySelNew(ssmOff);
   FSelInit[s] := True;

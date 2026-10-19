@@ -248,6 +248,7 @@ var
 
 var
   node: TJSONObject;
+  d: TJSONData;
   stackName, order: string;
   b: TTySeriesBinding;
   st: TTyDataStore;
@@ -287,7 +288,10 @@ begin
     node := SeriesNode(AOption, i);
     { `stack: ''` is not a stack. Upstream notes the compatibility reason for
       spelling that out rather than treating any string as a group. }
-    stackName := StringIn(node, 'stack');
+    { a root `stack` reaches every series: no type has a default [R2-G] }
+    d := TyGetShallowRoot(node, AOption.Root, 'stack');
+    stackName := '';
+    if (d <> nil) and (d.JSONType = jtString) then stackName := d.AsString;
     if stackName = '' then Continue;
 
     { THE CAPABILITY GATE. Upstream refuses a series with no stackable

@@ -77,6 +77,12 @@ type
       the whole viewport, which is why an ordinary pie is centred on the
       control and not on a grid. }
     Box: TTyBoxSpec;
+    { [R2-G] the six as getLayoutRect reads them -- what was written, else
+      the root's, else the default; 'auto' and a word that is no position
+      are not a number there, not the default. HasBoxRaw: the spec came
+      from an option (TyPieSpecOf), and the layout goes through it }
+    BoxRaw: TTyRawBox;
+    HasBoxRaw: Boolean;
     CentreX, CentreY: TTyBoxValue;
     Radius0, Radius1: TTyBoxValue;
     StartAngleDeg: Double;
@@ -486,6 +492,9 @@ begin
 
   { getBoxLayoutParams: the four edges default to 0, width and height to
     null -- a null or a key with no default reads the option root [F4c] }
+  Result.BoxRaw := TyBoxSpecRaw(Result.Box);
+  TyBoxRawClimbInto(Result.BoxRaw, node, AOption.Root);
+  Result.HasBoxRaw := True;
   Result.Box.Left := TyPieMeasureOf(TyBoxKeyClimb(node, AOption.Root, 'left', True),
     Result.Box.Left);
   Result.Box.Top := TyPieMeasureOf(TyBoxKeyClimb(node, AOption.Root, 'top', True),
@@ -701,6 +710,7 @@ function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
 var
   mask: TFPUExceptionMask;
   vr: TTyRectF;
+  view: TTyXYWH;
 begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
@@ -708,6 +718,14 @@ begin
     { getCircleLayout, layout.ts:225-251. The two bases are different and
       that is the whole point of doing it here rather than reusing the
       grid's solver. }
+    { [R2-G] getLayoutRect on the raw box, where the spec has one }
+    if ASpec.HasBoxRaw then
+    begin
+      view := TyGetLayoutRect(ASpec.BoxRaw, AViewport.Left, AViewport.Top,
+        AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top, []);
+      Result := PieLayoutOfImpl(ASpec, TyRectOfXYWH(view), view, AStore, ADim);
+      Exit;
+    end;
     vr := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
     Result := PieLayoutOfImpl(ASpec, vr, TyXYWHOfRect(vr), AStore, ADim);
   finally

@@ -955,17 +955,43 @@ begin
 end;
 
 function TTyAdvanceChart.SymbolFor(ASlot: Integer): TTySymbolSpec;
+const
+  cRootKeys: array[0..3] of string = ('symbol', 'symbolRotate', 'symbolKeepAspect',
+    'symbolOffset');
 var
   d: TJSONData;
-  node: TJSONObject;
+  node, under: TJSONObject;
+  k: Integer;
+  t: string;
 begin
   Result := TySymbolDefault('');
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
-  Result := TySymbolDefault(FBindings[ASlot].SeriesType);
+  t := FBindings[ASlot].SeriesType;
+  Result := TySymbolDefault(t);
   if FOption = nil then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if (d = nil) or not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
+  { THE OPTION ROOT UNDER THE SERIES [R2-G]: the series model's parent is
+    the GlobalModel, so a root symbolRotate, symbolKeepAspect or
+    symbolOffset reaches every series (no type has a default), and a root
+    symbol a scatter's (whose circle is seriesSymbolTask's fallback, not a
+    default); symbolSize every such type has }
+  if FOption.Root is TJSONObject then
+  begin
+    under := TJSONObject.Create;
+    try
+      for k := 0 to High(cRootKeys) do
+      begin
+        if (k = 0) and (t <> 'scatter') and (t <> 'effectScatter') then Continue;
+        d := TJSONObject(FOption.Root).Find(cRootKeys[k]);
+        if (d <> nil) and (d.JSONType <> jtNull) then under.Add(cRootKeys[k], d.Clone);
+      end;
+      if under.Count > 0 then Result := TySymbolSpecOf(under, Result);
+    finally
+      under.Free;
+    end;
+  end;
   Result := TySymbolSpecOf(node, Result);
 end;
 

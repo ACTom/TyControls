@@ -56,6 +56,9 @@ type
       size -- a real inset, unlike the pie's zero box, so a funnel does not
       reach the edges of the control. }
     Box: TTyBoxSpec;
+    { [R2-G] the box as getLayoutRect reads it (see TTyPieSpec.BoxRaw) }
+    BoxRaw: TTyRawBox;
+    HasBoxRaw: Boolean;
     MinSize, MaxSize: TTyBoxValue;
     { `min` and `max` are ABSENT from upstream's defaultOption, and the absence
       is load-bearing: min falls back to Min(dataMin, 0) and max to dataMax,
@@ -312,6 +315,9 @@ begin
 
   { getBoxLayoutParams: the four edges have defaults, width and height
     none -- a null or a key with no default reads the option root [F4c] }
+  Result.BoxRaw := TyBoxSpecRaw(Result.Box);
+  TyBoxRawClimbInto(Result.BoxRaw, node, AOption.Root);
+  Result.HasBoxRaw := True;
   Result.Box.Left := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'left', True),
     Result.Box.Left);
   Result.Box.Top := BoxValueOfData(TyBoxKeyClimb(node, AOption.Root, 'top', True),
@@ -446,11 +452,22 @@ function FunnelLayoutOfImpl(const ASpec: TTyFunnelSpec; const AViewport: TTyRect
   does, where FPC would raise. }
 function TyFunnelLayoutOf(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
-var mask: TFPUExceptionMask;
+var
+  mask: TFPUExceptionMask;
+  view: TTyXYWH;
 begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
   try
+    { [R2-G] getLayoutRect on the raw box, where the spec has one }
+    if ASpec.HasBoxRaw then
+    begin
+      view := TyGetLayoutRect(ASpec.BoxRaw, AViewport.Left, AViewport.Top,
+        AViewport.Right - AViewport.Left, AViewport.Bottom - AViewport.Top, []);
+      Result := FunnelLayoutOfImpl(ASpec, TyRectF(view.X, view.Y, view.X + view.W,
+        view.Y + view.H), AStore, ADim, True, view);
+      Exit;
+    end;
     Result := FunnelLayoutOfImpl(ASpec, AViewport, AStore, ADim, False, Default(TTyXYWH));
   finally
     ClearExceptions(False);

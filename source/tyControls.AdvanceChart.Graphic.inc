@@ -219,9 +219,11 @@ begin
     if FOption <> nil then node := FOption.ComponentAt('graphic', 0);
     if node is TJSONObject then
     begin
-      d := TJSONObject(node).Find('z');
+      { graphicModel.get('z' / 'zlevel'): the component has no default for
+        either, so the option root's reach it [R2-G] }
+      d := TyGetShallowRoot(node, FOption.Root, 'z');
       if (d <> nil) and (d.JSONType = jtNumber) then z := d.AsFloat;
-      d := TJSONObject(node).Find('zlevel');
+      d := TyGetShallowRoot(node, FOption.Root, 'zlevel');
       if (d <> nil) and (d.JSONType = jtNumber) then zl := d.AsFloat;
     end;
     FGfxView.Render(FGfxModel, w, h, meas, GfxAnimSettings, z, zl);

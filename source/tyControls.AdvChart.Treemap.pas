@@ -973,7 +973,9 @@ begin
   Result.Series := TJSONObject(node);
   if APPI > 0 then Result.Scale := APPI / 96 else Result.Scale := 1;
   Result.Z := 0;
-  d := Result.Series.Find('z');
+  { retrieveZInfo's `model.get('z') || 0`: a treemap has no default z, so
+    the option root's reaches it [R2-G] }
+  d := TyGetShallowRoot(Result.Series, AOption.Root, 'z');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.Z := Round(d.AsFloat);
   d := Result.Series.Find('levels');
   if (d <> nil) and (d.JSONType = jtArray) then

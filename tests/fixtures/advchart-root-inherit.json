@@ -1864,6 +1864,964 @@
      "chunkMode": "<undef>"
     }
    ]
+  },
+  {
+   "group": "box",
+   "id": "b-pie-auto",
+   "note": "a pie's left 'auto' with a width: not a number to getLayoutRect, so the pie hangs on its right",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "left": 100,
+    "series": [
+     {
+      "type": "pie",
+      "left": "auto",
+      "width": 200,
+      "data": [
+       1,
+       2
+      ]
+     }
+    ]
+   },
+   "pieBox": {
+    "left": "auto",
+    "top": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "right": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "bottom": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "width": {
+     "n": "4069000000000000",
+     "t": "200"
+    },
+    "height": "<undef>"
+   },
+   "pie": {
+    "cx": "407f400000000000",
+    "cy": "4069000000000000",
+    "r": "4049000000000000",
+    "text": "500,200,50"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-pie-word",
+   "note": "a pie's left 'abc' with a right: parseFloat's NaN, the box from the right",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "left": "abc",
+      "right": 100,
+      "data": [
+       1,
+       2
+      ]
+     }
+    ]
+   },
+   "pieBox": {
+    "left": "abc",
+    "top": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "right": {
+     "n": "4059000000000000",
+     "t": "100"
+    },
+    "bottom": {
+     "n": "0000000000000000",
+     "t": "0"
+    },
+    "width": "<undef>",
+    "height": "<undef>"
+   },
+   "pie": {
+    "cx": "406f400000000000",
+    "cy": "4069000000000000",
+    "r": "4059000000000000",
+    "text": "250,200,100"
+   }
+  },
+  {
+   "group": "box",
+   "id": "b-funnel-auto",
+   "note": "a funnel's left 'auto' with a width and the root's width under it: 'auto' is its own, no climb",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "width": 300,
+    "series": [
+     {
+      "type": "funnel",
+      "left": "auto",
+      "width": 150,
+      "data": [
+       {
+        "value": 3
+       },
+       {
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "funnelBox": {
+    "left": "auto",
+    "top": {
+     "n": "404e000000000000",
+     "t": "60"
+    },
+    "right": {
+     "n": "4054000000000000",
+     "t": "80"
+    },
+    "bottom": {
+     "n": "4050400000000000",
+     "t": "65"
+    },
+    "width": {
+     "n": "4062c00000000000",
+     "t": "150"
+    },
+    "height": "<undef>"
+   },
+   "funnelPoints": [
+    [
+     "4077200000000000",
+     "404e000000000000"
+    ],
+    [
+     "4080400000000000",
+     "404e000000000000"
+    ],
+    [
+     "407ef00000000000",
+     "4068b00000000000"
+    ],
+    [
+     "4078b00000000000",
+     "4068b00000000000"
+    ]
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-stack-bar",
+   "note": "a root stack: every bar stacks on the one before",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "stack": "all",
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "data": [
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "bars": [
+    [
+     {
+      "x": "405c500000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c04fe00000000000",
+      "text": "113.25,320,103.5,-63.75"
+     },
+     {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c05fe00000000000",
+      "text": "263.25,320,103.5,-127.5"
+     },
+     {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c067e80000000000",
+      "text": "413.25,320,103.5,-191.25"
+     }
+    ],
+    [
+     {
+      "x": "405c500000000000",
+      "y": "4070040000000000",
+      "width": "4059e00000000000",
+      "height": "c067e80000000000",
+      "text": "113.25,256.25,103.5,-191.25"
+     },
+     {
+      "x": "4070740000000000",
+      "y": "4068100000000000",
+      "width": "4059e00000000000",
+      "height": "c05fe00000000000",
+      "text": "263.25,192.5,103.5,-127.5"
+     },
+     {
+      "x": "4079d40000000000",
+      "y": "4060180000000000",
+      "width": "4059e00000000000",
+      "height": "c04fe00000000000",
+      "text": "413.25,128.75,103.5,-63.75"
+     }
+    ]
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-stack-line",
+   "note": "a root stack: the second line's points stand on the first's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "stack": "all",
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "points": [
+    [
+     {
+      "x": "4064a00000000000",
+      "y": "4070040000000000",
+      "text": "165,256.25"
+     },
+     {
+      "x": "4073b00000000000",
+      "y": "4068100000000000",
+      "text": "315,192.5"
+     },
+     {
+      "x": "407d100000000000",
+      "y": "4060180000000000",
+      "text": "465,128.75"
+     }
+    ],
+    [
+     {
+      "x": "4064a00000000000",
+      "y": "4050400000000000",
+      "text": "165,65"
+     },
+     {
+      "x": "4073b00000000000",
+      "y": "4050400000000000",
+      "text": "315,65"
+     },
+     {
+      "x": "407d100000000000",
+      "y": "4050400000000000",
+      "text": "465,65"
+     }
+    ]
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-bar-sizes",
+   "note": "the root's barWidth and barGap: a 10 px bar, a bar's width apart",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "barWidth": 10,
+    "barGap": "100%",
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "data": [
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "bars": [
+    [
+     {
+      "x": "4062c00000000000",
+      "y": "4074000000000000",
+      "width": "4024000000000000",
+      "height": "c055400000000000",
+      "text": "150,320,10,-85"
+     },
+     {
+      "x": "4072c00000000000",
+      "y": "4074000000000000",
+      "width": "4024000000000000",
+      "height": "c065400000000000",
+      "text": "300,320,10,-170"
+     },
+     {
+      "x": "407c200000000000",
+      "y": "4074000000000000",
+      "width": "4024000000000000",
+      "height": "c06fe00000000000",
+      "text": "450,320,10,-255"
+     }
+    ],
+    [
+     {
+      "x": "4065400000000000",
+      "y": "4074000000000000",
+      "width": "4024000000000000",
+      "height": "c06fe00000000000",
+      "text": "170,320,10,-255"
+     },
+     {
+      "x": "4074000000000000",
+      "y": "4074000000000000",
+      "width": "4024000000000000",
+      "height": "c065400000000000",
+      "text": "320,320,10,-170"
+     },
+     {
+      "x": "407d600000000000",
+      "y": "4074000000000000",
+      "width": "4024000000000000",
+      "height": "c055400000000000",
+      "text": "470,320,10,-85"
+     }
+    ]
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-bar-gaps",
+   "note": "the root's barCategoryGap and barMaxWidth",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "barCategoryGap": "60%",
+    "barMaxWidth": 15,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "barMaxWidth": 30,
+      "data": [
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "bars": [
+    [
+     {
+      "x": "4060e00000000000",
+      "y": "4074000000000000",
+      "width": "402e000000000000",
+      "height": "c055400000000000",
+      "text": "135,320,15,-85"
+     },
+     {
+      "x": "4071d00000000000",
+      "y": "4074000000000000",
+      "width": "402e000000000000",
+      "height": "c065400000000000",
+      "text": "285,320,15,-170"
+     },
+     {
+      "x": "407b300000000000",
+      "y": "4074000000000000",
+      "width": "402e000000000000",
+      "height": "c06fe00000000000",
+      "text": "435,320,15,-255"
+     }
+    ],
+    [
+     {
+      "x": "4062f00000000000",
+      "y": "4074000000000000",
+      "width": "4045c00000000000",
+      "height": "c06fe00000000000",
+      "text": "151.5,320,43.5,-255"
+     },
+     {
+      "x": "4072d80000000000",
+      "y": "4074000000000000",
+      "width": "4045c00000000000",
+      "height": "c065400000000000",
+      "text": "301.5,320,43.5,-170"
+     },
+     {
+      "x": "407c380000000000",
+      "y": "4074000000000000",
+      "width": "4045c00000000000",
+      "height": "c055400000000000",
+      "text": "451.5,320,43.5,-85"
+     }
+    ]
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-polar-bar",
+   "note": "a polar bar with the root's stack and barWidth",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "stack": "s",
+    "barWidth": 8,
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "radiusAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       2,
+       2,
+       2
+      ]
+     }
+    ]
+   },
+   "polar": [
+    [
+     {
+      "r0": "0000000000000000",
+      "r": "4040000000000000",
+      "startAngle": "bfe2fd3b0c77c70d",
+      "endAngle": "bfdd0ad2c7c63f7d",
+      "text": "0,32,-0.5934119456780721,-0.4537856055185257"
+     },
+     {
+      "r0": "0000000000000000",
+      "r": "4050000000000000",
+      "startAngle": "3ff80406ea1f0344",
+      "endAngle": "3ffa3fefbe6956ec",
+      "text": "0,64,1.5009831567151233,1.6406094968746698"
+     },
+     {
+      "r0": "0000000000000000",
+      "r": "4058000000000000",
+      "startAngle": "400cc355ad3cf507",
+      "endAngle": "400de14a17621edb",
+      "text": "0,96,3.5953782591083185,3.735004599267865"
+     }
+    ],
+    [
+     {
+      "r0": "4040000000000000",
+      "r": "4058000000000000",
+      "startAngle": "bfe2fd3b0c77c70d",
+      "endAngle": "bfdd0ad2c7c63f7d",
+      "text": "32,96,-0.5934119456780721,-0.4537856055185257"
+     },
+     {
+      "r0": "4050000000000000",
+      "r": "4060000000000000",
+      "startAngle": "3ff80406ea1f0344",
+      "endAngle": "3ffa3fefbe6956ec",
+      "text": "64,128,1.5009831567151233,1.6406094968746698"
+     },
+     {
+      "r0": "4058000000000000",
+      "r": "4064000000000000",
+      "startAngle": "400cc355ad3cf507",
+      "endAngle": "400de14a17621edb",
+      "text": "96,160,3.5953782591083185,3.735004599267865"
+     }
+    ]
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-candle",
+   "note": "a candlestick with the root's barMaxWidth",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "barMaxWidth": 6,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ],
+       [
+        4,
+        3,
+        2,
+        6
+       ],
+       [
+        3,
+        5,
+        2,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "candles": [
+    {
+     "x": "4064400000000000",
+     "y": "4071580000000000",
+     "width": "4018000000000000",
+     "height": "c065400000000000",
+     "text": "162,277.5,6,-170",
+     "bodyWidth": "4014000000000000"
+    },
+    {
+     "x": "4073800000000000",
+     "y": "406d600000000000",
+     "width": "4018000000000000",
+     "height": "c065400000000000",
+     "text": "312,235,6,-170",
+     "bodyWidth": "4014000000000000"
+    },
+    {
+     "x": "407ce00000000000",
+     "y": "406d600000000000",
+     "width": "4018000000000000",
+     "height": "c065400000000000",
+     "text": "462,235,6,-170",
+     "bodyWidth": "4014000000000000"
+    }
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-select",
+   "note": "the root's selectedMode reaches get() but not the selection: nothing is selected",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "selectedMode": "single",
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "selectedMode": "single",
+   "selected": []
+  },
+  {
+   "group": "climb",
+   "id": "c-select-own",
+   "note": "a series' own selectedMode false: nothing either",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "selectedMode": "single",
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "selectedMode": false,
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "selectedMode": false,
+   "selected": []
+  },
+  {
+   "group": "climb",
+   "id": "c-treemap-z",
+   "note": "a treemap has no z of its own: the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "z": 5,
+    "series": [
+     {
+      "type": "treemap",
+      "breadcrumb": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 1
+       }
+      ]
+     }
+    ]
+   },
+   "z": 5,
+   "zModel": {
+    "n": "4014000000000000",
+    "t": "5"
+   }
+  },
+  {
+   "group": "climb",
+   "id": "c-graphic-z",
+   "note": "the graphic component has no z of its own: an element's z written null takes the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "z": 7,
+    "graphic": [
+     {
+      "type": "rect",
+      "z": null,
+      "shape": {
+       "x": 10,
+       "y": 10,
+       "width": 50,
+       "height": 30
+      },
+      "style": {
+       "fill": "#ff0000"
+      }
+     },
+     {
+      "type": "rect",
+      "shape": {
+       "x": 80,
+       "y": 10,
+       "width": 50,
+       "height": 30
+      },
+      "style": {
+       "fill": "#00ff00"
+      }
+     }
+    ]
+   },
+   "z": 7,
+   "zs": [
+    7,
+    0
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-hoverlink",
+   "note": "legendHoverLink: a type with no default reads the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legendHoverLink": false,
+    "legend": {},
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "c",
+      "d"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 5
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "H",
+      "data": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        1,
+        1,
+        3
+       ]
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       1,
+       2
+      ]
+     }
+    ]
+   },
+   "hoverLink": [
+    {
+     "type": "heatmap",
+     "get": false
+    },
+    {
+     "type": "bar",
+     "get": true
+    }
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-symbol",
+   "note": "a root symbol reaches a scatter (no default) but not a line; symbolRotate reaches both",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "symbol": "rect",
+    "symbolRotate": 30,
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "symbols": [
+    {
+     "type": "scatter",
+     "symbolType": "rect",
+     "rotation": "3fe0c152382d7365",
+     "rotationText": "0.5235987755982988",
+     "getSymbol": "rect"
+    },
+    {
+     "type": "line",
+     "symbolType": "emptyCircle",
+     "rotation": "3fe0c152382d7365",
+     "rotationText": "0.5235987755982988",
+     "getSymbol": "emptyCircle"
+    }
+   ]
   }
  ],
  "guards": [
@@ -1933,6 +2891,46 @@
   },
   {
    "name": "p-candle: the candlestick's own chunk mode",
+   "ok": true
+  },
+  {
+   "name": "b-pie-auto: 'auto' is not the root's left: the pie hangs right (cx 500)",
+   "ok": true
+  },
+  {
+   "name": "c-stack-bar: the second series stands on the first",
+   "ok": true
+  },
+  {
+   "name": "c-bar-sizes: the root's barWidth 10",
+   "ok": true
+  },
+  {
+   "name": "c-select: the root's selectedMode reaches get()",
+   "ok": true
+  },
+  {
+   "name": "c-select: and selects nothing",
+   "ok": true
+  },
+  {
+   "name": "c-select-own: nothing",
+   "ok": true
+  },
+  {
+   "name": "c-treemap-z: the root's z",
+   "ok": true
+  },
+  {
+   "name": "c-graphic-z: the null z takes the root's, the unwritten one 0",
+   "ok": true
+  },
+  {
+   "name": "c-hoverlink: the heatmap reads the root's false",
+   "ok": true
+  },
+  {
+   "name": "c-symbol: the scatter's symbol is the root's rect, the line's its own",
    "ok": true
   }
  ]

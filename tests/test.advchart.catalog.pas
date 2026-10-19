@@ -830,11 +830,13 @@ const
     of `children[].` is folded to one, so a key reported at every depth of a
     tree is one entry. Every one of these is a key ECharts 6.1 does not read
     where it is written, so saying nothing would be the lie. }
-  cKnown: array[0..28] of string = (
+  cKnown: array[0..27] of string = (
     'toolbox.feature.mark',            // no such feature since ECharts 3
     'calculable',                      // ECharts 2
     'bmap',                            // the Baidu-map extension, not core
-    'dataGroupId', 'id',               // read on a series, not on the root
+    { [R2-G: 'dataGroupId' left the list -- a series' get('dataGroupId')
+      reads the root's too (universalTransition.ts), and so does the port] }
+    'id',                              // read on a series, not on the root
     'dataZoom[].realtime',             // only SliderZoomView reads it; these are inside
     'dataZoom[].height', 'dataZoom[].show', 'dataZoom[].top', // ditto
     'parallel.parallelAxisDefault.splitLine', // parallel axes draw no split lines
