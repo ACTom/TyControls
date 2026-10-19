@@ -13,7 +13,14 @@ unit test.advchart.textdash;
   The picture is the painter's (the halo is the glyphs' outline, F4c), so
   what it draws is held by what the dashes mean: the gallery's text shows
   no stroke while its dash has no length, half of it at [100, 100], all of
-  it at [200, 0]. }
+  it at [200, 0].
+
+  [R2-I2] And a series' own dash and phase -- lineStyle.type / dashOffset,
+  itemStyle.borderType / borderDashOffset, the item's over the series' --
+  on bars, a line, scatter symbols, radar rings, graph edges, lines,
+  parallel lines, tree edges and map regions, and a text box's border (a
+  label's borderType / borderDashOffset, a graphic text's borderDash /
+  borderDashOffset): the element's pattern and phase bit for bit. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -21,6 +28,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Render, tyControls.AdvChart.RichText,
      tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
+     tyControls.AdvChart.Geo,
      tyControls.AdvanceChart,
      test.advchart.graphic;
 type
@@ -37,12 +45,15 @@ type
     procedure RenderNow;
     function TextEl(const AId: string): TTyGfxEl;
     procedure CheckSpans(AEl: TTyGfxEl; ASpans: TJSONArray);
+    procedure CheckStroke(const AWhat: string; const APattern: TTyDoubleArray;
+      AOffset: Double; AItem: TJSONObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestTheGraphicTextsAreUpstreams;
     procedure TestTheGalleryAnimationIsUpstreams;
+    procedure TestTheSeriesDashesAreUpstreams;
   end;
 
   { What the dashes draw. }
@@ -59,6 +70,7 @@ type
     procedure TestTheGalleryStrokeIsDrawnAsItsDashSays;
     procedure TestAGraphicTextsPhaseMovesItsDashes;
     procedure TestAPathsAndAMarkLinesPhaseMoveTheirDashes;
+    procedure TestASeriesAndATextBoxsPhaseMoveTheirDashes;
   end;
 
 function TyTextDashGalleryFile(const AName: string): string;
@@ -320,6 +332,188 @@ begin
     Fail(Format('%d of %d comparisons differ from upstream:%s', [FBad, FCompared, FReport]));
 end;
 
+{ [R2-I2] one stroke against upstream's: the pattern normalizeLineDash
+  makes, and the phase (none written is 0) }
+procedure TAdvChartTextDashOracleTest.CheckStroke(const AWhat: string;
+  const APattern: TTyDoubleArray; AOffset: Double; AItem: TJSONObject);
+var
+  want: TJSONData;
+  k: Integer;
+  wantOff: Double;
+begin
+  want := AItem.Find('pattern');
+  Inc(FCompared);
+  if (want = nil) or (want.JSONType = jtNull) then
+  begin
+    if Length(APattern) > 0 then Bad(AWhat + ': dashed here, solid upstream');
+    Exit;
+  end;
+  if Length(APattern) <> want.Count then
+  begin
+    Bad(Format('%s: %d dash lengths, upstream %s', [AWhat, Length(APattern), want.AsJSON]));
+    Exit;
+  end;
+  for k := 0 to High(APattern) do
+  begin
+    Inc(FCompared);
+    if not SameBits(APattern[k], FromHex(TJSONArray(want).Strings[k])) then
+      Bad(Format('%s: dash %d %.17g, upstream %.17g', [AWhat, k, APattern[k],
+        FromHex(TJSONArray(want).Strings[k])]));
+  end;
+  wantOff := 0;
+  if (AItem.Find('lineDashOffset') <> nil) and (AItem.Find('lineDashOffset').JSONType = jtString) then
+    wantOff := FromHex(AItem.Strings['lineDashOffset']);
+  Inc(FCompared);
+  if not SameBits(AOffset, wantOff) then
+    Bad(Format('%s: phase %.17g, upstream %.17g', [AWhat, AOffset, wantOff]));
+end;
+
+procedure TAdvChartTextDashOracleTest.TestTheSeriesDashesAreUpstreams;
+var
+  cases, items, maps: TJSONArray;
+  cs, it: TJSONObject;
+  c, k, j, s, idx, n, seen: Integer;
+  role, what: string;
+  el: TTyChartElement;
+  found: Boolean;
+  want: TTyChartAnimRole;
+  rt: TTyRtResult;
+  bx: TTyRtPieceArray;
+  pat: TTyDoubleArray;
+  gel: TTyGfxEl;
+
+  procedure Bordered(const APieces: TTyRtPieceArray);
+  var q: Integer;
+  begin
+    bx := nil;
+    for q := 0 to High(APieces) do
+      if (APieces[q].Kind = rpkRect) and APieces[q].HasStroke then
+      begin
+        SetLength(bx, Length(bx) + 1);
+        bx[High(bx)] := APieces[q];
+      end;
+  end;
+
+begin
+  maps := TJSONObject(FRoot).Arrays['maps'];
+  for k := 0 to maps.Count - 1 do
+    AssertTrue('the map registers', TyChartRegisterMap(maps.Objects[k].Strings['name'],
+      maps.Objects[k].Strings['text']));
+  try
+    cases := TJSONObject(FRoot).Arrays['series'];
+    seen := 0;
+    for c := 0 to cases.Count - 1 do
+    begin
+      cs := cases.Objects[c];
+      FWhere := cs.Strings['id'];
+      NewChart(400, 300);
+      FChart.SetOption('{"animation":false,' + Copy(cs.Objects['option'].AsJSON, 2, MaxInt), True);
+      RenderNow;
+      items := cs.Arrays['items'];
+      Inc(FCompared);
+      if items.Count = 0 then Bad('no strokes upstream');
+      for k := 0 to items.Count - 1 do
+      begin
+        it := items.Objects[k];
+        role := it.Strings['role'];
+        s := it.Integers['s'];
+        if it.Find('i').JSONType = jtNumber then idx := it.Integers['i'] else idx := -1;
+        what := Format('%s s%d %s', [role, s, it.Find('i').AsJSON]);
+        if (role = 'labelBox') or (role = 'graphicBox') then
+        begin
+          { a text's box: its stroked rects, the block's first }
+          if role = 'graphicBox' then
+          begin
+            gel := TextEl(it.Strings['i']);
+            if gel = nil then
+            begin
+              Bad(what + ': no such text');
+              Continue;
+            end;
+            rt := TyGfxTextLayout(gel, FChart.NewTextMeasurerForTest);
+            Bordered(rt.Pieces);
+          end
+          else
+          begin
+            found := False;
+            for j := 0 to FChart.List.Count - 1 do
+            begin
+              el := FChart.List.Element(j);
+              if (el.Anim.Role = carLabel) and (el.Datum.SeriesIndex = s)
+                and (el.Datum.DataIndex = idx) then
+              begin
+                found := True;
+                Break;
+              end;
+            end;
+            if not found then
+            begin
+              Bad(what + ': no label');
+              Continue;
+            end;
+            Bordered(el.Caption.RtPieces);
+          end;
+          n := it.Integers['n'];
+          Inc(FCompared);
+          if n > High(bx) then
+          begin
+            Bad(Format('%s: box %d, here %d bordered rects', [what, n, Length(bx)]));
+            Continue;
+          end;
+          Inc(FCompared);
+          if not SameBits(bx[n].LineWidth, FromHex(it.Strings['lineWidth'])) then
+            Bad(Format('%s box %d: width %g, upstream %g', [what, n, bx[n].LineWidth,
+              FromHex(it.Strings['lineWidth'])]));
+          if not TyNormalizeLineDash(bx[n].BorderDash, bx[n].LineWidth, pat) then pat := nil;
+          CheckStroke(Format('%s box %d', [what, n]), pat, bx[n].BorderDashOffset, it);
+          Inc(seen);
+          Continue;
+        end;
+        if role = 'bar' then want := carBar
+        else if role = 'line' then want := carLineRun
+        else if role = 'symbol' then want := carSymbol
+        else if role = 'radar' then want := carRadarLine
+        else if role = 'edge' then want := carGraphEdge
+        else if role = 'lines' then want := carLinesLine
+        else if role = 'parallel' then want := carParallelLine
+        else if role = 'treeEdge' then want := carTreeEdge
+        else if role = 'region' then want := carMapRegion
+        else
+        begin
+          Bad(what + ': a role the test does not know');
+          Continue;
+        end;
+        found := False;
+        for j := 0 to FChart.List.Count - 1 do
+        begin
+          el := FChart.List.Element(j);
+          if (el.Anim.Role <> want) or (el.Anim.Series <> s) then Continue;
+          if (idx >= 0) and (el.Anim.Index <> idx) then Continue;
+          found := True;
+          Break;
+        end;
+        Inc(FCompared);
+        if not found then
+        begin
+          Bad(what + ': no such element');
+          Continue;
+        end;
+        Inc(FCompared);
+        if not SameBits(el.Style.StrokeWidthLogical, FromHex(it.Strings['lineWidth'])) then
+          Bad(Format('%s: width %g, upstream %g', [what, el.Style.StrokeWidthLogical,
+            FromHex(it.Strings['lineWidth'])]));
+        CheckStroke(what, el.Style.DashLogical, el.Style.DashOffsetLogical, it);
+        Inc(seen);
+      end;
+    end;
+  finally
+    for k := 0 to maps.Count - 1 do TyChartUnregisterMap(maps.Objects[k].Strings['name']);
+  end;
+  AssertTrue(Format('strokes compared (%d)', [seen]), seen >= 25);
+  if FBad > 0 then
+    Fail(Format('%d of %d comparisons differ from upstream:%s', [FBad, FCompared, FReport]));
+end;
+
 { ==================== the picture ==================== }
 
 procedure TAdvChartTextDashTest.SetUp;
@@ -494,6 +688,77 @@ const
 begin
   Check('a polyline', cPath);
   Check('a markLine', cMark);
+end;
+
+{ [R2-I2] A SERIES' OWN PHASE AND A TEXT BOX'S: a bar's
+  itemStyle.borderDashOffset, a line's lineStyle.dashOffset, a graphic
+  text's box (borderDash / borderDashOffset) and a label's box (borderType /
+  borderDashOffset) -- a whole period is the dashes unmoved, half of one
+  moves them }
+procedure TAdvChartTextDashTest.TestASeriesAndATextBoxsPhaseMoveTheirDashes;
+const
+  cBar = '{"animation":false,"xAxis":{"type":"category","data":["a"],"show":false},'
+    + '"yAxis":{"max":10,"show":false},"series":[{"type":"bar","barWidth":120,"data":[8],'
+    + '"itemStyle":{"color":"#ffffff","borderColor":"#000","borderWidth":4,"borderType":[12,12],'
+    + '"borderDashOffset":%d}}]}';
+  cLine = '{"animation":false,"xAxis":{"type":"category","data":["a","b"],"show":false},'
+    + '"yAxis":{"max":10,"show":false},"series":[{"type":"line","symbol":"none","data":[5,5],'
+    + '"lineStyle":{"color":"#000","width":4,"type":[12,12],"dashOffset":%d}}]}';
+  cBox = '{"graphic":[{"type":"text","x":40,"y":30,"style":{"text":"Box","fontSize":40,'
+    + '"fill":"transparent","padding":30,"borderColor":"#000","borderWidth":4,'
+    + '"borderDash":[12,12],"borderDashOffset":%d}}]}';
+  cLabelBox = '{"animation":false,"xAxis":{"type":"category","data":["a"],"show":false},'
+    + '"yAxis":{"max":10,"show":false},"series":[{"type":"bar","barWidth":4,"data":[2],'
+    + '"itemStyle":{"color":"#ffffff"},"label":{"show":true,"position":"top","fontSize":30,'
+    + '"color":"transparent","padding":20,"borderColor":"#000","borderWidth":4,'
+    + '"borderType":[12,12],"borderDashOffset":%d}}]}';
+
+  function Frame(const AOpt: string; AOffset: Integer): TBGRABitmap;
+  begin
+    FreeAndNil(FChart);
+    FChart := TGfxProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, 400, 200);
+    FChart.AnimationMode := camOff;
+    FChart.SetOption(Format(AOpt, [AOffset]), True);
+    Result := TBGRABitmap.Create(400, 200, BGRA(255, 255, 255, 255));
+    FChart.Render(Result.Canvas, Rect(0, 0, 400, 200), 96);
+  end;
+
+  procedure Check(const AWhat, AOpt: string);
+  var
+    a, b, c: TBGRABitmap;
+    x, y, same, diff: Integer;
+  begin
+    a := Frame(AOpt, 0);
+    b := nil;
+    c := nil;
+    try
+      b := Frame(AOpt, 24);
+      c := Frame(AOpt, 12);
+      same := 0;
+      diff := 0;
+      for y := 0 to 199 do
+        for x := 0 to 399 do
+        begin
+          if a.GetPixel(x, y) <> b.GetPixel(x, y) then Inc(same);
+          if a.GetPixel(x, y) <> c.GetPixel(x, y) then Inc(diff);
+        end;
+      AssertEquals(AWhat + ': a whole period is the dashes unmoved', 0, same);
+      AssertTrue(Format('%s: half a period moves them (%d px)', [AWhat, diff]), diff > 200);
+    finally
+      a.Free;
+      b.Free;
+      c.Free;
+    end;
+  end;
+
+begin
+  Check('a bar', cBar);
+  Check('a line', cLine);
+  Check('a graphic text''s box', cBox);
+  Check('a label''s box', cLabelBox);
 end;
 
 initialization

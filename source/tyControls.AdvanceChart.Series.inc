@@ -437,8 +437,9 @@ begin
       APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
         lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
         sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, sp.Placements[q].Text) > 0);
+        labelS.FontWeight, labelS.TextColor,
+        LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
+        False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
   end;
 end;
@@ -1172,8 +1173,9 @@ var
       APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
         lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
         sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, sp.Placements[q].Text) > 0);
+        labelS.FontWeight, labelS.TextColor,
+        LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
+        False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
   end;
 
@@ -1206,8 +1208,9 @@ var
       APainter.DrawText(AnchorBox(AView.Labels[q].X, AView.Labels[q].Y, lblW,
         lblH, AView.Labels[q].AnchorH, AView.Labels[q].AnchorV),
         AView.Labels[q].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, AView.Labels[q].Text) > 0);
+        labelS.FontWeight, labelS.TextColor,
+        LevelLinesAlign(AView.Labels[q].Text, AView.Labels[q].AnchorH), tlCenter,
+        False, 0, False, Pos(#10, AView.Labels[q].Text) > 0);
     end;
   end;
 
@@ -1686,6 +1689,9 @@ begin
   if d = nil then Result.Opacity := 0.5 else Result.Opacity := TyLinesJsNum(d);
   LnDashOf(TyLinesFind(raw, ANode, ['lineStyle', 'type']), dash, expl);
   Result.Dash := TyDashPattern(dash, expl, Result.Width);
+  { [R2-I2] its phase, the row's else the series' }
+  d := TyLinesFind(raw, ANode, ['lineStyle', 'dashOffset']);
+  if (d <> nil) and (d.JSONType = jtNumber) then Result.DashOffset := d.AsFloat;
   { THE END SYMBOLS (linesVisual): the series' pair, the row's own where it
     is truthy -- a size of 0 keeps the series' }
   syms := LnNode(ANode, ['symbol']);
@@ -2081,7 +2087,7 @@ var
   cats: array of Boolean;
   rawItem: TTyRawItem;
   cell: TTyDataValue;
-  v, lsWidth, opN, opA, opI, w: Double;
+  v, lsWidth, opN, opA, opI, w, dashOff: Double;
   seen: TStringList;
   key: string;
   has, any, catHas: Boolean;
@@ -2156,6 +2162,9 @@ begin
     if d = nil then dashWord := 'solid' else dashWord := DashText(d);
     LnDashOf(d, dash, expl);
     if d = nil then dash := todSolid;
+    { [R2-I2] the phase }
+    d := LnNode(node, ['lineStyle', 'dashOffset']);
+    if (d <> nil) and (d.JSONType = jtNumber) then dashOff := d.AsFloat else dashOff := 0;
     d := LnNode(node, ['lineStyle', 'opacity']);
     if (d <> nil) and (d.JSONType = jtNumber) then opN := d.AsFloat else opN := 0.45;
     d := LnNode(node, ['activeOpacity']);
@@ -2206,10 +2215,13 @@ begin
         iword := dashWord;
         idash := dash;
         iexpl := expl;
+        row.DashOffset := dashOff;
         row.Opacity := opN;
         item := StItemNode(si, raw);
         if item <> nil then
         begin
+          d := LnNode(item, ['lineStyle', 'dashOffset']);
+          if (d <> nil) and (d.JSONType = jtNumber) then row.DashOffset := d.AsFloat;
           if LnColour(LnNode(item, ['lineStyle', 'color']), ic) then c := ic;
           d := LnNode(item, ['lineStyle', 'width']);
           if (d <> nil) and (d.JSONType = jtNumber) then w := d.AsFloat;
@@ -2459,8 +2471,9 @@ begin
         APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
           lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
           sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
-          labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
-          Pos(#10, sp.Placements[q].Text) > 0);
+          labelS.FontWeight, labelS.TextColor,
+          LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
+          False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
       end;
     end;
   end;
@@ -2859,6 +2872,7 @@ begin
   os := TyReadOptStyle(node, 'lineStyle');
   Result.LineDash := os.Dash;
   Result.LineDashExplicit := os.DashLogical;
+  Result.LineDashOffset := os.DashOffset;
   d := node.Find('data');
   if d is TJSONArray then
   begin
@@ -2866,6 +2880,8 @@ begin
     SetLength(Result.RowLineWidth, d.Count);
     SetLength(Result.RowLineDash, d.Count);
     SetLength(Result.RowLineDashExplicit, d.Count);
+    SetLength(Result.RowLineDashOffsetSet, d.Count);
+    SetLength(Result.RowLineDashOffset, d.Count);
     for k := 0 to d.Count - 1 do
     begin
       if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
@@ -2875,6 +2891,8 @@ begin
       Result.RowLineWidth[k] := os.BorderWidthLogical;
       Result.RowLineDash[k] := os.Dash;
       Result.RowLineDashExplicit[k] := os.DashLogical;
+      Result.RowLineDashOffsetSet[k] := os.DashOffsetHas;
+      Result.RowLineDashOffset[k] := os.DashOffset;
     end;
   end;
   { AN AREA ONLY WHEN THE AUTHOR ASKED FOR ONE, and `areaStyle: {}` counts as

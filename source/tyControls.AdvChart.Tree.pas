@@ -1470,6 +1470,8 @@ begin
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
+      { [R2-I2] and its phase }
+      el.Style.DashOffsetLogical := ChainNum(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0);
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
       el.Z := ASolved.Spec.Z;
       el.Z2 := ASolved.Spec.Z2;
@@ -1594,6 +1596,8 @@ begin
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
+      { [R2-I2] and its phase }
+      el.Style.DashOffsetLogical := ChainNum(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0);
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
       el.Z := ASolved.Spec.Z;
       el.Z2 := ASolved.Spec.Z2;

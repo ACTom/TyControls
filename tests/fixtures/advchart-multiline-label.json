@@ -1140,6 +1140,2101 @@
      ]
     }
    ]
+  },
+  {
+   "id": "polar.radius.turned",
+   "note": "a polar category radius axis' labels of two lines turned 30 degrees",
+   "option": {
+    "animation": false,
+    "polar": {},
+    "angleAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "radiusAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     "axisLabel": {
+      "rotate": 30,
+      "formatter": "{value}\nday"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4072400000000000",
+      "4066800000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4072400000000000",
+      "4061800000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4072400000000000",
+      "4059000000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4072400000000000",
+      "404e000000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "polar.radius.level",
+   "note": "the same, level, three lines",
+   "option": {
+    "animation": false,
+    "polar": {},
+    "angleAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "radiusAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     "axisLabel": {
+      "formatter": "{value}\nday\nend"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday\nend",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4072400000000000",
+      "4066800000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday\nend",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4072400000000000",
+      "4061800000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday\nend",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4072400000000000",
+      "4059000000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday\nend",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4072400000000000",
+      "404e000000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "end",
+       "x": "0000000000000000",
+       "y": "4028000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "polar.angle",
+   "note": "a polar category angle axis' labels of two lines",
+   "option": {
+    "animation": false,
+    "polar": {},
+    "radiusAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     "axisLabel": {
+      "formatter": "{value}\nday"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "404f9a6032f20308",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "4052cd3019790184",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "40744cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "40750cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "right",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "4066a6980cbc80c2",
+       "y": "40744cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "4066a6980cbc80c2",
+       "y": "40750cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "4066a6980cbc80c1",
+       "y": "404f9a6032f20308",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "4066a6980cbc80c1",
+       "y": "4052cd3019790184",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "polar.angle.turned",
+   "note": "the angle axis' labels of two lines turned 20 degrees",
+   "option": {
+    "animation": false,
+    "polar": {},
+    "radiusAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     "axisLabel": {
+      "rotate": 20,
+      "formatter": "{value}\nday"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "404f9a6032f20308",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "4052cd3019790184",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "40744cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "407a2cb3f9a1bf9f",
+       "y": "40750cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "right",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "4066a6980cbc80c2",
+       "y": "40744cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "4066a6980cbc80c2",
+       "y": "40750cb3f9a1bf9f",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "right",
+     "verticalAlign": "bottom",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "4066a6980cbc80c1",
+       "y": "404f9a6032f20308",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "4066a6980cbc80c1",
+       "y": "4052cd3019790184",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "single.turned",
+   "note": "a single category axis' labels of two lines turned 30 degrees",
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     "top": 100,
+     "height": 100,
+     "axisLabel": {
+      "rotate": 30,
+      "formatter": "{value}\nday"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       0,
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday",
+     "mat": [
+      "3febb67ae8584ca8",
+      "bfe0000000000001",
+      "3fe0000000000001",
+      "3febb67ae8584ca8",
+      "4058600000000000",
+      "406a000000000000"
+     ],
+     "rotation": "3fe0c152382d7368",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday",
+     "mat": [
+      "3febb67ae8584ca8",
+      "bfe0000000000001",
+      "3fe0000000000001",
+      "3febb67ae8584ca8",
+      "406d100000000000",
+      "406a000000000000"
+     ],
+     "rotation": "3fe0c152382d7368",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday",
+     "mat": [
+      "3febb67ae8584ca8",
+      "bfe0000000000001",
+      "3fe0000000000001",
+      "3febb67ae8584ca8",
+      "4076f80000000000",
+      "406a000000000000"
+     ],
+     "rotation": "3fe0c152382d7368",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday",
+     "mat": [
+      "3febb67ae8584ca8",
+      "bfe0000000000001",
+      "3fe0000000000001",
+      "3febb67ae8584ca8",
+      "407f680000000000",
+      "406a000000000000"
+     ],
+     "rotation": "3fe0c152382d7368",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "single.level",
+   "note": "a single value axis' labels of three lines, level",
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "value",
+     "top": 100,
+     "height": 100,
+     "axisLabel": {
+      "formatter": "{value}\nx\ny"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       1,
+       5,
+       9
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "0\nx\ny",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "403e000000000000",
+      "406a000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "0",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "y",
+       "x": "0000000000000000",
+       "y": "403e000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "2\nx\ny",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4061400000000000",
+      "406a000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "2",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "y",
+       "x": "0000000000000000",
+       "y": "403e000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "4\nx\ny",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406ec00000000000",
+      "406a000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "4",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "y",
+       "x": "0000000000000000",
+       "y": "403e000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "6\nx\ny",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4076200000000000",
+      "406a000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "6",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "y",
+       "x": "0000000000000000",
+       "y": "403e000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "8\nx\ny",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407ce00000000000",
+      "406a000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "8",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "y",
+       "x": "0000000000000000",
+       "y": "403e000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "10\nx\ny",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4081d00000000000",
+      "406a000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "10",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "x",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "y",
+       "x": "0000000000000000",
+       "y": "403e000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "parallel.turned",
+   "note": "parallel axes: a category axis' labels of two lines turned 30, a value axis' turned -20",
+   "option": {
+    "animation": false,
+    "parallelAxis": [
+     {
+      "dim": 0,
+      "type": "category",
+      "data": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu"
+      ],
+      "axisLabel": {
+       "rotate": 30,
+       "formatter": "{value}\nday"
+      }
+     },
+     {
+      "dim": 1,
+      "axisLabel": {
+       "rotate": -20,
+       "formatter": "{value}\nu"
+      }
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        "Mon",
+        3
+       ],
+       [
+        "Wed",
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4056000000000000",
+      "4073100000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4056000000000000",
+      "406d600000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4056000000000001",
+      "4064a00000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday",
+     "mat": [
+      "3febb67ae8584cae",
+      "bfdffffffffffff3",
+      "3fdffffffffffff3",
+      "3febb67ae8584cae",
+      "4056000000000001",
+      "4057c00000000000"
+     ],
+     "rotation": "3fe0c152382d735e",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "0\nu",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4080800000000000",
+      "4075400000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "0",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "2\nu",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4080800000000000",
+      "4070e00000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "2",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "4\nu",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4080800000000000",
+      "4069000000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "4",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "6\nu",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4080800000000000",
+      "4060400000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "6",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "8\nu",
+     "mat": [
+      "3fee11f642522d1c",
+      "3fd5e3a8748a0bf3",
+      "bfd5e3a8748a0bf7",
+      "3fee11f642522d1b",
+      "4080800000000000",
+      "404e000000000000"
+     ],
+     "rotation": "bfd657184ae74485",
+     "align": "left",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "8",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "left"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "parallel.level",
+   "note": "a vertical parallel layout: the labels of two lines, level",
+   "option": {
+    "animation": false,
+    "parallel": {
+     "layout": "vertical"
+    },
+    "parallelAxis": [
+     {
+      "dim": 0,
+      "type": "category",
+      "data": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu"
+      ],
+      "axisLabel": {
+       "formatter": "{value}\nday"
+      }
+     },
+     {
+      "dim": 1,
+      "axisLabel": {
+       "formatter": "{value}\nu"
+      }
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        "Mon",
+        3
+       ],
+       [
+        "Wed",
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Mon\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4060e00000000000",
+      "4051000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Mon",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Tue\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406ea00000000000",
+      "4051000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Tue",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Wed\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4076300000000000",
+      "4051000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Wed",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "Thu\nday",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407d100000000000",
+      "4051000000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "Thu",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "day",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "0\nu",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4054000000000000",
+      "4075c00000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "0",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "2\nu",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4067c00000000000",
+      "4075c00000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "2",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "4\nu",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4072c00000000000",
+      "4075c00000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "4",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "6\nu",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4079a00000000000",
+      "4075c00000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "6",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "8\nu",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4080400000000000",
+      "4075c00000000000"
+     ],
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "top",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "8",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "center"
+      },
+      {
+       "text": "u",
+       "x": "0000000000000000",
+       "y": "4032000000000000",
+       "baseline": "middle",
+       "align": "center"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "axis.level",
+   "note": "a value axis' labels of lines of different lengths, level (right-aligned: each line on its own)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": "{value}\nunits wide"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80
+      ],
+      "label": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "0\nunits wide",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4054800000000000",
+      "4074000000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "0",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units wide",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "50\nunits wide",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4054800000000000",
+      "4070040000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "50",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units wide",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "100\nunits wide",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4054800000000001",
+      "4068100000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "100",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units wide",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "150\nunits wide",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4054800000000001",
+      "4060180000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "150",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units wide",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    },
+    {
+     "kind": "axis",
+     "s": null,
+     "d": null,
+     "text": "200\nunits wide",
+     "mat": [
+      "3ff0000000000000",
+      "3cb1a62633145c07",
+      "bcc0d313198a2e04",
+      "3ff0000000000000",
+      "4054800000000001",
+      "4050400000000000"
+     ],
+     "rotation": "bcb1a62633145c07",
+     "align": "right",
+     "verticalAlign": "middle",
+     "lineHeight": "4028000000000000",
+     "spans": [
+      {
+       "text": "200",
+       "x": "0000000000000000",
+       "y": "c018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      },
+      {
+       "text": "units wide",
+       "x": "0000000000000000",
+       "y": "4018000000000000",
+       "baseline": "middle",
+       "align": "right"
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -1161,6 +3256,10 @@
   },
   {
    "name": "the turned ones are turned",
+   "ok": true
+  },
+  {
+   "name": "the other axes have their labels",
    "ok": true
   }
  ]

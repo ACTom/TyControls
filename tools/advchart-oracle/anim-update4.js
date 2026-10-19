@@ -28,6 +28,12 @@ transitions still missing after F3d.
             by getId (old order: update / remove, then add), removeNode /
             removeNodeEdge walking the OLD tree's parent chain and reading
             the old data's layout.
+  radar     [R2-I2] RadarView.render's update: updateSymbols makes every
+            symbol anew at the point the polyline has NOW (its shape as the
+            last frame left it -- an enter or an update still running) and
+            updateProps it to the new point (update timing, the row); the
+            polyline and the polygon updateProps their points (no row); the
+            labels hang on the symbols and fade in again.
 
 Runs the real ECharts 6.1 development build (D:/Projects/echarts/dist, or
 ECHARTS_DIST) in node's server-side mode (SVG renderer), chart._ssr = false,
@@ -80,6 +86,14 @@ A sample's rec, by probe:
          line group's clip rect; 'ln<s>/sym<i>' {sx, sy, n} the symbol's
          group scale; 'ln<s>/poly' {n, len} the polyline's clips and its
          points' length.
+  radar  per radar series s and data index i: 'rd<s>/<i>' {line, area (the
+         polyline's and the polygon's points, flattened), ln, an (their
+         clips), syms [{x, y, n}] the symbols in the group's order, labs
+         [null | {tx, x, y (the text's global translation), op, ig}] their
+         labels}.
+
+An option's function is written {$fn: name} (the test registers the same
+name with the control's timing registry).
 
 Guards (any failure: nothing is written, exit 1): named discriminating facts
 and the whole fixture generated twice, byte-identical.
@@ -148,6 +162,21 @@ const quiet = fn => {
   try { return fn(); } finally { console.warn = w; console.error = e; }
 };
 const arr = a => Array.from(a, x => hx(x));
+// [R2-I2] a function in an option, written {$fn: name} in the fixture
+const FNS = { 'idx*30': idx => idx * 30, 'dur:300+idx*400': idx => 300 + idx * 400 };
+function materialize(v) {
+  if (Array.isArray(v)) return v.map(materialize);
+  if (v && typeof v === 'object') {
+    if (typeof v.$fn === 'string') {
+      must(FNS[v.$fn], 'unknown $fn ' + v.$fn);
+      return FNS[v.$fn];
+    }
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = materialize(v[k]);
+    return o;
+  }
+  return v;
+}
 const nClip = el => (el && el.animators ? el.animators.filter(a => a.getClip()).length : 0);
 
 // ---------- zrender's width table ----------
@@ -403,6 +432,33 @@ const PROBES = {
       if (v._polyline) rec[key + '/poly'] = { n: nClip(v._polyline), len: v._polyline.shape.points.length };
     });
   },
+  // [R2-I2] a radar item's group: the polyline, the polygon, the symbols
+  // and the labels hung on them
+  radar(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'radar') return;
+      const data = sm.getData();
+      data.each(i => {
+        const g = data.getItemGraphicEl(i);
+        if (!g) return;
+        const pl = g.childAt(0);
+        const pg = g.childAt(1);
+        const flat = pts => [].concat(...(pts || []).map(p => [hx(p[0]), hx(p[1])]));
+        const syms = [];
+        const labs = [];
+        g.childAt(2).eachChild(sym => {
+          syms.push({ x: hx(sym.x), y: hx(sym.y), n: nClip(sym) });
+          const t = sym.getTextContent();
+          if (!t) { labs.push(null); return; }
+          const m = t.getComputedTransform();
+          labs.push({ tx: t.style.text == null ? '' : String(t.style.text), x: hx(m ? m[4] : t.x), y: hx(m ? m[5] : t.y),
+            op: hx(t.style.opacity == null ? 1 : t.style.opacity), ig: !!t.ignore });
+        });
+        rec['rd' + sm.seriesIndex + '/' + i] = { line: flat(pl.shape.points), area: flat(pg.shape.points),
+          ln: nClip(pl), an: nClip(pg), syms, labs };
+      });
+    });
+  },
 };
 
 // the treemap's elements by the node they were stored for, as a render
@@ -584,6 +640,85 @@ add('treeData', 'tree-data-move', "orient TB, polyline edges: a merge takes a aw
       { name: 'b', children: [{ name: 'b1' }, { name: 'b2' }] },
       { name: 'c', children: [{ name: 'c1' }, { name: 'c2' }] }] }] }] } }, ...afterRm(T1)]);
 
+// ---- [R2-I2] a radar's update ----
+const RIND = [{ name: 'a', max: 100 }, { name: 'b', max: 100 }, { name: 'c', max: 100 }, { name: 'd', max: 100 },
+  { name: 'e', max: 100 }];
+const RPAL = ['#5070dd', '#b6d634', '#505372', '#ff994d'];
+const RP = { value: [60, 70, 80, 50, 40], name: 'p' };
+const RQ = { value: [30, 90, 40, 70, 60], name: 'q' };
+function rdr(series, root) {
+  return Object.assign({ animation: true, color: RPAL, radar: { indicator: RIND, center: ['50%', '50%'], radius: 100 },
+    animationDuration: 1000, animationEasing: 'linear' }, root || {}, { series });
+}
+const RSER = extra => Object.assign({ type: 'radar', label: { show: true }, areaStyle: {} }, LIN, extra || {});
+const S_RD = [0, 1, 16, 100, 250, 500, 999, 1000, 1001, 1300];
+add('radar', 'rd-merge', "a merge that changes both rows' values (1000 ms linear): every symbol is made anew at the polyline's point and slides to the new one, its label with it (and fading in again); the polyline and the polygon tween their points",
+  rdr([RSER({ data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, { value: [50, 50, 50, 50, 50], name: 'q' }] }] } },
+    ...after(S_RD, T1)]);
+add('radar', 'rd-inflight', "a second merge 300 ms into the first: the symbols start where the polyline is now, not where the first merge sent them",
+  rdr([RSER({ data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, RQ] }] } },
+    ...after([0, 100, 300], T1),
+    { t: T1 + 300, do: 'merge', option: { series: [{ data: [{ value: [90, 90, 90, 90, 90], name: 'p' }, { value: [10, 10, 10, 10, 10], name: 'q' }] }] } },
+    ...after([300, 301, 400, 700, 1299, 1300, 1301], T1)]);
+add('radar', 'rd-enter', "a merge 300 ms into the enter (1000 ms linear): the symbols, still at their points through the enter, start from the growing polyline's points",
+  rdr([RSER({ data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: 0, do: 'sample' }, { t: 300, do: 'sample' },
+    { t: 300, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, RQ] }] } },
+    ...after([0, 1, 100, 500, 1000, 1001], 300)]);
+add('radar', 'rd-twice', "two merges at the same moment, no frame between: the second's symbols start from the points the polyline still has",
+  rdr([RSER({ data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, RQ] }] } },
+    { t: T1, do: 'merge', option: { series: [{ data: [RQ, RP] }] } },
+    ...after([0, 1, 250, 999, 1000], T1)]);
+add('radar', 'rd-spokes', "an indicator added (5 -> 6), then two taken away (6 -> 4): a new spoke's symbol starts at the polyline's closing point; the points arrays of other lengths are filled from the new or cut",
+  rdr([RSER({ data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { radar: { indicator: RIND.concat([{ name: 'f', max: 100 }]) },
+      series: [{ data: [{ value: [60, 70, 80, 50, 40, 90], name: 'p' }, { value: [30, 90, 40, 70, 60, 20], name: 'q' }] }] } },
+    ...after([0, 1, 250, 999, 1000], T1),
+    { t: T1 + 2000, do: 'merge', option: { radar: { indicator: RIND.slice(0, 4) },
+      series: [{ data: [{ value: [10, 20, 30, 40], name: 'p' }, { value: [80, 70, 60, 50], name: 'q' }] }] } },
+    ...after([0, 1, 250, 999, 1000], T1 + 2000)]);
+add('radar', 'rd-timing', "update timing of the symbols' own row: animationDurationUpdate (idx) => 300 + idx * 400, animationDelayUpdate (idx) => idx * 30, cubicOut -- the polyline and the polygon call them with no row",
+  rdr([RSER({ animationDurationUpdate: { $fn: 'dur:300+idx*400' }, animationDelayUpdate: { $fn: 'idx*30' },
+    animationEasingUpdate: 'cubicOut', data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, { value: [50, 50, 50, 50, 50], name: 'q' }] }] } },
+    ...after([0, 1, 29, 30, 31, 100, 299, 300, 329, 330, 500, 729, 730, 731], T1)]);
+add('radar', 'rd-rows', "a row taken away and one added, a value turned missing ('-'): the kept row's symbol slides to the centre, the new row's symbols stand at their points while its rings grow from the centre, the gone row's group goes at once",
+  rdr([RSER({ data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [60, '-', 80, 50, 40], name: 'p' }, { value: [10, 20, 30, 40, 50], name: 'r' }] }] } },
+    ...after([0, 1, 250, 999, 1000], T1)]);
+add('radar', 'rd-placed', "labels placed off their symbols (right, distance 10, an item's offset and turn, an item's own symbol): each label rides its symbol",
+  rdr([RSER({ symbol: 'rect', symbolSize: 12, label: { show: true, position: 'right', distance: 10 },
+    data: [RP, Object.assign({}, RQ, { symbol: 'triangle', symbolSize: [14, 8], symbolRotate: 45,
+      label: { position: 'bottom', offset: [3, -2], rotate: 30 } })] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' },
+      Object.assign({}, RQ, { value: [50, 50, 50, 50, 50], symbol: 'triangle', symbolSize: [14, 8], symbolRotate: 45,
+        label: { position: 'bottom', offset: [3, -2], rotate: 30 } })] }] } },
+    ...after([0, 1, 100, 500, 1000], T1)]);
+add('radar', 'rd-off', "a series with animation off: the symbols are set at their new points",
+  rdr([RSER({ animation: false, data: [RP, RQ] })]),
+  ['radar'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: [20, 30, 90, 80, 10], name: 'p' }, RQ] }] } },
+    ...after([0, 1, 100], T1)]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -599,7 +734,7 @@ function runCase(c) {
   try {
     const out = { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, option: clone(c.option),
       probes: c.probes, events: [] };
-    quiet(() => chart.setOption(clone(c.option)));
+    quiet(() => chart.setOption(materialize(clone(c.option))));
     noteStorage(chart);
     c.events.forEach(ev => {
       NOW = T0 + ev.t;
@@ -610,7 +745,7 @@ function runCase(c) {
         o.rec = readRec(chart, c.probes);
       }
       else if (ev.do === 'frame') zr(chart).animation.update();
-      else if (ev.do === 'merge') quiet(() => chart.setOption(clone(ev.option)));
+      else if (ev.do === 'merge') quiet(() => chart.setOption(materialize(clone(ev.option))));
       else if (ev.do === 'action') quiet(() => chart.dispatchAction(clone(ev.action)));
       else must(false, 'an event it does not know: ' + ev.do);
       noteStorage(chart);
@@ -691,6 +826,42 @@ function guards(out) {
     const a = rec('tree-data', T1 - 1, 'tr0/node2');
     return gh && Math.abs(n(gh.x) - (n(a.x) + 1)) < 0.5 && Math.abs(n(gh.y) - (n(a.y) + 1)) < 0.5;
   })());
+  // [R2-I2] the radar
+  const sym = (id, t, row, j) => rec(id, t, 'rd0/' + row).syms[j];
+  guard('rd-merge: a symbol slides (starts at the old point, moving, at the new one at the end)', (() => {
+    const a = sym('rd-merge', T1 - 1, 0, 1);
+    const b = sym('rd-merge', T1, 0, 1);
+    const c = sym('rd-merge', T1 + 250, 0, 1);
+    const d = sym('rd-merge', T1 + 1000, 0, 1);
+    return a.y === b.y && b.n === 1 && c.y !== b.y && c.y !== d.y && d.n === 0;
+  })());
+  guard('rd-merge: the label rides its symbol', (() => {
+    const r = rec('rd-merge', T1 + 250, 'rd0/0');
+    const r0 = rec('rd-merge', T1 + 1000, 'rd0/0');
+    return n(r.labs[1].y) - n(r.syms[1].y) === n(r0.labs[1].y) - n(r0.syms[1].y);
+  })());
+  guard('rd-enter: the symbols stand still through the enter', (() => {
+    const a = cs('rd-enter').events.find(q => q.do === 'sample' && q.t === 300).rec['rd0/0'].syms[1];
+    return sym('rd-enter', 0, 0, 1).y === a.y && a.n === 0 && sym('rd-enter', 0, 0, 1).n === 0;
+  })());
+  guard('rd-enter: the merge starts them at the growing polyline\'s points', (() => {
+    const r = rec('rd-enter', 300, 'rd0/0');
+    return r.syms[1].y === r.line[3] && r.syms[1].y !== sym('rd-enter', 0, 0, 1).y;
+  })());
+  guard('rd-inflight: the second merge starts at the polyline now', (() => {
+    const r = cs('rd-inflight').events.filter(q => q.do === 'sample' && q.t === T1 + 300);
+    return r.length === 2 && r[1].rec['rd0/0'].syms[0].y === r[0].rec['rd0/0'].line[1];
+  })());
+  guard('rd-spokes: the new spoke\'s symbol starts at the closing point', (() => {
+    const r = rec('rd-spokes', T1, 'rd0/0');
+    return r.syms.length === 6 && r.syms[5].x === r.syms[0].x && r.syms[5].y === r.syms[0].y;
+  })());
+  guard('rd-timing: the second row waits 30 ms', (() => {
+    const a = sym('rd-timing', T1, 1, 0);
+    return sym('rd-timing', T1 + 30, 1, 0).y === a.y && sym('rd-timing', T1 + 31, 1, 0).y !== a.y;
+  })());
+  guard('rd-rows: the new row\'s symbols stand at their points', sym('rd-rows', T1, 1, 0).n === 0);
+  guard('rd-off: no slide', sym('rd-off', T1, 0, 0).n === 0);
   return g;
 }
 

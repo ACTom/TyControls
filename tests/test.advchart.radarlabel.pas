@@ -512,7 +512,7 @@ const
 var
   fade, sm: TJSONObject;
   samples, op: TJSONArray;
-  i, k, d, dim: Integer;
+  i, k, d, dim, h: Integer;
   el: TTyChartElement;
   base: Double;
 begin
@@ -555,7 +555,23 @@ begin
       begin
         Num('x', el.Caption.X, sm.Arrays['x'].Strings[k]);
         Num('y', el.Caption.Y, sm.Arrays['y'].Strings[k]);
+      end
+      else
+      begin
+        { [R2-I2] an update slides the symbol from its old point and the
+          label rides it: carried by the symbol's move (a sum, not
+          upstream's product of transforms -- within 1e-9) }
+        Inc(FCompared);
+        if Abs(el.Caption.X - FromHex(sm.Arrays['x'].Strings[k])) > 1e-9 then
+          Miss(Format('x %s upstream, %s here', [Fmt(FromHex(sm.Arrays['x'].Strings[k])), Fmt(el.Caption.X)]));
+        Inc(FCompared);
+        if Abs(el.Caption.Y - FromHex(sm.Arrays['y'].Strings[k])) > 1e-9 then
+          Miss(Format('y %s upstream, %s here', [Fmt(FromHex(sm.Arrays['y'].Strings[k])), Fmt(el.Caption.Y)]));
       end;
+      { [R2-I2] the symbol it hangs on, where the frame draws it }
+      h := el.Caption.LmHostPlus1 - 1;
+      Num('host x', FChart.Frame.Element(h).Caption.LgG[5], sm.Arrays['hostX'].Strings[k]);
+      Num('host y', FChart.Frame.Element(h).Caption.LgG[6], sm.Arrays['hostY'].Strings[k]);
     end;
   end;
   Finish(150);

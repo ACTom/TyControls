@@ -279,6 +279,10 @@ type
     Opacity: Double;              // NaN = not written
     Dash: TTyOptDash;
     DashLogical: TTyDoubleArray;  // todExplicit only
+    { [R2-I2] lineStyle.dashOffset / itemStyle.borderDashOffset, a number as
+      written (getLineStyle's / getItemStyle's lineDashOffset), px }
+    DashOffsetHas: Boolean;
+    DashOffset: Double;
   end;
 
 { Read one style block. AKey is 'itemStyle', 'lineStyle' or 'areaStyle', and
@@ -1270,6 +1274,9 @@ begin
     { A line has a WIDTH, not a border width, and a `type`, not a borderType. }
     Result.BorderWidthLogical := NumOr(sub, 'width');
     Result.Dash := ReadDash(sub, 'type', Result.DashLogical);
+    Result.DashOffset := NumOr(sub, 'dashOffset');
+    Result.DashOffsetHas := not IsNan(Result.DashOffset);
+    if not Result.DashOffsetHas then Result.DashOffset := 0;
     Exit;
   end;
   if AKey = 'areaStyle' then
@@ -1279,6 +1286,9 @@ begin
   Result.BorderColor := ReadOptColor(sub, 'borderColor');
   Result.BorderWidthLogical := NumOr(sub, 'borderWidth');
   Result.Dash := ReadDash(sub, 'borderType', Result.DashLogical);
+  Result.DashOffset := NumOr(sub, 'borderDashOffset');
+  Result.DashOffsetHas := not IsNan(Result.DashOffset);
+  if not Result.DashOffsetHas then Result.DashOffset := 0;
 end;
 
 function TyStyleAccessPath(const ASeriesType: string): string;

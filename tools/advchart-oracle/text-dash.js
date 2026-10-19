@@ -9,7 +9,7 @@ lineDash and lineDashOffset in its style as they are; a label writes
 textBorderType and textBorderDashOffset (labelStyle.ts: the label's, else the
 global textStyle's) -- label-halo.js holds those.
 
-Two parts:
+Three parts:
   static  graphic texts (plain and rich) and their TSpans as zrender holds
           them after a paint: text, stroke, lineWidth, the lineDash as
           written, the lineDashOffset, the pattern normalizeLineDash makes.
@@ -20,6 +20,17 @@ Two parts:
           (the clock of keyframe-animation.js: the global Date replaced
           before the dist loads, chart._ssr false, env.node off), each
           sample the Text's style values and its TSpan's.
+  series  [R2-I2] a series' own stroke dash and its phase: lineStyle.type /
+          dashOffset (getLineStyle's lineDash / lineDashOffset) and
+          itemStyle.borderType / borderDashOffset (getItemStyle's), the
+          item's own over the series' key by key -- on bars, a line, scatter
+          symbols, radar rings, graph edges, lines, parallel lines, tree
+          edges and map regions; and a text box's border (Text.ts
+          _renderBackground: rectStyle.lineDash = style.borderDash,
+          lineDashOffset = style.borderDashOffset || 0; labelStyle.ts writes a
+          label's borderType as borderDash): each element's lineWidth, the
+          lineDash as written, the lineDashOffset, the pattern
+          normalizeLineDash makes against the width.
 
   node tools/advchart-oracle/text-dash.js
 
@@ -193,6 +204,106 @@ function runAnim() {
   }
 }
 
+// ---------- series: a series' stroke dash and phase [R2-I2] ----------
+function strokeRec(role, s, i, st, extra) {
+  const lw = st.lineWidth;
+  const pat = normalizeLineDash(st.lineDash, lw);
+  return Object.assign({ role, s, i,
+    lineWidth: lw == null ? null : hex(lw),
+    lineDash: st.lineDash == null ? null : valRec(st.lineDash),
+    lineDashOffset: st.lineDashOffset == null ? null : hex(st.lineDashOffset),
+    pattern: pat == null ? null : pat.map(hex) }, extra || {});
+}
+const views = chart => chart._chartsViews || [];
+function eachSeriesOf(chart, type, fn) {
+  chart.getModel().eachSeries(sm => { if (sm.subType === type) fn(sm, sm.getData(), chart.getViewOfSeriesModel(sm)); });
+}
+// a label's (or a graphic text's) box: the Rect children of its Text, the
+// block's first, then each token's
+function boxRecs(role, s, i, t) {
+  const out = [];
+  (t.childrenRef ? t.childrenRef() : []).forEach((k, n) => {
+    if (k.type === 'rect' && k.style.stroke) out.push(strokeRec(role, s, i, k.style, { n: out.length }));
+  });
+  return out;
+}
+const PICK = {
+  bar: chart => { const r = []; eachSeriesOf(chart, 'bar', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('bar', sm.seriesIndex, i, el.style)); })); return r; },
+  line: chart => { const r = []; eachSeriesOf(chart, 'line', (sm, d, v) => { if (v._polyline) r.push(strokeRec('line', sm.seriesIndex, -1, v._polyline.style)); }); return r; },
+  scatter: chart => { const r = []; eachSeriesOf(chart, 'scatter', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('symbol', sm.seriesIndex, i, el.childAt(0).style)); })); return r; },
+  radar: chart => { const r = []; eachSeriesOf(chart, 'radar', (sm, d) => d.each(i => { const g = d.getItemGraphicEl(i); if (g) r.push(strokeRec('radar', sm.seriesIndex, i, g.childAt(0).style)); })); return r; },
+  graph: chart => { const r = []; eachSeriesOf(chart, 'graph', sm => { const ed = sm.getEdgeData(); ed.each(i => { const el = ed.getItemGraphicEl(i); if (el) r.push(strokeRec('edge', sm.seriesIndex, i, el.childOfName('line').style)); }); }); return r; },
+  lines: chart => { const r = []; eachSeriesOf(chart, 'lines', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('lines', sm.seriesIndex, i, el.childOfName('line').style)); })); return r; },
+  parallel: chart => { const r = []; eachSeriesOf(chart, 'parallel', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(strokeRec('parallel', sm.seriesIndex, i, el.style)); })); return r; },
+  tree: chart => { const r = []; eachSeriesOf(chart, 'tree', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); if (el && el.__edge) r.push(strokeRec('treeEdge', sm.seriesIndex, i, el.__edge.style)); })); return r; },
+  map: chart => {
+    const r = [];
+    eachSeriesOf(chart, 'map', (sm, d, v) => {
+      const regions = [];
+      v.group.traverse(el => { if (el.type === 'compound' || el.type === 'polygon') regions.push(el); });
+      regions.forEach((el, n) => { if (el.style && el.style.stroke) r.push(strokeRec('region', sm.seriesIndex, n, el.style)); });
+    });
+    return r;
+  },
+  barLabelBox: chart => { const r = []; eachSeriesOf(chart, 'bar', (sm, d) => d.each(i => { const el = d.getItemGraphicEl(i); const t = el && el.getTextContent(); if (t) r.push(...boxRecs('labelBox', sm.seriesIndex, i, t)); })); return r; },
+  graphicBox: chart => graphicTexts(chart).reduce((a, t) => a.concat(boxRecs('graphicBox', -1, t.id, t.el)), []),
+};
+const CAT = { type: 'category', data: ['a', 'b', 'c'] };
+const VAL = { type: 'value' };
+const SQ = [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]];
+const SQ2 = [[[10, 0], [20, 0], [20, 10], [10, 10], [10, 0]]];
+const MAPJSON = { type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: SQ } },
+  { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: SQ2 } }] };
+const SERIES = [
+  { id: 'bar', note: 'bars: itemStyle borderType [4, 2], borderDashOffset 3; the second item\'s own borderDashOffset 7 over it',
+    pick: 'bar', option: { xAxis: CAT, yAxis: VAL, series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: [4, 2], borderDashOffset: 3 },
+      data: [5, { value: 7, itemStyle: { borderDashOffset: 7 } }, 3] }] } },
+  { id: 'line', note: "a line: lineStyle type 'dashed' (against width 3), dashOffset 5",
+    pick: 'line', option: { xAxis: CAT, yAxis: VAL, series: [{ type: 'line', showSymbol: false, lineStyle: { width: 3, type: 'dashed', dashOffset: 5 }, data: [5, 7, 3] }] } },
+  { id: 'scatter', note: "scatter symbols: borderType 'dotted' (width 3), borderDashOffset -2",
+    pick: 'scatter', option: { xAxis: VAL, yAxis: VAL, series: [{ type: 'scatter', symbolSize: 20, itemStyle: { borderColor: '#000', borderWidth: 3, borderType: 'dotted', borderDashOffset: -2 }, data: [[1, 2], [3, 4]] }] } },
+  { id: 'radar', note: 'radar rings: the series lineStyle [6, 3] offset 2; an item\'s own dashOffset 7; an item\'s own type dotted (the series\' offset)',
+    pick: 'radar', option: { radar: { indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 }, { name: 'c', max: 10 }] },
+      series: [{ type: 'radar', lineStyle: { type: [6, 3], dashOffset: 2 }, data: [{ value: [5, 6, 7] }, { value: [3, 4, 5], lineStyle: { dashOffset: 7 } },
+        { value: [8, 2, 4], lineStyle: { type: 'dotted', width: 2 } }] }] } },
+  { id: 'graph', note: "graph edges: the series lineStyle 'dashed' offset 4; an edge's own dashOffset 9; an edge's own type [2, 2]",
+    pick: 'graph', option: { series: [{ type: 'graph', layout: 'none', lineStyle: { type: 'dashed', dashOffset: 4, width: 2 },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 0 }, { name: 'c', x: 50, y: 80 }],
+      links: [{ source: 'a', target: 'b' }, { source: 'b', target: 'c', lineStyle: { dashOffset: 9 } }, { source: 'c', target: 'a', lineStyle: { type: [2, 2] } }] }] } },
+  { id: 'lines', note: 'lines: the series lineStyle [5, 5] offset 1; an item\'s own dashOffset 6',
+    pick: 'lines', option: { xAxis: VAL, yAxis: VAL, series: [{ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { type: [5, 5], dashOffset: 1, width: 2 },
+      data: [{ coords: [[0, 0], [10, 10]] }, { coords: [[0, 10], [10, 0]], lineStyle: { dashOffset: 6 } }] }] } },
+  { id: 'parallel', note: "parallel lines: the series lineStyle 'dashed' offset 3; an item's own dashOffset 8",
+    pick: 'parallel', option: { parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }], series: [{ type: 'parallel', lineStyle: { type: 'dashed', dashOffset: 3, width: 2 },
+      data: [[1, 2, 3], { value: [3, 2, 1], lineStyle: { dashOffset: 8 } }] }] } },
+  { id: 'tree', note: "tree edges: the series lineStyle 'dashed' offset 2, a node's own dashOffset 6",
+    pick: 'tree', option: { series: [{ type: 'tree', lineStyle: { type: 'dashed', dashOffset: 2, width: 2 }, initialTreeDepth: -1,
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b', lineStyle: { dashOffset: 6 } }] }] }] } },
+  { id: 'map', note: "map regions: itemStyle borderType 'dashed' (width 2), borderDashOffset 3; region B's own borderDashOffset 10",
+    pick: 'map', option: { series: [{ type: 'map', map: 'r2i2dash', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed', borderDashOffset: 3 },
+      data: [{ name: 'A', value: 1 }, { name: 'B', value: 2, itemStyle: { borderDashOffset: 10 } }] }] } },
+  { id: 'labelBox', note: "a bar label's box: borderType 'dashed' with a background (the border drawn first at twice the width), borderDashOffset 2; a rich token's own borderType [3, 1] and borderDashOffset 5 (no background)",
+    pick: 'barLabelBox', option: { xAxis: CAT, yAxis: VAL, series: [{ type: 'bar', label: { show: true, position: 'top', backgroundColor: '#eee', borderColor: '#000', borderWidth: 1,
+      borderType: 'dashed', borderDashOffset: 2, padding: 4, formatter: ['{a|x} y'].join(''), rich: { a: { borderColor: '#f00', borderWidth: 2, borderType: [3, 1], borderDashOffset: 5 } } },
+      data: [5, 7] }] } },
+  { id: 'graphicBox', note: 'a graphic text\'s box: style.borderDash [6, 2] and borderDashOffset 4 as written; a negative offset on another',
+    pick: 'graphicBox', option: { graphic: [g('gb', { text: 'Box', borderColor: '#000', borderWidth: 2, borderDash: [6, 2], borderDashOffset: 4, padding: 3 }),
+      g('gn', { text: 'Neg', y: 80, borderColor: '#00f', borderWidth: 1, borderDash: 'dotted', borderDashOffset: -3, backgroundColor: '#ff0' })] } },
+];
+function runSeries(c) {
+  echarts.registerMap('r2i2dash', MAPJSON);
+  const chart = mk(400, 300);
+  try {
+    chart.setOption(Object.assign({ animation: false }, c.option));
+    chart.renderToSVGString();
+    refresh(chart);
+    return { id: c.id, note: c.note, option: c.option, items: PICK[c.pick](chart) };
+  } finally {
+    chart.dispose();
+  }
+}
+
 function generate() {
   const out = {
     source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version,
@@ -200,6 +311,8 @@ function generate() {
     static: STATIC.map(runStatic),
     anim: runAnim(),
   };
+  out.series = SERIES.map(runSeries);
+  out.maps = [{ name: 'r2i2dash', text: JSON.stringify(MAPJSON) }];
   const st = id => out.static.find(c => c.id === id);
   const at = t => out.anim.samples.find(s => s.t === t);
   const arr = h => (h == null ? null : h.map(num));
@@ -214,6 +327,21 @@ function generate() {
     { name: 'anim: the phase moves', ok: num(at(1050).spans[0].lineDashOffset) > 0 && num(at(2100).spans[0].lineDashOffset) === 200 },
     { name: 'anim: it loops', ok: num(at(3001).spans[0].lineDashOffset) < 1 },
   ];
+  const sr = id => out.series.find(c => c.id === id).items;
+  const off = r => (r.lineDashOffset == null ? null : num(r.lineDashOffset));
+  out.guards.push(
+    { name: 'series bar: 3, the item\'s 7', ok: sr('bar').length === 3 && off(sr('bar')[0]) === 3 && off(sr('bar')[1]) === 7 },
+    { name: 'series line: dashed [12, 6] at 5', ok: JSON.stringify(sr('line')[0].pattern.map(num)) === '[12,6]' && off(sr('line')[0]) === 5 },
+    { name: 'series radar: the item\'s 7, the dotted item the series\' 2', ok: off(sr('radar')[1]) === 7 && off(sr('radar')[2]) === 2
+      && JSON.stringify(sr('radar')[2].pattern.map(num)) === '[2]' },
+    { name: 'series graph: 4, 9, 4 with [2, 2]', ok: sr('graph').map(off).join() === '4,9,4' },
+    { name: 'series lines / parallel / tree / map carry the offsets', ok: sr('lines').map(off).join() === '1,6'
+      && sr('parallel').map(off).join() === '3,8' && sr('tree').map(off).join() === '2,6'
+      && sr('map').map(off).sort().join() === '10,3' },
+    { name: 'labelBox: the block\'s dashed against twice the width, at 2; the token\'s [3, 1] at 5', ok: sr('labelBox').some(r => off(r) === 2
+      && JSON.stringify(r.pattern.map(num)) === '[8,4]') && sr('labelBox').some(r => off(r) === 5 && JSON.stringify(r.pattern.map(num)) === '[3,1]') },
+    { name: 'graphicBox: [6, 2] at 4, dotted at -3', ok: sr('graphicBox').map(off).join() === '4,-3' },
+  );
   return out;
 }
 
@@ -228,6 +356,7 @@ try {
   process.exit(1);
 }
 out1.static.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.texts.map(t => t.spans.map(s => [s.text, s.lineDash, s.pattern && s.pattern.map(num), s.lineDashOffset && num(s.lineDashOffset)])))));
+out1.series.forEach(c => console.log('series ' + c.id + ': ' + JSON.stringify(c.items.map(r => [r.role, r.i, r.lineDash, r.pattern && r.pattern.map(num), r.lineDashOffset && num(r.lineDashOffset)]))));
 out1.anim.samples.forEach(s => console.log('t ' + s.t + ': ' + JSON.stringify(s.spans.map(q => [q.pattern && q.pattern.map(num), q.lineDashOffset && num(q.lineDashOffset)])) + ' fill ' + s.style.fill));
 const bad = out1.guards.filter(q => !q.ok);
 out1.guards.forEach(q => console.log('guard ' + (q.ok ? 'ok  ' : 'FAIL') + ' ' + q.name));

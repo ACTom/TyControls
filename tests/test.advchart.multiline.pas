@@ -49,6 +49,7 @@ type
     procedure TestATurnedCaptionDrawsEveryLine;
     procedure TestALevelCaptionDrawsEveryLine;
     procedure TestTheChartDrawsEveryLine;
+    procedure TestTheOtherAxesDrawEveryLine;
   end;
 
 implementation
@@ -164,6 +165,9 @@ begin
       mat := tx.Arrays['mat'];
       for k := 0 to 5 do m[k] := FromHex(mat.Strings[k]);
       spans := tx.Arrays['spans'];
+      { [R2-I2] a text placed by its style's x / y rather than a transform
+        (a polar angle axis' level labels): its anchor is not recorded }
+      if FromHex(spans.Objects[0].Strings['x']) <> 0 then Continue;
       got := TyRotatedLineCentres(m[4], m[5], FromHex(tx.Strings['rotation']),
         VAlignOf(tx.Strings['verticalAlign']), FromHex(tx.Strings['lineHeight']),
         spans.Count);
@@ -372,6 +376,154 @@ begin
       end;
     end;
     AssertTrue(Format('lines looked at (%d)', [n]), n >= 12);
+  finally
+    bmp.Free;
+    ref.Free;
+    FreeAndNil(form);
+    ctl.Free;
+  end;
+end;
+
+{ [R2-I2] THE POLAR, SINGLE AND PARALLEL AXES' LABELS OF SEVERAL LINES,
+  turned and level: the control draws the case, and again with those
+  axes' labels in no ink (the layout the same); along every line's middle
+  upstream draws, the words' ink ends where the line's alignment puts them
+  -- its right end at the anchor for 'right', its left end for 'left', its
+  middle for 'center' (each line aligned on its own, as zrender's TSpans) --
+  within 3 px }
+procedure TAdvChartMultilineLabelTest.TestTheOtherAxesDrawEveryLine;
+const
+  cAxes: array[0..5] of string = ('angleAxis', 'radiusAxis', 'singleAxis', 'parallelAxis',
+    'xAxis', 'yAxis');
+var
+  form: TForm;
+  ctl: TTyStyleController;
+  chart: TMlProbe;
+  bmp, ref: TBGRABitmap;
+  c, t, k, a, n, bad: Integer;
+  cs, tx: TJSONObject;
+  spans, mat: TJSONArray;
+  m: array[0..5] of Double;
+  x0, x1, ty, sx, lo, hi, at, want: Double;
+  id, report: string;
+  opt: TJSONObject;
+  d: TJSONData;
+
+  procedure Blank(AAxis: TJSONData);
+  var lab: TJSONData;
+  begin
+    if not (AAxis is TJSONObject) then Exit;
+    lab := TJSONObject(AAxis).Find('axisLabel');
+    if not (lab is TJSONObject) then
+    begin
+      TJSONObject(AAxis).Add('axisLabel', TJSONObject.Create);
+      lab := TJSONObject(AAxis).Find('axisLabel');
+    end;
+    if TJSONObject(lab).Find('color') <> nil then TJSONObject(lab).Delete('color');
+    TJSONObject(lab).Add('color', 'rgba(0,0,0,0)');
+  end;
+
+begin
+  form := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  bmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  ref := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  n := 0;
+  bad := 0;
+  report := '';
+  try
+    ctl.Mode := 'light';
+    ctl.ThemeName := 'default';
+    chart := TMlProbe.Create(form);
+    chart.Parent := form;
+    chart.Controller := ctl;
+    chart.Measurer := TPtToPxMeasurer.Create(TZrSsrMeasurer.Create(
+      TJSONObject(FMeasure).Objects['ratios'].Arrays['ratio'],
+      TJSONObject(FMeasure).Objects['ratios'].Integers['firstCode']));
+    chart.AnimationMode := camOff;
+    chart.SetBounds(0, 0, cW, cH);
+    for c := 0 to Cases.Count - 1 do
+    begin
+      cs := Cases.Objects[c];
+      id := cs.Strings['id'];
+      if (Copy(id, 1, 6) <> 'polar.') and (Copy(id, 1, 7) <> 'single.')
+        and (Copy(id, 1, 9) <> 'parallel.') and (id <> 'axis.level') then Continue;
+      { the axes' words in no ink }
+      opt := TJSONObject(cs.Objects['option'].Clone);
+      try
+        for a := 0 to High(cAxes) do
+        begin
+          d := opt.Find(cAxes[a]);
+          if d is TJSONArray then
+            for k := 0 to d.Count - 1 do Blank(d.Items[k])
+          else
+            Blank(d);
+        end;
+        chart.Option := '{}';
+        chart.Option := opt.AsJSON;
+      finally
+        opt.Free;
+      end;
+      ref.Fill(BGRA(255, 255, 255, 255));
+      chart.Render(ref.Canvas, Classes.Rect(0, 0, cW, cH), 96);
+      chart.Option := '{}';
+      chart.Option := cs.Objects['option'].AsJSON;
+      AssertEquals(id + ': the option parses', '', chart.OptionError);
+      bmp.Fill(BGRA(255, 255, 255, 255));
+      chart.Render(bmp.Canvas, Classes.Rect(0, 0, cW, cH), 96);
+      for t := 0 to cs.Arrays['texts'].Count - 1 do
+      begin
+        tx := cs.Arrays['texts'].Objects[t];
+        mat := tx.Arrays['mat'];
+        for k := 0 to 5 do m[k] := FromHex(mat.Strings[k]);
+        spans := tx.Arrays['spans'];
+        for k := 0 to spans.Count - 1 do
+        begin
+          sx := FromHex(spans.Objects[k].Strings['x']);
+          ty := FromHex(spans.Objects[k].Strings['y']);
+          { the line's ink along its middle, 30 px either side of the anchor }
+          lo := NaN;
+          hi := NaN;
+          at := sx - 30;
+          while at <= sx + 30 do
+          begin
+            if InkAlong(bmp, ref, m, ty, at, at) > 0 then
+            begin
+              if IsNan(lo) then lo := at;
+              hi := at;
+            end;
+            at := at + 1;
+          end;
+          if tx.Strings['align'] = 'right' then
+          begin
+            x0 := hi;
+            want := sx;
+          end
+          else if tx.Strings['align'] = 'left' then
+          begin
+            x0 := lo;
+            want := sx;
+          end
+          else
+          begin
+            x0 := (lo + hi) / 2;
+            want := sx;
+          end;
+          Inc(n);
+          if IsNan(x0) or (Abs(x0 - want) > 3) then
+          begin
+            Inc(bad);
+            x1 := x0;
+            if Length(report) < 4000 then
+              report := report + LineEnding + Format('  %s "%s" line %d (%s, %s): ink %g..%g, its end at %g, upstream %g',
+                [id, StringReplace(tx.Strings['text'], #10, '|', [rfReplaceAll]), k,
+                 spans.Objects[k].Strings['text'], tx.Strings['align'], lo, hi, x1, want]);
+          end;
+        end;
+      end;
+    end;
+    AssertEquals(Format('%d of %d lines drawn nowhere upstream draws them:%s', [bad, n, report]), 0, bad);
+    AssertTrue(Format('lines looked at (%d)', [n]), n >= 90);
   finally
     bmp.Free;
     ref.Free;

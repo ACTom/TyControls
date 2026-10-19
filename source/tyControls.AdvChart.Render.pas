@@ -1709,6 +1709,17 @@ var
   hasInk: Boolean;
   k: Integer;
   radii: array[0..3] of Double;
+  pat: TTyDoubleArray;
+
+  { [R2-I2] the rect's border dash: normalizeLineDash against its width }
+  procedure BorderDash;
+  begin
+    if pc.HasStroke and TyNormalizeLineDash(pc.BorderDash, pc.LineWidth, pat) then
+      P.SetLineDash(pat, pc.BorderDashOffset)
+    else
+      P.SetLineDash([]);
+  end;
+
 begin
   if P = nil then Exit;
   if AScale <= 0 then AScale := 1;
@@ -1725,7 +1736,7 @@ begin
         P.SaveState;
         try
           if a < 1 then P.SetElementAlpha(a);
-          P.SetLineDash([]);
+          BorderDash;
           P.Translate(AX, AY);
           if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
           for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;
@@ -1745,7 +1756,7 @@ begin
       P.SaveState;
       try
         if a < 1 then P.SetElementAlpha(a);
-        P.SetLineDash([]);
+        BorderDash;
         P.Translate(AX, AY);
         if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
         for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;

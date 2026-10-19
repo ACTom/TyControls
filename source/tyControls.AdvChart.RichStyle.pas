@@ -555,6 +555,11 @@ begin
       crColour: begin S.HasBorderColor := True; S.BorderColor := c; end;
       crInherit: S.BorderColorInherit := True;
     end;
+    { [R2-I2] borderDashOffset (TEXT_PROPS_BOX) and borderType, which
+      labelStyle.ts writes as the box's borderDash }
+    if NumOf(Get(AOwn, 'borderDashOffset'), x) then S.BorderDashOffset := x;
+    d := Get(AOwn, 'borderType');
+    if (d <> nil) and (d.JSONType <> jtNull) then S.BorderDash := TyDashTextOf(d);
   end;
 end;
 

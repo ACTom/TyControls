@@ -88,9 +88,19 @@ procedure TyChartImageFlush;
   one (a decal's tile): '' for a source that is no list reference (a data
   URL is its own content), '-' for a reference that finds no list, else the
   list it finds and the generation of the lists' pictures -- which moves
-  whenever a list a picture was taken from changes or is freed. Equal
-  stamps, the same picture. }
+  whenever a list a picture was taken from changes or is freed -- and
+  [R2-I2] the picture's own content (TyChartImagePrint). Equal stamps, the
+  same picture. }
 function TyChartImageStamp(const ASource: string): string;
+
+{ [R2-I2] THE CONTENT OF ONE PICTURE OF A LIST, every resolution of it: a
+  64-bit hash of the list's own raw data (read in place, no copy). LCL's
+  Replace, ReplaceMasked, ReplaceIcon and ReplaceSlice write that data and
+  announce nothing (TCustomImageListResolution.InternalReplace calls no
+  Change), so a cache keyed by the list alone would keep the old picture;
+  a cache that asks this when it is consulted sees the new one. A few
+  hundred multiplications for a 32 x 32 picture. Out of range: a constant. }
+function TyChartImagePrint(AList: TCustomImageList; AIndex: Integer): QWord;
 
 implementation
 
@@ -387,23 +397,66 @@ begin
   Result.InvalidateBitmap;
 end;
 
+{$PUSH}{$Q-}{$R-}
+function TyChartImagePrint(AList: TCustomImageList; AIndex: Integer): QWord;
+const
+  cPrime = QWord($100000001B3);
+var
+  i, k, n: Integer;
+  r: TCustomImageListResolution;
+  raw: TRawImage;
+  q: PQWord;
+  b: PByte;
+begin
+  Result := QWord($CBF29CE484222325);
+  if (AList = nil) or (AIndex < 0) or (AIndex >= AList.Count) then Exit;
+  for i := 0 to AList.ResolutionCount - 1 do
+  begin
+    r := AList.ResolutionByIndex[i];
+    if (r = nil) or (AIndex >= r.Count) then Continue;
+    r.GetRawImage(AIndex, raw);
+    Result := (Result xor QWord(r.Width)) * cPrime;
+    if raw.Data = nil then Continue;
+    q := PQWord(raw.Data);
+    n := raw.DataSize div 8;
+    for k := 1 to n do
+    begin
+      Result := (Result xor q^) * cPrime;
+      Result := Result xor (Result shr 31);
+      Inc(q);
+    end;
+    b := PByte(q);
+    for k := 1 to raw.DataSize - PtrUInt(n) * 8 do
+    begin
+      Result := (Result xor b^) * cPrime;
+      Inc(b);
+    end;
+  end;
+end;
+{$POP}
+
 function ListImage(AList: TCustomImageList; AIndex: Integer;
   ADevicePx: Double): TBGRABitmap;
 var
   res: TCustomImageListResolution;
-  key: string;
+  base, key: string;
   k: Integer;
 begin
   Result := nil;
   if (AIndex < 0) or (AIndex >= AList.Count) then Exit;
   res := PickResolution(AList, ADevicePx);
   if res = nil then Exit;
-  key := ListKeyPrefix(AList) + IntToStr(AIndex) + '/' + IntToStr(res.Width);
+  { [R2-I2] keyed by the picture's content too: a Replace (which announces
+    nothing) makes a new key, and the old picture of the slot goes }
+  base := ListKeyPrefix(AList) + IntToStr(AIndex) + '/' + IntToStr(res.Width) + '#';
+  key := base + IntToHex(TyChartImagePrint(AList, AIndex), 16);
   if GListCache = nil then GListCache := NewCache(True);
   if GListCache.Find(key, k) then Exit(TBGRABitmap(GListCache.Objects[k]));
   Result := ResolutionBitmap(res, AIndex);
   if Result = nil then Exit;
   Watcher.Watch(AList);
+  for k := GListCache.Count - 1 downto 0 do
+    if Copy(GListCache[k], 1, Length(base)) = base then GListCache.Delete(k);
   GListCache.AddObject(key, Result);
 end;
 
@@ -535,7 +588,8 @@ begin
   if lst = nil then Exit('-');
   { watched, so that its next change moves the generation }
   Watcher.Watch(lst);
-  Result := ListKeyPrefix(lst) + IntToStr(GImageGeneration);
+  Result := ListKeyPrefix(lst) + IntToStr(GImageGeneration) + '/'
+    + IntToHex(TyChartImagePrint(lst, idx), 16);
 end;
 
 initialization

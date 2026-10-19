@@ -2601,6 +2601,8 @@ begin
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
+  { [R2-I2] and its phase (borderDashOffset) }
+  AVisual.DashOffset := item.DashOffset;
   if not IsNan(item.Opacity) then
     AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity))
   else if st = 'scatter' then
@@ -2636,6 +2638,7 @@ begin
       a width does not inherit a dash from its itemStyle. }
     AVisual.Dash := line.Dash;
     AVisual.DashExplicit := line.DashLogical;
+    AVisual.DashOffset := line.DashOffset;
     if not IsNan(line.Opacity) then
       AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
     if line.Color.Gradient.Kind <> cgkNone then

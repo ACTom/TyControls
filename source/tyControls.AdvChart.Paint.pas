@@ -272,6 +272,10 @@ type
     HasBorderColor: Boolean;
     BorderColor: TTyChartColor;
     BorderWidth: Double;
+    { [R2-I2] the box's border dash as written (a label's borderType, a
+      graphic text's borderDash; '' solid) and its phase (borderDashOffset) }
+    BorderDash: string;
+    BorderDashOffset: Double;
     Radius: array[0..3] of Double;
     HasOpacity: Boolean;
     Opacity: Double;
@@ -331,6 +335,11 @@ type
     { [R2-F] its phase (lineDashOffset), px }
     LineDashOffset: Double;
     StrokeFirst: Boolean;
+    { [R2-I2] a rect's border dash as written ('' solid) and its phase:
+      _renderBackground's rectStyle.lineDash / lineDashOffset, the pattern
+      made against LineWidth (doubled under a fill) }
+    BorderDash: string;
+    BorderDashOffset: Double;
     Radius: array[0..3] of Double;
     Opacity: Double;
     { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the

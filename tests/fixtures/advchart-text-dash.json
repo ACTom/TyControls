@@ -774,6 +774,865 @@
    }
   ]
  },
+ "series": [
+  {
+   "id": "bar",
+   "note": "bars: itemStyle borderType [4, 2], borderDashOffset 3; the second item's own borderDashOffset 7 over it",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderType": [
+        4,
+        2
+       ],
+       "borderDashOffset": 3
+      },
+      "data": [
+       5,
+       {
+        "value": 7,
+        "itemStyle": {
+         "borderDashOffset": 7
+        }
+       },
+       3
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4010000000000000",
+      "4000000000000000"
+     ]
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "401c000000000000",
+     "pattern": [
+      "4010000000000000",
+      "4000000000000000"
+     ]
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4010000000000000",
+      "4000000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "line",
+   "note": "a line: lineStyle type 'dashed' (against width 3), dashOffset 5",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "lineStyle": {
+       "width": 3,
+       "type": "dashed",
+       "dashOffset": 5
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "line",
+     "s": 0,
+     "i": -1,
+     "lineWidth": "4008000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4014000000000000",
+     "pattern": [
+      "4028000000000000",
+      "4018000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "scatter",
+   "note": "scatter symbols: borderType 'dotted' (width 3), borderDashOffset -2",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 20,
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 3,
+       "borderType": "dotted",
+       "borderDashOffset": -2
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "symbol",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4008000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "c000000000000000",
+     "pattern": [
+      "4008000000000000"
+     ]
+    },
+    {
+     "role": "symbol",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4008000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "c000000000000000",
+     "pattern": [
+      "4008000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "radar",
+   "note": "radar rings: the series lineStyle [6, 3] offset 2; an item's own dashOffset 7; an item's own type dotted (the series' offset)",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "a",
+       "max": 10
+      },
+      {
+       "name": "b",
+       "max": 10
+      },
+      {
+       "name": "c",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "lineStyle": {
+       "type": [
+        6,
+        3
+       ],
+       "dashOffset": 2
+      },
+      "data": [
+       {
+        "value": [
+         5,
+         6,
+         7
+        ]
+       },
+       {
+        "value": [
+         3,
+         4,
+         5
+        ],
+        "lineStyle": {
+         "dashOffset": 7
+        }
+       },
+       {
+        "value": [
+         8,
+         2,
+         4
+        ],
+        "lineStyle": {
+         "type": "dotted",
+         "width": 2
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "radar",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4018000000000000",
+      "4008000000000000"
+     ],
+     "lineDashOffset": "4000000000000000",
+     "pattern": [
+      "4018000000000000",
+      "4008000000000000"
+     ]
+    },
+    {
+     "role": "radar",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4018000000000000",
+      "4008000000000000"
+     ],
+     "lineDashOffset": "401c000000000000",
+     "pattern": [
+      "4018000000000000",
+      "4008000000000000"
+     ]
+    },
+    {
+     "role": "radar",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "4000000000000000",
+     "pattern": [
+      "4000000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "graph",
+   "note": "graph edges: the series lineStyle 'dashed' offset 4; an edge's own dashOffset 9; an edge's own type [2, 2]",
+   "option": {
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "lineStyle": {
+       "type": "dashed",
+       "dashOffset": 4,
+       "width": 2
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 0
+       },
+       {
+        "name": "c",
+        "x": 50,
+        "y": 80
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c",
+        "lineStyle": {
+         "dashOffset": 9
+        }
+       },
+       {
+        "source": "c",
+        "target": "a",
+        "lineStyle": {
+         "type": [
+          2,
+          2
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "edge",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4010000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    },
+    {
+     "role": "edge",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4022000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    },
+    {
+     "role": "edge",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4000000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "4010000000000000",
+     "pattern": [
+      "4000000000000000",
+      "4000000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "lines",
+   "note": "lines: the series lineStyle [5, 5] offset 1; an item's own dashOffset 6",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "lineStyle": {
+       "type": [
+        5,
+        5
+       ],
+       "dashOffset": 1,
+       "width": 2
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          10,
+          10
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0,
+          10
+         ],
+         [
+          10,
+          0
+         ]
+        ],
+        "lineStyle": {
+         "dashOffset": 6
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "lines",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4014000000000000",
+      "4014000000000000"
+     ],
+     "lineDashOffset": "3ff0000000000000",
+     "pattern": [
+      "4014000000000000",
+      "4014000000000000"
+     ]
+    },
+    {
+     "role": "lines",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4014000000000000",
+      "4014000000000000"
+     ],
+     "lineDashOffset": "4018000000000000",
+     "pattern": [
+      "4014000000000000",
+      "4014000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "parallel",
+   "note": "parallel lines: the series lineStyle 'dashed' offset 3; an item's own dashOffset 8",
+   "option": {
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     },
+     {
+      "dim": 2
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "lineStyle": {
+       "type": "dashed",
+       "dashOffset": 3,
+       "width": 2
+      },
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       {
+        "value": [
+         3,
+         2,
+         1
+        ],
+        "lineStyle": {
+         "dashOffset": 8
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "parallel",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    },
+    {
+     "role": "parallel",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4020000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tree",
+   "note": "tree edges: the series lineStyle 'dashed' offset 2, a node's own dashOffset 6",
+   "option": {
+    "series": [
+     {
+      "type": "tree",
+      "lineStyle": {
+       "type": "dashed",
+       "dashOffset": 2,
+       "width": 2
+      },
+      "initialTreeDepth": -1,
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b",
+          "lineStyle": {
+           "dashOffset": 6
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "treeEdge",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4000000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    },
+    {
+     "role": "treeEdge",
+     "s": 0,
+     "i": 3,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4018000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "map",
+   "note": "map regions: itemStyle borderType 'dashed' (width 2), borderDashOffset 3; region B's own borderDashOffset 10",
+   "option": {
+    "series": [
+     {
+      "type": "map",
+      "map": "r2i2dash",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderType": "dashed",
+       "borderDashOffset": 3
+      },
+      "data": [
+       {
+        "name": "A",
+        "value": 1
+       },
+       {
+        "name": "B",
+        "value": 2,
+        "itemStyle": {
+         "borderDashOffset": 10
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "region",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    },
+    {
+     "role": "region",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4024000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "labelBox",
+   "note": "a bar label's box: borderType 'dashed' with a background (the border drawn first at twice the width), borderDashOffset 2; a rich token's own borderType [3, 1] and borderDashOffset 5 (no background)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "position": "top",
+       "backgroundColor": "#eee",
+       "borderColor": "#000",
+       "borderWidth": 1,
+       "borderType": "dashed",
+       "borderDashOffset": 2,
+       "padding": 4,
+       "formatter": "{a|x} y",
+       "rich": {
+        "a": {
+         "borderColor": "#f00",
+         "borderWidth": 2,
+         "borderType": [
+          3,
+          1
+         ],
+         "borderDashOffset": 5
+        }
+       }
+      },
+      "data": [
+       5,
+       7
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "labelBox",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4000000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ],
+     "n": 0
+    },
+    {
+     "role": "labelBox",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4008000000000000",
+      "3ff0000000000000"
+     ],
+     "lineDashOffset": "4014000000000000",
+     "pattern": [
+      "4008000000000000",
+      "3ff0000000000000"
+     ],
+     "n": 1
+    },
+    {
+     "role": "labelBox",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4000000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ],
+     "n": 0
+    },
+    {
+     "role": "labelBox",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4008000000000000",
+      "3ff0000000000000"
+     ],
+     "lineDashOffset": "4014000000000000",
+     "pattern": [
+      "4008000000000000",
+      "3ff0000000000000"
+     ],
+     "n": 1
+    }
+   ]
+  },
+  {
+   "id": "graphicBox",
+   "note": "a graphic text's box: style.borderDash [6, 2] and borderDashOffset 4 as written; a negative offset on another",
+   "option": {
+    "graphic": [
+     {
+      "type": "text",
+      "id": "gb",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Box",
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderDash": [
+        6,
+        2
+       ],
+       "borderDashOffset": 4,
+       "padding": 3
+      }
+     },
+     {
+      "type": "text",
+      "id": "gn",
+      "x": 40,
+      "y": 40,
+      "style": {
+       "fontSize": 20,
+       "text": "Neg",
+       "y": 80,
+       "borderColor": "#00f",
+       "borderWidth": 1,
+       "borderDash": "dotted",
+       "borderDashOffset": -3,
+       "backgroundColor": "#ff0"
+      }
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "graphicBox",
+     "s": -1,
+     "i": "gb",
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4018000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "4010000000000000",
+     "pattern": [
+      "4018000000000000",
+      "4000000000000000"
+     ],
+     "n": 0
+    },
+    {
+     "role": "graphicBox",
+     "s": -1,
+     "i": "gn",
+     "lineWidth": "4000000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "c008000000000000",
+     "pattern": [
+      "4000000000000000"
+     ],
+     "n": 0
+    }
+   ]
+  }
+ ],
+ "maps": [
+  {
+   "name": "r2i2dash",
+   "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}"
+  }
+ ],
  "guards": [
   {
    "name": "plain: [4, 2] and 3",
@@ -801,6 +1660,34 @@
   },
   {
    "name": "anim: it loops",
+   "ok": true
+  },
+  {
+   "name": "series bar: 3, the item's 7",
+   "ok": true
+  },
+  {
+   "name": "series line: dashed [12, 6] at 5",
+   "ok": true
+  },
+  {
+   "name": "series radar: the item's 7, the dotted item the series' 2",
+   "ok": true
+  },
+  {
+   "name": "series graph: 4, 9, 4 with [2, 2]",
+   "ok": true
+  },
+  {
+   "name": "series lines / parallel / tree / map carry the offsets",
+   "ok": true
+  },
+  {
+   "name": "labelBox: the block's dashed against twice the width, at 2; the token's [3, 1] at 5",
+   "ok": true
+  },
+  {
+   "name": "graphicBox: [6, 2] at 4, dotted at -3",
    "ok": true
   }
  ]

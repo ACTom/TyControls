@@ -69,11 +69,45 @@ const CASES = [
     option: bar({ show: false }, { xAxis: { type: 'category', data: CATS, axisLabel: { rotate: 40, formatter: '{value}\nday\nend' } } }) },
   { id: 'axis.turned.value', note: 'a value axis\' labels of two lines turned -20 degrees',
     option: bar({ show: false }, { yAxis: { type: 'value', axisLabel: { rotate: -20, formatter: '{value}\nunits' } } }) },
+  // [R2-I2] the polar, single and parallel axes (AxisBuilder's labels, as
+  // the cartesian ones)
+  { id: 'polar.radius.turned', note: 'a polar category radius axis\' labels of two lines turned 30 degrees',
+    option: { animation: false, polar: {}, angleAxis: { type: 'value', axisLabel: { show: false } },
+      radiusAxis: { type: 'category', data: CATS, axisLabel: { rotate: 30, formatter: '{value}\nday' } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: [1, 2, 3, 4] }] } },
+  { id: 'polar.radius.level', note: 'the same, level, three lines',
+    option: { animation: false, polar: {}, angleAxis: { type: 'value', axisLabel: { show: false } },
+      radiusAxis: { type: 'category', data: CATS, axisLabel: { formatter: '{value}\nday\nend' } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: [1, 2, 3, 4] }] } },
+  { id: 'polar.angle', note: 'a polar category angle axis\' labels of two lines',
+    option: { animation: false, polar: {}, radiusAxis: { type: 'value', axisLabel: { show: false } },
+      angleAxis: { type: 'category', data: CATS, axisLabel: { formatter: '{value}\nday' } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: [1, 2, 3, 4] }] } },
+  { id: 'polar.angle.turned', note: 'the angle axis\' labels of two lines turned 20 degrees',
+    option: { animation: false, polar: {}, radiusAxis: { type: 'value', axisLabel: { show: false } },
+      angleAxis: { type: 'category', data: CATS, axisLabel: { rotate: 20, formatter: '{value}\nday' } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: [1, 2, 3, 4] }] } },
+  { id: 'single.turned', note: 'a single category axis\' labels of two lines turned 30 degrees',
+    option: { animation: false, singleAxis: { type: 'category', data: CATS, top: 100, height: 100, axisLabel: { rotate: 30, formatter: '{value}\nday' } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [0, 1, 2, 3] }] } },
+  { id: 'single.level', note: 'a single value axis\' labels of three lines, level',
+    option: { animation: false, singleAxis: { type: 'value', top: 100, height: 100, axisLabel: { formatter: '{value}\nx\ny' } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 5, 9] }] } },
+  { id: 'parallel.turned', note: 'parallel axes: a category axis\' labels of two lines turned 30, a value axis\' turned -20',
+    option: { animation: false, parallelAxis: [{ dim: 0, type: 'category', data: CATS, axisLabel: { rotate: 30, formatter: '{value}\nday' } },
+      { dim: 1, axisLabel: { rotate: -20, formatter: '{value}\nu' } }],
+      series: [{ type: 'parallel', data: [['Mon', 3], ['Wed', 8]] }] } },
+  { id: 'parallel.level', note: 'a vertical parallel layout: the labels of two lines, level',
+    option: { animation: false, parallel: { layout: 'vertical' }, parallelAxis: [{ dim: 0, type: 'category', data: CATS, axisLabel: { formatter: '{value}\nday' } },
+      { dim: 1, axisLabel: { formatter: '{value}\nu' } }],
+      series: [{ type: 'parallel', data: [['Mon', 3], ['Wed', 8]] }] } },
+  { id: 'axis.level', note: 'a value axis\' labels of lines of different lengths, level (right-aligned: each line on its own)',
+    option: bar({ show: false }, { yAxis: { type: 'value', axisLabel: { formatter: '{value}\nunits wide' } } }) },
 ];
 
 function record(t, kind, s, d) {
-  const m = t.getComputedTransform();
-  must(m, 'a text with no transform');
+  // [R2-I2] no transform anywhere up its parents: the identity
+  const m = t.getComputedTransform() || [1, 0, 0, 1, 0, 0];
   const ds = t._defaultStyle || {};
   const kids = (t.childrenRef ? t.childrenRef() : []).filter(k => k.type === 'tspan');
   must(kids.length >= 2, 'a text of several lines with ' + kids.length + ' spans: ' + JSON.stringify(t.style.text));
@@ -104,7 +138,7 @@ function runCase(c) {
         if (t && !t.ignore && String(t.style.text).indexOf('\n') >= 0) texts.push(record(t, 'series', sm.seriesIndex, idx));
       });
     });
-    for (const mainType of ['xAxis', 'yAxis']) {
+    for (const mainType of ['xAxis', 'yAxis', 'angleAxis', 'radiusAxis', 'singleAxis', 'parallelAxis']) {
       chart.getModel().eachComponent(mainType, (am) => {
         const view = chart.getViewOfComponentModel(am);
         view.group.traverse(el => {
@@ -128,6 +162,8 @@ function generate() {
     { name: 'a line height of 12 (the font size)', ok: cases.every(c => c.texts.every(t => num(t.lineHeight) === 12)) },
     { name: 'spans middle-based', ok: cases.every(c => c.texts.every(t => t.spans.every(s => s.baseline === 'middle'))) },
     { name: 'the turned ones are turned', ok: by('bar.turned.two').texts.every(t => num(t.mat[1]) !== 0) },
+    { name: 'the other axes have their labels', ok: ['polar.radius.turned', 'polar.radius.level', 'polar.angle', 'polar.angle.turned',
+      'single.turned', 'parallel.turned', 'parallel.level'].every(id => by(id).texts.length >= 4) && by('single.level').texts.length >= 3 },
   ];
   return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases, guards };
 }

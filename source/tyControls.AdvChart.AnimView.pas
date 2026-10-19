@@ -714,6 +714,10 @@ function TyChartAnimProxyRole(ARole: TTyChartAnimRole): string;
 { ... and the key of one element's proxy: the role's, a ripple's with its
   number [Batch 92] }
 function TyChartAnimRoleKey(const AEl: TTyChartElement): string;
+{ [R2-I2] the proxy role of a radar item's symbol on spoke ASpoke (0 the
+  first): an update slides it from the polyline's point (RadarView's
+  updateSymbols) }
+function TyRadarSymRole(ASpoke: Integer): string;
 { interpolateRawValues for a number (util/model.ts): from `AFrom || 0` to
   ATo at APercent, rounded to the precision -- the larger of the two values'
   getPrecision unless one is given (AHasPrec) [Batch 92] }
@@ -1684,6 +1688,11 @@ begin
   end;
   Result := TyAnimProps([Num1('shape.x', x), Num1('shape.y', y),
     Num1('shape.width', w), Num1('shape.height', h)]);
+end;
+
+function TyRadarSymRole(ASpoke: Integer): string;
+begin
+  Result := 'radarSym' + IntToStr(ASpoke);
 end;
 
 { the radar's ring, closed: the line carries the closing point, the area
@@ -3392,7 +3401,7 @@ var
     props, oprops: TTyAnimProps;
     oe, host: TTyChartElement;
     hasOld, hadProxy: Boolean;
-    ring, oring: TTyDoubleArray;
+    ring, oring, cur: TTyDoubleArray;
     a, rot: Double;
     q2: TTyChartAnimProxy;
     rk: string;
@@ -3711,12 +3720,34 @@ var
           if Length(oring) > 0 then
             oprops := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(oring, 2))])
           else oprops := nil;
+          { [R2-I2] the polyline's points NOW, before anything below tweens
+            it: as the last frame left them (an enter or an update still
+            running), else the old ring }
+          cur := oring;
+          q2 := OldProxy(AOld, AOldRow, 'radarLine');
+          if (q2 <> nil) and (q2.GetAnimProp('shape.points').Kind = avkArray) then
+            cur := Copy(q2.GetAnimProp('shape.points').Arr, 0, MaxInt);
           p := Take(AOld, AOldRow, s, r, 'radarArea', oprops, props, Length(oring) > 0);
           p.SetFinal(props);
           TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
           p := Take(AOld, AOldRow, s, r, 'radarLine', oprops, props, Length(oring) > 0);
           p.SetFinal(props);
           TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+          { [R2-I2] THE SYMBOLS SLIDE: updateSymbols makes every one anew,
+            sets it at the polyline's point of its spoke (oldPoints[i], the
+            shape before updateProps fills or cuts it) and updateProps it to
+            its new point at update timing and the row; a spoke the old ring
+            has no point for stands at its new one. The labels hang on them
+            (the frame carries them). [Was: they stood at the new points.] }
+          for ka := 0 to Length(ring) div 2 - 2 do
+          begin
+            if ka * 2 + 1 > High(cur) then Break;
+            oprops := TyAnimProps([Num1('x', ring[ka * 2]), Num1('y', ring[ka * 2 + 1])]);
+            p := Make(s, r, TyRadarSymRole(ka));
+            p.Attr(TyAnimProps([Num1('x', cur[ka * 2]), Num1('y', cur[ka * 2 + 1])]));
+            p.SetFinal(oprops);
+            TyUpdateProps(p, oprops, AC.Model, TyAnimCallAt(r));
+          end;
         end;
       carCandleBody, carCandleWickHigh, carCandleWickLow:
         begin
@@ -9828,11 +9859,15 @@ var
   hostRow, hostSer: Integer;
   extras: array of TTyChartElement;
   key: string;
+  { [R2-I2] a radar symbol's slide this frame, by insertion index }
+  slideDX, slideDY: TTyDoubleArray;
 begin
   if (ASource = nil) or (ADest = nil) then Exit;
   ADest.Clear;
   extras := nil;
   nx := 0;
+  slideDX := nil;
+  slideDY := nil;
   for i := 0 to ASource.Count - 1 do
   begin
     { one copy, the one the frame keeps: read in place [P2] -- and [R2-H]
@@ -9954,6 +9989,38 @@ begin
         TyShapeMove(pel^.Shape, NumOr(g, 'x', pel^.Anim.G[8]) - pel^.Anim.G[8],
           NumOr(g, 'y', pel^.Anim.G[9]) - pel^.Anim.G[9]);
     end;
+    { [R2-I2] A RADAR'S SYMBOL slides on a proxy of its own (made anew at
+      every update, RadarView's updateSymbols); its label rides it (below) }
+    if (ASet <> nil) and (pel^.Anim.Role = carNone) and (pel^.Anim.UtTag = 1)
+      and (pel^.Anim.Sub > 0) then
+    begin
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.UtRow, TyRadarSymRole(pel^.Anim.Sub - 1));
+      if (g <> nil) and not g.AtFinal then
+      begin
+        x1 := NumOr(g, 'x', pel^.Caption.LgG[5]);
+        y1 := NumOr(g, 'y', pel^.Caption.LgG[6]);
+        dx := x1 - pel^.Caption.LgG[5];
+        dy := y1 - pel^.Caption.LgG[6];
+        if (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0)) then
+        begin
+          MoveSymbol(pel^, dx, dy);
+          if pel^.Caption.HasSymBox then
+          begin
+            pel^.Caption.SymBox.X := pel^.Caption.SymBox.X + dx;
+            pel^.Caption.SymBox.Y := pel^.Caption.SymBox.Y + dy;
+          end;
+          pel^.Caption.LgG[5] := x1;
+          pel^.Caption.LgG[6] := y1;
+          if Length(slideDX) = 0 then
+          begin
+            SetLength(slideDX, ASource.Count);
+            SetLength(slideDY, ASource.Count);
+          end;
+          slideDX[i] := dx;
+          slideDY[i] := dy;
+        end;
+      end;
+    end;
     { [F3a] A GRAPH EDGE'S LABEL is placed from its line's percent, whatever
       its own fade does }
     if (ASet <> nil) and (pel^.Anim.Role = carGraphEdgeLabel) then
@@ -9971,6 +10038,11 @@ begin
       carGraphEdgeLabel]) and not ((pel^.Anim.Role = carLabel) and (pel^.Anim.HostPlus1 > 0)) then
       ViewMap(pel^, vsx, vsy, vx, vy);
     h := pel^.Anim.HostPlus1 - 1;
+    { [R2-I2] a label on a sliding radar symbol: moved with it }
+    if (pel^.Anim.Role = carLabel) and (h >= 0) and (h < i) and (h <= High(slideDX))
+      and ((slideDX[h] <> 0) or (slideDY[h] <> 0)) then
+      MoveCaption(pel^, slideDX[h], slideDY[h])
+    else
     { [F3c] A TEXT ON A MORPHING HOST rides the morph frame: zrender lays a
       textContent out on its host's bounding rect, which the replaced
       buildPath draws (with no transform) -- its stroke in it as
