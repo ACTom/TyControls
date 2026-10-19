@@ -575,7 +575,7 @@ var
   bmp: TBGRABitmap;
   lw, lh: Integer;
 begin
-  if (P.DeviceScale <= 1) or (AList is TTyVirtualImageList) then
+  if (P.DeviceScale <= 1) or (AList is TTyCustomVirtualImageList) then
   begin
     { S = 1 is TyBlitImage exactly; our own list renders the vector at the raster size. }
     TyBlitImage(P.Bitmap, AList, AIndex, P.Dev(AX), P.Dev(AY), P.Dev(ASizePx), P.RasterPPI,
@@ -636,7 +636,7 @@ function TyRenderImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex, ASi
 var
   lw, lh: Integer;
 begin
-  if (P.DeviceScale <= 1) or (AList is TTyVirtualImageList) then
+  if (P.DeviceScale <= 1) or (AList is TTyCustomVirtualImageList) then
     Exit(TyRenderImage(AList, AIndex, P.Dev(ASizePx), P.RasterPPI, AGhosted));
   Result := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);
   if Result <> nil then Result := Result.Duplicate as TBGRABitmap;   // the caller's to free

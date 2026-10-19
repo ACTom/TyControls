@@ -35,6 +35,9 @@ type
     { the composition (macOS IME) is drawn on the surface too: its underline at S = 2 is the
       S = 1 one doubled -- four times the pixels, from twice the row }
     procedure TestPreeditAtTheDeviceScale;
+    { Review: on a Retina window's canvas (device px) the S-times surface is stretched into the
+      device-px rect; the picture must be the S = 1 one. }
+    procedure TestTerminalOnALayoutCanvas;
   end;
 
 implementation
@@ -300,6 +303,51 @@ begin
     F.View.ImeEnd;
   finally
     F.Free;
+  end;
+end;
+
+procedure TTerminalViewDeviceScaleTest.TestTerminalOnALayoutCanvas;
+var
+  F1, F2: TTyTermViewFixture;
+  bmp: TBitmap;
+  onLayout, plain: TBGRABitmap;
+  ink, blocks: Integer;
+begin
+  F1 := TTyTermViewFixture.Create;
+  F2 := TTyTermViewFixture.Create;
+  bmp := TBitmap.Create;
+  onLayout := nil;
+  plain := nil;
+  try
+    F1.View.RasterBudgetMs := 0;
+    F2.View.RasterBudgetMs := 0;
+    F1.SizeTo(30, 6);
+    F2.SizeTo(30, 6);
+    F1.View.WriteSync(CScreen);
+    F2.View.WriteSync(CScreen);
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(F1.View.ClientWidth, F1.View.ClientHeight);
+    bmp.Canvas.Brush.Color := RGBToColor(255, 0, 255);
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    TyForceDeviceScaleForTest(2, False, False);
+    try
+      F1.View.Render(bmp.Canvas, Rect(0, 0, F1.View.ClientWidth, F1.View.ClientHeight),
+        F1.View.Font.PixelsPerInch);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+    onLayout := TBGRABitmap.Create(bmp);
+    plain := SnapAt(F2, 1);
+    ink := TyInkMismatch(onLayout, plain);
+    blocks := TyBlockMismatch(onLayout, plain);
+    AssertTrue(Format('a Retina window''s canvas shows the S = 1 picture (score %d > %d: ink %d, blocks %d)',
+      [ink + blocks, CMaxMismatch, ink, blocks]), ink + blocks <= CMaxMismatch);
+  finally
+    plain.Free;
+    onLayout.Free;
+    bmp.Free;
+    F2.Free;
+    F1.Free;
   end;
 end;
 

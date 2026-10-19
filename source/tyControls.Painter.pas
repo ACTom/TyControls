@@ -4508,6 +4508,19 @@ begin
   Result.Scale := 1;
   Result.DeviceUnits := False;
   if not TyDeviceScaleRendering then Exit;
+  { A raster cache's canvas answers its own registration first, the test seam included: it is
+    in device units whatever the window it is blitted to is in, and a seam answering it as a
+    window would paint the cache at half size on a layout-units run. }
+  if ACanvas <> nil then
+  begin
+    i := RasterCanvasIndex(ACanvas);
+    if i >= 0 then
+    begin
+      Result.Scale := GRasterCanvases[i].Scale;
+      Result.DeviceUnits := True;
+      Exit;
+    end;
+  end;
   if (GForcedScale > 0) and ((ACanvas <> nil) or GForcedNilCanvas) then
   begin
     Result.Scale := GForcedScale;
@@ -4515,13 +4528,6 @@ begin
     Exit;
   end;
   if ACanvas = nil then Exit;
-  i := RasterCanvasIndex(ACanvas);
-  if i >= 0 then
-  begin
-    Result.Scale := GRasterCanvases[i].Scale;
-    Result.DeviceUnits := True;
-    Exit;
-  end;
   { The system is asked through the platform facade, never here: a widgetset that needs its own
     query gets it in PlatformWS and its WS unit, and this unit stays free of widgetset IFDEFs. }
   if (ACanvas is TControlCanvas) and (TControlCanvas(ACanvas).Control <> nil) then

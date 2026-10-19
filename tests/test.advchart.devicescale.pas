@@ -51,6 +51,10 @@ type
       its own the size of the painter's bitmap }
     procedure TestProgressiveLayerAtTheDeviceScale;
     procedure TestTrailLayerAtTheDeviceScale;
+    { Review: a Retina window's canvas is in device px (DeviceUnits False): the dirty-rect
+      window's layers are put into device-px rects there, the S-times pixels stretched. Every
+      other check paints on a raster canvas, 1:1. The picture must be the S = 1 one. }
+    procedure TestDirtyRectOnALayoutCanvas;
   end;
 
 implementation
@@ -497,6 +501,63 @@ begin
   finally
     pb.Free;
     pa.Free;
+    f.Free;
+  end;
+end;
+
+procedure TAdvChartDeviceScaleTest.TestDirtyRectOnALayoutCanvas;
+var
+  f: TForm;
+  a, b: TDsChart;
+  hostA: TBitmap;
+  pa, pb: TBGRABitmap;
+
+  procedure Frame(const AWhat: string);
+  var
+    ink, blocks: Integer;
+  begin
+    FreeAndNil(pa);
+    FreeAndNil(pb);
+    TyForceDeviceScaleForTest(2, False, False);
+    try
+      a.Layered(hostA.Canvas, Rect(0, 0, a.Width, a.Height), 96);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+    pa := TBGRABitmap.Create(hostA);
+    pb := ShotAt(b, 1);
+    ink := TyInkMismatch(pa, pb);
+    blocks := TyBlockMismatch(pa, pb);
+    AssertTrue(Format('%s: a Retina window''s canvas shows the S = 1 picture (score %d > %d: ink %d, blocks %d)',
+      [AWhat, ink + blocks, CMaxMismatch, ink, blocks]), ink + blocks <= CMaxMismatch);
+  end;
+
+begin
+  f := TForm.CreateNew(nil);
+  hostA := TBitmap.Create;
+  pa := nil;
+  pb := nil;
+  try
+    f.SetBounds(0, 0, 500, 400);
+    a := NewChart(f, cBarsPointer, 320, 200);
+    b := NewChart(f, cBarsPointer, 320, 200);
+    a.UseDirtyRect := True;
+    hostA.PixelFormat := pf32bit;
+    hostA.SetSize(a.Width, a.Height);
+    hostA.Canvas.Brush.Color := RGBToColor(1, 2, 3);
+    hostA.Canvas.FillRect(0, 0, hostA.Width, hostA.Height);
+    Frame('the first frame');
+    a.Hover(a.DatumCentre(2).X, a.DatumCentre(2).Y);
+    b.Hover(b.DatumCentre(2).X, b.DatumCentre(2).Y);
+    Frame('a hover');
+    AssertFalse('precondition: the hover was a partial repaint', a.LastRepaintFull);
+    a.Hover(a.DatumCentre(0).X, a.DatumCentre(0).Y);
+    b.Hover(b.DatumCentre(0).X, b.DatumCentre(0).Y);
+    Frame('the first bar');
+  finally
+    pb.Free;
+    pa.Free;
+    hostA.Free;
     f.Free;
   end;
 end;

@@ -36,6 +36,7 @@ type
     function BuildToolWindow(AParent: TWinControl; APPI: Integer): TControl;
     function BuildToolWindowBar(AParent: TWinControl; APPI: Integer): TControl;
     function BuildDBNavigator(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildDBNavigatorLucide(AParent: TWinControl; APPI: Integer): TControl;
     function IconFont: TTyIconFont;
     function Images: TImageList;
     function BuildImage(AParent: TWinControl; APPI: Integer): TControl;
@@ -129,6 +130,11 @@ type
     procedure TestToolWindowThroughItsCache;
     procedure TestToolWindowBarStripIcons;
     procedure TestDBNavigatorImages;
+    { Review: main's Lucide list is a TTyCustomVirtualImageList, not a TTyVirtualImageList; it
+      must be rendered as ours at the raster size -- in a slot no baked width fits (16 from a
+      12 list: 32 px at S = 2) and greyed the library's way (the navigator's buttons are
+      disabled with no data source). }
+    procedure TestDBNavigatorLucideImages;
   end;
 
 { A picture with structure in every direction, so a placement or a stretch that is off shows. }
@@ -1002,6 +1008,28 @@ begin
   TControlAccess(n).Font.PixelsPerInch := APPI;
   n.Images := Images;   // one picture: the first button's
   Result := n;
+end;
+
+function TDeviceScaleControlsTest.BuildDBNavigatorLucide(AParent: TWinControl;
+  APPI: Integer): TControl;
+var
+  n: TTyDBNavigator;
+  list: TTyLucideImageList;
+begin
+  list := TTyLucideImageList.Create(AParent);
+  list.Width := 12;
+  list.Height := 12;
+  list.Names.Text := 'house'#10'file'#10'search';
+  n := TTyDBNavigator.Create(AParent);
+  n.Parent := AParent;
+  TControlAccess(n).Font.PixelsPerInch := APPI;
+  n.Images := list;
+  Result := n;
+end;
+
+procedure TDeviceScaleControlsTest.TestDBNavigatorLucideImages;
+begin
+  CheckScale('TTyDBNavigator-lucide', @BuildDBNavigatorLucide, 240, 28);
 end;
 
 procedure TDeviceScaleControlsTest.TestToolWindowThroughItsCache;
