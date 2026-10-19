@@ -26,7 +26,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="3">
+    <Units Count="5">
       <Unit0>
         <Filename Value="advchart_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -43,6 +43,14 @@
         <Filename Value="umaps.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit2>
+      <Unit3>
+        <Filename Value="urenderitems.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="ugenerated.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit4>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

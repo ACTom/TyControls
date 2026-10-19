@@ -1,6 +1,7 @@
 {
-  "comment": "Map name -> file, as the gallery examples register them with echarts.registerMap (an .svg file is an SVG map, registerMap(name, {svg})). Read by umaps.pas. Sources and licences: THIRD-PARTY-NOTICES.md. notShipped: maps that draw national borders, which the demo does not include (see umaps.pas); a file named <name>.json, <name>.geo.json or <name>.svg put in this folder is still picked up.",
+  "comment": "Map name -> file, as the gallery examples register them with echarts.registerMap (an .svg file is an SVG map, registerMap(name, {svg})). Read by umaps.pas. Sources and licences: THIRD-PARTY-NOTICES.md. notShipped: maps that draw national borders, which the demo does not include (see umaps.pas); unlicensed: the gallery's SVG maps with no recorded licence; a file named <name>.json, <name>.geo.json or <name>.svg put in this folder is still picked up.",
   "notShipped": ["china", "world", "HK"],
+  "unlicensed": ["flight-seats", "MacOdrum-LV5-floorplan-web", "ksia-ext-plan"],
   "maps": {
     "USA": {
       "file": "USA.json",
