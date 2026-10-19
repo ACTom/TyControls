@@ -928,6 +928,21 @@ const CASES = [
     steps: [{ move: S(150, 50) }, { move: S(230, 50) }, { leave: true }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } },
       { move: S(150, 50) }, { leave: true }, { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }],
   },
+  // ---- [R2-I1] ----
+  {
+    id: 'map-series-held-move-off',
+    note: "[R2-I1] the second B held by highlight; the pointer on the first B lifts it, and MOVING OFF it -- onto the unnamed background, onto A, onto the held B -- takes it down again (it holds no bits; the held one stays); downplay, the pointer still on the background; then the first B hovered BEFORE the highlight and left (the held one stays), the held one hovered and left, a downplay under the pointer on the first B (it stays lifted: its own hover); a highlight and a downplay under the pointer on the held B (the downplay takes it down, the pointer still on it), and a downplay of the hovered last B with no highlight (leaveEmphasis there too)",
+    maps: [{ map: 'svHit', svg: 'svHit' }],
+    option: { animation: false, series: [{ type: 'map', map: 'svHit', data: [{ name: 'A', value: 1 }, { name: 'B', value: 2 }] }] },
+    steps: [{ action: { type: 'highlight', seriesIndex: 0, name: 'B' } }, { move: S(150, 50) }, { move: S(300, 250) },
+      { move: S(150, 50) }, { move: S(60, 50) }, { move: S(150, 50) }, { move: S(230, 50) }, { move: S(300, 250) },
+      { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { leave: true },
+      { move: S(150, 50) }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } }, { leave: true },
+      { move: S(230, 50) }, { leave: true }, { move: S(150, 50) }, { action: { type: 'downplay', seriesIndex: 0, name: 'B' } },
+      { move: S(300, 250) }, { move: S(230, 50) }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } },
+      { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { move: S(300, 250) }, { move: S(230, 50) },
+      { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { leave: true }],
+  },
 ];
 
 // ============================================================================
@@ -998,6 +1013,14 @@ function guards(out) {
   add('map-dup-hover', st2(1, bs2[0]) === 'emphasis' && st2(1, bs2[1]) === '' && st2(2, bs2[1]) === 'emphasis' && st2(2, bs2[0]) === '',
     'a map series lifts the element under the pointer alone');
   add('map-dup-action', st2(4, bs2[1]) === 'emphasis' && st2(4, bs2[0]) === '', 'highlight by name: the last element registered alone');
+  // [R2-I1] moving off the unheld one of the name takes it down
+  c = C('map-series-held-move-off');
+  const bs3 = c.trees[0].named.filter(x => x.name === 'B').map(x => x.el);
+  const st3 = (k, i) => c.states[k].draws[0].items.find(x => x.i === i).states;
+  add('map-held-move-off', st3(2, bs3[0]) === 'emphasis' && st3(3, bs3[0]) === '' && st3(3, bs3[1]) === 'emphasis'
+    && st3(5, bs3[0]) === '' && st3(7, bs3[0]) === '' && st3(7, bs3[1]) === 'emphasis'
+    && st3(17, bs3[0]) === 'emphasis' && st3(21, bs3[1]) === '' && st3(24, bs3[1]) === '',
+    'the unheld B leaves emphasis when the pointer moves off; a downplay reaches the last one alone');
   return g;
 }
 

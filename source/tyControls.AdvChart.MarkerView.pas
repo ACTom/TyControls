@@ -82,6 +82,8 @@ type
     PosCode: Integer;
     DistX, DistY, Dy, Dir: Double;
     AuthorAlign, AuthorVAlign: Boolean;
+    { [R2-I1] built for a state only (needsCreateText): ignored at rest }
+    Hidden: Boolean;
   end;
 
   TTyMkLinePic = record
@@ -203,6 +205,8 @@ type
       path as drawn), as a move from its rest place }
     HasEmphPlace: Boolean;
     EmphDX, EmphDY: Double;
+    { [R2-I1] built for a state only (needsCreateText): ignored at rest }
+    Hidden: Boolean;
   end;
 
   TTyMkPointPic = record
@@ -238,6 +242,9 @@ type
     { [R2-B] Symbol._updateCommon's emphasis ratio: the path's emphasis
       scale is ScaleX / ScaleY times it }
     EmphRatio: Double;
+    { [R2-I1] the label as the hover lays it out: on the path at its
+      emphasis scale, under the emphasis textConfig (Present False: none) }
+    EmphLbl: TTyMkPtLabelPic;
   end;
   TTyMkPointPicArray = array of TTyMkPointPic;
 
@@ -274,6 +281,9 @@ type
     Dash: TJSONData;
     LineCap, LineJoin: string;
     Lbl: TTyMkPtLabelPic;
+    { [R2-I1] the label under the emphasis textConfig (Present False: the
+      state says no place of its own) }
+    EmphLbl: TTyMkPtLabelPic;
   end;
   TTyMkAreaPicArray = array of TTyMkAreaPic;
 
@@ -450,6 +460,83 @@ begin
   Result[0] := A;
   Result[1] := B;
   Result[2] := C;
+end;
+
+{ [R2-I1] A STATE'S label.show as setLabelStyle reads it -- getShallow down
+  the item model's chain (the item, the marker option, the top-level one and
+  the defaults) -- with fillLabel's copy of label.show into emphasis on the
+  item and the marker option (levels 0 and 1). AHas False where none says. }
+function StateLabelShow(const lv: TMkLevels; const AState: string; out AHas: Boolean): Boolean;
+var
+  j, i: Integer;
+  st, lb, d: TJSONData;
+begin
+  Result := False;
+  AHas := False;
+  for j := 0 to High(lv) do
+    for i := 0 to High(lv[j]) do
+    begin
+      if lv[j][i] = nil then Continue;
+      d := nil;
+      st := lv[j][i].Find(AState);
+      if st is TJSONObject then
+      begin
+        lb := TJSONObject(st).Find('label');
+        if lb is TJSONObject then d := TJSONObject(lb).Find('show');
+      end;
+      if JNull(d) and (AState = 'emphasis') and (j <= 1) then
+      begin
+        lb := lv[j][i].Find('label');
+        if lb is TJSONObject then d := TJSONObject(lb).Find('show');
+      end;
+      if not JNull(d) then
+      begin
+        AHas := True;
+        Exit(Truthy(d));
+      end;
+    end;
+end;
+
+{ [R2-I1] needsCreateText: some state's label.show is truthy }
+function AnyStateLabelShows(const lv: TMkLevels): Boolean;
+var has: Boolean;
+begin
+  Result := StateLabelShow(lv, 'emphasis', has) or StateLabelShow(lv, 'blur', has)
+    or StateLabelShow(lv, 'select', has);
+end;
+
+{ [R2-I1] THE EMPHASIS STATE'S TEXT CONFIG (setLabelStyle: createTextConfig
+  of the state's label model, which extends the normal one key by key where
+  it says one): position (a truthy one), distance, offset and rotate down the
+  item's emphasis.label chain, as one object to stand as a level over the
+  label's; nil where the state says none of them. The caller frees it. }
+function EmphTextConfig(const lv: TMkLevels): TJSONObject;
+const
+  cKeys: array[0..3] of string = ('position', 'distance', 'offset', 'rotate');
+var
+  EL: TMkLevels;
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  EL := Sub(Sub(lv, 'emphasis'), 'label');
+  for k := 0 to High(cKeys) do
+  begin
+    d := Chain(EL, cKeys[k]);
+    if d = nil then Continue;
+    if (k = 0) and not Truthy(d) then Continue;
+    if Result = nil then Result := TJSONObject.Create;
+    Result.Add(cKeys[k], d.Clone);
+  end;
+end;
+
+{ [R2-I1] AObj as a level of its own over L }
+function OverLevels(AObj: TJSONObject; const L: TMkLevels): TMkLevels;
+var i: Integer;
+begin
+  SetLength(Result, Length(L) + 1);
+  Result[0] := View1(AObj);
+  for i := 0 to High(L) do Result[i + 1] := L[i];
 end;
 
 { THE LABEL'S TEXT BLOCK over its levels, the most specific object first,
@@ -944,12 +1031,15 @@ var
     { ---- the label ---- }
     label_ := Default(TTyMkLabelPic);
     LB := Sub(itemLv, 'label');
-    if not Truthy(Chain(LB, 'show')) then
+    { [R2-I1] built where a state shows it too (needsCreateText), ignored at
+      rest [was: not built] }
+    if not Truthy(Chain(LB, 'show')) and not AnyStateLabelShows(itemLv) then
     begin
       P.Lbl := label_;
       Exit;
     end;
     label_.Present := True;
+    label_.Hidden := not Truthy(Chain(LB, 'show'));
     { the default text: the value rounded to ten places, else the name }
     rawVal := L.LineValue;
     case L.LineName.Kind of
@@ -1599,6 +1689,7 @@ var
     if AMeasurer <> nil then
       AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
     el := Blank(B.Z2);
+    el.Ignore := B.Hidden;
     el.Shape := TyShapeRect(TyAnchorBox(x, y, w, h, ah, av));
     el.Caption.Text := B.Text;
     el.Caption.FontName := AInk.FontName;
@@ -2128,9 +2219,10 @@ var
     calcA, calcV: string;
     dimIdx, k: Integer;
     dl: TTyDoubleArray;
-    defOp, ls2, x1, y1, x2, y2, lw2: Double;
+    defOp, ls2, x1, y1, x2, y2, lw2, ratio2: Double;
     hasL2, hasG2, hasStroke2: Boolean;
-    ES: TMkLevels;
+    ES, LBE: TMkLevels;
+    ecfg: TJSONObject;
     sc2: string;
     l2, g2: TTyMat2D;
   begin
@@ -2298,12 +2390,15 @@ var
     { ---- the label ---- }
     lp := Default(TTyMkPtLabelPic);
     LB := Sub(lv, 'label');
-    if not Truthy(Chain(LB, 'show')) then
+    { [R2-I1] built where a state shows it too (needsCreateText), ignored at
+      rest [was: not built] }
+    if not Truthy(Chain(LB, 'show')) and not AnyStateLabelShows(lv) then
     begin
       P.Lbl := lp;
       Exit;
     end;
     lp.Present := True;
+    lp.Hidden := not Truthy(Chain(LB, 'show'));
     fmt := Chain(LB, 'formatter');
     { the value as {c} prints it: an array joins }
     v := nil;
@@ -2367,11 +2462,16 @@ var
       hasFill, True, P.StyleFill, defOp, P.ShapeType = 'pin', maxZ2, lp);
     { [R2-B] AND ON THE PATH THE HOVER SCALES: the same layout on the rect of
       the path at its emphasis scale (the stroke's margin by that scale's
-      line scale) -- the move from the rest place }
-    if (P.EmphRatio <> 1) and not IsNan(P.EmphRatio) and not IsInfinite(P.EmphRatio) then
+      line scale) -- the move from the rest place; [R2-I1] under the
+      emphasis textConfig too (its position, distance, offset, rotate) }
+    ratio2 := P.EmphRatio;
+    if IsNan(ratio2) or IsInfinite(ratio2) then ratio2 := 1;
+    ecfg := EmphTextConfig(lv);
+    try
+    if (ratio2 <> 1) or (ecfg <> nil) then
     begin
-      hasL2 := LocalTransformS(P.X, P.Y, P.Rotation, P.ScaleX * P.EmphRatio,
-        P.ScaleY * P.EmphRatio, l2);
+      hasL2 := LocalTransformS(P.X, P.Y, P.Rotation, P.ScaleX * ratio2,
+        P.ScaleY * ratio2, l2);
       hasG2 := hasL2 or P.HasGroupTransform;
       if P.HasGroupTransform and hasL2 then g2 := MatMul(P.GroupTransform, l2)
       else if hasL2 then g2 := l2
@@ -2391,9 +2491,14 @@ var
       if d <> nil then lw2 := NumOf(d);
       hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
       lp2 := lp;
-      StyleLabel(LB, gts, AIn, s, RectThrough(TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke2,
+      if ecfg <> nil then LBE := OverLevels(ecfg, LB) else LBE := LB;
+      StyleLabel(LBE, gts, AIn, s, RectThrough(TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke2,
         hasFill, lw2, ls2), hasG2, g2), fill, hasFill, True, P.StyleFill, defOp,
         P.ShapeType = 'pin', maxZ2, lp2);
+      { the option's own objects outlive the overlay; its position does not }
+      lp2.Position := nil;
+      lp2.Hidden := False;
+      P.EmphLbl := lp2;
       x1 := 0;
       y1 := 0;
       x2 := 0;
@@ -2411,6 +2516,9 @@ var
       lp.HasEmphPlace := True;
       lp.EmphDX := x2 - x1;
       lp.EmphDY := y2 - y1;
+    end;
+    finally
+      ecfg.Free;
     end;
     P.Lbl := lp;
   end;
@@ -2505,6 +2613,7 @@ begin
     el.Silent := True;
     el.Datum := TyChartDatum(-1, -1);
     el.Style.Alpha := 1;
+    el.Ignore := B.Hidden;
     el.Shape := TyShapeRect(TyAnchorBox(x, y, w, h, ah, av));
     el.Caption.Text := B.Text;
     el.Caption.FontName := AInk.FontName;
@@ -2573,6 +2682,46 @@ begin
     end;
   AList.Add(el);
   Result := 1;
+end;
+
+{ [R2-I1] THE EMPHASIS LAYOUT ONTO THE REST LABEL AEl: the label emitted
+  from AEmph -- where the hover lays it out -- read back into AEl.Anim: the
+  move of its anchor G[2..3], G[4] 2 (1: the move alone, a text block), its
+  alignment G[5..6], its turn G[7], its box G[8..11]; and its ink as the
+  caption's emphasis ink (updateInnerText picks the inside or outside ink
+  where the text now is) }
+procedure StampEmphLayout(var AEl: TTyChartElement; const AEmph: TTyMkPtLabelPic;
+  const ABlock: TTyMkBlock; const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer);
+var
+  tmp: TTyPaintList;
+  e2: TTyChartElement;
+  b: TTyRectF;
+begin
+  if not AEmph.Present then Exit;
+  tmp := TTyPaintList.Create;
+  try
+    if (EmitLabel(AEmph, ABlock, AInk, AMeasurer, tmp) <= 0) or (tmp.Count = 0) then Exit;
+    e2 := tmp.Element(0);
+  finally
+    tmp.Free;
+  end;
+  AEl.Anim.G[2] := e2.Caption.X - AEl.Caption.X;
+  AEl.Anim.G[3] := e2.Caption.Y - AEl.Caption.Y;
+  AEl.Anim.G[4] := 1;
+  if (Length(AEl.Caption.RtPieces) > 0) or (Length(e2.Caption.RtPieces) > 0) then Exit;
+  AEl.Anim.G[4] := 2;
+  AEl.Anim.G[5] := Ord(e2.Caption.AnchorH);
+  AEl.Anim.G[6] := Ord(e2.Caption.AnchorV);
+  AEl.Anim.G[7] := e2.Caption.RotationRad;
+  b := e2.Shape.Bounds;
+  AEl.Anim.G[8] := b.Left;
+  AEl.Anim.G[9] := b.Top;
+  AEl.Anim.G[10] := b.Right;
+  AEl.Anim.G[11] := b.Bottom;
+  AEl.Caption.HasEmph := True;
+  AEl.Caption.EmphColour := e2.Caption.Colour;
+  AEl.Caption.EmphStrokeColour := e2.Caption.StrokeColour;
+  AEl.Caption.EmphStrokeWidthLogical := e2.Caption.StrokeWidthLogical;
 end;
 
 function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkBlock;
@@ -2675,12 +2824,14 @@ begin
         lel.Anim.Index := ABlock.Points[APics[i].Item].DataIndex;
         lel.Anim.G[0] := AList.Element(first).Anim.G[0];
         lel.Anim.G[1] := AList.Element(first).Anim.G[1];
-        { [R2-B] where the hover puts it, as a move (G[4] says there is one) }
+        { [R2-B] where the hover puts it, as a move (G[4] says there is one);
+          [R2-I1] its alignment, turn, box and ink there too }
         if APics[i].Lbl.HasEmphPlace then
         begin
           lel.Anim.G[2] := APics[i].Lbl.EmphDX;
           lel.Anim.G[3] := APics[i].Lbl.EmphDY;
           lel.Anim.G[4] := 1;
+          if k = at then StampEmphLayout(lel, APics[i].EmphLbl, ABlock, AInk, AMeasurer);
         end;
         AList.SetElement(k, lel);
       end;
@@ -2711,7 +2862,8 @@ var
   d, fmt, v: TJSONData;
   hasStroke, hasFill: Boolean;
   inherit, name, str: string;
-  lp: TTyMkPtLabelPic;
+  lp, lp2: TTyMkPtLabelPic;
+  ecfg: TJSONObject;
 begin
   Result := nil;
   if (not ABlock.Present) or (ABlock.Kind <> mkArea) then Exit;
@@ -2795,9 +2947,12 @@ begin
       { the label: the name, or the formatter }
       lp := Default(TTyMkPtLabelPic);
       LB := Sub(lv, 'label');
-      if Truthy(Chain(LB, 'show')) then
+      { [R2-I1] built where a state shows it too (needsCreateText), ignored
+        at rest [was: not built] }
+      if Truthy(Chain(LB, 'show')) or AnyStateLabelShows(lv) then
       begin
         lp.Present := True;
+        lp.Hidden := not Truthy(Chain(LB, 'show'));
         case A.Name.Kind of
           mvkStr: name := A.Name.Str;
           mvkNum: name := TyJsNumberToString(A.Name.Num);
@@ -2827,6 +2982,21 @@ begin
         else inherit := TyMkModifyAlpha(P.Fill, 1);
         StyleLabel(LB, gts, AIn, s, P.Rect, inherit, hasFill, P.FillData = nil, P.Fill,
           NaN, False, maxZ2, lp);
+        { [R2-I1] and under the emphasis textConfig, where it says a key }
+        ecfg := EmphTextConfig(lv);
+        try
+          if ecfg <> nil then
+          begin
+            lp2 := lp;
+            StyleLabel(OverLevels(ecfg, LB), gts, AIn, s, P.Rect, inherit, hasFill,
+              P.FillData = nil, P.Fill, NaN, False, maxZ2, lp2);
+            lp2.Position := nil;
+            lp2.Hidden := False;
+            P.EmphLbl := lp2;
+          end;
+        finally
+          ecfg.Free;
+        end;
       end;
       P.Lbl := lp;
     end;
@@ -2841,8 +3011,8 @@ function TyBuildMarkAreas(const APics: TTyMkAreaPicArray; const ABlock: TTyMkBlo
   const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
   AHostSeries: Integer): Integer;
 var
-  i, k, first: Integer;
-  el: TTyChartElement;
+  i, k, first, at: Integer;
+  el, lel: TTyChartElement;
   c: TTyChartColor;
   pts: TTyPointFArray;
   g: TTyChartGradient;
@@ -2912,7 +3082,15 @@ begin
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
     AList.Add(el);
     Inc(Result);
+    at := AList.Count;
     Inc(Result, EmitLabel(APics[i].Lbl, ABlock, AInk, AMeasurer, AList));
+    { [R2-I1] where the emphasis textConfig puts it }
+    if (AList.Count > at) and APics[i].EmphLbl.Present then
+    begin
+      lel := AList.Element(at);
+      StampEmphLayout(lel, APics[i].EmphLbl, ABlock, AInk, AMeasurer);
+      AList.SetElement(at, lel);
+    end;
     MkTarget(AList, first, ctkMarkArea, AHostSeries,
       ABlock.Areas[APics[i].Item].DataIndex, ABlock.Silent);
   end;

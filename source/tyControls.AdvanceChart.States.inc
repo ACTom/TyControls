@@ -1385,7 +1385,7 @@ var
   k, j: Integer;
   el: TTyChartElement;
   nodes: TTyStNodeArray;
-  has, bolder, proxy, emShow, normalShow: Boolean;
+  has, bolder, proxy, emShow, normalShow, stShow: Boolean;
   line, obj: TTyStObject;
   n: TTyStName;
   ss: Double;
@@ -1409,16 +1409,17 @@ begin
     begin
       m^.IsPath := False;
       m^.Rest := StLabelRestOf(el);
-      { the emphasis emShow: item and marker option with fillLabel's copy of
-        label.emShow, then the top-level and the defaults }
+      { the emphasis show: item and marker option with fillLabel's copy of
+        label.show, then the top-level and the defaults [R2-I1: the keys
+        read were 'emShow', so the emphasis show was always true] }
       normalShow := not el.Ignore;
-      emShow := True;
+      emShow := normalShow;
       has := False;
       for j := 0 to High(nodes) do
       begin
         if nodes[j] = nil then Continue;
-        d := TyStFind([nodes[j]], ['emphasis', 'label', 'emShow']);
-        if (d = nil) and (j <= 2) then d := TyStFind([nodes[j]], ['label', 'emShow']);
+        d := TyStFind([nodes[j]], ['emphasis', 'label', 'show']);
+        if (d = nil) and (j <= 2) then d := TyStFind([nodes[j]], ['label', 'show']);
         if d <> nil then
         begin
           if d.JSONType = jtBoolean then emShow := d.AsBoolean
@@ -1432,14 +1433,23 @@ begin
         obj := TyStNoObject;
         if (n = stnEmphasis) and (emShow <> normalShow) then
           TyStSetNum(obj, stkIgnore, Ord(not emShow));
+        { [R2-I1] blur and select: the state's own show, the normal one
+          unless it says (retrieve2) }
+        if n <> stnEmphasis then
+        begin
+          stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
+          if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+        end;
         txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
         if has and (txt <> 'inherit') and (txt <> 'auto')
           and TyTryParseChartColor(txt, c) then
           TyStSetColor(obj, stkFill, c);
         ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
         if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
-        { a markPoint's words where its scaled path puts them }
-        if (n = stnEmphasis) and (el.Anim.Role = carMarkPointLabel) and (el.Anim.G[4] <> 0) then
+        { a markPoint's words where its scaled path puts them; [R2-I1] a
+          markPoint's or a markArea's where the emphasis textConfig does }
+        if (n = stnEmphasis) and ((el.Anim.Role = carMarkPointLabel)
+          or (el.Datum.Kind = ctkMarkArea)) and (el.Anim.G[4] <> 0) then
         begin
           TyStSetNum(obj, stkX, el.Caption.X + el.Anim.G[2]);
           TyStSetNum(obj, stkY, el.Caption.Y + el.Anim.G[3]);
@@ -1548,7 +1558,20 @@ begin
             TyShapeScaleAbout(el.Shape, el.Anim.G[0], el.Anim.G[1], sc, sc);
         end
         else
+        begin
           StWriteLabel(el, FSt[s].Marks[k], False);
+          { [R2-I1] UNDER THE EMPHASIS textConfig: the alignment, the turn and
+            the box of the label as the hover lays it out }
+          if (stnEmphasis in FSt[s].Marks[k].States) and (el.Anim.G[4] = 2)
+            and ((el.Anim.Role = carMarkPointLabel) or (el.Datum.Kind = ctkMarkArea)) then
+          begin
+            el.Caption.AnchorH := TTyTextAnchorH(Round(el.Anim.G[5]));
+            el.Caption.AnchorV := TTyTextAnchorV(Round(el.Anim.G[6]));
+            el.Caption.RotationRad := el.Anim.G[7];
+            el.Shape := TyShapeRect(TyRectF(el.Anim.G[8], el.Anim.G[9], el.Anim.G[10],
+              el.Anim.G[11]));
+          end;
+        end;
         AList.SetElement(FSt[s].MarkIdx[k], el);
       end;
     finally

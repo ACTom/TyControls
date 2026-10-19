@@ -18,6 +18,12 @@
 //   selected. A marker model does not animate here (isAnimationEnabled reads
 //   its own `animation`, unset): no stateTransition.
 //
+// [R2-I1] a marker label's emphasis textConfig (setLabelStyle: the state's
+// createTextConfig -- position, distance, offset, rotate where the state's
+// label model says them, down the item model's chain), and a marker label
+// shown only in a state (needsCreateText: built and ignored at rest; the
+// state's ignore = !show where it differs from the normal one).
+//
 // The harness is states-misc.js', copied (that script generates and exits on
 // load): the replaced Date before the dist, chart._ssr = false,
 // env.node = false, the seeded Math.random, hand-stepped frames, one frame a
@@ -727,6 +733,37 @@ const SELECT = [
     events: [click(0, mark(0, 'mp0')), out(300), click(500, mark(0, 'mp0')), out(800)] },
 ];
 
+// [R2-I1]
+const R2I1 = [
+  { id: 'mp-emph-position', note: 'emphasis textConfig: the markPoint\'s emphasis.label.position top over the pin\'s inside '
+    + 'label; item 1 (a circle of 20, a right label at rest) its own emphasis label at the bottom, distance 8, offset [3, 2]; '
+    + 'item 2 (a circle) an emphasis rotate of 30; hover mp0 at 0, mp1 at 400, mp2 at 800, out at 1200',
+    option: bars({ markPoint: MP({ emphasis: { label: { position: 'top' } } }, [
+      { type: 'max', name: 'max' },
+      { type: 'min', name: 'min', symbol: 'circle', symbolSize: 20, label: { position: 'right' },
+        emphasis: { label: { position: 'bottom', distance: 8, offset: [3, 2] } } },
+      { coord: ['C', 30], name: 'c', value: 30, symbol: 'circle', symbolSize: 20, label: { position: 'left' },
+        emphasis: { label: { position: 'right', rotate: 30 } } }]) }),
+    events: [over(0, mark(0, 'mp0')), over(400, mark(0, 'mp1')), over(800, mark(0, 'mp2')), out(1200)] },
+  { id: 'mp-label-state-only', note: 'a markPoint label hidden at rest (label.show false) and shown by a state: the '
+    + 'markPoint\'s emphasis.label.show (at the top) on hover; item 1\'s blur.label.show under the other series\' focus; '
+    + 'hover mp0 at 0, out at 300, the other series at 500, out at 900',
+    option: bars({ markPoint: MP({ label: { show: false }, emphasis: { label: { show: true, position: 'top' } } }, [
+      { type: 'max', name: 'max' }, { type: 'min', name: 'min', blur: { label: { show: true } } }]) },
+      { emphasis: { focus: 'series' } }),
+    events: [over(0, mark(0, 'mp0')), out(300), over(500, ['item', 1, 3]), out(900)] },
+  { id: 'ml-label-state-only', note: 'a markLine label hidden at rest and shown in emphasis (the markLine\'s '
+    + 'emphasis.label.show): hover ml0 at 0, out at 500',
+    option: bars({ markLine: ML({ label: { show: false }, emphasis: { label: { show: true } } }) }),
+    events: [over(0, mark(0, 'ml0')), out(500)] },
+  { id: 'ma-label-state-only', note: 'markArea labels: the first hidden at rest and shown in emphasis; the second shown at '
+    + 'rest (top) and moved to insideBottom by its emphasis.label.position; hover ma0 at 0, ma1 at 400, out at 800',
+    option: bars({ markArea: MA({ label: { show: false }, emphasis: { label: { show: true } } }, [
+      [{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }],
+      [{ xAxis: 'D', name: 'two', label: { show: true }, emphasis: { label: { position: 'insideBottom' } } }, { xAxis: 'E' }]]) }),
+    events: [over(0, mark(0, 'ma0')), over(400, mark(0, 'ma1')), out(800)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -850,13 +887,39 @@ function guards(cases) {
       || !((e.trackText && e.trackText.states && e.trackText.states.some(x => /select/.test(x || '')))
         || /select/.test(e.finalText.states || ''))), sel);
   }
+  // [R2-I1]
+  {
+    const c = byId(cases, 'mp-emph-position');
+    const at = (part, ms) => [numAt(mk(c, 0, part), 'tx', ms), numAt(mk(c, 0, part), 'ty', ms)].join(',');
+    g('mp-emph-position-moves', at('mp0#label', 250) !== at('mp0#label', 1600) && at('mp1#label', 650) !== at('mp1#label', 1600)
+      && at('mp2#label', 1000) !== at('mp2#label', 1600), [at('mp0#label', 250), at('mp0#label', 1600)].join(' '));
+  }
+  {
+    const c = byId(cases, 'mp-label-state-only');
+    const l0 = mk(c, 0, 'mp0#label');
+    const l1 = mk(c, 0, 'mp1#label');
+    g('mp-label-state-only', l0 && l1 && numAt(l0, 'ignore', 250) === false && numAt(l0, 'ignore', 1600) === true
+      && numAt(l1, 'ignore', 650) === false && numAt(l1, 'ignore', 250) === true, 'mp-label-state-only');
+  }
+  {
+    const c = byId(cases, 'ml-label-state-only');
+    const l = mk(c, 0, 'ml0#label');
+    g('ml-label-state-only', l && numAt(l, 'ignore', 250) === false && numAt(l, 'ignore', 1600) === true, 'ml-label-state-only');
+  }
+  {
+    const c = byId(cases, 'ma-label-state-only');
+    const l = mk(c, 0, 'ma0#label');
+    const l1 = mk(c, 0, 'ma1#label');
+    g('ma-label-state-only', l && numAt(l, 'ignore', 250) === false && numAt(l, 'ignore', 1600) === true
+      && numAt(l1, 'ty', 650) !== numAt(l1, 'ty', 1600), 'ma-label-state-only');
+  }
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,
