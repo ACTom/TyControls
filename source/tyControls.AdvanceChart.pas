@@ -2018,6 +2018,9 @@ type
     function DzGrabAt(AX, AY: Integer): Boolean;
     function AnyPanRoam: Boolean;
     function RoamGrabAt(AX, AY: Integer): Boolean;
+    { [R2-E] the RoamController that has the last word on a release: -1
+      none that pans, 0 the point outside its area, 1 inside }
+    function RoamReleaseArea(AX, AY: Integer): Integer;
     procedure CursorAfterMove(AX, AY: Integer);
     procedure CursorAfterUp(AX, AY: Integer);
     procedure ApplyCursorName(const AName: string);
