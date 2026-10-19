@@ -84,6 +84,9 @@ type
     procedure TestDegenerateRects;
     procedure TestNilCanvasIsScaleOne;
     procedure TestBeginPaintOnResizesToRaster;
+    { A caller's surface outlives the frame: the scale(S) preset must not (follow-up to #83). }
+    procedure TestKeptSurfaceDrawsAtOneTimesAfterARetinaFrame;
+    procedure TestKeptSurfaceGetsTheCallersTransformBack;
     procedure TestScaleOneEndPaintUnchanged;
     { Task 3: fills, borders, glyphs and shadows inside the raster scope. }
     procedure TestFillBackgroundSolidRounded;
@@ -392,6 +395,83 @@ begin
     AssertEquals('and height', 60, surf.Height);
     AssertTrue('and the painter draws on it', P.Bitmap = surf);
     P.EndPaint;
+  finally
+    P.Free;
+    surf.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestKeptSurfaceDrawsAtOneTimesAfterARetinaFrame;
+{ A caller's surface (BeginPaintOn) outlives the frame, and BGRA keeps a bitmap's Canvas2D --
+  transform and stroke transform -- across SetSize. A frame at S = 2 presets scale(2) on it; if
+  that is still there when the window has moved to a one-times screen, Canvas2D drawing in the
+  next frame (a grid's OnDrawCell, say) comes out twice as large. }
+var
+  P: TTyPainter;
+  surf: TBGRABitmap;
+begin
+  surf := TBGRABitmap.Create(40, 30, BGRAPixelTransparent);
+  P := TTyPainter.Create;
+  try
+    TyForceDeviceScaleForTest(2, False);
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    P.EndPaint;
+    TyForceDeviceScaleForTest(0, False);   // the one-times screen
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    AssertEquals('precondition: this frame is at S = 1', 1, P.DeviceScale);
+    P.Bitmap.Fill(BGRAPixelTransparent);
+    P.Bitmap.Canvas2D.fillStyle(BGRA(255, 0, 0));
+    P.Bitmap.Canvas2D.fillRect(0, 0, 10, 10);
+    P.EndPaint;
+    AssertTrue('(5,5) is inside the 10 x 10 square, got ' + PxStr(surf.GetPixel(5, 5)),
+      IsRed(surf.GetPixel(5, 5)));
+    AssertEquals('(15,15) is not -- at a kept scale(2) the square would reach (20,20)',
+      0, surf.GetPixel(15, 15).alpha);
+  finally
+    P.Free;
+    surf.Free;
+  end;
+end;
+
+procedure TDeviceScalePainterTest.TestKeptSurfaceGetsTheCallersTransformBack;
+{ What EndPaint puts back is what the caller had before BeginPaintOn -- its own transform and
+  stroke transform -- not the identity. At S = 1 nothing is preset and nothing is put back: the
+  painter leaves the caller's Canvas2D alone, as it always did. }
+var
+  P: TTyPainter;
+  surf: TBGRABitmap;
+
+  function Same(const A, B: TAffineMatrix): Boolean;
+  var
+    i, j: Integer;
+  begin
+    Result := True;
+    for i := 1 to 2 do
+      for j := 1 to 3 do
+        if Abs(A[i, j] - B[i, j]) > 1e-6 then Exit(False);
+  end;
+
+begin
+  surf := TBGRABitmap.Create(40, 30, BGRAPixelTransparent);
+  P := TTyPainter.Create;
+  try
+    surf.Canvas2D.translate(3, 4);
+    surf.Canvas2D.strokeScale(5, 5);
+    TyForceDeviceScaleForTest(2, False);
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    AssertTrue('in the frame: the scale(2) preset',
+      Same(surf.Canvas2D.matrix, AffineMatrixScale(2, 2)));
+    P.EndPaint;
+    AssertTrue('after it: the caller''s translate(3, 4)',
+      Same(surf.Canvas2D.matrix, AffineMatrixTranslation(3, 4)));
+    AssertTrue('and the caller''s strokeScale(5, 5)',
+      Same(surf.Canvas2D.strokeMatrix, AffineMatrixScale(5, 5)));
+    TyForceDeviceScaleForTest(0, False);
+    P.BeginPaintOn(nil, Rect(0, 0, 40, 30), 96, surf);
+    surf.Canvas2D.translate(1, 1);
+    P.EndPaint;
+    AssertTrue('S = 1: a transform set in the frame is still there after it',
+      Same(surf.Canvas2D.matrix, AffineMatrixTranslation(4, 5)));
   finally
     P.Free;
     surf.Free;

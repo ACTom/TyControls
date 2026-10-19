@@ -65,6 +65,10 @@ type
     FDeviceUnits: Boolean;
     FLayoutPPI: Integer;
     FRasterDepth: Integer;
+    { A caller's surface (BeginPaintOn) at S > 1: its Canvas2D transforms from before the
+      preset, which EndPaint puts back. }
+    FKeptC2D: Boolean;
+    FKeptMatrix, FKeptStrokeMatrix: TAffineMatrix;
     function GetRasterPPI: Integer;
     { The canvas2D of a scaled layer works in layout pixels: BeginPaint presets scale(S, S). }
     procedure PresetCanvas2D;
@@ -1713,6 +1717,7 @@ begin
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
+  FKeptC2D := False;
   FBmp.Fill(BGRAPixelTransparent);
   if FScale > 1 then PresetCanvas2D;
 end;
@@ -1744,7 +1749,16 @@ begin
   if (FBmp <> nil) and ((FBmp.Width <> w) or (FBmp.Height <> h)) then
     FBmp.SetSize(w, h);
   FOwnsBmp := False;
-  if (FBmp <> nil) and (FScale > 1) then PresetCanvas2D;
+  { The surface outlives the frame, and BGRA keeps its Canvas2D -- transform and stroke
+    transform -- across SetSize: note what the caller had, so that EndPaint puts it back and a
+    frame at S = 1 (the window moved to a one-times screen) does not find scale(S) there. }
+  FKeptC2D := (FBmp <> nil) and (FScale > 1);
+  if FKeptC2D then
+  begin
+    FKeptMatrix := FBmp.Canvas2D.matrix;
+    FKeptStrokeMatrix := FBmp.Canvas2D.strokeMatrix;
+    PresetCanvas2D;
+  end;
 end;
 
 procedure TTyPainter.PresetCanvas2D;
@@ -1808,6 +1822,16 @@ var
   baseBmp: TBGRABitmap;
   c: TBGRAPixel;
 begin
+  if FKeptC2D then
+  begin
+    { The two transforms only: a path the caller has open holds device points already. }
+    FKeptC2D := False;
+    if FBmp <> nil then
+    begin
+      FBmp.Canvas2D.matrix := FKeptMatrix;
+      FBmp.Canvas2D.strokeMatrix := FKeptStrokeMatrix;
+    end;
+  end;
   if Assigned(FBmp) then
   begin
     if Assigned(FCanvas) then
