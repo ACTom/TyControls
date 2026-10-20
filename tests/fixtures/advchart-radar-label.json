@@ -5897,6 +5897,433 @@
     }
    ],
    "hover": null
+  },
+  {
+   "id": "symbol.offset",
+   "note": "a series and an item symbolOffset: not read, the symbols and labels on their points",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "a",
+       "max": 100
+      },
+      {
+       "name": "b",
+       "max": 100
+      },
+      {
+       "name": "c",
+       "max": 100
+      },
+      {
+       "name": "d",
+       "max": 100
+      },
+      {
+       "name": "e",
+       "max": 100
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "symbolOffset": [
+       9,
+       6
+      ],
+      "label": {
+       "show": true
+      },
+      "data": [
+       {
+        "value": [
+         60,
+         70,
+         80,
+         50,
+         40
+        ],
+        "name": "p"
+       },
+       {
+        "value": [
+         30,
+         90,
+         40,
+         70,
+         60
+        ],
+        "name": "q",
+        "symbol": "rect",
+        "symbolSize": 10,
+        "symbolOffset": [
+         -7,
+         5
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "rows": [
+    {
+     "s": 0,
+     "d": 0,
+     "points": [
+      [
+       "4072c00000000000",
+       "4061800000000000"
+      ],
+      [
+       "406d2da226bb50c2",
+       "40664bcd4b74731a"
+      ],
+      [
+       "406f9f450e9b53c3",
+       "40708b8ab04fbe3a"
+      ],
+      [
+       "4074963a6b6f75d3",
+       "406e0e6d5c63adc9"
+      ],
+      [
+       "407520ad198156a4",
+       "406774754fb041c6"
+      ],
+      [
+       "4072c00000000000",
+       "4061800000000000"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "points": [
+      [
+       "4072c00000000000",
+       "4065400000000000"
+      ],
+      [
+       "406accf50d39fa1e",
+       "40658607f34c93fd"
+      ],
+      [
+       "407147d143a6d4f1",
+       "406d0b8ab04fbe3a"
+      ],
+      [
+       "40755251c99c0b5b",
+       "40700a195a45c673"
+      ],
+      [
+       "40765103a64201f6",
+       "4066aeaff78862a9"
+      ],
+      [
+       "4072c00000000000",
+       "4065400000000000"
+      ]
+     ]
+    }
+   ],
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "dim": 0,
+     "text": "60",
+     "ignore": false,
+     "x": "4072c00000000000",
+     "y": "4060600000000000",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4072c00000000000",
+      "4060600000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "4072c00000000000",
+     "hostY": "4061800000000000",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "dim": 1,
+     "text": "70",
+     "ignore": false,
+     "x": "406d2da226bb50c2",
+     "y": "40652bcd4b74731a",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406d2da226bb50c2",
+      "40652bcd4b74731a"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "406d2da226bb50c2",
+     "hostY": "40664bcd4b74731a",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "dim": 2,
+     "text": "80",
+     "ignore": false,
+     "x": "406f9f450e9b53c3",
+     "y": "406ff715609f7c74",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406f9f450e9b53c3",
+      "406ff715609f7c74"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "406f9f450e9b53c3",
+     "hostY": "40708b8ab04fbe3a",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "dim": 3,
+     "text": "50",
+     "ignore": false,
+     "x": "4074963a6b6f75d3",
+     "y": "406cee6d5c63adc9",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4074963a6b6f75d3",
+      "406cee6d5c63adc9"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "4074963a6b6f75d3",
+     "hostY": "406e0e6d5c63adc9",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "dim": 4,
+     "text": "40",
+     "ignore": false,
+     "x": "407520ad198156a4",
+     "y": "406654754fb041c6",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407520ad198156a4",
+      "406654754fb041c6"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "407520ad198156a4",
+     "hostY": "406774754fb041c6",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dim": 0,
+     "text": "30",
+     "ignore": false,
+     "x": "4072c00000000000",
+     "y": "4064000000000000",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4072c00000000000",
+      "4064000000000000"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "4072c00000000000",
+     "hostY": "4065400000000000",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dim": 1,
+     "text": "90",
+     "ignore": false,
+     "x": "406accf50d39fa1e",
+     "y": "40644607f34c93fd",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406accf50d39fa1e",
+      "40644607f34c93fd"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "406accf50d39fa1e",
+     "hostY": "40658607f34c93fd",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dim": 2,
+     "text": "40",
+     "ignore": false,
+     "x": "407147d143a6d4f1",
+     "y": "406bcb8ab04fbe3a",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407147d143a6d4f1",
+      "406bcb8ab04fbe3a"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "407147d143a6d4f1",
+     "hostY": "406d0b8ab04fbe3a",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dim": 3,
+     "text": "70",
+     "ignore": false,
+     "x": "40755251c99c0b5b",
+     "y": "406ed432b48b8ce6",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "40755251c99c0b5b",
+      "406ed432b48b8ce6"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "40755251c99c0b5b",
+     "hostY": "40700a195a45c673",
+     "z2": 102,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dim": 4,
+     "text": "60",
+     "ignore": false,
+     "x": "40765103a64201f6",
+     "y": "40656eaff78862a9",
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "40765103a64201f6",
+      "40656eaff78862a9"
+     ],
+     "rotation": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "opacity": "3ff0000000000000",
+     "hostX": "40765103a64201f6",
+     "hostY": "4066aeaff78862a9",
+     "z2": 102,
+     "guide": null
+    }
+   ],
+   "hover": null
   }
  ],
  "fade": {
@@ -6638,6 +7065,10 @@
   },
   {
    "name": "fade: an update fades the labels in again, the symbols moving",
+   "ok": true
+  },
+  {
+   "name": "symbol.offset: every symbol on its ring point (no offset)",
    "ok": true
   }
  ]

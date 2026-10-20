@@ -124,6 +124,10 @@ const CASES = [
     option: radar([{ type: 'radar', label: { show: true }, labelLine: { show: true }, labelLayout: { dx: 24, dy: -16 }, data: [P] }]) },
   { id: 'fontSize', note: 'a written font size and weight',
     option: radar([{ type: 'radar', label: { show: true, fontSize: 18, fontWeight: 'bold', position: 'top' }, data: [P] }]) },
+  // [r2v] createSymbol reads no symbolOffset: the symbol and its label stay on the point
+  { id: 'symbol.offset', note: 'a series and an item symbolOffset: not read, the symbols and labels on their points',
+    option: radar([{ type: 'radar', symbolOffset: [9, 6], label: { show: true },
+      data: [P, Object.assign({}, Q, { symbol: 'rect', symbolSize: 10, symbolOffset: [-7, 5] })] }]) },
 ];
 
 function ringPoints(data, idx) {
@@ -283,6 +287,9 @@ function generate() {
     { name: 'fade: an update fades the labels in again, the symbols moving',
       ok: fade.samples[7].opacity.every(o => num(o) === 0) && fade.samples[12].opacity.every(o => num(o) === 1)
         && fade.samples[8].hostY[0] !== fade.samples[12].hostY[0] },
+    { name: 'symbol.offset: every symbol on its ring point (no offset)',
+      ok: (() => { const c = by('symbol.offset'); return c.labels.length === 10 && c.labels.every(l => {
+        const r = c.rows.find(q => q.d === l.d).points[l.dim]; return r[0] === l.hostX && r[1] === l.hostY; }); })() },
   ];
   return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases, fade, guards };
 }

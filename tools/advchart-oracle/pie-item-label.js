@@ -126,6 +126,9 @@ const CASES = [
     option: pie({ label: { position: 'inner' }, data: withItem(1, { label: { position: null } }) }) },
   { id: 'item.inside.series', note: 'the series inside, an item outer with its line',
     option: pie({ label: { position: 'inside' }, data: withItem(4, { label: { position: 'outer' } }) }) },
+  // [r2v] an item's labelLine.minTurnAngle
+  { id: 'item.minTurnAngle', note: 'an item\'s labelLine.minTurnAngle 170: its line nearly straight',
+    option: pie({ data: withItem(1, { labelLine: { minTurnAngle: 170 } }) }) },
 ];
 
 function painted(t) {
@@ -194,6 +197,9 @@ function generate() {
     { name: 'position.null.item: item 1 inner', ok: lab('position.null.item', 1).align === 'center' },
     { name: 'item.inside.series: item 4 outer with its line (the item\'s word)', ok: lab('item.inside.series', 4).guide !== null && lab('item.inside.series', 4).align !== 'center' },
     { name: 'item.state.only: item 2 built, ignored', ok: lab('item.state.only', 2) && lab('item.state.only', 2).ignore },
+    { name: 'item.minTurnAngle: item 1\'s line other than the series\' default draws it',
+      ok: JSON.stringify(lab('item.minTurnAngle', 1).guide.points)
+        !== JSON.stringify(runCase({ id: 'x', note: '', option: pie({ data: DATA() }) }).labels.find(l => l.d === 1).guide.points) },
   ];
   return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases, guards };
 }
