@@ -795,6 +795,10 @@ type
     FProgUnfinished: Boolean;
     FProgFresh: Boolean;
     FProgReuse: Boolean;
+    { [R2-I9] THE LIST AN UPDATE BUILT (FullUpdateWith, DropStaticKeepList)
+      and nothing has touched since: the paint draws it as it stands instead
+      of building the same list a second time }
+    FListFresh: Boolean;
     FProgStepCost: Double;
     FStreamPending: Boolean;
     FStreamRelayout: Boolean;
@@ -4926,6 +4930,13 @@ function TyAdvChartProgFastFramesForTest: Integer;
   and how many times it has. }
 procedure TyAdvChartListTailForTest(AOn: Boolean);
 function TyAdvChartListTailsForTest: Integer;
+{ [R2-I9] The list an update built drawn by the next paint as it stands
+  (FListFresh): a switch that turns it off -- the paint builds it again, the
+  reference it must match -- and how many paints have drawn one. }
+procedure TyAdvChartListFreshForTest(AOn: Boolean);
+function TyAdvChartListFreshesForTest: Integer;
+{ [R2-I9] how many times any chart has built its series list (BuildSeriesList) }
+function TyAdvChartListBuildsForTest: Integer;
 { [R2-L] The incremental layer drawn again only where a state changed it
   (ProgLayerRegionRedraw): a switch -- off, the layer is drawn whole, the
   reference -- and how many times it has been. }
@@ -4983,6 +4994,24 @@ end;
 var
   GListTailOff: Boolean = False;
   GListTails: Integer = 0;
+  GListFreshOff: Boolean = False;
+  GListFreshes: Integer = 0;
+  GListBuilds: Integer = 0;
+
+function TyAdvChartListBuildsForTest: Integer;
+begin
+  Result := GListBuilds;
+end;
+
+procedure TyAdvChartListFreshForTest(AOn: Boolean);
+begin
+  GListFreshOff := not AOn;
+end;
+
+function TyAdvChartListFreshesForTest: Integer;
+begin
+  Result := GListFreshes;
+end;
 
 procedure TyAdvChartListTailForTest(AOn: Boolean);
 begin

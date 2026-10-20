@@ -2514,6 +2514,9 @@ var
   k: Integer;
 begin
   Result := False;
+  { [R2-I9] the list changes: patched, or built again where it cannot be --
+    never drawn as an update left it }
+  FListFresh := False;
   if GStPatchOff or FStGeoApplied or (FPaintList = nil) or not FPaintListValid
     or FDirty or FAnimPending or FExporting or not FPaintList.JournalReady then Exit;
   { [R2-L] what the last patch wrote, as it stands now: what this one

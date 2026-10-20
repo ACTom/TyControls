@@ -1292,7 +1292,11 @@ begin
   if (FBuild = nil) or (FLastPPI <= 0) then Exit;
   SolveDataZoomViews(NewTextMeasurer(FLastPPI), FLastPPI);
   TipReset;
-  DropStatic;
+  { [R2-I9] the sliders are the list's end (BuildListTail): built again
+    there, not the whole list [was: DropStatic -- a pointer over a slider,
+    and every step of a drag after its update had built the list, built
+    every element again] }
+  ListTailRefresh;
   FZrDirty := True;
   inherited Invalidate;
 end;
@@ -1314,7 +1318,10 @@ begin
     the hovered element found again (zrender #6198) [Batch 96] }
   FullUpdateWith(APayload, AHasPayload);
   TipReset;
-  DropStatic;
+  { [R2-I9] the cached picture went with the update; the list it built is
+    the paint's [was: DropStatic -- left from when this relayouted without
+    building, it threw the update's list away and the paint built every
+    element a second time] }
 end;
 
 procedure TTyAdvanceChart.DzArmTimer;

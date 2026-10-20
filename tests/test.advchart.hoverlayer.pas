@@ -33,6 +33,7 @@ type
     procedure Layered(ACanvas: TCanvas; const ARect: TRect);
     procedure Move(AX, AY: Integer);
     procedure Leave;
+    procedure Drag(AX0, AY0, AX1, AY1: Integer);
     function List: TTyPaintList;
     function Primary: TTyChartColor;
   end;
@@ -79,6 +80,23 @@ type
     procedure TestTheCopyIsDrawnOverEveryLayer;
     procedure TestAHoverOnlyFrameLeavesTheListAlone;
     procedure TestALabelledSymbolIsLiftedInItsLayer;
+  end;
+
+  { [R2-I9] the list an update built drawn as it stands, and the visual
+    map's own states on the list's end }
+  TAdvChartListFreshTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl: TTyStyleController;
+    function NewChart(AW, AH: Integer; AMode: TTyChartAnimationMode;
+      const AOption: string): THlProbe;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAFreshListIsTheBuiltList;
+    procedure TestAnUpdateBuildsOnce;
+    procedure TestTheFirstIndicatorBuildsNoList;
   end;
 
 implementation
@@ -161,6 +179,15 @@ end;
 procedure THlProbe.Leave;
 begin
   MouseLeave;
+end;
+
+procedure THlProbe.Drag(AX0, AY0, AX1, AY1: Integer);
+begin
+  MouseMove([], AX0, AY0);
+  MouseDown(mbLeft, [ssLeft], AX0, AY0);
+  MouseMove([ssLeft], (AX0 + AX1) div 2, (AY0 + AY1) div 2);
+  MouseMove([ssLeft], AX1, AY1);
+  MouseUp(mbLeft, [], AX1, AY1);
 end;
 
 function THlProbe.List: TTyPaintList;
@@ -638,9 +665,387 @@ begin
     - item.Host.Rest.Num[stkZ2]));
 end;
 
+{ ==================== the fresh list ==================== }
+
+procedure TAdvChartListFreshTest.SetUp;
+begin
+  inherited SetUp;
+  FForm := TForm.CreateNew(nil);
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.Mode := 'light';
+  FCtl.ThemeName := 'default';
+end;
+
+procedure TAdvChartListFreshTest.TearDown;
+begin
+  TyAdvChartListFreshForTest(True);
+  TyAdvChartListTailForTest(True);
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  inherited TearDown;
+end;
+
+function TAdvChartListFreshTest.NewChart(AW, AH: Integer; AMode: TTyChartAnimationMode;
+  const AOption: string): THlProbe;
+begin
+  Result := THlProbe.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.AnimationMode := AMode;
+  Result.AnimNow := 1000;
+  { the tooltip's clock stands with the animation's: no real time }
+  Result.TooltipNow := 1000;
+  Result.ProgressiveStepCostMs := 1;
+  Result.SetBounds(0, 0, AW, AH);
+  Result.Option := AOption;
+end;
+
+function Frame(B: TBitmap): RawByteString;
+var
+  y, n: Integer;
+begin
+  n := B.Width * 3;
+  SetLength(Result, n * B.Height);
+  for y := 0 to B.Height - 1 do
+    Move(B.ScanLine[y]^, Result[1 + y * n], n);
+end;
+
+{ the paint list as a text: each element's kind, place in the order, box,
+  inks, visibility and words }
+function ListSig(AChart: THlProbe): string;
+var
+  L: TTyPaintList;
+  i: Integer;
+  pe: PTyChartElement;
+begin
+  L := AChart.List;
+  if L = nil then Exit('nil');
+  Result := IntToStr(L.Count);
+  for i := 0 to L.Count - 1 do
+  begin
+    pe := L.Ref(L.PaintOrder(i));
+    Result := Result + Format('|%d %d %d %s %s %s %s %x %x %s %d %d %s',
+      [Ord(pe^.Shape.Kind), pe^.Z, pe^.Z2, Hex(pe^.Shape.Bounds.Left),
+       Hex(pe^.Shape.Bounds.Top), Hex(pe^.Shape.Bounds.Right), Hex(pe^.Shape.Bounds.Bottom),
+       pe^.Style.FillColor, pe^.Style.StrokeColor, Hex(pe^.Style.Alpha),
+       Ord(pe^.Ignore), Ord(pe^.ProgHidden), pe^.Caption.Text]);
+  end;
+end;
+
+const
+  cFreshW = 480;
+  cFreshH = 360;
+
+function FreshOptions(AIndex: Integer): string;
+var
+  sb: TStringBuilder;
+  i, j: Integer;
+begin
+  sb := TStringBuilder.Create;
+  try
+    case AIndex of
+      0:
+        begin
+          sb.Append('{"legend": {}, "tooltip": {"trigger": "axis"}, "xAxis": {"type": "category", "data": [');
+          for i := 0 to 59 do
+          begin
+            if i > 0 then sb.Append(',');
+            sb.Append('"c' + IntToStr(i) + '"');
+          end;
+          sb.Append(']}, "yAxis": {"type": "value"}, "dataZoom": [{"type": "inside"}, {"type": "slider"}],');
+          sb.Append(' "series": [{"name": "a", "type": "bar", "data": [');
+          for i := 0 to 59 do
+          begin
+            if i > 0 then sb.Append(',');
+            sb.Append(IntToStr(5 + (i * 37) mod 90));
+          end;
+          sb.Append(']}, {"name": "b", "type": "line", "data": [');
+          for i := 0 to 59 do
+          begin
+            if i > 0 then sb.Append(',');
+            sb.Append(IntToStr(10 + (i * 53) mod 70));
+          end;
+          sb.Append(']}]}');
+        end;
+      1:
+        begin
+          sb.Append('{"tooltip": {}, "xAxis": {"type": "category"}, "yAxis": {"type": "category"},');
+          sb.Append(' "dataZoom": [{"type": "slider"}], "visualMap": {"min": 0, "max": 1, "calculable": true,');
+          sb.Append(' "orient": "horizontal", "left": "center", "top": 0},');
+          sb.Append(' "series": [{"type": "heatmap", "progressive": 60, "progressiveThreshold": 100, "data": [');
+          for i := 0 to 19 do
+            for j := 0 to 19 do
+            begin
+              if (i > 0) or (j > 0) then sb.Append(',');
+              sb.Append(Format('[%d,%d,%s]', [i, j, FloatToStr(((i * 7 + j * 13) mod 20) / 20)]));
+            end;
+          sb.Append(']}]}');
+        end;
+    else
+      sb.Append('{"legend": {}, "series": [{"type": "pie", "radius": "50%", "selectedMode": "single",');
+      sb.Append(' "data": [{"name": "p", "value": 3}, {"name": "q", "value": 5}, {"name": "r", "value": 7},');
+      sb.Append(' {"name": "s", "value": 2}]}]}');
+    end;
+    Result := sb.ToString;
+  finally
+    sb.Free;
+  end;
+end;
+
+function FreshActions(AIndex: Integer): TStringArray;
+begin
+  case AIndex of
+    0: Result := TStringArray.Create(
+         '{"type": "dataZoom", "start": 20, "end": 60}',
+         '{"type": "dataZoom", "start": 30, "end": 70}',
+         '{"type": "legendToggleSelect", "name": "b"}',
+         '{"type": "highlight", "seriesIndex": 0, "dataIndex": 30}',
+         '{"type": "legendToggleSelect", "name": "b"}',
+         '{"type": "downplay", "seriesIndex": 0, "dataIndex": 30}',
+         '{"type": "dataZoom", "start": 0, "end": 100}',
+         { the slider under the pointer, dragged, left }
+         'move:120,335', 'move:240,335', 'move:395,335', 'drag:240,335,300,335',
+         'drag:395,335,350,335', 'move:200,150', 'leave');
+    1: Result := TStringArray.Create(
+         { a cell hovered, its box up, then the window moves under it }
+         'move:220,180',
+         '{"type": "dataZoom", "start": 40, "end": 60}',
+         '{"type": "dataZoom", "start": 41, "end": 61}',
+         '{"type": "highlight", "seriesIndex": 0, "dataIndex": 3}',
+         'move:200,160',
+         '{"type": "dataZoom", "start": 0, "end": 100}',
+         'move:150,150', 'move:220,180', 'move:240,335', 'drag:240,335,280,335',
+         'move:160,330', 'leave');
+  else
+    Result := TStringArray.Create(
+      '{"type": "legendToggleSelect", "name": "q"}',
+      '{"type": "select", "seriesIndex": 0, "dataIndex": 2}',
+      '{"type": "legendToggleSelect", "name": "q"}');
+  end;
+end;
+
+procedure TAdvChartListFreshTest.TestAFreshListIsTheBuiltList;
+var
+  frames: array[Boolean] of TStringList;
+  fresh: Boolean;
+  chart: THlProbe;
+  bmp: TBitmap;
+  o, a, k, t, n0, used: Integer;
+  mode: TTyChartAnimationMode;
+  acts: TStringArray;
+
+  procedure Snap(const AWhat: string);
+  begin
+    chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+    frames[fresh].Add(AWhat);
+    frames[fresh].Add(Frame(bmp));
+    frames[fresh].Add(ListSig(chart));
+  end;
+
+  { an action, or the pointer: move:x,y drag:x0,y0,x1,y1 leave }
+  procedure Act(const A: string);
+  var p: TStringArray;
+  begin
+    if Copy(A, 1, 5) = 'move:' then
+    begin
+      p := Copy(A, 6, MaxInt).Split([',']);
+      chart.Move(StrToInt(p[0]), StrToInt(p[1]));
+    end
+    else if Copy(A, 1, 5) = 'drag:' then
+    begin
+      p := Copy(A, 6, MaxInt).Split([',']);
+      chart.Drag(StrToInt(p[0]), StrToInt(p[1]), StrToInt(p[2]), StrToInt(p[3]));
+    end
+    else if A = 'leave' then chart.Leave
+    else chart.DispatchAction(A);
+  end;
+
+begin
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(cFreshW, cFreshH);
+    used := 0;
+    for o := 0 to 2 do
+      for mode := Low(TTyChartAnimationMode) to High(TTyChartAnimationMode) do
+      begin
+        if not (mode in [camOff, camAlways]) then Continue;
+        frames[False].Clear;
+        frames[True].Clear;
+        for fresh := False to True do
+        begin
+          TyAdvChartListFreshForTest(fresh);
+          TyAdvChartListTailForTest(fresh);
+          n0 := TyAdvChartListFreshesForTest;
+          chart := NewChart(cFreshW, cFreshH, mode, FreshOptions(o));
+          try
+            Snap('first');
+            k := 0;
+            while chart.ProgressiveUnfinished and (k < 100) do
+            begin
+              chart.ProgressTick;
+              Snap('chunk');
+              Inc(k);
+            end;
+            acts := FreshActions(o);
+            for a := 0 to High(acts) do
+            begin
+              Act(acts[a]);
+              Snap(acts[a]);
+              { the update's animation, frame by frame, and the chunks }
+              for t := 1 to 6 do
+              begin
+                chart.AnimNow := 1000 + a * 10000 + t * 150;
+                chart.TooltipNow := chart.AnimNow;
+                chart.TooltipTick(chart.AnimNow);
+                chart.AnimTick(chart.AnimNow);
+                if chart.ProgressiveUnfinished then chart.ProgressTick;
+                Snap(Format('%s +%d', [acts[a], t]));
+              end;
+              chart.AnimNow := 1000 + (a + 1) * 10000;
+              chart.TooltipNow := chart.AnimNow;
+              chart.TooltipTick(chart.AnimNow);
+              chart.AnimTick(chart.AnimNow);
+              k := 0;
+              while chart.ProgressiveUnfinished and (k < 100) do
+              begin
+                chart.ProgressTick;
+                Inc(k);
+              end;
+              Snap(acts[a] + ' settled');
+            end;
+            if fresh then Inc(used, TyAdvChartListFreshesForTest - n0)
+            else AssertEquals('switched off: none drawn as it stands', n0, TyAdvChartListFreshesForTest);
+          finally
+            chart.Free;
+          end;
+        end;
+        AssertEquals(Format('option %d mode %d: as many frames', [o, Ord(mode)]),
+          frames[False].Count, frames[True].Count);
+        for k := 0 to frames[False].Count - 1 do
+          if frames[False][k] <> frames[True][k] then
+          begin
+            if k mod 3 = 0 then
+              Fail(Format('option %d mode %d: step "%s" against "%s"', [o, Ord(mode),
+                frames[False][k], frames[True][k]]))
+            else if k mod 3 = 1 then
+              Fail(Format('option %d mode %d: the frame of %s differs', [o, Ord(mode),
+                frames[False][k - 1]]))
+            else
+              Fail(Format('option %d mode %d: the list of %s differs', [o, Ord(mode),
+                frames[False][k - 2]]));
+          end;
+      end;
+    AssertTrue(Format('the fresh list was drawn (%d)', [used]), used >= 20);
+  finally
+    frames[False].Free;
+    frames[True].Free;
+    bmp.Free;
+  end;
+end;
+
+procedure TAdvChartListFreshTest.TestAnUpdateBuildsOnce;
+var
+  chart: THlProbe;
+  bmp: TBitmap;
+  b0: Integer;
+  fresh: Boolean;
+  drag: array[Boolean] of Integer;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(cFreshW, cFreshH);
+    for fresh := False to True do
+    begin
+      TyAdvChartListFreshForTest(fresh);
+      TyAdvChartListTailForTest(fresh);
+      chart := NewChart(cFreshW, cFreshH, camOff, FreshOptions(0));
+      try
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+        { a dataZoom step: the update builds the list, the paint draws it
+          [was: thrown away by DzSyncLayout and built again by the paint] }
+        b0 := TyAdvChartListBuildsForTest;
+        chart.DispatchAction('{"type": "dataZoom", "start": 20, "end": 60}');
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+        if fresh then
+          AssertEquals('a dataZoom step builds the list once', b0 + 1, TyAdvChartListBuildsForTest)
+        else
+          AssertEquals('switched off: twice', b0 + 2, TyAdvChartListBuildsForTest);
+        { a legend toggle, the same }
+        b0 := TyAdvChartListBuildsForTest;
+        chart.DispatchAction('{"type": "legendToggleSelect", "name": "b"}');
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+        if fresh then
+          AssertEquals('a legend toggle builds the list once', b0 + 1, TyAdvChartListBuildsForTest)
+        else
+          AssertEquals('switched off: twice', b0 + 2, TyAdvChartListBuildsForTest);
+        { a drag of the slider's window: an update a step, the slider's own
+          view the list's end }
+        b0 := TyAdvChartListBuildsForTest;
+        chart.Drag(240, 335, 300, 335);
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+        drag[fresh] := TyAdvChartListBuildsForTest - b0;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertTrue(Format('a drag builds less (%d against %d)', [drag[True], drag[False]]),
+      (drag[True] >= 1) and (drag[True] < drag[False]));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TAdvChartListFreshTest.TestTheFirstIndicatorBuildsNoList;
+var
+  chart: THlProbe;
+  bmp: TBitmap;
+  b0, t0, k: Integer;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(cFreshW, cFreshH);
+    chart := NewChart(cFreshW, cFreshH, camOff, FreshOptions(1));
+    try
+      chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+      while chart.ProgressiveUnfinished do
+      begin
+        chart.ProgressTick;
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+      end;
+      { the first hover over a cell: the indicator shows and the handle
+        labels blur -- the visual map's own elements, the list's end alone
+        [was: the blur dropped the whole list, every cell built again] }
+      b0 := TyAdvChartListBuildsForTest;
+      t0 := TyAdvChartListTailsForTest;
+      for k := 0 to 5 do
+      begin
+        chart.Move(120 + k * 31, 140 + (k mod 3) * 37);
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+        AssertEquals(Format('no list built by move %d', [k]), b0, TyAdvChartListBuildsForTest);
+      end;
+      AssertTrue('its end built again', TyAdvChartListTailsForTest > t0);
+      { off the chart: the indicator and the slider's hover go, the list's
+        end alone [was: DzViewUpdate dropped the whole list] }
+      chart.Leave;
+      chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+      AssertEquals('no list built leaving', b0, TyAdvChartListBuildsForTest);
+    finally
+      chart.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TAdvChartHoverLayerOracleTest);
   RegisterTest(TAdvChartHoverLayerTest);
+  RegisterTest(TAdvChartListFreshTest);
 finalization
   FreeAndNil(GFix);
 end.

@@ -991,6 +991,8 @@ var
   largeBars: TTyBoolArray;
   i: Integer;
 begin
+  { [R2-I9] a new layout: no list of the last one is drawn as it stands }
+  FListFresh := False;
   { a resize renders every view [Batch 130] }
   if (ARect.Left <> FLastRect.Left) or (ARect.Top <> FLastRect.Top)
     or (ARect.Right <> FLastRect.Right) or (ARect.Bottom <> FLastRect.Bottom) then
@@ -3662,6 +3664,7 @@ var
 begin
   Result := 0;
   gfxCount := 0;
+  Inc(GListBuilds);
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
     insertion) ACROSS the chart, and a list per series would order each one
     against itself and leave the between-series order to the loop. }
@@ -4441,6 +4444,8 @@ begin
     publishes the one `updated` (echarts.ts doDispatchAction) [Batch 97] }
   FLazyPending := False;
   BuildSeriesList(m, FLastPPI);
+  { [R2-I9] the paint draws this one (AnimFullEnd may drop it again) }
+  FListFresh := True;
   AnimFullEnd;
   if FEvHover.Id > 0 then
   begin

@@ -1083,7 +1083,8 @@ begin
     FVmLive[AIndex].ThumbFill[h] := FVisualLayouts[AIndex].Handles[h].Fill;
     FVmLive[AIndex].Labels[h] := FVisualLayouts[AIndex].Handles[h].Label_;
   end;
-  DropStatic;
+  { [R2-I9] the view alone moved: the visual maps and what follows them }
+  ListTailRefresh;
   FZrDirty := True;
   inherited Invalidate;
 end;
@@ -1343,7 +1344,11 @@ begin
   end;
   if anyChange then
   begin
-    DropStatic;
+    { [R2-I9] the thumbs and the labels are the visual map's own elements:
+      the visual maps and what follows them, not the whole list [was:
+      DropStatic -- the first hover over a heatmap built every cell again,
+      the indicator's first show blurring the handle labels] }
+    ListTailRefresh;
     FZrDirty := True;
     inherited Invalidate;
   end;
