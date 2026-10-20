@@ -1653,6 +1653,7 @@
      ]
     }
    ],
+   "symbolSize": "@scatter-map-brush.symbolSize",
    "label": {
     "formatter": "{b}",
     "position": "right",
@@ -1721,6 +1722,7 @@
      ]
     }
    ],
+   "symbolSize": "@scatter-map-brush.symbolSize#2",
    "showEffectOn": "emphasis",
    "rippleEffect": {
     "brushType": "stroke"

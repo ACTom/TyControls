@@ -22,7 +22,8 @@
   "bottom": "10%"
  },
  "tooltip": {
-  "backgroundColor": "rgba(255,255,255,0.7)"
+  "backgroundColor": "rgba(255,255,255,0.7)",
+  "formatter": "@scatter-aqi-color.formatter"
  },
  "xAxis": {
   "type": "value",

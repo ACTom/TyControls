@@ -730,12 +730,14 @@ end;
 
 procedure TTyAdvanceChart.RenderTo(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
-var prev: TComponent;
+var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
   prev := TyChartImageScopeEnter(Owner);
+  prevRes := TyChartImageResolverEnter(@ResolveImageUrl);
   try
     RenderToBody(ACanvas, ARect, APPI);
   finally
+    TyChartImageResolverLeave(prevRes);
     TyChartImageScopeLeave(prev);
   end;
 end;
@@ -1299,13 +1301,45 @@ begin
   RtFlushQueue;
 end;
 
+{ [R2-J2] the scope's URL resolver: OnResolveImage, asked once a URL }
+function TTyAdvanceChart.ResolveImageUrl(const AUrl: string): TBGRABitmap;
+var i: Integer;
+begin
+  Result := nil;
+  if FResolvedImages <> nil then
+  begin
+    i := FResolvedImages.IndexOf(AUrl);
+    if i >= 0 then Exit(TBGRABitmap(FResolvedImages.Objects[i]));
+  end;
+  if not Assigned(FOnResolveImage) then Exit;
+  if FResolvedImages = nil then
+  begin
+    FResolvedImages := TStringList.Create;
+    FResolvedImages.OwnsObjects := True;
+    FResolvedImages.UseLocale := False;
+    FResolvedImages.CaseSensitive := True;
+    FResolvedImages.Sorted := True;
+    FResolvedImages.Duplicates := dupIgnore;
+  end;
+  FOnResolveImage(Self, AUrl, Result);
+  FResolvedImages.AddObject(AUrl, Result);
+end;
+
+procedure TTyAdvanceChart.ForgetResolvedImages;
+begin
+  FreeAndNil(FResolvedImages);
+  Invalidate;
+end;
+
 procedure TTyAdvanceChart.Paint;
-var prev: TComponent;
+var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
   prev := TyChartImageScopeEnter(Owner);
+  prevRes := TyChartImageResolverEnter(@ResolveImageUrl);
   try
     PaintBody;
   finally
+    TyChartImageResolverLeave(prevRes);
     TyChartImageScopeLeave(prev);
   end;
 end;

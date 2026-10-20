@@ -7,7 +7,9 @@
  },
  "xAxis": {
   "max": "dataMax",
-  "axisLabel": {}
+  "axisLabel": {
+   "formatter": "@bar-race-country.formatter"
+  }
  },
  "dataset": {
   "source": [
@@ -153,6 +155,7 @@
   "axisLabel": {
    "show": true,
    "fontSize": 14,
+   "formatter": "@bar-race-country.formatter#2",
    "rich": {
     "flag": {
      "fontSize": 25,
@@ -168,7 +171,9 @@
    "realtimeSort": true,
    "seriesLayoutBy": "column",
    "type": "bar",
-   "itemStyle": {},
+   "itemStyle": {
+    "color": "@bar-race-country.color"
+   },
    "encode": {
     "x": 0,
     "y": 3

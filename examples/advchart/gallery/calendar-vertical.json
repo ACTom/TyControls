@@ -1,6 +1,7 @@
 {
  "tooltip": {
-  "position": "top"
+  "position": "top",
+  "formatter": "@calendar-vertical.formatter"
  },
  "visualMap": {
   "min": 0,

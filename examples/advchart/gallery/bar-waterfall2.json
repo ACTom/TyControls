@@ -6,7 +6,8 @@
   "trigger": "axis",
   "axisPointer": {
    "type": "shadow"
-  }
+  },
+  "formatter": "@bar-waterfall2.formatter"
  },
  "legend": {
   "data": [

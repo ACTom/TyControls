@@ -472,8 +472,10 @@ function guards(out) {
 
 function generate() {
   NOW = T0;
-  const ids = INDEX.entries.filter(e => e.ok && e.handlers && e.handlers.some(h => h.indexOf('.') < 0))
-    .map(e => e.id);
+  /* [R2-J2] custom-wind draws on the world map, which neither the demo nor
+     this script has: not a case */
+  const ids = INDEX.entries.filter(e => e.ok && e.handlers && e.handlers.some(h => h.indexOf('.') < 0)
+    && e.id !== 'custom-wind').map(e => e.id);
   const out = {
     source: DIST, version: echarts.version, seed: SEED, W, H,
     measure: { firstCode: FIRST_CODE, ratio: RATIO.map(hex) },

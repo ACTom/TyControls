@@ -506,7 +506,9 @@
   {
    "type": "value",
    "name": "Budget (million USD)",
-   "axisLabel": {}
+   "axisLabel": {
+    "formatter": "@mix-zoom-on-value.formatter"
+   }
   }
  ],
  "dataZoom": [

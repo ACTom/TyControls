@@ -26,7 +26,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
      tyControls.AdvChart.Color, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Matrix, tyControls.AdvChart.Export, tyControls.AdvanceChart,
-     test.advchart.gridbounds, test.advchart.categoryminmax;
+     test.advchart.gridbounds, test.advchart.categoryminmax,
+     test.advchart.gallerytext;
 type
   TMxProbe = class(TTyAdvanceChart)
   protected
@@ -303,7 +304,7 @@ var d: TJSONData;
 begin
   d := ACase.Find('gallery');
   if (d <> nil) and (d.JSONType = jtString) then
-    Result := TJSONObject(LoadJson(GalleryPath(d.AsString)))
+    Result := TJSONObject(GalleryWithoutFunctions(LoadJson(GalleryPath(d.AsString))))
   else
     Result := TJSONObject(ACase.Objects['option'].Clone);
 end;
@@ -824,7 +825,7 @@ begin
     if AGallery <> ((d <> nil) and (d.JSONType = jtString)) then Continue;
     if cs.Arrays['series'].Count = 0 then Continue;
     FName := cs.Strings['id'];
-    if AGallery then opt := TJSONObject(LoadJson(GalleryPath(d.AsString)))
+    if AGallery then opt := TJSONObject(GalleryWithoutFunctions(LoadJson(GalleryPath(d.AsString))))
     else opt := TJSONObject(cs.Objects['option'].Clone);
     try
       { UPSTREAM'S OWN PALETTE AND RAMP where the option names none }
@@ -1036,7 +1037,7 @@ var
 begin
   for k := 0 to High(cFiles) do
   begin
-    opt := LoadJson(GalleryPath(cFiles[k]));
+    opt := GalleryWithoutFunctions(LoadJson(GalleryPath(cFiles[k])));
     try
       try
         LoadOption(opt.AsJSON);

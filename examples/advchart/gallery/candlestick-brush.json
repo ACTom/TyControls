@@ -21,7 +21,8 @@
   "padding": 10,
   "textStyle": {
    "color": "#000"
-  }
+  },
+  "position": "@candlestick-brush.position"
  },
  "axisPointer": {
   "link": [

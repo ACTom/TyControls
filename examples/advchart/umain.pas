@@ -45,9 +45,18 @@ unit umain;
   the option is set. Three that load a large file ship it gzipped.
 
   WHAT CANNOT BE DRAWN SAYS SO, ON THE CHART. A map the demo does not ship,
-  a Baidu map, a projection from a script on a CDN, a file too large to
-  ship: the reason is shown over the chart (the chart's own loading mask,
-  without the spinner) rather than an empty frame. }
+  a Baidu map, a file too large to ship: the reason is shown over the chart
+  (the chart's own loading mask, without the spinner) rather than an empty
+  frame.
+
+  [R2-J2] EVERY OTHER FUNCTION OF A PAGE IS NAMED TOO -- formatters,
+  symbolSize, itemStyle.color, labelLayout, tooltip.position ... as
+  '@<id>.<key>' -- and ucallbacks.pas registers a transcription of each (the
+  few it cannot transcribe are said under the notes, with the reason);
+  map-usa-projection's d3 projection is ualbersusa.pas. A PICTURE GIVEN BY
+  URL is answered by the chart's OnResolveImage (ChartResolveImage): the
+  examples site's own pictures, in images/ under their path there; one the
+  demo does not have is said under the notes. }
 
 {$mode objfpc}{$H+}
 
@@ -60,7 +69,8 @@ uses
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
   tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose,
-  umaps, urenderitems, ugenerated;
+  BGRABitmap, BGRABitmapTypes,
+  umaps, urenderitems, ugenerated, ucallbacks, ualbersusa;
 
 type
   { One row of gallery/index.json. `Ok` false means the harvester could not
@@ -116,12 +126,17 @@ type
     procedure BtnShotClick(Sender: TObject);
     procedure BtnNextClick(Sender: TObject);
     procedure SeqTimerTimer(Sender: TObject);
+    procedure ChartResolveImage(Sender: TObject; const AUrl: string;
+      var AImage: TBGRABitmap);
   private
     FEntries: array of TGalleryEntry;
     FCategories: TStringList;
     FGalleryDir: string;
     { maps/ beside gallery/: the GeoJSON the geo examples register }
     FMapsDir: string;
+    { images/ beside gallery/: the examples site's pictures, by their path
+      under data/asset/img/ there }
+    FImagesDir: string;
     { The gallery slot the memo and chart now hold, -1 for none. Picking a row
       in code fires the list's change event as well, so without it one click on
       a tab loaded the same option two or three times. }
@@ -185,9 +200,8 @@ resourcestring
     + 'not include it. Save the SVG under the map''s name in %s (for instance '
     + 'flight-seats.svg) to see the example.';
   rsNoticeProjection = 'This example projects its map with d3-geo''s Albers USA '
-    + 'projection, which the page loads from a CDN; the demo has no Pascal port '
-    + 'of it. Register handlers under the names %s with '
-    + 'TyChartRegisterGeoProjection to draw it.';
+    + 'projection, which the page loads from a CDN. Register handlers under the '
+    + 'names %s with TyChartRegisterGeoProjection (ualbersusa.pas does) to draw it.';
   rsNoticeNotConverted = 'This example could not be converted: %s';
   { under the notes }
   rsNoteLostCanvas = 'The page draws a picture of its own on a canvas (here the '
@@ -197,6 +211,14 @@ resourcestring
     + 'it.';
   rsNoteShortened = 'The option is %s MB; the editor shows its beginning, and '
     + 'Apply sets the whole of it while that is unchanged.';
+  { [R2-J2] under the notes: a picture the page names by URL that images/
+    does not hold (%s the file name(s), %s the folder) }
+  rsNoteImageMissing = 'The page shows the picture %s from the ECharts examples '
+    + 'site, which has no recorded licence, so the demo does not include it; '
+    + 'saved in %s under that name it is drawn.';
+  { a function of the page that ucallbacks.pas does not transcribe: %s its
+    name, %s why }
+  rsNoteUntranscribed = 'The page''s function %s is not transcribed: %s.';
   rsBorderMapNotShipped = 'This example needs the map %s, which the demo does '
     + 'not include. Borders between countries are disputed, and some places '
     + 'require published maps to be reviewed, so neither TyControls nor this demo '
@@ -543,6 +565,60 @@ begin
   ShowNotes(opt);
 end;
 
+{ the file images/ holds for a URL of the examples site's pictures
+  ('__ROOT__/data/asset/img/<path>'), '' for any other URL }
+function ImageFileOf(const AImagesDir, AUrl: string): string;
+const cPrefix = '__ROOT__/data/asset/img/';
+begin
+  Result := '';
+  if (AImagesDir = '') or (Copy(AUrl, 1, Length(cPrefix)) <> cPrefix) then Exit;
+  Result := AImagesDir + StringReplace(Copy(AUrl, Length(cPrefix) + 1, MaxInt),
+    '/', PathDelim, [rfReplaceAll]);
+end;
+
+{ THE CHART ASKS FOR A PICTURE IT CANNOT LOAD (OnResolveImage, wired in the
+  .lfm): one of the examples site's own, read from images/ -- wind-barb's
+  weather icons, bar-rich-text's and pie-rich-text's. The chart keeps the
+  answer; a URL the demo has no file for stays empty. }
+procedure TMainForm.ChartResolveImage(Sender: TObject; const AUrl: string;
+  var AImage: TBGRABitmap);
+var fn: string;
+begin
+  fn := ImageFileOf(FImagesDir, AUrl);
+  if (fn <> '') and FileExists(fn) then
+  try
+    AImage := TBGRABitmap.Create(fn);
+  except
+    AImage := nil;
+  end;
+end;
+
+{ the examples site's pictures AText names that images/ does not hold, by
+  file name, comma-separated }
+function MissingImages(const AImagesDir, AText: string): string;
+const cPrefix = '"__ROOT__/data/asset/img/';
+var
+  p, q: Integer;
+  url, fn, nm: string;
+begin
+  Result := '';
+  p := Pos(cPrefix, AText);
+  while p > 0 do
+  begin
+    q := PosEx('"', AText, p + 1);
+    if q <= 0 then Break;
+    url := Copy(AText, p + 1, q - p - 1);
+    fn := ImageFileOf(AImagesDir, url);
+    nm := ExtractFileName(StringReplace(url, '/', PathDelim, [rfReplaceAll]));
+    if (fn <> '') and not FileExists(fn) and (Pos(nm, Result) = 0) then
+    begin
+      if Result <> '' then Result := Result + ', ';
+      Result := Result + nm;
+    end;
+    p := PosEx(cPrefix, AText, q + 1);
+  end;
+end;
+
 function TMainForm.NoticeFor(const AText: string): string;
 var
   e: Integer;
@@ -598,6 +674,7 @@ var
   diags: TTyOptDiagArray;
   i, notes: Integer;
   s, border: string;
+  untr: TStringList;
 begin
   { THE LIBRARY'S OWN WORDS. Asking TyOptDiagnose rather than the control keeps
     two things honest at once: the answer is current (the control's build is
@@ -645,6 +722,21 @@ begin
   border := BorderMapsMissing(AText, FMapsDir);
   if border <> '' then
     s := s + LineEnding + LineEnding + Format(rsBorderMapNotShipped, [border, FMapsDir]);
+  { [R2-J2] a picture the demo does not have, and a function of the page it
+    does not transcribe }
+  border := MissingImages(FImagesDir, AText);
+  if border <> '' then
+    s := s + LineEnding + Format(rsNoteImageMissing, [border, FImagesDir]);
+  untr := TStringList.Create;
+  try
+    GalleryUntranscribed(untr);
+    for i := 0 to untr.Count - 1 do
+      if Pos('"@' + untr.Names[i] + '"', AText) > 0 then
+        s := s + LineEnding + Format(rsNoteUntranscribed, [untr.Names[i],
+          untr.ValueFromIndex[i]]);
+  finally
+    untr.Free;
+  end;
   if (FShownSlot >= 0) and (FShownSlot <= High(FEntries)) then
   begin
     if FEntries[FShownSlot].Generated then s := s + LineEnding + rsNoteGenerated;
@@ -733,8 +825,11 @@ var
 begin
   FCategories := TStringList.Create;
   FShownSlot := -1;
-  { the gallery's renderItem functions, transcribed (urenderitems.pas) }
+  { the gallery's renderItem functions, transcribed (urenderitems.pas), and
+    every other function it names (ucallbacks.pas, ualbersusa.pas) }
   RegisterGalleryRenderItems;
+  RegisterGalleryCallbacks;
+  RegisterAlbersUsa;
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
@@ -750,6 +845,10 @@ begin
   begin
     FMapsDir := ExtractFilePath(ExcludeTrailingPathDelimiter(FGalleryDir))
       + 'maps' + PathDelim;
+    FImagesDir := ExtractFilePath(ExcludeTrailingPathDelimiter(FGalleryDir))
+      + 'images' + PathDelim;
+    GalleryDataDir := ExtractFilePath(ExcludeTrailingPathDelimiter(FGalleryDir))
+      + 'data' + PathDelim;
     LoadIndex;
     FillCategories;
     FillList;

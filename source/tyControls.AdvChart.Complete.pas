@@ -943,7 +943,7 @@ const
     A key upstream does NOT read stays out of here and stays reported --
     toolbox.feature.mark, the root `calculable`, an inside dataZoom's
     `realtime` -- because saying nothing about it would be the lie. }
-  cRuntimeKeys: array[0..53] of TRuntimeKey = (
+  cRuntimeKeys: array[0..56] of TRuntimeKey = (
     { model/mixin/palette.ts:53 -- a series' own palette }
     (Parent: 'series-scatter'; Key: 'color'),
     { label/labelStyle.ts:551 }
@@ -1057,7 +1057,15 @@ const
     { [R2-J] component/axis/ParallelAxisView.ts:174, its default in
       component/parallel/install.ts:40 -- what every parallel axis takes from
       parallelAxisDefault (parallel-nutrients) }
-    (Parent: 'parallel.parallelAxisDefault'; Key: 'realtime')
+    (Parent: 'parallel.parallelAxisDefault'; Key: 'realtime'),
+    { [R2-J2] label/labelStyle.ts:160 getFormattedLabel, via HeatmapView.ts:319
+      (matrix-correlation-heatmap, whose formatter the gallery now names) }
+    (Parent: 'series-heatmap.label'; Key: 'formatter'),
+    { [R2-J2] label/labelStyle.ts:160, via RadarView.ts:254 -- the item's own
+      (radar-custom) }
+    (Parent: 'series-radar.data.label'; Key: 'formatter'),
+    { [R2-J2] model/Series.ts:590 getProgressive -- any series (custom-wind) }
+    (Parent: 'series-custom'; Key: 'progressive')
   );
 
   { Enumerated values the runtime accepts beyond the documented list. }

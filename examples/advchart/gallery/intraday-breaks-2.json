@@ -14,7 +14,8 @@
    "interval": 1800000,
    "axisLabel": {
     "showMinLabel": true,
-    "showMaxLabel": true
+    "showMaxLabel": true,
+    "formatter": "@intraday-breaks-2.formatter"
    },
    "breakLabelLayout": {
     "moveOverlap": false

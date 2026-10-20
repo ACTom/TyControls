@@ -71,7 +71,8 @@
     "shadowColor": "rgba(0, 0, 0, 0.5)"
    },
    "animationType": "scale",
-   "animationEasing": "elasticOut"
+   "animationEasing": "elasticOut",
+   "animationDelay": "@pie-custom.animationDelay"
   }
  ]
 }

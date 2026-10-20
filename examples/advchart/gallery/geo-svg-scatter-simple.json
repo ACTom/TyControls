@@ -11,6 +11,7 @@
   "type": "effectScatter",
   "coordinateSystem": "geo",
   "geoIndex": 0,
+  "symbolSize": "@geo-svg-scatter-simple.symbolSize",
   "itemStyle": {
    "color": "#b02a02"
   },

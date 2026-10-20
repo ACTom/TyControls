@@ -115,7 +115,8 @@
   "left": 50
  },
  "tooltip": {
-  "show": true
+  "show": true,
+  "valueFormatter": "@matrix-covariance.valueFormatter"
  },
  "visualMap": {
   "type": "continuous",

@@ -13,7 +13,9 @@
   "textStyle": {
    "color": "#fff",
    "fontSize": 12
-  }
+  },
+  "position": "@scatter-nutrients-matrix.position",
+  "formatter": "@scatter-nutrients-matrix.formatter"
  },
  "axisPointer": {
   "show": true,

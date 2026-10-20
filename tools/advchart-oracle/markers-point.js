@@ -224,6 +224,8 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-markers-point.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R2-J2] the gallery as it was before every function got a name
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -1386,7 +1388,7 @@ function tagOption(option) {
   }
   return option;
 }
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 const pointed = option => seriesArray(option).map((s, i) => (s && s.markPoint && s.markPoint.data ? i : -1)).filter(i => i >= 0);
 
 function recordCase(def, side) {

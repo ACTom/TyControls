@@ -24,6 +24,10 @@ unit ugenerated;
   and the sixteen hex digits of a number's IEEE bits, 's' a string and a NUL,
   '[' ... ']' around an array.
 
+  [R2-J2] custom-wind is the sixth: its 65,160 wind vectors come from
+  data-gl's winds.json, which this demo ships gzipped in data/ (176 KB in
+  place of 5.3 MB of option), through the page's loop and its shuffle.
+
   A filled option is text, as every option is: GalleryFillGenerated writes
   each array straight into the option text where the empty one was (the rest
   of the text untouched), each number as the seventeen significant digits
@@ -43,6 +47,12 @@ type
     procedure Num(A: Double); virtual; abstract;
     procedure Str(const A: string); virtual; abstract;
   end;
+
+{ [R2-J2] The folder the data files are read from (data/ beside gallery/):
+  winds.json.gz, scatter-painter-choice-marker.json. The demo and the tests
+  set it before a chart draws. }
+var
+  GalleryDataDir: string = '';
 
 { Whether AId is a generated example of the gallery. }
 function GalleryIsGenerated(const AId: string): Boolean;
@@ -67,9 +77,9 @@ function GalleryGeneratedHash(const AId: string; out AHashes: TStringArray;
 implementation
 
 uses
-  Math,
+  Math, zstream,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.Time;
+  tyControls.AdvChart.Time, tyControls.AdvChart.Data;
 
 { ==================== Math.random ==================== }
 
@@ -591,6 +601,122 @@ begin
   GenScatter(r, 500000, 10, B);
 end;
 
+{ ==================== custom-wind [R2-J2] ==================== }
+
+{ a gzipped file's bytes, '' when it is not there }
+function ReadGz(const AFile: string): string;
+var
+  gz: TGZFileStream;
+  buf: array[0..65535] of Byte;
+  n: Integer;
+  ss: TStringStream;
+begin
+  Result := '';
+  if not FileExists(AFile) then Exit;
+  ss := TStringStream.Create('');
+  try
+    gz := TGZFileStream.Create(AFile, gzOpenRead);
+    try
+      repeat
+        n := gz.Read(buf, SizeOf(buf));
+        if n > 0 then ss.WriteBuffer(buf, n);
+      until n <= 0;
+    finally
+      gz.Free;
+    end;
+    Result := ss.DataString;
+  finally
+    ss.Free;
+  end;
+end;
+
+{ the number after `"AKey":` in AText (NaN when there is none) }
+function KeyNum(const AText, AKey: string): Double;
+var p, q: Integer;
+begin
+  Result := NaN;
+  p := Pos('"' + AKey + '":', AText);
+  if p <= 0 then Exit;
+  p := p + Length(AKey) + 3;
+  q := p;
+  while (q <= Length(AText)) and (AText[q] in ['0'..'9', '-', '+', '.', 'e', 'E']) do Inc(q);
+  Result := TyJsToNumber(Copy(AText, p, q - p));
+end;
+
+{ the page's loop over winds.json: for every grid point j (rows), i
+  (columns), [i / nx * 360 - 180, j / ny * 180 - 90, vx, vy, |v|]; then
+  its shuffle on Math.random. The numbers of the file are read as
+  JavaScript reads them (TyJsToNumber), token by token. }
+procedure GenCustomWind(ARows: TGenSink);
+type
+  TRow = array[0..4] of Double;
+var
+  text: string;
+  nx, ny, p, i, j, k, q, n, cur, ri: Integer;
+  vals: array of Double;
+  rows: array of TRow;
+  tmp: TRow;
+  vx, vy: Double;
+  r: TJsRandom;
+begin
+  text := ReadGz(GalleryDataDir + 'winds.json.gz');
+  if text = '' then Exit;
+  nx := Trunc(KeyNum(text, 'nx'));
+  ny := Trunc(KeyNum(text, 'ny'));
+  { every number of `data`, in order }
+  p := Pos('"data":', text);
+  if p <= 0 then Exit;
+  SetLength(vals, nx * ny * 2);
+  n := 0;
+  k := p + 7;
+  while (k <= Length(text)) and (n < Length(vals)) do
+  begin
+    if text[k] in ['0'..'9', '-', '.'] then
+    begin
+      q := k;
+      while (q <= Length(text)) and (text[q] in ['0'..'9', '-', '+', '.', 'e', 'E']) do Inc(q);
+      vals[n] := TyJsToNumber(Copy(text, k, q - k));
+      Inc(n);
+      k := q;
+    end
+    else Inc(k);
+  end;
+  SetLength(rows, nx * ny);
+  p := 0;
+  for j := 0 to ny - 1 do
+    for i := 0 to nx - 1 do
+    begin
+      vx := vals[p * 2];
+      vy := vals[p * 2 + 1];
+      rows[p][0] := (i / nx) * 360 - 180;
+      rows[p][1] := (j / ny) * 180 - 90;
+      rows[p][2] := vx;
+      rows[p][3] := vy;
+      rows[p][4] := Sqrt(vx * vx + vy * vy);
+      Inc(p);
+    end;
+  { shuffle(data): Fisher-Yates from the end, Math.floor(Math.random() *
+    currentIndex) }
+  RandomInit(r);
+  cur := Length(rows);
+  while cur <> 0 do
+  begin
+    ri := Floor(JsRandom(r) * cur);
+    Dec(cur);
+    tmp := rows[cur];
+    rows[cur] := rows[ri];
+    rows[ri] := tmp;
+  end;
+  ARows.BeginArr;
+  for p := 0 to High(rows) do
+  begin
+    ARows.BeginArr;
+    for k := 0 to 4 do ARows.Num(rows[p][k]);
+    ARows.EndArr;
+  end;
+  ARows.EndArr;
+end;
+
 { ==================== the table ==================== }
 
 function GalleryIsGenerated(const AId: string): Boolean;
@@ -605,7 +731,8 @@ begin
   else if AId = 'candlestick-large' then Result := ['dataset.source']
   else if (AId = 'heatmap-large') or (AId = 'heatmap-large-piecewise') then
     Result := ['xAxis.data', 'yAxis.data', 'series.0.data']
-  else if AId = 'scatter-large' then Result := ['series.0.data', 'series.1.data'];
+  else if AId = 'scatter-large' then Result := ['series.0.data', 'series.1.data']
+  else if AId = 'custom-wind' then Result := ['series.data'];
 end;
 
 function GalleryGenerate(const AId: string; const ASinks: array of TGenSink): Boolean;
@@ -617,6 +744,7 @@ begin
   else if (AId = 'heatmap-large') or (AId = 'heatmap-large-piecewise') then
     GenHeatmapLarge(ASinks[0], ASinks[1], ASinks[2])
   else if AId = 'scatter-large' then GenScatterLarge(ASinks[0], ASinks[1])
+  else if AId = 'custom-wind' then GenCustomWind(ASinks[0])
   else Result := False;
 end;
 

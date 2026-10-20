@@ -164,12 +164,14 @@ begin
 end;
 
 function TTyAdvanceChart.RenderToBitmap(const AOptsJson: string): TBGRABitmap;
-var prev: TComponent;
+var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
   prev := TyChartImageScopeEnter(Owner);
+  prevRes := TyChartImageResolverEnter(@ResolveImageUrl);
   try
     Result := RenderToBitmapBody(AOptsJson);
   finally
+    TyChartImageResolverLeave(prevRes);
     TyChartImageScopeLeave(prev);
   end;
 end;

@@ -451,7 +451,8 @@
     "fontSize": 18,
     "fontWeight": 800,
     "fontFamily": "Arial",
-    "color": "#fff"
+    "color": "#fff",
+    "formatter": "@gauge-car.formatter"
    },
    "progress": {
     "show": true,
@@ -552,7 +553,8 @@
     "fontSize": 18,
     "fontWeight": 800,
     "fontFamily": "Arial",
-    "color": "#fff"
+    "color": "#fff",
+    "formatter": "@gauge-car.formatter#2"
    },
    "anchor": {
     "show": true,

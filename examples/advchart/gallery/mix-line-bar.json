@@ -79,7 +79,9 @@
   {
    "name": "Evaporation",
    "type": "bar",
-   "tooltip": {},
+   "tooltip": {
+    "valueFormatter": "@mix-line-bar.valueFormatter"
+   },
    "data": [
     2,
     4.9,
@@ -98,7 +100,9 @@
   {
    "name": "Precipitation",
    "type": "bar",
-   "tooltip": {},
+   "tooltip": {
+    "valueFormatter": "@mix-line-bar.valueFormatter#2"
+   },
    "data": [
     2.6,
     5.9,
@@ -118,7 +122,9 @@
    "name": "Temperature",
    "type": "line",
    "yAxisIndex": 1,
-   "tooltip": {},
+   "tooltip": {
+    "valueFormatter": "@mix-line-bar.valueFormatter#3"
+   },
    "data": [
     2,
     2.2,

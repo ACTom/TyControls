@@ -16,7 +16,9 @@
    }
   ]
  },
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@flame-graph.formatter"
+ },
  "title": [
   {
    "text": "Flame Graph",

@@ -605,7 +605,11 @@ begin
   Result := v.Fill;
   if (slot <= High(FStores)) and (FStores[slot] <> nil)
     and (ADatum.DataIndex >= 0) and (ADatum.DataIndex < FStores[slot].Count) then
+  begin
+    { [R2-J2] and what the series' colour callback answered for it }
+    VisualCallbacks(slot, v, ADatum.DataIndex);
     Result := TyRowFill(v, FStores[slot], ADatum.DataIndex);
+  end;
 
   { SOME SERIES HAVE NO SINGLE COLOUR. A pie's slices take consecutive palette
     slots; a candlestick's bodies are red or green by the datum's own two
@@ -4741,14 +4745,8 @@ end;
 { a node's `name` as upstream's getName answers it: a string, a number's
   text, or nothing }
 function HierItemName(AItem: TJSONData): string;
-var d: TJSONData;
 begin
-  Result := '';
-  if not (AItem is TJSONObject) then Exit;
-  d := TJSONObject(AItem).Find('name');
-  if d = nil then Exit;
-  if d.JSONType = jtString then Result := d.AsString
-  else if d.JSONType = jtNumber then Result := TyJsNumberToString(d.AsFloat);
+  Result := TyHierItemName(AItem);
 end;
 
 { JavaScript's String() of an option value, for `source + ' -- ' + target` }
@@ -4791,37 +4789,11 @@ function TTyAdvanceChart.HierTipParams(const ADatum: TTyChartDatumRef;
   ASlot: Integer; var AParams: TTyChartCallbackParams): Boolean;
 var
   st: string;
-  row, k, n: Integer;
+  row, k: Integer;
   v: Double;
   d: TJSONData;
-  path: TTyIntegerArray;
   hier: TTyHierarchy;
   vals: TTyDoubleArray;
-
-  function JsonNum(A: Double): string;
-  begin
-    { JSON.stringify: a number that is none is null }
-    if IsNan(A) or IsInfinite(A) then Result := 'null'
-    else Result := TyJsNumberToString(A);
-  end;
-
-  function PathJson: string;
-  var j: Integer; nm: string;
-  begin
-    Result := '[';
-    for j := High(path) downto 0 do
-    begin
-      if j < High(path) then Result := Result + ',';
-      if path[j] = 0 then
-        nm := HierItemName(FOption.ComponentAt('series', ADatum.SeriesIndex))
-      else
-        nm := HierItemName(hier.Nodes[path[j]].Item);
-      Result := Result + '{"name":' + TyJsonQuote(nm) + ',"dataIndex":'
-        + IntToStr(path[j]) + ',"value":' + JsonNum(vals[path[j]]) + '}';
-    end;
-    Result := Result + ']';
-  end;
-
 begin
   Result := False;
   st := FBindings[ASlot].SeriesType;
@@ -4886,17 +4858,10 @@ begin
     else
       AParams.Name := HierItemName(hier.Nodes[row].Item);
     v := vals[row];
-    { the node and its ancestors, from the node up }
-    path := nil;
-    k := row;
-    while (k >= 0) and (k <= High(hier.Nodes)) do
-    begin
-      n := Length(path);
-      SetLength(path, n + 1);
-      path[n] := k;
-      k := hier.Nodes[k].Parent;
-    end;
-    AParams.TreePathInfo := PathJson;
+    { the node and its ancestors, from the virtual root down [R2-J2: the
+      one a label's params carry too] }
+    AParams.TreePathInfo := TyHierTreePathJson(hier, vals, row,
+      HierItemName(FOption.ComponentAt('series', ADatum.SeriesIndex)));
   end;
   SetLength(AParams.Values, 1);
   AParams.Values[0] := v;

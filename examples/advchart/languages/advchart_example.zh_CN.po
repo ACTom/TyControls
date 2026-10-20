@@ -101,8 +101,8 @@ msgstr "这个示例画在 ECharts 示例站点的 SVG 地图 %s 上。这张图
 
 #: umain.rsnoticeprojection
 #, object-pascal-format
-msgid "This example projects its map with d3-geo's Albers USA projection, which the page loads from a CDN; the demo has no Pascal port of it. Register handlers under the names %s with TyChartRegisterGeoProjection to draw it."
-msgstr "这个示例用 d3-geo 的 Albers USA 投影画地图，页面从 CDN 加载它；demo 里没有它的 Pascal 版。用 TyChartRegisterGeoProjection 以 %s 这些名字注册投影处理函数，就能画出来。"
+msgid "This example projects its map with d3-geo's Albers USA projection, which the page loads from a CDN. Register handlers under the names %s with TyChartRegisterGeoProjection (ualbersusa.pas does) to draw it."
+msgstr "这个示例用 d3-geo 的 Albers USA 投影画地图，页面从 CDN 加载它。用 TyChartRegisterGeoProjection 以 %s 这些名字注册投影处理函数（ualbersusa.pas 就是这样做的），就能画出来。"
 
 #: umain.rsnoticenotconverted
 #, object-pascal-format
@@ -121,3 +121,25 @@ msgstr "这个示例的数据由 ugenerated.pas 按页面自己的代码和随�
 #, object-pascal-format
 msgid "The option is %s MB; the editor shows its beginning, and Apply sets the whole of it while that is unchanged."
 msgstr "这份 option 有 %s MB，编辑框只显示开头；只要没改动，“应用”设置的是完整的 option。"
+
+#: umain.rsnoteimagemissing
+#, object-pascal-format
+msgid "The page shows the picture %s from the ECharts examples site, which has no recorded licence, so the demo does not include it; saved in %s under that name it is drawn."
+msgstr "页面显示 ECharts 示例站点的图片 %s。这张图没有记录许可证，demo 没有附带；以这个文件名存进 %s 就能画出来。"
+
+#: umain.rsnoteuntranscribed
+#, object-pascal-format
+msgid "The page's function %s is not transcribed: %s."
+msgstr "页面的函数 %s 没有转写：%s。"
+
+#: ucallbacks.rsuntrairline
+msgid "it names a route by the page's route and airport tables, which the gallery file does not carry"
+msgstr "它用页面自己的航线表和机场表给航线起名，画廊文件里没有这两张表"
+
+#: ucallbacks.rsuntrnutrients
+msgid "it colours each field by the page's colour table, built from the axes the page's controls chose"
+msgstr "它按页面的颜色表给每个字段上色，那张表由页面控件选中的轴生成"
+
+#: ucallbacks.rsuntrhill
+msgid "it delays each repeated symbol by its own index (params.index), which an animation timing handler is not handed"
+msgstr "它按每个重复符号自己的序号（params.index）错开动画，动画时间处理函数拿不到这个序号"

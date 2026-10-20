@@ -4,6 +4,7 @@
  },
  "tooltip": {
   "trigger": "axis",
+  "formatter": "@dynamic-data2.formatter",
   "axisPointer": {
    "animation": false
   }

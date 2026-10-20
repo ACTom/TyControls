@@ -51,6 +51,7 @@
   ],
   "label": {
    "show": true,
+   "formatter": "@matrix-confusion.formatter",
    "rich": {
     "name": {
      "color": "#fff",

@@ -80,7 +80,8 @@
    ],
    "barCategoryGap": "40%",
    "universalTransition": {
-    "enabled": true
+    "enabled": true,
+    "delay": "@pictorialBar-bar-transition.delay#5"
    },
    "data": [
     {
@@ -125,7 +126,8 @@
     "60%"
    ],
    "universalTransition": {
-    "enabled": true
+    "enabled": true,
+    "delay": "@pictorialBar-bar-transition.delay#6"
    },
    "data": [
     {

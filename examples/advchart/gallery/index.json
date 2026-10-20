@@ -1,7 +1,7 @@
 {
  "source": "apache/echarts-examples",
  "total": 273,
- "converted": 269,
+ "converted": 270,
  "entries": [
   {
    "id": "area-basic",
@@ -83,8 +83,11 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 499717
+   "callbacks": 0,
+   "handlers": [
+    "area-simple.position"
+   ],
+   "bytes": 499756
   },
   {
    "id": "area-stack-gradient",
@@ -149,8 +152,11 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 847545
+   "callbacks": 0,
+   "handlers": [
+    "area-time-axis.position"
+   ],
+   "bytes": 847587
   },
   {
    "id": "bar-animation-delay",
@@ -171,8 +177,13 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 3,
-   "bytes": 6273
+   "callbacks": 0,
+   "handlers": [
+    "bar-animation-delay.animationDelay",
+    "bar-animation-delay.animationDelay#2",
+    "bar-animation-delay.animationDelayUpdate"
+   ],
+   "bytes": 6465
   },
   {
    "id": "bar-background",
@@ -415,8 +426,11 @@
     "yAxis",
     "graphic"
    ],
-   "callbacks": 1,
-   "bytes": 761
+   "callbacks": 0,
+   "handlers": [
+    "bar-multi-drilldown.onclick"
+   ],
+   "bytes": 807
   },
   {
    "id": "bar-negative",
@@ -521,8 +535,11 @@
     "angleAxis",
     "radiusAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1961
+   "callbacks": 0,
+   "handlers": [
+    "bar-polar-real-estate.formatter"
+   ],
+   "bytes": 2012
   },
   {
    "id": "bar-polar-stack-radial",
@@ -582,11 +599,16 @@
     "graphic",
     "dataset"
    ],
-   "callbacks": 90,
+   "callbacks": 0,
+   "handlers": [
+    "bar-race-country.formatter",
+    "bar-race-country.formatter#2",
+    "bar-race-country.color"
+   ],
    "stubbedRemote": [
     "emoji-flags@1.3.0/data.json"
    ],
-   "bytes": 117677,
+   "bytes": 121907,
    "sequence": {
     "interval": 2000,
     "loopTo": null,
@@ -821,8 +843,11 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 2571
+   "callbacks": 0,
+   "handlers": [
+    "bar-rich-text.formatter"
+   ],
+   "bytes": 2615
   },
   {
    "id": "bar-simple",
@@ -878,8 +903,15 @@
     "yAxis",
     "graphic"
    ],
-   "callbacks": 5,
-   "bytes": 15909
+   "callbacks": 0,
+   "handlers": [
+    "bar-stack-normalization-and-variation.formatter",
+    "bar-stack-normalization-and-variation.formatter#2",
+    "bar-stack-normalization-and-variation.formatter#3",
+    "bar-stack-normalization-and-variation.formatter#4",
+    "bar-stack-normalization-and-variation.formatter#5"
+   ],
+   "bytes": 16262
   },
   {
    "id": "bar-stack-normalization",
@@ -897,8 +929,15 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 5,
-   "bytes": 1807
+   "callbacks": 0,
+   "handlers": [
+    "bar-stack-normalization.formatter",
+    "bar-stack-normalization.formatter#2",
+    "bar-stack-normalization.formatter#3",
+    "bar-stack-normalization.formatter#4",
+    "bar-stack-normalization.formatter#5"
+   ],
+   "bytes": 2090
   },
   {
    "id": "bar-stack",
@@ -958,8 +997,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1035
+   "callbacks": 0,
+   "handlers": [
+    "bar-waterfall.formatter"
+   ],
+   "bytes": 1078
   },
   {
    "id": "bar-waterfall2",
@@ -980,8 +1022,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1433
+   "callbacks": 0,
+   "handlers": [
+    "bar-waterfall2.formatter"
+   ],
+   "bytes": 1477
   },
   {
    "id": "bar-y-category-stack",
@@ -1089,8 +1134,11 @@
     "yAxis",
     "dataset"
    ],
-   "callbacks": 1,
-   "bytes": 2142
+   "callbacks": 0,
+   "handlers": [
+    "boxplot-light-velocity2.itemNameFormatter"
+   ],
+   "bytes": 2218
   },
   {
    "id": "boxplot-multi",
@@ -1134,8 +1182,14 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 4,
-   "bytes": 4674
+   "callbacks": 0,
+   "handlers": [
+    "bubble-gradient.symbolSize",
+    "bubble-gradient.formatter",
+    "bubble-gradient.symbolSize#2",
+    "bubble-gradient.formatter#2"
+   ],
+   "bytes": 4870
   },
   {
    "id": "bump-chart",
@@ -1178,8 +1232,12 @@
     "visualMap",
     "calendar"
    ],
-   "callbacks": 2,
-   "bytes": 62426
+   "callbacks": 0,
+   "handlers": [
+    "calendar-charts.symbolSize",
+    "calendar-charts.symbolSize#2"
+   ],
+   "bytes": 62524
   },
   {
    "id": "calendar-effectscatter",
@@ -1199,8 +1257,14 @@
     "tooltip",
     "calendar"
    ],
-   "callbacks": 4,
-   "bytes": 33970
+   "callbacks": 0,
+   "handlers": [
+    "calendar-effectscatter.symbolSize",
+    "calendar-effectscatter.symbolSize#2",
+    "calendar-effectscatter.symbolSize#3",
+    "calendar-effectscatter.symbolSize#4"
+   ],
+   "bytes": 34196
   },
   {
    "id": "calendar-graph",
@@ -1278,8 +1342,13 @@
     "visualMap",
     "calendar"
    ],
-   "callbacks": 3,
-   "bytes": 64781
+   "callbacks": 0,
+   "handlers": [
+    "calendar-lunar.formatter",
+    "calendar-lunar.formatter#2",
+    "calendar-lunar.formatter#3"
+   ],
+   "bytes": 64922
   },
   {
    "id": "calendar-pie",
@@ -1298,8 +1367,11 @@
     "tooltip",
     "calendar"
    ],
-   "callbacks": 1,
-   "bytes": 12350
+   "callbacks": 0,
+   "handlers": [
+    "calendar-pie.formatter"
+   ],
+   "bytes": 12394
   },
   {
    "id": "calendar-simple",
@@ -1335,8 +1407,11 @@
     "visualMap",
     "calendar"
    ],
-   "callbacks": 1,
-   "bytes": 45616
+   "callbacks": 0,
+   "handlers": [
+    "calendar-vertical.formatter"
+   ],
+   "bytes": 45663
   },
   {
    "id": "candlestick-brush",
@@ -1363,8 +1438,11 @@
     "axisPointer",
     "brush"
    ],
-   "callbacks": 1,
-   "bytes": 722157
+   "callbacks": 0,
+   "handlers": [
+    "candlestick-brush.position"
+   ],
+   "bytes": 722202
   },
   {
    "id": "candlestick-large",
@@ -1446,8 +1524,12 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 2,
-   "bytes": 16151
+   "callbacks": 0,
+   "handlers": [
+    "candlestick-sh.formatter",
+    "candlestick-sh.formatter#2"
+   ],
+   "bytes": 16255
   },
   {
    "id": "candlestick-simple",
@@ -1491,8 +1573,12 @@
     "graphic",
     "axisPointer"
    ],
-   "callbacks": 2,
-   "bytes": 15375
+   "callbacks": 0,
+   "handlers": [
+    "candlestick-touch.position",
+    "candlestick-touch.formatter"
+   ],
+   "bytes": 15472
   },
   {
    "id": "chord-lineStyle-color",
@@ -1585,8 +1671,14 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 4,
-   "bytes": 7798
+   "callbacks": 0,
+   "handlers": [
+    "confidence-band.formatter",
+    "confidence-band.formatter#2",
+    "confidence-band.formatter#3",
+    "confidence-band.formatter#4"
+   ],
+   "bytes": 7995
   },
   {
    "id": "custom-bar-trend",
@@ -1731,11 +1823,12 @@
     "toolbox",
     "axisPointer"
    ],
-   "callbacks": 1,
+   "callbacks": 0,
    "handlers": [
+    "custom-ohlc.position",
     "custom-ohlc"
    ],
-   "bytes": 364538
+   "bytes": 364577
   },
   {
    "id": "custom-polar-heatmap",
@@ -1791,8 +1884,8 @@
    "titleCN": "使用自定义系列绘制风场",
    "category": "custom",
    "difficulty": 7,
-   "ok": false,
-   "reason": "converted, but 5.3 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "custom"
    ],
@@ -1804,8 +1897,17 @@
    "handlers": [
     "custom-wind"
    ],
-   "bytes": 5564972,
-   "tooBig": true
+   "bytes": 784,
+   "generated": {
+    "bytes": 5564972,
+    "fill": [
+     {
+      "path": "series.data",
+      "count": 65160,
+      "hash": "27920122"
+     }
+    ]
+   }
   },
   {
    "id": "data-transform-filter",
@@ -2152,8 +2254,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 738441,
+   "callbacks": 0,
+   "handlers": [
+    "dynamic-data2.formatter"
+   ],
+   "bytes": 738484,
    "sequence": {
     "interval": 1000,
     "loopTo": null,
@@ -2196,8 +2301,12 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 2,
-   "bytes": 21064
+   "callbacks": 0,
+   "handlers": [
+    "effectScatter-bmap.symbolSize",
+    "effectScatter-bmap.symbolSize#2"
+   ],
+   "bytes": 21168
   },
   {
    "id": "effectScatter-map",
@@ -2217,8 +2326,12 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 2,
-   "bytes": 19439
+   "callbacks": 0,
+   "handlers": [
+    "effectScatter-map.symbolSize",
+    "effectScatter-map.symbolSize#2"
+   ],
+   "bytes": 19541
   },
   {
    "id": "flame-graph",
@@ -2238,11 +2351,12 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 1,
+   "callbacks": 0,
    "handlers": [
+    "flame-graph.formatter",
     "flame-graph"
    ],
-   "bytes": 124184
+   "bytes": 124226
   },
   {
    "id": "funnel-align",
@@ -2451,8 +2565,12 @@
     "tooltip",
     "toolbox"
    ],
-   "callbacks": 2,
-   "bytes": 12524
+   "callbacks": 0,
+   "handlers": [
+    "gauge-car.formatter",
+    "gauge-car.formatter#2"
+   ],
+   "bytes": 12608
   },
   {
    "id": "gauge-clock",
@@ -2466,8 +2584,11 @@
     "gauge"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 5375
+   "callbacks": 0,
+   "handlers": [
+    "gauge-clock.formatter"
+   ],
+   "bytes": 5418
   },
   {
    "id": "gauge-grade",
@@ -2481,8 +2602,12 @@
     "gauge"
    ],
    "components": [],
-   "callbacks": 2,
-   "bytes": 1307
+   "callbacks": 0,
+   "handlers": [
+    "gauge-grade.formatter",
+    "gauge-grade.formatter#2"
+   ],
+   "bytes": 1395
   },
   {
    "id": "gauge-multi-title",
@@ -2752,8 +2877,11 @@
     "gauge"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 1997
+   "callbacks": 0,
+   "handlers": [
+    "gauge-speed.formatter"
+   ],
+   "bytes": 2040
   },
   {
    "id": "gauge-stage",
@@ -3127,8 +3255,12 @@
     "yAxis",
     "geo"
    ],
-   "callbacks": 2,
-   "bytes": 2544
+   "callbacks": 0,
+   "handlers": [
+    "geo-svg-map.formatter",
+    "geo-svg-map.formatter#2"
+   ],
+   "bytes": 2631
   },
   {
    "id": "geo-svg-scatter-simple",
@@ -3145,8 +3277,11 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 1,
-   "bytes": 675
+   "callbacks": 0,
+   "handlers": [
+    "geo-svg-scatter-simple.symbolSize"
+   ],
+   "bytes": 729
   },
   {
    "id": "geo-svg-traffic",
@@ -3389,8 +3524,29 @@
     "visualMap",
     "toolbox"
    ],
-   "callbacks": 19,
-   "bytes": 494092
+   "callbacks": 0,
+   "handlers": [
+    "graph-life-expectancy.animationDelay",
+    "graph-life-expectancy.animationDelay#2",
+    "graph-life-expectancy.animationDelay#3",
+    "graph-life-expectancy.animationDelay#4",
+    "graph-life-expectancy.animationDelay#5",
+    "graph-life-expectancy.animationDelay#6",
+    "graph-life-expectancy.animationDelay#7",
+    "graph-life-expectancy.animationDelay#8",
+    "graph-life-expectancy.animationDelay#9",
+    "graph-life-expectancy.animationDelay#10",
+    "graph-life-expectancy.animationDelay#11",
+    "graph-life-expectancy.animationDelay#12",
+    "graph-life-expectancy.animationDelay#13",
+    "graph-life-expectancy.animationDelay#14",
+    "graph-life-expectancy.animationDelay#15",
+    "graph-life-expectancy.animationDelay#16",
+    "graph-life-expectancy.animationDelay#17",
+    "graph-life-expectancy.animationDelay#18",
+    "graph-life-expectancy.animationDelay#19"
+   ],
+   "bytes": 495316
   },
   {
    "id": "graph-npm",
@@ -3639,8 +3795,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 73229
+   "callbacks": 0,
+   "handlers": [
+    "intraday-breaks-1.formatter"
+   ],
+   "bytes": 73278
   },
   {
    "id": "intraday-breaks-2",
@@ -3660,8 +3819,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 11909
+   "callbacks": 0,
+   "handlers": [
+    "intraday-breaks-2.formatter"
+   ],
+   "bytes": 11958
   },
   {
    "id": "line-aqi",
@@ -3706,8 +3868,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 957
+   "callbacks": 0,
+   "handlers": [
+    "line-draggable.formatter"
+   ],
+   "bytes": 1001
   },
   {
    "id": "line-easing",
@@ -3914,8 +4079,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 629
+   "callbacks": 0,
+   "handlers": [
+    "line-pen.formatter"
+   ],
+   "bytes": 668
   },
   {
    "id": "line-polar",
@@ -3980,8 +4148,18 @@
     "yAxis",
     "dataset"
    ],
-   "callbacks": 8,
-   "bytes": 126473
+   "callbacks": 0,
+   "handlers": [
+    "line-race.formatter",
+    "line-race.formatter#2",
+    "line-race.formatter#3",
+    "line-race.formatter#4",
+    "line-race.formatter#5",
+    "line-race.formatter#6",
+    "line-race.formatter#7",
+    "line-race.formatter#8"
+   ],
+   "bytes": 126815
   },
   {
    "id": "line-sections",
@@ -4126,8 +4304,12 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 2,
-   "bytes": 2778
+   "callbacks": 0,
+   "handlers": [
+    "line-tooltip-touch.position",
+    "line-tooltip-touch.formatter"
+   ],
+   "bytes": 2874
   },
   {
    "id": "line-y-category",
@@ -4166,10 +4348,13 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 1,
-   "bytes": 7087381,
+   "callbacks": 0,
+   "handlers": [
+    "lines-airline.formatter"
+   ],
+   "bytes": 7087425,
    "file": "lines-airline.json.gz",
-   "gzBytes": 483388
+   "gzBytes": 483423
   },
   {
    "id": "lines-bmap-bus",
@@ -4378,11 +4563,12 @@
     "graphic",
     "matrix"
    ],
-   "callbacks": 1,
+   "callbacks": 0,
    "handlers": [
+    "matrix-confusion.formatter",
     "matrix-confusion"
    ],
-   "bytes": 1414
+   "bytes": 1461
   },
   {
    "id": "matrix-correlation-heatmap",
@@ -4399,8 +4585,11 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 2719
+   "callbacks": 0,
+   "handlers": [
+    "matrix-correlation-heatmap.formatter"
+   ],
+   "bytes": 2776
   },
   {
    "id": "matrix-correlation-scatter",
@@ -4417,8 +4606,11 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 4466
+   "callbacks": 0,
+   "handlers": [
+    "matrix-correlation-scatter.formatter"
+   ],
+   "bytes": 4523
   },
   {
    "id": "matrix-covariance",
@@ -4436,8 +4628,11 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 34670
+   "callbacks": 0,
+   "handlers": [
+    "matrix-covariance.valueFormatter"
+   ],
+   "bytes": 34727
   },
   {
    "id": "matrix-graph",
@@ -4455,8 +4650,11 @@
     "graphic",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 2299
+   "callbacks": 0,
+   "handlers": [
+    "matrix-graph.formatter"
+   ],
+   "bytes": 2343
   },
   {
    "id": "matrix-mbti",
@@ -4476,8 +4674,12 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 2,
-   "bytes": 171445
+   "callbacks": 0,
+   "handlers": [
+    "matrix-mbti.formatter",
+    "matrix-mbti.formatter#2"
+   ],
+   "bytes": 171531
   },
   {
    "id": "matrix-mini-bar-data-collection",
@@ -4539,11 +4741,12 @@
    "components": [
     "matrix"
    ],
-   "callbacks": 1,
+   "callbacks": 0,
    "handlers": [
+    "matrix-periodic-table.formatter",
     "matrix-periodic-table"
    ],
-   "bytes": 8369
+   "bytes": 8421
   },
   {
    "id": "matrix-pie",
@@ -4624,8 +4827,13 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 3,
-   "bytes": 1631
+   "callbacks": 0,
+   "handlers": [
+    "mix-line-bar.valueFormatter",
+    "mix-line-bar.valueFormatter#2",
+    "mix-line-bar.valueFormatter#3"
+   ],
+   "bytes": 1806
   },
   {
    "id": "mix-zoom-on-value",
@@ -4647,8 +4855,11 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 34715
+   "callbacks": 0,
+   "handlers": [
+    "mix-zoom-on-value.formatter"
+   ],
+   "bytes": 34767
   },
   {
    "id": "multiple-x-axis",
@@ -4668,8 +4879,12 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 2,
-   "bytes": 1603
+   "callbacks": 0,
+   "handlers": [
+    "multiple-x-axis.formatter",
+    "multiple-x-axis.formatter#2"
+   ],
+   "bytes": 1709
   },
   {
    "id": "multiple-y-axis",
@@ -4771,8 +4986,16 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 6,
-   "bytes": 48229,
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-bar-transition.delay",
+    "pictorialBar-bar-transition.delay#2",
+    "pictorialBar-bar-transition.delay#3",
+    "pictorialBar-bar-transition.delay#4",
+    "pictorialBar-bar-transition.delay#5",
+    "pictorialBar-bar-transition.delay#6"
+   ],
+   "bytes": 48545,
    "sequence": {
     "interval": 2500,
     "loopTo": 0,
@@ -4807,8 +5030,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 33740
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-body-fill.formatter"
+   ],
+   "bytes": 33848
   },
   {
    "id": "pictorialBar-dotted",
@@ -4965,8 +5191,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 5066
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-hill.animationDelay"
+   ],
+   "bytes": 5126
   },
   {
    "id": "pictorialBar-spirit",
@@ -4985,8 +5214,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 32614,
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-spirit.formatter"
+   ],
+   "bytes": 32665,
    "sequence": {
     "interval": 3000,
     "loopTo": null,
@@ -5123,8 +5355,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 16233
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-velocity.formatter"
+   ],
+   "bytes": 16284
   },
   {
    "id": "pie-alignTo",
@@ -5177,8 +5412,11 @@
     "tooltip",
     "visualMap"
    ],
-   "callbacks": 1,
-   "bytes": 1149
+   "callbacks": 0,
+   "handlers": [
+    "pie-custom.animationDelay"
+   ],
+   "bytes": 1200
   },
   {
    "id": "pie-doughnut",
@@ -5230,8 +5468,13 @@
    "components": [
     "title"
    ],
-   "callbacks": 3,
-   "bytes": 2815
+   "callbacks": 0,
+   "handlers": [
+    "pie-labelLine-adjust.labelLayout",
+    "pie-labelLine-adjust.labelLayout#2",
+    "pie-labelLine-adjust.labelLayout#3"
+   ],
+   "bytes": 2984
   },
   {
    "id": "pie-legend",
@@ -5488,8 +5731,11 @@
     "legend",
     "radar"
    ],
-   "callbacks": 1,
-   "bytes": 2721
+   "callbacks": 0,
+   "handlers": [
+    "radar-custom.formatter"
+   ],
+   "bytes": 2767
   },
   {
    "id": "radar-multiple",
@@ -5689,8 +5935,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 18189,
+   "callbacks": 0,
+   "handlers": [
+    "scatter-aggregate-bar.delay",
+    "scatter-aggregate-bar.delay#2",
+    "scatter-aggregate-bar.delay#3"
+   ],
+   "bytes": 18328,
    "sequence": {
     "interval": 2000,
     "loopTo": 1,
@@ -5753,8 +6004,11 @@
     "yAxis",
     "visualMap"
    ],
-   "callbacks": 1,
-   "bytes": 10597
+   "callbacks": 0,
+   "handlers": [
+    "scatter-aqi-color.formatter"
+   ],
+   "bytes": 10644
   },
   {
    "id": "scatter-clustering",
@@ -5861,8 +6115,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 1950
+   "callbacks": 0,
+   "handlers": [
+    "scatter-label-align-right.symbolSize",
+    "scatter-label-align-right.labelLayout",
+    "scatter-label-align-right.formatter"
+   ],
+   "bytes": 2125
   },
   {
    "id": "scatter-label-align-top",
@@ -5879,8 +6138,12 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 2,
-   "bytes": 1941
+   "callbacks": 0,
+   "handlers": [
+    "scatter-label-align-top.symbolSize",
+    "scatter-label-align-top.formatter"
+   ],
+   "bytes": 2052
   },
   {
    "id": "scatter-large",
@@ -5996,8 +6259,12 @@
     "toolbox",
     "brush"
    ],
-   "callbacks": 2,
-   "bytes": 20841
+   "callbacks": 0,
+   "handlers": [
+    "scatter-map-brush.symbolSize",
+    "scatter-map-brush.symbolSize#2"
+   ],
+   "bytes": 20943
   },
   {
    "id": "scatter-matrix",
@@ -6067,8 +6334,12 @@
     "visualMap",
     "axisPointer"
    ],
-   "callbacks": 2,
-   "bytes": 647849
+   "callbacks": 0,
+   "handlers": [
+    "scatter-nutrients-matrix.position",
+    "scatter-nutrients-matrix.formatter"
+   ],
+   "bytes": 647955
   },
   {
    "id": "scatter-nutrients",
@@ -6105,8 +6376,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 132153
+   "callbacks": 0,
+   "handlers": [
+    "scatter-painter-choice.formatter",
+    "scatter-painter-choice.symbolSize",
+    "scatter-painter-choice.color"
+   ],
+   "bytes": 132312
   },
   {
    "id": "scatter-polar-punchCard",
@@ -6127,8 +6403,13 @@
     "angleAxis",
     "radiusAxis"
    ],
-   "callbacks": 3,
-   "bytes": 7039
+   "callbacks": 0,
+   "handlers": [
+    "scatter-polar-punchCard.formatter",
+    "scatter-polar-punchCard.symbolSize",
+    "scatter-polar-punchCard.animationDelay"
+   ],
+   "bytes": 7213
   },
   {
    "id": "scatter-polynomial-regression",
@@ -6174,8 +6455,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 7050
+   "callbacks": 0,
+   "handlers": [
+    "scatter-punchCard.formatter",
+    "scatter-punchCard.symbolSize",
+    "scatter-punchCard.animationDelay"
+   ],
+   "bytes": 7205
   },
   {
    "id": "scatter-simple",
@@ -6211,8 +6497,17 @@
     "tooltip",
     "singleAxis"
    ],
-   "callbacks": 7,
-   "bytes": 9408
+   "callbacks": 0,
+   "handlers": [
+    "scatter-single-axis.symbolSize",
+    "scatter-single-axis.symbolSize#2",
+    "scatter-single-axis.symbolSize#3",
+    "scatter-single-axis.symbolSize#4",
+    "scatter-single-axis.symbolSize#5",
+    "scatter-single-axis.symbolSize#6",
+    "scatter-single-axis.symbolSize#7"
+   ],
+   "bytes": 9784
   },
   {
    "id": "scatter-stream-visual",
@@ -6336,8 +6631,11 @@
     "toolbox",
     "brush"
    ],
-   "callbacks": 1,
-   "bytes": 19915
+   "callbacks": 0,
+   "handlers": [
+    "scatter-weight.formatter"
+   ],
+   "bytes": 19959
   },
   {
    "id": "sunburst-borderRadius",
@@ -6383,8 +6681,11 @@
     "sunburst"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 1401
+   "callbacks": 0,
+   "handlers": [
+    "sunburst-label-rotate.formatter"
+   ],
+   "bytes": 1454
   },
   {
    "id": "sunburst-monochrome",
@@ -6604,8 +6905,11 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 1,
-   "bytes": 522049
+   "callbacks": 0,
+   "handlers": [
+    "treemap-disk.formatter"
+   ],
+   "bytes": 522092
   },
   {
    "id": "treemap-drill-down",
@@ -6641,8 +6945,16 @@
     "legend",
     "tooltip"
    ],
-   "callbacks": 6,
-   "bytes": 276278
+   "callbacks": 0,
+   "handlers": [
+    "treemap-obama.formatter",
+    "treemap-obama.formatter#2",
+    "treemap-obama.formatter#3",
+    "treemap-obama.formatter#4",
+    "treemap-obama.formatter#5",
+    "treemap-obama.formatter#6"
+   ],
+   "bytes": 276567
   },
   {
    "id": "treemap-show-parent",
@@ -6659,8 +6971,11 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 1,
-   "bytes": 522349
+   "callbacks": 0,
+   "handlers": [
+    "treemap-show-parent.formatter"
+   ],
+   "bytes": 522399
   },
   {
    "id": "treemap-simple",
@@ -6720,8 +7035,11 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 1,
-   "bytes": 103579
+   "callbacks": 0,
+   "handlers": [
+    "treemap-visual.formatter"
+   ],
+   "bytes": 103624
   },
   {
    "id": "watermark",
@@ -6769,12 +7087,14 @@
     "dataZoom",
     "visualMap"
    ],
-   "callbacks": 2,
+   "callbacks": 0,
    "handlers": [
+    "wind-barb.formatter",
     "wind-barb",
-    "wind-barb#2"
+    "wind-barb#2",
+    "wind-barb.formatter#2"
    ],
-   "bytes": 30565
+   "bytes": 30647
   }
  ]
 }

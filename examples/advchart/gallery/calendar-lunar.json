@@ -1,5 +1,7 @@
 {
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@calendar-lunar.formatter"
+ },
  "visualMap": {
   "show": false,
   "min": 0,
@@ -53,6 +55,7 @@
    "symbolSize": 0,
    "label": {
     "show": true,
+    "formatter": "@calendar-lunar.formatter#2",
     "color": "#000"
    },
    "data": [
@@ -2255,6 +2258,7 @@
    "symbolSize": 0,
    "label": {
     "show": true,
+    "formatter": "@calendar-lunar.formatter#3",
     "fontSize": 14,
     "fontWeight": 700,
     "color": "#a00"

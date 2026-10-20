@@ -20,9 +20,12 @@
  "series": [
   {
    "type": "treemap",
-   "tooltip": {},
+   "tooltip": {
+    "formatter": "@treemap-obama.formatter"
+   },
    "label": {
     "position": "insideTopLeft",
+    "formatter": "@treemap-obama.formatter#2",
     "rich": {
      "budget": {
       "fontSize": 22,
@@ -4623,9 +4626,12 @@
   },
   {
    "type": "treemap",
-   "tooltip": {},
+   "tooltip": {
+    "formatter": "@treemap-obama.formatter#3"
+   },
    "label": {
     "position": "insideTopLeft",
+    "formatter": "@treemap-obama.formatter#4",
     "rich": {
      "budget": {
       "fontSize": 22,
@@ -9226,9 +9232,12 @@
   },
   {
    "type": "treemap",
-   "tooltip": {},
+   "tooltip": {
+    "formatter": "@treemap-obama.formatter#5"
+   },
    "label": {
     "position": "insideTopLeft",
+    "formatter": "@treemap-obama.formatter#6",
     "rich": {
      "budget": {
       "fontSize": 22,

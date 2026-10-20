@@ -15,13 +15,26 @@ unit test.advchart.galleryrenderitem;
   handlers registered, and compares them bit for bit.
 
   The gallery files are read from examples/advchart/gallery, as the demo
-  reads them; the SVG map an option names from examples/advchart/maps. }
+  reads them; the SVG map an option names from examples/advchart/maps.
+
+  [R2-J2] THE GALLERY'S OTHER FUNCTIONS: the label, axis label and gauge
+  formatters, symbolSize, itemStyle.color, labelLayout and a transform's
+  itemNameFormatter the gallery names '<id>.<key>' and
+  examples/advchart/ucallbacks.pas transcribes -- every answer each gives
+  while the chart draws, held to what the page's own function answers
+  upstream (tools/advchart-oracle/gallery-callbacks.js); and d3-geo's
+  geoAlbersUsa, transcribed in examples/advchart/ualbersusa.pas, held to
+  d3-geo 2.0.1 point by point (gallery-projection.js). }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Anim,
+     Contnrs, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
+     tyControls.Controller, tyControls.AdvanceChart,
+     tyControls.AdvChart.Anim, tyControls.AdvChart.Handlers,
      tyControls.AdvChart.GfxEl, tyControls.AdvChart.Custom,
      tyControls.AdvChart.Geo, tyControls.AdvChart.Option,
-     test.advchart.customseries, urenderitems, ugenerated;
+     tyControls.AdvChart.Paint, tyControls.AdvChart.Dataset,
+     test.advchart.customseries, urenderitems, ugenerated, ucallbacks,
+     ualbersusa, umaps;
 type
   TAdvChartGalleryRenderItemTest = class(TCuOracleBase)
   private
@@ -69,6 +82,57 @@ type
     procedure TestTheFilledOptionHoldsTheData;
   end;
 
+  { one gallery function's answers while a chart draws, written as the
+    oracle writes them; it stands in front of the demo's handler }
+  TCbLog = class
+  public
+    Name: string;
+    Answers: TStringList;
+    Fmt: TTyChartFormatter;
+    Vis: TTyChartVisualHandler;
+    Lay: TTyChartLabelLayoutHandler;
+    constructor Create(const AName: string);
+    destructor Destroy; override;
+    function DoFmt(const AParams: TTyChartParams): string;
+    function DoVis(const AParams: TTyChartCallbackParams): TJSONData;
+    function DoLay(const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout;
+  end;
+
+  { [R2-J2] what the demo's transcriptions answer while a gallery chart
+    draws, against the page's own functions upstream }
+  TAdvChartGalleryCallbackOracleTest = class(TCuOracleBase)
+  private
+    FGallery, FMaps: string;
+    FLogs: TObjectList;
+    procedure Wrap;
+    procedure RunOne(ACase: TJSONObject);
+    procedure RunPrefixes(const APrefixes: array of string; AMin: Integer);
+  protected
+    function FixtureName: string; override;
+    function NewMirror: TCuMirror; override;
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestEveryCaseIsInAGroup;
+    procedure TestTheBarsAndLinesAreUpstreams;
+    procedure TestTheScattersAreUpstreams;
+    procedure TestTheCalendarsAndGaugesAreUpstreams;
+    procedure TestTheRestAreUpstreams;
+  end;
+
+  { [R2-J2] the handlers the demo registers against the names the gallery
+    uses, and d3's geoAlbersUsa }
+  TAdvChartGalleryCallbackTest = class(TTestCase)
+  private
+    FGallery: string;
+    function ReadText(const AFile: string): string;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestEveryGalleryCallbackIsTranscribed;
+    procedure TestTheProjectionIsD3s;
+  end;
+
   { [R2-J] backwardCompat's text-style compatibility: a label's ec2
     `textStyle` copied up into the label, everywhere compatStyle.ts calls
     compatTextStyle -- matrix-periodic-table writes its label's size, colour
@@ -94,6 +158,20 @@ begin
   end;
 end;
 
+{ a file's bytes as they are }
+function ReadFileText(const AFile: string): string;
+var st: TFileStream;
+begin
+  Result := '';
+  st := TFileStream.Create(AFile, fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, st.Size);
+    if st.Size > 0 then st.ReadBuffer(Result[1], st.Size);
+  finally
+    st.Free;
+  end;
+end;
+
 procedure TAdvChartGalleryRenderItemTest.SetUp;
 begin
   inherited SetUp;
@@ -111,6 +189,9 @@ function TAdvChartGalleryRenderItemTest.NewMirror: TCuMirror;
 begin
   Result := TCuMirror.Create;
   RegisterGalleryRenderItems;
+  { [R2-J2] matrix-confusion's and matrix-periodic-table's labels come from
+    their formatters }
+  RegisterGalleryCallbacks;
 end;
 
 { THE WEATHER DAYS ARE LOCAL DATES. wind-barb's second custom series reads
@@ -350,12 +431,434 @@ begin
   RunIds(['pie-parliament-transition'], 5000);
 end;
 
+{ ==================== the other functions [R2-J2] ==================== }
+
+constructor TCbLog.Create(const AName: string);
+begin
+  inherited Create;
+  Name := AName;
+  Answers := TStringList.Create;
+  Answers.Sorted := True;
+  Answers.Duplicates := dupIgnore;
+  Answers.CaseSensitive := True;
+  Answers.UseLocale := False;
+end;
+
+destructor TCbLog.Destroy;
+begin
+  Answers.Free;
+  inherited Destroy;
+end;
+
+function TCbLog.DoFmt(const AParams: TTyChartParams): string;
+begin
+  Result := Fmt(AParams);
+  Answers.Add('s:' + Result);
+end;
+
+function TCbLog.DoVis(const AParams: TTyChartCallbackParams): TJSONData;
+begin
+  Result := Vis(AParams);
+  if Result = nil then Answers.Add('u')
+  else if Result.JSONType = jtNumber then Answers.Add('n:' + HexOf(Result.AsFloat))
+  else if Result.JSONType = jtString then Answers.Add('s:' + Result.AsString)
+  else Answers.Add('j:?');
+end;
+
+{ the object the page's function answered, as the oracle writes it: its
+  keys sorted, numbers hex }
+function TCbLog.DoLay(const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout;
+var
+  s: string;
+  i: Integer;
+  keys: TStringList;
+begin
+  Result := Lay(AArgs);
+  keys := TStringList.Create;
+  try
+    keys.Sorted := True;
+    keys.UseLocale := False;
+    keys.CaseSensitive := True;
+    if Result.HasLabelLinePoints then
+    begin
+      s := '"labelLinePoints":[';
+      for i := 0 to High(Result.LabelLinePoints) do
+      begin
+        if i > 0 then s := s + ',';
+        s := s + '["' + HexOf(Result.LabelLinePoints[i].X) + '","'
+          + HexOf(Result.LabelLinePoints[i].Y) + '"]';
+      end;
+      keys.Add(s + ']');
+    end;
+    if Result.MoveOverlap <> '' then keys.Add('"moveOverlap":"' + Result.MoveOverlap + '"');
+    if Result.X.Kind = cpvNumber then keys.Add('"x":"' + HexOf(Result.X.Num) + '"');
+    if Result.Y.Kind = cpvNumber then keys.Add('"y":"' + HexOf(Result.Y.Num) + '"');
+    s := '';
+    for i := 0 to keys.Count - 1 do
+    begin
+      if i > 0 then s := s + ',';
+      s := s + keys[i];
+    end;
+    Answers.Add('j:{' + s + '}');
+  finally
+    keys.Free;
+  end;
+end;
+
+function TAdvChartGalleryCallbackOracleTest.FixtureName: string;
+begin
+  Result := 'advchart-gallery-callbacks.json';
+end;
+
+function TAdvChartGalleryCallbackOracleTest.NewMirror: TCuMirror;
+begin
+  Result := TCuMirror.Create;
+  RegisterGalleryRenderItems;
+  RegisterGalleryCallbacks;
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.SetUp;
+begin
+  inherited SetUp;
+  FGallery := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'gallery');
+  FMaps := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'maps');
+  GalleryDataDir := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'data');
+  AssertTrue('the gallery is where the test can reach it', FGallery <> '');
+  FLogs := TObjectList.Create(True);
+  Wrap;
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TearDown;
+begin
+  { the demo's own handlers back in place of the loggers }
+  RegisterGalleryCallbacks;
+  FreeAndNil(FLogs);
+  inherited TearDown;
+end;
+
+{ a logger in front of every handler the demo registered }
+procedure TAdvChartGalleryCallbackOracleTest.Wrap;
+var
+  names: TStringList;
+  i: Integer;
+  lg: TCbLog;
+  f: TTyChartFormatter;
+  v: TTyChartVisualHandler;
+  l: TTyChartLabelLayoutHandler;
+begin
+  names := TStringList.Create;
+  try
+    GalleryCallbackNames(names);
+    for i := 0 to names.Count - 1 do
+    begin
+      lg := TCbLog.Create(names[i]);
+      FLogs.Add(lg);
+      if TyChartFindFormatter(names[i], f) and Assigned(f) then
+      begin
+        lg.Fmt := f;
+        TyChartRegisterFormatter(names[i], @lg.DoFmt);
+      end
+      else if TyChartFindVisualHandler(names[i], v) then
+      begin
+        lg.Vis := v;
+        TyChartRegisterVisualHandler(names[i], @lg.DoVis);
+      end
+      else if TyChartFindLabelLayoutHandler(names[i], l) then
+      begin
+        lg.Lay := l;
+        TyChartRegisterLabelLayoutHandler(names[i], @lg.DoLay);
+      end;
+    end;
+  finally
+    names.Free;
+  end;
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.RunOne(ACase: TJSONObject);
+var
+  text: string;
+  root: TJSONObject;
+  calls: TJSONObject;
+  i, k: Integer;
+  lg: TCbLog;
+  want: TJSONArray;
+  got, exp: string;
+begin
+  FWhere := ACase.Strings['id'];
+  for i := 0 to FLogs.Count - 1 do TCbLog(FLogs[i]).Answers.Clear;
+  text := ReadFileText(FGallery + ACase.Strings['file']);
+  if FMaps <> '' then RegisterGalleryMapsFor(text, FMaps);
+  NewChart(TJSONObject(FRoot).Integers['W'], TJSONObject(FRoot).Integers['H']);
+  root := TJSONObject(GetJSON(text));
+  try
+    if root.IndexOfName('animation') < 0 then root.Add('animation', False);
+    FChart.SetOption(root.AsJSON, True);
+  finally
+    root.Free;
+  end;
+  RenderNow;
+  calls := ACase.Objects['calls'];
+  for i := 0 to FLogs.Count - 1 do
+  begin
+    lg := TCbLog(FLogs[i]);
+    if calls.IndexOfName(lg.Name) < 0 then
+    begin
+      Inc(FCompared);
+      if lg.Answers.Count > 0 then
+        Bad(lg.Name + ': called here (' + lg.Answers[0] + '), never upstream');
+      Continue;
+    end;
+    want := calls.Arrays[lg.Name];
+    { NOT COMPARED: line-tooltip-touch's pointer label. Its x axis pointer
+      has a value and a handle; the handle keeps it shown upstream, and
+      axisPointer.handle is one of the port's declared non-goals (spec §6),
+      so the label it formats is never drawn here. }
+    if lg.Name = 'line-tooltip-touch.formatter' then Continue;
+    if Assigned(lg.Fmt) then
+    begin
+      { a formatter: every answer upstream gave is among the port's (a
+        category axis is formatted whole here, sampled upstream) }
+      for k := 0 to want.Count - 1 do
+      begin
+        exp := want.Strings[k];
+        { THE ONE DEVIATION: bar-race-country's flags come from a CDN; the
+          page run on the harvest's empty table prints 'undefined' where the
+          demo leaves the flag out (ucallbacks.pas) }
+        if lg.Name = 'bar-race-country.formatter#2' then
+          exp := StringReplace(exp, '{flag|undefined}', '{flag|}', []);
+        Inc(FCompared);
+        if lg.Answers.IndexOf(exp) < 0 then
+          Bad(lg.Name + ': upstream answers ' + exp + ', the port never does');
+      end;
+      Continue;
+    end;
+    exp := '';
+    for k := 0 to want.Count - 1 do exp := exp + '|' + want.Strings[k];
+    got := '';
+    for k := 0 to lg.Answers.Count - 1 do got := got + '|' + lg.Answers[k];
+    SameStr(lg.Name + ' answers', got, exp);
+  end;
+  for i := 0 to calls.Count - 1 do
+  begin
+    k := 0;
+    while (k < FLogs.Count) and (TCbLog(FLogs[k]).Name <> calls.Names[i]) do Inc(k);
+    if k >= FLogs.Count then Bad(calls.Names[i] + ': the demo has no such handler');
+  end;
+  FChart.Measurer := nil;
+  FreeAndNil(FChart);
+end;
+
+function HasPrefix(const AId: string; const APrefixes: array of string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(APrefixes) do
+    if Copy(AId, 1, Length(APrefixes[i])) = APrefixes[i] then Exit(True);
+  Result := False;
+end;
+
+const
+  cBarsLines: array[0..11] of string = ('bar-', 'line-', 'candlestick-',
+    'confidence-band', 'intraday-', 'mix-', 'multiple-x-axis', 'pictorialBar-',
+    'boxplot-', 'area-', 'dynamic-data2', 'custom-ohlc');
+  cScatters: array[0..3] of string = ('scatter-', 'bubble-gradient',
+    'geo-svg-scatter-simple', 'effectScatter-');
+  cCalGauge: array[0..1] of string = ('calendar-', 'gauge-');
+  cRest: array[0..8] of string = ('matrix-', 'treemap-', 'sunburst-', 'radar-',
+    'pie-', 'flame-graph', 'geo-svg-map', 'wind-barb', 'graph-');
+
+procedure TAdvChartGalleryCallbackOracleTest.RunPrefixes(
+  const APrefixes: array of string; AMin: Integer);
+var
+  all: TJSONArray;
+  i: Integer;
+begin
+  all := TJSONObject(FRoot).Arrays['cases'];
+  for i := 0 to all.Count - 1 do
+    if HasPrefix(all.Objects[i].Strings['id'], APrefixes) then
+      RunOne(all.Objects[i]);
+  Finish(APrefixes[0], AMin);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestEveryCaseIsInAGroup;
+var
+  all: TJSONArray;
+  i: Integer;
+  id: string;
+begin
+  all := TJSONObject(FRoot).Arrays['cases'];
+  AssertTrue('the fixture has its cases', all.Count > 30);
+  for i := 0 to all.Count - 1 do
+  begin
+    id := all.Objects[i].Strings['id'];
+    AssertTrue(id + ' is in a group', HasPrefix(id, cBarsLines)
+      or HasPrefix(id, cScatters) or HasPrefix(id, cCalGauge) or HasPrefix(id, cRest));
+  end;
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheBarsAndLinesAreUpstreams;
+begin
+  RunPrefixes(cBarsLines, 1000);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheScattersAreUpstreams;
+begin
+  RunPrefixes(cScatters, 1000);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheCalendarsAndGaugesAreUpstreams;
+begin
+  RunPrefixes(cCalGauge, 500);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheRestAreUpstreams;
+begin
+  RunPrefixes(cRest, 1000);
+end;
+
+procedure TAdvChartGalleryCallbackTest.SetUp;
+begin
+  inherited SetUp;
+  FGallery := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'gallery');
+  AssertTrue('the gallery is where the test can reach it', FGallery <> '');
+end;
+
+function TAdvChartGalleryCallbackTest.ReadText(const AFile: string): string;
+var sl: TStringList;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(AFile);
+    Result := sl.Text;
+  finally
+    sl.Free;
+  end;
+end;
+
+{ every '<id>.<key>' name a gallery entry lists is registered by the demo or
+  said not to be (with its reason); every registered name is used; the
+  projection's two are registered as projections }
+procedure TAdvChartGalleryCallbackTest.TestEveryGalleryCallbackIsTranscribed;
+var
+  idx: TJSONData;
+  entries, hs: TJSONArray;
+  i, k: Integer;
+  used, ours, untr: TStringList;
+  h: TTyGeoProjectHandler;
+  nm: string;
+begin
+  idx := GetJSON(ReadText(FGallery + 'index.json'));
+  used := TStringList.Create;
+  ours := TStringList.Create;
+  untr := TStringList.Create;
+  try
+    used.Sorted := True;
+    used.Duplicates := dupIgnore;
+    entries := TJSONObject(idx).Arrays['entries'];
+    for i := 0 to entries.Count - 1 do
+    begin
+      if not entries.Objects[i].Get('ok', False) then Continue;
+      AssertEquals(entries.Objects[i].Strings['id'] + ': no function is lost but '
+        + 'watermark''s canvas', Ord(entries.Objects[i].Strings['id'] = 'watermark') * 3,
+        entries.Objects[i].Get('callbacks', 0));
+      if not (entries.Objects[i].Find('handlers') is TJSONArray) then Continue;
+      hs := entries.Objects[i].Arrays['handlers'];
+      for k := 0 to hs.Count - 1 do
+        if Pos('.', hs.Strings[k]) > 0 then used.Add(hs.Strings[k]);
+    end;
+    GalleryCallbackNames(ours);
+    GalleryUntranscribed(untr);
+    RegisterAlbersUsa;
+    for i := 0 to used.Count - 1 do
+    begin
+      nm := used[i];
+      if (Copy(nm, Length(nm) - 7, 8) = '.project') or (Copy(nm, Length(nm) - 9, 10) = '.unproject') then
+        AssertTrue(nm + ' is a registered projection', TyChartFindGeoProjection('@' + nm, h))
+      else
+        AssertTrue(nm + ' is transcribed or said not to be',
+          (ours.IndexOf(nm) >= 0) or (untr.IndexOfName(nm) >= 0));
+    end;
+    for i := 0 to ours.Count - 1 do
+      AssertTrue(ours[i] + ' is used by the gallery', used.IndexOf(ours[i]) >= 0);
+    for i := 0 to untr.Count - 1 do
+    begin
+      AssertTrue(untr.Names[i] + ' is used by the gallery', used.IndexOf(untr.Names[i]) >= 0);
+      AssertTrue(untr.Names[i] + ' is not also transcribed', ours.IndexOf(untr.Names[i]) < 0);
+      AssertTrue(untr.Names[i] + ' says why', Length(untr.ValueFromIndex[i]) > 20);
+    end;
+  finally
+    used.Free;
+    ours.Free;
+    untr.Free;
+    idx.Free;
+  end;
+end;
+
+{ d3-geo 2.0.1's albersUsa and its invert, point by point, to the bit }
+procedure TAdvChartGalleryCallbackTest.TestTheProjectionIsD3s;
+var
+  root: TJSONData;
+  arr, r: TJSONArray;
+  i, bad, n: Integer;
+  x, y: Double;
+  ok: Boolean;
+  first: string;
+begin
+  root := GetJSON(ReadText(FixturePath('advchart-gallery-projection.json')));
+  try
+    bad := 0;
+    n := 0;
+    first := '';
+    arr := TJSONObject(root).Arrays['project'];
+    for i := 0 to arr.Count - 1 do
+    begin
+      r := arr.Arrays[i];
+      ok := AlbersUsa.Project(FromHex(r.Strings[0]), FromHex(r.Strings[1]), x, y);
+      Inc(n);
+      if r.Items[2].JSONType = jtNull then
+      begin
+        if ok then
+        begin
+          Inc(bad);
+          if first = '' then first := Format('project %d: a point, upstream null', [i]);
+        end;
+      end
+      else if not ok or (HexOf(x) <> r.Strings[2]) or (HexOf(y) <> r.Strings[3]) then
+      begin
+        Inc(bad);
+        if first = '' then
+          first := Format('project %d: %s %s, upstream %s %s', [i, HexOf(x), HexOf(y),
+            r.Strings[2], r.Strings[3]]);
+      end;
+    end;
+    arr := TJSONObject(root).Arrays['unproject'];
+    for i := 0 to arr.Count - 1 do
+    begin
+      r := arr.Arrays[i];
+      ok := AlbersUsa.Unproject(FromHex(r.Strings[0]), FromHex(r.Strings[1]), x, y);
+      Inc(n);
+      if not ok or (HexOf(x) <> r.Strings[2]) or (HexOf(y) <> r.Strings[3]) then
+      begin
+        Inc(bad);
+        if first = '' then
+          first := Format('unproject %d: %s %s, upstream %s %s', [i, HexOf(x), HexOf(y),
+            r.Strings[2], r.Strings[3]]);
+      end;
+    end;
+    AssertEquals(Format('%d of %d points differ; first: %s', [bad, n, first]), 0, bad);
+    AssertTrue('points compared', n > 2500);
+  finally
+    root.Free;
+  end;
+end;
+
 { ==================== the generated data ==================== }
 
 procedure TAdvChartGalleryGeneratedTest.SetUp;
 var sl: TStringList;
 begin
   inherited SetUp;
+  { [R2-J2] custom-wind reads data/winds.json.gz }
+  GalleryDataDir := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'data');
   FGallery := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'gallery');
   AssertTrue('the gallery is where the test can reach it', FGallery <> '');
   sl := TStringList.Create;
@@ -414,7 +917,7 @@ begin
       AssertEquals(id + ' ' + paths[k] + ': the values (hash)', fill.Objects[k].Strings['hash'], hashes[k]);
     end;
   end;
-  AssertEquals('the five generated examples', 5, n);
+  AssertEquals('the six generated examples', 6, n);
 end;
 
 { the skeleton filled: the same option text around the arrays, which now
@@ -541,6 +1044,8 @@ end;
 
 initialization
   RegisterTest(TAdvChartGalleryRenderItemTest);
+  RegisterTest(TAdvChartGalleryCallbackOracleTest);
+  RegisterTest(TAdvChartGalleryCallbackTest);
   RegisterTest(TAdvChartGalleryGeneratedTest);
   RegisterTest(TAdvChartCompatTextStyleTest);
 end.

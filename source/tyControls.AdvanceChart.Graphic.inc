@@ -575,6 +575,9 @@ type
     function Lookup(AItem, ASeries: TJSONObject; const APath: array of string): TJSONData;
     function GlobalText(const AKey: string): TJSONData;
     function MakeStyle(AExtra: TJSONObject; ARow: Integer; AEmphasis: Boolean): TJSONObject;
+    { [R2-J2] the series' getFormattedLabel for one status: False when the
+      label of that status has no formatter (upstream's undefined) }
+    function FormattedLabel(ARow: Integer; AEmphasis: Boolean; out AText: string): Boolean;
     function ParseOn(AAxis: TTyAxis; const ACell: TTyCustomCell): Double;
   protected
     function DimIndexOf(const AName: string): Integer; override;
@@ -1200,6 +1203,46 @@ begin
   end;
 end;
 
+{ [R2-J2] DataFormatMixin.getFormattedLabel(dataIndexInside, status): the
+  item model's `label.formatter` (`emphasis.label.formatter` for the
+  emphasis status -- no fall back inside, the caller's retrieve3 does that),
+  a function handed the item's getDataParams with params.status set, a
+  string through formatTpl and the `{@dim}` pass; anything else, and no
+  formatter at all, is undefined. A '@Name' is the registered handler. }
+function TTyChartCustomApi.FormattedLabel(ARow: Integer; AEmphasis: Boolean;
+  out AText: string): Boolean;
+var
+  d, vis: TJSONData;
+  prm: TTyChartCallbackParams;
+  ink: TTyChartColor;
+  sname: string;
+begin
+  AText := '';
+  if AEmphasis then d := Lookup(ItemNode(ARow), Node, ['emphasis', 'label', 'formatter'])
+  else d := Lookup(ItemNode(ARow), Node, ['label', 'formatter']);
+  Result := (d <> nil) and (d.JSONType = jtString);
+  if not Result then Exit;
+  { params.color: the item's visual fill }
+  ink := 0;
+  vis := Chart.CustomVisualFill(Slot, ARow);
+  try
+    if (vis <> nil) and (vis.JSONType = jtString) then
+      TyTryParseChartColor(vis.AsString, ink);
+  finally
+    vis.Free;
+  end;
+  sname := Chart.SeriesModelName(Series);
+  if TyChartIsHandlerRef(d.AsString) then
+  begin
+    prm := TyLabelParams(Store, ARow, sname, -1, 0, False, Series, 'custom', ink, '');
+    if AEmphasis then prm.Status := 'emphasis';
+    AText := TyChartRunHandler(d.AsString, TyChartOneParams(prm));
+  end
+  else
+    AText := TyLabelText(d.AsString, True, tldValue, Store, ARow, sname, -1, 0,
+      False, Series, 'custom', ink, '', False, '');
+end;
+
 { api.style / api.styleEmphasis: getItemStyle, the visual colour and
   opacity (normal), the label's text style and config, then
   convertToEC4StyleForCustomSerise, the extra over it, legacy }
@@ -1235,6 +1278,8 @@ var
   cells: TTyIntegerArray;
   cell: TTyDataValue;
   vrow: TTyVisualRow;
+  inh: string;
+  richObj: TJSONObject;
 
   function ItemStyleOf(AKey: string): TJSONData;
   begin
@@ -1246,6 +1291,154 @@ var
   begin
     if AEmphasis then Result := Lookup(item, Node, ['emphasis', 'label', AKey])
     else Result := Lookup(item, Node, ['label', AKey]);
+  end;
+
+  { [R2-J2] the label's `rich` as createTextStyle builds it: every name the
+    item's label and the series' label give (getRichItemNames, the item's
+    first), each through setTokenTextStyle(rich model, global, the plain
+    label, richInheritPlainLabel, opt, isNotNormal, attached, not a block,
+    in rich), then convertToEC4RichItem over itself -- the ec4 keys added
+    beside the ec5 ones. matrix-confusion's and matrix-periodic-table's
+    formatters write rich text. nil: no rich at all. }
+  function RichOf(const AInherit: string): TJSONObject;
+  const
+    cWithGlobal: array[0..7] of string = ('fontStyle', 'fontWeight', 'fontSize',
+      'fontFamily', 'textShadowColor', 'textShadowBlur', 'textShadowOffsetX',
+      'textShadowOffsetY');
+    cSelf: array[0..6] of string = ('align', 'lineHeight', 'width', 'height',
+      'tag', 'verticalAlign', 'ellipsis');
+    cBox: array[0..9] of string = ('padding', 'borderWidth', 'borderRadius',
+      'borderDashOffset', 'backgroundColor', 'borderColor', 'shadowColor',
+      'shadowBlur', 'shadowOffsetX', 'shadowOffsetY');
+    cEc4: array[0..20, 0..1] of string = (('lineWidth', 'textStrokeWidth'),
+      ('font', 'font'), ('fontStyle', 'fontStyle'), ('fontWeight', 'fontWeight'),
+      ('fontSize', 'fontSize'), ('fontFamily', 'fontFamily'), ('align', 'textAlign'),
+      ('verticalAlign', 'textVerticalAlign'), ('lineHeight', 'textLineHeight'),
+      ('width', 'textWidth'), ('height', 'textHeight'),
+      ('backgroundColor', 'textBackgroundColor'), ('padding', 'textPadding'),
+      ('borderColor', 'textBorderColor'), ('borderWidth', 'textBorderWidth'),
+      ('borderRadius', 'textBorderRadius'), ('shadowColor', 'textBoxShadowColor'),
+      ('shadowBlur', 'textBoxShadowBlur'), ('shadowOffsetX', 'textBoxShadowOffsetX'),
+      ('shadowOffsetY', 'textBoxShadowOffsetY'), ('textShadowColor', 'textShadowColor'));
+  var
+    names: TStringList;
+    tok: TJSONObject;
+    nm: string;
+    i, k: Integer;
+    dd: TJSONData;
+
+    function LabelNode(ARoot: TJSONObject): TJSONObject;
+    begin
+      Result := nil;
+      if ARoot = nil then Exit;
+      if AEmphasis then Result := CuObj(CuObj(ARoot, 'emphasis'), 'label')
+      else Result := CuObj(ARoot, 'label');
+    end;
+
+    procedure AddNames(ALabel: TJSONObject);
+    var rr: TJSONObject; j: Integer;
+    begin
+      rr := CuObj(ALabel, 'rich');
+      if rr = nil then Exit;
+      for j := 0 to rr.Count - 1 do
+        if names.IndexOf(rr.Names[j]) < 0 then names.Add(rr.Names[j]);
+    end;
+
+    { the rich model's own key: the item's label's, else the series' }
+    function RichKey(const AKey: string): TJSONData;
+    begin
+      if AEmphasis then Result := Lookup(item, Node, ['emphasis', 'label', 'rich', nm, AKey])
+      else Result := Lookup(item, Node, ['label', 'rich', nm, AKey]);
+    end;
+
+    { the global textStyle -- none for a state that is not normal }
+    function Glob(const AKey: string): TJSONData;
+    begin
+      if AEmphasis then Result := nil else Result := GlobalText(AKey);
+    end;
+
+    procedure PutC(const AKey: string; AVal: TJSONData);
+    begin
+      if AVal <> nil then CuPut(tok, AKey, AVal.Clone);
+    end;
+
+  begin
+    Result := nil;
+    names := TStringList.Create;
+    try
+      names.CaseSensitive := True;
+      AddNames(LabelNode(item));
+      AddNames(LabelNode(Node));
+      if names.Count = 0 then Exit;
+      Result := TJSONObject.Create;
+      for i := 0 to names.Count - 1 do
+      begin
+        nm := names[i];
+        tok := TJSONObject.Create;
+        Result.Add(nm, tok);
+        { fill and stroke: 'inherit' / 'auto' the inherited colour or none;
+          attached -- no global colour }
+        dd := RichKey('color');
+        if (dd <> nil) and (dd.JSONType = jtString)
+          and ((dd.AsString = 'inherit') or (dd.AsString = 'auto')) then
+        begin
+          if AInherit <> '' then tok.Add('fill', AInherit);
+        end
+        else PutC('fill', dd);
+        dd := RichKey('textBorderColor');
+        if (dd <> nil) and (dd.JSONType = jtString)
+          and ((dd.AsString = 'inherit') or (dd.AsString = 'auto')) then
+        begin
+          if AInherit <> '' then tok.Add('stroke', AInherit);
+        end
+        else PutC('stroke', dd);
+        dd := RichKey('textBorderWidth');
+        if dd = nil then dd := Glob('textBorderWidth');
+        PutC('lineWidth', dd);
+        dd := RichKey('textBorderType');
+        if dd = nil then dd := Glob('textBorderType');
+        PutC('lineDash', dd);
+        dd := RichKey('textBorderDashOffset');
+        if dd = nil then dd := Glob('textBorderDashOffset');
+        PutC('lineDashOffset', dd);
+        dd := RichKey('opacity');
+        if dd = nil then dd := Glob('opacity');
+        PutC('opacity', dd);
+        { inherited from the plain label (richInheritPlainLabel) }
+        for k := 0 to High(cWithGlobal) do
+        begin
+          dd := RichKey(cWithGlobal[k]);
+          if dd = nil then dd := LabelOf(cWithGlobal[k]);
+          if dd = nil then dd := Glob(cWithGlobal[k]);
+          PutC(cWithGlobal[k], dd);
+        end;
+        for k := 0 to High(cSelf) do PutC(cSelf[k], RichKey(cSelf[k]));
+        if tok.Find('verticalAlign') = nil then PutC('verticalAlign', RichKey('baseline'));
+        for k := 0 to High(cBox) do PutC(cBox[k], RichKey(cBox[k]));
+        PutC('borderDash', RichKey('borderType'));
+        for k := 0 to 1 do
+        begin
+          if k = 0 then nm := 'backgroundColor' else nm := 'borderColor';
+          dd := tok.Find(nm);
+          if (dd <> nil) and (dd.JSONType = jtString) and (AInherit <> '')
+            and ((dd.AsString = 'auto') or (dd.AsString = 'inherit')) then
+            CuPut(tok, nm, TJSONString.Create(AInherit));
+        end;
+        nm := names[i];
+        { convertToEC4RichItem(richItem, richItem): the ec4 names beside }
+        if tok.Find('fill') <> nil then CuPut(tok, 'textFill', tok.Find('fill').Clone);
+        if tok.Find('stroke') <> nil then
+        begin
+          if tok.Find('fill') <> nil then CuPut(tok, 'textStroke', tok.Find('fill').Clone)
+          else CuPut(tok, 'textStroke', TJSONNull.Create);
+        end;
+        for k := 0 to High(cEc4) do
+          if tok.Find(cEc4[k, 0]) <> nil then
+            CuPut(tok, cEc4[k, 1], tok.Find(cEc4[k, 0]).Clone);
+      end;
+    finally
+      names.Free;
+    end;
   end;
 
 begin
@@ -1315,11 +1508,18 @@ begin
       { the text: shown, the default label (the label dimensions' values):
         getDefaultLabel -- [R2-J] undefined with no label dimension (a
         matrix's x and y are categories) and null for the one dimension's
-        null; several are joined, a null one as '' }
+        null; several are joined, a null one as ''.
+        [R2-J2] THE FORMATTER FIRST: retrieve2(getFormattedLabel(NORMAL),
+        default) for style, retrieve3(EMPHASIS, NORMAL, default) for
+        styleEmphasis -- matrix-confusion's and matrix-periodic-table's
+        cells take their text from one. }
       show := CuTruthy(LabelOf('show'));
       hasText := False;
       txt := '';
-      if show then
+      if show and (FormattedLabel(ARow, AEmphasis, txt)
+        or (AEmphasis and FormattedLabel(ARow, False, txt))) then
+        hasText := True
+      else if show then
       begin
         if Store.HasLabelPositions then cells := Store.LabelPositions else cells := nil;
         hasText := Length(cells) > 0;
@@ -1401,6 +1601,12 @@ begin
         in the series colour. }
       if hasText then CuPut(Result, 'text', TJSONString.Create(txt))
       else CuPut(Result, 'text', TJSONNull.Create);
+      { [R2-J2] out.rich = txStl.rich }
+      if (vis <> nil) and (vis.JSONType = jtString) then inh := vis.AsString
+      else if AEmphasis then inh := ''
+      else inh := '#000';
+      richObj := RichOf(inh);
+      if richObj <> nil then CuPut(Result, 'rich', richObj);
     finally
       ts.Free;
       tc.Free;

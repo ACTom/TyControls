@@ -274,6 +274,8 @@ const ZRENDER_SRC = process.env.ZRENDER_SRC || 'D:/Projects/zrender/src/core/pla
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-treemap.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R2-J2] the gallery as it was before every function got a name
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -1596,7 +1598,7 @@ function diffFlat(a, b) {
 // ============================================================================
 // Recording a case
 // ============================================================================
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 // M1 cases: none of these may appear anywhere in the series option
 const M2PLUS = ['colorSaturation', 'borderColorSaturation', 'colorAlpha', 'upperLabel', 'leafDepth', 'colorMappingBy', 'visualDimension', 'visualMin', 'visualMax', 'decal'];
 // M2 / M3 cases: still refused (M4+), anywhere in the series option

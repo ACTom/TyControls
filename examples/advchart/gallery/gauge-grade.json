@@ -65,7 +65,8 @@
     "color": "#464646",
     "fontSize": 20,
     "distance": -60,
-    "rotate": "tangential"
+    "rotate": "tangential",
+    "formatter": "@gauge-grade.formatter"
    },
    "title": {
     "offsetCenter": [
@@ -81,6 +82,7 @@
      "-35%"
     ],
     "valueAnimation": true,
+    "formatter": "@gauge-grade.formatter#2",
     "color": "inherit"
    },
    "data": [
