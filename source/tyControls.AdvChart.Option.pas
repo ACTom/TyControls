@@ -270,6 +270,13 @@ function TyOptionParseRaw(const AText: string; out AData: TJSONData;
   it to every tree it parses. }
 procedure TyJsonFixNumbers(const AText: string; ARoot: TJSONData);
 
+{ [R2-I6] TyOptionParseRaw's fast reader on its own: the tree of a text that
+  is plain JSON, or False and nil (see the implementation); and a switch
+  that turns it off in TyOptionParseRaw -- every text read the long way,
+  the reference it must match. }
+function TyJsonFastParse(const AText: string; out AData: TJSONData): Boolean;
+procedure TyJsonFastForTest(AOn: Boolean);
+
 { [R2-J] backwardCompat's text-style compatibility (preprocessor/helper/
   compatStyle.ts, every compatTextStyle it calls): a label written the ec2
   way, its text style under `textStyle`, has each text-style key of it
@@ -855,6 +862,405 @@ begin
   if not Result then SetError(err.Message, err.Line, err.Col);
 end;
 
+function TyJsonTokenNumber(const AText: string; AStart, ALen: Integer;
+  AOld: Double): Double; forward;
+
+var
+  GTyJsonFastOff: Boolean = False;
+
+procedure TyJsonFastForTest(AOn: Boolean);
+begin
+  GTyJsonFastOff := not AOn;
+end;
+
+{ [R2-I6] THE FAST READER: the tree TyOptionParseRaw makes of a text that is
+  plain JSON -- exactly that tree, or False and nothing (the caller then
+  reads it the long way, every quirk and every error message of it). Plain:
+  the system code page UTF-8; no #0, no backslash-u anywhere (the escape
+  pre-decode changes nothing then); outside strings only JSON's tokens and
+  blanks (#9, #10, #13, ' ') -- no comment, no single quote, no identifier
+  but the three literals as written, no trailing comma, nothing after the
+  value; double-quoted strings without a control character, their escapes
+  the scanner's own but the one for a code unit; numbers in JSON's grammar
+  followed by what the scanner lets follow one; at most TyOptionMaxNesting
+  levels. The nodes are the parser's: fcl-json's CreateJSON* (whatever
+  classes are registered), keys added by TJSONObject.Add (a duplicate raises
+  there as it does in the parser -- and sends the text the long way); a
+  number the kind ParseNumber makes (Integer, Int64, QWord, else a float
+  through Val) with TyJsonFixNumbers' value for a float. The nesting guard's
+  count is the structure's unless a string holds an escaped quote (the guard
+  does not skip one): then the guard itself is asked. }
+function TyJsonFastParse(const AText: string; out AData: TJSONData): Boolean;
+var
+  base, p: PChar;
+  depth: Integer;
+  quoteEsc: Boolean;
+
+  procedure Ws; inline;
+  begin
+    while p^ in [' ', #9, #10, #13] do Inc(p);
+  end;
+
+  { the string at p (on its opening quote) into AStr; False: not plain }
+  function Str(out AStr: string): Boolean;
+  var
+    start: PChar;
+    sb: string;
+    n: Integer;
+    c: Char;
+  begin
+    Result := False;
+    AStr := '';
+    Inc(p);
+    start := p;
+    while not (p^ in ['"', '\']) do
+    begin
+      if p^ < #32 then Exit;
+      Inc(p);
+    end;
+    if p^ = '"' then
+    begin
+      SetString(AStr, start, p - start);
+      Inc(p);
+      Exit(True);
+    end;
+    { an escape: piece by piece }
+    SetString(sb, start, p - start);
+    while True do
+    begin
+      if p^ = '"' then Break;
+      if p^ < #32 then Exit;
+      if p^ = '\' then
+      begin
+        Inc(p);
+        case p^ of
+          '"':
+            begin
+              c := '"';
+              quoteEsc := True;
+            end;
+          '''': c := '''';
+          '\': c := '\';
+          '/': c := '/';
+          'b': c := #8;
+          'f': c := #12;
+          'n': c := #10;
+          'r': c := #13;
+          't': c := #9;
+        else
+          Exit;
+        end;
+        sb := sb + c;
+        Inc(p);
+        Continue;
+      end;
+      start := p;
+      while not (p^ in ['"', '\']) and (p^ >= #32) do Inc(p);
+      n := Length(sb);
+      SetLength(sb, n + (p - start));
+      if p > start then Move(start^, sb[n + 1], p - start);
+    end;
+    AStr := sb;
+    Inc(p);
+    Result := True;
+  end;
+
+  function Value(out AValue: TJSONData): Boolean; forward;
+
+  function Num(out AValue: TJSONData): Boolean;
+  var
+    start: PChar;
+    digits, sig, fracLen, ex: Integer;
+    isInt, neg, expNeg: Boolean;
+    v: Int64;
+    s: string;
+    qw: QWord;
+    i64: Int64;
+    f: Double;
+    code: Integer;
+  begin
+    Result := False;
+    AValue := nil;
+    start := p;
+    neg := p^ = '-';
+    if neg then Inc(p);
+    if not (p^ in ['0'..'9']) then Exit;
+    v := 0;
+    digits := 0;
+    { TyJsonTokenNumber's count: the digits from the first that is not a
+      nought on, the fraction's length, the exponent (capped as it caps) }
+    sig := 0;
+    fracLen := 0;
+    if p^ = '0' then
+    begin
+      Inc(p);
+      digits := 1;
+      if p^ in ['0'..'9'] then Exit;
+    end
+    else
+      while p^ in ['0'..'9'] do
+      begin
+        if digits < 18 then v := v * 10 + (Ord(p^) - Ord('0'));
+        Inc(digits);
+        Inc(sig);
+        Inc(p);
+      end;
+    isInt := True;
+    if p^ = '.' then
+    begin
+      isInt := False;
+      Inc(p);
+      if not (p^ in ['0'..'9']) then Exit;
+      while p^ in ['0'..'9'] do
+      begin
+        if (sig > 0) or (p^ <> '0') then Inc(sig);
+        Inc(fracLen);
+        Inc(p);
+      end;
+    end;
+    ex := 0;
+    if p^ in ['e', 'E'] then
+    begin
+      isInt := False;
+      Inc(p);
+      expNeg := p^ = '-';
+      if p^ in ['+', '-'] then Inc(p);
+      if not (p^ in ['0'..'9']) then Exit;
+      while p^ in ['0'..'9'] do
+      begin
+        if ex < 100000 then ex := ex * 10 + (Ord(p^) - Ord('0'));
+        Inc(p);
+      end;
+      if expNeg then ex := -ex;
+    end;
+    { what the scanner lets follow a number }
+    if not (p^ in [#13, #10, #0, '}', ']', ',', #9, ' ']) then Exit;
+    if isInt and (digits <= 9) then
+    begin
+      { both of ParseNumber's integer tries give this Integer }
+      if neg then v := -v;
+      AValue := CreateJSON(Integer(v));
+      Exit(True);
+    end;
+    if isInt then
+    begin
+      SetString(s, start, p - start);
+      { ParseNumber, as it is }
+      if TryStrToQWord(s, qw) then
+      begin
+        if qw > QWord(High(Int64)) then AValue := CreateJSON(qw)
+        else if qw > MaxInt then AValue := CreateJSON(Int64(qw))
+        else AValue := CreateJSON(Integer(qw));
+        Exit(True);
+      end;
+      if TryStrToInt64(s, i64) then
+      begin
+        if (i64 > MaxInt) or (i64 < -MaxInt) then AValue := CreateJSON(i64)
+        else AValue := CreateJSON(Integer(i64));
+        Exit(True);
+      end;
+    end;
+    { a float: TyJsonFixNumbers' value. Its short path -- at most fifteen
+      significant digits, a power of ten within 22 -- reads the token alone
+      (and Val takes such a token without fail); a longer one wants Val's
+      value too (kept where it is the nearest) }
+    if not isInt and (sig <= 15) and (ex - fracLen >= -22) and (ex - fracLen <= 22) then
+    begin
+      AValue := CreateJSON(TyJsonTokenNumber(AText, start - base + 1, p - start, 0));
+      Exit(True);
+    end;
+    if not isInt then SetString(s, start, p - start);
+    code := 0;
+    f := 0;
+    Val(s, f, code);
+    if code <> 0 then Exit;
+    AValue := CreateJSON(TyJsonTokenNumber(AText, start - base + 1, p - start, f));
+    Result := True;
+  end;
+
+  function Lit(const AWord: string): Boolean;
+  var k: Integer;
+  begin
+    Result := False;
+    for k := 1 to Length(AWord) do
+      if p[k - 1] <> AWord[k] then Exit;
+    if p[Length(AWord)] in ['A'..'Z', 'a'..'z', '0'..'9', '_'] then Exit;
+    Inc(p, Length(AWord));
+    Result := True;
+  end;
+
+  function Obj(out AValue: TJSONData): Boolean;
+  var
+    o: TJSONObject;
+    key: string;
+    v: TJSONData;
+  begin
+    Result := False;
+    AValue := nil;
+    Inc(depth);
+    if depth > TyOptionMaxNesting then Exit;
+    o := CreateJSONObject([]);
+    AValue := o;
+    Inc(p);
+    Ws;
+    if p^ = '}' then
+    begin
+      Inc(p);
+      Dec(depth);
+      Exit(True);
+    end;
+    while True do
+    begin
+      if p^ <> '"' then Exit;
+      if not Str(key) then Exit;
+      Ws;
+      if p^ <> ':' then Exit;
+      Inc(p);
+      Ws;
+      if not Value(v) then
+      begin
+        v.Free;
+        Exit;
+      end;
+      try
+        o.Add(key, v);
+      except
+        v.Free;
+        raise;
+      end;
+      Ws;
+      if p^ = ',' then
+      begin
+        Inc(p);
+        Ws;
+        Continue;
+      end;
+      if p^ <> '}' then Exit;
+      Inc(p);
+      Break;
+    end;
+    Dec(depth);
+    Result := True;
+  end;
+
+  function Arr(out AValue: TJSONData): Boolean;
+  var
+    a: TJSONArray;
+    v: TJSONData;
+  begin
+    Result := False;
+    AValue := nil;
+    Inc(depth);
+    if depth > TyOptionMaxNesting then Exit;
+    a := CreateJSONArray([]);
+    AValue := a;
+    Inc(p);
+    Ws;
+    if p^ = ']' then
+    begin
+      Inc(p);
+      Dec(depth);
+      Exit(True);
+    end;
+    while True do
+    begin
+      if not Value(v) then
+      begin
+        v.Free;
+        Exit;
+      end;
+      a.Add(v);
+      Ws;
+      if p^ = ',' then
+      begin
+        Inc(p);
+        Ws;
+        { a trailing comma goes the long way }
+        if p^ = ']' then Exit;
+        Continue;
+      end;
+      if p^ <> ']' then Exit;
+      Inc(p);
+      Break;
+    end;
+    Dec(depth);
+    Result := True;
+  end;
+
+  function Value(out AValue: TJSONData): Boolean;
+  var s: string;
+  begin
+    Result := False;
+    AValue := nil;
+    case p^ of
+      '{': Result := Obj(AValue);
+      '[': Result := Arr(AValue);
+      '"':
+        if Str(s) then
+        begin
+          AValue := CreateJSON(TJSONStringType(s));
+          Result := True;
+        end;
+      '-', '0'..'9': Result := Num(AValue);
+      't':
+        if Lit('true') then
+        begin
+          AValue := CreateJSON(True);
+          Result := True;
+        end;
+      'f':
+        if Lit('false') then
+        begin
+          AValue := CreateJSON(False);
+          Result := True;
+        end;
+      'n':
+        if Lit('null') then
+        begin
+          AValue := CreateJSON;
+          Result := True;
+        end;
+    end;
+  end;
+
+var
+  line, col: Integer;
+begin
+  Result := False;
+  AData := nil;
+  if (AText = '') or (DefaultSystemCodePage <> CP_UTF8) then Exit;
+  if IndexByte(AText[1], Length(AText), 0) >= 0 then Exit;
+  if Pos('\u', AText) > 0 then Exit;
+  base := PChar(AText);
+  p := base;
+  depth := 0;
+  quoteEsc := False;
+  try
+    Ws;
+    if p^ = #0 then Exit;
+    if not Value(AData) then
+    begin
+      FreeAndNil(AData);
+      Exit;
+    end;
+    Ws;
+    if p^ <> #0 then
+    begin
+      FreeAndNil(AData);
+      Exit;
+    end;
+  except
+    FreeAndNil(AData);
+    Exit;
+  end;
+  if quoteEsc and TyJsonNestingExceeds(AText, TyOptionMaxNesting, line, col) then
+  begin
+    FreeAndNil(AData);
+    Exit;
+  end;
+  Result := True;
+end;
+
 function TyOptionParseRaw(const AText: string; out AData: TJSONData;
   out AError: TTyOptionError): Boolean;
 var
@@ -877,6 +1283,8 @@ begin
   AError.Message := '';
   AError.Line := 0;
   AError.Col := 0;
+  { [R2-I6] plain JSON, read without the scanner: the same tree }
+  if not GTyJsonFastOff and TyJsonFastParse(AText, AData) then Exit(True);
   { TOO DEEP IS REFUSED before the parser can recurse into it }
   if TyJsonNestingExceeds(AText, TyOptionMaxNesting, line, col) then
   begin
@@ -908,6 +1316,90 @@ begin
   end;
   TyJsonFixNumbers(AText, AData);
   Result := True;
+end;
+
+{ [R2-I6] Number() of the token of AText at AStart, ALen bytes long, fpjson's
+  value of it AOld -- TyJsonFixNumbers' arithmetic, shared with the fast
+  reader }
+function TyJsonTokenNumber(const AText: string; AStart, ALen: Integer;
+  AOld: Double): Double;
+var
+  p, stop, d, fracLen, ex, expo, intStart, intEnd, fracStart: Integer;
+  neg, expNeg, seen: Boolean;
+  m: QWord;
+begin
+  p := AStart;
+  stop := AStart + ALen;
+  neg := AText[p] = '-';
+  if neg then Inc(p);
+  m := 0;
+  d := 0;
+  fracLen := 0;
+  seen := False;
+  intStart := p;
+  fracStart := p;
+  { the integer digits, then the fraction's: leading noughts are no
+    significant digits, every other digit is (a trailing nought too, as
+    TyJsDecimalToDouble counts it) }
+  while (p < stop) and (AText[p] in ['0'..'9']) do
+  begin
+    if seen or (AText[p] <> '0') then
+    begin
+      seen := True;
+      Inc(d);
+      if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
+    end;
+    Inc(p);
+  end;
+  intEnd := p;
+  if (p < stop) and (AText[p] = '.') then
+  begin
+    Inc(p);
+    fracStart := p;
+    while (p < stop) and (AText[p] in ['0'..'9']) do
+    begin
+      Inc(fracLen);
+      if seen or (AText[p] <> '0') then
+      begin
+        seen := True;
+        Inc(d);
+        if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
+      end;
+      Inc(p);
+    end;
+  end;
+  expo := 0;
+  if (p < stop) and (AText[p] in ['e', 'E']) then
+  begin
+    Inc(p);
+    expNeg := False;
+    if (p < stop) and (AText[p] in ['+', '-']) then
+    begin
+      expNeg := AText[p] = '-';
+      Inc(p);
+    end;
+    ex := 0;
+    while (p < stop) and (AText[p] in ['0'..'9']) and (ex < 100000) do
+    begin
+      ex := ex * 10 + Ord(AText[p]) - Ord('0');
+      Inc(p);
+    end;
+    if expNeg then expo := -ex else expo := ex;
+  end;
+  expo := expo - fracLen;
+  if (p = stop) and (d <= 15) and (expo >= -22) and (expo <= 22) then
+  begin
+    if d = 0 then Result := 0
+    else if expo >= 0 then Result := Double(m) * TyJsPow10(expo)
+    else Result := Double(m) / TyJsPow10(-expo);
+    if neg then Result := -Result;
+  end
+  else if (p = stop) and (d > 15) and TyJsDecimalIsNearest(
+    Copy(AText, intStart, intEnd - intStart) + Copy(AText, fracStart, fracLen),
+    expo, Abs(AOld)) then
+    Result := AOld
+  else
+    Result := TyJsToNumber(Copy(AText, AStart, ALen));
 end;
 
 { THE NUMBERS AGAIN, correctly rounded [Batch 146; every option since
@@ -986,85 +1478,9 @@ var
     end;
   end;
 
-  { Number() of the token at AStart, ALen bytes long }
   function ValueAt(AStart, ALen: Integer; AOld: Double): Double;
-  var
-    p, stop, d, fracLen, ex, expo, intStart, intEnd, fracStart: Integer;
-    neg, expNeg, seen: Boolean;
-    m: QWord;
   begin
-    p := AStart;
-    stop := AStart + ALen;
-    neg := AText[p] = '-';
-    if neg then Inc(p);
-    m := 0;
-    d := 0;
-    fracLen := 0;
-    seen := False;
-    intStart := p;
-    fracStart := p;
-    { the integer digits, then the fraction's: leading noughts are no
-      significant digits, every other digit is (a trailing nought too, as
-      TyJsDecimalToDouble counts it) }
-    while (p < stop) and (AText[p] in ['0'..'9']) do
-    begin
-      if seen or (AText[p] <> '0') then
-      begin
-        seen := True;
-        Inc(d);
-        if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
-      end;
-      Inc(p);
-    end;
-    intEnd := p;
-    if (p < stop) and (AText[p] = '.') then
-    begin
-      Inc(p);
-      fracStart := p;
-      while (p < stop) and (AText[p] in ['0'..'9']) do
-      begin
-        Inc(fracLen);
-        if seen or (AText[p] <> '0') then
-        begin
-          seen := True;
-          Inc(d);
-          if d <= 15 then m := m * 10 + QWord(Ord(AText[p]) - Ord('0'));
-        end;
-        Inc(p);
-      end;
-    end;
-    expo := 0;
-    if (p < stop) and (AText[p] in ['e', 'E']) then
-    begin
-      Inc(p);
-      expNeg := False;
-      if (p < stop) and (AText[p] in ['+', '-']) then
-      begin
-        expNeg := AText[p] = '-';
-        Inc(p);
-      end;
-      ex := 0;
-      while (p < stop) and (AText[p] in ['0'..'9']) and (ex < 100000) do
-      begin
-        ex := ex * 10 + Ord(AText[p]) - Ord('0');
-        Inc(p);
-      end;
-      if expNeg then expo := -ex else expo := ex;
-    end;
-    expo := expo - fracLen;
-    if (p = stop) and (d <= 15) and (expo >= -22) and (expo <= 22) then
-    begin
-      if d = 0 then Result := 0
-      else if expo >= 0 then Result := Double(m) * TyJsPow10(expo)
-      else Result := Double(m) / TyJsPow10(-expo);
-      if neg then Result := -Result;
-    end
-    else if (p = stop) and (d > 15) and TyJsDecimalIsNearest(
-      Copy(AText, intStart, intEnd - intStart) + Copy(AText, fracStart, fracLen),
-      expo, Abs(AOld)) then
-      Result := AOld
-    else
-      Result := TyJsToNumber(Copy(AText, AStart, ALen));
+    Result := TyJsonTokenNumber(AText, AStart, ALen, AOld);
   end;
 
   procedure Walk(AData: TJSONData; AApply: Boolean);

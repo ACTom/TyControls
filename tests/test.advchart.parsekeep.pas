@@ -50,6 +50,15 @@ type
     procedure TestTheGenerationIsNewWithEveryWrite;
   end;
 
+  { [R2-I6] the option text read without fcl-json's scanner }
+  TAdvChartFastJsonTest = class(TTestCase)
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestTheFastReaderIsTheReader;
+    procedure TestTheFastReaderTakesPlainJsonOnly;
+  end;
+
 implementation
 
 procedure TPkChart.Cached(ACanvas: TCanvas; const ARect: TRect);
@@ -390,6 +399,289 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------- the reader }
+
+procedure TAdvChartFastJsonTest.TearDown;
+begin
+  TyJsonFastForTest(True);
+  inherited TearDown;
+end;
+
+{ two trees the same: node classes, kinds, keys in order, strings by bytes,
+  numbers by their bits }
+function JsonSame(A, B: TJSONData; out AWhy: string): Boolean;
+var
+  k: Integer;
+  fa, fb: Double;
+begin
+  Result := False;
+  AWhy := '';
+  if (A = nil) or (B = nil) then
+  begin
+    Result := (A = nil) and (B = nil);
+    if not Result then AWhy := 'one is nil';
+    Exit;
+  end;
+  if A.ClassType <> B.ClassType then
+  begin
+    AWhy := A.ClassName + ' / ' + B.ClassName + ' at ' + A.AsJSON;
+    Exit;
+  end;
+  case A.JSONType of
+    jtNumber:
+      if A is TJSONFloatNumber then
+      begin
+        fa := A.AsFloat;
+        fb := B.AsFloat;
+        if PInt64(@fa)^ <> PInt64(@fb)^ then
+        begin
+          AWhy := 'float ' + A.AsJSON + ' / ' + B.AsJSON;
+          Exit;
+        end;
+      end
+      else if A is TJSONQWordNumber then
+      begin
+        if A.AsQWord <> B.AsQWord then
+        begin
+          AWhy := 'qword ' + A.AsJSON;
+          Exit;
+        end;
+      end
+      else if A.AsInt64 <> B.AsInt64 then
+      begin
+        AWhy := 'integer ' + A.AsJSON + ' / ' + B.AsJSON;
+        Exit;
+      end;
+    jtString:
+      if A.AsString <> B.AsString then
+      begin
+        AWhy := 'string ' + A.AsJSON + ' / ' + B.AsJSON;
+        Exit;
+      end;
+    jtBoolean:
+      if A.AsBoolean <> B.AsBoolean then
+      begin
+        AWhy := 'boolean';
+        Exit;
+      end;
+    jtArray, jtObject:
+      begin
+        if A.Count <> B.Count then
+        begin
+          AWhy := 'count ' + IntToStr(A.Count) + ' / ' + IntToStr(B.Count);
+          Exit;
+        end;
+        for k := 0 to A.Count - 1 do
+        begin
+          if (A.JSONType = jtObject)
+            and (TJSONObject(A).Names[k] <> TJSONObject(B).Names[k]) then
+          begin
+            AWhy := 'key ' + TJSONObject(A).Names[k] + ' / ' + TJSONObject(B).Names[k];
+            Exit;
+          end;
+          if not JsonSame(A.Items[k], B.Items[k], AWhy) then Exit;
+        end;
+      end;
+  end;
+  Result := True;
+end;
+
+const
+  cEdges: array[0..65] of string = (
+    '0', '-0', '5', '-5', '7', '999999999', '-999999999', '1000000000', '-1000000000',
+    '2147483647', '2147483648', '-2147483647', '-2147483648', '-2147483649',
+    '9223372036854775807', '9223372036854775808', '-9223372036854775808',
+    '-9223372036854775809', '18446744073709551615', '18446744073709551616',
+    '123456789012345678901234567890', '0.1', '-0.0', '1e5', '1E-5', '1e+5', '-1.5e+300',
+    '1e400', '-1e400', '4.9e-324', '2.4703282292062327e-324', '1.7976931348623157e308',
+    '0.30000000000000004', '1.00000000000000011102230246251565404236316680908203125',
+    '123456.789012345678', '9007199254740993', '9007199254740993.0', '0.1e1', '1.5e-7',
+    '[1,2,3]', '[ 1 , 2 ]', ' {"a": [1, {"b": null}], "c": true, "d": false} ',
+    '{"a":1,"a":2}', '{"a":"x\"y{["}', '"\n\t\/\b\f\r\\\''"', '[1,]', '{"a":1,}',
+    '{}', '[]', 'true', 'nullx', 'True', '"'#$C3#$A9#$E6#$BC#$A2'"', '"abc\u0041"',
+    '''x''', '{a:1}', '// c'#10'1', '1 2', '[1 2]', '{"k" 1}', '"a'#9'b"', '012', '.5',
+    '-', '{"a":"\q"}', '1.');
+
+{ THE FAST READER IS THE READER: every edge above and a thousand plain
+  documents of every shape, read with the fast reader on and off (the long
+  way: the escape pre-decode, fcl-json in relaxed mode, TyJsonFixNumbers):
+  the same answer -- the same tree, or the same error }
+procedure TAdvChartFastJsonTest.TestTheFastReaderIsTheReader;
+var
+  k, taken: Integer;
+  texts: TStringList;
+  a, b: TJSONData;
+  ea, eb: TTyOptionError;
+  oka, okb: Boolean;
+  why, rej: string;
+  seed: LongWord;
+
+  function R(AMax: Integer): Integer;
+  begin
+    {$push}{$R-}{$Q-}
+    seed := seed * 1664525 + 1013904223;
+    {$pop}
+    Result := Integer((seed shr 8) mod LongWord(AMax));
+  end;
+
+  function NumText: string;
+  var i: Integer;
+  begin
+    case R(9) of
+      0: Result := IntToStr(R(1000));
+      1: Result := IntToStr(-R(100000));
+      2: Result := IntToStr(R(1000000000)) + IntToStr(R(1000000000));
+      3: Result := '-' + IntToStr(R(9) + 1) + IntToStr(R(1000000000)) + IntToStr(R(1000000000));
+      4: Result := IntToStr(R(1000)) + '.' + IntToStr(R(1000000));
+      5: Result := '-' + IntToStr(R(100)) + '.' + IntToStr(R(10)) + 'e' + IntToStr(R(40) - 20);
+      6:
+        begin
+          Result := '0.';
+          for i := 1 to 15 + R(8) do Result := Result + Chr(Ord('0') + R(10));
+        end;
+      7: Result := IntToStr(R(10)) + 'E+' + IntToStr(R(320));
+    else
+      Result := IntToStr(R(100000)) + '.' + IntToStr(R(100000)) + IntToStr(R(100000)) + IntToStr(R(100000));
+    end;
+  end;
+
+  function StrText: string;
+  var i: Integer;
+  begin
+    Result := '"';
+    for i := 1 to R(8) do
+      case R(12) of
+        0: Result := Result + '\n';
+        1: Result := Result + '\"';
+        2: Result := Result + '\\';
+        3: Result := Result + #$E4#$B8#$AD;
+        4: Result := Result + '{';
+        5: Result := Result + ' ';
+      else
+        Result := Result + Chr(Ord('a') + R(26));
+      end;
+    Result := Result + '"';
+  end;
+
+  function Doc(ADepth: Integer): string;
+  var i, n: Integer;
+  begin
+    case R(ADepth + 6) of
+      0: Result := NumText;
+      1: Result := StrText;
+      2: if R(2) = 0 then Result := 'true' else Result := 'null';
+      3, 4:
+        begin
+          Result := '[';
+          n := R(5);
+          for i := 0 to n - 1 do
+          begin
+            if i > 0 then Result := Result + ',' + StringOfChar(' ', R(2));
+            if ADepth > 0 then Result := Result + Doc(ADepth - 1) else Result := Result + NumText;
+          end;
+          Result := Result + ']';
+        end;
+    else
+      begin
+        Result := '{';
+        n := R(5);
+        for i := 0 to n - 1 do
+        begin
+          if i > 0 then Result := Result + ',' + #10;
+          Result := Result + '"k' + IntToStr(i) + '":';
+          if ADepth > 0 then Result := Result + Doc(ADepth - 1) else Result := Result + StrText;
+        end;
+        Result := Result + '}';
+      end;
+    end;
+  end;
+
+begin
+  texts := TStringList.Create;
+  try
+    for k := 0 to High(cEdges) do texts.Add(cEdges[k]);
+    texts.Add(StringOfChar('[', 256) + StringOfChar(']', 256));
+    texts.Add(StringOfChar('[', 257) + StringOfChar(']', 257));
+    texts.Add('{"s":"' + StringOfChar('{', 300) + '"}');
+    texts.Add('{"s":"\"' + StringOfChar('{', 300) + '"}');
+    seed := 12345;
+    for k := 0 to 999 do texts.Add(Doc(4));
+    taken := 0;
+    rej := '';
+    for k := 0 to texts.Count - 1 do
+    begin
+      if TyJsonFastParse(texts[k], a) then
+      begin
+        Inc(taken);
+        a.Free;
+      end
+      else if (k > High(cEdges) + 4) and (Length(rej) < 600) then
+        rej := rej + ' | ' + Copy(texts[k], 1, 150);
+      a := nil;
+      b := nil;
+      TyJsonFastForTest(True);
+      oka := TyOptionParseRaw(texts[k], a, ea);
+      TyJsonFastForTest(False);
+      okb := TyOptionParseRaw(texts[k], b, eb);
+      TyJsonFastForTest(True);
+      try
+        AssertEquals('parsed alike: ' + texts[k], okb, oka);
+        if oka then
+        begin
+          AssertTrue(Format('the same tree for %s: %s', [Copy(texts[k], 1, 200), why]),
+            JsonSame(a, b, why));
+        end
+        else
+        begin
+          AssertEquals('the same error: ' + texts[k], eb.Message, ea.Message);
+          AssertEquals('the same line: ' + texts[k], eb.Line, ea.Line);
+          AssertEquals('the same column: ' + texts[k], eb.Col, ea.Col);
+        end;
+      finally
+        a.Free;
+        b.Free;
+      end;
+    end;
+    { the random documents are plain: nearly every one is taken }
+    AssertTrue(Format('the fast reader took %d of %d: %s', [taken, texts.Count, rej]), taken > 900);
+  finally
+    texts.Free;
+  end;
+end;
+
+{ WHAT IT LEAVES TO THE LONG WAY: a comment, a single quote, a code-unit
+  escape, an identifier key, a trailing comma, a leading zero, a lone dot,
+  a capitalised literal, a control character in a string, something after
+  the value, an escape the scanner does not know, more than
+  TyOptionMaxNesting levels }
+procedure TAdvChartFastJsonTest.TestTheFastReaderTakesPlainJsonOnly;
+const
+  cLeft: array[0..12] of string = ('// c'#10'1', '''x''', '"\u0041"', '{a:1}', '[1,]',
+    '012', '.5', 'True', '"a'#9'b"', '1 2', '{"a":1,}', '1.', '"\q"');
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  for k := 0 to High(cLeft) do
+  begin
+    AssertFalse('left: ' + cLeft[k], TyJsonFastParse(cLeft[k], d));
+    AssertTrue('nothing made: ' + cLeft[k], d = nil);
+  end;
+  AssertFalse('too deep', TyJsonFastParse(StringOfChar('[', 257) + StringOfChar(']', 257), d));
+  AssertTrue('as deep as allowed', TyJsonFastParse(StringOfChar('[', 256) + StringOfChar(']', 256), d));
+  d.Free;
+  AssertTrue('plain', TyJsonFastParse('{"a":[1,-2,3.5,"x\ny"],"b":{"c":null}}', d));
+  try
+    AssertEquals(2, d.Count);
+    AssertEquals('x'#10'y', TJSONObject(d).Arrays['a'].Strings[3]);
+    AssertTrue('an Integer', TJSONObject(d).Arrays['a'].Items[1] is TJSONIntegerNumber);
+    AssertTrue('a float', TJSONObject(d).Arrays['a'].Items[2] is TJSONFloatNumber);
+  finally
+    d.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TAdvChartParseKeepTest);
+  RegisterTest(TAdvChartFastJsonTest);
 end.
