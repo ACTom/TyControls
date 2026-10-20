@@ -30,6 +30,8 @@ type
   TPkChart = class(TTyAdvanceChart)
   public
     procedure Cached(ACanvas: TCanvas; const ARect: TRect);
+    procedure HoverAt(AX, AY: Integer);
+    procedure LeaveNow;
   end;
 
   TAdvChartParseKeepTest = class(TTestCase)
@@ -50,6 +52,15 @@ type
     procedure TestTheGenerationIsNewWithEveryWrite;
   end;
 
+  { [R2-I6] the paint order repaired where an element moved }
+  TAdvChartPaintOrderTest = class(TTestCase)
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestARepairedOrderIsTheSortedOrder;
+    procedure TestAHoverSweepIsTheSameRepaired;
+  end;
+
   { [R2-I6] the option text read without fcl-json's scanner }
   TAdvChartFastJsonTest = class(TTestCase)
   protected
@@ -64,6 +75,16 @@ implementation
 procedure TPkChart.Cached(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderCached(ACanvas, ARect, 96);
+end;
+
+procedure TPkChart.HoverAt(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
+end;
+
+procedure TPkChart.LeaveNow;
+begin
+  MouseLeave;
 end;
 
 function TAdvChartParseKeepTest.NewChart(AW, AH: Integer; const AOption: string): TPkChart;
@@ -681,7 +702,209 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------- the order }
+
+procedure TAdvChartPaintOrderTest.TearDown;
+begin
+  TyPaintListRepairForTest(True);
+  inherited TearDown;
+end;
+
+{ THE REPAIRED ORDER IS THE SORTED ORDER: a list of three thousand elements
+  on a few z and z2, sorted, then two hundred rounds of writes -- some that
+  move an element (its z, its z2, both, the same one twice), some that do
+  not, a journal rewound now and then, the tail cut and added to again --
+  and after each, the order the list
+  paints in is the order a list of the same elements added afresh is
+  sorted in }
+procedure TAdvChartPaintOrderTest.TestARepairedOrderIsTheSortedOrder;
+var
+  list, fresh: TTyPaintList;
+  e: TTyChartElement;
+  i, rnd, k, n, idx, r0: Integer;
+  seed: LongWord;
+  journal: Boolean;
+
+  function R(AMax: Integer): Integer;
+  begin
+    {$push}{$R-}{$Q-}
+    seed := seed * 1664525 + 1013904223;
+    {$pop}
+    Result := Integer((seed shr 8) mod LongWord(AMax));
+  end;
+
+begin
+  seed := 777;
+  r0 := TyPaintListRepairsForTest;
+  list := TTyPaintList.Create;
+  try
+    for i := 0 to 2999 do
+    begin
+      e := Default(TTyChartElement);
+      e.Z := R(4);
+      e.Z2 := R(21) - 5;
+      e.Style.Alpha := i;
+      list.Add(e);
+    end;
+    list.PaintOrder(0);
+    for rnd := 0 to 199 do
+    begin
+      journal := R(5) = 0;
+      if journal then
+      begin
+        list.JournalOpen;
+        list.JournalRecord(True);
+      end;
+      n := 1 + R(40);
+      if R(10) = 0 then n := 300;
+      for k := 1 to n do
+      begin
+        idx := R(3000);
+        idx := idx mod list.Count;
+        e := list.Element(idx);
+        case R(5) of
+          0: e.Z := R(4);
+          1: e.Z2 := R(21) - 5;
+          2:
+            begin
+              e.Z := R(4);
+              e.Z2 := R(21) - 5;
+            end;
+          3: e.Style.Alpha := R(1000);
+        else
+          Inc(e.Z2, 10);
+        end;
+        list.SetElement(idx, e);
+      end;
+      if journal then
+      begin
+        list.JournalRecord(False);
+        list.JournalClose;
+        if R(2) = 0 then list.JournalRewind;
+      end
+      { the tail cut and built again (ListTailRebuild) }
+      else if R(4) = 0 then
+      begin
+        list.Truncate(list.Count - 1 - R(60));
+        for k := 1 to R(80) do
+        begin
+          e := Default(TTyChartElement);
+          e.Z := R(4);
+          e.Z2 := R(21) - 5;
+          list.Add(e);
+        end;
+      end;
+      fresh := TTyPaintList.Create;
+      try
+        for i := 0 to list.Count - 1 do fresh.Add(list.Element(i));
+        for i := 0 to list.Count - 1 do
+          AssertEquals(Format('round %d place %d', [rnd, i]), fresh.PaintOrder(i),
+            list.PaintOrder(i));
+      finally
+        fresh.Free;
+      end;
+    end;
+    AssertTrue('repaired, not sorted whole, most rounds',
+      TyPaintListRepairsForTest - r0 > 100);
+  finally
+    list.Free;
+  end;
+end;
+
+{ A HOVER SWEEP over a heatmap of ten thousand cells with a visualMap,
+  frame by frame the same with the order repaired and sorted whole }
+procedure TAdvChartPaintOrderTest.TestAHoverSweepIsTheSameRepaired;
+var
+  frames: array[Boolean] of TStringList;
+  rep: Boolean;
+  chart: TPkChart;
+  bmp: TBitmap;
+  form: TForm;
+  ctl: TTyStyleController;
+  sb: TStringBuilder;
+  i, j, k, r0, used: Integer;
+  opt: string;
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "tooltip": {}, "xAxis": {"type": "category"},');
+    sb.Append(' "yAxis": {"type": "category"},');
+    sb.Append(' "visualMap": {"min": 0, "max": 1, "calculable": true, "orient": "horizontal", "left": "center", "bottom": 0},');
+    sb.Append(' "series": [{"type": "heatmap", "progressive": 1000, "data": [');
+    for i := 0 to 99 do
+      for j := 0 to 99 do
+      begin
+        if (i > 0) or (j > 0) then sb.Append(',');
+        sb.Append('[').Append(i).Append(',').Append(j).Append(',')
+          .Append(FloatToStr(((i * 37 + j * 11) mod 100) / 100, DefaultFormatSettings)).Append(']');
+      end;
+    sb.Append(']}]}');
+    opt := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  form := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  bmp := TBitmap.Create;
+  used := 0;
+  try
+    ctl.Mode := 'light';
+    ctl.ThemeName := 'default';
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(480, 340);
+    for rep := False to True do
+    begin
+      TyPaintListRepairForTest(rep);
+      r0 := TyPaintListRepairsForTest;
+      chart := TPkChart.Create(form);
+      try
+        chart.Parent := form;
+        chart.Controller := ctl;
+        chart.AnimationMode := camOff;
+        chart.AnimNow := 0;
+        chart.ProgressiveStepCostMs := 1;
+        chart.SetBounds(0, 0, 480, 340);
+        chart.Option := opt;
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 340));
+        k := 0;
+        while chart.ProgressiveUnfinished and (k < 100) do
+        begin
+          chart.ProgressTick;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 340));
+          Inc(k);
+        end;
+        for k := 0 to 15 do
+        begin
+          chart.HoverAt(70 + k * 24, 60 + k * 14);
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 340));
+          frames[rep].Add(FrameText(bmp));
+        end;
+        chart.LeaveNow;
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 340));
+        frames[rep].Add(FrameText(bmp));
+        if rep then used := TyPaintListRepairsForTest - r0;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertEquals('as many frames', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('frame %d the same', [k]), frames[False][k] = frames[True][k]);
+    AssertTrue(Format('the order was repaired (%d)', [used]), used > 0);
+  finally
+    bmp.Free;
+    ctl.Free;
+    form.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyPaintListRepairForTest(True);
+  end;
+end;
+
 initialization
   RegisterTest(TAdvChartParseKeepTest);
+  RegisterTest(TAdvChartPaintOrderTest);
   RegisterTest(TAdvChartFastJsonTest);
 end.
