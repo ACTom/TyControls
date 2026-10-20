@@ -1155,6 +1155,21 @@ add('A', 'duplicate categories', cx({ data: ['a', 'b', 'a', 'c', 'd'] },
   [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
 add('A', "duplicate categories min 'a'", cx({ data: ['a', 'b', 'a', 'c', 'd'], min: 'a' },
   [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
+// [R2-I9] OrdinalMeta.createByAxisModel reads `option.dedplication !== false`
+// (the key misspelt): only a literal false under that name collects blindly --
+// every row a new category, a repeated name too; `deduplication: false` has
+// no effect, and neither has a falsy value that is not false
+const REP = [['a', 5], ['b', 20], ['a', 8], ['c', 3], ['b', 12]];
+add('A', 'collected, dedplication false: a blind append', { xAxis: { type: 'category', dedplication: false },
+  yAxis: { type: 'value' }, series: [bar(REP)] });
+add('A', 'collected, deduplication false: no effect upstream', { xAxis: { type: 'category', deduplication: false },
+  yAxis: { type: 'value' }, series: [bar(REP)] });
+add('A', 'collected, dedplication 0: only false switches it', { xAxis: { type: 'category', dedplication: 0 },
+  yAxis: { type: 'value' }, series: [bar(REP)] });
+add('A', 'collected, dedplication false, two series share the axis', { xAxis: { type: 'category', dedplication: false },
+  yAxis: { type: 'value' }, series: [bar(REP), line([['c', 7], ['a', 9]])] });
+add('A', 'fixed data, dedplication false: the list as written', cx({ data: ['a', 'b', 'a', 'c', 'd'], dedplication: false },
+  [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
 
 // B. blank
 add('B', "min 'zz'", cx({ min: 'zz' }));

@@ -1199,7 +1199,16 @@ begin
   a.Name := AxisNameIn(nd);
   a.AxisType := t;
   if t = atCategory then
+  begin
     ReadCategories(AOption, nd, a);
+    { [R2-I9] OrdinalMeta.createByAxisModel: `deduplication:
+      option.dedplication !== false` -- the key as upstream spells it, so
+      only a literal false under that name collects blindly (every row a new
+      category); `deduplication: false` has no effect there, nor here }
+    d := FindIn(nd, 'dedplication');
+    if (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean then
+      a.Categories.Deduplication := False;
+  end;
   { Category axes band by default; the setter refuses to band anything
     else, so a value axis' boundaryGap -- which is a pair of percentages,
     not a boolean -- cannot turn this on by accident. }
