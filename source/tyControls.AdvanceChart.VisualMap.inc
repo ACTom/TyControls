@@ -88,10 +88,19 @@ begin
     begin
       spec := FVisualSpecs[k];
       if not TyVisualMapTargets(spec, FBindings[i].SeriesIndex, sid) then Continue;
-      { with each value's text: what a category or a string piece matches }
-      values := TyVisualSeriesValues(st,
-        TyVisualMapDimFor(spec, FBindings[i].SeriesIndex, sid), col, dimIndex,
-        texts);
+      { with each value's text: what a category or a string piece matches --
+        [R2-L] and nothing else reads it: without either, no texts }
+      if TyVisualSpecReadsText(spec) then
+        values := TyVisualSeriesValues(st,
+          TyVisualMapDimFor(spec, FBindings[i].SeriesIndex, sid), col, dimIndex,
+          texts)
+      else
+      begin
+        values := TyVisualSeriesValues(st,
+          TyVisualMapDimFor(spec, FBindings[i].SeriesIndex, sid), col, dimIndex);
+        texts := nil;
+        SetLength(texts, Length(values));
+      end;
       if rows = nil then
       begin
         SetLength(rows, st.RawCount);
@@ -981,7 +990,8 @@ begin
   { the handle labels fade: api.enterBlur }
   if FVisualViews[AIndex].Calculable then
     for h := 0 to 1 do FVmLive[AIndex].LabelBlur[h] := True;
-  DropStaticKeepList;
+  { [R2-L] the visual maps and what follows them, not the whole list }
+  ListTailRefresh;
   FZrDirty := True;
   inherited Invalidate;
 end;
@@ -994,7 +1004,7 @@ begin
   FVmLive[AIndex].IndVisible := False;
   FVmLive[AIndex].IndLabelVisible := False;
   for h := 0 to 1 do FVmLive[AIndex].LabelBlur[h] := False;
-  DropStaticKeepList;
+  ListTailRefresh;
   FZrDirty := True;
   inherited Invalidate;
 end;
@@ -1261,13 +1271,13 @@ end;
   when its series is a target: the indicator at its value }
 procedure TTyAdvanceChart.VmZrMouseOver(const ATarget: TTyChartEventTarget);
 var
-  k, t, raw: Integer;
+  k, t, raw, slot: Integer;
   targets: TTyIntegerArray;
   st: TTyDataStore;
-  vals: TTyDoubleArray;
-  texts: TTyStringArray;
   v: Double;
   isTarget: Boolean;
+  sid: string;
+  d: TJSONData;
 begin
   if not (ATarget.HdKind in [1, 3]) or ATarget.HdEdge then Exit;
   for k := 0 to High(FVisualLayouts) do
@@ -1278,11 +1288,23 @@ begin
     for t := 0 to High(targets) do
       if targets[t] = ATarget.HdSeries then isTarget := True;
     if not isTarget then Continue;
-    if not VmSeriesValues(k, ATarget.HdSeries, st, vals, texts) then Continue;
+    { [R2-L] the hovered row's value alone, as VmSeriesValues reads every
+      row's (the texts it adds are not read here) }
+    slot := SlotOfSeries(ATarget.HdSeries);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    st := FStores[slot];
     if (ATarget.HdRow < 0) or (ATarget.HdRow >= st.Count) then Continue;
     raw := st.GetRawIndex(ATarget.HdRow);
-    if (raw < 0) or (raw > High(vals)) then Continue;
-    v := vals[raw];
+    if (raw < 0) or (raw >= st.RawCount) then Continue;
+    sid := '';
+    d := FOption.ComponentAt('series', ATarget.HdSeries);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then sid := d.AsString;
+    end;
+    v := TyVisualSeriesValueAt(st, TyVisualMapDimFor(FVisualSpecs[k],
+      ATarget.HdSeries, sid), raw);
     if not IsNan(v) then VmShowIndicator(k, v, v, '');
   end;
 end;

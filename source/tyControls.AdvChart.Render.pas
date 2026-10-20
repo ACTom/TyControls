@@ -15,7 +15,10 @@ uses
   tyControls.Types,     // TTyColor: the render side speaks the library's colour type
   tyControls.AdvChart.Measure,  // the anchor-to-LCL-alignment converters
   BGRABitmap,
-  tyControls.Painter;
+  tyControls.Painter,
+  { last, as it stood first in the implementation's list: the brush and
+    pixel types TyFillRectAntialiasExact is declared in [R2-L] }
+  BGRABitmapTypes;
 
 { Trace one shape into the painter's current path. Does NOT begin the path: a
   caller composing a ring from two contours needs to add both before filling. }
@@ -144,9 +147,28 @@ procedure TyAdvChartHaloCacheForTest(AOn: Boolean);
   x, y in turn. }
 function TyTraceMaskOutlineForTest(AMask: TBGRABitmap; AScale: Integer): TTyDoubleArray;
 
+{ [R2-L] BGRA's ABmp.FillRectAntialias(x, y, x2, y2, AColor) -- pixel-centred,
+  in the bitmap's antialiasing draw mode -- byte for byte, the same brush
+  calls in the same order, without the scanline filler's per-row
+  intersection objects: what a large batch's bars and boost squares are
+  drawn with (see the implementation for the rows it follows). }
+procedure TyFillRectAntialiasExact(ABmp: TBGRABitmap; x, y, x2, y2: Single;
+  const AColor: TBGRAPixel; AMemo: TObject = nil);
+
+var
+  { [R2-L] an element's solid pen through the painter's kept strokes
+    (StrokePathKept: the pen's polygon and the fill's coverage kept, the
+    same pixels) -- switched on where the same paths come back, a
+    progressive run's layer drawn again }
+  TyRenderKeptStrokes: Boolean = False;
+{ [R2-L] a memo of what the brush made of a pixel at a coverage: handed to
+  every TyFillRectAntialiasExact of one colour (it forgets itself when the
+  colour or the draw mode is another) }
+function TyRectFillMemoNew: TObject;
+
 implementation
 
-uses base64, BGRABitmapTypes, Generics.Collections, tyControls.AdvChart.Large,
+uses base64, Generics.Collections, tyControls.AdvChart.Large,
   tyControls.AdvChart.Symbol, tyControls.AdvChart.Decal, tyControls.AdvChart.Images,
   tyControls.AdvChart.ZrPath, tyControls.AdvChart.GfxEl;
 
@@ -157,6 +179,361 @@ var
 function TyAdvChartLargeFastPathsForTest: Integer;
 begin
   Result := GLargeFastPaths;
+end;
+
+{ WHAT BGRA DOES WITH A RECTANGLE (BGRAPolygon.FillShapeAntialias over a
+  TFillRectangleInfo, fmAlternate), row by row, and nothing else. The shape
+  is the rect ordered and moved half a pixel (pixel-centred); its rows and
+  columns those of floor(x1) .. floor(x2) and floor(y1) .. floor(y2), cut
+  to the clip. A scan line at cury meets it, at x1 and x2, when
+  y1 <= cury <= y2. Each row is scanned at yb + 1/256 and yb + 255/256:
+  - both meet it (or neither does): the "optimised" row -- the two
+    intersections are the same, so it is drawn straight from x1 .. x2 (the
+    first and last pixel partly covered, as 65535ths), or not at all;
+  - one does and the other does not: the row's sixteen sub-scans at
+    yb + (2c + 1) / 32, each meeting it adding the same densities (256 a
+    full pixel, the partial ends in 256ths), rendered as sixteen-fold
+    densities.
+  The arithmetic is BGRA's own, in its own types (Single coordinates,
+  Int64 rounding, Word densities). A rectangle has no curved segment and
+  no third intersection, so nothing else of the filler applies. }
+{ A SOLID BRUSH'S PIXEL is a function of the pixel it lands on and the
+  coverage alone (BGRASolidBrushDrawPixels: the colour's expanded value
+  blended by the coverage's alpha; a coverage of 128 or less leaves it):
+  the memo keeps, per colour and draw mode, the last pixels and coverages
+  met and what the brush made of them. A batch of thin bars lands the same
+  coverage on the same pixel value row after row. }
+const
+  cRectMemoSize = 4096;
+
+type
+  TTyRectFillMemo = class
+    Color: TBGRAPixel;
+    Mode: TDrawMode;
+    Ready: Boolean;
+    Keys: array[0..cRectMemoSize - 1] of QWord;
+    Res: array[0..cRectMemoSize - 1] of LongWord;
+  end;
+
+function TyRectFillMemoNew: TObject;
+begin
+  Result := TTyRectFillMemo.Create;
+end;
+
+procedure TyFillRectAntialiasExact(ABmp: TBGRABitmap; x, y, x2, y2: Single;
+  const AColor: TBGRAPixel; AMemo: TObject);
+const
+  cPrec = 16;  { BGRAFillInfo.AntialiasPrecision }
+  cShift = 4;  { AntialiasPrecisionShift }
+var
+  brush: TUniversalBrush;
+  ctx: TUniBrushContext;
+  fx1, fy1, fx2, fy2, temp, x1, xr, cy: Single;
+  minx, miny, maxx, maxy, yb, yc, k, ix1, ix2, densMinX, densMaxX, xb, drawCount, j: Integer;
+  bounds, clip: TRect;
+  tempDensity: UInt32or64;
+  dens: array of Word;
+  inA, inB: Boolean;
+  pDest: PByte;
+  d0, dEnd, dMid: Integer;
+  memo: TTyRectFillMemo;
+  segDone: Boolean;
+  segN, q, cnt: Integer;
+  segX, segCount: array[0..2] of Integer;
+  segAlpha: array[0..2] of Word;
+  { the last pixel value each segment met and what it became: down a bar's
+    column the same value comes back row after row }
+  segIn, segOut: array[0..2] of LongWord;
+  segHas: array[0..2] of Boolean;
+  pl: PLongWord;
+  v: LongWord;
+
+  { the brush on one pixel, through the memo }
+  procedure PutOne(P: PLongWord; AAlpha: Word; AX, AY: Integer);
+  var
+    key: QWord;
+    h: LongWord;
+  begin
+    key := QWord(P^) or (QWord(AAlpha) shl 32) or (QWord(1) shl 48);
+    h := (P^ xor (P^ shr 15) xor (LongWord(AAlpha) * 2654435761)) and (cRectMemoSize - 1);
+    if memo.Keys[h] = key then
+    begin
+      P^ := memo.Res[h];
+      Exit;
+    end;
+    brush.MoveTo(@ctx, P, AX, AY);
+    brush.PutNextPixels(@ctx, AAlpha, 1);
+    memo.Keys[h] := key;
+    memo.Res[h] := P^;
+  end;
+
+begin
+  ABmp.SolidBrush(brush, AColor, ABmp.AntialiasingDrawMode);
+  if brush.DoesNothing then Exit;
+  { the memo for this colour and mode; a solid brush in the bitmap's own
+    pixel format only }
+  memo := nil;
+  if (AMemo is TTyRectFillMemo) and (ABmp.Colorspace = TBGRAPixelColorspace) then
+  begin
+    memo := TTyRectFillMemo(AMemo);
+    if not memo.Ready or (LongWord(memo.Color) <> LongWord(AColor))
+      or (memo.Mode <> ABmp.AntialiasingDrawMode) then
+    begin
+      FillChar(memo.Keys, SizeOf(memo.Keys), 0);
+      memo.Color := AColor;
+      memo.Mode := ABmp.AntialiasingDrawMode;
+      memo.Ready := True;
+    end;
+  end;
+  segDone := False;
+  segN := 0;
+  segHas[0] := False;
+  segHas[1] := False;
+  segHas[2] := False;
+  { TFillRectangleInfo.Create }
+  if y > y2 then
+  begin
+    temp := y;
+    y := y2;
+    y2 := temp;
+  end;
+  if x > x2 then
+  begin
+    temp := x;
+    x := x2;
+    x2 := temp;
+  end;
+  fx1 := x + 0.5;
+  fy1 := y + 0.5;
+  fx2 := x2 + 0.5;
+  fy2 := y2 + 0.5;
+  { BGRAShapeComputeMinMax }
+  bounds := Rect(Floor(fx1), Floor(fy1), Floor(fx2) + 1, Floor(fy2) + 1);
+  if (bounds.Right <= bounds.Left) or (bounds.Bottom <= bounds.Top) then Exit;
+  clip := ABmp.ClipRect;
+  miny := bounds.Top;
+  maxy := bounds.Bottom - 1;
+  minx := bounds.Left;
+  maxx := bounds.Right - 1;
+  if minx < clip.Left then minx := clip.Left;
+  if maxx < clip.Left then Exit;
+  if maxx > clip.Right - 1 then maxx := clip.Right - 1;
+  if minx > clip.Right - 1 then Exit;
+  if miny < clip.Top then miny := clip.Top;
+  if maxy < clip.Top then Exit;
+  if maxy > clip.Bottom - 1 then maxy := clip.Bottom - 1;
+  if miny > clip.Bottom - 1 then Exit;
+  ABmp.LoadFromBitmapIfNeeded;
+  dens := nil;
+  for yb := miny to maxy do
+  begin
+    cy := yb + 1/256;
+    inA := (cy >= fy1) and (cy <= fy2);
+    cy := yb + 255/256;
+    inB := (cy >= fy1) and (cy <= fy2);
+    if inA = inB then
+    begin
+      { the optimised row: nothing, or straight from x1 .. x2 }
+      if not inA then Continue;
+      { [R2-L] THROUGH THE MEMO: every such row makes the same calls, so
+        they are worked out once -- (first pixel, count, coverage) at most
+        three times -- and each pixel goes through the memo }
+      if memo <> nil then
+      begin
+        if not segDone then
+        begin
+          segDone := True;
+          segN := 0;
+          x1 := (fx1 + fx1) * 0.5;
+          xr := (fx2 + fx2) * 0.5;
+          if x1 < minx then x1 := minx;
+          ix1 := Floor(x1);
+          if xr >= maxx + 1 then
+          begin
+            xr := maxx + 1;
+            ix2 := maxx;
+          end
+          else
+            ix2 := Floor(xr);
+          if ix2 > maxx then ix2 := maxx;
+          if ix1 <= ix2 then
+          begin
+            if ix1 = ix2 then
+            begin
+              tempDensity := Round((xr - x1) * 65535);
+              segX[0] := ix1; segCount[0] := 1; segAlpha[0] := tempDensity;
+              segN := 1;
+            end
+            else
+            begin
+              tempDensity := Round((ix1 + 1 - x1) * 65535);
+              segX[0] := ix1; segCount[0] := 1; segAlpha[0] := tempDensity;
+              segN := 1;
+              Inc(ix1);
+              tempDensity := Round((xr - ix2) * 65535);
+              if tempDensity < 65535 then
+              begin
+                Dec(ix2);
+                if ix2 >= ix1 then
+                begin
+                  segX[segN] := ix1; segCount[segN] := ix2 - ix1 + 1; segAlpha[segN] := 65535;
+                  Inc(segN);
+                end;
+                segX[segN] := ix2 + 1; segCount[segN] := 1; segAlpha[segN] := tempDensity;
+                Inc(segN);
+              end
+              else
+              begin
+                segX[segN] := ix1; segCount[segN] := ix2 - ix1 + 1; segAlpha[segN] := 65535;
+                Inc(segN);
+              end;
+            end;
+          end;
+        end;
+        for q := 0 to segN - 1 do
+        begin
+          { the brush leaves a pixel this faint as it is }
+          if segAlpha[q] <= $80 then Continue;
+          pl := PLongWord(ABmp.GetPixelAddress(segX[q], yb));
+          for cnt := 0 to segCount[q] - 1 do
+          begin
+            v := pl^;
+            if segHas[q] and (v = segIn[q]) then
+              pl^ := segOut[q]
+            else
+            begin
+              PutOne(pl, segAlpha[q], segX[q] + cnt, yb);
+              segIn[q] := v;
+              segOut[q] := pl^;
+              segHas[q] := True;
+            end;
+            Inc(pl);
+          end;
+        end;
+        Continue;
+      end;
+      x1 := (fx1 + fx1) * 0.5;
+      xr := (fx2 + fx2) * 0.5;
+      if x1 < minx then x1 := minx;
+      ix1 := Floor(x1);
+      if xr >= maxx + 1 then
+      begin
+        xr := maxx + 1;
+        ix2 := maxx;
+      end
+      else
+        ix2 := Floor(xr);
+      if ix2 > maxx then ix2 := maxx;
+      if ix1 > ix2 then Continue;
+      pDest := ABmp.GetPixelAddress(ix1, yb);
+      brush.MoveTo(@ctx, pDest, ix1, yb);
+      if ix1 = ix2 then
+      begin
+        tempDensity := Round((xr - x1) * 65535);
+        brush.PutNextPixels(@ctx, tempDensity, 1);
+      end
+      else
+      begin
+        tempDensity := Round((ix1 + 1 - x1) * 65535);
+        brush.PutNextPixels(@ctx, tempDensity, 1);
+        Inc(ix1);
+        tempDensity := Round((xr - ix2) * 65535);
+        if tempDensity < 65535 then
+        begin
+          Dec(ix2);
+          if ix2 >= ix1 then brush.PutNextPixels(@ctx, 65535, ix2 - ix1 + 1);
+          brush.PutNextPixels(@ctx, tempDensity, 1);
+        end
+        else
+          brush.PutNextPixels(@ctx, 65535, ix2 - ix1 + 1);
+      end;
+      Continue;
+    end;
+    { the sixteen sub-scans: how many meet the rect }
+    k := 0;
+    for yc := 0 to cPrec - 1 do
+    begin
+      cy := yb + (yc * 2 + 1) / (cPrec * 2);
+      if (cy >= fy1) and (cy <= fy2) then Inc(k);
+    end;
+    if k = 0 then Continue;
+    { one sub-scan's densities (density256.inc, INCLUDE_FILLDENSITY) }
+    x1 := fx1;
+    xr := fx2;
+    if not ((x1 <> xr) and (x1 < maxx + 1) and (xr >= minx)) then Continue;
+    if x1 < minx then x1 := minx;
+    if xr >= maxx + 1 then xr := maxx + 1;
+    ix1 := Floor(x1);
+    ix2 := Floor(xr);
+    densMinX := ix1;
+    densMaxX := ix2;
+    if Length(dens) < maxx - minx + 2 then SetLength(dens, maxx - minx + 2);
+    FillChar(dens[0], (maxx - minx + 2) * SizeOf(Word), 0);
+    if ix1 = ix2 then
+    begin
+      d0 := Round((xr - ix2) * 256) - Round((x1 - ix1) * 256);
+      dens[ix1 - minx] := Word(dens[ix1 - minx] + d0 * k);
+    end
+    else
+    begin
+      d0 := 256 - Round((x1 - ix1) * 256);
+      dens[ix1 - minx] := Word(dens[ix1 - minx] + d0 * k);
+      if ix2 <= maxx then
+      begin
+        dEnd := Round((xr - ix2) * 256);
+        dens[ix2 - minx] := Word(dens[ix2 - minx] + dEnd * k);
+      end;
+    end;
+    if ix2 > ix1 + 1 then
+    begin
+      dMid := 256 * k;
+      for j := ix1 + 1 - minx to ix2 - 1 - minx do
+        dens[j] := Word(dens[j] + dMid);
+    end;
+    { INCLUDE_RENDERDENSITY with PARAM_ANTIALIASINGFACTOR }
+    if densMinX < minx then densMinX := minx;
+    if densMaxX > maxx then densMaxX := maxx;
+    if densMinX > densMaxX then Continue;
+    xb := densMinX;
+    j := densMinX - minx;
+    pDest := ABmp.GetPixelAddress(densMinX, yb);
+    brush.MoveTo(@ctx, pDest, xb, yb);
+    while xb <= densMaxX do
+    begin
+      tempDensity := dens[j];
+      Inc(j);
+      Inc(xb);
+      drawCount := 1;
+      if tempDensity >= 256 shl cShift then
+      begin
+        while (xb <= densMaxX) and (dens[j] >= 256 shl cShift) do
+        begin
+          Inc(xb);
+          Inc(j);
+          Inc(drawCount);
+        end;
+        brush.PutNextPixels(@ctx, 65535, drawCount);
+      end
+      else
+      begin
+        while (xb <= densMaxX) and (dens[j] = tempDensity) do
+        begin
+          Inc(xb);
+          Inc(j);
+          Inc(drawCount);
+        end;
+        if tempDensity = 0 then
+          brush.PutNextPixels(@ctx, 0, drawCount)
+        else
+        begin
+          Dec(tempDensity);
+          brush.PutNextPixels(@ctx, (tempDensity shl (8 - cShift))
+            + (tempDensity shr (2 * cShift)), drawCount);
+        end;
+      end;
+    end;
+  end;
+  ABmp.InvalidateBitmap;
 end;
 
 { [F6a] A PICTURE DRAWN INTO ITS CORNERS: ACorners the image's top-left,
@@ -2331,6 +2708,9 @@ var
         P.StrokePathGradient(stops, gx1, gy1, gx2, gy2, gr,
           AElement.Style.StrokeWidthLogical);
       end
+      else if TyRenderKeptStrokes then
+        P.StrokePathKept(TTyColor(AElement.Style.StrokeColor),
+                     AElement.Style.StrokeWidthLogical)
       else
         P.StrokePath(TTyColor(AElement.Style.StrokeColor),
                      AElement.Style.StrokeWidthLogical);
@@ -2439,6 +2819,7 @@ var
     c: TBGRAPixel;
     sub: TTyChartShape;
     pts: ArrayOfTPointF;
+    memo: TObject;
 
     { a row's polygon with BGRA's generator pinned (TyPinBgraRandom) }
     procedure PinnedPoly(AKind: Integer);
@@ -2513,6 +2894,8 @@ var
     oy := area.Top + 0.5;
     layer := TBGRABitmap.Create(area.Right - area.Left, area.Bottom - area.Top,
       BGRAPixelTransparent);
+    { what the brush made of a pixel, for every rect of this one colour }
+    memo := TyRectFillMemoNew;
     try
       layer.LineCap := pecFlat;
       for i := 0 to n - 1 do
@@ -2541,7 +2924,7 @@ var
         if (g.Kind = lgkBar) or g.Boost or (TTySymbolKind(g.SymKind) = tsyRect) then
         begin
           if AStroke then layer.RectangleAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, c, pen)
-          else layer.FillRectAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, c);
+          else TyFillRectAntialiasExact(layer, x0 - ox, y0 - oy, x1 - ox, y1 - oy, c, memo);
           Continue;
         end;
         w := g.SymW * s;
@@ -2562,7 +2945,7 @@ var
               if AStroke then
                 layer.RectangleAntialias(x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c, pen)
               else
-                layer.FillRectAntialias(x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c);
+                TyFillRectAntialiasExact(layer, x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c, memo);
             end;
           tsyRoundRect:
             begin
@@ -2594,6 +2977,7 @@ var
       end;
       bmp.PutImage(area.Left, area.Top, layer, dmDrawWithTransparency, op);
     finally
+      memo.Free;
       layer.Free;
     end;
   end;
@@ -2758,6 +3142,12 @@ begin
       PaintLargeInTiles;
       PaintDecal;
     end
+    { [R2-L] A PEN THAT INKS NOTHING and no fill: a solid stroke at alpha 0
+      (its own or the element's) leaves at once in BGRA's fill, before any
+      random draw -- the path is not traced for it (a parallel's inactive
+      lines, thousands of curves) }
+    else if (not AElement.Style.HasFill) and (AElement.Style.StrokeGradient.Kind = cgkNone)
+      and ((AElement.Style.Alpha <= 0) or ((AElement.Style.StrokeColor shr 24) = 0)) then
     else
     begin
       P.BeginPath;

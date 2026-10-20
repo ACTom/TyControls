@@ -655,6 +655,9 @@ procedure TyPainterClipReuseForTest(AOn: Boolean);
 procedure TyPainterKeptStrokesForTest(AOn: Boolean);
 function TyPainterKeptStrokeFillsForTest: Integer;
 function TyPainterKeptStrokeReplaysForTest: Integer;
+{ [R2-L] ... and the pen's polygons it keeps beside them: how many were computed (a
+  kept one met again does not count). }
+function TyPainterKeptStrokeContoursForTest: Integer;
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -5657,6 +5660,136 @@ var
   GKeptFillsMade: Integer = 0;
   GKeptFillsReplayed: Integer = 0;
 
+{ [R2-L] THE KEPT PENS. What the pen makes of a path -- the polygon the fill is given -- is
+  a function of the path's points, the width, and the stroker's join, cap, miter limit,
+  stroke matrix and dash pattern (TBGRAPenStroker.ComputePolylineAutocycle, no arrow, no
+  random draw): kept by those, found by a hash of them and compared whole. A path met
+  again (a progressive layer drawn again on a hover) skips the pen as the kept fill skips
+  the filler. }
+type
+  TTyKeptContour = class
+    Pts: array of TPointF;
+    Width, Miter: Single;
+    Join: TPenJoinStyle;
+    Cap: TPenEndCap;
+    Mat: TAffineMatrix;
+    Style: TBGRAPenStyle;
+    Contour: ArrayOfTPointF;
+    Next: TTyKeptContour;
+  end;
+
+const
+  KeptContoursMaxCount = 8192;
+  KeptContoursMaxBytes = 48 * 1024 * 1024;
+
+var
+  GKeptContours: specialize TDictionary<QWord, TTyKeptContour> = nil;
+  GKeptContourCount: Integer = 0;
+  GKeptContourBytes: Int64 = 0;
+  GKeptContoursMade: Integer = 0;
+
+procedure DropKeptContours;
+var
+  c, n, nx: TTyKeptContour;
+begin
+  if GKeptContours <> nil then
+  begin
+    for c in GKeptContours.Values do
+    begin
+      n := c;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GKeptContours.Clear;
+  end;
+  GKeptContourCount := 0;
+  GKeptContourBytes := 0;
+end;
+
+function TyPainterKeptStrokeContoursForTest: Integer;
+begin
+  Result := GKeptContoursMade;
+end;
+
+function KeptContourOf(AStroker: TBGRACustomPenStroker; const APts: ArrayOfTPointF;
+  AWidth: Single): ArrayOfTPointF;
+var
+  h: QWord;
+  q: PQWord;
+  i: Integer;
+  join: TPenJoinStyle;
+  cap: TPenEndCap;
+  miter: Single;
+  mat: TAffineMatrix;
+  style: TBGRAPenStyle;
+  c, first: TTyKeptContour;
+
+  procedure Mix(AValue: QWord);
+  begin
+    {$push}{$R-}{$Q-}
+    h := (h xor AValue) * QWord($100000001B3);
+    {$pop}
+  end;
+
+begin
+  join := AStroker.JoinStyle;
+  cap := AStroker.LineCap;
+  miter := AStroker.MiterLimit;
+  mat := AStroker.StrokeMatrix;
+  style := AStroker.CustomPenStyle;
+  h := QWord($CBF29CE484222325);
+  Mix(QWord(PLongWord(@AWidth)^) or (QWord(Ord(join)) shl 32) or (QWord(Ord(cap)) shl 40));
+  Mix(QWord(PLongWord(@miter)^) or (QWord(Length(style)) shl 32));
+  for i := 0 to High(style) do Mix(QWord(PLongWord(@style[i])^));
+  q := PQWord(@mat);
+  for i := 0 to (SizeOf(mat) div 8) - 1 do Mix(q[i]);
+  if Length(APts) > 0 then
+  begin
+    q := PQWord(@APts[0]);
+    for i := 0 to High(APts) do Mix(q[i]);
+  end;
+  first := nil;
+  if GKeptContours <> nil then GKeptContours.TryGetValue(h, first);
+  c := first;
+  while c <> nil do
+  begin
+    if (Length(c.Pts) = Length(APts)) and (c.Width = AWidth) and (c.Miter = miter)
+      and (c.Join = join) and (c.Cap = cap) and (Length(c.Style) = Length(style))
+      and CompareMem(@c.Mat, @mat, SizeOf(mat))
+      and ((Length(style) = 0) or CompareMem(@c.Style[0], @style[0], Length(style) * SizeOf(Single)))
+      and ((Length(APts) = 0) or CompareMem(@c.Pts[0], @APts[0], Length(APts) * SizeOf(TPointF))) then
+      Exit(c.Contour);
+    c := c.Next;
+  end;
+  Result := AStroker.ComputePolylineAutocycle(APts, AWidth);
+  Inc(GKeptContoursMade);
+  c := TTyKeptContour.Create;
+  c.Pts := APts;
+  c.Width := AWidth;
+  c.Miter := miter;
+  c.Join := join;
+  c.Cap := cap;
+  c.Mat := mat;
+  c.Style := Copy(style);
+  c.Contour := Result;
+  if GKeptContours = nil then
+    GKeptContours := specialize TDictionary<QWord, TTyKeptContour>.Create;
+  if (GKeptContourCount >= KeptContoursMaxCount) or (GKeptContourBytes
+    + Int64(Length(APts) + Length(Result)) * SizeOf(TPointF) > KeptContoursMaxBytes) then
+  begin
+    DropKeptContours;
+    first := nil;
+  end;
+  c.Next := first;
+  GKeptContours.AddOrSetValue(h, c);
+  Inc(GKeptContourCount);
+  Inc(GKeptContourBytes, Int64(Length(APts) + Length(Result)) * SizeOf(TPointF));
+end;
+
 procedure DropKeptFills;
 var
   f, n, nx: TTyKeptFill;
@@ -5682,6 +5815,7 @@ end;
 procedure TyPainterKeptStrokesForTest(AOn: Boolean);
 begin
   DropKeptFills;
+  DropKeptContours;
   GKeptFillsOff := not AOn;
 end;
 
@@ -5751,6 +5885,7 @@ var
   c: TBGRAPixel;
   uctx: TUniBrushContext;
   mode: TDrawMode;
+  maskScan: TBGRACustomScanner;
 begin
   if FBmp = nil then Exit;
   w := ScaleF(AWidthLogical);
@@ -5768,28 +5903,38 @@ begin
   st := nil;
   if not GKeptFillsOff and (GetCurrentThreadId = MainThreadID) then
     st := CanvasStateOf(ctx);
-  if (st = nil) or (st.clipMaskReadOnly <> nil) or (st.strokeTextureProvider <> nil)
+  if (st = nil) or (st.strokeTextureProvider <> nil)
     or ctx.hasShadow or not ctx.antialiasing or (st.lineWidth = 0)
     or (ctx.surface <> FBmp) or (st.penStroker.Arrow <> nil) then
   begin
     CtxStroke(ctx);
     Exit;
   end;
-  { the brush StrokePoly's fill makes (AnyBrush): the stroke colour at the global alpha }
+  { the brush StrokePoly's fill makes (AnyBrush): the stroke colour at the global alpha --
+    [R2-L] or, under a clip mask, its scanner of that colour through the mask
+    (FillPolyAntialiasWithTexture: the same fill, nonzero, pixel-centred, a scanner brush) }
   c := st.strokeColor;
   c.alpha := ApplyOpacity(c.alpha, st.globalAlpha);
   if ctx.linearBlend then mode := dmLinearBlend else mode := dmDrawWithTransparency;
-  FBmp.SolidBrush(b, c, mode);
-  if b.DoesNothing then
+  maskScan := nil;
+  if st.clipMaskReadOnly <> nil then
   begin
-    CtxStroke(ctx);
-    Exit;
-  end;
+    maskScan := TBGRASolidColorMaskScanner.Create(st.clipMaskReadOnly, Point(0, 0), c);
+    FBmp.ScannerBrush(b, maskScan, mode);
+  end
+  else
+    FBmp.SolidBrush(b, c, mode);
+  try
+  { [R2-L] A SOLID INK THAT DRAWS NOTHING draws nothing: StrokePoly's fill
+    leaves at once (FillPolyAntialias: brush.DoesNothing), before any random
+    draw -- the pen's polygon it makes first goes nowhere. Not made. }
+  if b.DoesNothing then Exit;
   pts := ctx.currentPath;
   if Length(pts) = 0 then Exit;
   saved := TyPinBgraRandom;
   try
-    contour := st.penStroker.ComputePolylineAutocycle(pts, st.lineWidth);
+    { the pen's polygon, kept by everything it is made from [R2-L] }
+    contour := KeptContourOf(st.penStroker, pts, st.lineWidth);
     if Length(contour) < 3 then Exit;   // FillPolyAntialias draws nothing
     clip := FBmp.ClipRect;
     h := KeptFillHash(contour, clip);
@@ -5862,6 +6007,9 @@ begin
       Inc(k, 2);
     end;
   FBmp.InvalidateBitmap;
+  finally
+    maskScan.Free;
+  end;
 end;
 
 { Every state on ACtx (the current one and the saved ones) that shares AMask gets a copy
@@ -6103,5 +6251,7 @@ finalization
   GRasterCanvases := nil;
   DropKeptFills;
   FreeAndNil(GKeptFills);
+  DropKeptContours;
+  FreeAndNil(GKeptContours);
 
 end.

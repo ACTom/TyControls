@@ -1007,6 +1007,10 @@ type
   public
     constructor Create;
     procedure Clear;
+    { [R2-L] the elements from ACount on removed, the rest as they stand }
+    procedure Truncate(ACount: Integer);
+    { [R2-L] the journal keeps an element at AIndex or after it }
+    function JournalHoldsFrom(AIndex: Integer): Boolean;
     function Add(const AElement: TTyChartElement): Integer;
     { [R2-H] Add, answering the new element's slot: a caller that builds the
       element further works on it there (valid until the next Add or Clear) }
@@ -1040,6 +1044,10 @@ type
     { [R2-P] how many elements the open session has kept -- one per index
       however often it was written (FOR THE TESTS) }
     property JournalCount: Integer read FJrN;
+    { [R2-L] the K-th element the open session keeps: its index, and what
+      it was before the session's first write to it }
+    function JournalIndex(K: Integer): Integer;
+    function JournalOld(K: Integer): PTyChartElement;
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
@@ -1337,6 +1345,34 @@ begin
   FJrN := 0;
   FJrOld := nil;
   FJrMark := nil;
+end;
+
+procedure TTyPaintList.Truncate(ACount: Integer);
+var k: Integer;
+begin
+  if (ACount < 0) or (ACount >= FCount) then Exit;
+  for k := ACount to FCount - 1 do FItems[k] := Default(TTyChartElement);
+  FCount := ACount;
+  FOrdered := False;
+end;
+
+function TTyPaintList.JournalIndex(K: Integer): Integer;
+begin
+  if (K < 0) or (K >= FJrN) then Exit(-1);
+  Result := FJrIdx[K];
+end;
+
+function TTyPaintList.JournalOld(K: Integer): PTyChartElement;
+begin
+  Result := @FJrOld[K];
+end;
+
+function TTyPaintList.JournalHoldsFrom(AIndex: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to FJrN - 1 do
+    if FJrIdx[k] >= AIndex then Exit(True);
 end;
 
 procedure TTyPaintList.JournalOpen;

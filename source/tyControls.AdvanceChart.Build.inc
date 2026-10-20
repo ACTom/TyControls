@@ -651,6 +651,7 @@ begin
   FDatumAsked := nil;
   FRowObjFills := nil;
   FRowObjDone := nil;
+  FRowObjN := nil;
   SetLength(FDatumPicks, Length(FBindings));
   SetLength(FDatumAsked, Length(FBindings));
   if FOption = nil then Exit;
@@ -727,6 +728,16 @@ begin
 end;
 
 function TTyAdvanceChart.RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+var d: TJSONArray;
+begin
+  Result := nil;
+  d := RawItemArray(ASlot);
+  if d = nil then Exit;
+  if (ARaw < 0) or (ARaw >= d.Count) then Exit;
+  if d.Items[ARaw] is TJSONObject then Result := TJSONObject(d.Items[ARaw]);
+end;
+
+function TTyAdvanceChart.RawItemArray(ASlot: Integer): TJSONArray;
 var d: TJSONData;
 begin
   Result := nil;
@@ -745,10 +756,7 @@ begin
     d := TJSONObject(d).Find('nodes')
   else
     d := TJSONObject(d).Find('data');
-  if not (d is TJSONArray) then Exit;
-  if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
-  d := TJSONArray(d).Items[ARaw];
-  if d is TJSONObject then Result := TJSONObject(d);
+  if d is TJSONArray then Result := TJSONArray(d);
 end;
 
 function TTyAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
@@ -817,9 +825,10 @@ end;
 function TTyAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
 var
   k, n: Integer;
-  any: Boolean;
   oc: TTyOptColor;
   st: TTyOptStyle;
+  items: TJSONArray;
+  objs: Boolean;
 begin
   Result := nil;
   if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
@@ -829,61 +838,68 @@ begin
   begin
     SetLength(FRowObjDone, Length(FStores));
     SetLength(FRowObjFills, Length(FStores));
+    SetLength(FRowObjN, Length(FStores));
   end;
-  if not FRowObjDone[ASlot] or (Length(FRowObjFills[ASlot]) <> n) then
+  if not FRowObjDone[ASlot] or (FRowObjN[ASlot] <> n) then
   begin
-    SetLength(FRowObjFills[ASlot], n);
-    for k := 0 to n - 1 do
-    begin
-      FRowObjFills[ASlot][k] := Default(TTyRowFill);
-      if RowObjectFill(ASlot, k, oc) then
+    { [R2-L] kept only where a row has one: a row that is no object has
+      none (RowObjectFill reads nothing from a nil item) }
+    FRowObjFills[ASlot] := nil;
+    items := RawItemArray(ASlot);
+    if items <> nil then
+      for k := 0 to n - 1 do
       begin
-        FRowObjFills[ASlot][k].ObjSet := True;
-        FRowObjFills[ASlot][k].ObjSolid := oc.Color;
-        FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
-        FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
+        if (k >= items.Count) or not (items.Items[k] is TJSONObject) then Continue;
+        if RowObjectFill(ASlot, k, oc) then
+        begin
+          if FRowObjFills[ASlot] = nil then SetLength(FRowObjFills[ASlot], n);
+          FRowObjFills[ASlot][k].ObjSet := True;
+          FRowObjFills[ASlot][k].ObjSolid := oc.Color;
+          FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
+          FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
+        end;
+        { [R2-I4] and its own border colour when that is a gradient }
+        st := TyReadOptStyle(RawItemNode(ASlot, k), 'itemStyle');
+        if st.BorderColor.Written and not st.BorderColor.IsNone and not st.BorderColor.IsAuto
+          and (st.BorderColor.Gradient.Kind <> cgkNone) then
+        begin
+          if FRowObjFills[ASlot] = nil then SetLength(FRowObjFills[ASlot], n);
+          FRowObjFills[ASlot][k].StrokeObjSet := True;
+          FRowObjFills[ASlot][k].StrokeObjSolid := st.BorderColor.Color;
+          FRowObjFills[ASlot][k].StrokeObjGradient := st.BorderColor.Gradient;
+        end;
       end;
-      { [R2-I4] and its own border colour when that is a gradient }
-      st := TyReadOptStyle(RawItemNode(ASlot, k), 'itemStyle');
-      if st.BorderColor.Written and not st.BorderColor.IsNone and not st.BorderColor.IsAuto
-        and (st.BorderColor.Gradient.Kind <> cgkNone) then
-      begin
-        FRowObjFills[ASlot][k].StrokeObjSet := True;
-        FRowObjFills[ASlot][k].StrokeObjSolid := st.BorderColor.Color;
-        FRowObjFills[ASlot][k].StrokeObjGradient := st.BorderColor.Gradient;
-      end;
-    end;
+    FRowObjN[ASlot] := n;
     FRowObjDone[ASlot] := True;
   end;
-  SetLength(Result, n);
-  any := False;
+  { the fills only where a row has one; none at all reads as nil }
+  objs := FRowObjFills[ASlot] <> nil;
   for k := 0 to n - 1 do
   begin
+    if not ((ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot])) and FDatumAsked[ASlot][k])
+      and not (objs and (FRowObjFills[ASlot][k].ObjSet or FRowObjFills[ASlot][k].StrokeObjSet)) then Continue;
+    if Result = nil then SetLength(Result, n);
     if (ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot]))
       and FDatumAsked[ASlot][k] then
     begin
       Result[k].PaletteSet := True;
       Result[k].PaletteNone := FDatumPicks[ASlot][k].Kind = ppkNone;
       Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
-      any := True;
     end;
-    if FRowObjFills[ASlot][k].ObjSet then
+    if objs and FRowObjFills[ASlot][k].ObjSet then
     begin
       Result[k].ObjSet := True;
       Result[k].ObjSolid := FRowObjFills[ASlot][k].ObjSolid;
       Result[k].ObjGradient := FRowObjFills[ASlot][k].ObjGradient;
       Result[k].ObjPattern := FRowObjFills[ASlot][k].ObjPattern;
-      any := True;
     end;
-    if FRowObjFills[ASlot][k].StrokeObjSet then
+    if objs and FRowObjFills[ASlot][k].StrokeObjSet then
     begin
       Result[k].StrokeObjSet := True;
       Result[k].StrokeObjSolid := FRowObjFills[ASlot][k].StrokeObjSolid;
       Result[k].StrokeObjGradient := FRowObjFills[ASlot][k].StrokeObjGradient;
-      any := True;
     end;
   end;
-  if not any then Result := nil;
 end;
 
 procedure TTyAdvanceChart.SolveSampling;
@@ -2217,6 +2233,8 @@ var
   rowSet: TTyBoolArray;
   st: TTyDataStore;
   dataScope: TTyDecalScope;
+  items: TJSONArray;
+  own: TTyDecalRaw;
 
   function OwnDecal(ANode: TJSONData): TTyDecalRaw;
   begin
@@ -2274,17 +2292,25 @@ begin
     rowSet := nil;
     rawN := 0;
     if st <> nil then rawN := st.RawCount;
-    SetLength(rows, rawN);
-    SetLength(rowSet, rawN);
-    { dataStyleTask: the view's rows only }
-    for k := 0 to rawN - 1 do
-      if (not noItems) and (st.IndexOfRawIndex(k) >= 0) then
-      begin
-        item := RawItemNode(slot, k);
-        if item = nil then Continue;
-        rows[k] := OwnDecal(item);
-        rowSet[k] := rows[k].Present;
-      end;
+    { dataStyleTask: the view's rows only -- and only an object item has a
+      decal of its own; the rows' arrays only once one has [R2-L] }
+    items := nil;
+    if not noItems then items := RawItemArray(slot);
+    if items <> nil then
+      for k := 0 to rawN - 1 do
+        if (k < items.Count) and (items.Items[k] is TJSONObject)
+          and (st.IndexOfRawIndex(k) >= 0) then
+        begin
+          own := OwnDecal(items.Items[k]);
+          if not own.Present then Continue;
+          if rows = nil then
+          begin
+            SetLength(rows, rawN);
+            SetLength(rowSet, rawN);
+          end;
+          rows[k] := own;
+          rowSet[k] := True;
+        end;
     if useDecal and not FBindings[slot].Hidden and (typ <> TySunburstSeriesTypeName)
       and (typ <> TyTreemapSeriesTypeName) then
     begin
@@ -2310,6 +2336,11 @@ begin
           scopes[t].Scope := Default(TTyDecalScope);
         end;
         dataScope := scopes[t].Scope;
+        if rows = nil then
+        begin
+          SetLength(rows, rawN);
+          SetLength(rowSet, rawN);
+        end;
         for k := 0 to rawN - 1 do
         begin
           nm := st.GetNameByRaw(k);
@@ -2329,6 +2360,9 @@ begin
     if FBindings[slot].Hidden then Continue;
     FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin, ground);
     FSeriesDecalRaws[slot] := seriesRaw;
+    { no row of its own: the series' decal for every row, as an all-false
+      set reads [R2-L] }
+    if rowSet = nil then Continue;
     SetLength(FRowDecals[slot], rawN);
     SetLength(FRowDecalSet[slot], rawN);
     SetLength(FRowDecalRaws[slot], rawN);
@@ -3499,6 +3533,7 @@ begin
   if FPaintList = nil then FPaintList := TTyPaintList.Create
   else FPaintList.Clear;
   list := FPaintList;
+  FListTailAt := -1;
   { a new list: no entry is a custom element yet, and what the last render
     removed may go [Batch 123] }
   FCustomPaintEls := nil;
@@ -4122,46 +4157,10 @@ begin
       if n > 0 then ViewDrew(cvLegend);
       Inc(drawn, n);
     end;
-    if not ViewHidden(cvVisualMap) then
-    begin
-      n := BuildVisualMaps(list);
-      if n > 0 then ViewDrew(cvVisualMap);
-      Inc(drawn, n);
-    end;
-    if not ViewHidden(cvDataZoom) then
-    begin
-      n := BuildDataZooms(list);
-      if n > 0 then ViewDrew(cvDataZoom);
-      Inc(drawn, n);
-    end;
-    { the timeline, z 4 [Batch 129] }
-    if not ViewHidden(cvTimeline) then
-    begin
-      n := BuildTimeline(list);
-      if n > 0 then ViewDrew(cvTimeline);
-      Inc(drawn, n);
-    end;
-    { [Batch 125] }
-    if not ViewHidden(cvToolbox) then
-    begin
-      n := BuildToolboxes(list, AMeasurer);
-      if n > 0 then ViewDrew(cvToolbox);
-      Inc(drawn, n);
-    end;
-    { the parallel axes' covers, z 10000: their controllers' groups are
-      zrender's, no view hides them [Batch 130] }
-    Inc(drawn, BuildParallelBrushes(list));
-    { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
-      they are its controller's: BrushController.mount adds its group to
-      zrender's root, outside the brush view's group, so
-      `excludeComponents: ['brush']` cannot hide them and the brush view is
-      never a view that drew (its group holds nothing) [milestone C14-C22] }
-    Inc(drawn, BuildBrushes(list));
-    { THE THUMBNAILS, z 10: the copy a full update takes of its graph (a
-      roam only moves the window), then the box, the copy and the window
-      as elements [Batch 140] }
-    if FThumbSnapDue then ThumbRender;
-    Inc(drawn, BuildThumbnails(list));
+    { the components from the visual maps on [R2-L: built by BuildListTail,
+      which ListTailRebuild runs again on its own] }
+    FListTailAt := list.Count;
+    Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
     UtStaleHarvest;
     if FLineHistDue then
@@ -4171,6 +4170,91 @@ begin
     end;
     list.JournalClose;
   end;
+end;
+
+function TTyAdvanceChart.BuildListTail(AList: TTyPaintList;
+  const AMeasurer: ITyTextMeasurer): Integer;
+var n: Integer;
+begin
+  Result := 0;
+  if not ViewHidden(cvVisualMap) then
+  begin
+    n := BuildVisualMaps(AList);
+    if n > 0 then ViewDrew(cvVisualMap);
+    Inc(Result, n);
+  end;
+  if not ViewHidden(cvDataZoom) then
+  begin
+    n := BuildDataZooms(AList);
+    if n > 0 then ViewDrew(cvDataZoom);
+    Inc(Result, n);
+  end;
+  { the timeline, z 4 [Batch 129] }
+  if not ViewHidden(cvTimeline) then
+  begin
+    n := BuildTimeline(AList);
+    if n > 0 then ViewDrew(cvTimeline);
+    Inc(Result, n);
+  end;
+  { [Batch 125] }
+  if not ViewHidden(cvToolbox) then
+  begin
+    n := BuildToolboxes(AList, AMeasurer);
+    if n > 0 then ViewDrew(cvToolbox);
+    Inc(Result, n);
+  end;
+  { the parallel axes' covers, z 10000: their controllers' groups are
+    zrender's, no view hides them [Batch 130] }
+  Inc(Result, BuildParallelBrushes(AList));
+  { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
+    they are its controller's: BrushController.mount adds its group to
+    zrender's root, outside the brush view's group, so
+    `excludeComponents: ['brush']` cannot hide them and the brush view is
+    never a view that drew (its group holds nothing) [milestone C14-C22] }
+  Inc(Result, BuildBrushes(AList));
+  { THE THUMBNAILS, z 10: the copy a full update takes of its graph (a
+    roam only moves the window), then the box, the copy and the window
+    as elements [Batch 140] }
+  if FThumbSnapDue then ThumbRender;
+  Inc(Result, BuildThumbnails(AList));
+end;
+
+{ THE COMPONENTS AT THE END OF THE LIST, built again where they stand
+  [R2-L]. A visual map's indicator moving with the pointer (VmShowIndicator,
+  VmHideIndicator) changes its elements and nothing before them: what a
+  build puts before the visual maps reads none of their live state. Those
+  elements stay; the rest is dropped and built again, as the build builds
+  it. The list is then the one a whole build would give but for the
+  states the pointer changed meanwhile, which the frame's own state pass
+  writes (StApplyChanged / StPatchList, as for any hover) -- and the
+  incremental layer is drawn again, as after a build. Not where an update
+  is still to be laid out or armed, an export runs, or the journal keeps
+  an element of the end (a rewind would put an old one back). }
+function TTyAdvanceChart.ListTailRebuild: Boolean;
+begin
+  Result := False;
+  if GListTailOff or (FPaintList = nil) or not FPaintListValid or FDirty
+    or FExporting or FAnimPending or (FLastPPI <= 0) or (FListTailAt < 0)
+    or (FListTailAt > FPaintList.Count) or (FPaintListPPI <> FLastPPI)
+    or FPaintList.JournalHoldsFrom(FListTailAt) then Exit;
+  FPaintList.Truncate(FListTailAt);
+  BuildListTail(FPaintList, NewTextMeasurer(FLastPPI));
+  { the incremental layer holds none of the end: what a build would draw
+    on it again it holds already where it is what a whole drawing in paint
+    order gives -- else drawn again, as after a build }
+  if FProgLayerInOrder and (Length(FProgPainted) >= FListTailAt) then
+    SetLength(FProgPainted, FPaintList.Count)
+  else
+    FProgLayerOk := False;
+  StaticDrop;
+  FProgReuse := True;
+  Inc(GListTails);
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.ListTailRefresh;
+begin
+  if not ListTailRebuild then DropStaticKeepList;
 end;
 
 procedure TTyAdvanceChart.FullUpdate;

@@ -304,6 +304,14 @@ function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;
   where the item wrote one }
 function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;
   out AStoreCol, ADimIndex: Integer; out ATexts: TTyStringArray): TTyDoubleArray; overload;
+{ [R2-L] one raw row's value of TyVisualSeriesValues -- the same reading,
+  without the whole series' (NaN off the rows) }
+function TyVisualSeriesValueAt(AStore: TTyDataStore; const ADim: TTyVisualDim;
+  ARaw: Integer): Double;
+{ [R2-L] whether a value's text can change what the component makes of it:
+  a piece whose value is a string, a category mapping -- the only readers
+  of the text TyVisualValueState and TyVisualApply are handed }
+function TyVisualSpecReadsText(const ASpec: TTyVisualMapSpec): Boolean;
 
 { ---- the continuous visualMeta ---- }
 function TyVmStopValues(AE0, AE1: Double): TTyDoubleArray;
@@ -363,12 +371,38 @@ begin
   Result.Defined := True;
 end;
 
+{ [R2-L] the last few texts parsed and what they parsed to: a mapping's
+  colour is read once per row, the same few texts for every row }
+const
+  cVisualParseMemo = 4;
+
+threadvar
+  GVisualParseText: array[0..cVisualParseMemo - 1] of string;
+  GVisualParseOk: array[0..cVisualParseMemo - 1] of Boolean;
+  GVisualParseColor: array[0..cVisualParseMemo - 1] of TTyVisualColor;
+  GVisualParseHas: array[0..cVisualParseMemo - 1] of Boolean;
+  GVisualParseNext: Integer;
+
 function TyVisualTryParse(const AText: string; out AColor: TTyVisualColor): Boolean;
-var r, g, b, a: Double;
+var
+  r, g, b, a: Double;
+  k: Integer;
 begin
+  for k := 0 to cVisualParseMemo - 1 do
+    if GVisualParseHas[k] and (GVisualParseText[k] = AText) then
+    begin
+      AColor := GVisualParseColor[k];
+      Exit(GVisualParseOk[k]);
+    end;
   AColor := TyVisualUndefined;
   Result := TyTryParseCssRgba(AText, r, g, b, a);
   if Result then AColor := TyVisualRgba(r, g, b, a);
+  k := GVisualParseNext;
+  GVisualParseNext := (k + 1) mod cVisualParseMemo;
+  GVisualParseText[k] := AText;
+  GVisualParseOk[k] := Result;
+  GVisualParseColor[k] := AColor;
+  GVisualParseHas[k] := True;
 end;
 
 function TyVisualParsedStop(AData: TJSONData): TTyVisualColor;
@@ -2462,73 +2496,111 @@ end;
 
 { ==================== one series ==================== }
 
+{ which position the visual reads (-1: none) and the store column holding
+  it (-1: parsed from the item) }
+procedure VisualDimResolve(AStore: TTyDataStore; const ADim: TTyVisualDim;
+  out ADimIndex, AStoreCol: Integer);
+var
+  k: Integer;
+  pos: Double;
+begin
+  AStoreCol := -1;
+  if ADim.Given then
+  begin
+    if ADim.IsName then pos := AStore.RawPosOf(ADim.Name)
+    else pos := ADim.Num;
+    if IsNan(pos) or (pos < 0) or (Frac(pos) <> 0) then ADimIndex := -1
+    else ADimIndex := Trunc(pos);
+  end
+  else
+    { THE LAST DIMENSION that is not a calculation: the coordinates, or the
+      row's own width when it is wider -- a scatter's third number, a
+      table's last column. Asked before any stack column is added. }
+    ADimIndex := Max(AStore.DimCount, AStore.RawWidth) - 1;
+  if ADimIndex < 0 then Exit;
+  { A STORE COLUMN READ FROM THAT POSITION holds it as the axis does -- a
+    category's ordinal, the value before any stack; any other position is
+    parsed from the item as written }
+  for k := 0 to AStore.DimCount - 1 do
+    if AStore.RawDimPos(k) = ADimIndex then
+    begin
+      AStoreCol := k;
+      Break;
+    end;
+end;
+
+{ one raw row's value at the resolved position }
+function VisualRowValue(AStore: TTyDataStore; ADimIndex, AStoreCol: Integer;
+  ATyp: TTyDimType; ARaw: Integer): Double;
+var cell: TTyDataValue;
+begin
+  if ADimIndex < 0 then Exit(NaN);
+  if AStoreCol >= 0 then Exit(AStore.GetByRaw(AStoreCol, ARaw));
+  if TTyDataStore.RawCell(AStore.RawItemByRaw(ARaw), ADimIndex, cell) then
+    case ATyp of
+      { AN ORDINAL COLUMN NO AXIS READS keeps what was written, and the
+        visual's own arithmetic reads it as JavaScript does -- a gap (null)
+        and '' are nought, a boolean 0 or 1, a word not a number [R2-G] }
+      ddtOrdinal:
+        case cell.Kind of
+          dvkNone: Result := 0;
+          dvkNumber, dvkBool: Result := cell.Num;
+        else
+          Result := TyJsToNumber(cell.Text);
+        end;
+      { an 'int' one is an Int32Array; a time one a time; the rest data }
+      ddtInt, ddtTime: Result := TyParseDataValue(cell, ATyp);
+    else
+      Result := TyParseDataValue(cell, ddtFloat);
+    end
+  else
+    Result := NaN;
+end;
+
 function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;
   out AStoreCol, ADimIndex: Integer): TTyDoubleArray;
 var
-  d, k, raw: Integer;
-  pos: Double;
-  cell: TTyDataValue;
+  raw: Integer;
   typ: TTyDimType;
 begin
   Result := nil;
   AStoreCol := -1;
   ADimIndex := -1;
   if AStore = nil then Exit;
-  if ADim.Given then
-  begin
-    if ADim.IsName then pos := AStore.RawPosOf(ADim.Name)
-    else pos := ADim.Num;
-    if IsNan(pos) or (pos < 0) or (Frac(pos) <> 0) then d := -1
-    else d := Trunc(pos);
-  end
-  else
-    { THE LAST DIMENSION that is not a calculation: the coordinates, or the
-      row's own width when it is wider -- a scatter's third number, a
-      table's last column. Asked before any stack column is added. }
-    d := Max(AStore.DimCount, AStore.RawWidth) - 1;
-  ADimIndex := d;
+  VisualDimResolve(AStore, ADim, ADimIndex, AStoreCol);
   SetLength(Result, AStore.RawCount);
-  if d < 0 then
-  begin
-    for raw := 0 to High(Result) do Result[raw] := NaN;
-    Exit;
-  end;
-  { A STORE COLUMN READ FROM THAT POSITION holds it as the axis does -- a
-    category's ordinal, the value before any stack; any other position is
-    parsed from the item as written }
-  for k := 0 to AStore.DimCount - 1 do
-    if AStore.RawDimPos(k) = d then
-    begin
-      AStoreCol := k;
-      Break;
-    end;
-  if AStoreCol >= 0 then
-  begin
-    for raw := 0 to High(Result) do
-      Result[raw] := AStore.GetByRaw(AStoreCol, raw);
-    Exit;
-  end;
-  typ := AStore.RawPosType(d);
+  typ := ddtFloat;
+  if (ADimIndex >= 0) and (AStoreCol < 0) then typ := AStore.RawPosType(ADimIndex);
   for raw := 0 to High(Result) do
-    if TTyDataStore.RawCell(AStore.RawItemByRaw(raw), d, cell) then
-      case typ of
-        { AN ORDINAL COLUMN NO AXIS READS keeps what was written, and the
-          visual's own arithmetic reads it as JavaScript does -- a gap (null)
-          and '' are nought, a boolean 0 or 1, a word not a number [R2-G] }
-        ddtOrdinal:
-          case cell.Kind of
-            dvkNone: Result[raw] := 0;
-            dvkNumber, dvkBool: Result[raw] := cell.Num;
-          else
-            Result[raw] := TyJsToNumber(cell.Text);
-          end;
-        { an 'int' one is an Int32Array; a time one a time; the rest data }
-        ddtInt, ddtTime: Result[raw] := TyParseDataValue(cell, typ);
-      else
-        Result[raw] := TyParseDataValue(cell, ddtFloat);
-      end
-    else
-      Result[raw] := NaN;
+    Result[raw] := VisualRowValue(AStore, ADimIndex, AStoreCol, typ, raw);
+end;
+
+function TyVisualSpecReadsText(const ASpec: TTyVisualMapSpec): Boolean;
+var
+  i: Integer;
+  s: TTyVisualState;
+begin
+  Result := True;
+  for i := 0 to High(ASpec.Pieces) do
+    if ASpec.Pieces[i].HasValue and ASpec.Pieces[i].ValueIsStr then Exit;
+  for s := Low(TTyVisualState) to High(TTyVisualState) do
+    for i := 0 to High(ASpec.States[s]) do
+      if ASpec.States[s][i].Method = tvmCategory then Exit;
+  Result := False;
+end;
+
+function TyVisualSeriesValueAt(AStore: TTyDataStore; const ADim: TTyVisualDim;
+  ARaw: Integer): Double;
+var
+  col, d: Integer;
+  typ: TTyDimType;
+begin
+  Result := NaN;
+  if (AStore = nil) or (ARaw < 0) or (ARaw >= AStore.RawCount) then Exit;
+  VisualDimResolve(AStore, ADim, d, col);
+  typ := ddtFloat;
+  if (d >= 0) and (col < 0) then typ := AStore.RawPosType(d);
+  Result := VisualRowValue(AStore, d, col, typ, ARaw);
 end;
 
 function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;

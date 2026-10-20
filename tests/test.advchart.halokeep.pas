@@ -780,13 +780,16 @@ begin
     StrokeOn(a, True, cRed, 1, False, 5);
     AssertEquals('a wider pen', 0, DiffPixels(a, ref));
     AssertEquals('is a polygon of its own', f0 + 2, TyPainterKeptStrokeFillsForTest);
-    { a clip the replay does not model: stroked as StrokePath strokes }
+    { [R2-L] a clip mask: the same fill through the mask's scanner (StrokePoly's
+      FillPolyAntialiasWithTexture) -- the coverage is the polygon's and the bitmap's
+      clip rect's alone, so the unclipped red stroke's serves it [was: not modelled,
+      stroked as StrokePath strokes] }
     r0 := TyPainterKeptStrokeReplaysForTest;
     StrokeOn(ref, False, cRed, 1, True);
     StrokeOn(a, True, cRed, 1, True);
     AssertEquals('clipped', 0, DiffPixels(a, ref));
-    AssertEquals('not recorded', f0 + 2, TyPainterKeptStrokeFillsForTest);
-    AssertEquals('not replayed', r0, TyPainterKeptStrokeReplaysForTest);
+    AssertEquals('nothing recorded', f0 + 2, TyPainterKeptStrokeFillsForTest);
+    AssertEquals('the red coverage replayed through the mask', r0 + 1, TyPainterKeptStrokeReplaysForTest);
     { THE GLOBAL Random, left as the fill leaves it: the fill draws its pivots
       from the pinned generator, and unpinning reseeds the application's }
     RandSeed := 4242;

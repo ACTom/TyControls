@@ -1243,6 +1243,7 @@ begin
   if APPI <> FStaticPPI then
   begin
     FStatic.Drop;
+    FProgFastFrame := False;
     FStaticPPI := APPI;
   end;
   { upstream's frame: the flags become state lists, and a changed element
@@ -1250,6 +1251,7 @@ begin
   if StApplyChanged then
   begin
     FStatic.Drop;
+    FProgFastFrame := False;
     { the states restyle the list: it is built again [Batch 119] -- or,
       where only they changed, patched where it stands [P2] }
     FProgReuse := StPatchList;
@@ -1258,13 +1260,34 @@ begin
   { AND THE DEVICE SCALE: the cache holds S times the pixels and its canvas
     is a raster canvas a painter draws on at S; a change of S is a change of
     size, so it renders again (#83) }
-  if FStatic.NeedsRender(w, h, sc) then
+  if FStatic.NeedsRender(w, h, sc) and not ProgFastPaint(R, APPI, sc) then
   begin
     measurer := NewTextMeasurer(APPI);
     P := TTyPainter.Create;
     try
       P.BeginPaint(FStatic.Canvas, R, APPI);
-      PaintStatic(P, R, APPI, measurer);
+      { [R2-L] the bitmap kept for the progress frames to come, where a run
+        is blitted in it and the paint blends it as it stands }
+      FProgCapOk := False;
+      FProgCapUnder := False;
+      FProgCap := not GProgFastOff;
+      try
+        PaintStatic(P, R, APPI, measurer);
+      finally
+        FProgCap := False;
+      end;
+      if FProgCapUnder and (P.Bitmap <> nil) and (P.Opacity = 1.0) then
+      begin
+        if FProgWork = nil then FProgWork := TBGRABitmap.Create(P.Bitmap.Width, P.Bitmap.Height)
+        else FProgWork.SetSize(P.Bitmap.Width, P.Bitmap.Height);
+        FProgWork.PutImage(0, 0, P.Bitmap, dmSet);
+        FProgCapW := w;
+        FProgCapH := h;
+        FProgCapPPI := APPI;
+        FProgCapScale := P.DeviceScale;
+        FProgCapOk := True;
+      end;
+      FProgFastFrame := False;
       P.EndPaint;
     finally
       P.Free;
@@ -1416,6 +1439,8 @@ end;
 procedure TTyAdvanceChart.StaticDrop;
 begin
   if FStatic <> nil then FStatic.Drop;
+  { not a progress frame's own drop (ProgFrame says so after it) [R2-L] }
+  FProgFastFrame := False;
   { the cache no longer holds what the snapshot says [Batch 142] }
   FDrSnapOk := False;
 end;
