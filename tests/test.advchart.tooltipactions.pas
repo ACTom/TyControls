@@ -302,7 +302,8 @@ begin
     first := True;
     for i := 0 to High(snap.Hits) do
     begin
-      if snap.Hits[i].Cross or (snap.Hits[i].Axis = nil) then Continue;
+      { [R2-I7] the axes that trigger the tooltip }
+      if snap.Hits[i].NoTip or (snap.Hits[i].Axis = nil) then Continue;
       for k := 0 to High(snap.Hits[i].Slots) do
       begin
         s := SlotSeriesIndex(snap.Hits[i].Slots[k]);

@@ -167,6 +167,7 @@ uses
   test.advchart.stringidentity,
   test.advchart.p2perf,
   test.advchart.tooltipkeep,
+  test.advchart.axisownpointer,
   test.advchart.tooltipparams,
   test.advchart.actionsbatch,
   test.advchart.rootinherit,

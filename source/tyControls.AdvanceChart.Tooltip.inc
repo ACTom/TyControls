@@ -1522,34 +1522,182 @@ begin
   Result := Length(ARows) > 0;
 end;
 
-function TTyAdvanceChart.ResolveAxisPointers(AX, AY: Double;
-  AInput: TJSONArray): TTyAxisHitArray;
-type
-  { an axisInfo of the axisPointer model: every tooltip axis of every
-    coordinate system, whether the point is in it or not [Batch 141] }
-  TLinkCand = record
-    Axis: TTyAxis;
-    Plot: TTyRectF;
-    Cross: Boolean;
-    Polar: TTyPolar;
-    Single: TTySingle;
-    Key: string;
-    Group: Integer;
-  end;
+function TTyAdvanceChart.PtrInfoOf(const AInfos: TTyPtrAxisInfoArray;
+  AAxis: TTyAxis): Integer;
+var k: Integer;
+begin
+  for k := 0 to High(AInfos) do
+    if AInfos[k].Axis = AAxis then Exit(k);
+  Result := -1;
+end;
+
+function TTyAdvanceChart.PtrCollect: TTyPtrAxisInfoArray;
 var
   tipSpec: TTyTooltipSpec;
-  wantAxis: string;
-  crossType: Boolean;
-  g, c: Integer;
+  tipOn, crossType, triggerAxis: Boolean;
+  wantAxis, wantPolar: string;
+  g, c, k: Integer;
   gb: TTyGridBuild;
   cart: TTyCartesian2D;
-  baseAxis, otherAxis: TTyAxis;
-  seen: array of TTyAxis;
-  wantPolar: string;
+  base: TTyAxis;
   pol: TTyPolar;
   sgl: TTySingle;
+  bases, others: array of TTyAxis;
+
+  procedure AddUnique(var AList: array of TTyAxis; var ACount: Integer; AAxis: TTyAxis);
+  var j: Integer;
+  begin
+    if AAxis = nil then Exit;
+    for j := 0 to ACount - 1 do
+      if AList[j] = AAxis then Exit;
+    AList[ACount] := AAxis;
+    Inc(ACount);
+  end;
+
+  { saveTooltipAxisInfo(fromTooltip, triggerTooltip, axis) }
+  procedure Save(AAxis: TTyAxis; const APlot: TTyRectF; APolar: TTyPolar;
+    ASingle: TTySingle; const ACsKey: string; AFromTooltip, ACrossFrom,
+    ATrigger: Boolean);
+  var
+    info: TTyPtrAxisInfo;
+    own: TTyAxisPointerSpec;
+    isCat: Boolean;
+    at_, n: Integer;
+  begin
+    if AAxis = nil then Exit;
+    isCat := AAxis.Scale is TTyOrdinalScale;
+    { the axis' own model (its block over the root) decides whether it is
+      collected at all: show falsy never, 'auto' only from the tooltip (a
+      handle is not modelled) }
+    own := TyAxisPointerSpecOf(FOption, AAxis.MainType, AAxis.ComponentIndex,
+      isCat, False, False, False);
+    if own.Show = apsNo then Exit;
+    if (own.Show = apsAuto) and not AFromTooltip then Exit;
+    info := Default(TTyPtrAxisInfo);
+    info.Axis := AAxis;
+    info.Plot := APlot;
+    info.Polar := APolar;
+    info.Single := ASingle;
+    info.CsKey := ACsKey;
+    info.FromTooltip := AFromTooltip;
+    info.CrossArm := ACrossFrom and not ATrigger;
+    if AFromTooltip then
+    begin
+      info.TriggerTooltip := ATrigger;
+      info.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
+        AAxis.ComponentIndex, isCat, True, ATrigger, ACrossFrom);
+    end
+    else
+    begin
+      { triggerTooltip == null: the axis' own model's }
+      info.TriggerTooltip := own.TriggerTooltip;
+      info.Spec := own;
+    end;
+    info.InvolveSeries := info.TriggerTooltip or info.Spec.Snap or isCat;
+    { an axis already there is replaced where it stands (the tooltip has the
+      higher priority; the key keeps its place) }
+    at_ := PtrInfoOf(Result, AAxis);
+    if at_ >= 0 then
+      Result[at_] := info
+    else
+    begin
+      n := Length(Result);
+      SetLength(Result, n + 1);
+      Result[n] := info;
+    end;
+  end;
+
+  procedure SaveTooltipAxes(const ABases, AOthers: array of TTyAxis;
+    ANb, ANo: Integer; const APlot: TTyRectF; APolar: TTyPolar;
+    ASingle: TTySingle; const ACsKey: string);
+  var j: Integer;
+  begin
+    if not tipOn or not (triggerAxis or crossType) then Exit;
+    for j := 0 to ANb - 1 do
+      Save(ABases[j], APlot, APolar, ASingle, ACsKey, True, crossType, triggerAxis);
+    if crossType then
+      for j := 0 to ANo - 1 do
+        Save(AOthers[j], APlot, APolar, ASingle, ACsKey, True, True, False);
+  end;
+
+var
+  nb, no_: Integer;
+begin
+  Result := nil;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
+  { the tooltip's axes: a tooltip component that shows (showContent false
+    still draws the pointer) }
+  tipOn := tipSpec.HasComponent and tipSpec.Show;
+  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
+  triggerAxis := tipSpec.Trigger = tttAxis;
+  wantAxis := TyTooltipAxisPointerAxis(FOption);
+  wantPolar := TyTooltipPolarPointerAxis(FOption);
+  { THE GRIDS: grid.getAxes() is every x axis, then every y axis, in their
+    component order; getTooltipAxes every cartesian's base axis (or the one
+    `tooltip.axisPointer.axis` names), then every other one, each once }
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    if gb.CartesianCount = 0 then Continue;
+    for k := 0 to gb.XAxisCount - 1 do
+      Save(gb.XAxis(k), gb.PlotRect, nil, nil, 'g' + IntToStr(g), False, False, False);
+    for k := 0 to gb.YAxisCount - 1 do
+      Save(gb.YAxis(k), gb.PlotRect, nil, nil, 'g' + IntToStr(g), False, False, False);
+    SetLength(bases, gb.CartesianCount);
+    SetLength(others, gb.CartesianCount);
+    nb := 0;
+    no_ := 0;
+    for c := 0 to gb.CartesianCount - 1 do
+    begin
+      cart := gb.CartesianByIndex(c);
+      if cart = nil then Continue;
+      if wantAxis <> '' then base := cart.AxisByDim(wantAxis)
+      else base := cart.GetBaseAxis;
+      if base = nil then Continue;
+      AddUnique(bases, nb, base);
+      AddUnique(others, no_, cart.GetOtherAxis(base));
+    end;
+    SaveTooltipAxes(bases, others, nb, no_, gb.PlotRect, nil, nil, 'g' + IntToStr(g));
+  end;
+  { THE POLARS: getAxes() is the radius, then the angle }
+  for g := 0 to High(FPolars) do
+  begin
+    pol := FPolars[g];
+    if pol = nil then Continue;
+    Save(pol.AxisByDim('radius'), Default(TTyRectF), pol, nil, 'p' + IntToStr(g), False, False, False);
+    Save(pol.AxisByDim('angle'), Default(TTyRectF), pol, nil, 'p' + IntToStr(g), False, False, False);
+    if wantPolar <> '' then base := pol.AxisByDim(wantPolar)
+    else base := pol.BaseAxis;
+    if base = nil then Continue;
+    SetLength(bases, 1);
+    SetLength(others, 1);
+    bases[0] := base;
+    others[0] := pol.OtherAxis(base);
+    no_ := 1;
+    if others[0] = nil then no_ := 0;
+    SaveTooltipAxes(bases, others, 1, no_, Default(TTyRectF), pol, nil, 'p' + IntToStr(g));
+  end;
+  { THE SINGLE AXES: their only axis, no other one }
+  for g := 0 to High(FSingles) do
+  begin
+    sgl := FSingles[g];
+    if sgl = nil then Continue;
+    Save(sgl.Axis, sgl.GetRect, nil, sgl, 's' + IntToStr(g), False, False, False);
+    SetLength(bases, 1);
+    bases[0] := sgl.Axis;
+    SaveTooltipAxes(bases, others, 1, 0, sgl.GetRect, nil, sgl, 's' + IntToStr(g));
+  end;
+end;
+
+function TTyAdvanceChart.ResolveAxisPointers(AX, AY: Double;
+  AInput: TJSONArray): TTyAxisHitArray;
+var
+  infos: TTyPtrAxisInfoArray;
+  groups: array of Integer;
+  g: Integer;
+  gb: TTyGridBuild;
   links: array of TJSONData;
-  cands: array of TLinkCand;
   lkVal: TTyDoubleArray;
   lkHas: array of Boolean;
   t, s, h, n0, at_, j: Integer;
@@ -1558,16 +1706,7 @@ var
   mapper: TTyChartAxisPointerMapper;
   hold: TTyAxisHit;
   appended: Boolean;
-
-  function AlreadySeen(AAxis: TTyAxis): Boolean;
-  var j: Integer;
-  begin
-    for j := 0 to High(seen) do
-      if seen[j] = AAxis then Exit(True);
-    SetLength(seen, Length(seen) + 1);
-    seen[High(seen)] := AAxis;
-    Result := False;
-  end;
+  contains: array of Boolean;
 
   { One axis, resolved and appended when it has something to say. On a
     polar the value is the axis' own half of pointToData [Batch 111]. }
@@ -1609,8 +1748,7 @@ var
   { `appended` says whether a hit went in. ALinked: axisPointer.link's
     pass, the value given (AGivenValue) and the axis taken whether or not
     the first pass looked at it [Batch 141] }
-  procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
-    APolar: TTyPolar = nil; ASingle: TTySingle = nil; ALinked: Boolean = False;
+  procedure Consider(const AInfo: TTyPtrAxisInfo; ALinked: Boolean = False;
     AGivenValue: Double = 0);
   var
     hit: TTyAxisHit;
@@ -1620,10 +1758,15 @@ var
     isCat, given: Boolean;
     inp: TJSONObject;
     iv: TJSONData;
+    AAxis: TTyAxis;
+    APolar: TTyPolar;
+    ASingle: TTySingle;
   begin
     appended := False;
+    AAxis := AInfo.Axis;
+    APolar := AInfo.Polar;
+    ASingle := AInfo.Single;
     if AAxis = nil then Exit;
-    if not ALinked and AlreadySeen(AAxis) then Exit;
     isCat := AAxis.Scale is TTyOrdinalScale;
     { [Batch 153] THE PAYLOAD'S axesInfo restricts the first pass to the
       axes it names (dim and index), and a value it writes stands in for
@@ -1658,15 +1801,16 @@ var
     end;
     hit := Default(TTyAxisHit);
     hit.Axis := AAxis;
-    hit.Plot := APlot;
-    hit.Cross := ACross;
+    hit.Plot := AInfo.Plot;
+    hit.Cross := AInfo.CrossArm;
+    hit.NoTip := not AInfo.TriggerTooltip;
     hit.Polar := APolar;
     hit.Single := ASingle;
     hit.Linked := ALinked;
-    hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
-      AAxis.ComponentIndex, isCat, True,
-      (tipSpec.Trigger = tttAxis) and not ACross, crossType);
-    if hit.Spec.Show = apsNo then Exit;
+    { [R2-I7] the axisInfo's model: the tooltip's volatile layer for a
+      tooltip axis, the axis' own block over the root for one collected for
+      its own show }
+    hit.Spec := AInfo.Spec;
 
     if ALinked or given then
       value := AGivenValue
@@ -1715,7 +1859,12 @@ var
     minDist := Infinity;
     minDiff := -1;
     if isCat then maxDist := 0.5 else maxDist := Infinity;
-    if not ACross then
+    { [R2-I7] involveSeries -- triggerTooltip, snap or a category axis --
+      not "anything but a cross arm": an axis that neither triggers nor snaps
+      shows its pointer at the value with no rows, and a category cross arm
+      has its rows
+      [Revised in R2-I7: `if not ACross`.] }
+    if AInfo.InvolveSeries then
       for s := 0 to High(FBindings) do
       begin
         if FBindings[s].Hidden then Continue;
@@ -1826,28 +1975,6 @@ var
     end;
   end;
 
-  { saveTooltipAxisInfo: an axis whose pointer is not switched off, once }
-  procedure AddCand(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
-    APolar: TTyPolar; ASingle: TTySingle; const AKey: string);
-  var k: Integer;
-  begin
-    if AAxis = nil then Exit;
-    for k := 0 to High(cands) do
-      if cands[k].Axis = AAxis then Exit;
-    if TyAxisPointerSpecOf(FOption, AAxis.MainType, AAxis.ComponentIndex,
-      AAxis.Scale is TTyOrdinalScale, True,
-      (tipSpec.Trigger = tttAxis) and not ACross, crossType).Show = apsNo then Exit;
-    k := Length(cands);
-    SetLength(cands, k + 1);
-    cands[k].Axis := AAxis;
-    cands[k].Plot := APlot;
-    cands[k].Cross := ACross;
-    cands[k].Polar := APolar;
-    cands[k].Single := ASingle;
-    cands[k].Key := AKey;
-    cands[k].Group := LinkGroupOf(AAxis);
-  end;
-
   function HitOf(const AHits: TTyAxisHitArray; AAxis: TTyAxis): Integer;
   var k: Integer;
   begin
@@ -1859,9 +1986,8 @@ var
   function KeyOf(AAxis: TTyAxis): string;
   var k: Integer;
   begin
-    for k := 0 to High(cands) do
-      if cands[k].Axis = AAxis then Exit(cands[k].Key);
-    Result := '';
+    k := PtrInfoOf(infos, AAxis);
+    if k >= 0 then Result := infos[k].CsKey else Result := '';
   end;
 
   { showValueMap's value: the snapped one when the axis snaps and the
@@ -1907,153 +2033,99 @@ var
 
 begin
   Result := nil;
-  seen := nil;
-  cands := nil;
   links := nil;
   if (FBuild = nil) or (FOption = nil) then Exit;
-  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
-  if not tipSpec.Show then Exit;
-  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
-  { CROSS PUTS A POINTER ON THE BASE AXIS EVEN WHEN THE TRIGGER IS NOT 'axis'.
-    Upstream's gate is `triggerAxis || cross`, and the second disjunct is the
-    reason `tooltip: {axisPointer: {type: 'cross'}}` written on its own draws
-    anything at all. }
-  if (tipSpec.Trigger <> tttAxis) and not crossType then Exit;
-  wantAxis := TyTooltipAxisPointerAxis(FOption);
-
-  for g := 0 to FBuild.GridCount - 1 do
+  { [R2-I7] THE AXES OF THE axisPointer MODEL, not the tooltip's alone:
+    collectAxesInfo takes an axis whose own pointer says `show` whatever the
+    tooltip is (scatter-nutrients-matrix: a none trigger and the root's
+    show), then the tooltip's axes -- trigger 'axis' or a cross -- in their
+    place. The tooltip's own trigger decides nothing else: an axis that
+    triggers the tooltip puts its rows into dataByCoordSys, and TooltipView
+    shows those whatever it says.
+    [Revised in R2-I7: only the tooltip's axes, and nothing at all without
+    trigger 'axis' or a cross.] }
+  infos := PtrCollect;
+  if Length(infos) = 0 then Exit;
+  { WHICH COORDINATE SYSTEMS HOLD THE POINT: a grid CLOSED ON EVERY EDGE, as
+    upstream's containPoint -- a pointer on the plot's right or bottom edge
+    still points at the last category (its first cartesian's); a polar
+    (Polar.containPoint); a single axis (Single.containPoint)
+    [Revised in batch 44: this was the half-open cell rule.] }
+  SetLength(contains, Length(infos));
+  for t := 0 to High(infos) do
   begin
-    gb := FBuild.Grid(g);
-    { CLOSED ON EVERY EDGE, as upstream's containPoint: a pointer on the
-      plot's right or bottom edge still points at the last category
-      [Revised in batch 44: this was the half-open cell rule.] }
-    if (gb.CartesianCount = 0)
-      or not gb.CartesianByIndex(0).ContainPoint(TyPointF(AX, AY)) then Continue;
-    for c := 0 to gb.CartesianCount - 1 do
+    contains[t] := False;
+    if infos[t].Polar <> nil then
+      contains[t] := infos[t].Polar.ContainXY(AX, AY)
+    else if infos[t].Single <> nil then
+      contains[t] := infos[t].Single.ContainXY(AX, AY)
+    else
     begin
-      cart := gb.CartesianByIndex(c);
-      if cart = nil then Continue;
-      { `tooltip.axisPointer.axis` names a dimension; 'auto' asks the
-        coordinate system, whose rule is ordinal before time before x -- BY
-        SCALE, so a y-category chart puts its pointer on Y. }
-      if wantAxis <> '' then baseAxis := cart.AxisByDim(wantAxis)
-      else baseAxis := cart.GetBaseAxis;
-      Consider(baseAxis, gb.PlotRect, False);
-      if crossType then
-      begin
-        otherAxis := cart.GetOtherAxis(baseAxis);
-        Consider(otherAxis, gb.PlotRect, True);
-      end;
+      g := StrToIntDef(Copy(infos[t].CsKey, 2, MaxInt), -1);
+      if (g < 0) or (g >= FBuild.GridCount) then Continue;
+      gb := FBuild.Grid(g);
+      contains[t] := (gb.CartesianCount > 0)
+        and gb.CartesianByIndex(0).ContainPoint(TyPointF(AX, AY));
     end;
   end;
-  { THE POLARS, after the grids as the coordinate system manager lists
-    them: one that holds the point (Polar.containPoint) takes a pointer on
-    its tooltip axis -- `tooltip.axisPointer.axis` 'radius' or 'angle', else
-    getBaseAxis -- and with a cross on the other [Batch 111] }
-  wantPolar := TyTooltipPolarPointerAxis(FOption);
-  for g := 0 to High(FPolars) do
-  begin
-    pol := FPolars[g];
-    if (pol = nil) or not pol.ContainXY(AX, AY) then Continue;
-    if wantPolar <> '' then baseAxis := pol.AxisByDim(wantPolar)
-    else baseAxis := pol.BaseAxis;
-    Consider(baseAxis, Default(TTyRectF), False, pol);
-    if crossType and (baseAxis <> nil) then
-      Consider(pol.OtherAxis(baseAxis), Default(TTyRectF), True, pol);
-  end;
-  { THE SINGLE AXES, after the polars as the coordinate system manager
-    lists them: one that holds the point (Single.containPoint) takes a
-    pointer on its axis -- its only one, so a cross adds nothing
-    [Batch 118] }
-  for g := 0 to High(FSingles) do
-  begin
-    sgl := FSingles[g];
-    if (sgl = nil) or not sgl.ContainXY(AX, AY) then Continue;
-    Consider(sgl.Axis, sgl.GetRect, False, nil, sgl);
-  end;
+  { ---- the first pass: every axisInfo of a coordinate system that holds
+    the point, in the order they were collected ---- }
+  for t := 0 to High(infos) do
+    if contains[t] then Consider(infos[t]);
 
   { ---- axisPointer.link [Batch 141] ----
-    Every tooltip axis of every coordinate system is an axisInfo, the point
-    in it or not, in the order the first pass walks them. An axis the first
-    pass did not show takes, from each shown axis of its link group in turn
-    (the last one wins), that axis' value -- through the group's mapper and
-    the target scale's parse -- and then goes through processOnAxis with no
-    snap. Its hit goes after the hits of its own coordinate system, as
-    dataByCoordSys lists them. }
+    Every axisInfo of every coordinate system, the point in it or not, in
+    the order they were collected. An axis the first pass did not show
+    takes, from each shown axis of its link group in turn (the last one
+    wins), that axis' value -- through the group's mapper and the target
+    scale's parse -- and then goes through processOnAxis with no snap. Its
+    hit goes after the hits of its own coordinate system, as dataByCoordSys
+    lists them. }
   ReadLinks;
   if Length(links) = 0 then Exit;
-  for g := 0 to FBuild.GridCount - 1 do
-  begin
-    gb := FBuild.Grid(g);
-    for c := 0 to gb.CartesianCount - 1 do
-    begin
-      cart := gb.CartesianByIndex(c);
-      if cart = nil then Continue;
-      if wantAxis <> '' then baseAxis := cart.AxisByDim(wantAxis)
-      else baseAxis := cart.GetBaseAxis;
-      AddCand(baseAxis, gb.PlotRect, False, nil, nil, 'g' + IntToStr(g));
-      if crossType and (baseAxis <> nil) then
-        AddCand(cart.GetOtherAxis(baseAxis), gb.PlotRect, True, nil, nil, 'g' + IntToStr(g));
-    end;
-  end;
-  for g := 0 to High(FPolars) do
-  begin
-    pol := FPolars[g];
-    if pol = nil then Continue;
-    if wantPolar <> '' then baseAxis := pol.AxisByDim(wantPolar)
-    else baseAxis := pol.BaseAxis;
-    AddCand(baseAxis, Default(TTyRectF), False, pol, nil, 'p' + IntToStr(g));
-    if crossType and (baseAxis <> nil) then
-      AddCand(pol.OtherAxis(baseAxis), Default(TTyRectF), True, pol, nil, 'p' + IntToStr(g));
-  end;
-  for g := 0 to High(FSingles) do
-  begin
-    sgl := FSingles[g];
-    if sgl = nil then Continue;
-    AddCand(sgl.Axis, sgl.GetRect, False, nil, sgl, 's' + IntToStr(g));
-  end;
-  SetLength(lkVal, Length(cands));
-  SetLength(lkHas, Length(cands));
-  for t := 0 to High(cands) do
+  SetLength(groups, Length(infos));
+  for t := 0 to High(infos) do groups[t] := LinkGroupOf(infos[t].Axis);
+  SetLength(lkVal, Length(infos));
+  SetLength(lkHas, Length(infos));
+  for t := 0 to High(infos) do
   begin
     lkHas[t] := False;
     lkVal[t] := NaN;
-    if (cands[t].Group < 0) or (HitOf(Result, cands[t].Axis) >= 0) then Continue;
-    for s := 0 to High(cands) do
+    if (groups[t] < 0) or (HitOf(Result, infos[t].Axis) >= 0) then Continue;
+    for s := 0 to High(infos) do
     begin
-      if (s = t) or (cands[s].Group <> cands[t].Group) then Continue;
-      h := HitOf(Result, cands[s].Axis);
+      if (s = t) or (groups[s] <> groups[t]) then Continue;
+      h := HitOf(Result, infos[s].Axis);
       if h < 0 then Continue;
       v := SourceValue(Result[h]);
       mapperSpec := '';
-      if links[cands[t].Group] is TJSONObject then
-        mapperSpec := TJSONObject(links[cands[t].Group]).Get('mapper', '');
+      if links[groups[t]] is TJSONObject then
+        mapperSpec := TJSONObject(links[groups[t]]).Get('mapper', '');
       { a mapper that is not a registered handler maps nothing (upstream
         would throw calling it) }
       if TyChartIsHandlerRef(mapperSpec)
         and TyChartFindAxisPointerMapper(Copy(mapperSpec, 2, MaxInt), mapper) then
       begin
-        v := mapper(v, MapperParam(cands[s].Axis), MapperParam(cands[t].Axis));
+        v := mapper(v, MapperParam(infos[s].Axis), MapperParam(infos[t].Axis));
         { the target scale's parse: a category or a time axis rounds }
-        if ((cands[t].Axis.Scale is TTyOrdinalScale)
-          or (cands[t].Axis.AxisType = atTime)) and not IsNan(v)
+        if ((infos[t].Axis.Scale is TTyOrdinalScale)
+          or (infos[t].Axis.AxisType = atTime)) and not IsNan(v)
           and not IsInfinite(v) then v := Floor(v + 0.5);
       end;
       lkVal[t] := v;
       lkHas[t] := True;
     end;
   end;
-  for t := 0 to High(cands) do
+  for t := 0 to High(infos) do
   begin
     if not lkHas[t] then Continue;
     n0 := Length(Result);
-    Consider(cands[t].Axis, cands[t].Plot, cands[t].Cross,
-      cands[t].Polar, cands[t].Single, True, lkVal[t]);
+    Consider(infos[t], True, lkVal[t]);
     if not appended then Continue;
     { after the last hit of its own coordinate system, when it has one }
     at_ := -1;
     for j := 0 to n0 - 1 do
-      if KeyOf(Result[j].Axis) = cands[t].Key then at_ := j;
+      if KeyOf(Result[j].Axis) = infos[t].CsKey then at_ := j;
     if (at_ < 0) or (at_ = n0 - 1) then Continue;
     hold := Result[n0];
     for j := n0 downto at_ + 2 do Result[j] := Result[j - 1];
@@ -2284,7 +2356,7 @@ begin
   for i := 0 to High(AHits) do
   begin
     { The cross' other arm carries no series -- see AxisTooltipContent. }
-    if AHits[i].Cross then Continue;
+    if AHits[i].NoTip then Continue;
     for k := 0 to High(AHits[i].Slots) do
     begin
       slot := AHits[i].Slots[k];
@@ -2294,6 +2366,14 @@ begin
         FStores[slot].GetRawIndex(row));
       SetLength(Result, n + 1);
       Result[n] := TooltipParams(d);
+      { [R2-I7] _showAxisTooltip's cbParams.axisDim / axisIndex: the axis of
+        the section -- what scatter-nutrients-matrix's formatter files its
+        points by (it drew nothing without them) }
+      if AHits[i].Axis <> nil then
+      begin
+        Result[n].AxisDimension := AHits[i].Axis.Dim;
+        Result[n].AxisIndex := AHits[i].Axis.ComponentIndex;
+      end;
       Inc(n);
     end;
   end;
@@ -2322,7 +2402,7 @@ begin
     { THE SECOND ARM OF A CROSS NEVER CONTRIBUTES A SECTION. Upstream hard-codes
       its triggerTooltip to false, which is why a cross shows one tooltip and
       not two. }
-    if AHits[i].Cross then Continue;
+    if AHits[i].NoTip then Continue;
     { THE SAME ROUTINE AS THE POINTER'S LABEL, formatter and precision and
       all -- upstream's header is getValueLabel with the pointer's label
       options -- at the snapped row, which the tooltip always describes. A
@@ -2521,40 +2601,143 @@ end;
 
 procedure TTyAdvanceChart.TipTryShow(const ASnap: TTyTipSnap;
   const ASpec: TTyTooltipSpec);
+var snap: TTyTipSnap;
 begin
+  { [R2-I7] the default markup first, as _showAxisTooltip and
+    _showSeriesItemTooltip build it before _showOrMove }
+  snap := ASnap;
+  TipMarkup(snap);
   { _showOrMove: clearTimeout first, whatever the delay -- a show waiting
     is replaced by this one, or dropped when this one is immediate }
   FTipShowAt := NaN;
   if ASpec.ShowDelayMs > 0 then
   begin
-    FTipPend := ASnap;
+    FTipPend := snap;
     FTipShowAt := TipClock + ASpec.ShowDelayMs;
     Inc(FTipSeq);
     FTipShowSeq := FTipSeq;
   end
   else
-    TipApplyShow(ASnap);
+    TipApplyShow(snap);
+end;
+
+procedure TTyAdvanceChart.TipMarkup(var ASnap: TTyTipSnap);
+var
+  spec: TTyTooltipSpec;
+  block: TTyTooltipBlock;
+begin
+  ASnap.MarkupHas := False;
+  ASnap.Markup := nil;
+  if FDirty or (FBuild = nil) or ASnap.Stale then Exit;
+  { an axis tooltip's sections, or a series item's (a marker's) rows: what
+    formatTooltip and buildTooltipMarkup make -- a valueFormatter runs here.
+    A component item (a geo region, an axis' text, a matrix cell) has none. }
+  if Length(ASnap.Hits) = 0 then
+  begin
+    if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
+      or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum) then Exit;
+  end;
+  spec := TipSpecOf(ASnap);
+  if not spec.HasComponent then Exit;
+  if Length(ASnap.Hits) > 0 then block := AxisTooltipContent(ASnap.Hits, spec)
+  else block := TooltipContent(ASnap.Datum, spec);
+  try
+    ASnap.MarkupHas := True;
+    if block <> nil then ASnap.Markup := TyTooltipFlatten(block, TooltipInk(spec));
+  finally
+    block.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TipRowSig(ASlot, ARow: Integer): string;
+var
+  prm: TTyChartCallbackParams;
+  k: Integer;
+begin
+  { cbParams.data, as `!==` sees it: a number or a string by its value, an
+    array or an object by its cells (upstream: by identity -- the same
+    cells written again by a setOption are new objects there and the same
+    data here) }
+  Result := '';
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FStores))
+    or (FStores[ASlot] = nil) or (ARow < 0) or (ARow >= FStores[ASlot].Count) then Exit;
+  prm := TooltipParams(TyChartDatum(FBindings[ASlot].SeriesIndex, ARow,
+    FStores[ASlot].GetRawIndex(ARow)));
+  case prm.Raw.Shape of
+    rshScalar: Result := 's:' + TyJsValueText(prm.Raw.Scalar, '');
+    rshArray, rshObject:
+      begin
+        Result := 'o:';
+        for k := 0 to High(prm.Raw.Cells) do
+          Result := Result + TyJsValueText(prm.Raw.Cells[k], '') + #1;
+      end;
+  else
+    Result := 'n:' + prm.ValueText;
+  end;
 end;
 
 procedure TTyAdvanceChart.TipApplyShow(const ASnap: TTyTipSnap);
 var
   spec: TTyTooltipSpec;
   arr: TJSONArray;
+  prevDbc: string;
+  tips: TTyAxisHitArray;
+  sigs: TTyStringArray;
+  sigSeries: TTyIntegerArray;
+  unchanged: Boolean;
+  i, k, n, s: Integer;
 begin
   { [F4b] _showAxisTooltip's callback: _updateContentNotChangedOnAxis keeps
     the dataByCoordSys first, whatever the content then does }
+  prevDbc := FTipLastDbc;
+  unchanged := False;
   if Length(ASnap.Hits) > 0 then
   begin
-    arr := TipDbcJson(TipAxesHits(ASnap.Hits));
+    tips := TipAxesHits(ASnap.Hits);
+    arr := TipDbcJson(tips);
     try
       FTipLastDbc := arr.AsJSON;
     finally
       arr.Free;
     end;
+    { [R2-I7] _cbParamsList's data, one per row in the order the params
+      were pushed }
+    sigs := nil;
+    sigSeries := nil;
+    for i := 0 to High(tips) do
+      for k := 0 to High(tips[i].Slots) do
+      begin
+        n := Length(sigs);
+        SetLength(sigs, n + 1);
+        SetLength(sigSeries, n + 1);
+        sigs[n] := TipRowSig(tips[i].Slots[k], tips[i].Rows[k]);
+        sigSeries[n] := SlotSeriesIndex(tips[i].Slots[k]);
+      end;
+    { THE SAME CONTENT: the same axes, values and rows, and no row whose
+      data changed -- read, as upstream reads it, at the params of each
+      row's SERIES INDEX in the pushed order }
+    unchanged := (prevDbc <> '') and (prevDbc = FTipLastDbc);
+    if unchanged then
+      for i := 0 to High(sigSeries) do
+      begin
+        s := sigSeries[i];
+        if (s >= 0) and (s <= High(sigs)) and (s <= High(FTipLastSigs))
+          and (sigs[s] <> FTipLastSigs[s]) then unchanged := False;
+      end;
+    FTipLastSigs := sigs;
+    FTipLastSigSeries := sigSeries;
   end
   else if ASnap.DbcJson <> '' then
     FTipLastDbc := ASnap.DbcJson;
   spec := TipSpecOf(ASnap);
+  { [R2-I7] the content unchanged: _updatePosition alone -- no formatter,
+    the box keeps what it says; a position function runs again }
+  if unchanged and FTipShown and FTipCur.Has then
+  begin
+    FTipSnap := ASnap;
+    Inc(FTipShowGen);
+    Exit;
+  end;
   { _showTooltipContent returns before anything for `show: false` or
     `showContent: false` -- and a box already up stays as it was }
   if not spec.HasComponent or not spec.Show or not spec.ShowContent then Exit;
@@ -2563,6 +2746,16 @@ begin
   FTipShown := True;
   FTipShowFlag := True;
   FTipSnap := ASnap;
+  { [R2-I7] setContent: once, here (the build standing), else at the next
+    paint; and a position function asked again }
+  Inc(FTipShowGen);
+  FTipCurDue := True;
+  if not FDirty and (FBuild <> nil) then
+  begin
+    TipSnapRefresh;
+    FTipCurDue := False;
+    TipBuildContent(FTipSnap, FTipCur);
+  end;
 end;
 
 procedure TTyAdvanceChart.TipHide(const AGlobal: TTyTooltipSpec);
@@ -3010,10 +3203,12 @@ begin
   Result := nil;
   if FOption = nil then Exit;
   { showTooltip: axisInfo.triggerTooltip -- the base axis of an axis
-    trigger, never a cross arm -- and a payload batch }
-  if TyTooltipSpecOf(FOption, -1, -1).Trigger <> tttAxis then Exit;
+    trigger, never a cross arm, and an axis collected for its own show that
+    triggers -- and a payload batch
+    [Revised in R2-I7: none at all unless the tooltip's trigger was
+    'axis'.] }
   for i := 0 to High(AHits) do
-    if not AHits[i].Cross and (Length(AHits[i].Slots) > 0) then
+    if not AHits[i].NoTip and (Length(AHits[i].Slots) > 0) then
     begin
       n := Length(Result);
       SetLength(Result, n + 1);
@@ -3188,10 +3383,12 @@ var
   pol: TTyPolar;
   sgl: TTySingle;
   crossType, isCat: Boolean;
+  infos: TTyPtrAxisInfoArray;
 begin
   Result := nil;
   if (ADbc = nil) or (FBuild = nil) or (FOption = nil) then Exit;
   crossType := TyTooltipAxisPointerType(FOption) = aptCross;
+  infos := PtrCollect;
   for i := 0 to ADbc.Count - 1 do
   begin
     if not (ADbc.Items[i] is TJSONObject) then Continue;
@@ -3226,8 +3423,13 @@ begin
       hit.Plot := plot;
       hit.Polar := pol;
       hit.Single := sgl;
-      hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
-        isCat, True, True, crossType);
+      { [R2-I7] the axisInfo's model when the axis is collected (an axis of
+        its own show reads its own label), else the tooltip's }
+      m := PtrInfoOf(infos, ax);
+      if m >= 0 then hit.Spec := infos[m].Spec
+      else
+        hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
+          isCat, True, True, crossType);
       hit.Value := v;
       hit.SnapValue := v;
       d := ai.Find('seriesDataIndices');
@@ -3273,53 +3475,13 @@ end;
 
 function TTyAdvanceChart.TipCollectionOrder: TTyAxisArray;
 var
-  g, c: Integer;
-  gb: TTyGridBuild;
-  cart: TTyCartesian2D;
-  base: TTyAxis;
-  wantAxis, wantPolar: string;
-  crossType: Boolean;
-
-  procedure Add(AAxis: TTyAxis);
-  var k: Integer;
-  begin
-    if AAxis = nil then Exit;
-    for k := 0 to High(Result) do
-      if Result[k] = AAxis then Exit;
-    k := Length(Result);
-    SetLength(Result, k + 1);
-    Result[k] := AAxis;
-  end;
-
+  infos: TTyPtrAxisInfoArray;
+  k: Integer;
 begin
-  Result := nil;
-  if (FBuild = nil) or (FOption = nil) then Exit;
-  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
-  wantAxis := TyTooltipAxisPointerAxis(FOption);
-  wantPolar := TyTooltipPolarPointerAxis(FOption);
-  for g := 0 to FBuild.GridCount - 1 do
-  begin
-    gb := FBuild.Grid(g);
-    for c := 0 to gb.CartesianCount - 1 do
-    begin
-      cart := gb.CartesianByIndex(c);
-      if cart = nil then Continue;
-      if wantAxis <> '' then base := cart.AxisByDim(wantAxis)
-      else base := cart.GetBaseAxis;
-      Add(base);
-      if crossType and (base <> nil) then Add(cart.GetOtherAxis(base));
-    end;
-  end;
-  for g := 0 to High(FPolars) do
-  begin
-    if FPolars[g] = nil then Continue;
-    if wantPolar <> '' then base := FPolars[g].AxisByDim(wantPolar)
-    else base := FPolars[g].BaseAxis;
-    Add(base);
-    if crossType and (base <> nil) then Add(FPolars[g].OtherAxis(base));
-  end;
-  for g := 0 to High(FSingles) do
-    if FSingles[g] <> nil then Add(FSingles[g].Axis);
+  { [R2-I7] the axisPointer model's axes as collectAxesInfo collected them }
+  infos := PtrCollect;
+  SetLength(Result, Length(infos));
+  for k := 0 to High(infos) do Result[k] := infos[k].Axis;
 end;
 
 function TTyAdvanceChart.TipSeriesPoint(APayload: TJSONObject; AFull: Boolean;
@@ -4035,7 +4197,7 @@ procedure TTyAdvanceChart.TipFreeze;
     { the tooltip's axes, as a dataByCoordSys: never a cross arm }
     tips := nil;
     for i := 0 to High(ASnap.Hits) do
-      if not ASnap.Hits[i].Cross and (ASnap.Hits[i].Axis <> nil) then
+      if not ASnap.Hits[i].NoTip and (ASnap.Hits[i].Axis <> nil) then
       begin
         n := Length(tips);
         SetLength(tips, n + 1);
@@ -4158,6 +4320,7 @@ begin
     kp.Dim := FTipHits[i].Axis.Dim;
     kp.Index := FTipHits[i].Axis.ComponentIndex;
     kp.Cross := FTipHits[i].Cross;
+    kp.NoTip := FTipHits[i].NoTip;
     kp.Linked := FTipHits[i].Linked;
     kp.Value := FTipHits[i].Value;
     kp.SnapValue := FTipHits[i].SnapValue;
@@ -4183,8 +4346,8 @@ var
   plot: TTyRectF;
   pol: TTyPolar;
   sgl: TTySingle;
-  tipSpec: TTyTooltipSpec;
-  crossType: Boolean;
+  infos: TTyPtrAxisInfoArray;
+  m: Integer;
 begin
   if not FTipKeepPtrDue then Exit;
   FTipKeepPtrDue := False;
@@ -4193,32 +4356,28 @@ begin
     FTipKeepPtr := nil;
     Exit;
   end;
-  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
-  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
   FTipHits := nil;
-  { the axes the new models collect a pointer on (collectAxesInfo, the gate
-    ResolveAxisPointers has): a setOption that made the tooltip an item one, with no
-    cross, took the pointers with their axisInfo }
-  if not tipSpec.Show or ((tipSpec.Trigger <> tttAxis) and not crossType) then
-  begin
-    FTipKeepPtr := nil;
-    Exit;
-  end;
+  { the axes the new models collect a pointer on (collectAxesInfo): a
+    setOption that made the tooltip an item one, with no cross and no axis
+    of its own show, took the pointers with their axisInfo
+    [Revised in R2-I7: the tooltip's gate alone.] }
+  infos := PtrCollect;
   for i := 0 to High(FTipKeepPtr) do
   begin
     ax := TipAxisAt(FTipKeepPtr[i].Dim, FTipKeepPtr[i].Index, plot, pol, sgl);
     if ax = nil then Continue;
+    m := PtrInfoOf(infos, ax);
+    if m < 0 then Continue;
     hit := Default(TTyAxisHit);
     hit.Axis := ax;
     hit.Plot := plot;
     hit.Polar := pol;
     hit.Single := sgl;
-    hit.Cross := FTipKeepPtr[i].Cross;
+    { [R2-I7] the new axisInfo's model and its trigger }
+    hit.Cross := infos[m].CrossArm;
+    hit.NoTip := not infos[m].TriggerTooltip;
     hit.Linked := FTipKeepPtr[i].Linked;
-    hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
-      ax.Scale is TTyOrdinalScale, True, (tipSpec.Trigger = tttAxis) and not hit.Cross,
-      crossType);
-    if hit.Spec.Show = apsNo then Continue;
+    hit.Spec := infos[m].Spec;
     hit.Value := FTipKeepPtr[i].Value;
     hit.SnapValue := FTipKeepPtr[i].SnapValue;
     { seriesDataIndices as the model holds them: the rows that are still
@@ -4284,7 +4443,7 @@ var
   g, c, k: Integer;
   gb: TTyGridBuild;
   cart: TTyCartesian2D;
-  tipSpec: TTyTooltipSpec;
+  infos: TTyPtrAxisInfoArray;
   seen: array of TTyAxis;
 
   function Seen_(AAxis: TTyAxis): Boolean;
@@ -4304,10 +4463,10 @@ var
   procedure TryAxis(AAxis, ABase: TTyAxis; const APlot: TTyRectF;
     APolar: TTyPolar; ASingle: TTySingle);
   var
-    node, ap, d, st, sh: TJSONData;
-    isCat, fromTip: Boolean;
+    node, ap, d, st: TJSONData;
+    isCat: Boolean;
     v, ms: Double;
-    n: Integer;
+    n, m: Integer;
     hit: TTyAxisHit;
   begin
     if (AAxis = nil) or Seen_(AAxis) then Exit;
@@ -4322,9 +4481,12 @@ var
     if (st = nil) or (st.JSONType <> jtString) or (st.AsString <> 'show') then Exit;
     d := TJSONObject(ap).Find('value');
     if (d = nil) or not (d.JSONType in [jtNumber, jtString]) then Exit;
-    sh := TJSONObject(ap).Find('show');
-    fromTip := tipSpec.HasComponent and (tipSpec.Trigger = tttAxis) and (AAxis = ABase);
-    if not (fromTip or ((sh <> nil) and (sh.JSONType = jtBoolean) and sh.AsBoolean)) then Exit;
+    { [R2-I7] an axis the axisPointer model collected (collectAxesInfo: its
+      own show, or the tooltip's) -- AxisView asks its axisInfo
+      [Revised in R2-I7: its own boolean show, or the base axis of an
+      axis-triggered tooltip.] }
+    m := PtrInfoOf(infos, AAxis);
+    if m < 0 then Exit;
     isCat := AAxis.Scale is TTyOrdinalScale;
     v := NaN;
     if isCat then
@@ -4349,9 +4511,9 @@ var
     hit.Plot := APlot;
     hit.Polar := APolar;
     hit.Single := ASingle;
-    hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType, AAxis.ComponentIndex,
-      isCat, fromTip, fromTip, False);
-    if hit.Spec.Show = apsNo then Exit;
+    hit.Spec := infos[m].Spec;
+    hit.Cross := infos[m].CrossArm;
+    hit.NoTip := not infos[m].TriggerTooltip;
     hit.Value := v;
     hit.SnapValue := v;
     SetLength(Result, Length(Result) + 1);
@@ -4370,7 +4532,7 @@ begin
   seen := nil;
   if (FBuild = nil) or (FOption = nil) then Exit;
   if FOptPtrGone and (Length(FOptPtrBack) = 0) then Exit;
-  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
+  infos := PtrCollect;
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
@@ -5006,15 +5168,14 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
-  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+procedure TTyAdvanceChart.TipBuildContent(const ASnap: TTyTipSnap;
+  out AContent: TTyTipContent);
 var
   onAxis: Boolean;
   spec: TTyTooltipSpec;
   ink: TTyTooltipInk;
-  block: TTyTooltipBlock;
+  block, dflt: TTyTooltipBlock;
   lines: TTyTooltipLineArray;
-  st: TTyStyleSet;
   params: TTyChartParams;
   tipText, fmtText: string;
   k, m: Integer;
@@ -5023,81 +5184,40 @@ var
     their colours }
   mkNames: array of string;
   mkColours: array of TTyChartColor;
-  w, h, lineH, gap, cx, cy: Double;
-  padL, padT, padR, padB, radius, borderW: Double;
-  box: TTyRectF;
-  r: TRect;
-  i, j, row, lineTop: Integer;
-  corners: TTyCorners;
-  surface: TTyFill;
-  borderCol: TTyColor;
   snap: TTyTipSnap;
-  pin: TTyTooltipPlaceIn;
-  at: TTyPointF;
-  elRect: TTyRectF;
-  frozenPic: Boolean;
 begin
-  FTipBox := TyInvalidRectF;
-  FTipRect := TyInvalidRectF;
-  FTipFormatterText := '';
-  { [Batch 100] WHAT IS SHOWN, NOT WHAT IS HOVERED: the box's own state
-    decides -- a show waiting out showDelay is not drawn yet, a hide waiting
-    out hideDelay still is, at the place and with the content of the show }
-  if not FTipShown then Exit;
-  { [F4b] a box that outlived a re-render: its axes and element from the
-    build standing now }
-  TipSnapRefresh;
-  snap := FTipSnap;
+  { [R2-I7] _showTooltipContent, ONCE PER SHOW: what was drawn on every
+    paint -- the formatter run, the default markup built -- is built here
+    when a show sets the box, and a paint draws it
+    [Revised in R2-I7: PaintTooltip built it, the formatter running on
+    every paint.] }
+  AContent := Default(TTyTipContent);
+  snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
-  { [R2-E] A FROZEN BOX SAYS WHAT IT SAID: TooltipView.render does not
-    touch the content element -- a row gone, a value changed, the box keeps
-    the last show's text, ink and border until a show sets them again }
-  frozenPic := snap.Frozen and FTipFrozenHas;
-  if frozenPic then
-  begin
-    spec := FTipFrozenSpec;
-    ink := FTipFrozenInk;
-    onAxis := FTipFrozenOnAxis;
-    FTipFormatterText := FTipFrozenFmt;
-  end
-  else
-  begin
-    if not TipTargetValid(snap.Datum) and not onAxis then Exit;
-    { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
-      tooltip's model from the global component and a positioning hint and
-      nothing else -- no series level, no data item -- so every option but
-      valueFormatter is global there. }
-    spec := TipSpecOf(snap);
-    if not spec.HasComponent then Exit;
-    if not spec.Show or not spec.ShowContent then Exit;
-    { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's
-      SHAPE -- if a coordinate system reported axes, the axis path runs and
-      the item trigger is never consulted. }
-    if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-      and not IsAxisTextDatum(snap.Datum) then Exit;
-    ink := TooltipInk(spec);
-  end;
-
-  st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
-    [tysNormal]);
-  { NO BOX WITHOUT A BACKGROUND. A theme that defines no tooltip surface gets
-    no tooltip -- never a hard-coded colour, which is the rule the old chart
-    already follows and the reason the key lives in the base layer where every
-    theme inherits it. }
-  if not (tpBackground in st.Present) then Exit;
-
+  if not TipTargetValid(snap.Datum) and not onAxis then Exit;
+  { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
+    tooltip's model from the global component and a positioning hint and
+    nothing else -- no series level, no data item -- so every option but
+    valueFormatter is global there. }
+  spec := TipSpecOf(snap);
+  if not spec.HasComponent then Exit;
+  if not spec.Show or not spec.ShowContent then Exit;
+  { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's
+    SHAPE -- if a coordinate system reported axes, the axis path runs and
+    the item trigger is never consulted. }
+  if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
+    and not IsAxisTextDatum(snap.Datum) then Exit;
+  ink := TooltipInk(spec);
+  mkNames := nil;
+  mkColours := nil;
   block := nil;
   try
-    if frozenPic then
-      lines := FTipFrozenLines
-    else
-    begin
     if (not onAxis) and IsGeoDatum(snap.Datum) then
     begin
       { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
         with the component's params, else the content (the name) }
       tipText := GeoTipText(snap.Datum, spec);
-      FTipFormatterText := tipText;
+      AContent.Fmt := tipText;
       if tipText = '' then Exit;
       block := TTyTooltipBlock.CreateSection('', True);
       block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
@@ -5108,7 +5228,7 @@ begin
       { [F4c] AN AXIS' NAME OR LABEL: its formatter through formatTpl, else
         the content -- the text itself }
       tipText := AxisTipText(snap.Datum, spec);
-      FTipFormatterText := tipText;
+      AContent.Fmt := tipText;
       if tipText = '' then Exit;
       block := TTyTooltipBlock.CreateSection('', True);
       block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
@@ -5116,10 +5236,17 @@ begin
     end
     else if spec.HasFormatter then
     begin
-      { A FORMATTER REPLACES THE CONTENT, it does not decorate it. Upstream
-        builds the default markup first and then throws it away, so a
-        formatter with side effects still sees them run; here the default is
-        simply not built, which is the same picture for less. }
+      { A FORMATTER REPLACES THE CONTENT, it does not decorate it -- but
+        upstream builds the default markup first and then throws it away,
+        so a valueFormatter with side effects still runs: the tried show
+        built it (TipMarkup), and a show nobody tried builds it here
+        [Revised in R2-I7: the default was not built under a formatter.] }
+      if not snap.MarkupHas then
+      begin
+        if onAxis then dflt := AxisTooltipContent(snap.Hits, spec)
+        else dflt := TooltipContent(snap.Datum, spec);
+        dflt.Free;
+      end;
       SetLength(params, 1);
       { A FORMATTER UNDER AN AXIS TRIGGER IS GIVEN EVERY SERIES, in the order
         the sections hold them -- which is what makes `{a1}` and `{c2}` mean
@@ -5131,8 +5258,6 @@ begin
         their order (makeTooltipMarker, richText) -- a series' item and a
         marker component's, not a component item's (a geo region's, a
         matrix cell's have no marker) }
-      mkNames := nil;
-      mkColours := nil;
       for k := 0 to High(params) do
         if (params[k].ComponentType = 'series') or (params[k].ComponentType = 'markPoint')
           or (params[k].ComponentType = 'markLine') or (params[k].ComponentType = 'markArea') then
@@ -5158,7 +5283,7 @@ begin
           for m := 0 to High(snap.Hits[k].Slots) do
             if (snap.Hits[k].Slots[m] >= 0)
               and (snap.Hits[k].Slots[m] <= High(FBindings)) then hasSeries := True;
-          if snap.Hits[k].Cross or not hasSeries then Continue;
+          if snap.Hits[k].NoTip or not hasSeries then Continue;
           if (snap.Hits[k].Axis <> nil) and (snap.Hits[k].Axis.Scale is TTyTimeScale) then
             fmtText := TyFormatTime(snap.Hits[k].SnapValue, fmtText,
               TTyTimeScale(snap.Hits[k].Axis.Scale).UTC);
@@ -5171,7 +5296,7 @@ begin
         { A named handler that is not registered says so rather than drawing
           nothing -- TyChartResolveText puts the message in the text. }
         ;
-      FTipFormatterText := tipText;
+      AContent.Fmt := tipText;
       if Trim(tipText) = '' then Exit;
       block := TTyTooltipBlock.CreateSection('', True);
       { THE WHOLE STRING AS ONE NAME. A formatter's output is words, not a
@@ -5181,6 +5306,16 @@ begin
       block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
         '', True));
     end
+    else if snap.MarkupHas then
+    begin
+      { the default markup the tried show built }
+      AContent.Has := Length(snap.Markup) > 0;
+      AContent.Spec := spec;
+      AContent.Ink := ink;
+      AContent.Lines := snap.Markup;
+      AContent.OnAxis := onAxis;
+      Exit;
+    end
     else if onAxis then
       block := AxisTooltipContent(snap.Hits, spec)
     else
@@ -5189,7 +5324,99 @@ begin
     lines := TyTooltipFlatten(block, ink);
     { [R2-J3] the dots a formatter's text names by params.marker }
     TyTooltipSplitMarkers(lines, mkNames, mkColours, ink);
+    AContent.Has := Length(lines) > 0;
+    AContent.Spec := spec;
+    AContent.Ink := ink;
+    AContent.Lines := lines;
+    AContent.OnAxis := onAxis;
+  finally
+    block.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  onAxis: Boolean;
+  spec: TTyTooltipSpec;
+  ink: TTyTooltipInk;
+  lines: TTyTooltipLineArray;
+  st: TTyStyleSet;
+  w, h, lineH, gap, cx, cy: Double;
+  padL, padT, padR, padB, radius, borderW: Double;
+  box: TTyRectF;
+  r: TRect;
+  i, j, row, lineTop: Integer;
+  corners: TTyCorners;
+  surface: TTyFill;
+  borderCol: TTyColor;
+  snap: TTyTipSnap;
+  pin: TTyTooltipPlaceIn;
+  at: TTyPointF;
+  elRect: TTyRectF;
+  frozenPic: Boolean;
+  pspec: TTyTooltipSpec;
+begin
+  FTipBox := TyInvalidRectF;
+  FTipRect := TyInvalidRectF;
+  FTipFormatterText := '';
+  { [Batch 100] WHAT IS SHOWN, NOT WHAT IS HOVERED: the box's own state
+    decides -- a show waiting out showDelay is not drawn yet, a hide waiting
+    out hideDelay still is, at the place and with the content of the show }
+  if not FTipShown then Exit;
+  { [F4b] a box that outlived a re-render: its axes and element from the
+    build standing now }
+  TipSnapRefresh;
+  snap := FTipSnap;
+  onAxis := Length(snap.Hits) > 0;
+  { [R2-E] A FROZEN BOX SAYS WHAT IT SAID: TooltipView.render does not
+    touch the content element -- a row gone, a value changed, the box keeps
+    the last show's text, ink and border until a show sets them again }
+  frozenPic := snap.Frozen and FTipFrozenHas;
+  if frozenPic then
+  begin
+    spec := FTipFrozenSpec;
+    ink := FTipFrozenInk;
+    onAxis := FTipFrozenOnAxis;
+    FTipFormatterText := FTipFrozenFmt;
+    lines := FTipFrozenLines;
+  end
+  else
+  begin
+    { [R2-I7] THE LAST SHOW'S CONTENT: built when the show set it (a show
+      whose build was not standing: now, once) }
+    if FTipCurDue then
+    begin
+      FTipCurDue := False;
+      TipBuildContent(snap, FTipCur);
     end;
+    FTipFormatterText := FTipCur.Fmt;
+    if not FTipCur.Has then Exit;
+    spec := FTipCur.Spec;
+    ink := FTipCur.Ink;
+    onAxis := FTipCur.OnAxis;
+    lines := FTipCur.Lines;
+    { WHERE IT GOES IS THE LAST SHOW'S, what it says may be an earlier
+      one's: an axis show whose content did not change is _updatePosition
+      alone, under its own model and position (a showTip's `position`) }
+    pspec := TipSpecOf(snap);
+    spec.Position := pspec.Position;
+    spec.PositionHandler := pspec.PositionHandler;
+    spec.Align := pspec.Align;
+    spec.VerticalAlign := pspec.VerticalAlign;
+    spec.Confine := pspec.Confine;
+    spec.ConfineSet := pspec.ConfineSet;
+  end;
+
+  st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
+    [tysNormal]);
+  { NO BOX WITHOUT A BACKGROUND. A theme that defines no tooltip surface gets
+    no tooltip -- never a hard-coded colour, which is the rule the old chart
+    already follows and the reason the key lives in the base layer where every
+    theme inherits it. }
+  if not (tpBackground in st.Present) then Exit;
+
+  begin
     if Length(lines) = 0 then Exit;
 
     if spec.HasPadding then
@@ -5241,14 +5468,24 @@ begin
         elRect.Right - elRect.Left, elRect.Bottom - elRect.Top);
       FTipRect := elRect;
     end;
+    { [R2-I7] A POSITION FUNCTION RUNS ONCE PER SHOW (_updatePosition):
+      its answer is kept for the paints until the next show
+      [Revised in R2-I7: it ran on every paint.] }
     if (spec.PositionHandler <> '') and not snap.Frozen then
     begin
-      if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
-      else if IsGeoDatum(snap.Datum) then
-        pin.Params := TyChartOneParams(GeoTipParams(snap.Datum))
-      else if IsAxisTextDatum(snap.Datum) then
-        pin.Params := TyChartOneParams(AxisTipParams(snap.Datum))
-      else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
+      if FTipPosGen <> FTipShowGen then
+      begin
+        if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
+        else if IsGeoDatum(snap.Datum) then
+          pin.Params := TyChartOneParams(GeoTipParams(snap.Datum))
+        else if IsAxisTextDatum(snap.Datum) then
+          pin.Params := TyChartOneParams(AxisTipParams(snap.Datum))
+        else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
+        TyTooltipRunPosition(spec, pin, FTipPosAns);
+        FTipPosGen := FTipShowGen;
+      end;
+      spec.Position := FTipPosAns;
+      spec.PositionHandler := '';
     end;
     { [F4b] the box a re-render left up stays where it was until a show
       places it again [R2-E: the position is not asked again] }
@@ -5359,7 +5596,5 @@ begin
         end;
       Inc(row);
     end;
-  finally
-    block.Free;
   end;
 end;
