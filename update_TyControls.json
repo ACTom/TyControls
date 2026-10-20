@@ -4,18 +4,18 @@
       "ForceNotify" : false,
       "InternalVersion" : 1,
       "Name" : "tycontrols.lpk",
-      "Version" : "3.0.2.0"
+      "Version" : "3.0.3.0"
     },
     {
       "ForceNotify" : false,
       "InternalVersion" : 1,
       "Name" : "tycontrols_dt.lpk",
-      "Version" : "3.0.2.0"
+      "Version" : "3.0.3.0"
     }
   ],
   "UpdatePackageData" : {
     "DisableInOPM" : false,
-    "DownloadZipURL" : "https://github.com/ACTom/TyControls/releases/download/v3.0.2/TyControls-3.0.2.zip",
+    "DownloadZipURL" : "https://github.com/ACTom/TyControls/releases/download/v3.0.3/TyControls-3.0.3.zip",
     "Name" : "TyControls"
   }
 }
