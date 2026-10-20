@@ -658,6 +658,9 @@ function TyPainterKeptStrokeReplaysForTest: Integer;
 { [R2-L] ... and the pen's polygons it keeps beside them: how many were computed (a
   kept one met again does not count). }
 function TyPainterKeptStrokeContoursForTest: Integer;
+{ Every kept fill hashed alike, so that a lookup is decided by its polygon and
+  clip compare alone (the kept fills dropped either way). }
+procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -5657,6 +5660,7 @@ var
   GKeptFillCount: Integer = 0;
   GKeptFillBytes: Int64 = 0;
   GKeptFillsOff: Boolean = False;
+  GKeptFillHashCollide: Boolean = False;
   GKeptFillsMade: Integer = 0;
   GKeptFillsReplayed: Integer = 0;
 
@@ -5819,6 +5823,12 @@ begin
   GKeptFillsOff := not AOn;
 end;
 
+procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
+begin
+  DropKeptFills;
+  GKeptFillHashCollide := AOn;
+end;
+
 function TyPainterKeptStrokeFillsForTest: Integer;
 begin
   Result := GKeptFillsMade;
@@ -5835,6 +5845,7 @@ var
   q: PQWord;
   i: Integer;
 begin
+  if GKeptFillHashCollide then Exit(0);
   {$push}{$R-}{$Q-}
   Result := QWord($CBF29CE484222325);
   Result := (Result xor QWord(LongWord(AClip.Left)) xor (QWord(LongWord(AClip.Top)) shl 32))
