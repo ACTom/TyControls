@@ -231,6 +231,12 @@ function styleRec(st) {
     const pat = normalizeLineDash(st.lineDash, st.lineWidth);
     o.pattern = pat == null ? null : pat.map(hex);
     o.lineDashOffset = st.lineDashOffset == null ? null : hex(st.lineDashOffset);
+    // [R2-I5] a pen that is a gradient, as the clone holds it
+    const s = st.stroke;
+    if (s && typeof s === 'object' && s.colorStops) {
+      o.strokeGrad = { type: s.type, x: s.x, y: s.y, x2: s.x2 == null ? null : s.x2, y2: s.y2 == null ? null : s.y2,
+        r: s.r == null ? null : s.r, global: !!s.global, stops: s.colorStops.map(c => [c.offset, c.color]) };
+    }
   }
   return o;
 }
@@ -787,6 +793,26 @@ const SCENARIOS = [
     },
     steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
   },
+  // [R2-I5]
+  {
+    id: 'TH-GRAD', family: 'thumbnail', pen: true,
+    note: "[R2-I5] nodes whose pens are gradients, cloned as they are: a linear borderColor at 2, a radial one at 3 dashed, a category's (by name) linear one; a solid pen beside them",
+    option: {
+      animation: false,
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 24,
+        categories: [{ name: 'g', itemStyle: { borderWidth: 2, borderColor: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#0000ff' }] } } }],
+        data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderWidth: 2, borderColor: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 0.5, color: '#ffff00' }, { offset: 1, color: '#0000ff' }] } } },
+          { name: 'b', x: 100, y: 0, itemStyle: { borderWidth: 3, borderType: 'dashed', borderColor: { type: 'radial', x: 0.5, y: 0.5,
+            r: 0.5, colorStops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ff00ff' }] } } },
+          { name: 'c', x: 50, y: 80, category: 'g' },
+          { name: 'd', x: 150, y: 80, itemStyle: { borderColor: '#333333', borderWidth: 2 } }],
+        links: [{ source: 'a', target: 'b' }, { source: 'c', target: 'd' }] }],
+      thumbnail: {},
+    },
+    steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
+  },
 ];
 
 const NOTES = [
@@ -1275,6 +1301,11 @@ function generate() {
   must(tp.filter(it => it.kind === 'symbol' && it.style.stroke != null && it.style.stroke !== 'none').length === 4
     && tp[0].style.lineWidth === hex(1) && tp[1].style.lineDashOffset === hex(5) && tp[2].style.lineDashOffset === hex(2),
     'TH-PEN: the pens are not as cloned: ' + JSON.stringify(tp.map(it => it.style)));
+  // [R2-I5] three of TH-GRAD's pens are gradients
+  const tg = byId('TH-GRAD').initial.thumbs[0].items;
+  must(tg.filter(it => it.kind === 'symbol' && it.style.strokeGrad).length === 3
+    && tg[0].style.strokeGrad.type === 'linear' && tg[1].style.strokeGrad.type === 'radial',
+    'TH-GRAD: the gradient pens are not as cloned: ' + JSON.stringify(tg.map(it => it.style)));
   // strip the private fields
   for (const sc of scenarios) {
     for (const s of sc.steps) delete s._before;
