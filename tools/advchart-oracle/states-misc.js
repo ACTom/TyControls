@@ -225,6 +225,17 @@ function seriesParts(chart) {
     }
     // [R2-I3] a line's polyline, in a case that asks for the pens' phases
     if (type === 'line' && CUR_CASE && CUR_CASE.dashOff && view._polyline) put(view._polyline, s, 0, 'poly');
+    // [R2-I5] a tree's edge (symbolEl.__edge, the node's row), in a case
+    // that asks for the pens' dashes
+    if (type === 'tree' && CUR_CASE && CUR_CASE.dash) {
+      data.each(i => {
+        const g = data.getItemGraphicEl(i);
+        if (!g) return;
+        put(g.childAt(0), s, i, 'host');
+        if (g.__edge) put(g.__edge, s, i, 'edge');
+      });
+      return;
+    }
     if (type === 'pictorialBar') {
       data.each(i => {
         const g = data.getItemGraphicEl(i);
@@ -1002,6 +1013,30 @@ const R2I4 = [
     events: [over(0, ['item', 1, 1]), out(300), over(500, ['item', 0, 0]), out(800)] },
 ];
 
+// [R2-I5] the same for the other pens a state's transition tweens: a tree's
+// edge, a lines series' line, a parallel series' line -- each brushed with
+// its word normalised against the width the frame draws
+const R2I5 = [
+  { id: 'tree-dash-word-tween', dash: true, note: '[R2-I5] a tree\'s edges dashed at 1, emphasis lineStyle width 5: '
+    + 'hovering A puts its edge (root to A) in emphasis, the width tweens and the dash follows it. Over A at 0, out at 500',
+    option: { series: [{ type: 'tree', left: 40, top: 30, bottom: 30, right: 120, symbolSize: 16, expandAndCollapse: false,
+      lineStyle: { type: 'dashed', width: 1, color: '#000' }, emphasis: { lineStyle: { width: 5 } },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }] }, { name: 'B' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'lines-dash-word-tween', dash: true, note: '[R2-I5] a lines series dotted at 1, emphasis lineStyle width 6: '
+    + 'hovering line 0, the width tweens and the dash follows it. Over line 0 at 0, out at 500',
+    option: { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { type: 'dotted', width: 1, opacity: 1, color: '#000' },
+        emphasis: { lineStyle: { width: 6 } }, data: [{ coords: [[1, 2], [8, 2]] }, { coords: [[1, 7], [8, 7]] }] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'parallel-dash-word-tween', dash: true, note: '[R2-I5] a parallel series dashed at 1, emphasis lineStyle width 4: '
+    + 'hovering row 0, the width tweens and the dash follows it. Over row 0 at 0, out at 500',
+    option: { parallelAxis: [{ dim: 0, min: 0, max: 10 }, { dim: 1, min: 0, max: 10 }, { dim: 2, min: 0, max: 10 }],
+      series: [{ type: 'parallel', lineStyle: { type: 'dashed', width: 1, opacity: 1, color: '#000' },
+        emphasis: { lineStyle: { width: 4 } }, data: [[2, 3, 2], [8, 7, 8]] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1233,6 +1268,22 @@ function guards(cases) {
     g('still-dash-word-at-state-width', b1 && numAt(b1, 'dash', 1) === '[6]' && numAt(b1, 'dash', 400) === '[1]'
       && b0 && numAt(b0, 'dash', 501) === '[20,10]', b0 && b1 && [numAt(b1, 'dash', 1), numAt(b0, 'dash', 501)].join(' '));
   }
+  // [R2-I5] mid-transition the dash is neither the rest's nor the state's
+  {
+    const mid = (c, el, a, b) => {
+      const v = numAt(el, 'dash', 50);
+      return el && v !== a && v !== b && v !== 'null' && numAt(el, 'dash', 450) === b && numAt(el, 'dash', 1600) === a;
+    };
+    const t = byId(cases, 'tree-dash-word-tween');
+    const te = elRow(t, 0, 2, 'edge');
+    g('tree-edge-dash-word-follows-width', mid(t, te, '[4,2]', '[20,10]'), te && [numAt(te, 'dash', 50), numAt(te, 'dash', 450)].join(' '));
+    const l = byId(cases, 'lines-dash-word-tween');
+    const le = elRow(l, 0, 0, 'host');
+    g('lines-dash-word-follows-width', mid(l, le, '[1]', '[6]'), le && [numAt(le, 'dash', 50), numAt(le, 'dash', 450)].join(' '));
+    const p = byId(cases, 'parallel-dash-word-tween');
+    const pe = elRow(p, 0, 0, 'host');
+    g('parallel-dash-word-follows-width', mid(p, pe, '[4,2]', '[16,8]'), pe && [numAt(pe, 'dash', 50), numAt(pe, 'dash', 450)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -1240,7 +1291,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

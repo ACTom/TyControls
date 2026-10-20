@@ -37,7 +37,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Color, tyControls.AdvChart.JsMath,
+     tyControls.AdvChart.Color, tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
      tyControls.AdvChart.AnimView, tyControls.AdvChart.Morph,
      tyControls.AdvChart.Custom, tyControls.AdvChart.Geo,
@@ -162,6 +162,21 @@ function SampleOf(AData: TJSONData; ASample: Integer): TJSONData;
 begin
   if (AData <> nil) and (AData.JSONType = jtArray) then Result := AData.Items[ASample]
   else Result := AData;
+end;
+
+{ [R2-I5] the lengths a frame brushes, as the fixture writes them
+  (JSON.stringify of normalizeLineDash: 'null' for none) }
+function DashText(const A: TTyDoubleArray): string;
+var j: Integer;
+begin
+  if Length(A) = 0 then Exit('null');
+  Result := '[';
+  for j := 0 to High(A) do
+  begin
+    if j > 0 then Result := Result + ',';
+    Result := Result + TyJsNumberToString(A[j]);
+  end;
+  Result := Result + ']';
 end;
 
 { {"$fn": name} -> '@name', in place, everywhere }
@@ -701,6 +716,15 @@ begin
     if Hex(AFe.Style.Alpha) <> sv.AsString then
       Miss(Format('%s: opacity %s, upstream %s', [AId, FloatToStr(AFe.Style.Alpha),
         FloatToStr(FromHex(sv.AsString))]), AOnce + 'op');
+  end;
+  { [R2-I5] a dash case: the lengths the frame brushes }
+  sv := SampleOf(AStyle.Find('dash'), ASample);
+  if (sv <> nil) and (sv.JSONType = jtString) then
+  begin
+    Inc(FCompared);
+    if DashText(AFe.Style.DashLogical) <> sv.AsString then
+      Miss(Format('%s: dash %s, upstream %s', [AId, DashText(AFe.Style.DashLogical),
+        sv.AsString]), AOnce + 'dash');
   end;
 end;
 

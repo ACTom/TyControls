@@ -5977,7 +5977,12 @@ var
                   el.Style.DashOffsetLogical := look.StateOpt[sn].DashOffset;
             end;
             if optDash then
-              el.Style.DashLogical := TyDashPattern(dash, dashLogical, lw)
+            begin
+              el.Style.DashLogical := TyDashPattern(dash, dashLogical, lw);
+              { [R2-I5] a word, measured again against the width a frame
+                draws (an option-styled shape is strokeNoScale: w is lw) }
+              el.Style.DashWord := TyDashWord(dash);
+            end
             else if look.HasDash and (Length(look.Dash) > 0) then
             begin
               SetLength(el.Style.DashLogical, Length(look.Dash));
@@ -6286,6 +6291,8 @@ begin
                 dashLogical := p.StatePaint[s].DashLogical;
               end;
             el.Style.DashLogical := TyDashPattern(dash, dashLogical, c.Num[stkLineWidth]);
+            { [R2-I5] a word, measured again against the width a frame draws }
+            el.Style.DashWord := TyDashWord(dash);
             { [R2-I2] its phase: the normal one, a state's over it }
             if p.Paint.DashOffsetHas then el.Style.DashOffsetLogical := p.Paint.DashOffset;
             for s := Low(TTyStName) to High(TTyStName) do

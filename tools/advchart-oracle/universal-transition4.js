@@ -282,11 +282,25 @@ function itemPaths(el) {
   });
   return out;
 }
+// [R2-I5] a case that asks for the pens' dashes (c.dash): the lengths the
+// canvas brushes (normalizeLineDash against the width now) as JSON
+let DASH = false;
+// zrender canvas/dashStyle.ts normalizeLineDash, transcribed
+function normalizeLineDash(lineType, lineWidth) {
+  if (!lineType || lineType === 'solid' || !(lineWidth > 0)) return null;
+  lineWidth = lineWidth || 1;
+  return lineType === 'dashed' ? [4 * lineWidth, 2 * lineWidth]
+    : lineType === 'dotted' ? [lineWidth]
+    : typeof lineType === 'number' ? [lineType]
+    : Array.isArray(lineType) ? lineType : null;
+}
 function styleOf(el) {
   const s = el.style;
   const col = v => (v == null ? null : String(v));
-  return { fill: col(s.fill), stroke: col(s.stroke), lineWidth: s.lineWidth == null ? null : hex(s.lineWidth),
+  const o = { fill: col(s.fill), stroke: col(s.stroke), lineWidth: s.lineWidth == null ? null : hex(s.lineWidth),
     opacity: s.opacity == null ? null : hex(s.opacity) };
+  if (DASH) o.dash = JSON.stringify(normalizeLineDash(s.lineDash, s.lineWidth));
+  return o;
 }
 const SNAP_KEYS = ['x', 'y', 'scaleX', 'scaleY', 'rotation'];
 function snapOf(el) {
@@ -448,6 +462,7 @@ const T_GAP = 10000;
 function runCase(c) {
   NOW = T_BASE;
   rngState = SEED;
+  DASH = !!c.dash;
   const chart = newChart();
   try {
     const zr = chart.getZr();
@@ -609,6 +624,13 @@ function chartCases() {
   const tm = (pal, data) => ({ color: pal, series: [{ type: 'treemap', id: 'pk', animationDurationUpdate: 1000, roam: false,
     nodeClick: false, universalTransition: true, label: { show: false }, breadcrumb: { show: false }, data }] });
   const REV = PALETTE.slice().reverse();
+  // [R2-I5] the same bars with a wider dashed border: animateElementStyles
+  // tweens the width from the old style saved, the word stays a word and the
+  // canvas measures it against the width each frame draws
+  const DB = w => ({ itemStyle: { borderColor: '#000000', borderWidth: w, borderType: 'dashed' } });
+  add('bar-bar.dashtween', '[R2-I5] the same bar series with its dashed border widened from 1 to 6: one view keeps its '
+    + 'rects, each tweens its style from the old one saved (animateElementStyles) -- the dash, written as a word, follows '
+    + 'the width', [s(cart([barS(DB(1))])), s(cart([barS(DB(6))]))], { dash: true });
   add('sb-sb.recolor', 'the same sunburst with a new palette: one view keeps its pieces -- each fades its style from the '
     + 'old one saved (animateElementStyles)', [s(sb(PALETTE, small())), s(sb(REV, small()))]);
   add('sb-sb.data', 'the same sunburst with other data (c and c1 gone, d new): the kept pieces restyle, d enters',
@@ -792,6 +814,11 @@ function guards(charts) {
   must(byId('sb-sb.recolor').elements.some(e => e.item && Array.isArray(e.style.fill)), 'sb-sb.recolor: no style moves');
   none('sb-sb.recolor');
   none('tm-tm.data');
+  // [R2-I5] the dash written as a word follows the tweening width
+  must(byId('bar-bar.dashtween').elements.some(e => e.item && Array.isArray(e.style.dash)
+    && e.style.dash.some(d => d !== '[4,2]' && d !== '[24,12]') && e.style.dash.includes('[24,12]')),
+    'bar-bar.dashtween: the dash does not follow the width');
+  none('bar-bar.dashtween');
   must(byId('label.pie-bar').elements.some(e => e.text && new Set(e.text.x).size > 2), 'label.pie-bar: no text moves');
   must(morphs(byId('gal.map-bar')).length > 40, 'gal.map-bar: few morphs');
   must(morphs(byId('gal.bar-map')).length > 40, 'gal.bar-map: few morphs');
