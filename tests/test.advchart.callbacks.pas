@@ -51,7 +51,13 @@ type
     FNormText, FEmphText: string;
     { [R2-J3] the markers a tooltip formatter was handed, '|'-joined }
     FMarkers: string;
+    { [r2v] the colour a tooltip formatter was handed; the treePathInfo a
+      label formatter was handed, by dataIndex }
+    FTipColour: TTyChartColor;
+    FPaths: TStringList;
     function Tip(const AParams: TTyChartParams): string;
+    function TipColour(const AParams: TTyChartParams): string;
+    function PathOf(const AParams: TTyChartParams): string;
     function Size(const AParams: TTyChartCallbackParams): TJSONData;
     function Colour(const AParams: TTyChartCallbackParams): TJSONData;
     function Name(const AParams: TTyChartParams): string;
@@ -82,6 +88,10 @@ type
     procedure TestATooltipFormatterIsHandedItsMarker;
     procedure TestAFormattersMarkerIsADot;
     procedure TestARowAZoomBringsInIsAskedToo;
+    { [r2v] }
+    procedure TestATooltipColourIsTheColourCallbacks;
+    procedure TestAListNobodyHasIsTheHostsToAnswer;
+    procedure TestAHierarchyLabelsPathStartsAtTheSeriesName;
   end;
 
   { [R2-J3] the visual callbacks of every series, upstream's }
@@ -94,6 +104,7 @@ type
     function HRot(const AParams: TTyChartCallbackParams): TJSONData;
     function HOff(const AParams: TTyChartCallbackParams): TJSONData;
     function HCol(const AParams: TTyChartCallbackParams): TJSONData;
+    function HNone(const AParams: TTyChartCallbackParams): TJSONData;
     function ElementsOf(ASeries, ARaw: Integer): TTyIntegerArray;
     procedure CheckItem(AItem: TJSONObject);
     procedure RunIds(const AIds: array of string);
@@ -108,6 +119,10 @@ type
     procedure TestThePictorialBarIsUpstreams;
     procedure TestTheColourCallbacksAreUpstreams;
     procedure TestTheMarkPointSymbolsAreUpstreams;
+    { [r2v] }
+    procedure TestAColourCallbackGoesUnderAVisualMap;
+    procedure TestTheRootDoesNotReachAKeyThatIsACallback;
+    procedure TestAPictorialSymbolCallbackOfNoAnswerIsTheDefault;
   end;
 
   { [R2-J3] the arguments of every timing function call, upstream's }
@@ -154,6 +169,7 @@ begin
   FCtl.Mode := 'light';
   FCtl.ThemeName := 'default';
   FAsked := TStringList.Create;
+  FPaths := TStringList.Create;
   FCalls := 0;
   FChart := TCuProbe.Create(FForm);
   FChart.Parent := FForm;
@@ -177,6 +193,7 @@ begin
   TyChartUnregisterRenderItem('cbCell');
   FreeAndNil(FChart);
   FAsked.Free;
+  FPaths.Free;
   FCtl.Free;
   FForm.Free;
   inherited TearDown;
@@ -209,6 +226,21 @@ begin
   for i := 0 to High(AParams) do FMarkers := FMarkers + '|' + AParams[i].Marker;
   Result := '';
   if Length(AParams) > 0 then Result := AParams[0].Marker + ' ' + AParams[0].SeriesName;
+end;
+
+{ [r2v] params.color of the first params }
+function TAdvChartCallbacksTest.TipColour(const AParams: TTyChartParams): string;
+begin
+  if Length(AParams) > 0 then FTipColour := AParams[0].Color;
+  Result := 'x';
+end;
+
+{ [r2v] params.treePathInfo by dataIndex }
+function TAdvChartCallbacksTest.PathOf(const AParams: TTyChartParams): string;
+begin
+  if Length(AParams) > 0 then
+    FPaths.Values[IntToStr(AParams[0].DataIndex)] := AParams[0].TreePathInfo;
+  Result := 'x';
 end;
 
 function TAdvChartCallbacksTest.Name(const AParams: TTyChartParams): string;
@@ -262,7 +294,7 @@ procedure TAdvChartCallbacksTest.Resolve(Sender: TObject; const AUrl: string;
   var AImage: TBGRABitmap);
 begin
   FAsked.Add(AUrl);
-  if AUrl = 'http://example.invalid/red.png' then
+  if (AUrl = 'http://example.invalid/red.png') or (AUrl = 'nolist/0') then
     AImage := TBGRABitmap.Create(10, 10, BGRA(255, 0, 0, 255));
 end;
 
@@ -482,6 +514,7 @@ begin
   TyChartRegisterVisualHandler('vrot', @HRot);
   TyChartRegisterVisualHandler('voff', @HOff);
   TyChartRegisterVisualHandler('vcol', @HCol);
+  TyChartRegisterVisualHandler('vnone', @HNone);
 end;
 
 procedure TAdvChartVisualCallbacksOracleTest.TearDown;
@@ -491,6 +524,7 @@ begin
   TyChartUnregisterVisualHandler('vrot');
   TyChartUnregisterVisualHandler('voff');
   TyChartUnregisterVisualHandler('vcol');
+  TyChartUnregisterVisualHandler('vnone');
   FreeAndNil(FLog);
   inherited TearDown;
 end;
@@ -538,6 +572,13 @@ function TAdvChartVisualCallbacksOracleTest.HCol(const AParams: TTyChartCallback
 begin
   Note('vcol', AParams);
   Result := TJSONString.Create(cVcCols[AParams.DataIndex mod 4]);
+end;
+
+{ [r2v] a callback that answers undefined }
+function TAdvChartVisualCallbacksOracleTest.HNone(const AParams: TTyChartCallbackParams): TJSONData;
+begin
+  Note('vnone', AParams);
+  Result := nil;
 end;
 
 { the elements of a series' item, a markPoint's when ASeries < 0 (its host
@@ -837,6 +878,31 @@ procedure TAdvChartVisualCallbacksOracleTest.TestTheMarkPointSymbolsAreUpstreams
 begin
   RunIds(['markpoint']);
   Finish('markPoint', 5);
+end;
+
+{ [r2v] seriesStyleTask's colour callback (stage 2000) under a visualMap
+  (4000): still called, the items drawn in the visualMap's colours }
+procedure TAdvChartVisualCallbacksOracleTest.TestAColourCallbackGoesUnderAVisualMap;
+begin
+  RunIds(['colour-under-visualmap']);
+  Finish('colour under a visualMap', 12);
+end;
+
+{ [r2v] a series key that is a callback is the series' own value: the
+  root's symbol, symbolOffset and symbolRotate do not reach an item it
+  answers nothing for }
+procedure TAdvChartVisualCallbacksOracleTest.TestTheRootDoesNotReachAKeyThatIsACallback;
+begin
+  RunIds(['root-under-callback']);
+  Finish('the root under a callback', 6);
+end;
+
+{ [r2v] a pictorial bar's symbol callback that answers undefined: the
+  series' own value is the function, no symbol name -- the default glyph }
+procedure TAdvChartVisualCallbacksOracleTest.TestAPictorialSymbolCallbackOfNoAnswerIsTheDefault;
+begin
+  RunIds(['pictorial-none']);
+  Finish('a pictorial symbol of no answer', 6);
 end;
 
 { ==================== [R2-J3] timing arguments ==================== }
@@ -1147,6 +1213,73 @@ begin
   end;
   AssertEquals('the row brought in: 12 * 2', 24, SymbolWidth(0), 1e-9);
   AssertEquals('and the next: 3 * 2', 6, SymbolWidth(1), 1e-9);
+end;
+
+{ [r2v] params.color of an item tooltip is the item's colour
+  (getDataParams: data.getItemVisual(idx, 'style')[drawType]) -- the
+  series' colour callback's answer for it, not the series' palette colour }
+procedure TAdvChartCallbacksTest.TestATooltipColourIsTheColourCallbacks;
+var bmp: TBGRABitmap;
+begin
+  TyChartRegisterFormatter('cbTipC', @TipColour);
+  try
+    Show('{"animation":false,"tooltip":{"formatter":"@cbTipC","renderMode":"richText"},'
+      + '"xAxis":{"type":"value"},"yAxis":{"type":"value"},'
+      + '"series":[{"type":"scatter","itemStyle":{"color":"@cbColour"},"data":[[1,2],[3,4]]}]}');
+    FTipColour := 0;
+    FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":1}');
+    bmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    finally
+      bmp.Free;
+    end;
+    AssertEquals('row 1: the callback''s blue', TTyChartColor($FF0000FF), FTipColour);
+  finally
+    TyChartUnregisterFormatter('cbTipC');
+  end;
+end;
+
+{ [r2v] 'name/index' of an image list nobody registered is the host's to
+  answer, as a URL is }
+procedure TAdvChartCallbacksTest.TestAListNobodyHasIsTheHostsToAnswer;
+var px: TBGRAPixel;
+begin
+  FChart.OnResolveImage := @Resolve;
+  Show(Format(cImage, ['image://nolist/0']));
+  px := PixelAt(40, 40);
+  AssertEquals('asked by the reference', 'nolist/0', FAsked[0]);
+  AssertEquals('drawn red', 255, Integer(px.red));
+  AssertEquals('drawn red, not green', 0, Integer(px.green));
+end;
+
+{ [r2v] a sunburst's and a treemap's label formatter: treePathInfo from the
+  virtual root, which bears the series' name -- upstream's
+  JSON.stringify(params.treePathInfo), from wrapTreePathInfo (node,
+  ECharts 6.1) }
+procedure TAdvChartCallbacksTest.TestAHierarchyLabelsPathStartsAtTheSeriesName;
+const
+  cData = '"data":[{"name":"a","value":4,"children":[{"name":"a1","value":3}]},{"name":"b","value":2}]';
+  cA1 = '[{"name":"S","dataIndex":0,"value":6},{"name":"a","dataIndex":1,"value":4},'
+    + '{"name":"a1","dataIndex":2,"value":3}]';
+  cB = '[{"name":"S","dataIndex":0,"value":6},{"name":"b","dataIndex":3,"value":2}]';
+begin
+  TyChartRegisterFormatter('cbPath', @PathOf);
+  try
+    Show('{"animation":false,"series":[{"type":"sunburst","name":"S",'
+      + '"label":{"show":true,"formatter":"@cbPath"},' + cData + '}]}');
+    AssertEquals('sunburst a', '[{"name":"S","dataIndex":0,"value":6},'
+      + '{"name":"a","dataIndex":1,"value":4}]', FPaths.Values['1']);
+    AssertEquals('sunburst a1', cA1, FPaths.Values['2']);
+    AssertEquals('sunburst b', cB, FPaths.Values['3']);
+    FPaths.Clear;
+    Show('{"animation":false,"series":[{"type":"treemap","name":"S",'
+      + '"label":{"show":true,"formatter":"@cbPath"},' + cData + '}]}');
+    AssertEquals('treemap a1', cA1, FPaths.Values['2']);
+    AssertEquals('treemap b', cB, FPaths.Values['3']);
+  finally
+    TyChartUnregisterFormatter('cbPath');
+  end;
 end;
 
 initialization

@@ -247,8 +247,11 @@ begin
   node := TJSONObject(d);
 
   Result.SymbolName := StrIn(node, 'symbol', '');
-  { [R2-J3] a callback is no series value: the item's answer is the visual }
-  if TyChartIsHandlerRef(Result.SymbolName) then Result.SymbolName := '';
+  { [R2-J3] a callback is no series value: the item's answer is the visual;
+    [r2v] where it answers nothing, the series visual -- seriesSymbolTask's
+    `symbol || seriesModel.defaultSymbol`, a pictorial bar's 'roundRect'
+    (not the defaultOption's circle, which the function replaced) }
+  if TyChartIsHandlerRef(Result.SymbolName) then Result.SymbolName := 'roundRect';
 
   d := node.Find('symbolSize');
   if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then

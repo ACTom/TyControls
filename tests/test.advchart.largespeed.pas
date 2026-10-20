@@ -71,6 +71,10 @@ type
     procedure TestAColourParseIsKept;
     procedure TestAKeptPenIsThePen;
     procedure TestAPenThatInksNothingDrawsNothing;
+    { [r2v] }
+    procedure TestARowsGradientBorderLeavesItsFill;
+    procedure TestAProgressBandIsTheFullPaint;
+    procedure TestTheTailRedrawsALayerOutOfOrder;
   end;
 
 implementation
@@ -520,6 +524,93 @@ begin
   end;
 end;
 
+{ [r2v] a run whose chunks land in bands, one under the other (the
+  symbols' y grows with their index), under a sawtooth line drawn after
+  the layer: the line meets every band and runs on above and below it --
+  drawn whole, what it puts outside the band must be the last paint's }
+function ProgressBandOption: string;
+var
+  sb: TStringBuilder;
+  i: Integer;
+begin
+  GLcg := 31;
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {"type": "value", "min": 0, "max": 300},');
+    sb.Append(' "yAxis": {"type": "value", "min": 0, "max": 100},');
+    sb.Append(' "series": [{"type": "scatter", "large": true, "largeThreshold": 20,');
+    sb.Append(' "progressive": 30, "progressiveThreshold": 50, "symbolSize": 6,');
+    sb.Append(' "itemStyle": {"opacity": 0.6}, "data": [');
+    for i := 0 to 239 do
+    begin
+      if i > 0 then sb.Append(',');
+      sb.Append('[').Append(IntToStr(Lcg(300))).Append(',').Append(IntToStr(5 + i * 90 div 240)).Append(']');
+    end;
+    sb.Append(']}, {"type": "line", "showSymbol": false, "lineStyle": {"width": 3, "opacity": 0.5}, "data": [');
+    for i := 0 to 30 do
+    begin
+      if i > 0 then sb.Append(',');
+      if i mod 2 = 0 then sb.Append(Format('[%d,2]', [i * 10]))
+      else sb.Append(Format('[%d,98]', [i * 10]));
+    end;
+    sb.Append(']}]}');
+    Result := sb.ToString;
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TAdvChartLargeSpeedTest.TestAProgressBandIsTheFullPaint;
+var
+  frames: array[Boolean] of TStringList;
+  fast: Boolean;
+  chart: TLsChart;
+  bmp: TBitmap;
+  n, k, f0, used: Integer;
+begin
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(520, 360);
+    used := 0;
+    for fast := False to True do
+    begin
+      TyAdvChartProgFastForTest(fast);
+      f0 := TyAdvChartProgFastFramesForTest;
+      chart := NewChart(520, 360, ProgressBandOption);
+      try
+        chart.Cached(bmp.Canvas, Rect(0, 0, 520, 360));
+        frames[fast].Add(Frame(bmp));
+        n := 0;
+        while chart.ProgressiveUnfinished and (n < 60) do
+        begin
+          chart.ProgressTick;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 520, 360));
+          frames[fast].Add(Frame(bmp));
+          Inc(n);
+        end;
+        AssertFalse('drawn to the end', chart.ProgressiveUnfinished);
+        if fast then used := TyAdvChartProgFastFramesForTest - f0;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertTrue('several chunks', frames[False].Count > 6);
+    AssertEquals('as many frames', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('frame %d the same pixels%s', [k, FrameDiff(frames[False][k], frames[True][k], 520)]),
+        frames[False][k] = frames[True][k]);
+    AssertTrue('the progress frames kept the static layer', used >= frames[False].Count - 3);
+  finally
+    bmp.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyAdvChartProgFastForTest(True);
+  end;
+end;
+
 { ------------------------------------------------- the indicator's tail }
 
 procedure TAdvChartLargeSpeedTest.TestTheIndicatorRebuildsTheTail;
@@ -590,6 +681,86 @@ begin
     for k := 0 to frames[False].Count - 1 do
       AssertTrue(Format('hover frame %d the same pixels', [k]), frames[False][k] = frames[True][k]);
     AssertTrue('the indicator moved by its tail', used >= 10);
+  finally
+    bmp.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyAdvChartListTailForTest(True);
+  end;
+end;
+
+{ [r2v] two progressive runs of symbols over each other (their chunks come
+  in turn: the drained layer is not a drawing in paint order) under a
+  continuous visual map: the indicator's tail rebuild right after the run
+  must draw the layer again, as the whole rebuild does }
+procedure TAdvChartLargeSpeedTest.TestTheTailRedrawsALayerOutOfOrder;
+var
+  frames: array[Boolean] of TStringList;
+  tail: Boolean;
+  chart: TLsChart;
+  bmp: TBitmap;
+  sb: TStringBuilder;
+  i, j, k, t0, used: Integer;
+  opt: string;
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {}, "yAxis": {},');
+    sb.Append(' "visualMap": {"min": 0, "max": 40, "dimension": 1, "calculable": true, "orient": "horizontal", "left": "center", "top": 0},');
+    sb.Append(' "series": [');
+    GLcg := 55;
+    for j := 0 to 1 do
+    begin
+      if j > 0 then sb.Append(',');
+      sb.Append('{"type": "scatter", "progressive": 25, "progressiveThreshold": 40, "symbolSize": 16,');
+      sb.Append(' "itemStyle": {"opacity": 0.7}, "data": [');
+      for i := 0 to 99 do
+      begin
+        if i > 0 then sb.Append(',');
+        sb.Append(Format('[%d,%d]', [Lcg(60), Lcg(40)]));
+      end;
+      sb.Append(']}');
+    end;
+    sb.Append(']}');
+    opt := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(480, 400);
+    used := 0;
+    for tail := False to True do
+    begin
+      TyAdvChartListTailForTest(tail);
+      chart := NewChart(480, 400, opt);
+      try
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        while chart.ProgressiveUnfinished do
+        begin
+          chart.ProgressTick;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        end;
+        t0 := TyAdvChartListTailsForTest;
+        for k := 0 to 13 do
+        begin
+          chart.Move(90 + k * 23, 120 + (k mod 4) * 41);
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[tail].Add(Frame(bmp));
+        end;
+        if tail then used := TyAdvChartListTailsForTest - t0;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertEquals('as many frames', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('hover frame %d the same pixels%s', [k, FrameDiff(frames[False][k], frames[True][k], 480)]),
+        frames[False][k] = frames[True][k]);
+    AssertTrue('the indicator moved by its tail', used >= 1);
   finally
     bmp.Free;
     frames[False].Free;
@@ -1197,6 +1368,36 @@ begin
   finally
     ref.Free;
     got.Free;
+  end;
+end;
+
+{ [r2v] a row whose only object colour is its border's gradient keeps the
+  series' fill: the row fills carry an object fill only for a row that has
+  one }
+procedure TAdvChartLargeSpeedTest.TestARowsGradientBorderLeavesItsFill;
+var
+  chart: TLsChart;
+  bmp: TBitmap;
+  i0, i1: Integer;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(400, 300);
+    chart := NewChart(400, 300, '{"animation": false, "xAxis": {"type": "category"}, "yAxis": {},'
+      + ' "series": [{"type": "bar", "data": [3, {"value": 5, "itemStyle": {"borderWidth": 2,'
+      + ' "borderColor": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1, "colorStops":'
+      + ' [{"offset": 0, "color": "#ff0000"}, {"offset": 1, "color": "#0000ff"}]}}}, 2]}]}');
+    chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+    i0 := chart.List.IndexOfDatumInk(0, 0);
+    i1 := chart.List.IndexOfDatumInk(0, 1);
+    AssertTrue('both drawn', (i0 >= 0) and (i1 >= 0));
+    AssertTrue('a fill', chart.List.Element(i1).Style.HasFill);
+    AssertEquals('the series'' fill, as the plain row''s', chart.List.Element(i0).Style.FillColor,
+      chart.List.Element(i1).Style.FillColor);
+    AssertTrue('no fill gradient', chart.List.Element(i1).Style.FillGradient.Kind = cgkNone);
+  finally
+    bmp.Free;
   end;
 end;
 

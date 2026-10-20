@@ -964,10 +964,21 @@ const
   cRootKeys: array[0..3] of string = ('symbol', 'symbolRotate', 'symbolKeepAspect',
     'symbolOffset');
 var
-  d: TJSONData;
+  d, own: TJSONData;
   node, under: TJSONObject;
   k: Integer;
   t: string;
+  empty: Boolean;
+  path: string;
+
+  { a series key written as a callback ('@Name'): the series' own value is
+    the function }
+  function IsCb(const AKey: string): Boolean;
+  begin
+    own := node.Find(AKey);
+    Result := (own <> nil) and (own.JSONType = jtString) and TyChartIsHandlerRef(own.AsString);
+  end;
+
 begin
   Result := TySymbolDefault('');
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
@@ -989,6 +1000,11 @@ begin
       for k := 0 to High(cRootKeys) do
       begin
         if (k = 0) and (t <> 'scatter') and (t <> 'effectScatter') then Continue;
+        { [r2v] NOT UNDER A CALLBACK: seriesModel.get(key) answers the
+          series' function, never the root's -- an item the callback leaves
+          undefined has no value of the key (symbol.ts' seriesSymbolTask
+          sets no series visual for it) }
+        if IsCb(cRootKeys[k]) then Continue;
         d := TJSONObject(FOption.Root).Find(cRootKeys[k]);
         if (d <> nil) and (d.JSONType <> jtNull) then under.Add(cRootKeys[k], d.Clone);
       end;
@@ -998,6 +1014,16 @@ begin
     end;
   end;
   Result := TySymbolSpecOf(node, Result);
+  { [r2v] a symbol callback: the series visual is seriesModel.defaultSymbol
+    ('circle' for every series that reads it here), not the type's own
+    default -- a line's emptyCircle is its defaultOption, which the
+    function replaced }
+  if IsCb('symbol') then
+  begin
+    Result.Kind := TySymbolKindOf('circle', empty, path);
+    Result.Empty := empty;
+    Result.PathData := path;
+  end;
 end;
 
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
