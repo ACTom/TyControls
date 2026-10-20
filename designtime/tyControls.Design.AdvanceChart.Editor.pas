@@ -1,4 +1,4 @@
-unit tyControls.Design.AdvChart.Editor;
+unit tyControls.Design.AdvanceChart.Editor;
 {$mode objfpc}{$H+}
 
 { Design-time editor for TTyAdvanceChart.Option: a SynEdit dialog with
@@ -110,8 +110,8 @@ uses
   SynEditTypes, SynHighlighterJScript,
   tyControls.AdvanceChart,
   tyControls.AdvanceChart.Catalog,
-  tyControls.Design.AdvChart.Descs,
-  tyControls.Design.AdvChart.SeriesDialog,
+  tyControls.Design.AdvanceChart.Descs,
+  tyControls.Design.AdvanceChart.SeriesDialog,
   tyControls.Dialogs;
 
 resourcestring

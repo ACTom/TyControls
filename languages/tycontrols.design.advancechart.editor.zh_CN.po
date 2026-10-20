@@ -9,34 +9,34 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: tycontrols.design.advchart.editor.rsoptedfilter
+#: tycontrols.design.advancechart.editor.rsoptedfilter
 msgid "Filter the reference"
 msgstr "过滤参考树"
 
-#: tycontrols.design.advchart.editor.rsoptedformat
+#: tycontrols.design.advancechart.editor.rsoptedformat
 msgid "Format"
 msgstr "格式化"
 
-#: tycontrols.design.advchart.editor.rsoptedformatdropscomments
+#: tycontrols.design.advancechart.editor.rsoptedformatdropscomments
 msgid "Formatting re-writes the option from its parsed form, which drops the comments and the original quoting. Continue?"
 msgstr "格式化会从解析后的结构重新生成 option，注释和原有的引号写法都会丢失。继续？"
 
-#: tycontrols.design.advchart.editor.rsoptednoissues
+#: tycontrols.design.advancechart.editor.rsoptednoissues
 msgid "Nothing to report."
 msgstr "没有发现问题。"
 
-#: tycontrols.design.advchart.editor.rsoptedseries
+#: tycontrols.design.advancechart.editor.rsoptedseries
 msgid "Series && data..."
 msgstr "系列与数据..."
 
-#: tycontrols.design.advchart.editor.rsoptedtitle
+#: tycontrols.design.advancechart.editor.rsoptedtitle
 msgid "Chart option (ECharts)"
 msgstr "图表 option（ECharts）"
 
-#: tycontrols.design.advchart.editor.rsoptedvalidate
+#: tycontrols.design.advancechart.editor.rsoptedvalidate
 msgid "Validate"
 msgstr "验证"
 
-#: tycontrols.design.advchart.editor.rsoptedcataloglang
+#: tycontrols.design.advancechart.editor.rsoptedcataloglang
 msgid "__locale__"
 msgstr "zh_CN"

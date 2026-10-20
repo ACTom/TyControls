@@ -17,6 +17,7 @@ type
     procedure TestTheExampleCataloguesCarryTheLoadSentinel;
     procedure TestEveryPotHasAChineseCatalogue;
     procedure TestEveryCatalogueBelongsToAUnitThatStillTranslates;
+    procedure TestTheChartEditorCataloguesBindToTheirUnits;
     procedure TestNoUnitHoldsChineseTextInAStringLiteral;
   end;
 
@@ -144,7 +145,9 @@ end;
   Failing entries are reported by name so the fix is either "add it to the .pot" or "give it
   a non-empty English baseline", decided per string.
 
-  Both packages' string units: tycontrols' StrConsts and tycontrols_db's DB.StrConsts. }
+  Both packages' string units: tycontrols' StrConsts and tycontrols_db's DB.StrConsts; and
+  the chart's two design-time units, whose catalogues are keyed on the unit's name (a
+  rename of the unit that leaves the .pot ids behind is caught here). }
 procedure TI18NTest.TestEveryStrConstsResourcestringIsInThePot;
 var
   root: string;
@@ -234,6 +237,10 @@ begin
   CheckUnit('source' + PathDelim + 'tyControls.StrConsts.pas', 'tyControls.StrConsts');
   CheckUnit('source' + PathDelim + 'db' + PathDelim + 'tyControls.DB.StrConsts.pas',
     'tyControls.DB.StrConsts');
+  CheckUnit('designtime' + PathDelim + 'tyControls.Design.AdvanceChart.Editor.pas',
+    'tyControls.Design.AdvanceChart.Editor');
+  CheckUnit('designtime' + PathDelim + 'tyControls.Design.AdvanceChart.SeriesDialog.pas',
+    'tyControls.Design.AdvanceChart.SeriesDialog');
 end;
 
 { End to end, against the catalogue that actually ships.
@@ -483,6 +490,53 @@ begin
     units.Free;
   end;
   AssertEquals('catalogues no unit translates any more:', '', stray);
+end;
+
+{ The IDE translates a design-time unit with languages/<unit>.<lang>.po, matching each entry
+  by `<unit>.<identifier>`, lowercase. An entry under any other prefix -- the unit's name
+  before a rename -- loads and is never used: the editor comes up in English. So every
+  entry of the two chart catalogues carries its unit's name and translates by that
+  identifier alone (the sentinel original keeps TPOFile's fallback by English text from
+  answering instead). }
+procedure TI18NTest.TestTheChartEditorCataloguesBindToTheirUnits;
+const
+  UNITS: array[0..1] of string = ('tyControls.Design.AdvanceChart.Editor',
+    'tyControls.Design.AdvanceChart.SeriesDialog');
+  NONE = '#untranslated#';
+var
+  root, f, id, bad: string;
+  lines: TStringList;
+  po: TPOFile;
+  u, i, n: Integer;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'languages' + PathDelim;
+  bad := '';
+  for u := 0 to High(UNITS) do
+  begin
+    f := root + LowerCase(UNITS[u]) + '.zh_CN.po';
+    AssertTrue('catalogue exists: ' + f, FileExists(f));
+    lines := TStringList.Create;
+    po := TPOFile.Create(f);
+    try
+      lines.LoadFromFile(f);
+      n := 0;
+      for i := 0 to lines.Count - 1 do
+        if Copy(lines[i], 1, 3) = '#: ' then
+        begin
+          Inc(n);
+          id := Trim(Copy(lines[i], 4, MaxInt));
+          if Pos(LowerCase(UNITS[u]) + '.', id) <> 1 then
+            bad := bad + LineEnding + '  ' + ExtractFileName(f) + ': ' + id + ' (other unit)'
+          else if po.Translate(id, NONE) = NONE then
+            bad := bad + LineEnding + '  ' + ExtractFileName(f) + ': ' + id + ' (no translation)';
+        end;
+      AssertTrue(ExtractFileName(f) + ' has entries', n > 0);
+    finally
+      po.Free;
+      lines.Free;
+    end;
+  end;
+  AssertEquals('chart editor catalogue entries that do not bind:', '', bad);
 end;
 
 { True when the UTF-8 bytes of S hold a CJK character: U+3000..U+9FFF (lead bytes E3..E9) or

@@ -1,0 +1,35 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.advancechart.editor.rsoptedcataloglang
+msgid "__locale__"
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptedfilter
+msgid "Filter the reference"
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptedformat
+msgid "Format"
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptedformatdropscomments
+msgid "Formatting re-writes the option from its parsed form, which drops the comments and the original quoting. Continue?"
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptednoissues
+msgid "Nothing to report."
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptedseries
+msgid "Series && data..."
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptedtitle
+msgid "Chart option (ECharts)"
+msgstr ""
+
+#: tycontrols.design.advancechart.editor.rsoptedvalidate
+msgid "Validate"
+msgstr ""
+

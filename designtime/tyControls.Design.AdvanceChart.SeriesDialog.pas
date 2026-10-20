@@ -1,4 +1,4 @@
-unit tyControls.Design.AdvChart.SeriesDialog;
+unit tyControls.Design.AdvanceChart.SeriesDialog;
 {$mode objfpc}{$H+}
 
 { Design-time structured editor for TTyAdvanceChart.Option: the series as a

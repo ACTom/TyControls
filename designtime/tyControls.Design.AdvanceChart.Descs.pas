@@ -1,4 +1,4 @@
-unit tyControls.Design.AdvChart.Descs;
+unit tyControls.Design.AdvanceChart.Descs;
 {$mode objfpc}{$H+}
 { The option catalog's EN and ZH descriptions, for the design-time editor.
 

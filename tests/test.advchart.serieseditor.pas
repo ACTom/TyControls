@@ -1229,13 +1229,13 @@ begin
   d := ExtractFilePath(ParamStr(0));
   for i := 0 to 5 do
   begin
-    if FileExists(d + 'designtime' + PathDelim + 'tyControls.Design.AdvChart.SeriesDialog.pas') then
+    if FileExists(d + 'designtime' + PathDelim + 'tyControls.Design.AdvanceChart.SeriesDialog.pas') then
       Break;
     d := d + '..' + PathDelim;
   end;
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(d + 'designtime' + PathDelim + 'tyControls.Design.AdvChart.SeriesDialog.pas');
+    sl.LoadFromFile(d + 'designtime' + PathDelim + 'tyControls.Design.AdvanceChart.SeriesDialog.pas');
     AssertTrue('read the dialog', sl.Count > 100);
     bad := '';
     depth := 0;

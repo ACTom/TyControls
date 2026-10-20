@@ -30,7 +30,7 @@ uses
   Graphics, SynEdit, SynEditTypes,
   tyControls.AdvanceChart.Complete,
   tyControls.AdvanceChart.Diagnose,
-  tyControls.Design.AdvChart.Editor;
+  tyControls.Design.AdvanceChart.Editor;
 
 var
   GFails: Integer = 0;

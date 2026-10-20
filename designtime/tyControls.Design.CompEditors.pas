@@ -10,7 +10,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, ClipBrd,
   PropEdits, PropEditUtils, ComponentEditors,
-  tyControls.AdvanceChart, tyControls.Design.AdvChart.Editor,
+  tyControls.AdvanceChart, tyControls.Design.AdvanceChart.Editor,
   tyControls.IconFont, tyControls.Icons.Lucide, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
