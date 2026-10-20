@@ -1058,13 +1058,14 @@ end;
 
 { [R2-J3] params.marker: the richText dot a tooltip formatter is handed,
   the empty rich token of style __EC_aUTo_<n> and two spaces, one per
-  series' params in order (an item tooltip's one, an axis tooltip's each) }
+  series' params in order (an item tooltip's one, an axis tooltip's each)
+  [R2-I8: in richText mode -- written here; html mode's is the span] }
 procedure TAdvChartCallbacksTest.TestATooltipFormatterIsHandedItsMarker;
 const
-  cItem = '{"animation":false,"tooltip":{"formatter":"@cbTip"},'
+  cItem = '{"animation":false,"tooltip":{"formatter":"@cbTip","renderMode":"richText"},'
     + '"xAxis":{"type":"category","data":["a","b","c"]},"yAxis":{},'
     + '"series":[{"type":"bar","name":"s","data":[3,5,2]}]}';
-  cAxis = '{"animation":false,"tooltip":{"trigger":"axis","formatter":"@cbTip"},'
+  cAxis = '{"animation":false,"tooltip":{"trigger":"axis","formatter":"@cbTip","renderMode":"richText"},'
     + '"xAxis":{"type":"category","data":["a","b","c"]},"yAxis":{},'
     + '"series":[{"type":"bar","name":"s","data":[3,5,2]},'
     + '{"type":"line","name":"t","data":[1,4,6]}]}';

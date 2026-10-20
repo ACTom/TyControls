@@ -968,6 +968,9 @@ var
   what, got, exp, s: string;
 begin
   LoadCase(ACase, False);
+  { [R2-I8] THE ORACLE RUNS IN NODE, where renderMode 'auto' is richText:
+    params.marker is richText's token there, html's span in a browser }
+  FChart.TooltipAutoRichText := True;
   FChart.TooltipNow := 0;
   steps := ACase.Arrays['hover'];
   drawn := ACase.Objects['calls'];

@@ -1094,6 +1094,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Tooltip"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.TipHtml.pas"/>
+        <UnitName Value="tyControls.AdvChart.TipHtml"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.AxisPointer.pas"/>
         <UnitName Value="tyControls.AdvChart.AxisPointer"/>
       </Item>

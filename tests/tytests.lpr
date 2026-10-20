@@ -168,6 +168,7 @@ uses
   test.advchart.p2perf,
   test.advchart.tooltipkeep,
   test.advchart.axisownpointer,
+  test.advchart.tiphtml,
   test.advchart.tooltipparams,
   test.advchart.actionsbatch,
   test.advchart.rootinherit,
