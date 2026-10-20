@@ -14,16 +14,25 @@ unit test.bgrarandompin;
   Each test paints under eight global seeds and wants the same pixels: the
   wrappers on a bare bitmap, and a line chart of 300 points (its data the one
   of six streams tried that differed most unpinned: 3019 pixels over the seven
-  repaints). }
+  repaints).
+
+  [r2v] The bare paint's own fill and clip are a closed zigzag and two
+  loops: shapes whose edges never tie on a row, so a fill or a clip left
+  unpinned painted the same under every seed. A stroke's outline is where the
+  ties are (its joins overlap): the fill and the clip of the bare paint's two
+  stroke outlines are tested on their own, each with a control that the same
+  paint unpinned does differ. }
 interface
 uses Classes, SysUtils, Graphics, fpcunit, testregistry,
-     BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
+     BGRABitmap, BGRABitmapTypes, BGRACanvas2D, BGRAPen,
      tyControls.Painter, tyControls.Chart;
 type
   TBgraRandomPinTest = class(TTestCase)
   published
     procedure TestTheCanvas2DWrappersPaintTheSameWhateverTheGlobalRandomHolds;
     procedure TestALongChartLinePaintsTheSameWhateverTheGlobalRandomHolds;
+    procedure TestAFillOfAStrokesOutlinePaintsTheSameWhateverTheGlobalRandomHolds;
+    procedure TestAClipToAStrokesOutlinePaintsTheSameWhateverTheGlobalRandomHolds;
   end;
 
 implementation
@@ -106,6 +115,113 @@ begin
   ctx.fillStyle(BGRA(20, 160, 60, 90));
   ctx.fillRect(0, 0, 800, 500);
   ctx.restore;
+end;
+
+{ the outline a canvas' stroke fills for the bare paint's zigzag (width 2,
+  bevelled, butt): one polygon whose edges overlap at every join }
+procedure StrokeOutline(ACtx: TBGRACanvas2D; ASeed: LongWord);
+var
+  s: LongWord;
+  i: Integer;
+  line, wide: ArrayOfTPointF;
+  fresh: Boolean;
+  stroker: TBGRAPenStroker;
+begin
+  s := ASeed;
+  SetLength(line, 300);
+  for i := 0 to 299 do
+    line[i] := PointF(10 + i * 780 / 299, 40 + Lcg(s) * 420);
+  stroker := TBGRAPenStroker.Create;
+  try
+    stroker.JoinStyle := pjsBevel;
+    stroker.LineCap := pecFlat;
+    wide := stroker.ComputePolylineAutocycle(line, 2);
+  finally
+    stroker.Free;
+  end;
+  ACtx.beginPath;
+  fresh := True;
+  for i := 0 to High(wide) do
+    if isEmptyPointF(wide[i]) then fresh := True
+    else if fresh then
+    begin
+      ACtx.moveTo(wide[i]);
+      fresh := False;
+    end
+    else ACtx.lineTo(wide[i]);
+  ACtx.closePath;
+end;
+
+{ AClip: the outline clips a translucent fill of the whole bitmap, else it
+  is filled translucent itself; APinned: through the wrapper, else straight }
+function PaintOutline(ASeed: LongWord; AClip, APinned: Boolean): TBGRABitmap;
+var
+  ctx: TBGRACanvas2D;
+  k: Integer;
+begin
+  Result := TBGRABitmap.Create(800, 500, BGRA(255, 255, 255, 255));
+  ctx := Result.Canvas2D;
+  RandSeed := ASeed;
+  if AClip then
+  begin
+    for k := 0 to 1 do
+    begin
+      ctx.save;
+      StrokeOutline(ctx, 1 + 2 * k);
+      if APinned then TyCtxClip(ctx) else ctx.clip;
+      ctx.fillStyle(BGRA(20, 160, 60, 140));
+      ctx.fillRect(0, 0, 800, 500);
+      ctx.restore;
+    end;
+  end
+  else
+  begin
+    ctx.fillStyle(BGRA(40, 40, 160, 140));
+    for k := 0 to 1 do
+    begin
+      StrokeOutline(ctx, 1 + 2 * k);
+      if APinned then TyCtxFill(ctx) else ctx.fill;
+    end;
+  end;
+end;
+
+{ every seed's paint against the first: the pixels that differ, summed }
+function OutlineSeedsDiffer(AClip, APinned: Boolean): Integer;
+var
+  ref, b: TBGRABitmap;
+  k: Integer;
+begin
+  Result := 0;
+  ref := PaintOutline(cSeeds[0], AClip, APinned);
+  try
+    for k := 1 to High(cSeeds) do
+    begin
+      b := PaintOutline(cSeeds[k], AClip, APinned);
+      try
+        Inc(Result, PixelsDiffer(ref, b));
+      finally
+        b.Free;
+      end;
+    end;
+  finally
+    ref.Free;
+  end;
+end;
+
+procedure TBgraRandomPinTest.TestAFillOfAStrokesOutlinePaintsTheSameWhateverTheGlobalRandomHolds;
+begin
+  AssertTrue('the control: unpinned, the fill differs under some seed',
+    OutlineSeedsDiffer(False, False) > 0);
+  AssertEquals('pinned: pixels that differ from the first seed''s', 0,
+    OutlineSeedsDiffer(False, True));
+end;
+
+procedure TBgraRandomPinTest.TestAClipToAStrokesOutlinePaintsTheSameWhateverTheGlobalRandomHolds;
+begin
+  AssertTrue('the control: unpinned, the clip differs under some seed',
+    OutlineSeedsDiffer(True, False) > 0);
+  AssertEquals('pinned: pixels that differ from the first seed''s', 0,
+    OutlineSeedsDiffer(True, True));
 end;
 
 procedure TBgraRandomPinTest.TestTheCanvas2DWrappersPaintTheSameWhateverTheGlobalRandomHolds;
