@@ -3439,6 +3439,21 @@ var
   rect2: TTyXYWH;
   penMoves: Boolean;
 
+  { [R2-I6] Path.getBoundingRect's stroke allowance in the port's device
+    units, as R2-I4's markLine Grown: the LOGICAL width -- max(width, 5)
+    where the polygon has no fill -- then the scale the path is drawn at
+    (the polygon has no strokeNoScale). [Was: the logical width taken as
+    device px, the floor too -- half a width short at 192 PPI; the
+    gradient's box floored after the scale.] }
+  function AreaRect(AHasStroke, AHasFill: Boolean; AWidth: Double): TTyXYWH;
+  var g: Double;
+  begin
+    if not (AHasStroke and (AWidth > 0) and (Length(P.Path) > 0)) then Exit(P.BBox);
+    g := AWidth;
+    if (not AHasFill) and (g < 5) then g := 5;
+    Result := TyZrStrokeRect(P.BBox, Length(P.Path), True, True, g * s, 1);
+  end;
+
   { [R2-I5] THE RECT A STATE LAYS THE LABEL ON: the polygon's box grown by
     the pen that state draws (its own borderColor and borderWidth over the
     rest's -- Path.getBoundingRect under the state's style); APenMoves where
@@ -3459,7 +3474,7 @@ var
     if e <> nil then has2 := not ((e.JSONType = jtString) and (e.AsString = 'none'));
     has2 := has2 and (lw2 > 0);
     APenMoves := (has2 <> hasStroke) or (has2 and (lw2 <> P.LineWidth));
-    Result := TyZrStrokeRect(P.BBox, Length(P.Path), has2, hasFill, lw2, 1);
+    Result := AreaRect(has2, hasFill, lw2);
   end;
 
 begin
@@ -3536,9 +3551,8 @@ begin
       hasStroke := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none')
         and (P.LineWidth > 0);
       hasFill := P.HasFill and (P.Fill <> 'none');
-      P.Rect := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill, P.LineWidth, 1);
-      P.GradBox := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill,
-        P.LineWidth * s, 1);
+      P.Rect := AreaRect(hasStroke, hasFill, P.LineWidth);
+      P.GradBox := P.Rect;
       { Math.max(z2 || 0, maxZ2) -- a clipped area does not count }
       if IsNan(P.Z2) then z2v := 0 else z2v := P.Z2;
       if z2v > maxZ2 then maxZ2 := z2v;
