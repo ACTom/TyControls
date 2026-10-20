@@ -436,6 +436,7 @@ var
   pat: TTyDoubleArray;
   gel: TTyGfxEl;
   wantColour: TTyChartColor;
+  ls: Double;
 
   procedure Bordered(const APieces: TTyRtPieceArray);
   var q: Integer;
@@ -549,11 +550,17 @@ begin
             Bad(what + ': no such shape');
             Continue;
           end;
+          { [r2v] a shape the canvas draws through its transform: upstream's
+            numbers are in its own units, lineScale canvas px each }
+          ls := 1;
+          if it.Find('lineScale') <> nil then ls := FromHex(it.Strings['lineScale']);
+          pat := Copy(el.Style.DashLogical, 0, MaxInt);
+          for j := 0 to High(pat) do pat[j] := pat[j] / ls;
           Inc(FCompared);
-          if not SameBits(el.Style.StrokeWidthLogical, FromHex(it.Strings['lineWidth'])) then
-            Bad(Format('%s: width %g, upstream %g', [what, el.Style.StrokeWidthLogical,
+          if not SameBits(el.Style.StrokeWidthLogical / ls, FromHex(it.Strings['lineWidth'])) then
+            Bad(Format('%s: width %g, upstream %g', [what, el.Style.StrokeWidthLogical / ls,
               FromHex(it.Strings['lineWidth'])]));
-          CheckStroke(what, el.Style.DashLogical, el.Style.DashOffsetLogical, it);
+          CheckStroke(what, pat, el.Style.DashOffsetLogical / ls, it);
           Inc(seen);
           Continue;
         end;

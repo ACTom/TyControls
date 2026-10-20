@@ -117,6 +117,10 @@ function TyChartImageStamp(const ASource: string): string;
   hundred multiplications for a 32 x 32 picture. Out of range: a constant. }
 function TyChartImagePrint(AList: TCustomImageList; AIndex: Integer): QWord;
 
+{ [r2v] How many pictures of AList the cache holds (a query for the tests:
+  a Replace makes a new picture of the slot and lets the old one go). }
+function TyChartImageListCachedCount(AList: TCustomImageList): Integer;
+
 implementation
 
 uses tyControls.AdvanceChart.Symbol;
@@ -433,6 +437,18 @@ begin
 end;
 
 {$PUSH}{$Q-}{$R-}
+function TyChartImageListCachedCount(AList: TCustomImageList): Integer;
+var
+  i: Integer;
+  pre: string;
+begin
+  Result := 0;
+  if GListCache = nil then Exit;
+  pre := ListKeyPrefix(AList);
+  for i := 0 to GListCache.Count - 1 do
+    if Copy(GListCache[i], 1, Length(pre)) = pre then Inc(Result);
+end;
+
 function TyChartImagePrint(AList: TCustomImageList; AIndex: Integer): QWord;
 const
   cPrime = QWord($100000001B3);

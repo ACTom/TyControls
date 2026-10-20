@@ -289,6 +289,19 @@ const P_GRAPH_BORDER = [
   ['node', 0, 0, 0, -14, 'a, 14 above: off its border'],
   ['node', 0, 1, 12, 0, 'b (no border), 12 right: off'],
 ];
+// [r2v] a graph node with a 1 px border: the filled Symbol path's reach is
+// half its width (0.5), not the threshold 5 an unfilled path takes
+const OPT_GRAPH_THIN = {
+  animation: false,
+  series: [{ type: 'graph', layout: 'none', left: 100, top: 100, width: 200, height: 100, symbolSize: 20, label: { show: false },
+    itemStyle: { borderColor: '#333333', borderWidth: 1 },
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 200, y: 100 }], links: [] }],
+};
+const P_GRAPH_THIN = [
+  ['node', 0, 0, 10, 0, 'a, 10 right: on its 1 px border'],
+  ['node', 0, 0, 12, 0, 'a, 12 right: 1.5 off its 1 px border'],
+  ['node', 0, 1, 0, -12, 'b, 12 above: 1.5 off its 1 px border'],
+];
 
 const COARSE_CASES = [
   { id: 'scatter-small', note: 'four 4 px scatter symbols, pointer 44', init: { useCoarsePointer: true }, option: OPT_SCATTER, probes: P_SCATTER },
@@ -307,6 +320,7 @@ const COARSE_CASES = [
   { id: 'radar-off', note: '[R2-I3] radar rings 1 and 8 wide, symbols of 10, a mouse', init: { useCoarsePointer: false }, option: OPT_RADAR, probes: P_RADAR },
   { id: 'radar', note: '[R2-I3] the same, pointer 44', init: { useCoarsePointer: true }, option: OPT_RADAR, probes: P_RADAR },
   { id: 'graph-border-off', note: '[R2-I3] graph nodes of 20 with a 6 px border (one with borderWidth 0), a mouse', init: { useCoarsePointer: false }, option: OPT_GRAPH_BORDER, probes: P_GRAPH_BORDER },
+  { id: 'graph-thin-border-off', note: '[r2v] graph nodes of 20 with a 1 px border, a mouse: the stroke adds half its width, no threshold', init: { useCoarsePointer: false }, option: OPT_GRAPH_THIN, probes: P_GRAPH_THIN },
 ];
 
 let ecKey = null;
@@ -678,6 +692,10 @@ function guards(g) {
     'a radar symbol: its shape; the fallback finds it 2 px off');
   add('graph-border-reach', at('graph-border-off', 'a, 12 right: on its border').direct && !at('graph-border-off', 'a, 14 above: off its border').direct
     && !at('graph-border-off', 'b (no border), 12 right: off').direct, 'a graph node: its border by half its width');
+  // [r2v]
+  add('graph-thin-border', at('graph-thin-border-off', 'a, 10 right: on its 1 px border').direct
+    && !at('graph-thin-border-off', 'a, 12 right: 1.5 off its 1 px border').direct
+    && !at('graph-thin-border-off', 'b, 12 above: 1.5 off its 1 px border').direct, 'a filled node with a 1 px border: half its width, not the threshold');
   return out;
 }
 

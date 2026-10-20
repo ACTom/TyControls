@@ -2597,7 +2597,10 @@ begin
     carGuide:
       begin
         if not AC.Enabled then Exit;
-        p := Make(AEl.Anim.Series, idx, 'guide');
+        { [r2v] under the key the frame looks it up by: a radar point
+          label's line carries its point (TyChartAnimRoleKey) [was: 'guide'
+          for every line, so a radar's never drew in] }
+        p := Make(AEl.Anim.Series, idx, TyChartAnimRoleKey(AEl));
         props := TyAnimProps([Num1('style.strokePercent', 1)]);
         p.Attr(props);
         p.SetFinal(props);
