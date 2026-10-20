@@ -198,6 +198,8 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-datazoom-slider.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R2-J2] the gallery as it was before every function got a name
+const { withoutFunctions } = require('./gallery-functions.js');
 const C = echarts.color;
 
 const W = 800;
@@ -1694,7 +1696,7 @@ function recordSlider(chart, dz, userDz, side, key) {
 }
 
 function recordCase(def, side) {
-  const src = def.gallery ? JSON.parse(fs.readFileSync(path.join(GALLERY, def.gallery + '.json'), 'utf8')) : def.option;
+  const src = def.gallery ? withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, def.gallery + '.json'), 'utf8'))) : def.option;
   const optionText = JSON.stringify(src);
   CAPTURE = new Map();
   return runChart(JSON.parse(optionText), chart => {

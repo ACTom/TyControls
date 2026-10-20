@@ -25,7 +25,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Convert,
      tyControls.AdvChart.Data, tyControls.AdvChart.JsMath,
      tyControls.AdvChart.GeoFix, tyControls.AdvChart.Geo,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart, ualbersusa;
 type
   TGeoProbe = class(TTyAdvanceChart)
   public
@@ -222,6 +222,10 @@ begin
   TyChartRegisterGeoProjection('linInv', @FProj.LinInv);
   TyChartRegisterGeoProjection('cut', @FProj.Cut);
   TyChartRegisterGeoProjection('cutInv', @FProj.CutInv);
+  { [R2-J2] d3-geo's geoAlbersUsa, the demo's transcription (case
+    'albers-usa') }
+  TyChartRegisterGeoProjection('albersUsa', @AlbersUsa.Project);
+  TyChartRegisterGeoProjection('albersUsaInv', @AlbersUsa.Unproject);
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -596,6 +600,16 @@ begin
           HexOf(lw.Floats['fontSize']))
       else
         SameInt(dr.Groups[g].Name + ' label size (default)', 12, lw.Integers['fontSize']);
+      { [R2-J2] A REGION WITH NO CENTRE -- one a projection answers null for
+        (Puerto Rico under albersUsa): no labelXY, so upstream keeps
+        textConfig.position 'inside' with no layout rect and no align; the
+        port gives the label no position }
+      if not (lw.Find('pos') is TJSONArray) then
+      begin
+        Inc(FCompared);
+        if p.Lbl.HasPos then Bad(dr.Groups[g].Name + ' label placed, upstream has no centre');
+        Continue;
+      end;
       SameStr(dr.Groups[g].Name + ' label align', 'center', lw.Strings['align']);
       SameStr(dr.Groups[g].Name + ' label valign', 'middle', lw.Strings['verticalAlign']);
       SameInt(dr.Groups[g].Name + ' label z2', 2, lw.Integers['z2']);

@@ -73,3 +73,6 @@ tests/golden/*.golden.txt.actual
 
 # scripts/make-gallery.ps1 的临时副本
 .gallery-build/
+
+# the oracles' npm packages (tools/advchart-oracle/package.json; npm install there)
+tools/advchart-oracle/node_modules/

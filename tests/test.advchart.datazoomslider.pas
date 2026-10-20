@@ -22,7 +22,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
      tyControls.AdvChart.Layout, tyControls.AdvChart.ZrPath,
-     tyControls.AdvChart.DataZoomView, tyControls.AdvanceChart;
+     tyControls.AdvChart.DataZoomView, tyControls.AdvanceChart,
+     test.advchart.gallerytext;
 type
   TDzsMeasurer = class(TInterfacedObject, ITyTextMeasurer)
   public
@@ -580,7 +581,8 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R2-J2] the file as the fixture's upstream read it }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
