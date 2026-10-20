@@ -3142,6 +3142,12 @@ begin
       PaintLargeInTiles;
       PaintDecal;
     end
+    { [R2-L] A PEN THAT INKS NOTHING and no fill: a solid stroke at alpha 0
+      (its own or the element's) leaves at once in BGRA's fill, before any
+      random draw -- the path is not traced for it (a parallel's inactive
+      lines, thousands of curves) }
+    else if (not AElement.Style.HasFill) and (AElement.Style.StrokeGradient.Kind = cgkNone)
+      and ((AElement.Style.Alpha <= 0) or ((AElement.Style.StrokeColor shr 24) = 0)) then
     else
     begin
       P.BeginPath;

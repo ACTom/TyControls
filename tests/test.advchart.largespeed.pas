@@ -35,6 +35,7 @@ uses Classes, SysUtils, Math, Types, Controls, Graphics, Forms, fpcunit, testreg
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Painter, tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Data,
+     tyControls.AdvChart.Shape,
      tyControls.AdvChart.Scale, tyControls.AdvChart.Color, tyControls.AdvChart.Layout,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Coord, tyControls.AdvChart.Option,
      tyControls.AdvChart.VisualMap, tyControls.AdvChart.Render, tyControls.AdvanceChart;
@@ -68,6 +69,7 @@ type
     procedure TestAShortDecimalIsTheLongWay;
     procedure TestAColourParseIsKept;
     procedure TestAKeptPenIsThePen;
+    procedure TestAPenThatInksNothingDrawsNothing;
   end;
 
 implementation
@@ -1040,6 +1042,79 @@ begin
     ref.Free;
     a.Free;
     GPath := nil;
+  end;
+end;
+
+{ an element whose pen inks nothing -- alpha 0, its own or its colour's --
+  and no fill is not traced: nothing drawn, the application's Random as a
+  stroke leaves it, the same as a pen of that ink stroking the path }
+procedure TAdvChartLargeSpeedTest.TestAPenThatInksNothingDrawsNothing;
+var
+  ref, got: TBGRABitmap;
+  el: TTyChartElement;
+  pts: array of TTyPointF;
+  i, k: Integer;
+  p: TTyPainter;
+  r1, r2: LongInt;
+begin
+  SetLength(pts, 30);
+  GLcg := 9;
+  for i := 0 to High(pts) do
+  begin
+    pts[i].X := 5 + Lcg(150);
+    pts[i].Y := 5 + Lcg(100);
+  end;
+  ref := TBGRABitmap.Create(170, 120);
+  got := TBGRABitmap.Create(170, 120);
+  try
+    for k := 0 to 2 do
+    begin
+      el := TyChartElement(TyShapePolyline(pts));
+      el.Style.HasFill := False;
+      el.Style.StrokeWidthLogical := 2;
+      case k of
+        0: begin el.Style.StrokeColor := TTyChartColor($FF3050A0); el.Style.Alpha := 0; end;
+        1: begin el.Style.StrokeColor := TTyChartColor($003050A0); el.Style.Alpha := 1; end;
+      else
+        begin el.Style.StrokeColor := TTyChartColor($003050A0); el.Style.Alpha := 0.5;
+          SetLength(el.Style.DashLogical, 2); el.Style.DashLogical[0] := 4; el.Style.DashLogical[1] := 2; end;
+      end;
+      Ground(ref, 3);
+      Ground(got, 3);
+      { the reference: the path stroked as the element would stroke it }
+      RandSeed := 4321;
+      p := TTyPainter.Create;
+      try
+        p.BeginPaintOn(nil, Rect(0, 0, 170, 120), 96, ref);
+        p.SaveState;
+        if el.Style.Alpha < 1 then p.SetElementAlpha(el.Style.Alpha);
+        p.SetLineDash(el.Style.DashLogical, 0);
+        p.BeginPath;
+        p.MoveTo(pts[0].X, pts[0].Y);
+        for i := 1 to High(pts) do p.LineTo(pts[i].X, pts[i].Y);
+        p.StrokePath(TTyColor(el.Style.StrokeColor), 2);
+        p.RestoreState;
+        p.EndPaint;
+      finally
+        p.Free;
+      end;
+      r1 := Random(1000000);
+      RandSeed := 4321;
+      p := TTyPainter.Create;
+      try
+        p.BeginPaintOn(nil, Rect(0, 0, 170, 120), 96, got);
+        TyRenderElement(p, el);
+        p.EndPaint;
+      finally
+        p.Free;
+      end;
+      r2 := Random(1000000);
+      AssertEquals(Format('case %d: nothing drawn', [k]), 0, DiffPixels(ref, got));
+      AssertEquals(Format('case %d: the stream as a stroke leaves it', [k]), r1, r2);
+    end;
+  finally
+    ref.Free;
+    got.Free;
   end;
 end;
 
