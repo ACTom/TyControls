@@ -241,7 +241,12 @@ var
   segN, q, cnt: Integer;
   segX, segCount: array[0..2] of Integer;
   segAlpha: array[0..2] of Word;
+  { the last pixel value each segment met and what it became: down a bar's
+    column the same value comes back row after row }
+  segIn, segOut: array[0..2] of LongWord;
+  segHas: array[0..2] of Boolean;
   pl: PLongWord;
+  v: LongWord;
 
   { the brush on one pixel, through the memo }
   procedure PutOne(P: PLongWord; AAlpha: Word; AX, AY: Integer);
@@ -249,8 +254,6 @@ var
     key: QWord;
     h: LongWord;
   begin
-    { the brush leaves a pixel this faint as it is }
-    if AAlpha <= $80 then Exit;
     key := QWord(P^) or (QWord(AAlpha) shl 32) or (QWord(1) shl 48);
     h := (P^ xor (P^ shr 15) xor (LongWord(AAlpha) * 2654435761)) and (cRectMemoSize - 1);
     if memo.Keys[h] = key then
@@ -284,6 +287,9 @@ begin
   end;
   segDone := False;
   segN := 0;
+  segHas[0] := False;
+  segHas[1] := False;
+  segHas[2] := False;
   { TFillRectangleInfo.Create }
   if y > y2 then
   begin
@@ -386,10 +392,21 @@ begin
         end;
         for q := 0 to segN - 1 do
         begin
+          { the brush leaves a pixel this faint as it is }
+          if segAlpha[q] <= $80 then Continue;
           pl := PLongWord(ABmp.GetPixelAddress(segX[q], yb));
           for cnt := 0 to segCount[q] - 1 do
           begin
-            PutOne(pl, segAlpha[q], segX[q] + cnt, yb);
+            v := pl^;
+            if segHas[q] and (v = segIn[q]) then
+              pl^ := segOut[q]
+            else
+            begin
+              PutOne(pl, segAlpha[q], segX[q] + cnt, yb);
+              segIn[q] := v;
+              segOut[q] := pl^;
+              segHas[q] := True;
+            end;
             Inc(pl);
           end;
         end;
