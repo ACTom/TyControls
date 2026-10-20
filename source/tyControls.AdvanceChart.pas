@@ -738,6 +738,7 @@ type
       FProgFastFrame: since the capture the static layer was dropped by
       progress frames alone. }
     FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
+    FListTailAt: Integer;
     FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
     FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
     { Which series accumulate onto which, and into which columns. Solved in
@@ -1972,6 +1973,16 @@ type
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
+    { [R2-L] the components a list ends with, from the visual maps on --
+      what a build adds after the legends -- and where they start in it
+      (-1: a list with none built) }
+    function BuildListTail(AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
+    { [R2-L] those components built again in the list as it stands -- a
+      visual map's indicator moved, which nothing before them reads --
+      instead of the whole list; False where it cannot be (then the list
+      is built whole) }
+    function ListTailRebuild: Boolean;
+    procedure ListTailRefresh;
     { ---- visualMap interaction [Batch 116] ---- }
     procedure VmEnsure(ACount: Integer);
     function VmKeepNow(AIndex: Integer): Boolean;
@@ -4133,6 +4144,9 @@ type
       APart (False: no such part), and let go again }
     function KbTakeMarkerForTest(APart: Integer): Boolean;
     procedure KbLeaveForTest;
+    { [R2-L] FOR TESTS: how many row state records series ASeriesIndex
+      keeps (none where no element hosts a row, -1 for no such series) }
+    function StRowRecordsForTest(ASeriesIndex: Integer): Integer;
     { [F2b] a marker element of series ASeriesIndex by its name (mp0,
       ml0.from, ma0#label ...): its state record and its index in the list }
     function MarkerStates(ASeriesIndex: Integer; const APart: string;
@@ -4705,6 +4719,11 @@ function TyAdvChartStPatchesForTest: Integer;
   whole, the reference it must match -- and how many frames it has served. }
 procedure TyAdvChartProgFastForTest(AOn: Boolean);
 function TyAdvChartProgFastFramesForTest: Integer;
+{ [R2-L] The list's components built again on their own (ListTailRebuild):
+  a switch that turns it off -- the list is built whole, the reference --
+  and how many times it has. }
+procedure TyAdvChartListTailForTest(AOn: Boolean);
+function TyAdvChartListTailsForTest: Integer;
 
 implementation
 
@@ -4747,6 +4766,20 @@ end;
 function TyAdvChartProgFastFramesForTest: Integer;
 begin
   Result := GProgFastFrames;
+end;
+
+var
+  GListTailOff: Boolean = False;
+  GListTails: Integer = 0;
+
+procedure TyAdvChartListTailForTest(AOn: Boolean);
+begin
+  GListTailOff := not AOn;
+end;
+
+function TyAdvChartListTailsForTest: Integer;
+begin
+  Result := GListTails;
 end;
 
 function TyAdvChartStPatchesForTest: Integer;

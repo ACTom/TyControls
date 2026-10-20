@@ -996,6 +996,10 @@ type
   public
     constructor Create;
     procedure Clear;
+    { [R2-L] the elements from ACount on removed, the rest as they stand }
+    procedure Truncate(ACount: Integer);
+    { [R2-L] the journal keeps an element at AIndex or after it }
+    function JournalHoldsFrom(AIndex: Integer): Boolean;
     function Add(const AElement: TTyChartElement): Integer;
     { [R2-H] Add, answering the new element's slot: a caller that builds the
       element further works on it there (valid until the next Add or Clear) }
@@ -1311,6 +1315,23 @@ begin
   FJrN := 0;
   FJrOld := nil;
   FJrMark := nil;
+end;
+
+procedure TTyPaintList.Truncate(ACount: Integer);
+var k: Integer;
+begin
+  if (ACount < 0) or (ACount >= FCount) then Exit;
+  for k := ACount to FCount - 1 do FItems[k] := Default(TTyChartElement);
+  FCount := ACount;
+  FOrdered := False;
+end;
+
+function TTyPaintList.JournalHoldsFrom(AIndex: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to FJrN - 1 do
+    if FJrIdx[k] >= AIndex then Exit(True);
 end;
 
 procedure TTyPaintList.JournalOpen;

@@ -457,6 +457,12 @@ begin
   if d is TJSONObject then Result := TJSONObject(d);
 end;
 
+function TTyAdvanceChart.StRowRecordsForTest(ASeriesIndex: Integer): Integer;
+begin
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit(-1);
+  Result := Length(FSt[ASeriesIndex].Rows);
+end;
+
 function TTyAdvanceChart.StItemPlainArray(ASeriesIndex: Integer;
   out AArr: TJSONArray): Boolean;
 var s: TJSONObject; d: TJSONData; slot: Integer;

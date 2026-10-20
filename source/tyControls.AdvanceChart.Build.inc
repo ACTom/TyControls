@@ -3372,6 +3372,7 @@ begin
   if FPaintList = nil then FPaintList := TTyPaintList.Create
   else FPaintList.Clear;
   list := FPaintList;
+  FListTailAt := -1;
   { a new list: no entry is a custom element yet, and what the last render
     removed may go [Batch 123] }
   FCustomPaintEls := nil;
@@ -3993,46 +3994,10 @@ begin
       if n > 0 then ViewDrew(cvLegend);
       Inc(drawn, n);
     end;
-    if not ViewHidden(cvVisualMap) then
-    begin
-      n := BuildVisualMaps(list);
-      if n > 0 then ViewDrew(cvVisualMap);
-      Inc(drawn, n);
-    end;
-    if not ViewHidden(cvDataZoom) then
-    begin
-      n := BuildDataZooms(list);
-      if n > 0 then ViewDrew(cvDataZoom);
-      Inc(drawn, n);
-    end;
-    { the timeline, z 4 [Batch 129] }
-    if not ViewHidden(cvTimeline) then
-    begin
-      n := BuildTimeline(list);
-      if n > 0 then ViewDrew(cvTimeline);
-      Inc(drawn, n);
-    end;
-    { [Batch 125] }
-    if not ViewHidden(cvToolbox) then
-    begin
-      n := BuildToolboxes(list, AMeasurer);
-      if n > 0 then ViewDrew(cvToolbox);
-      Inc(drawn, n);
-    end;
-    { the parallel axes' covers, z 10000: their controllers' groups are
-      zrender's, no view hides them [Batch 130] }
-    Inc(drawn, BuildParallelBrushes(list));
-    { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
-      they are its controller's: BrushController.mount adds its group to
-      zrender's root, outside the brush view's group, so
-      `excludeComponents: ['brush']` cannot hide them and the brush view is
-      never a view that drew (its group holds nothing) [milestone C14-C22] }
-    Inc(drawn, BuildBrushes(list));
-    { THE THUMBNAILS, z 10: the copy a full update takes of its graph (a
-      roam only moves the window), then the box, the copy and the window
-      as elements [Batch 140] }
-    if FThumbSnapDue then ThumbRender;
-    Inc(drawn, BuildThumbnails(list));
+    { the components from the visual maps on [R2-L: built by BuildListTail,
+      which ListTailRebuild runs again on its own] }
+    FListTailAt := list.Count;
+    Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
     UtStaleHarvest;
     if FLineHistDue then
@@ -4042,6 +4007,85 @@ begin
     end;
     list.JournalClose;
   end;
+end;
+
+function TTyAdvanceChart.BuildListTail(AList: TTyPaintList;
+  const AMeasurer: ITyTextMeasurer): Integer;
+var n: Integer;
+begin
+  Result := 0;
+  if not ViewHidden(cvVisualMap) then
+  begin
+    n := BuildVisualMaps(AList);
+    if n > 0 then ViewDrew(cvVisualMap);
+    Inc(Result, n);
+  end;
+  if not ViewHidden(cvDataZoom) then
+  begin
+    n := BuildDataZooms(AList);
+    if n > 0 then ViewDrew(cvDataZoom);
+    Inc(Result, n);
+  end;
+  { the timeline, z 4 [Batch 129] }
+  if not ViewHidden(cvTimeline) then
+  begin
+    n := BuildTimeline(AList);
+    if n > 0 then ViewDrew(cvTimeline);
+    Inc(Result, n);
+  end;
+  { [Batch 125] }
+  if not ViewHidden(cvToolbox) then
+  begin
+    n := BuildToolboxes(AList, AMeasurer);
+    if n > 0 then ViewDrew(cvToolbox);
+    Inc(Result, n);
+  end;
+  { the parallel axes' covers, z 10000: their controllers' groups are
+    zrender's, no view hides them [Batch 130] }
+  Inc(Result, BuildParallelBrushes(AList));
+  { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
+    they are its controller's: BrushController.mount adds its group to
+    zrender's root, outside the brush view's group, so
+    `excludeComponents: ['brush']` cannot hide them and the brush view is
+    never a view that drew (its group holds nothing) [milestone C14-C22] }
+  Inc(Result, BuildBrushes(AList));
+  { THE THUMBNAILS, z 10: the copy a full update takes of its graph (a
+    roam only moves the window), then the box, the copy and the window
+    as elements [Batch 140] }
+  if FThumbSnapDue then ThumbRender;
+  Inc(Result, BuildThumbnails(AList));
+end;
+
+{ THE COMPONENTS AT THE END OF THE LIST, built again where they stand
+  [R2-L]. A visual map's indicator moving with the pointer (VmShowIndicator,
+  VmHideIndicator) changes its elements and nothing before them: what a
+  build puts before the visual maps reads none of their live state. Those
+  elements stay; the rest is dropped and built again, as the build builds
+  it. The list is then the one a whole build would give but for the
+  states the pointer changed meanwhile, which the frame's own state pass
+  writes (StApplyChanged / StPatchList, as for any hover) -- and the
+  incremental layer is drawn again, as after a build. Not where an update
+  is still to be laid out or armed, an export runs, or the journal keeps
+  an element of the end (a rewind would put an old one back). }
+function TTyAdvanceChart.ListTailRebuild: Boolean;
+begin
+  Result := False;
+  if GListTailOff or (FPaintList = nil) or not FPaintListValid or FDirty
+    or FExporting or FAnimPending or (FLastPPI <= 0) or (FListTailAt < 0)
+    or (FListTailAt > FPaintList.Count) or (FPaintListPPI <> FLastPPI)
+    or FPaintList.JournalHoldsFrom(FListTailAt) then Exit;
+  FPaintList.Truncate(FListTailAt);
+  BuildListTail(FPaintList, NewTextMeasurer(FLastPPI));
+  FProgLayerOk := False;
+  StaticDrop;
+  FProgReuse := True;
+  Inc(GListTails);
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.ListTailRefresh;
+begin
+  if not ListTailRebuild then DropStaticKeepList;
 end;
 
 procedure TTyAdvanceChart.FullUpdate;
