@@ -2665,10 +2665,40 @@ var
   g, lm: TTyMat2D;
   lr: Double;
   props: TTyTransformProps;
+  placeAll: Boolean;
+
+  { AxisBuilder: the label is a child of the axis group, at (c, t) and
+    turned by the requested angle less the axis' own; zrender multiplies
+    the two, and a turn or move within 5e-5 of nothing is no local
+    transform at all. The anchor is that product's translation. }
+  procedure PlaceInFrame(AI: Integer);
+  begin
+    lr := TyRemRadian(ASpec.RotationRad - fr.Rotation);
+    if TyNeedLocal(ASpec.LocalCoords[AI], t, lr) then
+      lm := TyMatMul(g, TyMatLocal(ASpec.LocalCoords[AI], t, lr))
+    else
+      lm := g;
+    Result[AI].X := lm[4];
+    Result[AI].Y := lm[5];
+    { THEN THE LABEL IS TAKEN OUT OF THE GROUP -- decomposed to props and
+      recomposed from them -- and that matrix is the one its rect, its
+      overlap box and the name's occupied area are made with. }
+    props := TyMatDecompose(lm);
+    Result[AI].M := TyMatRecompose(props);
+    Result[AI].DecRotation := props.Rotation;
+    Result[AI].HasM := True;
+  end;
+
 begin
   Result := nil;
   SetLength(Result, Length(ASpec.Labels));
   if Length(ASpec.Labels) = 0 then Exit;
+  { [R2-L] A LABEL'S PLACE IN THE FRAME only for the labels built -- the
+    only ones anything reads it of (painted, hit, measured, animated) --
+    and for every one where a break's two labels may be moved apart, which
+    reads them before the list is made. A category axis of half a million
+    categories builds a few dozen. }
+  placeAll := Length(ASpec.LabelBreakKind) = Length(ASpec.Labels);
   AnchorsFor(ASpec, ah, av);
   { UPSTREAM'S ANCHOR (AxisBuilder): the label's point in the axis' own
     frame -- its coordinate c along, and t across, the label offset of an
@@ -2732,24 +2762,7 @@ begin
     Result[i].AnchorV := av;
     if byFrame then
     begin
-      { AxisBuilder: the label is a child of the axis group, at (c, t) and
-        turned by the requested angle less the axis' own; zrender multiplies
-        the two, and a turn or move within 5e-5 of nothing is no local
-        transform at all. The anchor is that product's translation. }
-      lr := TyRemRadian(ASpec.RotationRad - fr.Rotation);
-      if TyNeedLocal(ASpec.LocalCoords[i], t, lr) then
-        lm := TyMatMul(g, TyMatLocal(ASpec.LocalCoords[i], t, lr))
-      else
-        lm := g;
-      Result[i].X := lm[4];
-      Result[i].Y := lm[5];
-      { THEN THE LABEL IS TAKEN OUT OF THE GROUP -- decomposed to props and
-        recomposed from them -- and that matrix is the one its rect, its
-        overlap box and the name's occupied area are made with. }
-      props := TyMatDecompose(lm);
-      Result[i].M := TyMatRecompose(props);
-      Result[i].DecRotation := props.Rotation;
-      Result[i].HasM := True;
+      if placeAll then PlaceInFrame(i);
     end
     else
     case ASpec.Side of
@@ -2830,6 +2843,9 @@ begin
     Inc(m);
   end;
   SetLength(cands, m);
+  { the built labels' places [R2-L] }
+  if byFrame and not placeAll then
+    for k := 0 to m - 1 do PlaceInFrame(cands[k].Index);
   { A BREAK'S LABELS COME FIRST [Batch 132]: their z2 lifted past every
     other label's -- by the spread of z2 over the axis, plus one }
   if Length(ASpec.LabelBreakKind) = n then

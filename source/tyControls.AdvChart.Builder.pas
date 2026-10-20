@@ -1699,17 +1699,24 @@ begin
   AParams.BreakEnd := ATick.BreakVMax;
 end;
 
-function TyAxisTickLabelAt(AAxis: TTyAxis; const ATick: TTyScaleTick; AIndex: Integer;
-  AHasFormatter: Boolean; const AFormatter: string): string; overload;
+{ a named handler's label: its own routine, so that the plain label -- every
+  tick of a category axis -- does not set up and tear down the callback
+  parameters it never uses [R2-L] }
+function AxisTickHandlerLabel(AAxis: TTyAxis; const ATick: TTyScaleTick;
+  AIndex: Integer; const AFormatter: string): string;
 var prm: TTyChartCallbackParams;
 begin
+  prm := AxisLabelParams(AAxis, ATick.Value, AIndex,
+    TyAxisTickLabel(AAxis, ATick.Value, False, ''), False, 0);
+  AxisLabelParamsBreak(prm, ATick);
+  Result := TyChartRunHandler(AFormatter, TyChartOneParams(prm));
+end;
+
+function TyAxisTickLabelAt(AAxis: TTyAxis; const ATick: TTyScaleTick; AIndex: Integer;
+  AHasFormatter: Boolean; const AFormatter: string): string; overload;
+begin
   if AHasFormatter and TyChartIsHandlerRef(AFormatter) then
-  begin
-    prm := AxisLabelParams(AAxis, ATick.Value, AIndex,
-      TyAxisTickLabel(AAxis, ATick.Value, False, ''), False, 0);
-    AxisLabelParamsBreak(prm, ATick);
-    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(prm)));
-  end;
+    Exit(AxisTickHandlerLabel(AAxis, ATick, AIndex, AFormatter));
   Result := TyAxisTickLabel(AAxis, ATick.Value, AHasFormatter, AFormatter);
 end;
 
