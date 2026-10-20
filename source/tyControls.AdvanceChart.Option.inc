@@ -107,6 +107,7 @@ begin
   FreeAndNil(FJitter);
   FreeAndNil(FOption);
   FreeAndNil(FTbStatus);
+  FreeAndNil(FResolvedImages);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);

@@ -34,7 +34,7 @@ unit tyControls.AdvChart.Handlers;
   LCL-free: SysUtils, Classes, Math and the AdvChart units. }
 interface
 uses
-  SysUtils, Classes, Math,
+  SysUtils, Classes, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape;
 
@@ -217,6 +217,12 @@ type
     LabelRectX, LabelRectY, LabelRectW, LabelRectH: Double;
     Align, VerticalAlign: string;
     LabelLinePoints: TTyPointFArray;
+    { [R2-J2] THE CHART'S SIZE in CSS px -- myChart.getWidth() / getHeight(),
+      which a page's labelLayout function closes over (pie-labelLine-adjust
+      tells left from right by it) -- and the device px per CSS px the rects
+      above are scaled by (an answer's x / y are CSS px) }
+    ChartWidth, ChartHeight: Double;
+    Scale: Double;
   end;
 
   { WHAT A labelLayout SAYS -- the object form read off the option, or a
@@ -270,6 +276,19 @@ type
 
   TTyChartAxisPointerMapper = function(AValue: Double;
     const ASource, ATarget: TTyChartMapperAxis): Double of object;
+
+  { ==== per-item visual callbacks [R2-J2] ====
+
+    A series' `symbol`, `symbolSize`, `symbolRotate` and `symbolOffset`, and
+    its `itemStyle.color`, may be functions upstream: visual/symbol.ts calls
+    `cb(rawValue, params)` for every item and visual/style.ts calls
+    `colorCallback(params)`. Written as '@Name', the handler registered under
+    that name is called the same way -- AParams is the item's getDataParams,
+    whose Raw is rawValue -- and answers the value the option would have held:
+    a number, an array, a string. nil is upstream's undefined. The caller frees
+    the answer. }
+  TTyChartVisualHandler = function(
+    const AParams: TTyChartCallbackParams): TJSONData of object;
 
 { ---- the registry ---- }
 { Registering the same name twice REPLACES, so a form reopened at design time
@@ -325,6 +344,20 @@ procedure TyChartUnregisterAxisPointerMapper(const AName: string);
 function TyChartFindAxisPointerMapper(const AName: string;
   out AHandler: TTyChartAxisPointerMapper): Boolean;
 procedure TyChartClearAxisPointerMappers;
+
+{ ---- per-item visual handlers [R2-J2] ----
+  The formatters' rules: a name, registered once, replaced when registered
+  again. }
+procedure TyChartRegisterVisualHandler(const AName: string;
+  AHandler: TTyChartVisualHandler);
+procedure TyChartUnregisterVisualHandler(const AName: string);
+function TyChartFindVisualHandler(const AName: string;
+  out AHandler: TTyChartVisualHandler): Boolean;
+procedure TyChartClearVisualHandlers;
+{ Runs the handler ASpec ('@Name') names: its answer (the caller's to free),
+  nil when nobody registered it or it answered undefined. }
+function TyChartRunVisualHandler(const ASpec: string;
+  const AParams: TTyChartCallbackParams): TJSONData;
 
 { Building an answer: a number, a text ('50%', 'center'), nothing. }
 function TyChartPosNum(AValue: Double): TTyChartPosValue;
@@ -406,6 +439,74 @@ type
 
 var
   GFormatters: array of TFormatterEntry;
+
+type
+  TVisualEntry = record
+    Name: string;
+    Handler: TTyChartVisualHandler;
+  end;
+
+var
+  GVisuals: array of TVisualEntry;
+
+function IndexOfVisual(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GVisuals) do
+    if SameText(GVisuals[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterVisualHandler(const AName: string;
+  AHandler: TTyChartVisualHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfVisual(AName);
+  if i < 0 then
+  begin
+    i := Length(GVisuals);
+    SetLength(GVisuals, i + 1);
+    GVisuals[i].Name := AName;
+  end;
+  GVisuals[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterVisualHandler(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfVisual(AName);
+  if i < 0 then Exit;
+  for j := i to High(GVisuals) - 1 do
+    GVisuals[j] := GVisuals[j + 1];
+  SetLength(GVisuals, Length(GVisuals) - 1);
+end;
+
+function TyChartFindVisualHandler(const AName: string;
+  out AHandler: TTyChartVisualHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfVisual(AName);
+  Result := (i >= 0) and Assigned(GVisuals[i].Handler);
+  if Result then AHandler := GVisuals[i].Handler;
+end;
+
+procedure TyChartClearVisualHandlers;
+begin
+  GVisuals := nil;
+end;
+
+function TyChartRunVisualHandler(const ASpec: string;
+  const AParams: TTyChartCallbackParams): TJSONData;
+var h: TTyChartVisualHandler;
+begin
+  Result := nil;
+  if not TyChartIsHandlerRef(ASpec) then Exit;
+  if not TyChartFindVisualHandler(Copy(ASpec, 2, MaxInt), h) then Exit;
+  Result := h(AParams);
+end;
 
 type
   TPositionEntry = record
@@ -935,5 +1036,6 @@ end;
 finalization
   TyChartClearFormatters;
   TyChartClearPositionHandlers;
+  TyChartClearVisualHandlers;
 
 end.

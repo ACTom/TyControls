@@ -251,6 +251,11 @@ type
       [w, h] and symbolOffset never reach the override table). [Batch 71] }
     SymItems: TTySymbolSpecArray;
     SymItemHas: TTyBoolArray;
+    { [R2-J2] A SERIES' itemStyle.color CALLBACK's answer, by raw row:
+      seriesStyleTask's dataEach (stage 2000) -- the visualMap (4000) and
+      the item's own style (4500) go over it }
+    CbFill: array of TTyChartColor;
+    CbFillSet: TTyBoolArray;
     RippleNumber: Integer;
     RippleFill: Boolean;
     RippleHasColor: Boolean;
@@ -730,6 +735,8 @@ begin
   Result.RippleScale := 2.5;
   Result.SymItems := nil;
   Result.SymItemHas := nil;
+  Result.CbFill := nil;
+  Result.CbFillSet := nil;
   Result.VisualRows := nil;
   Result.VisualLine := Default(TTyVisualLineFill);
   Result.VisualLineStroke := False;
@@ -916,6 +923,19 @@ var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
 begin
   Result := AVisual;
   if AStore = nil then Exit;
+  { [R2-J2] THE SERIES' COLOUR CALLBACK, before everything else here: it is
+    the series style's per-item colour (a gradient or pattern of the series
+    gives way to it) }
+  if AVisual.CbFillSet <> nil then
+  begin
+    raw := AStore.GetRawIndex(ARow);
+    if (raw >= 0) and (raw <= High(AVisual.CbFillSet)) and AVisual.CbFillSet[raw] then
+    begin
+      Result.Fill := AVisual.CbFill[raw];
+      Result.FillGradient := Default(TTyChartGradient);
+      Result.FillPattern := Default(TTyChartPattern);
+    end;
+  end;
   { THE VISUAL PIPELINE FIRST, then the datum's own style over it: upstream's
     visualMap encoding is stage 4000 and the item style 4500. A colour the
     mapping left undefined paints nothing, and an opacity it wrote replaces

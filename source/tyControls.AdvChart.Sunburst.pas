@@ -121,7 +121,7 @@ function TyBuildSunburstMarks(ASeriesIndex: Integer; const ASolved: TTySunburstS
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers;
 
 const
   cRadian = Pi / 180;
@@ -759,6 +759,9 @@ var
   spec: TTyLabelSpec;
   c: TTyChartColor;
   show: Boolean;
+  prm: TTyChartCallbackParams;
+  vals: TTyDoubleArray;
+  vk: Integer;
 begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
@@ -838,6 +841,20 @@ begin
     end;
     if show and (AStore <> nil) then
     begin
+      { [R2-J2] a named formatter is handed the sunburst's getDataParams:
+        the plain item's, and treePathInfo -- sunburst-label-rotate picks
+        each ring's rotation by its depth }
+      if spec.HasFormatter and TyChartIsHandlerRef(spec.Formatter) then
+      begin
+        prm := TyLabelParams(AStore, row, AInk.SeriesName, AInk.LabelValueDim,
+          NaN, False, ASeriesIndex, 'sunburst', 0, '');
+        SetLength(vals, Length(ASolved.Nodes));
+        for vk := 0 to High(vals) do vals[vk] := ASolved.Nodes[vk].Value;
+        prm.TreePathInfo := TyHierTreePathJson(ASolved.Hier, vals, row,
+          TyHierItemName(ASolved.Series));
+        el.Caption.Text := TyChartRunHandler(spec.Formatter, TyChartOneParams(prm));
+      end
+      else
       el.Caption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
         AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False,
         ASeriesIndex, 'sunburst');

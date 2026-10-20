@@ -397,6 +397,14 @@ type
     True: the host saved (or declined) -- no dialog, no file. }
   TTyToolboxSaveEvent = procedure(Sender: TObject; var AFileName: string;
     const AOptsJson: string; var AHandled: Boolean) of object;
+  { [R2-J2] AN IMAGE THE CHART CANNOT LOAD ITSELF: an option's picture given
+    as a URL (an http address, a file path -- anything but a `data:` URL
+    and an image list's `image://list/index`), written without the
+    `image://` in front. Set AImage to the picture -- the chart owns it from
+    then on -- or leave it nil; the answer is kept (ForgetResolvedImages
+    asks again). Upstream loads the URL; this control never fetches. }
+  TTyChartResolveImageEvent = procedure(Sender: TObject; const AUrl: string;
+    var AImage: TBGRABitmap) of object;
   { the skin's inks for the toolbox [Batch 125] }
   TTyTbInk = record
     Stroke, StrokeHover, Background, Border, Brush, Title: TTyChartColor;
@@ -1229,6 +1237,10 @@ type
     FTbBfSnapType: TTyBrushType;
     FTbError: string;
     FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
+    { [R2-J2] OnResolveImage and the answers it gave, by URL (owned; a nil
+      answer kept too) }
+    FOnResolveImage: TTyChartResolveImageEvent;
+    FResolvedImages: TStringList;
     { THE TIMELINE [Batch 129] -- see its section }
     FTlView: TTyTimelineView;
     FTlAnim: TTyAnimation;
@@ -2776,8 +2788,16 @@ type
     procedure PlaceBoxedCoordSys;
     function CalendarGraphPoints(ASeriesIndex: Integer;
       ACal: TTyCalendar): TTyPointFArray;
+    { [R2-J2] the image scope's URL resolver: OnResolveImage, once a URL }
+    function ResolveImageUrl(const AUrl: string): TBGRABitmap;
     procedure SymbolItems(ASeriesIndex: Integer; const ABase: TTySymbolSpec;
       out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
+    { [R2-J2] a series' per-item visual callbacks ('@Name' handlers): the
+      symbol options of a scatter or an effectScatter, and the
+      itemStyle.color of a series that colours by itemStyle's fill; every
+      row, or AOnlyRow alone }
+    procedure VisualCallbacks(ASlot: Integer; var AVisual: TTySeriesVisual;
+      AOnlyRow: Integer = -1);
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
       out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
     procedure ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
@@ -3741,6 +3761,9 @@ type
     { renderToCanvas: the picture, unencoded. The caller frees it; nil for an
       image with no pixels. }
     function RenderToBitmap(const AOptsJson: string = ''): TBGRABitmap;
+    { [R2-J2] drop every picture OnResolveImage answered (and every URL it
+      left unanswered): the next draw asks again }
+    procedure ForgetResolvedImages;
     { THE LOADING EFFECT, showLoading's `default` [Batch 106]: a mask over
       the chart, the text and a turning arc. ACfgJson is upstream's cfg
       (`text`, `textColor`, `color`, `maskColor`, `fontSize`, `fontWeight`,
@@ -4615,6 +4638,9 @@ type
       SaveToFile }
     property OnToolboxSaveAsImage: TTyToolboxSaveEvent read FOnToolboxSaveAsImage
       write FOnToolboxSaveAsImage;
+    { [R2-J2] a picture the option names by URL: see TTyChartResolveImageEvent }
+    property OnResolveImage: TTyChartResolveImageEvent read FOnResolveImage
+      write FOnResolveImage;
     { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
     property AnimationMode: TTyChartAnimationMode read FAnimMode
       write SetAnimMode default camAuto;

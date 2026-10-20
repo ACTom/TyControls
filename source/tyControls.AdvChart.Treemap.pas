@@ -282,7 +282,8 @@ function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSol
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.Handlers;
 
 const
   cEps = 5e-5;
@@ -1798,6 +1799,8 @@ var
   lines: TStringArray;
   d: TJSONData;
   mask: TFPUExceptionMask;
+  prm: TTyChartCallbackParams;
+  vals: TTyDoubleArray;
 begin
   if not ASolved.Valid or (AMeasurer = nil) then Exit;
   mask := GetExceptionMask;
@@ -1815,7 +1818,20 @@ begin
       if row <= High(ASpecs) then spec := ASpecs[row] else Continue;
       if not spec.Show then Continue;
       { the formatter, else the chain's name }
-      if spec.HasFormatter then
+      if spec.HasFormatter and TyChartIsHandlerRef(spec.Formatter) then
+      begin
+        { [R2-J2] the treemap's getDataParams: treePathInfo beside the
+          plain item's }
+        prm := TyLabelParams(AStore, row, ASeriesName, AValueDim, NaN, False,
+          ASolved.SeriesIndex, 'treemap', 0, '');
+        SetLength(vals, Length(ASolved.Nodes));
+        for k := 0 to High(vals) do vals[k] := ASolved.Nodes[k].Value;
+        prm.TreePathInfo := TyHierTreePathJson(ASolved.Hier, vals, row,
+          TyHierItemName(ASolved.Series));
+        text := TyChartRunHandler(spec.Formatter, TyChartOneParams(prm));
+        has := True;
+      end
+      else if spec.HasFormatter then
       begin
         text := TyLabelText(spec.Formatter, True, tldName, AStore, row,
           ASeriesName, AValueDim, NaN, False, ASolved.SeriesIndex, 'treemap');

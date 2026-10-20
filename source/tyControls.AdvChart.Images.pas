@@ -20,6 +20,11 @@ unit tyControls.AdvChart.Images;
 
   `image://data:...` is the data URL. Anything else -- an http URL, a file
   path -- is no picture: upstream's image that has not loaded yet.
+  [R2-J2] ... unless the chart's OnResolveImage answers it: the URL (without
+  an `image://` in front) is handed to the RESOLVER of the scope (the chart
+  that opened it), which asks the host once and keeps the answer -- the
+  chart itself still loads nothing. A list reference whose list nobody has
+  is asked about too.
 
   THE OWNER is the chart's, and a resolve does not take a chart: the chart
   opens a SCOPE around the work that resolves (its build, its paint, an
@@ -51,6 +56,16 @@ procedure TyChartRegisterImageList(const AName: string; AList: TCustomImageList)
 procedure TyChartUnregisterImageList(const AName: string);
 { the registered list of that name, or nil }
 function TyChartRegisteredImageList(const AName: string): TCustomImageList;
+
+type
+  { [R2-J2] A URL the chart cannot load itself, answered: the bitmap (the
+    resolver's -- do not free it, do not keep it past the scope), or nil }
+  TTyChartImageUrlResolver = function(const AUrl: string): TBGRABitmap of object;
+
+{ the resolver a URL goes to inside a chart's scope; Enter answers the one
+  it replaced, which Leave puts back }
+function TyChartImageResolverEnter(AResolver: TTyChartImageUrlResolver): TTyChartImageUrlResolver;
+procedure TyChartImageResolverLeave(APrevious: TTyChartImageUrlResolver);
 
 { the owner a name falls back to; Enter answers the scope it replaced, which
   Leave puts back }
@@ -128,6 +143,8 @@ var
   GDataCache: TStringList = nil;  { data URL -> TBGRABitmap (or nil), owned }
   GWatch: TTyImgWatch = nil;
   GScope: TComponent = nil;
+  { [R2-J2] the scope's URL resolver }
+  GResolver: TTyChartImageUrlResolver = nil;
   { [R2-F] moves with every list change or free (DropList) and every flush }
   GImageGeneration: Cardinal = 0;
 
@@ -297,6 +314,24 @@ end;
 function TyChartImageScopeOwner: TComponent;
 begin
   Result := GScope;
+end;
+
+function TyChartImageResolverEnter(AResolver: TTyChartImageUrlResolver): TTyChartImageUrlResolver;
+begin
+  Result := GResolver;
+  GResolver := AResolver;
+end;
+
+procedure TyChartImageResolverLeave(APrevious: TTyChartImageUrlResolver);
+begin
+  GResolver := APrevious;
+end;
+
+{ [R2-J2] what the scope's resolver answers for a URL, nil without one }
+function ResolvedImage(const AUrl: string): TBGRABitmap;
+begin
+  Result := nil;
+  if Assigned(GResolver) and (AUrl <> '') then Result := GResolver(AUrl);
 end;
 
 { ---- names ---- }
@@ -517,9 +552,19 @@ begin
     end;
     Exit;
   end;
-  if not TyChartImageListRef(s, nm, idx) then Exit;
-  L := TyChartFindImageList(nm);
-  if L = nil then Exit;
+  if TyChartImageListRef(s, nm, idx) then L := TyChartFindImageList(nm)
+  else L := nil;
+  if L = nil then
+  begin
+    { [R2-J2] a URL, or a list nobody has: the host's answer }
+    Result := ResolvedImage(s);
+    if Result <> nil then
+    begin
+      ANatW := Result.Width;
+      ANatH := Result.Height;
+    end;
+    Exit;
+  end;
   Result := ListImage(L, idx, ADevicePx);
   if Result = nil then Exit;
   ANatW := L.Width;
@@ -549,9 +594,21 @@ begin
     Exit;
   end;
   Result := False;
-  if not TyChartImageListRef(s, nm, idx) then Exit;
-  L := TyChartFindImageList(nm);
-  if (L = nil) or (idx >= L.Count) or (L.Width <= 0) or (L.Height <= 0) then Exit;
+  if TyChartImageListRef(s, nm, idx) then L := TyChartFindImageList(nm)
+  else L := nil;
+  if L = nil then
+  begin
+    { [R2-J2] the host's answer for a URL }
+    bmp := ResolvedImage(s);
+    Result := bmp <> nil;
+    if Result then
+    begin
+      AW := bmp.Width;
+      AH := bmp.Height;
+    end;
+    Exit;
+  end;
+  if (idx >= L.Count) or (L.Width <= 0) or (L.Height <= 0) then Exit;
   AW := L.Width;
   AH := L.Height;
   Result := True;

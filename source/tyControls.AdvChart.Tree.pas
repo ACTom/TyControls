@@ -62,6 +62,17 @@ type
 
   TTyTreeOrient = (troLR, troRL, troTB, troBT, troNone);
 
+{ [R2-J2] a node's `name` as upstream's getName answers it: a string, a
+  number's text, or nothing (moved here from the tooltip's) }
+function TyHierItemName(AItem: TJSONData): string;
+{ [R2-J2] wrapTreePathInfo as JSON text -- a sunburst's or a treemap's
+  params.treePathInfo: every node from the virtual root (named ARootName)
+  down to ARow, {name, dataIndex, value}, the value AValues[row] (a number
+  that is none is null, as JSON.stringify writes it) }
+function TyHierTreePathJson(const AHier: TTyHierarchy;
+  const AValues: TTyDoubleArray; ARow: Integer; const ARootName: string): string;
+
+type
   TTyTreeSpec = record
     Box: TTyRawBox;
     Radial: Boolean;
@@ -169,7 +180,50 @@ function TyBuildTreeMarks(ASeriesIndex: Integer; const ASolved: TTyTreeSolved;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.AdvChart.LabelGuide;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.LabelGuide,
+  tyControls.AdvChart.OptionMerge;
+
+function TyHierItemName(AItem: TJSONData): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if not (AItem is TJSONObject) then Exit;
+  d := TJSONObject(AItem).Find('name');
+  if d = nil then Exit;
+  if d.JSONType = jtString then Result := d.AsString
+  else if d.JSONType = jtNumber then Result := TyJsNumberToString(d.AsFloat);
+end;
+
+function TyHierTreePathJson(const AHier: TTyHierarchy;
+  const AValues: TTyDoubleArray; ARow: Integer; const ARootName: string): string;
+var
+  path: TTyIntegerArray;
+  j, k, n: Integer;
+  nm, vt: string;
+  v: Double;
+begin
+  path := nil;
+  k := ARow;
+  while (k >= 0) and (k <= High(AHier.Nodes)) do
+  begin
+    n := Length(path);
+    SetLength(path, n + 1);
+    path[n] := k;
+    k := AHier.Nodes[k].Parent;
+  end;
+  Result := '[';
+  for j := High(path) downto 0 do
+  begin
+    if j < High(path) then Result := Result + ',';
+    if path[j] = 0 then nm := ARootName
+    else nm := TyHierItemName(AHier.Nodes[path[j]].Item);
+    if path[j] <= High(AValues) then v := AValues[path[j]] else v := NaN;
+    if IsNan(v) or IsInfinite(v) then vt := 'null' else vt := TyJsNumberToString(v);
+    Result := Result + '{"name":' + TyJsonQuote(nm) + ',"dataIndex":'
+      + IntToStr(path[j]) + ',"value":' + vt + '}';
+  end;
+  Result := Result + ']';
+end;
 
 { ==================== small readers ==================== }
 

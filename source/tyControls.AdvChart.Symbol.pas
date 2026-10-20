@@ -258,15 +258,28 @@ begin
   Result := StrToFloatDef(Trim(S), NaN, fs);
 end;
 
-{ symbolSize is a number or a two-element array; a callback cannot survive the
-  trip through JSON and is simply absent. }
+{ [R2-J2] '@Name' in place of a symbol option is upstream's function: a
+  per-item callback (visual/symbol.ts), run by the chart for every item --
+  as a series value it is undefined, not a symbol name (which would draw a
+  rect) nor a size }
+function IsCallbackRef(AData: TJSONData): Boolean;
+var s: string;
+begin
+  Result := False;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  s := AData.AsString;
+  Result := (Length(s) > 1) and (s[1] = '@') and (s[2] <> '[');
+end;
+
+{ symbolSize is a number or a two-element array. [R2-J2] A callback written
+  as '@Name' is no value here: the chart runs it per item (VisualCallbacks). }
 procedure ReadSize(ANode: TJSONObject; var ASpec: TTySymbolSpec);
 var
   d: TJSONData;
   a: TJSONArray;
 begin
   d := ANode.Find('symbolSize');
-  if d = nil then Exit;
+  if (d = nil) or IsCallbackRef(d) then Exit;
   if d.JSONType = jtNumber then
   begin
     ASpec.WidthPx := d.AsFloat;
@@ -341,7 +354,7 @@ var
   a: TJSONArray;
 begin
   d := ANode.Find('symbolOffset');
-  if d = nil then Exit;
+  if (d = nil) or IsCallbackRef(d) then Exit;
   { normalizeSymbolOffset: a single value is both offsets }
   if not (d is TJSONArray) then
   begin
@@ -491,7 +504,7 @@ begin
   if ANode = nil then Exit;
 
   d := ANode.Find('symbol');
-  if (d <> nil) and (d.JSONType = jtString) then
+  if (d <> nil) and (d.JSONType = jtString) and not IsCallbackRef(d) then
   begin
     Result.Kind := TySymbolKindOf(d.AsString, empty, path);
     Result.Empty := empty;

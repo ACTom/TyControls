@@ -303,8 +303,9 @@ function TyQuantile(const AAsc: array of Double; AP: Double): Double;
   boundIQR from AConfig: absent or null is 1.5; 'none' and 0 use the extremes
   (low and high are the minimum and maximum); anything else multiplies the
   interquartile range, coerced the way `*` coerces. itemNameFormatter: a
-  string with its FIRST value placeholder replaced by the row index;
-  anything else, the index. A sample is a number as JavaScript's subtraction reads it.
+  string with its FIRST value placeholder replaced by the row index; [R2-J2]
+  a '@Name' -- upstream's function -- the registered formatter handed
+  `{value: i}` (params.Values [i]); anything else, the index. A sample is a number as JavaScript's subtraction reads it.
 
   False, with nothing made, when a row is not an array -- upstream's
   `.slice()` throws there. The two arrays are the caller's. [Batch 108] }
@@ -423,7 +424,7 @@ implementation
 
 uses tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
   tyControls.AdvChart.DataTransform, tyControls.AdvChart.Jitter,
-  tyControls.StrConsts;
+  tyControls.AdvChart.Handlers, tyControls.StrConsts;
 
 const
   { Source.ts:351 -- `10 is an experience number, avoid long loop.` }
@@ -667,6 +668,7 @@ var
   d, fmt: TJSONData;
   name: string;
   box, outlier: TJSONArray;
+  prm: TTyChartCallbackParams;
 begin
   Result := False;
   ABoxes := nil;
@@ -723,8 +725,18 @@ begin
       lo := JsMax2(mn, q1 - bound);
       hi := JsMin2(mx, q3 + bound);
     end;
+    { [R2-J2] isFunction(itemNameFormatter): itemNameFormatter({value: i}) --
+      boxplot-light-velocity2 names its boxes 'expr 0' ... that way }
+    if (fmt <> nil) and (fmt.JSONType = jtString) and TyChartIsHandlerRef(fmt.AsString) then
+    begin
+      prm := TyChartBlankParams;
+      SetLength(prm.Values, 1);
+      prm.Values[0] := i;
+      prm.ValueText := IntToStr(i);
+      name := TyChartRunHandler(fmt.AsString, TyChartOneParams(prm));
+    end
     { the FIRST placeholder only -- String.prototype.replace with a string }
-    if (fmt <> nil) and (fmt.JSONType = jtString) then
+    else if (fmt <> nil) and (fmt.JSONType = jtString) then
     begin
       name := fmt.AsString;
       k := Pos('{value}', name);

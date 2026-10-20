@@ -625,6 +625,9 @@ begin
         if c.LmStyleHasAH then args.Align := LmAlignName(c.LmStyleAH);
         if c.LmStyleHasAV then args.VerticalAlign := LmVAlignName(c.LmStyleAV);
         if gi >= 0 then args.LabelLinePoints := Copy(AList.Element(gi).Shape.Points);
+        args.ChartWidth := cssW;
+        args.ChartHeight := cssH;
+        args.Scale := scale;
         TyChartRunLabelLayoutHandler(lay.Handler, args, lo);
       end
       else
