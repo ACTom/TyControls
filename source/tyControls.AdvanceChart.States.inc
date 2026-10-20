@@ -2471,19 +2471,42 @@ end;
   or an update is pending, or anything else wrote to the list since the
   build: then it is built again, as before. }
 function TTyAdvanceChart.StPatchList: Boolean;
+var
+  region: Boolean;
+  prevIdx: TTyIntegerArray;
+  prevEls: array of TTyChartElement;
+  k: Integer;
 begin
   Result := False;
   if GStPatchOff or FStGeoApplied or (FPaintList = nil) or not FPaintListValid
     or FDirty or FAnimPending or FExporting or not FPaintList.JournalReady then Exit;
+  { [R2-L] what the last patch wrote, as it stands now: what this one
+    changes is against it }
+  region := not GLayerRegionOff and FProgLayerOk and FProgLayerInOrder
+    and (FProgLayer <> nil);
+  prevIdx := nil;
+  prevEls := nil;
+  if region then
+  begin
+    SetLength(prevIdx, FPaintList.JournalCount);
+    SetLength(prevEls, FPaintList.JournalCount);
+    for k := 0 to High(prevIdx) do
+    begin
+      prevIdx[k] := FPaintList.JournalIndex(k);
+      prevEls[k] := FPaintList.Element(prevIdx[k]);
+    end;
+  end;
   FPaintList.JournalRewind;
   { the incremental layer holds the chunks as they were written: drawn
-    again, as after a build [Batch 119] }
+    again, as after a build [Batch 119] -- [R2-L] or only where the patch
+    changed it }
   FProgLayerOk := False;
   StWrite(FPaintList);
   TmCrumbStates(FPaintList);
   MapRepatch(FPaintListPPI, True);
   StSyncMarks(FPaintList);
   FPaintList.JournalClose;
+  if region and ProgPatchRegion(prevIdx, prevEls) then FProgLayerOk := True;
   Inc(GStPatches);
   Result := True;
 end;

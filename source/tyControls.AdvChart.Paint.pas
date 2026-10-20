@@ -1033,6 +1033,10 @@ type
     { [R2-P] how many elements the open session has kept -- one per index
       however often it was written (FOR THE TESTS) }
     property JournalCount: Integer read FJrN;
+    { [R2-L] the K-th element the open session keeps: its index, and what
+      it was before the session's first write to it }
+    function JournalIndex(K: Integer): Integer;
+    function JournalOld(K: Integer): PTyChartElement;
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
@@ -1324,6 +1328,17 @@ begin
   for k := ACount to FCount - 1 do FItems[k] := Default(TTyChartElement);
   FCount := ACount;
   FOrdered := False;
+end;
+
+function TTyPaintList.JournalIndex(K: Integer): Integer;
+begin
+  if (K < 0) or (K >= FJrN) then Exit(-1);
+  Result := FJrIdx[K];
+end;
+
+function TTyPaintList.JournalOld(K: Integer): PTyChartElement;
+begin
+  Result := @FJrOld[K];
 end;
 
 function TTyPaintList.JournalHoldsFrom(AIndex: Integer): Boolean;

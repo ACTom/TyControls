@@ -361,6 +361,7 @@ begin
     sc.DeviceUnits := False;
     P.BeginPaintOnScaled(nil, Rect(0, 0, AW div FProgLayerScale, AH div FProgLayerScale), APPI,
       FProgLayer, sc);
+    FProgLayerLastPos := -1;
     for i := 0 to FPaintList.Count - 1 do
     begin
       idx := FPaintList.PaintOrder(i);
@@ -369,6 +370,7 @@ begin
       TyRenderElement(P, el);
       if el.Shape.Kind = cskLarge then FProgPainted[idx] := Max(1, TyLargeRows(el.Shape.Large))
       else FProgPainted[idx] := 1;
+      FProgLayerLastPos := i;
     end;
     P.EndPaint;
   finally
@@ -376,6 +378,9 @@ begin
     P.Free;
   end;
   FProgLayerOk := True;
+  { drawn whole, in paint order [R2-L] }
+  FProgLayerInOrder := True;
+  FProgLayerRegionOn := False;
 end;
 
 { A FRAME'S CHUNK onto the layer: what was not on it, in paint order, and
@@ -419,6 +424,10 @@ begin
           FProgLayer.Height div FProgLayerScale), FProgLayerPPI, FProgLayer, sc);
         started := True;
       end;
+      { [R2-L] still what a whole drawing gives: each element drawn after
+        every one before it in paint order, and whole }
+      if (have > 0) or (i <= FProgLayerLastPos) then FProgLayerInOrder := False;
+      if i > FProgLayerLastPos then FProgLayerLastPos := i;
       if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol) then
       begin
         { only the rows the batch grew by }
@@ -471,7 +480,9 @@ begin
   if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
     or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
     or (FProgLayerScale <> APainter.DeviceScale) then
-    ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale);
+    ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
+  else if FProgLayerRegionOn then
+    ProgLayerRegionRedraw;
   blitted := False;
   for i := 0 to AList.Count - 1 do
   begin
@@ -501,6 +512,140 @@ begin
       Continue;
     end;
     TyRenderElement(APainter, pe^);
+  end;
+end;
+
+{ THE BOX A STATE PATCH CHANGED ON THE LAYER [R2-L]. The elements the last
+  patch wrote (AIdx, as they stood before this one: AEls) and the ones this
+  one wrote (the journal: each with what it was before) -- an element of a
+  run that is not what it was puts its old and its new paint rect in the
+  box. False where one has no paint rect (a large batch, a rich caption):
+  the layer is drawn whole. }
+function TTyAdvanceChart.ProgPatchRegion(const AIdx: TTyIntegerArray;
+  const AEls: array of TTyChartElement): Boolean;
+var
+  k, idx: Integer;
+  seen: TTyBoolArray;
+  box: TTyXYWH;
+  any: Boolean;
+
+  function Take(const AOld, ANew: TTyChartElement): Boolean;
+  var r: TTyXYWH;
+  begin
+    Result := True;
+    if not (ProgIsLayered(AOld) or ProgIsLayered(ANew)) then Exit;
+    if TyElementsSame(AOld, ANew) then Exit;
+    if ProgIsLayered(AOld) then
+    begin
+      if not TyElementPaintRect(AOld, FPaintListPPI, r) then Exit(False);
+      if any then TyZrRectUnion(box, r) else box := r;
+      any := True;
+    end;
+    if ProgIsLayered(ANew) then
+    begin
+      if not TyElementPaintRect(ANew, FPaintListPPI, r) then Exit(False);
+      if any then TyZrRectUnion(box, r) else box := r;
+      any := True;
+    end;
+  end;
+
+begin
+  Result := False;
+  any := False;
+  box := Default(TTyXYWH);
+  SetLength(seen, FPaintList.Count);
+  for k := 0 to High(AIdx) do
+  begin
+    idx := AIdx[k];
+    if (idx < 0) or (idx >= FPaintList.Count) then Exit;
+    seen[idx] := True;
+    if not Take(AEls[k], FPaintList.Element(idx)) then Exit;
+  end;
+  for k := 0 to FPaintList.JournalCount - 1 do
+  begin
+    idx := FPaintList.JournalIndex(k);
+    if (idx < 0) or (idx >= FPaintList.Count) then Exit;
+    if seen[idx] then Continue;
+    if not Take(FPaintList.JournalOld(k)^, FPaintList.Element(idx)) then Exit;
+  end;
+  Result := True;
+  if not any then Exit;
+  if FProgLayerRegionOn then TyZrRectUnion(FProgLayerRegion, box)
+  else FProgLayerRegion := box;
+  FProgLayerRegionOn := True;
+end;
+
+{ THE LAYER DRAWN AGAIN INSIDE THE BOX [R2-L]. The layer is what a whole
+  drawing in paint order gives (FProgLayerInOrder), and only the elements
+  of the box changed: inside it, the layer is the elements that meet it
+  drawn from transparent in paint order -- an element that does not meet
+  it puts nothing there. Each is drawn whole (an antialiased fill is not
+  the same under a clip) and the pixels outside the box are the layer's
+  as it was. }
+procedure TTyAdvanceChart.ProgLayerRegionRedraw;
+var
+  saved: TBGRABitmap;
+  P: TTyPainter;
+  R: TRect;
+  zr, er: TTyXYWH;
+  i, idx, s: Integer;
+  pe: PTyChartElement;
+  sc: TTyCanvasScale;
+  kept: Boolean;
+
+  procedure Band(const ABand: TRect);
+  begin
+    if (ABand.Right > ABand.Left) and (ABand.Bottom > ABand.Top) then
+      FProgLayer.PutImagePart(ABand.Left, ABand.Top, saved, ABand, dmSet);
+  end;
+
+begin
+  FProgLayerRegionOn := False;
+  if FProgLayer = nil then Exit;
+  s := Max(1, FProgLayerScale);
+  { the box in the layer's pixels, two device px out }
+  zr := FProgLayerRegion;
+  zr.X := zr.X - 2;
+  zr.Y := zr.Y - 2;
+  zr.W := zr.W + 4;
+  zr.H := zr.H + 4;
+  R := Rect(Max(0, Floor(zr.X * s)), Max(0, Floor(zr.Y * s)),
+    Min(FProgLayer.Width, Ceil((zr.X + zr.W) * s)),
+    Min(FProgLayer.Height, Ceil((zr.Y + zr.H) * s)));
+  if (R.Right <= R.Left) or (R.Bottom <= R.Top) then Exit;
+  saved := TBGRABitmap.Create(FProgLayer.Width, FProgLayer.Height);
+  P := TTyPainter.Create;
+  kept := TyRenderKeptStrokes;
+  TyRenderKeptStrokes := True;
+  try
+    saved.PutImage(0, 0, FProgLayer, dmSet);
+    FProgLayer.FillRect(R, BGRAPixelTransparent, dmSet);
+    sc.Scale := s;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayer.Width div s, FProgLayer.Height div s),
+      FProgLayerPPI, FProgLayer, sc);
+    FProgLayerLastPos := -1;
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      idx := FPaintList.PaintOrder(i);
+      pe := FPaintList.Ref(idx);
+      if not ProgIsLayered(pe^) then Continue;
+      FProgLayerLastPos := i;
+      if TyElementPaintRect(pe^, FProgLayerPPI, er) and not TyZrRectIntersect(er, zr) then
+        Continue;
+      TyRenderElement(P, pe^);
+    end;
+    P.EndPaint;
+    FProgLayer.ClipRect := Rect(0, 0, FProgLayer.Width, FProgLayer.Height);
+    Band(Rect(0, 0, FProgLayer.Width, R.Top));
+    Band(Rect(0, R.Bottom, FProgLayer.Width, FProgLayer.Height));
+    Band(Rect(0, R.Top, R.Left, R.Bottom));
+    Band(Rect(R.Right, R.Top, FProgLayer.Width, R.Bottom));
+    Inc(GLayerRegions);
+  finally
+    TyRenderKeptStrokes := kept;
+    P.Free;
+    saved.Free;
   end;
 end;
 

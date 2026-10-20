@@ -738,6 +738,14 @@ type
       FProgFastFrame: since the capture the static layer was dropped by
       progress frames alone. }
     FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
+    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: whether the layer
+      is what a whole drawing in paint order gives (FProgLayerInOrder; the
+      last position drawn on it, FProgLayerLastPos), and the box, in device
+      px, a state patch changed on it (FProgLayerRegion when
+      FProgLayerRegionOn) -- see ProgLayerRegionRedraw }
+    FProgLayerInOrder, FProgLayerRegionOn: Boolean;
+    FProgLayerLastPos: Integer;
+    FProgLayerRegion: TTyXYWH;
     FListTailAt: Integer;
     FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
     FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
@@ -2492,6 +2500,13 @@ type
       FStatic's canvas; False where it cannot be (then the full paint runs) }
     function ProgFastPaint(const R: TRect; APPI: Integer; const AScale: TTyCanvasScale): Boolean;
     procedure ProgFastDrop;
+    { [R2-L] the layer drawn again inside the box a state patch changed }
+    procedure ProgLayerRegionRedraw;
+    { [R2-L] after a state patch: the box its writes changed on the layer,
+      against what the last patch had written (AIdx / AEls) -- False where
+      the layer must be drawn whole }
+    function ProgPatchRegion(const AIdx: TTyIntegerArray;
+      const AEls: array of TTyChartElement): Boolean;
     { the row a large element's own handler gives the pointer: the batch's
       scan, -1 for none (a candle's path has no data) }
     function LargeRowAt(AElement, AX, AY: Integer): Integer;
@@ -4724,6 +4739,11 @@ function TyAdvChartProgFastFramesForTest: Integer;
   and how many times it has. }
 procedure TyAdvChartListTailForTest(AOn: Boolean);
 function TyAdvChartListTailsForTest: Integer;
+{ [R2-L] The incremental layer drawn again only where a state changed it
+  (ProgLayerRegionRedraw): a switch -- off, the layer is drawn whole, the
+  reference -- and how many times it has been. }
+procedure TyAdvChartLayerRegionForTest(AOn: Boolean);
+function TyAdvChartLayerRegionsForTest: Integer;
 
 implementation
 
@@ -4780,6 +4800,20 @@ end;
 function TyAdvChartListTailsForTest: Integer;
 begin
   Result := GListTails;
+end;
+
+var
+  GLayerRegionOff: Boolean = False;
+  GLayerRegions: Integer = 0;
+
+procedure TyAdvChartLayerRegionForTest(AOn: Boolean);
+begin
+  GLayerRegionOff := not AOn;
+end;
+
+function TyAdvChartLayerRegionsForTest: Integer;
+begin
+  Result := GLayerRegions;
 end;
 
 function TyAdvChartStPatchesForTest: Integer;
