@@ -236,6 +236,20 @@ function seriesParts(chart) {
       });
       return;
     }
+    // [R2-V] a graph's edge (its Line group's line, the edge's row), in a
+    // case that asks for the pens' dashes
+    if (type === 'graph' && CUR_CASE && CUR_CASE.dash) {
+      data.each(i => {
+        const g = data.getItemGraphicEl(i);
+        if (g) put(g.childAt(0), s, i, 'host');
+      });
+      const ed = sm.getEdgeData();
+      ed.each(e => {
+        const g = ed.getItemGraphicEl(e);
+        if (g && g.childOfName('line')) put(g.childOfName('line'), s, e, 'edge');
+      });
+      return;
+    }
     if (type === 'pictorialBar') {
       data.each(i => {
         const g = data.getItemGraphicEl(i);
@@ -402,6 +416,8 @@ function aimOf(chart, pick) {
   if (k === 'gq') return aimAt(chart, view._progressEls[i]);
   if (k === 'rsym') return aimAt(chart, itemEl(chart, s, i).childAt(2).childAt(pick[3]));
   if (k === 'rline') return aimAt(chart, itemEl(chart, s, i).childAt(0));
+  // [R2-V] a graph's edge: its Line group's line
+  if (k === 'gedge') return aimAt(chart, sm.getEdgeData().getItemGraphicEl(i).childOfName('line'));
   if (k === 'rarea') return aimAt(chart, itemEl(chart, s, i).childAt(1));
   if (k === 'item') {
     const el = itemEl(chart, s, i);
@@ -1075,6 +1091,33 @@ const R2V = [
       series: [{ type: 'bar', emphasis: { itemStyle: { borderColor: '#000', borderWidth: 3, borderType: [6, 3] } },
         data: [10, 20, 30] }] },
     events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'radar-dash-word-tween', dash: true, note: '[R2-V] a radar\'s rings dashed at 1 (the series\' lineStyle), emphasis '
+    + 'lineStyle width 5: hovering a symbol of p, its ring\'s width tweens and the dash follows it. Over at 0, out at 500',
+    option: radar({ lineStyle: { type: 'dashed', width: 1 }, emphasis: { lineStyle: { width: 5 } } }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
+  { id: 'graph-dash-word-tween', dash: true, note: '[R2-V] a graph\'s nodes bordered #000 at 1 dashed, emphasis borderWidth '
+    + '5; its edges dotted at 1, emphasis lineStyle width 4 (focus adjacency): hovering node a, its width tweens and the '
+    + 'dash follows it; hovering the edge a-b, the same for the edge. Over a at 0, out at 500, over the edge at 800, out at 1200',
+    option: { color: [C0], series: [{ type: 'graph', layout: 'none', symbolSize: 30, left: 60, top: 60, width: 280, height: 180,
+      itemStyle: { borderColor: '#000', borderWidth: 1, borderType: 'dashed' },
+      lineStyle: { type: 'dotted', width: 1, color: '#000', opacity: 1 },
+      emphasis: { focus: 'adjacency', itemStyle: { borderWidth: 5 }, lineStyle: { width: 4 } },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 200, y: 0 }],
+      links: [{ source: 'a', target: 'b' }] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['gedge', 0, 0]), out(1200)] },
+  { id: 'tree-polyline-dash-word-tween', dash: true, note: '[R2-V] tree-dash-word-tween with edgeShape polyline: A\'s '
+    + 'edge is the polyline to its children (TreePath, the node\'s own __edge), its width tweens and the dash follows it. '
+    + 'Over A at 0, out at 500',
+    option: { series: [{ type: 'tree', left: 40, top: 30, bottom: 30, right: 120, symbolSize: 16, expandAndCollapse: false,
+      edgeShape: 'polyline', lineStyle: { type: 'dashed', width: 1, color: '#000' }, emphasis: { lineStyle: { width: 5 } },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }] }, { name: 'B' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'bar-dash-word-to-zero', dash: true, note: '[R2-V] bars bordered #000 at 2 dashed, emphasis borderWidth 0: the dash '
+    + 'follows the width down and is none at 0 (normalizeLineDash wants a width above 0). Hover bar 1 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed' },
+        emphasis: { itemStyle: { borderWidth: 0 } }, data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
 ];
 
 // ---------- the compact writer of animation.js ----------
@@ -1323,6 +1366,25 @@ function guards(cases) {
     const p = byId(cases, 'parallel-dash-word-tween');
     const pe = elRow(p, 0, 0, 'host');
     g('parallel-dash-word-follows-width', mid(p, pe, '[4,2]', '[16,8]'), pe && [numAt(pe, 'dash', 50), numAt(pe, 'dash', 450)].join(' '));
+    // [R2-V]
+    const r = byId(cases, 'radar-dash-word-tween');
+    const re = elRow(r, 0, 0, 'host');
+    g('radar-dash-word-follows-width', mid(r, re, '[4,2]', '[20,10]'), re && [numAt(re, 'dash', 50), numAt(re, 'dash', 450)].join(' '));
+    const gr = byId(cases, 'graph-dash-word-tween');
+    const gn = elRow(gr, 0, 0, 'host');
+    const ge = elRow(gr, 0, 0, 'edge');
+    g('graph-dash-words-follow-width', mid(gr, gn, '[4,2]', '[20,10]') && ge && numAt(ge, 'dash', 850) !== '[1]'
+      && numAt(ge, 'dash', 850) !== '[4]' && JSON.parse(numAt(ge, 'dash', 1100))[0] > 3.99 && numAt(ge, 'dash', 1600) === '[1]',
+      gn && ge && [numAt(gn, 'dash', 50), numAt(gn, 'dash', 450), numAt(ge, 'dash', 850), numAt(ge, 'dash', 1100)].join(' '));
+    const tp = byId(cases, 'tree-polyline-dash-word-tween');
+    const tpe = elRow(tp, 0, 2, 'edge');
+    g('tree-polyline-dash-word-follows-width', mid(tp, tpe, '[4,2]', '[20,10]'),
+      tpe && [numAt(tpe, 'dash', 50), numAt(tpe, 'dash', 450)].join(' '));
+    const z = byId(cases, 'bar-dash-word-to-zero');
+    const ze = elRow(z, 0, 1, 'host');
+    g('dash-word-none-at-width-0', ze && numAt(ze, 'dash', 450) === 'null' && numAt(ze, 'dash', 1600) === '[8,4]'
+      && numAt(ze, 'dash', 50) !== 'null' && numAt(ze, 'dash', 50) !== '[8,4]',
+      ze && [numAt(ze, 'dash', 50), numAt(ze, 'dash', 450)].join(' '));
   }
   // [r2v]
   {

@@ -40,6 +40,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    function List: TTyPaintList;
     procedure Down(AX, AY: Integer);
     procedure Move(AX, AY: Integer);
     procedure Up(AX, AY: Integer);
@@ -91,6 +92,8 @@ type
     procedure TestTheThumbnailPensAsUpstream;
     { [R2-I5] the nodes' pens that are gradients }
     procedure TestTheThumbnailGradientPensAsUpstream;
+    { [R2-V] an edge the list draws nothing of: its pen as the line's }
+    procedure TestTheThumbnailPenOfAnEdgeOfNoLengthAsUpstream;
     procedure TestTheExpandedLayoutsAsUpstream;
     procedure TestTheClickTriggerAsUpstream;
     procedure TestTheMoveTriggerAsUpstream;
@@ -110,6 +113,8 @@ type
     procedure TearDown; override;
   published
     procedure TestTheThumbnailIsDrawnOverTheGraph;
+    { [R2-V] the elements the copy draws carry its items' pens }
+    procedure TestTheCopyIsDrawnInItsItemsPens;
     procedure TestTheBoxHidesWhatIsUnderIt;
     procedure TestTheExpansionEventCanBeSubscribed;
     procedure TestTheThrottleRunsOnItsOwnClock;
@@ -141,6 +146,11 @@ end;
 procedure TTaProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TTaProbe.List: TTyPaintList;
+begin
+  Result := SeriesList;
 end;
 
 procedure TTaProbe.Down(AX, AY: Integer);
@@ -1045,6 +1055,11 @@ begin
   RunGroup(['TH-GRAD']);
 end;
 
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailPenOfAnEdgeOfNoLengthAsUpstream;
+begin
+  RunGroup(['TH-PEN0']);
+end;
+
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheExpandedLayoutsAsUpstream;
 begin
   RunGroup(['AE-LAYOUT']);
@@ -1154,6 +1169,65 @@ begin
   FChart.GraphRoam(0, 100, 0);
   st := FChart.ThumbnailState(0);
   AssertTrue('the window moved left', st.Window.X < FChart.ThumbnailState(0).Content.X + 1);
+end;
+
+{ [R2-V] THE COPY AS DRAWN: each item a path element at the copy's paint
+  order, in the item's pen -- its dash phase and its gradient as the item
+  has them (the oracle compares the items; this, what is painted of them) }
+procedure TAdvChartThumbnailAxisExpandTest.TestTheCopyIsDrawnInItsItemsPens;
+const
+  cPens = '{"animation":false,'
+    + '"series":[{"type":"graph","layout":"none","roam":true,"symbolSize":24,'
+    + '"data":[{"name":"a","x":0,"y":0,"itemStyle":{"borderWidth":2,"borderColor":'
+    + '{"type":"linear","x":0,"y":0,"x2":1,"y2":0,"colorStops":[{"offset":0,"color":"#ff0000"},'
+    + '{"offset":1,"color":"#0000ff"}]}}},'
+    + '{"name":"b","x":100,"y":0,"itemStyle":{"borderColor":"#00aa00","borderWidth":2,'
+    + '"borderType":"dashed","borderDashOffset":5}},'
+    + '{"name":"c","x":50,"y":80}],'
+    + '"links":[{"source":"a","target":"b","lineStyle":{"type":"dashed","dashOffset":3}},'
+    + '{"source":"b","target":"c"}]}],'
+    + '"thumbnail":{}}';
+var
+  st: TTyThumbState;
+  els: array of TTyChartElement;
+  i, k, phased, graded: Integer;
+  el: TTyChartElement;
+begin
+  Show(cPens);
+  st := FChart.ThumbnailState(0);
+  AssertTrue('it has a view', st.View.Valid);
+  els := nil;
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    el := FChart.List.Element(i);
+    if el.Z2 = TyThumbItemZ2 then
+    begin
+      SetLength(els, Length(els) + 1);
+      els[High(els)] := el;
+    end;
+  end;
+  k := 0;
+  phased := 0;
+  graded := 0;
+  for i := 0 to High(st.Items) do
+  begin
+    if Length(TyThumbItemPath(st.Items[i])) = 0 then Continue;
+    AssertTrue(Format('item %d is drawn', [i]), k <= High(els));
+    el := els[k];
+    Inc(k);
+    if not st.Items[i].HasStroke then Continue;
+    AssertEquals(Format('item %d: the phase drawn', [i]), st.Items[i].DashOffset,
+      el.Style.DashOffsetLogical, 0);
+    AssertEquals(Format('item %d: the gradient drawn', [i]), Ord(st.Items[i].StrokeGradient.Kind),
+      Ord(el.Style.StrokeGradient.Kind));
+    AssertEquals(Format('item %d: its stops', [i]), Length(st.Items[i].StrokeGradient.Stops),
+      Length(el.Style.StrokeGradient.Stops));
+    if st.Items[i].DashOffset <> 0 then Inc(phased);
+    if st.Items[i].StrokeGradient.Kind <> cgkNone then Inc(graded);
+  end;
+  AssertEquals('every item drawn once', Length(els), k);
+  AssertEquals('b and the edge a-b dash with a phase of their own', 2, phased);
+  AssertEquals('a draws a gradient pen', 1, graded);
 end;
 
 procedure TAdvChartThumbnailAxisExpandTest.TestTheBoxHidesWhatIsUnderIt;

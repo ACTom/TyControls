@@ -5075,6 +5075,11 @@ begin
   end;
 end;
 
+const
+  { [R2-V] the thinnest dashed pen laid, in device px: 1/512 of a pixel's
+    coverage rounds to nothing in 8 bits }
+  cThinDashPx = 1 / 512;
+
 { [R2-F] A DASH WITH A PHASE. BGRA's pen starts every pattern at its head
   (bgrapen.pas, ComputeWidePolylinePoints' FlushLine: posstyle := 0) and has
   no way in for a phase, and it refuses a pattern with a zero entry (it
@@ -5306,6 +5311,12 @@ begin
   { A theme that set a border width of 0 means "no border". Falling back to
     BGRA's default width would draw a hairline everywhere it was switched off. }
   if w <= 0 then Exit;
+  { A DASHED PEN TOO THIN TO LEAVE A MARK is not laid [R2-V]: a dash written
+    as a word scales with the width, and a width tweening to 0 (a state's
+    borderWidth 0) passes 1e-7 px on its way -- hundreds of millions of
+    dashes round one bar, a stroke that never finished. Under 1/512 px no
+    pixel takes any of it in 8 bits. }
+  if (Length(FVecDash) > 0) and (w < cThinDashPx) then Exit;
   ctx := FBmp.Canvas2D;
   ctx.lineWidth := w;
   { Logical px -> multiples of the device line width, which is what BGRA's pen
@@ -5901,6 +5912,12 @@ begin
   if FBmp = nil then Exit;
   w := ScaleF(AWidthLogical);
   if w <= 0 then Exit;
+  { A DASHED PEN TOO THIN TO LEAVE A MARK is not laid [R2-V]: a dash written
+    as a word scales with the width, and a width tweening to 0 (a state's
+    borderWidth 0) passes 1e-7 px on its way -- hundreds of millions of
+    dashes round one bar, a stroke that never finished. Under 1/512 px no
+    pixel takes any of it in 8 bits. }
+  if (Length(FVecDash) > 0) and (w < cThinDashPx) then Exit;
   ctx := FBmp.Canvas2D;
   { the state StrokePath sets, set the same way }
   ctx.lineWidth := w;

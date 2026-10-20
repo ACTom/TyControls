@@ -1966,11 +1966,15 @@ begin
         pin.SeriesType := FBindings[SlotOfSeries(FMarkers[i].SeriesIndex)].SeriesType;
       pin.SeriesColor := MarkerSeriesColorCss(i);
       pin.SeriesColorData := MarkerSeriesColorData(i);
-      nd := TJSONObject(node).Find('name');
-      if (nd <> nil) and (nd.JSONType = jtString) then
-        pin.SeriesName := TyMkOf(nd)
-      else
-        pin.SeriesName := TyMkUndef;
+      { [R2-V] THE HOST SERIES' NAME AS ITS MODEL HAS IT
+        (MarkerModel.getDataParams: hostSeries.name) -- the written one, a
+        number as its text, a dataset column's, or the generated
+        'series' + NUL + index; the formatters' a and a handler's
+        seriesName print it. [Was: undefined wherever the option wrote no
+        string -- 'undefined' where upstream prints the name.] }
+      pin.SeriesName := TyMkUndef;
+      pin.SeriesName.Kind := mvkStr;
+      pin.SeriesName.Str := SeriesModelName(FMarkers[i].SeriesIndex);
       nd := FOption.Find('textStyle');
       if (nd <> nil) and (nd.JSONType = jtObject) then pin.TextStyle := TJSONObject(nd);
       MarkerGround(pin.Background, pin.IsDark);

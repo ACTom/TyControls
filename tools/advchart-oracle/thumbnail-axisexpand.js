@@ -813,6 +813,19 @@ const SCENARIOS = [
     },
     steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
   },
+  // [R2-V]
+  {
+    id: 'TH-PEN0', family: 'thumbnail', pen: true,
+    note: "[R2-V] an edge of no length (a and b at one place) dashed at 2 with its own phase 4: the copy clones its line's style like any other",
+    option: {
+      animation: false,
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 20,
+        data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 0, y: 0 }, { name: 'c', x: 120, y: 60 }],
+        links: [{ source: 'a', target: 'b', lineStyle: { type: 'dashed', width: 2, dashOffset: 4 } }, { source: 'b', target: 'c' }] }],
+      thumbnail: {},
+    },
+    steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
+  },
 ];
 
 const NOTES = [
