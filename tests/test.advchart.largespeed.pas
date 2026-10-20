@@ -61,6 +61,7 @@ type
     procedure TestALargeSeriesKeepsNoRowRecords;
     procedure TestAProgressFrameIsTheFullPaint;
     procedure TestTheIndicatorRebuildsTheTail;
+    procedure TestALayerRegionIsTheWholeLayer;
     procedure TestOneRowValueIsTheSeriesValue;
     procedure TestTheTextIsReadWhereItIsRead;
     procedure TestOnlyTheBuiltLabelsArePlaced;
@@ -205,6 +206,7 @@ begin
   FCtl.ThemeName := 'default';
   TyAdvChartProgFastForTest(True);
   TyAdvChartListTailForTest(True);
+  TyAdvChartLayerRegionForTest(True);
   TyPainterKeptStrokesForTest(True);
 end;
 
@@ -505,7 +507,7 @@ begin
     sb.Append('{"animation": false, "tooltip": {}, "xAxis": {"type": "category"},');
     sb.Append(' "yAxis": {"type": "category"}, "dataZoom": [{"type": "slider"}],');
     sb.Append(' "visualMap": {"min": 0, "max": 1, "calculable": true, "orient": "horizontal", "left": "center", "top": 0},');
-    sb.Append(' "series": [{"type": "heatmap", "progressive": 60, "data": [');
+    sb.Append(' "series": [{"type": "heatmap", "progressive": 60, "progressiveThreshold": 100, "data": [');
     for i := 0 to 19 do
       for j := 0 to 19 do
       begin
@@ -561,6 +563,122 @@ begin
     frames[False].Free;
     frames[True].Free;
     TyAdvChartListTailForTest(True);
+  end;
+end;
+
+{ a heatmap of a progressive run under a visual map (APiecewise: piecewise,
+  hovering a cell highlights its piece's cells), or a parallel of lines }
+function RegionOption(AKind: Integer): string;
+var
+  sb: TStringBuilder;
+  i, j: Integer;
+begin
+  sb := TStringBuilder.Create;
+  try
+    if AKind = 2 then
+    begin
+      sb.Append('{"animation": false, "parallelAxis": [{"dim": 0}, {"dim": 1}, {"dim": 2}, {"dim": 3}],');
+      sb.Append(' "series": [{"type": "parallel", "progressive": 30, "progressiveThreshold": 50, "smooth": true,');
+      sb.Append(' "lineStyle": {"width": 1.5, "opacity": 0.6}, "emphasis": {"lineStyle": {"width": 3}}, "data": [');
+      GLcg := 77;
+      for i := 0 to 119 do
+      begin
+        if i > 0 then sb.Append(',');
+        sb.Append(Format('[%d,%d,%d,%d]', [Lcg(100), Lcg(100), Lcg(100), Lcg(100)]));
+      end;
+      sb.Append(']}]}');
+      Exit(sb.ToString);
+    end;
+    sb.Append('{"animation": false, "xAxis": {"type": "category"}, "yAxis": {"type": "category"},');
+    if AKind = 1 then
+      sb.Append(' "visualMap": {"type": "piecewise", "min": 0, "max": 1, "splitNumber": 4, "orient": "horizontal", "left": "center", "top": 0},')
+    else
+      sb.Append(' "visualMap": {"min": 0, "max": 1, "calculable": true, "orient": "horizontal", "left": "center", "top": 0},');
+    sb.Append(' "series": [{"type": "heatmap", "progressive": 50, "progressiveThreshold": 100,');
+    sb.Append(' "emphasis": {"itemStyle": {"borderColor": "#333", "borderWidth": 1}}, "data": [');
+    for i := 0 to 17 do
+      for j := 0 to 17 do
+      begin
+        if (i > 0) or (j > 0) then sb.Append(',');
+        sb.Append(Format('[%d,%d,%s]', [i, j, FloatToStr(((i * 7 + j * 13) mod 20) / 20)]));
+      end;
+    sb.Append(']}]}');
+    Result := sb.ToString;
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TAdvChartLargeSpeedTest.TestALayerRegionIsTheWholeLayer;
+var
+  frames: array[Boolean] of TStringList;
+  on_: Boolean;
+  chart: TLsChart;
+  bmp: TBitmap;
+  kind, k, r0, used: Integer;
+begin
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(480, 400);
+    for kind := 0 to 2 do
+    begin
+      frames[False].Clear;
+      frames[True].Clear;
+      used := 0;
+      for on_ := False to True do
+      begin
+        TyAdvChartLayerRegionForTest(on_);
+        r0 := TyAdvChartLayerRegionsForTest;
+        chart := NewChart(480, 400, RegionOption(kind));
+        try
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          while chart.ProgressiveUnfinished do
+          begin
+            chart.ProgressTick;
+            chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          end;
+          for k := 0 to 15 do
+          begin
+            chart.Move(80 + k * 21, 110 + (k mod 5) * 37);
+            chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+            frames[on_].Add(Frame(bmp));
+          end;
+          { along the visual map at the top (a piece's cells highlighted), a
+            highlight of many and its downplay, and off the chart }
+          for k := 0 to 7 do
+          begin
+            chart.Move(150 + k * 25, 12);
+            chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+            frames[on_].Add(Frame(bmp));
+          end;
+          chart.DispatchAction('{"type": "highlight", "seriesIndex": 0, "dataIndex": [3, 40, 41, 42, 77, 150, 151, 200]}');
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[on_].Add(Frame(bmp));
+          chart.DispatchAction('{"type": "downplay", "seriesIndex": 0, "dataIndex": [40, 41, 150]}');
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[on_].Add(Frame(bmp));
+          chart.Leave;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[on_].Add(Frame(bmp));
+          if on_ then used := TyAdvChartLayerRegionsForTest - r0
+          else AssertEquals('switched off: none', 0, TyAdvChartLayerRegionsForTest - r0);
+        finally
+          chart.Free;
+        end;
+      end;
+      for k := 0 to frames[False].Count - 1 do
+        AssertTrue(Format('kind %d hover frame %d the same pixels%s', [kind, k,
+          FrameDiff(frames[False][k], frames[True][k], 480)]), frames[False][k] = frames[True][k]);
+      AssertTrue(Format('kind %d: the layer drawn in part', [kind]), used >= 5);
+    end;
+  finally
+    bmp.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyAdvChartLayerRegionForTest(True);
   end;
 end;
 
