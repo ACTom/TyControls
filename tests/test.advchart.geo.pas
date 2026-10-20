@@ -602,12 +602,24 @@ begin
         SameInt(dr.Groups[g].Name + ' label size (default)', 12, lw.Integers['fontSize']);
       { [R2-J2] A REGION WITH NO CENTRE -- one a projection answers null for
         (Puerto Rico under albersUsa): no labelXY, so upstream keeps
-        textConfig.position 'inside' with no layout rect and no align; the
-        port gives the label no position }
+        textConfig.position 'inside' with no layout rect and no align;
+        [R2-J3] the port places it there too -- the middle of the path's
+        drawn box through the group's transform }
       if not (lw.Find('pos') is TJSONArray) then
       begin
         Inc(FCompared);
-        if p.Lbl.HasPos then Bad(dr.Groups[g].Name + ' label placed, upstream has no centre');
+        if (lw.Find('pos') <> nil) and (lw.Find('pos').JSONType = jtString)
+          and (lw.Strings['pos'] = 'inside') then
+        begin
+          if not (p.Lbl.HasPos and p.Lbl.Inside) then
+            Bad(dr.Groups[g].Name + ' label not placed inside, upstream''s is')
+          else if not lw.Booleans['ignore'] then
+          begin
+            Same(dr.Groups[g].Name + ' inside label x', p.Lbl.AnchorX, lw.Strings['x']);
+            Same(dr.Groups[g].Name + ' inside label y', p.Lbl.AnchorY, lw.Strings['y']);
+          end;
+        end
+        else if p.Lbl.HasPos then Bad(dr.Groups[g].Name + ' label placed, upstream has no position');
         Continue;
       end;
       SameStr(dr.Groups[g].Name + ' label align', 'center', lw.Strings['align']);

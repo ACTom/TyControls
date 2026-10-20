@@ -28,7 +28,33 @@ chart's size. An answer is written as
                                            keys sorted
 The port's test wraps the demo's handlers the same way. A name upstream never
 calls while drawing (a tooltip's, a hover's, an animation's) is not in the
-case; the port must not call it either.
+case's calls; the port must not call it either.
+
+[R2-J3] TWO MORE PASSES, each on a chart of its own:
+  anim   a case with an animation timing function (animationDelay,
+         animationDuration and their Update twins, wherever written): the
+         option set as the page wrote it (animation on) and drawn, then set
+         again (an update) and drawn. Per name, the distinct calls as
+           'i:<dataIndex> p:<extraDelayParams> => <answer>'
+         -- dataIndex 'n:<integer>' or 'u' (null / undefined), the second
+         argument 'u' or 'j:<json>' (getAnimationConfig hands a pictorial
+         bar's item model {index, count} -- a key it does not have is left
+         out), the answer as above, '?' for a function that draws on
+         Math.random. enter[] for the first setOption, update[] for the
+         second.
+  hover  a case with a tooltip formatter, position, valueFormatter or an
+         axis pointer label formatter: the option set with animation off and
+         drawn, then for each step a showTip dispatched (and a hideTip after
+         it): the first three regions of every geo by name, then every series'
+         first, middle and last item by seriesIndex and dataIndex (four series
+         at most), then a pointer's: showTip at x, y -- every series' middle
+         item where findPointFromSeries puts it (the series' own
+         getTooltipPosition, dataToPoint of its coordinate system, else its
+         element's box centre), rounded to the
+         pixel; a trigger 'none' tooltip shows only from its axis pointer.
+         Per step: the payload and, per name, the distinct answers
+         its functions gave while the tip was shown (a label formatter asked
+         for the emphasis state is not written down, as above).
 
 Runs the real ECharts 6.1 build (ECHARTS_DIST) in node's server-side mode
 (SVG renderer), chart._ssr = false, env.node off, the clock of animation.js,
@@ -43,7 +69,8 @@ SVG through jsdom's DOMParser). Every chart 960 x 600, the root's
 
 writes tests/fixtures/advchart-gallery-callbacks.json (ORACLE_OUT overrides).
 Top level: source, version, seed, W, H, measure {firstCode, ratio[]}, notes[],
-cases[] {id, file, maps[], calls {name: [answer...] sorted}}, guards[].
+cases[] {id, file, maps[], calls {name: [answer...] sorted}, anim?, hover?},
+direct[] {id, name, params, answer} [R2-J3], guards[].
 Ends with process.exit().
 */
 'use strict';
@@ -229,6 +256,178 @@ function materialize(v, byName, log) {
   return v;
 }
 
+// ---------- [R2-J3] the animation's functions and the hover's ----------
+const TIMING_KEY = /^animation(Delay|Duration)(Update)?$/;
+const HOVER_KEY = /^(formatter|position|valueFormatter)$/;
+function keyOfName(id, name) {
+  return name.slice(id.length + 1).replace(/#[0-9]+$/, '');
+}
+function reprIndex(v) {
+  if (v === undefined || v === null) return 'u';
+  if (typeof v === 'number') return Number.isInteger(v) ? 'n:' + v : 'n:' + hex(v);
+  return 's:' + String(v);
+}
+function reprParams(v) {
+  if (v === undefined || v === null) return 'u';
+  return 'j:' + JSON.stringify(deep(v));
+}
+
+/* the option with its '@name's turned back into the page's functions: a
+   timing function written down into what logOf() answers, every other
+   function plain */
+function materializeTiming(v, byName, logOf) {
+  if (Array.isArray(v)) return v.map(x => materializeTiming(x, byName, logOf));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v)) {
+      const s = v[k];
+      if (typeof s === 'string' && s[0] === '@' && byName.has(s.slice(1))) {
+        const name = s.slice(1);
+        const fn = byName.get(name);
+        if (!TIMING_KEY.test(k)) {
+          o[k] = fn;
+          continue;
+        }
+        const random = /Math\.random/.test(fn.toString());
+        o[k] = function (...args) {
+          const r = fn.apply(this, args);
+          const log = logOf();
+          (log[name] = log[name] || new Set()).add('i:' + reprIndex(args[0])
+            + ' p:' + reprParams(args[1]) + ' => ' + (random ? '?' : repr(r)));
+          return r;
+        };
+      }
+      else o[k] = materializeTiming(s, byName, logOf);
+    }
+    return o;
+  }
+  return v;
+}
+
+/* the option for the hover: a formatter, a position, a valueFormatter
+   written down into what logOf() answers (a label formatter asked for the
+   emphasis state left out, a formatter's number its String()), every other
+   function plain */
+function materializeHover(v, byName, logOf) {
+  if (Array.isArray(v)) return v.map(x => materializeHover(x, byName, logOf));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v)) {
+      const s = v[k];
+      if (typeof s === 'string' && s[0] === '@' && byName.has(s.slice(1))) {
+        const name = s.slice(1);
+        const fn = byName.get(name);
+        if (!HOVER_KEY.test(k)) {
+          o[k] = fn;
+          continue;
+        }
+        const isFormatter = /formatter$/i.test(k);
+        o[k] = function (...args) {
+          const r = fn.apply(this, args);
+          const p = args[0];
+          if (p && typeof p === 'object' && !Array.isArray(p) && p.status === 'emphasis') return r;
+          const rr = isFormatter && typeof r === 'number' ? 's:' + String(r) : repr(r);
+          const log = logOf();
+          (log[name] = log[name] || new Set()).add(rr);
+          return r;
+        };
+      }
+      else o[k] = materializeHover(s, byName, logOf);
+    }
+    return o;
+  }
+  return v;
+}
+function sortedLog(log) {
+  const out = {};
+  Object.keys(log).sort().forEach(k => { out[k] = Array.from(log[k]).sort(); });
+  return out;
+}
+
+function animPass(text, byName) {
+  const enter = {};
+  const update = {};
+  let cur = enter;
+  const chart = mk();
+  try {
+    quiet(() => chart.setOption(materializeTiming(JSON.parse(text), byName, () => cur)));
+    paint(chart);
+    cur = update;
+    quiet(() => chart.setOption(materializeTiming(JSON.parse(text), byName, () => cur)));
+    paint(chart);
+  } finally {
+    chart.dispose();
+  }
+  return { enter: sortedLog(enter), update: sortedLog(update) };
+}
+
+function hoverSteps(chart) {
+  const ecModel = chart.getModel();
+  const steps = [];
+  ecModel.eachComponent('geo', (g, gi) => {
+    const regions = (g.coordinateSystem && g.coordinateSystem.regions) || [];
+    regions.slice(0, 3).forEach(r => steps.push({ type: 'showTip', geoIndex: gi, name: r.name }));
+  });
+  ecModel.eachSeries((s, si) => {
+    if (si > 3) return;
+    const n = s.getData().count();
+    if (!n) return;
+    const seen = new Set();
+    [0, n >> 1, n - 1].forEach(d => {
+      if (seen.has(d)) return;
+      seen.add(d);
+      steps.push({ type: 'showTip', seriesIndex: si, dataIndex: d });
+    });
+  });
+  ecModel.eachSeries((s, si) => {
+    if (si > 3) return;
+    const data = s.getData();
+    const n = data.count();
+    if (!n) return;
+    const d = n >> 1;
+    const cs = s.coordinateSystem;
+    let pt = null;
+    if (s.getTooltipPosition) pt = s.getTooltipPosition(d);
+    else if (cs && cs.dataToPoint && cs.dimensions) {
+      const vals = data.getValues(cs.dimensions.map(dim => data.mapDimension(dim)), d);
+      pt = cs.dataToPoint(vals);
+    }
+    else {
+      const el = data.getItemGraphicEl(d);
+      if (el) {
+        const r = el.getBoundingRect().clone();
+        r.applyTransform(el.transform);
+        pt = [r.x + r.width / 2, r.y + r.height / 2];
+      }
+    }
+    if (!pt || !isFinite(pt[0]) || !isFinite(pt[1])) return;
+    steps.push({ type: 'showTip', x: Math.round(pt[0]), y: Math.round(pt[1]) });
+  });
+  return steps;
+}
+
+function hoverPass(text, byName) {
+  let cur = {};
+  const chart = mk();
+  const out = [];
+  try {
+    const opt = materializeHover(JSON.parse(text), byName, () => cur);
+    quiet(() => chart.setOption(Object.assign({ animation: false }, opt)));
+    paint(chart);
+    hoverSteps(chart).forEach(action => {
+      cur = {};
+      quiet(() => chart.dispatchAction(action));
+      const calls = sortedLog(cur);
+      cur = {};
+      quiet(() => chart.dispatchAction({ type: 'hideTip' }));
+      out.push({ action, calls });
+    });
+  } finally {
+    chart.dispose();
+  }
+  return out;
+}
+
 function runCase(entry) {
   const file = entry.sequence ? entry.sequence.steps[0].file : (entry.file || entry.id + '.json');
   const text = fs.readFileSync(path.join(GALLERY, file), 'utf8');
@@ -278,7 +477,61 @@ function runCase(entry) {
   }
   const calls = {};
   Object.keys(log).sort().forEach(k => { calls[k] = Array.from(log[k]).sort(); });
-  return { id: entry.id, file, grafted, maps: mp.maps.map(m => m.name), calls };
+  const res = { id: entry.id, file, grafted, maps: mp.maps.map(m => m.name), calls };
+  const names = Array.from(byName.keys());
+  if (names.some(n => TIMING_KEY.test(keyOfName(entry.id, n)))) res.anim = animPass(text, byName);
+  if (names.some(n => HOVER_KEY.test(keyOfName(entry.id, n)))) res.hover = hoverPass(text, byName);
+  return res;
+}
+
+/* [R2-J3] THE FUNCTIONS NO HOVER HERE REACHES, CALLED DIRECTLY: lines-
+   airline's tooltip (its world map is not shipped) and scatter-nutrients-
+   matrix's (the port collects no axis' own pointer, so its axis tooltip
+   never shows). The page's own function, run in the harvest's sandbox (the
+   tables it closes over are the page's), handed params built from the
+   gallery file with the fields it reads -- an item's dataIndex; an axis
+   tooltip's list of {data, axisDim} -- and what it answers. */
+function directCalls() {
+  const out = [];
+  const live = id => {
+    const src = fs.readFileSync(path.join(HARVEST.TS_DIR, id + '.ts'), 'utf8');
+    const collected = {};
+    HARVEST.runExample(src, id + '.ts', collected);
+    const byName = new Map();
+    collected.namer.names.forEach((name, fn) => byName.set(name, fn));
+    return byName;
+  };
+  {
+    const id = 'lines-airline';
+    const fn = live(id).get(id + '.formatter');
+    must(fn, id + ': no formatter');
+    const zlib = require('zlib');
+    const opt = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(GALLERY, id + '.json.gz'))).toString('utf8'));
+    const n = opt.series[0].data.length;
+    [0, 1, 777, n >> 1, n - 1].forEach(k => {
+      const params = { dataIndex: k };
+      out.push({ id, name: id + '.formatter', params, answer: repr(fn(params)) });
+    });
+  }
+  {
+    const id = 'scatter-nutrients-matrix';
+    const fn = live(id).get(id + '.formatter');
+    must(fn, id + ': no formatter');
+    const opt = JSON.parse(fs.readFileSync(path.join(GALLERY, id + '.json'), 'utf8'));
+    const row = (s, r) => opt.series[s].data[r];
+    const lists = [
+      // the same point found by both axes: CROSS, and another on each line
+      [{ data: row(0, 0), axisDim: 'x' }, { data: row(1, 0), axisDim: 'x' },
+        { data: row(0, 0), axisDim: 'y' }, { data: row(2, 3), axisDim: 'y' }],
+      [{ data: row(0, 5), axisDim: 'x' }, { data: row(2, 7), axisDim: 'y' }],
+      [{ data: row(3, 11), axisDim: 'x' }, { data: row(1, 11), axisDim: 'x' }],
+      [{ data: row(2, 20), axisDim: 'y' }],
+    ];
+    lists.forEach(params => {
+      out.push({ id, name: id + '.formatter', params, answer: repr(fn(params)) });
+    });
+  }
+  return out;
 }
 
 function eligible(e) {
@@ -305,6 +558,9 @@ function guards(out) {
   add('no tooltip formatter is called while drawing',
     out.cases.every(x => Object.keys(x.calls).every(k => !/(position|valueFormatter)$/.test(k))));
   add('every case calls something or says nothing (a hover-only case)', out.cases.length > 30);
+  add('lines-airline: a route named by its airports', out.direct.some(x => x.id === 'lines-airline' && / > /.test(x.answer)));
+  add('scatter-nutrients-matrix: a CROSS block with the axis colours',
+    out.direct.some(x => /POINTS ON CROSS/.test(x.answer) && /color:#/.test(x.answer)));
   return g;
 }
 
@@ -318,6 +574,7 @@ function generate() {
       'calls: per function name, the distinct answers it gave while the chart was set and drawn once.',
     ],
     cases: INDEX.entries.filter(eligible).map(runCase),
+    direct: directCalls(),
   };
   out.guards = guards(out);
   return out;

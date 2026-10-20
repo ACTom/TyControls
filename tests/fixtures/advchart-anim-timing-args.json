@@ -1,0 +1,1405 @@
+{
+ "source": "D:/Projects/echarts/dist/echarts.js",
+ "version": "6.1.0",
+ "seed": 2463534242,
+ "W": 600,
+ "H": 400,
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "notes": [
+  "every chart: chart._ssr false, env.node off, 600 x 400; the option set at T0 and drawn, the update 50 ms later and drawn.",
+  "enter / updated: per key, the distinct calls of the root's timing function in the first setOption and in the update."
+ ],
+ "cases": [
+  {
+   "id": "line",
+   "note": "a line with symbols on a category axis: the line clip and the series delay called with null, each symbol with its index; an update moves the points",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       4,
+       2,
+       6,
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u",
+     "i:u p:u"
+    ],
+    "animationDuration": [
+     "i:u p:u"
+    ]
+   },
+   "updated": {
+    "animationDelay": [
+     "i:u p:u"
+    ],
+    "animationDelayUpdate": [
+     "i:u p:u"
+    ],
+    "animationDuration": [
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "bar",
+   "note": "a bar series and a legend: each bar at its index; the update changes the values",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "legend": {},
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "b",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       4,
+       2,
+       6,
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "scatter",
+   "note": "scatter symbols on value axes",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "xAxis": {},
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        3
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        4,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       [
+        1,
+        4
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        3,
+        6
+       ],
+       [
+        4,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "pie",
+   "note": "a pie with its labels",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       {
+        "value": 3,
+        "name": "a"
+       },
+       {
+        "value": 5,
+        "name": "b"
+       },
+       {
+        "value": 2,
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "value": 4,
+        "name": "a"
+       },
+       {
+        "value": 2,
+        "name": "b"
+       },
+       {
+        "value": 6,
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "funnel",
+   "note": "a funnel",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "funnel",
+      "data": [
+       {
+        "value": 30,
+        "name": "a"
+       },
+       {
+        "value": 50,
+        "name": "b"
+       },
+       {
+        "value": 20,
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "value": 40,
+        "name": "a"
+       },
+       {
+        "value": 20,
+        "name": "b"
+       },
+       {
+        "value": 60,
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ],
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "gauge",
+   "note": "a gauge: its pointer and progress",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "gauge",
+      "progress": {
+       "show": true
+      },
+      "data": [
+       {
+        "value": 40
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "value": 70
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:u p:u"
+    ],
+    "animationDuration": [
+     "i:u p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "radar",
+   "note": "a radar",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "radar": {
+     "indicator": [
+      {
+       "max": 10
+      },
+      {
+       "max": 10
+      },
+      {
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         7
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "value": [
+         6,
+         2,
+         4
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "pictorial",
+   "note": "pictorial bars: a repeated column (each glyph its index and the repeat count), a single glyph and a clipped repeat (the clip path: an object with neither)",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       20,
+       8
+      ],
+      "symbolMargin": 2,
+      "data": [
+       {
+        "value": 40,
+        "symbolRepeat": true
+       },
+       {
+        "value": 60
+       },
+       {
+        "value": 30,
+        "symbolRepeat": true,
+        "symbolClip": true
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "value": 60,
+        "symbolRepeat": true
+       },
+       {
+        "value": 30
+       },
+       {
+        "value": 50,
+        "symbolRepeat": true,
+        "symbolClip": true
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"0000000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"3ff0000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"4000000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"4008000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"4010000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"4014000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"4018000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"401c000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"4022000000000000\",\"index\":\"4020000000000000\"}",
+     "i:n:1 p:j:{}",
+     "i:n:2 p:j:{}"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"0000000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"3ff0000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4000000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4008000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4010000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4014000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4018000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"401c000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4020000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4022000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4024000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4026000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"4028000000000000\"}",
+     "i:n:0 p:j:{\"count\":\"402c000000000000\",\"index\":\"402a000000000000\"}",
+     "i:n:0 p:j:{}",
+     "i:n:1 p:j:{}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"0000000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"3ff0000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4000000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4008000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4010000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4014000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4018000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"401c000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4020000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4022000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4024000000000000\"}",
+     "i:n:2 p:j:{\"count\":\"4028000000000000\",\"index\":\"4026000000000000\"}",
+     "i:n:2 p:j:{}",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "graph",
+   "note": "a graph of three nodes and two edges, no layout",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "label": {
+       "show": true
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 10,
+        "y": 10
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 50
+       },
+       {
+        "name": "c",
+        "x": 50,
+        "y": 100
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "name": "a",
+        "x": 20,
+        "y": 10
+       },
+       {
+        "name": "b",
+        "x": 90,
+        "y": 60
+       },
+       {
+        "name": "c",
+        "x": 40,
+        "y": 90
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "candle-box",
+   "note": "a candlestick and a boxplot",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "candlestick",
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ],
+       [
+        4,
+        3,
+        2,
+        6
+       ]
+      ]
+     },
+     {
+      "type": "boxplot",
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       [
+        3,
+        4,
+        1,
+        5
+       ],
+       [
+        4,
+        2,
+        1,
+        6
+       ]
+      ]
+     },
+     {
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        6
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        7
+       ]
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "heatmap",
+   "note": "a cartesian heatmap",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        0,
+        1,
+        5
+       ],
+       [
+        1,
+        0,
+        7
+       ],
+       [
+        1,
+        1,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       [
+        0,
+        0,
+        4
+       ],
+       [
+        0,
+        1,
+        2
+       ],
+       [
+        1,
+        0,
+        9
+       ],
+       [
+        1,
+        1,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "enter": {},
+   "updated": {
+    "animationDelayUpdate": [
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "tree",
+   "note": "a tree",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "tree",
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b",
+          "children": [
+           {
+            "name": "c"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u"
+    ],
+    "animationDelayUpdate": [
+     "i:u p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "treemap",
+   "note": "a treemap",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "treemap",
+      "data": [
+       {
+        "name": "a",
+        "value": 6
+       },
+       {
+        "name": "b",
+        "value": 4,
+        "children": [
+         {
+          "name": "c",
+          "value": 3
+         },
+         {
+          "name": "d",
+          "value": 1
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 7,
+        "children": [
+         {
+          "name": "c",
+          "value": 5
+         },
+         {
+          "name": "d",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:1 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u"
+    ],
+    "animationDuration": [
+     "i:n:1 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:1 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u"
+    ]
+   }
+  },
+  {
+   "id": "sunburst",
+   "note": "a sunburst",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "series": [
+     {
+      "type": "sunburst",
+      "data": [
+       {
+        "name": "a",
+        "value": 6
+       },
+       {
+        "name": "b",
+        "value": 4,
+        "children": [
+         {
+          "name": "c",
+          "value": 3
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 7,
+        "children": [
+         {
+          "name": "c",
+          "value": 5
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u"
+    ]
+   },
+   "updated": {
+    "animationDelayUpdate": [
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:u p:u"
+    ]
+   }
+  },
+  {
+   "id": "markers",
+   "note": "a line with a markPoint, a markLine and a markArea",
+   "option": {
+    "animationDelay": "@ad",
+    "animationDuration": "@aD",
+    "animationDelayUpdate": "@adu",
+    "animationDurationUpdate": "@aDu",
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "type": "max"
+        }
+       ]
+      },
+      "markLine": {
+       "data": [
+        {
+         "type": "average"
+        }
+       ]
+      },
+      "markArea": {
+       "data": [
+        [
+         {
+          "xAxis": "A"
+         },
+         {
+          "xAxis": "B"
+         }
+        ]
+       ]
+      }
+     }
+    ]
+   },
+   "update": {
+    "series": [
+     {
+      "data": [
+       4,
+       2,
+       6,
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "enter": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:n:1 p:u",
+     "i:n:2 p:u",
+     "i:n:3 p:u",
+     "i:n:4 p:u",
+     "i:u p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ]
+   },
+   "updated": {
+    "animationDelay": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ],
+    "animationDelayUpdate": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ],
+    "animationDuration": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ],
+    "animationDurationUpdate": [
+     "i:n:0 p:u",
+     "i:u p:u"
+    ]
+   }
+  }
+ ],
+ "guards": [
+  {
+   "name": "pictorial: a glyph hands {index, count}",
+   "ok": true
+  },
+  {
+   "name": "pictorial: the clip path hands an empty object",
+   "ok": true
+  },
+  {
+   "name": "line: the series delay is called with null",
+   "ok": true
+  },
+  {
+   "name": "bar: each bar at its index",
+   "ok": true
+  },
+  {
+   "name": "every case but the heatmap animates",
+   "ok": true
+  },
+  {
+   "name": "every case updates",
+   "ok": true
+  }
+ ]
+}
