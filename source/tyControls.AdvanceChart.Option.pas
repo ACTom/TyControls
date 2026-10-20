@@ -209,8 +209,8 @@ type
     function ComponentAt(const AMainType: string; AIndex: Integer): TJSONData;
 
     property Root: TJSONData read FRoot;
-    { THE PIECE THE LAST MERGE MERGED IN (its base option), nil after a
-      set: what the aria preprocessor reads per setOption [Batch 131] }
+    { THE PIECE THE LAST MERGE MERGED IN (its base option, preprocessed),
+      nil after a set [Batch 131] }
     property MergedPiece: TJSONData read FMerged;
     property Text: string read FText;
     property Error: TTyOptionError read FError;
@@ -1972,9 +1972,62 @@ begin
   end;
 end;
 
+{ ariaPreprocessor [231b]: on an aria object, a `show` that is not null is
+  written to `enabled` (show stays); `label` is made an object where it is
+  falsy; description, general, series and data that are not null are
+  copied under it, replacing what it had. Per option, as parseRawOption
+  runs it: a frame's `show` turns aria on or off when the frame is merged,
+  a base's `show` stays behind in the merged option and is never read
+  again; the media default is not preprocessed. A label written as a truthy
+  primitive is left alone (upstream throws on the first key it copies). }
+procedure TyAriaPreprocess(AOption: TJSONObject);
+const
+  cMoved: array[0..3] of string = ('description', 'general', 'series', 'data');
+var
+  d, lb: TJSONData;
+  aria: TJSONObject;
+  k: Integer;
+begin
+  if AOption = nil then Exit;
+  d := AOption.Find('aria');
+  if not (d is TJSONObject) then Exit;
+  aria := TJSONObject(d);
+  d := aria.Find('show');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+    aria.Elements['enabled'] := d.Clone;
+  lb := aria.Find('label');
+  if not PreTruthy(lb) then
+  begin
+    lb := TJSONObject.Create;
+    aria.Elements['label'] := lb;
+  end;
+  if not (lb is TJSONObject) then Exit;
+  for k := 0 to High(cMoved) do
+  begin
+    d := aria.Find(cMoved[k]);
+    if (d <> nil) and (d.JSONType <> jtNull) then
+      TJSONObject(lb).Elements[cMoved[k]] := d.Clone;
+  end;
+end;
+
+{ initBase's aria detection [231b]: on the base of a new option (the first
+  setOption, a notMerge), after its preprocessors and before its frame and
+  media are merged, an aria object whose `enabled` is null or missing gets
+  `enabled: true`. The merged option's aria.enabled is then what ariaVisual
+  reads. }
+procedure TyAriaInitBase(ABase: TJSONObject);
+var d: TJSONData;
+begin
+  if ABase = nil then Exit;
+  d := ABase.Find('aria');
+  if not (d is TJSONObject) then Exit;
+  if (TJSONObject(d).Find('enabled') = nil) or (TJSONObject(d).Find('enabled').JSONType = jtNull) then
+    TJSONObject(d).Elements['enabled'] := TJSONBoolean.Create(True);
+end;
+
 { the preprocessors over one option unit, in the order upstream registers
   them: backwardCompat first [R2-J], parallel (an installed chart's), brush,
-  visualMap [231b] }
+  visualMap, aria [231b] }
 procedure PreprocessOne(AOption: TJSONObject; AIsNew: Boolean);
 begin
   if AOption = nil then Exit;
@@ -1982,6 +2035,7 @@ begin
   TyParallelPreprocess(AOption);
   TyBrushPreprocess(AOption, AIsNew);
   TyVisualMapPreprocess(AOption);
+  TyAriaPreprocess(AOption);
 end;
 
 { parseRawOption's doPreprocess: over the base, every timeline frame and
@@ -2051,6 +2105,8 @@ begin
     TyParseRawOption(base, mset);
     { the preprocessors: a new option [Batch 127] }
     PreprocessUnits(base, mset, True);
+    { initBase: aria switched on where the base writes it [231b] }
+    TyAriaInitBase(base);
     parsed := base;
   end;
   FMedia.Reset(mset);

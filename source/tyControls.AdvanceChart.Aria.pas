@@ -80,13 +80,13 @@ function TyAriaDefaultLocale: TTyAriaLocale;
 { series.typeNames[subType] || typeNames.chart }
 function TyAriaTypeName(const ASubType: string): string;
 
-{ The author's aria templates over ALocale: aria.label's keys -- where the
-  option wrote general, series or data at aria's top level (the
-  preprocessor's legacy placement) those REPLACE label's -- each one a
-  string, or String() of what was written. }
+{ The author's aria templates over ALocale: aria.label's keys (the
+  preprocessor has moved general, series and data from aria's top level
+  under label in every option it read), each one a string, or String() of
+  what was written. }
 function TyAriaLocaleOf(AAria: TJSONObject; const ALocale: TTyAriaLocale): TTyAriaLocale;
 
-{ aria.label's key at APath (top-level placement first), nil where none }
+{ aria.label's key at APath, nil where none -- of a preprocessed option [231b] }
 function TyAriaLabelKey(AAria: TJSONObject; const APath: array of string): TJSONData;
 
 { For each key in turn: every match of the key in braces (blanks allowed
@@ -184,16 +184,14 @@ var
 begin
   Result := nil;
   if (AAria = nil) or (Length(APath) = 0) then Exit;
-  { the preprocessor moves description, general, series and data from
-    aria's top level under aria.label, replacing what was there }
-  d := AAria.Find(APath[0]);
-  if (d = nil) or (d.JSONType = jtNull) then
-  begin
-    d := AAria.Find('label');
-    if not (d is TJSONObject) then Exit;
-    d := TJSONObject(d).Find(APath[0]);
-  end;
-  for i := 1 to High(APath) do
+  { UNDER LABEL ONLY [231b]: the preprocessor copies description, general,
+    series and data from aria's top level under aria.label in every option
+    it reads -- the base, each frame, each media unit with a query -- so a
+    later option's label wins over an earlier top-level key, and the media
+    default's top-level keys (not preprocessed) are never read. aria.enabled
+    is not label.enabled. }
+  d := AAria.Find('label');
+  for i := 0 to High(APath) do
   begin
     if not (d is TJSONObject) then Exit(nil);
     d := TJSONObject(d).Find(APath[i]);

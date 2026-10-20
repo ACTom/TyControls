@@ -2149,7 +2149,7 @@ begin
   Result := False;
   if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
   aria := TJSONObject(FOption.Root).Find('aria');
-  if not (FAriaEnabled and (aria is TJSONObject)) then Exit;
+  if not (AriaEnabled and (aria is TJSONObject)) then Exit;
   d := TJSONObject(aria).Find('decal');
   if not ((d is TJSONObject) and TyDecalTruthy(TJSONObject(d).Find('show'))) then Exit;
   APal := TyDecalPaletteOf(aria);
@@ -2225,32 +2225,14 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
-var
-  aria, d: TJSONData;
+function TTyAdvanceChart.AriaEnabled: Boolean;
+var aria: TJSONData;
 begin
-  aria := nil;
-  if ARoot is TJSONObject then aria := TJSONObject(ARoot).Find('aria');
-  if not (aria is TJSONObject) then
-  begin
-    { initBase finds no object to turn on; a merge without one leaves it }
-    if AInit then FAriaEnabled := False;
-    Exit;
-  end;
-  { the preprocessor: `aria.show != null` becomes aria.enabled }
-  d := TJSONObject(aria).Find('show');
-  if (d <> nil) and (d.JSONType <> jtNull) then
-  begin
-    FAriaEnabled := TyDecalTruthy(d);
-    Exit;
-  end;
-  d := TJSONObject(aria).Find('enabled');
-  if AInit then
-    { initBase: an aria object whose enabled is null is on }
-    FAriaEnabled := (d = nil) or (d.JSONType = jtNull) or TyDecalTruthy(d)
-  else if d <> nil then
-    { a merge writes what it was given, null included }
-    FAriaEnabled := TyDecalTruthy(d);
+  Result := False;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  aria := TJSONObject(FOption.Root).Find('aria');
+  { a merge that wrote enabled null leaves it null: off }
+  Result := (aria is TJSONObject) and TyDecalTruthy(TJSONObject(aria).Find('enabled'));
 end;
 
 { The aria visual's setDecal and the decal visual [Batch 131]:
@@ -2316,7 +2298,7 @@ begin
     []).TextColor);
   ground := DecalGround;
   aria := TJSONObject(FOption.Root).Find('aria');
-  useDecal := FAriaEnabled and (aria is TJSONObject);
+  useDecal := AriaEnabled and (aria is TJSONObject);
   if useDecal then
   begin
     d := TJSONObject(aria).Find('decal');
@@ -2434,7 +2416,7 @@ var
   loc: TTyAriaLocale;
 begin
   Result := '';
-  if (FOption = nil) or not (FOption.Root is TJSONObject) or not FAriaEnabled then Exit;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) or not AriaEnabled then Exit;
   ConvertReady;
   aria := TJSONObject(FOption.Root).Find('aria');
   if not (aria is TJSONObject) then Exit;
