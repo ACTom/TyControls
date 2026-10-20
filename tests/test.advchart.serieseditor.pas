@@ -21,7 +21,7 @@ unit test.advchart.serieseditor;
   reads its file and fails if it reaches past the model. }
 interface
 uses Classes, SysUtils, fpcunit, testregistry, fpjson,
-     tyControls.AdvChart.TextPatch, tyControls.AdvChart.SeriesEdit;
+     tyControls.AdvanceChart.TextPatch, tyControls.AdvanceChart.SeriesEdit;
 
 type
   TAdvChartTextPatchTest = class(TTestCase)
@@ -75,7 +75,7 @@ type
 
 implementation
 
-uses Math, tyControls.AdvChart.Option, tyControls.AdvChart.Diagnose,
+uses Math, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Diagnose,
   tyControls.StrConsts;
 
 const
@@ -1257,7 +1257,7 @@ begin
           bad := bad + LF + '  line ' + IntToStr(i + 1) + ': ' + Trim(line);
     end;
     AssertEquals('the series dialog reaches past its model -- add what it needs to '
-      + 'tyControls.AdvChart.SeriesEdit, where a test can see it:' + bad, '', bad);
+      + 'tyControls.AdvanceChart.SeriesEdit, where a test can see it:' + bad, '', bad);
   finally
     sl.Free;
   end;

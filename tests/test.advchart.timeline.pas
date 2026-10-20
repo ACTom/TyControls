@@ -23,11 +23,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.StrConsts,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.GfxEl,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.Timeline,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Export,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.GfxEl,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Timeline,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Export,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type

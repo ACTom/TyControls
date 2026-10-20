@@ -41,12 +41,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.OptionMerge, tyControls.AdvChart.Graph,
-     tyControls.AdvChart.DataZoom, tyControls.AdvChart.Title, tyControls.AdvChart.Series,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.AnimView,
-     tyControls.AdvChart.Events, tyControls.AdvChart.Legend, tyControls.AdvChart.Color,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.OptionMerge, tyControls.AdvanceChart.Graph,
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.Title, tyControls.AdvanceChart.Series,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type

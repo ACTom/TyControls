@@ -26,9 +26,9 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson, jsonparser, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.JsMath, tyControls.AdvChart.Radar,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Radar,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart;
 type
   TScaleAlignProbe = class(TTyAdvanceChart)

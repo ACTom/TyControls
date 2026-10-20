@@ -20,9 +20,9 @@ unit test.advchart.boxmerge;
   in upstream's order, down to a negative width flipped. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Layout, tyControls.AdvChart.Title,
-     tyControls.AdvChart.Legend;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Title,
+     tyControls.AdvanceChart.Legend;
 type
   { Every text answered from the fixture's own measurements; an unknown
     one fails the case rather than guessing. }

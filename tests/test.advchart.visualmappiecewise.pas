@@ -21,10 +21,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Scale,
-     tyControls.AdvChart.VisualMap, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.VisualMap, tyControls.AdvanceChart;
 type
   TVmpProbe = class(TTyAdvanceChart)
   public

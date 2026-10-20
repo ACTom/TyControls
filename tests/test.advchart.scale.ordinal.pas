@@ -20,8 +20,8 @@ unit test.advchart.scale.ordinal;
   source. The tests below say where the number comes from. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Coord;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord;
 type
   TAdvChartOrdinalScaleTest = class(TTestCase)
   private

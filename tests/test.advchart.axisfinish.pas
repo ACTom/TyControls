@@ -25,10 +25,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Data,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart, test.advchart.gridbounds,
      test.advchart.categoryminmax;
 type
@@ -81,7 +81,7 @@ type
 
 implementation
 
-uses tyControls.AdvChart.AxisPointer;
+uses tyControls.AdvanceChart.AxisPointer;
 
 procedure TAxisFinishProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin

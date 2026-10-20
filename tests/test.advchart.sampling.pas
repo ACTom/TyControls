@@ -31,9 +31,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Scale, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Sampling, tyControls.AdvChart.Measure, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Sampling, tyControls.AdvanceChart.Measure, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TSmpProbe = class(TTyAdvanceChart)

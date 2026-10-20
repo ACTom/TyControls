@@ -30,10 +30,10 @@ unit test.advchart.gridbounds;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.FontUnits,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-     tyControls.AdvChart.Layout;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Series,
+     tyControls.AdvanceChart.Layout;
 type
   { zrender's measureText with no canvas (platform.ts): a table of widths. }
   TZrSsrMeasurer = class(TInterfacedObject, ITyTextMeasurer)

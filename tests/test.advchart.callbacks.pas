@@ -32,11 +32,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.AdvanceChart,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Handlers,
-     tyControls.AdvChart.Custom, tyControls.AdvChart.Dataset,
-     tyControls.AdvChart.AnimOpt, tyControls.AdvChart.Symbol,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Tooltip,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Handlers,
+     tyControls.AdvanceChart.Custom, tyControls.AdvanceChart.Dataset,
+     tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart.Symbol,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Tooltip,
      test.advchart.customseries;
 type
   TAdvChartCallbacksTest = class(TTestCase)

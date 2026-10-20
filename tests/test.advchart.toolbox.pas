@@ -25,13 +25,13 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.Dialogs, tyControls.Memo,
-     tyControls.AdvChart.Types,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Events,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.DataZoom,
-     tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.Series,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Toolbox, tyControls.AdvChart.ToolboxDlg,
+     tyControls.AdvanceChart.Types,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.DataZoom,
+     tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart.Series,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Toolbox, tyControls.AdvanceChart.ToolboxDlg,
      tyControls.AdvanceChart;
 type
   { zrender's widths, from the fixture's table (the font is not asked) }

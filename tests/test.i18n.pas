@@ -648,9 +648,9 @@ begin
       if SameText(name, 'tyControls.BuiltinThemeData.pas')
         or SameText(name, 'tyControls.DefaultTheme.pas') then Continue;
       Inc(scanned);
-      if SameText(name, 'tyControls.AdvChart.Calendar.pas') then
+      if SameText(name, 'tyControls.AdvanceChart.Calendar.pas') then
         found := found + WithoutLiterals(ChineseLiterals(files[i]), AdvChartCalendarData)
-      else if SameText(name, 'tyControls.AdvChart.GeoFix.pas') then
+      else if SameText(name, 'tyControls.AdvanceChart.GeoFix.pas') then
         found := found + WithoutLiterals(ChineseLiterals(files[i]), AdvChartGeoFixData)
       else
         found := found + ChineseLiterals(files[i]);

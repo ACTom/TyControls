@@ -28,8 +28,8 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Controls, StdCtrls, ComCtrls, ExtCtrls, Classes, SysUtils,
   Graphics, SynEdit, SynEditTypes,
-  tyControls.AdvChart.Complete,
-  tyControls.AdvChart.Diagnose,
+  tyControls.AdvanceChart.Complete,
+  tyControls.AdvanceChart.Diagnose,
   tyControls.Design.AdvChart.Editor;
 
 var

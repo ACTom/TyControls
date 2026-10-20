@@ -1,6 +1,6 @@
 unit tyControls.AdvanceChart;
 {$mode objfpc}{$H+}
-{ TTyAdvanceChart -- the control the whole AdvChart layer exists under.
+{ TTyAdvanceChart -- the control the whole AdvanceChart layer exists under.
 
   WINDOWED, not graphic, and that decision was made on day one: focus, keyboard,
   an in-chart scrollbar, a dataZoom slider and a toolbox all need a handle, and
@@ -28,57 +28,57 @@ uses
   Classes, SysUtils, Math, Types, Controls, Graphics, LCLType, ExtCtrls,
   BGRABitmap,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option, tyControls.AdvChart.OptionMerge,
-  tyControls.AdvChart.Media,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.Time,
-  tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers, tyControls.FontUnits,
-  tyControls.AdvChart.Events, tyControls.AdvChart.States,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
-  tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
-  tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
-  tyControls.AdvChart.Stack, tyControls.AdvChart.Sampling, tyControls.AdvChart.Symbol,
-  tyControls.AdvChart.Pictorial,
-  tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
-  tyControls.AdvChart.VisualMapView, tyControls.AdvChart.Decal,
-  tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
-  tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.ZrPath,
-  tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
-  tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
-  tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
-  tyControls.AdvChart.Calendar, tyControls.AdvChart.Matrix, tyControls.AdvChart.Tree,
-  tyControls.AdvChart.Geo, tyControls.AdvChart.GeoSvg, tyControls.AdvChart.HeatLayer,
-  tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
-  tyControls.AdvChart.Sankey,
-  tyControls.AdvChart.Graph,
-  tyControls.AdvChart.Title,
-  tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
-  tyControls.AdvChart.Tooltip, tyControls.AdvChart.TipHtml,
-  tyControls.AdvChart.AxisPointer,
-  tyControls.AdvChart.Dataset, tyControls.AdvChart.WhiskerBox,
-  tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
-  tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
-  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
-  tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
-  tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
-  tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
-  tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
-  tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
-  tyControls.AdvChart.Chord,
-  tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
-  tyControls.AdvChart.Lines, tyControls.AdvChart.Custom,
-  tyControls.AdvChart.Toolbox, tyControls.AdvChart.Brush,
-  tyControls.AdvChart.Timeline,
-  tyControls.AdvChart.Parallel, tyControls.AdvChart.Thumbnail,
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.OptionMerge,
+  tyControls.AdvanceChart.Media,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
+  tyControls.AdvanceChart.Time,
+  tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Layout,
+  tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Series,
+  tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Handlers, tyControls.FontUnits,
+  tyControls.AdvanceChart.Events, tyControls.AdvanceChart.States,
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Render,
+  tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Style,
+  tyControls.AdvanceChart.Marks, tyControls.AdvanceChart.BarLayout,
+  tyControls.AdvanceChart.Stack, tyControls.AdvanceChart.Sampling, tyControls.AdvanceChart.Symbol,
+  tyControls.AdvanceChart.Pictorial,
+  tyControls.AdvanceChart.Color, tyControls.AdvanceChart.VisualMap,
+  tyControls.AdvanceChart.VisualMapView, tyControls.AdvanceChart.Decal,
+  tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.DataZoomView,
+  tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart.ZrPath,
+  tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
+  tyControls.AdvanceChart.Pie, tyControls.AdvanceChart.Funnel,
+  tyControls.AdvanceChart.Gauge, tyControls.AdvanceChart.Radar,
+  tyControls.AdvanceChart.Calendar, tyControls.AdvanceChart.Matrix, tyControls.AdvanceChart.Tree,
+  tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.GeoSvg, tyControls.AdvanceChart.HeatLayer,
+  tyControls.AdvanceChart.Sunburst, tyControls.AdvanceChart.Treemap,
+  tyControls.AdvanceChart.Sankey,
+  tyControls.AdvanceChart.Graph,
+  tyControls.AdvanceChart.Title,
+  tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.LabelOpt,
+  tyControls.AdvanceChart.PieLabel, tyControls.AdvanceChart.Legend,
+  tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.TipHtml,
+  tyControls.AdvanceChart.AxisPointer,
+  tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.WhiskerBox,
+  tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimOpt,
+  tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.AnimAxis,
+  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.LabelLayout,
+  tyControls.AdvanceChart.Export, tyControls.AdvanceChart.Loading,
+  tyControls.AdvanceChart.Convert, tyControls.AdvanceChart.Jitter,
+  tyControls.AdvanceChart.Large, tyControls.AdvanceChart.Progressive,
+  tyControls.AdvanceChart.Polar, tyControls.AdvanceChart.PolarBar,
+  tyControls.AdvanceChart.Single, tyControls.AdvanceChart.ThemeRiver,
+  tyControls.AdvanceChart.Chord,
+  tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Graphic,
+  tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.Custom,
+  tyControls.AdvanceChart.Toolbox, tyControls.AdvanceChart.Brush,
+  tyControls.AdvanceChart.Timeline,
+  tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.Thumbnail,
   { echarts.connect's revert map and the combined export [Batch 141] }
-  tyControls.AdvChart.Connect,
+  tyControls.AdvanceChart.Connect,
   { the coarse pointer and the dirty rectangles [Batch 142] }
-  tyControls.AdvChart.DirtyRect,
+  tyControls.AdvanceChart.DirtyRect,
   { the keyboard and the accessible tree [Batch 144] }
-  tyControls.AdvChart.Aria, tyControls.AdvChart.KeyNav, tyControls.Accessible,
+  tyControls.AdvanceChart.Aria, tyControls.AdvanceChart.KeyNav, tyControls.Accessible,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -2058,7 +2058,7 @@ type
     procedure Rebuild;
     { [F6a] the bodies of Rebuild, Paint, RenderTo and RenderToBitmap: each
       public entry opens the image scope -- an `image://name/i` looks for
-      `name` on this chart's Owner (AdvChart.Images) -- around its body }
+      `name` on this chart's Owner (AdvanceChart.Images) -- around its body }
     procedure RebuildBody;
     procedure PaintBody;
     procedure RenderToBody(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -3088,14 +3088,14 @@ type
     function BuildSeriesList(const AMeasurer: ITyTextMeasurer;
       APPI: Integer): Integer;
     { SERIES LABEL LAYOUT -- LabelManager over every series that writes a
-      labelLayout (AdvChart.LabelLayout): the layout applied to each label,
+      labelLayout (AdvanceChart.LabelLayout): the layout applied to each label,
       then moveOverlap and hideOverlap across all of them. Runs on the
       finished list, after the expansion. [Batch 103] }
     procedure LayoutSeriesLabels(AList: TTyPaintList;
       const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
       const AMeasurer: ITyTextMeasurer; APPI: Integer);
     { LABEL LINES ROUTED AFTER THE LAYOUT -- LabelManager.processLabelsOverall's
-      _updateLabelLine (AdvChart.LabelGuide): a pie's line again where its
+      _updateLabelLine (AdvanceChart.LabelGuide): a pie's line again where its
       labelLayout gave an x or a y, and a line for every label of a symbol or
       a bar whose labelLine shows in some state. [Batch 112] }
     procedure RouteLabelLines(AList: TTyPaintList;
@@ -3444,7 +3444,7 @@ type
     { THE TOOLBOX'S DIALOGS [Batch 125]: dataView's table (True when Refresh
       closed it, the text in AText) and saveAsImage's file name. Virtual so
       a host -- or a test -- answers without a modal; the defaults are the
-      library's dialogs (tyControls.AdvChart.ToolboxDlg). }
+      library's dialogs (tyControls.AdvanceChart.ToolboxDlg). }
     function ToolboxShowDataView(const ATitle: string; var AText: string;
       AReadOnly: Boolean; const ACloseCaption, ARefreshCaption: string): Boolean; virtual;
     function ToolboxAskFileName(var AFileName: string; const AType: string): Boolean; virtual;
@@ -4013,7 +4013,7 @@ type
     procedure SaveToPng(const AFileName: string);
     { EXPORT, as getDataURL does it [Batch 106]. AOptsJson is upstream's
       options object -- `type`, `pixelRatio`, `backgroundColor`,
-      `excludeComponents` -- '' for none; see tyControls.AdvChart.Export for
+      `excludeComponents` -- '' for none; see tyControls.AdvanceChart.Export for
       what each one does. The picture is the FINISHED chart: an animation
       running in the window is drawn where it will rest, and the pointer's
       own state -- the tooltip box, a hovered axis pointer, a hover's
@@ -4230,7 +4230,7 @@ type
     property AriaDescription: string read GetAriaDescription;
     { ==== THE KEYBOARD AND THE ACCESSIBLE TREE [Batch 144] ====
       Upstream has no keyboard; this is the port's (see
-      tyControls.AdvChart.KeyNav for the keys). The chart is no tab stop
+      tyControls.AdvanceChart.KeyNav for the keys). The chart is no tab stop
       unless the host makes it one (TabStop := True): then a click or Tab
       gives it focus and the keys walk the data items.
 
@@ -4744,7 +4744,7 @@ type
     function SeriesOldViewKey(ASeries: Integer): string;
     { A MERGE setOption: components and series mapped onto the models there
       by id, then name, then index, and merged into them (see
-      tyControls.AdvChart.OptionMerge). What upstream keeps in the models
+      tyControls.AdvanceChart.OptionMerge). What upstream keeps in the models
       survives: the legend's selection unless the option writes `selected`,
       a roam's centre and zoom, an action's dataZoom window, the series'
       selection. It renders as an update. The Option property reads the
@@ -4777,7 +4777,7 @@ type
       <mainType>Index / Id / Name keys, as util/model.ts parseFinder reads
       them. The value is any JSON: a pair for a coordinate system, one
       value for one axis, read with upstream's JavaScript rules (see
-      tyControls.AdvChart.Convert). The coordinate systems are asked in
+      tyControls.AdvanceChart.Convert). The coordinate systems are asked in
       upstream's order -- the grids, the graphs' views, the calendars --
       and the first that answers is the answer.
 
@@ -5022,17 +5022,17 @@ uses
     rects it invalidates [Batch 142] }
   Forms, LCLIntf,
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
-    rest of the AdvChart family keeps, invisible to a host. }
+    rest of the AdvanceChart family keeps, invisible to a host. }
   tyControls.StrConsts,
-  tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
+  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
-  tyControls.AdvChart.ToolboxDlg,
-  tyControls.AdvChart.AxisBreak, tyControls.AdvChart.DataTransform,
+  tyControls.AdvanceChart.ToolboxDlg,
+  tyControls.AdvanceChart.AxisBreak, tyControls.AdvanceChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }
-  tyControls.AdvChart.StatTransform,
+  tyControls.AdvanceChart.StatTransform,
   { `image://` pictures and their image lists [F6a] }
-  tyControls.AdvChart.Images;
+  tyControls.AdvanceChart.Images;
 
 var
   GStPatchOff: Boolean = False;
@@ -5629,29 +5629,29 @@ end;
 { THE METHODS, BY FEATURE: one include file each; inside a file they keep the order
   they had in this unit. What stays above is the unit's own routines and the helpers
   more than one feature shares. }
-{$I tyControls.AdvanceChart.Option.inc}
-{$I tyControls.AdvanceChart.Build.inc}
-{$I tyControls.AdvanceChart.Paint.inc}
-{$I tyControls.AdvanceChart.DataZoom.inc}
-{$I tyControls.AdvanceChart.VisualMap.inc}
-{$I tyControls.AdvanceChart.Geo.inc}
-{$I tyControls.AdvanceChart.Hierarchy.inc}
-{$I tyControls.AdvanceChart.Series.inc}
-{$I tyControls.AdvanceChart.Legend.inc}
-{$I tyControls.AdvanceChart.Labels.inc}
-{$I tyControls.AdvanceChart.Progressive.inc}
-{$I tyControls.AdvanceChart.Tooltip.inc}
-{$I tyControls.AdvanceChart.Events.inc}
-{$I tyControls.AdvanceChart.States.inc}
-{$I tyControls.AdvanceChart.Actions.inc}
-{$I tyControls.AdvanceChart.Anim.inc}
-{$I tyControls.AdvanceChart.Keyboard.inc}
-{$I tyControls.AdvanceChart.Graphic.inc}
-{$I tyControls.AdvanceChart.Export.inc}
-{$I tyControls.AdvanceChart.Timeline.inc}
-{$I tyControls.AdvanceChart.Toolbox.inc}
-{$I tyControls.AdvanceChart.Brush.inc}
-{$I tyControls.AdvanceChart.Thumbnail.inc}
+{$I tyControls.AdvanceChart.Control.Option.inc}
+{$I tyControls.AdvanceChart.Control.Build.inc}
+{$I tyControls.AdvanceChart.Control.Paint.inc}
+{$I tyControls.AdvanceChart.Control.DataZoom.inc}
+{$I tyControls.AdvanceChart.Control.VisualMap.inc}
+{$I tyControls.AdvanceChart.Control.Geo.inc}
+{$I tyControls.AdvanceChart.Control.Hierarchy.inc}
+{$I tyControls.AdvanceChart.Control.Series.inc}
+{$I tyControls.AdvanceChart.Control.Legend.inc}
+{$I tyControls.AdvanceChart.Control.Labels.inc}
+{$I tyControls.AdvanceChart.Control.Progressive.inc}
+{$I tyControls.AdvanceChart.Control.Tooltip.inc}
+{$I tyControls.AdvanceChart.Control.Events.inc}
+{$I tyControls.AdvanceChart.Control.States.inc}
+{$I tyControls.AdvanceChart.Control.Actions.inc}
+{$I tyControls.AdvanceChart.Control.Anim.inc}
+{$I tyControls.AdvanceChart.Control.Keyboard.inc}
+{$I tyControls.AdvanceChart.Control.Graphic.inc}
+{$I tyControls.AdvanceChart.Control.Export.inc}
+{$I tyControls.AdvanceChart.Control.Timeline.inc}
+{$I tyControls.AdvanceChart.Control.Toolbox.inc}
+{$I tyControls.AdvanceChart.Control.Brush.inc}
+{$I tyControls.AdvanceChart.Control.Thumbnail.inc}
 
 finalization
   FreeAndNil(GTyCharts);

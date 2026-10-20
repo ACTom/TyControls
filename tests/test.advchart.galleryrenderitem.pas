@@ -37,11 +37,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Contnrs, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.AdvanceChart,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.Handlers,
-     tyControls.AdvChart.GfxEl, tyControls.AdvChart.Custom,
-     tyControls.AdvChart.Geo, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Dataset,
-     tyControls.AdvChart.AnimOpt,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.Handlers,
+     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Custom,
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Dataset,
+     tyControls.AdvanceChart.AnimOpt,
      test.advchart.customseries, urenderitems, ugenerated, ucallbacks,
      ualbersusa, umaps;
 type
@@ -176,7 +176,7 @@ type
 
 implementation
 
-uses DateUtils, tyControls.AdvChart.Data;
+uses DateUtils, tyControls.AdvanceChart.Data;
 
 function FindUp(const ARel: string): string;
 var d: string; i: Integer;

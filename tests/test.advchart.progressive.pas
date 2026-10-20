@@ -24,11 +24,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Large,
-     tyControls.AdvChart.Progressive, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Large,
+     tyControls.AdvanceChart.Progressive, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart;
 type
   TPgProbe = class(TTyAdvanceChart)

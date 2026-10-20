@@ -20,15 +20,15 @@ unit test.advchart.pieavoid;
       alignment, hidden or not, and the line: the solver's, bent by the two
       turn limits [Batch 112: they were only counted];
     - THE LIMITS: each recorded solver line bent by limitTurnAngle and
-      limitSurfaceAngle (AdvChart.LabelGuide) against the line drawn.
+      limitSurfaceAngle (AdvanceChart.LabelGuide) against the line drawn.
       [Batch 112, roadmap B14] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.FontUnits,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.LabelLayout, tyControls.AdvChart.LabelGuide, tyControls.AdvChart.Pie, tyControls.AdvChart.PieLabel, tyControls.AdvChart.Labels, tyControls.AdvChart.RichStyle,
-     tyControls.AdvChart.Measure, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.Pie, tyControls.AdvanceChart.PieLabel, tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.RichStyle,
+     tyControls.AdvanceChart.Measure, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TPaProbe = class(TTyAdvanceChart)

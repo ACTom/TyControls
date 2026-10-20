@@ -12,8 +12,8 @@ unit test.advchart.symbol;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-  tyControls.AdvChart.Symbol;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+  tyControls.AdvanceChart.Symbol;
 
 type
   TAdvChartSymbolTest = class(TTestCase)

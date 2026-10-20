@@ -4,7 +4,7 @@ unit test.advchart.paint;
   Pure -- no painter is involved in deciding order or answering the pointer. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Paint;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint;
 type
   TAdvChartPaintTest = class(TTestCase)
   private

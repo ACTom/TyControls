@@ -12,7 +12,7 @@ unit test.advchart.complete;
   the JSON was valid would appear approximately never. }
 interface
 uses Classes, SysUtils, fpcunit, testregistry,
-     tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
+     tyControls.AdvanceChart.Catalog, tyControls.AdvanceChart.Complete,
      tyControls.StrConsts;
 type
   TIntArray = array of Integer;

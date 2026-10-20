@@ -68,7 +68,7 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
-  tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvChart.Diagnose,
+  tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvanceChart.Diagnose,
   BGRABitmap, BGRABitmapTypes,
   umaps, urenderitems, ugenerated, ucallbacks, ualbersusa;
 

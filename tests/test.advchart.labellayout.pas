@@ -25,10 +25,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.FontUnits,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.AxisLabels,
-     tyControls.AdvChart.LabelLayout, tyControls.AdvChart.States,
-     tyControls.AdvChart.Measure, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.AxisLabels,
+     tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.States,
+     tyControls.AdvanceChart.Measure, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TLlProbe = class(TTyAdvanceChart)

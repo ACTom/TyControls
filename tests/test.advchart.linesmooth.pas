@@ -16,8 +16,8 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser, sha1,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.LinePath, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart;
 type
   TLsProbe = class(TTyAdvanceChart)
   public

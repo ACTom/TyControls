@@ -18,9 +18,9 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Funnel, tyControls.AdvChart.Paint,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Funnel, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartFunnelRuleTest = class(TTestCase)

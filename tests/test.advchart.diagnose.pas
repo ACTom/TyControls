@@ -8,7 +8,7 @@ unit test.advchart.diagnose;
   thing to SAY, in the right order, pointing at the right place". }
 interface
 uses Classes, SysUtils, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Diagnose, tyControls.AdvChart.Series,
+     tyControls.AdvanceChart.Diagnose, tyControls.AdvanceChart.Series,
      tyControls.AdvanceChart;
 type
   TAdvChartDiagnoseTest = class(TTestCase)
@@ -50,7 +50,7 @@ type
 
 implementation
 
-uses tyControls.StrConsts, tyControls.AdvChart.Geo;
+uses tyControls.StrConsts, tyControls.AdvanceChart.Geo;
 
 { the rows of a kind -- an untyped series, a build problem }
 type

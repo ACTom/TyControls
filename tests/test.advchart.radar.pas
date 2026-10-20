@@ -16,12 +16,12 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Radar, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Series, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Scale,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Radar, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Series, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartRadarRuleTest = class(TTestCase)

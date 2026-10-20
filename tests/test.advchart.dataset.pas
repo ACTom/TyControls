@@ -24,8 +24,8 @@ unit test.advchart.dataset;
 interface
 uses
   Classes, SysUtils, Math, fpjson, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Dataset;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Dataset;
 
 type
   TAdvChartDatasetTest = class(TTestCase)

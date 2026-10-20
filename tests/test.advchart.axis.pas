@@ -10,7 +10,7 @@ unit test.advchart.axis;
   verified separately in test.advchart.measure. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Layout;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Layout;
 type
   { CharW px per character, CharH px tall, whatever the font says. }
   TFakeMeasurer = class(TInterfacedObject, ITyTextMeasurer)

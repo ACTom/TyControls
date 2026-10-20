@@ -1,6 +1,6 @@
 'use strict';
 // What V8's Math.pow and Math.log answer, to the bit -- the answers
-// tyControls.AdvChart.JsMath's TyJsPow and TyJsLog must give. ECharts reaches
+// tyControls.AdvanceChart.JsMath's TyJsPow and TyJsLog must give. ECharts reaches
 // them through mathPow / mathLog (util/number.ts:588-597): the log scale's
 // ticks, normalize and pointToData (scale/helper.ts), nice(), quantity().
 //

@@ -49,7 +49,7 @@ implementation
 
 uses
   Classes, SysUtils, fpjson, jsonparser,
-  tyControls.AdvChart.Option, tyControls.AdvChart.Geo;
+  tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Geo;
 
 var
   GIndex: TJSONObject = nil;

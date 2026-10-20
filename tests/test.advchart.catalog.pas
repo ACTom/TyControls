@@ -11,8 +11,8 @@ unit test.advchart.catalog;
   live in that same file. Hence the third, over the data section. }
 interface
 uses Classes, SysUtils, StrUtils, zstream, sha1, fpjson, jsonparser, fpcunit, testregistry,
-     tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
-     tyControls.AdvChart.Option;
+     tyControls.AdvanceChart.Catalog, tyControls.AdvanceChart.Complete,
+     tyControls.AdvanceChart.Option;
 type
   TAdvChartCatalogTest = class(TTestCase)
   private
@@ -281,7 +281,7 @@ begin
   raw := ReadLF(f);
   { Byte-for-byte, no newline normalisation: catalog.json is machine-written
     JSON on one line, so there are no line endings for a checkout to change. }
-  AssertEquals('tyControls.AdvChart.Catalog.pas is out of date -- '
+  AssertEquals('tyControls.AdvanceChart.Catalog.pas is out of date -- '
              + 'run: node tools/advchart/gen-catalog.js',
                TyOptCatalogDigest, UpperCase(SHA1Print(SHA1String(raw))));
 end;
@@ -299,7 +299,7 @@ begin
   { CRLF -> LF, so a checkout with a different core.autocrlf does not turn this
     red for no reason. The generator digests itself the same way. }
   src := StringReplace(src, #13#10, #10, [rfReplaceAll]);
-  AssertEquals('tyControls.AdvChart.Catalog.pas was produced by a different '
+  AssertEquals('tyControls.AdvanceChart.Catalog.pas was produced by a different '
              + 'gen-catalog.js -- re-run: node tools/advchart/gen-catalog.js',
                TyOptGeneratorDigest, UpperCase(SHA1Print(SHA1String(src))));
 end;
@@ -321,14 +321,14 @@ begin
     So the data sits below a marker and is digested separately. Editing a value
     changes the section's hash but not the constant; matching them again means
     recomputing a SHA-1 by hand, which is forgery rather than an accident. }
-  f := RepoRoot + 'source' + PathDelim + 'tyControls.AdvChart.Catalog.pas';
+  f := RepoRoot + 'source' + PathDelim + 'tyControls.AdvanceChart.Catalog.pas';
   AssertTrue('the generated unit exists: ' + f, FileExists(f));
   src := ReadLF(f);
   src := StringReplace(src, #13#10, #10, [rfReplaceAll]);
   at := Pos(Mark, src);
   AssertTrue('the data marker is present', at > 0);
   data := Copy(src, at + Length(Mark), MaxInt);
-  AssertEquals('the data section of tyControls.AdvChart.Catalog.pas has been '
+  AssertEquals('the data section of tyControls.AdvanceChart.Catalog.pas has been '
              + 'edited by hand -- re-run: node tools/advchart/gen-catalog.js',
                TyOptDataDigest, UpperCase(SHA1Print(SHA1String(data))));
 end;

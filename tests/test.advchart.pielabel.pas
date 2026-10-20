@@ -25,11 +25,11 @@ unit test.advchart.pielabel;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Layout, tyControls.AdvChart.Labels,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Paint,
-  tyControls.AdvChart.Shape, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Pie, tyControls.AdvChart.PieLabel;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Labels,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Paint,
+  tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Series,
+  tyControls.AdvanceChart.Pie, tyControls.AdvanceChart.PieLabel;
 
 type
   TPieLabelMeasurer = class(TInterfacedObject, ITyTextMeasurer)

@@ -1,6 +1,6 @@
 # Pack the option catalog's EN/ZH descriptions into a design-time resource.
 #
-# WHY THEY ARE NOT IN THE GENERATED .pas. tyControls.AdvChart.Catalog.pas is a
+# WHY THEY ARE NOT IN THE GENERATED .pas. tyControls.AdvanceChart.Catalog.pas is a
 # RUNTIME unit, and the descriptions are 194 KB of mostly-CJK prose that nothing
 # at runtime reads -- only the design-time editor shows them. Compiling them into
 # the runtime package would put a fifth of a megabyte of documentation into every

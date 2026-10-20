@@ -10,7 +10,7 @@ unit tyControls.Design.AdvChart.SeriesDialog;
   gives: designtime/ is outside the test build. Every question -- which
   series there are and what to call them, which keys a type has, what a cell
   turns into, what deleting a category row deletes, what goes back into the
-  text and what it costs -- is answered by tyControls.AdvChart.SeriesEdit,
+  text and what it costs -- is answered by tyControls.AdvanceChart.SeriesEdit,
   where tests/test.advchart.serieseditor.pas reaches it. That suite also
   reads THIS file and fails if it ever touches fcl-json or the patcher
   itself (TheSeriesDialogStaysAShell).
@@ -32,7 +32,7 @@ interface
 uses
   Classes, SysUtils, Controls, Forms, StdCtrls, ComCtrls, ExtCtrls, Grids,
   Graphics, Dialogs,
-  tyControls.AdvChart.SeriesEdit, tyControls.AdvChart.Diagnose,
+  tyControls.AdvanceChart.SeriesEdit, tyControls.AdvanceChart.Diagnose,
   tyControls.AdvanceChart;
 
 type

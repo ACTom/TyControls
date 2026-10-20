@@ -30,11 +30,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller, tyControls.StrConsts,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Tooltip,
-     tyControls.AdvChart.Time, tyControls.AdvChart.Coord, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Tooltip,
+     tyControls.AdvanceChart.Time, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -82,7 +82,7 @@ type
 
 implementation
 
-uses tyControls.FontUnits, tyControls.AdvChart.RichStyle;
+uses tyControls.FontUnits, tyControls.AdvanceChart.RichStyle;
 
 const
   cW = 600;

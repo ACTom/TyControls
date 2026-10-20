@@ -18,8 +18,8 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Option, tyControls.AdvChart.Tree,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Tree,
      tyControls.AdvanceChart;
 type
   TTrProbe = class(TTyAdvanceChart)

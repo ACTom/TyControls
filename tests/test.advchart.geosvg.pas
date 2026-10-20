@@ -20,13 +20,13 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.FontUnits, tyControls.Types, tyControls.StyleModel,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Style, tyControls.AdvChart.States, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Custom, tyControls.AdvChart.Convert, tyControls.AdvChart.Lines,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.GeoSvg, tyControls.AdvChart.Tooltip, tyControls.AdvChart.Scale, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Geo, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Style, tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Custom, tyControls.AdvanceChart.Convert, tyControls.AdvanceChart.Lines,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GeoSvg, tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart;
 type
   { zrender's server-side width table for every text the chart measures }
   TGsvMeasurer = class(TInterfacedObject, ITyTextMeasurer)

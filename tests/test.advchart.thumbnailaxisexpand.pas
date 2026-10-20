@@ -27,10 +27,10 @@ interface
 uses Classes, SysUtils, Math, Types, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Events, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Brush, tyControls.AdvChart.Parallel, tyControls.AdvChart.Graph,
-     tyControls.AdvChart.Thumbnail, tyControls.AdvChart.Color, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Brush, tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.Graph,
+     tyControls.AdvanceChart.Thumbnail, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart;
 type
   TTaProbe = class(TTyAdvanceChart)

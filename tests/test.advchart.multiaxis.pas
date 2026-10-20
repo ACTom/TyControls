@@ -16,8 +16,8 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Coord, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartMultiAxisTest = class(TTestCase)

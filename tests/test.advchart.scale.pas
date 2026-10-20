@@ -8,7 +8,7 @@ unit test.advchart.scale;
   the decorator design has failed. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale;
 type
   TAdvChartMapperTest = class(TTestCase)
   published

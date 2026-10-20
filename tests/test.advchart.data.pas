@@ -19,7 +19,7 @@ unit test.advchart.data;
   round-trip is checked through a filter. }
 interface
 uses Classes, SysUtils, Math, DateUtils, fpcunit, testregistry,
-     tyControls.AdvChart.Data;
+     tyControls.AdvanceChart.Data;
 type
   TAdvChartDataTest = class(TTestCase)
   private

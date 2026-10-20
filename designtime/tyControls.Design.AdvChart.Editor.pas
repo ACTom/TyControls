@@ -30,7 +30,7 @@ uses
   Classes, SysUtils, Controls, Forms, StdCtrls, ComCtrls, ExtCtrls, Graphics,
   SynEdit, SynCompletion, LCLType,
   PropEdits, ComponentEditors,
-  tyControls.AdvChart.Complete, tyControls.AdvChart.Diagnose;
+  tyControls.AdvanceChart.Complete, tyControls.AdvanceChart.Diagnose;
 
 type
   { THE DIALOG ITSELF, in the interface rather than tucked into the
@@ -109,7 +109,7 @@ uses
   Dialogs, TypInfo,
   SynEditTypes, SynHighlighterJScript,
   tyControls.AdvanceChart,
-  tyControls.AdvChart.Catalog,
+  tyControls.AdvanceChart.Catalog,
   tyControls.Design.AdvChart.Descs,
   tyControls.Design.AdvChart.SeriesDialog,
   tyControls.Dialogs;
@@ -403,7 +403,7 @@ begin
     rows rowTexted with the whole dotted path, and a parentless row otherwise
     means a child of the root -- so this took `xAxis.axisLabel` as an edge name
     and inserted `xAxis.axisLabel: `. A '.' is not a name character:
-    AdvChart.Locate says so in its own comment, because `a.b: 1` is a spelling
+    AdvanceChart.Locate says so in its own comment, because `a.b: 1` is a spelling
     fcl-json cannot parse unquoted. Every filter hit below the top level
     inserted text the option reader rejects.
 

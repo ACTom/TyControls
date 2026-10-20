@@ -22,10 +22,10 @@ unit test.advchart.stringidentity;
 interface
 
 uses Classes, SysUtils, Math, fpjson, jsonparser, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Tree, tyControls.AdvChart.Treemap,
-     tyControls.AdvChart.Sunburst;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Tree, tyControls.AdvanceChart.Treemap,
+     tyControls.AdvanceChart.Sunburst;
 
 type
   TAdvChartStringIdentityOracleTest = class(TTestCase)
@@ -262,16 +262,18 @@ begin
   bad := '';
   n := 0;
   try
-    if FindFirst(dir + 'tyControls.AdvChart*.pas', faAnyFile, sr) = 0 then
+    { the model units, tyControls.AdvanceChart.<Name>.pas }
+    if FindFirst(dir + 'tyControls.AdvanceChart.*.pas', faAnyFile, sr) = 0 then
     begin
       repeat
-        files.Add(sr.Name);
+        if not SameText(sr.Name, 'tyControls.AdvanceChart.pas') then
+          files.Add(sr.Name);
       until FindNext(sr) <> 0;
       FindClose(sr);
     end;
     files.Add('tyControls.AdvanceChart.pas');
     { and the include files the control's unit is split into [S1] }
-    if FindFirst(dir + 'tyControls.AdvanceChart.*.inc', faAnyFile, sr) = 0 then
+    if FindFirst(dir + 'tyControls.AdvanceChart.Control.*.inc', faAnyFile, sr) = 0 then
     begin
       repeat
         files.Add(sr.Name);

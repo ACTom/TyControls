@@ -3,7 +3,7 @@ unit test.advchart.types;
 { Headless tests for the AdvChart geometry primitives. Everything here is pure
   arithmetic on records — no control, no handle, no painter. }
 interface
-uses Classes, SysUtils, Math, fpcunit, testregistry, tyControls.AdvChart.Types;
+uses Classes, SysUtils, Math, fpcunit, testregistry, tyControls.AdvanceChart.Types;
 type
   TAdvChartTypesTest = class(TTestCase)
   published

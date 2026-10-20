@@ -34,11 +34,11 @@ interface
 uses Classes, SysUtils, Math, Types, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Painter, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Color, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Coord, tyControls.AdvChart.Option,
-     tyControls.AdvChart.VisualMap, tyControls.AdvChart.Render, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.VisualMap, tyControls.AdvanceChart.Render, tyControls.AdvanceChart;
 
 type
   TLsChart = class(TTyAdvanceChart)

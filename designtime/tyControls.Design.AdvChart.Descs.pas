@@ -35,7 +35,7 @@ implementation
 
 uses
   SysUtils, Classes, LResources, fpjson, jsonparser,
-  tyControls.AdvChart.Catalog;
+  tyControls.AdvanceChart.Catalog;
 
 var
   GPool: array of string;

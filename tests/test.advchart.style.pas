@@ -10,8 +10,8 @@ unit test.advchart.style;
   is a test below. }
 interface
 uses Classes, SysUtils, Math, fpjson, jsonparser, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Style;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Style;
 type
   TAdvChartStyleTest = class(TTestCase)
   published

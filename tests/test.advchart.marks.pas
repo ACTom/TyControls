@@ -8,12 +8,12 @@ unit test.advchart.marks;
   one. The drawn result is checked in test.advancechart, through the control. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
-     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Symbol, tyControls.AdvChart.Labels;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Series, tyControls.AdvanceChart.Marks,
+     tyControls.AdvanceChart.BarLayout, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Labels;
 type
   TAdvChartMarksTest = class(TTestCase)
   private
@@ -509,16 +509,16 @@ begin
       or (cTypes[i] = 'sunburst') or (cTypes[i] = 'treemap')
       or (cTypes[i] = 'sankey') or (cTypes[i] = 'themeRiver')
       or (cTypes[i] = 'chord')
-      { a lines series' rows are laid out by AdvChart.Lines through its
+      { a lines series' rows are laid out by AdvanceChart.Lines through its
         coordinate hook, never as a coordinate-pair store [Batch 121] }
       or (cTypes[i] = 'lines')
       { a custom series' elements are its renderItem's, drawn from its view
-        (AdvChart.Custom) [Batch 123] }
+        (AdvanceChart.Custom) [Batch 123] }
       or (cTypes[i] = 'custom')
-      { a parallel series' rows by AdvChart.Parallel on its parallel
+      { a parallel series' rows by AdvanceChart.Parallel on its parallel
         [Batch 128] }
       or (cTypes[i] = 'parallel')
-      { a map series' regions by MapDraw on its geo (AdvChart.Geo)
+      { a map series' regions by MapDraw on its geo (AdvanceChart.Geo)
         [Batch 152] }
       or (cTypes[i] = 'map') then
     begin

@@ -17,8 +17,8 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpjson,
      fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Builder,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartColorTest = class(TTestCase)

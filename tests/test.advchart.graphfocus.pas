@@ -17,9 +17,9 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson, jsonparser, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Style,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Graph,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Style,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Graph,
      tyControls.AdvanceChart;
 type
   TGraphFocusProbe = class(TTyAdvanceChart)

@@ -23,9 +23,9 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson, jsonparser, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Labels,
-     tyControls.AdvChart.LabelOpt, tyControls.AdvChart.Color,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Labels,
+     tyControls.AdvanceChart.LabelOpt, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart;
 type
   TInsideLabelProbe = class(TTyAdvanceChart)

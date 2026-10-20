@@ -16,11 +16,11 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
-     tyControls.AdvChart.Scale, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.AxisPointer,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart;
 type
   TAdvChartAxisPointerRuleTest = class(TTestCase)
   private

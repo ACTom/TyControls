@@ -19,10 +19,10 @@ unit test.advchart.barlayout;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.BarLayout, tyControls.AdvChart.Shape;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Data,
+  tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Series,
+  tyControls.AdvanceChart.BarLayout, tyControls.AdvanceChart.Shape;
 
 type
   TAdvChartBarLayoutTest = class(TTestCase)
@@ -355,7 +355,7 @@ begin
   { COLUMNS, NOT SERIES. Two series naming one stack are ONE column: same
     width, same offset -- which is what puts a stacked pair in one place
     instead of side by side. Their values accumulating is a different question
-    and a different unit (AdvChart.Stack); this one is only about where the
+    and a different unit (AdvanceChart.Stack); this one is only about where the
     column is and how wide. }
   Run('{ xAxis: { data: [''A'', ''B''] }, yAxis: {}, series: ['
     + '{ type: ''bar'', stack: ''s'', data: [1, 2] },'

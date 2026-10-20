@@ -20,9 +20,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Scale, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Series, tyControls.AdvChart.DataZoom,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Series, tyControls.AdvanceChart.DataZoom,
      tyControls.AdvanceChart;
 type
   TDzwProbe = class(TTyAdvanceChart)
@@ -62,7 +62,7 @@ type
 
 implementation
 
-uses tyControls.AdvChart.Complete;
+uses tyControls.AdvanceChart.Complete;
 
 procedure TDzwProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin

@@ -19,9 +19,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
-     tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.Series, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.DataZoomView,
+     tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart.Series, tyControls.AdvanceChart;
 type
   TDziMeasurer = class(TInterfacedObject, ITyTextMeasurer)
   public

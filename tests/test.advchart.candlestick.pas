@@ -17,11 +17,11 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson, jsonparser,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Marks,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.AnimAxis,
-     tyControls.AdvChart.Series,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Marks,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.AnimAxis,
+     tyControls.AdvanceChart.Series,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartCandleRuleTest = class(TTestCase)

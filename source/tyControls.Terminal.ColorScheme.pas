@@ -22,7 +22,7 @@ unit tyControls.Terminal.ColorScheme;
 
   为什么解析前先自己解 \u 转义(TyTermJsonDecodeEscapes):FPC 3.2.2 的 jsonscanner 遇到
   两个挨着的 \u 转义会丢字节(中文名字写成转义就是这样),\u0000 也会被吞。AdvChart 有一份
-  同样用途的预解码(tyControls.AdvChart.Option 的 TyDecodeUnicodeEscapes),但它不认注释
+  同样用途的预解码(tyControls.AdvanceChart.Option 的 TyDecodeUnicodeEscapes),但它不认注释
   (settings.json 的注释里有引号,会把串内串外弄反),还会把 \u0022 / \u005C 解成裸的引号、
   反斜杠(裸引号提前结束字符串)。这里另写一份:认 // 与 /* */ 注释,引号、反斜杠、控制
   字符保留成转义。 }

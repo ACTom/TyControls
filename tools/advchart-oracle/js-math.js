@@ -1,6 +1,6 @@
 'use strict';
 // What V8's Math.sin, cos, atan and atan2 answer, to the bit -- the answers
-// tyControls.AdvChart.JsMath must give.
+// tyControls.AdvanceChart.JsMath must give.
 //
 //   node tools/advchart-oracle/js-math.js
 //

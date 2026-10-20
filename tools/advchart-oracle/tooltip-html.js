@@ -12,7 +12,7 @@ gives a formatter and a template html:
      modes;
   3. encodeHTML itself.
 
-The port draws the html it is handed (tyControls.AdvChart.TipHtml); these
+The port draws the html it is handed (tyControls.AdvanceChart.TipHtml); these
 are the strings it must be handed. The layout of the html is the browser's
 -- CSS, not ECharts -- and is not recorded here.
 

@@ -14,13 +14,13 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.StrConsts,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Tooltip,
-     tyControls.AdvChart.Legend, tyControls.AdvChart.VisualMapView,
-     tyControls.AdvChart.DataZoomView, tyControls.AdvChart.JsMath,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Tooltip,
+     tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.VisualMapView,
+     tyControls.AdvanceChart.DataZoomView, tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart;
 type
   THwProbe = class(TTyAdvanceChart)

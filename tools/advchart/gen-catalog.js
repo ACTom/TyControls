@@ -4,7 +4,7 @@
  *   node tools/advchart/gen-catalog.js
  *
  * Reads the committed intermediate tools/advchart/catalog.json and writes
- * source/tyControls.AdvChart.Catalog.pas -- pure data, no logic. The lookup,
+ * source/tyControls.AdvanceChart.Catalog.pas -- pure data, no logic. The lookup,
  * path normalisation and validation live in a hand-written unit next to it, so
  * that they are readable and headless-testable; this follows the house split of
  * Css.Catalog (generated data) from Css.Complete (logic).
@@ -33,7 +33,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const inFile = path.join(__dirname, 'catalog.json');
-const outFile = path.join(__dirname, '..', '..', 'source', 'tyControls.AdvChart.Catalog.pas');
+const outFile = path.join(__dirname, '..', '..', 'source', 'tyControls.AdvanceChart.Catalog.pas');
 
 const catRaw = fs.readFileSync(inFile);
 const cat = JSON.parse(catRaw.toString('utf8'));
@@ -120,7 +120,7 @@ function pasQuote(s) {
 function q(s) { return pasQuote(s); }
 
 const L = [];
-L.push('unit tyControls.AdvChart.Catalog;');
+L.push('unit tyControls.AdvanceChart.Catalog;');
 L.push('{$mode objfpc}{$H+}');
 L.push('{ GENERATED FILE -- DO NOT EDIT BY HAND.');
 L.push('');
@@ -142,7 +142,7 @@ L.push('  (TyOptDescEn / TyOptDescZh below are those indices), so a design-time 
 L.push('  reads them from there without any of it reaching a compiled runtime unit.');
 L.push('');
 L.push('  Lookup, path normalisation and validation are NOT here: they are hand-written');
-L.push('  in tyControls.AdvChart.Complete, so they stay readable and testable while this');
+L.push('  in tyControls.AdvanceChart.Complete, so they stay readable and testable while this');
 L.push('  file stays pure data. Same split as Css.Catalog / Css.Complete. }');
 L.push('interface');
 L.push('');

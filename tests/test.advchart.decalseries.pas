@@ -16,10 +16,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.Types, tyControls.StyleModel,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Render, tyControls.AdvChart.Custom,
-     tyControls.AdvChart.Legend, tyControls.AdvChart.Decal,
-     tyControls.AdvChart.Geo, tyControls.AdvChart.Images, ImgList,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Custom,
+     tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.Decal,
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Images, ImgList,
      tyControls.AdvanceChart;
 type
   TDsProbe = class(TTyAdvanceChart)
