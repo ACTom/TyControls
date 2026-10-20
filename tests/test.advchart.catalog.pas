@@ -769,6 +769,12 @@ begin
     '{ series: [{ type: ''map'', map: ''USA'', animationDurationUpdate: 1000 },'
     + ' { type: ''treemap'', animationDurationUpdate: 1000, universalTransition: true },'
     + ' { type: ''sunburst'', universalTransition: true }] }'));
+  { [R2-J2] a heatmap's label formatter, a radar item's own, a custom
+    series' progressive -- the gallery names the formatters now }
+  AssertEquals('', IssuesOf(
+    '{ series: [{ type: ''heatmap'', label: { formatter: ''{c}'' } },'
+    + ' { type: ''radar'', data: [{ value: [1], label: { formatter: ''{c}'' } }] },'
+    + ' { type: ''custom'', progressive: 2000 }] }'));
   { BY NODE: a graph's `id` is not every series' `id` on its data items }
   AssertEquals('series[0].data[0].id', IssuesOf(
     '{ series: [{ type: ''pie'', data: [{ id: ''n1'', value: 1 }] }] }'));
