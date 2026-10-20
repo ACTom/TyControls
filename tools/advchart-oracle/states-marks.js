@@ -156,6 +156,12 @@ function snap(el) {
       spans.push(k.style.text + '@' + x.toFixed(6) + ',' + y.toFixed(6) + ':' + (k.style.font || ''));
     }
     put('spans', spans.join('|'));
+    // [R2-V] a spanOp case: every TSpan's opacity as drawn
+    if (CUR_CASE.spanOp) {
+      const ops = [];
+      for (const k of el.childrenRef()) if (k.type === 'tspan') ops.push(k.style.opacity == null ? 1 : k.style.opacity);
+      put('sop', ops.join(','));
+    }
   }
   // [R2-I4] a text's words as its state shows them
   if (CUR_CASE && CUR_CASE.words && el.type === 'text') put('txt', el.style.text == null ? '' : String(el.style.text));
@@ -977,6 +983,42 @@ const R2I6 = [
       out(1200)] },
 ];
 
+// [R2-V] the emphasis words where the earlier cases did not look: a handler's
+// dataIndex past a filtered item, a formatter neither a string nor a
+// function, {a} of a series named by a number, a markArea's words alone
+// (its emphasis label position '' -- the default 'top' does not show)
+const R2V = [
+  { id: 'mk-emph-formatter-more', textBox: true, words: true, note: '[R2-V] series 0 named 7 (a number); markPoints at the '
+    + 'top of circles of 20 (scale false) formatted {b}: a first item at coord Z (not on the axis: filtered, no dataIndex), '
+    + 'mp0 its own emphasis handler (params.dataIndex 0), mp1 an emphasis formatter 123 (a number: the normal text stays), '
+    + 'mp2 its own emphasis template {a}|{b}; markArea one with emphasis label position \'\' and formatter E {b} (its '
+    + 'words alone). Hover mp0 at 0, mp1 at 300, mp2 at 600, ma0 at 900, out at 1200',
+    option: bars({ name: 7, markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top', formatter: '{b}' },
+      emphasis: { scale: false } }, [
+      { coord: ['Z', 10], name: 'gone' },
+      { type: 'max', name: 'max', emphasis: { label: { formatter: '@mkWords' } } },
+      { type: 'min', name: 'min', emphasis: { label: { formatter: 123 } } },
+      { coord: ['C', 30], name: 'c', value: 30, emphasis: { label: { formatter: '{a}|{b}' } } }]),
+    markArea: MA({}, [[{ xAxis: 'A', name: 'one', emphasis: { label: { position: '', formatter: 'E {b}' } } },
+      { xAxis: 'B' }]]) }),
+    events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'mp1')), over(600, mark(0, 'mp2')), over(900, mark(0, 'ma0')),
+      out(1200)] },
+  { id: 'mk-rich-blur-opacity', textBox: true, spanOp: true, note: '[R2-V] a rich markPoint label {a|A}{b|B} (no opacity '
+    + 'of its own) under blur.label.opacity 0.3: every TSpan takes the state\'s opacity once (Text._placeToken: '
+    + 'retrieve3(token.opacity, style.opacity, 1)) -- the state\'s text style is the opacity, nothing multiplies it. Hover '
+    + 'bar 3 of series 1 (focus series) at 0, out at 500',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20,
+      label: { position: 'top', formatter: '{a|A}{b|B}', rich: { a: { fontSize: 14 }, b: { color: '#0000ff' } } },
+      emphasis: { scale: false }, blur: { label: { opacity: 0.3 } } }) }, { emphasis: { focus: 'series' } }),
+    events: [over(0, ['item', 1, 3]), out(500)] },
+  { id: 'mk-state-pen-none', textBox: true, note: '[R2-V] markArea one bordered #000 at 9, emphasis borderColor none: '
+    + 'the state draws no pen, so the label hangs off the polygon\'s own box (Path.getBoundingRect without a stroke) '
+    + 'and moves down by 4.5. Hover ma0 at 0, out at 500',
+    option: bars({ markArea: MA({ itemStyle: { borderColor: '#000000', borderWidth: 9 },
+      emphasis: { itemStyle: { borderColor: 'none' } } }, [[{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }]]) }),
+    events: [over(0, mark(0, 'ma0')), out(500)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1180,13 +1222,28 @@ function guards(cases) {
       && ty('mp0#label', 550) - ty('mp0#label', 1600) === -4 && ty('mp0#label', 650) - ty('mp0#label', 1600) === -1,
       [ty('ma0#label', 250), ty('ma0#label', 650), ty('mp0#label', 550), ty('mp0#label', 650), ty('mp0#label', 1600)].join(' '));
   }
+  // [R2-V]
+  if (cases.some(c => c.id === 'mk-emph-formatter-more')) {
+    const c = byId(cases, 'mk-emph-formatter-more');
+    const t = (part, ms) => numAt(mk(c, 0, part), 'txt', ms);
+    g('mk-emph-formatter-more', t('mp0#label', 250) === 'markPoint:max:emphasis:0' && t('mp0#label', 1600) === 'max'
+      && t('mp1#label', 450) === 'min' && t('mp2#label', 650) === '7|c' && t('mp2#label', 1600) === 'c'
+      && t('ma0#label', 1000) === 'E one' && t('ma0#label', 1600) === 'one' && !mk(c, 0, 'mp3'),
+      [t('mp0#label', 250), t('mp1#label', 450), t('mp2#label', 650), t('ma0#label', 1000)].join(' | '));
+    const r = byId(cases, 'mk-rich-blur-opacity');
+    const so = ms => numAt(mk(r, 0, 'mp0#label'), 'sop', ms);
+    g('mk-rich-blur-opacity', so(250) === '0.3,0.3' && so(1600) === '1,1', [so(250), so(1600)].join(' | '));
+    const pn = byId(cases, 'mk-state-pen-none');
+    const ty = ms => Number(numAt(mk(pn, 0, 'ma0#label'), 'ty', ms));
+    g('mk-state-pen-none', ty(250) - ty(1600) === 4.5, [ty(250), ty(1600)].join(' | '));
+  }
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

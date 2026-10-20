@@ -959,6 +959,16 @@ add('state', 'state-tangential', 'emphasis and select on tangential roundCap bar
     { type: 'select', seriesIndex: 0, dataIndex: 1 },
     { type: 'downplay', seriesIndex: 0, dataIndex: 4 },
   ] });
+// [R2-V] a gradient border is a pen: the stroked rect the labels hang in
+// grows by it as by a colour (Path.getBoundingRect: hasStroke), the series
+// fill transparent
+const GRAD = { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+  colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] };
+add('bar', 'bar-border-gradient', '[R2-V] a transparent radial series, every bar bordered 6 in a gradient of its own, labels top and insideBottom: the stroked rect as with a colour',
+  P(CAT, {}, [bar(D5.map(v => ({ value: v, itemStyle: { borderWidth: 6, borderColor: GRAD } })),
+    { itemStyle: { color: 'transparent' }, label: { show: true, position: 'top' } }),
+  bar(D5.map(v => ({ value: v, itemStyle: { borderWidth: 6, borderColor: GRAD } })),
+    { itemStyle: { color: 'transparent' }, label: { show: true, position: 'insideBottom' } })]));
 
 // ---------------------------------------------------------------------------
 // running

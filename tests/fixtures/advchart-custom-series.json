@@ -16021,6 +16021,1403 @@
     }
    ],
    "fails": []
+  },
+  {
+   "id": "gantt-label-none",
+   "group": "shape",
+   "note": "[R2-V] the gantt with label.show on two category axes: no label dimension, api.style's text is undefined (retrieve2(formatted, getDefaultLabel) -- nothing)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q",
+      "r",
+      "s",
+      "t"
+     ]
+    },
+    "series": [
+     {
+      "type": "custom",
+      "renderItem": "@gantt",
+      "label": {
+       "show": true
+      },
+      "encode": {
+       "x": [
+        1,
+        2
+       ],
+       "y": 0
+      },
+      "data": [
+       [
+        0,
+        1,
+        3,
+        "a1"
+       ],
+       [
+        1,
+        2,
+        4,
+        "b1"
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "3ff0000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "406a400000000000",
+          "40732aaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4008000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4079a00000000000",
+          "40732aaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4059000000000000",
+          "405aaaaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "normal",
+          "fontWeight": "normal",
+          "fontSize": "4028000000000000",
+          "fontFamily": "Microsoft YaHei",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "406a400000000000",
+         "y": "40712aaaaaaaaaab",
+         "width": "4069000000000000",
+         "height": "4050000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "normal",
+         "fontWeight": "normal",
+         "fontSize": "4028000000000000",
+         "fontFamily": "Microsoft YaHei",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "legacy": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4073600000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4010000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4010000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "407fe00000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4059000000000000",
+          "405aaaaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "normal",
+          "fontWeight": "normal",
+          "fontSize": "4028000000000000",
+          "fontFamily": "Microsoft YaHei",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4073600000000000",
+         "y": "4065000000000000",
+         "width": "4069000000000000",
+         "height": "4050000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "normal",
+         "fontWeight": "normal",
+         "fontSize": "4028000000000000",
+         "fontFamily": "Microsoft YaHei",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "legacy": true
+        }
+       }
+      }
+     ],
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "406a400000000000",
+        "y": "40712aaaaaaaaaab",
+        "width": "4069000000000000",
+        "height": "4050000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "406a400000000000",
+        "40712aaaaaaaaaab",
+        "4069000000000000",
+        "4050000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "4073600000000000",
+         "40732aaaaaaaaaab"
+        ],
+        "inner": {
+         "x": "4073600000000000",
+         "y": "40732aaaaaaaaaab",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": null,
+         "font": "normal normal 12px Microsoft YaHei",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4073600000000000",
+        "y": "4065000000000000",
+        "width": "4069000000000000",
+        "height": "4050000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4073600000000000",
+        "4065000000000000",
+        "4069000000000000",
+        "4050000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "4079a00000000000",
+         "4069000000000000"
+        ],
+        "inner": {
+         "x": "4079a00000000000",
+         "y": "4069000000000000",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": null,
+         "font": "normal normal 12px Microsoft YaHei",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
+  },
+  {
+   "id": "gantt-label-null",
+   "group": "shape",
+   "note": "[R2-V] the gantt with label.show and encode.label 3: one label dimension, its value null in the second item -- api.style's text is null there (getDefaultLabel), the value elsewhere",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "custom",
+      "renderItem": "@gantt",
+      "label": {
+       "show": true
+      },
+      "encode": {
+       "x": [
+        1,
+        2
+       ],
+       "y": 0,
+       "label": 3
+      },
+      "data": [
+       [
+        0,
+        1,
+        5,
+        7
+       ],
+       [
+        1,
+        3,
+        9,
+        null
+       ],
+       [
+        2,
+        6,
+        15,
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "3ff0000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4055400000000000",
+          "40732aaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4014000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4067200000000000",
+          "40732aaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "0000000000000000",
+          "405aaaaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "normal",
+          "fontWeight": "normal",
+          "fontSize": "4028000000000000",
+          "fontFamily": "Microsoft YaHei",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "text": "7",
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4055400000000000",
+         "y": "40712aaaaaaaaaab",
+         "width": "4059000000000000",
+         "height": "4050000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "normal",
+         "fontWeight": "normal",
+         "fontSize": "4028000000000000",
+         "fontFamily": "Microsoft YaHei",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "text": "7",
+         "legacy": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4008000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4060e00000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4022000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4022000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4071d00000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "0000000000000000",
+          "405aaaaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "normal",
+          "fontWeight": "normal",
+          "fontSize": "4028000000000000",
+          "fontFamily": "Microsoft YaHei",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "text": null,
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4060e00000000000",
+         "y": "4065000000000000",
+         "width": "4062c00000000000",
+         "height": "4050000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "normal",
+         "fontWeight": "normal",
+         "fontSize": "4028000000000000",
+         "fontFamily": "Microsoft YaHei",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "text": null,
+         "legacy": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 2,
+        "dataIndexInside": 2,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4018000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4018000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "406a400000000000",
+          "4057555555555554"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "402e000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "402e000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "407b300000000000",
+          "4057555555555554"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "0000000000000000",
+          "405aaaaaaaaaaaab"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "normal",
+          "fontWeight": "normal",
+          "fontSize": "4028000000000000",
+          "fontFamily": "Microsoft YaHei",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "text": "8",
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "406a400000000000",
+         "y": "404eaaaaaaaaaaa8",
+         "width": "406c200000000000",
+         "height": "4050000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "normal",
+         "fontWeight": "normal",
+         "fontSize": "4028000000000000",
+         "fontFamily": "Microsoft YaHei",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "text": "8",
+         "legacy": true
+        }
+       }
+      }
+     ],
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4055400000000000",
+        "y": "40712aaaaaaaaaab",
+        "width": "4059000000000000",
+        "height": "4050000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4055400000000000",
+        "40712aaaaaaaaaab",
+        "4059000000000000",
+        "4050000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "4060e00000000000",
+         "40732aaaaaaaaaab"
+        ],
+        "inner": {
+         "x": "4060e00000000000",
+         "y": "40732aaaaaaaaaab",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": "7",
+         "font": "normal normal 12px Microsoft YaHei",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [
+         {
+          "k": "t",
+          "text": "7",
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "font": "normal normal 12px Microsoft YaHei",
+          "align": "center",
+          "base": "middle",
+          "fill": "#fff",
+          "stroke": "#5470c6",
+          "lineWidth": "4000000000000000",
+          "opacity": "3ff0000000000000"
+         }
+        ],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4060e00000000000",
+        "y": "4065000000000000",
+        "width": "4062c00000000000",
+        "height": "4050000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4060e00000000000",
+        "4065000000000000",
+        "4062c00000000000",
+        "4050000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "406a400000000000",
+         "4069000000000000"
+        ],
+        "inner": {
+         "x": "406a400000000000",
+         "y": "4069000000000000",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": null,
+         "font": "normal normal 12px Microsoft YaHei",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      },
+      {
+       "key": "s0:2",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "406a400000000000",
+        "y": "404eaaaaaaaaaaa8",
+        "width": "406c200000000000",
+        "height": "4050000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "406a400000000000",
+        "404eaaaaaaaaaaa8",
+        "406c200000000000",
+        "4050000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "4074280000000000",
+         "4057555555555554"
+        ],
+        "inner": {
+         "x": "4074280000000000",
+         "y": "4057555555555554",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": "8",
+         "font": "normal normal 12px Microsoft YaHei",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [
+         {
+          "k": "t",
+          "text": "8",
+          "x": "0000000000000000",
+          "y": "0000000000000000",
+          "font": "normal normal 12px Microsoft YaHei",
+          "align": "center",
+          "base": "middle",
+          "fill": "#fff",
+          "stroke": "#5470c6",
+          "lineWidth": "4000000000000000",
+          "opacity": "3ff0000000000000"
+         }
+        ],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       },
+       "info": null
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s0:2",
+      "s0:0#label",
+      "s0:2#label"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:2",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
   }
  ],
  "guards": [
@@ -16062,6 +17459,14 @@
   },
   {
    "name": "emphasis: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "gantt-label-none: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "gantt-label-null: every record matches its recipe",
    "ok": true
   },
   {

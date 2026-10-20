@@ -764,6 +764,17 @@ add('hover', 'emphasis', 'emphasis: a declared emphasis style on the rect, the d
   { xAxis: { type: 'category', data: ['e', 'f'] }, yAxis: { type: 'value', min: 0, max: 10 },
     series: [{ type: 'custom', renderItem: '@hover', data: [[0, 6], [1, 4]] }] },
   { steps: [{ move: 's0:0/0' }, { move: 's0:1/1' }, { leave: true }] });
+// [R2-V] the ec4 label's default text where getDefaultLabel has none: no
+// label dimension at all (both axes categories: mayLabelDimType takes no
+// ordinal) -- undefined; one label dimension whose value is null -- null
+add('shape', 'gantt-label-none', "[R2-V] the gantt with label.show on two category axes: no label dimension, api.style's text is undefined (retrieve2(formatted, getDefaultLabel) -- nothing)",
+  { yAxis: { type: 'category', data: ['A', 'B', 'C'] }, xAxis: { type: 'category', data: ['p', 'q', 'r', 's', 't'] },
+    series: [{ type: 'custom', renderItem: '@gantt', label: { show: true }, encode: { x: [1, 2], y: 0 },
+      data: [[0, 1, 3, 'a1'], [1, 2, 4, 'b1']] }] });
+add('shape', 'gantt-label-null', "[R2-V] the gantt with label.show and encode.label 3: one label dimension, its value null in the second item -- api.style's text is null there (getDefaultLabel), the value elsewhere",
+  { yAxis: { type: 'category', data: ['A', 'B', 'C'] }, xAxis: { type: 'value', min: 0, max: 20 },
+    series: [{ type: 'custom', renderItem: '@gantt', label: { show: true }, encode: { x: [1, 2], y: 0, label: 3 },
+      data: [[0, 1, 5, 7], [1, 3, 9, null], [2, 6, 15, 8]] }] });
 
 // ---------------------------------------------------------------------------
 // one case

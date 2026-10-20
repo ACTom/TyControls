@@ -18567,16 +18567,248 @@
      }
     }
    ]
+  },
+  {
+   "id": "TH-PEN0",
+   "family": "thumbnail",
+   "note": "[R2-V] an edge of no length (a and b at one place) dashed at 2 with its own phase 4: the copy clones its line's style like any other",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "roam": true,
+      "symbolSize": 20,
+      "data": [{"name":"a","x":0,"y":0},{"name":"b","x":0,"y":0},{"name":"c","x":120,"y":60}],
+      "links": [{"source":"a","target":"b","lineStyle":{"type":"dashed","width":2,"dashOffset":4}},{"source":"b","target":"c"}]
+     }
+    ],
+    "thumbnail": {}
+   },
+   "initial": {
+    "W": 600,
+    "H": 400,
+    "thumbs": [
+     {
+      "k": 0,
+      "enabled": true,
+      "drawn": true,
+      "box": ["407c100000000000","4072b00000000000","4062c00000000000","4059000000000000"],
+      "boxR": "undefined",
+      "bgStyle": {"fill":"#fff","stroke":"#b7b9be","lineWidth":"4000000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"},
+      "bgZ2": "141",
+      "content": ["407c200000000000","4072c00000000000","4062800000000000","4058800000000000"],
+      "window": ["407c7b13b13b13b2","4072f76276276277","406113b13b13b13b","4056c4ec4ec4ec4f"],
+      "winR": "undefined",
+      "winStyle": {"fill":"#b7b9be","stroke":"#9ea0a5","lineWidth":"3ff0000000000000","opacity":"3fd3333333333333","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"},
+      "winZ2": "161",
+      "view": {
+       "dataRect": ["c014000000000000","c014000000000000","4060400000000000","4051800000000000"],
+       "viewRect": ["407d0ccccccccccd","4073d1f81f81f820","405d99999999999a","404fe07e07e07e08"],
+       "trans": ["407d55a95a95a95b","40741ad4ad4ad4ae","3fed2505838b6bea","3fed2505838b6bea"],
+       "overall": ["3fed2505838b6bea","0000000000000000","0000000000000000","3fed2505838b6bea","407d55a95a95a95b","40741ad4ad4ad4ae"],
+       "target": ["4010000000000000","0000000000000000","0000000000000000","4010000000000000","404e000000000000","4054000000000000"],
+       "toTarget": ["4011914c1bacf915","8000000000000000","8000000000000000","4011914c1bacf915","c09f4567c8a60dd7","c094d314c1bacf92"],
+       "roamType": "true",
+       "roamOn": true
+      },
+      "items": [
+       {
+        "kind": "symbol",
+        "type": "circle",
+        "rect": ["c014000000000000","c014000000000000","4024000000000000","4024000000000000"],
+        "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+       },
+       {
+        "kind": "symbol",
+        "type": "circle",
+        "rect": ["c014000000000000","c014000000000000","4024000000000000","4024000000000000"],
+        "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+       },
+       {
+        "kind": "symbol",
+        "type": "circle",
+        "rect": ["405cc00000000000","404b800000000000","4024000000000000","4024000000000000"],
+        "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+       },
+       {
+        "kind": "line",
+        "shape": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","7ff8000000000000","7ff8000000000000","3ff0000000000000"],
+        "style": {"fill":null,"stroke":"#86878c","lineWidth":"4000000000000000","opacity":"3fe0000000000000","lineDash":"dashed","pattern":["4020000000000000","4010000000000000"],"lineDashOffset":"4010000000000000"}
+       },
+       {
+        "kind": "line",
+        "shape": ["0000000000000000","0000000000000000","405e000000000000","404e000000000000","7ff8000000000000","7ff8000000000000","3ff0000000000000"],
+        "style": {"fill":null,"stroke":"#86878c","lineWidth":"3ff0000000000000","opacity":"3fe0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+       }
+      ]
+     }
+    ],
+    "graphs": [{"seriesIndex":0,"overall":["4010000000000000","0000000000000000","0000000000000000","4010000000000000","404e000000000000","4054000000000000"]}],
+    "pars": [],
+    "axes": [],
+    "rows": [],
+    "actions": [],
+    "events": [],
+    "error": null
+   },
+   "steps": [
+    {
+     "i": 0,
+     "step": {"type":"action","payload":{"type":"graphRoam","dx":10,"dy":5},"dt":200},
+     "hover": null,
+     "record": {
+      "W": 600,
+      "H": 400,
+      "thumbs": [
+       {
+        "k": 0,
+        "enabled": true,
+        "drawn": true,
+        "box": ["407c100000000000","4072b00000000000","4062c00000000000","4059000000000000"],
+        "boxR": "undefined",
+        "bgStyle": {"fill":"#fff","stroke":"#b7b9be","lineWidth":"4000000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"},
+        "bgZ2": "141",
+        "content": ["407c200000000000","4072c00000000000","4062800000000000","4058800000000000"],
+        "window": ["407c56a56a56a56b","4072e52b52b52b53","406113b13b13b13b","4056c4ec4ec4ec4f"],
+        "winR": "undefined",
+        "winStyle": {"fill":"#b7b9be","stroke":"#9ea0a5","lineWidth":"3ff0000000000000","opacity":"3fd3333333333333","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"},
+        "winZ2": "161",
+        "view": {
+         "dataRect": ["c014000000000000","c014000000000000","4060400000000000","4051800000000000"],
+         "viewRect": ["407d0ccccccccccd","4073d1f81f81f820","405d99999999999a","404fe07e07e07e08"],
+         "trans": ["407d55a95a95a95b","40741ad4ad4ad4ae","3fed2505838b6bea","3fed2505838b6bea"],
+         "overall": ["3fed2505838b6bea","0000000000000000","0000000000000000","3fed2505838b6bea","407d55a95a95a95b","40741ad4ad4ad4ae"],
+         "target": ["4010000000000000","0000000000000000","0000000000000000","4010000000000000","4051800000000000","4055400000000000"],
+         "toTarget": ["4011914c1bacf915","8000000000000000","8000000000000000","4011914c1bacf915","c09f1d67c8a60dd8","c094bf14c1bacf92"],
+         "roamType": "true",
+         "roamOn": true
+        },
+        "items": [
+         {
+          "kind": "symbol",
+          "type": "circle",
+          "rect": ["c014000000000000","c014000000000000","4024000000000000","4024000000000000"],
+          "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         },
+         {
+          "kind": "symbol",
+          "type": "circle",
+          "rect": ["c014000000000000","c014000000000000","4024000000000000","4024000000000000"],
+          "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         },
+         {
+          "kind": "symbol",
+          "type": "circle",
+          "rect": ["405cc00000000000","404b800000000000","4024000000000000","4024000000000000"],
+          "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         },
+         {
+          "kind": "line",
+          "shape": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","7ff8000000000000","7ff8000000000000","3ff0000000000000"],
+          "style": {"fill":null,"stroke":"#86878c","lineWidth":"4000000000000000","opacity":"3fe0000000000000","lineDash":"dashed","pattern":["4020000000000000","4010000000000000"],"lineDashOffset":"4010000000000000"}
+         },
+         {
+          "kind": "line",
+          "shape": ["0000000000000000","0000000000000000","405e000000000000","404e000000000000","7ff8000000000000","7ff8000000000000","3ff0000000000000"],
+          "style": {"fill":null,"stroke":"#86878c","lineWidth":"3ff0000000000000","opacity":"3fe0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         }
+        ]
+       }
+      ],
+      "graphs": [{"seriesIndex":0,"overall":["4010000000000000","0000000000000000","0000000000000000","4010000000000000","4051800000000000","4055400000000000"]}],
+      "pars": [],
+      "axes": [],
+      "rows": [],
+      "actions": [],
+      "events": [{"t":200,"type":"graphroam","seriesId":null,"dx":"4024000000000000","dy":"4014000000000000","zoom":null,"originX":null,"originY":null}],
+      "error": null
+     }
+    },
+    {
+     "i": 1,
+     "step": {"type":"idle","dt":1000},
+     "hover": null,
+     "record": {
+      "W": 600,
+      "H": 400,
+      "thumbs": [
+       {
+        "k": 0,
+        "enabled": true,
+        "drawn": true,
+        "box": ["407c100000000000","4072b00000000000","4062c00000000000","4059000000000000"],
+        "boxR": "undefined",
+        "bgStyle": {"fill":"#fff","stroke":"#b7b9be","lineWidth":"4000000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"},
+        "bgZ2": "141",
+        "content": ["407c200000000000","4072c00000000000","4062800000000000","4058800000000000"],
+        "window": ["407c56a56a56a56b","4072e52b52b52b53","406113b13b13b13b","4056c4ec4ec4ec4f"],
+        "winR": "undefined",
+        "winStyle": {"fill":"#b7b9be","stroke":"#9ea0a5","lineWidth":"3ff0000000000000","opacity":"3fd3333333333333","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"},
+        "winZ2": "161",
+        "view": {
+         "dataRect": ["c014000000000000","c014000000000000","4060400000000000","4051800000000000"],
+         "viewRect": ["407d0ccccccccccd","4073d1f81f81f820","405d99999999999a","404fe07e07e07e08"],
+         "trans": ["407d55a95a95a95b","40741ad4ad4ad4ae","3fed2505838b6bea","3fed2505838b6bea"],
+         "overall": ["3fed2505838b6bea","0000000000000000","0000000000000000","3fed2505838b6bea","407d55a95a95a95b","40741ad4ad4ad4ae"],
+         "target": ["4010000000000000","0000000000000000","0000000000000000","4010000000000000","4051800000000000","4055400000000000"],
+         "toTarget": ["4011914c1bacf915","8000000000000000","8000000000000000","4011914c1bacf915","c09f1d67c8a60dd8","c094bf14c1bacf92"],
+         "roamType": "true",
+         "roamOn": true
+        },
+        "items": [
+         {
+          "kind": "symbol",
+          "type": "circle",
+          "rect": ["c014000000000000","c014000000000000","4024000000000000","4024000000000000"],
+          "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         },
+         {
+          "kind": "symbol",
+          "type": "circle",
+          "rect": ["c014000000000000","c014000000000000","4024000000000000","4024000000000000"],
+          "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         },
+         {
+          "kind": "symbol",
+          "type": "circle",
+          "rect": ["405cc00000000000","404b800000000000","4024000000000000","4024000000000000"],
+          "style": {"fill":"#5070dd","stroke":null,"lineWidth":"3ff0000000000000","opacity":"3ff0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         },
+         {
+          "kind": "line",
+          "shape": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","7ff8000000000000","7ff8000000000000","3ff0000000000000"],
+          "style": {"fill":null,"stroke":"#86878c","lineWidth":"4000000000000000","opacity":"3fe0000000000000","lineDash":"dashed","pattern":["4020000000000000","4010000000000000"],"lineDashOffset":"4010000000000000"}
+         },
+         {
+          "kind": "line",
+          "shape": ["0000000000000000","0000000000000000","405e000000000000","404e000000000000","7ff8000000000000","7ff8000000000000","3ff0000000000000"],
+          "style": {"fill":null,"stroke":"#86878c","lineWidth":"3ff0000000000000","opacity":"3fe0000000000000","lineDash":null,"pattern":null,"lineDashOffset":"0000000000000000"}
+         }
+        ]
+       }
+      ],
+      "graphs": [{"seriesIndex":0,"overall":["4010000000000000","0000000000000000","0000000000000000","4010000000000000","4051800000000000","4055400000000000"]}],
+      "pars": [],
+      "axes": [],
+      "rows": [],
+      "actions": [],
+      "events": [],
+      "error": null
+     }
+    }
+   ]
   }
  ],
  "guards": [
-  {"id":"G1","mutation":"the content rect shrunk by the whole rim","named":["TH-NONE","TH-STYLE","TH-BOX"],"changed":["TH-NONE","TH-STYLE","TH-BOX","TH-FORCE","TH-CIRC","TH-TARGET","TH-PEN","TH-GRAD"],"ok":true},
-  {"id":"G2","mutation":"the view rect takes 0.75 of the content's side","named":["TH-NONE","TH-FORCE","TH-CIRC"],"changed":["TH-NONE","TH-STYLE","TH-BOX","TH-FORCE","TH-CIRC","TH-TARGET","TH-PEN","TH-GRAD"],"ok":true},
-  {"id":"G3","mutation":"the window ignores the graph transform","named":["TH-NONE","TH-BOX"],"changed":["TH-NONE","TH-STYLE","TH-BOX","TH-FORCE","TH-CIRC","TH-TARGET","TH-PEN","TH-GRAD"],"ok":true},
+  {"id":"G1","mutation":"the content rect shrunk by the whole rim","named":["TH-NONE","TH-STYLE","TH-BOX"],"changed":["TH-NONE","TH-STYLE","TH-BOX","TH-FORCE","TH-CIRC","TH-TARGET","TH-PEN","TH-GRAD","TH-PEN0"],"ok":true},
+  {"id":"G2","mutation":"the view rect takes 0.75 of the content's side","named":["TH-NONE","TH-FORCE","TH-CIRC"],"changed":["TH-NONE","TH-STYLE","TH-BOX","TH-FORCE","TH-CIRC","TH-TARGET","TH-PEN","TH-GRAD","TH-PEN0"],"ok":true},
+  {"id":"G3","mutation":"the window ignores the graph transform","named":["TH-NONE","TH-BOX"],"changed":["TH-NONE","TH-STYLE","TH-BOX","TH-FORCE","TH-CIRC","TH-TARGET","TH-PEN","TH-GRAD","TH-PEN0"],"ok":true},
   {"id":"G4","mutation":"a line's stroke counted at 4","named":["TH-TARGET"],"changed":["TH-TARGET"],"ok":true},{"id":"G5","mutation":"a thumbnail pan's sign flipped","named":["TH-NONE","TH-FORCE"],"changed":["TH-NONE","TH-FORCE"],"ok":true},
   {"id":"G6","mutation":"the layout does not rewrite the window","named":["AE-ACTION"],"changed":["AE-ACTION"],"ok":true},
   {"id":"G7","mutation":"the slide zone at 10% instead of the trigger area","named":["AE-CLICK"],"changed":["AE-CLICK","AE-VERT","AE-MOVE"],"ok":true},
   {"id":"G8","mutation":"a jump is not debounced","named":["AE-MOVE"],"changed":["AE-MOVE"],"ok":true},{"id":"G9","mutation":"a click within 4 px squared","named":["AE-CLICK"],"changed":["AE-CLICK"],"ok":true}
  ],
- "recipes": {"T1":185,"T2":36,"T3":12,"E1":195,"E2":29,"E3":2}
+ "recipes": {"T1":191,"T2":39,"T3":12,"E1":195,"E2":29,"E3":2}
 }

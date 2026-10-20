@@ -73,6 +73,8 @@ type
     FBoxes, FDashes: Integer;
     { [R2-I4] a state's words compared }
     FWords: Integer;
+    { [R2-V] the spans' opacities compared }
+    FSpanOps: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -648,6 +650,10 @@ var
   isText: Boolean;
   cf, cr, cp, crp: TTyChartColor;
   hasP: Boolean;
+  { [R2-V] the spans' opacities }
+  sops: TStringList;
+  n, k: Integer;
+  fs: TFormatSettings;
 begin
   map := AEl.Objects['map'];
   part := map.Strings['part'];
@@ -733,6 +739,37 @@ begin
       if el.Caption.Text <> v.AsString then
         Miss(Format('%s %s: text "%s", upstream "%s"', [AWhere, part, el.Caption.Text,
           v.AsString]), AWhere + part + 'txt');
+    end;
+    { [R2-V] A spanOp case: every TSpan's opacity as drawn -- a rich
+      piece's own times the label's }
+    if not el.Ignore and ValueAt(AEl, 'sop', ASample, v) then
+    begin
+      Inc(FSpanOps);
+      fs := DefaultFormatSettings;
+      fs.DecimalSeparator := '.';
+      sops := TStringList.Create;
+      try
+        sops.StrictDelimiter := True;
+        sops.Delimiter := ',';
+        sops.DelimitedText := v.AsString;
+        n := 0;
+        for k := 0 to High(el.Caption.RtPieces) do
+          if el.Caption.RtPieces[k].Kind = rpkText then
+          begin
+            if n > sops.Count - 1 then Break;
+            got := el.Caption.RtPieces[k].Opacity * el.Style.Alpha;
+            want := StrToFloat(sops[n], fs);
+            if Abs(got - want) > 1e-12 then
+              Miss(Format('%s %s: span %d opacity %s, upstream %s', [AWhere, part, n,
+                FloatToStr(got), sops[n]]), AWhere + part + 'sop');
+            Inc(n);
+          end;
+        if n <> sops.Count then
+          Miss(Format('%s %s: %d text pieces, upstream %d spans', [AWhere, part, n,
+            sops.Count]), AWhere + part + 'sopn');
+      finally
+        sops.Free;
+      end;
     end;
     { [R2-I3] A textBox case: the merged style's size, the alignment the
       style says, and the box through the transform -- the text as the
@@ -1028,11 +1065,11 @@ begin
     Fail(Format('%d mismatches over %d samples (%s):%s', [FBad, FCompared,
       FTally.CommaText, FReport]));
   AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
-    + 'hidden labels shown %d, text boxes %d, dashes %d, words %d',
+    + 'hidden labels shown %d, text boxes %d, dashes %d, words %d, span opacities %d',
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FHiddenPlaces,
-      FBoxes, FDashes, FWords]),
+      FBoxes, FDashes, FWords, FSpanOps]),
     (FEventsCompared > 30) and (FMarksCompared > 1000) and (FHiddenPlaces > 20)
-    and (FBoxes > 100) and (FDashes > 50) and (FWords > 100));
+    and (FBoxes > 100) and (FDashes > 50) and (FWords > 100) and (FSpanOps > 10));
 end;
 
 { ==================== by hand ==================== }
