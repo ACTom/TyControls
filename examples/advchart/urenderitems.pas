@@ -137,7 +137,11 @@ begin
   Result := AApi.OrdinalRawValue(ADim);
 end;
 
-{ isNaN(api.value(dim)): a null cell is Number(null), 0 -- not NaN }
+{ isNaN(api.value(dim)). api.value hands back the stored number, and the
+  store parses a null (or a text) in a number dimension to NaN -- so isNaN
+  holds there. Only a dimension kept as written (an ordinal one no axis
+  interns) hands back the null itself, and isNaN(null) is false: Number(null)
+  is 0. }
 function JsIsNaNValue(AApi: TTyCustomApi; ADim: Integer): Boolean;
 var t: string;
 begin
@@ -705,8 +709,9 @@ end;
 
 { matrix-periodic-table: an element's cell, two pixels in from the cell, in
   its group's colour; a placeholder cell (no atomic number) half see-through
-  -- except that isNaN(null) is false, so the page's two placeholders are
-  drawn as elements, as upstream draws them }
+  and without a border. The page's two placeholders (La~Yb, Ac~No) carry a
+  null atomic number; api.value gives NaN for it, so they are drawn as
+  placeholders, as upstream draws them }
 function TGalleryRenderItems.PeriodicTable(const AParams: TTyCustomParams;
   AApi: TTyCustomApi): TJSONData;
 const
