@@ -46,6 +46,7 @@ type
     procedure Cached(ACanvas: TCanvas; const ARect: TRect);
     procedure Move(AX, AY: Integer);
     procedure Leave;
+    function List: TTyPaintList;
   end;
 
   TAdvChartLargeSpeedTest = class(TTestCase)
@@ -89,6 +90,11 @@ end;
 procedure TLsChart.Leave;
 begin
   MouseLeave;
+end;
+
+function TLsChart.List: TTyPaintList;
+begin
+  Result := SeriesList;
 end;
 
 var
@@ -185,6 +191,28 @@ begin
     Inc(i, 3);
   end;
   Result := Format(' (%d pixels in %d,%d..%d,%d)', [n, x0, y0, x1, y1]);
+end;
+
+{ the paint list as a text: each element's kind, place in the order, box,
+  inks and words -- what a stale or a doubled element would change }
+function ListSig(AChart: TLsChart): string;
+var
+  L: TTyPaintList;
+  i: Integer;
+  pe: PTyChartElement;
+  b: TTyRectF;
+begin
+  L := AChart.List;
+  if L = nil then Exit('nil');
+  Result := IntToStr(L.Count);
+  for i := 0 to L.Count - 1 do
+  begin
+    pe := L.Ref(L.PaintOrder(i));
+    b := TyShapeBounds(pe^.Shape);
+    Result := Result + Format('|%d %d %d %.3f %.3f %.3f %.3f %x %x %.3f %s',
+      [Ord(pe^.Shape.Kind), pe^.Z, pe^.Z2, b.Left, b.Top, b.Right, b.Bottom,
+       pe^.Style.FillColor, pe^.Style.StrokeColor, pe^.Style.Alpha, pe^.Caption.Text]);
+  end;
 end;
 
 function TAdvChartLargeSpeedTest.NewChart(AW, AH: Integer; const AOption: string): TLsChart;
@@ -546,6 +574,8 @@ begin
           chart.Move(90 + k * 23, 120 + (k mod 4) * 41);
           chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
           frames[tail].Add(Frame(bmp));
+          { and the list the frame was painted from }
+          frames[tail].Add(ListSig(chart));
         end;
         chart.Leave;
         chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
@@ -581,7 +611,9 @@ begin
     begin
       sb.Append('{"animation": false, "parallelAxis": [{"dim": 0}, {"dim": 1}, {"dim": 2}, {"dim": 3}],');
       sb.Append(' "series": [{"type": "parallel", "progressive": 30, "progressiveThreshold": 50, "smooth": true,');
-      sb.Append(' "lineStyle": {"width": 1.5, "opacity": 0.6}, "emphasis": {"lineStyle": {"width": 3}}, "data": [');
+      { an emphasis far wider than the line -- past the miter allowance of
+        the line's own paint rect: what it leaves must go again }
+      sb.Append(' "lineStyle": {"width": 1.5, "opacity": 0.6}, "emphasis": {"lineStyle": {"width": 32}}, "data": [');
       GLcg := 77;
       for i := 0 to 119 do
       begin
@@ -660,6 +692,16 @@ begin
           chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
           frames[on_].Add(Frame(bmp));
           chart.DispatchAction('{"type": "downplay", "seriesIndex": 0, "dataIndex": [40, 41, 150]}');
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[on_].Add(Frame(bmp));
+          { one alone, highlighted and let go: the box must hold what its
+            emphasis drew, not only what it draws now }
+          chart.DispatchAction('{"type": "downplay", "seriesIndex": 0}');
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          chart.DispatchAction('{"type": "highlight", "seriesIndex": 0, "dataIndex": 5}');
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[on_].Add(Frame(bmp));
+          chart.DispatchAction('{"type": "downplay", "seriesIndex": 0, "dataIndex": 5}');
           chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
           frames[on_].Add(Frame(bmp));
           chart.Leave;
@@ -1067,7 +1109,7 @@ begin
   ref := TBGRABitmap.Create(170, 120);
   got := TBGRABitmap.Create(170, 120);
   try
-    for k := 0 to 2 do
+    for k := 0 to 3 do
     begin
       el := TyChartElement(TyShapePolyline(pts));
       el.Style.HasFill := False;
@@ -1075,6 +1117,8 @@ begin
       case k of
         0: begin el.Style.StrokeColor := TTyChartColor($FF3050A0); el.Style.Alpha := 0; end;
         1: begin el.Style.StrokeColor := TTyChartColor($003050A0); el.Style.Alpha := 1; end;
+        { and one that inks: drawn as the stroke draws it }
+        3: begin el.Style.StrokeColor := TTyChartColor($C03050A0); el.Style.Alpha := 0.7; end;
       else
         begin el.Style.StrokeColor := TTyChartColor($003050A0); el.Style.Alpha := 0.5;
           SetLength(el.Style.DashLogical, 2); el.Style.DashLogical[0] := 4; el.Style.DashLogical[1] := 2; end;
@@ -1109,7 +1153,7 @@ begin
         p.Free;
       end;
       r2 := Random(1000000);
-      AssertEquals(Format('case %d: nothing drawn', [k]), 0, DiffPixels(ref, got));
+      AssertEquals(Format('case %d: the same pixels', [k]), 0, DiffPixels(ref, got));
       AssertEquals(Format('case %d: the stream as a stroke leaves it', [k]), r1, r2);
     end;
   finally
