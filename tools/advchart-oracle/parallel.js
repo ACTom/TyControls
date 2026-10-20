@@ -878,6 +878,30 @@ C('convert-vertical', 'convert', 'containPixel on a vertical parallel with a box
     return out;
   } });
 
+// ---- E. the preprocessor over every option the manager reads ----
+// parseRawOption runs parallelPreprocessor over the base, over every timeline
+// frame and over every media unit with a query (not over the media default);
+// a merge's option is preprocessed the same way. A frame or a unit that
+// brings a parallel series and no `parallel` therefore brings `parallel: [{}]`.
+const TL2 = { axisType: 'category', data: ['one', 'two'] };
+C('pre-timeline', 'interact', "parallelAxis in the baseOption, the parallel series only in the timeline's frames: every frame is preprocessed, so the first one brings the parallel; an axisAreaSelect, then the second frame",
+  { baseOption: IX({ timeline: TL2, parallelAxis: [{ dim: 0, id: 'p0' }, { dim: 1 }, { dim: 2 }] }),
+    options: [{ series: [PS({ data: [[1, 10, 5], [3, 30, 2], [2, 20, 8]] })] }, { series: [{ data: [[2, 15, 1], [3, 25, 9], [1, 12, 4]] }] }] },
+  { steps: [
+    ['action', { type: 'axisAreaSelect', parallelAxisId: 'p0', intervals: [[1.5, 3]] }],
+    ['action', { type: 'timelineChange', currentIndex: 1 }],
+  ] });
+C('pre-media', 'interact', 'the parallel series only in a media unit with a query: the unit is preprocessed and brings the parallel',
+  { baseOption: IX({ parallelAxis: [{ dim: 0 }, { dim: 1 }] }),
+    media: [{ query: { minWidth: 100 }, option: { series: [PS({ data: [[1, 2], [3, 4], [2, 1]] })] } }] },
+  { steps: [['action', { type: 'axisAreaSelect', parallelAxisIndex: 1, intervals: [[0, 2.5]] }]] });
+C('pre-merge', 'interact', 'a merge that brings the parallelAxis and the parallel series beside a grid: the merged option is preprocessed and brings the parallel',
+  IX({ grid: { left: 20, right: 420, top: 20, bottom: 20 }, xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', data: [[1, 1]] }] }),
+  { steps: [
+    ['merge', { parallel: null, parallelAxis: [{ dim: 0 }, { dim: 1 }], series: [{}, PS({ data: [[1, 2], [3, 4]] })] }],
+    ['action', { type: 'axisAreaSelect', parallelAxisIndex: 0, intervals: [[2, 4]] }],
+  ] });
+
 // =====================================================================
 // the conversions
 // =====================================================================
@@ -1145,6 +1169,14 @@ function guards(cases) {
   G('the parallel coordinate system converts nothing', get('convert').convert.filter(p => p.op !== 'contain').every(p => p.out.k === 'none'));
   G('containPixel answers on an axis finder', get('convert').convert.some(p => p.op === 'contain' && p.finder.text === '{"parallelAxisIndex":1}' && p.out.v === true));
   G('containPixel answers on a series finder', get('convert').convert.some(p => p.op === 'contain' && p.finder.text === '{"seriesIndex":0}' && p.out.v === true));
+  G('a timeline frame with the parallel series brings the parallel', get('pre-timeline').record.parallels.length === 1);
+  G("the frame's parallel takes the selection", get('pre-timeline').steps[0].record.parallels[0].axes[0].intervals.length === 1);
+  G('the selection survives the next frame', get('pre-timeline').steps[1].record.parallels[0].axes[0].intervals.length === 1
+    && get('pre-timeline').steps[1].record.series[0].count === 3);
+  G('a media unit with the parallel series brings the parallel', get('pre-media').record.parallels.length === 1
+    && get('pre-media').steps[0].record.parallels[0].axes[1].intervals.length === 1);
+  G('a merge with the parallel series brings the parallel', get('pre-merge').record.parallels.length === 0
+    && get('pre-merge').steps[0].record.parallels.length === 1 && get('pre-merge').steps[1].record.parallels[0].axes[0].intervals.length === 1);
   return g;
 }
 

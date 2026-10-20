@@ -1936,20 +1936,27 @@ begin
   CompatTextStyleOf(CompatChild(PreItem(AOption.Find('tooltip'), 0), 'axisPointer'), 'label');
 end;
 
+{ the preprocessors over one option unit }
+procedure PreprocessOne(AOption: TJSONObject; AIsNew: Boolean);
+begin
+  if AOption = nil then Exit;
+  { backwardCompat is the first preprocessor upstream registers [R2-J] }
+  TyCompatTextStyle(AOption);
+  TyParallelPreprocess(AOption);
+  TyBrushPreprocess(AOption, AIsNew);
+end;
+
+{ parseRawOption's doPreprocess: over the base, every timeline frame and
+  every media unit with a query -- in that order; never over the media
+  default. A frame is an option of its own: one that brings a parallel
+  series and no `parallel` brings an empty parallel component, one with a
+  brush fills its own toolbox [231a] }
 procedure PreprocessUnits(ABase: TJSONObject; const ASet: TTyMediaSet; AIsNew: Boolean);
 var i: Integer;
 begin
-  { backwardCompat is the first preprocessor upstream registers [R2-J] }
-  TyCompatTextStyle(ABase);
-  TyParallelPreprocess(ABase);
-  TyBrushPreprocess(ABase, AIsNew);
-  for i := 0 to High(ASet.Units) do
-    if ASet.Units[i].Option <> nil then
-    begin
-      TyCompatTextStyle(ASet.Units[i].Option);
-      TyParallelPreprocess(ASet.Units[i].Option);
-      TyBrushPreprocess(ASet.Units[i].Option, AIsNew);
-    end;
+  PreprocessOne(ABase, AIsNew);
+  for i := 0 to High(ASet.Frames) do PreprocessOne(ASet.Frames[i], AIsNew);
+  for i := 0 to High(ASet.Units) do PreprocessOne(ASet.Units[i].Option, AIsNew);
 end;
 
 function TTyChartOption.SetOptionText(const AText: string): Boolean;
