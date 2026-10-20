@@ -1936,14 +1936,52 @@ begin
   CompatTextStyleOf(CompatChild(PreItem(AOption.Find('tooltip'), 0), 'axisPointer'), 'label');
 end;
 
-{ the preprocessors over one option unit }
+{ visualMapPreprocessor [231b]: every truthy visualMap (the object, or each
+  of the list) with an own `splitList` and no own `pieces` has its splitList
+  renamed `pieces` (the key goes last); every piece object of an array
+  `pieces` with `start` and no `min` gets min = start, with `end` and no
+  `max` max = end. Per option, as parseRawOption runs it: a frame's
+  splitList is that frame's pieces and replaces the base's when the frame
+  is merged; the media default's stays splitList, which nothing reads. }
+procedure TyVisualMapPreprocess(AOption: TJSONObject);
+var
+  list, it, pieces, pc: TJSONData;
+  vm: TJSONObject;
+  i, k: Integer;
+begin
+  if AOption = nil then Exit;
+  list := AOption.Find('visualMap');
+  for i := 0 to PreCount(list) - 1 do
+  begin
+    it := PreItem(list, i);
+    if not (it is TJSONObject) then Continue;
+    vm := TJSONObject(it);
+    if (vm.IndexOfName('splitList') >= 0) and (vm.IndexOfName('pieces') < 0) then
+      vm.Add('pieces', vm.Extract('splitList'));
+    pieces := vm.Find('pieces');
+    if not (pieces is TJSONArray) then Continue;
+    for k := 0 to pieces.Count - 1 do
+    begin
+      pc := TJSONArray(pieces).Items[k];
+      if not (pc is TJSONObject) then Continue;
+      if (TJSONObject(pc).IndexOfName('start') >= 0) and (TJSONObject(pc).IndexOfName('min') < 0) then
+        TJSONObject(pc).Add('min', TJSONObject(pc).Find('start').Clone);
+      if (TJSONObject(pc).IndexOfName('end') >= 0) and (TJSONObject(pc).IndexOfName('max') < 0) then
+        TJSONObject(pc).Add('max', TJSONObject(pc).Find('end').Clone);
+    end;
+  end;
+end;
+
+{ the preprocessors over one option unit, in the order upstream registers
+  them: backwardCompat first [R2-J], parallel (an installed chart's), brush,
+  visualMap [231b] }
 procedure PreprocessOne(AOption: TJSONObject; AIsNew: Boolean);
 begin
   if AOption = nil then Exit;
-  { backwardCompat is the first preprocessor upstream registers [R2-J] }
   TyCompatTextStyle(AOption);
   TyParallelPreprocess(AOption);
   TyBrushPreprocess(AOption, AIsNew);
+  TyVisualMapPreprocess(AOption);
 end;
 
 { parseRawOption's doPreprocess: over the base, every timeline frame and

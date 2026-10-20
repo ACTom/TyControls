@@ -818,6 +818,10 @@ var
   procedure Update(AEnd: Double; AIndex: Integer);
   var d: Double;
   begin
+    { Math.abs(end - value): an infinite end and a value of the same
+      infinity is NaN, never closer -- the meta asks for -Infinity, a piece
+      with no low end has it [231b] }
+    if IsInfinite(AEnd) and IsInfinite(AValue) and ((AEnd > 0) = (AValue > 0)) then Exit;
     d := Abs(AEnd - AValue);
     if Lt(d, best) then
     begin
@@ -1112,16 +1116,6 @@ begin
   APieces[n].Value := NaN;
 end;
 
-{ visualMapPreprocessor: ec2's `splitList` is `pieces` when there is no
-  `pieces` key at all }
-function EffectivePieces(ANode: TJSONObject): TJSONData;
-begin
-  if (ANode.IndexOfName('splitList') >= 0) and (ANode.IndexOfName('pieces') < 0) then
-    Result := ANode.Find('splitList')
-  else
-    Result := ANode.Find('pieces');
-end;
-
 { the three resetMethods, into ASpec.Pieces }
 procedure BuildPieces(ANode: TJSONObject; var ASpec: TTyVisualMapSpec);
 var
@@ -1166,8 +1160,9 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then ASpec.Formatter := d.AsString;
 
   { _determineMode: pieces (a non-empty list), else categories, else
-    splitNumber }
-  pd := EffectivePieces(ANode);
+    splitNumber -- ec2's splitList renamed per option by the preprocessor
+    (TyVisualMapPreprocess) [231b] }
+  pd := ANode.Find('pieces');
   d := ANode.Find('categories');
   if (pd <> nil) and (pd.JSONType = jtArray) and (TJSONArray(pd).Count > 0) then
     ASpec.Mode := tpmPieces
@@ -1286,11 +1281,9 @@ begin
               found := False;
               for k := 0 to 2 do
               begin
+                { ec2's start / end were copied to min / max per option by
+                  the preprocessor [231b] }
                 e := po.Find(names[lg, k]);
-                { the preprocessor: ec2's start / end are min / max when
-                  there is no min / max key }
-                if (k = 2) and (po.IndexOfName(names[lg, k]) < 0) then
-                  if lg = 0 then e := po.Find('start') else e := po.Find('end');
                 if lg = 0 then piece.Close0 := Ord(k <> 1) else piece.Close1 := Ord(k <> 1);
                 useMinMax[lg] := k = 2;
                 if (e <> nil) and (e.JSONType <> jtNull) then
@@ -1758,7 +1751,7 @@ var
     end;
 
   begin
-    pd := EffectivePieces(node);
+    pd := node.Find('pieces');
     if (pd = nil) or (pd.JSONType <> jtArray) then Exit;
     types := nil;
     for k := 0 to TJSONArray(pd).Count - 1 do

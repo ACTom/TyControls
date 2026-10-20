@@ -63,6 +63,10 @@ type
     procedure TestLineMetasAsUpstream;
     procedure TestGalleryAsUpstream;
     procedure TestTheNoteIsGone;
+    { [231b] visualMap's preprocessor per option: a timeline frame's and a
+      media unit's splitList (start / end) are their pieces (min / max); the
+      media default's are not }
+    procedure TestPreprocessPerOptionAsUpstream;
   end;
 
 implementation
@@ -970,7 +974,7 @@ procedure TAdvChartVisualMapPiecewiseOracleTest.RunCases(const AIds: array of st
 var
   cases, vms, ser: TJSONArray;
   cs: TJSONObject;
-  opt: TJSONObject;
+  opt, base: TJSONObject;
   sl: TStringList;
   d: TJSONData;
   c, k, j, ran: Integer;
@@ -1008,11 +1012,16 @@ begin
       end;
     end;
     try
+      { a root form: a key beside baseOption is not read, the base is where
+        the palette goes [231b] }
+      base := opt;
+      if opt.Find('baseOption') is TJSONObject then
+        base := TJSONObject(opt.Find('baseOption'));
       { upstream's palette and ramp, so the theme is out of the comparison }
-      if opt.Find('color') = nil then opt.Add('color', GetJSON(cPalette));
-      if opt.Find('gradientColor') = nil then
-        opt.Add('gradientColor', GetJSON('["rgba(212,220,247,1)","#5070dd"]'));
-      d := opt.Find('visualMap');
+      if base.Find('color') = nil then base.Add('color', GetJSON(cPalette));
+      if base.Find('gradientColor') = nil then
+        base.Add('gradientColor', GetJSON('["rgba(212,220,247,1)","#5070dd"]'));
+      d := base.Find('visualMap');
       if (d <> nil) and (d.JSONType = jtObject) then Upstream(TJSONObject(d))
       else if (d <> nil) and (d.JSONType = jtArray) then
         for k := 0 to TJSONArray(d).Count - 1 do
@@ -1041,7 +1050,7 @@ begin
       begin
         ser := cs.Arrays['series'];
         for k := 0 to ser.Count - 1 do
-          CheckSeries(opt, ser.Objects[k]);
+          CheckSeries(base, ser.Objects[k]);
       end;
     finally
       opt.Free;
@@ -1062,7 +1071,7 @@ end;
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestPiecesAsUpstream;
 begin
   RunCases(['P4', 'P5', 'P6', 'P7', 'P11', 'P12', 'P13', 'P14', 'P15', 'P16', 'P17',
-    'P18', 'P19', 'P20', 'P21']);
+    'P18', 'P19', 'P20', 'P21', 'P22', 'P23']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestCategoriesAsUpstream;
@@ -1085,6 +1094,11 @@ end;
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestLineMetasAsUpstream;
 begin
   RunCases(['L1', 'L2']);
+end;
+
+procedure TAdvChartVisualMapPiecewiseOracleTest.TestPreprocessPerOptionAsUpstream;
+begin
+  RunCases(['PP1', 'PP2', 'PP3', 'PP4']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestGalleryAsUpstream;
