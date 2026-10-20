@@ -1037,6 +1037,26 @@ const R2I5 = [
     events: [over(0, ['item', 0, 0]), out(500)] },
 ];
 
+// [R2-I6] a label's own opacity under a state's: the state's text style
+// replaces it (zrender merges the state's style over the normal one), and
+// blur without one of its own takes the label's current opacity times 0.1
+// (createBlurDefaultState on the Text) -- nothing multiplies
+const R2I6 = [
+  { id: 'label-opacity-states', note: '[R2-I6] bar series 0 labels at label.opacity 0.5, emphasis.label.opacity 0.8, '
+    + 'blur.label.opacity 0.3, focus series; series 1 labels at 0.6 with no state opacity (blur: 0.06), focus series; a '
+    + 'line series at itemStyle.opacity 0.5 (the defaultOpacity of its labels) and emphasis.label.opacity 0.9. Hover bar 1 of '
+    + 'series 0 at 0, out at 300, bar 2 of series 1 at 500, out at 800, line point 3 at 900, out at 1100',
+    option: { color: [C0, C1, C2], xAxis: { type: 'category', data: CATS }, yAxis: { type: 'value', max: 40 },
+      series: [
+        { type: 'bar', label: { show: true, position: 'top', opacity: 0.5 },
+          emphasis: { focus: 'series', label: { opacity: 0.8 } }, blur: { label: { opacity: 0.3 } }, data: [5, 20, 36, 10, 18] },
+        { type: 'bar', label: { show: true, position: 'top', opacity: 0.6 }, emphasis: { focus: 'series' },
+          data: [8, 12, 6, 30, 4] },
+        { type: 'line', symbolSize: 10, itemStyle: { opacity: 0.5 }, label: { show: true },
+          emphasis: { label: { opacity: 0.9 } }, data: [3, 9, 14, 22, 27] }] },
+    events: [over(0, ['item', 0, 1]), out(300), over(500, ['item', 1, 2]), out(800), over(900, ['item', 2, 3]), out(1100)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1291,7 +1311,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

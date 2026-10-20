@@ -835,6 +835,15 @@ begin
   end;
 end;
 
+{ [R2-I6] a marker label's own opacity as its element's alpha: none is 1,
+  and the ink's old rule beyond [0, 1] (clamped) }
+function LabelAlpha(AOpacity: Double): Double;
+begin
+  if IsNan(AOpacity) or (AOpacity >= 1) then Exit(1);
+  if AOpacity <= 0 then Exit(0);
+  Result := AOpacity;
+end;
+
 { [R2-I5] THE WORD a dash is written as, for TTyChartStyle.DashWord: 1
   'dashed', 2 'dotted', 0 anything else (lengths, or none) -- the canvas
   normalises a word against the width it strokes at, brush by brush }
@@ -1879,13 +1888,6 @@ var
     Result := (S <> '') and TyTryParseChartColor(S, AC);
   end;
 
-  function Faded(AC: TTyChartColor; AOpacity: Double): TTyChartColor;
-  begin
-    if IsNan(AOpacity) or (AOpacity >= 1) then Exit(AC);
-    if AOpacity <= 0 then Exit(AC and $00FFFFFF);
-    Result := (AC and $00FFFFFF) or (Cardinal(Round((AC shr 24) * AOpacity)) shl 24);
-  end;
-
   function Blank(AZ2: Double): TTyChartElement;
   begin
     Result := Default(TTyChartElement);
@@ -1969,12 +1971,18 @@ var
     { the author's colours as written; upstream's default ink is the skin's }
     if (B.StyleFill <> '') and Colour(B.InkFill, c) then el.Caption.Colour := c
     else el.Caption.Colour := AInk.Text;
-    el.Caption.Colour := Faded(el.Caption.Colour, B.InkOpacity);
+    { [R2-I6] THE TEXT'S OWN OPACITY ON THE ELEMENT, not in its ink: a
+      state's text style replaces it (zrender merges the state's style over
+      the normal one) and blur's default is a tenth of it -- the states
+      write the element's opacity, and with this one in the ink as well the
+      two multiplied (a blur.label.opacity 0.3 over a label.opacity 0.5 drew
+      at 0.15, an emphasis twin's ink carried emphasis' own once more). The
+      same alpha on every colour of it, rich pieces too. }
+    el.Style.Alpha := LabelAlpha(B.StyleOpacity);
     if B.InkStroke <> '' then
     begin
       if (B.StyleStroke <> '') and Colour(B.InkStroke, c) then el.Caption.StrokeColour := c
       else el.Caption.StrokeColour := AInk.Halo;
-      el.Caption.StrokeColour := Faded(el.Caption.StrokeColour, B.InkOpacity);
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
     end;
     el.Caption.X := x;
@@ -3089,13 +3097,6 @@ var
     Result := (S <> '') and TyTryParseChartColor(S, AC);
   end;
 
-  function Faded(AC: TTyChartColor; AOpacity: Double): TTyChartColor;
-  begin
-    if IsNan(AOpacity) or (AOpacity >= 1) then Exit(AC);
-    if AOpacity <= 0 then Exit(AC and $00FFFFFF);
-    Result := (AC and $00FFFFFF) or (Cardinal(Round((AC shr 24) * AOpacity)) shl 24);
-  end;
-
 begin
   Result := 0;
   AGlobal := AInk.RtGlobal;
@@ -3159,14 +3160,14 @@ begin
       else el.Caption.Colour := AInk.Inside[2];
     end
     else el.Caption.Colour := AInk.Text;
-    el.Caption.Colour := Faded(el.Caption.Colour, B.InkOpacity);
+    { [R2-I6] the text's own opacity on the element, as a markPoint's }
+    el.Style.Alpha := LabelAlpha(B.StyleOpacity);
     if B.InkStroke <> '' then
     begin
       if ((B.StyleStroke <> '') or B.Inside) and Colour(B.InkStroke, c) then
         el.Caption.StrokeColour := c
       else
         el.Caption.StrokeColour := AInk.Halo;
-      el.Caption.StrokeColour := Faded(el.Caption.StrokeColour, B.InkOpacity);
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
     end;
     el.Caption.X := x;
