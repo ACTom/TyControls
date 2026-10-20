@@ -777,6 +777,22 @@ C('visualmap-categories', 'layout', "[R2-I6] a piecewise visualMap's categories 
       PS({ lineStyle: { opacity: 0.05 }, inactiveOpacity: 0, activeOpacity: 0.01, data: [['n0', 'x', 1, 2], ['n1', 'z', 3, 1], ['n2', 'w', 2, 2], ['n3', 'y', 1, 3]] }),
       PS({ data: [[2, 'x', 1, 2], [8, 'y', 2, 1], ['5', 'z', 3, 3]] }),
     ] }));
+C('visualmap-dash-first', 'layout', "[r2v] a continuous visualMap on a column no axis reads whose first value is '-': guessOrdinal learns nothing from a dash and goes on to the number after it, so the column is a number and the visualMap colours the rows after it by their numbers (the dash row opted out with visualMap: false)",
+  base({ visualMap: [
+      { type: 'continuous', seriesIndex: 0, dimension: 0, min: 0, max: 10, inRange: { color: ['#0000ff', '#ff0000'] }, outOfRange: { color: '#cccccc' }, show: false },
+    ],
+    parallelAxis: [{ dim: 1 }, { dim: 2 }],
+    series: [
+      PS({ data: [{ value: ['-', 1, 2], visualMap: false }, [3, 2, 1], [8, 3, 3], ['6', 1, 1]] }),
+    ] }));
+C('visualmap-dash-first-text', 'layout', "[r2v] the same column written as text after the dash: a number to guessOrdinal (a numeric string is only a might), so '3.10' is the number 3.1 and '8.0' the number 8 -- the categories '3.1' and '8' take them as String(value) (an ordinal column would keep the text, which neither category equals)",
+  base({ visualMap: [
+      { type: 'piecewise', seriesIndex: 0, dimension: 0, categories: ['3.1', '8'], inRange: { color: ['#aa0000', '#00aa00'] }, outOfRange: { color: '#cccccc' }, show: false },
+    ],
+    parallelAxis: [{ dim: 1 }, { dim: 2 }],
+    series: [
+      PS({ data: [{ value: ['-', 1, 2], visualMap: false }, ['3.10', 2, 1], ['8.0', 3, 3]] }),
+    ] }));
 C('legend', 'layout', 'two named series and a legend: the icons; toggling one off rescales the axes',
   base({ legend: {}, parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }],
     series: [PS({ name: 'alpha', data: [[1, 2, 3], [2, 3, 1]] }), PS({ name: 'beta', data: [[10, 20, 30]] })] }),
@@ -1106,6 +1122,10 @@ function guards(cases) {
     && JSON.stringify(item('visualmap-categories', 0, 1).stroke) === '[0,0,170,1]' && JSON.stringify(item('visualmap-categories', 0, 2).stroke) === '[204,204,204,1]'
     && num(item('visualmap-categories', 0, 0).opacity) === 0.05);
   G('a numeric column no axis reads is a number to a continuous visualMap', JSON.stringify(item('visualmap-categories', 1, 0).stroke) !== JSON.stringify(item('visualmap-categories', 1, 1).stroke));
+  G('a numeric text after a dash is a number: the category 3.1 takes 3.10, 8 takes 8.0', JSON.stringify(item('visualmap-dash-first-text', 0, 1).stroke) === '[170,0,0,1]'
+    && JSON.stringify(item('visualmap-dash-first-text', 0, 2).stroke) === '[0,170,0,1]');
+  G('a dash first tells guessOrdinal nothing: the numbers after it colour', JSON.stringify(item('visualmap-dash-first', 0, 1).stroke) !== JSON.stringify(item('visualmap-dash-first', 0, 2).stroke)
+    && JSON.stringify(item('visualmap-dash-first', 0, 1).stroke) !== JSON.stringify(item('visualmap-dash-first', 0, 0).stroke));
   G('the legend toggle rescales an axis', num(get('legend').steps[0].record.parallels[0].axes[0].scale[1]) < num(get('legend').record.parallels[0].axes[0].scale[1]));
   G('a hover lifts the stroke and z2', (() => { const s = get('hover').steps[0].states.find(r => r.dataIndex === 0); return s.states.indexOf('emphasis') >= 0 && s.z2 === 20; })());
   G('the item tooltip names the row by its first category and shows the last numeric coordinate', (() => { const t = get('hover').steps[0].tooltip;

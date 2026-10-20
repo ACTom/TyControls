@@ -25,7 +25,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Style,
-     tyControls.AdvanceChart.States, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.States, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart;
 type
   THlProbe = class(TTyAdvanceChart)
   public
@@ -80,6 +80,8 @@ type
     procedure TestTheCopyIsDrawnOverEveryLayer;
     procedure TestAHoverOnlyFrameLeavesTheListAlone;
     procedure TestALabelledSymbolIsLiftedInItsLayer;
+    procedure TestTheCachedPaintDrawsTheCopy;
+    procedure TestAZoomPastTheThresholdKeepsTheEmphasisInItsLayer;
   end;
 
   { [R2-I9] the list an update built drawn as it stands, and the visual
@@ -97,6 +99,7 @@ type
     procedure TestAFreshListIsTheBuiltList;
     procedure TestAnUpdateBuildsOnce;
     procedure TestTheFirstIndicatorBuildsNoList;
+    procedure TestARefusedPatchAfterAnUpdateBuilds;
   end;
 
 implementation
@@ -401,10 +404,11 @@ procedure TAdvChartHoverLayerOracleTest.CheckSnap(ASnap: TJSONObject; ASeriesCou
 var
   hv, els: TJSONArray;
   layer: TTyPaintList;
-  i, n, s, want: Integer;
-  e: TTyChartElement;
+  i, n, s, want, k: Integer;
+  e, own: TTyChartElement;
   h, w: TJSONObject;
   got: string;
+  bc, bo: TTyRectF;
 begin
   Inc(FSnaps);
   hv := ASnap.Arrays['hover'];
@@ -441,6 +445,25 @@ begin
             and (w.Integers['p'] = h.Integers['p']) and (w.Find('hs') <> nil)
             and (w.Find('hs').JSONType = jtObject) then
             CheckDrawn(Format('hover layer #%d', [i]), w.Objects['hs'], e);
+        end;
+      { [r2v] AND WHERE: the hover layer brushes the element itself, with
+        its own transform -- the copy's shape is the own element's as the
+        list holds it (a scale the own layer took is not taken again) }
+      if (h.Integers['d'] >= 0) and (h.Integers['p'] = 0) then
+        for k := 0 to FChart.List.Count - 1 do
+        begin
+          own := FChart.List.Element(k);
+          if (own.Datum.SeriesIndex <> h.Integers['s']) or (own.Datum.DataIndex <> h.Integers['d'])
+            or own.Datum.IsEdge or own.Silent or (own.Caption.FontSizeLogical > 0) or own.IsGuide then
+            Continue;
+          Inc(FCompared);
+          bc := TyShapeBounds(e.Shape);
+          bo := TyShapeBounds(own.Shape);
+          if (Hex(bc.Left) <> Hex(bo.Left)) or (Hex(bc.Top) <> Hex(bo.Top))
+            or (Hex(bc.Right) <> Hex(bo.Right)) or (Hex(bc.Bottom) <> Hex(bo.Bottom)) then
+            Miss(Format('hover layer #%d: drawn at %g..%g, its own element at %g..%g', [i,
+              bc.Left, bc.Right, bo.Left, bo.Right]));
+          Break;
         end;
     end;
   if not FSkipEls then
@@ -594,6 +617,82 @@ begin
   AssertNull('the layer empties', FChart.HoverLayerForTest);
   px := FBmp.GetPixel(310, 200 - 15);
   AssertTrue('red again', (px.red > 200) and (px.blue < 60));
+end;
+
+{ [r2v] THE CACHED PAINT DRAWS THE COPY TOO: a highlight past the threshold
+  with nothing else dynamic (no tooltip, no pointer) -- the hover layer alone
+  is what the dynamic pass has to draw }
+procedure TAdvChartHoverLayerTest.TestTheCachedPaintDrawsTheCopy;
+var
+  bmp: TBitmap;
+  c: TColor;
+begin
+  NewChart(Format(cStack, ['"hoverLayerThreshold":1,']));
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(cW, cH);
+    FChart.Layered(bmp.Canvas, Rect(0, 0, cW, cH));
+    c := bmp.Canvas.Pixels[310, 200];
+    AssertTrue('green on top at rest', (Green(c) > 200) and (Blue(c) < 60));
+    FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":0}');
+    FChart.Layered(bmp.Canvas, Rect(0, 0, cW, cH));
+    AssertNotNull('a hover layer', FChart.HoverLayerForTest);
+    c := bmp.Canvas.Pixels[310, 200];
+    AssertTrue('the copy over the green', (Blue(c) > 200) and (Green(c) < 60));
+    FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":0}');
+    FChart.Layered(bmp.Canvas, Rect(0, 0, cW, cH));
+    c := bmp.Canvas.Pixels[310, 200];
+    AssertTrue('green again', (Green(c) > 200) and (Blue(c) < 60));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ [r2v] A ZOOM THAT TAKES THE COUNT PAST THE THRESHOLD while a symbol is
+  highlighted: the symbol keeps its emphasis in its own layer (updateStates
+  puts its states back before updateHoverLayerStatus flags it) -- with the
+  update's list drawn as it stands and with the paint building it again }
+procedure TAdvChartHoverLayerTest.TestAZoomPastTheThresholdKeepsTheEmphasisInItsLayer;
+var
+  sb: string;
+  i: Integer;
+  fresh: Boolean;
+begin
+  sb := '[';
+  for i := 0 to 3499 do
+  begin
+    if i > 0 then sb := sb + ',';
+    sb := sb + Format('[%d,%d]', [(i * 37) mod 1000, (i * 53) mod 500]);
+  end;
+  sb := sb + ']';
+  try
+    for fresh := False to True do
+    begin
+      TyAdvChartListFreshForTest(fresh);
+      NewChart('{"animation":false,"dataZoom":[{"type":"inside","xAxisIndex":0,"start":0,"end":50}],'
+        + '"xAxis":{"type":"value","min":0,"max":1000},"yAxis":{"type":"value","min":0,"max":500},'
+        + '"series":[{"type":"scatter","progressive":0,"symbolSize":8,"data":' + sb + '}]}');
+      FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":1}');
+      Draw;
+      AssertNull('under the threshold: no hover layer', FChart.HoverLayerForTest);
+      FChart.DispatchAction('{"type":"dataZoom","start":0,"end":100}');
+      Draw;
+      AssertNull(Format('past it after the zoom (fresh %s): still no copy',
+        [BoolToStr(fresh, True)]), FChart.HoverLayerForTest);
+      Draw;
+      AssertNull(Format('nor at the next paint (fresh %s)', [BoolToStr(fresh, True)]),
+        FChart.HoverLayerForTest);
+      { out and in again: now the flagged emphasis takes it there }
+      FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":1}');
+      Draw;
+      FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":1}');
+      Draw;
+      AssertNotNull('hovered again past the threshold: the copy', FChart.HoverLayerForTest);
+    end;
+  finally
+    TyAdvChartListFreshForTest(True);
+  end;
 end;
 
 procedure TAdvChartHoverLayerTest.TestAHoverOnlyFrameLeavesTheListAlone;
@@ -1038,6 +1137,61 @@ begin
       chart.Free;
     end;
   finally
+    bmp.Free;
+  end;
+end;
+
+{ [r2v] A STATE PATCH REFUSED AFTER AN UPDATE: the update's list is no
+  longer the one to draw -- the paint builds it with the states, the same
+  frames as with the fresh list switched off }
+procedure TAdvChartListFreshTest.TestARefusedPatchAfterAnUpdateBuilds;
+var
+  frames: array[Boolean] of TStringList;
+  fresh: Boolean;
+  chart: THlProbe;
+  bmp: TBitmap;
+  k: Integer;
+begin
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(cFreshW, cFreshH);
+    for fresh := False to True do
+    begin
+      TyAdvChartListFreshForTest(fresh);
+      TyAdvChartListTailForTest(fresh);
+      chart := NewChart(cFreshW, cFreshH, camOff, FreshOptions(0));
+      try
+        chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+        TyAdvChartStPatchForTest(False);
+        try
+          { the update builds its list; a highlight before the paint }
+          chart.DispatchAction('{"type": "legendToggleSelect", "name": "b"}');
+          chart.DispatchAction('{"type": "highlight", "seriesIndex": 0, "dataIndex": 30}');
+          chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+          frames[fresh].Add(Frame(bmp));
+          frames[fresh].Add(ListSig(chart));
+          chart.DispatchAction('{"type": "downplay", "seriesIndex": 0, "dataIndex": 30}');
+          chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
+          frames[fresh].Add(Frame(bmp));
+          frames[fresh].Add(ListSig(chart));
+        finally
+          TyAdvChartStPatchForTest(True);
+        end;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertEquals('as many records', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('record %d: the same with the fresh list on', [k]),
+        frames[False][k] = frames[True][k]);
+    AssertTrue('the highlight is drawn', frames[True][0] <> frames[True][2]);
+  finally
+    frames[False].Free;
+    frames[True].Free;
     bmp.Free;
   end;
 end;

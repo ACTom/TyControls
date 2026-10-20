@@ -97,6 +97,7 @@ type
     procedure TestASelectedSliceIsHitWhereItIsDrawn;
     procedure TestHeadlessSwitchesAtOnce;
     procedure TestPastTheHoverLayerThresholdNothingTransitions;
+    procedure TestAnOwnLayerStuckUnderTheHoverLayerStaysStuck;
   end;
 
 implementation
@@ -1098,6 +1099,36 @@ begin
   AssertEquals('leaving the hover layer: no transition either', 0, FChart.AnimClipCount);
   AssertEquals('nor a state', '', p.CurrentStates);
   AssertNull('the copy goes', FChart.HoverLayerForTest);
+end;
+
+{ [r2v] THE OWN LAYER STAYS WHAT IT WAS WHEN THE ELEMENT FIRST WENT ON THE
+  HOVER LAYER: selected while held, it leaves the hover layer still
+  unselected below; hovered again, the own layer (the proxy) is that one
+  still -- not the selected one the state list now says }
+procedure TAdvChartAnimStateTest.TestAnOwnLayerStuckUnderTheHoverLayerStaysStuck;
+var p: TTyChartAnimProxy;
+begin
+  NewChart(camAlways);
+  Load(StringReplace(StringReplace(cBar, '{"color"', '{"hoverLayerThreshold":3,"color"', []),
+    '"type":"bar","data"', '"type":"bar","selectedMode":"multiple","data"', []));
+  Settle(T0);
+  FChart.AnimNow := T1;
+  FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  FChart.DispatchAction('{"type":"select","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  p := FChart.AnimStateProxy(0, 2, 'host');
+  AssertNotNull(p);
+  AssertEquals('left the hover layer selected: the own layer as it entered', '', p.CurrentStates);
+  FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  AssertEquals('on the hover layer again: the own layer as it first entered', '', p.CurrentStates);
+  AssertEquals('its fill unselected', '#5470c6', p.GetAnimProp('style.fill').Str);
+  FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  AssertEquals('and off it again', '', p.CurrentStates);
 end;
 
 initialization

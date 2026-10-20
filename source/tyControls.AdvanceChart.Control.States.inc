@@ -2233,9 +2233,12 @@ begin
   FStMemoNodes := nil;
   FStMemoSpecNode := nil;
   FStDirty := False;
-  { [R2-I9] the hover layer's flags as renderSeries leaves them -- and a row
-    the sync put in emphasis goes on the layer, as useStates(prevStates) on
-    a flagged element does }
+  { [R2-I9] the hover layer's flags as renderSeries leaves them -- after the
+    states were put back under the last render's flags (updateStates runs
+    before updateHoverLayerStatus): a row in emphasis the flag reaches only
+    now keeps it in its own layer [r2v; was: the stamp put every flagged row
+    in emphasis on the layer, a highlighted symbol at a zoom that took the
+    count past the threshold] }
   StHoverStamp(True);
   FHoverDirty := True;
   { WHAT THE STATES ARE WRITTEN OVER, kept from here to the end of the
@@ -2659,25 +2662,6 @@ var
       AItem.Parts[j].HoverLayer := AOn and AItem.Parts[j].IsPath and not texts;
   end;
 
-  { useStates(prevStates) on a flagged element: a row in emphasis enters the
-    hover layer, its own layer the list without emphasis }
-  procedure Enter(var AEl: TTyStElement);
-  var full: TTyStNames;
-  begin
-    if not AEl.Exists or not AEl.HoverLayer or AEl.InHover
-      or not (stnEmphasis in AEl.States) then Exit;
-    full := AEl.States;
-    TyStUseStates(AEl, full - [stnEmphasis]);
-    TyStUseStates(AEl, full);
-  end;
-
-  procedure EnterItem(var AItem: TTyStItem);
-  var j: Integer;
-  begin
-    Enter(AItem.Host);
-    for j := 0 to High(AItem.Parts) do Enter(AItem.Parts[j]);
-  end;
-
 begin
   if (FPaintList = nil) then Exit;
   { the non-group elements of the storage: the list's, but the chunks not
@@ -2701,32 +2685,18 @@ begin
     FSt[s].HlSet := True;
     for raw := 0 to High(FSt[s].Rows) do
       if FSt[s].Rows[raw].Host.Exists then
-      begin
         StampItem(FSt[s].Rows[raw], want);
-        if AEnter then EnterItem(FSt[s].Rows[raw]);
-      end;
     { a line's polyline: its endLabel is its textContent; its area none }
     nodes[0] := StSeriesNode(s);
     endLabel := TyStReadBool(nodes, ['endLabel', 'show'], has) and has;
     FSt[s].Run.Host.HoverLayer := want and FSt[s].Run.Host.IsPath and not endLabel;
     FSt[s].Area.Host.HoverLayer := want and FSt[s].Area.Host.IsPath;
-    if AEnter then
-    begin
-      Enter(FSt[s].Run.Host);
-      Enter(FSt[s].Area.Host);
-    end;
     for raw := 0 to High(FSt[s].EdgeRows) do
       if FSt[s].EdgeRows[raw].Host.Exists then
-      begin
         StampItem(FSt[s].EdgeRows[raw], want);
-        if AEnter then EnterItem(FSt[s].EdgeRows[raw]);
-      end;
     for raw := 0 to High(FSt[s].PeerRows) do
       if FSt[s].PeerRows[raw].Host.Exists then
-      begin
         StampItem(FSt[s].PeerRows[raw], want);
-        if AEnter then EnterItem(FSt[s].PeerRows[raw]);
-      end;
   end;
 end;
 

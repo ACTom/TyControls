@@ -218,6 +218,12 @@ const CASES = [
       series: [{ type: 'pictorialBar', symbol: 'rect', symbolSize: [20, 8], symbolMargin: 2,
         data: [{ value: 40, symbolRepeat: true }, { value: 60 }, { value: 30, symbolRepeat: true, symbolClip: true }] }] },
     update: { series: [{ data: [{ value: 60, symbolRepeat: true }, { value: 30 }, { value: 50, symbolRepeat: true, symbolClip: true }] }] } },
+  { id: 'pictorial-shrink', note: '[r2v] a repeated column whose count falls: the glyphs past the new count shrink to nothing, '
+      + 'each handed {index, count} with the NEW count',
+    option: { xAxis: { type: 'category', data: ['a'] }, yAxis: { max: 100 },
+      series: [{ type: 'pictorialBar', symbol: 'rect', symbolSize: [20, 8], symbolMargin: 2,
+        data: [{ value: 70, symbolRepeat: true }] }] },
+    update: { series: [{ data: [{ value: 40, symbolRepeat: true }] }] } },
   { id: 'graph', note: 'a graph of three nodes and two edges, no layout',
     option: { series: [{ type: 'graph', layout: 'none', label: { show: true },
       data: [{ name: 'a', x: 10, y: 10 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 50, y: 100 }],
@@ -237,6 +243,11 @@ const CASES = [
   { id: 'treemap', note: 'a treemap',
     option: { series: [{ type: 'treemap', data: [{ name: 'a', value: 6 }, { name: 'b', value: 4, children: [{ name: 'c', value: 3 }, { name: 'd', value: 1 }] }] }] },
     update: { series: [{ data: [{ name: 'a', value: 3 }, { name: 'b', value: 7, children: [{ name: 'c', value: 5 }, { name: 'd', value: 2 }] }] }] } },
+  { id: 'treemap-upper', note: '[r2v] a treemap showing its parents\' upper labels (not the root\'s: levels[0] hides it): after a '
+      + 'merge LabelManager updateProps every label not ignored -- a parent\'s only label is its upper one, the only call at its row',
+    option: { series: [{ type: 'treemap', upperLabel: { show: true, height: 20 }, levels: [{ upperLabel: { show: false } }], breadcrumb: { show: false },
+      data: [{ name: 'a', value: 6 }, { name: 'b', children: [{ name: 'c', value: 3 }, { name: 'd', value: 1 }] }] }] },
+    update: { series: [{ data: [{ name: 'a', value: 3 }, { name: 'b', children: [{ name: 'c', value: 5 }, { name: 'd', value: 2 }] }] }] } },
   { id: 'sunburst', note: 'a sunburst',
     option: { series: [{ type: 'sunburst', data: [{ name: 'a', value: 6 }, { name: 'b', value: 4, children: [{ name: 'c', value: 3 }] }] }] },
     update: { series: [{ data: [{ name: 'a', value: 3 }, { name: 'b', value: 7, children: [{ name: 'c', value: 5 }] }] }] } },
@@ -282,6 +293,11 @@ function guards(out) {
   const c = id => out.cases.find(x => x.id === id);
   add('pictorial: a glyph hands {index, count}', c('pictorial').enter.animationDelay.some(s => /"index"/.test(s) && /"count"/.test(s)));
   add('pictorial: the clip path hands an empty object', c('pictorial').enter.animationDelay.some(s => /p:j:\{\}/.test(s)));
+  add('pictorial-shrink: the shrinking glyphs hand the new count', (() => {
+    const counts = new Set();
+    c('pictorial-shrink').updated.animationDelayUpdate.forEach(s => { const m = /"count":"([0-9a-f]+)"/.exec(s); if (m) counts.add(m[1]); });
+    return counts.size === 1;
+  })());
   add('line: the series delay is called with null', c('line').enter.animationDelay.some(s => /^i:z p:u$/.test(s)));
   add('line: the calls in order -- the duration and the delay with null, then each symbol\'s delay',
     c('line').enterSeq[0] === 'animationDuration i:z p:u' && c('line').enterSeq[1] === 'animationDelay i:z p:u'

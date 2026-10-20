@@ -76,6 +76,8 @@ type
     procedure TestShowAutoIsNotCollectedAsUpstream;
     procedure TestTheOwnLabelAsUpstream;
     procedure TestAnOwnShadowAsUpstream;
+    procedure TestASnapWithoutTriggerInvolvesTheSeriesAsUpstream;
+    procedure TestATruthyShowThatIsNoBooleanAsUpstream;
     { the tooltip's functions }
     procedure TestAnItemShowCallsEachOnceAsUpstream;
     procedure TestAValueFormatterWithoutAFormatterAsUpstream;
@@ -628,6 +630,20 @@ end;
 procedure TAdvChartAxisOwnPointerOracleTest.TestAnOwnShadowAsUpstream;
 begin
   RunCase('own-shadow');
+end;
+
+{ involveSeries is triggerTooltip || snap || a category axis: an axis that
+  snaps but does not trigger still finds its rows (the pointer on the point)
+  and keeps them out of the box }
+procedure TAdvChartAxisOwnPointerOracleTest.TestASnapWithoutTriggerInvolvesTheSeriesAsUpstream;
+begin
+  RunCase('own-snap-no-trigger');
+end;
+
+{ show is read for its truth, not for a boolean }
+procedure TAdvChartAxisOwnPointerOracleTest.TestATruthyShowThatIsNoBooleanAsUpstream;
+begin
+  RunCase('own-show-truthy');
 end;
 
 procedure TAdvChartAxisOwnPointerOracleTest.TestAnItemShowCallsEachOnceAsUpstream;

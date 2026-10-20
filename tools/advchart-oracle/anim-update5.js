@@ -54,7 +54,8 @@ by probe:
          (the bundle's place), n (its clips), clip: null | {sh [x, y,
          width, height], n}, paths [{ai (__pictorialAnimationIndex, null
          for a single glyph), x, y, sx, sy, rot, n, gx, gy (the path's
-         origin on the canvas: its computed transform's translation)}] in
+         origin on the canvas: its computed transform's translation), gb [x,
+         y, width, height] (its box through that transform)}] in
          the bundle's order, rect [x, y, width, height] (the bar rect --
          the label's host -- as it is now), rn (its clips), label: null |
          {gx, gy (the text's computed transform's translation), text}};
@@ -155,6 +156,14 @@ function gpos(el) {
   const m = el.getComputedTransform();
   return m ? [m[4], m[5]] : [0, 0];
 }
+// [r2v] the path's box on the canvas: its own box through its computed
+// transform (for a rect symbol the box of the turned, scaled rect)
+function gbox(el) {
+  const r = el.getBoundingRect().clone();
+  const m = el.getComputedTransform();
+  if (m) r.applyTransform(m);
+  return [r.x, r.y, r.width, r.height];
+}
 const NULMARK = '\u2400';
 const idText = s => String(s).split('\u0000').join(NULMARK);
 
@@ -245,7 +254,7 @@ const PROBES = {
           const g = gpos(p);
           paths.push({ ai: p.__pictorialAnimationIndex == null ? null : p.__pictorialAnimationIndex,
             x: hx(p.x), y: hx(p.y), sx: hx(p.scaleX), sy: hx(p.scaleY), rot: hx(p.rotation), n: nClip(p),
-            gx: hx(g[0]), gy: hx(g[1]) });
+            gx: hx(g[0]), gy: hx(g[1]), gb: arr(gbox(p)) });
         });
         return paths;
       };
@@ -338,6 +347,22 @@ add('markPoint', 'mp-stay', "the max stays on D with a new value: its id is the 
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [3, 5, 2, 8, 4] }] } },
     ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('markPoint', 'mp-dup-name', "[r2v] two points by one name: mpData's ids are 'p' and 'p__ec__1' (a repeated name numbered), so each slides from its own old place to its new one (update timing) and nothing fades",
+  { animation: true, xAxis: { type: 'category', data: CAT }, yAxis: { type: 'value', max: 10 },
+    series: [Object.assign({ type: 'line', data: [3, 5, 2, 6, 4],
+      markPoint: { data: [{ name: 'p', coord: ['B', 5] }, { name: 'p', coord: ['D', 2] }] } }, LIN)] },
+  ['mp'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ markPoint: { data: [{ name: 'p', coord: ['C', 8] }, { name: 'p', coord: ['E', 1] }] } }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('markPoint', 'mp-no-name', "[r2v] value axes: a point with no name has no name dimension to answer either -- its id is 'e' + two NULs + its index, apart from a point named '0'; after the merge the point named '0' keeps its symbol, the unnamed one at index 1 is new (it pops in) and the unnamed one at index 0 fades",
+  { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [Object.assign({ type: 'scatter', data: [[1, 1], [9, 9]], animationDuration: 600, animationEasing: 'linear',
+      markPoint: { data: [{ coord: [2, 3] }, { name: '0', coord: [6, 7] }] } }, LIN)] },
+  ['mp'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ markPoint: { data: [{ name: '0', coord: [5, 5] }, { coord: [8, 2] }] } }] } },
+    ...after([0, 1, 100, 199, 200, 201, 500, 999, 1000, 1001], T1)]);
 
 // ---- pictorial ----
 const PCAT = ['a', 'b', 'c'];
@@ -357,6 +382,12 @@ add('pictorial', 'pb-single', "single glyphs sized to their value (symbolSize ['
   ['pict'],
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [60, 30, 80], symbolRotate: 0 }] } },
+    ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
+add('pictorial', 'pb-single-turn', "[r2v] the same glyphs turned the other way: unturned at first, symbolRotate 40 in the merge -- the path's turn tweens from 0 to its new rest, the glyph drawn at the turn it has now (not its rest's on top of it)",
+  PB([PS({ symbolSize: ['100%', 20], data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [60, 30, 80], symbolRotate: 40 }] } },
     ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
 add('pictorial', 'pb-move', "single glyphs at the end of their bars (symbolPosition end): a merge changes the values -- the main path's place in the bundle slides with the new length",
   PB([PS({ symbolPosition: 'end', symbolSize: [20, 20], data: [30, 60, 90] })]),

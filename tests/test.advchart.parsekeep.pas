@@ -58,6 +58,7 @@ type
     procedure TearDown; override;
   published
     procedure TestARepairedOrderIsTheSortedOrder;
+    procedure TestACutTailIsRepairedNotSortedWhole;
     procedure TestAHoverSweepIsTheSameRepaired;
   end;
 
@@ -780,6 +781,9 @@ begin
       begin
         list.JournalRecord(False);
         list.JournalClose;
+        { the patched frame paints (its order repaired) before the next
+          patch rewinds the journal: the rewound elements move back }
+        list.PaintOrder(0);
         if R(2) = 0 then list.JournalRewind;
       end
       { the tail cut and built again (ListTailRebuild) }
@@ -807,6 +811,49 @@ begin
     AssertTrue('repaired, not sorted whole, most rounds',
       TyPaintListRepairsForTest - r0 > 100);
   finally
+    list.Free;
+  end;
+end;
+
+{ A CUT TAIL BUILT AGAIN (ListTailRebuild) IS REPAIRED: Truncate takes the
+  cut elements out of the order, so the order of the rest stands and the
+  new tail merges in -- the sorted order, by a repair, not a sort of the
+  whole list }
+procedure TAdvChartPaintOrderTest.TestACutTailIsRepairedNotSortedWhole;
+var
+  list, fresh: TTyPaintList;
+  e: TTyChartElement;
+  i, r0: Integer;
+begin
+  list := TTyPaintList.Create;
+  fresh := TTyPaintList.Create;
+  try
+    for i := 0 to 499 do
+    begin
+      e := Default(TTyChartElement);
+      e.Z := i mod 3;
+      e.Z2 := (i * 7) mod 11;
+      e.Style.Alpha := i;
+      list.Add(e);
+    end;
+    list.PaintOrder(0);
+    r0 := TyPaintListRepairsForTest;
+    list.Truncate(400);
+    for i := 0 to 49 do
+    begin
+      e := Default(TTyChartElement);
+      e.Z := (i * 5) mod 3;
+      e.Z2 := (i * 3) mod 13 - 2;
+      e.Style.Alpha := 1000 + i;
+      list.Add(e);
+    end;
+    list.PaintOrder(0);
+    AssertEquals('the cut and built tail was repaired', 1, TyPaintListRepairsForTest - r0);
+    for i := 0 to list.Count - 1 do fresh.Add(list.Element(i));
+    for i := 0 to list.Count - 1 do
+      AssertEquals(Format('place %d', [i]), fresh.PaintOrder(i), list.PaintOrder(i));
+  finally
+    fresh.Free;
     list.Free;
   end;
 end;
