@@ -1131,7 +1131,7 @@ end;
 procedure TAdvChartGraphicTest.TestTheOrderAndTheFlagsAreUpstreams;
 var c: TJSONObject;
 begin
-  RunStatic(['z-order', 'flags', 'forms'], True);
+  RunStatic(['z-order', 'flags', 'forms', 'forms-frame'], True);
   { the compound path: the update stopped at it, as the throw does }
   c := CaseById('compound');
   FWhere := 'compound';

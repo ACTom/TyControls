@@ -30193,6 +30193,224 @@
     1500
    ],
    "fails": []
+  },
+  {
+   "id": "forms-frame",
+   "group": "order",
+   "note": "the preprocessor on a timeline frame: the first frame writes its graphic as an array of elements, preprocessed into one component with those elements (parseRawOption's doPreprocess over every frame) and merged at the init",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "baseOption": {
+     "animation": false,
+     "timeline": {
+      "show": false,
+      "axisType": "category",
+      "data": [
+       "a",
+       "b"
+      ]
+     }
+    },
+    "options": [
+     {
+      "graphic": [
+       {
+        "type": "rect",
+        "id": "fa",
+        "left": 10,
+        "top": 10,
+        "shape": {
+         "width": 30,
+         "height": 30
+        },
+        "style": {
+         "fill": "#5070dd"
+        }
+       },
+       {
+        "type": "circle",
+        "id": "fb",
+        "left": 60,
+        "top": 10,
+        "shape": {
+         "r": 15
+        },
+        "style": {
+         "fill": "#b6d634"
+        }
+       }
+      ]
+     },
+     {}
+    ]
+   },
+   "steps": [],
+   "throws": null,
+   "states": [
+    {
+     "els": [
+      {
+       "id": "fa",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4024000000000000",
+        "y": "4024000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "403e000000000000",
+        "height": "403e000000000000"
+       },
+       "shape": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "403e000000000000",
+        "height": "403e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "403e000000000000",
+        "403e000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "fb",
+       "gtype": "circle",
+       "type": "circle",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4052c00000000000",
+        "y": "4039000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4052c00000000000",
+        "4039000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "c02e000000000000",
+        "y": "c02e000000000000",
+        "width": "403e000000000000",
+        "height": "403e000000000000"
+       },
+       "shape": {
+        "cx": "0000000000000000",
+        "cy": "0000000000000000",
+        "r": "402e000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "402e000000000000",
+        "0000000000000000",
+        "4014000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "402e000000000000",
+        "402e000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "#b6d634",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:fa",
+      "g:fb"
+     ],
+     "model": [
+      {
+       "id": "fa",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "fb",
+       "type": "circle",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": []
+    }
+   ],
+   "fails": []
   }
  ],
  "guards": [
@@ -30294,6 +30512,10 @@
   },
   {
    "name": "leave: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "forms-frame: every record matches its recipe",
    "ok": true
   },
   {
@@ -30498,6 +30720,10 @@
   },
   {
    "name": "the animations settle",
+   "ok": true
+  },
+  {
+   "name": "forms-frame: the first frame's element array is drawn, both elements in one component",
    "ok": true
   }
  ]
