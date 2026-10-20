@@ -3642,6 +3642,27 @@ begin
     { FILLED BUT TRANSPARENT, for its label: upstream's target rect has a
       `transparent` fill, which counts as a fill. }
     el.Caption.HostTransparent := True;
+    { [R2-I8] THE BAR RECT'S SHAPE, upstream's barRectShape: the bar
+      layout's corner and breadth, the length along the value axis signed
+      -- what an update tweens (createOrUpdateBarRect) }
+    el.Anim.Role := carPictorialRect;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := i;
+    if baseHoriz then
+    begin
+      el.Anim.G[0] := bundleAcross;
+      el.Anim.G[1] := floorPx;
+      el.Anim.G[2] := col.Width;
+      el.Anim.G[3] := barLen;
+    end
+    else
+    begin
+      el.Anim.G[0] := floorPx;
+      el.Anim.G[1] := bundleAcross;
+      el.Anim.G[2] := barLen;
+      el.Anim.G[3] := col.Width;
+    end;
+    el.Anim.G[4] := Ord(spec.AnimOff);
     AList.Add(el);
     Inc(Result);
 

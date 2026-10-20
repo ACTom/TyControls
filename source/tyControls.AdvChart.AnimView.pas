@@ -250,6 +250,12 @@ type
       element's record, and whether the fade has ended [Batch 90] }
     FLeaving, FGone: Boolean;
     FGhost: TTyChartElement;
+    { [R2-I8] A PICTORIAL PATH SHRINKING IN A KEPT COLUMN rides its bundle:
+      the column's new row (whose 'pbundle' moves) and the bundle's new
+      place, for when that proxy is gone }
+    FPictRide: Boolean;
+    FPictRow: Integer;
+    FPictBX, FPictBY: Double;
     { a line's polyline: the symbols that follow its points }
     FFollow: array of TTyChartAnimFollow;
     { A COUNT (animateLabelValue) [Batch 92]: from, to, the interpolated
@@ -360,6 +366,9 @@ type
     property Leaving: Boolean read FLeaving;
     property Gone: Boolean read FGone;
     property Ghost: TTyChartElement read FGhost;
+    { [R2-I8] a pictorial path shrinking in a kept column (it rides the
+      bundle), not a removed bar's }
+    property PictRide: Boolean read FPictRide;
     { the morph's done (restoreToPath), the style transition's }
     procedure MorphDone;
     procedure UtStyleDone;
@@ -1464,6 +1473,7 @@ begin
     carSankeyClip: Result := 'sankeyClip';
     carPictorialGlyph: Result := 'pglyph';
     carPictorialClip: Result := 'pclip';
+    carPictorialRect: Result := 'prect';
     carGraphEdge, carGraphEdgeFrom, carGraphEdgeTo: Result := 'gedge';
     carGraphEdgeLabel: Result := 'gedgeLabel';
     carTreeNode: Result := 'symbol';
@@ -3532,11 +3542,21 @@ var
     item's model at update timing, and the bar rect (the label's host, no
     ink) its shape -- once a bar }
   procedure PictBundle(AOld, AOldRow: Integer; const AEl, AOldEl: TTyChartElement;
-    const AC: TTyChartAnimSeries);
+    const AC: TTyChartAnimSeries; AAt: Integer);
   var
     props, oprops: TTyAnimProps;
     bp: TTyChartAnimProxy;
     tm: TTyAnimTiming;
+    k: Integer;
+    ne, oe2: TTyChartElement;
+    found: Boolean;
+
+    function RectProps(const E: TTyChartElement): TTyAnimProps;
+    begin
+      Result := TyAnimProps([Num1('shape.x', E.Anim.G[0]), Num1('shape.y', E.Anim.G[1]),
+        Num1('shape.width', E.Anim.G[2]), Num1('shape.height', E.Anim.G[3])]);
+    end;
+
   begin
     if Find(s, r, 'pbundle') <> nil then Exit;
     props := TyAnimProps([Num1('x', AEl.Caption.LgG[6]), Num1('y', AEl.Caption.LgG[7])]);
@@ -3544,8 +3564,51 @@ var
     bp := Take(AOld, AOldRow, s, r, 'pbundle', oprops, props, True);
     bp.SetFinal(props);
     TyUpdateProps(bp, props, ItemModelOf(AC, r), PictNoPlace(r));
-    { the bar rect: no ink here, its timing asked }
-    TyAnimGetConfig(atUpdate, ItemModelOf(AC, r), PictNoPlace(r), tm);
+    { [R2-I8] THE BAR RECT updateProps its shape (createOrUpdateBarRect on a
+      kept bar), and the label laid out on it rides it
+      [Revised in R2-I8: its timing was asked and nothing moved.] -- it is
+      the row's element just before its glyphs }
+    found := False;
+    for k := AAt - 1 downto 0 do
+    begin
+      ne := AList.Element(k);
+      if (ne.Anim.Role = carPictorialRect) and (ne.Anim.Series = s) and (ne.Anim.Index = r) then
+      begin
+        found := True;
+        Break;
+      end;
+    end;
+    if found and OldEl(AOld, AOldRow, 'prect', oe2) and (Find(s, r, 'prect') = nil) then
+    begin
+      props := RectProps(ne);
+      bp := Take(AOld, AOldRow, s, r, 'prect', RectProps(oe2), props, True);
+      Ensure(bp, 'shape.x', oe2.Anim.G[0]);
+      Ensure(bp, 'shape.y', oe2.Anim.G[1]);
+      Ensure(bp, 'shape.width', oe2.Anim.G[2]);
+      Ensure(bp, 'shape.height', oe2.Anim.G[3]);
+      bp.SetFinal(props);
+      TyUpdateProps(bp, props, ItemModelOf(AC, r), PictNoPlace(r));
+    end
+    else
+      TyAnimGetConfig(atUpdate, ItemModelOf(AC, r), PictNoPlace(r), tm);
+  end;
+
+  { [R2-I8] the old clipped path of the same place in its column }
+  function OldClipPath(AOld, AOldRow, ASub: Integer; out AOldEl: TTyChartElement): Boolean;
+  var j: Integer;
+  begin
+    Result := False;
+    AOldEl := Default(TTyChartElement);
+    if AOldRow < 0 then Exit;
+    for j := 0 to High(APrev.Elements) do
+      if (APrev.Elements[j].Anim.Role = carPictorialClip)
+        and (APrev.Elements[j].Anim.Series = AOld)
+        and (APrev.Elements[j].Anim.Index = AOldRow)
+        and (APrev.Elements[j].Anim.Sub = ASub) then
+      begin
+        AOldEl := APrev.Elements[j];
+        Exit(True);
+      end;
   end;
 
   procedure UpdateOne(AAt: Integer; const AEl: TTyChartElement;
@@ -3576,7 +3639,7 @@ var
             Exit;
           end;
           if (AEl.Anim.G[4] <> 0) or not AC.Enabled then Exit;
-          PictBundle(AOld, AOldRow, AEl, oe, AC);
+          PictBundle(AOld, AOldRow, AEl, oe, AC, AAt);
           rk := TyChartAnimRoleKey(AEl);
           if Find(s, r, rk) <> nil then Exit;
           props := TyAnimProps([Num1('x', AEl.Caption.LgG[0]), Num1('y', AEl.Caption.LgG[1]),
@@ -3620,9 +3683,11 @@ var
       carPictorialClip:
         begin
           { [R2-I7] a kept clipped bar's path: updateAttr(isUpdate) is an
-            updateProps of its place, scale and turn -- they stand where the
-            bounding data puts them; the timing is asked, {index, count} for
-            a repeated one, {} for the single one }
+            updateProps of its place, scale and turn, {index, count} for a
+            repeated one, {} for the single one -- [R2-I8] tweened on a
+            proxy of its own, 'pcpath<n>', from the old path of its place in
+            the column (one that had none grows from nought at its place)
+            [Revised in R2-I8: only the timing was asked.] }
           if (AEl.Anim.G[8] = 0) and AC.Enabled and PictOldBar(AOld, AOldRow, AEl, oe) then
           begin
             popts := PictNoPlace(r);
@@ -3633,7 +3698,38 @@ var
               popts.HasDelayCount := True;
               popts.DelayCount := Round(AEl.Anim.G[10]);
             end;
-            TyAnimGetConfig(atUpdate, ItemModelOf(AC, r), popts, tmg);
+            rk := 'pcpath' + IntToStr(AEl.Anim.Sub);
+            if Find(s, r, rk) = nil then
+            begin
+              props := TyAnimProps([Num1('x', AEl.Caption.LgG[0]), Num1('y', AEl.Caption.LgG[1]),
+                Num1('scaleX', AEl.Caption.LgG[2]), Num1('scaleY', AEl.Caption.LgG[3]),
+                Num1('rotation', AEl.Caption.LgG[5])]);
+              if OldClipPath(AOld, AOldRow, AEl.Anim.Sub, host) then
+              begin
+                oprops := TyAnimProps([Num1('x', host.Caption.LgG[0]), Num1('y', host.Caption.LgG[1]),
+                  Num1('scaleX', host.Caption.LgG[2]), Num1('scaleY', host.Caption.LgG[3]),
+                  Num1('rotation', host.Caption.LgG[5])]);
+                p := Take(AOld, AOldRow, s, r, rk, oprops, props, True);
+                Ensure(p, 'x', host.Caption.LgG[0]);
+                Ensure(p, 'y', host.Caption.LgG[1]);
+                Ensure(p, 'scaleX', host.Caption.LgG[2]);
+                Ensure(p, 'scaleY', host.Caption.LgG[3]);
+                Ensure(p, 'rotation', host.Caption.LgG[5]);
+                p.SetFinal(props);
+                TyUpdateProps(p, props, ItemModelOf(AC, r), popts);
+              end
+              else
+              begin
+                p := Make(s, r, rk);
+                p.Attr(props);
+                p.SetFinal(props);
+                p.SetNum('scaleX', 0);
+                p.SetNum('scaleY', 0);
+                p.SetNum('rotation', 0);
+                TyUpdateProps(p, TyAnimProps([props[2], props[3], props[4]]),
+                  ItemModelOf(AC, r), popts);
+              end;
+            end;
           end;
           if Find(s, r, 'pclip') <> nil then Exit;
           if AOldRow < 0 then
@@ -3651,7 +3747,7 @@ var
           begin
             { the clip path updateProps its shape -- along the value axis
               what changes -- and the bundle its place }
-            PictBundle(AOld, AOldRow, AEl, oe, AC);
+            PictBundle(AOld, AOldRow, AEl, oe, AC, AAt);
             if AEl.Anim.G[1] <> 0 then
               oprops := TyAnimProps([Num1('shape.height', oe.Anim.G[2])])
             else
@@ -4249,6 +4345,7 @@ var
     g, q2: TTyChartAnimProxy;
     opts: TTyAnimCallOpts;
     keep: Boolean;
+    nbx, nby: Double;
 
     function PNum(const AKey: string; AOr: Double): Double;
     var v: TTyAnimValue;
@@ -4278,6 +4375,8 @@ var
           or (oe.Anim.G[6] = 0) then Break;
         keep := True;
         cnt := Round(ne.Anim.G[7]);
+        nbx := ne.Caption.LgG[6];
+        nby := ne.Caption.LgG[7];
         Break;
       end;
       if not keep then Continue;
@@ -4294,6 +4393,12 @@ var
         g.FLeaving := True;
         g.FGhost := oe;
         g.FFinal := nil;
+        { [R2-I8] it is the bundle's child: it moves with the bundle
+          [Revised in R2-I8: it stayed where the old bundle was.] }
+        g.FPictRide := True;
+        g.FPictRow := nr;
+        g.FPictBX := nbx;
+        g.FPictBY := nby;
         FGhosts.Add(g);
         opts := TyAnimCallAt(nr);
         opts.HasDelayIndex := True;
@@ -4769,6 +4874,50 @@ var
       or ((Round(nr.Anim.G[5]) and 8) <> (Round(orr.Anim.G[5]) and 8));
   end;
 
+  { [R2-I8] PictorialBarView's removeBar: the label at once (no ghost is
+    made for it), every path to no scale by removeElement -- leave timing,
+    200 ms cubicOut, no delay asked of a function -- and the bar gone when
+    they end. A clipped bar has no animation model: gone at once.
+    [Revised in R2-I8: a removed pictorial bar vanished.] }
+  procedure PictorialLeave(ASer, AOld, AOldRow: Integer; const AModel: TTyAnimModel);
+  var
+    j: Integer;
+    oe: TTyChartElement;
+    g, q2: TTyChartAnimProxy;
+    opts: TTyAnimCallOpts;
+
+    function PNum(const AKey: string; AOr: Double): Double;
+    var v: TTyAnimValue;
+    begin
+      Result := AOr;
+      if q2 = nil then Exit;
+      v := q2.GetAnimProp(AKey);
+      if v.Kind = avkNumber then Result := v.Num;
+    end;
+
+  begin
+    for j := 0 to High(APrev.Elements) do
+    begin
+      oe := APrev.Elements[j];
+      if (oe.Anim.Role <> carPictorialGlyph) or (oe.Anim.Series <> AOld)
+        or (oe.Anim.Index <> AOldRow) then Continue;
+      { the item's animation off: no model, at once }
+      if oe.Anim.G[4] <> 0 then Continue;
+      q2 := OldProxy(AOld, AOldRow, TyChartAnimRoleKey(oe));
+      g := TTyChartAnimProxy.Create(ASer, AOldRow, TyChartAnimRoleKey(oe));
+      g.Animation := FAnimation;
+      g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
+        Num1('scaleY', PNum('scaleY', oe.Anim.G[3]))]));
+      g.FLeaving := True;
+      g.FGhost := oe;
+      g.FFinal := nil;
+      FGhosts.Add(g);
+      opts := TyAnimCallAt(AOldRow);
+      opts.Done := @g.LeaveDone;
+      TyRemoveElement(g, TyAnimProps([Num1('scaleX', 0), Num1('scaleY', 0)]), AModel, opts);
+    end;
+  end;
+
   { ---- a removed element: the ghost that fades ---- }
   procedure Leave(ASer, AOld, AOldRow: Integer; const AModel: TTyAnimModel);
   const
@@ -4779,6 +4928,7 @@ var
     g: TTyChartAnimProxy;
     opts: TTyAnimCallOpts;
   begin
+    PictorialLeave(ASer, AOld, AOldRow, AModel);
     for j := 0 to High(cRoles) do
     begin
       if not OldEl(AOld, AOldRow, cRoles[j], oe) then Continue;
@@ -5859,6 +6009,17 @@ begin
   end;
   if (AProxy = nil) or AProxy.AtFinal then Exit;
   case AEl.Anim.Role of
+    carPictorialRect:
+      begin
+        { [R2-I8] the bar rect's shape now (no ink: what its label is laid
+          out on) }
+        x := NumOr(AProxy, 'shape.x', AEl.Anim.G[0]);
+        y := NumOr(AProxy, 'shape.y', AEl.Anim.G[1]);
+        bw := NumOr(AProxy, 'shape.width', AEl.Anim.G[2]);
+        bh := NumOr(AProxy, 'shape.height', AEl.Anim.G[3]);
+        AEl.Shape := TyShapeRect(TyRectF(Min(x, x + bw), Min(y, y + bh),
+          Max(x, x + bw), Max(y, y + bh)));
+      end;
     carParallelLine:
       begin
         { the data group's clip while it grows [Batch 128] }
@@ -6648,6 +6809,32 @@ begin
 end;
 
 { A GHOST AS IT IS NOW: the old element under its leaving proxy }
+{ [R2-I8] a clipped pictorial path drawn as its proxy holds it now: its rest
+  undone about its place on the canvas (the bundle's plus its own) -- turned
+  back, scaled, turned again -- and moved by its place's change in the
+  bundle }
+procedure PictPathNow(var AEl: TTyChartElement; P: TTyChartAnimProxy);
+var px, py, fx, fy, a: Double;
+begin
+  px := AEl.Caption.LgG[6] + AEl.Caption.LgG[0];
+  py := AEl.Caption.LgG[7] + AEl.Caption.LgG[1];
+  if AEl.Caption.LgG[2] <> 0 then fx := NumOr(P, 'scaleX', AEl.Caption.LgG[2]) / AEl.Caption.LgG[2]
+  else fx := 1;
+  if AEl.Caption.LgG[3] <> 0 then fy := NumOr(P, 'scaleY', AEl.Caption.LgG[3]) / AEl.Caption.LgG[3]
+  else fy := 1;
+  if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then
+  begin
+    MakeInkless(AEl);
+    Exit;
+  end;
+  if AEl.Caption.LgG[5] <> 0 then TyShapeRotateAbout(AEl.Shape, px, py, -AEl.Caption.LgG[5]);
+  TyShapeScaleAbout(AEl.Shape, px, py, fx, fy);
+  a := NumOr(P, 'rotation', AEl.Caption.LgG[5]);
+  if a <> 0 then TyShapeRotateAbout(AEl.Shape, px, py, a);
+  TyShapeMove(AEl.Shape, NumOr(P, 'x', AEl.Caption.LgG[0]) - AEl.Caption.LgG[0],
+    NumOr(P, 'y', AEl.Caption.LgG[1]) - AEl.Caption.LgG[1]);
+end;
+
 procedure ApplyGhost(var AEl: TTyChartElement; G: TTyChartAnimProxy);
 var
   fx, fy, op, rest: Double;
@@ -10391,6 +10578,13 @@ begin
       TyAnimApply(pel^, ABind[i]);
     { [R2-I7] A PICTORIAL BAR'S BUNDLE moves its paths (and a symbolClip's
       clip, which is the bundle's) on a proxy of its own }
+    { [R2-I8] a clipped bar's path: its place, scale and turn in the bundle
+      now, on its own proxy }
+    if (ASet <> nil) and (pel^.Anim.Role = carPictorialClip) then
+    begin
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'pcpath' + IntToStr(pel^.Anim.Sub));
+      if (g <> nil) and not g.AtFinal then PictPathNow(pel^, g);
+    end;
     if (ASet <> nil) and (pel^.Anim.Role in [carPictorialGlyph, carPictorialClip]) then
     begin
       g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'pbundle');
@@ -10622,6 +10816,15 @@ begin
       g := ASet.Ghost(i);
       if g.Gone then Continue;
       ApplyGhost(el, g);
+      { [R2-I8] a path shrinking in a kept pictorial column: in its bundle
+        as the bundle is now }
+      if g.FPictRide then
+      begin
+        bp := ASet.Find(g.Series, g.FPictRow, 'pbundle');
+        x1 := NumOr(bp, 'x', g.FPictBX);
+        y1 := NumOr(bp, 'y', g.FPictBY);
+        TyShapeMove(el.Shape, x1 - el.Caption.LgG[6], y1 - el.Caption.LgG[7]);
+      end;
       { [F3d] a removed tree node's label on its host's ghost as drawn }
       if g.Role = 'treeNode' then
       begin
