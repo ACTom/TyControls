@@ -4984,6 +4984,390 @@
    "anim": true
   },
   {
+   "id": "tl-after-aas",
+   "note": "an axisAreaSelect, then a timelineChange: the select's update skips the axis it names (no covers there); the timeline's update (prepareAndUpdate, its own payload) renders every parallelAxis view -- the covers come back",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "timeline": {
+      "data": [
+       "t0",
+       "t1"
+      ]
+     },
+     "parallel": {},
+     "parallelAxis": [
+      {
+       "dim": 0,
+       "name": "p"
+      },
+      {
+       "dim": 1,
+       "name": "q"
+      },
+      {
+       "dim": 2,
+       "name": "r"
+      }
+     ]
+    },
+    "options": [
+     {
+      "series": [
+       {
+        "type": "parallel",
+        "data": [
+         [
+          1,
+          5,
+          2
+         ],
+         [
+          2,
+          4,
+          3
+         ],
+         [
+          3,
+          3,
+          4
+         ],
+         [
+          4,
+          2,
+          5
+         ]
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "type": "parallel",
+        "data": [
+         [
+          4,
+          2,
+          5
+         ],
+         [
+          3,
+          3,
+          4
+         ],
+         [
+          2,
+          4,
+          3
+         ],
+         [
+          1,
+          5,
+          2
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "axisAreaSelect",
+      "parallelAxisIndex": 0,
+      "intervals": [
+       [
+        1,
+        2
+       ]
+      ]
+     },
+     "events": [
+      [
+       0,
+       "axisareaselected",
+       {
+        "type": "axisareaselected",
+        "parallelAxisIndex": 0,
+        "intervals": [
+         [
+          1,
+          2
+         ]
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "covers": [
+      [],
+      [],
+      []
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "timelineChange",
+      "currentIndex": 1
+     },
+     "events": [
+      [
+       0,
+       "timelinechanged",
+       {
+        "currentIndex": 1,
+        "type": "timelinechanged"
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "covers": [
+      [
+       [
+        "4051800000000000",
+        "4061800000000000"
+       ]
+      ],
+      [],
+      []
+     ]
+    }
+   ]
+  },
+  {
+   "id": "b-tl-after-aas",
+   "note": "the same with the timelineChange as a batch: its one update renders every parallelAxis view",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "timeline": {
+      "data": [
+       "t0",
+       "t1"
+      ]
+     },
+     "parallel": {},
+     "parallelAxis": [
+      {
+       "dim": 0,
+       "name": "p"
+      },
+      {
+       "dim": 1,
+       "name": "q"
+      },
+      {
+       "dim": 2,
+       "name": "r"
+      }
+     ]
+    },
+    "options": [
+     {
+      "series": [
+       {
+        "type": "parallel",
+        "data": [
+         [
+          1,
+          5,
+          2
+         ],
+         [
+          2,
+          4,
+          3
+         ],
+         [
+          3,
+          3,
+          4
+         ],
+         [
+          4,
+          2,
+          5
+         ]
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "type": "parallel",
+        "data": [
+         [
+          4,
+          2,
+          5
+         ],
+         [
+          3,
+          3,
+          4
+         ],
+         [
+          2,
+          4,
+          3
+         ],
+         [
+          1,
+          5,
+          2
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "twin": false,
+   "flush": false,
+   "handlers": [],
+   "pre": [],
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "axisAreaSelect",
+      "parallelAxisIndex": 0,
+      "intervals": [
+       [
+        1,
+        2
+       ]
+      ]
+     },
+     "events": [
+      [
+       0,
+       "axisareaselected",
+       {
+        "type": "axisareaselected",
+        "parallelAxisIndex": 0,
+        "intervals": [
+         [
+          1,
+          2
+         ]
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "covers": [
+      [],
+      [],
+      []
+     ]
+    },
+    {
+     "op": "action",
+     "payload": {
+      "type": "timelineChange",
+      "batch": [
+       {
+        "currentIndex": 1
+       },
+       {
+        "currentIndex": 0
+       }
+      ]
+     },
+     "events": [
+      [
+       0,
+       "timelinechanged",
+       {
+        "type": "timelinechanged",
+        "batch": [
+         {
+          "currentIndex": 1,
+          "type": "timelinechanged",
+          "batch": null
+         },
+         {
+          "currentIndex": 0,
+          "type": "timelinechanged",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "covers": [
+      [
+       [
+        "4051800000000000",
+        "4061800000000000"
+       ]
+      ],
+      [],
+      []
+     ]
+    }
+   ]
+  },
+  {
    "id": "b-axisareaselect-covers",
    "note": "axisAreaSelect as a batch: the one update after it renders every parallelAxis view but the first the OUTER payload finds (no query: the first axis) -- that one keeps the covers it had (none)",
    "option": {
@@ -6621,6 +7005,11 @@
    "id": "ta-enters",
    "ok": true,
    "what": "the batch renders once: the second series enters over animationDuration from the frame before the batch"
+  },
+  {
+   "id": "taa-covers-back",
+   "ok": true,
+   "what": "a timelineChange after an axisAreaSelect: every parallelAxis view renders, the named one's covers come back"
   },
   {
    "id": "ac-first-skipped",

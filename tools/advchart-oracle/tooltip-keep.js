@@ -224,6 +224,9 @@ function stateOf(chart, w, def) {
     };
     // [R2-E] the content's text (a template formatter's: plain)
     if (def && def.text) tip.text = vis && c.el ? c.el.style.text : null;
+    // [r2v] its border (setContent's: a written borderColor, else the
+    // item's colour)
+    if (def && def.border) tip.border = vis && c.el ? c.el.style.borderColor : null;
   }
   return { axes, tip };
 }
@@ -515,6 +518,28 @@ const CASES = [
     ],
   },
   {
+    id: 'keep-frozen-unpainted', text: true, note: 'a showTip on another bar and, before any frame, a setOption: the content '
+      + 'element took the new show\'s text at once (setContent), so the frozen box says that one -- not the last one drawn',
+    charts: [barLine({ trigger: 'item', formatter: '{b}: {c}' })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'action', chart: 0, payload: { type: 'showTip', seriesIndex: 0, dataIndex: 2 }, noFrame: true },
+      { op: 'setOption', chart: 0, option: newData },
+      { op: 'idle', ms: 0 },
+    ],
+  },
+  {
+    id: 'keep-frozen-border', text: true, border: true, note: 'an item tooltip and a setOption that colours the series anew: the '
+      + 'frozen box keeps the border its show set (the item\'s old colour) until the keep timer shows it with the new one',
+    charts: [barLine({ trigger: 'item', formatter: '{b}: {c}' }, { series: [{ type: 'bar', data: [3, 5, 2, 6], itemStyle: { color: '#00aa00' } },
+      { type: 'line', data: [1, 4, 3, 2] }] })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'setOption', chart: 0, option: { series: [{ itemStyle: { color: '#ff0000' } }, {}] } },
+      { op: 'idle', ms: 0 },
+    ],
+  },
+  {
     id: 'keep-frozen-axis-text', text: true, note: 'the same under an axis trigger',
     charts: [barLine({ trigger: 'axis', formatter: '{b}: {c0} / {c1}' })],
     steps: [
@@ -685,7 +710,10 @@ function runCase(def) {
         rec.ms = st.ms;
         advanceClock(NOW + st.ms);
       } else throw new OracleError('op ' + st.op);
-      charts.forEach(frame);
+      // [r2v] a step the next one follows before any frame: nothing drawn
+      // between them (the port compares its events only)
+      if (st.noFrame) rec.noFrame = true;
+      else charts.forEach(frame);
       rec.events = log.slice();
       rec.state = charts.map((c, i) => stateOf(c, watch[i], def));
       steps.push(rec);
@@ -694,6 +722,7 @@ function runCase(def) {
     // [R2-E] only the cases that have them
     if (def.ptr) out.ptr = true;
     if (def.text) out.text = true;
+    if (def.border) out.border = true;
     if (initial) out.initial = initial;
     return out;
   } finally {
@@ -758,6 +787,12 @@ function anchors(cases) {
   const unhex = s => { const b = new DataView(new ArrayBuffer(8)); b.setUint32(0, parseInt(s.slice(0, 8), 16)); b.setUint32(4, parseInt(s.slice(8), 16)); return b.getFloat64(0); };
   const kft = cs('keep-frozen-text');
   guard('kft-frozen', tip(kft.steps[1]).text === 'b: 5' && tip(kft.steps[2]).text === 'b: 6', 'frozen: the old text until the keep timer');
+  const kfu = cs('keep-frozen-unpainted');
+  guard('kfu-new-show', tip(kfu.steps[0]).text === 'b: 5' && tip(kfu.steps[2]).text === 'c: 2' && tip(kfu.steps[3]).text === 'c: 3',
+    'the frozen box says the last show\'s text, drawn or not, until the keep timer');
+  const kfb = cs('keep-frozen-border');
+  guard('kfb-kept', tip(kfb.steps[1]).border === tip(kfb.steps[0]).border && tip(kfb.steps[0]).border === '#00aa00'
+    && tip(kfb.steps[2]).border === '#ff0000', 'frozen: the old border until the keep timer');
   const kfa = cs('keep-frozen-axis-text');
   guard('kfa-frozen', tip(kfa.steps[1]).text === 'b: 5 / 4' && tip(kfa.steps[2]).text === 'b: 6 / 5', 'the axis box the same');
   const kfg = cs('keep-frozen-gone');

@@ -251,6 +251,10 @@ function batchCase(id, note, option, payload, extra) {
   return Object.assign({ id, note, option, twin: true, steps: [{ op: 'action', payload }] }, extra || {});
 }
 
+const TL_PAR = { baseOption: { animation: false, timeline: { data: ['t0', 't1'] }, parallel: {},
+  parallelAxis: [{ dim: 0, name: 'p' }, { dim: 1, name: 'q' }, { dim: 2, name: 'r' }] },
+  options: [{ series: [{ type: 'parallel', data: [[1, 5, 2], [2, 4, 3], [3, 3, 4], [4, 2, 5]] }] },
+    { series: [{ type: 'parallel', data: [[4, 2, 5], [3, 3, 4], [2, 4, 3], [1, 5, 2]] }] }] };
 const CASES = [
   // ---------------- batches ----------------
   batchCase('b-legendscroll', 'legendScroll: one event, each item a copy; escapeConnect in the head',
@@ -390,6 +394,15 @@ const CASES = [
       { op: 'idle', ms: 150 },
       { op: 'idle', ms: 1000 },
     ] },
+  { id: 'tl-after-aas', note: 'an axisAreaSelect, then a timelineChange: the select\'s update skips the axis it names (no covers '
+      + 'there); the timeline\'s update (prepareAndUpdate, its own payload) renders every parallelAxis view -- the covers come back',
+    covers: true, option: TL_PAR,
+    steps: [{ op: 'action', payload: { type: 'axisAreaSelect', parallelAxisIndex: 0, intervals: [[1, 2]] } },
+      { op: 'action', payload: { type: 'timelineChange', currentIndex: 1 } }] },
+  { id: 'b-tl-after-aas', note: 'the same with the timelineChange as a batch: its one update renders every parallelAxis view',
+    covers: true, option: TL_PAR,
+    steps: [{ op: 'action', payload: { type: 'axisAreaSelect', parallelAxisIndex: 0, intervals: [[1, 2]] } },
+      { op: 'action', payload: { type: 'timelineChange', batch: [{ currentIndex: 1 }, { currentIndex: 0 }] } }] },
   { id: 'b-axisareaselect-covers', note: 'axisAreaSelect as a batch: the one update after it renders every parallelAxis view but the '
       + 'first the OUTER payload finds (no query: the first axis) -- that one keeps the covers it had (none)', covers: true,
     option: { animation: false, parallelAxis: [{ dim: 0, name: 'p' }, { dim: 1, name: 'q' }, { dim: 2, name: 'r' }],
@@ -732,6 +745,11 @@ function anchors(cases) {
   const ta = cs('b-timeline-anim');
   guard('ta-enters', Math.abs(unhex(ta.steps[0].bars[1][0][3])) === 0 && Math.abs(unhex(ta.steps[1].bars[1][0][3]) + 51 * 0.15) < 1e-9,
     'the batch renders once: the second series enters over animationDuration from the frame before the batch');
+  const taa = cs('tl-after-aas');
+  const btaa = cs('b-tl-after-aas');
+  guard('taa-covers-back', taa.steps[0].covers[0].length === 0 && taa.steps[1].covers[0].length === 1
+    && btaa.steps[0].covers[0].length === 0 && btaa.steps[1].covers[0].length === 1,
+    'a timelineChange after an axisAreaSelect: every parallelAxis view renders, the named one\'s covers come back');
   const ac = cs('b-axisareaselect-covers');
   guard('ac-first-skipped', ac.steps[0].covers[0].length === 0 && ac.steps[0].covers[1].length === 1 && ac.steps[0].covers[2].length === 1,
     'the update after the batch skips the first axis the outer payload finds');

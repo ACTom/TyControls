@@ -778,6 +778,9 @@ end;
 procedure TAdvChartActionsBatchOracleTest.TestAnAxisAreaSelectBatchsCoversAsUpstream;
 begin
   RunCase('b-axisareaselect-covers');
+  { a timelineChange after it (alone, or a batch) renders every view }
+  RunCase('tl-after-aas');
+  RunCase('b-tl-after-aas');
 end;
 
 procedure TAdvChartActionsBatchOracleTest.TestTheOuterPayloadNamesTheSkippedAxisAsUpstream;

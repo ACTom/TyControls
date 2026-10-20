@@ -4278,6 +4278,10 @@ procedure TTyAdvanceChart.TipFreeze;
     i, n: Integer;
     arr: TJSONArray;
   begin
+    { a show since the last paint: setContent and _updatePosition ran at
+      the show upstream -- the box is laid out now, on the build it was
+      shown on, before it is held }
+    if AShown and not ASnap.Frozen and (FTipPaintGen <> FTipShowGen) then TipLayoutNow;
     { the box where the last paint put it: held there until a show places
       it again (the content element keeps its position) }
     if AShown and not ASnap.Frozen and TyRectFIsValid(FTipBox) then
@@ -4320,6 +4324,31 @@ begin
   if FOption = nil then Exit;
   Freeze(FTipSnap, FTipShown);
   Freeze(FTipPend, False);
+end;
+
+procedure TTyAdvanceChart.TipLayoutNow;
+var
+  P: TTyPainter;
+  bmp: TBGRABitmap;
+  R: TRect;
+  m: ITyTextMeasurer;
+begin
+  if (FLastPPI <= 0) or (FBuild = nil) or (csDesigning in ComponentState) then Exit;
+  { the paint's local rect, which the layout was made on }
+  R := Rect(Round(FLastRect.Left), Round(FLastRect.Top), Round(FLastRect.Right),
+    Round(FLastRect.Bottom));
+  if (R.Right <= 0) or (R.Bottom <= 0) then Exit;
+  m := NewTextMeasurer(FLastPPI);
+  bmp := TBGRABitmap.Create(R.Right, R.Bottom);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(nil, R, FLastPPI, bmp);
+    PaintTooltip(P, R, FLastPPI, m);
+    P.EndPaint;
+  finally
+    P.Free;
+    bmp.Free;
+  end;
 end;
 
 procedure TTyAdvanceChart.TipRendered;
@@ -4719,6 +4748,11 @@ end;
 function TTyAdvanceChart.TooltipFormatterText: string;
 begin
   Result := FTipFormatterText;
+end;
+
+function TTyAdvanceChart.TooltipBorderColour: TTyColor;
+begin
+  Result := FTipBorderPainted;
 end;
 
 function TTyAdvanceChart.TooltipShownWhich: string;
@@ -5549,6 +5583,7 @@ begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
   FTipFormatterText := '';
+  FTipBorderPainted := 0;
   { [Batch 100] WHAT IS SHOWN, NOT WHAT IS HOVERED: the box's own state
     decides -- a show waiting out showDelay is not drawn yet, a hide waiting
     out hideDelay still is, at the place and with the content of the show }
@@ -5733,9 +5768,11 @@ begin
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
         describing several series cannot take one of their colours. }
       borderCol := st.BorderColor;
+    FTipBorderPainted := borderCol;
     { [R2-E] what this show says, for a re-render to freeze }
     if not frozenPic then
     begin
+      FTipPaintGen := FTipShowGen;
       FTipLastHas := True;
       FTipLastSpec := spec;
       FTipLastInk := ink;

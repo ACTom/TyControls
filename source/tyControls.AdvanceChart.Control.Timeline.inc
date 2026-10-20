@@ -470,6 +470,9 @@ begin
   begin
     FAnimPending := True;
     FDirty := True;
+    { its update renders every parallelAxis view: the payload is no
+      axisAreaSelect (fromAxisAreaSelect) }
+    FParBrushSkip := -1;
     Invalidate;
     { and rendered now, inside the dispatch, as prepareAndUpdate does: the
       brushSelect its visual stage dispatches goes with the action

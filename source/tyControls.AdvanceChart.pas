@@ -1597,6 +1597,10 @@ type
     FTipCur: TTyTipContent;
     FTipCurDue: Boolean;
     FTipShowGen, FTipPosGen: Integer;
+    { the show the last paint drew (a re-render freezing a show not drawn
+      yet lays its box out first), and the colour it gave the box's border }
+    FTipPaintGen: Integer;
+    FTipBorderPainted: TTyColor;
     { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
     FPtrMemo: array of TTyPtrMemoEntry;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
@@ -3326,6 +3330,8 @@ type
     { [F4b] the snapshots' axes into JSON before their build goes, the box
       held where it was painted }
     procedure TipFreeze;
+    { the box of a show not painted yet, laid out on the build standing }
+    procedure TipLayoutNow;
     { [F4b] TooltipView.render's _keepShow }
     procedure TipRendered;
     { [F4b] a frozen snapshot's axes and element read back from the build
@@ -3645,6 +3651,9 @@ type
       template after the time format and formatTpl, or a handler's answer --
       '' when the box was not drawn or had no formatter. }
     function TooltipFormatterText: string;
+    { THE COLOUR THE LAST PAINT GAVE THE BOX'S BORDER; 0 when no box was
+      drawn }
+    function TooltipBorderColour: TTyColor;
     { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
       px); nil when no box was drawn }
     function TooltipLines: TTyTooltipLineArray;

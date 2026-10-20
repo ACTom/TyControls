@@ -889,6 +889,15 @@ begin
         if leaf.Integers['n'] > 0 then Bad(name + ': upstream grows the clip, the port has no proxy');
         Continue;
       end;
+      { a polar's clip: createPolarClipPath's sector }
+      if leaf.Find('sector') <> nil then
+      begin
+        SameKey(name, p, 'shape.r0', leaf.Find('r0'));
+        SameKey(name, p, 'shape.r', leaf.Find('r'));
+        SameKey(name, p, 'shape.startAngle', leaf.Find('startAngle'));
+        SameKey(name, p, 'shape.endAngle', leaf.Find('endAngle'));
+        Continue;
+      end;
       SameKey(name, p, 'shape.x', leaf.Find('x'));
       SameKey(name, p, 'shape.y', leaf.Find('y'));
       SameKey(name, p, 'shape.width', leaf.Find('width'));

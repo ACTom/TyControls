@@ -43,7 +43,7 @@ type
     FReport, FWhere: string;
     FLog: TStrings;
     FSkipRows: Boolean;
-    FText, FPtr: Boolean;
+    FText, FPtr, FBorder: Boolean;
     procedure Bad(const AWhat: string);
     procedure Same(const AWhat: string; AGot: Double; const AHex: string);
     procedure Finish(const AWhat: string);
@@ -345,7 +345,8 @@ var
   shown: Boolean;
   box: TTyRectF;
   at: TTyPointF;
-  who: string;
+  who, bs: string;
+  bc: TTyColor;
 begin
   who := 'chart ' + IntToStr(AIndex);
   hits := AChart.Hits;
@@ -419,6 +420,15 @@ begin
       Bad(Format('%s: the box says %s, upstream %s', [who, TTkProbe(AChart).TooltipFormatterText,
         tip.Strings['text']]));
   end;
+  { [r2v] its border colour (setContent's), as '#rrggbb' }
+  if FBorder and (tip.Find('border') <> nil) and (tip.Find('border').JSONType = jtString) then
+  begin
+    Inc(FCompared);
+    bc := TTkProbe(AChart).TooltipBorderColour;
+    bs := LowerCase(Format('#%.2x%.2x%.2x', [TyRedOf(bc), TyGreenOf(bc), TyBlueOf(bc)]));
+    if bs <> tip.Strings['border'] then
+      Bad(Format('%s: the box border is %s, upstream %s', [who, bs, tip.Strings['border']]));
+  end;
 end;
 
 procedure TAdvChartTooltipKeepOracleTest.RunCase(const AId: string);
@@ -429,6 +439,7 @@ var
   i, j, c: Integer;
   op: string;
   now_: Double;
+  noFrame: Boolean;
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
   cs := nil;
@@ -440,6 +451,7 @@ begin
   for i := 0 to High(probes) do probes[i] := nil;
   FSkipRows := False;
   FText := (cs.Find('text') <> nil) and cs.Booleans['text'];
+  FBorder := (cs.Find('border') <> nil) and cs.Booleans['border'];
   FPtr := (cs.Find('ptr') <> nil) and cs.Booleans['ptr'];
   try
     for i := 0 to charts.Count - 1 do
@@ -483,11 +495,15 @@ begin
       end
       else if op = 'setOption' then
         probes[c].SetOption(st.Objects['option'].AsJSON, st.Booleans['notMerge']);
-      for i := 0 to High(probes) do
-        probes[i].Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+      { a step the next one follows before any frame: its events alone }
+      noFrame := (st.Find('noFrame') <> nil) and st.Booleans['noFrame'];
+      if not noFrame then
+        for i := 0 to High(probes) do
+          probes[i].Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
       CompareEvents(st.Arrays['events']);
-      for i := 0 to High(probes) do
-        CompareState(probes[i], st.Arrays['state'].Objects[i], i);
+      if not noFrame then
+        for i := 0 to High(probes) do
+          CompareState(probes[i], st.Arrays['state'].Objects[i], i);
     end;
   finally
     for i := 0 to High(probes) do probes[i].Free;
@@ -578,6 +594,10 @@ end;
 procedure TAdvChartTooltipKeepOracleTest.TestTheFrozenBoxKeepsItsTextAsUpstream;
 begin
   RunCase('keep-frozen-text');
+  { the series coloured anew meanwhile: the frozen box keeps its border }
+  RunCase('keep-frozen-border');
+  { a show not drawn yet when the re-render freezes the box: its text }
+  RunCase('keep-frozen-unpainted');
 end;
 
 procedure TAdvChartTooltipKeepOracleTest.TestTheFrozenAxisBoxKeepsItsTextAsUpstream;
