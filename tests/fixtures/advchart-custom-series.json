@@ -1457,6 +1457,706 @@
    "fails": []
   },
   {
+   "id": "richlabel",
+   "group": "shape",
+   "note": "[r2v] api.style's label rich (createTextStyle's setTokenTextStyle): a token without fontSize / fontWeight / fontStyle / fontFamily takes the plain label's (richInheritPlainLabel), one with its own keeps it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "custom",
+      "renderItem": "@gantt",
+      "encode": {
+       "x": [
+        1,
+        2
+       ],
+       "y": 0
+      },
+      "label": {
+       "show": true,
+       "fontSize": 20,
+       "fontWeight": "bold",
+       "fontStyle": "italic",
+       "fontFamily": "serif",
+       "formatter": "{a|x}{b|y}",
+       "rich": {
+        "a": {
+         "color": "#ff0000"
+        },
+        "b": {
+         "fontSize": 9,
+         "color": "#0000ff"
+        }
+       }
+      },
+      "data": [
+       [
+        0,
+        1,
+        5
+       ],
+       [
+        1,
+        3,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "3ff0000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4055400000000000",
+          "4071800000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4014000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4067200000000000",
+          "4071800000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "0000000000000000",
+          "4064000000000000"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "italic",
+          "fontWeight": "bold",
+          "fontSize": "4034000000000000",
+          "fontFamily": "serif",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "text": "{a|x}{b|y}",
+          "rich": {
+           "a": {
+            "fill": "#ff0000",
+            "fontStyle": "italic",
+            "fontWeight": "bold",
+            "fontSize": "4034000000000000",
+            "fontFamily": "serif",
+            "textFill": "#ff0000"
+           },
+           "b": {
+            "fill": "#0000ff",
+            "fontStyle": "italic",
+            "fontWeight": "bold",
+            "fontSize": "4022000000000000",
+            "fontFamily": "serif",
+            "textFill": "#0000ff"
+           }
+          },
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4055400000000000",
+         "y": "406d000000000000",
+         "width": "4059000000000000",
+         "height": "4058000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "italic",
+         "fontWeight": "bold",
+         "fontSize": "4034000000000000",
+         "fontFamily": "serif",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "text": "{a|x}{b|y}",
+         "rich": {
+          "a": {
+           "fill": "#ff0000",
+           "fontStyle": "italic",
+           "fontWeight": "bold",
+           "fontSize": "4034000000000000",
+           "fontFamily": "serif",
+           "textFill": "#ff0000"
+          },
+          "b": {
+           "fill": "#0000ff",
+           "fontStyle": "italic",
+           "fontWeight": "bold",
+           "fontSize": "4022000000000000",
+           "fontFamily": "serif",
+           "textFill": "#0000ff"
+          }
+         },
+         "legacy": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "gantt",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "y": [
+          0
+         ],
+         "x": [
+          1,
+          2
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4008000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4060e00000000000",
+          "405e000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "4022000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4022000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4071d00000000000",
+          "405e000000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "0000000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "0000000000000000",
+          "4064000000000000"
+         ]
+        },
+        {
+         "fn": "style",
+         "args": [],
+         "ret": {
+          "fill": "#5470c6",
+          "textPosition": "inside",
+          "textDistance": "4014000000000000",
+          "fontStyle": "italic",
+          "fontWeight": "bold",
+          "fontSize": "4034000000000000",
+          "fontFamily": "serif",
+          "textFill": "#fff",
+          "textStroke": "#5470c6",
+          "textStrokeWidth": "4000000000000000",
+          "text": "{a|x}{b|y}",
+          "rich": {
+           "a": {
+            "fill": "#ff0000",
+            "fontStyle": "italic",
+            "fontWeight": "bold",
+            "fontSize": "4034000000000000",
+            "fontFamily": "serif",
+            "textFill": "#ff0000"
+           },
+           "b": {
+            "fill": "#0000ff",
+            "fontStyle": "italic",
+            "fontWeight": "bold",
+            "fontSize": "4022000000000000",
+            "fontFamily": "serif",
+            "textFill": "#0000ff"
+           }
+          },
+          "legacy": true
+         }
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "shape": {
+         "x": "4060e00000000000",
+         "y": "4052000000000000",
+         "width": "4062c00000000000",
+         "height": "4058000000000000"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "textPosition": "inside",
+         "textDistance": "4014000000000000",
+         "fontStyle": "italic",
+         "fontWeight": "bold",
+         "fontSize": "4034000000000000",
+         "fontFamily": "serif",
+         "textFill": "#fff",
+         "textStroke": "#5470c6",
+         "textStrokeWidth": "4000000000000000",
+         "text": "{a|x}{b|y}",
+         "rich": {
+          "a": {
+           "fill": "#ff0000",
+           "fontStyle": "italic",
+           "fontWeight": "bold",
+           "fontSize": "4034000000000000",
+           "fontFamily": "serif",
+           "textFill": "#ff0000"
+          },
+          "b": {
+           "fill": "#0000ff",
+           "fontStyle": "italic",
+           "fontWeight": "bold",
+           "fontSize": "4022000000000000",
+           "fontFamily": "serif",
+           "textFill": "#0000ff"
+          }
+         },
+         "legacy": true
+        }
+       }
+      }
+     ],
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4055400000000000",
+        "y": "406d000000000000",
+        "width": "4059000000000000",
+        "height": "4058000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4055400000000000",
+        "406d000000000000",
+        "4059000000000000",
+        "4058000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "4060e00000000000",
+         "4071800000000000"
+        ],
+        "inner": {
+         "x": "4060e00000000000",
+         "y": "4071800000000000",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": "{a|x}{b|y}",
+         "font": "italic bold 20px serif",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [
+         {
+          "k": "t",
+          "text": "x",
+          "x": "c002000000000000",
+          "y": "0000000000000000",
+          "font": "italic bold 20px serif",
+          "align": "center",
+          "base": "middle",
+          "fill": "#ff0000",
+          "stroke": "#5470c6",
+          "lineWidth": "4000000000000000",
+          "opacity": "3ff0000000000000"
+         },
+         {
+          "k": "t",
+          "text": "y",
+          "x": "4014000000000000",
+          "y": "0000000000000000",
+          "font": "italic bold 9px serif",
+          "align": "center",
+          "base": "middle",
+          "fill": "#0000ff",
+          "stroke": "#5470c6",
+          "lineWidth": "4000000000000000",
+          "opacity": "3ff0000000000000"
+         }
+        ],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "x": "4060e00000000000",
+        "y": "4052000000000000",
+        "width": "4062c00000000000",
+        "height": "4058000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4060e00000000000",
+        "4052000000000000",
+        "4062c00000000000",
+        "4058000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": {
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "406a400000000000",
+         "405e000000000000"
+        ],
+        "inner": {
+         "x": "406a400000000000",
+         "y": "405e000000000000",
+         "rotation": "0000000000000000",
+         "originX": "0000000000000000",
+         "originY": "0000000000000000"
+        },
+        "def": {
+         "fill": "#eee",
+         "stroke": "#5470c6",
+         "autoStroke": true,
+         "align": "center",
+         "verticalAlign": "middle"
+        },
+        "style": {
+         "text": "{a|x}{b|y}",
+         "font": "italic bold 20px serif",
+         "fill": "#fff",
+         "stroke": "#5470c6",
+         "lineWidth": "4000000000000000",
+         "align": null,
+         "verticalAlign": null,
+         "x": null,
+         "y": null,
+         "opacity": "3ff0000000000000"
+        },
+        "pieces": [
+         {
+          "k": "t",
+          "text": "x",
+          "x": "c002000000000000",
+          "y": "0000000000000000",
+          "font": "italic bold 20px serif",
+          "align": "center",
+          "base": "middle",
+          "fill": "#ff0000",
+          "stroke": "#5470c6",
+          "lineWidth": "4000000000000000",
+          "opacity": "3ff0000000000000"
+         },
+         {
+          "k": "t",
+          "text": "y",
+          "x": "4014000000000000",
+          "y": "0000000000000000",
+          "font": "italic bold 9px serif",
+          "align": "center",
+          "base": "middle",
+          "fill": "#0000ff",
+          "stroke": "#5470c6",
+          "lineWidth": "4000000000000000",
+          "opacity": "3ff0000000000000"
+         }
+        ],
+        "z": "4000000000000000",
+        "z2": "4000000000000000",
+        "zlevel": "0000000000000000",
+        "ignore": false,
+        "silent": true
+       },
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s0:0#label",
+      "s0:1#label"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
+  },
+  {
    "id": "errorbar",
    "group": "shape",
    "note": "error bars: a group of three lines per item, api.visual(color), a category x axis (api.size along it)",
@@ -16029,6 +16729,10 @@
    "ok": true
   },
   {
+   "name": "richlabel: every record matches its recipe",
+   "ok": true
+  },
+  {
    "name": "errorbar: every record matches its recipe",
    "ok": true
   },
@@ -16114,6 +16818,10 @@
   },
   {
    "name": "a category band is the size along it",
+   "ok": true
+  },
+  {
+   "name": "[r2v] a rich token takes the plain label's fontSize where it has none",
    "ok": true
   },
   {

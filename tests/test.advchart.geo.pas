@@ -42,6 +42,8 @@ type
     function LinInv(AX, AY: Double; out ARX, ARY: Double): Boolean;
     function Cut(AX, AY: Double; out ARX, ARY: Double): Boolean;
     function CutInv(AX, AY: Double; out ARX, ARY: Double): Boolean;
+    { [r2v] no point north of 40 (case 'cut-label') }
+    function Cut40(AX, AY: Double; out ARX, ARY: Double): Boolean;
   end;
 
   TAdvChartGeoOracleTest = class(TTestCase)
@@ -164,6 +166,13 @@ begin
   Result := True;
 end;
 
+function TGeoProjections.Cut40(AX, AY: Double; out ARX, ARY: Double): Boolean;
+begin
+  ARX := AX;
+  ARY := -AY;
+  Result := not (AY > 40);
+end;
+
 { ==================== helpers ==================== }
 
 function FixturePath(const AName: string): string;
@@ -222,6 +231,7 @@ begin
   TyChartRegisterGeoProjection('linInv', @FProj.LinInv);
   TyChartRegisterGeoProjection('cut', @FProj.Cut);
   TyChartRegisterGeoProjection('cutInv', @FProj.CutInv);
+  TyChartRegisterGeoProjection('cut40', @FProj.Cut40);
   { [R2-J2] d3-geo's geoAlbersUsa, the demo's transcription (case
     'albers-usa') }
   TyChartRegisterGeoProjection('albersUsa', @AlbersUsa.Project);

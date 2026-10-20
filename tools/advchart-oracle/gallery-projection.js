@@ -45,6 +45,25 @@ function hex(v) {
   return bits.getUint32(0).toString(16).padStart(8, '0') + bits.getUint32(4).toString(16).padStart(8, '0');
 }
 
+function epsilonBand() {
+  const k = 1070, x = 480, y = 250, eps = 1e-6;
+  const alaska = d3.geoConicEqualArea().rotate([154, 0]).center([-2, 58.5]).parallels([55, 65])
+    .scale(k * 0.35).translate([x - 0.307 * k, y + 0.201 * k]);
+  const hawaii = d3.geoConicEqualArea().rotate([157, 0]).center([-3, 19.9]).parallels([8, 18])
+    .scale(k).translate([x - 0.205 * k, y + 0.212 * k]);
+  const out = [];
+  for (const [inset, x0, y0, x1, y1] of [
+    [alaska, x - 0.425 * k, y + 0.120 * k, x - 0.214 * k, y + 0.234 * k],
+    [hawaii, x - 0.214 * k, y + 0.166 * k, x - 0.115 * k, y + 0.234 * k]]) {
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    for (const d of [eps / 2, -eps / 2, 2 * eps]) {
+      out.push(inset.invert([x0 + d, my]), inset.invert([x1 - d, my]),
+        inset.invert([mx, y0 + d]), inset.invert([mx, y1 - d]));
+    }
+  }
+  return out;
+}
+
 function generate() {
   const projection = d3.geoAlbersUsa();
   const project = [];
@@ -59,6 +78,14 @@ function generate() {
   const extra = [[-155.5828, 19.8968], [-149.9003, 61.2181], [-66.1057, 18.4655], [-77.0369, 38.9072],
     [-122.4194, 37.7749], [-70.0, 43.123456789], [-171.3, 63.8], [-160.1, 21.9], [-67.0, 44.9]];
   for (const q of extra) {
+    const p = projection(q);
+    project.push([hex(q[0]), hex(q[1]), p ? hex(p[0]) : null, p ? hex(p[1]) : null]);
+  }
+  // [r2v] points whose inset projection lands in the epsilon band of the
+  // Alaska and Hawaii clip extents (albersUsa pulls each extent in by 1e-6):
+  // the inset's own projection inverted at half an epsilon inside and
+  // outside every edge, and two epsilons in
+  for (const q of epsilonBand()) {
     const p = projection(q);
     project.push([hex(q[0]), hex(q[1]), p ? hex(p[0]) : null, p ? hex(p[1]) : null]);
   }

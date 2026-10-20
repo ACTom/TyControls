@@ -251,6 +251,8 @@ const PROJ = {
   // no point north of 45
   cut: p => (p[1] > 45 ? null : [p[0], -p[1]]),
   cutInv: p => [p[0], -p[1]],
+  // [r2v] no point north of 40
+  cut40: p => (p[1] > 40 ? null : [p[0], -p[1]]),
 };
 function withProjections(option) {
   const o = JSON.parse(JSON.stringify(option));
@@ -328,6 +330,9 @@ const CASES = [
   { id: 'albers-usa-label', note: '[R2-J3] the same with the labels shown: Puerto Rico has no centre, so its label stays at textConfig.position inside -- the middle of its (empty) path box through the group transform', maps: [M('usaplain', 'usa')],
     option: { geo: { map: 'usaplain', label: { show: true }, left: 100, top: 50, width: 400, height: 250, zoom: 1.5,
       projection: { project: '@albersUsa', unproject: '@albersUsaInv' } } } },
+  { id: 'cut-label', note: '[r2v] labels under a projection that drops every point north of 40 (the centre of Kyrgyzstan is at 41.5, its south edge at 39.2): a region whose centre is north of it and part of whose outline is south has no centre but a drawn box -- its inside label the middle of that box, both ways', maps: [M('world', 'world')],
+    option: { geo: { map: 'world', label: { show: true }, left: 0, top: 0, width: 600, height: 400,
+      projection: { project: '@cut40', unproject: '@cutInv' } } } },
   { id: 'center-zoom', note: 'center and zoom from the option; percentages of the data rect; scaleLimit clamping the zoom', maps: [M('usa', 'usa', USA_SPECIAL)],
     option: { geo: [
       { map: 'usa', center: [-100, 40], zoom: 2, left: 0, top: 0, width: 400, height: 300 },

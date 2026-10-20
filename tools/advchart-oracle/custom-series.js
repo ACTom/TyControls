@@ -723,6 +723,12 @@ add('shape', 'gantt', "gantt bars: api.value / coord / size (a category band) / 
       encode: { x: [1, 2], y: 0, tooltip: [1, 2] }, dimensions: ['row', 'start', 'end', 'job'],
       data: [[0, 1, 5, 'a1'], [1, 3, 9, 'b1'], { value: [2, 6, 15, 'c1'], itemStyle: { color: '#ee6666' } }, [0, 10, 18, 'a2']] }] },
   { steps: [{ move: 's0:1' }, { move: 's0:2' }, { leave: true }] });
+add('shape', 'richlabel', "[r2v] api.style's label rich (createTextStyle's setTokenTextStyle): a token without fontSize / fontWeight / fontStyle / fontFamily takes the plain label's (richInheritPlainLabel), one with its own keeps it",
+  { yAxis: { type: 'category', data: ['A', 'B'] }, xAxis: { type: 'value', min: 0, max: 20 },
+    series: [{ type: 'custom', renderItem: '@gantt', encode: { x: [1, 2], y: 0 },
+      label: { show: true, fontSize: 20, fontWeight: 'bold', fontStyle: 'italic', fontFamily: 'serif', formatter: '{a|x}{b|y}',
+        rich: { a: { color: '#ff0000' }, b: { fontSize: 9, color: '#0000ff' } } },
+      data: [[0, 1, 5], [1, 3, 9]] }] });
 add('shape', 'errorbar', 'error bars: a group of three lines per item, api.visual(color), a category x axis (api.size along it)',
   { xAxis: { type: 'category', data: ['m', 't', 'w', 'r'] }, yAxis: { type: 'value' },
     series: [{ type: 'custom', renderItem: '@errorbar', encode: { x: 0, y: [1, 2] },
@@ -859,6 +865,9 @@ function guards(out) {
   guard('api.style is legacy and carries the series opacity', apiOf(call('gantt', 0, 0), 'style')[0].ret.legacy === true
     && num(apiOf(call('gantt', 0, 0), 'style')[0].ret.opacity) === 0.8);
   guard('a category band is the size along it', num(apiOf(g0, 'size')[0].ret[1]) > 50);
+  guard("[r2v] a rich token takes the plain label's fontSize where it has none",
+    num(apiOf(call('richlabel', 0, 0), 'style')[0].ret.rich.a.fontSize) === 20
+    && num(apiOf(call('richlabel', 0, 0), 'style')[0].ret.rich.b.fontSize) === 9);
   guard('the ec4 style made a silent label', el('gantt', 's0:0').label && el('gantt', 's0:0').label.silent);
   const gt = cs('gantt').states[1];
   guard('the tooltip names the hovered row with both encoded values', gt.tooltip.shown && gt.hover.dataIndex === 1
