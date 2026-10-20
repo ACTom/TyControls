@@ -1941,6 +1941,215 @@
      "raw": "6"
     }
    ]
+  },
+  {
+   "id": "barItemLong",
+   "note": "[R2-I4] bars: the series' border #000 at 2, dashed; item 0 its own borderType of six numbers, item 1 of five; item 2 its own borderColor a linear gradient; item 3 a radial one at width 3 with its own dotted -- the store kept neither",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderType": "dashed"
+      },
+      "data": [
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderType": [
+          6,
+          2,
+          3,
+          1,
+          2,
+          4
+         ]
+        }
+       },
+       {
+        "value": 7,
+        "itemStyle": {
+         "borderType": [
+          5,
+          1,
+          1,
+          1,
+          1
+         ]
+        }
+       },
+       {
+        "value": 3,
+        "itemStyle": {
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 4,
+        "itemStyle": {
+         "borderWidth": 3,
+         "borderType": "dotted",
+         "borderColor": {
+          "type": "radial",
+          "x": 0.5,
+          "y": 0.5,
+          "r": 0.5,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#00ff00"
+           },
+           {
+            "offset": 1,
+            "color": "#ff00ff"
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4018000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "3ff0000000000000",
+      "4000000000000000",
+      "4010000000000000"
+     ],
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4018000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "3ff0000000000000",
+      "4000000000000000",
+      "4010000000000000"
+     ],
+     "stroke": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4014000000000000",
+      "3ff0000000000000",
+      "3ff0000000000000",
+      "3ff0000000000000",
+      "3ff0000000000000"
+     ],
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4014000000000000",
+      "3ff0000000000000",
+      "3ff0000000000000",
+      "3ff0000000000000",
+      "3ff0000000000000"
+     ],
+     "stroke": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "lineWidth": "4000000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4020000000000000",
+      "4010000000000000"
+     ],
+     "strokeGrad": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "r": null,
+      "global": false,
+      "stops": [
+       [
+        0,
+        "#ff0000"
+       ],
+       [
+        1,
+        "#0000ff"
+       ]
+      ]
+     }
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 3,
+     "lineWidth": "4008000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "0000000000000000",
+     "pattern": [
+      "4008000000000000"
+     ],
+     "strokeGrad": {
+      "type": "radial",
+      "x": 0.5,
+      "y": 0.5,
+      "x2": null,
+      "y2": null,
+      "r": 0.5,
+      "global": false,
+      "stops": [
+       [
+        0,
+        "#00ff00"
+       ],
+       [
+        1,
+        "#ff00ff"
+       ]
+      ]
+     }
+    }
+   ]
   }
  ],
  "maps": [
@@ -2020,6 +2229,10 @@
   },
   {
    "name": "svgGeo: the strings 3, -2 and 6",
+   "ok": true
+  },
+  {
+   "name": "barItemLong: six and five numbers as written, a linear and a radial pen",
    "ok": true
   }
  ]

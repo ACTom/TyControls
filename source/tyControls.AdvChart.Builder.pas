@@ -2187,7 +2187,12 @@ end;
   the path and its position (`symbolSize.0`, `symbolSize.1`), never under the
   path itself: a reader of the scalar form still finds nothing, and one that
   knows the pair form asks for the positions. Upstream's visual reads the
-  row's own array through getShallow (visual/symbol.ts). }
+  row's own array through getShallow (visual/symbol.ts).
+
+  [R2-I4] A DASH ARRAY (a `borderType` or a `type` leaf) of scalars is kept
+  at every length: getItemStyle hands the item's array to the canvas as it
+  is, five numbers or fifty. [Was: one to four, a longer one dropped -- the
+  item drew the series' dash.] }
 procedure CollectOverrides(AObj: TJSONObject; AStore: TTyDataStore;
   ARawIndex: Integer; const APrefix: string; ADepth: Integer);
 var
@@ -2212,8 +2217,10 @@ begin
         AStore.SetOverride(ARawIndex, TyOverrideKey(path), CellValue(child));
       jtArray:
         begin
-          { [F3d] one to four scalars, item by item }
-          scalars := (child.Count >= 1) and (child.Count <= 4);
+          { [F3d] one to four scalars, item by item; [R2-I4] a dash's at
+            any length }
+          scalars := (child.Count >= 1) and ((child.Count <= 4)
+            or (key = 'borderType') or (key = 'type'));
           for k := 0 to child.Count - 1 do
             if not (child.Items[k].JSONType in [jtNumber, jtString, jtBoolean]) then
               scalars := False;

@@ -54,6 +54,9 @@ type
     procedure TestTheGraphicTextsAreUpstreams;
     procedure TestTheGalleryAnimationIsUpstreams;
     procedure TestTheSeriesDashesAreUpstreams;
+  private
+    procedure CheckGradient(const AWhat: string; const AGot: TTyChartGradient;
+      AWant: TJSONObject);
   end;
 
   { What the dashes draw. }
@@ -368,6 +371,57 @@ begin
     Bad(Format('%s: phase %.17g, upstream %.17g', [AWhat, AOffset, wantOff]));
 end;
 
+{ [R2-I4] a gradient pen against the record: type, x, y, x2, y2 (linear) or
+  r (radial), global, and the stops in order }
+procedure TAdvChartTextDashOracleTest.CheckGradient(const AWhat: string;
+  const AGot: TTyChartGradient; AWant: TJSONObject);
+var
+  stops, st: TJSONArray;
+  q: Integer;
+  c: TTyChartColor;
+begin
+  Inc(FCompared);
+  if AWant.Strings['type'] = 'radial' then
+  begin
+    if AGot.Kind <> cgkRadial then
+    begin
+      Bad(AWhat + ': not a radial pen');
+      Exit;
+    end;
+    if (AGot.X <> AWant.Floats['x']) or (AGot.Y <> AWant.Floats['y'])
+      or (AGot.R <> AWant.Floats['r']) then
+      Bad(Format('%s: radial (%g, %g, %g), upstream %s', [AWhat, AGot.X, AGot.Y, AGot.R,
+        AWant.AsJSON]));
+  end
+  else
+  begin
+    if AGot.Kind <> cgkLinear then
+    begin
+      Bad(AWhat + ': not a linear pen');
+      Exit;
+    end;
+    if (AGot.X <> AWant.Floats['x']) or (AGot.Y <> AWant.Floats['y'])
+      or (AGot.X2 <> AWant.Floats['x2']) or (AGot.Y2 <> AWant.Floats['y2']) then
+      Bad(Format('%s: linear (%g, %g, %g, %g), upstream %s', [AWhat, AGot.X, AGot.Y,
+        AGot.X2, AGot.Y2, AWant.AsJSON]));
+  end;
+  if AGot.Global <> AWant.Booleans['global'] then Bad(AWhat + ': global differs');
+  stops := AWant.Arrays['stops'];
+  if Length(AGot.Stops) <> stops.Count then
+  begin
+    Bad(Format('%s: %d stops, upstream %d', [AWhat, Length(AGot.Stops), stops.Count]));
+    Exit;
+  end;
+  for q := 0 to stops.Count - 1 do
+  begin
+    st := TJSONArray(stops.Items[q]);
+    if not TyTryParseChartColor(st.Strings[1], c) or (AGot.Stops[q].Color <> c)
+      or (AGot.Stops[q].Offset <> st.Floats[0]) then
+      Bad(Format('%s: stop %d (%g, %s), upstream %s', [AWhat, q, AGot.Stops[q].Offset,
+        IntToHex(AGot.Stops[q].Color, 8), st.AsJSON]));
+  end;
+end;
+
 procedure TAdvChartTextDashOracleTest.TestTheSeriesDashesAreUpstreams;
 var
   cases, items, maps: TJSONArray;
@@ -549,6 +603,9 @@ begin
             Bad(Format('%s: stroke %s, upstream %s', [what, IntToHex(el.Style.StrokeColor, 8),
               it.Strings['stroke']]));
         end;
+        { [R2-I4] a pen that is a gradient: its kind, its numbers, its stops }
+        if (it.Find('strokeGrad') <> nil) and (it.Find('strokeGrad').JSONType = jtObject) then
+          CheckGradient(what, el.Style.StrokeGradient, it.Objects['strokeGrad']);
         Inc(seen);
       end;
     end;

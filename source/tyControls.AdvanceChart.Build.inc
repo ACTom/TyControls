@@ -817,6 +817,7 @@ var
   k, n: Integer;
   any: Boolean;
   oc: TTyOptColor;
+  st: TTyOptStyle;
 begin
   Result := nil;
   if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
@@ -840,6 +841,15 @@ begin
         FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
         FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
       end;
+      { [R2-I4] and its own border colour when that is a gradient }
+      st := TyReadOptStyle(RawItemNode(ASlot, k), 'itemStyle');
+      if st.BorderColor.Written and not st.BorderColor.IsNone and not st.BorderColor.IsAuto
+        and (st.BorderColor.Gradient.Kind <> cgkNone) then
+      begin
+        FRowObjFills[ASlot][k].StrokeObjSet := True;
+        FRowObjFills[ASlot][k].StrokeObjSolid := st.BorderColor.Color;
+        FRowObjFills[ASlot][k].StrokeObjGradient := st.BorderColor.Gradient;
+      end;
     end;
     FRowObjDone[ASlot] := True;
   end;
@@ -861,6 +871,13 @@ begin
       Result[k].ObjSolid := FRowObjFills[ASlot][k].ObjSolid;
       Result[k].ObjGradient := FRowObjFills[ASlot][k].ObjGradient;
       Result[k].ObjPattern := FRowObjFills[ASlot][k].ObjPattern;
+      any := True;
+    end;
+    if FRowObjFills[ASlot][k].StrokeObjSet then
+    begin
+      Result[k].StrokeObjSet := True;
+      Result[k].StrokeObjSolid := FRowObjFills[ASlot][k].StrokeObjSolid;
+      Result[k].StrokeObjGradient := FRowObjFills[ASlot][k].StrokeObjGradient;
       any := True;
     end;
   end;

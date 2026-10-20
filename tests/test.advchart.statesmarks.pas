@@ -27,6 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.JsMath,
      tyControls.AdvChart.Anim, tyControls.AdvChart.AnimView,
      tyControls.AdvChart.States, tyControls.AdvChart.Events, tyControls.AdvanceChart,
+     tyControls.AdvChart.Handlers,
      tyControls.FontUnits,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -52,6 +53,8 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Handle(Sender: TObject; const AEvent: TTyChartEvent);
+    { [R2-I4] the oracle's '@mkWords' }
+    function MkWords(const AParams: TTyChartParams): string;
   end;
 
   TAdvChartStatesMarksOracleTest = class(TTestCase)
@@ -68,6 +71,8 @@ type
     FHiddenPlaces: Integer;
     { [R2-I3] text boxes and dashes compared }
     FBoxes, FDashes: Integer;
+    { [R2-I4] a state's words compared }
+    FWords: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -111,6 +116,9 @@ type
     { [R2-I1] }
     procedure TestAHoveredMarkerLabelIsLaidOutByItsEmphasisTextConfig;
     procedure TestATreeEdgeIsATargetOfNoData;
+    { [R2-I4] }
+    procedure TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
+    procedure TestARestDashWordTakesTheStatesWidthWithoutProxies;
   end;
 
 implementation
@@ -297,6 +305,12 @@ begin
   end;
 end;
 
+function TSkLogger.MkWords(const AParams: TTyChartParams): string;
+begin
+  Result := AParams[0].ComponentType + ':' + AParams[0].Name + ':' + AParams[0].Status
+    + ':' + IntToStr(AParams[0].DataIndex);
+end;
+
 function JsonText(AData: TJSONData): string;
 begin
   if AData = nil then Result := '(none)' else Result := AData.AsJSON;
@@ -365,6 +379,7 @@ begin
   end;
   FChart := nil;
   FLogger := TSkLogger.Create;
+  TyChartRegisterFormatter('mkWords', @FLogger.MkWords);
   FSeen := TStringList.Create;
   FTally := TStringList.Create;
 end;
@@ -378,6 +393,7 @@ begin
   FreeAndNil(FCtl);
   FreeAndNil(FBmp);
   FreeAndNil(FMeasure);
+  TyChartUnregisterFormatter('mkWords');
   FreeAndNil(FLogger);
   inherited TearDown;
 end;
@@ -708,6 +724,14 @@ begin
       and ColourOf(v.AsString, cf) and (el.Caption.Colour <> cf) then
       Miss(Format('%s %s: ink %s, upstream %s', [AWhere, part,
         IntToHex(el.Caption.Colour, 8), v.AsString]), AWhere + part + 'ink');
+    { [R2-I4] A words case: the text the state shows (its formatter's) }
+    if not el.Ignore and ValueAt(AEl, 'txt', ASample, v) then
+    begin
+      Inc(FWords);
+      if el.Caption.Text <> v.AsString then
+        Miss(Format('%s %s: text "%s", upstream "%s"', [AWhere, part, el.Caption.Text,
+          v.AsString]), AWhere + part + 'txt');
+    end;
     { [R2-I3] A textBox case: the merged style's size, the alignment the
       style says, and the box through the transform -- the text as the
       state lays it out }
@@ -1002,11 +1026,11 @@ begin
     Fail(Format('%d mismatches over %d samples (%s):%s', [FBad, FCompared,
       FTally.CommaText, FReport]));
   AssertTrue(Format('keys compared: %d, tracked %d, events %d, marker samples %d, '
-    + 'hidden labels shown %d, text boxes %d, dashes %d',
+    + 'hidden labels shown %d, text boxes %d, dashes %d, words %d',
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FHiddenPlaces,
-      FBoxes, FDashes]),
+      FBoxes, FDashes, FWords]),
     (FEventsCompared > 30) and (FMarksCompared > 1000) and (FHiddenPlaces > 20)
-    and (FBoxes > 100) and (FDashes > 50));
+    and (FBoxes > 100) and (FDashes > 50) and (FWords > 100));
 end;
 
 { ==================== by hand ==================== }
@@ -1262,6 +1286,93 @@ begin
     AssertEquals(parts[k] + ' ink', IntToHex(want[k].Caption.Colour, 8), IntToHex(got[k].Caption.Colour, 8));
   end;
   AssertTrue('the turn is the config''s', Abs(got[0].Caption.RotationRad) > 0.5);
+end;
+
+{ [R2-I4] THE LINE GROUP'S BOX UNDER AN EMPHASIS POSITION (R2-I3's
+  EmphLinePlace), at 96 and at 192 PPI: an end symbol has no strokeNoScale,
+  so its box grows by its pen in its own coordinates -- the logical 2 of an
+  emptyCircle, which the port's device units make 2 x the scale; the line
+  (strokeNoScale, a line scale of 1) by max(width, 5) logical, scaled the
+  same. A word calculateTextPosition does not know ('start') leaves the
+  label's anchor on the box's corner. [Was: the symbol's pen and the line's
+  floor taken in device px -- a 1 px and a 2.5 px short corner at 192.] }
+procedure TAdvChartStatesMarksTest.TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
+const
+  cOpt = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[5,30,12],'
+    + '"markLine":{"symbol":["emptyCircle","emptyCircle"],"symbolSize":10,"lineStyle":{"width":1},'
+    + '"emphasis":{"lineStyle":{"width":2},"label":{"position":"start"}},'
+    + '"data":[{"yAxis":20,"name":"ring"}]}},'
+    + '{"type":"bar","data":[3,6,9],'
+    + '"markLine":{"symbol":"none","lineStyle":{"width":1},'
+    + '"emphasis":{"lineStyle":{"width":2},"label":{"position":"start"}},'
+    + '"data":[{"yAxis":30,"name":"bare"}]}}]}';
+var
+  ppi, s: Integer;
+  lbl, sym, line: TTyChartElement;
+  b: TTyRectF;
+  k, q: Integer;
+begin
+  for q := 0 to 1 do
+  begin
+    if q = 0 then ppi := 96 else ppi := 192;
+    s := ppi div 96;
+    NewChart(camOff);
+    FChart.SetBounds(0, 0, cW * s, cH * s);
+    FBmp.SetSize(cW * s, cH * s);
+    FChart.Option := cOpt;
+    AssertEquals('the option parses', '', FChart.OptionError);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, cW * s, cH * s), ppi);
+    { the ring's line: its from-symbol, a circle of 10 at the line's start,
+      grown by the logical 2 }
+    AssertTrue('ring label', FindRole(carMarkLineLabel, 0, 0, lbl) >= 0);
+    AssertTrue('ring from-symbol', FindRole(carMarkLineFrom, 0, 0, sym) >= 0);
+    AssertEquals('ring twin', 1, Length(lbl.EmphTwin));
+    AssertEquals(Format('ring corner x at %d', [ppi]), sym.Anim.G[0] - 5 * s - 2 * s / 2,
+      lbl.EmphTwin[0].Caption.X, 1e-9);
+    AssertEquals(Format('ring corner y at %d', [ppi]), sym.Anim.G[1] - 5 * s - 2 * s / 2,
+      lbl.EmphTwin[0].Caption.Y, 1e-9);
+    { the bare line: its own path box, grown by max(2, 5) logical }
+    AssertTrue('bare label', FindRole(carMarkLineLabel, 1, 0, lbl) >= 0);
+    AssertTrue('no bare from-symbol', FindRole(carMarkLineFrom, 1, 0, sym) < 0);
+    k := FindRole(carMarkLine, 1, 0, line);
+    AssertTrue('bare line', k >= 0);
+    AssertEquals('bare twin', 1, Length(lbl.EmphTwin));
+    b := TyShapeBounds(line.Shape);
+    AssertEquals(Format('bare corner x at %d', [ppi]), b.Left - 5 * s / 2,
+      lbl.EmphTwin[0].Caption.X, 1e-9);
+    AssertEquals(Format('bare corner y at %d', [ppi]), b.Top - 5 * s / 2,
+      lbl.EmphTwin[0].Caption.Y, 1e-9);
+  end;
+  FBmp.SetSize(cW, cH);
+end;
+
+{ [R2-I4] WITH NOTHING ANIMATING (no state proxies, StWriteHost writes the
+  list): a bar's rest borderType 'dotted' at width 1 under an emphasis
+  borderWidth of 6 is drawn [6] -- the canvas normalises the word against the
+  width it strokes at. [Was: the rest width's [1].] }
+procedure TAdvChartStatesMarksTest.TestARestDashWordTakesTheStatesWidthWithoutProxies;
+const
+  cOpt = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[10,30,20],'
+    + '"itemStyle":{"borderColor":"#000","borderWidth":1,"borderType":"dotted"},'
+    + '"emphasis":{"itemStyle":{"borderWidth":6}}}]}';
+var
+  bar: TTyChartElement;
+  b: TTyRectF;
+begin
+  NewChart(camOff);
+  Load(cOpt);
+  AssertTrue('the bar', FindRole(carBar, 0, 1, bar) >= 0);
+  AssertEquals('dotted at rest', 1, Length(bar.Style.DashLogical));
+  AssertEquals('dotted at rest is the rest width', 1, bar.Style.DashLogical[0], 0);
+  b := TyShapeBounds(bar.Shape);
+  FChart.Move(Round((b.Left + b.Right) / 2), Round((b.Top + b.Bottom) / 2));
+  Draw;
+  AssertTrue('the hovered bar', FindRole(carBar, 0, 1, bar) >= 0);
+  AssertEquals('the state width', 6, bar.Style.StrokeWidthLogical, 0);
+  AssertEquals('dotted under emphasis', 1, Length(bar.Style.DashLogical));
+  AssertEquals('dotted at the state width', 6, bar.Style.DashLogical[0], 0);
 end;
 
 { [R2-I1] A TREE EDGE IS NO SILENT ELEMENT (TreeView.drawEdge): the pointer

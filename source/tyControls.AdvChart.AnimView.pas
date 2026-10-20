@@ -6157,6 +6157,12 @@ begin
       if AEl.Shape.Kind = cskSector then AEl.Shape.R1 := v.Num;
     end;
   end;
+  { [R2-I4] A DASH WRITTEN AS A WORD, against the width this frame draws: the
+    canvas normalises the style's lineDash per brush, so where the state's
+    transition tweens lineWidth the lengths follow it [was: measured once, at
+    the state's end width -- or the rest's, for a word the rest wrote] }
+  if AEl.Style.DashWord <> 0 then
+    AEl.Style.DashLogical := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical);
 end;
 
 function PointsOf(const A: TTyDoubleArray): TTyPointFArray;

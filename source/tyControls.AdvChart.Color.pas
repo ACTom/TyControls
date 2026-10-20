@@ -307,6 +307,10 @@ function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;
 function TyDashPattern(ADash: TTyOptDash; const AExplicit: TTyDoubleArray;
   AWidthLogical: Double): TTyDoubleArray;
 
+{ [R2-I4] the word a dash was written as, for TTyChartStyle.DashWord: 1
+  'dashed', 2 'dotted', 0 anything else (lengths, solid, none) }
+function TyDashWord(ADash: TTyOptDash): Byte;
+
 { The style block a series' PALETTE colour lands in, and whether it lands on
   the fill or the stroke.
 
@@ -1218,6 +1222,16 @@ begin
   if s = 'dashed' then Exit(todDashed);
   if s = 'dotted' then Exit(todDotted);
   if s = 'solid' then Exit(todSolid);
+end;
+
+function TyDashWord(ADash: TTyOptDash): Byte;
+begin
+  case ADash of
+    todDashed: Result := 1;
+    todDotted: Result := 2;
+  else
+    Result := 0;
+  end;
 end;
 
 function TyDashPattern(ADash: TTyOptDash; const AExplicit: TTyDoubleArray;

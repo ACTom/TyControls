@@ -148,6 +148,12 @@ type
     ObjSolid: TTyChartColor;
     ObjGradient: TTyChartGradient;
     ObjPattern: TTyChartPattern;
+    { [R2-I4] the row's own itemStyle.borderColor when it is a GRADIENT
+      object, which the overrides do not park either: the stroke the item's
+      style extends over the series' }
+    StrokeObjSet: Boolean;
+    StrokeObjSolid: TTyChartColor;
+    StrokeObjGradient: TTyChartGradient;
   end;
   TTyRowFillArray = array of TTyRowFill;
 
@@ -996,8 +1002,9 @@ begin
   end
   else if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderType.0')) then
   begin
+    { [R2-I4] every number the item wrote [was: four at most] }
     n := 0;
-    while (n < 4) and AStore.HasOverride(ARow,
+    while AStore.HasOverride(ARow,
       TyOverrideKey('itemStyle.borderType.' + IntToStr(n))) do Inc(n);
     SetLength(Result.DashExplicit, n);
     for k := 0 to n - 1 do
@@ -1035,6 +1042,13 @@ begin
         Result.StrokeGradient := Default(TTyChartGradient);
       end;
     end;
+  end;
+  { [R2-I4] its own borderColor as a gradient object, likewise over the
+    series' [was: dropped -- the item drew the series' pen] }
+  if rf.StrokeObjSet then
+  begin
+    Result.Stroke := rf.StrokeObjSolid;
+    Result.StrokeGradient := rf.StrokeObjGradient;
   end;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
@@ -1180,6 +1194,9 @@ begin
   Result.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
   Result.Style.DashLogical := TyDashPattern(AVisual.Dash, AVisual.DashExplicit,
     AVisual.StrokeWidthLogical);
+  { [R2-I4] and the word it was, which a state's tweening width measures
+    again frame by frame }
+  Result.Style.DashWord := TyDashWord(AVisual.Dash);
   Result.Style.DashOffsetLogical := AVisual.DashOffset;
   { `itemStyle.opacity` is a whole-element alpha and MULTIPLIES the
     colour's own -- upstream writes it to globalAlpha, so an 80% opacity
@@ -4253,6 +4270,7 @@ begin
     el := LargeElement(ABg, v, ABinding.SeriesIndex);
     el.Silent := True;
     el.Style.DashLogical := nil;
+    el.Style.DashWord := 0;
     if col.Clip then
     begin
       el.HasClip := True;
@@ -4269,6 +4287,7 @@ begin
     the whole batch -- every chunk of a progressive one too [F4a] }
   el.Style.Decal := AVisual.Decal;
   el.Style.DashLogical := nil;
+  el.Style.DashWord := 0;
   el.Z2 := AVisual.Z2 + 1;
   if col.Clip then
   begin

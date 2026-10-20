@@ -977,6 +977,31 @@ const R2I3 = [
     events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
 ];
 
+// [R2-I4] a dash written as a word is normalised against the width the
+// frame draws (canvas getLineDash per brush): where a state tweens the width
+// the dash follows it, the state's word and the rest's alike
+const R2I4 = [
+  { id: 'bar-dash-word-tween', dash: true, note: '[R2-I4] series 0: bars bordered #000 at 1, emphasis borderWidth 5 and '
+    + 'borderType dashed (the state\'s word against the tweening width); series 1: bars bordered #000 at 1 dotted, emphasis '
+    + 'borderWidth 6 alone (the rest\'s word against it). Hover bar 0 of series 0 at 0, out at 500, bar 1 of series 1 at '
+    + '800, out at 1200',
+    option: { color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1 },
+        emphasis: { itemStyle: { borderWidth: 5, borderType: 'dashed' } }, data: [10, 20, 30] },
+      { type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1, borderType: 'dotted' },
+        emphasis: { itemStyle: { borderWidth: 6 } }, data: [12, 22, 32] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['item', 1, 1]), out(1200)] },
+  { id: 'bar-dash-word-still', dash: true, note: '[R2-I4] the same with animation false (no state transition): the '
+    + 'rest\'s dotted at 1 under emphasis borderWidth 6 is [6] at once; the state\'s dashed at 5 is [20, 10]. Hover bar 1 '
+    + 'of series 1 at 0, out at 300, bar 0 of series 0 at 500, out at 800',
+    option: { animation: false, color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1 },
+        emphasis: { itemStyle: { borderWidth: 5, borderType: 'dashed' } }, data: [10, 20, 30] },
+      { type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1, borderType: 'dotted' },
+        emphasis: { itemStyle: { borderWidth: 6 } }, data: [12, 22, 32] }] },
+    events: [over(0, ['item', 1, 1]), out(300), over(500, ['item', 0, 0]), out(800)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1191,6 +1216,23 @@ function guards(cases) {
     g('state-dash-offset-tweens', b0 && Number(numAt(b0, 'dashOff', 100)) > 0 && Number(numAt(b0, 'dashOff', 100)) < 4
       && Number(numAt(b0, 'dashOff', 450)) === 4 && b1 && Number(numAt(b1, 'dashOff', 1200)) === 9, 'bar-state-dash phases');
   }
+  // [R2-I4]
+  {
+    const c = byId(cases, 'bar-dash-word-tween');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 1, 1, 'host');
+    const d = (el, ms) => numAt(el, 'dash', ms);
+    g('state-dash-word-follows-width', b0 && d(b0, 450) === '[20,10]' && d(b0, 50) !== '[20,10]' && d(b0, 50) !== 'null'
+      && b1 && JSON.parse(d(b1, 1100))[0] > 5.99 && JSON.parse(d(b1, 850))[0] > 1 && JSON.parse(d(b1, 850))[0] < 5,
+      b0 && b1 && [d(b0, 50), d(b0, 450), d(b1, 850), d(b1, 1100)].join(' '));
+  }
+  {
+    const c = byId(cases, 'bar-dash-word-still');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 1, 1, 'host');
+    g('still-dash-word-at-state-width', b1 && numAt(b1, 'dash', 1) === '[6]' && numAt(b1, 'dash', 400) === '[1]'
+      && b0 && numAt(b0, 'dash', 501) === '[20,10]', b0 && b1 && [numAt(b1, 'dash', 1), numAt(b0, 'dash', 501)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -1198,7 +1240,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

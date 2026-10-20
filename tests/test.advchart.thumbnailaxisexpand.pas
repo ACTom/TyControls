@@ -85,6 +85,8 @@ type
     procedure TestTheThumbnailBoxesAsUpstream;
     procedure TestTheThumbnailOfForceAndCircularAsUpstream;
     procedure TestTheThumbnailTargetsAsUpstream;
+    { [R2-I4] the nodes' pens, their dashes and phases }
+    procedure TestTheThumbnailPensAsUpstream;
     procedure TestTheExpandedLayoutsAsUpstream;
     procedure TestTheClickTriggerAsUpstream;
     procedure TestTheMoveTriggerAsUpstream;
@@ -507,6 +509,24 @@ begin
         and (sty.Strings['stroke'] <> 'none') and (HexNum(sty.Find('lineWidth')) > 0));
       if item.HasStroke then
         SameHex(Format('%s item %d line width', [what, i]), item.LineWidth, sty.Find('lineWidth'));
+      { [R2-I4] a pen scenario: the dash the clone draws (normalizeLineDash's
+        lengths) and its phase }
+      if item.HasStroke and (sty.Find('pattern') <> nil) then
+      begin
+        if sty.Find('pattern').JSONType = jtNull then
+          SameStr(Format('%s item %d dash', [what, i]), IntToStr(Length(item.Dash)), '0')
+        else
+        begin
+          SameStr(Format('%s item %d dash length', [what, i]), IntToStr(Length(item.Dash)),
+            IntToStr(sty.Arrays['pattern'].Count));
+          for j := 0 to Min(Length(item.Dash), sty.Arrays['pattern'].Count) - 1 do
+            SameHex(Format('%s item %d dash[%d]', [what, i, j]), item.Dash[j],
+              sty.Arrays['pattern'].Items[j]);
+        end;
+        if sty.Find('lineDashOffset').JSONType <> jtNull then
+          SameHex(Format('%s item %d dash phase', [what, i]), item.DashOffset,
+            sty.Find('lineDashOffset'));
+      end;
       SameHex(Format('%s item %d opacity', [what, i]), item.Opacity, sty.Find('opacity'));
       { the colours, where the port's colour can be compared }
       ink := JStr(sty.Find('fill'));
@@ -952,6 +972,11 @@ end;
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailTargetsAsUpstream;
 begin
   RunGroup(['TH-TARGET']);
+end;
+
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailPensAsUpstream;
+begin
+  RunGroup(['TH-PEN']);
 end;
 
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheExpandedLayoutsAsUpstream;

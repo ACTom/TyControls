@@ -909,7 +909,8 @@ end;
 { formatTpl: {a} {b} {c}, each replaced at its FIRST occurrence only }
 { what a named marker label handler is given: the marker's own params }
 function MkHandlerText(const AHandler: string; const AIn: TTyMkPicInput;
-  const AKind, AName, AValueText: string; ADataIndex: Integer): string;
+  const AKind, AName, AValueText: string; ADataIndex: Integer;
+  const AStatus: string): string;
 var p: TTyChartCallbackParams;
 begin
   p := TyChartBlankParams;
@@ -921,7 +922,8 @@ begin
   p.DataIndex := ADataIndex;
   p.RawDataIndex := ADataIndex;
   p.ValueText := AValueText;
-  p.Status := 'normal';
+  { [R2-I4] the state it is asked for (params.status) [was: 'normal'] }
+  p.Status := AStatus;
   Result := TyChartRunHandler(AHandler, TyChartOneParams(p));
 end;
 
@@ -948,6 +950,32 @@ begin
       Result := Copy(Result, 1, p - 1) + AValues[k]
         + Copy(Result, p + Length(from), MaxInt);
   end;
+end;
+
+{ [R2-I4] THE EMPHASIS TEXT (labelStyle getLabelText): the state's words are
+  getFormattedLabel(idx, 'emphasis', ..., the emphasis label model's
+  formatter) -- down the item's chain, a string a template, a named handler
+  asked with status 'emphasis'; where it answers nothing (no formatter, or
+  one neither a string nor a function) the normal text stays (retrieve2).
+  True where the emphasis has words of its own. [Was: the emphasis showed
+  the normal text whatever its formatter said.] }
+function EmphText(const lv: TMkLevels; const AIn: TTyMkPicInput;
+  const AKind, AName, AValueText: string; ADataIndex: Integer;
+  out AText: string): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  AText := '';
+  d := Chain(Sub(Sub(lv, 'emphasis'), 'label'), 'formatter');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  if TyChartIsHandlerRef(d.AsString) then
+    AText := MkHandlerText(d.AsString, AIn, AKind, AName, AValueText, ADataIndex,
+      'emphasis')
+  else if AIn.SeriesName.Kind = mvkUndef then
+    AText := FormatTpl(d.AsString, ['undefined', AName, AValueText])
+  else
+    AText := FormatTpl(d.AsString, [ValString(AIn.SeriesName), AName, AValueText]);
+  Result := True;
 end;
 
 { ---- the pictures ---- }
@@ -1111,6 +1139,9 @@ var
     hold: IInterface;
     lab2: TTyMkLabelPic;
     emphPos: TJSONData;
+    { [R2-I4] the hover's words }
+    et: string;
+    hasEt: Boolean;
 
   { THE TEXT'S STYLE AND LINE.beforeUpdate's PLACE over the label levels
     ALB -- the rest label's, and [R2-I3] the hover's (the emphasis text
@@ -1451,7 +1482,7 @@ var
     d := Chain(LB, 'formatter');
     if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
       str := MkHandlerText(d.AsString, AIn, 'markLine', name, ValString(rawVal),
-        L.DataIndex)
+        L.DataIndex, 'normal')
     else if (d <> nil) and (d.JSONType = jtString) then
     begin
       if AIn.SeriesName.Kind = mvkUndef then
@@ -1479,10 +1510,13 @@ var
     EL := Sub(Sub(itemLv, 'emphasis'), 'label');
     emphPos := Chain(EL, 'position');
     if not Truthy(emphPos) then emphPos := nil;
+    hasEt := EmphText(itemLv, AIn, 'markLine', name, ValString(rawVal), L.DataIndex, et);
     if EmphLevels(itemLv, LB, ['position', 'distance', 'align', 'verticalAlign',
-      'baseline'], LBE, hold) or (emphPos <> nil) then
+      'baseline'], LBE, hold) or (emphPos <> nil) or hasEt then
     begin
       lab2 := label_;
+      { [R2-I4] its own words, where the emphasis formats them }
+      if hasEt then lab2.Text := et;
       LayText(LBE, lab2);
       lab2.Hold := hold;
       lab2.Hidden := False;
@@ -2233,12 +2267,29 @@ var
   d: TJSONData;
   w, dist, x, y: Double;
 
+  { [R2-I4] getBoundingRect's stroke allowance in the port's device units:
+    the LOGICAL width -- max(width, 5) for a path of no fill -- and then the
+    scale the path itself is drawn at. An end symbol (Line.ts createSymbol)
+    has no strokeNoScale: its pen grows its box in its own coordinates,
+    before its turn; the line's strokeNoScale meets a line scale of 1. [Was:
+    the symbol's logical width taken as device px, and the line's floor of 5
+    applied after the scale -- a corner short by both at 192 PPI.] }
+  function Grown(const ABox: TTyXYWH; AHasFill: Boolean; AWidth: Double): TTyXYWH;
+  var g: Double;
+  begin
+    Result := ABox;
+    if not (AWidth > 0) then Exit;
+    g := AWidth;
+    if (not AHasFill) and (g < 5) then g := 5;
+    Result := TyGrowByStroke(ABox, True, g * AScale);
+  end;
+
   procedure Sym(const S: TTyMkSymbolPic);
   begin
     if not S.Present or (Length(S.Path) = 0) then Exit;
     r := TyZrBBox(S.Path);
     if (S.Stroke <> '') and (S.Stroke <> 'none') then
-      r := TyGrowByStroke(r, (S.Fill <> '') and (S.Fill <> 'none'), S.LineWidth);
+      r := Grown(r, (S.Fill <> '') and (S.Fill <> 'none'), S.LineWidth);
     ZrUnion(box, has, RectThrough(r, S.HasTransform, S.Transform));
   end;
 
@@ -2251,7 +2302,7 @@ begin
     if d <> nil then w := NumOf(d) else w := P.LineWidth;
     r := TyZrBBox(P.Path);
     if (P.Stroke <> '') and (P.Stroke <> 'none') then
-      r := TyGrowByStroke(r, False, w * AScale);
+      r := Grown(r, False, w);
     ZrUnion(box, has, r);
   end;
   Sym(P.FromSym);
@@ -2559,6 +2610,9 @@ var
     hold: IInterface;
     sc2: string;
     l2, g2: TTyMat2D;
+    { [R2-I4] the name, and the hover's words }
+    nm, et: string;
+    hasEt: Boolean;
   begin
     lv := nil;
     SetLength(lv, 3);
@@ -2748,17 +2802,18 @@ var
     end
     else
       sv := ValString(E.Value);
+    case E.Name.Kind of
+      mvkStr: nm := E.Name.Str;
+      mvkNum: nm := TyJsNumberToString(E.Name.Num);
+    else
+      nm := '';
+    end;
     if (fmt <> nil) and (fmt.JSONType = jtString) then
     begin
-      case E.Name.Kind of
-        mvkStr: str := E.Name.Str;
-        mvkNum: str := TyJsNumberToString(E.Name.Num);
-      else
-        str := '';
-      end;
+      str := nm;
       if TyChartIsHandlerRef(fmt.AsString) then
         str := MkHandlerText(fmt.AsString, AIn, 'markPoint', str, sv,
-          ABlock.Points[P.Item].DataIndex)
+          ABlock.Points[P.Item].DataIndex, 'normal')
       else if AIn.SeriesName.Kind = mvkUndef then
         str := FormatTpl(fmt.AsString, ['undefined', str, sv])
       else
@@ -2802,7 +2857,8 @@ var
     ratio2 := P.EmphRatio;
     if IsNan(ratio2) or IsInfinite(ratio2) then ratio2 := 1;
     hasOv := EmphLevels(lv, LB, [], LBE, hold);
-    if (ratio2 <> 1) or hasOv then
+    hasEt := EmphText(lv, AIn, 'markPoint', nm, sv, ABlock.Points[P.Item].DataIndex, et);
+    if (ratio2 <> 1) or hasOv or hasEt then
     begin
       hasL2 := LocalTransformS(P.X, P.Y, P.Rotation, P.ScaleX * ratio2,
         P.ScaleY * ratio2, l2);
@@ -2825,6 +2881,8 @@ var
       if d <> nil then lw2 := NumOf(d);
       hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
       lp2 := lp;
+      { [R2-I4] its own words, where the emphasis formats them }
+      if hasEt then lp2.Text := et;
       StyleLabel(LBE, gts, AIn, s, RectThrough(TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke2,
         hasFill, lw2, ls2), hasG2, g2), fill, hasFill, True, P.StyleFill, defOp,
         P.ShapeType = 'pin', maxZ2, lp2);
@@ -3201,6 +3259,9 @@ var
   lp, lp2: TTyMkPtLabelPic;
   LBE: TMkLevels;
   hold: IInterface;
+  { [R2-I4] the hover's words }
+  et: string;
+  hasEt: Boolean;
 begin
   Result := nil;
   if (not ABlock.Present) or (ABlock.Kind <> mkArea) then Exit;
@@ -3300,7 +3361,7 @@ begin
         if (fmt <> nil) and (fmt.JSONType = jtString)
           and TyChartIsHandlerRef(fmt.AsString) then
           str := MkHandlerText(fmt.AsString, AIn, 'markArea', name,
-            JsStringOf(VGet(lv[0], 'value')), A.DataIndex)
+            JsStringOf(VGet(lv[0], 'value')), A.DataIndex, 'normal')
         else if (fmt <> nil) and (fmt.JSONType = jtString) then
         begin
           v := VGet(lv[0], 'value');
@@ -3320,10 +3381,14 @@ begin
         StyleLabel(LB, gts, AIn, s, P.Rect, inherit, hasFill, P.FillData = nil, P.Fill,
           NaN, False, maxZ2, lp);
         { [R2-I1] and under the emphasis textConfig, where it says a key;
-          [R2-I3] under the whole emphasis label }
-        if EmphLevels(lv, LB, [], LBE, hold) then
+          [R2-I3] under the whole emphasis label; [R2-I4] in the words its
+          formatter gives }
+        hasEt := EmphText(lv, AIn, 'markArea', name, JsStringOf(VGet(lv[0], 'value')),
+          A.DataIndex, et);
+        if EmphLevels(lv, LB, [], LBE, hold) or hasEt then
         begin
           lp2 := lp;
+          if hasEt then lp2.Text := et;
           StyleLabel(LBE, gts, AIn, s, P.Rect, inherit, hasFill,
             P.FillData = nil, P.Fill, NaN, False, maxZ2, lp2);
           lp2.Hold := hold;
