@@ -470,7 +470,9 @@ const PROBES = {
       const v = chart.getViewOfSeriesModel(sm);
       const key = 'ln' + sm.seriesIndex;
       const cp = v._lineGroup.getClipPath();
-      if (cp) rec[key + '/clip'] = { x: hx(cp.shape.x), y: hx(cp.shape.y), width: hx(cp.shape.width), height: hx(cp.shape.height), n: nClip(cp) };
+      if (cp && cp.shape.r != null) rec[key + '/clip'] = { sector: true, r0: hx(cp.shape.r0), r: hx(cp.shape.r),
+        startAngle: hx(cp.shape.startAngle), endAngle: hx(cp.shape.endAngle), n: nClip(cp) };
+      else if (cp) rec[key + '/clip'] = { x: hx(cp.shape.x), y: hx(cp.shape.y), width: hx(cp.shape.width), height: hx(cp.shape.height), n: nClip(cp) };
       const data = sm.getData();
       data.each(i => {
         const el = data.getItemGraphicEl(i);
@@ -619,6 +621,21 @@ add('roam', 'map-roam', "a map series drawing its own map: a merge writes zoom 1
   ['geo'],
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ zoom: 1.5, center: [5, 5] }] } }, ...after([0, 1, 100, 400, 799, 800, 801], T1)]);
+add('roam', 'geo-roam-series', "a geo component with a scatter on it whose own update timing is 800 ms linear: a merge writes zoom 2 and a centre -- the transform group tweens on the GEO's model (the global update timing), not the series'",
+  { animation: true, geo: { map: 'r2c', roam: true },
+    series: [{ type: 'scatter', coordinateSystem: 'geo', animationDurationUpdate: 800, animationEasingUpdate: 'linear', data: [[5, 5, 1]] }] },
+  ['geo'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { zoom: 2, center: [10, 8] } } }, ...after([0, 1, 100, 299, 300, 301, 500, 799, 800, 801], T1)]);
+add('roam', 'map-roam-action', "a map series: a merge writes zoom 1.5 and a centre (800 ms linear), and 100 ms in a visualMap selectDataRange renders it again with a payload -- MapDraw's isFirstDraw: the group is set, not tweened again (the merge's tween runs on to its end)",
+  { animation: true, visualMap: { min: 0, max: 4, calculable: true },
+    series: [{ type: 'map', map: 'r2c', roam: true, animationDurationUpdate: 800, animationEasingUpdate: 'linear',
+      data: [{ name: 'A', value: 1 }, { name: 'C', value: 3 }] }] },
+  ['geo'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ zoom: 1.5, center: [5, 5] }] } }, ...after([0, 1, 50, 100], T1),
+    { t: T1 + 100, do: 'action', action: { type: 'selectDataRange', selected: [0, 2] } },
+    ...after([100, 101, 400, 799, 800, 801, 900, 901, 1000], T1)]);
 
 // ---- force ----
 const FN = [{ name: 'a', x: 10, y: 10, category: 0 }, { name: 'b', x: 100, y: 50, category: 1 },
@@ -665,6 +682,13 @@ add('step', 'step-same', "a step line merged with the same step and a new value:
   ['line'],
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [3, 5, 2, 1, 4] }] } }, ...after([0, 1, 100, 300, 301], T1)]);
+add('step', 'step-polar', "a line that moves from the grid to a polar (coordinateSystem changed by a merge): prevCoordSys.type differs -- the init branch, the polyline does not tween from the old points",
+  { animation: true, xAxis: LX, yAxis: { type: 'value' }, polar: {}, angleAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'] },
+    radiusAxis: { type: 'value' },
+    series: [{ type: 'line', data: [3, 5, 2, 6, 4], animationDuration: 1000, animationEasing: 'linear' }] },
+  ['line'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ coordinateSystem: 'polar' }] } }, ...after([0, 1, 100, 300, 500, 999, 1000, 1001], T1)]);
 
 // ---- a tree's data merge ----
 const S_TREE_RM = [0, 1, 16, 100, 250, 499, 500, 501, 750, 999];
@@ -687,6 +711,14 @@ add('treeData', 'tree-data-move', "orient TB, polyline edges: a merge takes a aw
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'root', children: [
       { name: 'b', children: [{ name: 'b1' }, { name: 'b2' }] },
       { name: 'c', children: [{ name: 'c1' }, { name: 'c2' }] }] }] }] } }, ...afterRm(T1)]);
+add('treeData', 'tree-data-only', "orient TB, polyline edges: a merge takes a away -- its only child a1 has a TreePath of its own (a11 under it): removeNode(a)'s removeNodeEdge(a1) takes a1's, so a's own goes by removeNodeEdge(a) to the root's old place, not a's",
+  { animation: true, series: [Object.assign({ type: 'tree', orient: 'TB', edgeShape: 'polyline', initialTreeDepth: -1,
+    data: [{ name: 'root', children: [{ name: 'a', children: [{ name: 'a1', children: [{ name: 'a11' }] }] },
+      { name: 'b', children: [{ name: 'b1' }, { name: 'b2' }] }, { name: 'c' }] }] }, TLIN)] },
+  ['tree'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'root', children: [
+      { name: 'b', children: [{ name: 'b1' }, { name: 'b2' }] }, { name: 'c' }] }] }] } }, ...afterRm(T1)]);
 
 // ---- [R2-I2] a radar's update ----
 const RIND = [{ name: 'a', max: 100 }, { name: 'b', max: 100 }, { name: 'c', max: 100 }, { name: 'd', max: 100 },

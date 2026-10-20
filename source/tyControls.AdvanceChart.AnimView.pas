@@ -5068,6 +5068,15 @@ begin
             APrev.GeoNew[k].Model, TyAnimCallNoIndex);
           Break;
         end;
+    { AN ACTION'S RENDER (a payload): MapDraw.draw's isFirstDraw sets the
+      group with attr, no updateProps -- the animator a setOption started on
+      it runs on untouched to its end }
+    if APrev.FullUpdate then
+      for o := 0 to High(APrev.GeoOld) do
+      begin
+        p := OldProxy(-1, APrev.GeoOld[o].Key, 'geoView');
+        if p <> nil then Carry(p, -1, APrev.GeoOld[o].Key);
+      end;
     SetLength(lineInit, Length(ASeries));
     for s := 0 to High(ASeries) do
       lineInit[s] := upd[s] and (ASeries[s].SeriesType = 'line') and LineReinit(s, oldOf[s]);
