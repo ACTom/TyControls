@@ -29,9 +29,11 @@ unit urenderitems;
   xorshift32 (it only staggers an animation).
 
   WHAT IS NOT DRAWN, AND WHY. wind-barb's weather pictures are image URLs of
-  the ECharts examples site; the chart loads no URL (a data: URL or an image
-  list, see tyControls.AdvChart.Images), so the images are drawn empty,
-  exactly where upstream would put them. }
+  the ECharts examples site; the chart loads no URL itself (a data: URL or an
+  image list, see tyControls.AdvChart.Images) -- [R2-J2] the demo answers
+  them from images/ through the chart's OnResolveImage (umain.pas).
+  custom-wind's vectors draw on the world map only, which the demo does not
+  ship. }
 
 interface
 
@@ -78,20 +80,23 @@ type
     function Parliament(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function WindArrow(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function WindWeather(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function WindVector(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
   end;
 
 var
   GItems: TGalleryRenderItems = nil;
 
 const
-  cNames: array[0..17] of string = (
+  cNames: array[0..18] of string = (
     'custom-bar-trend', 'custom-calendar-icon', 'custom-cartesian-polygon',
     'custom-error-bar', 'custom-error-scatter', 'custom-ohlc',
     'custom-polar-heatmap', 'custom-profit', 'flame-graph',
     'geo-svg-custom-effect', 'matrix-confusion',
     'matrix-mini-bar-data-collection', 'matrix-mini-bar-data-collection#2',
     'matrix-mini-bar-data-collection#3', 'matrix-periodic-table',
-    'pie-parliament-transition', 'wind-barb', 'wind-barb#2');
+    'pie-parliament-transition', 'wind-barb', 'wind-barb#2',
+    { [R2-J2] }
+    'custom-wind');
 
 { ==================== helpers ==================== }
 
@@ -864,6 +869,40 @@ begin
       'position', Pair(point[0], 80)])])]);
 end;
 
+{ [R2-J2] custom-wind: a line through the grid point, a fifth of the
+  vector to either side, clamped to the globe; stroked in the visualMap's
+  colour. Drawn on the world map only, which the demo does not ship. }
+function JsMax2(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+function JsMin2(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
+end;
+
+function TGalleryRenderItems.WindVector(const AParams: TTyCustomParams;
+  AApi: TTyCustomApi): TJSONData;
+var
+  x, y, dx, dy: Double;
+  s, e: TTyDoubleArray;
+begin
+  x := AApi.Value(0);
+  y := AApi.Value(1);
+  dx := AApi.Value(2);
+  dy := AApi.Value(3);
+  s := AApi.Coord([JsMax2(x - dx / 5, -180), JsMax2(y - dy / 5, -90)]);
+  e := AApi.Coord([JsMin2(x + dx / 5, 180), JsMin2(y + dy / 5, 90)]);
+  if Length(s) < 2 then s := [NaN, NaN];
+  if Length(e) < 2 then e := [NaN, NaN];
+  Result := TJSONObject.Create(['type', 'line',
+    'shape', TJSONObject.Create(['x1', N(s[0]), 'y1', N(s[1]), 'x2', N(e[0]), 'y2', N(e[1])]),
+    'style', TJSONObject.Create(['lineWidth', N(0.5), 'stroke', OrNull(AApi.Visual('color'))])]);
+end;
+
 { ==================== the registry ==================== }
 
 procedure RegisterGalleryRenderItems;
@@ -887,6 +926,7 @@ begin
   TyChartRegisterRenderItem('pie-parliament-transition', @GItems.Parliament);
   TyChartRegisterRenderItem('wind-barb', @GItems.WindArrow);
   TyChartRegisterRenderItem('wind-barb#2', @GItems.WindWeather);
+  TyChartRegisterRenderItem('custom-wind', @GItems.WindVector);
 end;
 
 procedure GalleryRenderItemNames(AList: TStrings);

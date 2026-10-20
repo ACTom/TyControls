@@ -73,15 +73,35 @@ rather than duplicated here so it cannot drift from the upstream file.
 `examples/advchart/gallery/*.json` are the option trees of the official Apache ECharts
 example gallery, converted from TypeScript to JSON by `tools/advchart-gallery/harvest.js`.
 They are DATA, not code: each file is one chart configuration, and the conversion changes
-only the notation. Callbacks cannot survive the trip to JSON and are dropped; the index
-records how many each example lost. Three large ones are stored gzipped (`*.json.gz`), and
-five whose data the page computes are stored without that data.
+only the notation. A function cannot survive the trip to JSON: each is written as a name
+(`'@<example>.<key>'`), and the index lists them; three large ones are stored gzipped
+(`*.json.gz`), and six whose data the page computes are stored without that data.
 
-Two demo units carry code of the same examples, translated to Pascal under the same licence:
-`examples/advchart/urenderitems.pas` (the custom series' `renderItem` functions) and
-`examples/advchart/ugenerated.pas` (the data generators of the five, including the
+Three demo units carry code of the same examples, translated to Pascal under the same licence:
+`examples/advchart/urenderitems.pas` (the custom series' `renderItem` functions),
+`examples/advchart/ucallbacks.pas` (the pages' other functions: formatters, symbol sizes,
+colours, label layouts, tooltip positions, animation delays) and
+`examples/advchart/ugenerated.pas` (the data generators of the six, including the
 Perlin-noise helper heatmap-large carries, credited there to
 https://github.com/josephg/noisejs).
+
+Data and pictures of the same repository, used unmodified (the same licence; the repository
+records no other source for them):
+
+- `examples/advchart/data/winds.json.gz` -- `public/data-gl/asset/data/winds.json`, gzipped:
+  the wind field custom-wind draws (ugenerated.pas makes the example's vectors from it).
+- `examples/advchart/data/scatter-painter-choice-marker.json` -- the `marker.size`,
+  `marker.color` and `marker.sizeref` of `public/data/asset/data/masterPainterColorChoice.json`,
+  the part of that file scatter-painter-choice's two functions read (the page credits the
+  data to Plot.ly).
+- `examples/advchart/images/weather/sunny_128.png`, `cloudy_128.png`, `showers_128.png` --
+  `public/data/asset/img/weather/`, the weather icons wind-barb, bar-rich-text and
+  pie-rich-text show; the same three files are in apache/echarts itself (`test/data/weather/`),
+  whose LICENSE lists no other terms for them.
+
+Not included: `hill-Kilimanjaro.png` and `hill-Qomolangma.png` (pictorialBar-hill), photographs
+for which the repository records no source; saved in `examples/advchart/images/` under their
+names they are drawn.
 
 They are used as a conformance corpus -- the point of the demo is to show what
 `TTyAdvanceChart` does with an option written for ECharts, unmodified.
@@ -101,6 +121,46 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+```
+
+---
+
+## d3-geo — `examples/advchart/ualbersusa.pas`
+
+The demo's Albers USA projection (map-usa-projection) is a Pascal transcription of
+`geoAlbersUsa` and the code it runs (`albers`, `conicEqualArea`, the projection's point stream
+and rotation) of d3-geo 2.0.1 -- the version the gallery page loads. Upstream:
+<https://github.com/d3/d3-geo>. The oracle that checks it installs the same version under
+`tools/advchart-oracle` (`npm install`); nothing of d3 is shipped beyond the transcription.
+
+```
+Copyright 2010-2016 Mike Bostock
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the author nor the names of contributors may be used to
+  endorse or promote products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
 ---
