@@ -233,6 +233,12 @@ const F = n => Array.from({ length: n }, () => ['frame']);
 C('sc-over', 'a scatter of 3500 symbols drawn at once (progressive 0): past the threshold, a hovered symbol is drawn again over all in its emphasis style, its own copy unchanged (no scale, no z2)',
   base(Object.assign({}, XY, { series: [scatter(3500, { progressive: 0 })] })),
   [mv(0), mv(1), ['leave'], mv(2), ['leave']]);
+C('sc-over-update', '[r2v] past the threshold, a symbol highlighted, then a dataZoom (a full update) while it is held: after the update it is on the hover layer still, its own copy at rest',
+  base(Object.assign({ dataZoom: [{ type: 'inside', xAxisIndex: 0 }] }, XY, { series: [scatter(3500, { progressive: 0 })] })),
+  [hl(0, 1), ['act', { type: 'dataZoom', start: 0, end: 95 }], ['act', { type: 'dataZoom', start: 0, end: 100 }], dp(0, 1)]);
+C('sc-scaled-enter', '[r2v] a scatter of 3500 zoomed to half (under the threshold): a symbol highlighted takes its emphasis scale in its own layer; the zoom back to the whole (past the threshold) keeps it so; a select while held puts it on the hover layer with its own layer as it was -- scaled',
+  base(Object.assign({ dataZoom: [{ type: 'inside', xAxisIndex: 0, start: 0, end: 50 }] }, XY, { series: [scatter(3500, { progressive: 0, selectedMode: 'multiple' })] })),
+  [hl(0, 1), ['act', { type: 'dataZoom', start: 0, end: 100 }], sel(0, 1), dp(0, 1), unsel(0, 1)]);
 C('sc-under', 'the same scatter with 1500 symbols: under the threshold, the symbol itself takes the state (scale, z2, lifted fill)',
   base(Object.assign({}, XY, { series: [scatter(1500, { progressive: 0 })] })),
   [mv(0), ['leave']]);
@@ -273,6 +279,11 @@ C('bar-over', 'a bar of 3200 categories (not large): past the threshold; select 
   base({ xAxis: { type: 'category', data: cats(3200) }, yAxis: { type: 'value' },
     series: [{ type: 'bar', selectedMode: 'multiple', select: { itemStyle: { color: '#00aa00' } }, data: vals(3200, 5, 90, 3) }] }),
   [sel(0, 10), hl(0, 10), dp(0, 10), hl(0, 20), sel(0, 20), dp(0, 20), unsel(0, 10), hl(0, 10), dp(0, 10)]);
+C('bar-over-unsel', '[r2v] the same bars, the select style with a border: a bar selected, then hovered (its own layer keeps the select style), then unselected while held -- the hover style is the normal style under emphasis, no border, whatever the own layer still shows',
+  base({ xAxis: { type: 'category', data: cats(3200) }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', selectedMode: 'multiple', select: { itemStyle: { color: '#00aa00', borderColor: '#000000', borderWidth: 3 } },
+      data: vals(3200, 5, 90, 3) }] }),
+  [sel(0, 30), hl(0, 30), unsel(0, 30), dp(0, 30), hl(0, 30), dp(0, 30)]);
 
 // --- parallel
 (function () {
@@ -284,6 +295,8 @@ C('bar-over', 'a bar of 3200 categories (not large): past the threshold; select 
     par({ progressive: 0 }), [hl(0, 5), hl(0, 6), dp(0, 5), dp(0, 6)]);
   C('par-prog', 'the same lines by 400: the threshold once the chunks are in',
     par({ progressive: 400 }), F(9).concat([hl(0, 5), dp(0, 5)]));
+  C('par-prog-first', '[r2v] the same lines by 400, highlighted before the second chunk: the storage holds the first chunk alone, under the threshold -- the line takes the state in its own layer',
+    par({ progressive: 400 }), [hl(0, 5), dp(0, 5)]);
   C('par-emph', 'a declared emphasis lineStyle on the hover layer',
     par({ progressive: 0, emphasis: { lineStyle: { width: 4, color: '#ff00ff', opacity: 1 } } }), [hl(0, 7), dp(0, 7)]);
 })();
@@ -303,6 +316,14 @@ C('line-thl', 'hoverLayerThreshold 1, a line: its symbol and its polyline on the
   base({ hoverLayerThreshold: 1, xAxis: { type: 'category', data: cats(5) }, yAxis: { type: 'value' },
     series: [{ type: 'line', data: [5, 20, 36, 10, 10], emphasis: { lineStyle: { width: 6 } } }] }),
   [hl(0, 2), dp(0, 2)]);
+(function () {
+  const g = thl => base({ hoverLayerThreshold: thl, xAxis: { type: 'value', min: 0, max: 1000, show: false }, yAxis: { type: 'value', min: 0, max: 500, show: false },
+    series: [{ type: 'scatter', symbolSize: 8, data: [[100, 100], [300, 250], [700, 400], [900, 50], [500, 300]] }] });
+  C('sc-at-threshold', '[r2v] five symbols and nothing else in the storage (the axes hidden), hoverLayerThreshold 5: the count must pass the threshold (elCount > value) -- five is not past five',
+    g(5), [hl(0, 2), dp(0, 2)]);
+  C('sc-past-threshold', '[r2v] the same symbols, hoverLayerThreshold 4: five is past it',
+    g(4), [hl(0, 2), dp(0, 2)]);
+})();
 C('treemap-thl', 'hoverLayerThreshold 1, a treemap: preventUsingHoverLayer',
   base({ hoverLayerThreshold: 1, series: [{ type: 'treemap', label: { show: false }, upperLabel: { show: false }, breadcrumb: { show: false },
     data: [{ name: 'a', value: 4 }, { name: 'b', value: 6 }, { name: 'c', value: 2 }] }] }),
@@ -450,12 +471,20 @@ function guards(cases) {
   G('a heatmap drawn at once does not', sn('hm-whole', 1).hover.length === 0 && sn('hm-whole', 1).els.length === 1);
   G('a selected bar entering the hover layer keeps its select style below', (() => { const e = one('bar-over', 2); return e.st.fill === '#00aa00'; })());
   G('selected while held: the own layer stays unselected', (() => { const e = sn('bar-over', 6).els.find(x => x.d === 20); return e && !e.ih && e.cs.join() === 'select' && e.st.fill !== '#00aa00'; })());
+  G('unselected while held: the hover style has no border, the own layer keeps it', (() => {
+    const e = one('bar-over-unsel', 3);
+    return e && e.cs.join() === 'emphasis' && e.st.lineWidth === hex(3) && e.hs.lineWidth !== hex(3);
+  })());
   G('the parallel threshold', sn('par-over', 1).thl && sn('par-over', 2).hover.length === 2);
+  G('before the second chunk they do not', !sn('par-prog-first', 1).thl && sn('par-prog-first', 1).hover.length === 0
+    && sn('par-prog-first', 1).els.length === 1);
   G('the parallel lines by chunks reach it', sn('par-prog', 10).thl && sn('par-prog', 10).hover.length === 1);
   G('an emphasis-only label keeps a sector off', sn('pie-thl', 1).hover.length === 0);
   G('a pie sector never: PiePiece sets a textContent whatever the label says', sn('pie-thl-nolabel', 1).hover.length === 0 && sn('pie-thl-nolabel', 1).els[0].z2 === 12);
   G('pie labels keep it off', sn('pie-thl-label', 1).hover.length === 0);
   G('a line\'s symbol and polyline', sn('line-thl', 1).hover.length === 2);
+  G('at the threshold no hover layer, past it the hover layer', sn('sc-at-threshold', 1).count === 5 && !sn('sc-at-threshold', 1).thl
+    && sn('sc-at-threshold', 1).hover.length === 0 && sn('sc-past-threshold', 1).thl && sn('sc-past-threshold', 1).hover.length === 1);
   G('a treemap never', sn('treemap-thl', 1).hover.length === 0 && sn('treemap-thl', 1).thl);
   return g;
 }

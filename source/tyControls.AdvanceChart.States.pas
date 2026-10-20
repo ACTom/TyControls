@@ -125,6 +125,13 @@ type
       writes the own layer again -- upstream's HOVER_LAYER_CONSTRAINTS). }
     HoverLayer, InHover, LayerLag: Boolean;
     LayerStates: TTyStNames;
+    { [r2v] NormOwn: a switch to no state on the hover layer left the own
+      layer as it was (Norm) -- and zrender's normal state is cleared on
+      that switch and cloned from the element's own style at the next one:
+      from then on Norm, not Rest, is what every switch starts from (the
+      hover style's keys too) and what clearing the states writes back }
+    NormOwn: Boolean;
+    Norm: TTyStObject;
   end;
 
   { A data item's element and what is attached to it: the label, which
@@ -597,20 +604,29 @@ begin
     AEl.States := ANew;
     AEl.Merged := merged;
     if not hover then AEl.InHover := False;
+    { [r2v] to no state: the own layer, as it stays, is the normal the next
+      switch clones [was: Rest] }
+    if ANew = [] then
+    begin
+      AEl.Norm := AEl.Cur;
+      AEl.NormOwn := True;
+    end;
     Exit;
   end;
   ALayer := True;
   AEl.LayerLag := False;
   if ANew = [] then
   begin
-    { clearStates: every saved key back to rest }
-    AEl.Cur := AEl.Rest;
+    { clearStates: every saved key back to rest -- the normal state's }
+    if AEl.NormOwn then AEl.Cur := AEl.Norm
+    else AEl.Cur := AEl.Rest;
     AEl.States := [];
     AEl.Merged := TyStNoObject;
     Exit;
   end;
   for k := Low(TTyStKey) to High(TTyStKey) do
     if merged.Has[k] then CopyKey(AEl.Cur, merged, k)
+    else if AEl.NormOwn then CopyKey(AEl.Cur, AEl.Norm, k)
     else CopyKey(AEl.Cur, AEl.Rest, k);
   AEl.States := ANew;
   AEl.Merged := merged;
@@ -633,14 +649,20 @@ const
   { the style keys: what _applyStateObj writes to __hoverStyle }
   cStyle: array[0..5] of TTyStKey = (stkFill, stkStroke, stkLineWidth,
     stkOpacity, stkDash, stkDashOffset);
-var i: Integer;
+var
+  i: Integer;
+  base: TTyStObject;
 begin
   Result := AEl.Cur;
+  { [r2v] the normal style: Rest, or the own layer an exit to no state on
+    the hover layer left (NormOwn) }
+  if AEl.NormOwn then base := AEl.Norm
+  else base := AEl.Rest;
   for i := 0 to High(cStyle) do
     if AEl.Merged.Has[cStyle[i]] then CopyKey(Result, AEl.Merged, cStyle[i])
-    else CopyKey(Result, AEl.Rest, cStyle[i]);
+    else CopyKey(Result, base, cStyle[i]);
   if AEl.Merged.Has[stkFill] then Result.FillInherit := AEl.Merged.FillInherit
-  else Result.FillInherit := AEl.Rest.FillInherit;
+  else Result.FillInherit := base.FillInherit;
 end;
 
 function UseItemStatesIn(var AItem: TTyStItem; ANew: TTyStNames;
@@ -692,6 +714,7 @@ begin
   { [R2-I9] the own layer at rest is the whole element at rest }
   AEl.InHover := False;
   AEl.LayerLag := False;
+  AEl.NormOwn := False;
 end;
 
 procedure TyStClearItem(var AItem: TTyStItem);

@@ -3797,9 +3797,9 @@ type
       updateHoverLayerStatus): the root hoverLayerThreshold as `elCount >
       value` reads it; whether a series' rendered paths carry the flag (the
       threshold, or an incremental render's own); the flags given to every
-      row -- AEnter (a build) also puts a row already in emphasis on the
-      layer; the copies the layer brushes, found again; whether there are
-      any; and drawing them over everything the canvas holds }
+      row -- AEnter (a build) gives them to every row whether the series'
+      changed or not; the copies the layer brushes, found again; whether
+      there are any; and drawing them over everything the canvas holds }
     function StHoverThreshold: Double;
     function StSeriesHoverOn(ASlot: Integer; AThl: Boolean): Boolean;
     procedure StHoverStamp(AEnter: Boolean);
