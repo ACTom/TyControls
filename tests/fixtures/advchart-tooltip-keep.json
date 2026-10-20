@@ -5829,6 +5829,575 @@
    "text": true
   },
   {
+   "id": "keep-frozen-unpainted",
+   "note": "a showTip on another bar and, before any frame, a setOption: the content element took the new show's text at once (setContent), so the frozen box says that one -- not the last one drawn",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "formatter": "{b}: {c}"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ]
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 5"
+       }
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "noFrame": true,
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "4070d00000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "269"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4074a00000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "330"
+        ],
+        "text": "c: 2"
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "data": [
+         4,
+         6,
+         3,
+         7
+        ]
+       },
+       {
+        "data": [
+         2,
+         5,
+         4,
+         3
+        ]
+       }
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "4070d00000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "269"
+        ],
+        "box": [
+         "4074b40000000000",
+         "4074a00000000000"
+        ],
+        "boxText": [
+         "331.25",
+         "330"
+        ],
+        "text": "c: 2"
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:2",
+        "anchor": [
+         "4077340000000000",
+         "4070d00000000000"
+        ],
+        "anchorText": [
+         "371.25",
+         "269"
+        ],
+        "box": [
+         "4078740000000000",
+         "4072100000000000"
+        ],
+        "boxText": [
+         "391.25",
+         "289"
+        ],
+        "text": "c: 3"
+       }
+      }
+     ]
+    }
+   ],
+   "text": true
+  },
+  {
+   "id": "keep-frozen-border",
+   "note": "an item tooltip and a setOption that colours the series anew: the frozen box keeps the border its show set (the item's old colour) until the keep timer shows it with the new one",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item",
+       "formatter": "{b}: {c}"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         3,
+         5,
+         2,
+         6
+        ],
+        "itemStyle": {
+         "color": "#00aa00"
+        }
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         4,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      259,
+      256
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 5",
+        "border": "#00aa00"
+       }
+      }
+     ]
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "series": [
+       {
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {}
+      ]
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 5",
+        "border": "#00aa00"
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "item:0:1",
+        "anchor": [
+         "4070300000000000",
+         "4070000000000000"
+        ],
+        "anchorText": [
+         "259",
+         "256"
+        ],
+        "box": [
+         "4071700000000000",
+         "4071400000000000"
+        ],
+        "boxText": [
+         "279",
+         "276"
+        ],
+        "text": "b: 5",
+        "border": "#ff0000"
+       }
+      }
+     ]
+    }
+   ],
+   "text": true,
+   "border": true
+  },
+  {
    "id": "keep-frozen-axis-text",
    "note": "the same under an axis trigger",
    "charts": [
@@ -8058,6 +8627,16 @@
    "id": "kft-frozen",
    "ok": true,
    "what": "frozen: the old text until the keep timer"
+  },
+  {
+   "id": "kfu-new-show",
+   "ok": true,
+   "what": "the frozen box says the last show's text, drawn or not, until the keep timer"
+  },
+  {
+   "id": "kfb-kept",
+   "ok": true,
+   "what": "frozen: the old border until the keep timer"
   },
   {
    "id": "kfa-frozen",
