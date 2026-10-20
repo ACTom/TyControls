@@ -385,6 +385,13 @@ end;
 procedure TAdvChartDecalAriaOracleTest.Step(AStep: TJSONObject);
 var opt: TJSONObject;
 begin
+  { an action step [231b]: dispatchAction, then the render }
+  if AStep.Find('action') is TJSONObject then
+  begin
+    FChart.DispatchAction(AStep.Objects['action'].AsJSON);
+    FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, 600, 400), 96);
+    Exit;
+  end;
   opt := TJSONObject(AStep.Objects['option'].Clone);
   try
     if AStep.Booleans['merge'] then

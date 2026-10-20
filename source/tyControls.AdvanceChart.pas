@@ -1461,9 +1461,6 @@ type
       the option's, or the built-in palette's) }
     FSeriesDecalRaws: array of TTyDecalRaw;
     FRowDecalRaws: array of array of TTyDecalRaw;
-    { aria.enabled as the setOptions left it: initBase turns an aria object
-      on, the preprocessor copies the legacy `show` [Batch 131] }
-    FAriaEnabled: Boolean;
     { THE KEYBOARD FOCUS ITEM [Batch 144]: its series index and view row
       (-1 none), and whether the keyboard holds it now -- the ring is
       drawn, the item is highlighted and its tooltip shown. Leaving the
@@ -2500,8 +2497,9 @@ type
     { a legend item's decal: the legend's itemStyle.decal over the series' }
     function LegendDecalOf(ALegend: Integer; const AName: string;
       const ASeries: TTyChartDecal): TTyChartDecal;
-    { the aria preprocessor and initBase on a setOption's root [Batch 131] }
-    procedure AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
+    { ariaVisual's `ariaModel.get('enabled')`: the merged option's -- every
+      option preprocessed, initBase's switch in the base [231b] }
+    function AriaEnabled: Boolean;
     function GetAriaDescription: string;
     { the facts the description is made of, from the last layout: AAria's
       maxCount and excludeDimensionId (the defaults when it is nil), the

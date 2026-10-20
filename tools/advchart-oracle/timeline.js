@@ -977,6 +977,24 @@ const CASES = [
     steps: [{ kind: 'action', payload: { type: 'timelineChange', currentIndex: 3 } }, { kind: 'wait', dt: 100 },
       { kind: 'set', option: { timeline: { checkpointStyle: { animation: true, animationDuration: 800, animationEasing: 'linear' } } } },
       { kind: 'action', payload: { type: 'timelineChange', currentIndex: 0 }, dt: 50 }, { kind: 'wait', dt: 200 }, { kind: 'wait', dt: 400 }, { kind: 'wait', dt: 400 }] },
+  // ---------------- the preprocessor per option (231b) ----------------
+  { id: 'preprocess-visualmap', group: 'option', note: "visualMap's preprocessor runs on every frame: the second frame's ec2 splitList is its pieces (its start / end copied to min / max) and replaces the base's pieces when the frame is merged; the base's own pieces until then",
+    option: bars(tlCat({}), { options: [barFrame(0),
+      Object.assign(barFrame(1), { visualMap: { splitList: [{ start: 2, end: 5 }, { start: 5, end: 8 }] } }),
+      barFrame(2), barFrame(3)] },
+      { visualMap: { type: 'piecewise', show: false, dimension: 1, pieces: [{ min: 0, max: 2 }] } }),
+    steps: [
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 1 } },
+    ] },
+  { id: 'preprocess-frame-components', group: 'option', note: "the timeline's own preprocessor runs on every frame: the second frame's ec2 timeline controlPosition is its controlStyle.position; a merge's frame and a merge's media unit are preprocessed as a merge: a brush there names no default buttons",
+    option: bars(tlCat({}), { options: [barFrame(0),
+      Object.assign(barFrame(1), { timeline: { controlPosition: 'right' } }),
+      barFrame(2), barFrame(3)] }),
+    steps: [
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 1 } },
+      { kind: 'set', option: { options: [barFrame(0), Object.assign(barFrame(1), { brush: {}, toolbox: {} }), barFrame(2), barFrame(3)] } },
+      { kind: 'set', option: { media: [{ query: { minWidth: 1 }, option: { brush: { xAxisIndex: 0 }, toolbox: {} } }] } },
+    ] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1090,6 +1108,15 @@ function guards(out) {
   guard('anim: the bars move', JSON.stringify(am[2].bars) !== JSON.stringify(am[1].bars) && JSON.stringify(am[2].bars) !== JSON.stringify(am[6].bars));
   const ao = cs('anim-off').states;
   guard('anim-off: a jump', el(ao[1], 'pointer').t.x === el(ao[2], 'pointer').t.x);
+  const pv = cs('preprocess-visualmap').states;
+  guard('preprocess-visualmap: the base\'s pieces until the frame', JSON.stringify(pv[0].tree.visualMap[0].pieces) === '[{"min":0,"max":2}]');
+  guard('preprocess-visualmap: the frame\'s splitList is its pieces, start / end copied', JSON.stringify(pv[1].tree.visualMap[0].pieces) === '[{"start":2,"end":5,"min":2,"max":5},{"start":5,"end":8,"min":5,"max":8}]'
+    && !('splitList' in pv[1].tree.visualMap[0]));
+  const pc = cs('preprocess-frame-components').states;
+  guard('preprocess-frame-components: the frame\'s ec2 controlPosition is its controlStyle.position', pc[1].tree.timeline[0].controlStyle.position === 'right'
+    && !('controlPosition' in pc[1].tree.timeline[0]));
+  guard('preprocess-frame-components: a merge\'s frame brush names no buttons', JSON.stringify(pc[2].tree.toolbox[0].feature.brush.type) === '[]');
+  guard('preprocess-frame-components: a merge\'s media unit brush names no buttons', JSON.stringify(pc[3].tree.toolbox[0].feature.brush.type) === '[]');
   return g;
 }
 

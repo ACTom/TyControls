@@ -437,7 +437,7 @@ const
     + '"#fb628b","#785db0","#3fbe95"]';
 var
   cases, vms: TJSONArray;
-  cs, opt, vm: TJSONObject;
+  cs, opt, vm, base: TJSONObject;
   d: TJSONData;
   sl: TStringList;
   c, k: Integer;
@@ -467,10 +467,15 @@ begin
       end;
     end;
     try
-      if opt.Find('color') = nil then opt.Add('color', GetJSON(cPalette));
-      if opt.Find('gradientColor') = nil then
-        opt.Add('gradientColor', GetJSON('["rgba(212,220,247,1)","#5070dd"]'));
-      d := opt.Find('visualMap');
+      { a root form: a key beside baseOption is not read, the base is where
+        the palette goes [231b] }
+      base := opt;
+      if opt.Find('baseOption') is TJSONObject then
+        base := TJSONObject(opt.Find('baseOption'));
+      if base.Find('color') = nil then base.Add('color', GetJSON(cPalette));
+      if base.Find('gradientColor') = nil then
+        base.Add('gradientColor', GetJSON('["rgba(212,220,247,1)","#5070dd"]'));
+      d := base.Find('visualMap');
       if (d <> nil) and (d.JSONType = jtObject) then Upstream(TJSONObject(d))
       else if (d <> nil) and (d.JSONType = jtArray) then
         for k := 0 to TJSONArray(d).Count - 1 do

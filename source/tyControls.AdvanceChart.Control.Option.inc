@@ -398,10 +398,9 @@ begin
     [Batch 140] }
   if FThumbFresh then ThumbInitAll;
   if FGfxFresh then GfxInitFromTree;
-  { A NEW GlobalModel: a new decal scope, and aria on where the option
-    wrote an aria object [Batch 131] }
+  { A NEW GlobalModel: a new decal scope [Batch 131]; aria's switch is in
+    the tree (initBase, the preprocessor per option) [231b] }
   FDecalScope := Default(TTyDecalScope);
-  AriaTakeEnabled(FOption.Root, True);
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
@@ -574,9 +573,6 @@ begin
     reported to MergePass [Batch 107] }
   if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, @MergePass, rep) then
     Exit(False);
-  { the preprocessor runs on the piece: a `show` or an `enabled` it wrote
-    [Batch 131] }
-  AriaTakeEnabled(FOption.MergedPiece, False);
   { A PIECE THAT CARRIES `dataset` marks every dataset dirty: their
     transforms run again from where the chart's stream stands [Batch 134] }
   if (FOption.MergedPiece is TJSONObject)

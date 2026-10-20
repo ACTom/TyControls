@@ -459,12 +459,10 @@ begin
   { dataZoom: registerSubTypeDefaulter('dataZoom', () => 'slider') }
   if AMainType = 'dataZoom' then Exit('slider');
   if AMainType <> 'visualMap' then Exit;
-  { `pieces ? pieces.length > 0 : splitNumber > 0` -- after the preprocessor
-    renamed ec2's splitList, which it does only when there is no `pieces` }
-  if (AElement.IndexOfName('splitList') >= 0) and (AElement.IndexOfName('pieces') < 0) then
-    pieces := AElement.Find('splitList')
-  else
-    pieces := AElement.Find('pieces');
+  { `pieces ? pieces.length > 0 : splitNumber > 0`, on the preprocessed
+    option: ec2's splitList is already pieces where the preprocessor ran
+    (not in the media default) [231b] }
+  pieces := AElement.Find('pieces');
   if JsTruthy(pieces) then
   begin
     case pieces.JSONType of

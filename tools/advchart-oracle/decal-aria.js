@@ -59,8 +59,9 @@
 //   (the decal object after the defaults: every decalKey and rotation, as
 //   vals), tile {w, h (svgWidth / svgHeight, numbers), rotation hex,
 //   scaleX, scaleY, repeat, symbols [{type, x, y, w, h hex, fill}]}
-// A scenario: id, note, steps[] {option (raw JSON), merge (true: setOption
-//   without notMerge), record}
+// A scenario: id, note, steps[] {option (raw JSON; null for an action),
+//   merge (true: setOption without notMerge), action (only on an action
+//   step: the dispatchAction payload), record}
 // A record
 //   error     null | the exception's message (nothing else is recorded)
 //   aria      {role, label} what this update wrote (null where nothing)
@@ -329,6 +330,7 @@ function runTile(id, decal) {
 
 // ---------- the scenarios ----------
 const CAT = { xAxis: { data: ['a', 'b', 'c'] }, yAxis: {} };
+const TLA = { show: false, axisType: 'category', data: ['t0', 't1'] };
 function bars(n, extra) {
   const s = [];
   for (let i = 0; i < n; i++) s.push(Object.assign({ type: 'bar', data: [1 + i, 2, 3] }, extra ? extra(i) : {}));
@@ -467,6 +469,49 @@ const SCENARIOS = [
       { option: Object.assign({}, CAT, { series: bars(1) }) },
       { option: Object.assign({ aria: { show: true } }, CAT, { series: bars(1) }) },
     ] },
+  // ---------------- the preprocessor per option ----------------
+  // ariaPreprocessor runs on the base, on every timeline frame and on every
+  // media unit with a query (parseRawOption's doPreprocess), not on the media
+  // default; a root-form option carries its own `animation: false` (a root key
+  // beside baseOption is not read). An `action` step is a dispatchAction.
+  { id: 'pre-frames', note: "aria.show is aria.enabled in every frame: the base's show true, then a frame's enabled false turns aria off; the base's enabled false, then a frame's show true turns it on; the first frame's show at the init",
+    steps: [
+      { option: { baseOption: Object.assign({ animation: false, timeline: TLA, aria: { show: true, decal: { show: true } } }, CAT, { series: bars(2) }),
+        options: [{}, { aria: { enabled: false } }] } },
+      { action: { type: 'timelineChange', currentIndex: 1 } },
+      { option: { baseOption: Object.assign({ animation: false, timeline: TLA, aria: { enabled: false, decal: { show: true } } }, CAT, { series: bars(2) }),
+        options: [{}, { aria: { show: true } }] } },
+      { action: { type: 'timelineChange', currentIndex: 1 } },
+      { option: { baseOption: Object.assign({ animation: false, timeline: TLA, aria: { enabled: false } }, CAT, { series: bars(1) }),
+        options: [{ aria: { show: true } }, {}] } },
+    ] },
+  { id: 'pre-media', note: "a media unit with a query is preprocessed (its show turns aria on); the media default is not (its show does nothing)",
+    steps: [
+      { option: { baseOption: Object.assign({ animation: false, aria: { enabled: false, decal: { show: true } } }, CAT, { series: bars(2) }),
+        media: [{ query: { minWidth: 1 }, option: { aria: { show: true } } }] } },
+      { option: { baseOption: Object.assign({ animation: false, aria: { enabled: false, decal: { show: true } } }, CAT, { series: bars(2) }),
+        media: [{ option: { aria: { show: true } } }] } },
+    ] },
+  { id: 'pre-label', custom: true, note: "the description moved under label in every option: a frame's and a merge's label.description win over the base's top-level one; the media default's top-level one is not moved (the template); label.enabled false under enabled true writes nothing",
+    steps: [
+      { option: { baseOption: Object.assign({ animation: false, timeline: TLA, aria: { description: 'Base.' } }, CAT, { series: bars(1) }),
+        options: [{}, { aria: { label: { description: 'Frame.' } } }] } },
+      { action: { type: 'timelineChange', currentIndex: 1 } },
+      { option: Object.assign({ aria: { description: 'First.' } }, CAT, { series: bars(1) }) },
+      { merge: true, option: { aria: { label: { description: 'Merged.' } } } },
+      { option: { baseOption: Object.assign({ animation: false, aria: {} }, CAT, { series: bars(1) }),
+        media: [{ option: { aria: { description: 'Default.' } } }] } },
+      { option: Object.assign({ aria: { enabled: true, label: { enabled: false } } }, CAT, { series: bars(1) }) },
+    ] },
+  { id: 'pre-edges', custom: true, note: "the preprocessor's edges: show over enabled in one option; a merge's null show leaves enabled; initBase turns a null enabled on; a null label is made an object the description moves into; a null top-level description is not moved",
+    steps: [
+      { option: Object.assign({ aria: { enabled: true, show: false } }, CAT, { series: bars(1) }) },
+      { option: Object.assign({ aria: {} }, CAT, { series: bars(1) }) },
+      { merge: true, option: { aria: { show: null } } },
+      { option: Object.assign({ aria: { enabled: null } }, CAT, { series: bars(1) }) },
+      { option: Object.assign({ aria: { label: null, description: 'Moved.' } }, CAT, { series: bars(1) }) },
+      { option: Object.assign({ aria: { description: null, label: { description: 'Kept.' } } }, CAT, { series: bars(1) }) },
+    ] },
 ];
 
 function runScenario(sc) {
@@ -478,15 +523,21 @@ function runScenario(sc) {
       const attrs = fakeDom(chart);
       let rec;
       try {
-        const opt = JSON.parse(JSON.stringify(st.option));
-        if (!st.merge) opt.animation = false;
-        chart.setOption(opt, st.merge ? false : true);
+        if (st.action) chart.dispatchAction(JSON.parse(JSON.stringify(st.action)));
+        else {
+          const opt = JSON.parse(JSON.stringify(st.option));
+          if (!st.merge) opt.animation = false;
+          chart.setOption(opt, st.merge ? false : true);
+        }
         rec = record(chart, attrs);
       } catch (e) {
         if (e instanceof OracleError) throw e;
         rec = { error: String(e && e.message || e) };
       }
-      steps.push({ i, merge: !!st.merge, option: st.option, record: rec });
+      const s = { i, merge: !!st.merge, option: st.action ? null : st.option };
+      if (st.action) s.action = st.action;
+      s.record = rec;
+      steps.push(s);
       // an update that threw leaves the chart broken: the next step (never
       // a merge) starts on a new one
       if (rec.error) {
@@ -682,13 +733,13 @@ function checks(g) {
       if (!st.record.error) st.record.patterns.forEach((p, k) => p.resolved && checkTile(sc.id + '#' + st.i + ' pattern ' + k, p));
   // L1: the default-locale descriptions are the transcription's
   let labelChecks = 0;
-  const defaultLabel = sc => !/^label-custom$/.test(sc.id);
+  const defaultLabel = sc => !/^label-custom$/.test(sc.id) && !SCENARIOS.find(x => x.id === sc.id).custom;
   for (const sc of g.scenarios) {
     if (!defaultLabel(sc)) continue;
     for (const st of sc.steps) {
       const r = st.record;
       if (r.error || r.aria.label == null || !r.facts) continue;
-      if (st.option.aria && (st.option.aria.label || st.option.aria.description)) continue;
+      if (st.option && st.option.aria && (st.option.aria.label || st.option.aria.description)) continue;
       must(transcribeLabel(r.facts) === r.aria.label, sc.id + '#' + st.i + ': the label transcription disagrees:\n' + transcribeLabel(r.facts) + '\n' + r.aria.label);
       labelChecks++;
     }
@@ -745,6 +796,17 @@ function checks(g) {
     resolvedOf0(step('scope', 1), 0) !== resolvedOf0(step('scope', 0), 0)
     && resolvedOf0(step('scope', 1), 0) !== resolvedOf0(step('scope', 0), 1)
     && resolvedOf0(step('scope', 2), 0) === resolvedOf0(step('scope', 0), 0));
+  anchor('pre-frames: a frame\'s enabled false outweighs the base\'s show', step('pre-frames', 0).aria.label !== null
+    && step('pre-frames', 1).aria.label === null && step('pre-frames', 1).series.every(s => s.decal === null));
+  anchor('pre-frames: a frame\'s show turns it on', step('pre-frames', 2).aria.label === null && step('pre-frames', 3).aria.label !== null
+    && step('pre-frames', 4).aria.label !== null);
+  anchor('pre-media: a unit\'s show is read, the default\'s is not', step('pre-media', 0).aria.label !== null && step('pre-media', 1).aria.label === null);
+  anchor('pre-label: the frame\'s, the merge\'s, not the default\'s, not under label.enabled false',
+    step('pre-label', 0).aria.label === 'Base.' && step('pre-label', 1).aria.label === 'Frame.' && step('pre-label', 3).aria.label === 'Merged.'
+    && step('pre-label', 4).aria.label !== null && step('pre-label', 4).aria.label !== 'Default.' && step('pre-label', 5).aria.label === null);
+  anchor('pre-edges: show over enabled, a null show kept out, a null enabled on, the null label filled, the null description not moved',
+    step('pre-edges', 0).aria.label === null && step('pre-edges', 2).aria.label !== null && step('pre-edges', 3).aria.label !== null
+    && step('pre-edges', 4).aria.label === 'Moved.' && step('pre-edges', 5).aria.label === 'Kept.');
   return { guards, anchors, tileChecks, labelChecks };
 }
 

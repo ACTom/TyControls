@@ -1367,7 +1367,8 @@ function diffFlat(a, b, prefix) {
 
 // ---------- the series (rows, visualMeta, line paints) ----------
 const vmOptions = option => {
-  const v = option.visualMap;
+  // a root form: the base's (precision is written there only)
+  const v = option.baseOption ? option.baseOption.visualMap : option.visualMap;
   return v === undefined ? [] : Array.isArray(v) ? v : [v];
 };
 const seriesOptions = option => (Array.isArray(option.series) ? option.series : [option.series]);
@@ -1471,7 +1472,12 @@ function envOf(vm, top) {
 }
 
 // every difference of a case under a mutation
-function caseDiffs(c, top, mut) {
+function caseDiffs(c, top, mut, force) {
+  // a root form (baseOption with options / media) is not transcribed; a case
+  // added after the guards were recorded only when forced (the guards' lists
+  // stay as they were)
+  const def = CASES.find(d => d.id === c.id);
+  if (def.rootForm || (def.untranscribed && !force)) return [];
   const opts = vmOptions(c.option);
   const diffs = [];
   const models = {};
@@ -1959,6 +1965,27 @@ const CASES = [
   { id: 'D9', groups: ['D9'], drawn: true, note: "inRange symbolSize ['5', 20] over two pieces: a word that is a number, handed on at its end",
     option: { xAxis: {}, yAxis: {}, visualMap: P({ pieces: [{ lt: 3 }, { gte: 3 }], dimension: 1, inRange: { symbolSize: ['5', 20] } }),
       series: [{ type: 'scatter', data: [[0, 1], [1, 3]] }] } },
+  // the preprocessor per option (parseRawOption's doPreprocess): the base, every
+  // timeline frame, every media unit with a query -- never the media default.
+  // The transcription reads a plain option only: these cases are recorded, not
+  // transcribed.
+  { id: 'PP1', groups: ['PP1'], rootForm: true, note: "the first timeline frame's ec2 splitList (start / end) is that frame's pieces (min / max) and replaces the base's pieces",
+    option: { baseOption: Object.assign({ timeline: { show: false, axisType: 'category', data: ['a', 'b'] } },
+      barOpt(P({ pieces: [{ min: 0, max: 50, color: '#f00' }] }), [25, 75, 120])),
+    options: [{ visualMap: { splitList: [{ start: 50, end: 100, color: '#00f' }, { start: 100, end: 150 }] } }, {}] } },
+  { id: 'PP2', groups: ['PP2'], rootForm: true, note: "a media unit with a query is preprocessed: its splitList (start / end) is its pieces and replaces the base's",
+    option: { baseOption: barOpt(P({ pieces: [{ min: 0, max: 50, color: '#f00' }] }), [25, 75, 120]),
+      media: [{ query: { minWidth: 1 }, option: { visualMap: { splitList: [{ start: 50, end: 100, color: '#00f' }] } } }] } },
+  { id: 'PP3', groups: ['PP3'], rootForm: true, note: "the media default is not preprocessed: its splitList stays splitList, which nothing reads -- the base's splitNumber pieces",
+    option: { baseOption: barOpt(P({ splitNumber: 3 }), [25, 75, 120]),
+      media: [{ option: { visualMap: { splitList: [{ min: 50, max: 100 }] } } }] } },
+  { id: 'PP4', groups: ['PP4'], rootForm: true, note: "the media default is not preprocessed: a piece's start / end are not its min / max, the piece is open on both ends",
+    option: { baseOption: barOpt(P({ pieces: [{ min: 0, max: 50 }] }), [25, 75, 120]),
+      media: [{ option: { visualMap: { pieces: [{ start: 0, end: 50 }, { min: 50, max: 100 }] } } }] } },
+  { id: 'P22', groups: ['P22'], untranscribed: true, note: 'a piece with no end at all is (-Infinity, Infinity), represented by 0; the meta asks for the closest piece of -Infinity (Infinity - Infinity is NaN, never closer)',
+    option: barOpt(P({ pieces: [{ color: '#0f0' }, { min: 50, max: 100 }] }), [25, 75, 120]) },
+  { id: 'P23', groups: ['P23'], untranscribed: true, note: 'the preprocessor leaves a written pieces beside a splitList, and a written min beside a start',
+    option: barOpt(P({ pieces: [{ start: 10, min: 0, max: 50 }], splitList: [{ min: 50, max: 100 }] }), [5, 25, 75]) },
 ];
 
 // ---------- the guards ----------
@@ -2074,6 +2101,16 @@ function check(out) {
   const aqi = byId['G-line-aqi'].visualMaps[0].view;
   must(aqi.children.map(ch => ch.yText).join() === '0,24,48,72,96,120' && aqi.group.xText + ',' + aqi.group.yText === '755,65', 'line-aqi view');
   must(byId.C4.series[0].rows.every(r => r.values[0].state === 'outOfRange'), 'C4 rows');
+  // the preprocessor per option
+  must(byId.PP1.visualMaps[0].pieces.map(p => p.intervalText.join()).join(' ') === '50,100 100,150', 'PP1: the frame\'s pieces');
+  must(byId.PP2.visualMaps[0].pieces.map(p => p.intervalText.join()).join(' ') === '50,100', 'PP2: the unit\'s pieces');
+  must(byId.PP3.visualMaps[0].mode === 'splitNumber' && byId.PP3.visualMaps[0].pieces.length === 3, 'PP3: the default\'s splitList unread');
+  must(byId.PP4.visualMaps[0].pieces.some(p => p.intervalText.join() === '-Infinity,Infinity'), 'PP4: the default\'s start / end unread');
+  for (const id of ['P22', 'P23']) {
+    const dx = caseDiffs(byId[id], top, {}, true);
+    must(!dx.length, id + ': the transcription differs at ' + dx.slice(0, 4).map(x => x.field + ' (' + x.upstream + ' vs ' + x.mutated + ')').join('; '));
+  }
+  must(byId.P23.visualMaps[0].pieces.map(p => p.intervalText.join()).join(' ') === '0,50', 'P23: the written pieces and min');
 
   return GUARDS.map(gd => {
     const changed = [];
