@@ -48,7 +48,7 @@ uses
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter,
   tyControls.AdvChart.PolarBar, tyControls.AdvChart.Large,
-  tyControls.AdvChart.Brush;
+  tyControls.AdvChart.Brush, tyControls.AdvChart.Handlers;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -262,6 +262,9 @@ type
       the item's own style (4500) go over it }
     CbFill: array of TTyChartColor;
     CbFillSet: TTyBoolArray;
+    { [R2-J3] the series' visual callbacks' answers (not owned; nil: none)
+      -- a pictorial bar's symbol and size per item }
+    ItemCb: TTyItemCallbacks;
     RippleNumber: Integer;
     RippleFill: Boolean;
     RippleHasColor: Boolean;
@@ -743,6 +746,7 @@ begin
   Result.SymItemHas := nil;
   Result.CbFill := nil;
   Result.CbFillSet := nil;
+  Result.ItemCb := nil;
   Result.VisualRows := nil;
   Result.VisualLine := Default(TTyVisualLineFill);
   Result.VisualLineStroke := False;
@@ -1662,10 +1666,18 @@ var
     el: TTyChartElement;
     rs: TTySymbolSpec;
     lift, lineW: Double;
+  var k: Integer;
   begin
     Result := False;
-    rs := RowSymbol(AVisual, AStore, ARow, AVisual.Symbol, lift);
+    { [R2-J3] the item's own symbol keys and the series' callbacks
+      (SymItems), as a scatter's [was: the series' spec for every row] }
+    k := AStore.GetRawIndex(ARow);
+    if (k >= 0) and (k <= High(AVisual.SymItemHas)) and AVisual.SymItemHas[k] then
+      rs := RowSymbol(AVisual, AStore, ARow, AVisual.SymItems[k], lift)
+    else
+      rs := RowSymbol(AVisual, AStore, ARow, AVisual.Symbol, lift);
     if rs.Kind = tsyNone then Exit;
+    rs := TySymbolResolveOffset(rs);
     sh := TyBuildSymbol(rs, AP.X, AP.Y);
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     { THE ROW'S COLOUR, not the series': a visualMap's, or the datum's own
@@ -3251,10 +3263,14 @@ begin
     end;
     shape := TyBoxplotShape(pts);
 
-    { THE STYLE: the series', then the item's own itemStyle over it }
+    { THE STYLE: the series', [R2-J3] the colour callback's stroke
+      (itemStyle.borderColor, a boxplot's colour key), then the item's own
+      itemStyle over it }
     v := AVisual;
     v.Fill := wl.BoxFill;
     v.Stroke := wl.BoxStroke;
+    if AVisual.ItemCb <> nil then
+      if AVisual.ItemCb.ColOf(AStore.GetRawIndex(i), c) then v.Stroke := c;
     v.StrokeWidthLogical := wl.BoxLineWidthLogical;
     v.FillGradient := Default(TTyChartGradient);
     v.StrokeGradient := Default(TTyChartGradient);
@@ -3424,7 +3440,11 @@ begin
     { THE ROW'S OWN OPTIONS FIRST, because every one of them is per-datum
       upstream -- and one of them decides the glyph's size, so reading them
       after the size was solved would read them for nothing. }
-    spec := TyPictorialRowSpec(AVisual.Pictorial, AStore, i);
+    { [R2-J3] the series' callbacks' symbol and size under the row's own }
+    spec := AVisual.Pictorial;
+    if AVisual.ItemCb <> nil then
+      spec := TyPictorialCbSpec(spec, AVisual.ItemCb.SymOf(AStore.GetRawIndex(i)));
+    spec := TyPictorialRowSpec(spec, AStore, i);
     lay := ABinding.Cart.DataToLayout([x, y]);
     if not TyRectFIsValid(lay.Rect) then Continue;
     if not haveCol then
@@ -3806,6 +3826,10 @@ begin
         el.Anim.G[5] := spec.RotateDeg * Pi / 180;
         if IsNan(el.Anim.G[5]) then el.Anim.G[5] := 0;
         el.Anim.G[6] := Ord(spec.Repeat_ <> prNone);
+        { [R2-J3] a repeated glyph's __pictorialRepeatTimes (Sub is its
+          __pictorialAnimationIndex): what getAnimationDelayParams hands
+          a delay function }
+        el.Anim.G[7] := n;
         if baseHoriz then el.Anim.G[3] := el.Anim.G[3] * (-1 * pxSign)
         else el.Anim.G[2] := el.Anim.G[2] * (1 * pxSign);
       end;

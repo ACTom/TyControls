@@ -24,7 +24,15 @@ unit test.advchart.galleryrenderitem;
   while the chart draws, held to what the page's own function answers
   upstream (tools/advchart-oracle/gallery-callbacks.js); and d3-geo's
   geoAlbersUsa, transcribed in examples/advchart/ualbersusa.pas, held to
-  d3-geo 2.0.1 point by point (gallery-projection.js). }
+  d3-geo 2.0.1 point by point (gallery-projection.js).
+
+  [R2-J3] THE FUNCTIONS NOTHING CALLS WHILE A CHART DRAWS: an animation
+  timing function's arguments and answers on an animated set and on the
+  update after it (dataIndex, and a pictorial bar's index and count); the
+  tooltip formatters, positions and valueFormatters and the axis pointer
+  label formatters, by the answers they give for the same showTip -- by
+  series and data index, by a geo's region name, at a point -- upstream
+  and here. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Contnrs, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -33,6 +41,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.GfxEl, tyControls.AdvChart.Custom,
      tyControls.AdvChart.Geo, tyControls.AdvChart.Option,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Dataset,
+     tyControls.AdvChart.AnimOpt,
      test.advchart.customseries, urenderitems, ugenerated, ucallbacks,
      ualbersusa, umaps;
 type
@@ -91,11 +100,18 @@ type
     Fmt: TTyChartFormatter;
     Vis: TTyChartVisualHandler;
     Lay: TTyChartLabelLayoutHandler;
+    { [R2-J3] a tooltip position; an animation timing, either kind }
+    PosH: TTyChartPositionHandler;
+    Tim: TTyAnimTimingHandler;
+    Del: TTyAnimDelayHandler;
     constructor Create(const AName: string);
     destructor Destroy; override;
     function DoFmt(const AParams: TTyChartParams): string;
     function DoVis(const AParams: TTyChartCallbackParams): TJSONData;
     function DoLay(const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout;
+    function DoPos(const AArgs: TTyChartTooltipPosArgs): TTyChartTooltipPos;
+    function DoDel(ADataIndex: Integer; AHasIndex: Boolean;
+      const AParams: TTyAnimDelayParams): Double;
   end;
 
   { [R2-J2] what the demo's transcriptions answer while a gallery chart
@@ -107,6 +123,13 @@ type
     procedure Wrap;
     procedure RunOne(ACase: TJSONObject);
     procedure RunPrefixes(const APrefixes: array of string; AMin: Integer);
+    procedure ClearLogs;
+    function LogOf(const AName: string): TCbLog;
+    procedure LoadCase(ACase: TJSONObject; AAnimate: Boolean);
+    procedure CompareAnim(const APhase: string; AWant: TJSONObject);
+    procedure RunAnim(ACase: TJSONObject);
+    procedure RunHover(ACase: TJSONObject);
+    procedure RunHoverPrefixes(const APrefixes: array of string; AMin: Integer);
   protected
     function FixtureName: string; override;
     function NewMirror: TCuMirror; override;
@@ -118,6 +141,11 @@ type
     procedure TestTheScattersAreUpstreams;
     procedure TestTheCalendarsAndGaugesAreUpstreams;
     procedure TestTheRestAreUpstreams;
+    { [R2-J3] }
+    procedure TestTheAnimationTimingsAreUpstreams;
+    procedure TestTheBarAndLineHoversAreUpstreams;
+    procedure TestTheScatterHoversAreUpstreams;
+    procedure TestTheOtherHoversAreUpstreams;
   end;
 
   { [R2-J2] the handlers the demo registers against the names the gallery
@@ -131,6 +159,8 @@ type
   published
     procedure TestEveryGalleryCallbackIsTranscribed;
     procedure TestTheProjectionIsD3s;
+    { [R2-J3] }
+    procedure TestTheTableReadersAreThePages;
   end;
 
   { [R2-J] backwardCompat's text-style compatibility: a label's ec2
@@ -145,6 +175,8 @@ type
   end;
 
 implementation
+
+uses DateUtils, tyControls.AdvChart.Data;
 
 function FindUp(const ARel: string): string;
 var d: string; i: Integer;
@@ -465,6 +497,72 @@ begin
   else Answers.Add('j:?');
 end;
 
+{ [R2-J3] a position as the oracle writes the page's answer: an array or an
+  object of numbers (hex) and words, a word, nothing }
+function PosValueJson(const AV: TTyChartPosValue): string;
+begin
+  case AV.Kind of
+    cpvNumber: Result := '"' + HexOf(AV.Num) + '"';
+    cpvText: Result := '"' + AV.Text + '"';
+  else
+    Result := 'null';
+  end;
+end;
+
+function TCbLog.DoPos(const AArgs: TTyChartTooltipPosArgs): TTyChartTooltipPos;
+var s: string;
+
+  procedure Key(const AKey: string; const AV: TTyChartPosValue);
+  begin
+    if AV.Kind = cpvAbsent then Exit;
+    if s <> '' then s := s + ',';
+    s := s + '"' + AKey + '":' + PosValueJson(AV);
+  end;
+
+begin
+  Result := PosH(AArgs);
+  case Result.Kind of
+    ctpPoint: Answers.Add('j:[' + PosValueJson(Result.X) + ',' + PosValueJson(Result.Y) + ']');
+    ctpSide: Answers.Add('s:' + Result.Side);
+    ctpBox:
+      begin
+        s := '';
+        Key('bottom', Result.Bottom);
+        Key('left', Result.Left);
+        Key('right', Result.Right);
+        Key('top', Result.Top);
+        Answers.Add('j:{' + s + '}');
+      end;
+  else
+    Answers.Add('u');
+  end;
+end;
+
+{ [R2-J3] a timing function's call as the oracle writes it:
+  'i:<index> p:<params> => <answer>' }
+function TCbLog.DoDel(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
+var a, p: string;
+begin
+  if Assigned(Del) then Result := Del(ADataIndex, AHasIndex, AParams)
+  else if Assigned(Tim) then Result := Tim(ADataIndex, AHasIndex)
+  else Result := NaN;
+  if AHasIndex then a := 'i:n:' + IntToStr(ADataIndex) else a := 'i:u';
+  if not AParams.Present then p := 'u'
+  else
+  begin
+    p := '';
+    if AParams.HasCount then p := '"count":"' + HexOf(AParams.Count) + '"';
+    if AParams.HasIndex then
+    begin
+      if p <> '' then p := p + ',';
+      p := p + '"index":"' + HexOf(AParams.Index) + '"';
+    end;
+    p := 'j:{' + p + '}';
+  end;
+  Answers.Add(a + ' p:' + p + ' => n:' + HexOf(Result));
+end;
+
 { the object the page's function answered, as the oracle writes it: its
   keys sorted, numbers hex }
 function TCbLog.DoLay(const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout;
@@ -529,8 +627,15 @@ begin
 end;
 
 procedure TAdvChartGalleryCallbackOracleTest.TearDown;
+var i: Integer;
 begin
-  { the demo's own handlers back in place of the loggers }
+  { the demo's own handlers back in place of the loggers: a timing logger
+    stands in the delay registry, which a timing's registration does not
+    replace }
+  if FLogs <> nil then
+    for i := 0 to FLogs.Count - 1 do
+      if Assigned(TCbLog(FLogs[i]).Tim) or Assigned(TCbLog(FLogs[i]).Del) then
+        TyChartUnregisterAnimDelay(TCbLog(FLogs[i]).Name);
   RegisterGalleryCallbacks;
   FreeAndNil(FLogs);
   inherited TearDown;
@@ -545,6 +650,9 @@ var
   f: TTyChartFormatter;
   v: TTyChartVisualHandler;
   l: TTyChartLabelLayoutHandler;
+  ps: TTyChartPositionHandler;
+  tm: TTyAnimTimingHandler;
+  dl: TTyAnimDelayHandler;
 begin
   names := TStringList.Create;
   try
@@ -567,6 +675,22 @@ begin
       begin
         lg.Lay := l;
         TyChartRegisterLabelLayoutHandler(names[i], @lg.DoLay);
+      end
+      { [R2-J3] }
+      else if TyChartFindPositionHandler(names[i], ps) then
+      begin
+        lg.PosH := ps;
+        TyChartRegisterPositionHandler(names[i], @lg.DoPos);
+      end
+      else if TyChartFindAnimDelay(names[i], dl) then
+      begin
+        lg.Del := dl;
+        TyChartRegisterAnimDelay(names[i], @lg.DoDel);
+      end
+      else if TyChartFindAnimTiming(names[i], tm) then
+      begin
+        lg.Tim := tm;
+        TyChartRegisterAnimDelay(names[i], @lg.DoDel);
       end;
     end;
   finally
@@ -648,6 +772,262 @@ begin
   FreeAndNil(FChart);
 end;
 
+{ ==================== [R2-J3] animation and hover ==================== }
+
+procedure TAdvChartGalleryCallbackOracleTest.ClearLogs;
+var i: Integer;
+begin
+  for i := 0 to FLogs.Count - 1 do TCbLog(FLogs[i]).Answers.Clear;
+end;
+
+function TAdvChartGalleryCallbackOracleTest.LogOf(const AName: string): TCbLog;
+var i: Integer;
+begin
+  for i := 0 to FLogs.Count - 1 do
+    if TCbLog(FLogs[i]).Name = AName then Exit(TCbLog(FLogs[i]));
+  Result := nil;
+end;
+
+{ the case's file on a new chart: animated as the page wrote it, or with the
+  root's animation off as the oracle's hover chart is }
+procedure TAdvChartGalleryCallbackOracleTest.LoadCase(ACase: TJSONObject;
+  AAnimate: Boolean);
+var
+  text: string;
+  root: TJSONObject;
+begin
+  FWhere := ACase.Strings['id'];
+  text := ReadFileText(FGallery + ACase.Strings['file']);
+  if FMaps <> '' then RegisterGalleryMapsFor(text, FMaps);
+  NewChart(TJSONObject(FRoot).Integers['W'], TJSONObject(FRoot).Integers['H']);
+  if AAnimate then
+  begin
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := 1700000000000;
+    FChart.SetOption(text);
+  end
+  else
+  begin
+    root := TJSONObject(GetJSON(text));
+    try
+      if root.IndexOfName('animation') < 0 then root.Add('animation', False);
+      FChart.SetOption(root.AsJSON, True);
+    finally
+      root.Free;
+    end;
+  end;
+  RenderNow;
+end;
+
+{ every timing logger's calls against the phase's: the same set (a function
+  of Math.random's answer is '?' upstream) }
+procedure TAdvChartGalleryCallbackOracleTest.CompareAnim(const APhase: string;
+  AWant: TJSONObject);
+var
+  i, k: Integer;
+  lg: TCbLog;
+  want: TJSONArray;
+  got, exp, s: string;
+  random: Boolean;
+  gl: TStringList;
+begin
+  for i := 0 to FLogs.Count - 1 do
+  begin
+    lg := TCbLog(FLogs[i]);
+    if not (Assigned(lg.Tim) or Assigned(lg.Del)) then Continue;
+    exp := '';
+    random := False;
+    if AWant.IndexOfName(lg.Name) >= 0 then
+    begin
+      want := AWant.Arrays[lg.Name];
+      for k := 0 to want.Count - 1 do
+      begin
+        exp := exp + '|' + want.Strings[k];
+        if Copy(want.Strings[k], Length(want.Strings[k]), 1) = '?' then random := True;
+      end;
+    end;
+    gl := TStringList.Create;
+    try
+      gl.Sorted := True;
+      gl.Duplicates := dupIgnore;
+      gl.CaseSensitive := True;
+      gl.UseLocale := False;
+      for k := 0 to lg.Answers.Count - 1 do
+      begin
+        s := lg.Answers[k];
+        if random then s := Copy(s, 1, System.Pos(' => ', s) + 3) + '?';
+        gl.Add(s);
+      end;
+      got := '';
+      for k := 0 to gl.Count - 1 do got := got + '|' + gl[k];
+    finally
+      gl.Free;
+    end;
+    SameStr(lg.Name + ' ' + APhase, got, exp);
+  end;
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.RunAnim(ACase: TJSONObject);
+var
+  anim: TJSONObject;
+  text: string;
+begin
+  anim := ACase.Objects['anim'];
+  ClearLogs;
+  LoadCase(ACase, True);
+  CompareAnim('enter', anim.Objects['enter']);
+  { the same option again: an update }
+  ClearLogs;
+  text := ReadFileText(FGallery + ACase.Strings['file']);
+  FChart.SetOption(text);
+  RenderNow;
+  CompareAnim('update', anim.Objects['update']);
+  FChart.Measurer := nil;
+  FreeAndNil(FChart);
+end;
+
+{ A MARKER'S STYLE NAME IS NUMBERED FROM A RANDOM BASE upstream
+  (TooltipMarkupStyleCreator: Math.round(Math.random() * 10)), from 0 here:
+  the marker's rich token compared without its number }
+function NormMarkers(const S: string): string;
+const cTok = '{__EC_aUTo_';
+var i, q: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(S) do
+  begin
+    if Copy(S, i, Length(cTok)) = cTok then
+    begin
+      Result := Result + cTok + '#';
+      q := i + Length(cTok);
+      while (q <= Length(S)) and (S[q] in ['0'..'9']) do Inc(q);
+      i := q;
+    end
+    else
+    begin
+      Result := Result + S[i];
+      Inc(i);
+    end;
+  end;
+end;
+
+{ WIND-BARB'S TIMES ARE THE PAGE'S LOCAL TIME (echarts.format.formatTime of
+  a Date): the oracle runs in UTC, this machine in its own zone -- an
+  upstream answer that opens 'yyyy-MM-dd hh:mm' is read as UTC and written
+  in local time before it is compared }
+function LocalStamp(const S: string): string;
+var
+  dt: TDateTime;
+  y, mo, d, hh, mi: Integer;
+begin
+  Result := S;
+  if (Length(S) < 16) or (S[5] <> '-') or (S[8] <> '-') or (S[11] <> ' ')
+    or (S[14] <> ':') then Exit;
+  if not (TryStrToInt(Copy(S, 1, 4), y) and TryStrToInt(Copy(S, 6, 2), mo)
+    and TryStrToInt(Copy(S, 9, 2), d) and TryStrToInt(Copy(S, 12, 2), hh)
+    and TryStrToInt(Copy(S, 15, 2), mi)) then Exit;
+  dt := UniversalTimeToLocal(EncodeDate(y, mo, d) + EncodeTime(hh, mi, 0, 0));
+  Result := FormatDateTime('yyyy"-"mm"-"dd hh":"nn', dt) + Copy(S, 17, MaxInt);
+end;
+
+{ NOT COMPARED ON A HOVER, each a difference the port declares:
+    line-tooltip-touch, candlestick-touch  the pointer's handle
+        (axisPointer.handle keeps an axis' pointer and its tooltip up --
+        spec §6 leaves the handle out): the label formatter of the one, the
+        position of the other's volume grid
+    scatter-nutrients-matrix  an axis' own pointer (axisPointer.show on
+        axes a 'none' tooltip does not trigger): upstream's
+        saveTooltipAxisInfo collects it and shows its axis tooltip; the
+        port collects only a tooltip's axes (reported in spec §229d)
+    scatter-weight at a pointer  a marker's hit slop (4 logical px, a
+        declared port difference) puts the pointer on the male symbol the
+        exact circle misses }
+function HoverSkipped(const AName, AWhat: string): Boolean;
+begin
+  Result := (AName = 'line-tooltip-touch.formatter')
+    or ((AName = 'candlestick-touch.position') and (Pos('"x"', AWhat) > 0)
+      and (Pos('"y" : 290', AWhat) > 0))
+    or (Pos('scatter-nutrients-matrix.', AName) = 1)
+    or ((AName = 'scatter-weight.formatter') and (Pos('"x"', AWhat) > 0));
+end;
+
+{ every step's showTip, and what each hover function answered: upstream's
+  answers all among the port's; a function the drawing never calls
+  (tooltip's, position's) answers exactly upstream's, and nothing where
+  upstream says nothing }
+procedure TAdvChartGalleryCallbackOracleTest.RunHover(ACase: TJSONObject);
+var
+  steps, want: TJSONArray;
+  step, calls, drawn: TJSONObject;
+  i, j, k: Integer;
+  lg: TCbLog;
+  what, got, exp, s: string;
+begin
+  LoadCase(ACase, False);
+  FChart.TooltipNow := 0;
+  steps := ACase.Arrays['hover'];
+  drawn := ACase.Objects['calls'];
+  for i := 0 to steps.Count - 1 do
+  begin
+    step := steps.Objects[i];
+    what := step.Objects['action'].AsJSON;
+    ClearLogs;
+    FChart.DispatchAction(what);
+    RenderNow;
+    calls := step.Objects['calls'];
+    for j := 0 to FLogs.Count - 1 do
+    begin
+      lg := TCbLog(FLogs[j]);
+      if not (Assigned(lg.Fmt) or Assigned(lg.PosH)) then Continue;
+      if HoverSkipped(lg.Name, what) then Continue;
+      if calls.IndexOfName(lg.Name) >= 0 then
+      begin
+        want := calls.Arrays[lg.Name];
+        if drawn.IndexOfName(lg.Name) >= 0 then
+        begin
+          { a label's or an axis label's formatter: upstream's answers among
+            the port's }
+          for k := 0 to want.Count - 1 do
+          begin
+            Inc(FCompared);
+            if lg.Answers.IndexOf(want.Strings[k]) < 0 then
+              Bad(lg.Name + ' on ' + what + ': upstream answers ' + want.Strings[k]
+                + ', the port never does');
+          end;
+          Continue;
+        end;
+        exp := '';
+        for k := 0 to want.Count - 1 do
+        begin
+          s := NormMarkers(want.Strings[k]);
+          if Pos('wind-barb.', lg.Name) = 1 then
+            s := 's:' + LocalStamp(Copy(s, 3, MaxInt));
+          exp := exp + '|' + s;
+        end;
+        got := '';
+        for k := 0 to lg.Answers.Count - 1 do got := got + '|' + NormMarkers(lg.Answers[k]);
+        SameStr(lg.Name + ' on ' + what, got, exp);
+      end
+      else if (drawn.IndexOfName(lg.Name) < 0) and (lg.Answers.Count > 0) then
+      begin
+        Inc(FCompared);
+        Bad(lg.Name + ' on ' + what + ': called here (' + lg.Answers[0]
+          + '), never upstream');
+      end
+      else Inc(FCompared);
+    end;
+    { the tip hidden for good before the next step (hideLater's delay
+      run out): a box still on its way out is painted, and its formatter
+      asked, by the next step's render }
+    FChart.DispatchAction('{"type":"hideTip"}');
+    FChart.TooltipNow := FChart.TooltipNow + 1000;
+    FChart.TooltipTick(FChart.TooltipNow);
+  end;
+  FChart.Measurer := nil;
+  FreeAndNil(FChart);
+end;
+
 function HasPrefix(const AId: string; const APrefixes: array of string): Boolean;
 var i: Integer;
 begin
@@ -677,6 +1057,57 @@ begin
     if HasPrefix(all.Objects[i].Strings['id'], APrefixes) then
       RunOne(all.Objects[i]);
   Finish(APrefixes[0], AMin);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.RunHoverPrefixes(
+  const APrefixes: array of string; AMin: Integer);
+var
+  all: TJSONArray;
+  i: Integer;
+begin
+  all := TJSONObject(FRoot).Arrays['cases'];
+  for i := 0 to all.Count - 1 do
+    if HasPrefix(all.Objects[i].Strings['id'], APrefixes)
+      and (all.Objects[i].Find('hover') <> nil) then
+      RunHover(all.Objects[i]);
+  Finish(APrefixes[0] + ' hovers', AMin);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheAnimationTimingsAreUpstreams;
+var
+  all: TJSONArray;
+  i, n: Integer;
+begin
+  all := TJSONObject(FRoot).Arrays['cases'];
+  n := 0;
+  for i := 0 to all.Count - 1 do
+    if all.Objects[i].Find('anim') <> nil then
+    begin
+      RunAnim(all.Objects[i]);
+      Inc(n);
+    end;
+  AssertTrue('the fixture animates its timing cases', n >= 6);
+  Finish('animation timings', 6);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheBarAndLineHoversAreUpstreams;
+begin
+  RunHoverPrefixes(cBarsLines, 500);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheScatterHoversAreUpstreams;
+begin
+  RunHoverPrefixes(cScatters, 100);
+end;
+
+procedure TAdvChartGalleryCallbackOracleTest.TestTheOtherHoversAreUpstreams;
+var p: array of string;
+  i: Integer;
+begin
+  SetLength(p, Length(cCalGauge) + Length(cRest));
+  for i := 0 to High(cCalGauge) do p[i] := cCalGauge[i];
+  for i := 0 to High(cRest) do p[Length(cCalGauge) + i] := cRest[i];
+  RunHoverPrefixes(p, 300);
 end;
 
 procedure TAdvChartGalleryCallbackOracleTest.TestEveryCaseIsInAGroup;
@@ -713,6 +1144,94 @@ end;
 procedure TAdvChartGalleryCallbackOracleTest.TestTheRestAreUpstreams;
 begin
   RunPrefixes(cRest, 1000);
+end;
+
+{ [R2-J3] the two functions that read a table of the page's -- lines-
+  airline's routes and airports (carried as data), scatter-nutrients-
+  matrix's colours (computed from the option, GalleryPrepare) -- handed the
+  params the oracle handed the page's own and answering what it answered }
+procedure TAdvChartGalleryCallbackTest.TestTheTableReadersAreThePages;
+var
+  sl: TStringList;
+  root: TJSONData;
+  direct, arr, row: TJSONArray;
+  d: TJSONObject;
+  i, j, k: Integer;
+  prm: TTyChartParams;
+  f: TTyChartFormatter;
+  got, id: string;
+  cell: TJSONData;
+  n: Integer;
+begin
+  RegisterGalleryCallbacks;
+  GalleryDataDir := FindUp('examples' + PathDelim + 'advchart' + PathDelim + 'data');
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(FixturePath('advchart-gallery-callbacks.json'));
+    root := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  try
+    direct := TJSONObject(root).Arrays['direct'];
+    AssertTrue('the fixture calls them', direct.Count >= 6);
+    n := 0;
+    for i := 0 to direct.Count - 1 do
+    begin
+      d := direct.Objects[i];
+      id := d.Strings['id'];
+      if id = 'scatter-nutrients-matrix' then
+        GalleryPrepare(id, ReadText(FGallery + id + '.json'));
+      if d.Elements['params'] is TJSONArray then
+      begin
+        arr := d.Arrays['params'];
+        SetLength(prm, arr.Count);
+        for j := 0 to arr.Count - 1 do
+        begin
+          prm[j] := TyChartBlankParams;
+          prm[j].ComponentType := 'series';
+          prm[j].AxisDimension := arr.Objects[j].Strings['axisDim'];
+          row := arr.Objects[j].Arrays['data'];
+          prm[j].Raw.Shape := rshArray;
+          SetLength(prm[j].Raw.Cells, row.Count);
+          for k := 0 to row.Count - 1 do
+          begin
+            cell := row.Items[k];
+            prm[j].Raw.Cells[k] := Default(TTyDataValue);
+            case cell.JSONType of
+              jtNumber:
+                begin
+                  prm[j].Raw.Cells[k].Kind := dvkNumber;
+                  prm[j].Raw.Cells[k].Num := cell.AsFloat;
+                end;
+              jtString:
+                begin
+                  prm[j].Raw.Cells[k].Kind := dvkText;
+                  prm[j].Raw.Cells[k].Text := cell.AsString;
+                end;
+            end;
+          end;
+        end;
+      end
+      else
+      begin
+        SetLength(prm, 1);
+        prm[0] := TyChartBlankParams;
+        prm[0].ComponentType := 'series';
+        prm[0].DataIndex := d.Objects['params'].Integers['dataIndex'];
+        prm[0].RawDataIndex := prm[0].DataIndex;
+      end;
+      AssertTrue(d.Strings['name'] + ' is registered',
+        TyChartFindFormatter(d.Strings['name'], f) and Assigned(f));
+      got := 's:' + f(prm);
+      AssertEquals(d.Strings['name'] + ' on ' + d.Elements['params'].AsJSON,
+        d.Strings['answer'], got);
+      Inc(n);
+    end;
+    AssertTrue('both functions answered', n >= 6);
+  finally
+    root.Free;
+  end;
 end;
 
 procedure TAdvChartGalleryCallbackTest.SetUp;

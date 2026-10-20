@@ -705,6 +705,10 @@ type
     FJitter: TTyJitterPass;
     { LARGE MODE, by binding slot, as the last build decided it [Batch 117] }
     FLargeKinds: array of TTyLargeKind;
+    { [R2-J3] per slot, what the series' visual callbacks answered on the
+      last rebuild (nil: none is a callback) -- upstream's visual stage runs
+      them once per update }
+    FItemCbs: array of TTyItemCallbacks;
     { PROGRESSIVE RENDERING AND appendData [Batch 119]: every slot's
       pipeline (its context, its chunks, the args its tasks ran with); a
       chunk still to draw; the next update is a setOption's (a pipeline with
@@ -2850,6 +2854,19 @@ type
       row, or AOnlyRow alone }
     procedure VisualCallbacks(ASlot: Integer; var AVisual: TTySeriesVisual;
       AOnlyRow: Integer = -1);
+    { [R2-J3] every series' per-item visual callbacks run (the caller frees
+      the answers): the four symbol keys of a series with symbols, the
+      colour key of its style path. ASymColour is the series style's colour
+      a symbol callback's params carry where no colour callback answered.
+      Every row, or AOnlyRow alone; nil when nothing is a callback. }
+    function ItemCallbacks(ASlot: Integer; AOnlyRow: Integer;
+      ASymColour: TTyChartColor): TTyItemCallbacks;
+    { [R2-J3] the rebuild's callbacks: run for every slot (SolveItemCallbacks),
+      read (ItemCbOf: nil when none), freed with the build }
+    procedure SolveItemCallbacks;
+    procedure RadarSymbolCallbacks(ASlot: Integer; var AVisual: TTyRadarVisual);
+    function ItemCbOf(ASlot: Integer): TTyItemCallbacks;
+    procedure FreeItemCbs;
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
       out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
     procedure ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;

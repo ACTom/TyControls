@@ -325,6 +325,9 @@ const CASES = [
     ] } },
   { id: 'albers-usa', note: '[R2-J2] d3-geo geoAlbersUsa through the handles (map-usa-projection): the lower 48, Alaska and Hawaii in their insets, Puerto Rico in none (null: its points dropped)', maps: [M('usaplain', 'usa')],
     option: { geo: { map: 'usaplain', projection: { project: '@albersUsa', unproject: '@albersUsaInv' } } } },
+  { id: 'albers-usa-label', note: '[R2-J3] the same with the labels shown: Puerto Rico has no centre, so its label stays at textConfig.position inside -- the middle of its (empty) path box through the group transform', maps: [M('usaplain', 'usa')],
+    option: { geo: { map: 'usaplain', label: { show: true }, left: 100, top: 50, width: 400, height: 250, zoom: 1.5,
+      projection: { project: '@albersUsa', unproject: '@albersUsaInv' } } } },
   { id: 'center-zoom', note: 'center and zoom from the option; percentages of the data rect; scaleLimit clamping the zoom', maps: [M('usa', 'usa', USA_SPECIAL)],
     option: { geo: [
       { map: 'usa', center: [-100, 40], zoom: 2, left: 0, top: 0, width: 400, height: 300 },

@@ -224,6 +224,8 @@ begin
   FChords := nil;
   FChordInks := nil;
   FRadarDims := nil;
+  { [R2-J3] the callbacks' answers name the stores' rows }
+  FreeItemCbs;
   FreeStores;
   { the matrices after the stores, which borrow their category lists
     [Batch 145] }

@@ -4352,6 +4352,9 @@
    "handlers": [
     "lines-airline.formatter"
    ],
+   "carried": [
+    "lines-airline-tables.json.gz"
+   ],
    "bytes": 7087425,
    "file": "lines-airline.json.gz",
    "gzBytes": 483423

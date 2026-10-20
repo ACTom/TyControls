@@ -1682,6 +1682,10 @@ begin
   { THE STYLE: each key the row's lineStyle, else the series', else the
     default (opacity 0.5, width 1); the colour the series' visual }
   Result.Stroke := AStroke;
+  { [R2-J3] the colour callback (lineStyle.color) under the row's own }
+  if (ItemCbOf(ASlot) <> nil) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+    and ItemCbOf(ASlot).ColOf(FStores[ASlot].GetRawIndex(ARow), c) then
+    Result.Stroke := c;
   if LnColour(TyLinesItemFind(raw, ['lineStyle', 'color']), c) then Result.Stroke := c;
   d := TyLinesFind(raw, ANode, ['lineStyle', 'width']);
   if d = nil then Result.Width := 1 else Result.Width := TyLinesJsNum(d);
@@ -2209,8 +2213,11 @@ begin
         { buildPath's `if (smooth)` }
         if (sol.Smooth <> 0) and not IsNan(sol.Smooth) and (Length(row.Pts) >= 2) then
           row.Cmds := TyParallelSmoothCmds(row.Pts, sol.Smooth);
-        { the style: series, visualMap, the item's own }
+        { the style: series, [R2-J3] the colour callback (lineStyle.color),
+          visualMap, the item's own }
         c := base;
+        if ItemCbOf(i) <> nil then
+          if not ItemCbOf(i).ColOf(raw, c) then c := base;
         if (raw >= 0) and (raw <= High(vrows)) and vrows[raw].ColorSet then
           c := TyVisualToChart(vrows[raw].Color);
         w := lsWidth;
@@ -2817,6 +2824,38 @@ begin
   Result.Z := 0;
 end;
 
+{ [R2-J3] a radar item's symbol: the series' callbacks' answers under the
+  item's own keys (seriesSymbolTask, then dataSymbolTask) }
+procedure TTyAdvanceChart.RadarSymbolCallbacks(ASlot: Integer;
+  var AVisual: TTyRadarVisual);
+var
+  cb: TTyItemCallbacks;
+  raw: Integer;
+  d, data: TJSONData;
+  spec: TTySymbolSpec;
+begin
+  cb := ItemCbOf(ASlot);
+  if (cb = nil) or not cb.HasSym then Exit;
+  data := nil;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if d is TJSONObject then data := TJSONObject(d).Find('data');
+  if Length(AVisual.RowSyms) < Length(cb.Sym) then
+  begin
+    SetLength(AVisual.RowSyms, Length(cb.Sym));
+    SetLength(AVisual.RowSymSet, Length(cb.Sym));
+  end;
+  for raw := 0 to High(cb.Sym) do
+  begin
+    if cb.Sym[raw] = nil then Continue;
+    spec := TySymbolSpecOf(cb.Sym[raw], AVisual.Symbol);
+    if (data is TJSONArray) and (raw < TJSONArray(data).Count)
+      and (TJSONArray(data).Items[raw] is TJSONObject) then
+      spec := TySymbolSpecOf(TJSONObject(TJSONArray(data).Items[raw]), spec);
+    AVisual.RowSyms[raw] := spec;
+    AVisual.RowSymSet[raw] := True;
+  end;
+end;
+
 function TTyAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
 var
   k: Integer;
@@ -2856,6 +2895,7 @@ begin
   Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
   SymbolItems(FBindings[ASlot].SeriesIndex, Result.Symbol, Result.RowSyms,
     Result.RowSymSet);
+  RadarSymbolCallbacks(ASlot, Result);
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
@@ -3139,7 +3179,9 @@ begin
   base := TTyChartColor(SeriesColor(si));
   for k := 0 to rawN - 1 do
   begin
-    Result[k] := base;
+    { [R2-J3] the series' colour callback is the row's style colour }
+    if (ItemCbOf(ASlot) = nil) or not ItemCbOf(ASlot).ColOf(k, Result[k]) then
+      Result[k] := base;
     if (ASlot <= High(FVisualRows)) and (k <= High(FVisualRows[ASlot]))
       and FVisualRows[ASlot][k].ColorSet then
       Result[k] := TyVisualToChart(FVisualRows[ASlot][k].Color)
@@ -3267,7 +3309,7 @@ end;
 
 procedure TTyAdvanceChart.BoxplotStyle(ASlot: Integer; var AVisual: TTySeriesVisual);
 var
-  d: TJSONData;
+  d, cd: TJSONData;
   st: TTyOptStyle;
   si: Integer;
 begin
@@ -3279,6 +3321,13 @@ begin
   d := FOption.ComponentAt('series', si);
   if not (d is TJSONObject) then Exit;
   st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+  { [R2-J3] A FUNCTION AS itemStyle.color, not the boxplot's colour key: the
+    style task gives the fill the palette's colour (`isFunction(fill) ?
+    colorPalette : fill`) }
+  cd := TJSONObject(d).Find('itemStyle');
+  if cd is TJSONObject then cd := TJSONObject(cd).Find('color') else cd := nil;
+  if (cd <> nil) and (cd.JSONType = jtString) and TyChartIsHandlerRef(cd.AsString) then
+    AVisual.Whisker.BoxFill := TTyChartColor(SeriesPaletteColor(si));
   if st.Color.Written then
   begin
     if st.Color.IsNone then AVisual.Whisker.BoxFill := 0

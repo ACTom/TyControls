@@ -37,7 +37,8 @@ uses
   tyControls.AdvChart.Color, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.Calendar,
-  tyControls.AdvChart.JsMath, tyControls.AdvChart.ZrPath;
+  tyControls.AdvChart.JsMath, tyControls.AdvChart.ZrPath,
+  tyControls.AdvChart.Handlers;
 
 const
   TyTreeSeriesTypeName = 'tree';
@@ -131,6 +132,10 @@ type
     ItemLabels: TTyLabelSpecArray;
     SeriesName: string;
     LabelValueDim: Integer;
+    { [R2-J3] the series' visual callbacks (not owned; nil: none) -- by row,
+      the symbol answers under the item's own keys and the colour under its
+      own itemStyle }
+    ItemCb: TTyItemCallbacks;
   end;
 
 function TyHierarchyOf(AOption: TTyChartOption; ASeriesIndex: Integer): TTyHierarchy;
@@ -1487,7 +1492,7 @@ var
   el: TTyChartElement;
   shape: TTyChartShape;
   sym: TTySymbolSpec;
-  colour: TTyChartColor;
+  colour, cbColour: TTyChartColor;
   w: Double;
   collapsedParent, zeroSize: Boolean;
   spec: TTyLabelSpec;
@@ -1721,8 +1726,11 @@ begin
   begin
     if not ASolved.Pos[row].Placed then Continue;
     ChainOf(ASolved, row, chain, cnt);
-    { the symbol is read shallow: the item's own over the series' }
+    { the symbol is read shallow: the item's own over the series' -- and
+      over the series' callbacks' answers [R2-J3] }
     sym := ASolved.Spec.Symbol;
+    if (AInk.ItemCb <> nil) and (AInk.ItemCb.SymOf(row) <> nil) then
+      sym := TySymbolSpecOf(AInk.ItemCb.SymOf(row), sym);
     if ItemObj(ASolved, row) <> nil then sym := TySymbolSpecOf(ItemObj(ASolved, row), sym);
     sym := TySymbolResolveOffset(sym);
     if sym.Kind = tsyNone then Continue;
@@ -1750,7 +1758,11 @@ begin
         ASolved.Pos[row].PY + sym.OffsetY));
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
     el := TyChartElement(shape);
-    colour := ChainColour(Slice(chain, cnt), 'itemStyle', 'color', AInk.NodeColour);
+    { [R2-J3] the series' colour callback under the chain's own colour }
+    cbColour := AInk.NodeColour;
+    if (AInk.ItemCb <> nil) and not AInk.ItemCb.ColOf(row, cbColour) then
+      cbColour := AInk.NodeColour;
+    colour := ChainColour(Slice(chain, cnt), 'itemStyle', 'color', cbColour);
     collapsedParent := (not ASolved.Hier.Nodes[row].Expanded)
       and (Length(ASolved.Hier.Nodes[row].Children) > 0);
     if sym.Empty then

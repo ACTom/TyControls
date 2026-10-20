@@ -1,0 +1,1659 @@
+{
+ "source": "D:/Projects/echarts/dist/echarts.js",
+ "version": "6.1.0",
+ "seed": 2463534242,
+ "W": 600,
+ "H": 400,
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "notes": [
+  "every chart: chart._ssr false, env.node off, 600 x 400, the root's animation false.",
+  "calls: per callback, the distinct calls; items: what each item's element draws."
+ ],
+ "cases": [
+  {
+   "id": "line",
+   "note": "a line: the four symbol callbacks and the colour callback; an item with its own symbolSize over the callback",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3,
+       {
+        "value": 5,
+        "symbolSize": 20
+       },
+       2,
+       6
+      ],
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "symbolRotate": "@vrot",
+      "symbolOffset": "@voff",
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:2 i:2 s:0 t: n:C c:#5070dd",
+     "v:3 i:0 s:0 t: n:A c:#5070dd",
+     "v:5 i:1 s:0 t: n:B c:#5070dd",
+     "v:6 i:3 s:0 t: n:D c:#5070dd"
+    ],
+    "voff": [
+     "v:2 i:2 s:0 t: n:C c:#61a0a8",
+     "v:3 i:0 s:0 t: n:A c:#c23531",
+     "v:5 i:1 s:0 t: n:B c:#2f4554",
+     "v:6 i:3 s:0 t: n:D c:#d48265"
+    ],
+    "vrot": [
+     "v:2 i:2 s:0 t: n:C c:#61a0a8",
+     "v:3 i:0 s:0 t: n:A c:#c23531",
+     "v:5 i:1 s:0 t: n:B c:#2f4554",
+     "v:6 i:3 s:0 t: n:D c:#d48265"
+    ],
+    "vsize": [
+     "v:2 i:2 s:0 t: n:C c:#61a0a8",
+     "v:3 i:0 s:0 t: n:A c:#c23531",
+     "v:5 i:1 s:0 t: n:B c:#2f4554",
+     "v:6 i:3 s:0 t: n:D c:#d48265"
+    ],
+    "vsym": [
+     "v:2 i:2 s:0 t: n:C c:#61a0a8",
+     "v:3 i:0 s:0 t: n:A c:#c23531",
+     "v:5 i:1 s:0 t: n:B c:#2f4554",
+     "v:6 i:3 s:0 t: n:D c:#d48265"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "gx": "4062480000000000",
+     "gy": "4068100000000000",
+     "sym": "circle",
+     "cx": "4062480000000000",
+     "cy": "4068100000000000",
+     "gsx": "4010000000000000",
+     "gsy": "4010000000000000",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "gx": "40702c0000000000",
+     "gy": "405ae00000000000",
+     "sym": "rect",
+     "cx": "40704c0000000000",
+     "cy": "405aa00000000000",
+     "gsx": "4024000000000000",
+     "gsy": "4024000000000000",
+     "sx": "4024000000000000",
+     "sy": "4024000000000000",
+     "rot": "3fe0c152382d7365",
+     "ox": "4000000000000000",
+     "oy": "bff0000000000000",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "gx": "4077340000000000",
+     "gy": "406d600000000000",
+     "sym": "triangle",
+     "cx": "4077740000000000",
+     "cy": "406d200000000000",
+     "gsx": "401c000000000001",
+     "gsy": "401c000000000001",
+     "sx": "401c000000000000",
+     "sy": "401c000000000000",
+     "rot": "3ff0c152382d7365",
+     "ox": "4010000000000000",
+     "oy": "c000000000000000",
+     "fill": "#61a0a8",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "gx": "407e3c0000000000",
+     "gy": "4050400000000000",
+     "sym": "diamond",
+     "cx": "407e9c0000000000",
+     "cy": "404f000000000000",
+     "gsx": "4021000000000000",
+     "gsy": "4021000000000000",
+     "sx": "4021000000000000",
+     "sy": "4021000000000000",
+     "rot": "3ff921fb54442d18",
+     "ox": "4018000000000000",
+     "oy": "c008000000000000",
+     "fill": "#d48265",
+     "stroke": null
+    }
+   ]
+  },
+  {
+   "id": "scatter",
+   "note": "scatter and effectScatter (done in R2-J2): the same keys",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {},
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        3
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        4,
+        6
+       ]
+      ],
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "symbolRotate": "@vrot",
+      "symbolOffset": "@voff",
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     },
+     {
+      "type": "effectScatter",
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        2,
+        2
+       ]
+      ],
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "symbolRotate": "@vrot",
+      "symbolOffset": "@voff"
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:1,3 i:0 s:0 t: n: c:#5070dd",
+     "v:2,5 i:1 s:0 t: n: c:#5070dd",
+     "v:3,2 i:2 s:0 t: n: c:#5070dd",
+     "v:4,6 i:3 s:0 t: n: c:#5070dd"
+    ],
+    "voff": [
+     "v:1,1 i:0 s:1 t: n: c:#b6d634",
+     "v:1,3 i:0 s:0 t: n: c:#c23531",
+     "v:2,2 i:1 s:1 t: n: c:#b6d634",
+     "v:2,5 i:1 s:0 t: n: c:#2f4554",
+     "v:3,2 i:2 s:0 t: n: c:#61a0a8",
+     "v:4,6 i:3 s:0 t: n: c:#d48265"
+    ],
+    "vrot": [
+     "v:1,1 i:0 s:1 t: n: c:#b6d634",
+     "v:1,3 i:0 s:0 t: n: c:#c23531",
+     "v:2,2 i:1 s:1 t: n: c:#b6d634",
+     "v:2,5 i:1 s:0 t: n: c:#2f4554",
+     "v:3,2 i:2 s:0 t: n: c:#61a0a8",
+     "v:4,6 i:3 s:0 t: n: c:#d48265"
+    ],
+    "vsize": [
+     "v:1,1 i:0 s:1 t: n: c:#b6d634",
+     "v:1,3 i:0 s:0 t: n: c:#c23531",
+     "v:2,2 i:1 s:1 t: n: c:#b6d634",
+     "v:2,5 i:1 s:0 t: n: c:#2f4554",
+     "v:3,2 i:2 s:0 t: n: c:#61a0a8",
+     "v:4,6 i:3 s:0 t: n: c:#d48265"
+    ],
+    "vsym": [
+     "v:1,1 i:0 s:1 t: n: c:#b6d634",
+     "v:1,3 i:0 s:0 t: n: c:#c23531",
+     "v:2,2 i:1 s:1 t: n: c:#b6d634",
+     "v:2,5 i:1 s:0 t: n: c:#2f4554",
+     "v:3,2 i:2 s:0 t: n: c:#61a0a8",
+     "v:4,6 i:3 s:0 t: n: c:#d48265"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "gx": "4069500000000000",
+     "gy": "4068100000000000",
+     "sym": "circle",
+     "cx": "4069500000000000",
+     "cy": "4068100000000000",
+     "gsx": "4010000000000000",
+     "gsy": "4010000000000000",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "gx": "4073b00000000000",
+     "gy": "405ae00000000000",
+     "sym": "rect",
+     "cx": "4073d00000000000",
+     "cy": "405aa00000000000",
+     "gsx": "4016000000000001",
+     "gsy": "4016000000000001",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "3fe0c152382d7365",
+     "ox": "4000000000000000",
+     "oy": "bff0000000000000",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "gx": "407ab80000000000",
+     "gy": "406d600000000000",
+     "sym": "triangle",
+     "cx": "407af80000000000",
+     "cy": "406d200000000000",
+     "gsx": "401c000000000001",
+     "gsy": "401c000000000001",
+     "sx": "401c000000000000",
+     "sy": "401c000000000000",
+     "rot": "3ff0c152382d7365",
+     "ox": "4010000000000000",
+     "oy": "c000000000000000",
+     "fill": "#61a0a8",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "gx": "4080e00000000000",
+     "gy": "4050400000000000",
+     "sym": "diamond",
+     "cx": "4081100000000000",
+     "cy": "404f000000000000",
+     "gsx": "4021000000000000",
+     "gsy": "4021000000000000",
+     "sx": "4021000000000000",
+     "sy": "4021000000000000",
+     "rot": "3ff921fb54442d18",
+     "ox": "4018000000000000",
+     "oy": "c008000000000000",
+     "fill": "#d48265",
+     "stroke": null
+    },
+    {
+     "s": 1,
+     "i": 0,
+     "type": "path",
+     "fill": "#b6d634",
+     "stroke": null
+    },
+    {
+     "s": 1,
+     "i": 1,
+     "type": "path",
+     "fill": "#b6d634",
+     "stroke": null
+    }
+   ]
+  },
+  {
+   "id": "graph",
+   "note": "a graph without layout, zoomed (the symbols and their offsets under the view scale): node symbols by callback, the symbolRotate node d has over the callback; the colour callback on the nodes",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "zoom": 2,
+      "data": [
+       {
+        "name": "a",
+        "x": 10,
+        "y": 10,
+        "value": 1
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 50,
+        "value": 2
+       },
+       {
+        "name": "c",
+        "x": 50,
+        "y": 100,
+        "value": 3
+       },
+       {
+        "name": "d",
+        "x": 150,
+        "y": 120,
+        "value": 4,
+        "symbolRotate": 45
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       }
+      ],
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "symbolRotate": "@vrot",
+      "symbolOffset": "@voff",
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:1 i:0 s:0 t: n:a c:#5070dd",
+     "v:2 i:1 s:0 t: n:b c:#5070dd",
+     "v:3 i:2 s:0 t: n:c c:#5070dd",
+     "v:4 i:3 s:0 t: n:d c:#5070dd"
+    ],
+    "voff": [
+     "v:1 i:0 s:0 t: n:a c:#c23531",
+     "v:2 i:1 s:0 t: n:b c:#2f4554",
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:3 s:0 t: n:d c:#d48265"
+    ],
+    "vrot": [
+     "v:1 i:0 s:0 t: n:a c:#c23531",
+     "v:2 i:1 s:0 t: n:b c:#2f4554",
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:3 s:0 t: n:d c:#d48265"
+    ],
+    "vsize": [
+     "v:1 i:0 s:0 t: n:a c:#c23531",
+     "v:2 i:1 s:0 t: n:b c:#2f4554",
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:3 s:0 t: n:d c:#d48265"
+    ],
+    "vsym": [
+     "v:1 i:0 s:0 t: n:a c:#c23531",
+     "v:2 i:1 s:0 t: n:b c:#2f4554",
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:3 s:0 t: n:d c:#d48265"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "gx": "4024000000000000",
+     "gy": "4024000000000000",
+     "sym": "circle",
+     "cx": "c05ad1745d1745d1",
+     "cy": "c05e000000000000",
+     "gsx": "4019999999999999",
+     "gsy": "401999999999999a",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "gx": "4059000000000000",
+     "gy": "4049000000000000",
+     "sym": "rect",
+     "cx": "407a3904a7904a78",
+     "cy": "405bc8253c8253ca",
+     "gsx": "4021999999999999",
+     "gsy": "402199999999999a",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "3fe0c152382d7365",
+     "ox": "4000000000000000",
+     "oy": "bff0000000000000",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "gx": "4049000000000000",
+     "gy": "4059000000000000",
+     "sym": "triangle",
+     "cx": "40607b586fb586fb",
+     "cy": "407906fb586fb588",
+     "gsx": "4026666666666668",
+     "gsy": "4026666666666666",
+     "sx": "401c000000000000",
+     "sy": "401c000000000000",
+     "rot": "3ff0c152382d7365",
+     "ox": "4010000000000000",
+     "oy": "c000000000000000",
+     "fill": "#61a0a8",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "gx": "4062c00000000000",
+     "gy": "405e000000000000",
+     "sym": "diamond",
+     "cx": "408666fb586fb587",
+     "cy": "408019999999999a",
+     "gsx": "402b333333333334",
+     "gsy": "402b333333333334",
+     "sx": "4021000000000000",
+     "sy": "4021000000000000",
+     "rot": "3fe921fb54442d18",
+     "ox": "4018000000000000",
+     "oy": "c008000000000000",
+     "fill": "#d48265",
+     "stroke": null
+    }
+   ]
+  },
+  {
+   "id": "radar",
+   "note": "a radar of two items: symbolSize and symbol by callback, the colour callback",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "max": 10
+      },
+      {
+       "max": 10
+      },
+      {
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         7
+        ],
+        "name": "p"
+       },
+       {
+        "value": [
+         6,
+         2,
+         4
+        ],
+        "name": "q"
+       }
+      ],
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:3,5,7 i:0 s:0 t: n:p c:#5070dd",
+     "v:6,2,4 i:1 s:0 t: n:q c:#5070dd"
+    ],
+    "vsize": [
+     "v:3,5,7 i:0 s:0 t: n:p c:#c23531",
+     "v:6,2,4 i:1 s:0 t: n:q c:#2f4554"
+    ],
+    "vsym": [
+     "v:3,5,7 i:0 s:0 t: n:p c:#c23531",
+     "v:6,2,4 i:1 s:0 t: n:q c:#2f4554"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "k": 0,
+     "sym": "circle",
+     "cx": "4072c00000000000",
+     "cy": "4065400000000000",
+     "gsx": "4010000000000000",
+     "gsy": "4010000000000000",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "4072c00000000000",
+     "oy": "4065400000000000",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "k": 1,
+     "sym": "circle",
+     "cx": "40700b2dff4f6083",
+     "cy": "406c1fffffffffff",
+     "gsx": "4010000000000000",
+     "gsy": "4010000000000000",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "40700b2dff4f6083",
+     "oy": "406c1fffffffffff",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "k": 2,
+     "sym": "circle",
+     "cx": "407689f2cdc4127b",
+     "cy": "406d600000000001",
+     "gsx": "4010000000000000",
+     "gsy": "4010000000000000",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "407689f2cdc4127b",
+     "oy": "406d600000000001",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "k": -1,
+     "type": "polyline",
+     "fill": "none",
+     "stroke": "#c23531"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "k": 0,
+     "sym": "rect",
+     "cx": "4072c00000000000",
+     "cy": "4061800000000000",
+     "gsx": "4016000000000000",
+     "gsy": "4016000000000000",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "0000000000000000",
+     "ox": "4072c00000000000",
+     "oy": "4061800000000000",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "k": 1,
+     "sym": "rect",
+     "cx": "4071aadf32ec8d01",
+     "cy": "406a400000000000",
+     "gsx": "4016000000000000",
+     "gsy": "4016000000000000",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "0000000000000000",
+     "ox": "4071aadf32ec8d01",
+     "oy": "406a400000000000",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "k": 2,
+     "sym": "rect",
+     "cx": "4074ea419a26e5fd",
+     "cy": "406b800000000001",
+     "gsx": "4016000000000000",
+     "gsy": "4016000000000000",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "0000000000000000",
+     "ox": "4074ea419a26e5fd",
+     "oy": "406b800000000001",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "k": -1,
+     "type": "polyline",
+     "fill": "none",
+     "stroke": "#2f4554"
+    }
+   ]
+  },
+  {
+   "id": "tree",
+   "note": "a tree: node symbolSize and symbol by callback; the colour callback, the symbols filled with it",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "tree",
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "itemStyle": {
+       "color": "@vcol"
+      },
+      "data": [
+       {
+        "name": "r",
+        "value": 1,
+        "children": [
+         {
+          "name": "a",
+          "value": 2
+         },
+         {
+          "name": "b",
+          "value": 3
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:1 i:1 s:0 t: n:r c:#5070dd",
+     "v:2 i:2 s:0 t: n:a c:#5070dd",
+     "v:3 i:3 s:0 t: n:b c:#5070dd",
+     "v:undefined i:0 s:0 t: n: c:#5070dd"
+    ],
+    "vsize": [
+     "v:1 i:1 s:0 t: n:r c:#2f4554",
+     "v:2 i:2 s:0 t: n:a c:#61a0a8",
+     "v:3 i:3 s:0 t: n:b c:#d48265",
+     "v:undefined i:0 s:0 t: n: c:#c23531"
+    ],
+    "vsym": [
+     "v:1 i:1 s:0 t: n:r c:#2f4554",
+     "v:2 i:2 s:0 t: n:a c:#61a0a8",
+     "v:3 i:3 s:0 t: n:b c:#d48265",
+     "v:undefined i:0 s:0 t: n: c:#c23531"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "none": true
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "gx": "0000000000000000",
+     "gy": "4063000000000000",
+     "sym": "rect",
+     "cx": "4052000000000000",
+     "cy": "4069000000000000",
+     "gsx": "4016000000000000",
+     "gsy": "4016000000000000",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "obj",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "gx": "407c800000000000",
+     "gy": "4053000000000000",
+     "sym": "triangle",
+     "cx": "4080800000000000",
+     "cy": "405f000000000000",
+     "gsx": "401c000000000000",
+     "gsy": "401c000000000000",
+     "sx": "401c000000000000",
+     "sy": "401c000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "obj",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "gx": "407c800000000000",
+     "gy": "406c800000000000",
+     "sym": "diamond",
+     "cx": "4080800000000000",
+     "cy": "4071400000000000",
+     "gsx": "4021000000000000",
+     "gsy": "4021000000000000",
+     "sx": "4021000000000000",
+     "sy": "4021000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "obj",
+     "stroke": null
+    }
+   ]
+  },
+  {
+   "id": "pictorial",
+   "note": "a pictorial bar: symbol, symbolSize and symbolRotate by callback; the colour callback",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "data": [
+       4,
+       6,
+       3
+      ],
+      "symbol": "@vsym",
+      "symbolSize": "@vsize",
+      "symbolRotate": "@vrot",
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:3 i:2 s:0 t: n:c c:#5070dd",
+     "v:4 i:0 s:0 t: n:a c:#5070dd",
+     "v:6 i:1 s:0 t: n:b c:#5070dd"
+    ],
+    "vrot": [
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:0 s:0 t: n:a c:#c23531",
+     "v:6 i:1 s:0 t: n:b c:#2f4554"
+    ],
+    "vsize": [
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:0 s:0 t: n:a c:#c23531",
+     "v:6 i:1 s:0 t: n:b c:#2f4554"
+    ],
+    "vsym": [
+     "v:3 i:2 s:0 t: n:c c:#61a0a8",
+     "v:4 i:0 s:0 t: n:a c:#c23531",
+     "v:6 i:1 s:0 t: n:b c:#2f4554"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "n": 1,
+     "gsym": "circle",
+     "sx": "3f947ae147ae147b",
+     "sy": "3f947ae147ae147b",
+     "rot": "0000000000000000",
+     "fill": "#c23531"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "n": 1,
+     "gsym": "rect",
+     "sx": "3f9c28f5c28f5c29",
+     "sy": "3f9c28f5c28f5c29",
+     "rot": "0000000000000000",
+     "fill": "#2f4554"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "n": 1,
+     "gsym": "triangle",
+     "sx": "3fa1eb851eb851ec",
+     "sy": "3fa1eb851eb851ec",
+     "rot": "0000000000000000",
+     "fill": "#61a0a8"
+    }
+   ]
+  },
+  {
+   "id": "bar-pie-funnel",
+   "note": "the colour callback on a bar, a pie and a funnel",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ],
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     },
+     {
+      "type": "pie",
+      "center": [
+       "80%",
+       "30%"
+      ],
+      "radius": 40,
+      "data": [
+       {
+        "value": 3,
+        "name": "p"
+       },
+       {
+        "value": 5,
+        "name": "q"
+       },
+       {
+        "value": 2,
+        "name": "r"
+       }
+      ],
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     },
+     {
+      "type": "funnel",
+      "left": "70%",
+      "top": "60%",
+      "width": 100,
+      "height": 100,
+      "data": [
+       {
+        "value": 30,
+        "name": "f"
+       },
+       {
+        "value": 50,
+        "name": "g"
+       }
+      ],
+      "itemStyle": {
+       "color": "@vcol"
+      }
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:2 i:2 s:0 t: n:C c:#5070dd",
+     "v:2 i:2 s:1 t: n:r c:#b6d634",
+     "v:3 i:0 s:0 t: n:A c:#5070dd",
+     "v:3 i:0 s:1 t: n:p c:#b6d634",
+     "v:30 i:0 s:2 t: n:f c:#505372",
+     "v:5 i:1 s:0 t: n:B c:#5070dd",
+     "v:5 i:1 s:1 t: n:q c:#b6d634",
+     "v:50 i:1 s:2 t: n:g c:#505372",
+     "v:6 i:3 s:0 t: n:D c:#5070dd"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "type": "rect",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "type": "rect",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "type": "rect",
+     "fill": "#61a0a8",
+     "stroke": null
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "type": "rect",
+     "fill": "#d48265",
+     "stroke": null
+    },
+    {
+     "s": 1,
+     "i": 0,
+     "type": "sector",
+     "fill": "#c23531",
+     "stroke": null
+    },
+    {
+     "s": 1,
+     "i": 1,
+     "type": "sector",
+     "fill": "#2f4554",
+     "stroke": null
+    },
+    {
+     "s": 1,
+     "i": 2,
+     "type": "sector",
+     "fill": "#61a0a8",
+     "stroke": null
+    },
+    {
+     "s": 2,
+     "i": 0,
+     "type": "polygon",
+     "fill": "#c23531",
+     "stroke": "#fff"
+    },
+    {
+     "s": 2,
+     "i": 1,
+     "type": "polygon",
+     "fill": "#2f4554",
+     "stroke": "#fff"
+    }
+   ]
+  },
+  {
+   "id": "stroke-series",
+   "note": "series that draw with the stroke: lines and parallel read lineStyle.color, a boxplot itemStyle.borderColor; a boxplot's itemStyle.color as a function is the palette's",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": [
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "type": "value",
+      "gridIndex": 1
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "type": "value",
+      "gridIndex": 1
+     }
+    ],
+    "grid": [
+     {
+      "left": 40,
+      "top": 20,
+      "width": 200,
+      "height": 150
+     },
+     {
+      "left": 320,
+      "top": 20,
+      "width": 200,
+      "height": 150
+     }
+    ],
+    "parallel": {
+     "left": 40,
+     "top": 230,
+     "width": 500,
+     "height": 120
+    },
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     },
+     {
+      "dim": 2
+     }
+    ],
+    "series": [
+     {
+      "type": "boxplot",
+      "itemStyle": {
+       "borderColor": "@vcol"
+      },
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      ]
+     },
+     {
+      "type": "boxplot",
+      "itemStyle": {
+       "color": "@vcol"
+      },
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        6
+       ],
+       [
+        2,
+        3,
+        4,
+        6,
+        7
+       ]
+      ]
+     },
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "lineStyle": {
+       "color": "@vcol"
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          1,
+          1
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2,
+          6
+         ],
+         [
+          6,
+          2
+         ]
+        ]
+       }
+      ]
+     },
+     {
+      "type": "parallel",
+      "lineStyle": {
+       "color": "@vcol"
+      },
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        3,
+        2,
+        1
+       ],
+       [
+        2,
+        3,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "calls": {
+    "vcol": [
+     "v:0,1,2,3,4,5 i:0 s:0 t: n:a c:#5070dd",
+     "v:1,2,3 i:0 s:3 t: n: c:#ff994d",
+     "v:1,2,3,4,5,6 i:1 s:0 t: n:b c:#5070dd",
+     "v:2,3,1 i:2 s:3 t: n: c:#ff994d",
+     "v:3,2,1 i:1 s:3 t: n: c:#ff994d",
+     "v:undefined i:0 s:2 t: n: c:#505372",
+     "v:undefined i:1 s:2 t: n: c:#505372"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "type": "boxplotBoxPath",
+     "fill": "#fff",
+     "stroke": "#c23531"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "type": "boxplotBoxPath",
+     "fill": "#fff",
+     "stroke": "#2f4554"
+    },
+    {
+     "s": 1,
+     "i": 0,
+     "type": "boxplotBoxPath",
+     "fill": "#b6d634",
+     "stroke": "#b6d634"
+    },
+    {
+     "s": 1,
+     "i": 1,
+     "type": "boxplotBoxPath",
+     "fill": "#b6d634",
+     "stroke": "#b6d634"
+    },
+    {
+     "s": 2,
+     "i": 0,
+     "type": "ec-line",
+     "fill": null,
+     "stroke": "#c23531"
+    },
+    {
+     "s": 2,
+     "i": 1,
+     "type": "ec-line",
+     "fill": null,
+     "stroke": "#2f4554"
+    },
+    {
+     "s": 3,
+     "i": 0,
+     "type": "polyline",
+     "fill": null,
+     "stroke": "#c23531"
+    },
+    {
+     "s": 3,
+     "i": 1,
+     "type": "polyline",
+     "fill": null,
+     "stroke": "#2f4554"
+    },
+    {
+     "s": 3,
+     "i": 2,
+     "type": "polyline",
+     "fill": null,
+     "stroke": "#61a0a8"
+    }
+   ]
+  },
+  {
+   "id": "markpoint",
+   "note": "a markPoint whose symbolSize and symbol are callbacks (MarkPointView, on the marker's data)",
+   "option": {
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3,
+       5,
+       2,
+       6
+      ],
+      "markPoint": {
+       "symbol": "@vsym",
+       "symbolSize": "@vsize",
+       "data": [
+        {
+         "type": "max"
+        },
+        {
+         "type": "min"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "calls": {
+    "vsize": [
+     "v:2 i:1 s:0 t: n:2 c:",
+     "v:6 i:0 s:0 t: n:3 c:"
+    ],
+    "vsym": [
+     "v:2 i:1 s:0 t: n:2 c:",
+     "v:6 i:0 s:0 t: n:3 c:"
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "gx": "4062480000000000",
+     "gy": "4068100000000000",
+     "sym": "emptyCircle",
+     "cx": "4062480000000000",
+     "cy": "4068100000000000",
+     "gsx": "4008000000000000",
+     "gsy": "4008000000000000",
+     "sx": "4008000000000000",
+     "sy": "4008000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#fff",
+     "stroke": "#5070dd"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "gx": "40702c0000000000",
+     "gy": "405ae00000000000",
+     "sym": "emptyCircle",
+     "cx": "40702c0000000000",
+     "cy": "405ae00000000000",
+     "gsx": "4008000000000000",
+     "gsy": "4008000000000000",
+     "sx": "4008000000000000",
+     "sy": "4008000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#fff",
+     "stroke": "#5070dd"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "gx": "4077340000000000",
+     "gy": "406d600000000000",
+     "sym": "emptyCircle",
+     "cx": "4077340000000000",
+     "cy": "406d600000000000",
+     "gsx": "4008000000000000",
+     "gsy": "4008000000000000",
+     "sx": "4008000000000000",
+     "sy": "4008000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#fff",
+     "stroke": "#5070dd"
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "gx": "407e3c0000000000",
+     "gy": "4050400000000000",
+     "sym": "emptyCircle",
+     "cx": "407e3c0000000000",
+     "cy": "4050400000000000",
+     "gsx": "4008000000000000",
+     "gsy": "4008000000000000",
+     "sx": "4008000000000000",
+     "sy": "4008000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#fff",
+     "stroke": "#5070dd"
+    },
+    {
+     "mark": true,
+     "s": 0,
+     "i": 0,
+     "gx": "407e3c0000000000",
+     "gy": "4050400000000000",
+     "sym": "circle",
+     "cx": "407e3c0000000000",
+     "cy": "4050400000000000",
+     "gsx": "4010000000000000",
+     "gsy": "4010000000000000",
+     "sx": "4010000000000000",
+     "sy": "4010000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#5070dd",
+     "stroke": null
+    },
+    {
+     "mark": true,
+     "s": 0,
+     "i": 1,
+     "gx": "4077340000000000",
+     "gy": "406d600000000000",
+     "sym": "rect",
+     "cx": "4077340000000000",
+     "cy": "406d600000000000",
+     "gsx": "4016000000000000",
+     "gsy": "4016000000000000",
+     "sx": "4016000000000000",
+     "sy": "4016000000000000",
+     "rot": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "fill": "#5070dd",
+     "stroke": null
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "line: four symbol callbacks and the colour",
+   "ok": true
+  },
+  {
+   "name": "line: the item's own symbolSize stands over the callback",
+   "ok": true
+  },
+  {
+   "name": "graph: symbols by callback",
+   "ok": true
+  },
+  {
+   "name": "tree: symbols by callback",
+   "ok": true
+  },
+  {
+   "name": "stroke series: the lines' and the parallel's colour callbacks",
+   "ok": true
+  },
+  {
+   "name": "markpoint: the marker's symbol callbacks",
+   "ok": true
+  }
+ ]
+}

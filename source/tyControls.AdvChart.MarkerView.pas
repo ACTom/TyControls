@@ -140,6 +140,9 @@ type
     Scale: Double;
     { the root's side of a text block [Batch 86] }
     RtGlobal: TTyRtGlobal;
+    { [R2-J3] the coordinate that names a marker's datum (the series'
+      itemName dimension -- a category axis'): 0 x, 1 y, -1 none }
+    NameDim: Integer;
   end;
 
 { the global text style's defaults (globalDefault.ts): 12 px, normal, and
@@ -2675,9 +2678,61 @@ function TyMkPointPictures(const ABlock: TTyMkBlock; const AIn: TTyMkPicInput;
 var
   own, master, gts: TMkView;
   MP: TMkLevels;
-  i, n: Integer;
+  i, n, k: Integer;
   maxZ2, s: Double;
   E: TTyMkEnd;
+  { [R2-J3] the symbol callbacks' answers of the point being pictured }
+  cbHeld: array of TJSONData;
+
+  { [R2-J3] MarkPointView: a symbol, symbolSize, symbolRotate or
+    symbolOffset that is a function is called as cb(rawValue, params) --
+    mpModel.getRawValue and getDataParams of the marker's datum (n: its
+    place in the marker's data; no colour) -- and its answer is the value.
+    Any other value as it is. }
+  function Cbd(AData: TJSONData): TJSONData;
+  var prm: TTyChartCallbackParams;
+  begin
+    Result := AData;
+    if (AData = nil) or (AData.JSONType <> jtString)
+      or not TyChartIsHandlerRef(AData.AsString) then Exit;
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'markPoint';
+    prm.SeriesType := AIn.SeriesType;
+    prm.SeriesIndex := AIn.SeriesIndex;
+    prm.SeriesName := AIn.SeriesName.Str;
+    prm.DataIndex := n;
+    prm.RawDataIndex := n;
+    prm.Status := 'normal';
+    case E.Name.Kind of
+      mvkNum: prm.Name := TyChartValueText(E.Name.Num);
+      mvkStr: prm.Name := E.Name.Str;
+    else
+      { no name of its own: mpData's name dimension, the coordinate on the
+        series' category axis (the max's category index, '3') }
+      if (AIn.NameDim >= 0) and (AIn.NameDim <= 1) then
+        case E.Coord[AIn.NameDim].Kind of
+          mvkNum: prm.Name := TyChartValueText(E.Coord[AIn.NameDim].Num);
+          mvkStr: prm.Name := E.Coord[AIn.NameDim].Str;
+        end;
+    end;
+    case E.Value.Kind of
+      mvkNum:
+        begin
+          SetLength(prm.Values, 1);
+          prm.Values[0] := E.Value.Num;
+          prm.ValueText := TyChartValueText(E.Value.Num);
+        end;
+      mvkStr: prm.ValueText := E.Value.Str;
+    else
+      prm.ValueText := 'undefined';
+    end;
+    Result := TyChartRunVisualHandler(AData.AsString, prm);
+    if Result <> nil then
+    begin
+      SetLength(cbHeld, Length(cbHeld) + 1);
+      cbHeld[High(cbHeld)] := Result;
+    end;
+  end;
 
   procedure Picture(var P: TTyMkPointPic);
   var
@@ -2719,7 +2774,7 @@ var
     P.Fill := fill;
     d := Chain(lv, 'z2');
     if d <> nil then P.Z2 := NumOf(d) else P.Z2 := 0;
-    d := Chain(lv, 'symbol');
+    d := Cbd(Chain(lv, 'symbol'));
     P.Drawn := not (IsNan(E.Point.X) or IsNan(E.Point.Y));
     if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'none') then P.Drawn := False;
     if not P.Drawn then Exit;
@@ -2730,7 +2785,7 @@ var
     if P.Empty then P.ShapeType := LowerCase(Copy(typ, 6, 1)) + Copy(typ, 7, MaxInt)
     else P.ShapeType := typ;
     { normalizeSymbolSize }
-    sz := Chain(lv, 'symbolSize');
+    sz := Cbd(Chain(lv, 'symbolSize'));
     if (sz <> nil) and (sz.JSONType = jtArray) then
     begin
       if sz.Count > 0 then w := NumOf(sz.Items[0]) else w := NaN;
@@ -2765,14 +2820,14 @@ var
       if IsNan(P.EmphRatio) or IsInfinite(P.EmphRatio) or not (P.EmphRatio > 0) then
         P.EmphRatio := 1;
     end;
-    d := Chain(lv, 'symbolRotate');
+    d := Cbd(Chain(lv, 'symbolRotate'));
     if Truthy(d) then rot := NumOf(d) * Pi / 180 else rot := 0;
     if IsNan(rot) then rot := 0;
     P.Rotation := rot;
     { normalizeSymbolOffset: percent of the size, y falling back to x }
     P.X := 0;
     P.Y := 0;
-    off := Chain(lv, 'symbolOffset');
+    off := Cbd(Chain(lv, 'symbolOffset'));
     if off <> nil then
     begin
       if off.JSONType = jtArray then
@@ -3063,7 +3118,13 @@ begin
     E := ABlock.Points[i].E;
     Result[n] := Default(TTyMkPointPic);
     Result[n].Item := i;
-    Picture(Result[n]);
+    cbHeld := nil;
+    try
+      Picture(Result[n]);
+    finally
+      for k := 0 to High(cbHeld) do cbHeld[k].Free;
+      cbHeld := nil;
+    end;
     Inc(n);
     if n >= Length(Result) then Break;
   end;

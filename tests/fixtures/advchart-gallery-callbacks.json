@@ -114,21 +114,426 @@
    "file": "area-simple.json",
    "grafted": true,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "area-simple.position": [
+       "j:[\"4062000000000000\",\"10%\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 334
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 668
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 505,
+      "y": 346
+     },
+     "calls": {
+      "area-simple.position": [
+       "j:[\"407f900000000000\",\"10%\"]"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "area-time-axis",
    "file": "area-time-axis.json",
    "grafted": true,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "area-time-axis.position": [
+       "j:[\"4062000000000000\",\"10%\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2000
+     },
+     "calls": {
+      "area-time-axis.position": [
+       "j:[\"407f8049bb4fcfe0\",\"10%\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3999
+     },
+     "calls": {
+      "area-time-axis.position": [
+       "j:[\"408afed912c0c086\",\"10%\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 385
+     },
+     "calls": {
+      "area-time-axis.position": [
+       "j:[\"407f800000000000\",\"10%\"]"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "bar-animation-delay",
    "file": "bar-animation-delay.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "anim": {
+    "enter": {
+     "bar-animation-delay.animationDelay": [
+      "i:n:0 p:u => n:0000000000000000",
+      "i:n:1 p:u => n:4024000000000000",
+      "i:n:10 p:u => n:4059000000000000",
+      "i:n:11 p:u => n:405b800000000000",
+      "i:n:12 p:u => n:405e000000000000",
+      "i:n:13 p:u => n:4060400000000000",
+      "i:n:14 p:u => n:4061800000000000",
+      "i:n:15 p:u => n:4062c00000000000",
+      "i:n:16 p:u => n:4064000000000000",
+      "i:n:17 p:u => n:4065400000000000",
+      "i:n:18 p:u => n:4066800000000000",
+      "i:n:19 p:u => n:4067c00000000000",
+      "i:n:2 p:u => n:4034000000000000",
+      "i:n:20 p:u => n:4069000000000000",
+      "i:n:21 p:u => n:406a400000000000",
+      "i:n:22 p:u => n:406b800000000000",
+      "i:n:23 p:u => n:406cc00000000000",
+      "i:n:24 p:u => n:406e000000000000",
+      "i:n:25 p:u => n:406f400000000000",
+      "i:n:26 p:u => n:4070400000000000",
+      "i:n:27 p:u => n:4070e00000000000",
+      "i:n:28 p:u => n:4071800000000000",
+      "i:n:29 p:u => n:4072200000000000",
+      "i:n:3 p:u => n:403e000000000000",
+      "i:n:30 p:u => n:4072c00000000000",
+      "i:n:31 p:u => n:4073600000000000",
+      "i:n:32 p:u => n:4074000000000000",
+      "i:n:33 p:u => n:4074a00000000000",
+      "i:n:34 p:u => n:4075400000000000",
+      "i:n:35 p:u => n:4075e00000000000",
+      "i:n:36 p:u => n:4076800000000000",
+      "i:n:37 p:u => n:4077200000000000",
+      "i:n:38 p:u => n:4077c00000000000",
+      "i:n:39 p:u => n:4078600000000000",
+      "i:n:4 p:u => n:4044000000000000",
+      "i:n:40 p:u => n:4079000000000000",
+      "i:n:41 p:u => n:4079a00000000000",
+      "i:n:42 p:u => n:407a400000000000",
+      "i:n:43 p:u => n:407ae00000000000",
+      "i:n:44 p:u => n:407b800000000000",
+      "i:n:45 p:u => n:407c200000000000",
+      "i:n:46 p:u => n:407cc00000000000",
+      "i:n:47 p:u => n:407d600000000000",
+      "i:n:48 p:u => n:407e000000000000",
+      "i:n:49 p:u => n:407ea00000000000",
+      "i:n:5 p:u => n:4049000000000000",
+      "i:n:50 p:u => n:407f400000000000",
+      "i:n:51 p:u => n:407fe00000000000",
+      "i:n:52 p:u => n:4080400000000000",
+      "i:n:53 p:u => n:4080900000000000",
+      "i:n:54 p:u => n:4080e00000000000",
+      "i:n:55 p:u => n:4081300000000000",
+      "i:n:56 p:u => n:4081800000000000",
+      "i:n:57 p:u => n:4081d00000000000",
+      "i:n:58 p:u => n:4082200000000000",
+      "i:n:59 p:u => n:4082700000000000",
+      "i:n:6 p:u => n:404e000000000000",
+      "i:n:60 p:u => n:4082c00000000000",
+      "i:n:61 p:u => n:4083100000000000",
+      "i:n:62 p:u => n:4083600000000000",
+      "i:n:63 p:u => n:4083b00000000000",
+      "i:n:64 p:u => n:4084000000000000",
+      "i:n:65 p:u => n:4084500000000000",
+      "i:n:66 p:u => n:4084a00000000000",
+      "i:n:67 p:u => n:4084f00000000000",
+      "i:n:68 p:u => n:4085400000000000",
+      "i:n:69 p:u => n:4085900000000000",
+      "i:n:7 p:u => n:4051800000000000",
+      "i:n:70 p:u => n:4085e00000000000",
+      "i:n:71 p:u => n:4086300000000000",
+      "i:n:72 p:u => n:4086800000000000",
+      "i:n:73 p:u => n:4086d00000000000",
+      "i:n:74 p:u => n:4087200000000000",
+      "i:n:75 p:u => n:4087700000000000",
+      "i:n:76 p:u => n:4087c00000000000",
+      "i:n:77 p:u => n:4088100000000000",
+      "i:n:78 p:u => n:4088600000000000",
+      "i:n:79 p:u => n:4088b00000000000",
+      "i:n:8 p:u => n:4054000000000000",
+      "i:n:80 p:u => n:4089000000000000",
+      "i:n:81 p:u => n:4089500000000000",
+      "i:n:82 p:u => n:4089a00000000000",
+      "i:n:83 p:u => n:4089f00000000000",
+      "i:n:84 p:u => n:408a400000000000",
+      "i:n:85 p:u => n:408a900000000000",
+      "i:n:86 p:u => n:408ae00000000000",
+      "i:n:87 p:u => n:408b300000000000",
+      "i:n:88 p:u => n:408b800000000000",
+      "i:n:89 p:u => n:408bd00000000000",
+      "i:n:9 p:u => n:4056800000000000",
+      "i:n:90 p:u => n:408c200000000000",
+      "i:n:91 p:u => n:408c700000000000",
+      "i:n:92 p:u => n:408cc00000000000",
+      "i:n:93 p:u => n:408d100000000000",
+      "i:n:94 p:u => n:408d600000000000",
+      "i:n:95 p:u => n:408db00000000000",
+      "i:n:96 p:u => n:408e000000000000",
+      "i:n:97 p:u => n:408e500000000000",
+      "i:n:98 p:u => n:408ea00000000000",
+      "i:n:99 p:u => n:408ef00000000000"
+     ],
+     "bar-animation-delay.animationDelay#2": [
+      "i:n:0 p:u => n:4059000000000000",
+      "i:n:1 p:u => n:405b800000000000",
+      "i:n:10 p:u => n:4069000000000000",
+      "i:n:11 p:u => n:406a400000000000",
+      "i:n:12 p:u => n:406b800000000000",
+      "i:n:13 p:u => n:406cc00000000000",
+      "i:n:14 p:u => n:406e000000000000",
+      "i:n:15 p:u => n:406f400000000000",
+      "i:n:16 p:u => n:4070400000000000",
+      "i:n:17 p:u => n:4070e00000000000",
+      "i:n:18 p:u => n:4071800000000000",
+      "i:n:19 p:u => n:4072200000000000",
+      "i:n:2 p:u => n:405e000000000000",
+      "i:n:20 p:u => n:4072c00000000000",
+      "i:n:21 p:u => n:4073600000000000",
+      "i:n:22 p:u => n:4074000000000000",
+      "i:n:23 p:u => n:4074a00000000000",
+      "i:n:24 p:u => n:4075400000000000",
+      "i:n:25 p:u => n:4075e00000000000",
+      "i:n:26 p:u => n:4076800000000000",
+      "i:n:27 p:u => n:4077200000000000",
+      "i:n:28 p:u => n:4077c00000000000",
+      "i:n:29 p:u => n:4078600000000000",
+      "i:n:3 p:u => n:4060400000000000",
+      "i:n:30 p:u => n:4079000000000000",
+      "i:n:31 p:u => n:4079a00000000000",
+      "i:n:32 p:u => n:407a400000000000",
+      "i:n:33 p:u => n:407ae00000000000",
+      "i:n:34 p:u => n:407b800000000000",
+      "i:n:35 p:u => n:407c200000000000",
+      "i:n:36 p:u => n:407cc00000000000",
+      "i:n:37 p:u => n:407d600000000000",
+      "i:n:38 p:u => n:407e000000000000",
+      "i:n:39 p:u => n:407ea00000000000",
+      "i:n:4 p:u => n:4061800000000000",
+      "i:n:40 p:u => n:407f400000000000",
+      "i:n:41 p:u => n:407fe00000000000",
+      "i:n:42 p:u => n:4080400000000000",
+      "i:n:43 p:u => n:4080900000000000",
+      "i:n:44 p:u => n:4080e00000000000",
+      "i:n:45 p:u => n:4081300000000000",
+      "i:n:46 p:u => n:4081800000000000",
+      "i:n:47 p:u => n:4081d00000000000",
+      "i:n:48 p:u => n:4082200000000000",
+      "i:n:49 p:u => n:4082700000000000",
+      "i:n:5 p:u => n:4062c00000000000",
+      "i:n:50 p:u => n:4082c00000000000",
+      "i:n:51 p:u => n:4083100000000000",
+      "i:n:52 p:u => n:4083600000000000",
+      "i:n:53 p:u => n:4083b00000000000",
+      "i:n:54 p:u => n:4084000000000000",
+      "i:n:55 p:u => n:4084500000000000",
+      "i:n:56 p:u => n:4084a00000000000",
+      "i:n:57 p:u => n:4084f00000000000",
+      "i:n:58 p:u => n:4085400000000000",
+      "i:n:59 p:u => n:4085900000000000",
+      "i:n:6 p:u => n:4064000000000000",
+      "i:n:60 p:u => n:4085e00000000000",
+      "i:n:61 p:u => n:4086300000000000",
+      "i:n:62 p:u => n:4086800000000000",
+      "i:n:63 p:u => n:4086d00000000000",
+      "i:n:64 p:u => n:4087200000000000",
+      "i:n:65 p:u => n:4087700000000000",
+      "i:n:66 p:u => n:4087c00000000000",
+      "i:n:67 p:u => n:4088100000000000",
+      "i:n:68 p:u => n:4088600000000000",
+      "i:n:69 p:u => n:4088b00000000000",
+      "i:n:7 p:u => n:4065400000000000",
+      "i:n:70 p:u => n:4089000000000000",
+      "i:n:71 p:u => n:4089500000000000",
+      "i:n:72 p:u => n:4089a00000000000",
+      "i:n:73 p:u => n:4089f00000000000",
+      "i:n:74 p:u => n:408a400000000000",
+      "i:n:75 p:u => n:408a900000000000",
+      "i:n:76 p:u => n:408ae00000000000",
+      "i:n:77 p:u => n:408b300000000000",
+      "i:n:78 p:u => n:408b800000000000",
+      "i:n:79 p:u => n:408bd00000000000",
+      "i:n:8 p:u => n:4066800000000000",
+      "i:n:80 p:u => n:408c200000000000",
+      "i:n:81 p:u => n:408c700000000000",
+      "i:n:82 p:u => n:408cc00000000000",
+      "i:n:83 p:u => n:408d100000000000",
+      "i:n:84 p:u => n:408d600000000000",
+      "i:n:85 p:u => n:408db00000000000",
+      "i:n:86 p:u => n:408e000000000000",
+      "i:n:87 p:u => n:408e500000000000",
+      "i:n:88 p:u => n:408ea00000000000",
+      "i:n:89 p:u => n:408ef00000000000",
+      "i:n:9 p:u => n:4067c00000000000",
+      "i:n:90 p:u => n:408f400000000000",
+      "i:n:91 p:u => n:408f900000000000",
+      "i:n:92 p:u => n:408fe00000000000",
+      "i:n:93 p:u => n:4090180000000000",
+      "i:n:94 p:u => n:4090400000000000",
+      "i:n:95 p:u => n:4090680000000000",
+      "i:n:96 p:u => n:4090900000000000",
+      "i:n:97 p:u => n:4090b80000000000",
+      "i:n:98 p:u => n:4090e00000000000",
+      "i:n:99 p:u => n:4091080000000000"
+     ]
+    },
+    "update": {
+     "bar-animation-delay.animationDelayUpdate": [
+      "i:n:0 p:u => n:0000000000000000",
+      "i:n:1 p:u => n:4014000000000000",
+      "i:n:10 p:u => n:4049000000000000",
+      "i:n:11 p:u => n:404b800000000000",
+      "i:n:12 p:u => n:404e000000000000",
+      "i:n:13 p:u => n:4050400000000000",
+      "i:n:14 p:u => n:4051800000000000",
+      "i:n:15 p:u => n:4052c00000000000",
+      "i:n:16 p:u => n:4054000000000000",
+      "i:n:17 p:u => n:4055400000000000",
+      "i:n:18 p:u => n:4056800000000000",
+      "i:n:19 p:u => n:4057c00000000000",
+      "i:n:2 p:u => n:4024000000000000",
+      "i:n:20 p:u => n:4059000000000000",
+      "i:n:21 p:u => n:405a400000000000",
+      "i:n:22 p:u => n:405b800000000000",
+      "i:n:23 p:u => n:405cc00000000000",
+      "i:n:24 p:u => n:405e000000000000",
+      "i:n:25 p:u => n:405f400000000000",
+      "i:n:26 p:u => n:4060400000000000",
+      "i:n:27 p:u => n:4060e00000000000",
+      "i:n:28 p:u => n:4061800000000000",
+      "i:n:29 p:u => n:4062200000000000",
+      "i:n:3 p:u => n:402e000000000000",
+      "i:n:30 p:u => n:4062c00000000000",
+      "i:n:31 p:u => n:4063600000000000",
+      "i:n:32 p:u => n:4064000000000000",
+      "i:n:33 p:u => n:4064a00000000000",
+      "i:n:34 p:u => n:4065400000000000",
+      "i:n:35 p:u => n:4065e00000000000",
+      "i:n:36 p:u => n:4066800000000000",
+      "i:n:37 p:u => n:4067200000000000",
+      "i:n:38 p:u => n:4067c00000000000",
+      "i:n:39 p:u => n:4068600000000000",
+      "i:n:4 p:u => n:4034000000000000",
+      "i:n:40 p:u => n:4069000000000000",
+      "i:n:41 p:u => n:4069a00000000000",
+      "i:n:42 p:u => n:406a400000000000",
+      "i:n:43 p:u => n:406ae00000000000",
+      "i:n:44 p:u => n:406b800000000000",
+      "i:n:45 p:u => n:406c200000000000",
+      "i:n:46 p:u => n:406cc00000000000",
+      "i:n:47 p:u => n:406d600000000000",
+      "i:n:48 p:u => n:406e000000000000",
+      "i:n:49 p:u => n:406ea00000000000",
+      "i:n:5 p:u => n:4039000000000000",
+      "i:n:50 p:u => n:406f400000000000",
+      "i:n:51 p:u => n:406fe00000000000",
+      "i:n:52 p:u => n:4070400000000000",
+      "i:n:53 p:u => n:4070900000000000",
+      "i:n:54 p:u => n:4070e00000000000",
+      "i:n:55 p:u => n:4071300000000000",
+      "i:n:56 p:u => n:4071800000000000",
+      "i:n:57 p:u => n:4071d00000000000",
+      "i:n:58 p:u => n:4072200000000000",
+      "i:n:59 p:u => n:4072700000000000",
+      "i:n:6 p:u => n:403e000000000000",
+      "i:n:60 p:u => n:4072c00000000000",
+      "i:n:61 p:u => n:4073100000000000",
+      "i:n:62 p:u => n:4073600000000000",
+      "i:n:63 p:u => n:4073b00000000000",
+      "i:n:64 p:u => n:4074000000000000",
+      "i:n:65 p:u => n:4074500000000000",
+      "i:n:66 p:u => n:4074a00000000000",
+      "i:n:67 p:u => n:4074f00000000000",
+      "i:n:68 p:u => n:4075400000000000",
+      "i:n:69 p:u => n:4075900000000000",
+      "i:n:7 p:u => n:4041800000000000",
+      "i:n:70 p:u => n:4075e00000000000",
+      "i:n:71 p:u => n:4076300000000000",
+      "i:n:72 p:u => n:4076800000000000",
+      "i:n:73 p:u => n:4076d00000000000",
+      "i:n:74 p:u => n:4077200000000000",
+      "i:n:75 p:u => n:4077700000000000",
+      "i:n:76 p:u => n:4077c00000000000",
+      "i:n:77 p:u => n:4078100000000000",
+      "i:n:78 p:u => n:4078600000000000",
+      "i:n:79 p:u => n:4078b00000000000",
+      "i:n:8 p:u => n:4044000000000000",
+      "i:n:80 p:u => n:4079000000000000",
+      "i:n:81 p:u => n:4079500000000000",
+      "i:n:82 p:u => n:4079a00000000000",
+      "i:n:83 p:u => n:4079f00000000000",
+      "i:n:84 p:u => n:407a400000000000",
+      "i:n:85 p:u => n:407a900000000000",
+      "i:n:86 p:u => n:407ae00000000000",
+      "i:n:87 p:u => n:407b300000000000",
+      "i:n:88 p:u => n:407b800000000000",
+      "i:n:89 p:u => n:407bd00000000000",
+      "i:n:9 p:u => n:4046800000000000",
+      "i:n:90 p:u => n:407c200000000000",
+      "i:n:91 p:u => n:407c700000000000",
+      "i:n:92 p:u => n:407cc00000000000",
+      "i:n:93 p:u => n:407d100000000000",
+      "i:n:94 p:u => n:407d600000000000",
+      "i:n:95 p:u => n:407db00000000000",
+      "i:n:96 p:u => n:407e000000000000",
+      "i:n:97 p:u => n:407e500000000000",
+      "i:n:98 p:u => n:407ea00000000000",
+      "i:n:99 p:u => n:407ef00000000000",
+      "i:u p:u => n:7ff8000000000000"
+     ]
+    }
+   }
   },
   {
    "id": "bar-multi-drilldown",
@@ -142,7 +547,193 @@
    "file": "bar-polar-real-estate.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:北京<br>Lowest：5000<br>Highest：10000<br>Average：6785.71"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 9
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:济南<br>Lowest：2000<br>Highest：3000<br>Average：2500"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 18
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:烟台<br>Lowest：1500<br>Highest：1800<br>Average：1650"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:北京<br>Lowest：5000<br>Highest：10000<br>Average：6785.71"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 9
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:济南<br>Lowest：2000<br>Highest：3000<br>Average：2500"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 18
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:烟台<br>Lowest：1500<br>Highest：1800<br>Average：1650"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:北京<br>Lowest：5000<br>Highest：10000<br>Average：6785.71"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 9
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:济南<br>Lowest：2000<br>Highest：3000<br>Average：2500"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 18
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:烟台<br>Lowest：1500<br>Highest：1800<br>Average：1650"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:北京<br>Lowest：5000<br>Highest：10000<br>Average：6785.71"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 9
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:济南<br>Lowest：2000<br>Highest：3000<br>Average：2500"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 18
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:烟台<br>Lowest：1500<br>Highest：1800<br>Average：1650"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 348
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:济南<br>Lowest：2000<br>Highest：3000<br>Average：2500"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 324
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 359
+     },
+     "calls": {
+      "bar-polar-real-estate.formatter": [
+       "s:济南<br>Lowest：2000<br>Highest：3000<br>Average：2500"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 302
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "bar-race-country",
@@ -198,7 +789,41 @@
      "s:United Kingdom{flag|undefined}",
      "s:United States{flag|undefined}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 9
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 18
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 372,
+      "y": 748
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "bar-rich-text",
@@ -211,7 +836,105 @@
      "s:{Showers| }\n{value|Showers}",
      "s:{Sunny| }\n{value|Sunny}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 620,
+      "y": 293
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 421,
+      "y": 293
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 351,
+      "y": 293
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "bar-stack-normalization-and-variation",
@@ -262,7 +985,137 @@
      "s:53.2%",
      "s:57.3%"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 424
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 476
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 450
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 470
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "bar-stack-normalization",
@@ -313,21 +1166,371 @@
      "s:53.2%",
      "s:57.3%"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 435
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 486
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 461
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 481
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "bar-waterfall",
    "file": "bar-waterfall.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Total<br/>Life Cost : 2900"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Transportation<br/>Life Cost : 200"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 5
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Other<br/>Life Cost : 300"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Total<br/>Life Cost : 2900"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 3
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Transportation<br/>Life Cost : 200"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 5
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Other<br/>Life Cost : 300"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 566,
+      "y": 363
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Transportation<br/>Life Cost : 200"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 566,
+      "y": 529
+     },
+     "calls": {
+      "bar-waterfall.formatter": [
+       "s:Transportation<br/>Life Cost : 200"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "bar-waterfall2",
    "file": "bar-waterfall2.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 1<br/>Income : 900"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 5
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 6<br/>Income : 135"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 10
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 11<br/>Expenses : 203"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 1<br/>Income : 900"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 5
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 6<br/>Income : 135"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 10
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 5
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 10
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 11<br/>Expenses : 203"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 494,
+      "y": 236
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 6<br/>Income : 135"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 494,
+      "y": 530
+     },
+     "calls": {
+      "bar-waterfall2.formatter": [
+       "s:Nov 6<br/>Income : 135"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "boxplot-light-velocity2",
@@ -392,7 +1595,73 @@
      "n:40521aade3ebfb7b",
      "n:40528c2d572dc8e4"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 9
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 18
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 9
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 18
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 409,
+      "y": 150
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 483,
+      "y": 83
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "calendar-charts",
@@ -1815,7 +3084,81 @@
      "s:\n\n\n春分",
      "s:\n\n\n驚蟄"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 182
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 364
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 182
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 364
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 182
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 364
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "calendar-pie",
@@ -1853,21 +3196,443 @@
      "s:27",
      "s:28"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 14
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 27
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 400,
+      "y": 300
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 408,
+      "y": 141
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 465,
+      "y": 145
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 545,
+      "y": 135
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "calendar-vertical",
    "file": "calendar-vertical.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2015-01-01: 168"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 182
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2015-07-02: 149"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 364
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2015-12-31: 796"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2016-01-01: 219"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 183
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2016-07-02: 164"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 365
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2016-12-31: 949"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2017-01-01: 36"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 182
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2017-07-02: 515"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 364
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2017-12-31: 802"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 170,
+      "y": 590
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2015-07-02: 149"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 430,
+      "y": 590
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2016-07-02: 164"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 530,
+      "y": 325
+     },
+     "calls": {
+      "calendar-vertical.formatter": [
+       "s:2017-07-02: 515"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "candlestick-brush",
    "file": "candlestick-brush.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 32
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 63
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 32
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 63
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 32
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 63
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 32
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 63
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 496,
+      "y": 176
+     },
+     "calls": {
+      "candlestick-brush.position": [
+       "j:{\"left\":\"403e000000000000\",\"top\":\"4024000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 496,
+      "y": 185
+     },
+     "calls": {
+      "candlestick-brush.position": [
+       "j:{\"left\":\"403e000000000000\",\"top\":\"4024000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 496,
+      "y": 164
+     },
+     "calls": {
+      "candlestick-brush.position": [
+       "j:{\"left\":\"403e000000000000\",\"top\":\"4024000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 496,
+      "y": 149
+     },
+     "calls": {
+      "candlestick-brush.position": [
+       "j:{\"left\":\"403e000000000000\",\"top\":\"4024000000000000\"}"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "candlestick-sh",
@@ -1881,7 +3646,137 @@
      "s:2300",
      "s:2334"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 22
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 43
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 22
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 43
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 22
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 43
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 22
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 43
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 489,
+      "y": 281
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 489,
+      "y": 263
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 489,
+      "y": 302
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 489,
+      "y": 309
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "candlestick-touch",
@@ -1922,7 +3817,169 @@
      "s:05-25",
      "s:05-26"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 15
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"right\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 30
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"left\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 15
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"right\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 30
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"left\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 15
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 30
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 15
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 30
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 290
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"left\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 177
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"left\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 170
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"left\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 161
+     },
+     "calls": {
+      "candlestick-touch.position": [
+       "j:{\"left\":\"4014000000000000\",\"top\":\"404e000000000000\"}"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "confidence-band",
@@ -2000,28 +4057,336 @@
      "s:0%",
      "s:100%"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-08-28<br />-116.2%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-260.2%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 45
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-10-12<br />-4.6%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-6.3%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 90
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-12-31<br />33.0%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:15.4%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-08-28<br />-116.2%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-10.3%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 45
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-10-12<br />-4.6%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-293.4%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 90
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-12-31<br />33.0%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-280.4%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-08-28<br />-116.2%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-116.2%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 45
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-10-12<br />-4.6%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-4.6%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 90
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-12-31<br />33.0%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:33.0%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 497,
+      "y": 197
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-10-12<br />-4.6%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-6.2%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 497,
+      "y": 554
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-10-12<br />-4.6%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-293.6%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 497,
+      "y": 195
+     },
+     "calls": {
+      "confidence-band.formatter": [
+       "s:2012-10-12<br />-4.6%"
+      ],
+      "confidence-band.formatter#4": [
+       "s:-4.6%"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "custom-ohlc",
    "file": "custom-ohlc.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 32
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 63
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 496,
+      "y": 241
+     },
+     "calls": {
+      "custom-ohlc.position": [
+       "j:{\"left\":\"403e000000000000\",\"top\":\"4024000000000000\"}"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "dynamic-data2",
    "file": "dynamic-data2.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "dynamic-data2.formatter": [
+       "s:4/10/1997 : 171"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 500
+     },
+     "calls": {
+      "dynamic-data2.formatter": [
+       "s:16/2/1999 : 318"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 999
+     },
+     "calls": {
+      "dynamic-data2.formatter": [
+       "s:29/6/2000 : 678"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 417
+     },
+     "calls": {
+      "dynamic-data2.formatter": [
+       "s:15/2/1999 : 320"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "flame-graph",
    "file": "flame-graph.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "flame-graph.formatter": [
+       "s:{__EC_aUTo_2|}   root: (57,412 samples, 100%)"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 267
+     },
+     "calls": {
+      "flame-graph.formatter": [
+       "s:{__EC_aUTo_5|}   genunix vn_vfslocks_getlock: (1,357 samples, 2.36%)"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 534
+     },
+     "calls": {
+      "flame-graph.formatter": [
+       "s:{__EC_aUTo_4|}   unix atomic_add_64: (205 samples, 0.36%)"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "gauge-car",
@@ -2039,7 +4404,57 @@
      "s:60",
      "s:90"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 139,
+      "y": 383
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 410,
+      "y": 315
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "gauge-clock",
@@ -2062,7 +4477,57 @@
      "s:8",
      "s:9"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 256
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 239
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 222
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "gauge-grade",
@@ -2080,7 +4545,25 @@
     "gauge-grade.formatter#2": [
      "s:70"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 585,
+      "y": 306
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "gauge-speed",
@@ -2091,7 +4574,25 @@
     "gauge-speed.formatter": [
      "s:{value|100}{unit|km/h}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 461,
+      "y": 229
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "geo-svg-map",
@@ -2100,7 +4601,69 @@
    "maps": [
     "sicily"
    ],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "geoIndex": 0,
+      "name": "Lentini"
+     },
+     "calls": {
+      "geo-svg-map.formatter#2": [
+       "s:This is the introduction:<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "geoIndex": 0,
+      "name": "Lentini"
+     },
+     "calls": {
+      "geo-svg-map.formatter#2": [
+       "s:This is the introduction:<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "geoIndex": 0,
+      "name": "Assorus"
+     },
+     "calls": {
+      "geo-svg-map.formatter#2": [
+       "s:This is the introduction:<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx<br>xxxxxxxxxxxxxxxxxxxxx"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 520,
+      "y": 30
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "geo-svg-scatter-simple",
@@ -2125,7 +4688,95 @@
    "file": "graph-life-expectancy.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "anim": {
+    "enter": {
+     "graph-life-expectancy.animationDelay": [
+      "i:n:0 p:u => n:0000000000000000",
+      "i:n:1 p:u => n:4059000000000000",
+      "i:n:10 p:u => n:408f400000000000",
+      "i:n:11 p:u => n:4091300000000000",
+      "i:n:12 p:u => n:4092c00000000000",
+      "i:n:13 p:u => n:4094500000000000",
+      "i:n:14 p:u => n:4095e00000000000",
+      "i:n:15 p:u => n:4097700000000000",
+      "i:n:16 p:u => n:4099000000000000",
+      "i:n:17 p:u => n:409a900000000000",
+      "i:n:18 p:u => n:409c200000000000",
+      "i:n:19 p:u => n:409db00000000000",
+      "i:n:2 p:u => n:4069000000000000",
+      "i:n:20 p:u => n:409f400000000000",
+      "i:n:21 p:u => n:40a0680000000000",
+      "i:n:22 p:u => n:40a1300000000000",
+      "i:n:23 p:u => n:40a1f80000000000",
+      "i:n:24 p:u => n:40a2c00000000000",
+      "i:n:25 p:u => n:40a3880000000000",
+      "i:n:26 p:u => n:40a4500000000000",
+      "i:n:27 p:u => n:40a5180000000000",
+      "i:n:28 p:u => n:40a5e00000000000",
+      "i:n:29 p:u => n:40a6a80000000000",
+      "i:n:3 p:u => n:4072c00000000000",
+      "i:n:30 p:u => n:40a7700000000000",
+      "i:n:31 p:u => n:40a8380000000000",
+      "i:n:32 p:u => n:40a9000000000000",
+      "i:n:33 p:u => n:40a9c80000000000",
+      "i:n:34 p:u => n:40aa900000000000",
+      "i:n:35 p:u => n:40ab580000000000",
+      "i:n:36 p:u => n:40ac200000000000",
+      "i:n:37 p:u => n:40ace80000000000",
+      "i:n:38 p:u => n:40adb00000000000",
+      "i:n:39 p:u => n:40ae780000000000",
+      "i:n:4 p:u => n:4079000000000000",
+      "i:n:40 p:u => n:40af400000000000",
+      "i:n:41 p:u => n:40b0040000000000",
+      "i:n:42 p:u => n:40b0680000000000",
+      "i:n:43 p:u => n:40b0cc0000000000",
+      "i:n:44 p:u => n:40b1300000000000",
+      "i:n:45 p:u => n:40b1940000000000",
+      "i:n:46 p:u => n:40b1f80000000000",
+      "i:n:47 p:u => n:40b25c0000000000",
+      "i:n:48 p:u => n:40b2c00000000000",
+      "i:n:49 p:u => n:40b3240000000000",
+      "i:n:5 p:u => n:407f400000000000",
+      "i:n:50 p:u => n:40b3880000000000",
+      "i:n:51 p:u => n:40b3ec0000000000",
+      "i:n:52 p:u => n:40b4500000000000",
+      "i:n:53 p:u => n:40b4b40000000000",
+      "i:n:54 p:u => n:40b5180000000000",
+      "i:n:55 p:u => n:40b57c0000000000",
+      "i:n:56 p:u => n:40b5e00000000000",
+      "i:n:57 p:u => n:40b6440000000000",
+      "i:n:58 p:u => n:40b6a80000000000",
+      "i:n:59 p:u => n:40b70c0000000000",
+      "i:n:6 p:u => n:4082c00000000000",
+      "i:n:60 p:u => n:40b7700000000000",
+      "i:n:61 p:u => n:40b7d40000000000",
+      "i:n:62 p:u => n:40b8380000000000",
+      "i:n:63 p:u => n:40b89c0000000000",
+      "i:n:64 p:u => n:40b9000000000000",
+      "i:n:65 p:u => n:40b9640000000000",
+      "i:n:66 p:u => n:40b9c80000000000",
+      "i:n:67 p:u => n:40ba2c0000000000",
+      "i:n:68 p:u => n:40ba900000000000",
+      "i:n:69 p:u => n:40baf40000000000",
+      "i:n:7 p:u => n:4085e00000000000",
+      "i:n:70 p:u => n:40bb580000000000",
+      "i:n:71 p:u => n:40bbbc0000000000",
+      "i:n:72 p:u => n:40bc200000000000",
+      "i:n:73 p:u => n:40bc840000000000",
+      "i:n:74 p:u => n:40bce80000000000",
+      "i:n:75 p:u => n:40bd4c0000000000",
+      "i:n:76 p:u => n:40bdb00000000000",
+      "i:n:77 p:u => n:40be140000000000",
+      "i:n:78 p:u => n:40be780000000000",
+      "i:n:79 p:u => n:40bedc0000000000",
+      "i:n:8 p:u => n:4089000000000000",
+      "i:n:80 p:u => n:40bf400000000000",
+      "i:n:9 p:u => n:408c200000000000"
+     ]
+    },
+    "update": {}
+   }
   },
   {
    "id": "intraday-breaks-1",
@@ -2145,7 +4796,41 @@
      "s:16:00\n{weak|12d}",
      "s:16:01\n{weak|12d}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 784
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 1567
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 508,
+      "y": 271
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "intraday-breaks-2",
@@ -2162,21 +4847,155 @@
      "s:14:00",
      "s:15:00"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 121
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 241
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 345
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "line-draggable",
    "file": "line-draggable.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "line-draggable.formatter": [
+       "s:X: 40.00<br>Y: -10.00"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "calls": {
+      "line-draggable.formatter": [
+       "s:X: -76.50<br>Y: 20.00"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 4
+     },
+     "calls": {
+      "line-draggable.formatter": [
+       "s:X: -22.10<br>Y: 50.00"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 244,
+      "y": 261
+     },
+     "calls": {
+      "line-draggable.formatter": [
+       "s:X: -76.50<br>Y: 20.00"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "line-pen",
    "file": "line-pen.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "line-pen.formatter": [
+       "s:15.00, 0.00"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "calls": {
+      "line-pen.formatter": [
+       "s:-56.50, 20.00"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 4
+     },
+     "calls": {
+      "line-pen.formatter": [
+       "s:-22.10, 40.00"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 88,
+      "y": 314
+     },
+     "calls": {
+      "line-pen.formatter": [
+       "s:-56.50, 20.00"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "line-race",
@@ -2208,7 +5027,137 @@
     "line-race.formatter#8": [
      "s:United Kingdom: 38225"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 33
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 65
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 33
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 65
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 33
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 65
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 33
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 65
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 487,
+      "y": 368
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 487,
+      "y": 356
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 487,
+      "y": 337
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 487,
+      "y": 360
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "line-tooltip-touch",
@@ -2219,7 +5168,111 @@
     "line-tooltip-touch.formatter": [
      "s:2016-10-07"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "line-tooltip-touch.position": [
+       "j:[\"402e000000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 4
+     },
+     "calls": {
+      "line-tooltip-touch.position": [
+       "j:[\"407e000000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 8
+     },
+     "calls": {
+      "line-tooltip-touch.position": [
+       "j:[\"408d880000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "line-tooltip-touch.position": [
+       "j:[\"402e000000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 4
+     },
+     "calls": {
+      "line-tooltip-touch.position": [
+       "j:[\"407e000000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 8
+     },
+     "calls": {
+      "line-tooltip-touch.position": [
+       "j:[\"408d880000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 194
+     },
+     "calls": {
+      "line-tooltip-touch.formatter": [
+       "s:2016-10-08"
+      ],
+      "line-tooltip-touch.position": [
+       "j:[\"407e000000000000\",\"4060400000000000\"]"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 217
+     },
+     "calls": {
+      "line-tooltip-touch.formatter": [
+       "s:2016-10-08"
+      ],
+      "line-tooltip-touch.position": [
+       "j:[\"407e000000000000\",\"4060400000000000\"]"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "matrix-confusion",
@@ -2233,7 +5286,41 @@
      "s:{name|True Negative}\n{value|5}",
      "s:{name|True Positive}\n{value|10}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 680,
+      "y": 310
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "matrix-correlation-heatmap",
@@ -2270,7 +5357,41 @@
      "s:0.98",
      "s:1.00"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 18
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 35
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 651,
+      "y": 310
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "matrix-correlation-scatter",
@@ -2336,14 +5457,98 @@
      "s:0.95",
      "s:0.98"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 30
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 59
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 550,
+      "y": 179
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "matrix-covariance",
    "file": "matrix-covariance.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "matrix-covariance.valueFormatter": [
+       "s:178"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 312
+     },
+     "calls": {
+      "matrix-covariance.valueFormatter": [
+       "s:214"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 624
+     },
+     "calls": {
+      "matrix-covariance.valueFormatter": [
+       "s:156"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 300,
+      "y": 310
+     },
+     "calls": {
+      "matrix-covariance.valueFormatter": [
+       "s:214"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "matrix-graph",
@@ -2360,7 +5565,41 @@
      "s:Software Development",
      "s:Statistics for Data Analysis"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 580,
+      "y": 300
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "matrix-mbti",
@@ -2443,7 +5682,105 @@
      "s:96%",
      "s:97%"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> /\n                            <span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> :\n                            86%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 128
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> /\n                            <span style=\"color:#2D9A69;font-weight:bold\">INFJ</span> :\n                            74%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 255
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#E0A433;font-weight:bold\">ISTP</span> /\n                            <span style=\"color:#E0A433;font-weight:bold\">ISTP</span> :\n                            96%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> /\n                            <span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> :\n                            86%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 128
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> /\n                            <span style=\"color:#2D9A69;font-weight:bold\">INFJ</span> :\n                            74%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 255
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#E0A433;font-weight:bold\">ISTP</span> /\n                            <span style=\"color:#E0A433;font-weight:bold\">ISTP</span> :\n                            96%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 170,
+      "y": 153
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> /\n                            <span style=\"color:#2D9A69;font-weight:bold\">INFJ</span> :\n                            74%"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 170,
+      "y": 153
+     },
+     "calls": {
+      "matrix-mbti.formatter": [
+       "s:<span style=\"color:#2D9A69;font-weight:bold\">ENFJ</span> /\n                            <span style=\"color:#2D9A69;font-weight:bold\">INFJ</span> :\n                            74%"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "matrix-periodic-table",
@@ -2573,14 +5910,236 @@
      "s:{small|Ac~No}",
      "s:{small|La~Yb}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 60
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 119
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 413,
+      "y": 475
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "mix-line-bar",
    "file": "mix-line-bar.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:2 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:2.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:2 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 6
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:135.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:175.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:20.3 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 11
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:2 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:2.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:2 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 6
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:135.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:175.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:20.3 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 11
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:2 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:2.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:2 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 6
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:135.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:175.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:20.3 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 11
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 813,
+      "y": 273
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:135.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:175.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:20.3 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 813,
+      "y": 200
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:135.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:175.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:20.3 °C"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 813,
+      "y": 151
+     },
+     "calls": {
+      "mix-line-bar.valueFormatter": [
+       "s:135.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#2": [
+       "s:175.6 ml"
+      ],
+      "mix-line-bar.valueFormatter#3": [
+       "s:20.3 °C"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "mix-zoom-on-value",
@@ -2598,14 +6157,160 @@
      "s:600,000",
      "s:800,000"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 14
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 27
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 14
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 27
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 482,
+      "y": 458
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 482,
+      "y": 461
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "multiple-x-axis",
    "file": "multiple-x-axis.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 11
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 6
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 11
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 534,
+      "y": 213
+     },
+     "calls": {
+      "multiple-x-axis.formatter": [
+       "s:Precipitation  2016-7：231.6"
+      ],
+      "multiple-x-axis.formatter#2": [
+       "s:Precipitation  2015-7：175.6"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 534,
+      "y": 105
+     },
+     "calls": {
+      "multiple-x-axis.formatter": [
+       "s:Precipitation  2016-7：231.6"
+      ],
+      "multiple-x-axis.formatter#2": [
+       "s:Precipitation  2015-7：175.6"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "pictorialBar-bar-transition",
@@ -2627,14 +6332,124 @@
      "s:67%",
      "s:82%"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 4
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 4
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 260
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 413
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "pictorialBar-hill",
    "file": "pictorialBar-hill.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "anim": {
+    "enter": {
+     "pictorialBar-hill.animationDelay": [
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"0000000000000000\"} => n:0000000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"3ff0000000000000\"} => n:403e000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4000000000000000\"} => n:404e000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4008000000000000\"} => n:4056800000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4010000000000000\"} => n:405e000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4014000000000000\"} => n:4062c00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4018000000000000\"} => n:4066800000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"401c000000000000\"} => n:406a400000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4020000000000000\"} => n:406e000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4022000000000000\"} => n:4070e00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4024000000000000\"} => n:4072c00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4026000000000000\"} => n:4074a00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4028000000000000\"} => n:4076800000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"402a000000000000\"} => n:4078600000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"402c000000000000\"} => n:407a400000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"402e000000000000\"} => n:407c200000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4030000000000000\"} => n:407e000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4031000000000000\"} => n:407fe00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4032000000000000\"} => n:4080e00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4033000000000000\"} => n:4081d00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4034000000000000\"} => n:4082c00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4035000000000000\"} => n:4083b00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4036000000000000\"} => n:4084a00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4037000000000000\"} => n:4085900000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4038000000000000\"} => n:4086800000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4039000000000000\"} => n:4087700000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"403a000000000000\"} => n:4088600000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"403b000000000000\"} => n:4089500000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"403c000000000000\"} => n:408a400000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"403d000000000000\"} => n:408b300000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"403e000000000000\"} => n:408c200000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"403f000000000000\"} => n:408d100000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4040000000000000\"} => n:408e000000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4040800000000000\"} => n:408ef00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4041000000000000\"} => n:408fe00000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4041800000000000\"} => n:4090680000000000",
+      "i:n:0 p:j:{\"count\":\"4042800000000000\",\"index\":\"4042000000000000\"} => n:4090e00000000000"
+     ]
+    },
+    "update": {}
+   }
   },
   {
    "id": "pictorialBar-spirit",
@@ -2648,21 +6463,198 @@
      "s:61.0 %",
      "s:83.5 %"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 2
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 3
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 331,
+      "y": 325
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 331,
+      "y": 325
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "pictorialBar-velocity",
    "file": "pictorialBar-velocity.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:驯鹿: 123"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 4
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:轮船: 12"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 7
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:步行: 1"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:驯鹿: 123"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 4
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:轮船: 12"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 7
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:步行: 1"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 549,
+      "y": 481
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:轮船: 12"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 549,
+      "y": 481
+     },
+     "calls": {
+      "pictorialBar-velocity.formatter": [
+       "s:轮船: 12"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "pie-custom",
    "file": "pie-custom.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "anim": {
+    "enter": {
+     "pie-custom.animationDelay": [
+      "i:n:0 p:u => ?",
+      "i:n:1 p:u => ?",
+      "i:n:2 p:u => ?",
+      "i:n:3 p:u => ?",
+      "i:n:4 p:u => ?",
+      "i:u p:u => ?"
+     ]
+    },
+    "update": {}
+   }
   },
   {
    "id": "pie-labelLine-adjust",
@@ -2710,7 +6702,57 @@
      "s:70",
      "s:99"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 1
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 240,
+      "y": 240
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 720,
+      "y": 220
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "scatter-aggregate-bar",
@@ -2724,7 +6766,153 @@
    "file": "scatter-aqi-color.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">北京 1日：良</div>AQI指数：55<br>PM2.5：9<br>PM10：56<br>一氧化碳（CO）：0.46<br>二氧化氮（NO2）：18<br>二氧化硫（SO2）：6<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 15
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">北京 16日：优</div>AQI指数：33<br>PM2.5：6<br>PM10：29<br>一氧化碳（CO）：0.34<br>二氧化氮（NO2）：13<br>二氧化硫（SO2）：5<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 30
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">北京 31日：优</div>AQI指数：46<br>PM2.5：5<br>PM10：49<br>一氧化碳（CO）：0.28<br>二氧化氮（NO2）：10<br>二氧化硫（SO2）：6<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">上海 1日：良</div>AQI指数：91<br>PM2.5：45<br>PM10：125<br>一氧化碳（CO）：0.82<br>二氧化氮（NO2）：34<br>二氧化硫（SO2）：23<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 15
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">上海 16日：轻度污染</div>AQI指数：134<br>PM2.5：83<br>PM10：167<br>一氧化碳（CO）：1.16<br>二氧化氮（NO2）：57<br>二氧化硫（SO2）：43<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 30
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">上海 31日：中度污染</div>AQI指数：187<br>PM2.5：143<br>PM10：201<br>一氧化碳（CO）：1.39<br>二氧化氮（NO2）：89<br>二氧化硫（SO2）：53<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">广州 1日：优</div>AQI指数：26<br>PM2.5：37<br>PM10：27<br>一氧化碳（CO）：1.163<br>二氧化氮（NO2）：27<br>二氧化硫（SO2）：13<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 15
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">广州 16日：良</div>AQI指数：73<br>PM2.5：68<br>PM10：97<br>一氧化碳（CO）：0.905<br>二氧化氮（NO2）：51<br>二氧化硫（SO2）：34<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 30
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">广州 31日：轻度污染</div>AQI指数：118<br>PM2.5：50<br>PM10：0<br>一氧化碳（CO）：1.383<br>二氧化氮（NO2）：76<br>二氧化硫（SO2）：11<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 465,
+      "y": 492
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">北京 16日：优</div>AQI指数：33<br>PM2.5：6<br>PM10：29<br>一氧化碳（CO）：0.34<br>二氧化氮（NO2）：13<br>二氧化硫（SO2）：5<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 465,
+      "y": 347
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">上海 16日：轻度污染</div>AQI指数：134<br>PM2.5：83<br>PM10：167<br>一氧化碳（CO）：1.16<br>二氧化氮（NO2）：57<br>二氧化硫（SO2）：43<br>"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 465,
+      "y": 435
+     },
+     "calls": {
+      "scatter-aqi-color.formatter": [
+       "s:<div style=\"border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px\">广州 16日：良</div>AQI指数：73<br>PM2.5：68<br>PM10：97<br>一氧化碳（CO）：0.905<br>二氧化氮（NO2）：51<br>二氧化硫（SO2）：34<br>"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "scatter-label-align-right",
@@ -2777,7 +6965,41 @@
      "n:404d8186b4c609a7",
      "n:4050fd5ff1a44f8f"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 9
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 18
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 507,
+      "y": 81
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "scatter-label-align-top",
@@ -2827,14 +7049,206 @@
      "n:404d8186b4c609a7",
      "n:4050fd5ff1a44f8f"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 9
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 18
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 570,
+      "y": 81
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "scatter-nutrients-matrix",
    "file": "scatter-nutrients-matrix.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 500
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 999
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 500
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 999
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 500
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 999
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 500
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 999
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 119,
+      "y": 260
+     },
+     "calls": {
+      "scatter-nutrients-matrix.formatter": [
+       "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON V LINE</div><div style=\"margin: 10px 0\">Cheese, american cheddar, imitation<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.6<br/><span style=\"color:#A68B36\">calcium</span>: 0.562<br/><span style=\"color:#BD5692\">fiber</span>: 0</div><div style=\"margin: 10px 0\">Babyfood, cereal, high protein, prepared with whole milk<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.6<br/><span style=\"color:#A68B36\">calcium</span>: 0.218<br/><span style=\"color:#BD5692\">fiber</span>: 0</div><div style=\"margin: 10px 0\">Babyfood, fruit, pears, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.6<br/><span style=\"color:#A68B36\">calcium</span>: 0.008<br/><span style=\"color:#BD5692\">fiber</span>: 3.6</div></div><div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">CAMPBELL Soup Company, PACE, Dry Taco Seasoning Mix<br/><span style=\"color:#2A8339\">carbohydrate</span>: 56.29<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Vanilla extract, imitation, alcohol<br/><span style=\"color:#2A8339\">carbohydrate</span>: 2.41<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.098</div><div style=\"margin: 10px 0\">Animal fat, bacon grease<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fat, beef tallow<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fat, chicken<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fat, duck<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fat, goose<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fat, mutton tallow<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fat, turkey<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, cod liver<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, herring<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, menhaden<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, menhaden, fully hydrogenated<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, salmon<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, sardine<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Lard<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Margarine, 80% fat, tub, CANOLA HARVEST Soft Spread (canola, palm and palm kernel oils)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 1.39<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Margarine, margarine-like vegetable oil spread, 67-70% fat, tub<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.59<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Margarine-like shortening, industrial, soy (partially hydrogenated), cottonseed, and soy, principal use flaky pastries<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BALANCE Omega Plus Spread (with plant sterols & fish oil)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.16<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.071</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BALANCE Regular Buttery Spread with flax oil<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.14<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.028</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BEAT Smart Squeeze<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.1<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.026</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BEAT Super Light without saturated fat<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.012</div><div style=\"margin: 10px 0\">Margarine-like, vegetable oil spread, 20% fat, with salt<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.4<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.025</div><div style=\"margin: 10px 0\">Margarine-like, vegetable oil spread, 20% fat, without salt<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.4<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.025</div><div style=\"margin: 10px 0\">Margarine-like, vegetable oil spread, stick or tub, sweetened<br/><span style=\"color:#2A8339\">carbohydrate</span>: 16.7<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.03</div><div style=\"margin: 10px 0\">Mayonnaise, low sodium, low calorie or diet<br/><span style=\"color:#2A8339\">carbohydrate</span>: 16<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.01</div><div style=\"margin: 10px 0\">Mayonnaise, reduced-calorie or diet, cholesterol-free<br/><span style=\"color:#2A8339\">carbohydrate</span>: 6.7<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.067</div><div style=\"margin: 10px 0\">Meat drippings (lard, beef tallow, mutton tallow)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, PAM cooking spray, original<br/><span style=\"color:#2A8339\">carbohydrate</span>: 20.69<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, almond<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, apricot kernel<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, avocado<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, babassu<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, canola<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, cocoa butter<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, coconut<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, cooking and salad, ENOVA, 80% diglycerides<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, corn and canola<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, corn, industrial and retail, all purpose salad or cooking<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, corn, peanut, and olive<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, cottonseed, salad or cooking<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, cupu assu<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, flaxseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, grapeseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, hazelnut<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola (partially hydrogenated) oil for deep fat frying<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola for salads, woks and light frying<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola with antifoaming agent, principal uses salads, woks and light frying<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola, high oleic<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, coconut, principal uses candy coatings, oil sprays, roasting nuts<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, mid-oleic, sunflower<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy ( partially hydrogenated), all purpose<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated ) and soy (winterized), pourable clear fry<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated ), palm, principal uses icings and fillings<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated) and cottonseed, principal use as a tortilla shortening<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated), multiuse for non-dairy butter flavor<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated), principal uses popcorn and flavoring vegetables<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, fully hydrogenated<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, low linolenic<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, refined, for woks and light frying<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, ultra low linolenic<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, mustard<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, nutmeg butter<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, oat<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, palm<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, peanut, salad or cooking<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, poppyseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, rice bran<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, safflower, salad or cooking, high oleic (primary safflower oil of commerce)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, safflower, salad or cooking, linoleic, (over 70%)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, sesame, salad or cooking<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, sheanut<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean lecithin<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean, salad or cooking<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean, salad or cooking, (partially hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean, salad or cooking, (partially hydrogenated) and cottonseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, high oleic (70% and over)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, linoleic (less than 60%)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, linoleic, (approx. 65%)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, linoleic, (partially hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, teaseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, tomatoseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, ucuhuba butter<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, vegetable, Natreon canola, high stability, non trans, high oleic (70%)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, walnut<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Oil, wheat germ<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Salad dressing, home recipe, vinegar and oil<br/><span style=\"color:#2A8339\">carbohydrate</span>: 2.5<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.008</div><div style=\"margin: 10px 0\">Salad dressing, mayonnaise, imitation, soybean<br/><span style=\"color:#2A8339\">carbohydrate</span>: 16<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.01</div><div style=\"margin: 10px 0\">Salad dressing, mayonnaise, imitation, soybean without cholesterol<br/><span style=\"color:#2A8339\">carbohydrate</span>: 15.8<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0.01</div><div style=\"margin: 10px 0\">Shortening bread, soybean (hydrogenated) and cottonseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening cake mix, soybean (hydrogenated) and cottonseed (hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening confectionery, coconut (hydrogenated) and or palm kernel (hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening frying (heavy duty), beef tallow and cottonseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening frying (heavy duty), palm (hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening frying (heavy duty), soybean (hydrogenated), linoleic (less than 1%)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening household soybean (hydrogenated) and palm<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening industrial, lard and vegetable oil<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening industrial, soybean (hydrogenated) and cottonseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, confectionery, fractionated palm<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, household, lard and vegetable oil<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, household, soybean (partially hydrogenated)-cottonseed (partially hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, industrial, soy (partially hydrogenated ) and corn for frying<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, industrial, soy (partially hydrogenated ) for baking and confections<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, industrial, soy (partially hydrogenated), pourable liquid fry shortening<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, multipurpose, soybean (hydrogenated) and palm (hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, special purpose for baking, soybean (hydrogenated) palm and cottonseed<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Shortening, special purpose for cakes and frostings, soybean (hydrogenated)<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">USDA Commodity Food, oil, vegetable, low saturated fat<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">USDA Commodity Food, oil, vegetable, soybean, refined<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div><div style=\"margin: 10px 0\">Vegetable oil, palm kernel<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#367DA6\">potassium</span>: 0</div></div>"
+      ],
+      "scatter-nutrients-matrix.position": [
+       "j:{\"bottom\":\"4034000000000000\",\"right\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 119,
+      "y": 517
+     },
+     "calls": {
+      "scatter-nutrients-matrix.formatter": [
+       "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON V LINE</div><div style=\"margin: 10px 0\">Cheese, american cheddar, imitation<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.6<br/><span style=\"color:#BD5692\">fiber</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0.562</div><div style=\"margin: 10px 0\">Babyfood, cereal, high protein, prepared with whole milk<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.6<br/><span style=\"color:#BD5692\">fiber</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0.218</div><div style=\"margin: 10px 0\">Babyfood, fruit, pears, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.6<br/><span style=\"color:#BD5692\">fiber</span>: 3.6<br/><span style=\"color:#A68B36\">calcium</span>: 0.008</div></div><div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">Babyfood, apples, dices, toddler<br/><span style=\"color:#2A8339\">carbohydrate</span>: 12.1<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.05</div><div style=\"margin: 10px 0\">Babyfood, cereal, egg yolks and bacon, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 6.2<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.035</div><div style=\"margin: 10px 0\">Babyfood, cereal, with egg yolks, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.1<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.035</div><div style=\"margin: 10px 0\">Babyfood, cereal, with egg yolks, strained<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.039</div><div style=\"margin: 10px 0\">Babyfood, dinner, chicken noodle, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 8.79<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.039</div><div style=\"margin: 10px 0\">Babyfood, dinner, turkey and rice, strained<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.94<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.091</div><div style=\"margin: 10px 0\">Babyfood, dinner, vegetables and turkey, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.55<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.098</div><div style=\"margin: 10px 0\">Babyfood, mashed cheddar potatoes and broccoli, toddlers<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.64<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.118</div><div style=\"margin: 10px 0\">Babyfood, potatoes, toddler<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.73<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.11</div><div style=\"margin: 10px 0\">Babyfood, vegetables, squash, junior<br/><span style=\"color:#2A8339\">carbohydrate</span>: 5.73<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.185</div><div style=\"margin: 10px 0\">Babyfood, vegetables, squash, strained<br/><span style=\"color:#2A8339\">carbohydrate</span>: 5.73<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#367DA6\">potassium</span>: 0.185</div></div>"
+      ],
+      "scatter-nutrients-matrix.position": [
+       "j:{\"right\":\"404e000000000000\",\"top\":\"4034000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 581,
+      "y": 260
+     },
+     "calls": {
+      "scatter-nutrients-matrix.formatter": [
+       "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON V LINE</div><div style=\"margin: 10px 0\">Cheese, cottage, creamed, large or small curd<br/><span style=\"color:#367DA6\">potassium</span>: 0.104<br/><span style=\"color:#A68B36\">calcium</span>: 0.083<br/><span style=\"color:#BD5692\">fiber</span>: 0</div></div><div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">CAMPBELL Soup Company, PACE, Dry Taco Seasoning Mix<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 56.29</div><div style=\"margin: 10px 0\">Vanilla extract, imitation, alcohol<br/><span style=\"color:#367DA6\">potassium</span>: 0.098<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 2.41</div><div style=\"margin: 10px 0\">Animal fat, bacon grease<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fat, beef tallow<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fat, chicken<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fat, duck<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fat, goose<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fat, mutton tallow<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fat, turkey<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, cod liver<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, herring<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, menhaden<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, menhaden, fully hydrogenated<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, salmon<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Fish oil, sardine<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Lard<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Margarine, 80% fat, tub, CANOLA HARVEST Soft Spread (canola, palm and palm kernel oils)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 1.39</div><div style=\"margin: 10px 0\">Margarine, margarine-like vegetable oil spread, 67-70% fat, tub<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.59</div><div style=\"margin: 10px 0\">Margarine-like shortening, industrial, soy (partially hydrogenated), cottonseed, and soy, principal use flaky pastries<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BALANCE Omega Plus Spread (with plant sterols & fish oil)<br/><span style=\"color:#367DA6\">potassium</span>: 0.071<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.16</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BALANCE Regular Buttery Spread with flax oil<br/><span style=\"color:#367DA6\">potassium</span>: 0.028<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.14</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BEAT Smart Squeeze<br/><span style=\"color:#367DA6\">potassium</span>: 0.026<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.1</div><div style=\"margin: 10px 0\">Margarine-like spread, SMART BEAT Super Light without saturated fat<br/><span style=\"color:#367DA6\">potassium</span>: 0.012<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Margarine-like, vegetable oil spread, 20% fat, with salt<br/><span style=\"color:#367DA6\">potassium</span>: 0.025<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.4</div><div style=\"margin: 10px 0\">Margarine-like, vegetable oil spread, 20% fat, without salt<br/><span style=\"color:#367DA6\">potassium</span>: 0.025<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.4</div><div style=\"margin: 10px 0\">Margarine-like, vegetable oil spread, stick or tub, sweetened<br/><span style=\"color:#367DA6\">potassium</span>: 0.03<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 16.7</div><div style=\"margin: 10px 0\">Mayonnaise, low sodium, low calorie or diet<br/><span style=\"color:#367DA6\">potassium</span>: 0.01<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 16</div><div style=\"margin: 10px 0\">Mayonnaise, reduced-calorie or diet, cholesterol-free<br/><span style=\"color:#367DA6\">potassium</span>: 0.067<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 6.7</div><div style=\"margin: 10px 0\">Meat drippings (lard, beef tallow, mutton tallow)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, PAM cooking spray, original<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 20.69</div><div style=\"margin: 10px 0\">Oil, almond<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, apricot kernel<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, avocado<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, babassu<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, canola<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, cocoa butter<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, coconut<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, cooking and salad, ENOVA, 80% diglycerides<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, corn and canola<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, corn, industrial and retail, all purpose salad or cooking<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, corn, peanut, and olive<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, cottonseed, salad or cooking<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, cupu assu<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, flaxseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, grapeseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, hazelnut<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola (partially hydrogenated) oil for deep fat frying<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola for salads, woks and light frying<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola with antifoaming agent, principal uses salads, woks and light frying<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, canola, high oleic<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, coconut, principal uses candy coatings, oil sprays, roasting nuts<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, mid-oleic, sunflower<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy ( partially hydrogenated), all purpose<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated ) and soy (winterized), pourable clear fry<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated ), palm, principal uses icings and fillings<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated) and cottonseed, principal use as a tortilla shortening<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated), multiuse for non-dairy butter flavor<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy (partially hydrogenated), principal uses popcorn and flavoring vegetables<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, fully hydrogenated<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, low linolenic<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, refined, for woks and light frying<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, industrial, soy, ultra low linolenic<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, mustard<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, nutmeg butter<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, oat<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, palm<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, peanut, salad or cooking<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, poppyseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, rice bran<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, safflower, salad or cooking, high oleic (primary safflower oil of commerce)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, safflower, salad or cooking, linoleic, (over 70%)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, sesame, salad or cooking<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, sheanut<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean lecithin<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean, salad or cooking<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean, salad or cooking, (partially hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, soybean, salad or cooking, (partially hydrogenated) and cottonseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, high oleic (70% and over)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, linoleic (less than 60%)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, linoleic, (approx. 65%)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, sunflower, linoleic, (partially hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, teaseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, tomatoseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, ucuhuba butter<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, vegetable, Natreon canola, high stability, non trans, high oleic (70%)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, walnut<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Oil, wheat germ<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Salad dressing, home recipe, vinegar and oil<br/><span style=\"color:#367DA6\">potassium</span>: 0.008<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 2.5</div><div style=\"margin: 10px 0\">Salad dressing, mayonnaise, imitation, soybean<br/><span style=\"color:#367DA6\">potassium</span>: 0.01<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 16</div><div style=\"margin: 10px 0\">Salad dressing, mayonnaise, imitation, soybean without cholesterol<br/><span style=\"color:#367DA6\">potassium</span>: 0.01<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 15.8</div><div style=\"margin: 10px 0\">Shortening bread, soybean (hydrogenated) and cottonseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening cake mix, soybean (hydrogenated) and cottonseed (hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening confectionery, coconut (hydrogenated) and or palm kernel (hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening frying (heavy duty), beef tallow and cottonseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening frying (heavy duty), palm (hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening frying (heavy duty), soybean (hydrogenated), linoleic (less than 1%)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening household soybean (hydrogenated) and palm<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening industrial, lard and vegetable oil<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening industrial, soybean (hydrogenated) and cottonseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, confectionery, fractionated palm<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, household, lard and vegetable oil<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, household, soybean (partially hydrogenated)-cottonseed (partially hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, industrial, soy (partially hydrogenated ) and corn for frying<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, industrial, soy (partially hydrogenated ) for baking and confections<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, industrial, soy (partially hydrogenated), pourable liquid fry shortening<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, multipurpose, soybean (hydrogenated) and palm (hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, special purpose for baking, soybean (hydrogenated) palm and cottonseed<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Shortening, special purpose for cakes and frostings, soybean (hydrogenated)<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">USDA Commodity Food, oil, vegetable, low saturated fat<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">USDA Commodity Food, oil, vegetable, soybean, refined<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div><div style=\"margin: 10px 0\">Vegetable oil, palm kernel<br/><span style=\"color:#367DA6\">potassium</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0</div></div>"
+      ],
+      "scatter-nutrients-matrix.position": [
+       "j:{\"bottom\":\"4034000000000000\",\"left\":\"404e000000000000\"}"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 581,
+      "y": 517
+     },
+     "calls": {
+      "scatter-nutrients-matrix.formatter": [
+       "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON V LINE</div><div style=\"margin: 10px 0\">Cheese, cottage, creamed, large or small curd<br/><span style=\"color:#367DA6\">potassium</span>: 0.104<br/><span style=\"color:#BD5692\">fiber</span>: 0<br/><span style=\"color:#A68B36\">calcium</span>: 0.083</div></div><div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">Babyfood, apples, dices, toddler<br/><span style=\"color:#367DA6\">potassium</span>: 0.05<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 12.1</div><div style=\"margin: 10px 0\">Babyfood, cereal, egg yolks and bacon, junior<br/><span style=\"color:#367DA6\">potassium</span>: 0.035<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 6.2</div><div style=\"margin: 10px 0\">Babyfood, cereal, with egg yolks, junior<br/><span style=\"color:#367DA6\">potassium</span>: 0.035<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.1</div><div style=\"margin: 10px 0\">Babyfood, cereal, with egg yolks, strained<br/><span style=\"color:#367DA6\">potassium</span>: 0.039<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7</div><div style=\"margin: 10px 0\">Babyfood, dinner, chicken noodle, junior<br/><span style=\"color:#367DA6\">potassium</span>: 0.039<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 8.79</div><div style=\"margin: 10px 0\">Babyfood, dinner, turkey and rice, strained<br/><span style=\"color:#367DA6\">potassium</span>: 0.091<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.94</div><div style=\"margin: 10px 0\">Babyfood, dinner, vegetables and turkey, junior<br/><span style=\"color:#367DA6\">potassium</span>: 0.098<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.55</div><div style=\"margin: 10px 0\">Babyfood, mashed cheddar potatoes and broccoli, toddlers<br/><span style=\"color:#367DA6\">potassium</span>: 0.118<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.64</div><div style=\"margin: 10px 0\">Babyfood, potatoes, toddler<br/><span style=\"color:#367DA6\">potassium</span>: 0.11<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 11.73</div><div style=\"margin: 10px 0\">Babyfood, vegetables, squash, junior<br/><span style=\"color:#367DA6\">potassium</span>: 0.185<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 5.73</div><div style=\"margin: 10px 0\">Babyfood, vegetables, squash, strained<br/><span style=\"color:#367DA6\">potassium</span>: 0.185<br/><span style=\"color:#BD5692\">fiber</span>: 0.9<br/><span style=\"color:#2A8339\">carbohydrate</span>: 5.73</div></div>"
+      ],
+      "scatter-nutrients-matrix.position": [
+       "j:{\"left\":\"404e000000000000\",\"top\":\"4034000000000000\"}"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "scatter-painter-choice",
@@ -7154,7 +11568,41 @@
      "n:4033c3c3c3c3c3c4",
      "n:4033d7d7d7d7d7d8"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 2055
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 4110
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 647,
+      "y": 507
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "scatter-polar-punchCard",
@@ -7179,7 +11627,232 @@
      "n:403a000000000000",
      "n:403c000000000000"
     ]
-   }
+   },
+   "anim": {
+    "enter": {
+     "scatter-polar-punchCard.animationDelay": [
+      "i:n:0 p:u => n:0000000000000000",
+      "i:n:1 p:u => n:4014000000000000",
+      "i:n:10 p:u => n:4049000000000000",
+      "i:n:100 p:u => n:407f400000000000",
+      "i:n:101 p:u => n:407f900000000000",
+      "i:n:102 p:u => n:407fe00000000000",
+      "i:n:103 p:u => n:4080180000000000",
+      "i:n:104 p:u => n:4080400000000000",
+      "i:n:105 p:u => n:4080680000000000",
+      "i:n:106 p:u => n:4080900000000000",
+      "i:n:107 p:u => n:4080b80000000000",
+      "i:n:108 p:u => n:4080e00000000000",
+      "i:n:109 p:u => n:4081080000000000",
+      "i:n:11 p:u => n:404b800000000000",
+      "i:n:110 p:u => n:4081300000000000",
+      "i:n:111 p:u => n:4081580000000000",
+      "i:n:112 p:u => n:4081800000000000",
+      "i:n:113 p:u => n:4081a80000000000",
+      "i:n:114 p:u => n:4081d00000000000",
+      "i:n:115 p:u => n:4081f80000000000",
+      "i:n:116 p:u => n:4082200000000000",
+      "i:n:117 p:u => n:4082480000000000",
+      "i:n:118 p:u => n:4082700000000000",
+      "i:n:119 p:u => n:4082980000000000",
+      "i:n:12 p:u => n:404e000000000000",
+      "i:n:120 p:u => n:4082c00000000000",
+      "i:n:121 p:u => n:4082e80000000000",
+      "i:n:122 p:u => n:4083100000000000",
+      "i:n:123 p:u => n:4083380000000000",
+      "i:n:124 p:u => n:4083600000000000",
+      "i:n:125 p:u => n:4083880000000000",
+      "i:n:126 p:u => n:4083b00000000000",
+      "i:n:127 p:u => n:4083d80000000000",
+      "i:n:128 p:u => n:4084000000000000",
+      "i:n:129 p:u => n:4084280000000000",
+      "i:n:13 p:u => n:4050400000000000",
+      "i:n:130 p:u => n:4084500000000000",
+      "i:n:131 p:u => n:4084780000000000",
+      "i:n:132 p:u => n:4084a00000000000",
+      "i:n:133 p:u => n:4084c80000000000",
+      "i:n:134 p:u => n:4084f00000000000",
+      "i:n:135 p:u => n:4085180000000000",
+      "i:n:136 p:u => n:4085400000000000",
+      "i:n:137 p:u => n:4085680000000000",
+      "i:n:138 p:u => n:4085900000000000",
+      "i:n:139 p:u => n:4085b80000000000",
+      "i:n:14 p:u => n:4051800000000000",
+      "i:n:140 p:u => n:4085e00000000000",
+      "i:n:141 p:u => n:4086080000000000",
+      "i:n:142 p:u => n:4086300000000000",
+      "i:n:143 p:u => n:4086580000000000",
+      "i:n:144 p:u => n:4086800000000000",
+      "i:n:145 p:u => n:4086a80000000000",
+      "i:n:146 p:u => n:4086d00000000000",
+      "i:n:147 p:u => n:4086f80000000000",
+      "i:n:148 p:u => n:4087200000000000",
+      "i:n:149 p:u => n:4087480000000000",
+      "i:n:15 p:u => n:4052c00000000000",
+      "i:n:150 p:u => n:4087700000000000",
+      "i:n:151 p:u => n:4087980000000000",
+      "i:n:152 p:u => n:4087c00000000000",
+      "i:n:153 p:u => n:4087e80000000000",
+      "i:n:154 p:u => n:4088100000000000",
+      "i:n:155 p:u => n:4088380000000000",
+      "i:n:156 p:u => n:4088600000000000",
+      "i:n:157 p:u => n:4088880000000000",
+      "i:n:158 p:u => n:4088b00000000000",
+      "i:n:159 p:u => n:4088d80000000000",
+      "i:n:16 p:u => n:4054000000000000",
+      "i:n:160 p:u => n:4089000000000000",
+      "i:n:161 p:u => n:4089280000000000",
+      "i:n:162 p:u => n:4089500000000000",
+      "i:n:163 p:u => n:4089780000000000",
+      "i:n:164 p:u => n:4089a00000000000",
+      "i:n:165 p:u => n:4089c80000000000",
+      "i:n:166 p:u => n:4089f00000000000",
+      "i:n:167 p:u => n:408a180000000000",
+      "i:n:17 p:u => n:4055400000000000",
+      "i:n:18 p:u => n:4056800000000000",
+      "i:n:19 p:u => n:4057c00000000000",
+      "i:n:2 p:u => n:4024000000000000",
+      "i:n:20 p:u => n:4059000000000000",
+      "i:n:21 p:u => n:405a400000000000",
+      "i:n:22 p:u => n:405b800000000000",
+      "i:n:23 p:u => n:405cc00000000000",
+      "i:n:24 p:u => n:405e000000000000",
+      "i:n:25 p:u => n:405f400000000000",
+      "i:n:26 p:u => n:4060400000000000",
+      "i:n:27 p:u => n:4060e00000000000",
+      "i:n:28 p:u => n:4061800000000000",
+      "i:n:29 p:u => n:4062200000000000",
+      "i:n:3 p:u => n:402e000000000000",
+      "i:n:30 p:u => n:4062c00000000000",
+      "i:n:31 p:u => n:4063600000000000",
+      "i:n:32 p:u => n:4064000000000000",
+      "i:n:33 p:u => n:4064a00000000000",
+      "i:n:34 p:u => n:4065400000000000",
+      "i:n:35 p:u => n:4065e00000000000",
+      "i:n:36 p:u => n:4066800000000000",
+      "i:n:37 p:u => n:4067200000000000",
+      "i:n:38 p:u => n:4067c00000000000",
+      "i:n:39 p:u => n:4068600000000000",
+      "i:n:4 p:u => n:4034000000000000",
+      "i:n:40 p:u => n:4069000000000000",
+      "i:n:41 p:u => n:4069a00000000000",
+      "i:n:42 p:u => n:406a400000000000",
+      "i:n:43 p:u => n:406ae00000000000",
+      "i:n:44 p:u => n:406b800000000000",
+      "i:n:45 p:u => n:406c200000000000",
+      "i:n:46 p:u => n:406cc00000000000",
+      "i:n:47 p:u => n:406d600000000000",
+      "i:n:48 p:u => n:406e000000000000",
+      "i:n:49 p:u => n:406ea00000000000",
+      "i:n:5 p:u => n:4039000000000000",
+      "i:n:50 p:u => n:406f400000000000",
+      "i:n:51 p:u => n:406fe00000000000",
+      "i:n:52 p:u => n:4070400000000000",
+      "i:n:53 p:u => n:4070900000000000",
+      "i:n:54 p:u => n:4070e00000000000",
+      "i:n:55 p:u => n:4071300000000000",
+      "i:n:56 p:u => n:4071800000000000",
+      "i:n:57 p:u => n:4071d00000000000",
+      "i:n:58 p:u => n:4072200000000000",
+      "i:n:59 p:u => n:4072700000000000",
+      "i:n:6 p:u => n:403e000000000000",
+      "i:n:60 p:u => n:4072c00000000000",
+      "i:n:61 p:u => n:4073100000000000",
+      "i:n:62 p:u => n:4073600000000000",
+      "i:n:63 p:u => n:4073b00000000000",
+      "i:n:64 p:u => n:4074000000000000",
+      "i:n:65 p:u => n:4074500000000000",
+      "i:n:66 p:u => n:4074a00000000000",
+      "i:n:67 p:u => n:4074f00000000000",
+      "i:n:68 p:u => n:4075400000000000",
+      "i:n:69 p:u => n:4075900000000000",
+      "i:n:7 p:u => n:4041800000000000",
+      "i:n:70 p:u => n:4075e00000000000",
+      "i:n:71 p:u => n:4076300000000000",
+      "i:n:72 p:u => n:4076800000000000",
+      "i:n:73 p:u => n:4076d00000000000",
+      "i:n:74 p:u => n:4077200000000000",
+      "i:n:75 p:u => n:4077700000000000",
+      "i:n:76 p:u => n:4077c00000000000",
+      "i:n:77 p:u => n:4078100000000000",
+      "i:n:78 p:u => n:4078600000000000",
+      "i:n:79 p:u => n:4078b00000000000",
+      "i:n:8 p:u => n:4044000000000000",
+      "i:n:80 p:u => n:4079000000000000",
+      "i:n:81 p:u => n:4079500000000000",
+      "i:n:82 p:u => n:4079a00000000000",
+      "i:n:83 p:u => n:4079f00000000000",
+      "i:n:84 p:u => n:407a400000000000",
+      "i:n:85 p:u => n:407a900000000000",
+      "i:n:86 p:u => n:407ae00000000000",
+      "i:n:87 p:u => n:407b300000000000",
+      "i:n:88 p:u => n:407b800000000000",
+      "i:n:89 p:u => n:407bd00000000000",
+      "i:n:9 p:u => n:4046800000000000",
+      "i:n:90 p:u => n:407c200000000000",
+      "i:n:91 p:u => n:407c700000000000",
+      "i:n:92 p:u => n:407cc00000000000",
+      "i:n:93 p:u => n:407d100000000000",
+      "i:n:94 p:u => n:407d600000000000",
+      "i:n:95 p:u => n:407db00000000000",
+      "i:n:96 p:u => n:407e000000000000",
+      "i:n:97 p:u => n:407e500000000000",
+      "i:n:98 p:u => n:407ea00000000000",
+      "i:n:99 p:u => n:407ef00000000000"
+     ]
+    },
+    "update": {}
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-polar-punchCard.formatter": [
+       "s:5 commits in 12a of Saturday"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 84
+     },
+     "calls": {
+      "scatter-polar-punchCard.formatter": [
+       "s:7 commits in 12p of Wednesday"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 167
+     },
+     "calls": {
+      "scatter-polar-punchCard.formatter": [
+       "s:6 commits in 11p of Sunday"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 480,
+      "y": 420
+     },
+     "calls": {
+      "scatter-polar-punchCard.formatter": [
+       "s:7 commits in 12p of Wednesday"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "scatter-punchCard",
@@ -7204,7 +11877,232 @@
      "n:403a000000000000",
      "n:403c000000000000"
     ]
-   }
+   },
+   "anim": {
+    "enter": {
+     "scatter-punchCard.animationDelay": [
+      "i:n:0 p:u => n:0000000000000000",
+      "i:n:1 p:u => n:4014000000000000",
+      "i:n:10 p:u => n:4049000000000000",
+      "i:n:100 p:u => n:407f400000000000",
+      "i:n:101 p:u => n:407f900000000000",
+      "i:n:102 p:u => n:407fe00000000000",
+      "i:n:103 p:u => n:4080180000000000",
+      "i:n:104 p:u => n:4080400000000000",
+      "i:n:105 p:u => n:4080680000000000",
+      "i:n:106 p:u => n:4080900000000000",
+      "i:n:107 p:u => n:4080b80000000000",
+      "i:n:108 p:u => n:4080e00000000000",
+      "i:n:109 p:u => n:4081080000000000",
+      "i:n:11 p:u => n:404b800000000000",
+      "i:n:110 p:u => n:4081300000000000",
+      "i:n:111 p:u => n:4081580000000000",
+      "i:n:112 p:u => n:4081800000000000",
+      "i:n:113 p:u => n:4081a80000000000",
+      "i:n:114 p:u => n:4081d00000000000",
+      "i:n:115 p:u => n:4081f80000000000",
+      "i:n:116 p:u => n:4082200000000000",
+      "i:n:117 p:u => n:4082480000000000",
+      "i:n:118 p:u => n:4082700000000000",
+      "i:n:119 p:u => n:4082980000000000",
+      "i:n:12 p:u => n:404e000000000000",
+      "i:n:120 p:u => n:4082c00000000000",
+      "i:n:121 p:u => n:4082e80000000000",
+      "i:n:122 p:u => n:4083100000000000",
+      "i:n:123 p:u => n:4083380000000000",
+      "i:n:124 p:u => n:4083600000000000",
+      "i:n:125 p:u => n:4083880000000000",
+      "i:n:126 p:u => n:4083b00000000000",
+      "i:n:127 p:u => n:4083d80000000000",
+      "i:n:128 p:u => n:4084000000000000",
+      "i:n:129 p:u => n:4084280000000000",
+      "i:n:13 p:u => n:4050400000000000",
+      "i:n:130 p:u => n:4084500000000000",
+      "i:n:131 p:u => n:4084780000000000",
+      "i:n:132 p:u => n:4084a00000000000",
+      "i:n:133 p:u => n:4084c80000000000",
+      "i:n:134 p:u => n:4084f00000000000",
+      "i:n:135 p:u => n:4085180000000000",
+      "i:n:136 p:u => n:4085400000000000",
+      "i:n:137 p:u => n:4085680000000000",
+      "i:n:138 p:u => n:4085900000000000",
+      "i:n:139 p:u => n:4085b80000000000",
+      "i:n:14 p:u => n:4051800000000000",
+      "i:n:140 p:u => n:4085e00000000000",
+      "i:n:141 p:u => n:4086080000000000",
+      "i:n:142 p:u => n:4086300000000000",
+      "i:n:143 p:u => n:4086580000000000",
+      "i:n:144 p:u => n:4086800000000000",
+      "i:n:145 p:u => n:4086a80000000000",
+      "i:n:146 p:u => n:4086d00000000000",
+      "i:n:147 p:u => n:4086f80000000000",
+      "i:n:148 p:u => n:4087200000000000",
+      "i:n:149 p:u => n:4087480000000000",
+      "i:n:15 p:u => n:4052c00000000000",
+      "i:n:150 p:u => n:4087700000000000",
+      "i:n:151 p:u => n:4087980000000000",
+      "i:n:152 p:u => n:4087c00000000000",
+      "i:n:153 p:u => n:4087e80000000000",
+      "i:n:154 p:u => n:4088100000000000",
+      "i:n:155 p:u => n:4088380000000000",
+      "i:n:156 p:u => n:4088600000000000",
+      "i:n:157 p:u => n:4088880000000000",
+      "i:n:158 p:u => n:4088b00000000000",
+      "i:n:159 p:u => n:4088d80000000000",
+      "i:n:16 p:u => n:4054000000000000",
+      "i:n:160 p:u => n:4089000000000000",
+      "i:n:161 p:u => n:4089280000000000",
+      "i:n:162 p:u => n:4089500000000000",
+      "i:n:163 p:u => n:4089780000000000",
+      "i:n:164 p:u => n:4089a00000000000",
+      "i:n:165 p:u => n:4089c80000000000",
+      "i:n:166 p:u => n:4089f00000000000",
+      "i:n:167 p:u => n:408a180000000000",
+      "i:n:17 p:u => n:4055400000000000",
+      "i:n:18 p:u => n:4056800000000000",
+      "i:n:19 p:u => n:4057c00000000000",
+      "i:n:2 p:u => n:4024000000000000",
+      "i:n:20 p:u => n:4059000000000000",
+      "i:n:21 p:u => n:405a400000000000",
+      "i:n:22 p:u => n:405b800000000000",
+      "i:n:23 p:u => n:405cc00000000000",
+      "i:n:24 p:u => n:405e000000000000",
+      "i:n:25 p:u => n:405f400000000000",
+      "i:n:26 p:u => n:4060400000000000",
+      "i:n:27 p:u => n:4060e00000000000",
+      "i:n:28 p:u => n:4061800000000000",
+      "i:n:29 p:u => n:4062200000000000",
+      "i:n:3 p:u => n:402e000000000000",
+      "i:n:30 p:u => n:4062c00000000000",
+      "i:n:31 p:u => n:4063600000000000",
+      "i:n:32 p:u => n:4064000000000000",
+      "i:n:33 p:u => n:4064a00000000000",
+      "i:n:34 p:u => n:4065400000000000",
+      "i:n:35 p:u => n:4065e00000000000",
+      "i:n:36 p:u => n:4066800000000000",
+      "i:n:37 p:u => n:4067200000000000",
+      "i:n:38 p:u => n:4067c00000000000",
+      "i:n:39 p:u => n:4068600000000000",
+      "i:n:4 p:u => n:4034000000000000",
+      "i:n:40 p:u => n:4069000000000000",
+      "i:n:41 p:u => n:4069a00000000000",
+      "i:n:42 p:u => n:406a400000000000",
+      "i:n:43 p:u => n:406ae00000000000",
+      "i:n:44 p:u => n:406b800000000000",
+      "i:n:45 p:u => n:406c200000000000",
+      "i:n:46 p:u => n:406cc00000000000",
+      "i:n:47 p:u => n:406d600000000000",
+      "i:n:48 p:u => n:406e000000000000",
+      "i:n:49 p:u => n:406ea00000000000",
+      "i:n:5 p:u => n:4039000000000000",
+      "i:n:50 p:u => n:406f400000000000",
+      "i:n:51 p:u => n:406fe00000000000",
+      "i:n:52 p:u => n:4070400000000000",
+      "i:n:53 p:u => n:4070900000000000",
+      "i:n:54 p:u => n:4070e00000000000",
+      "i:n:55 p:u => n:4071300000000000",
+      "i:n:56 p:u => n:4071800000000000",
+      "i:n:57 p:u => n:4071d00000000000",
+      "i:n:58 p:u => n:4072200000000000",
+      "i:n:59 p:u => n:4072700000000000",
+      "i:n:6 p:u => n:403e000000000000",
+      "i:n:60 p:u => n:4072c00000000000",
+      "i:n:61 p:u => n:4073100000000000",
+      "i:n:62 p:u => n:4073600000000000",
+      "i:n:63 p:u => n:4073b00000000000",
+      "i:n:64 p:u => n:4074000000000000",
+      "i:n:65 p:u => n:4074500000000000",
+      "i:n:66 p:u => n:4074a00000000000",
+      "i:n:67 p:u => n:4074f00000000000",
+      "i:n:68 p:u => n:4075400000000000",
+      "i:n:69 p:u => n:4075900000000000",
+      "i:n:7 p:u => n:4041800000000000",
+      "i:n:70 p:u => n:4075e00000000000",
+      "i:n:71 p:u => n:4076300000000000",
+      "i:n:72 p:u => n:4076800000000000",
+      "i:n:73 p:u => n:4076d00000000000",
+      "i:n:74 p:u => n:4077200000000000",
+      "i:n:75 p:u => n:4077700000000000",
+      "i:n:76 p:u => n:4077c00000000000",
+      "i:n:77 p:u => n:4078100000000000",
+      "i:n:78 p:u => n:4078600000000000",
+      "i:n:79 p:u => n:4078b00000000000",
+      "i:n:8 p:u => n:4044000000000000",
+      "i:n:80 p:u => n:4079000000000000",
+      "i:n:81 p:u => n:4079500000000000",
+      "i:n:82 p:u => n:4079a00000000000",
+      "i:n:83 p:u => n:4079f00000000000",
+      "i:n:84 p:u => n:407a400000000000",
+      "i:n:85 p:u => n:407a900000000000",
+      "i:n:86 p:u => n:407ae00000000000",
+      "i:n:87 p:u => n:407b300000000000",
+      "i:n:88 p:u => n:407b800000000000",
+      "i:n:89 p:u => n:407bd00000000000",
+      "i:n:9 p:u => n:4046800000000000",
+      "i:n:90 p:u => n:407c200000000000",
+      "i:n:91 p:u => n:407c700000000000",
+      "i:n:92 p:u => n:407cc00000000000",
+      "i:n:93 p:u => n:407d100000000000",
+      "i:n:94 p:u => n:407d600000000000",
+      "i:n:95 p:u => n:407db00000000000",
+      "i:n:96 p:u => n:407e000000000000",
+      "i:n:97 p:u => n:407e500000000000",
+      "i:n:98 p:u => n:407ea00000000000",
+      "i:n:99 p:u => n:407ef00000000000"
+     ]
+    },
+    "update": {}
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-punchCard.formatter": [
+       "s:5 commits in 12a of Saturday"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 84
+     },
+     "calls": {
+      "scatter-punchCard.formatter": [
+       "s:7 commits in 12p of Wednesday"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 167
+     },
+     "calls": {
+      "scatter-punchCard.formatter": [
+       "s:6 commits in 11p of Sunday"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 531,
+      "y": 318
+     },
+     "calls": {
+      "scatter-punchCard.formatter": [
+       "s:7 commits in 12p of Wednesday"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "scatter-single-axis",
@@ -7298,7 +12196,105 @@
    "file": "scatter-weight.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Female :<br/>161.2cm 51.6kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 130
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Female :<br/>162.8cm 58kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 259
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Female :<br/>163.8cm 67.3kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Male :<br/>174cm 65.6kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 123
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Male :<br/>177.8cm 116.4kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 246
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Male :<br/>180.3cm 83.2kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 385,
+      "y": 432
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Female :<br/>162.8cm 58kg "
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 589,
+      "y": 86
+     },
+     "calls": {
+      "scatter-weight.formatter": [
+       "s:Male :<br/>177.8cm 116.4kg "
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "sunburst-label-rotate",
@@ -7311,14 +12307,78 @@
      "s:radial",
      "s:tangential"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 8
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 16
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 466,
+      "y": 370
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "treemap-disk",
    "file": "treemap-disk.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "treemap-disk.formatter": [
+       "s:<div class=\"tooltip-title\"></div>Disk Usage: 4,484,208 KB"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 1818
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3635
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "treemap-obama",
@@ -7579,28 +12639,490 @@
      "s:{name|Veterans Health Administration}\n{hr|}\n{budget|$ 54,438,000} {label|budget}\n{household|$ 479.1} {label|per household}",
      "s:{name|Wage and Hour Division}\n{hr|}\n{budget|$ 241,000} {label|budget}\n{household|$ 2.1} {label|per household}"
     ]
-   }
+   },
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "treemap-obama.formatter": [
+       "s:<div class=\"tooltip-title\">2012Budget</div>2012 Amount: &nbsp;&nbsp;-<br>Per Household: &nbsp;&nbsp;-<br>2011 Amount: &nbsp;&nbsp;-<br>Change From 2011: &nbsp;&nbsp;-"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 224
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 447
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "treemap-show-parent",
    "file": "treemap-show-parent.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "treemap-show-parent.formatter": [
+       "s:<div class=\"tooltip-title\"></div>Disk Usage: 4,484,208 KB"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 1818
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 3635
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "treemap-visual",
    "file": "treemap-visual.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "treemap-visual.formatter": [
+       "s:<div class=\"tooltip-title\">ALL</div>2012 Amount: &nbsp;&nbsp;-<br>2011 Amount: &nbsp;&nbsp;-<br>Change From 2011: &nbsp;&nbsp;-"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 224
+     },
+     "calls": {}
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 447
+     },
+     "calls": {}
+    }
+   ]
   },
   {
    "id": "wind-barb",
    "file": "wind-barb.json",
    "grafted": false,
    "maps": [],
-   "calls": {}
+   "calls": {},
+   "hover": [
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-06-27 11:00<br>风速：9<br>风向：NNW<br>浪高：2.64"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 59
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 03:30<br>风速：10<br>风向：NNW<br>浪高：2.02"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 0,
+      "dataIndex": 118
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-04 20:00<br>风速：26<br>风向：SW<br>浪高：2.97"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-06-27 11:00<br>风速：9<br>风向：NNW<br>浪高：2.64"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 59
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 03:30<br>风速：10<br>风向：NNW<br>浪高：2.02"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 1,
+      "dataIndex": 118
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-04 20:00<br>风速：26<br>风向：SW<br>浪高：2.97"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 0
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-06-27 11:00<br>风速：9<br>风向：NNW<br>浪高：2.64"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 59
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 03:30<br>风速：10<br>风向：NNW<br>浪高：2.02"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 2,
+      "dataIndex": 118
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-04 20:00<br>风速：26<br>风向：SW<br>浪高：2.97"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 0
+     },
+     "calls": {
+      "wind-barb.formatter#2": [
+       "s:2017-06-28: 4 - 13°"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 3
+     },
+     "calls": {
+      "wind-barb.formatter#2": [
+       "s:2017-07-01: 1 - 11°"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "seriesIndex": 3,
+      "dataIndex": 6
+     },
+     "calls": {
+      "wind-barb.formatter#2": [
+       "s:2017-07-04: 5 - 12°"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 369
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 03:30<br>风速：10<br>风向：NNW<br>浪高：2.02"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 370
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 03:30<br>风速：10<br>风向：NNW<br>浪高：2.02"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 504,
+      "y": 370
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 03:30<br>风速：10<br>风向：NNW<br>浪高：2.02"
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "showTip",
+      "x": 490,
+      "y": 475
+     },
+     "calls": {
+      "wind-barb.formatter": [
+       "s:2017-07-01 00:30<br>风速：10<br>风向：NW<br>浪高：2.13"
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "direct": [
+  {
+   "id": "lines-airline",
+   "name": "lines-airline.formatter",
+   "params": {
+    "dataIndex": 0
+   },
+   "answer": "s:Sochi > Kazan"
+  },
+  {
+   "id": "lines-airline",
+   "name": "lines-airline.formatter",
+   "params": {
+    "dataIndex": 1
+   },
+   "answer": "s:Astrakhan > Kazan"
+  },
+  {
+   "id": "lines-airline",
+   "name": "lines-airline.formatter",
+   "params": {
+    "dataIndex": 777
+   },
+   "answer": "s:Xuzhou > Shenyang"
+  },
+  {
+   "id": "lines-airline",
+   "name": "lines-airline.formatter",
+   "params": {
+    "dataIndex": 32831
+   },
+   "answer": "s:Dalian > Hangzhou"
+  },
+  {
+   "id": "lines-airline",
+   "name": "lines-airline.formatter",
+   "params": {
+    "dataIndex": 65662
+   },
+   "answer": "s:Osh > Bishkek"
+  },
+  {
+   "id": "scatter-nutrients-matrix",
+   "name": "scatter-nutrients-matrix.formatter",
+   "params": [
+    {
+     "data": [
+      66.2,
+      0.285,
+      "Dairy and Egg Products",
+      "Beverage, instant breakfast powder, chocolate, not reconstituted",
+      "carbohydrate",
+      "calcium",
+      0
+     ],
+     "axisDim": "x"
+    },
+    {
+     "data": [
+      66.2,
+      0.4,
+      "Dairy and Egg Products",
+      "Beverage, instant breakfast powder, chocolate, not reconstituted",
+      "carbohydrate",
+      "fiber",
+      0
+     ],
+     "axisDim": "x"
+    },
+    {
+     "data": [
+      66.2,
+      0.285,
+      "Dairy and Egg Products",
+      "Beverage, instant breakfast powder, chocolate, not reconstituted",
+      "carbohydrate",
+      "calcium",
+      0
+     ],
+     "axisDim": "y"
+    },
+    {
+     "data": [
+      0.005,
+      0.004,
+      "Dairy and Egg Products",
+      "Butter oil, anhydrous",
+      "potassium",
+      "calcium",
+      3
+     ],
+     "axisDim": "y"
+    }
+   ],
+   "answer": "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON CROSS</div><div style=\"margin: 10px 0\">Beverage, instant breakfast powder, chocolate, not reconstituted<br/><span style=\"color:#2A8339\">carbohydrate</span>: 66.2<br/><span style=\"color:#A68B36\">calcium</span>: 0.285<br/><span style=\"color:#BD5692\">fiber</span>: 0.4</div></div><div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">Butter oil, anhydrous<br/><span style=\"color:#367DA6\">potassium</span>: 0.005<br/><span style=\"color:#A68B36\">calcium</span>: 0.004</div></div>"
+  },
+  {
+   "id": "scatter-nutrients-matrix",
+   "name": "scatter-nutrients-matrix.formatter",
+   "params": [
+    {
+     "data": [
+      0.06,
+      0.024,
+      "Dairy and Egg Products",
+      "Butter, whipped, with salt",
+      "carbohydrate",
+      "calcium",
+      5
+     ],
+     "axisDim": "x"
+    },
+    {
+     "data": [
+      0.105,
+      0.476,
+      "Dairy and Egg Products",
+      "Cheese fondue",
+      "potassium",
+      "calcium",
+      7
+     ],
+     "axisDim": "y"
+    }
+   ],
+   "answer": "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON V LINE</div><div style=\"margin: 10px 0\">Butter, whipped, with salt<br/><span style=\"color:#2A8339\">carbohydrate</span>: 0.06<br/><span style=\"color:#A68B36\">calcium</span>: 0.024</div></div><div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">Cheese fondue<br/><span style=\"color:#367DA6\">potassium</span>: 0.105<br/><span style=\"color:#A68B36\">calcium</span>: 0.476</div></div>"
+  },
+  {
+   "id": "scatter-nutrients-matrix",
+   "name": "scatter-nutrients-matrix.formatter",
+   "params": [
+    {
+     "data": [
+      0.291,
+      0,
+      "Dairy and Egg Products",
+      "Cheese food, pasteurized process, american, without di sodium phosphate",
+      "potassium",
+      "fiber",
+      11
+     ],
+     "axisDim": "x"
+    },
+    {
+     "data": [
+      7.83,
+      0,
+      "Dairy and Egg Products",
+      "Cheese food, pasteurized process, american, without di sodium phosphate",
+      "carbohydrate",
+      "fiber",
+      11
+     ],
+     "axisDim": "x"
+    }
+   ],
+   "answer": "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON V LINE</div><div style=\"margin: 10px 0\">Cheese food, pasteurized process, american, without di sodium phosphate<br/><span style=\"color:#367DA6\">potassium</span>: 0.291<br/><span style=\"color:#BD5692\">fiber</span>: 0<br/><span style=\"color:#2A8339\">carbohydrate</span>: 7.83</div></div>"
+  },
+  {
+   "id": "scatter-nutrients-matrix",
+   "name": "scatter-nutrients-matrix.formatter",
+   "params": [
+    {
+     "data": [
+      0.093,
+      1.146,
+      "Dairy and Egg Products",
+      "Cheese, Mexican, blend, reduced fat",
+      "potassium",
+      "calcium",
+      20
+     ],
+     "axisDim": "y"
+    }
+   ],
+   "answer": "s:<div style=\"margin: 10px 0\"><div style=\"font-size: 16px; color: #aaa\">POINTS ON H LINE</div><div style=\"margin: 10px 0\">Cheese, Mexican, blend, reduced fat<br/><span style=\"color:#367DA6\">potassium</span>: 0.093<br/><span style=\"color:#A68B36\">calcium</span>: 1.146</div></div>"
   }
  ],
  "guards": [
@@ -7630,6 +13152,14 @@
   },
   {
    "name": "every case calls something or says nothing (a hover-only case)",
+   "ok": true
+  },
+  {
+   "name": "lines-airline: a route named by its airports",
+   "ok": true
+  },
+  {
+   "name": "scatter-nutrients-matrix: a CROSS block with the axis colours",
    "ok": true
   }
  ]

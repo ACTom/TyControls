@@ -235,6 +235,26 @@ const GENERATED = {
    the bmap ones cannot draw without Baidu's online map, and scatter-nebula
    is 14 MB even compressed. [R2-J2] custom-wind is GENERATED now. */
 const SHIP_GZ = new Set(['lines-airline', 'parallel-nutrients', 'scatter-weibo']);
+/* [R2-J3] TABLES A PAGE'S FUNCTIONS READ, CARRIED AS DATA. A function may
+   close over a table the page built from a file it loaded -- lines-airline's
+   tooltip names a route by flights.json's airports and routes -- and the
+   option does not hold it. CARRY[id] picks out of the loaded file what the
+   function reads; the harvest writes it beside the gallery, into
+   examples/advchart/data (gzipped), and the entry's `carried` names it.
+   A table the page computes from the chart instead (scatter-nutrients-
+   matrix's colour per axis name) is computed by the demo from the option. */
+const CARRY = {
+  'lines-airline': {
+    file: 'lines-airline-tables.json.gz',
+    from: 'flights.json',
+    /* data.airports[i][1], the airport's name, and data.routes[i][1] /
+       [2], a route's two airports: all the tooltip reads */
+    pick: (d) => ({
+      airports: d.airports.map((a) => a[1]),
+      routes: d.routes.map((r) => [r[1], r[2]])
+    })
+  }
+};
 const GZ_MAX = 640 * 1024;
 
 function getPath(obj, p) {
@@ -733,6 +753,10 @@ function makeSandbox(collected) {
     }
     const text = fs.readFileSync(p, 'utf8');
     collected.usedData = (collected.usedData || 0) + 1;
+    /* [R2-J3] what a CARRY picks from: the file as loaded, before the page
+       can change it */
+    collected.loaded = collected.loaded || {};
+    collected.loaded[path.basename(p)] = text;
     if (/\.json$/i.test(p)) return JSON.parse(text);
     return text;
   };
@@ -1020,6 +1044,15 @@ function main() {
         entry.handlers = Array.from(new Set(collected.namer.names.values()));
       }
       if (collected.lost && collected.lost.length) entry.lost = collected.lost;
+      /* [R2-J3] the tables its functions read */
+      const carry = CARRY[id];
+      if (carry && collected.loaded && collected.loaded[carry.from]) {
+        const table = JSON.stringify(carry.pick(JSON.parse(collected.loaded[carry.from])));
+        const dataDir = path.join(OUT, '..', 'data');
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        fs.writeFileSync(path.join(dataDir, carry.file), zlib.gzipSync(table, { level: 9 }));
+        entry.carried = [carry.file];
+      }
       if (collected.stubbedRemote && collected.stubbedRemote.length) {
         entry.stubbedRemote = Array.from(new Set(collected.stubbedRemote));
       }

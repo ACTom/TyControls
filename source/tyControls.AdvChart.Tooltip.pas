@@ -371,6 +371,23 @@ function TyTooltipPlace(const ASpec: TTyTooltipSpec;
 procedure TyTooltipReadPosition(AData: TJSONData; out APos: TTyChartTooltipPos;
   out AHandler: string);
 
+{ ---- a formatter's markers [R2-J3] ---- }
+{ The style name of a tooltip's AIndex-th marker, as
+  TooltipMarkupStyleCreator._generateStyleName writes it: '__EC_aUTo_' and a
+  number. Upstream's numbering starts at Math.round(Math.random() * 10) per
+  tooltip; here at 0. }
+function TyTooltipMarkerName(AIndex: Integer): string;
+{ params.marker in richText: an empty rich token of that style name (open
+  brace, the name, a bar, close brace) and two spaces }
+function TyTooltipRichMarker(AIndex: Integer): string;
+{ A FORMATTER'S TEXT CARRYING MARKERS: every empty rich token in a text run
+  whose style name is one of ANames becomes that marker's dot, in AColours'
+  colour -- the run split around it, the rest of its text kept as it was. A
+  token of any other name is left as text. }
+procedure TyTooltipSplitMarkers(var ALines: TTyTooltipLineArray;
+  const ANames: array of string; const AColours: array of TTyChartColor;
+  const AInk: TTyTooltipInk);
+
 { ---- layout ---- }
 { The tree, flattened into lines of runs. }
 function TyTooltipFlatten(ABlock: TTyTooltipBlock;
@@ -1495,6 +1512,88 @@ begin
   Result := RenderBlock(ABlock, AInk);
   { The first line has nothing above it whatever the join decided. }
   if Length(Result) > 0 then Result[0].BlankLinesBefore := 0;
+end;
+
+{ ============================ a formatter's markers ============================ }
+
+function TyTooltipMarkerName(AIndex: Integer): string;
+begin
+  Result := '__EC_aUTo_' + IntToStr(AIndex);
+end;
+
+function TyTooltipRichMarker(AIndex: Integer): string;
+begin
+  Result := '{' + TyTooltipMarkerName(AIndex) + '|}  ';
+end;
+
+procedure TyTooltipSplitMarkers(var ALines: TTyTooltipLineArray;
+  const ANames: array of string; const AColours: array of TTyChartColor;
+  const AInk: TTyTooltipInk);
+var
+  i, j, k, p, best, bestK, q: Integer;
+  runs: array of TTyTooltipRun;
+  run, piece: TTyTooltipRun;
+  rest, tok: string;
+
+  procedure Push(const ARun: TTyTooltipRun);
+  begin
+    SetLength(runs, Length(runs) + 1);
+    runs[High(runs)] := ARun;
+  end;
+
+begin
+  if Length(ANames) = 0 then Exit;
+  for i := 0 to High(ALines) do
+  begin
+    runs := nil;
+    for j := 0 to High(ALines[i].Runs) do
+    begin
+      run := ALines[i].Runs[j];
+      if run.Kind <> ttrText then
+      begin
+        Push(run);
+        Continue;
+      end;
+      rest := run.Text;
+      repeat
+        { the earliest token of a known name }
+        best := 0;
+        bestK := -1;
+        for k := 0 to High(ANames) do
+        begin
+          if ANames[k] = '' then Continue;
+          tok := '{' + ANames[k] + '|}';
+          p := Pos(tok, rest);
+          if (p > 0) and ((best = 0) or (p < best)) then
+          begin
+            best := p;
+            bestK := k;
+          end;
+        end;
+        if bestK < 0 then Break;
+        tok := '{' + ANames[bestK] + '|}';
+        if best > 1 then
+        begin
+          piece := run;
+          piece.Text := Copy(rest, 1, best - 1);
+          Push(piece);
+        end;
+        if bestK <= High(AColours) then
+          Push(MarkerRun(AInk, ttmItem, AColours[bestK]))
+        else
+          Push(MarkerRun(AInk, ttmItem, 0));
+        q := best + Length(tok);
+        rest := Copy(rest, q, MaxInt);
+      until False;
+      if (rest <> '') or (Length(runs) = 0) then
+      begin
+        piece := run;
+        piece.Text := rest;
+        Push(piece);
+      end;
+    end;
+    ALines[i].Runs := runs;
+  end;
 end;
 
 { ============================ measuring ============================ }

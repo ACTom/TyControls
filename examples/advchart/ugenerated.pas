@@ -57,6 +57,9 @@ var
 { Whether AId is a generated example of the gallery. }
 function GalleryIsGenerated(const AId: string): Boolean;
 
+{ [R2-J3] a gzipped data file's text ('' when it cannot be read) }
+function GalleryReadGz(const AFile: string): string;
+
 { The paths AId's generator fills, in its order ('xAxis.data',
   'series.0.data'). }
 function GalleryGeneratedPaths(const AId: string): TStringArray;
@@ -604,6 +607,15 @@ end;
 { ==================== custom-wind [R2-J2] ==================== }
 
 { a gzipped file's bytes, '' when it is not there }
+function ReadGz(const AFile: string): string; forward;
+
+function GalleryReadGz(const AFile: string): string;
+begin
+  Result := '';
+  if not FileExists(AFile) then Exit;
+  Result := ReadGz(AFile);
+end;
+
 function ReadGz(const AFile: string): string;
 var
   gz: TGZFileStream;
