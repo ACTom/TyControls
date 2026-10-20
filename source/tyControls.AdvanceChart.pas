@@ -4369,6 +4369,9 @@ type
     function AnimFindGhost(ASeries, AIndex: Integer;
       const ARole: string): TTyChartAnimProxy;
     function AnimGhostCount: Integer;
+    { [R2-I7] the AIndex-th ghost still leaving (0 .. AnimGhostCount - 1),
+      its old element at Ghost }
+    function AnimGhostAt(AIndex: Integer): TTyChartAnimProxy;
     { THE PROXY AN ELEMENT'S STATES RUN ON [Batch 94]: of series ASeries,
       inner row ARow, the part 'host', 'label', 'guide' (the row's), 'poly'
       or 'area' (a line's, ARow ignored); nil when none is bound }

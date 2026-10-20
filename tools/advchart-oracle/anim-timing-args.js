@@ -128,8 +128,11 @@ function paint(chart) {
   quiet(() => chart.renderToSVGString());
 }
 
+// [R2-I7] null 'z', undefined 'u': a handler tells them apart (null * 10
+// is 0, undefined * 10 NaN)
 function reprIndex(v) {
-  if (v === undefined || v === null) return 'u';
+  if (v === null) return 'z';
+  if (v === undefined) return 'u';
   return Number.isInteger(v) ? 'n:' + v : 'n:' + hex(v);
 }
 function deep(v) {
@@ -168,6 +171,8 @@ function materialize(v, logOf) {
         o[k] = function (...args) {
           const log = logOf();
           (log[key] = log[key] || new Set()).add('i:' + reprIndex(args[0]) + ' p:' + reprParams(args[1]));
+          // [R2-I7] and in order, where the case asks for it
+          if (log.__seq) log.__seq.push(key + ' i:' + reprIndex(args[0]) + ' p:' + reprParams(args[1]));
           return isDelay ? 0 : 300;
         };
       }
@@ -179,7 +184,7 @@ function materialize(v, logOf) {
 }
 function sortedLog(log) {
   const out = {};
-  Object.keys(log).sort().forEach(k => { out[k] = Array.from(log[k]).sort(); });
+  Object.keys(log).sort().forEach(k => { if (k !== '__seq') out[k] = Array.from(log[k]).sort(); });
   return out;
 }
 
@@ -187,7 +192,7 @@ const T = { animationDelay: '@ad', animationDuration: '@aD', animationDelayUpdat
 const cat = ['A', 'B', 'C', 'D', 'E'];
 
 const CASES = [
-  { id: 'line', note: 'a line with symbols on a category axis: the line clip and the series delay called with null, each symbol with its index; an update moves the points',
+  { id: 'line', seq: true, note: 'a line with symbols on a category axis: the line clip and the series delay called with null, each symbol with its index; an update moves the points',
     option: { xAxis: { type: 'category', data: cat }, yAxis: {}, series: [{ type: 'line', data: [3, 5, 2, 6, 4] }] },
     update: { series: [{ data: [4, 2, 6, 3, 5] }] } },
   { id: 'bar', note: 'a bar series and a legend: each bar at its index; the update changes the values',
@@ -244,6 +249,12 @@ const CASES = [
 function runCase(c) {
   const enter = {};
   const update = {};
+  // [R2-I7] every call in order, for the cases that ask (a series' delay
+  // with null before its symbols')
+  if (c.seq) {
+    Object.defineProperty(enter, '__seq', { value: [], enumerable: false });
+    Object.defineProperty(update, '__seq', { value: [], enumerable: false });
+  }
   let cur = enter;
   const chart = mk();
   try {
@@ -256,8 +267,13 @@ function runCase(c) {
   } finally {
     chart.dispose();
   }
-  return { id: c.id, note: c.note, option: Object.assign({}, T, c.option), update: c.update,
+  const rec = { id: c.id, note: c.note, option: Object.assign({}, T, c.option), update: c.update,
     enter: sortedLog(enter), updated: sortedLog(update) };
+  if (c.seq) {
+    rec.enterSeq = enter.__seq.slice();
+    rec.updatedSeq = update.__seq.slice();
+  }
+  return rec;
 }
 
 function guards(out) {
@@ -266,7 +282,10 @@ function guards(out) {
   const c = id => out.cases.find(x => x.id === id);
   add('pictorial: a glyph hands {index, count}', c('pictorial').enter.animationDelay.some(s => /"index"/.test(s) && /"count"/.test(s)));
   add('pictorial: the clip path hands an empty object', c('pictorial').enter.animationDelay.some(s => /p:j:\{\}/.test(s)));
-  add('line: the series delay is called with null', c('line').enter.animationDelay.some(s => /^i:u p:u$/.test(s)));
+  add('line: the series delay is called with null', c('line').enter.animationDelay.some(s => /^i:z p:u$/.test(s)));
+  add('line: the calls in order -- the duration and the delay with null, then each symbol\'s delay',
+    c('line').enterSeq[0] === 'animationDuration i:z p:u' && c('line').enterSeq[1] === 'animationDelay i:z p:u'
+    && c('line').enterSeq[2] === 'animationDelay i:n:0 p:u');
   add('bar: each bar at its index', c('bar').enter.animationDelay.filter(s => /^i:n:\d p:u$/.test(s)).length >= 5);
   // a heatmap's cells have no enter animation upstream: only its update
   add('every case but the heatmap animates', out.cases.every(x => x.id === 'heatmap' || Object.keys(x.enter).length > 0));

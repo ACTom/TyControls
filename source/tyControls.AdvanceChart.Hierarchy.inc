@@ -1523,6 +1523,7 @@ var
   model: TTyAnimModel;
   wrapOn, labelsOn, reRoot, drill, parDel: Boolean;
   v: TTyAnimOptValue;
+  tmg: TTyAnimTiming;
   dur, pw, ph, tx, ty, ox, oy: Double;
   easing: string;
   cfg: TTyAnimCfg;
@@ -1960,6 +1961,14 @@ begin
         TyInitProps(p, TyAnimProps([TmNum('style.opacity', 1)]), model, TyAnimCallAt(row));
         A.Labels[row][1] := p;
       end;
+      { [R2-I7] AND A KEPT LABEL: LabelManager updateProps its layout -- its
+        x / y / rotation in its host's frame, which the host's move leaves as
+        they were (the words ride the rect): nothing moves, the timing is
+        asked, at update timing and its row }
+      if Was(have.Ct, row) and Was(AOldHave.Ct, OldOf(row)) and TS^.Nodes[row].HasLabel then
+        TyAnimGetConfig(atUpdate, model, TyAnimCallAt(row), tmg);
+      if Was(have.Bg, row) and Was(AOldHave.Bg, OldOf(row)) and TS^.Nodes[row].HasUpper then
+        TyAnimGetConfig(atUpdate, model, TyAnimCallAt(row), tmg);
     end;
   if Length(FTmAnim) <= si then SetLength(FTmAnim, si + 1);
   FTmAnim[si] := A;

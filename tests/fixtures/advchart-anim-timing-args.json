@@ -161,10 +161,10 @@
      "i:n:2 p:u",
      "i:n:3 p:u",
      "i:n:4 p:u",
-     "i:u p:u"
+     "i:z p:u"
     ],
     "animationDuration": [
-     "i:u p:u"
+     "i:z p:u"
     ]
    },
    "updated": {
@@ -180,7 +180,64 @@
     "animationDurationUpdate": [
      "i:u p:u"
     ]
-   }
+   },
+   "enterSeq": [
+    "animationDuration i:z p:u",
+    "animationDelay i:z p:u",
+    "animationDelay i:n:0 p:u",
+    "animationDelay i:n:1 p:u",
+    "animationDelay i:n:2 p:u",
+    "animationDelay i:n:3 p:u",
+    "animationDelay i:n:4 p:u",
+    "animationDelay i:z p:u",
+    "animationDuration i:z p:u"
+   ],
+   "updatedSeq": [
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u",
+    "animationDelay i:u p:u",
+    "animationDuration i:u p:u",
+    "animationDelayUpdate i:u p:u",
+    "animationDurationUpdate i:u p:u"
+   ]
   },
   {
    "id": "bar",
@@ -1349,11 +1406,11 @@
      "i:n:2 p:u",
      "i:n:3 p:u",
      "i:n:4 p:u",
-     "i:u p:u"
+     "i:z p:u"
     ],
     "animationDuration": [
      "i:n:0 p:u",
-     "i:u p:u"
+     "i:z p:u"
     ]
    },
    "updated": {
@@ -1387,6 +1444,10 @@
   },
   {
    "name": "line: the series delay is called with null",
+   "ok": true
+  },
+  {
+   "name": "line: the calls in order -- the duration and the delay with null, then each symbol's delay",
    "ok": true
   },
   {

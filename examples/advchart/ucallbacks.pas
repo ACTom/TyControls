@@ -189,10 +189,14 @@ type
     function PieLineEnd(const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout;
     function AlignRight(const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout;
     { animation timings }
-    function Delay10(ADataIndex: Integer; AHasIndex: Boolean): Double;
-    function Delay10Plus100(ADataIndex: Integer; AHasIndex: Boolean): Double;
-    function Delay5(ADataIndex: Integer; AHasIndex: Boolean): Double;
-    function Delay100(ADataIndex: Integer; AHasIndex: Boolean): Double;
+    function Delay10(ADataIndex: Integer; AHasIndex: Boolean;
+      const AParams: TTyAnimDelayParams): Double;
+    function Delay10Plus100(ADataIndex: Integer; AHasIndex: Boolean;
+      const AParams: TTyAnimDelayParams): Double;
+    function Delay5(ADataIndex: Integer; AHasIndex: Boolean;
+      const AParams: TTyAnimDelayParams): Double;
+    function Delay100(ADataIndex: Integer; AHasIndex: Boolean;
+      const AParams: TTyAnimDelayParams): Double;
     function DelayRandom200(ADataIndex: Integer; AHasIndex: Boolean): Double;
     function HillDelay(ADataIndex: Integer; AHasIndex: Boolean;
       const AParams: TTyAnimDelayParams): Double;
@@ -1676,28 +1680,38 @@ end;
 
 { ---- animation ---- }
 
-function TGalleryCallbacks.Delay10(ADataIndex: Integer; AHasIndex: Boolean): Double;
+{ idx as JavaScript's arithmetic sees it: a number, null as 0 (LineView's
+  seriesDelay(null), a grid clip's), undefined as NaN }
+function JsIdx(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
 begin
-  if not AHasIndex then Exit(NaN);
-  Result := ADataIndex * 10;
+  if AHasIndex then Result := ADataIndex
+  else if AParams.IndexNull then Result := 0
+  else Result := NaN;
 end;
 
-function TGalleryCallbacks.Delay10Plus100(ADataIndex: Integer; AHasIndex: Boolean): Double;
+function TGalleryCallbacks.Delay10(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
 begin
-  if not AHasIndex then Exit(NaN);
-  Result := ADataIndex * 10 + 100;
+  Result := JsIdx(ADataIndex, AHasIndex, AParams) * 10;
 end;
 
-function TGalleryCallbacks.Delay5(ADataIndex: Integer; AHasIndex: Boolean): Double;
+function TGalleryCallbacks.Delay10Plus100(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
 begin
-  if not AHasIndex then Exit(NaN);
-  Result := ADataIndex * 5;
+  Result := JsIdx(ADataIndex, AHasIndex, AParams) * 10 + 100;
 end;
 
-function TGalleryCallbacks.Delay100(ADataIndex: Integer; AHasIndex: Boolean): Double;
+function TGalleryCallbacks.Delay5(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
 begin
-  if not AHasIndex then Exit(NaN);
-  Result := ADataIndex * 100;
+  Result := JsIdx(ADataIndex, AHasIndex, AParams) * 5;
+end;
+
+function TGalleryCallbacks.Delay100(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
+begin
+  Result := JsIdx(ADataIndex, AHasIndex, AParams) * 100;
 end;
 
 { pie-custom: Math.random() * 200 }
@@ -1790,9 +1804,9 @@ begin
   c := GCallbacks;
   Pos_('area-simple.position', @c.TenPercentTop, AList);
   Pos_('area-time-axis.position', @c.TenPercentTop, AList);
-  Tim('bar-animation-delay.animationDelay', @c.Delay10, AList);
-  Tim('bar-animation-delay.animationDelay#2', @c.Delay10Plus100, AList);
-  Tim('bar-animation-delay.animationDelayUpdate', @c.Delay5, AList);
+  Dly('bar-animation-delay.animationDelay', @c.Delay10, AList);
+  Dly('bar-animation-delay.animationDelay#2', @c.Delay10Plus100, AList);
+  Dly('bar-animation-delay.animationDelayUpdate', @c.Delay5, AList);
   Elh('bar-multi-drilldown.onclick', @c.GoBack, AList);
   Fmt('bar-polar-real-estate.formatter', @c.PolarRentTip, AList);
   Fmt('bar-race-country.formatter', @c.RaceRound, AList);
@@ -1854,9 +1868,9 @@ begin
   Fmt('geo-svg-map.formatter', @c.SvgMapTip, AList);
   Fmt('geo-svg-map.formatter#2', @c.SvgGeoTip, AList);
   Vis('geo-svg-scatter-simple.symbolSize', @c.SvgScatterSize, AList);
-  Tim('graph-life-expectancy.animationDelay', @c.Delay100, AList);
+  Dly('graph-life-expectancy.animationDelay', @c.Delay100, AList);
   for i := 2 to 19 do
-    Tim('graph-life-expectancy.animationDelay#' + IntToStr(i), @c.Delay100, AList);
+    Dly('graph-life-expectancy.animationDelay#' + IntToStr(i), @c.Delay100, AList);
   Fmt('intraday-breaks-1.formatter', @c.BreakTime1, AList);
   Fmt('intraday-breaks-2.formatter', @c.BreakTime2, AList);
   Fmt('line-draggable.formatter', @c.DraggableTip, AList);
@@ -1913,10 +1927,10 @@ begin
   Vis('scatter-painter-choice.color', @c.PainterColor, AList);
   Fmt('scatter-polar-punchCard.formatter', @c.PolarPunchTip, AList);
   Vis('scatter-polar-punchCard.symbolSize', @c.ThirdTwice, AList);
-  Tim('scatter-polar-punchCard.animationDelay', @c.Delay5, AList);
+  Dly('scatter-polar-punchCard.animationDelay', @c.Delay5, AList);
   Fmt('scatter-punchCard.formatter', @c.PunchTip, AList);
   Vis('scatter-punchCard.symbolSize', @c.ThirdTwice, AList);
-  Tim('scatter-punchCard.animationDelay', @c.Delay5, AList);
+  Dly('scatter-punchCard.animationDelay', @c.Delay5, AList);
   Vis('scatter-single-axis.symbolSize', @c.SecondFour, AList);
   for i := 2 to 7 do
     Vis('scatter-single-axis.symbolSize#' + IntToStr(i), @c.SecondFour, AList);

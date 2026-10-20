@@ -835,6 +835,12 @@ type
     UtData, UtBase: TTyDoubleArray;
     UtHasM, UtNoScale: Boolean;
     UtM: TTyMat2D;
+    { [R2-I7] A markPoint's mpData id (carMarkPoint): SymbolDraw's update
+      diffs the symbols by it -- the item's name, else the coordinate on
+      the series' name dimension, a repeat '__ec__<n>', no name 'e' + two
+      NULs + its place -- so a max that moves to another category is a
+      symbol removed and a symbol added, not one that slides }
+    Key: string;
   end;
 
   { [F6b] zrender's own contain over an element of an SVG map, in the

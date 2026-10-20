@@ -114,8 +114,12 @@ type
   TAdvChartAnimTimingArgsTest = class(TCuOracleBase)
   private
     FLog: array[0..3] of TStringList;
+    { [R2-I7] every call in order }
+    FSeq: TStringList;
+    FSeqOn: Boolean;
     procedure Note(AKey: Integer; ADataIndex: Integer; AHasIndex: Boolean;
       const AParams: TTyAnimDelayParams);
+    procedure CompareSeq(const APhase: string; AWant: TJSONData);
     function HDelay(ADataIndex: Integer; AHasIndex: Boolean;
       const AParams: TTyAnimDelayParams): Double;
     function HDuration(ADataIndex: Integer; AHasIndex: Boolean;
@@ -135,6 +139,9 @@ type
     procedure TestTheCartesianSeriesAreUpstreams;
     procedure TestThePictorialBarHandsItsGlyphsPlace;
     procedure TestTheOtherSeriesAreUpstreams;
+    { [R2-I7] the line's calls in upstream's order: the series' duration
+      and delay with null once, then each symbol's }
+    procedure TestTheLineCallsInUpstreamsOrder;
   end;
 
 implementation
@@ -860,6 +867,7 @@ begin
     FLog[k].CaseSensitive := True;
     FLog[k].UseLocale := False;
   end;
+  FSeq := TStringList.Create;
   TyChartRegisterAnimDelay('ad', @HDelay);
   TyChartRegisterAnimDelay('aD', @HDuration);
   TyChartRegisterAnimDelay('adu', @HDelayUpdate);
@@ -874,6 +882,7 @@ begin
   TyChartUnregisterAnimDelay('adu');
   TyChartUnregisterAnimDelay('aDu');
   for k := 0 to 3 do FreeAndNil(FLog[k]);
+  FreeAndNil(FSeq);
   inherited TearDown;
 end;
 
@@ -882,7 +891,10 @@ procedure TAdvChartAnimTimingArgsTest.Note(AKey: Integer; ADataIndex: Integer;
   AHasIndex: Boolean; const AParams: TTyAnimDelayParams);
 var a, p: string;
 begin
-  if AHasIndex then a := 'i:n:' + IntToStr(ADataIndex) else a := 'i:u';
+  { [R2-I7] null 'z', undefined 'u' }
+  if AHasIndex then a := 'i:n:' + IntToStr(ADataIndex)
+  else if AParams.IndexNull then a := 'i:z'
+  else a := 'i:u';
   if not AParams.Present then p := 'u'
   else
   begin
@@ -896,6 +908,20 @@ begin
     p := 'j:{' + p + '}';
   end;
   FLog[AKey].Add(a + ' p:' + p);
+  FSeq.Add(cTimingKeys[AKey] + ' ' + a + ' p:' + p);
+end;
+
+procedure TAdvChartAnimTimingArgsTest.CompareSeq(const APhase: string; AWant: TJSONData);
+var
+  j: Integer;
+  got, exp: string;
+begin
+  if not FSeqOn or (AWant = nil) or not (AWant is TJSONArray) then Exit;
+  exp := '';
+  for j := 0 to AWant.Count - 1 do exp := exp + '|' + TJSONArray(AWant).Strings[j];
+  got := '';
+  for j := 0 to FSeq.Count - 1 do got := got + '|' + FSeq[j];
+  SameStr(APhase + ' in order', got, exp);
 end;
 
 function TAdvChartAnimTimingArgsTest.HDelay(ADataIndex: Integer; AHasIndex: Boolean;
@@ -926,26 +952,14 @@ begin
   Result := 300;
 end;
 
-{ NOT COMPARED -- where the port does not animate an element upstream
-  animates, so the function is never asked for it (each one an animation
-  the port sets at once, reported in spec §229d):
-    markers update   the moved max markPoint: upstream's marker data id is
-                     the category it stands on ('3', then '2'), so the
-                     SymbolDraw diff removes the old symbol and pops a new
-                     one in (enter timing at the marker's row); the port
-                     pairs markers by their index and tweens the old one
-    pictorial update updateBar (the bundle, every glyph with its {index,
-                     count}, the clip, at update timing): the port sets a
-                     pictorial bar's update at once
-    tree update      the label of the node the update removes (LabelManager
-                     moves it while its group leaves)
-    treemap update   the labels' layout move (LabelManager updateProps) }
+{ NOT COMPARED -- nothing since R2-I7 (spec §229f), which animated what
+  R2-J3 listed here: the markPoint a merge moves to another category (paired
+  by its mpData id), a pictorial bar's update, a removed tree node's label
+  and a treemap's kept labels (LabelManager's pass). The list stays, empty,
+  for the next one. }
 function TimingSkipped(const AWhat: string): Boolean;
 const
-  cSkip: array[0..7] of string = ('markers update animationDelay',
-    'markers update animationDuration', 'pictorial update animationDelayUpdate',
-    'pictorial update animationDurationUpdate', 'tree update animationDelayUpdate',
-    'treemap update animationDelayUpdate', '', '');
+  cSkip: array[0..7] of string = ('', '', '', '', '', '', '', '');
 var i: Integer;
 begin
   for i := 0 to High(cSkip) do
@@ -994,16 +1008,24 @@ begin
     AssertTrue(AIds[j] + ' is in the fixture', c <> nil);
     FWhere := AIds[j];
     for k := 0 to 3 do FLog[k].Clear;
+    FSeq.Clear;
     NewChart(TJSONObject(FRoot).Integers['W'], TJSONObject(FRoot).Integers['H']);
     FChart.AnimationMode := camAlways;
     FChart.AnimNow := 1700000000000;
     FChart.SetOption(c.Objects['option'].AsJSON);
     RenderNow;
     Compare(AIds[j] + ' enter', c.Objects['enter']);
+    CompareSeq(AIds[j] + ' enter', c.Find('enterSeq'));
+    FSeq.Clear;
     FChart.AnimNow := 1700000000050;
     FChart.SetOption(c.Objects['update'].AsJSON);
     RenderNow;
     Compare(AIds[j] + ' update', c.Objects['updated']);
+    { NOT the update's order: the same calls, but the port arms the line's
+      clip (enter timing) at its polyline, before the axes' and the
+      symbols' updates, where upstream makes it after them -- the spec's
+      deviation (R2-I7) }
+    FSeq.Clear;
     FChart.Measurer := nil;
     FreeAndNil(FChart);
   end;
@@ -1019,6 +1041,13 @@ procedure TAdvChartAnimTimingArgsTest.TestThePictorialBarHandsItsGlyphsPlace;
 begin
   RunIds(['pictorial']);
   Finish('pictorial', 6);
+end;
+
+procedure TAdvChartAnimTimingArgsTest.TestTheLineCallsInUpstreamsOrder;
+begin
+  FSeqOn := True;
+  RunIds(['line']);
+  Finish('line in order', 5);
 end;
 
 procedure TAdvChartAnimTimingArgsTest.TestTheOtherSeriesAreUpstreams;

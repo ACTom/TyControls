@@ -73,6 +73,15 @@ type
     Index: Integer;
     HasCount: Boolean;
     Count: Integer;
+    { [R2-I7] ABOUT THE FIRST ARGUMENT, which a handler sees as
+      (ADataIndex, AHasIndex): with AHasIndex False, True when upstream
+      passed null and False when it passed undefined -- `null * 10` is 0,
+      `undefined * 10` NaN. Null: LineView's seriesDuration(null) /
+      seriesDelay(null), a grid clip path's initProps(..., null, done), a
+      callback in the dataIndex slot (animateOrSetProps turns it into null:
+      the parallel's, the sankey's and the themeRiver's clips). Set for a
+      duration function too, whose params are otherwise null. }
+    IndexNull: Boolean;
   end;
 
   { [R2-J3] a delay function given both of upstream's arguments,
@@ -153,6 +162,8 @@ type
       False is the undefined of an element with no such field }
     DelayIndex, DelayCount: Integer;
     HasDelayIndex, HasDelayCount: Boolean;
+    { [R2-I7] HasIndex False: the call passed null, not undefined }
+    IndexNull: Boolean;
   end;
 
 { ---- the handler registry ('@Name') ---- }
@@ -172,6 +183,8 @@ procedure TyChartUnregisterAnimDelay(const AName: string);
 function TyChartFindAnimDelay(const AName: string; out AHandler: TTyAnimDelayHandler): Boolean;
 { upstream's null second argument }
 function TyAnimNoDelayParams: TTyAnimDelayParams;
+{ [R2-I7] the same, the first argument null }
+function TyAnimNullIndexParams: TTyAnimDelayParams;
 { Runs the timing function '@Name' names (AName without the '@'): a delay
   handler with AParams, else a timing handler with the index. False -- and
   not-a-number -- when nobody registered it. }
@@ -200,6 +213,8 @@ function TyAnimIsEnabled(const AModel: TTyAnimModel): Boolean;
 { ---- the config ---- }
 function TyAnimCallAt(ADataIndex: Integer): TTyAnimCallOpts;
 function TyAnimCallNoIndex: TTyAnimCallOpts;
+{ [R2-I7] a call whose dataIndex is null rather than undefined }
+function TyAnimCallNull: TTyAnimCallOpts;
 function TyAnimNoOverride: TTyAnimOverride;
 
 { getAnimationConfig: False when the model does not animate (upstream's
@@ -339,6 +354,12 @@ end;
 function TyAnimNoDelayParams: TTyAnimDelayParams;
 begin
   Result := Default(TTyAnimDelayParams);
+end;
+
+function TyAnimNullIndexParams: TTyAnimDelayParams;
+begin
+  Result := Default(TTyAnimDelayParams);
+  Result.IndexNull := True;
 end;
 
 function TyAnimRunTiming(const AName: string; ADataIndex: Integer;
@@ -702,6 +723,12 @@ begin
   Result.HasIndex := False;
 end;
 
+function TyAnimCallNull: TTyAnimCallOpts;
+begin
+  Result := TyAnimCallNoIndex;
+  Result.IndexNull := True;
+end;
+
 { a delay function is handed AParams too [R2-J3]; a duration function
   the index alone }
 function CallTiming(const AV: TTyAnimOptValue; const AOpts: TTyAnimCallOpts;
@@ -787,8 +814,12 @@ begin
       dp.HasCount := AOpts.HasDelayCount;
       dp.Count := AOpts.DelayCount;
     end;
+    { [R2-I7] the dataIndex null or undefined }
+    dp.IndexNull := AOpts.IndexNull and not AOpts.HasIndex;
     ATiming.Delay := CallTiming(del, AOpts, dp);
-    ATiming.Duration := CallTiming(dur, AOpts, TyAnimNoDelayParams);
+    dp := TyAnimNoDelayParams;
+    dp.IndexNull := AOpts.IndexNull and not AOpts.HasIndex;
+    ATiming.Duration := CallTiming(dur, AOpts, dp);
     { duration || 0 }
     if IsNan(ATiming.Duration) then ATiming.Duration := 0;
     ATiming.Easing := EasingOf(eas);
