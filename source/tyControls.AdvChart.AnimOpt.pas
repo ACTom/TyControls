@@ -29,6 +29,12 @@ unit tyControls.AdvChart.AnimOpt;
   TTyAnimTimingHandler registered as Name with the element's data index, and
   AHasIndex False where upstream passes null (the line clip, a symbol group's
   position). A duration that comes to nothing, not-a-number included, is 0.
+  [R2-J3] A delay function's second argument, extraDelayParams: a
+  TTyAnimDelayHandler registered under the name is asked first and handed
+  it -- a pictorial bar's item model answers {index, count} for the element
+  it animates (getAnimationDelayParams: a repeated glyph's place in its
+  column and the column's repeat count, undefined on any other element),
+  every other model null. A duration function is handed the index alone.
 
   animateOrSetProps. Unless leaving, stop the element's 'leave' animation
   (an element that comes back cancels its fade). With a config and a
@@ -54,6 +60,27 @@ type
   { universalTransition.delay(index, count): the index of a morphing piece
     among count [Batch 137] }
   TTyUtDelayHandler = function(AIndex, ACount: Integer): Double of object;
+
+  { [R2-J3] THE SECOND ARGUMENT OF A DELAY FUNCTION, getAnimationConfig's
+    extraDelayParams: Present False is upstream's null (every model but a
+    pictorial bar's item model); Present True is the object
+    getAnimationDelayParams answers -- index (__pictorialAnimationIndex) and
+    count (__pictorialRepeatTimes), each HasXxx False where the element has
+    none (a single glyph, a clip path: undefined). }
+  TTyAnimDelayParams = record
+    Present: Boolean;
+    HasIndex: Boolean;
+    Index: Integer;
+    HasCount: Boolean;
+    Count: Integer;
+  end;
+
+  { [R2-J3] a delay function given both of upstream's arguments,
+    (dataIndex, extraDelayParams); registered under a name it is asked
+    before a TTyAnimTimingHandler of the same name. As a duration it is
+    handed no params (upstream calls duration(dataIndex)). }
+  TTyAnimDelayHandler = function(ADataIndex: Integer; AHasIndex: Boolean;
+    const AParams: TTyAnimDelayParams): Double of object;
 
   TTyAnimOptKind = (aokUndefined, aokNull, aokBool, aokNumber, aokString,
     aokHandler, aokObject);
@@ -98,6 +125,9 @@ type
       the series' (Model.getShallow: a nullish key falls to the parent) --
       a pictorial bar animates on its item's model. nil: none }
     Item: TJSONData;
+    { [R2-J3] the model has getAnimationDelayParams (a pictorial bar's item
+      model): a delay function is handed the call's DelayParams }
+    DelayParams: Boolean;
   end;
 
   TTyAnimTiming = record
@@ -118,6 +148,11 @@ type
     RemoveOpt: TTyAnimOverride;
     Payload: TTyAnimOverride;
     HasPayload: Boolean;
+    { [R2-J3] what getAnimationDelayParams answers for the element, when
+      the model has it (TTyAnimModel.DelayParams): HasIndex / HasCount
+      False is the undefined of an element with no such field }
+    DelayIndex, DelayCount: Integer;
+    HasDelayIndex, HasDelayCount: Boolean;
   end;
 
 { ---- the handler registry ('@Name') ---- }
@@ -130,6 +165,18 @@ procedure TyChartClearAnimTimings;
 procedure TyChartRegisterUtDelay(const AName: string; AHandler: TTyUtDelayHandler);
 procedure TyChartUnregisterUtDelay(const AName: string);
 function TyChartFindUtDelay(const AName: string; out AHandler: TTyUtDelayHandler): Boolean;
+{ [R2-J3] delay handlers given extraDelayParams; asked before the timings
+  of the same name; TyChartClearAnimTimings clears them too }
+procedure TyChartRegisterAnimDelay(const AName: string; AHandler: TTyAnimDelayHandler);
+procedure TyChartUnregisterAnimDelay(const AName: string);
+function TyChartFindAnimDelay(const AName: string; out AHandler: TTyAnimDelayHandler): Boolean;
+{ upstream's null second argument }
+function TyAnimNoDelayParams: TTyAnimDelayParams;
+{ Runs the timing function '@Name' names (AName without the '@'): a delay
+  handler with AParams, else a timing handler with the index. False -- and
+  not-a-number -- when nobody registered it. }
+function TyAnimRunTiming(const AName: string; ADataIndex: Integer;
+  AHasIndex: Boolean; const AParams: TTyAnimDelayParams; out AValue: Double): Boolean;
 
 { ---- models ---- }
 { Series ASeriesIndex of the root option ARoot (a bare `series` object is
@@ -190,9 +237,15 @@ type
     Handler: TTyUtDelayHandler;
   end;
 
+  TDelayEntry = record
+    Name: string;
+    Handler: TTyAnimDelayHandler;
+  end;
+
 var
   GTimings: array of TTimingEntry;
   GUtDelays: array of TUtDelayEntry;
+  GDelays: array of TDelayEntry;
 
 { ==================== registry ==================== }
 
@@ -240,6 +293,70 @@ procedure TyChartClearAnimTimings;
 begin
   GTimings := nil;
   GUtDelays := nil;
+  GDelays := nil;
+end;
+
+function IndexOfDelay(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GDelays) do
+    if GDelays[i].Name = AName then Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterAnimDelay(const AName: string; AHandler: TTyAnimDelayHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfDelay(AName);
+  if i < 0 then
+  begin
+    i := Length(GDelays);
+    SetLength(GDelays, i + 1);
+    GDelays[i].Name := AName;
+  end;
+  GDelays[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterAnimDelay(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfDelay(AName);
+  if i < 0 then Exit;
+  for j := i to High(GDelays) - 1 do GDelays[j] := GDelays[j + 1];
+  SetLength(GDelays, Length(GDelays) - 1);
+end;
+
+function TyChartFindAnimDelay(const AName: string; out AHandler: TTyAnimDelayHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfDelay(AName);
+  Result := i >= 0;
+  if Result then AHandler := GDelays[i].Handler;
+end;
+
+function TyAnimNoDelayParams: TTyAnimDelayParams;
+begin
+  Result := Default(TTyAnimDelayParams);
+end;
+
+function TyAnimRunTiming(const AName: string; ADataIndex: Integer;
+  AHasIndex: Boolean; const AParams: TTyAnimDelayParams; out AValue: Double): Boolean;
+var
+  hd: TTyAnimDelayHandler;
+  h: TTyAnimTimingHandler;
+begin
+  Result := True;
+  if TyChartFindAnimDelay(AName, hd) and Assigned(hd) then
+    AValue := hd(ADataIndex, AHasIndex, AParams)
+  else if TyChartFindAnimTiming(AName, h) and Assigned(h) then
+    AValue := h(ADataIndex, AHasIndex)
+  else
+  begin
+    AValue := NaN;
+    Result := False;
+  end;
 end;
 
 function IndexOfUtDelay(const AName: string): Integer;
@@ -585,16 +702,13 @@ begin
   Result.HasIndex := False;
 end;
 
-function CallTiming(const AV: TTyAnimOptValue; const AOpts: TTyAnimCallOpts): Double;
-var h: TTyAnimTimingHandler;
+{ a delay function is handed AParams too [R2-J3]; a duration function
+  the index alone }
+function CallTiming(const AV: TTyAnimOptValue; const AOpts: TTyAnimCallOpts;
+  const AParams: TTyAnimDelayParams): Double;
 begin
   if AV.Kind = aokHandler then
-  begin
-    if TyChartFindAnimTiming(AV.Str, h) and Assigned(h) then
-      Result := h(AOpts.DataIndex, AOpts.HasIndex)
-    else
-      Result := NaN;
-  end
+    TyAnimRunTiming(AV.Str, AOpts.DataIndex, AOpts.HasIndex, AParams, Result)
   else if IsNullish(AV) then
     Result := NaN
   else
@@ -617,6 +731,7 @@ function TyAnimGetConfig(AType: TTyAnimType; const AModel: TTyAnimModel;
 var
   dur, del, eas: TTyAnimOptValue;
   mask: TFPUExceptionMask;
+  dp: TTyAnimDelayParams;
 begin
   ATiming.Duration := 0;
   ATiming.Delay := 0;
@@ -660,9 +775,20 @@ begin
       if AModel.Payload.HasEasing then eas := OptStr(AModel.Payload.Easing);
       if AModel.Payload.HasDelay then del := OptNum(AModel.Payload.Delay);
     end;
-    { the delay function first, then the duration's, as upstream calls them }
-    ATiming.Delay := CallTiming(del, AOpts);
-    ATiming.Duration := CallTiming(dur, AOpts);
+    { the delay function first, then the duration's, as upstream calls them;
+      the delay's second argument getAnimationDelayParams' answer on a model
+      that has it, else null [R2-J3] }
+    dp := TyAnimNoDelayParams;
+    if AModel.DelayParams then
+    begin
+      dp.Present := True;
+      dp.HasIndex := AOpts.HasDelayIndex;
+      dp.Index := AOpts.DelayIndex;
+      dp.HasCount := AOpts.HasDelayCount;
+      dp.Count := AOpts.DelayCount;
+    end;
+    ATiming.Delay := CallTiming(del, AOpts, dp);
+    ATiming.Duration := CallTiming(dur, AOpts, TyAnimNoDelayParams);
     { duration || 0 }
     if IsNan(ATiming.Duration) then ATiming.Duration := 0;
     ATiming.Easing := EasingOf(eas);

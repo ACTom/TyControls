@@ -135,6 +135,14 @@ type
       value} -- as JSON text; '' everywhere else (the treemap's
       treeAncestors is the same list) }
     TreePathInfo: string;
+    { [R2-J3] A TOOLTIP FORMATTER'S params.marker: the richText marker
+      upstream's TooltipMarkupStyleCreator writes -- an empty rich token of
+      the marker's style name, then two spaces (TyTooltipRichMarker) --
+      for which a dot of the item's colour is drawn wherever the formatter's
+      text carries it. The box is richText here (AdvChart.Tooltip), so this
+      is not the html span a browser's formatter is handed. '' everywhere
+      else. }
+    Marker: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 
@@ -289,6 +297,25 @@ type
     the answer. }
   TTyChartVisualHandler = function(
     const AParams: TTyChartCallbackParams): TJSONData of object;
+
+  { [R2-J3] WHAT ONE SERIES' VISUAL CALLBACKS ANSWERED, per raw index: the
+    symbol keys (an object of the symbol / symbolSize / symbolRotate /
+    symbolOffset a callback answered, nil where none did -- read as the
+    option is, TySymbolSpecOf) and the colour. A builder lays the symbol
+    answers over the series' spec and under the item's own keys (and a
+    graph's category), as seriesSymbolTask's item visuals lie under
+    dataSymbolTask's. }
+  TTyItemCallbacks = class
+  public
+    Sym: array of TJSONObject;
+    Col: array of TTyChartColor;
+    ColSet: array of Boolean;
+    HasSym, HasCol: Boolean;
+    destructor Destroy; override;
+    { nil: no answer for the item }
+    function SymOf(ARaw: Integer): TJSONObject;
+    function ColOf(ARaw: Integer; out AColour: TTyChartColor): Boolean;
+  end;
 
 { ---- the registry ---- }
 { Registering the same name twice REPLACES, so a form reopened at design time
@@ -496,6 +523,28 @@ end;
 procedure TyChartClearVisualHandlers;
 begin
   GVisuals := nil;
+end;
+
+{ ---- TTyItemCallbacks [R2-J3] ---- }
+
+destructor TTyItemCallbacks.Destroy;
+var i: Integer;
+begin
+  for i := 0 to High(Sym) do FreeAndNil(Sym[i]);
+  inherited Destroy;
+end;
+
+function TTyItemCallbacks.SymOf(ARaw: Integer): TJSONObject;
+begin
+  Result := nil;
+  if (ARaw >= 0) and (ARaw <= High(Sym)) then Result := Sym[ARaw];
+end;
+
+function TTyItemCallbacks.ColOf(ARaw: Integer; out AColour: TTyChartColor): Boolean;
+begin
+  AColour := 0;
+  Result := (ARaw >= 0) and (ARaw <= High(ColSet)) and ColSet[ARaw];
+  if Result then AColour := Col[ARaw];
 end;
 
 function TyChartRunVisualHandler(const ASpec: string;

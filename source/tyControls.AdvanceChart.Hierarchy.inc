@@ -3235,6 +3235,8 @@ begin
   Result.LabelValueDim := -1;
   if FStores[ASlot] <> nil then
     Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+  { [R2-J3] }
+  Result.ItemCb := ItemCbOf(ASlot);
 end;
 
 procedure TTyAdvanceChart.FreeTreeViews;
@@ -3276,12 +3278,16 @@ begin
   SetLength(FGraphEdges, Length(FBindings));
   SetLength(FGraphCats, Length(FBindings));
   SetLength(FGraphNodeScale, Length(FBindings));
+  { [R2-J3] each slot's visual callbacks in the graph unit's scope while its
+    nodes are read }
+  try
   for i := 0 to High(FBindings) do
   begin
     FGraphs[i] := nil;
     FGraphLaidOut[i] := False;
     FGraphNodeScale[i] := 1;
     if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
+    TyGraphItemCallbacks := ItemCbOf(i);
     if not FBindings[i].Resolved then Continue;
     { A GRAPH THE LEGEND SWITCHED OFF IS NOT LAID OUT AT ALL -- upstream's
       legendFilter takes the series out before any layout runs -- and for a
@@ -3385,6 +3391,9 @@ begin
     FGraphEdges[i] := solved.Edges;
     FGraphCats[i] := solved.Cats;
   end;
+  finally
+    TyGraphItemCallbacks := nil;
+  end;
   { [F3d] the edges' keys for the next update }
   SetLength(FGraphEdgeKeys, Length(FBindings));
   for i := 0 to High(FBindings) do FGraphEdgeKeys[i] := AnimGraphEdgeKeys(i);
@@ -3404,7 +3413,7 @@ end;
 function TTyAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
 var
   i, si, raw: Integer;
-  base: TTyChartColor;
+  base, cbBase: TTyChartColor;
   cols: TTyGraphCatColours;
   store: TTyDataStore;
 begin
@@ -3437,8 +3446,13 @@ begin
   SetLength(Result.EdgeEndFills, Length(FGraphNodes[ASlot]));
   for i := 0 to High(FGraphNodes[ASlot]) do
   begin
+    { [R2-J3] the series' colour callback is the node's base: its category's
+      and its own colour over it }
+    cbBase := base;
+    if ItemCbOf(ASlot) <> nil then
+      if not ItemCbOf(ASlot).ColOf(FGraphNodes[ASlot][i].RawRow, cbBase) then cbBase := base;
     Result.NodeFills[i] := TyGraphNodeFill(FGraphNodes[ASlot][i], cols,
-      Length(FGraphCats[ASlot]), base, store, Result.EdgeEndFills[i]);
+      Length(FGraphCats[ASlot]), cbBase, store, Result.EdgeEndFills[i]);
     { A visualMap's colour over the category's and the series' -- the
       category visual runs before the encoding -- and under the node's own }
     raw := FGraphNodes[ASlot][i].RawRow;

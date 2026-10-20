@@ -130,6 +130,14 @@ function TyPictorialSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPictoria
 function TyPictorialRowSpec(const ASpec: TTyPictorialSpec;
   AStore: TTyDataStore; ARow: Integer): TTyPictorialSpec;
 
+{ [R2-J3] THE SERIES' SYMBOL CALLBACKS' ANSWERS for one item (ACb: the
+  answers object, nil: none), over the series' spec and under the item's
+  own keys (TyPictorialRowSpec after it): the symbol and its size -- the two
+  getSymbolMeta reads as visuals. symbolRotate and symbolOffset it reads off
+  the item model, so an answer for them changes nothing. }
+function TyPictorialCbSpec(const ASpec: TTyPictorialSpec;
+  ACb: TJSONObject): TTyPictorialSpec;
+
 { upstream's toIntTimes: round when within a ten-thousandth, otherwise CEIL.
 
   BOTH BRANCHES, transcribed. Replacing the pair with one Round or one Trunc
@@ -156,6 +164,8 @@ function TyPictorialSlot(const ARun: TTyPictorialRun; AIndex: Integer;
   AAnchor: Double): Double;
 
 implementation
+
+uses tyControls.AdvChart.Handlers;
 
 function TyPictorialSpecDefault: TTyPictorialSpec;
 begin
@@ -237,8 +247,12 @@ begin
   node := TJSONObject(d);
 
   Result.SymbolName := StrIn(node, 'symbol', '');
+  { [R2-J3] a callback is no series value: the item's answer is the visual }
+  if TyChartIsHandlerRef(Result.SymbolName) then Result.SymbolName := '';
 
   d := node.Find('symbolSize');
+  if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+    d := nil;
   if d <> nil then
   begin
     Result.HasSize := True;
@@ -409,6 +423,35 @@ begin
     dvkText: Result := v.Text;
     dvkNumber: Result := NumToStr(v.Num);
     dvkBool: if v.Num <> 0 then Result := 'true' else Result := 'false';
+  end;
+end;
+
+function TyPictorialCbSpec(const ASpec: TTyPictorialSpec;
+  ACb: TJSONObject): TTyPictorialSpec;
+var
+  d: TJSONData;
+  a: TJSONArray;
+begin
+  Result := ASpec;
+  if ACb = nil then Exit;
+  d := ACb.Find('symbol');
+  if (d <> nil) and (d.JSONType = jtString) then Result.SymbolName := d.AsString;
+  d := ACb.Find('symbolSize');
+  if d <> nil then
+  begin
+    Result.HasSize := True;
+    if d.JSONType = jtArray then
+    begin
+      a := TJSONArray(d);
+      if a.Count > 0 then Result.SizeW := TyBoxDataOf(a.Items[0], Result.SizeW);
+      if a.Count > 1 then Result.SizeH := TyBoxDataOf(a.Items[1], Result.SizeH)
+      else if a.Count = 1 then Result.SizeH := TyBoxPx(NaN);
+    end
+    else
+    begin
+      Result.SizeW := TyBoxDataOf(d, Result.SizeW);
+      Result.SizeH := Result.SizeW;
+    end;
   end;
 end;
 

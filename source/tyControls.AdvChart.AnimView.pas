@@ -1474,7 +1474,8 @@ begin
 end;
 
 { [F3b] a row's ITEM model: the series' with the data item's own option
-  object (data[raw], when it is an object) asked first }
+  object (data[raw], when it is an object) asked first -- a pictorial
+  bar's, whose getItemModel gives it getAnimationDelayParams [R2-J3] }
 function ItemModelOf(const AC: TTyChartAnimSeries; ARow: Integer): TTyAnimModel;
 var
   raw: Integer;
@@ -1482,6 +1483,7 @@ var
 begin
   Result := AC.Model;
   Result.Item := nil;
+  Result.DelayParams := True;
   if not (AC.Model.Own is TJSONObject) then Exit;
   raw := ARow;
   if (ARow >= 0) and (ARow <= High(AC.Raws)) then raw := AC.Raws[ARow];
@@ -1506,16 +1508,12 @@ end;
   called with null, a number as it is, anything else not one. }
 function TimingNumber(const AV: TTyAnimOptValue; AIndex: Integer;
   AHasIndex: Boolean): Double;
-var h: TTyAnimTimingHandler;
 begin
   case AV.Kind of
     aokNumber, aokBool: Result := AV.Num;
     aokString: Result := TyJsToNumber(AV.Str);
-    aokHandler:
-      if TyChartFindAnimTiming(AV.Str, h) and Assigned(h) then
-        Result := h(AIndex, AHasIndex)
-      else
-        Result := NaN;
+    { [R2-J3] a delay handler too, its second argument null }
+    aokHandler: TyAnimRunTiming(AV.Str, AIndex, AHasIndex, TyAnimNoDelayParams, Result);
   else
     Result := NaN;
   end;
@@ -1949,6 +1947,7 @@ var
   props: TTyAnimProps;
   idx, k: Integer;
   opts: TTyAnimCallOpts;
+  tm: TTyAnimTiming;
   cfg: TTyAnimCfg;
   x, y, w, h, ex, half, delay: Double;
   flags: Integer;
@@ -2138,8 +2137,18 @@ begin
         p.SetNum('scaleX', 0);
         p.SetNum('scaleY', 0);
         if AEl.Anim.G[6] <> 0 then p.SetNum('rotation', 0);
-        { [F3b] on the ITEM's model }
-        TyInitProps(p, props, ItemModelOf(AC, idx), TyAnimCallAt(idx));
+        { [F3b] on the ITEM's model; [R2-J3] a repeated glyph hands a delay
+          function its index in the column and the column's repeat count,
+          a single glyph neither (no __pictorialAnimationIndex) }
+        opts := TyAnimCallAt(idx);
+        if AEl.Anim.G[6] <> 0 then
+        begin
+          opts.HasDelayIndex := True;
+          opts.DelayIndex := AEl.Anim.Sub;
+          opts.HasDelayCount := True;
+          opts.DelayCount := Round(AEl.Anim.G[7]);
+        end;
+        TyInitProps(p, props, ItemModelOf(AC, idx), opts);
       end;
     carPictorialClip:
       begin
@@ -2369,6 +2378,11 @@ begin
         p.SetFinal(props);
         p.SetNum('style.opacity', 0);
         Start(props, TyAnimCallAt(idx));
+        { [R2-J3] then FunnelPiece._updateLabel: updateProps of the new
+          text's style x / y on the series at the row -- update timing. The
+          text has neither yet, so zrender sets them at once and nothing
+          tweens, but the timing functions are asked }
+        TyAnimGetConfig(atUpdate, AC.Model, TyAnimCallAt(idx), tm);
       end;
     carGaugePointer:
       begin

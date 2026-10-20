@@ -3401,8 +3401,20 @@ begin
   begin
     ix := st.DimIndexOf(FBindings[slot].XAxis.Dim);
     iy := st.DimIndexOf(FBindings[slot].YAxis.Dim);
-    AX := FBindings[slot].XAxis.DataToCoord(Val_(ix));
-    AY := FBindings[slot].YAxis.DataToCoord(Val_(iy));
+    { [R2-J3] Cartesian2D.dataToPoint: through the affine matrix when both
+      axes are value or time and both values are finite (its last bits are
+      not the per-axis answer's), else axis by axis [was: always per axis] }
+    if FBindings[slot].Cart <> nil then
+    begin
+      pt := FBindings[slot].Cart.DataToPoint([Val_(ix), Val_(iy)]);
+      AX := pt.X;
+      AY := pt.Y;
+    end
+    else
+    begin
+      AX := FBindings[slot].XAxis.DataToCoord(Val_(ix));
+      AY := FBindings[slot].YAxis.DataToCoord(Val_(iy));
+    end;
   end
   else if FBindings[slot].Polar <> nil then
   begin
@@ -5007,6 +5019,10 @@ var
   tipText, fmtText: string;
   k, m: Integer;
   hasSeries: Boolean;
+  { [R2-J3] the formatter's markers: the names its params were handed and
+    their colours }
+  mkNames: array of string;
+  mkColours: array of TTyChartColor;
   w, h, lineH, gap, cx, cy: Double;
   padL, padT, padR, padB, radius, borderW: Double;
   box: TTyRectF;
@@ -5111,6 +5127,22 @@ begin
       if onAxis then params := AxisTooltipParams(snap.Hits)
       else params[0] := TooltipParams(snap.Datum);
       if Length(params) = 0 then Exit;
+      { [R2-J3] params.marker: one marker per series' params, numbered in
+        their order (makeTooltipMarker, richText) -- a series' item and a
+        marker component's, not a component item's (a geo region's, a
+        matrix cell's have no marker) }
+      mkNames := nil;
+      mkColours := nil;
+      for k := 0 to High(params) do
+        if (params[k].ComponentType = 'series') or (params[k].ComponentType = 'markPoint')
+          or (params[k].ComponentType = 'markLine') or (params[k].ComponentType = 'markArea') then
+        begin
+          params[k].Marker := TyTooltipRichMarker(Length(mkNames));
+          SetLength(mkNames, Length(mkNames) + 1);
+          SetLength(mkColours, Length(mkNames));
+          mkNames[High(mkNames)] := TyTooltipMarkerName(High(mkNames));
+          mkColours[High(mkColours)] := params[k].Color;
+        end;
       fmtText := spec.Formatter;
       { A TEMPLATE UNDER A TIME AXIS IS A TIME TEMPLATE FIRST: TooltipView
         runs the string through util/time.ts format at the first series'
@@ -5155,6 +5187,8 @@ begin
       block := TooltipContent(snap.Datum, spec);
     if block = nil then Exit;
     lines := TyTooltipFlatten(block, ink);
+    { [R2-J3] the dots a formatter's text names by params.marker }
+    TyTooltipSplitMarkers(lines, mkNames, mkColours, ink);
     end;
     if Length(lines) = 0 then Exit;
 

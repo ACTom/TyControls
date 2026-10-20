@@ -616,6 +616,10 @@ begin
   { AND THE DECALS: the aria visual (6000) and the decal visual (7000)
     come after every other visual stage [Batch 131] }
   SolveDecals;
+  { [R2-J3] the series' visual callbacks: after the palette and the
+    visualMaps are settled, before any layout (a graph's ring sizes its
+    nodes by them) }
+  SolveItemCallbacks;
 end;
 
 { dataColorPaletteTask [Batch 105]. eachSeries -- the series the legend kept
@@ -1646,6 +1650,8 @@ var
   style: TTyOptStyle;
   key, other: TTyOptColor;
   hasAuto: Boolean;
+  isCb: Boolean;
+  sd: TJSONData;
 begin
   FSeriesColors := nil;
   FSeriesColorKnown := nil;
@@ -1715,6 +1721,21 @@ begin
       So `{ color: '#fff', borderColor: 'auto' }` is a white bar with a
       border in the palette colour, and it costs a slot. }
     hasAuto := key.IsAuto or other.IsAuto;
+    { [R2-J3] A COLOUR CALLBACK AT THE KEY is the style task's third reason
+      to ask the palette, whatever the type's defaults name: the series takes
+      a slot and its callback's params carry that colour (a tree with one is
+      the palette's, not lightsteelblue's) }
+    isCb := False;
+    sd := node.Find(TyStyleAccessPath(st));
+    if sd is TJSONObject then
+    begin
+      if TyStyleDrawsWithStroke(st) and (TyStyleAccessPath(st) = 'itemStyle') then
+        sd := TJSONObject(sd).Find('borderColor')
+      else
+        sd := TJSONObject(sd).Find('color');
+      isCb := (sd <> nil) and (sd.JSONType = jtString) and TyChartIsHandlerRef(sd.AsString);
+    end;
+    if isCb then hasAuto := True;
 
     { A TYPE WHOSE DEFAULTS NAME THE COLOUR takes no slot either: the style
       task reads itemStyle through the series' defaultOption, and a
@@ -1768,7 +1789,9 @@ begin
     FSeriesPick[i] := TySeriesPaletteFrom(ownPal, ownLayers, chartPal,
       chartLayers, NameFor(i), ownScope, chartScope, count);
     FSeriesPickAsked[i] := True;
-    FSeriesColorFromPalette[i] := not key.Written;
+    { [R2-J3] a colour callback says the colour is not the palette's
+      (seriesStyleTask: colorFromPalette false) -- no per-datum palette }
+    FSeriesColorFromPalette[i] := (not key.Written) and not isCb;
     { THE PICK IS NOT ALWAYS THE FILL. It becomes the fill only when the
       fill was left unwritten, or was written as `auto`; a series that
       named its fill and asked for `auto` somewhere else keeps the name
@@ -1917,6 +1940,10 @@ begin
       MarkerGround(pin.Background, pin.IsDark);
       pin.Scale := scale;
       pin.RtGlobal := RtGlobal;
+      { [R2-J3] the itemName dimension: a category axis' coordinate }
+      pin.NameDim := -1;
+      if ctx.XAxis.AxisType = atCategory then pin.NameDim := 0
+      else if ctx.YAxis.AxisType = atCategory then pin.NameDim := 1;
       { UNDER MASKED TRAPS: a corner of an unknown category is not a number,
         and upstream draws on regardless }
       fpMask := GetExceptionMask;
@@ -3259,42 +3286,40 @@ begin
   end;
 end;
 
-{ [R2-J2] THE SERIES' PER-ITEM VISUAL CALLBACKS. Upstream:
+{ [R2-J3] THE SERIES' PER-ITEM VISUAL CALLBACKS, every series'. Upstream:
 
-    seriesSymbolTask (visual/symbol.ts), for a series with symbols: every
-    one of symbol, symbolSize, symbolRotate, symbolOffset that is a function
-    is called as cb(rawValue, params) for each item, and the answer is the
-    item's visual; dataSymbolTask then puts the item's own keys over it.
-    Done for a scatter and an effectScatter, whose items carry their own
-    symbol spec (SymItems); the answer is read as the option would be read
-    (TySymbolSpecOf).
+    seriesStyleTask (visual/style.ts, every series): the colour key of the
+    series' style path -- itemStyle's fill; the stroke of a series that
+    draws with it, lineStyle.color for lines and parallel, a boxplot's
+    itemStyle.borderColor -- when a function, is called as
+    colorCallback(params) for each item; params.color is the palette's
+    colour then (the series' colour key takes it).
 
-    seriesStyleTask (visual/style.ts): a function itemStyle.color (the
-    series' colour key: fill -- lines, parallel and boxplot draw with the
-    stroke and are not done) is called as colorCallback(params) for each
-    item, its answer the item's fill under the visualMap and the item's own
-    style (RowVisualEarly). The series' own colour stays the palette's.
+    seriesSymbolTask (visual/symbol.ts, a series with hasSymbolVisual: line,
+    scatter, effectScatter, graph, radar, tree, pictorialBar): every one of
+    symbol, symbolSize, symbolRotate, symbolOffset that is a function is
+    called as cb(rawValue, params) for each item -- after the style task, so
+    params.color is the colour callback's answer for the item, else the
+    series style's colour.
 
   params: the item's getDataParams (TyLabelParams: the series' name and
-  index, the row and its raw index, the name, the raw item -- rawValue --,
-  the colour the series' style has). A handler nobody registered answers
-  undefined: the series' value stands. }
-procedure TTyAdvanceChart.VisualCallbacks(ASlot: Integer;
-  var AVisual: TTySeriesVisual; AOnlyRow: Integer);
+  index, the row and its raw index, the name, the raw item -- rawValue).
+  A handler nobody registered answers undefined: the series' value stands. }
+function TTyAdvanceChart.ItemCallbacks(ASlot: Integer; AOnlyRow: Integer;
+  ASymColour: TTyChartColor): TTyItemCallbacks;
 const
   cSym: array[0..3] of string = ('symbol', 'symbolSize', 'symbolRotate',
     'symbolOffset');
 var
-  node, item, tmp: TJSONObject;
-  d, ans, data: TJSONData;
+  node, tmp: TJSONObject;
+  d, ans: TJSONData;
   st: TTyDataStore;
-  r, r0, r1, raw, k: Integer;
+  r, r0, r1, raw, k, n: Integer;
   specs: array[0..3] of string;
-  anySym, symOk: Boolean;
-  colorSpec, sname, t: string;
+  anySym: Boolean;
+  colorSpec, sname, t, styleKey, colorKey: string;
   prm: TTyChartCallbackParams;
-  spec: TTySymbolSpec;
-  c: TTyChartColor;
+  c, palette: TTyChartColor;
 
   function Ref(AData: TJSONData): string;
   begin
@@ -3303,21 +3328,15 @@ var
       and TyChartIsHandlerRef(AData.AsString) then Result := AData.AsString;
   end;
 
-  procedure Grow(ARaw: Integer);
+  { getRawValue of an item with no value (a lines row of coords alone): undefined }
+  procedure NoValue(var AParams: TTyChartCallbackParams);
   begin
-    if anySym and (ARaw > High(AVisual.SymItems)) then
-    begin
-      SetLength(AVisual.SymItems, ARaw + 1);
-      SetLength(AVisual.SymItemHas, ARaw + 1);
-    end;
-    if (colorSpec <> '') and (ARaw > High(AVisual.CbFill)) then
-    begin
-      SetLength(AVisual.CbFill, ARaw + 1);
-      SetLength(AVisual.CbFillSet, ARaw + 1);
-    end;
+    if (AParams.ValueText = '') and (AParams.Raw.Shape = rshNone)
+      and (Length(AParams.Values) = 0) then AParams.ValueText := 'undefined';
   end;
 
 begin
+  Result := nil;
   if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FStores)) then Exit;
   st := FStores[ASlot];
   if (st = nil) or (FOption = nil) then Exit;
@@ -3326,22 +3345,33 @@ begin
   node := TJSONObject(d);
   t := FBindings[ASlot].SeriesType;
   anySym := False;
-  symOk := (t = 'scatter') or (t = 'effectScatter');
   for k := 0 to High(cSym) do
   begin
     specs[k] := '';
-    if symOk then specs[k] := Ref(node.Find(cSym[k]));
+    if (t = 'line') or (t = 'scatter') or (t = 'effectScatter') or (t = 'graph')
+      or (t = 'radar') or (t = 'tree') or (t = 'pictorialBar') then
+      specs[k] := Ref(node.Find(cSym[k]));
     if specs[k] <> '' then anySym := True;
   end;
+  { visualStyleAccessPath and the colour key of the draw type }
+  styleKey := 'itemStyle';
+  colorKey := 'color';
+  if (t = 'lines') or (t = 'parallel') then styleKey := 'lineStyle'
+  else if t = 'boxplot' then colorKey := 'borderColor';
   colorSpec := '';
-  if (t <> 'lines') and (t <> 'parallel') and (t <> 'boxplot') then
-  begin
-    d := node.Find('itemStyle');
-    if d is TJSONObject then colorSpec := Ref(TJSONObject(d).Find('color'));
-  end;
+  d := node.Find(styleKey);
+  if d is TJSONObject then colorSpec := Ref(TJSONObject(d).Find(colorKey));
   if not anySym and (colorSpec = '') then Exit;
-  data := node.Find('data');
+  Result := TTyItemCallbacks.Create;
+  Result.HasSym := anySym;
+  Result.HasCol := colorSpec <> '';
+  n := st.RawCount;
+  if n < st.Count then n := st.Count;
+  SetLength(Result.Sym, n);
+  SetLength(Result.Col, n);
+  SetLength(Result.ColSet, n);
   sname := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  palette := TTyChartColor(SeriesColor(FBindings[ASlot].SeriesIndex));
   if AOnlyRow >= 0 then
   begin
     r0 := AOnlyRow;
@@ -3355,45 +3385,132 @@ begin
   for r := r0 to r1 do
   begin
     raw := st.GetRawIndex(r);
-    if raw < 0 then Continue;
-    Grow(raw);
-    prm := TyLabelParams(st, r, sname, -1, 0, False,
-      FBindings[ASlot].SeriesIndex, t, AVisual.Fill, '');
-    if anySym then
-    begin
-      tmp := TJSONObject.Create;
-      try
-        for k := 0 to High(cSym) do
-        begin
-          if specs[k] = '' then Continue;
-          ans := TyChartRunVisualHandler(specs[k], prm);
-          if ans <> nil then tmp.Add(cSym[k], ans);
-        end;
-        spec := TySymbolSpecOf(tmp, AVisual.Symbol);
-      finally
-        tmp.Free;
-      end;
-      { the item's own keys over the callbacks' }
-      item := nil;
-      if (data is TJSONArray) and (raw < TJSONArray(data).Count)
-        and (TJSONArray(data).Items[raw] is TJSONObject) then
-        item := TJSONObject(TJSONArray(data).Items[raw]);
-      if item <> nil then spec := TySymbolSpecOf(item, spec);
-      AVisual.SymItems[raw] := spec;
-      AVisual.SymItemHas[raw] := True;
-    end;
+    if (raw < 0) or (raw >= n) then Continue;
+    { the style task first: its colour is the symbol callbacks' params.color }
     if colorSpec <> '' then
     begin
+      prm := TyLabelParams(st, r, sname, -1, 0, False,
+        FBindings[ASlot].SeriesIndex, t, palette, '');
+      NoValue(prm);
       ans := TyChartRunVisualHandler(colorSpec, prm);
       try
         if (ans <> nil) and (ans.JSONType = jtString)
           and TyTryParseChartColor(ans.AsString, c) then
         begin
-          AVisual.CbFill[raw] := c;
-          AVisual.CbFillSet[raw] := True;
+          Result.Col[raw] := c;
+          Result.ColSet[raw] := True;
         end;
       finally
         ans.Free;
+      end;
+    end;
+    if anySym then
+    begin
+      if Result.ColSet[raw] then c := Result.Col[raw] else c := ASymColour;
+      prm := TyLabelParams(st, r, sname, -1, 0, False,
+        FBindings[ASlot].SeriesIndex, t, c, '');
+      NoValue(prm);
+      tmp := TJSONObject.Create;
+      for k := 0 to High(cSym) do
+      begin
+        if specs[k] = '' then Continue;
+        ans := TyChartRunVisualHandler(specs[k], prm);
+        if ans <> nil then tmp.Add(cSym[k], ans);
+      end;
+      Result.Sym[raw] := tmp;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.FreeItemCbs;
+var i: Integer;
+begin
+  for i := 0 to High(FItemCbs) do FreeAndNil(FItemCbs[i]);
+  FItemCbs := nil;
+end;
+
+function TTyAdvanceChart.ItemCbOf(ASlot: Integer): TTyItemCallbacks;
+begin
+  Result := nil;
+  if (ASlot >= 0) and (ASlot <= High(FItemCbs)) then Result := FItemCbs[ASlot];
+end;
+
+{ the series style's colour a symbol callback is handed where no colour
+  callback answered: the palette's, or the option's itemStyle.color }
+procedure TTyAdvanceChart.SolveItemCallbacks;
+var
+  i: Integer;
+  v: TTySeriesVisual;
+begin
+  FreeItemCbs;
+  SetLength(FItemCbs, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FItemCbs[i] := nil;
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
+    ApplyOptStyle(v, FBindings[i].SeriesIndex);
+    FItemCbs[i] := ItemCallbacks(i, -1, v.Fill);
+  end;
+end;
+
+{ [R2-J2] the callbacks' answers on the series visual of the generic
+  builders: the symbol spec of a scatter's, an effectScatter's and a line's
+  items (SymItems, the item's own keys over the answers) [R2-J3: a line's
+  too], and the colour callback's fill (CbFill: RowVisualEarly) }
+procedure TTyAdvanceChart.VisualCallbacks(ASlot: Integer;
+  var AVisual: TTySeriesVisual; AOnlyRow: Integer);
+var
+  cb: TTyItemCallbacks;
+  node, item: TJSONObject;
+  d, data: TJSONData;
+  raw: Integer;
+  t: string;
+  spec: TTySymbolSpec;
+  c: TTyChartColor;
+begin
+  { [R2-J3] the rebuild's answers: a render does not call them again }
+  if AOnlyRow < 0 then ;
+  cb := ItemCbOf(ASlot);
+  if cb = nil then Exit;
+  begin
+    t := FBindings[ASlot].SeriesType;
+    d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+    node := nil;
+    if d is TJSONObject then node := TJSONObject(d);
+    data := nil;
+    if node <> nil then data := node.Find('data');
+    for raw := 0 to High(cb.Sym) do
+    begin
+      if cb.HasSym and ((t = 'scatter') or (t = 'effectScatter') or (t = 'line'))
+        and (cb.Sym[raw] <> nil) then
+      begin
+        if raw > High(AVisual.SymItems) then
+        begin
+          SetLength(AVisual.SymItems, raw + 1);
+          SetLength(AVisual.SymItemHas, raw + 1);
+        end;
+        spec := TySymbolSpecOf(cb.Sym[raw], AVisual.Symbol);
+        { the item's own keys over the callbacks' }
+        item := nil;
+        if (data is TJSONArray) and (raw < TJSONArray(data).Count)
+          and (TJSONArray(data).Items[raw] is TJSONObject) then
+          item := TJSONObject(TJSONArray(data).Items[raw]);
+        if item <> nil then spec := TySymbolSpecOf(item, spec);
+        AVisual.SymItems[raw] := spec;
+        AVisual.SymItemHas[raw] := True;
+      end;
+      { a series that draws with its stroke reads the answer itself }
+      if (t <> 'boxplot') and (t <> 'lines') and (t <> 'parallel')
+        and cb.ColOf(raw, c) then
+      begin
+        if raw > High(AVisual.CbFill) then
+        begin
+          SetLength(AVisual.CbFill, raw + 1);
+          SetLength(AVisual.CbFillSet, raw + 1);
+        end;
+        AVisual.CbFill[raw] := c;
+        AVisual.CbFillSet[raw] := True;
       end;
     end;
   end;
@@ -3905,11 +4022,15 @@ begin
           v.LargeChunks[pk] := TyProgRowsOf(FProg[i], pk);
       end;
       if FBindings[i].SeriesType = 'effectScatter' then RippleOf(i, v);
+      { [R2-J3] a line's items too: dataSymbolTask runs on every series
+        with symbols }
       if (FBindings[i].SeriesType = 'scatter')
-        or (FBindings[i].SeriesType = 'effectScatter') then
+        or (FBindings[i].SeriesType = 'effectScatter')
+        or (FBindings[i].SeriesType = 'line') then
         SymbolItems(FBindings[i].SeriesIndex, v.Symbol, v.SymItems, v.SymItemHas);
       { [R2-J2] symbolSize: '@Name', itemStyle.color: '@Name' }
       VisualCallbacks(i, v);
+      v.ItemCb := ItemCbOf(i);
       JitterFor(i, APPI, v);
       { THE PICTORIAL OPTIONS, read for every series rather than only for the
         one type that uses them. The alternative is a branch on the type name

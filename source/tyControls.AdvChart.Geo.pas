@@ -326,6 +326,11 @@ type
     PctX, PctY: Double;
     Layout: TTyXYWH;
     AnchorX, AnchorY: Double;
+    { [R2-J3] NO labelXY -- a region whose centre the projection answers
+      null for (Puerto Rico under albersUsa): textConfig.position stays
+      'inside', over the path's own bounding rect once drawn (BoxRect)
+      through the group's transform, its middle; HasPos True with it }
+    Inside: Boolean;
     { [Batch 148] the text exists (some state shows it: setLabelStyle's
       needsCreateText), the token the normal colour is, the normal style's
       opacity, textConfig's offset (logical px) and rotation, the text's own
@@ -3988,6 +3993,14 @@ procedure PlaceLabel(var P: TTyGeoDrawPath; const ADraw: TTyGeoDraw);
 var tr: TTyXYWH;
 begin
   if not P.Lbl.HasPos then Exit;
+  { [R2-J3] calculateTextPosition 'inside': the middle of the drawn box }
+  if P.Lbl.Inside then
+  begin
+    if ADraw.HasTrans then tr := RectApply(P.BoxRect, ADraw.Trans) else tr := P.BoxRect;
+    P.Lbl.AnchorX := tr.X + tr.W / 2;
+    P.Lbl.AnchorY := tr.Y + tr.H / 2;
+    Exit;
+  end;
   if ADraw.HasTrans then tr := RectApply(P.Lbl.Layout, ADraw.Trans) else tr := P.Lbl.Layout;
   P.Lbl.AnchorX := tr.X + P.Lbl.PctX / 100 * tr.W;
   P.Lbl.AnchorY := tr.Y + P.Lbl.PctY / 100 * tr.H;
@@ -4030,8 +4043,9 @@ begin
       begin
         ADraw.Groups[g].Paths[k].Drawn := FoldSubs(ADraw.Groups[g].Paths[k].Subs,
           ADraw.Groups[g].Paths[k].IsLine, ADraw.UX, ADraw.UY);
-        PlaceLabel(ADraw.Groups[g].Paths[k], ADraw);
+        { the box first: an 'inside' label is placed on it [R2-J3] }
         DrawnBox(ADraw.Groups[g].Paths[k], ADraw, scale);
+        PlaceLabel(ADraw.Groups[g].Paths[k], ADraw);
       end;
   finally
     UnmaskFpu(mask);
@@ -4411,6 +4425,13 @@ var
       p.Lbl.PctY := (centre.Y - p.Rect.Y) / p.Rect.H * 100;
       p.Lbl.Layout := p.Rect;
       PlaceLabel(p, dr);
+    end
+    else
+    begin
+      { [R2-J3] no centre: 'inside' the path, placed once its box is drawn
+        (below) }
+      p.Lbl.HasPos := True;
+      p.Lbl.Inside := True;
     end;
     { fixLineStyle: `stroke = stroke || fill`, and no fill }
     if AIsLine then
@@ -4426,6 +4447,7 @@ var
     end;
     { the rect once drawn }
     DrawnBox(p, dr, scale);
+    if p.Lbl.Inside then PlaceLabel(p, dr);
     SetLength(dr.Groups[gi].Paths, Length(dr.Groups[gi].Paths) + 1);
     dr.Groups[gi].Paths[High(dr.Groups[gi].Paths)] := p;
   end;

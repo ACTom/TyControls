@@ -30,7 +30,8 @@ uses
   tyControls.AdvChart.Symbol, tyControls.AdvChart.Color,
   { For TTySeriesDimArray: a graph on axes fills the axes' own columns. The
     builder uses none of this unit, so the dependency stays one-way. }
-  tyControls.AdvChart.Builder;
+  tyControls.AdvChart.Builder,
+  tyControls.AdvChart.Handlers;
 
 const
   TyGraphSeriesTypeName = 'graph';
@@ -128,6 +129,13 @@ type
       as often as not. HasDragScale False: the series' compensation scale. }
     HasDragScale: Boolean;
     DragScaleX, DragScaleY: Double;
+    { [R2-J3] THE NODE'S symbolRotate AND symbolOffset: its own rotate, else
+      the series' callback's answers (HasRot / HasOff False: the series'
+      spec's). Off carries the offset in a symbol spec's offset fields. }
+    HasRot: Boolean;
+    RotDeg: Double;
+    HasOff: Boolean;
+    Off: TTySymbolSpec;
   end;
   TTyGraphNodeArray = array of TTyGraphNode;
 
@@ -1135,6 +1143,14 @@ function TyBuildGraphMarks(ASeriesIndex: Integer;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AStore: TTyDataStore; AList: TTyPaintList;
   ASymX, ASymY: Double): Integer;
+
+var
+  { [R2-J3] THE SERIES' VISUAL CALLBACKS while the chart solves a graph:
+    the nodes take their symbol answers under their own keys and their
+    category's (seriesSymbolTask runs before categoryVisual and
+    dataSymbolTask) -- before any layout, so a ring sizes them too. The
+    chart sets it around the solve; nil otherwise. }
+  TyGraphItemCallbacks: TTyItemCallbacks = nil;
 
 implementation
 
@@ -2503,6 +2519,8 @@ var
   v: Double;
   written: Boolean;
   viewOf: array of Integer;
+  cb: TJSONObject;
+  d: TJSONData;
 begin
   Result := nil;
   if AStore = nil then Exit;
@@ -2617,6 +2635,57 @@ begin
         Result[i].SizeH := ACategories[j].SizeH;
         Result[i].RingSizeNaN := ACategories[j].RingSizeNaN;
       end;
+    end;
+    { [R2-J3] THE SERIES' SYMBOL CALLBACKS, under the node's own keys and its
+      category's }
+    if TyGraphItemCallbacks <> nil then
+    begin
+      cb := TyGraphItemCallbacks.SymOf(raw);
+      if cb <> nil then
+      begin
+        d := cb.Find('symbol');
+        if (Result[i].SymbolName = '') and (d <> nil) and (d.JSONType = jtString) then
+          Result[i].SymbolName := d.AsString;
+        d := cb.Find('symbolSize');
+        if not Result[i].HasSize then
+        begin
+          if (d <> nil) and (d.JSONType = jtNumber) then
+          begin
+            Result[i].HasSize := True;
+            Result[i].SizeW := SaneSize(d.AsFloat);
+            Result[i].SizeH := Result[i].SizeW;
+            Result[i].RingSizeNaN := RingSizeNaNOf(d);
+          end
+          else if (d is TJSONArray) and (TJSONArray(d).Count > 0)
+            and (TJSONArray(d).Items[0].JSONType = jtNumber) then
+          begin
+            Result[i].HasSize := True;
+            Result[i].SizeW := SaneSize(TJSONArray(d).Items[0].AsFloat);
+            Result[i].SizeH := Result[i].SizeW;
+            if (TJSONArray(d).Count > 1)
+              and (TJSONArray(d).Items[1].JSONType = jtNumber) then
+              Result[i].SizeH := SaneSize(TJSONArray(d).Items[1].AsFloat);
+            Result[i].RingSizeNaN := RingSizeNaNOf(d);
+          end;
+        end;
+        d := cb.Find('symbolRotate');
+        if (d <> nil) and (d.JSONType = jtNumber) then
+        begin
+          Result[i].HasRot := True;
+          Result[i].RotDeg := d.AsFloat;
+        end;
+        if cb.Find('symbolOffset') <> nil then
+        begin
+          Result[i].HasOff := True;
+          Result[i].Off := TySymbolSpecOf(cb, Default(TTySymbolSpec));
+        end;
+      end;
+    end;
+    { dataSymbolTask: the node's own symbolRotate over the callback's }
+    if RowNum(AStore, raw, 'symbolRotate', v) then
+    begin
+      Result[i].HasRot := True;
+      Result[i].RotDeg := v;
     end;
   end;
 end;
@@ -6647,6 +6716,19 @@ begin
       sym.WidthPx := ANodes[i].SizeW;
       sym.HeightPx := ANodes[i].SizeH;
     end;
+    { [R2-J3] its own turn and offset, the series' callbacks' (the offset a
+      share of the size it has before the view scales it) }
+    if ANodes[i].HasRot then sym.RotateDeg := ANodes[i].RotDeg;
+    if ANodes[i].HasOff then
+    begin
+      sym.OffsetX := ANodes[i].Off.OffsetX;
+      sym.OffsetY := ANodes[i].Off.OffsetY;
+      sym.OffsetXIsPct := ANodes[i].Off.OffsetXIsPct;
+      sym.OffsetYIsPct := ANodes[i].Off.OffsetYIsPct;
+      sym.OffsetXPct := ANodes[i].Off.OffsetXPct;
+      sym.OffsetYPct := ANodes[i].Off.OffsetYPct;
+    end;
+    sym := TySymbolResolveOffset(sym);
     { Symbol's _sizeX / _sizeY: the half size the path is scaled to, before
       any compensation [F3a] }
     hw := sym.WidthPx / 2;
@@ -6667,6 +6749,9 @@ begin
     begin
       sym.WidthPx := symX * (sym.WidthPx / 2) * 2;
       sym.HeightPx := symY * (sym.HeightPx / 2) * 2;
+      { [R2-J3] the path's offset is in the symbol group's frame too }
+      sym.OffsetX := symX * sym.OffsetX;
+      sym.OffsetY := symY * sym.OffsetY;
     end;
 
     shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
