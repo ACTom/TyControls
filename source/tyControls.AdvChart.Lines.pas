@@ -143,6 +143,8 @@ type
     Stroke: TTyChartColor;
     Width, Opacity: Double;
     Dash: TTyDoubleArray;
+    { [R2-I5] the word the dash is written as (TTyChartStyle.DashWord) }
+    DashWord: Byte;
     { [R2-I2] lineStyle.dashOffset, px }
     DashOffset: Double;
     Sym: array[0..1] of TTyLinesSym;
@@ -1291,6 +1293,7 @@ begin
     el.Style.StrokeWidthLogical := ink.Width;
     el.Style.Alpha := ink.Opacity;
     el.Style.DashLogical := ink.Dash;
+    el.Style.DashWord := ink.DashWord;
     el.Style.DashOffsetLogical := ink.DashOffset;
     el.Z := ASolved.Z;
     el.Z2 := ASolved.Z2;

@@ -6157,12 +6157,9 @@ begin
       if AEl.Shape.Kind = cskSector then AEl.Shape.R1 := v.Num;
     end;
   end;
-  { [R2-I4] A DASH WRITTEN AS A WORD, against the width this frame draws: the
-    canvas normalises the style's lineDash per brush, so where the state's
-    transition tweens lineWidth the lengths follow it [was: measured once, at
-    the state's end width -- or the rest's, for a word the rest wrote] }
-  if AEl.Style.DashWord <> 0 then
-    AEl.Style.DashLogical := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical);
+  { [R2-I4] A DASH WRITTEN AS A WORD follows the width the state tweens --
+    [R2-I5] measured where the frame is finished (TyAnimBuildFrame), for
+    every element and every animation alike }
 end;
 
 function PointsOf(const A: TTyDoubleArray): TTyPointFArray;
@@ -10124,6 +10121,19 @@ begin
     end;
   end;
   for i := 0 to nx - 1 do ADest.Add(extras[i]);
+  { [R2-I5] THE FRAME'S BRUSH: a dash written as a word against the width the
+    frame draws -- zrender's canvas normalises the style's lineDash per brush
+    (getLineDash), so wherever a transition tweens lineWidth -- a state's,
+    an update's (animateElementStyles), a morph's -- the lengths follow it.
+    [R2-I4 did it for a state's frame alone; an update kept the lengths of
+    the width the build measured.] }
+  for i := 0 to ADest.Count - 1 do
+  begin
+    pel := ADest.Ref(i);
+    if pel^.Style.DashWord <> 0 then
+      pel^.Style.DashLogical := TyDashOfWord(pel^.Style.DashWord,
+        pel^.Style.StrokeWidthLogical);
+  end;
   { THE GHOSTS, after the list: silent, so a hit never lands on one }
   hostRow := -1;
   if ASet <> nil then

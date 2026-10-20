@@ -152,6 +152,8 @@ var
     AItem.Fill := e.Style.FillColor;
     AItem.HasStroke := e.Style.StrokeWidthLogical > 0;
     AItem.Stroke := e.Style.StrokeColor;
+    { [R2-I5] a gradient pen as it is [was: its first colour] }
+    AItem.StrokeGradient := e.Style.StrokeGradient;
     if e.Style.StrokeWidthLogical > 0 then AItem.LineWidth := e.Style.StrokeWidthLogical
     else AItem.LineWidth := 0;
     AItem.Opacity := e.Style.Alpha;
@@ -477,6 +479,7 @@ begin
       if st.Items[i].HasStroke then
       begin
         el.Style.StrokeColor := st.Items[i].Stroke;
+        el.Style.StrokeGradient := st.Items[i].StrokeGradient;
         el.Style.StrokeWidthLogical := st.Items[i].LineWidth;
         el.Style.DashLogical := Copy(st.Items[i].Dash);
         el.Style.DashOffsetLogical := st.Items[i].DashOffset;

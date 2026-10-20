@@ -864,6 +864,11 @@ type
   TTyEmphTwin = record
     Caption: TTyElementCaption;
     Shape: TTyChartShape;
+    { [R2-I5] the state it is the text of: 0 emphasis, 1 blur, 2 select
+      (TyTwinEmphasis...) -- setLabelStyle gives every special state its
+      own style and words. An emphasis twin, where there is one, comes
+      first. }
+    State: Byte;
   end;
   TTyEmphTwinArray = array of TTyEmphTwin;
 
@@ -1134,6 +1139,16 @@ function TyGrowByStroke(const ABox: TTyXYWH; AHasFill: Boolean;
   width drawn now: 'dashed' [4w, 2w], 'dotted' [w]; nothing for 0 or for a
   width that is not above nought. }
 function TyDashOfWord(AWord: Byte; AWidthLogical: Double): TTyDoubleArray;
+
+const
+  { [R2-I5] TTyEmphTwin.State }
+  TyTwinEmphasis = 0;
+  TyTwinBlur = 1;
+  TyTwinSelect = 2;
+
+{ [R2-I5] the index of ATwins' twin for the state AState (TyTwin...), -1
+  where the state has none }
+function TyEmphTwinAt(const ATwins: TTyEmphTwinArray; AState: Byte): Integer;
 
 { A box as zrender's BoundingRect holds it: x, y and max - min. }
 function TyRectToXYWH(const ARect: TTyRectF): TTyXYWH;
@@ -1681,6 +1696,14 @@ begin
   Result.H := ABox.H + w;
   Result.X := ABox.X - w / 2;
   Result.Y := ABox.Y - w / 2;
+end;
+
+function TyEmphTwinAt(const ATwins: TTyEmphTwinArray; AState: Byte): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(ATwins) do
+    if ATwins[i].State = AState then Exit(i);
+  Result := -1;
 end;
 
 function TyDashOfWord(AWord: Byte; AWidthLogical: Double): TTyDoubleArray;

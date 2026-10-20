@@ -1468,6 +1468,9 @@ begin
     el.Style.StrokeWidthLogical := r.Width;
     el.Style.Alpha := r.Opacity;
     el.Style.DashLogical := r.Dash;
+    { [R2-I5] a word, measured again against the width a frame draws }
+    if r.DashWord = 'dashed' then el.Style.DashWord := 1
+    else if r.DashWord = 'dotted' then el.Style.DashWord := 2;
     el.Style.DashOffsetLogical := r.DashOffset;
     el.Z := ASolved.Z;
     el.Z2 := ASolved.Z2;

@@ -1689,6 +1689,8 @@ begin
   if d = nil then Result.Opacity := 0.5 else Result.Opacity := TyLinesJsNum(d);
   LnDashOf(TyLinesFind(raw, ANode, ['lineStyle', 'type']), dash, expl);
   Result.Dash := TyDashPattern(dash, expl, Result.Width);
+  { [R2-I5] a word, measured again against the width a frame draws }
+  Result.DashWord := TyDashWord(dash);
   { [R2-I2] its phase, the row's else the series' }
   d := TyLinesFind(raw, ANode, ['lineStyle', 'dashOffset']);
   if (d <> nil) and (d.JSONType = jtNumber) then Result.DashOffset := d.AsFloat;

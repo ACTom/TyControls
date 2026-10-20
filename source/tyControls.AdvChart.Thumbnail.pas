@@ -98,6 +98,9 @@ type
     Dash: TTyDoubleArray;
     { [R2-I4] the dash's phase (the cloned style's lineDashOffset) }
     DashOffset: Double;
+    { [R2-I5] the pen as a gradient (the cloned style's stroke object;
+      cgkNone: a plain colour) [was: its first colour] }
+    StrokeGradient: TTyChartGradient;
   end;
   TTyThumbItemArray = array of TTyThumbItem;
 

@@ -67,6 +67,8 @@ type
     procedure NewChart;
     procedure RenderNow;
     procedure CheckThumbs(ARec: TJSONObject);
+    procedure CheckPenGradient(const AWhat: string; const AGot: TTyChartGradient;
+      AWant: TJSONObject);
     procedure CheckGraphs(ARec: TJSONObject);
     procedure CheckPars(ARec: TJSONObject);
     procedure CheckAxes(ARec: TJSONObject);
@@ -87,6 +89,8 @@ type
     procedure TestTheThumbnailTargetsAsUpstream;
     { [R2-I4] the nodes' pens, their dashes and phases }
     procedure TestTheThumbnailPensAsUpstream;
+    { [R2-I5] the nodes' pens that are gradients }
+    procedure TestTheThumbnailGradientPensAsUpstream;
     procedure TestTheExpandedLayoutsAsUpstream;
     procedure TestTheClickTriggerAsUpstream;
     procedure TestTheMoveTriggerAsUpstream;
@@ -397,6 +401,56 @@ begin
   Result := AHas and (c = AGot);
 end;
 
+{ [R2-I5] a pen that is a gradient: its kind, its numbers, its stops }
+procedure TAdvChartThumbnailAxisExpandOracleTest.CheckPenGradient(const AWhat: string;
+  const AGot: TTyChartGradient; AWant: TJSONObject);
+var
+  stops, st: TJSONArray;
+  q: Integer;
+  c: TTyChartColor;
+begin
+  Inc(FCompared);
+  if AWant.Strings['type'] = 'radial' then
+  begin
+    if AGot.Kind <> cgkRadial then
+    begin
+      Miss(AWhat + ': not a radial pen');
+      Exit;
+    end;
+    if (AGot.X <> AWant.Floats['x']) or (AGot.Y <> AWant.Floats['y'])
+      or (AGot.R <> AWant.Floats['r']) then
+      Miss(Format('%s: radial (%g, %g, %g), upstream %s', [AWhat, AGot.X, AGot.Y, AGot.R,
+        AWant.AsJSON]));
+  end
+  else
+  begin
+    if AGot.Kind <> cgkLinear then
+    begin
+      Miss(AWhat + ': not a linear pen');
+      Exit;
+    end;
+    if (AGot.X <> AWant.Floats['x']) or (AGot.Y <> AWant.Floats['y'])
+      or (AGot.X2 <> AWant.Floats['x2']) or (AGot.Y2 <> AWant.Floats['y2']) then
+      Miss(Format('%s: linear (%g, %g, %g, %g), upstream %s', [AWhat, AGot.X, AGot.Y,
+        AGot.X2, AGot.Y2, AWant.AsJSON]));
+  end;
+  if AGot.Global <> AWant.Booleans['global'] then Miss(AWhat + ': global differs');
+  stops := AWant.Arrays['stops'];
+  if Length(AGot.Stops) <> stops.Count then
+  begin
+    Miss(Format('%s: %d stops, upstream %d', [AWhat, Length(AGot.Stops), stops.Count]));
+    Exit;
+  end;
+  for q := 0 to stops.Count - 1 do
+  begin
+    st := TJSONArray(stops.Items[q]);
+    if not TyTryParseChartColor(st.Strings[1], c) or (AGot.Stops[q].Color <> c)
+      or (AGot.Stops[q].Offset <> st.Floats[0]) then
+      Miss(Format('%s: stop %d (%g, %s), upstream %s', [AWhat, q, AGot.Stops[q].Offset,
+        IntToHex(AGot.Stops[q].Color, 8), st.AsJSON]));
+  end;
+end;
+
 procedure TAdvChartThumbnailAxisExpandOracleTest.CheckThumbs(ARec: TJSONObject);
 var
   ths, its: TJSONArray;
@@ -541,6 +595,13 @@ begin
         if not SameInk(ink, True, item.Stroke) then
           Miss(Format('%s item %d stroke is %s upstream, %s here', [what, i, ink,
             IntToHex(item.Stroke, 8)]));
+        { [R2-I5] a gradient pen as the clone holds it -- and a plain one is
+          no gradient }
+        if (sty.Find('strokeGrad') <> nil) and (sty.Find('strokeGrad').JSONType = jtObject) then
+          CheckPenGradient(Format('%s item %d pen', [what, i]), item.StrokeGradient,
+            sty.Objects['strokeGrad'])
+        else if (sty.Find('pattern') <> nil) and (item.StrokeGradient.Kind <> cgkNone) then
+          Miss(Format('%s item %d pen is a gradient here, a colour upstream', [what, i]));
       end;
     end;
   end;
@@ -977,6 +1038,11 @@ end;
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailPensAsUpstream;
 begin
   RunGroup(['TH-PEN']);
+end;
+
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailGradientPensAsUpstream;
+begin
+  RunGroup(['TH-GRAD']);
 end;
 
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheExpandedLayoutsAsUpstream;

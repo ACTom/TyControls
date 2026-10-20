@@ -29,6 +29,11 @@
 // the normal text where it answers nothing): a template, and a named handler
 // ('@Name', a function here, given params.status).
 //
+// [R2-I5] the blur (and select) formatter the same way -- each state shows its
+// own words; a label whose normal text is empty but a state has words (the
+// Text is built, empty, and shows the state's words); a marker's dash written
+// as a word, normalised against the width its emphasis draws.
+//
 // The harness is states-misc.js', copied (that script generates and exits on
 // load): the replaced Date before the dist, chart._ssr = false,
 // env.node = false, the seeded Math.random, hand-stepped frames, one frame a
@@ -280,7 +285,9 @@ function markerParts(mv, out) {
     if (!ecd || ecd.dataIndex == null) return;
     const k = ecd.dataIndex;
     // a label of no text draws nothing (a markArea's without a name)
-    const words = label => label && label.style && label.style.text != null && label.style.text !== '';
+    // [R2-I5] a keepEmpty case maps an empty label too (its states have words)
+    const words = label => label && label.style && label.style.text != null
+      && (label.style.text !== '' || !!(CUR_CASE && CUR_CASE.keepEmpty));
     const put = (el, part) => {
       if (!el) return;
       out.set(el, { s: mv.s, row: -1, part: part });
@@ -895,6 +902,65 @@ const R2I4 = [
     events: [over(0, mark(0, 'ma0')), over(400, mark(0, 'ma1')), out(800)] },
 ];
 
+// [R2-I5] the blur and select formatters (getLabelText asks every special
+// state); a label empty at rest that a state gives words; a marker's dash
+// word against the width its emphasis draws (canvas getLineDash per brush)
+const R2I5 = [
+  { id: 'mk-blur-formatter', textBox: true, words: true, note: '[R2-I5] the other series\' focus series blurs the host\'s '
+    + 'markers: mp0 / mp1 at the top of circles of 20 formatted {b}: {c}, the markPoint\'s blur formatter blur {b}; mp1 its '
+    + 'own blur formatter, a named handler (params.status blur), and a blur fontSize 16; mp2 a select formatter (a marker '
+    + 'is never selected: never shown; blurred, the markPoint\'s blur words); the markLine\'s blur formatter {b} ~ {c}; the markAreas\' blur formatter '
+    + '({b}), ma1 its own handler. Hover bar 3 of series 1 at 0, out at 500',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top', formatter: '{b}: {c}' },
+      emphasis: { scale: false }, blur: { label: { formatter: 'blur {b}' } } }, [
+      { type: 'max', name: 'max' },
+      { type: 'min', name: 'min', blur: { label: { formatter: '@mkWords', fontSize: 16 } } },
+      { coord: ['C', 30], name: 'c', value: 30, select: { label: { formatter: 'sel {b}' } } }]),
+    markLine: ML({ blur: { label: { formatter: '{b} ~ {c}' } } }),
+    markArea: MA({ blur: { label: { formatter: '({b})' } } }, [
+      [{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }],
+      [{ xAxis: 'B', name: 'two', blur: { label: { formatter: '@mkWords' } } }, { xAxis: 'C' }]]) },
+    { emphasis: { focus: 'series' } }),
+    events: [over(0, ['item', 1, 3]), out(500)] },
+  { id: 'mk-empty-normal', textBox: true, words: true, keepEmpty: true, note: '[R2-I5] labels whose normal text is empty: '
+    + 'mp0 formatted \'\' with an emphasis formatter hover {b}; mp1 formatted \'\' with a blur formatter blur {c}; the '
+    + 'markLine formatted \'\' with an emphasis formatter {b}!; a markArea of no name with an emphasis formatter area. The '
+    + 'empty Text is there (setLabelStyle: some state shows it) and shows the state\'s words. Hover mp0 at 0, ml0 at 300, '
+    + 'ma0 at 600, bar 3 of series 1 (focus series) at 900, out at 1200',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top', formatter: '' },
+      emphasis: { scale: false } }, [
+      { type: 'max', name: 'max', emphasis: { label: { formatter: 'hover {b}' } } },
+      { type: 'min', name: 'min', blur: { label: { formatter: 'blur {c}' } } }]),
+    markLine: ML({ label: { formatter: '' }, emphasis: { label: { formatter: '{b}!' } } }),
+    markArea: MA({ emphasis: { label: { formatter: 'area' } } }, [[{ xAxis: 'A' }, { xAxis: 'B' }]]) },
+    { emphasis: { focus: 'series' } }),
+    events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'ml0')), over(600, mark(0, 'ma0')), over(900, ['item', 1, 3]),
+      out(1200)] },
+  { id: 'mk-dash-word', dash: true, note: '[R2-I5] markers\' dashes written as words under an emphasis width: the '
+    + 'markLine dashed at 1 (its default emphasis width 3: [12, 6]); the pin\'s border dotted at 1, emphasis borderWidth 4 '
+    + '([4]); the markArea\'s border dashed at 1, emphasis borderWidth 3 ([12, 6]) -- a marker does not animate: at once. '
+    + 'Hover ml0 at 0, mp0 at 400, ma0 at 800, out at 1200',
+    option: bars({ markLine: ML({ lineStyle: { type: 'dashed', width: 1 } }),
+      markPoint: MP({ itemStyle: { borderColor: '#000000', borderWidth: 1, borderType: 'dotted' },
+        emphasis: { scale: false, itemStyle: { borderWidth: 4 } } }),
+      markArea: MA({ itemStyle: { borderColor: '#000000', borderWidth: 1, borderType: 'dashed' },
+        emphasis: { itemStyle: { borderWidth: 3 } } }) }),
+    events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'mp0')), over(800, mark(0, 'ma0')), out(1200)] },
+  { id: 'mk-state-pen', textBox: true, note: '[R2-I5] a state\'s pen moves the label (updateInnerText on the path as the '
+    + 'state draws it, Path.getBoundingRect grown by its lineWidth): the markArea \'one\' bordered #000 at 1, emphasis '
+    + 'borderWidth 11, blur borderWidth 5; a circle markPoint of 20 (scale false) with its label at the top, bordered at 1, '
+    + 'emphasis borderWidth 9, blur borderWidth 3. Hover ma0 at 0, mp0 at 300, bar 3 of series 1 (focus series) at 600, '
+    + 'out at 900',
+    option: bars({ markArea: MA({ itemStyle: { borderColor: '#000000', borderWidth: 1 },
+      emphasis: { itemStyle: { borderWidth: 11 } }, blur: { itemStyle: { borderWidth: 5 } } },
+      [[{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }]]),
+    markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top' },
+      itemStyle: { borderColor: '#000000', borderWidth: 1 },
+      emphasis: { scale: false, itemStyle: { borderWidth: 9 } }, blur: { itemStyle: { borderWidth: 3 } } }) },
+    { emphasis: { focus: 'series' } }),
+    events: [over(0, mark(0, 'ma0')), over(300, mark(0, 'mp0')), over(600, ['item', 1, 3]), out(900)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1065,13 +1131,46 @@ function guards(cases) {
     g('ma-emph-formatter', t('ma0#label', 250) === '[one]' && t('ma0#label', 1600) === 'one'
       && t('ma1#label', 650) === 'markArea:two:emphasis:1', [t('ma0#label', 250), t('ma1#label', 650)].join(' | '));
   }
+  // [R2-I5]
+  {
+    const c = byId(cases, 'mk-blur-formatter');
+    const t = (part, ms) => numAt(mk(c, 0, part), 'txt', ms);
+    g('mk-blur-formatter', t('mp0#label', 250) === 'blur max' && t('mp0#label', 1600) === 'max: 36'
+      && t('mp1#label', 250) === 'markPoint:min:blur:1' && t('mp2#label', 250) === 'blur c' && t('mp2#label', 1600) === 'c: 30'
+      && t('ml0#label', 250) !== t('ml0#label', 1600) && t('ma0#label', 250) === '(one)'
+      && t('ma1#label', 250) === 'markArea:two:blur:1',
+      [t('mp0#label', 250), t('mp1#label', 250), t('mp2#label', 250), t('ml0#label', 250), t('ma0#label', 250),
+        t('ma1#label', 250)].join(' | '));
+  }
+  {
+    const c = byId(cases, 'mk-empty-normal');
+    const t = (part, ms) => numAt(mk(c, 0, part), 'txt', ms);
+    g('mk-empty-normal', t('mp0#label', 1600) === '' && t('mp0#label', 250) === 'hover max'
+      && t('mp1#label', 1000) === 'blur 5' && t('ml0#label', 550) !== '' && t('ml0#label', 1600) === ''
+      && t('ma0#label', 850) === 'area' && t('ma0#label', 1600) === '',
+      [t('mp0#label', 250), t('mp1#label', 1000), t('ml0#label', 550), t('ma0#label', 850)].join(' | '));
+  }
+  {
+    const c = byId(cases, 'mk-dash-word');
+    const d = (part, ms) => numAt(mk(c, 0, part), 'dash', ms);
+    g('mk-dash-word', d('ml0', 250) === '[12,6]' && d('ml0', 1600) === '[4,2]' && d('mp0', 650) === '[4]'
+      && d('mp0', 1600) === '[1]' && d('ma0', 1000) === '[12,6]' && d('ma0', 1600) === '[4,2]',
+      [d('ml0', 250), d('mp0', 650), d('ma0', 1000)].join(' | '));
+  }
+  {
+    const c = byId(cases, 'mk-state-pen');
+    const ty = (part, ms) => Number(numAt(mk(c, 0, part), 'ty', ms));
+    g('mk-state-pen', ty('ma0#label', 250) - ty('ma0#label', 1600) === -5 && ty('ma0#label', 650) - ty('ma0#label', 1600) === -2
+      && ty('mp0#label', 550) - ty('mp0#label', 1600) === -4 && ty('mp0#label', 650) - ty('mp0#label', 1600) === -1,
+      [ty('ma0#label', 250), ty('ma0#label', 650), ty('mp0#label', 550), ty('mp0#label', 650), ty('mp0#label', 1600)].join(' '));
+  }
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

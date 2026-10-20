@@ -1259,6 +1259,18 @@ begin
   end;
 end;
 
+{ [R2-I5] the word ChainDash measured (TTyChartStyle.DashWord): 1 'dashed',
+  2 'dotted', 0 lengths or none }
+function ChainDashWord(const AChain: array of TJSONObject; const ASub, AKey: string): Byte;
+var d: TJSONData;
+begin
+  Result := 0;
+  d := ChainFind(AChain, ASub, AKey);
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  if d.AsString = 'dashed' then Result := 1
+  else if d.AsString = 'dotted' then Result := 2;
+end;
+
 { radialCoordinate, each coordinate `|| 0`: not-a-number and a negative
   zero both come out as a plain zero }
 function Radial0(ARad, AR: Double): TTyPointF;
@@ -1560,6 +1572,8 @@ begin
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
+      { [R2-I5] a word, measured again against the width a frame draws }
+      el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
       { [R2-I2] and its phase }
       el.Style.DashOffsetLogical := ChainNum(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0);
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
@@ -1687,6 +1701,8 @@ begin
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
+      { [R2-I5] a word, measured again against the width a frame draws }
+      el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
       { [R2-I2] and its phase }
       el.Style.DashOffsetLogical := ChainNum(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0);
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
