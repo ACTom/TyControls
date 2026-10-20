@@ -61,6 +61,7 @@ type
     procedure TestTheRingsAsUpstream;
     procedure TestTheHoverAsUpstream;
     procedure TestTheFadeAsUpstream;
+    procedure TestTheLabelLinesDrawInAsUpstream;
   end;
 
 implementation
@@ -572,6 +573,89 @@ begin
       h := el.Caption.LmHostPlus1 - 1;
       Num('host x', FChart.Frame.Element(h).Caption.LgG[5], sm.Arrays['hostX'].Strings[k]);
       Num('host y', FChart.Frame.Element(h).Caption.LgG[6], sm.Arrays['hostY'].Strings[k]);
+    end;
+  end;
+  Finish(150);
+end;
+
+{ [r2v] THE POINT LABELS' LINES DRAW IN on the enter and again on every
+  update (LabelManager.animateLabels: RadarView rebuilds the symbols, so each
+  line is new -- strokePercent 0 -> 1): the part of its polyline the frame
+  draws, as a share of the whole, is upstream's strokePercent [was: a radar
+  line's proxy was armed under 'guide' and looked for under 'guide<n>', so
+  the lines stood there whole from the first frame] }
+procedure TAdvChartRadarLabelOracleTest.TestTheLabelLinesDrawInAsUpstream;
+const
+  cT0 = 1000000;
+var
+  gf, sm, gl: TJSONObject;
+  samples, lines, pts: TJSONArray;
+  i, k, j, d, dim: Integer;
+  lst: TTyPaintList;
+  el: TTyChartElement;
+  found: Boolean;
+  base, full, drawn, want: Double;
+begin
+  gf := TJSONObject(FRoot).Objects['guideFade'];
+  NewChart(True);
+  FChart.AnimNow := cT0;
+  FChart.Option := gf.Objects['option'].AsJSON;
+  FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cW, cH), 96);
+  samples := gf.Arrays['samples'];
+  for i := 0 to samples.Count - 1 do
+  begin
+    sm := samples.Objects[i];
+    if (sm.Strings['phase'] = 'update') and (sm.Integers['t'] = 0) then
+    begin
+      FChart.AnimTick(cT0 + 5000);
+      FChart.AnimNow := cT0 + 5000;
+      FChart.SetOption(gf.Objects['update'].AsJSON);
+      FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cW, cH), 96);
+    end;
+    if sm.Strings['phase'] = 'update' then base := cT0 + 5000 else base := cT0;
+    FChart.AnimTick(base + sm.Integers['t']);
+    lst := FChart.Frame;
+    if (lst = nil) or (lst.Count <> FChart.List.Count) then lst := FChart.List;
+    lines := sm.Arrays['lines'];
+    for k := 0 to lines.Count - 1 do
+    begin
+      gl := lines.Objects[k];
+      d := gl.Integers['d'];
+      dim := gl.Integers['dim'];
+      FName := Format('%s t%d d%d dim%d', [sm.Strings['phase'], sm.Integers['t'], d, dim]);
+      found := False;
+      for j := 0 to lst.Count - 1 do
+      begin
+        el := lst.Element(j);
+        if (el.Anim.Role = carGuide) and (el.Anim.Series = 0) and (el.Anim.Index = d)
+          and (el.Anim.Sub = dim + 1) then
+        begin
+          found := True;
+          Break;
+        end;
+      end;
+      Inc(FCompared);
+      if not found then
+      begin
+        Miss('a label line upstream, none here');
+        Continue;
+      end;
+      pts := gl.Arrays['points'];
+      full := 0;
+      for j := 1 to pts.Count - 1 do
+        full := full + Hypot(
+          FromHex(TJSONArray(pts.Items[j]).Strings[0]) - FromHex(TJSONArray(pts.Items[j - 1]).Strings[0]),
+          FromHex(TJSONArray(pts.Items[j]).Strings[1]) - FromHex(TJSONArray(pts.Items[j - 1]).Strings[1]));
+      drawn := 0;
+      for j := 1 to High(el.Shape.Points) do
+        drawn := drawn + Hypot(el.Shape.Points[j].X - el.Shape.Points[j - 1].X,
+          el.Shape.Points[j].Y - el.Shape.Points[j - 1].Y);
+      want := FromHex(gl.Strings['strokePercent']);
+      Inc(FCompared);
+      if not (full > 0) then
+        Miss('a line of no length upstream')
+      else if Abs(drawn / full - want) > 1e-9 then
+        Miss(Format('drawn %s of the line, upstream %s', [Fmt(drawn / full), Fmt(want)]));
     end;
   end;
   Finish(150);

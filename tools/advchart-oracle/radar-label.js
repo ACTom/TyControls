@@ -258,9 +258,59 @@ function runFade() {
   }
 }
 
+// [r2v] the point labels' lines draw in (LabelManager.animateLabels: a new
+// label line, strokePercent 0 -> 1, no data index) on the enter and again on
+// every update -- RadarView rebuilds the symbols, so every line is new
+const GUIDE_OPTION = {
+  color: PALETTE,
+  radar: { indicator: [{ name: 'a', max: 100 }, { name: 'b', max: 100 }, { name: 'c', max: 100 }] },
+  series: [{ type: 'radar', label: { show: true }, labelLine: { show: true }, labelLayout: { dx: 24, dy: -16 },
+    data: [{ value: [60, 70, 80], name: 'p' }, { value: [20, 30, 40], name: 'q' }] }],
+};
+const GUIDE_UPDATE = { series: [{ type: 'radar', data: [{ value: [30, 20, 50], name: 'p' }, { value: [20, 30, 40], name: 'q' }] }] };
+function runGuideFade() {
+  const wasNode = echarts.env.node;
+  echarts.env.node = false;
+  const T0 = NOW = 1700000000000;
+  const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
+  chart._ssr = false;
+  const zr = chart.getZr();
+  const sample = (t, phase) => {
+    zr.storage.getDisplayList(true);
+    const lines = [];
+    eachLabel(chart, (s, d, sym, tx) => {
+      const g = sym.getTextGuideLine();
+      lines.push({ d, dim: sym.__dimIdx, ignore: g ? !!g.ignore : null,
+        strokePercent: g ? hex(g.style.strokePercent == null ? 1 : g.style.strokePercent) : null,
+        points: g ? (g.shape.points || []).map(q => [hex(q[0]), hex(q[1])]) : null });
+    });
+    return { phase, t, lines };
+  };
+  try {
+    const samples = [];
+    chart.setOption(clone(GUIDE_OPTION));
+    for (const t of FADE_T) {
+      if (t > 0) { NOW = T0 + t; zr.animation.update(); }
+      samples.push(sample(t, 'enter'));
+    }
+    NOW = T0 + 5000;
+    zr.animation.update();
+    chart.setOption(clone(GUIDE_UPDATE));
+    for (const t of FADE_T) {
+      if (t > 0) { NOW = T0 + 5000 + t; zr.animation.update(); }
+      samples.push(sample(t, 'update'));
+    }
+    return { option: clone(GUIDE_OPTION), update: clone(GUIDE_UPDATE), samples };
+  } finally {
+    chart.dispose();
+    echarts.env.node = wasNode;
+  }
+}
+
 function generate() {
   const cases = CASES.map(runCase);
   const fade = runFade();
+  const guideFade = runGuideFade();
   const by = id => cases.find(c => c.id === id);
   const num = h => { bits.setUint32(0, parseInt(h.slice(0, 8), 16)); bits.setUint32(4, parseInt(h.slice(8), 16)); return bits.getFloat64(0); };
   const guards = [
@@ -283,8 +333,13 @@ function generate() {
     { name: 'fade: an update fades the labels in again, the symbols moving',
       ok: fade.samples[7].opacity.every(o => num(o) === 0) && fade.samples[12].opacity.every(o => num(o) === 1)
         && fade.samples[8].hostY[0] !== fade.samples[12].hostY[0] },
+    { name: '[r2v] guideFade: six lines drawn in on the enter and again on the update',
+      ok: guideFade.samples[0].lines.length === 6 && guideFade.samples[0].lines.every(l => num(l.strokePercent) === 0)
+        && guideFade.samples[2].lines.every(l => num(l.strokePercent) > 0 && num(l.strokePercent) < 1)
+        && guideFade.samples[7].lines.every(l => num(l.strokePercent) === 0)
+        && guideFade.samples[13].lines.every(l => num(l.strokePercent) === 1) },
   ];
-  return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases, fade, guards };
+  return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases, fade, guards, guideFade };
 }
 
 let out1, json1, json2;
