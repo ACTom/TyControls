@@ -1112,6 +1112,9 @@ begin
   if FExporting then
   begin
     PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+    { [R2-I9] getRenderedCanvas draws every built-in layer, the hover
+      layer too }
+    PaintHoverLayer(APainter);
     PaintLoading(APainter, ARect, APPI, AMeasurer);
     Exit;
   end;
@@ -1154,6 +1157,9 @@ begin
   else
     PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
   PaintEmphasis(APainter, APPI, FTipHits);
+  { [R2-I9] THE HOVER LAYER over every layer of the canvas (zlevel 1e5):
+    the paths on it in their hover style -- the box, HTML upstream, over it }
+  PaintHoverLayer(APainter);
   { THE KEYBOARD'S RING over the marks and under the box [Batch 144] }
   PaintKbRing(APainter);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
@@ -1178,7 +1184,9 @@ begin
     { the keyboard's ring [Batch 144] }
     or FKbActive
     { a component's part [F5] }
-    or FKbStopOn;
+    or FKbStopOn
+    { [R2-I9] the hover layer's copies }
+    or StHoverAny;
 end;
 
 procedure TTyAdvanceChart.DropStatic;
@@ -1190,6 +1198,8 @@ begin
     answer questions about a picture no longer on screen. Not freed -- the
     next build reuses the object and only the answer is stale. }
   FPaintListValid := False;
+  { [R2-I9] the hover layer's copies are of that list }
+  FHoverDirty := True;
 end;
 
 procedure TTyAdvanceChart.DropStaticKeepList;

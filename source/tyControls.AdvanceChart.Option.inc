@@ -101,6 +101,7 @@ begin
   { [R2-I6] the kept stores borrow nothing; after the build all the same }
   StoreKeepDrop;
   FreeAndNil(FPaintList);
+  FreeAndNil(FHoverList);
   FreeGeoSel;
   FreeAndNil(FIndex);
   FreeAndNil(FAxisMemory);

@@ -1083,13 +1083,21 @@ begin
   Draw;
   p := FChart.AnimStateProxy(0, 2, 'host');
   AssertNotNull(p);
-  AssertEquals('emphasis applied', 'emphasis', p.CurrentStates);
+  { [R2-I9] THE ELEMENT ITSELF IS LEFT ALONE (zrender's ONLY_STYLE_CHANGE):
+    its proxy -- the own layer -- takes no state and no value; the lift is
+    the hover layer's copy [was: emphasis applied on the proxy at once] }
+  AssertEquals('the own layer takes no state', '', p.CurrentStates);
   AssertEquals('no clip: the hover layer does not transition', 0, FChart.AnimClipCount);
-  AssertEquals('the lift at once', 'rgba(92,123,217,1)', p.GetAnimProp('style.fill').Str);
-  { select alone is not hovered: it transitions }
+  AssertEquals('the own layer keeps its fill', '#5470c6', p.GetAnimProp('style.fill').Str);
+  AssertNotNull('the copy', FChart.HoverLayerForTest);
+  AssertEquals('one copy', 1, FChart.HoverLayerForTest.Count);
+  AssertEquals('lifted on the copy', IntToHex(TyChartLiftColor(TTyChartColor($FF5470C6)), 8),
+    IntToHex(FChart.HoverLayerForTest.Element(0).Style.FillColor, 8));
   FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":2}');
   Draw;
-  AssertEquals('leaving the hover layer: at once too', 0, FChart.AnimClipCount);
+  AssertEquals('leaving the hover layer: no transition either', 0, FChart.AnimClipCount);
+  AssertEquals('nor a state', '', p.CurrentStates);
+  AssertNull('the copy goes', FChart.HoverLayerForTest);
 end;
 
 initialization

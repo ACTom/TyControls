@@ -110,6 +110,21 @@ type
     { the merged state object the last useStates applied (what the proxies'
       transitions aim at) [Batch 94] }
     Merged: TTyStObject;
+    { [R2-I9] THE HOVER LAYER (zrender's __inHover, shouldUseHoverLayer):
+      HoverLayer -- the element's emphasis state carries the hoverLayer flag
+      (the control decides it: ECharts' threshold or incremental flag, a
+      path with no text attached); InHover -- the element is on the hover
+      layer: a switch whose last state is emphasis entered it before the
+      states applied, a switch whose last state is not leaves it after
+      applying. While it is on it, a switch changes ONLY the hover copy's
+      style (ONLY_STYLE_CHANGE): Cur, the element's own layer, stays as it
+      was -- style, z2, transform and shape alike; States and Merged are
+      upstream's currentStates and the merged object all the same.
+      LayerLag: Cur answers LayerStates, not States (set while on the hover
+      layer, and kept after leaving it until a switch off the hover layer
+      writes the own layer again -- upstream's HOVER_LAYER_CONSTRAINTS). }
+    HoverLayer, InHover, LayerLag: Boolean;
+    LayerStates: TTyStNames;
   end;
 
   { A data item's element and what is attached to it: the label, which
@@ -192,10 +207,25 @@ function TyStStateObject(const AEl: TTyStElement; AName: TTyStName;
   ANew: TTyStNames; out AObj: TTyStObject): Boolean;
 { zrender's useStates. True when the list changed (and so the values). }
 function TyStUseStates(var AEl: TTyStElement; ANew: TTyStNames): Boolean;
+{ [R2-I9] the same, ALayer True when the element's own layer took it (Cur
+  changed): False on the hover layer, where only the hover copy changes }
+function TyStUseStatesIn(var AEl: TTyStElement; ANew: TTyStNames;
+  out ALayer: Boolean): Boolean;
+{ [R2-I9] the states Cur answers: LayerStates while it lags, else States }
+function TyStLayerStates(const AEl: TTyStElement): TTyStNames;
+{ [R2-I9] the merged object a list gives (useStates' merge, select first) }
+function TyStMergedOf(const AEl: TTyStElement; ANew: TTyStNames): TTyStObject;
+{ [R2-I9] what the hover layer brushes the element with: its own layer's
+  values (Cur) with the style keys of __hoverStyle -- the normal style (Rest)
+  overlaid by the merged state style (Displayable._applyStateObj's
+  targetStyle). Meaningful while InHover. }
+function TyStHoverValues(const AEl: TTyStElement): TTyStObject;
 { applyElementStates on a data item: the host's list from its flags, and
   the label and the label line take the same list when the host's changed.
   True when anything changed. }
 function TyStApplyItem(var AItem: TTyStItem): Boolean;
+{ [R2-I9] the same, ALayer True when an element's own layer changed }
+function TyStApplyItemIn(var AItem: TTyStItem; out ALayer: Boolean): Boolean;
 { useStates on the whole item with a given list (the host's, then the label
   and line with it), whatever the flags -- the re-render's useStates of the
   previous list. }
@@ -515,17 +545,62 @@ begin
   end;
 end;
 
-function TyStUseStates(var AEl: TTyStElement; ANew: TTyStNames): Boolean;
+function TyStMergedOf(const AEl: TTyStElement; ANew: TTyStNames): TTyStObject;
 var
   n: TTyStName;
-  merged, obj: TTyStObject;
+  obj: TTyStObject;
+begin
+  Result := TyStNoObject;
+  { in list order, select first: the later state wins a shared key }
+  for n := Low(TTyStName) to High(TTyStName) do
+  begin
+    if not (n in ANew) then Continue;
+    if TyStStateObject(AEl, n, ANew, obj) then
+      Result := TyStOverlay(Result, obj);
+  end;
+end;
+
+function TyStUseStatesIn(var AEl: TTyStElement; ANew: TTyStNames;
+  out ALayer: Boolean): Boolean;
+var
+  merged: TTyStObject;
   k: TTyStKey;
+  hover: Boolean;
 begin
   Result := False;
+  ALayer := False;
   if not AEl.Exists then Exit;
   { the same list: nothing at all happens, not even the proxies }
   if ANew = AEl.States then Exit;
   Result := True;
+  { [R2-I9] shouldUseHoverLayer on the LAST state of the list: emphasis is
+    the last whenever it is in it (select first, then emphasis or blur);
+    the element enters the hover layer before the states apply }
+  hover := AEl.HoverLayer and (stnEmphasis in ANew);
+  if hover and not AEl.InHover then
+  begin
+    AEl.InHover := True;
+    if not AEl.LayerLag then
+    begin
+      AEl.LayerStates := AEl.States;
+      AEl.LayerLag := True;
+    end;
+  end;
+  if ANew = [] then merged := TyStNoObject
+  else merged := TyStMergedOf(AEl, ANew);
+  if AEl.InHover then
+  begin
+    { ONLY_STYLE_CHANGE: the switch goes to __hoverStyle (TyStHoverValues
+      reads it off Merged), the own layer keeps every key; a switch whose
+      last state has no flag leaves the hover layer after applying, still
+      only to the hover style }
+    AEl.States := ANew;
+    AEl.Merged := merged;
+    if not hover then AEl.InHover := False;
+    Exit;
+  end;
+  ALayer := True;
+  AEl.LayerLag := False;
   if ANew = [] then
   begin
     { clearStates: every saved key back to rest }
@@ -534,14 +609,6 @@ begin
     AEl.Merged := TyStNoObject;
     Exit;
   end;
-  merged := TyStNoObject;
-  { in list order, select first: the later state wins a shared key }
-  for n := Low(TTyStName) to High(TTyStName) do
-  begin
-    if not (n in ANew) then Continue;
-    if TyStStateObject(AEl, n, ANew, obj) then
-      merged := TyStOverlay(merged, obj);
-  end;
   for k := Low(TTyStKey) to High(TTyStKey) do
     if merged.Has[k] then CopyKey(AEl.Cur, merged, k)
     else CopyKey(AEl.Cur, AEl.Rest, k);
@@ -549,28 +616,72 @@ begin
   AEl.Merged := merged;
 end;
 
-function TyStUseItemStates(var AItem: TTyStItem; ANew: TTyStNames): Boolean;
+function TyStUseStates(var AEl: TTyStElement; ANew: TTyStNames): Boolean;
+var layer: Boolean;
+begin
+  Result := TyStUseStatesIn(AEl, ANew, layer);
+end;
+
+function TyStLayerStates(const AEl: TTyStElement): TTyStNames;
+begin
+  if AEl.LayerLag then Result := AEl.LayerStates
+  else Result := AEl.States;
+end;
+
+function TyStHoverValues(const AEl: TTyStElement): TTyStObject;
+const
+  { the style keys: what _applyStateObj writes to __hoverStyle }
+  cStyle: array[0..5] of TTyStKey = (stkFill, stkStroke, stkLineWidth,
+    stkOpacity, stkDash, stkDashOffset);
 var i: Integer;
 begin
-  Result := TyStUseStates(AItem.Host, ANew);
+  Result := AEl.Cur;
+  for i := 0 to High(cStyle) do
+    if AEl.Merged.Has[cStyle[i]] then CopyKey(Result, AEl.Merged, cStyle[i])
+    else CopyKey(Result, AEl.Rest, cStyle[i]);
+  if AEl.Merged.Has[stkFill] then Result.FillInherit := AEl.Merged.FillInherit
+  else Result.FillInherit := AEl.Rest.FillInherit;
+end;
+
+function UseItemStatesIn(var AItem: TTyStItem; ANew: TTyStNames;
+  out ALayer: Boolean): Boolean;
+var
+  i: Integer;
+  l: Boolean;
+begin
+  Result := TyStUseStatesIn(AItem.Host, ANew, ALayer);
   { the attached text and line get useStates(sameList) only from inside the
     host's own, so only when the host's list changed }
   if not Result then Exit;
-  TyStUseStates(AItem.Label_, ANew);
-  TyStUseStates(AItem.Guide, ANew);
-  for i := 0 to High(AItem.Parts) do TyStUseStates(AItem.Parts[i], ANew);
+  if TyStUseStatesIn(AItem.Label_, ANew, l) and l then ALayer := True;
+  if TyStUseStatesIn(AItem.Guide, ANew, l) and l then ALayer := True;
+  for i := 0 to High(AItem.Parts) do
+    if TyStUseStatesIn(AItem.Parts[i], ANew, l) and l then ALayer := True;
 end;
 
-function TyStApplyItem(var AItem: TTyStItem): Boolean;
+function TyStUseItemStates(var AItem: TTyStItem; ANew: TTyStNames): Boolean;
+var layer: Boolean;
+begin
+  Result := UseItemStatesIn(AItem, ANew, layer);
+end;
+
+function TyStApplyItemIn(var AItem: TTyStItem; out ALayer: Boolean): Boolean;
 var ns: TTyStNames;
 begin
+  ALayer := False;
   if not AItem.Host.Exists then Exit(False);
   ns := TyStTargetStates(AItem.Host);
   { [R2-I6] the same list: useStates does nothing (TyStUseStates' first
     test), asked here before a call that sets up its locals for every row
     of every hover }
   if ns = AItem.Host.States then Exit(False);
-  Result := TyStUseItemStates(AItem, ns);
+  Result := UseItemStatesIn(AItem, ns, ALayer);
+end;
+
+function TyStApplyItem(var AItem: TTyStItem): Boolean;
+var layer: Boolean;
+begin
+  Result := TyStApplyItemIn(AItem, layer);
 end;
 
 procedure ClearEl(var AEl: TTyStElement);
@@ -578,6 +689,9 @@ begin
   AEl.Cur := AEl.Rest;
   AEl.States := [];
   AEl.Merged := TyStNoObject;
+  { [R2-I9] the own layer at rest is the whole element at rest }
+  AEl.InHover := False;
+  AEl.LayerLag := False;
 end;
 
 procedure TyStClearItem(var AItem: TTyStItem);

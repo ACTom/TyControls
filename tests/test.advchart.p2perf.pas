@@ -301,7 +301,9 @@ begin
   { THE INCREMENTAL LAYER holds the chunks as they were drawn: a patch
     draws it again, as a build does -- left alone, a hovered point's
     emphasis stayed out of the picture (scatter-jitter, scatter-painter-
-    choice) }
+    choice). [R2-I9] The hovered point itself is the hover layer's now
+    (HOVER_LAYER_FOR_INCREMENTAL); the blur its focus puts on the rest is
+    the layer's own, and patched }
   s := '';
   st := 5;
   for i := 0 to 1199 do
@@ -314,7 +316,7 @@ begin
   end;
   n := Sweep('{ ' + cNoTip + 'xAxis: {}, yAxis: {}, series: [{ type: ''scatter'','
     + ' progressive: 200, progressiveThreshold: 500, symbolSize: 8,'
-    + ' emphasis: { itemStyle: { color: ''#f00'', borderColor: ''#000'', borderWidth: 2 } },'
+    + ' emphasis: { focus: ''self'', itemStyle: { color: ''#f00'', borderColor: ''#000'', borderWidth: 2 } },'
     + ' data: [' + s + '] }] }', False, False, 21);
   AssertTrue('frames were patched', n > 0);
 end;

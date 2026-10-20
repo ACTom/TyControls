@@ -2104,6 +2104,9 @@ begin
           FSt[s].HostIdx[raw] := FSt[s].PartIdx[raw][0];
           FSt[s].PartIdx[raw] := Copy(FSt[s].PartIdx[raw], 1, Length(FSt[s].PartIdx[raw]) - 1);
         end;
+  { [R2-I9] a new list: the hover layer's count and flags again }
+  FHlCountOk := False;
+  for s := 0 to High(FSt) do FSt[s].HlSet := False;
   { THE ROWS' RECORDS ONLY WHERE AN ELEMENT HOSTS ONE [R2-L]: a row no
     element hosts is reset to a blank record below, so a series none of
     whose rows is hosted (a large batch, a progressive run's later chunks
@@ -2230,6 +2233,11 @@ begin
   FStMemoNodes := nil;
   FStMemoSpecNode := nil;
   FStDirty := False;
+  { [R2-I9] the hover layer's flags as renderSeries leaves them -- and a row
+    the sync put in emphasis goes on the layer, as useStates(prevStates) on
+    a flagged element does }
+  StHoverStamp(True);
+  FHoverDirty := True;
   { WHAT THE STATES ARE WRITTEN OVER, kept from here to the end of the
     build: a frame whose states alone change puts it back and writes them
     again (StPatchList) [P2] }
@@ -2535,12 +2543,16 @@ begin
   StSyncMarks(FPaintList);
   FPaintList.JournalClose;
   if region and ProgPatchRegion(prevIdx, prevEls) then FProgLayerOk := True;
+  { [R2-I9] the copies are of the list as written }
+  FHoverDirty := True;
   Inc(GStPatches);
   Result := True;
 end;
 
 function TTyAdvanceChart.StApplyChanged: Boolean;
-var s, raw: Integer;
+var
+  s, raw: Integer;
+  layer: Boolean;
 begin
   Result := False;
   { the geos' flags too [Batch 148] -- which only a build draws [P2] }
@@ -2552,27 +2564,320 @@ begin
   if FTmCrumbDirty then Result := True;
   if not FStDirty then Exit;
   FStDirty := False;
+  { [R2-I9] the flags as the last renderSeries left them (the count grows
+    with the chunks), then the switches: one that only the HOVER LAYER takes
+    changes no element of the list -- True only where an element's own
+    layer changed; the copies are found again either way }
+  StHoverStamp(False);
+  FHoverDirty := True;
   for s := 0 to High(FSt) do
   begin
     if FSt[s].Kind = sskNone then Continue;
     for raw := 0 to High(FSt[s].Rows) do
-      if FSt[s].Rows[raw].Host.Exists and TyStApplyItem(FSt[s].Rows[raw]) then
+      if FSt[s].Rows[raw].Host.Exists and TyStApplyItemIn(FSt[s].Rows[raw], layer)
+        and layer then
         Result := True;
     if FSt[s].Run.Host.Exists
-      and TyStUseStates(FSt[s].Run.Host, TyStTargetStates(FSt[s].Run.Host)) then
+      and TyStUseStatesIn(FSt[s].Run.Host, TyStTargetStates(FSt[s].Run.Host), layer)
+      and layer then
       Result := True;
     if FSt[s].Area.Host.Exists
-      and TyStUseStates(FSt[s].Area.Host, TyStTargetStates(FSt[s].Area.Host)) then
+      and TyStUseStatesIn(FSt[s].Area.Host, TyStTargetStates(FSt[s].Area.Host), layer)
+      and layer then
       Result := True;
     for raw := 0 to High(FSt[s].EdgeRows) do
-      if FSt[s].EdgeRows[raw].Host.Exists and TyStApplyItem(FSt[s].EdgeRows[raw]) then
+      if FSt[s].EdgeRows[raw].Host.Exists and TyStApplyItemIn(FSt[s].EdgeRows[raw], layer)
+        and layer then
         Result := True;
     { a gauge's arcs and the markers [F2b] }
     for raw := 0 to High(FSt[s].PeerRows) do
-      if FSt[s].PeerRows[raw].Host.Exists and TyStApplyItem(FSt[s].PeerRows[raw]) then
+      if FSt[s].PeerRows[raw].Host.Exists and TyStApplyItemIn(FSt[s].PeerRows[raw], layer)
+        and layer then
         Result := True;
     if StApplyMarks(s) then Result := True;
   end;
+end;
+
+function TTyAdvanceChart.StHoverThreshold: Double;
+var d: TJSONData;
+begin
+  { retrieve2(ecModel.get('hoverLayerThreshold'), 3000): undefined and null
+    are the default; anything else is what `elCount > value` compares
+    against -- Number() of it (a string, a boolean; NaN for an object) }
+  Result := 3000;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  d := TJSONObject(FOption.Root).Find('hoverLayerThreshold');
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  Result := TyJsonToNumber(d);
+end;
+
+function TTyAdvanceChart.StSeriesHoverOn(ASlot: Integer; AThl: Boolean): Boolean;
+var
+  s: Integer;
+  st: string;
+begin
+  Result := False;
+  s := FBindings[ASlot].SeriesIndex;
+  { a map series' paths are its geo's (MapDraw) }
+  if (s < 0) or (s > High(FSt)) or (FSt[s].Kind in [sskNone, sskMap]) then Exit;
+  { HOVER_LAYER_FOR_INCREMENTAL: every element an incremental render made
+    -- SymbolDraw's, HeatmapView's, CustomView's (LineDraw's too; the port's
+    lines are never progressive) -- whatever the count. Not ParallelView's,
+    nor the large draws' (they have no states) }
+  st := FBindings[ASlot].SeriesType;
+  if ProgOnOf(ASlot) and ((st = 'scatter') or (st = 'heatmap') or (st = 'custom')) then
+    Exit(True);
+  { HOVER_LAYER_FROM_THRESHOLD: every series' rendered elements, but a
+    treemap's (preventUsingHoverLayer) }
+  Result := AThl and (FSt[s].Kind <> sskTreemap);
+end;
+
+procedure TTyAdvanceChart.StHoverStamp(AEnter: Boolean);
+var
+  slot, s, raw, k: Integer;
+  t: Double;
+  thl, want, endLabel, has: Boolean;
+  nodes: array[0..0] of TJSONObject;
+
+  { shouldUseHoverLayer: never a Text nor an element with a textContent --
+    setLabelStyle makes one wherever some state shows a label, the port
+    keeps it as the row's label (a pie's always); a part beside a part that
+    is text is taken for the text's host }
+  procedure StampItem(var AItem: TTyStItem; AOn: Boolean);
+  var
+    j: Integer;
+    texts: Boolean;
+  begin
+    AItem.Host.HoverLayer := AOn and AItem.Host.IsPath and not AItem.Label_.Exists;
+    texts := AItem.Label_.Exists;
+    for j := 0 to High(AItem.Parts) do
+      if not AItem.Parts[j].IsPath and not AItem.Parts[j].IsGuide then texts := True;
+    for j := 0 to High(AItem.Parts) do
+      AItem.Parts[j].HoverLayer := AOn and AItem.Parts[j].IsPath and not texts;
+  end;
+
+  { useStates(prevStates) on a flagged element: a row in emphasis enters the
+    hover layer, its own layer the list without emphasis }
+  procedure Enter(var AEl: TTyStElement);
+  var full: TTyStNames;
+  begin
+    if not AEl.Exists or not AEl.HoverLayer or AEl.InHover
+      or not (stnEmphasis in AEl.States) then Exit;
+    full := AEl.States;
+    TyStUseStates(AEl, full - [stnEmphasis]);
+    TyStUseStates(AEl, full);
+  end;
+
+  procedure EnterItem(var AItem: TTyStItem);
+  var j: Integer;
+  begin
+    Enter(AItem.Host);
+    for j := 0 to High(AItem.Parts) do Enter(AItem.Parts[j]);
+  end;
+
+begin
+  if (FPaintList = nil) then Exit;
+  { the non-group elements of the storage: the list's, but the chunks not
+    drawn yet }
+  if not FHlCountOk then
+  begin
+    FHlCount := 0;
+    for k := 0 to FPaintList.Count - 1 do
+      if not FPaintList.Ref(k)^.ProgHidden then Inc(FHlCount);
+    FHlCountOk := True;
+  end;
+  t := StHoverThreshold;
+  thl := (not IsNan(t)) and (FHlCount > t);
+  for slot := 0 to High(FBindings) do
+  begin
+    s := FBindings[slot].SeriesIndex;
+    if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    want := StSeriesHoverOn(slot, thl);
+    if FSt[s].HlSet and (FSt[s].HlOn = want) and not AEnter then Continue;
+    FSt[s].HlOn := want;
+    FSt[s].HlSet := True;
+    for raw := 0 to High(FSt[s].Rows) do
+      if FSt[s].Rows[raw].Host.Exists then
+      begin
+        StampItem(FSt[s].Rows[raw], want);
+        if AEnter then EnterItem(FSt[s].Rows[raw]);
+      end;
+    { a line's polyline: its endLabel is its textContent; its area none }
+    nodes[0] := StSeriesNode(s);
+    endLabel := TyStReadBool(nodes, ['endLabel', 'show'], has) and has;
+    FSt[s].Run.Host.HoverLayer := want and FSt[s].Run.Host.IsPath and not endLabel;
+    FSt[s].Area.Host.HoverLayer := want and FSt[s].Area.Host.IsPath;
+    if AEnter then
+    begin
+      Enter(FSt[s].Run.Host);
+      Enter(FSt[s].Area.Host);
+    end;
+    for raw := 0 to High(FSt[s].EdgeRows) do
+      if FSt[s].EdgeRows[raw].Host.Exists then
+      begin
+        StampItem(FSt[s].EdgeRows[raw], want);
+        if AEnter then EnterItem(FSt[s].EdgeRows[raw]);
+      end;
+    for raw := 0 to High(FSt[s].PeerRows) do
+      if FSt[s].PeerRows[raw].Host.Exists then
+      begin
+        StampItem(FSt[s].PeerRows[raw], want);
+        if AEnter then EnterItem(FSt[s].PeerRows[raw]);
+      end;
+  end;
+end;
+
+procedure TTyAdvanceChart.StHoverCollect;
+var
+  s, raw, k, n, i, j: Integer;
+  item: PTyStItem;
+  idx: TTyIntegerArray;
+  els: array of TTyChartElement;
+  ti: Integer;
+  te: TTyChartElement;
+
+  { the copy: the element as its own layer has it, then the hover style
+    over it -- the keys the hover copy changes against the own layer's }
+  procedure Put(AIdx: Integer; const AEl: TTyStElement; AFollow: Boolean);
+  var
+    el: TTyChartElement;
+    tmp: TTyStElement;
+  begin
+    if (AIdx < 0) or (AIdx >= FPaintList.Count) then Exit;
+    el := FPaintList.Element(AIdx);
+    if el.ProgHidden then Exit;
+    { on proxies the list keeps the rest the frame starts from: the own
+      layer's values written first }
+    if FStProxied then
+    begin
+      if AFollow then StWriteFollower(el, AEl, False)
+      else StWriteHost(el, AEl, False);
+    end;
+    tmp := AEl;
+    tmp.Rest := AEl.Cur;
+    tmp.Cur := TyStHoverValues(AEl);
+    { the own layer's scale is in the element already }
+    TyStSetNum(tmp.Cur, stkScale, 1);
+    if AFollow then StWriteFollower(el, tmp, False)
+    else StWriteHost(el, tmp, False);
+    if n >= Length(idx) then
+    begin
+      SetLength(idx, n * 2 + 4);
+      SetLength(els, n * 2 + 4);
+    end;
+    idx[n] := AIdx;
+    els[n] := el;
+    Inc(n);
+  end;
+
+  procedure PutItem(const AItem: TTyStItem; AHost: Integer;
+    const AFollow, AParts: TTyIntegerArray);
+  var q: Integer;
+  begin
+    if AItem.Host.InHover then
+    begin
+      Put(AHost, AItem.Host, False);
+      for q := 0 to High(AFollow) do Put(AFollow[q], AItem.Host, True);
+    end;
+    for q := 0 to Min(High(AParts), High(AItem.Parts)) do
+      if AItem.Parts[q].InHover then Put(AParts[q], AItem.Parts[q], False);
+  end;
+
+begin
+  FHoverDirty := False;
+  if FHoverList = nil then FHoverList := TTyPaintList.Create
+  else FHoverList.Clear;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  n := 0;
+  idx := nil;
+  els := nil;
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].Kind in [sskNone, sskMap] then Continue;
+    for raw := 0 to Min(High(FSt[s].Rows), High(FSt[s].HostIdx)) do
+    begin
+      item := @FSt[s].Rows[raw];
+      if not item^.Host.Exists then Continue;
+      if raw <= High(FSt[s].FollowIdx) then
+      begin
+        if raw <= High(FSt[s].PartIdx) then
+          PutItem(item^, FSt[s].HostIdx[raw], FSt[s].FollowIdx[raw], FSt[s].PartIdx[raw])
+        else
+          PutItem(item^, FSt[s].HostIdx[raw], FSt[s].FollowIdx[raw], nil);
+      end
+      else if raw <= High(FSt[s].PartIdx) then
+        PutItem(item^, FSt[s].HostIdx[raw], nil, FSt[s].PartIdx[raw])
+      else
+        PutItem(item^, FSt[s].HostIdx[raw], nil, nil);
+    end;
+    if FSt[s].Run.Host.InHover then
+      for k := 0 to High(FSt[s].RunIdx) do Put(FSt[s].RunIdx[k], FSt[s].Run.Host, False);
+    if FSt[s].Area.Host.InHover then
+      for k := 0 to High(FSt[s].AreaIdx) do Put(FSt[s].AreaIdx[k], FSt[s].Area.Host, False);
+    for raw := 0 to Min(High(FSt[s].EdgeRows), High(FSt[s].EdgeHostIdx)) do
+    begin
+      item := @FSt[s].EdgeRows[raw];
+      if not item^.Host.Exists then Continue;
+      if raw <= High(FSt[s].EdgePartIdx) then
+        PutItem(item^, FSt[s].EdgeHostIdx[raw], nil, FSt[s].EdgePartIdx[raw])
+      else
+        PutItem(item^, FSt[s].EdgeHostIdx[raw], nil, nil);
+    end;
+    for raw := 0 to Min(High(FSt[s].PeerRows), High(FSt[s].PeerHostIdx)) do
+    begin
+      item := @FSt[s].PeerRows[raw];
+      if not item^.Host.Exists then Continue;
+      if raw <= High(FSt[s].PeerFollowIdx) then
+        PutItem(item^, FSt[s].PeerHostIdx[raw], FSt[s].PeerFollowIdx[raw], nil)
+      else
+        PutItem(item^, FSt[s].PeerHostIdx[raw], nil, nil);
+    end;
+  end;
+  { IN THE DISPLAY LIST'S ORDER: the copies keep their z and z2, so added
+    in the list's insertion order they sort as the list does }
+  for i := 1 to n - 1 do
+  begin
+    ti := idx[i];
+    te := els[i];
+    j := i - 1;
+    while (j >= 0) and (idx[j] > ti) do
+    begin
+      idx[j + 1] := idx[j];
+      els[j + 1] := els[j];
+      Dec(j);
+    end;
+    idx[j + 1] := ti;
+    els[j + 1] := te;
+  end;
+  for i := 0 to n - 1 do FHoverList.Add(els[i]);
+end;
+
+function TTyAdvanceChart.StHoverAny: Boolean;
+begin
+  if FHoverDirty then StHoverCollect;
+  Result := (FHoverList <> nil) and (FHoverList.Count > 0);
+end;
+
+procedure TTyAdvanceChart.PaintHoverLayer(APainter: TTyPainter);
+begin
+  if StHoverAny then TyRenderPaintList(APainter, FHoverList);
+end;
+
+function TTyAdvanceChart.HoverLayerForTest: TTyPaintList;
+begin
+  if StHoverAny then Result := FHoverList else Result := nil;
+end;
+
+function TTyAdvanceChart.StRowsInStatesForTest(ASeriesIndex: Integer): Integer;
+var raw: Integer;
+begin
+  Result := 0;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  for raw := 0 to High(FSt[ASeriesIndex].Rows) do
+    if FSt[ASeriesIndex].Rows[raw].Host.Exists
+      and ((FSt[ASeriesIndex].Rows[raw].Host.States <> [])
+        or FSt[ASeriesIndex].Rows[raw].Host.InHover) then
+      Inc(Result);
 end;
 
 { ==================== state transitions [Batch 94, AN3b] ====================
@@ -2772,7 +3077,7 @@ end;
 
 procedure TTyAdvanceChart.StAnimEl(var AEl: TTyStElement; AListIdx, ASeries,
   ARaw: Integer; const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
-  AHasCfg, AOver: Boolean);
+  AHasCfg: Boolean);
 var
   el: TTyChartElement;
   p, role: TTyChartAnimProxy;
@@ -2892,24 +3197,36 @@ begin
     tmp := AEl;
     tmp.Cur := tmp.Rest;
     tmp.States := [];
+    { [R2-I9] the proxy is the own layer: no hover layer here }
+    tmp.HoverLayer := False;
+    tmp.InHover := False;
+    tmp.LayerLag := False;
     TyStUseStates(tmp, StNamesOf(p.StPrev));
     p.UseStates(p.StPrev, StAnimStateOf(tmp, tmp.Merged, AKind, p), True);
     p.StPrev := '';
   end;
   { ---- the series' stateTransition, only when it animates ---- }
   if AHasCfg then p.SetStateTransition(ACfg) else p.ClearStateTransition;
-  want := TyStNamesText(AEl.States);
+  { [R2-I9] THE OWN LAYER'S STATES: a switch the hover layer took changes
+    nothing here (zrender's _applyStateObj returns at once for an element
+    on it), so it neither transitions nor sets a value; a switch off the
+    hover layer transitions as any [was: past hoverLayerThreshold every
+    emphasis switch was applied here at once, the hover style in the own
+    layer] }
+  want := TyStNamesText(TyStLayerStates(AEl));
   if want = p.CurrentStates then Exit;
-  { no timer, no transition; and an element in the hover layer has none }
-  noAnim := not AnimAllowed or (AOver and ((Pos('emphasis', want) > 0)
-    or (Pos('emphasis', p.CurrentStates) > 0)));
+  { no timer, no transition }
+  noAnim := not AnimAllowed;
   if want = '' then p.ClearStates(noAnim)
   else
   begin
-    st := StAnimStateOf(AEl, AEl.Merged, AKind, p);
+    if AEl.LayerLag then
+      st := StAnimStateOf(AEl, TyStMergedOf(AEl, TyStLayerStates(AEl)), AKind, p)
+    else
+      st := StAnimStateOf(AEl, AEl.Merged, AKind, p);
     p.UseStates(want, st, noAnim);
     { a pie label's select place, for the next update's move from it }
-    if (AKind = cStPxLabel) and (stnSelect in AEl.States)
+    if (AKind = cStPxLabel) and (stnSelect in TyStLayerStates(AEl))
       and (TyAnimPropIndex(st.Props, 'x') >= 0) and (TyAnimPropIndex(st.Props, 'y') >= 0) then
       p.StNoteSelect(st.Props[TyAnimPropIndex(st.Props, 'x')].Value.Num,
         st.Props[TyAnimPropIndex(st.Props, 'y')].Value.Num);
@@ -2921,10 +3238,8 @@ var
   s, raw, k, clips: Integer;
   item: PTyStItem;
   cfg: TTyAnimCfg;
-  hasCfg, over: Boolean;
+  hasCfg: Boolean;
   hostP: TTyChartAnimProxy;
-  d: TJSONData;
-  threshold: Double;
 begin
   if not FStProxied or (FPaintList = nil) then Exit;
   if FAnim = nil then FAnim := NewAnimDriver;
@@ -2932,16 +3247,9 @@ begin
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
   clips := FAnim.ClipCount;
-  { THE HOVER LAYER: past hoverLayerThreshold elements upstream's canvas
-    hovers an element in a layer of its own, where it never transitions
-    (canTransition, __inHover) }
-  threshold := 3000;
-  if FOption.Root is TJSONObject then
-  begin
-    d := TJSONObject(FOption.Root).Find('hoverLayerThreshold');
-    if (d <> nil) and (d.JSONType = jtNumber) then threshold := d.AsFloat;
-  end;
-  over := FPaintList.Count > threshold;
+  { [R2-I9] THE HOVER LAYER is the states' own (TyStUseStatesIn): a switch
+    it takes never reaches a proxy, so never transitions (canTransition's
+    __inHover) [was: the list's length against hoverLayerThreshold here] }
   for s := 0 to High(FSt) do
   begin
     if FSt[s].Kind = sskNone then Continue;
@@ -2953,7 +3261,7 @@ begin
       item := @FSt[s].Rows[raw];
       if not item^.Host.Exists then Continue;
       StAnimEl(item^.Host, FSt[s].HostIdx[raw], s, raw, 'host', cStPxPath,
-        cfg, hasCfg, over);
+        cfg, hasCfg);
       { the rest of the same path: the host's proxy }
       hostP := FAnimStBind[FSt[s].HostIdx[raw]];
       if raw <= High(FSt[s].FollowIdx) then
@@ -2963,28 +3271,28 @@ begin
         for k := 0 to Min(High(FSt[s].PartIdx[raw]), High(item^.Parts)) do
           if item^.Parts[k].IsPath then
             StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
-              'part' + IntToStr(k), cStPxPart, cfg, hasCfg, over)
+              'part' + IntToStr(k), cStPxPart, cfg, hasCfg)
           { [R2-I1] a radar point label's line: a line's proxy }
           else if item^.Parts[k].IsGuide then
             StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
-              'part' + IntToStr(k), cStPxGuide, cfg, hasCfg, over)
+              'part' + IntToStr(k), cStPxGuide, cfg, hasCfg)
           else
             { [R2-A] a radar's point label: a Text's proxy }
             StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
-              'part' + IntToStr(k), cStPxLabel, cfg, hasCfg, over);
+              'part' + IntToStr(k), cStPxLabel, cfg, hasCfg);
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists then
         StAnimEl(item^.Label_, FSt[s].LabelIdx[raw], s, raw, 'label', cStPxLabel,
-          cfg, hasCfg, over);
+          cfg, hasCfg);
       if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists then
         StAnimEl(item^.Guide, FSt[s].GuideIdx[raw], s, raw, 'guide', cStPxGuide,
-          cfg, hasCfg, over);
+          cfg, hasCfg);
     end;
     { A GAUGE'S ARC: its own proxy, its caps drawn from it [F2b] }
     for raw := 0 to Min(High(FSt[s].PeerHostIdx), High(FSt[s].PeerRows)) do
       if (FSt[s].PeerHostIdx[raw] >= 0) and FSt[s].PeerRows[raw].Host.Exists then
       begin
         StAnimEl(FSt[s].PeerRows[raw].Host, FSt[s].PeerHostIdx[raw], s, raw,
-          'peer', cStPxPath, cfg, hasCfg, over);
+          'peer', cStPxPath, cfg, hasCfg);
         hostP := FAnimStBind[FSt[s].PeerHostIdx[raw]];
         for k := 0 to High(FSt[s].PeerFollowIdx[raw]) do
           FAnimStBind[FSt[s].PeerFollowIdx[raw][k]] := hostP;
@@ -2997,11 +3305,11 @@ begin
         if (FSt[s].EdgeHostIdx[raw] < 0) or not FSt[s].EdgeRows[raw].Host.Exists then Continue;
         item := @FSt[s].EdgeRows[raw];
         StAnimEl(item^.Host, FSt[s].EdgeHostIdx[raw], s, raw, 'edge', cStPxPath,
-          cfg, hasCfg, over);
+          cfg, hasCfg);
         if (raw <= High(FSt[s].EdgeLabelIdx)) and (FSt[s].EdgeLabelIdx[raw] >= 0)
           and item^.Label_.Exists then
           StAnimEl(item^.Label_, FSt[s].EdgeLabelIdx[raw], s, raw, 'edgelabel', cStPxLabel,
-            cfg, hasCfg, over);
+            cfg, hasCfg);
       end;
     { A CHORD'S RIBBONS have states of their own, each its own proxy
       (the series' view group is their role) [Batch 120] }
@@ -3009,7 +3317,7 @@ begin
       for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
         if (FSt[s].EdgeHostIdx[raw] >= 0) and FSt[s].EdgeRows[raw].Host.Exists then
           StAnimEl(FSt[s].EdgeRows[raw].Host, FSt[s].EdgeHostIdx[raw], s, raw,
-            'edge', cStPxPath, cfg, hasCfg, over);
+            'edge', cStPxPath, cfg, hasCfg);
     { [F2a] A GRAPH'S EDGES (the Line group's path, its arrows, its label)
       and A TREE'S (the edge path): states of their own, proxies of their
       own -- their stateTransition the series' as every other element's }
@@ -3019,27 +3327,27 @@ begin
         if (FSt[s].EdgeHostIdx[raw] < 0) or not FSt[s].EdgeRows[raw].Host.Exists then Continue;
         item := @FSt[s].EdgeRows[raw];
         StAnimEl(item^.Host, FSt[s].EdgeHostIdx[raw], s, raw, 'edge', cStPxPath,
-          cfg, hasCfg, over);
+          cfg, hasCfg);
         if raw <= High(FSt[s].EdgePartIdx) then
           for k := 0 to Min(High(FSt[s].EdgePartIdx[raw]), High(item^.Parts)) do
             StAnimEl(item^.Parts[k], FSt[s].EdgePartIdx[raw][k], s, raw,
-              'edgepart' + IntToStr(k), cStPxPart, cfg, hasCfg, over);
+              'edgepart' + IntToStr(k), cStPxPart, cfg, hasCfg);
         if (FSt[s].EdgeLabelIdx[raw] >= 0) and item^.Label_.Exists then
           StAnimEl(item^.Label_, FSt[s].EdgeLabelIdx[raw], s, raw, 'edgelabel', cStPxLabel,
-            cfg, hasCfg, over);
+            cfg, hasCfg);
       end;
     { a line's polyline and area: one element each upstream, its runs here }
     if FSt[s].Run.Host.Exists and (Length(FSt[s].RunIdx) > 0) then
     begin
       StAnimEl(FSt[s].Run.Host, FSt[s].RunIdx[0], s, -1, 'poly', cStPxLine,
-        cfg, hasCfg, over);
+        cfg, hasCfg);
       for k := 1 to High(FSt[s].RunIdx) do
         FAnimStBind[FSt[s].RunIdx[k]] := FAnimStBind[FSt[s].RunIdx[0]];
     end;
     if FSt[s].Area.Host.Exists and (Length(FSt[s].AreaIdx) > 0) then
     begin
       StAnimEl(FSt[s].Area.Host, FSt[s].AreaIdx[0], s, -1, 'area', cStPxLine,
-        cfg, hasCfg, over);
+        cfg, hasCfg);
       for k := 1 to High(FSt[s].AreaIdx) do
         FAnimStBind[FSt[s].AreaIdx[k]] := FAnimStBind[FSt[s].AreaIdx[0]];
     end;
