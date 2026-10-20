@@ -607,6 +607,29 @@ var
 begin
   sb := TStringBuilder.Create;
   try
+    if AKind = 3 then
+    begin
+      { two runs of symbols over each other: their chunks come in turn, so
+        the drained layer is not what a drawing in paint order gives (the
+        first state change after the run draws it whole -- the list is
+        built again then -- and only later ones in part) }
+      sb.Append('{"animation": false, "xAxis": {}, "yAxis": {}, "series": [');
+      GLcg := 55;
+      for j := 0 to 1 do
+      begin
+        if j > 0 then sb.Append(',');
+        sb.Append('{"type": "scatter", "progressive": 25, "progressiveThreshold": 40, "symbolSize": 16,');
+        sb.Append(' "itemStyle": {"opacity": 0.7}, "emphasis": {"scale": 2}, "data": [');
+        for i := 0 to 99 do
+        begin
+          if i > 0 then sb.Append(',');
+          sb.Append(Format('[%d,%d]', [Lcg(60), Lcg(40)]));
+        end;
+        sb.Append(']}');
+      end;
+      sb.Append(']}');
+      Exit(sb.ToString);
+    end;
     if AKind = 2 then
     begin
       sb.Append('{"animation": false, "parallelAxis": [{"dim": 0}, {"dim": 1}, {"dim": 2}, {"dim": 3}],');
@@ -657,7 +680,7 @@ begin
   try
     bmp.PixelFormat := pf24bit;
     bmp.SetSize(480, 400);
-    for kind := 0 to 2 do
+    for kind := 0 to 3 do
     begin
       frames[False].Clear;
       frames[True].Clear;
