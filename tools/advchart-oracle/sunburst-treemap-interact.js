@@ -772,6 +772,12 @@ const CASES = [
   { id: 'tm-anim-early-pan', group: 'tm-anim', note: 'a pan 100 ms into the first render, its labels still fading in: treemapMove renders again, the kept words at their rest at once',
     W: 600, H: 400, option: tm({ animation: true }, { animation: true }),
     steps: [{ tick: 16 }, { tick: 84 }, { drag: [[300, 200], [320, 210]] }, { tick: 16 }, { tick: 300 }, { tick: 1000 }] },
+  // [r2v] a drill's own label fades (the words of the nodes it brought in) still running when a pan renders again:
+  // the words still in view are at their rest at once, the ones the pan moves out of the view fade on
+  { id: 'tm-anim-drill-pan', group: 'tm-anim', note: 'leafDepth 1, a short update and a long enter: a rootToNode drill, its new words still fading in when a pan (one move: one render) takes a2 out of the view -- the words of a1 at their rest at once, those of a2 fade on',
+    W: 600, H: 400, option: tm({ animation: true, leafDepth: 1, animationDurationUpdate: 300, animationDuration: 3000 }, { animation: true }),
+    steps: [{ tick: 5000 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 400 }, { drag: [[300, 200], [595, 230]] }, { tick: 16 },
+      { tick: 300 }, { tick: 3000 }] },
   { id: 'tm-anim-opts', group: 'tm-anim', note: "animationDurationUpdate 400, animationEasing 'linear' (the treemap animates with animationEasing); a pan while it runs does nothing, after it pans and does not animate (the pointer leaves the canvas: no hover, whose state transition is not ported)",
     W: 600, H: 400, option: tm({ animation: true, animationDurationUpdate: 400, animationEasing: 'linear' }, { animation: true }),
     steps: [{ tick: 5000 }, { action: { type: 'treemapZoomToNode', targetNode: 'b1' } }, { tick: 16 }, { tick: 100 }, { tick: 200 }, { tick: 200 },

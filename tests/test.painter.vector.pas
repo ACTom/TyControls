@@ -57,6 +57,7 @@ type
     procedure TestADashPhaseShiftsThePattern;
     procedure TestADashWithAZeroEntryDrawsTheOthers;
     procedure TestCirclesInOnePathAreSubPathsOfTheirOwn;
+    procedure TestAFreshPathsFirstCircleIsDrawnAsBefore;
     procedure TestSquareCapExtendsPastTheEndpoint;
     { ---- state, transform, clip, alpha ---- }
     procedure TestClipRectHonoursTheCurrentTransform;
@@ -465,6 +466,65 @@ begin
   AssertTrue('the first ellipse', Opaque(20, 20));
   AssertTrue('the last', Opaque(60, 100));
   AssertFalse('nothing between the ellipses', Opaque(60, 47));
+end;
+
+{ [R2-F] BeginPath forgets that the last path held something, so the
+  first circle of a new path starts no sub-path of its own: drawn after
+  another path, it paints what a painter that drew nothing before paints
+  -- under a turned, unequally scaled matrix, a dash, every join and cap }
+procedure TPainterVectorTest.TestAFreshPathsFirstCircleIsDrawnAsBefore;
+var
+  fresh: array of TBGRAPixel;
+  c, x, y, diff: Integer;
+
+  procedure Draw(AAfterAnother: Boolean; ACase: Integer);
+  begin
+    MakePainter(90, 90, 96);
+    if AAfterAnother then
+    begin
+      FPainter.BeginPath;
+      FPainter.CirclePath(-200, -200, 5);
+      FPainter.FillPath(Red);
+    end;
+    FPainter.Translate(45.3, 44.7);
+    FPainter.RotateBy(0.37 * (ACase mod 3));
+    if ACase mod 2 = 1 then FPainter.ScaleBy(1.7, 0.63);
+    case ACase mod 3 of
+      0: FPainter.SetLineJoin(tljMiter, 10);
+      1: FPainter.SetLineJoin(tljRound);
+      2: FPainter.SetLineJoin(tljBevel);
+    end;
+    case (ACase div 3) mod 3 of
+      0: FPainter.SetLineCap(tlcButt);
+      1: FPainter.SetLineCap(tlcRound);
+      2: FPainter.SetLineCap(tlcSquare);
+    end;
+    if ACase >= 9 then FPainter.SetLineDash([7, 3], 2.5)
+    else if ACase >= 6 then FPainter.SetLineDash([5, 4]);
+    FPainter.BeginPath;
+    if ACase mod 4 = 3 then FPainter.EllipsePath(0, 0, 21.3, 13.1)
+    else FPainter.CirclePath(0, 0, 19.7);
+    FPainter.StrokePath(Blue, 1 + (ACase mod 5) * 2.5);
+  end;
+
+begin
+  for c := 0 to 13 do
+  begin
+    Draw(False, c);
+    SetLength(fresh, 90 * 90);
+    for y := 0 to 89 do
+      for x := 0 to 89 do
+        fresh[y * 90 + x] := PixelAt(x, y);
+    FreePainter;
+    Draw(True, c);
+    diff := 0;
+    for y := 0 to 89 do
+      for x := 0 to 89 do
+        if (PixelAt(x, y).alpha <> fresh[y * 90 + x].alpha)
+          or (PixelAt(x, y).blue <> fresh[y * 90 + x].blue) then Inc(diff);
+    FreePainter;
+    AssertEquals('case ' + IntToStr(c) + ': pixels unlike a fresh painter''s', 0, diff);
+  end;
 end;
 
 procedure TPainterVectorTest.TestSquareCapExtendsPastTheEndpoint;
