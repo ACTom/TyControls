@@ -975,6 +975,15 @@ const R2I6 = [
     { emphasis: { focus: 'series' } }),
     events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'ml0')), over(600, mark(0, 'ma0')), over(900, ['item', 1, 3]),
       out(1200)] },
+  { id: 'mk-label-opacity-zero', note: '[r2v] marker labels at opacity 0: the markPoint\'s label 0 with emphasis.label.opacity 0.8 '
+    + '(seen only while hovered), the markLine\'s label 0 with no state of its own (its blur a tenth of nothing), the markArea\'s '
+    + 'label 0 with blur.label.opacity 0.5. Hover mp0 at 0, ml0 at 300, bar 3 of series 1 (focus series) at 600, out at 900',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top', opacity: 0 },
+      emphasis: { scale: false, label: { opacity: 0.8 } } }),
+    markLine: ML({ label: { opacity: 0 } }),
+    markArea: MA({ label: { opacity: 0 }, blur: { label: { opacity: 0.5 } } }, [[{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }]]) },
+    { emphasis: { focus: 'series' } }),
+    events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'ml0')), over(600, ['item', 1, 3]), out(900)] },
 ];
 
 // ---------- the compact writer of animation.js ----------
