@@ -336,6 +336,7 @@ var
   i, idx: Integer;
   el: TTyChartElement;
   sc: TTyCanvasScale;
+  kept: Boolean;
 begin
   if (FProgLayer = nil) or (FProgLayer.Width <> AW) or (FProgLayer.Height <> AH) then
   begin
@@ -351,6 +352,10 @@ begin
   FProgPainted := nil;
   SetLength(FProgPainted, FPaintList.Count);
   P := TTyPainter.Create;
+  { a run's paths come back every time the layer is drawn again: their pens
+    and coverage kept [R2-L] }
+  kept := TyRenderKeptStrokes;
+  TyRenderKeptStrokes := True;
   try
     sc.Scale := FProgLayerScale;
     sc.DeviceUnits := False;
@@ -367,6 +372,7 @@ begin
     end;
     P.EndPaint;
   finally
+    TyRenderKeptStrokes := kept;
     P.Free;
   end;
   FProgLayerOk := True;
@@ -380,7 +386,7 @@ var
   P: TTyPainter;
   i, idx, have, rows: Integer;
   el, part: TTyChartElement;
-  started: Boolean;
+  started, kept: Boolean;
   sc: TTyCanvasScale;
 begin
   if not FProgLayerOk or (FProgLayer = nil) or (FPaintList = nil) then Exit;
@@ -391,6 +397,9 @@ begin
   end;
   P := nil;
   started := False;
+  { the paths kept for the layer's next full drawing [R2-L] }
+  kept := TyRenderKeptStrokes;
+  TyRenderKeptStrokes := True;
   try
     for i := 0 to FPaintList.Count - 1 do
     begin
@@ -424,6 +433,7 @@ begin
       FProgPainted[idx] := rows;
     end;
   finally
+    TyRenderKeptStrokes := kept;
     if started then
     begin
       P.EndPaint;

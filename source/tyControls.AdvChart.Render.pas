@@ -153,7 +153,18 @@ function TyTraceMaskOutlineForTest(AMask: TBGRABitmap; AScale: Integer): TTyDoub
   intersection objects: what a large batch's bars and boost squares are
   drawn with (see the implementation for the rows it follows). }
 procedure TyFillRectAntialiasExact(ABmp: TBGRABitmap; x, y, x2, y2: Single;
-  const AColor: TBGRAPixel);
+  const AColor: TBGRAPixel; AMemo: TObject = nil);
+
+var
+  { [R2-L] an element's solid pen through the painter's kept strokes
+    (StrokePathKept: the pen's polygon and the fill's coverage kept, the
+    same pixels) -- switched on where the same paths come back, a
+    progressive run's layer drawn again }
+  TyRenderKeptStrokes: Boolean = False;
+{ [R2-L] a memo of what the brush made of a pixel at a coverage: handed to
+  every TyFillRectAntialiasExact of one colour (it forgets itself when the
+  colour or the draw mode is another) }
+function TyRectFillMemoNew: TObject;
 
 implementation
 
@@ -186,8 +197,31 @@ end;
   The arithmetic is BGRA's own, in its own types (Single coordinates,
   Int64 rounding, Word densities). A rectangle has no curved segment and
   no third intersection, so nothing else of the filler applies. }
+{ A SOLID BRUSH'S PIXEL is a function of the pixel it lands on and the
+  coverage alone (BGRASolidBrushDrawPixels: the colour's expanded value
+  blended by the coverage's alpha; a coverage of 128 or less leaves it):
+  the memo keeps, per colour and draw mode, the last pixels and coverages
+  met and what the brush made of them. A batch of thin bars lands the same
+  coverage on the same pixel value row after row. }
+const
+  cRectMemoSize = 4096;
+
+type
+  TTyRectFillMemo = class
+    Color: TBGRAPixel;
+    Mode: TDrawMode;
+    Ready: Boolean;
+    Keys: array[0..cRectMemoSize - 1] of QWord;
+    Res: array[0..cRectMemoSize - 1] of LongWord;
+  end;
+
+function TyRectFillMemoNew: TObject;
+begin
+  Result := TTyRectFillMemo.Create;
+end;
+
 procedure TyFillRectAntialiasExact(ABmp: TBGRABitmap; x, y, x2, y2: Single;
-  const AColor: TBGRAPixel);
+  const AColor: TBGRAPixel; AMemo: TObject);
 const
   cPrec = 16;  { BGRAFillInfo.AntialiasPrecision }
   cShift = 4;  { AntialiasPrecisionShift }
@@ -202,9 +236,54 @@ var
   inA, inB: Boolean;
   pDest: PByte;
   d0, dEnd, dMid: Integer;
+  memo: TTyRectFillMemo;
+  segDone: Boolean;
+  segN, q, cnt: Integer;
+  segX, segCount: array[0..2] of Integer;
+  segAlpha: array[0..2] of Word;
+  pl: PLongWord;
+
+  { the brush on one pixel, through the memo }
+  procedure PutOne(P: PLongWord; AAlpha: Word; AX, AY: Integer);
+  var
+    key: QWord;
+    h: LongWord;
+  begin
+    { the brush leaves a pixel this faint as it is }
+    if AAlpha <= $80 then Exit;
+    key := QWord(P^) or (QWord(AAlpha) shl 32) or (QWord(1) shl 48);
+    h := (P^ xor (P^ shr 15) xor (LongWord(AAlpha) * 2654435761)) and (cRectMemoSize - 1);
+    if memo.Keys[h] = key then
+    begin
+      P^ := memo.Res[h];
+      Exit;
+    end;
+    brush.MoveTo(@ctx, P, AX, AY);
+    brush.PutNextPixels(@ctx, AAlpha, 1);
+    memo.Keys[h] := key;
+    memo.Res[h] := P^;
+  end;
+
 begin
   ABmp.SolidBrush(brush, AColor, ABmp.AntialiasingDrawMode);
   if brush.DoesNothing then Exit;
+  { the memo for this colour and mode; a solid brush in the bitmap's own
+    pixel format only }
+  memo := nil;
+  if (AMemo is TTyRectFillMemo) and (ABmp.Colorspace = TBGRAPixelColorspace) then
+  begin
+    memo := TTyRectFillMemo(AMemo);
+    if not memo.Ready or (LongWord(memo.Color) <> LongWord(AColor))
+      or (memo.Mode <> ABmp.AntialiasingDrawMode) then
+    begin
+      FillChar(memo.Keys, SizeOf(memo.Keys), 0);
+      memo.Color := AColor;
+      memo.Mode := ABmp.AntialiasingDrawMode;
+      memo.Ready := True;
+    end;
+  end;
+  segDone := False;
+  segN := 0;
   { TFillRectangleInfo.Create }
   if y > y2 then
   begin
@@ -250,6 +329,72 @@ begin
     begin
       { the optimised row: nothing, or straight from x1 .. x2 }
       if not inA then Continue;
+      { [R2-L] THROUGH THE MEMO: every such row makes the same calls, so
+        they are worked out once -- (first pixel, count, coverage) at most
+        three times -- and each pixel goes through the memo }
+      if memo <> nil then
+      begin
+        if not segDone then
+        begin
+          segDone := True;
+          segN := 0;
+          x1 := (fx1 + fx1) * 0.5;
+          xr := (fx2 + fx2) * 0.5;
+          if x1 < minx then x1 := minx;
+          ix1 := Floor(x1);
+          if xr >= maxx + 1 then
+          begin
+            xr := maxx + 1;
+            ix2 := maxx;
+          end
+          else
+            ix2 := Floor(xr);
+          if ix2 > maxx then ix2 := maxx;
+          if ix1 <= ix2 then
+          begin
+            if ix1 = ix2 then
+            begin
+              tempDensity := Round((xr - x1) * 65535);
+              segX[0] := ix1; segCount[0] := 1; segAlpha[0] := tempDensity;
+              segN := 1;
+            end
+            else
+            begin
+              tempDensity := Round((ix1 + 1 - x1) * 65535);
+              segX[0] := ix1; segCount[0] := 1; segAlpha[0] := tempDensity;
+              segN := 1;
+              Inc(ix1);
+              tempDensity := Round((xr - ix2) * 65535);
+              if tempDensity < 65535 then
+              begin
+                Dec(ix2);
+                if ix2 >= ix1 then
+                begin
+                  segX[segN] := ix1; segCount[segN] := ix2 - ix1 + 1; segAlpha[segN] := 65535;
+                  Inc(segN);
+                end;
+                segX[segN] := ix2 + 1; segCount[segN] := 1; segAlpha[segN] := tempDensity;
+                Inc(segN);
+              end
+              else
+              begin
+                segX[segN] := ix1; segCount[segN] := ix2 - ix1 + 1; segAlpha[segN] := 65535;
+                Inc(segN);
+              end;
+            end;
+          end;
+        end;
+        for q := 0 to segN - 1 do
+        begin
+          pl := PLongWord(ABmp.GetPixelAddress(segX[q], yb));
+          for cnt := 0 to segCount[q] - 1 do
+          begin
+            PutOne(pl, segAlpha[q], segX[q] + cnt, yb);
+            Inc(pl);
+          end;
+        end;
+        Continue;
+      end;
       x1 := (fx1 + fx1) * 0.5;
       xr := (fx2 + fx2) * 0.5;
       if x1 < minx then x1 := minx;
@@ -2546,6 +2691,9 @@ var
         P.StrokePathGradient(stops, gx1, gy1, gx2, gy2, gr,
           AElement.Style.StrokeWidthLogical);
       end
+      else if TyRenderKeptStrokes then
+        P.StrokePathKept(TTyColor(AElement.Style.StrokeColor),
+                     AElement.Style.StrokeWidthLogical)
       else
         P.StrokePath(TTyColor(AElement.Style.StrokeColor),
                      AElement.Style.StrokeWidthLogical);
@@ -2654,6 +2802,7 @@ var
     c: TBGRAPixel;
     sub: TTyChartShape;
     pts: ArrayOfTPointF;
+    memo: TObject;
 
     { a row's polygon with BGRA's generator pinned (TyPinBgraRandom) }
     procedure PinnedPoly(AKind: Integer);
@@ -2728,6 +2877,8 @@ var
     oy := area.Top + 0.5;
     layer := TBGRABitmap.Create(area.Right - area.Left, area.Bottom - area.Top,
       BGRAPixelTransparent);
+    { what the brush made of a pixel, for every rect of this one colour }
+    memo := TyRectFillMemoNew;
     try
       layer.LineCap := pecFlat;
       for i := 0 to n - 1 do
@@ -2756,7 +2907,7 @@ var
         if (g.Kind = lgkBar) or g.Boost or (TTySymbolKind(g.SymKind) = tsyRect) then
         begin
           if AStroke then layer.RectangleAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, c, pen)
-          else TyFillRectAntialiasExact(layer, x0 - ox, y0 - oy, x1 - ox, y1 - oy, c);
+          else TyFillRectAntialiasExact(layer, x0 - ox, y0 - oy, x1 - ox, y1 - oy, c, memo);
           Continue;
         end;
         w := g.SymW * s;
@@ -2777,7 +2928,7 @@ var
               if AStroke then
                 layer.RectangleAntialias(x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c, pen)
               else
-                TyFillRectAntialiasExact(layer, x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c);
+                TyFillRectAntialiasExact(layer, x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c, memo);
             end;
           tsyRoundRect:
             begin
@@ -2809,6 +2960,7 @@ var
       end;
       bmp.PutImage(area.Left, area.Top, layer, dmDrawWithTransparency, op);
     finally
+      memo.Free;
       layer.Free;
     end;
   end;
