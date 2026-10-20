@@ -473,6 +473,18 @@ begin
     begin
       if not blitted then
       begin
+        { [R2-L] what is under the layer, and the layer, as they stand here }
+        if FProgCap and (FProgLayer <> nil) then
+        begin
+          if FProgUnder = nil then FProgUnder := TBGRABitmap.Create(bmp.Width, bmp.Height)
+          else FProgUnder.SetSize(bmp.Width, bmp.Height);
+          FProgUnder.PutImage(0, 0, bmp, dmSet);
+          if FProgSeen = nil then FProgSeen := TBGRABitmap.Create(FProgLayer.Width, FProgLayer.Height)
+          else FProgSeen.SetSize(FProgLayer.Width, FProgLayer.Height);
+          FProgSeen.PutImage(0, 0, FProgLayer, dmSet);
+          FProgBlitAt := i;
+          FProgCapUnder := True;
+        end;
         bmp.PutImage(0, 0, FProgLayer, dmDrawWithTransparency);
         blitted := True;
       end;
@@ -480,6 +492,185 @@ begin
     end;
     TyRenderElement(APainter, pe^);
   end;
+end;
+
+function TTyAdvanceChart.ProgBlitPos: Integer;
+var
+  i: Integer;
+  pe: PTyChartElement;
+begin
+  Result := -1;
+  if FPaintList = nil then Exit;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(FPaintList.PaintOrder(i));
+    if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
+    if pe^.ProgChunk > 0 then Exit(i);
+  end;
+end;
+
+procedure TTyAdvanceChart.ProgFastDrop;
+begin
+  FProgCapOk := False;
+  FProgFastFrame := False;
+  FreeAndNil(FProgUnder);
+  FreeAndNil(FProgWork);
+  FreeAndNil(FProgSeen);
+end;
+
+{ A PROGRESS FRAME'S STATIC LAYER, from the last full paint's [R2-L].
+
+  Between two progress frames nothing but the incremental layer changed:
+  the same list, the same layout, the same states, more chunks on the
+  layer. What a full static paint puts at a pixel is then a function of
+  that pixel alone -- what lies under the layer there (FProgUnder: the
+  ground, the axes and the elements before the run), the layer's pixel,
+  and what the elements after the layer and the furniture after the
+  series put down there; it changes only where the layer changed. So: the
+  pixels the layer changed (their box, against FProgSeen) start from
+  FProgUnder, take the layer as the full paint blits it, and have the
+  elements after it -- those whose paint rect meets the box, or that have
+  none -- and the break areas, the parallel axes and the titles drawn
+  again with the bitmap clipped to the box (the dirty-rect path's
+  clipped repaint, Batch 142); every other pixel is the last paint's.
+  The result is blended onto the static canvas as the full paint's
+  EndPaint blends its bitmap. Anything else -- a relayout, a state, an
+  animation, another size, PPI or device scale, a layer built again, the
+  run's first element elsewhere in the order, a switched-off fast path --
+  leaves it to the full paint. }
+function TTyAdvanceChart.ProgFastPaint(const R: TRect; APPI: Integer;
+  const AScale: TTyCanvasScale): Boolean;
+var
+  w, h, x, y, i, idx, s: Integer;
+  pa, pb: PLongWord;
+  box, clip: TRect;
+  nb: TBGRABitmap;
+  P: TTyPainter;
+  pe: PTyChartElement;
+  zr, er: TTyXYWH;
+  sc: TTyCanvasScale;
+  measurer: ITyTextMeasurer;
+
+  procedure Band(ADst: TBGRABitmap; const ABand: TRect);
+  begin
+    if (ABand.Right > ABand.Left) and (ABand.Bottom > ABand.Top) then
+      ADst.PutImagePart(ABand.Left, ABand.Top, FProgWork, ABand, dmSet);
+  end;
+
+begin
+  Result := False;
+  if GProgFastOff or not FProgCapOk or not FProgFastFrame then Exit;
+  w := R.Right - R.Left;
+  h := R.Bottom - R.Top;
+  s := Max(1, AScale.Scale);
+  if (w <> FProgCapW) or (h <> FProgCapH) or (APPI <> FProgCapPPI) or (s <> FProgCapScale) then Exit;
+  if FDirty or (FLastRect.Right <> R.Right) or (FLastRect.Bottom <> R.Bottom) then Exit;
+  if FExporting or FAnimLive or FAnimContinuous or (Length(FAnimBind) > 0)
+    or (Length(FAnimStBind) > 0) or TmAnimAny or FDrPrepDone then Exit;
+  if (FPaintList = nil) or not FPaintListValid or not FProgReuse then Exit;
+  if (FProgWork = nil) or (FProgUnder = nil) or (FProgSeen = nil) or (FProgLayer = nil)
+    or not FProgLayerOk then Exit;
+  if (FProgLayer.Width <> FProgWork.Width) or (FProgLayer.Height <> FProgWork.Height)
+    or (FProgSeen.Width <> FProgWork.Width) or (FProgSeen.Height <> FProgWork.Height)
+    or (FProgUnder.Width <> FProgWork.Width) or (FProgUnder.Height <> FProgWork.Height)
+    or (FProgLayerPPI <> APPI) or (FProgLayerScale <> s) then Exit;
+  if ProgBlitPos <> FProgBlitAt then Exit;
+  { PaintSeries' own steps before it draws a reused list }
+  FProgReuse := False;
+  FDrStaticList := nil;
+  StAnimSync;
+  AnimFlushArmed;
+  if FAnimLive or FAnimContinuous or (Length(FAnimBind) > 0)
+    or (Length(FAnimStBind) > 0) or TmAnimAny then
+  begin
+    { the full paint, as it would have gone from here }
+    FProgReuse := True;
+    Exit;
+  end;
+  { the box of the layer's changed pixels }
+  box := Rect(MaxInt, MaxInt, -1, -1);
+  for y := 0 to FProgLayer.Height - 1 do
+  begin
+    pa := PLongWord(FProgLayer.ScanLine[y]);
+    pb := PLongWord(FProgSeen.ScanLine[y]);
+    for x := 0 to FProgLayer.Width - 1 do
+    begin
+      if pa^ <> pb^ then
+      begin
+        if x < box.Left then box.Left := x;
+        if x >= box.Right then box.Right := x + 1;
+        if y < box.Top then box.Top := y;
+        if y >= box.Bottom then box.Bottom := y + 1;
+      end;
+      Inc(pa);
+      Inc(pb);
+    end;
+  end;
+  if box.Right > box.Left then
+  begin
+    { a fresh bitmap, as BeginPaint's own is, holding the last paint }
+    nb := TBGRABitmap.Create(FProgWork.Width, FProgWork.Height);
+    try
+      nb.PutImage(0, 0, FProgWork, dmSet);
+      nb.ClipRect := box;
+      nb.PutImage(0, 0, FProgUnder, dmSet);
+      nb.PutImage(0, 0, FProgLayer, dmDrawWithTransparency);
+      { the box in device px, a pixel out: what meets it is drawn again }
+      zr.X := Floor(box.Left / s) - 1;
+      zr.Y := Floor(box.Top / s) - 1;
+      zr.W := Ceil(box.Right / s) + 1 - zr.X;
+      zr.H := Ceil(box.Bottom / s) + 1 - zr.Y;
+      measurer := NewTextMeasurer(APPI);
+      P := TTyPainter.Create;
+      try
+        sc.Scale := s;
+        sc.DeviceUnits := False;
+        P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
+        clip := nb.ClipRect;
+        for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+        begin
+          idx := FPaintList.PaintOrder(i);
+          pe := FPaintList.Ref(idx);
+          { ProgRenderList's own skips; a run's elements are the layer's }
+          if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
+          if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
+          TyRenderElement(P, pe^);
+          nb.ClipRect := clip;
+        end;
+        { what the static paint draws over the series, as it draws it }
+        PaintBreakAreas(P);
+        PaintParallels(P, APPI, measurer);
+        PaintTitles(P);
+        nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
+      nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
+      { OUTSIDE THE BOX the last paint's pixels, whatever an element's own
+        clip let through there }
+      Band(nb, Rect(0, 0, nb.Width, box.Top));
+      Band(nb, Rect(0, box.Bottom, nb.Width, nb.Height));
+      Band(nb, Rect(0, box.Top, box.Left, box.Bottom));
+      Band(nb, Rect(box.Right, box.Top, nb.Width, box.Bottom));
+      FProgSeen.PutImage(0, 0, FProgLayer, dmSet);
+      FreeAndNil(FProgWork);
+      FProgWork := nb;
+      nb := nil;
+    finally
+      nb.Free;
+    end;
+  end;
+  { blended onto the static canvas as the full paint's EndPaint blends }
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(FStatic.Canvas, R, APPI, FProgWork);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  Inc(GProgFastFrames);
+  Result := True;
 end;
 
 function TTyAdvanceChart.ProgLive: Boolean;
@@ -548,6 +739,9 @@ begin
     { THE SAME LIST, more of it shown -- and on the layer already }
     StaticDrop;
     FProgReuse := True;
+    { only the layer changed: the static layer can take it in place
+      [R2-L] }
+    FProgFastFrame := True;
   end;
   InvalidateFrame;
   if AEmit then

@@ -116,6 +116,7 @@ begin
   FreeAndNil(FDrBase);
   FreeAndNil(FDrDyn);
   FreeAndNil(FProgLayer);
+  ProgFastDrop;
   FreeAndNil(FTrailLayer);
   FreeAndNil(FDzTimer);
   BrushReset;

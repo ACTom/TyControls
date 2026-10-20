@@ -727,6 +727,19 @@ type
     FProgLayerPPI: Integer;
     FProgLayerScale: Integer;   { the device scale it holds, its pixels per device px (#83) }
     FProgPainted: TTyIntegerArray;
+    { [R2-L] A PROGRESS FRAME'S STATIC LAYER IN PLACE: the last full static
+      paint's own bitmap (FProgWork), the same bitmap as it stood when the
+      incremental layer was blitted (FProgUnder), and the layer as blitted
+      then (FProgSeen). A frame that only drew chunks onto the layer
+      changes the static bitmap only where the layer changed: there it
+      starts from FProgUnder, takes the layer, and has what comes after it
+      drawn again inside those pixels -- what the full paint would put there
+      (see ProgFastPaint). FProgCap: the full paint is capturing;
+      FProgFastFrame: since the capture the static layer was dropped by
+      progress frames alone. }
+    FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
+    FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
+    FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -2461,6 +2474,13 @@ type
     procedure ProgLayerBuild(AW, AH, APPI, AScale: Integer);
     procedure ProgLayerDelta;
     procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
+    { [R2-L] the paint-order position the incremental layer is blitted at:
+      the first shown element of a run, -1 for none }
+    function ProgBlitPos: Integer;
+    { [R2-L] a progress frame's static layer from the last full paint's, on
+      FStatic's canvas; False where it cannot be (then the full paint runs) }
+    function ProgFastPaint(const R: TRect; APPI: Integer; const AScale: TTyCanvasScale): Boolean;
+    procedure ProgFastDrop;
     { the row a large element's own handler gives the pointer: the batch's
       scan, -1 for none (a candle's path has no data) }
     function LargeRowAt(AElement, AX, AY: Integer): Integer;
@@ -4680,6 +4700,12 @@ function TyChartCssCursor(const ACss: string; out ACursor: TCursor): Boolean;
 procedure TyAdvChartStPatchForTest(AOn: Boolean);
 function TyAdvChartStPatchesForTest: Integer;
 
+{ [R2-L] A progress frame's static layer kept in place (ProgFastPaint): a
+  switch that turns it off -- every progress frame paints the static layer
+  whole, the reference it must match -- and how many frames it has served. }
+procedure TyAdvChartProgFastForTest(AOn: Boolean);
+function TyAdvChartProgFastFramesForTest: Integer;
+
 implementation
 
 uses
@@ -4707,6 +4733,20 @@ var
 procedure TyAdvChartStPatchForTest(AOn: Boolean);
 begin
   GStPatchOff := not AOn;
+end;
+
+var
+  GProgFastOff: Boolean = False;
+  GProgFastFrames: Integer = 0;
+
+procedure TyAdvChartProgFastForTest(AOn: Boolean);
+begin
+  GProgFastOff := not AOn;
+end;
+
+function TyAdvChartProgFastFramesForTest: Integer;
+begin
+  Result := GProgFastFrames;
 end;
 
 function TyAdvChartStPatchesForTest: Integer;
