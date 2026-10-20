@@ -1400,9 +1400,20 @@ end;
   set by the hover and by blurSeries / allLeaveBlur. A marker model does
   not animate here (MarkerModel.isAnimationEnabled reads its own
   `animation`): no transition, the list is written. }
+{ [R2-I5] a state's twin (TTyEmphTwin.State) }
+function StTwinOf(AName: TTyStName): Byte;
+begin
+  case AName of
+    stnBlur: Result := TyTwinBlur;
+    stnSelect: Result := TyTwinSelect;
+  else
+    Result := TyTwinEmphasis;
+  end;
+end;
+
 procedure TTyAdvanceChart.StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
 var
-  k, j: Integer;
+  k, j, tw: Integer;
   el: TTyChartElement;
   nodes: TTyStNodeArray;
   has, bolder, proxy, emShow, normalShow, stShow: Boolean;
@@ -1469,11 +1480,12 @@ begin
         { a markPoint's words where its scaled path puts them; [R2-I1] a
           markPoint's or a markArea's where the emphasis textConfig does }
         { [R2-I3] where the emphasis twin stands, any marker's (a
-          markLine's too) }
-        if (n = stnEmphasis) and (Length(el.EmphTwin) > 0) then
+          markLine's too); [R2-I5] blur's and select's twins the same }
+        tw := TyEmphTwinAt(el.EmphTwin, StTwinOf(n));
+        if tw >= 0 then
         begin
-          TyStSetNum(obj, stkX, el.EmphTwin[0].Caption.X);
-          TyStSetNum(obj, stkY, el.EmphTwin[0].Caption.Y);
+          TyStSetNum(obj, stkX, el.EmphTwin[tw].Caption.X);
+          TyStSetNum(obj, stkY, el.EmphTwin[tw].Caption.Y);
         end
         else if (n = stnEmphasis) and ((el.Anim.Role = carMarkPointLabel)
           or (el.Datum.Kind = ctkMarkArea)) and (el.Anim.G[4] <> 0) then
@@ -1534,7 +1546,7 @@ end;
 
 procedure TTyAdvanceChart.StSyncMarks(AList: TTyPaintList);
 var
-  s, k: Integer;
+  s, k, tw: Integer;
   el: TTyChartElement;
   pe: PTyChartElement;
   st: TTyStElement;
@@ -1590,11 +1602,20 @@ begin
           { [R2-I3] THE LABEL AS THE HOVER LAYS IT OUT, whole: its font, its
             block, its place, its box and its ink (the emphasis style merged
             over the normal one; updateInnerText's ink where it now is) --
-            a state's opacity, paint order and visibility stay the state's }
-          if (stnEmphasis in FSt[s].Marks[k].States) and (Length(el.EmphTwin) > 0) then
+            a state's opacity, paint order and visibility stay the state's.
+            [R2-I5] As blur or select lays it out the same way (their words
+            too), emphasis over select over blur }
+          tw := -1;
+          if stnEmphasis in FSt[s].Marks[k].States then
+            tw := TyEmphTwinAt(el.EmphTwin, TyTwinEmphasis);
+          if (tw < 0) and (stnSelect in FSt[s].Marks[k].States) then
+            tw := TyEmphTwinAt(el.EmphTwin, TyTwinSelect);
+          if (tw < 0) and (stnBlur in FSt[s].Marks[k].States) then
+            tw := TyEmphTwinAt(el.EmphTwin, TyTwinBlur);
+          if tw >= 0 then
           begin
-            el.Caption := el.EmphTwin[0].Caption;
-            el.Shape := el.EmphTwin[0].Shape;
+            el.Caption := el.EmphTwin[tw].Caption;
+            el.Shape := el.EmphTwin[tw].Shape;
             { a colour the states declare, select's under emphasis' }
             if TyStHasColour(FSt[s].Marks[k].Cur, stkFill) then
             begin

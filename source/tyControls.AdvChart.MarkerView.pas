@@ -86,6 +86,8 @@ type
     Hidden: Boolean;
     { [R2-I3] see TTyMkPtLabelPic.Hold }
     Hold: IInterface;
+    { [R2-I5] see TTyMkPtLabelPic.KeepEmpty }
+    KeepEmpty: Boolean;
   end;
 
   TTyMkLinePic = record
@@ -110,6 +112,11 @@ type
       where the emphasis textConfig writes a position, calculateTextPosition
       over the Line group's own box instead of Line.beforeUpdate's place }
     EmphLbl: TTyMkLabelPic;
+    { [R2-I5] the label as blur (1) and select (2) lay it out -- their own
+      text style and words (Present False: as at rest) }
+    StateLbl: array[1..2] of TTyMkLabelPic;
+    { [R2-I5] the dash written as a word (TTyChartStyle.DashWord) }
+    DashWord: Byte;
   end;
   TTyMkLinePicArray = array of TTyMkLinePic;
 
@@ -217,6 +224,9 @@ type
     { [R2-I3] the JSON an emphasis overlay is made of, which the picture's
       references point into (nil for none) }
     Hold: IInterface;
+    { [R2-I5] built though its text is empty: a state has words to show
+      (setLabelStyle makes the Text whatever its normal text is) }
+    KeepEmpty: Boolean;
   end;
 
   TTyMkPointPic = record
@@ -255,6 +265,8 @@ type
     { [R2-I1] the label as the hover lays it out: on the path at its
       emphasis scale, under the emphasis textConfig (Present False: none) }
     EmphLbl: TTyMkPtLabelPic;
+    { [R2-I5] blur's (1) and select's (2), see TTyMkLinePic.StateLbl }
+    StateLbl: array[1..2] of TTyMkPtLabelPic;
   end;
   TTyMkPointPicArray = array of TTyMkPointPic;
 
@@ -294,6 +306,8 @@ type
     { [R2-I1] the label under the emphasis textConfig (Present False: the
       state says no place of its own) }
     EmphLbl: TTyMkPtLabelPic;
+    { [R2-I5] blur's (1) and select's (2), see TTyMkLinePic.StateLbl }
+    StateLbl: array[1..2] of TTyMkPtLabelPic;
   end;
   TTyMkAreaPicArray = array of TTyMkAreaPic;
 
@@ -559,9 +573,12 @@ end;
   [A first draft replaced the normal rich: the fixture says merge.] False
   where the emphasis says nothing;
   AHold owns what ALevels points into. [R2-I1's EmphTextConfig took
-  position, distance, offset and rotate alone.] }
-function EmphLevels(const lv, LB: TMkLevels; const AExclude: array of string;
-  out ALevels: TMkLevels; out AHold: IInterface): Boolean;
+  position, distance, offset and rotate alone.] [R2-I5] Any special state's
+  the same way (AState 'emphasis', 'blur' or 'select': setLabelStyle builds
+  each one's style alike). }
+function EmphLevels(const lv, LB: TMkLevels; const AState: string;
+  const AExclude: array of string; out ALevels: TMkLevels;
+  out AHold: IInterface): Boolean;
 const
   { TEXT_PROPS_WITH_GLOBAL }
   cInherit: array[0..7] of string = ('fontStyle', 'fontWeight', 'fontSize', 'fontFamily',
@@ -579,7 +596,7 @@ begin
   Result := False;
   ALevels := LB;
   AHold := nil;
-  EL := Sub(Sub(lv, 'emphasis'), 'label');
+  EL := Sub(Sub(lv, AState), 'label');
   names := nil;
   for j := 0 to High(EL) do
     for i := 0 to High(EL[j]) do
@@ -818,6 +835,17 @@ begin
   end;
 end;
 
+{ [R2-I5] THE WORD a dash is written as, for TTyChartStyle.DashWord: 1
+  'dashed', 2 'dotted', 0 anything else (lengths, or none) -- the canvas
+  normalises a word against the width it strokes at, brush by brush }
+function DashWordOf(AType: TJSONData): Byte;
+begin
+  Result := 0;
+  if (AType = nil) or (AType.JSONType <> jtString) then Exit;
+  if AType.AsString = 'dashed' then Result := 1
+  else if AType.AsString = 'dotted' then Result := 2;
+end;
+
 function NotAroundZero(A: Double): Boolean; inline;
 begin
   Result := (A > 5e-5) or (A < -5e-5);
@@ -958,19 +986,21 @@ end;
   asked with status 'emphasis'; where it answers nothing (no formatter, or
   one neither a string nor a function) the normal text stays (retrieve2).
   True where the emphasis has words of its own. [Was: the emphasis showed
-  the normal text whatever its formatter said.] }
-function EmphText(const lv: TMkLevels; const AIn: TTyMkPicInput;
+  the normal text whatever its formatter said.] [R2-I5] getLabelText asks
+  every special state so: AState 'emphasis', 'blur' or 'select', a handler
+  asked with that status. [Was: blur and select showed the normal text.] }
+function EmphText(const lv: TMkLevels; const AState: string; const AIn: TTyMkPicInput;
   const AKind, AName, AValueText: string; ADataIndex: Integer;
   out AText: string): Boolean;
 var d: TJSONData;
 begin
   Result := False;
   AText := '';
-  d := Chain(Sub(Sub(lv, 'emphasis'), 'label'), 'formatter');
+  d := Chain(Sub(Sub(lv, AState), 'label'), 'formatter');
   if (d = nil) or (d.JSONType <> jtString) then Exit;
   if TyChartIsHandlerRef(d.AsString) then
     AText := MkHandlerText(d.AsString, AIn, AKind, AName, AValueText, ADataIndex,
-      'emphasis')
+      AState)
   else if AIn.SeriesName.Kind = mvkUndef then
     AText := FormatTpl(d.AsString, ['undefined', AName, AValueText])
   else
@@ -982,7 +1012,8 @@ end;
 
 { [R2-I3] the hover's markLine label under an emphasis position (below) }
 procedure EmphLinePlace(const P: TTyMkLinePic; const AItemLv, ALB: TMkLevels;
-  APos: TJSONData; AScale: Double; var ALab: TTyMkLabelPic); forward;
+  APos: TJSONData; AScale: Double; var ALab: TTyMkLabelPic;
+  const AState: string = 'emphasis'); forward;
 
 function TyMkLinePictures(const ABlock: TTyMkBlock;
   const AIn: TTyMkPicInput): TTyMkLinePicArray;
@@ -1142,6 +1173,9 @@ var
     { [R2-I4] the hover's words }
     et: string;
     hasEt: Boolean;
+    { [R2-I5] blur's and select's }
+    sti: Integer;
+    stName: string;
 
   { THE TEXT'S STYLE AND LINE.beforeUpdate's PLACE over the label levels
     ALB -- the rest label's, and [R2-I3] the hover's (the emphasis text
@@ -1376,7 +1410,9 @@ var
     else defFill := '#333';
     label_.DefFill := defFill;
     label_.DefStroke := TyMkOutsideStroke(AIn.Background, AIn.IsDark);
-    label_.HasInk := str <> '';
+    { [R2-I5] the words this layout shows -- a state's own [was: the rest
+      text's, so a state's words over an empty rest text had no ink] }
+    label_.HasInk := label_.Text <> '';
     if label_.HasInk then
     begin
       useDefault := not hasFc;
@@ -1426,6 +1462,8 @@ var
     lineType := Chain(LS, 'type');
     P.DashType := lineType;
     P.Dash := ResolveDash(lineType, P.LineWidth);
+    { [R2-I5] a word, measured again against the width a state draws }
+    P.DashWord := DashWordOf(lineType);
     d := Chain(LS, 'dashOffset');
     if d <> nil then P.DashOffset := NumOf(d) else P.DashOffset := 0;
     if IsNan(lsOpacity) then P.Opacity := 1 else P.Opacity := lsOpacity;
@@ -1510,8 +1548,9 @@ var
     EL := Sub(Sub(itemLv, 'emphasis'), 'label');
     emphPos := Chain(EL, 'position');
     if not Truthy(emphPos) then emphPos := nil;
-    hasEt := EmphText(itemLv, AIn, 'markLine', name, ValString(rawVal), L.DataIndex, et);
-    if EmphLevels(itemLv, LB, ['position', 'distance', 'align', 'verticalAlign',
+    hasEt := EmphText(itemLv, 'emphasis', AIn, 'markLine', name, ValString(rawVal),
+      L.DataIndex, et);
+    if EmphLevels(itemLv, LB, 'emphasis', ['position', 'distance', 'align', 'verticalAlign',
       'baseline'], LBE, hold) or (emphPos <> nil) or hasEt then
     begin
       lab2 := label_;
@@ -1522,7 +1561,33 @@ var
       lab2.Hidden := False;
       if emphPos <> nil then EmphLinePlace(P, itemLv, LB, emphPos, s, lab2);
       P.EmphLbl := lab2;
+      if lab2.Text <> '' then label_.KeepEmpty := True;
     end;
+    { [R2-I5] BLUR'S AND SELECT'S the same way: their own text style (the
+      opacity aside -- the states' own), place and words }
+    for sti := 1 to 2 do
+    begin
+      if sti = 1 then stName := 'blur' else stName := 'select';
+      EL := Sub(Sub(itemLv, stName), 'label');
+      emphPos := Chain(EL, 'position');
+      if not Truthy(emphPos) then emphPos := nil;
+      hasEt := EmphText(itemLv, stName, AIn, 'markLine', name, ValString(rawVal),
+        L.DataIndex, et);
+      if EmphLevels(itemLv, LB, stName, ['position', 'distance', 'align', 'verticalAlign',
+        'baseline', 'opacity'], LBE, hold) or (emphPos <> nil) or hasEt then
+      begin
+        lab2 := label_;
+        if hasEt then lab2.Text := et;
+        LayText(LBE, lab2);
+        lab2.Hold := hold;
+        lab2.Hidden := False;
+        if emphPos <> nil then EmphLinePlace(P, itemLv, LB, emphPos, s, lab2, stName);
+        P.StateLbl[sti] := lab2;
+        if lab2.Text <> '' then label_.KeepEmpty := True;
+      end;
+    end;
+    { an empty rest text keeps nothing of its own to show }
+    if label_.Text <> '' then label_.KeepEmpty := False;
     P.Lbl := label_;
   end;
 
@@ -1859,8 +1924,9 @@ var
     fs: Integer;
     pieces: TTyRtPieceArray;
   begin
-    if (not B.Present) or (B.Text = '') then Exit;
-    if not B.HasInk and not B.Rt.Needed then Exit;
+    { [R2-I5] an empty one too where a state has words [was: nothing] }
+    if (not B.Present) or ((B.Text = '') and not B.KeepEmpty) then Exit;
+    if not B.HasInk and not B.Rt.Needed and not B.KeepEmpty then Exit;
     if B.HasTransform then
     begin
       x := B.Transform[4];
@@ -1883,7 +1949,8 @@ var
       fs := TyOptFontSize(B.FontSize, fs);  // CSS px [Batch 83]
     w := 0;
     h := 0;
-    if AMeasurer <> nil then
+    { an empty text's box is its anchor (no line to measure) }
+    if (AMeasurer <> nil) and (B.Text <> '') then
       AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
     el := Blank(B.Z2);
     el.Ignore := B.Hidden;
@@ -1918,7 +1985,7 @@ var
     if not B.HasTransform then el.Caption.RotationRad := 0;
     { THE BLOCK, in the skin's outside ink and halo where the style gives
       none [Batch 86] }
-    if B.Rt.Needed then
+    if B.Rt.Needed and (B.Text <> '') then
     begin
       pieces := MkRtPieces(B.Rt, B.Text, el.Caption.FontName,
         el.Caption.FontSizeLogical, el.Caption.FontWeight, AInk.RtGlobal,
@@ -1972,7 +2039,7 @@ var
   end;
 
 var
-  at: Integer;
+  at, k: Integer;
   tmp: TTyPaintList;
   lel: TTyChartElement;
 begin
@@ -1994,6 +2061,7 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := Copy(APics[i].Dash);
+      el.Style.DashWord := APics[i].DashWord;
       el.Style.DashOffsetLogical := APics[i].DashOffset;
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
       { THE POINTER'S RIBBON: zrender's Path.contain widens a stroke with no
@@ -2025,12 +2093,33 @@ begin
           SetLength(lel.EmphTwin, 1);
           lel.EmphTwin[0].Caption := tmp.Element(0).Caption;
           lel.EmphTwin[0].Shape := tmp.Element(0).Shape;
+          lel.EmphTwin[0].State := TyTwinEmphasis;
           AList.SetElement(at, lel);
         end;
       finally
         tmp.Free;
       end;
     end;
+    { [R2-I5] and as blur and select lay it out }
+    for k := 1 to 2 do
+      if APics[i].StateLbl[k].Present and (AList.Count > at) then
+      begin
+        tmp := TTyPaintList.Create;
+        try
+          Lbl(APics[i].StateLbl[k], tmp);
+          if tmp.Count > 0 then
+          begin
+            lel := AList.Element(at);
+            SetLength(lel.EmphTwin, Length(lel.EmphTwin) + 1);
+            lel.EmphTwin[High(lel.EmphTwin)].Caption := tmp.Element(0).Caption;
+            lel.EmphTwin[High(lel.EmphTwin)].Shape := tmp.Element(0).Shape;
+            lel.EmphTwin[High(lel.EmphTwin)].State := k;
+            AList.SetElement(at, lel);
+          end;
+        finally
+          tmp.Free;
+        end;
+      end;
     MkTarget(AList, first, ctkMarkLine, AHostSeries,
       ABlock.Lines[APics[i].Item].DataIndex, ABlock.Silent);
   end;
@@ -2260,7 +2349,7 @@ end;
   alignment stays beforeUpdate's (it sets the style's), its turn and offset
   ride along: the move is the anchor's. }
 procedure EmphLinePlace(const P: TTyMkLinePic; const AItemLv, ALB: TMkLevels;
-  APos: TJSONData; AScale: Double; var ALab: TTyMkLabelPic);
+  APos: TJSONData; AScale: Double; var ALab: TTyMkLabelPic; const AState: string);
 var
   box, r: TTyXYWH;
   has: Boolean;
@@ -2298,7 +2387,7 @@ begin
   box := Default(TTyXYWH);
   if Length(P.Path) > 0 then
   begin
-    d := Chain(Sub(Sub(AItemLv, 'emphasis'), 'lineStyle'), 'width');
+    d := Chain(Sub(Sub(AItemLv, AState), 'lineStyle'), 'width');
     if d <> nil then w := NumOf(d) else w := P.LineWidth;
     r := TyZrBBox(P.Path);
     if (P.Stroke <> '') and (P.Stroke <> 'none') then
@@ -2307,7 +2396,7 @@ begin
   end;
   Sym(P.FromSym);
   Sym(P.ToSym);
-  d := Chain(Sub(Sub(AItemLv, 'emphasis'), 'label'), 'distance');
+  d := Chain(Sub(Sub(AItemLv, AState), 'label'), 'distance');
   if d = nil then d := Chain(ALB, 'distance');
   if d = nil then dist := 5
   else if d.JSONType = jtArray then dist := NaN
@@ -2613,6 +2702,10 @@ var
     { [R2-I4] the name, and the hover's words }
     nm, et: string;
     hasEt: Boolean;
+    { [R2-I5] blur's and select's }
+    sti: Integer;
+    stName: string;
+    lps: TTyMkPtLabelPic;
   begin
     lv := nil;
     SetLength(lv, 3);
@@ -2856,9 +2949,24 @@ var
       [R2-I3] under the whole emphasis label (its text style too) }
     ratio2 := P.EmphRatio;
     if IsNan(ratio2) or IsInfinite(ratio2) then ratio2 := 1;
-    hasOv := EmphLevels(lv, LB, [], LBE, hold);
-    hasEt := EmphText(lv, AIn, 'markPoint', nm, sv, ABlock.Points[P.Item].DataIndex, et);
-    if (ratio2 <> 1) or hasOv or hasEt then
+    hasOv := EmphLevels(lv, LB, 'emphasis', [], LBE, hold);
+    hasEt := EmphText(lv, 'emphasis', AIn, 'markPoint', nm, sv,
+      ABlock.Points[P.Item].DataIndex, et);
+    { the stroke the emphasis style draws: its own borderColor and
+      borderWidth over the rest's -- the rect grows by it }
+    ES := Sub(Sub(lv, 'emphasis'), 'itemStyle');
+    sc2 := P.StyleStroke;
+    lw2 := P.StyleLineWidth;
+    d := Chain(ES, 'borderColor');
+    if d <> nil then sc2 := StrOf(d);
+    d := Chain(ES, 'borderWidth');
+    if d <> nil then lw2 := NumOf(d);
+    hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
+    { [R2-I5] and a pen that grows or shrinks the rect moves the label too
+      (updateInnerText on the path as the state draws it) [was: laid out
+      again only for a scale, a text style or words of its own] }
+    if (ratio2 <> 1) or hasOv or hasEt or (hasStroke2 <> hasStroke)
+      or (hasStroke2 and (lw2 <> P.StyleLineWidth)) then
     begin
       hasL2 := LocalTransformS(P.X, P.Y, P.Rotation, P.ScaleX * ratio2,
         P.ScaleY * ratio2, l2);
@@ -2870,16 +2978,6 @@ var
         ls2 := Sqrt(Abs(g2[0] * g2[3] - g2[2] * g2[1]))
       else
         ls2 := 1;
-      { the stroke the emphasis style draws: its own borderColor and
-        borderWidth over the rest's -- the rect grows by it }
-      ES := Sub(Sub(lv, 'emphasis'), 'itemStyle');
-      sc2 := P.StyleStroke;
-      lw2 := P.StyleLineWidth;
-      d := Chain(ES, 'borderColor');
-      if d <> nil then sc2 := StrOf(d);
-      d := Chain(ES, 'borderWidth');
-      if d <> nil then lw2 := NumOf(d);
-      hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
       lp2 := lp;
       { [R2-I4] its own words, where the emphasis formats them }
       if hasEt then lp2.Text := et;
@@ -2907,7 +3005,41 @@ var
       lp.HasEmphPlace := True;
       lp.EmphDX := x2 - x1;
       lp.EmphDY := y2 - y1;
+      if lp2.Text <> '' then lp.KeepEmpty := True;
     end;
+    { [R2-I5] BLUR'S AND SELECT'S LABEL: its own text style (the opacity
+      aside -- the states' own) and words, on the path at rest grown by the
+      stroke that state draws }
+    for sti := 1 to 2 do
+    begin
+      if sti = 1 then stName := 'blur' else stName := 'select';
+      hasEt := EmphText(lv, stName, AIn, 'markPoint', nm, sv,
+        ABlock.Points[P.Item].DataIndex, et);
+      ES := Sub(Sub(lv, stName), 'itemStyle');
+      sc2 := P.StyleStroke;
+      lw2 := P.StyleLineWidth;
+      d := Chain(ES, 'borderColor');
+      if d <> nil then sc2 := StrOf(d);
+      d := Chain(ES, 'borderWidth');
+      if d <> nil then lw2 := NumOf(d);
+      hasStroke2 := (sc2 <> '') and (sc2 <> 'none') and (lw2 > 0);
+      if not (EmphLevels(lv, LB, stName, ['opacity'], LBE, hold) or hasEt
+        or (hasStroke2 <> hasStroke) or (hasStroke2 and (lw2 <> P.StyleLineWidth))) then
+        Continue;
+      lps := lp;
+      lps.HasEmphPlace := False;
+      if hasEt then lps.Text := et;
+      StyleLabel(LBE, gts, AIn, s, RectThrough(TyZrStrokeRect(P.BBox, Length(P.Path),
+        hasStroke2, hasFill, lw2, P.LineScale), P.HasGlobal, P.Global), fill, hasFill, True,
+        P.StyleFill, defOp, P.ShapeType = 'pin', maxZ2, lps);
+      lps.Hold := hold;
+      lps.Hidden := False;
+      lps.KeepEmpty := False;
+      P.StateLbl[sti] := lps;
+      if lps.Text <> '' then lp.KeepEmpty := True;
+    end;
+    { an empty rest text keeps nothing of its own to show }
+    if lp.Text <> '' then lp.KeepEmpty := False;
     P.Lbl := lp;
   end;
 
@@ -2968,9 +3100,10 @@ begin
   Result := 0;
   AGlobal := AInk.RtGlobal;
   defStroke := 0;
-  if (not B.Present) or (B.Text = '') then Exit;
+  { [R2-I5] an empty one too where a state has words [was: nothing] }
+  if (not B.Present) or ((B.Text = '') and not B.KeepEmpty) then Exit;
   { a rich label has no one-run ink and is drawn as its block [Batch 86] }
-  if not B.HasInk and not B.Rt.Needed then Exit;
+  if not B.HasInk and not B.Rt.Needed and not B.KeepEmpty then Exit;
   if IsNan(B.InnerX) or IsNan(B.InnerY) then Exit;
     if B.HasTransform then
     begin
@@ -2993,7 +3126,8 @@ begin
       fs := TyOptFontSize(B.FontSize, fs);  // CSS px [Batch 83]
     w := 0;
     h := 0;
-    if AMeasurer <> nil then
+    { an empty text's box is its anchor (no line to measure) }
+    if (AMeasurer <> nil) and (B.Text <> '') then
       AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
     el := Default(TTyChartElement);
     el.Z := Trunc(ABlock.Z);
@@ -3043,7 +3177,7 @@ begin
     { THE BLOCK, in the ink the one-run caption would have had where the
       style gives none: the band's inside (the host's fill as its halo),
       the skin's outside ink and halo otherwise [Batch 86] }
-    if B.Rt.Needed then
+    if B.Rt.Needed and (B.Text <> '') then
     begin
       if B.Inside then
       begin
@@ -3099,6 +3233,7 @@ begin
   SetLength(AEl.EmphTwin, 1);
   AEl.EmphTwin[0].Caption := e2.Caption;
   AEl.EmphTwin[0].Shape := e2.Shape;
+  AEl.EmphTwin[0].State := TyTwinEmphasis;
   AEl.Anim.G[2] := e2.Caption.X - AEl.Caption.X;
   AEl.Anim.G[3] := e2.Caption.Y - AEl.Caption.Y;
   AEl.Anim.G[4] := 1;
@@ -3116,6 +3251,32 @@ begin
   AEl.Caption.EmphColour := e2.Caption.Colour;
   AEl.Caption.EmphStrokeColour := e2.Caption.StrokeColour;
   AEl.Caption.EmphStrokeWidthLogical := e2.Caption.StrokeWidthLogical;
+end;
+
+{ [R2-I5] BLUR'S AND SELECT'S LABEL onto the rest label AEl: each laid out
+  as its state lays it out, a twin after the emphasis one }
+procedure StampStateTwins(var AEl: TTyChartElement; const AStates: array of TTyMkPtLabelPic;
+  const ABlock: TTyMkBlock; const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer);
+var
+  tmp: TTyPaintList;
+  k, n: Integer;
+begin
+  for k := 0 to High(AStates) do
+  begin
+    if not AStates[k].Present then Continue;
+    tmp := TTyPaintList.Create;
+    try
+      if (EmitLabel(AStates[k], ABlock, AInk, AMeasurer, tmp) <= 0) or (tmp.Count = 0) then
+        Continue;
+      n := Length(AEl.EmphTwin);
+      SetLength(AEl.EmphTwin, n + 1);
+      AEl.EmphTwin[n].Caption := tmp.Element(0).Caption;
+      AEl.EmphTwin[n].Shape := tmp.Element(0).Shape;
+      AEl.EmphTwin[n].State := k + 1;
+    finally
+      tmp.Free;
+    end;
+  end;
 end;
 
 function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkBlock;
@@ -3173,6 +3334,8 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].StyleLineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].StyleDash, APics[i].StyleLineWidth);
+      { [R2-I5] a word, measured again against the width a state draws }
+      el.Style.DashWord := DashWordOf(APics[i].StyleDash);
       el.Style.DashOffsetLogical := APics[i].StyleDashOffset;
     end;
     if not IsNan(APics[i].StyleOpacity) then
@@ -3229,6 +3392,13 @@ begin
         end;
         AList.SetElement(k, lel);
       end;
+    { [R2-I5] and as blur and select lay it out }
+    if AList.Count > at then
+    begin
+      lel := AList.Element(at);
+      StampStateTwins(lel, APics[i].StateLbl, ABlock, AInk, AMeasurer);
+      AList.SetElement(at, lel);
+    end;
     MkTarget(AList, first, ctkMarkPoint, AHostSeries,
       ABlock.Points[APics[i].Item].DataIndex, ABlock.Silent);
   end;
@@ -3262,6 +3432,35 @@ var
   { [R2-I4] the hover's words }
   et: string;
   hasEt: Boolean;
+  { [R2-I5] blur's and select's }
+  sti: Integer;
+  stName: string;
+  rect2: TTyXYWH;
+  penMoves: Boolean;
+
+  { [R2-I5] THE RECT A STATE LAYS THE LABEL ON: the polygon's box grown by
+    the pen that state draws (its own borderColor and borderWidth over the
+    rest's -- Path.getBoundingRect under the state's style); APenMoves where
+    that is not the rest's [was: the rest's rect under every state] }
+  function StateRect(const AState: string; out APenMoves: Boolean): TTyXYWH;
+  var
+    ES: TMkLevels;
+    e: TJSONData;
+    lw2: Double;
+    has2: Boolean;
+  begin
+    ES := Sub(Sub(lv, AState), 'itemStyle');
+    lw2 := P.LineWidth;
+    e := Chain(ES, 'borderWidth');
+    if e <> nil then lw2 := NumOf(e);
+    has2 := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none');
+    e := Chain(ES, 'borderColor');
+    if e <> nil then has2 := not ((e.JSONType = jtString) and (e.AsString = 'none'));
+    has2 := has2 and (lw2 > 0);
+    APenMoves := (has2 <> hasStroke) or (has2 and (lw2 <> P.LineWidth));
+    Result := TyZrStrokeRect(P.BBox, Length(P.Path), has2, hasFill, lw2, 1);
+  end;
+
 begin
   Result := nil;
   if (not ABlock.Present) or (ABlock.Kind <> mkArea) then Exit;
@@ -3383,18 +3582,41 @@ begin
         { [R2-I1] and under the emphasis textConfig, where it says a key;
           [R2-I3] under the whole emphasis label; [R2-I4] in the words its
           formatter gives }
-        hasEt := EmphText(lv, AIn, 'markArea', name, JsStringOf(VGet(lv[0], 'value')),
-          A.DataIndex, et);
-        if EmphLevels(lv, LB, [], LBE, hold) or hasEt then
+        hasEt := EmphText(lv, 'emphasis', AIn, 'markArea', name,
+          JsStringOf(VGet(lv[0], 'value')), A.DataIndex, et);
+        rect2 := StateRect('emphasis', penMoves);
+        if EmphLevels(lv, LB, 'emphasis', [], LBE, hold) or hasEt or penMoves then
         begin
           lp2 := lp;
           if hasEt then lp2.Text := et;
-          StyleLabel(LBE, gts, AIn, s, P.Rect, inherit, hasFill,
+          StyleLabel(LBE, gts, AIn, s, rect2, inherit, hasFill,
             P.FillData = nil, P.Fill, NaN, False, maxZ2, lp2);
           lp2.Hold := hold;
           lp2.Hidden := False;
           P.EmphLbl := lp2;
+          if lp2.Text <> '' then lp.KeepEmpty := True;
         end;
+        { [R2-I5] blur's and select's (the opacity aside -- the states'
+          own) }
+        for sti := 1 to 2 do
+        begin
+          if sti = 1 then stName := 'blur' else stName := 'select';
+          hasEt := EmphText(lv, stName, AIn, 'markArea', name,
+            JsStringOf(VGet(lv[0], 'value')), A.DataIndex, et);
+          rect2 := StateRect(stName, penMoves);
+          if not (EmphLevels(lv, LB, stName, ['opacity'], LBE, hold) or hasEt or penMoves) then
+            Continue;
+          lp2 := lp;
+          lp2.KeepEmpty := False;
+          if hasEt then lp2.Text := et;
+          StyleLabel(LBE, gts, AIn, s, rect2, inherit, hasFill,
+            P.FillData = nil, P.Fill, NaN, False, maxZ2, lp2);
+          lp2.Hold := hold;
+          lp2.Hidden := False;
+          P.StateLbl[sti] := lp2;
+          if lp2.Text <> '' then lp.KeepEmpty := True;
+        end;
+        if lp.Text <> '' then lp.KeepEmpty := False;
       end;
       P.Lbl := lp;
     end;
@@ -3462,6 +3684,8 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
+      { [R2-I5] a word, measured again against the width a state draws }
+      el.Style.DashWord := DashWordOf(APics[i].Dash);
       el.Style.DashOffsetLogical := APics[i].DashOffset;
     end
     else if (APics[i].LineWidth > 0) and (APics[i].Stroke = '')
@@ -3471,6 +3695,7 @@ begin
       el.Style.StrokeGradient := g;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
+      el.Style.DashWord := DashWordOf(APics[i].Dash);
       el.Style.DashOffsetLogical := APics[i].DashOffset;
     end;
     { getBoundingRect: the polygon's box grown by its stroke [Batch 105] }
@@ -3487,6 +3712,13 @@ begin
     begin
       lel := AList.Element(at);
       StampEmphLayout(lel, APics[i].EmphLbl, ABlock, AInk, AMeasurer);
+      AList.SetElement(at, lel);
+    end;
+    { [R2-I5] and as blur and select lay it out }
+    if AList.Count > at then
+    begin
+      lel := AList.Element(at);
+      StampStateTwins(lel, APics[i].StateLbl, ABlock, AInk, AMeasurer);
       AList.SetElement(at, lel);
     end;
     MkTarget(AList, first, ctkMarkArea, AHostSeries,
