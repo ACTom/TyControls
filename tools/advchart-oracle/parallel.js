@@ -767,6 +767,16 @@ C('visualmap-pieces', 'layout', 'a piecewise visualMap on the default dimension 
   base({ visualMap: { type: 'piecewise', seriesIndex: 0, pieces: [{ min: 0, max: 3, color: '#00aa00' }, { min: 3, max: 6, color: '#aa0000' }], outOfRange: { color: '#999999' }, show: false },
     parallelAxis: [{ dim: 0 }, { dim: 1 }],
     series: [PS({ data: [[1, 2, 1], [2, 3, 4], [3, 1, 9]] }), PS({ data: [[2, 2, 2]] })] }));
+C('visualmap-categories', 'layout', "[R2-I6] a piecewise visualMap's categories on dimension 1, a string column no axis reads (guessOrdinal types it ordinal and the store keeps the text), with another string column before it; a category the list lacks is out of range; a second, continuous visualMap on a numeric column no axis reads (a numeric string is a number)",
+  base({ visualMap: [
+      { type: 'piecewise', seriesIndex: 0, categories: ['x', 'y', 'z'], dimension: 1, inRange: { color: ['#aa0000', '#00aa00', '#0000aa'] }, outOfRange: { color: '#cccccc' }, show: false },
+      { type: 'continuous', seriesIndex: 1, dimension: 0, min: 0, max: 10, inRange: { color: ['#0000ff', '#ff0000'] }, show: false },
+    ],
+    parallelAxis: [{ dim: 2 }, { dim: 3 }],
+    series: [
+      PS({ lineStyle: { opacity: 0.05 }, inactiveOpacity: 0, activeOpacity: 0.01, data: [['n0', 'x', 1, 2], ['n1', 'z', 3, 1], ['n2', 'w', 2, 2], ['n3', 'y', 1, 3]] }),
+      PS({ data: [[2, 'x', 1, 2], [8, 'y', 2, 1], ['5', 'z', 3, 3]] }),
+    ] }));
 C('legend', 'layout', 'two named series and a legend: the icons; toggling one off rescales the axes',
   base({ legend: {}, parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }],
     series: [PS({ name: 'alpha', data: [[1, 2, 3], [2, 3, 1]] }), PS({ name: 'beta', data: [[10, 20, 30]] })] }),
@@ -1092,6 +1102,10 @@ function guards(cases) {
   G('the visualMap colours the stroke', JSON.stringify(item('visualmap', 0, 0).stroke) !== JSON.stringify(item('visualmap', 0, 4).stroke));
   G("the visualMap's opacity is overwritten", get('visualmap').record.series[0].items.every(i => num(i.opacity) === 0.45));
   G('outOfRange greys a row', JSON.stringify(item('visualmap-pieces', 0, 2).stroke) === '[153,153,153,1]');
+  G('a category on a string column no axis reads colours its line', JSON.stringify(item('visualmap-categories', 0, 0).stroke) === '[170,0,0,1]'
+    && JSON.stringify(item('visualmap-categories', 0, 1).stroke) === '[0,0,170,1]' && JSON.stringify(item('visualmap-categories', 0, 2).stroke) === '[204,204,204,1]'
+    && num(item('visualmap-categories', 0, 0).opacity) === 0.05);
+  G('a numeric column no axis reads is a number to a continuous visualMap', JSON.stringify(item('visualmap-categories', 1, 0).stroke) !== JSON.stringify(item('visualmap-categories', 1, 1).stroke));
   G('the legend toggle rescales an axis', num(get('legend').steps[0].record.parallels[0].axes[0].scale[1]) < num(get('legend').record.parallels[0].axes[0].scale[1]));
   G('a hover lifts the stroke and z2', (() => { const s = get('hover').steps[0].states.find(r => r.dataIndex === 0); return s.states.indexOf('emphasis') >= 0 && s.z2 === 20; })());
   G('the item tooltip names the row by its first category and shows the last numeric coordinate', (() => { const t = get('hover').steps[0].tooltip;

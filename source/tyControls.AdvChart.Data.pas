@@ -514,6 +514,10 @@ type
       items is text that is no number and not '-'. AOriginal: a series' own
       data, where an item that is not an array ends the guess. }
     procedure GuessRawOrdinals(AOriginal: Boolean);
+    { [R2-I6] that guess for ONE position, whoever reads it: what a column
+      no axis owns would be typed by upstream (a parallel series' extra
+      positions) }
+    function RawPosGuessOrdinal(APos: Integer; AOriginal: Boolean): Boolean;
     { upstream's defaultedTooltip and defaultedLabel, as raw positions. Unset,
       a consumer keeps its own rule; set EMPTY, there are none. }
     procedure SetTooltipPositions(const APos: TTyIntegerArray);
@@ -2392,10 +2396,7 @@ procedure TTyDataStore.GuessRawOrdinals(AOriginal: Boolean);
 var
   width, p, i, k, n: Integer;
   it: TTyRawItem;
-  c: TTyDataValue;
-  read, verdict, decided: Boolean;
-  num: Double;
-  mask: TFPUExceptionMask;
+  read: Boolean;
 begin
   if FRawItems = nil then Exit;
   n := Min(5, FRawCount);
@@ -2405,51 +2406,64 @@ begin
     it := RawItemByRaw(i);
     if Length(it.Cells) > width then width := Length(it.Cells);
   end;
+  for p := 0 to width - 1 do
+  begin
+    read := False;
+    for k := 0 to DimCount - 1 do
+      if RawDimPos(k) = p then read := True;
+    if read or RawDimInfo(p).HasType then Continue;
+    if RawPosGuessOrdinal(p, AOriginal) then SetRawDimType(p, ddtOrdinal);
+  end;
+end;
+
+function TTyDataStore.RawPosGuessOrdinal(APos: Integer; AOriginal: Boolean): Boolean;
+var
+  i, n: Integer;
+  it: TTyRawItem;
+  c: TTyDataValue;
+  decided: Boolean;
+  num: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := False;
+  if (FRawItems = nil) or (APos < 0) then Exit;
+  n := Min(5, FRawCount);
+  decided := False;
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exPrecision]);
   try
-    for p := 0 to width - 1 do
+    for i := 0 to n - 1 do
     begin
-      read := False;
-      for k := 0 to DimCount - 1 do
-        if RawDimPos(k) = p then read := True;
-      if read or RawDimInfo(p).HasType then Continue;
-      verdict := False;
-      decided := False;
-      for i := 0 to n - 1 do
+      it := RawItemByRaw(i);
+      if it.Shape in [rshArray, rshObject] then
       begin
-        it := RawItemByRaw(i);
-        if it.Shape in [rshArray, rshObject] then
-        begin
-          if p > High(it.Cells) then Continue;
-          c := it.Cells[p];
-        end
-        else if AOriginal then
-          Break // a non-array item: upstream answers "not ordinal"
-        else
-          Continue;
-        { detectValue: a finite Number() that is not '' -- not ordinal;
-          other text but '-' -- ordinal; anything else tells nothing. }
-        case c.Kind of
-          dvkNumber:
-            if not (IsNan(c.Num) or IsInfinite(c.Num)) then decided := True;
-          dvkBool:
-            decided := True;
-          dvkText:
+        if APos > High(it.Cells) then Continue;
+        c := it.Cells[APos];
+      end
+      else if AOriginal then
+        Break // a non-array item: upstream answers "not ordinal"
+      else
+        Continue;
+      { detectValue: a finite Number() that is not '' -- not ordinal;
+        other text but '-' -- ordinal; anything else tells nothing. }
+      case c.Kind of
+        dvkNumber:
+          if not (IsNan(c.Num) or IsInfinite(c.Num)) then decided := True;
+        dvkBool:
+          decided := True;
+        dvkText:
+          begin
+            num := TyJsToNumber(c.Text);
+            if (c.Text <> '') and not (IsNan(num) or IsInfinite(num)) then
+              decided := True
+            else if c.Text <> '-' then
             begin
-              num := TyJsToNumber(c.Text);
-              if (c.Text <> '') and not (IsNan(num) or IsInfinite(num)) then
-                decided := True
-              else if c.Text <> '-' then
-              begin
-                decided := True;
-                verdict := True;
-              end;
+              decided := True;
+              Result := True;
             end;
-        end;
-        if decided then Break;
+          end;
       end;
-      if verdict then SetRawDimType(p, ddtOrdinal);
+      if decided then Break;
     end;
   finally
     ClearExceptions(False);
