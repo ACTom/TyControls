@@ -562,9 +562,15 @@ begin
 end;
 
 function TyStApplyItem(var AItem: TTyStItem): Boolean;
+var ns: TTyStNames;
 begin
   if not AItem.Host.Exists then Exit(False);
-  Result := TyStUseItemStates(AItem, TyStTargetStates(AItem.Host));
+  ns := TyStTargetStates(AItem.Host);
+  { [R2-I6] the same list: useStates does nothing (TyStUseStates' first
+    test), asked here before a call that sets up its locals for every row
+    of every hover }
+  if ns = AItem.Host.States then Exit(False);
+  Result := TyStUseItemStates(AItem, ns);
 end;
 
 procedure ClearEl(var AEl: TTyStElement);

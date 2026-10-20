@@ -1001,12 +1001,21 @@ type
     FCount: Integer;
     FOrder: array of Integer;
     FOrdered: Boolean;
+    { [R2-I6] FOrder right but for the elements in FDirty, whose z or z2
+      changed since it was sorted (FOrdered is False then): EnsureOrder takes
+      them out and merges them back in. The order is (z, z2, index), a
+      strict total order, so this is the permutation the sort makes. }
+    FPartial: Boolean;
+    FDirty: array of Integer;
+    FDirtyN: Integer;
     { [P2] the journal: what SetElement overwrote while it recorded }
     FJrOn, FJrSession, FJrOpened, FJrTainted: Boolean;
     FJrIdx: array of Integer;
     FJrOld: array of TTyChartElement;
     FJrN: Integer;
     FJrMark: array of Boolean;
+    procedure MarkOrderDirty(AIndex: Integer);
+    function RepairOrder: Boolean;
     procedure EnsureOrder;
     function Less(A, B: Integer): Boolean;
     procedure MergeSortOrder;
@@ -1093,6 +1102,12 @@ type
     function IndexOfDatumInk(ASeries, ARow: Integer): Integer;
     property Count: Integer read FCount;
   end;
+
+{ [R2-I6] The paint order repaired where an element's z or z2 moved
+  (TTyPaintList.RepairOrder): a switch that turns it off -- sorted whole
+  after every move, the reference -- and how many times it has. }
+procedure TyPaintListRepairForTest(AOn: Boolean);
+function TyPaintListRepairsForTest: Integer;
 
 function TyChartNoDatum: TTyChartDatumRef;
 function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef; overload;
@@ -1344,6 +1359,8 @@ begin
   FOrder := nil;
   FCount := 0;
   FOrdered := True;
+  FPartial := False;
+  FDirtyN := 0;
   FJrOn := False;
   FJrSession := False;
   FJrOpened := False;
@@ -1354,12 +1371,32 @@ begin
 end;
 
 procedure TTyPaintList.Truncate(ACount: Integer);
-var k: Integer;
+var k, n: Integer;
 begin
   if (ACount < 0) or (ACount >= FCount) then Exit;
   for k := ACount to FCount - 1 do FItems[k] := Default(TTyChartElement);
+  { [R2-I6] an order (whole or to repair) loses the elements cut, and is
+    as good for the rest }
+  if FOrdered or FPartial then
+  begin
+    n := 0;
+    for k := 0 to High(FOrder) do
+      if FOrder[k] < ACount then
+      begin
+        FOrder[n] := FOrder[k];
+        Inc(n);
+      end;
+    SetLength(FOrder, n);
+    n := 0;
+    for k := 0 to FDirtyN - 1 do
+      if FDirty[k] < ACount then
+      begin
+        FDirty[n] := FDirty[k];
+        Inc(n);
+      end;
+    FDirtyN := n;
+  end;
   FCount := ACount;
-  FOrdered := False;
 end;
 
 function TTyPaintList.JournalIndex(K: Integer): Integer;
@@ -1411,8 +1448,12 @@ procedure TTyPaintList.JournalRewind;
 var k: Integer;
 begin
   for k := FJrN - 1 downto 0 do
+  begin
+    { [R2-I6] an element whose place in the order moves }
+    if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2) then
+      MarkOrderDirty(FJrIdx[k]);
     FItems[FJrIdx[k]] := FJrOld[k];
-  if FJrN > 0 then FOrdered := False;
+  end;
   JournalOpen;
 end;
 
@@ -1428,7 +1469,13 @@ begin
   FItems[FCount] := AElement;
   Result := FCount;
   Inc(FCount);
-  FOrdered := False;
+  { [R2-I6] merged into an order there is, as an element that moved }
+  if FOrdered or FPartial then MarkOrderDirty(Result)
+  else
+  begin
+    FPartial := False;
+    FDirtyN := 0;
+  end;
 end;
 
 function TTyPaintList.AddRef(const AElement: TTyChartElement): PTyChartElement;
@@ -1463,8 +1510,102 @@ begin
   end
   else if FJrOpened and not FJrSession then
     FJrTainted := True;
+  { [R2-I6] the order moves only where z or z2 does [was: sorted again
+    after any write] }
+  if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2) then
+    MarkOrderDirty(AIndex);
   FItems[AIndex] := AElement;
+end;
+
+var
+  GRepairOff: Boolean = False;
+  GRepairs: Integer = 0;
+
+procedure TyPaintListRepairForTest(AOn: Boolean);
+begin
+  GRepairOff := not AOn;
+end;
+
+function TyPaintListRepairsForTest: Integer;
+begin
+  Result := GRepairs;
+end;
+
+procedure TTyPaintList.MarkOrderDirty(AIndex: Integer);
+begin
+  { a list never sorted since its last add is sorted whole anyway }
+  if not (FOrdered or FPartial) then Exit;
+  if (FDirtyN >= 256) or GRepairOff then
+  begin
+    { many: sorted whole }
+    FOrdered := False;
+    FPartial := False;
+    FDirtyN := 0;
+    Exit;
+  end;
+  if FDirtyN = Length(FDirty) then SetLength(FDirty, Max(16, FDirtyN * 2));
+  FDirty[FDirtyN] := AIndex;
+  Inc(FDirtyN);
   FOrdered := False;
+  FPartial := True;
+end;
+
+function TTyPaintList.RepairOrder: Boolean;
+var
+  mark: array of Boolean;
+  base: array of Integer;
+  dirty: array of Integer;
+  i, j, k, n, nb, t: Integer;
+begin
+  Result := False;
+  SetLength(mark, FCount);
+  { the moved ones, each once, in their own order (insertion: a few) }
+  n := 0;
+  SetLength(dirty, FDirtyN);
+  for i := 0 to FDirtyN - 1 do
+  begin
+    t := FDirty[i];
+    if (t < 0) or (t >= FCount) or mark[t] then Continue;
+    mark[t] := True;
+    j := n;
+    while (j > 0) and Less(t, dirty[j - 1]) do
+    begin
+      dirty[j] := dirty[j - 1];
+      Dec(j);
+    end;
+    dirty[j] := t;
+    Inc(n);
+  end;
+  { the rest keep their order; the moved ones (and the added) merged in }
+  SetLength(base, Length(FOrder));
+  nb := 0;
+  for i := 0 to High(FOrder) do
+  begin
+    t := FOrder[i];
+    if (t < 0) or (t >= FCount) then Exit;
+    if not mark[t] then
+    begin
+      base[nb] := t;
+      Inc(nb);
+    end;
+  end;
+  { every element once, or sorted whole }
+  if nb + n <> FCount then Exit;
+  SetLength(FOrder, FCount);
+  i := 0;
+  j := 0;
+  for k := 0 to FCount - 1 do
+    if (j < n) and ((i >= nb) or Less(dirty[j], base[i])) then
+    begin
+      FOrder[k] := dirty[j];
+      Inc(j);
+    end
+    else
+    begin
+      FOrder[k] := base[i];
+      Inc(i);
+    end;
+  Result := True;
 end;
 
 var
@@ -1561,11 +1702,18 @@ var
   i: Integer;
 begin
   if FOrdered then Exit;
-  SetLength(FOrder, FCount);
-  for i := 0 to FCount - 1 do
-    FOrder[i] := i;
-  MergeSortOrder;
+  if FPartial and RepairOrder then
+    Inc(GRepairs)
+  else
+  begin
+    SetLength(FOrder, FCount);
+    for i := 0 to FCount - 1 do
+      FOrder[i] := i;
+    MergeSortOrder;
+  end;
   FOrdered := True;
+  FPartial := False;
+  FDirtyN := 0;
 end;
 
 function TTyPaintList.PaintOrder(AIndex: Integer): Integer;

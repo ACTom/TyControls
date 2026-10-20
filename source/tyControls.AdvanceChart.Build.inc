@@ -77,6 +77,9 @@ var
   radarSpec: TTyRadarSpec;
   polarMissing: TTyStringArray;
   ax: TTyAxis;
+  { [R2-I6] }
+  sig: string;
+  pre: TTyIntegerArray;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
@@ -139,6 +142,7 @@ begin
   FTransformRandom := FTransformSeed;
   FDatasetCache.RandomState := @FTransformRandom;
   cursors := nil;
+  StoreKeepBegin;
   for i := 0 to High(FBindings) do
   begin
     st := TTyDataStore.Create;
@@ -468,9 +472,15 @@ begin
     if ds < 0 then
     begin
       SeriesDataEncode(i, dims, enc);
+      { [R2-I6] the store the last build of this tree parsed, when it is
+        the same recipe on the same lists }
+      sig := StoreKeepSig(i, 0, -1, dims, enc);
+      if StoreKeepTake(i, sig, dims) then Continue;
+      StoreKeepPre(dims, pre);
       TyFillSeriesStore(FOption, i, dims, st);
       ResolveTextDims(enc, st, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex));
       HeatmapTipDims(i, enc, st);
+      StoreKeepPut(i, sig, dims, pre);
       Continue;
     end;
     { THE COORDINATES, AS THE ENCODE RULES SEE THEM: a name and whether the
@@ -502,11 +512,17 @@ begin
       `encode: {tooltip: [2]}` still draws x from 0 and y from 1. }
     if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
     FEncodes[i] := enc;
+    { [R2-I6] kept, as above }
+    sig := StoreKeepSig(i, 1, ds, dims, enc);
+    if StoreKeepTake(i, sig, dims) then Continue;
+    StoreKeepPre(dims, pre);
     TyFillStoreFromSource(FSources[i], enc, dims, st);
     ResolveTextDims(enc, st, FSources[i]);
     HeatmapTipDims(i, enc, st);
+    StoreKeepPut(i, sig, dims, pre);
     Continue;
   end;
+  StoreKeepEnd;
   { THE FIRST BUILD OF AN OPTION hands the chart's stream on past what its
     transforms drew; a later one leaves it where it is [Batch 134] }
   if not FTransformSeedTaken then
@@ -1481,6 +1497,8 @@ begin
         begin
           if d <> nil then bo.Delete('isExpanded');
           bo.Add('isExpanded', now_);
+          { [R2-I6] a write into the tree outside a merge }
+          FOption.Touch;
         end;
         if evBreaks <> '' then evBreaks := evBreaks + ',';
         evBreaks := evBreaks + '{"' + mains[m] + 'Index":' + IntToStr(idx[i])
@@ -4450,4 +4468,193 @@ begin
   StaticDrop;
   FZrDirty := True;
   inherited Invalidate;
+end;
+
+{ ==================== [R2-I6] the parsed store kept between builds ==================== }
+
+function TTyAdvanceChart.StoreKeepSig(ASlot, ABranch, ADs: Integer;
+  const ADims: TTySeriesDimArray; const AEnc: TTySeriesEncode): string;
+var k: Integer;
+
+  function Ints(const A: array of Integer): string;
+  var j: Integer;
+  begin
+    Result := '';
+    for j := 0 to High(A) do Result := Result + IntToStr(A[j]) + ',';
+  end;
+
+begin
+  Result := IntToStr(ASlot) + '|' + IntToStr(FBindings[ASlot].SeriesIndex) + '|'
+    + FBindings[ASlot].SeriesType + '|' + IntToStr(ABranch) + '|' + IntToStr(ADs);
+  if (ADs >= 0) and (ASlot <= High(FSources)) then
+    Result := Result + '|' + IntToStr(Ord(FSources[ASlot].LayoutBy)) + ','
+      + IntToStr(Ord(FSources[ASlot].Format)) + ',' + IntToStr(FSources[ASlot].StartIndex)
+      + ',' + IntToStr(FSources[ASlot].DimCount);
+  for k := 0 to High(ADims) do
+    Result := Result + '|d' + ADims[k].Name + #1 + IntToStr(Ord(ADims[k].Kind)) + #1
+      + IntToStr(ADims[k].SourceSlot) + #1 + ADims[k].Coord + #1
+      + BoolToStr(ADims[k].FromRowIndex, '1', '0') + BoolToStr(ADims[k].Axis <> nil, '1', '0');
+  Result := Result + '|e' + BoolToStr(AEnc.Given, '1', '0') + Ints(AEnc.Columns) + ';';
+  for k := 0 to High(AEnc.Explicit) do Result := Result + BoolToStr(AEnc.Explicit[k], '1', '0');
+  Result := Result + ';' + Ints(AEnc.Tooltip) + ';' + Ints(AEnc.Labels) + ';'
+    + IntToStr(AEnc.ItemName) + ';' + IntToStr(AEnc.SeriesName);
+end;
+
+procedure TTyAdvanceChart.StoreKeepPre(const ADims: TTySeriesDimArray;
+  out APre: TTyIntegerArray);
+var k: Integer;
+begin
+  APre := nil;
+  SetLength(APre, Length(ADims));
+  for k := 0 to High(ADims) do
+    if (ADims[k].Axis <> nil) and (ADims[k].Axis.Categories <> nil) then
+      APre[k] := ADims[k].Axis.Categories.Count
+    else
+      APre[k] := -1;
+end;
+
+{ every borrowed list a different object: a fill that interleaves two
+  columns over one collecting list is not split into per-column runs }
+function StoreKeepMetasDistinct(const ADims: TTySeriesDimArray): Boolean;
+var j, k: Integer;
+begin
+  Result := False;
+  for k := 0 to High(ADims) do
+  begin
+    if ADims[k].Axis = nil then Continue;
+    if ADims[k].Axis.Categories = nil then Exit;
+    for j := 0 to k - 1 do
+      if (ADims[j].Axis <> nil) and (ADims[j].Axis.Categories = ADims[k].Axis.Categories) then
+        Exit;
+  end;
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.StoreKeepBegin;
+var i: Integer;
+begin
+  for i := 0 to High(FStoreKeep) do FStoreKeep[i].Used := False;
+end;
+
+procedure TTyAdvanceChart.StoreKeepEnd;
+var i: Integer;
+begin
+  for i := 0 to High(FStoreKeep) do
+    if not FStoreKeep[i].Used then
+    begin
+      FreeAndNil(FStoreKeep[i].Store);
+      FStoreKeep[i] := Default(TTyStoreKeep);
+    end;
+  if Length(FStoreKeep) > Length(FBindings) then
+    SetLength(FStoreKeep, Length(FBindings));
+end;
+
+procedure TTyAdvanceChart.StoreKeepDrop;
+var i: Integer;
+begin
+  for i := 0 to High(FStoreKeep) do FreeAndNil(FStoreKeep[i].Store);
+  FStoreKeep := nil;
+end;
+
+function TTyAdvanceChart.StoreKeepTake(ASlot: Integer; const ASig: string;
+  const ADims: TTySeriesDimArray): Boolean;
+var
+  e: ^TTyStoreKeep;
+  k, q: Integer;
+  m: TTyOrdinalMeta;
+  metas: array of TTyOrdinalMeta;
+begin
+  Result := False;
+  if (GStoreKeepMinRows < 0) or (ASlot > High(FStoreKeep)) or (FOption = nil) then Exit;
+  e := @FStoreKeep[ASlot];
+  if not e^.Valid or (e^.Store = nil) or (e^.Gen <> FOption.Generation)
+    or (e^.Sig <> ASig) or not StoreKeepMetasDistinct(ADims) then Exit;
+  { the lists the new axes hold: as they were when the store was kept }
+  q := 0;
+  for k := 0 to High(ADims) do
+  begin
+    if ADims[k].Axis = nil then Continue;
+    if (q > High(e^.MetaDim)) or (e^.MetaDim[q] <> k) then Exit;
+    m := ADims[k].Axis.Categories;
+    if (m.NeedCollect <> e^.MetaCollect[q]) or (m.Deduplication <> e^.MetaDedup[q]) then Exit;
+    if e^.MetaCollect[q] then
+    begin
+      if not m.StartsWith(e^.MetaList[q], e^.MetaPre[q], e^.MetaPre[q]) then Exit;
+    end
+    else if not m.StartsWith(e^.MetaList[q], Length(e^.MetaList[q]),
+      Length(e^.MetaList[q])) then Exit;
+    Inc(q);
+  end;
+  if q <> Length(e^.MetaDim) then Exit;
+  { what the fill collected, in its order }
+  q := 0;
+  metas := nil;
+  SetLength(metas, Length(ADims));
+  for k := 0 to High(ADims) do
+  begin
+    if ADims[k].Axis = nil then Continue;
+    m := ADims[k].Axis.Categories;
+    metas[k] := m;
+    if e^.MetaCollect[q] then
+      m.AppendCollected(e^.MetaList[q], e^.MetaPre[q]);
+    Inc(q);
+  end;
+  FStores[ASlot].Free;
+  FStores[ASlot] := e^.Store.CloneWith(metas);
+  e^.Used := True;
+  Inc(GStoreKeeps);
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.StoreKeepPut(ASlot: Integer; const ASig: string;
+  const ADims: TTySeriesDimArray; const APre: TTyIntegerArray);
+var
+  e: TTyStoreKeep;
+  st: TTyDataStore;
+  k, q, total, i: Integer;
+  m: TTyOrdinalMeta;
+  metas: array of TTyOrdinalMeta;
+begin
+  if (GStoreKeepMinRows < 0) or (FOption = nil) or (ASlot > High(FStores)) then Exit;
+  st := FStores[ASlot];
+  if (st = nil) or (st.RawCount < GStoreKeepMinRows) then Exit;
+  if not StoreKeepMetasDistinct(ADims) then Exit;
+  total := st.RawCount;
+  for i := 0 to High(FStoreKeep) do
+    if (i <> ASlot) and FStoreKeep[i].Valid and FStoreKeep[i].Used
+      and (FStoreKeep[i].Store <> nil) then
+      Inc(total, FStoreKeep[i].Store.RawCount);
+  if total > cStoreKeepMaxRows then Exit;
+  e := Default(TTyStoreKeep);
+  e.Valid := True;
+  e.Used := True;
+  e.Gen := FOption.Generation;
+  e.Sig := ASig;
+  metas := nil;
+  SetLength(metas, Length(ADims));
+  q := 0;
+  for k := 0 to High(ADims) do
+  begin
+    if ADims[k].Axis = nil then Continue;
+    m := ADims[k].Axis.Categories;
+    SetLength(e.MetaDim, q + 1);
+    SetLength(e.MetaCollect, q + 1);
+    SetLength(e.MetaDedup, q + 1);
+    SetLength(e.MetaPre, q + 1);
+    SetLength(e.MetaList, q + 1);
+    e.MetaDim[q] := k;
+    e.MetaCollect[q] := m.NeedCollect;
+    e.MetaDedup[q] := m.Deduplication;
+    if (k <= High(APre)) and (APre[k] >= 0) then e.MetaPre[q] := APre[k]
+    else e.MetaPre[q] := m.Count;
+    e.MetaList[q] := m.Snapshot;
+    { the kept copy borrows nothing it could reach: the axes go with the
+      build }
+    metas[k] := nil;
+    Inc(q);
+  end;
+  e.Store := st.CloneWith(metas);
+  if ASlot >= Length(FStoreKeep) then SetLength(FStoreKeep, ASlot + 1);
+  FreeAndNil(FStoreKeep[ASlot].Store);
+  FStoreKeep[ASlot] := e;
 end;

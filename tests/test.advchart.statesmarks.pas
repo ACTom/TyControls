@@ -118,6 +118,8 @@ type
     procedure TestATreeEdgeIsATargetOfNoData;
     { [R2-I4] }
     procedure TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
+    { [R2-I6] }
+    procedure TestAMarkAreasLabelBoxGrowsByItsPenAtAnyPPI;
     procedure TestARestDashWordTakesTheStatesWidthWithoutProxies;
   end;
 
@@ -1296,6 +1298,90 @@ end;
   same. A word calculateTextPosition does not know ('start') leaves the
   label's anchor on the box's corner. [Was: the symbol's pen and the line's
   floor taken in device px -- a 1 px and a 2.5 px short corner at 192.] }
+{ [R2-I6] THE RECT A MARKAREA'S LABEL IS LAID ON, at 96 and at 192 PPI:
+  Path.getBoundingRect of the polygon (no strokeNoScale) grows by its pen
+  in logical px -- the borderWidth, or max(width, 5) where it has no fill
+  -- which the port's device units make that times the scale; emphasis
+  lays the label on the box its own pen grows (upstream at 96: rest text
+  at (58.5, 102.25), the box's corner). 'start' (a word
+  calculateTextPosition does not know) leaves the label's anchor on the
+  rect's corner. [Was: the logical width taken as device px -- a corner
+  half a width short at 192.] }
+procedure TAdvChartStatesMarksTest.TestAMarkAreasLabelBoxGrowsByItsPenAtAnyPPI;
+const
+  cOpt = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[5,30,12],'
+    + '"markArea":{"label":{"position":"start"},"itemStyle":{"borderColor":"#000","borderWidth":3},'
+    + '"emphasis":{"itemStyle":{"borderWidth":7}},'
+    + '"data":[[{"xAxis":"A","yAxis":10,"name":"one"},{"xAxis":"B","yAxis":30}]]}},'
+    + '{"type":"bar","data":[3,6,9],'
+    + '"markArea":{"label":{"position":"start"},"itemStyle":{"color":"none","borderColor":"#000","borderWidth":1},'
+    + '"data":[[{"xAxis":"B","yAxis":5,"name":"two"},{"xAxis":"C","yAxis":20}]]}}]}';
+var
+  ppi, s, q, k, si: Integer;
+  e, poly, lbl: TTyChartElement;
+  b: TTyRectF;
+  w: Double;
+  hasPoly, hasLbl: Boolean;
+begin
+  for q := 0 to 1 do
+  begin
+    if q = 0 then ppi := 96 else ppi := 192;
+    s := ppi div 96;
+    NewChart(camOff);
+    FChart.SetBounds(0, 0, cW * s, cH * s);
+    FBmp.SetSize(cW * s, cH * s);
+    FChart.Option := cOpt;
+    AssertEquals('the option parses', '', FChart.OptionError);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, cW * s, cH * s), ppi);
+    for si := 0 to 1 do
+    begin
+      poly := Default(TTyChartElement);
+      lbl := Default(TTyChartElement);
+      hasPoly := False;
+      hasLbl := False;
+      for k := 0 to FChart.List.Count - 1 do
+      begin
+        e := FChart.List.Element(k);
+        if (e.Datum.Kind <> ctkMarkArea) or (e.Datum.ComponentIndex <> si) then Continue;
+        if e.Caption.FontSizeLogical > 0 then
+        begin
+          lbl := e;
+          hasLbl := True;
+        end
+        else
+        begin
+          poly := e;
+          hasPoly := True;
+        end;
+      end;
+      AssertTrue(Format('series %d polygon at %d', [si, ppi]), hasPoly);
+      AssertTrue(Format('series %d label at %d', [si, ppi]), hasLbl);
+      b := TyShapeBounds(poly.Shape);
+      { a fill: the width; none: max(width, 5) -- logical, then scaled }
+      if si = 0 then w := 3 else w := 5;
+      AssertEquals(Format('series %d corner x at %d', [si, ppi]), b.Left - w * s / 2,
+        lbl.Caption.X, 1e-9);
+      AssertEquals(Format('series %d corner y at %d', [si, ppi]), b.Top - w * s / 2,
+        lbl.Caption.Y, 1e-9);
+      if si = 0 then
+      begin
+        { emphasis: the box its own pen of 7 grows, the defaults' emphasis
+          position 'top' (upstream at 96: the text at (160, 95.25) over a
+          path box from (60, 103.75)) -- its middle, its top less the
+          distance 5 }
+        k := TyEmphTwinAt(lbl.EmphTwin, TyTwinEmphasis);
+        AssertTrue(Format('emphasis twin at %d', [ppi]), k >= 0);
+        AssertEquals(Format('emphasis middle at %d', [ppi]), (b.Left + b.Right) / 2,
+          lbl.EmphTwin[k].Caption.X, 1e-9);
+        AssertEquals(Format('emphasis top at %d', [ppi]), b.Top - 7 * s / 2 - 5 * s,
+          lbl.EmphTwin[k].Caption.Y, 1e-9);
+      end;
+    end;
+  end;
+  FBmp.SetSize(cW, cH);
+end;
+
 procedure TAdvChartStatesMarksTest.TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
 const
   cOpt = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C"]},'

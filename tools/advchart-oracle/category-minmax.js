@@ -1148,6 +1148,13 @@ add('A', 'collected categories (no data), min 1', { xAxis: { type: 'category', m
   series: [bar(T.map((t, i) => [t, V10[i]]))] });
 add('A', 'y category min 2 max 5', cy({ min: 2, max: 5 }));
 add('A', 'y category min 2 max 5 inverse', cy({ min: 2, max: 5, inverse: true }));
+// [R2-I6] a category written twice in the axis data: createHashMap(categories)
+// sets every one in order, so the LATER ordinal is the one a value and a
+// string min / max find (the bar of 'a' stands on ordinal 2, not 0)
+add('A', 'duplicate categories', cx({ data: ['a', 'b', 'a', 'c', 'd'] },
+  [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
+add('A', "duplicate categories min 'a'", cx({ data: ['a', 'b', 'a', 'c', 'd'], min: 'a' },
+  [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
 
 // B. blank
 add('B', "min 'zz'", cx({ min: 'zz' }));

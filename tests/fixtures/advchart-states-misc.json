@@ -17,7 +17,7 @@
   "settled-pie-label-inside","settled-funnel-label-emphasis","settled-funnel-label-inside","settled-bar-item-label-emphasis","settled-pictorial-hit","settled-pictorial-clip","settled-radar-order","settled-radar-held-self",
   "settled-scatter-label-follows","settled-graph-label-follows","settled-radial-label-follows","settled-radar-dash","settled-tree-label-follows","settled-scatter-label-opacity","settled-bar-label-opacity","settled-line-label-opacity",
   "settled-pie-label-opacity","settled-funnel-label-opacity","settled-global-text-opacity","settled-pie-global-text-opacity","settled-radar-label-line-states","settled-bar-pie-label","settled-bar-state-dash","settled-line-state-dash",
-  "settled-radar-state-dash","settled-bar-dash-word-tween","settled-bar-dash-word-still","settled-tree-dash-word-tween","settled-lines-dash-word-tween","settled-parallel-dash-word-tween"
+  "settled-radar-state-dash","settled-bar-dash-word-tween","settled-bar-dash-word-still","settled-tree-dash-word-tween","settled-lines-dash-word-tween","settled-parallel-dash-word-tween","settled-label-opacity-states"
  ],
  "cases": [
   {
@@ -32921,6 +32921,1877 @@
      "trackText": null,
      "animators": null,
      "stateAnimators": null,
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "label-opacity-states",
+   "note": "[R2-I6] bar series 0 labels at label.opacity 0.5, emphasis.label.opacity 0.8, blur.label.opacity 0.3, focus series; series 1 labels at 0.6 with no state opacity (blur: 0.06), focus series; a line series at itemStyle.opacity 0.5 (the defaultOpacity of its labels) and emphasis.label.opacity 0.9. Hover bar 1 of series 0 at 0, out at 300, bar 2 of series 1 at 500, out at 800, line point 3 at 900, out at 1100",
+   "option": {
+    "color": ["#5470c6","#91cc75","#fac858"],
+    "xAxis": {"type":"category","data":["A","B","C","D","E"]},
+    "yAxis": {"type":"value","max":40},
+    "series": [
+     {"type":"bar","label":{"show":true,"position":"top","opacity":0.5},"emphasis":{"focus":"series","label":{"opacity":0.8}},"blur":{"label":{"opacity":0.3}},"data":[5,20,36,10,18]},
+     {"type":"bar","label":{"show":true,"position":"top","opacity":0.6},"emphasis":{"focus":"series"},"data":[8,12,6,30,4]},
+     {"type":"line","symbolSize":10,"itemStyle":{"opacity":0.5},"label":{"show":true},"emphasis":{"label":{"opacity":0.9}},"data":[3,9,14,22,27]}
+    ]
+   },
+   "events": [
+    {"at":0,"type":"move","x":139,"y":181,"pick":["item",0,1]},{"at":300,"type":"out","x":3,"y":3},{"at":500,"type":"move","x":221,"y":208,"pick":["item",1,2]},{"at":800,"type":"out","x":3,"y":3},
+    {"at":900,"type":"move","x":270,"y":135,"pick":["item",2,3]},{"at":1100,"type":"out","x":3,"y":3}
+   ],
+   "published": [
+    {"at":0,"type":"mouseover","componentType":"series","seriesIndex":0,"dataIndex":1},{"at":300,"type":"mouseout","componentType":"series","seriesIndex":0,"dataIndex":1},
+    {"at":500,"type":"mouseover","componentType":"series","seriesIndex":1,"dataIndex":2},{"at":800,"type":"mouseout","componentType":"series","seriesIndex":1,"dataIndex":2},
+    {"at":900,"type":"mouseover","componentType":"series","seriesIndex":2,"dataIndex":3},{"at":1100,"type":"mouseout","componentType":"series","seriesIndex":2,"dataIndex":3}
+   ],
+   "selection": [[{"s":0,"map":null,"indices":[]},{"s":1,"map":null,"indices":[]},{"s":2,"map":null,"indices":[]}]],
+   "clips": [23,23,23,23,23,23,23,23,23,23,23,23,23,23,31,31,31,31,23,23,23,23,23,23,24,24,24,4,4,0,0],
+   "elements": [
+    {
+     "id": "series0:bar/0",
+     "owner": "series0:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 0,
+     "map": {"s":0,"row":0,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c033600000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "4051066666666666",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-19.375",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "68.1",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15",
+       "3fe75688dde3188a","3feee6a8be197281","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654",
+       "0.7293133100254334","0.9656566346053098","0.9999999666666679","1","1","1","1"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/0#label",
+     "owner": "series0:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":0,"row":0,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000",
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fdab257ce8c88c0","3fd70cbd7da4708c","3fd4d50bf6ce182e","3fd3b03d89ae79f4","3fd3434c85ea902c","3fd333333b275528","3fd333333b275528","3fd880db694f2e05",
+       "3fdc2675b7f3275a","3fdf82f5a9d26bc8","3fdffffff80bde10","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.4171351925925926","0.36015259999999993","0.3255033407407407","0.3076318592592593","0.3009826","0.3000000074074074","0.3000000074074074",
+       "0.3828648117457479","0.4398474022278741","0.4923681410234022","0.49999999259259287","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/1",
+     "owner": "series0:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 1,
+     "map": {"s":0,"row":1,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c053600000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "4060033333333333",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "rgba(84,112,198,1)",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-77.5",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "128.1",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "rgba(84,112,198,1)",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.fill": [
+       "#5470c6","rgba(84,112,198,1)","rgba(85,113,200,1)","rgba(87,116,205,1)","rgba(89,119,211,1)","rgba(90,121,214,1)","rgba(91,122,216,1)","rgba(91,122,216,1)","rgba(91,122,216,1)","rgba(91,122,216,1)","rgba(88,117,208,1)","rgba(86,115,203,1)",
+       "rgba(86,114,203,1)","rgba(84,113,200,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)",
+       "rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)"
+      ],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15",
+       "3fe75688dde3188a","3feee6a8be197281","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ],
+      "z2": [
+       "4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.fill": [
+       "#5470c6","rgba(84,112,198,1)","rgba(85,113,200,1)","rgba(87,116,205,1)","rgba(89,119,211,1)","rgba(90,121,214,1)","rgba(91,122,216,1)","rgba(91,122,216,1)","rgba(91,122,216,1)","rgba(91,122,216,1)","rgba(88,117,208,1)","rgba(86,115,203,1)",
+       "rgba(86,114,203,1)","rgba(84,113,200,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)",
+       "rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)","rgba(84,112,198,1)"
+      ],
+      "style.opacity": [
+       "1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654",
+       "0.7293133100254334","0.9656566346053098","0.9999999666666679","1","1","1","1"
+      ],
+      "z2": ["11","11","11","11","11","11","11","11","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/1#label",
+     "owner": "series0:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":0,"row":1,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fe15e83e425aee7","3fe3fa3e25169970","3fe6b671e1c4ab97","3fe8603706e56dde","3fe93bd1d8bd248a","3fe98d869b9013df","3fe9999993a28022","3fe9999993a28022","3fe59f5b71049d7c","3fe2e327b609a27d",
+       "3fe2d82d8113b430","3fe1396291f170ae","3fe05dc7c0a22f2a","3fe05dc7c0a22f2a","3fdb2031557c7507","3fd74526c731ec56","3fd4ecf6be3540c8","3fd3b765c694312a","3fd344386c5c7c4a","3fd333333b9be0f4","3fd333333b9be0f4","3fd880db69937021",
+       "3fdc2675b81634da","3fdf82f5a9d6de4b","3fdffffff80bde10","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ],
+      "z2": [
+       "402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000",
+       "4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000",
+       "4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.5427875000000001","0.6242972111111111","0.7097711000000001","0.761744988888889","0.7885522111111112","0.7985261","0.7999999888888889","0.7999999888888889","0.6757027823813782","0.5902288966581889","0.5888888855967078",
+       "0.5382550096942589","0.5114477884648967","0.5114477884648967","0.42383988712556725","0.3635956712020677","0.32696312499048164","0.30806869881122856","0.30103884298472805","0.3000000078313996","0.3000000078313996","0.3828648119940699",
+       "0.4398474023553952","0.49236814103958143","0.49999999259259287","0.5","0.5","0.5","0.5"
+      ],
+      "z2": ["13","13","13","13","13","13","13","13","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3","3"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/2",
+     "owner": "series0:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 2,
+     "map": {"s":0,"row":2,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c061700000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "4067833333333333",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-139.5",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "188.1",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15",
+       "3fe75688dde3188a","3feee6a8be197281","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654",
+       "0.7293133100254334","0.9656566346053098","0.9999999666666679","1","1","1","1"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/2#label",
+     "owner": "series0:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":0,"row":2,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000",
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fdab257ce8c88c0","3fd70cbd7da4708c","3fd4d50bf6ce182e","3fd3b03d89ae79f4","3fd3434c85ea902c","3fd333333b275528","3fd333333b275528","3fd880db694f2e05",
+       "3fdc2675b7f3275a","3fdf82f5a9d26bc8","3fdffffff80bde10","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.4171351925925926","0.36015259999999993","0.3255033407407407","0.3076318592592593","0.3009826","0.3000000074074074","0.3000000074074074",
+       "0.3828648117457479","0.4398474022278741","0.4923681410234022","0.49999999259259287","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/3",
+     "owner": "series0:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 3,
+     "map": {"s":0,"row":3,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c043600000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "406f033333333333",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-38.75",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "248.1",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15",
+       "3fe75688dde3188a","3feee6a8be197281","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654",
+       "0.7293133100254334","0.9656566346053098","0.9999999666666679","1","1","1","1"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/3#label",
+     "owner": "series0:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":0,"row":3,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000",
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fdab257ce8c88c0","3fd70cbd7da4708c","3fd4d50bf6ce182e","3fd3b03d89ae79f4","3fd3434c85ea902c","3fd333333b275528","3fd333333b275528","3fd880db694f2e05",
+       "3fdc2675b7f3275a","3fdf82f5a9d26bc8","3fdffffff80bde10","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.4171351925925926","0.36015259999999993","0.3255033407407407","0.3076318592592593","0.3009826","0.3000000074074074","0.3000000074074074",
+       "0.3828648117457479","0.4398474022278741","0.4923681410234022","0.49999999259259287","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/4",
+     "owner": "series0:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 4,
+     "map": {"s":0,"row":4,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c051700000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db0",
+      "shape.x": "407341999999999a",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-69.75",
+      "shape.r": "0",
+      "shape.width": "20.857142857142833",
+      "shape.x": "308.1",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#5470c6",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15",
+       "3fe75688dde3188a","3feee6a8be197281","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","1","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654",
+       "0.7293133100254334","0.9656566346053098","0.9999999666666679","1","1","1","1"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series0:bar/4#label",
+     "owner": "series0:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":0,"row":4,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000",
+       "3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fdab257ce8c88c0","3fd70cbd7da4708c","3fd4d50bf6ce182e","3fd3b03d89ae79f4","3fd3434c85ea902c","3fd333333b275528","3fd333333b275528","3fd880db694f2e05",
+       "3fdc2675b7f3275a","3fdf82f5a9d26bc8","3fdffffff80bde10","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["","","","","","","","","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.5","0.4171351925925926","0.36015259999999993","0.3255033407407407","0.3076318592592593","0.3009826","0.3000000074074074","0.3000000074074074",
+       "0.3828648117457479","0.4398474022278741","0.4923681410234022","0.49999999259259287","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "","","","","","","","","","","","","","","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/0",
+     "owner": "series1:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 0,
+     "map": {"s":1,"row":0,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c03f000000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "4056c2be2be2be2c",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-31",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "91.04285714285714",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3febe474538ef34c","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15","3fe75688dde3188a",
+       "3fe777777cc4e36f","3fec53d84a2badf7","3feee6a8be197281","3feeeeeeef989c6e","3fefdbc705f9f0d6","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","0.8716374999999998","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654","0.7293133100254334","0.7333333432098764",
+       "0.8852349709172235","0.9656566346053098","0.9666666679012346","0.9955783001637666","0.9999999666666679","1","1","1","1","1","1","1","1","1","1","1","1","1"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/0#label",
+     "owner": "series1:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":1,"row":0,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe3333333333333","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.6","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe3333333333333","3fe3333333333333","3fe0bc45cbbc2b94","3fd814b9e0e1d7a0","3fcc77ff401192f6","3fc07e73ce58e8f8","3fb4a2989bc2bea8","3fb00a073fe54840","3faeb852975195c0","3faeb852975195c0","3fd228b6cf88fc40","3fdc01710a43b70b",
+       "3fdc28f5c8ec441f","3fe0ff1b5fb3cec7","3fe28a653edc1181","3fe28f5c295b910e","3fe31d7769fc5d4d","3fe3333328766bc9","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333",
+       "3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "0.6","0.6","0.5229824999999999","0.37626501999999995","0.22241201999999988","0.12885901999999994","0.08060601999999994","0.06265301999999995","0.06000001999999993","0.06000001999999993","0.28373499171351924","0.43758798601526",
+       "0.44000000592592586","0.531140982550334","0.5793939807631859","0.5800000007407407","0.5973469800982599","0.5999999800000008","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/1",
+     "owner": "series1:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 1,
+     "map": {"s":1,"row":1,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c047400000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "4062e15f15f15f16",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-46.5",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "151.04285714285714",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3febe474538ef34c","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15","3fe75688dde3188a",
+       "3fe777777cc4e36f","3fec53d84a2badf7","3feee6a8be197281","3feeeeeeef989c6e","3fefdbc705f9f0d6","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","0.8716374999999998","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654","0.7293133100254334","0.7333333432098764",
+       "0.8852349709172235","0.9656566346053098","0.9666666679012346","0.9955783001637666","0.9999999666666679","1","1","1","1","1","1","1","1","1","1","1","1","1"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/1#label",
+     "owner": "series1:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":1,"row":1,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe3333333333333","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.6","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe3333333333333","3fe3333333333333","3fe0bc45cbbc2b94","3fd814b9e0e1d7a0","3fcc77ff401192f6","3fc07e73ce58e8f8","3fb4a2989bc2bea8","3fb00a073fe54840","3faeb852975195c0","3faeb852975195c0","3fd228b6cf88fc40","3fdc01710a43b70b",
+       "3fdc28f5c8ec441f","3fe0ff1b5fb3cec7","3fe28a653edc1181","3fe28f5c295b910e","3fe31d7769fc5d4d","3fe3333328766bc9","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333",
+       "3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "0.6","0.6","0.5229824999999999","0.37626501999999995","0.22241201999999988","0.12885901999999994","0.08060601999999994","0.06265301999999995","0.06000001999999993","0.06000001999999993","0.28373499171351924","0.43758798601526",
+       "0.44000000592592586","0.531140982550334","0.5793939807631859","0.5800000007407407","0.5973469800982599","0.5999999800000008","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/2",
+     "owner": "series1:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 2,
+     "map": {"s":1,"row":2,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c037400000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db8",
+      "shape.x": "406a615f15f15f16",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "rgba(145,204,117,1)",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-23.25",
+      "shape.r": "0",
+      "shape.width": "20.85714285714286",
+      "shape.x": "211.04285714285714",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "rgba(145,204,117,1)",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","","","",""],
+      "style.fill": [
+       "#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","rgba(145,204,117,1)","rgba(150,212,121,1)","rgba(154,217,124,1)","rgba(157,221,126,1)",
+       "rgba(158,223,127,1)","rgba(158,223,127,1)","rgba(158,223,127,1)","rgba(158,223,127,1)","rgba(152,215,122,1)","rgba(148,209,120,1)","rgba(145,204,117,1)","rgba(145,204,117,1)","rgba(145,204,117,1)","rgba(145,204,117,1)","rgba(145,204,117,1)",
+       "rgba(145,204,117,1)"
+      ],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3febe474538ef34c","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15","3fe75688dde3188a",
+       "3fe777777cc4e36f","3fec53d84a2badf7","3feee6a8be197281","3feee6a8be197281","3fef5b39b5981d95","3fefab6211abc652","3fefdc1fd4e54319","3feff543a4a76d2e","3feffe9e26551dd4","3fefffffff512e4e","3fefffffff512e4e","3fefffffff999cd6",
+       "3fefffffffcb6bbf","3feffffffff9543b","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ],
+      "z2": [
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","4026000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","","","",""],
+      "style.fill": [
+       "#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","#91cc75","rgba(145,204,117,1)","rgba(150,212,121,1)","rgba(154,217,124,1)","rgba(157,221,126,1)",
+       "rgba(158,223,127,1)","rgba(158,223,127,1)","rgba(158,223,127,1)","rgba(158,223,127,1)","rgba(152,215,122,1)","rgba(148,209,120,1)","rgba(145,204,117,1)","rgba(145,204,117,1)","rgba(145,204,117,1)","rgba(145,204,117,1)","rgba(145,204,117,1)",
+       "rgba(145,204,117,1)"
+      ],
+      "style.opacity": [
+       "1","1","0.8716374999999998","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654","0.7293133100254334","0.7333333432098764",
+       "0.8852349709172235","0.9656566346053098","0.9656566346053098","0.9798859164010759","0.9896707863937968","0.9956206472507773","0.9986894813440921","0.9998312710458159","0.9999999987280235","0.9999999987280235","0.9999999992550339",
+       "0.9999999996174366","0.9999999999514623","1","1","1","1","1"
+      ],
+      "z2": ["1","1","1","1","1","1","1","1","1","1","1","1","1","1","11","11","11","11","11","11","11","1","1","1","1","1","1","1","1","1","1"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/2#label",
+     "owner": "series1:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":1,"row":2,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe3333333333333","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.6","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe3333333333333","3fe3333333333333","3fe0bc45cbbc2b94","3fd814b9e0e1d7a0","3fcc77ff401192f6","3fc07e73ce58e8f8","3fb4a2989bc2bea8","3fb00a073fe54840","3faeb852975195c0","3faeb852975195c0","3fd228b6cf88fc40","3fdc01710a43b70b",
+       "3fdc28f5c8ec441f","3fe0ff1b5fb3cec7","3fe28a653edc1181","3fe28a653edc1181","3fe2d055d35b44f3","3fe3006e0a9a43cb","3fe31dacb2eff50f","3fe32cc22f97a7e8","3fe3325ee3ccab7f","3fe3333332ca4efc","3fe3333332ca4efc","3fe3333332f5c481",
+       "3fe333333313a70c","3fe33333332f328a","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333"
+      ],
+      "z2": [
+       "4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000",
+       "4008000000000000","4008000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","402a000000000000","4008000000000000","4008000000000000","4008000000000000",
+       "4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000","4008000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","emphasis","","","","","","","","","",""],
+      "style.opacity": [
+       "0.6","0.6","0.5229824999999999","0.37626501999999995","0.22241201999999988","0.12885901999999994","0.08060601999999994","0.06265301999999995","0.06000001999999993","0.06000001999999993","0.28373499171351924","0.43758798601526",
+       "0.44000000592592586","0.531140982550334","0.5793939807631859","0.5793939807631859","0.5879315498406456","0.5938024718362781","0.5973723883504664","0.5992136888064552","0.5998987626274895","0.5999999992368141","0.5999999992368141",
+       "0.5999999995530204","0.5999999997704619","0.5999999999708774","0.6","0.6","0.6","0.6","0.6"
+      ],
+      "z2": ["3","3","3","3","3","3","3","3","3","3","3","3","3","3","13","13","13","13","13","13","13","3","3","3","3","3","3","3","3","3","3"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","emphasis:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/3",
+     "owner": "series1:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 3,
+     "map": {"s":1,"row":3,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c05d100000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db0",
+      "shape.x": "4070f0af8af8af8b",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-116.25",
+      "shape.r": "0",
+      "shape.width": "20.857142857142833",
+      "shape.x": "271.04285714285714",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3febe474538ef34c","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15","3fe75688dde3188a",
+       "3fe777777cc4e36f","3fec53d84a2badf7","3feee6a8be197281","3feeeeeeef989c6e","3fefdbc705f9f0d6","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","0.8716374999999998","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654","0.7293133100254334","0.7333333432098764",
+       "0.8852349709172235","0.9656566346053098","0.9666666679012346","0.9955783001637666","0.9999999666666679","1","1","1","1","1","1","1","1","1","1","1","1","1"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/3#label",
+     "owner": "series1:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":1,"row":3,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe3333333333333","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.6","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe3333333333333","3fe3333333333333","3fe0bc45cbbc2b94","3fd814b9e0e1d7a0","3fcc77ff401192f6","3fc07e73ce58e8f8","3fb4a2989bc2bea8","3fb00a073fe54840","3faeb852975195c0","3faeb852975195c0","3fd228b6cf88fc40","3fdc01710a43b70b",
+       "3fdc28f5c8ec441f","3fe0ff1b5fb3cec7","3fe28a653edc1181","3fe28f5c295b910e","3fe31d7769fc5d4d","3fe3333328766bc9","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333",
+       "3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "0.6","0.6","0.5229824999999999","0.37626501999999995","0.22241201999999988","0.12885901999999994","0.08060601999999994","0.06265301999999995","0.06000001999999993","0.06000001999999993","0.28373499171351924","0.43758798601526",
+       "0.44000000592592586","0.531140982550334","0.5793939807631859","0.5800000007407407","0.5973469800982599","0.5999999800000008","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/4",
+     "owner": "series1:bar",
+     "role": "el",
+     "type": "rect",
+     "dataIndex": 4,
+     "map": {"s":1,"row":4,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.height": "c02f000000000000",
+      "shape.r": "0000000000000000",
+      "shape.width": "4034db6db6db6db0",
+      "shape.x": "4074b0af8af8af8b",
+      "shape.y": "406b800000000000",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "3ff0000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.height": "-15.5",
+      "shape.r": "0",
+      "shape.width": "20.857142857142833",
+      "shape.x": "331.04285714285714",
+      "shape.y": "220",
+      "states": "",
+      "style.fill": "#91cc75",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "x": "0",
+      "y": "0",
+      "z2": "1"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3febe474538ef34c","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15","3fe75688dde3188a",
+       "3fe777777cc4e36f","3fec53d84a2badf7","3feee6a8be197281","3feeeeeeef989c6e","3fefdbc705f9f0d6","3fefffffee1ab3a4","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "1","1","0.8716374999999998","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654","0.7293133100254334","0.7333333432098764",
+       "0.8852349709172235","0.9656566346053098","0.9666666679012346","0.9955783001637666","0.9999999666666679","1","1","1","1","1","1","1","1","1","1","1","1","1"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series1:bar/4#label",
+     "owner": "series1:bar",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":1,"row":4,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe3333333333333","x":"0000000000000000","y":"0000000000000000","z2":"4008000000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.6","x":"0","y":"0","z2":"3"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe3333333333333","3fe3333333333333","3fe0bc45cbbc2b94","3fd814b9e0e1d7a0","3fcc77ff401192f6","3fc07e73ce58e8f8","3fb4a2989bc2bea8","3fb00a073fe54840","3faeb852975195c0","3faeb852975195c0","3fd228b6cf88fc40","3fdc01710a43b70b",
+       "3fdc28f5c8ec441f","3fe0ff1b5fb3cec7","3fe28a653edc1181","3fe28f5c295b910e","3fe31d7769fc5d4d","3fe3333328766bc9","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333",
+       "3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333","3fe3333333333333"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","","","","","","","","","","","","","","",""],
+      "style.opacity": [
+       "0.6","0.6","0.5229824999999999","0.37626501999999995","0.22241201999999988","0.12885901999999994","0.08060601999999994","0.06265301999999995","0.06000001999999993","0.06000001999999993","0.28373499171351924","0.43758798601526",
+       "0.44000000592592586","0.531140982550334","0.5793939807631859","0.5800000007407407","0.5973469800982599","0.5999999800000008","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6","0.6"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","","","","","","","","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.0.0",
+     "owner": "series2:line",
+     "role": "el",
+     "type": "path",
+     "dataIndex": 0,
+     "map": {"s":2,"row":0,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "4014000000000000",
+      "scaleY": "4014000000000000",
+      "shape.height": "4000000000000000",
+      "shape.width": "4000000000000000",
+      "shape.x": "bff0000000000000",
+      "shape.y": "bff0000000000000",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "4000000000000000",
+      "style.opacity": "3fe0000000000000",
+      "style.stroke": "#fac858",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "4059000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "5",
+      "scaleY": "5",
+      "shape.height": "2",
+      "shape.width": "2",
+      "shape.x": "-1",
+      "shape.y": "-1",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "2",
+      "style.opacity": "0.5",
+      "style.stroke": "#fac858",
+      "x": "0",
+      "y": "0",
+      "z2": "100"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.0.0#label",
+     "owner": "series2:line",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":2,"row":0,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4059800000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"102"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.1.0",
+     "owner": "series2:line",
+     "role": "el",
+     "type": "path",
+     "dataIndex": 1,
+     "map": {"s":2,"row":1,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "4014000000000000",
+      "scaleY": "4014000000000000",
+      "shape.height": "4000000000000000",
+      "shape.width": "4000000000000000",
+      "shape.x": "bff0000000000000",
+      "shape.y": "bff0000000000000",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "4000000000000000",
+      "style.opacity": "3fe0000000000000",
+      "style.stroke": "#fac858",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "4059000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "5",
+      "scaleY": "5",
+      "shape.height": "2",
+      "shape.width": "2",
+      "shape.x": "-1",
+      "shape.y": "-1",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "2",
+      "style.opacity": "0.5",
+      "style.stroke": "#fac858",
+      "x": "0",
+      "y": "0",
+      "z2": "100"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.1.0#label",
+     "owner": "series2:line",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":2,"row":1,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4059800000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"102"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.2.0",
+     "owner": "series2:line",
+     "role": "el",
+     "type": "path",
+     "dataIndex": 2,
+     "map": {"s":2,"row":2,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "4014000000000000",
+      "scaleY": "4014000000000000",
+      "shape.height": "4000000000000000",
+      "shape.width": "4000000000000000",
+      "shape.x": "bff0000000000000",
+      "shape.y": "bff0000000000000",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "4000000000000000",
+      "style.opacity": "3fe0000000000000",
+      "style.stroke": "#fac858",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "4059000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "5",
+      "scaleY": "5",
+      "shape.height": "2",
+      "shape.width": "2",
+      "shape.x": "-1",
+      "shape.y": "-1",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "2",
+      "style.opacity": "0.5",
+      "style.stroke": "#fac858",
+      "x": "0",
+      "y": "0",
+      "z2": "100"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.2.0#label",
+     "owner": "series2:line",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":2,"row":2,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4059800000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"102"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.3.0",
+     "owner": "series2:line",
+     "role": "el",
+     "type": "path",
+     "dataIndex": 3,
+     "map": {"s":2,"row":3,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "4014000000000000",
+      "scaleY": "4014000000000000",
+      "shape.height": "4000000000000000",
+      "shape.width": "4000000000000000",
+      "shape.x": "bff0000000000000",
+      "shape.y": "bff0000000000000",
+      "states": "",
+      "style.fill": "rgba(255,255,255,1)",
+      "style.lineWidth": "4000000000000000",
+      "style.opacity": "3fe0000000000000",
+      "style.stroke": "#fac858",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "4059000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "5",
+      "scaleY": "5",
+      "shape.height": "2",
+      "shape.width": "2",
+      "shape.x": "-1",
+      "shape.y": "-1",
+      "states": "",
+      "style.fill": "rgba(255,255,255,1)",
+      "style.lineWidth": "2",
+      "style.opacity": "0.5",
+      "style.stroke": "#fac858",
+      "x": "0",
+      "y": "0",
+      "z2": "100"
+     },
+     "track": {
+      "scaleX": [
+       "4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000",
+       "4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000",
+       "4014000000000000","4014000000000000","4015684bda12f685","4015684bda12f685","401564b4907f8183","4014000000000000","4014000000000000"
+      ],
+      "scaleY": [
+       "4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000",
+       "4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000","4014000000000000",
+       "4014000000000000","4014000000000000","4015684bda12f685","4015684bda12f685","401564b4907f8183","4014000000000000","4014000000000000"
+      ],
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","emphasis","emphasis","","","","",""],
+      "style.fill": [
+       "#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)",
+       "rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fd75688ddae8448","3fdd6ef9253d30ad","3fdd6ef9253d30ad","3fdd7585889ac190","3fe0000000000000","3fe0000000000000"
+      ],
+      "z2": [
+       "4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000",
+       "4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000",
+       "405b800000000000","405b800000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000","4059000000000000"
+      ]
+     },
+     "trackText": {
+      "scaleX": ["5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5.351851851851852","5.351851851851852","5.348345048696845","5","5"],
+      "scaleY": ["5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5.351851851851852","5.351851851851852","5.348345048696845","5","5"],
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","emphasis","emphasis","","","","",""],
+      "style.fill": [
+       "#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","#fff","rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)",
+       "rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.36465665482143494","0.45989826809524","0.45989826809524","0.4602979501751401","0.5","0.5"
+      ],
+      "z2": ["100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","100","110","110","100","100","100","100","100"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","emphasis: emphasis:style","emphasis: emphasis:style",
+      "__zr_normal__: __zr_normal__:style","__zr_normal__: __zr_normal__:style","__zr_normal__: __zr_normal__:style","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.3.0#label",
+     "owner": "series2:line",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":2,"row":3,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4059800000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"102"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","emphasis","emphasis","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fd75688ddae8448","3fe7b962064b2874","3fe7b962064b2874","3fe7a5acc77d6a75","3fe0000000000000","3fe0000000000000"
+      ],
+      "z2": [
+       "4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000",
+       "4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000",
+       "405c000000000000","405c000000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000","4059800000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","emphasis","emphasis","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.36465665482143494","0.7413797495767214","0.7413797495767214","0.738973989132616","0.5","0.5"
+      ],
+      "z2": ["102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","102","112","112","102","102","102","102","102"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","emphasis:style","emphasis:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.4.0",
+     "owner": "series2:line",
+     "role": "el",
+     "type": "path",
+     "dataIndex": 4,
+     "map": {"s":2,"row":4,"part":"host"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "4014000000000000",
+      "scaleY": "4014000000000000",
+      "shape.height": "4000000000000000",
+      "shape.width": "4000000000000000",
+      "shape.x": "bff0000000000000",
+      "shape.y": "bff0000000000000",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "4000000000000000",
+      "style.opacity": "3fe0000000000000",
+      "style.stroke": "#fac858",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "4059000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0",
+      "scaleX": "5",
+      "scaleY": "5",
+      "shape.height": "2",
+      "shape.width": "2",
+      "shape.x": "-1",
+      "shape.y": "-1",
+      "states": "",
+      "style.fill": "#fff",
+      "style.lineWidth": "2",
+      "style.opacity": "0.5",
+      "style.stroke": "#fac858",
+      "x": "0",
+      "y": "0",
+      "z2": "100"
+     },
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/0.4.0#label",
+     "owner": "series2:line",
+     "role": "label",
+     "type": "text",
+     "dataIndex": null,
+     "map": {"s":2,"row":4,"part":"label"},
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {"ignore":false,"invisible":false,"rotation":"0000000000000000","scaleX":"3ff0000000000000","scaleY":"3ff0000000000000","states":"","style.opacity":"3fe0000000000000","x":"0000000000000000","y":"0000000000000000","z2":"4059800000000000"},
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","states":"","style.opacity":"0.5","x":"0","y":"0","z2":"102"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "3fe0000000000000","3fe0000000000000","3fdbe474538ef34c","3fd4114590bc33b1","3fc7b954b563fa7a","3fbb7d6bad3ed9a0","3fb13229d7224990","3faabb616a7e2320","3fa9999a28c3fcd0","3fa9999a28c3fcd0","3fce43db59e44f15","3fd75688dde3188a",
+       "3fd777777cc4e36f","3fdc53d84a2badf7","3fdee6a8be197281","3fdee6a8be197281","3fd36c7f46545146","3fc71018d8bb871e","3fbaedeb00d3e604","3fb1073869bffe48","3faab0529d2711b8","3fa9999a234d6f40","3fa9999a234d6f40","3fce43db591788c2",
+       "3fd75688ddae8448","3fdee6a8be12c6bc","3fdfffffee1ab3a4","3fe0000000000000","3fe0000000000000","3fe0000000000000","3fe0000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","","","","","","",""],
+      "style.opacity": [
+       "0.5","0.5","0.4358187499999999","0.31355418333333335","0.18534334999999996","0.10738251666666665","0.06717168333333334","0.05221085000000003","0.05000001666666665","0.05000001666666665","0.2364458264279327","0.3646566550127167",
+       "0.3666666716049382","0.44261748545861174","0.4828283173026549","0.4828283173026549","0.3034971415338713","0.18017874319689836","0.10519284029205528","0.06651642400537938","0.05212648552290794","0.050000016030678385","0.050000016030678385",
+       "0.23644582605544967","0.36465665482143494","0.48282831727838604","0.49999998333333395","0.5","0.5","0.5","0.5"
+      ]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","","","",""
+     ],
+     "transition": [
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
+      "300/cubicOut/"
+     ]
+    },
+    {
+     "id": "series2:line/1.0",
+     "owner": "series2:line",
+     "role": "el",
+     "type": "ec-polyline",
+     "dataIndex": null,
+     "map": null,
+     "hasEmphasis": true,
+     "everStates": true,
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.smooth": "0000000000000000",
+      "states": "",
+      "style.fill": "none",
+      "style.lineWidth": "4000000000000000",
+      "style.opacity": "3ff0000000000000",
+      "style.stroke": "rgba(250,200,88,1)",
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "z2": "4024000000000000"
+     },
+     "finalText": {"ignore":false,"invisible":false,"rotation":"0","scaleX":"1","scaleY":"1","shape.smooth":"0","states":"","style.fill":"none","style.lineWidth":"2","style.opacity":"1","style.stroke":"rgba(250,200,88,1)","x":"0","y":"0","z2":"10"},
+     "track": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","emphasis","emphasis","","","","",""],
+      "style.opacity": [
+       "3ff0000000000000","3ff0000000000000","3febe474538ef34c","3fe4114590bc33b1","3fd7b954b563fa7a","3fcb7d6bad3ed9a0","3fc13229d7224990","3fbabb616a7e2320","3fb9999a28c3fcd0","3fb9999a28c3fcd0","3fde43db59e44f15","3fe75688dde3188a",
+       "3fe777777cc4e36f","3fec53d84a2badf7","3feee6a8be197281","3feee6a8be197281","3fe36c7f46545146","3fd71018d8bb871e","3fcaedeb00d3e604","3fc1073869bffe48","3fbab0529d2711b8","3fb9999a234d6f40","3fb9999a234d6f40","3fde43db591788c2",
+       "3fe75688ddae8448","3fe75688ddae8448","3fed6ef9253d30ad","3fed6ef9253d30ad","3fed7585889ac190","3ff0000000000000","3ff0000000000000"
+      ],
+      "style.stroke": [
+       "#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858",
+       "#fac858","rgba(250,200,88,1)","rgba(253,214,93,1)","rgba(253,214,93,1)","rgba(252,213,92,1)","rgba(250,200,88,1)","rgba(250,200,88,1)"
+      ],
+      "z2": [
+       "4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",
+       "4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",
+       "4034000000000000","4034000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000"
+      ]
+     },
+     "trackText": {
+      "states": ["blur","blur","blur","blur","blur","blur","blur","blur","","","","","","","blur","blur","blur","blur","blur","blur","blur","","","","emphasis","emphasis","","","","",""],
+      "style.opacity": [
+       "1","1","0.8716374999999998","0.6271083666666667","0.3706866999999999","0.2147650333333333","0.13434336666666669","0.10442170000000006","0.1000000333333333","0.1000000333333333","0.4728916528558654","0.7293133100254334","0.7333333432098764",
+       "0.8852349709172235","0.9656566346053098","0.9656566346053098","0.6069942830677426","0.3603574863937967","0.21038568058411056","0.13303284801075876","0.10425297104581588","0.10000003206135677","0.10000003206135677","0.47289165211089934",
+       "0.7293133096428699","0.7293133096428699","0.91979653619048","0.91979653619048","0.9205959003502802","1","1"
+      ],
+      "style.stroke": [
+       "#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858","#fac858",
+       "#fac858","rgba(250,200,88,1)","rgba(253,214,93,1)","rgba(253,214,93,1)","rgba(252,213,92,1)","rgba(250,200,88,1)","rgba(250,200,88,1)"
+      ],
+      "z2": ["10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","10","20","20","10","10","10","10","10"]
+     },
+     "animators": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+     "stateAnimators": [
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style",
+      "blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","blur:style","__zr_normal__:style","__zr_normal__:style","__zr_normal__:style","emphasis:style","emphasis:style","__zr_normal__:style","__zr_normal__:style",
+      "__zr_normal__:style","",""
+     ],
      "transition": [
       "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",
       "300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/","300/cubicOut/",

@@ -961,6 +961,22 @@ const R2I5 = [
     events: [over(0, mark(0, 'ma0')), over(300, mark(0, 'mp0')), over(600, ['item', 1, 3]), out(900)] },
 ];
 
+// [R2-I6] a marker label's own opacity under a state's: the state's text
+// style replaces it, blur without one of its own is a tenth of it
+const R2I6 = [
+  { id: 'mk-label-opacity', note: '[R2-I6] the labels of markers with opacities of their own: a circle markPoint of 20 (scale '
+    + 'false) with its label at the top at 0.5, emphasis.label.opacity 0.8, blur.label.opacity 0.3; the label of the markLine '
+    + 'at 0.6, emphasis.label.opacity 0.9, no blur one (a tenth: 0.06); the label of markArea one at 0.4, blur.label.opacity '
+    + '0.7, no emphasis one. Hover mp0 at 0, ml0 at 300, ma0 at 600, bar 3 of series 1 (focus series) at 900, out at 1200',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'top', opacity: 0.5 },
+      emphasis: { scale: false, label: { opacity: 0.8 } }, blur: { label: { opacity: 0.3 } } }),
+    markLine: ML({ label: { opacity: 0.6 }, emphasis: { label: { opacity: 0.9 } } }),
+    markArea: MA({ label: { opacity: 0.4 }, blur: { label: { opacity: 0.7 } } }, [[{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }]]) },
+    { emphasis: { focus: 'series' } }),
+    events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'ml0')), over(600, mark(0, 'ma0')), over(900, ['item', 1, 3]),
+      out(1200)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1170,7 +1186,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

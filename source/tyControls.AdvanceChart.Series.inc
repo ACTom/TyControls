@@ -2059,6 +2059,22 @@ begin
     if dims[k].Axis <> nil then AStore.UseOrdinalMeta(k, dims[k].Axis.Categories);
   end;
   if Length(dims) > 0 then TyFillSeriesStore(FOption, ASlot, dims, AStore);
+  { [R2-I6] AN EXTRA POSITION THAT IS TEXT -- one no axis stands on, which
+    upstream's createDimensions types by guessOrdinal -- holds the string
+    as written (an ordinal dimension with no ordinalMeta): the store's
+    float column of it would read every cell as not a number, and a
+    visualMap's categories on it would match nothing (parallel-nutrients
+    drew every line transparent). Its column reads no position; the
+    position answers from the item, typed ordinal, as any position no
+    column reads. }
+  for k := 0 to High(dims) do
+    if (dims[k].Axis = nil) and (dims[k].Kind = ddtFloat)
+      and (Copy(dims[k].Name, 1, Length(TyParallelDimPrefix)) <> TyParallelDimPrefix)
+      and AStore.RawPosGuessOrdinal(AStore.RawDimPos(k), True) then
+    begin
+      AStore.SetRawDimType(AStore.RawDimPos(k), ddtOrdinal);
+      AStore.SetRawDimPos(k, -1);
+    end;
   best := -1;
   for k := 0 to High(dims) do
     if (Copy(dims[k].Name, 1, Length(TyParallelDimPrefix)) = TyParallelDimPrefix)

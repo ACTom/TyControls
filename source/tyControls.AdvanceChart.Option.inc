@@ -98,6 +98,8 @@ begin
   { Order is a contract, not a habit: a store BORROWS its category list from an
     axis the build owns, so every store goes first. }
   DropBuild;
+  { [R2-I6] the kept stores borrow nothing; after the build all the same }
+  StoreKeepDrop;
   FreeAndNil(FPaintList);
   FreeGeoSel;
   FreeAndNil(FIndex);

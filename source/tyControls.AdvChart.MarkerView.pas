@@ -840,6 +840,15 @@ begin
   end;
 end;
 
+{ [R2-I6] a marker label's own opacity as its element's alpha: none is 1,
+  and the ink's old rule beyond [0, 1] (clamped) }
+function LabelAlpha(AOpacity: Double): Double;
+begin
+  if IsNan(AOpacity) or (AOpacity >= 1) then Exit(1);
+  if AOpacity <= 0 then Exit(0);
+  Result := AOpacity;
+end;
+
 { [R2-I5] THE WORD a dash is written as, for TTyChartStyle.DashWord: 1
   'dashed', 2 'dotted', 0 anything else (lengths, or none) -- the canvas
   normalises a word against the width it strokes at, brush by brush }
@@ -1884,13 +1893,6 @@ var
     Result := (S <> '') and TyTryParseChartColor(S, AC);
   end;
 
-  function Faded(AC: TTyChartColor; AOpacity: Double): TTyChartColor;
-  begin
-    if IsNan(AOpacity) or (AOpacity >= 1) then Exit(AC);
-    if AOpacity <= 0 then Exit(AC and $00FFFFFF);
-    Result := (AC and $00FFFFFF) or (Cardinal(Round((AC shr 24) * AOpacity)) shl 24);
-  end;
-
   function Blank(AZ2: Double): TTyChartElement;
   begin
     Result := Default(TTyChartElement);
@@ -1974,12 +1976,18 @@ var
     { the author's colours as written; upstream's default ink is the skin's }
     if (B.StyleFill <> '') and Colour(B.InkFill, c) then el.Caption.Colour := c
     else el.Caption.Colour := AInk.Text;
-    el.Caption.Colour := Faded(el.Caption.Colour, B.InkOpacity);
+    { [R2-I6] THE TEXT'S OWN OPACITY ON THE ELEMENT, not in its ink: a
+      state's text style replaces it (zrender merges the state's style over
+      the normal one) and blur's default is a tenth of it -- the states
+      write the element's opacity, and with this one in the ink as well the
+      two multiplied (a blur.label.opacity 0.3 over a label.opacity 0.5 drew
+      at 0.15, an emphasis twin's ink carried emphasis' own once more). The
+      same alpha on every colour of it, rich pieces too. }
+    el.Style.Alpha := LabelAlpha(B.StyleOpacity);
     if B.InkStroke <> '' then
     begin
       if (B.StyleStroke <> '') and Colour(B.InkStroke, c) then el.Caption.StrokeColour := c
       else el.Caption.StrokeColour := AInk.Halo;
-      el.Caption.StrokeColour := Faded(el.Caption.StrokeColour, B.InkOpacity);
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
     end;
     el.Caption.X := x;
@@ -3202,13 +3210,6 @@ var
     Result := (S <> '') and TyTryParseChartColor(S, AC);
   end;
 
-  function Faded(AC: TTyChartColor; AOpacity: Double): TTyChartColor;
-  begin
-    if IsNan(AOpacity) or (AOpacity >= 1) then Exit(AC);
-    if AOpacity <= 0 then Exit(AC and $00FFFFFF);
-    Result := (AC and $00FFFFFF) or (Cardinal(Round((AC shr 24) * AOpacity)) shl 24);
-  end;
-
 begin
   Result := 0;
   AGlobal := AInk.RtGlobal;
@@ -3272,14 +3273,14 @@ begin
       else el.Caption.Colour := AInk.Inside[2];
     end
     else el.Caption.Colour := AInk.Text;
-    el.Caption.Colour := Faded(el.Caption.Colour, B.InkOpacity);
+    { [R2-I6] the text's own opacity on the element, as a markPoint's }
+    el.Style.Alpha := LabelAlpha(B.StyleOpacity);
     if B.InkStroke <> '' then
     begin
       if ((B.StyleStroke <> '') or B.Inside) and Colour(B.InkStroke, c) then
         el.Caption.StrokeColour := c
       else
         el.Caption.StrokeColour := AInk.Halo;
-      el.Caption.StrokeColour := Faded(el.Caption.StrokeColour, B.InkOpacity);
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
     end;
     el.Caption.X := x;
@@ -3553,6 +3554,21 @@ var
   rect2: TTyXYWH;
   penMoves: Boolean;
 
+  { [R2-I6] Path.getBoundingRect's stroke allowance in the port's device
+    units, as R2-I4's markLine Grown: the LOGICAL width -- max(width, 5)
+    where the polygon has no fill -- then the scale the path is drawn at
+    (the polygon has no strokeNoScale). [Was: the logical width taken as
+    device px, the floor too -- half a width short at 192 PPI; the
+    gradient's box floored after the scale.] }
+  function AreaRect(AHasStroke, AHasFill: Boolean; AWidth: Double): TTyXYWH;
+  var g: Double;
+  begin
+    if not (AHasStroke and (AWidth > 0) and (Length(P.Path) > 0)) then Exit(P.BBox);
+    g := AWidth;
+    if (not AHasFill) and (g < 5) then g := 5;
+    Result := TyZrStrokeRect(P.BBox, Length(P.Path), True, True, g * s, 1);
+  end;
+
   { [R2-I5] THE RECT A STATE LAYS THE LABEL ON: the polygon's box grown by
     the pen that state draws (its own borderColor and borderWidth over the
     rest's -- Path.getBoundingRect under the state's style); APenMoves where
@@ -3573,7 +3589,7 @@ var
     if e <> nil then has2 := not ((e.JSONType = jtString) and (e.AsString = 'none'));
     has2 := has2 and (lw2 > 0);
     APenMoves := (has2 <> hasStroke) or (has2 and (lw2 <> P.LineWidth));
-    Result := TyZrStrokeRect(P.BBox, Length(P.Path), has2, hasFill, lw2, 1);
+    Result := AreaRect(has2, hasFill, lw2);
   end;
 
 begin
@@ -3650,9 +3666,8 @@ begin
       hasStroke := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none')
         and (P.LineWidth > 0);
       hasFill := P.HasFill and (P.Fill <> 'none');
-      P.Rect := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill, P.LineWidth, 1);
-      P.GradBox := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill,
-        P.LineWidth * s, 1);
+      P.Rect := AreaRect(hasStroke, hasFill, P.LineWidth);
+      P.GradBox := P.Rect;
       { Math.max(z2 || 0, maxZ2) -- a clipped area does not count }
       if IsNan(P.Z2) then z2v := 0 else z2v := P.Z2;
       if z2v > maxZ2 then maxZ2 := z2v;
