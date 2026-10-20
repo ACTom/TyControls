@@ -470,7 +470,7 @@ begin
       TyPolarPointerBand(AHit.Axis), True);
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
-  ADraw.Text := PointerLabelText(AHit, pv);
+  ADraw.Text := PointerDrawLabelText(AHit, pv);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
   AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
     labelS.FontWeight, tw, th);
@@ -1330,7 +1330,7 @@ begin
       PolarShadowBand(AHit), True);
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
-  ADraw.Text := PointerLabelText(AHit, pv);
+  ADraw.Text := PointerDrawLabelText(AHit, pv);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
   AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
     labelS.FontWeight, tw, th);

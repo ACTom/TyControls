@@ -7258,6 +7258,1940 @@
      }
     }
    ]
+  },
+  {
+   "id": "calls-ptrfmt",
+   "note": "no tooltip, the x axis own pointer with a function label: BaseAxisPointer.render runs it when the value or the status changed, once more after the first show (the graphicKey change clears _lastValue), and on a full update (forceRender)",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": true,
+        "label": {
+         "formatter": "@ptrfmt"
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "name": "s",
+        "data": [
+         [
+          2,
+          3
+         ],
+         [
+          5,
+          6
+         ],
+         [
+          8,
+          4
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      170
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 170,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 1
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      171
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 171,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 1
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      172
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 172,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      173
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 173,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      405,
+      170
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 7
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 405,
+        "y": 170,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 8,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 1
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      405,
+      171
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 7
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 405,
+        "y": 171,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 8,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      405,
+      170
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 7
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 405,
+        "y": 170,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 8,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 1
+     }
+    },
+    {
+     "op": "setOption",
+     "chart": 0,
+     "option": {
+      "title": {
+       "text": "t"
+      }
+     },
+     "notMerge": false,
+     "events": [
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 1
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      405,
+      171
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 7
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 405,
+        "y": 171,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 8,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true
+        }
+       ],
+       "tip": null
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "calls-ptrfmt-tip",
+   "note": "the same under a tooltip with trigger none: the axis tooltip header asks the label once per show besides",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": true,
+        "label": {
+         "formatter": "@ptrfmt"
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "name": "s",
+        "data": [
+         [
+          2,
+          3
+         ],
+         [
+          5,
+          6
+         ],
+         [
+          8,
+          4
+         ]
+        ]
+       }
+      ],
+      "tooltip": {
+       "trigger": "none"
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      170
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 170,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0",
+        "anchor": [
+         "4074400000000000",
+         "4065400000000000"
+        ],
+        "anchorText": [
+         "324",
+         "170"
+        ],
+        "box": [
+         "4075800000000000",
+         "4067c00000000000"
+        ],
+        "boxText": [
+         "344",
+         "190"
+        ],
+        "text": "{__EC_aUTo_#|P5}\n{__EC_aUTo_#|}  {__EC_aUTo_#|s}{__EC_aUTo_#|6}"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 2
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      171
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 171,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0",
+        "anchor": [
+         "4074400000000000",
+         "4065600000000000"
+        ],
+        "anchorText": [
+         "324",
+         "171"
+        ],
+        "box": [
+         "4075800000000000",
+         "4067e00000000000"
+        ],
+        "boxText": [
+         "344",
+         "191"
+        ],
+        "text": "{__EC_aUTo_#|P5}\n{__EC_aUTo_#|}  {__EC_aUTo_#|s}{__EC_aUTo_#|6}"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 2
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      324,
+      172
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5.2
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 324,
+        "y": 172,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014cccccccccccd",
+         "valueText": "5.2",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4074400000000000",
+          "pixelText": "324",
+          "label": "P5.2"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0",
+        "anchor": [
+         "4074400000000000",
+         "4065800000000000"
+        ],
+        "anchorText": [
+         "324",
+         "172"
+        ],
+        "box": [
+         "4075800000000000",
+         "4068000000000000"
+        ],
+        "boxText": [
+         "344",
+         "192"
+        ],
+        "text": "{__EC_aUTo_#|P5}\n{__EC_aUTo_#|}  {__EC_aUTo_#|s}{__EC_aUTo_#|6}"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 1
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      405,
+      170
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 7
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 405,
+        "y": 170,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 8,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/2@x0",
+        "anchor": [
+         "4079500000000000",
+         "4065400000000000"
+        ],
+        "anchorText": [
+         "405",
+         "170"
+        ],
+        "box": [
+         "407a900000000000",
+         "4067c00000000000"
+        ],
+        "boxText": [
+         "425",
+         "190"
+        ],
+        "text": "{__EC_aUTo_#|P8}\n{__EC_aUTo_#|}  {__EC_aUTo_#|s}{__EC_aUTo_#|4}"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 2
+     }
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "axis:0/2@x0",
+        "anchor": [
+         "4079500000000000",
+         "4065400000000000"
+        ],
+        "anchorText": [
+         "405",
+         "170"
+        ],
+        "box": [
+         "407a900000000000",
+         "4067c00000000000"
+        ],
+        "boxText": [
+         "425",
+         "190"
+        ],
+        "text": "{__EC_aUTo_#|P8}\n{__EC_aUTo_#|}  {__EC_aUTo_#|s}{__EC_aUTo_#|4}"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      405,
+      170
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 7
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 405,
+        "y": 170,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 8,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "401c000000000000",
+         "valueText": "7",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4079500000000000",
+          "pixelText": "405",
+          "label": "P7"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/2@x0",
+        "anchor": [
+         "4079500000000000",
+         "4065400000000000"
+        ],
+        "anchorText": [
+         "405",
+         "170"
+        ],
+        "box": [
+         "407a900000000000",
+         "4067c00000000000"
+        ],
+        "boxText": [
+         "425",
+         "190"
+        ],
+        "text": "{__EC_aUTo_#|P8}\n{__EC_aUTo_#|}  {__EC_aUTo_#|s}{__EC_aUTo_#|4}"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 2
+     }
+    }
+   ]
   }
  ],
  "guards": [

@@ -437,6 +437,22 @@ type
     asks again). Upstream loads the URL; this control never fetches. }
   TTyChartResolveImageEvent = procedure(Sender: TObject; const AUrl: string;
     var AImage: TBGRABitmap) of object;
+  { [R2-I8] one axis' BaseAxisPointer, as far as its label goes: the memo
+    render() keeps (PointerDrawLabelText) }
+  TTyPtrMemoEntry = record
+    Key: string;
+    { _lastValue / _lastStatus: HasLast False is their null (never
+      rendered, or cleared); LastShown the status 'show' }
+    HasLast, LastShown: Boolean;
+    LastValue: Double;
+    { _lastGraphicKey (the pointer's type); none before the first show }
+    HasGraphicKey: Boolean;
+    GraphicKey: TTyAxisPointerType;
+    { the full update (FStGen) the memo was rendered under, and the
+      updateAxisPointer action (FPtrUpdGen) it last rendered for }
+    Gen, UpdGen: Integer;
+    Text: string;
+  end;
   { the skin's inks for the toolbox [Batch 125] }
   TTyTbInk = record
     Stroke, StrokeHover, Background, Border, Brush, Title: TTyChartColor;
@@ -1545,6 +1561,11 @@ type
     FTipCur: TTyTipContent;
     FTipCurDue: Boolean;
     FTipShowGen, FTipPosGen: Integer;
+    { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
+    FPtrMemo: array of TTyPtrMemoEntry;
+    { [R2-I8] one per updateAxisPointer action: render() runs on an action,
+      not on a paint }
+    FPtrUpdGen: Integer;
     FTipPosAns: TTyChartTooltipPos;
     FTipLastSigs: TTyStringArray;
     FTipLastSigSeries: TTyIntegerArray;
@@ -3464,6 +3485,19 @@ type
       unless written: the step's decimals plus two, padded, so 3.00), with
       the label's string formatter over it. }
     function PointerLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    { [R2-I8] THE LABEL A POINTER DRAWS, run as BaseAxisPointer.render runs
+      it: a function formatter is called when the value or the status
+      changed since the axis' last render, on a full update (forceRender),
+      and once more after the first show -- whose graphicKey change clears
+      the memo --; otherwise the text it gave stands. A template is cheap
+      and has no side effects: it is just formatted. }
+    function PointerDrawLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    { [R2-I8] the pointers this paint does not draw are hidden: their
+      memo's status is 'hide' (the value kept, as the model keeps it) }
+    procedure PointerMemoHideOthers(const AHits: TTyAxisHitArray);
+    { [R2-I8] the label text a pointer last drew through the memo ('' when
+      it has none) -- for a probe that must not run the formatter }
+    function PointerLabelDrawn(const AHit: TTyAxisHit): string;
     function AuthorBackground(out AColour: TTyChartColor): Boolean;
     procedure GlobalInk(var AName: string; var ASize, AWeight: Integer;
       var AColour: TTyChartColor; APick: TTyTextPick);

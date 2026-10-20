@@ -1461,6 +1461,101 @@ begin
   Result := TyChartRunHandler(AHit.Spec.LabelSpec.Formatter, prm);
 end;
 
+function PtrMemoKey(AAxis: TTyAxis): string;
+begin
+  Result := AAxis.Dim + '/' + IntToStr(AAxis.ComponentIndex);
+end;
+
+function TTyAdvanceChart.PointerDrawLabelText(const AHit: TTyAxisHit;
+  AValue: Double): string;
+var
+  i, k: Integer;
+  key: string;
+  forced: Boolean;
+begin
+  if (AHit.Axis = nil) or not AHit.Spec.LabelSpec.HasFormatter
+    or not TyChartIsHandlerRef(AHit.Spec.LabelSpec.Formatter) then
+    Exit(PointerLabelText(AHit, AValue));
+  key := PtrMemoKey(AHit.Axis);
+  k := -1;
+  for i := 0 to High(FPtrMemo) do
+    if FPtrMemo[i].Key = key then
+    begin
+      k := i;
+      Break;
+    end;
+  if k < 0 then
+  begin
+    { a new BaseAxisPointer: nothing remembered, and a render it is }
+    k := Length(FPtrMemo);
+    SetLength(FPtrMemo, k + 1);
+    FPtrMemo[k] := Default(TTyPtrMemoEntry);
+    FPtrMemo[k].Key := key;
+    FPtrMemo[k].Gen := FStGen;
+    FPtrMemo[k].UpdGen := FPtrUpdGen - 1;
+  end;
+  { forceRender: AxisView.render on a full update }
+  forced := FPtrMemo[k].Gen <> FStGen;
+  { render() RUNS ON AN ACTION, NOT ON A PAINT: a second paint of the same
+    update draws what the first one rendered }
+  if (not forced) and (FPtrMemo[k].UpdGen = FPtrUpdGen) then
+    Exit(FPtrMemo[k].Text);
+  FPtrMemo[k].UpdGen := FPtrUpdGen;
+  { `!forceRender && _lastValue === value && _lastStatus === status`:
+    nothing to render, the label drawn stands }
+  if (not forced) and FPtrMemo[k].HasLast and FPtrMemo[k].LastShown
+    and (FPtrMemo[k].LastValue = AValue) then
+    Exit(FPtrMemo[k].Text);
+  FPtrMemo[k].HasLast := True;
+  FPtrMemo[k].LastShown := True;
+  FPtrMemo[k].LastValue := AValue;
+  FPtrMemo[k].Gen := FStGen;
+  { makeElOption: the label's text }
+  FPtrMemo[k].Text := PointerLabelText(AHit, AValue);
+  { a graphicKey other than the last one clears the pointer -- _lastValue
+    and _lastStatus with it, AFTER they were set: the render after the
+    first show (or after the pointer's type changed) is never skipped }
+  if not FPtrMemo[k].HasGraphicKey
+    or (FPtrMemo[k].GraphicKey <> AHit.Spec.PointerType) then
+    FPtrMemo[k].HasLast := False;
+  FPtrMemo[k].HasGraphicKey := True;
+  FPtrMemo[k].GraphicKey := AHit.Spec.PointerType;
+  Result := FPtrMemo[k].Text;
+end;
+
+procedure TTyAdvanceChart.PointerMemoHideOthers(const AHits: TTyAxisHitArray);
+var
+  i, j: Integer;
+  seen: Boolean;
+begin
+  for i := 0 to High(FPtrMemo) do
+  begin
+    seen := False;
+    for j := 0 to High(AHits) do
+      if (AHits[j].Axis <> nil) and AHits[j].Spec.LabelSpec.Show
+        and (PtrMemoKey(AHits[j].Axis) = FPtrMemo[i].Key) then
+      begin
+        seen := True;
+        Break;
+      end;
+    { status 'hide': `_lastStatus = status` with the value kept }
+    if not seen and FPtrMemo[i].HasLast then FPtrMemo[i].LastShown := False;
+  end;
+end;
+
+function TTyAdvanceChart.PointerLabelDrawn(const AHit: TTyAxisHit): string;
+var i: Integer; key: string;
+begin
+  Result := '';
+  if AHit.Axis = nil then Exit;
+  if not AHit.Spec.LabelSpec.HasFormatter
+    or not TyChartIsHandlerRef(AHit.Spec.LabelSpec.Formatter) then
+    Exit(PointerLabelText(AHit, PointerValue(AHit)));
+  key := PtrMemoKey(AHit.Axis);
+  for i := 0 to High(FPtrMemo) do
+    if FPtrMemo[i].Key = key then Exit(FPtrMemo[i].Text);
+end;
+
 function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
   const ALabel: TTyAxisPointerLabelSpec): string;
 begin
@@ -2158,6 +2253,8 @@ begin
     '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel',
     '', []);
+  { [R2-I8] a pointer this paint does not draw is hidden }
+  PointerMemoHideOthers(AHits);
   for i := 0 to High(AHits) do
   begin
     hit := AHits[i];
@@ -2248,8 +2345,9 @@ begin
     if not hit.Spec.LabelSpec.Show then Continue;
     if not (tpBackground in labelS.Present) then Continue;
     { The value the line is at -- the cursor's with snap off, where it used to
-      be the nearest row's while the line stood under the cursor. }
-    txt := PointerLabelText(hit, pv);
+      be the nearest row's while the line stood under the cursor.
+      [R2-I8] through the axis' memo: a function runs as upstream runs it }
+    txt := PointerDrawLabelText(hit, pv);
     if txt = '' then Continue;
     AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
       labelS.FontWeight, tw, th);
@@ -3855,6 +3953,8 @@ var
   end;
 
 begin
+  { [R2-I8] an action: each axis' pointer renders (PointerDrawLabelText) }
+  Inc(FPtrUpdGen);
   via := FUapListener;
   FUapListener := False;
   hits := nil;
