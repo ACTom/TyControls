@@ -118,6 +118,7 @@ type
     procedure TestATreeEdgeIsATargetOfNoData;
     { [R2-I4] }
     procedure TestAMarkLinesEmphasisBoxGrowsByItsPensAtAnyPPI;
+    procedure TestARestDashWordTakesTheStatesWidthWithoutProxies;
   end;
 
 implementation
@@ -1344,6 +1345,34 @@ begin
       lbl.EmphTwin[0].Caption.Y, 1e-9);
   end;
   FBmp.SetSize(cW, cH);
+end;
+
+{ [R2-I4] WITH NOTHING ANIMATING (no state proxies, StWriteHost writes the
+  list): a bar's rest borderType 'dotted' at width 1 under an emphasis
+  borderWidth of 6 is drawn [6] -- the canvas normalises the word against the
+  width it strokes at. [Was: the rest width's [1].] }
+procedure TAdvChartStatesMarksTest.TestARestDashWordTakesTheStatesWidthWithoutProxies;
+const
+  cOpt = '{"animation":false,"color":["#5470c6"],"xAxis":{"type":"category","data":["A","B","C"]},'
+    + '"yAxis":{"type":"value","max":40},"series":[{"type":"bar","data":[10,30,20],'
+    + '"itemStyle":{"borderColor":"#000","borderWidth":1,"borderType":"dotted"},'
+    + '"emphasis":{"itemStyle":{"borderWidth":6}}}]}';
+var
+  bar: TTyChartElement;
+  b: TTyRectF;
+begin
+  NewChart(camOff);
+  Load(cOpt);
+  AssertTrue('the bar', FindRole(carBar, 0, 1, bar) >= 0);
+  AssertEquals('dotted at rest', 1, Length(bar.Style.DashLogical));
+  AssertEquals('dotted at rest is the rest width', 1, bar.Style.DashLogical[0], 0);
+  b := TyShapeBounds(bar.Shape);
+  FChart.Move(Round((b.Left + b.Right) / 2), Round((b.Top + b.Bottom) / 2));
+  Draw;
+  AssertTrue('the hovered bar', FindRole(carBar, 0, 1, bar) >= 0);
+  AssertEquals('the state width', 6, bar.Style.StrokeWidthLogical, 0);
+  AssertEquals('dotted under emphasis', 1, Length(bar.Style.DashLogical));
+  AssertEquals('dotted at the state width', 6, bar.Style.DashLogical[0], 0);
 end;
 
 { [R2-I1] A TREE EDGE IS NO SILENT ELEMENT (TreeView.drawEdge): the pointer

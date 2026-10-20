@@ -85,6 +85,8 @@ type
     procedure TestTheThumbnailBoxesAsUpstream;
     procedure TestTheThumbnailOfForceAndCircularAsUpstream;
     procedure TestTheThumbnailTargetsAsUpstream;
+    { [R2-I4] the nodes' pens, their dashes and phases }
+    procedure TestTheThumbnailPensAsUpstream;
     procedure TestTheExpandedLayoutsAsUpstream;
     procedure TestTheClickTriggerAsUpstream;
     procedure TestTheMoveTriggerAsUpstream;
@@ -970,6 +972,11 @@ end;
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailTargetsAsUpstream;
 begin
   RunGroup(['TH-TARGET']);
+end;
+
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailPensAsUpstream;
+begin
+  RunGroup(['TH-PEN']);
 end;
 
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheExpandedLayoutsAsUpstream;
