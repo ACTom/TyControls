@@ -531,8 +531,8 @@ end;
   FProgUnder, take the layer as the full paint blits it, and have the
   elements after it -- those whose paint rect meets the box, or that have
   none -- and the break areas, the parallel axes and the titles drawn
-  again with the bitmap clipped to the box (the dirty-rect path's
-  clipped repaint, Batch 142); every other pixel is the last paint's.
+  again, whole (an antialiased fill is not the same under a clip); every
+  pixel outside the box is then the last paint's again.
   The result is blended onto the static canvas as the full paint's
   EndPaint blends its bitmap. Anything else -- a relayout, a state, an
   animation, another size, PPI or device scale, a layer built again, the
@@ -615,11 +615,17 @@ begin
       nb.ClipRect := box;
       nb.PutImage(0, 0, FProgUnder, dmSet);
       nb.PutImage(0, 0, FProgLayer, dmDrawWithTransparency);
-      { the box in device px, a pixel out: what meets it is drawn again }
-      zr.X := Floor(box.Left / s) - 1;
-      zr.Y := Floor(box.Top / s) - 1;
-      zr.W := Ceil(box.Right / s) + 1 - zr.X;
-      zr.H := Ceil(box.Bottom / s) + 1 - zr.Y;
+      { NOT CLIPPED to the box: BGRA's antialiased fill is not the same
+        inside a clip as without one -- a slanted edge's coverage is summed
+        from where the clip cuts it, and rounds differently. What meets the
+        box is drawn whole, as the full paint draws it; what it puts outside
+        the box is taken back below. }
+      nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
+      { the box in device px, two pixels out: what meets it is drawn again }
+      zr.X := Floor(box.Left / s) - 2;
+      zr.Y := Floor(box.Top / s) - 2;
+      zr.W := Ceil(box.Right / s) + 2 - zr.X;
+      zr.H := Ceil(box.Bottom / s) + 2 - zr.Y;
       measurer := NewTextMeasurer(APPI);
       P := TTyPainter.Create;
       try
