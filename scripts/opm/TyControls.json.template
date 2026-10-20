@@ -25,7 +25,7 @@
       "VersionAsString" : "@VERSION@",
       "LazCompatibility" : "3.0.0, 3.2.0, 3.4.0, 3.6.0, 3.8.0, 4.0.0, 4.2.0, 4.4.0, 4.6.0, 4.8.0",
       "FPCCompatibility" : "3.2.2, 3.2.4",
-      "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
+      "SupportedWidgetSet" : "win32/win64, gtk2, qt5, qt6, cocoa",
       "PackageType" : 2,
       "DependenciesAsString" : "BGRABitmapPack, LCL"
     },
@@ -38,7 +38,7 @@
       "VersionAsString" : "@VERSION@",
       "LazCompatibility" : "3.0.0, 3.2.0, 3.4.0, 3.6.0, 3.8.0, 4.0.0, 4.2.0, 4.4.0, 4.6.0, 4.8.0",
       "FPCCompatibility" : "3.2.2, 3.2.4",
-      "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
+      "SupportedWidgetSet" : "win32/win64, gtk2, qt5, qt6, cocoa",
       "PackageType" : 2,
       "DependenciesAsString" : "tycontrols, FCL, LCL"
     },
@@ -51,7 +51,7 @@
       "VersionAsString" : "@VERSION@",
       "LazCompatibility" : "3.0.0, 3.2.0, 3.4.0, 3.6.0, 3.8.0, 4.0.0, 4.2.0, 4.4.0, 4.6.0, 4.8.0",
       "FPCCompatibility" : "3.2.2, 3.2.4",
-      "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
+      "SupportedWidgetSet" : "win32/win64, gtk2, qt5, qt6, cocoa",
       "PackageType" : 1,
       "DependenciesAsString" : "tycontrols, tycontrols_db, IDEIntf, SynEdit"
     }
