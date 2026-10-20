@@ -26,9 +26,13 @@ unit ucallbacks;
   the week) are copied from the page.
 
   WHAT IS NOT TRANSCRIBED, AND WHY: GalleryUntranscribed lists the names
-  and the reason (a table of the page's that the gallery file does not
-  carry, an argument the handler kind is not handed). The library then says
-  what it says for a handler nobody registered.
+  and the reason. The library then says what it says for a handler nobody
+  registered. [R2-J3: nothing is left out now -- lines-airline's tooltip
+  reads the airport and route tables the harvest carries into
+  data/lines-airline-tables.json.gz; scatter-nutrients-matrix's colours its
+  fields by the table GalleryPrepare computes from the option, as the page
+  computes it from the axes it makes; pictorialBar-hill's delay is handed
+  its glyph's place.]
 
   TWO PLACES THE DEMO DIFFERS FROM THE PAGE, both said where they are:
   bar-race-country's flags come from a CDN the demo has no copy of (the
@@ -50,8 +54,14 @@ procedure RegisterGalleryCallbacks;
 procedure GalleryCallbackNames(AList: TStrings);
 
 { The gallery's function names that are NOT transcribed, as
-  'name=reason' lines. }
+  'name=reason' lines. [R2-J3: none] }
 procedure GalleryUntranscribed(AList: TStrings);
+
+{ [R2-J3] What an example's functions compute from the chart before it is
+  set: call it with the example's id and the option text the chart is
+  given (scatter-nutrients-matrix's colour per axis name; parsed only for
+  an example that needs it). }
+procedure GalleryPrepare(const AId, AOptionText: string);
 
 implementation
 
@@ -62,13 +72,6 @@ uses
   tyControls.AdvChart.AnimOpt, tyControls.AdvChart.Events,
   jsonparser;
 
-resourcestring
-  rsUntrAirline = 'it names a route by the page''s route and airport tables, '
-    + 'which the gallery file does not carry';
-  rsUntrNutrients = 'it colours each field by the page''s colour table, built '
-    + 'from the axes the page''s controls chose';
-  rsUntrHill = 'it delays each repeated symbol by its own index (params.index), '
-    + 'which an animation timing handler is not handed';
 
 const
   { the full-width colon, U+FF1A }
@@ -84,8 +87,14 @@ type
     FMarkerSize, FMarkerColor: TJSONArray;
     FMarkerRef: Double;
     FMarkerRoot: TJSONData;
+    { [R2-J3] lines-airline's tables; scatter-nutrients-matrix's colours }
+    FAirLoaded: Boolean;
+    FAirRoot: TJSONData;
+    FAirports, FRoutes: TJSONArray;
+    FNutColours: TStringList;
     function JsRandom: Double;
     procedure LoadMarker;
+    procedure LoadAirline;
   public
     constructor Create;
     destructor Destroy; override;
@@ -185,6 +194,11 @@ type
     function Delay5(ADataIndex: Integer; AHasIndex: Boolean): Double;
     function Delay100(ADataIndex: Integer; AHasIndex: Boolean): Double;
     function DelayRandom200(ADataIndex: Integer; AHasIndex: Boolean): Double;
+    function HillDelay(ADataIndex: Integer; AHasIndex: Boolean;
+      const AParams: TTyAnimDelayParams): Double;
+    function AirlineTip(const AParams: TTyChartParams): string;
+    function NutrientsTip(const AParams: TTyChartParams): string;
+    procedure PrepareNutrients(AOption: TJSONData);
     function UtShare(AIndex, ACount: Integer): Double;
     function UtRandom400(AIndex, ACount: Integer): Double;
     { a graphic's onclick }
@@ -438,6 +452,8 @@ end;
 destructor TGalleryCallbacks.Destroy;
 begin
   FMarkerRoot.Free;
+  FAirRoot.Free;
+  FNutColours.Free;
   inherited Destroy;
 end;
 
@@ -702,18 +718,15 @@ begin
   Result := t + ' : ' + S(p, 1);
 end;
 
-{ flame-graph's tooltip: `${marker} ${value[3]}: (${addCommas(samples)}
-  samples, ${+value[4].toFixed(2)}%)`, the marker the html one upstream's
-  getTooltipMarker writes }
+{ flame-graph's tooltip: `${params.marker} ${value[3]}: (${addCommas(samples)}
+  samples, ${+value[4].toFixed(2)}%)` -- the marker the box draws as a dot
+  (richText's '{name|}', params.Marker) }
 function TGalleryCallbacks.FlameTip(const AParams: TTyChartParams): string;
-var p: TTyChartCallbackParams; samples: Double; marker: string;
+var p: TTyChartCallbackParams; samples: Double;
 begin
   p := P0(AParams);
   samples := N(p, 2) - N(p, 1);
-  marker := '<span style="display:inline-block;margin-right:4px;border-radius:10px;'
-    + 'width:10px;height:10px;background-color:' + Format('rgb(%d,%d,%d)',
-    [(p.Color shr 16) and $FF, (p.Color shr 8) and $FF, p.Color and $FF]) + ';"></span>';
-  Result := marker + ' ' + S(p, 3) + ': (' + AddCommas(samples) + ' samples, '
+  Result := p.Marker + ' ' + S(p, 3) + ': (' + AddCommas(samples) + ' samples, '
     + NS(TyJsToNumber(Fx(N(p, 4), 2))) + '%)';
 end;
 
@@ -1039,6 +1052,265 @@ begin
   d := TJSONObject(FMarkerRoot).Find('color');
   if d is TJSONArray then FMarkerColor := TJSONArray(d);
   FMarkerRef := TJSONObject(FMarkerRoot).Get('sizeref', NaN);
+end;
+
+{ [R2-J3] data/lines-airline-tables.json.gz, what the harvest carried
+  out of flights.json: airports[i] the airport's name (data.airports[i][1]),
+  routes[i] the route's two airports (data.routes[i][1] and [2]) }
+procedure TGalleryCallbacks.LoadAirline;
+var
+  text: string;
+  d: TJSONData;
+begin
+  if FAirLoaded then Exit;
+  FAirLoaded := True;
+  text := GalleryReadGz(GalleryDataDir + 'lines-airline-tables.json.gz');
+  if text = '' then Exit;
+  FAirRoot := GetJSON(text);
+  if not (FAirRoot is TJSONObject) then Exit;
+  d := TJSONObject(FAirRoot).Find('airports');
+  if d is TJSONArray then FAirports := TJSONArray(d);
+  d := TJSONObject(FAirRoot).Find('routes');
+  if d is TJSONArray then FRoutes := TJSONArray(d);
+end;
+
+{ lines-airline's tooltip: var route = data.routes[param.dataIndex];
+  data.airports[route[1]][1] + ' > ' + data.airports[route[2]][1] }
+function TGalleryCallbacks.AirlineTip(const AParams: TTyChartParams): string;
+var
+  p: TTyChartCallbackParams;
+  k, a, b: Integer;
+  route: TJSONArray;
+
+  function NameOf(AIdx: Integer): string;
+  begin
+    if (AIdx >= 0) and (AIdx < FAirports.Count) and (FAirports.Items[AIdx].JSONType = jtString) then
+      Result := FAirports.Strings[AIdx]
+    else
+      Result := 'undefined';
+  end;
+
+begin
+  Result := '';
+  LoadAirline;
+  if (FRoutes = nil) or (FAirports = nil) then Exit;
+  p := P0(AParams);
+  k := p.RawDataIndex;
+  if k < 0 then k := p.DataIndex;
+  if (k < 0) or (k >= FRoutes.Count) or not (FRoutes.Items[k] is TJSONArray) then Exit;
+  route := TJSONArray(FRoutes.Items[k]);
+  a := route.Integers[0];
+  b := route.Integers[1];
+  Result := NameOf(a) + ' > ' + NameOf(b);
+end;
+
+{ [R2-J3] scatter-nutrients-matrix's colorBySchema, as its makeAxis fills it
+  while getOption builds the axes: every x and then every y axis, its name
+  to its axisLine.lineStyle.color (axisColors of its own id) -- a later axis
+  of the same name over an earlier one }
+procedure TGalleryCallbacks.PrepareNutrients(AOption: TJSONData);
+const
+  cKeys: array[0..1] of string = ('xAxis', 'yAxis');
+var
+  k, i, at: Integer;
+  axes, d: TJSONData;
+  nm, col: string;
+begin
+  if FNutColours = nil then
+  begin
+    FNutColours := TStringList.Create;
+    FNutColours.CaseSensitive := True;
+  end;
+  FNutColours.Clear;
+  if not (AOption is TJSONObject) then Exit;
+  for k := 0 to 1 do
+  begin
+    axes := TJSONObject(AOption).Find(cKeys[k]);
+    if not (axes is TJSONArray) then Continue;
+    for i := 0 to axes.Count - 1 do
+    begin
+      if not (TJSONArray(axes).Items[i] is TJSONObject) then Continue;
+      d := TJSONObject(TJSONArray(axes).Items[i]).Find('name');
+      if (d = nil) or (d.JSONType <> jtString) then Continue;
+      nm := d.AsString;
+      col := 'undefined';
+      d := TJSONObject(TJSONArray(axes).Items[i]).FindPath('axisLine.lineStyle.color');
+      if (d <> nil) and (d.JSONType = jtString) then col := d.AsString;
+      at := FNutColours.IndexOfName(nm);
+      if at >= 0 then FNutColours.ValueFromIndex[at] := col
+      else FNutColours.Add(nm + '=' + col);
+    end;
+  end;
+end;
+
+{ An object's keys in JavaScript's order: the array indices ('0', '12' --
+  canonical, below 2^32 - 1) ascending, then the rest as they were added }
+procedure JsKeyOrder(AKeys: TStrings; AOut: TStrings);
+var
+  i, j: Integer;
+  n: Int64;
+  idx: TStringList;
+
+  function IsIndex(const S: string; out V: Int64): Boolean;
+  begin
+    Result := (S <> '') and (Length(S) <= 10) and ((S = '0') or (S[1] in ['1'..'9']))
+      and TryStrToInt64(S, V) and (IntToStr(V) = S) and (V < 4294967295);
+  end;
+
+begin
+  AOut.Clear;
+  idx := TStringList.Create;
+  try
+    for i := 0 to AKeys.Count - 1 do
+      if IsIndex(AKeys[i], n) then idx.AddObject(Format('%.10d', [n]), TObject(PtrInt(i)));
+    idx.Sort;
+    for j := 0 to idx.Count - 1 do AOut.Add(AKeys[PtrInt(idx.Objects[j])]);
+    for i := 0 to AKeys.Count - 1 do
+      if not IsIndex(AKeys[i], n) then AOut.Add(AKeys[i]);
+  finally
+    idx.Free;
+  end;
+end;
+
+{ scatter-nutrients-matrix's tooltipFormatter: the points the pointer's
+  axes found, one entry per data name (data[3]) holding its two fields
+  (data[4]: data[0], data[5]: data[1]), filed by the axis that found it --
+  'xy' when both did -- then three blocks, CROSS, V LINE, H LINE, each a
+  div per name with a coloured line per field (colorBySchema) }
+function TGalleryCallbacks.NutrientsTip(const AParams: TTyChartParams): string;
+var
+  names: TStringList;
+  items: array of TStringList;
+  onDim: array[0..2] of TStringList;  // xy, x, y: name -> item index
+  i, j, k, d, at: Integer;
+  p: TTyChartCallbackParams;
+  nm, key, html, part, vals: string;
+  ordered, keys, fields, forder: TStringList;
+  cDim: array[0..2] of string;
+  cTitle: array[0..2] of string;
+
+  function ItemOf(const AName: string): Integer;
+  var q: Integer;
+  begin
+    q := names.IndexOf(AName);
+    if q < 0 then
+    begin
+      q := names.Add(AName);
+      SetLength(items, names.Count);
+      items[q] := TStringList.Create;
+      items[q].CaseSensitive := True;
+    end;
+    Result := q;
+  end;
+
+  procedure SetField(AItem: Integer; const AKey, AValue: string);
+  var q: Integer;
+  begin
+    q := items[AItem].IndexOfName(AKey);
+    if q >= 0 then items[AItem].ValueFromIndex[q] := AValue
+    else items[AItem].Add(AKey + '=' + AValue);
+  end;
+
+  procedure Put(ADim: Integer; const AName: string; AItem: Integer);
+  var q: Integer;
+  begin
+    q := onDim[ADim].IndexOfName(AName);
+    if q >= 0 then onDim[ADim].ValueFromIndex[q] := IntToStr(AItem)
+    else onDim[ADim].Add(AName + '=' + IntToStr(AItem));
+  end;
+
+  function NamesOf(ADim: Integer): TStringList;
+  var q: Integer;
+  begin
+    Result := TStringList.Create;
+    for q := 0 to onDim[ADim].Count - 1 do Result.Add(onDim[ADim].Names[q]);
+  end;
+
+  function Colour(const AField: string): string;
+  var q: Integer;
+  begin
+    Result := 'undefined';
+    if FNutColours = nil then Exit;
+    q := FNutColours.IndexOfName(AField);
+    if q >= 0 then Result := FNutColours.ValueFromIndex[q];
+  end;
+
+begin
+  Result := '';
+  cDim[0] := 'xy'; cDim[1] := 'x'; cDim[2] := 'y';
+  cTitle[0] := 'CROSS'; cTitle[1] := 'V LINE'; cTitle[2] := 'H LINE';
+  names := TStringList.Create;
+  names.CaseSensitive := True;
+  for d := 0 to 2 do
+  begin
+    onDim[d] := TStringList.Create;
+    onDim[d].CaseSensitive := True;
+  end;
+  ordered := TStringList.Create;
+  keys := TStringList.Create;
+  fields := TStringList.Create;
+  forder := TStringList.Create;
+  try
+    for i := 0 to High(AParams) do
+    begin
+      p := AParams[i];
+      nm := S(p, 3);
+      at := ItemOf(nm);
+      SetField(at, S(p, 4), S(p, 0));
+      SetField(at, S(p, 5), S(p, 1));
+      if p.AxisDimension = 'x' then Put(1, nm, at)
+      else if p.AxisDimension = 'y' then Put(2, nm, at);
+    end;
+    { a name both axes found goes to xy, in mapByDataName's key order }
+    JsKeyOrder(names, ordered);
+    for i := 0 to ordered.Count - 1 do
+    begin
+      nm := ordered[i];
+      if (onDim[1].IndexOfName(nm) >= 0) and (onDim[2].IndexOfName(nm) >= 0) then
+      begin
+        Put(0, nm, names.IndexOf(nm));
+        onDim[1].Delete(onDim[1].IndexOfName(nm));
+        onDim[2].Delete(onDim[2].IndexOfName(nm));
+      end;
+    end;
+    for d := 0 to 2 do
+    begin
+      html := '';
+      keys.Free;
+      keys := NamesOf(d);
+      JsKeyOrder(keys, ordered);
+      for j := 0 to ordered.Count - 1 do
+      begin
+        nm := ordered[j];
+        at := StrToInt(onDim[d].Values[nm]);
+        vals := '';
+        fields.Clear;
+        for k := 0 to items[at].Count - 1 do fields.Add(items[at].Names[k]);
+        JsKeyOrder(fields, forder);
+        for k := 0 to forder.Count - 1 do
+        begin
+          key := forder[k];
+          part := '<span style="color:' + Colour(key) + '">' + key + '</span>: '
+            + items[at].Values[key];
+          if vals <> '' then vals := vals + '<br/>';
+          vals := vals + part;
+        end;
+        html := html + '<div style="margin: 10px 0">' + nm + '<br/>' + vals + '</div>';
+      end;
+      if html <> '' then
+        Result := Result + '<div style="margin: 10px 0">'
+          + '<div style="font-size: 16px; color: #aaa">POINTS ON ' + cTitle[d]
+          + '</div>' + html + '</div>';
+    end;
+  finally
+    forder.Free;
+    fields.Free;
+    keys.Free;
+    ordered.Free;
+    for d := 0 to 2 do onDim[d].Free;
+    for i := 0 to High(items) do items[i].Free;
+    names.Free;
+  end;
 end;
 
 { json[0].marker.size[param.dataIndex] / json[0].marker.sizeref }
@@ -1434,6 +1706,17 @@ begin
   Result := JsRandom * 200;
 end;
 
+{ pictorialBar-hill: params.index * 30 -- the repeated paper's place in its
+  column, which a pictorial bar's item model hands every delay function
+  ({index, count}; undefined on an element that is not a repeated glyph:
+  NaN, no delay) }
+function TGalleryCallbacks.HillDelay(ADataIndex: Integer; AHasIndex: Boolean;
+  const AParams: TTyAnimDelayParams): Double;
+begin
+  if not (AParams.Present and AParams.HasIndex) then Exit(NaN);
+  Result := AParams.Index * 30;
+end;
+
 { pictorialBar-bar-transition: (idx / total) * 1000 }
 function TGalleryCallbacks.UtShare(AIndex, ACount: Integer): Double;
 begin
@@ -1480,6 +1763,11 @@ end;
 procedure Tim(const AName: string; AH: TTyAnimTimingHandler; AList: TStrings);
 begin
   if AList <> nil then AList.Add(AName) else TyChartRegisterAnimTiming(AName, AH);
+end;
+
+procedure Dly(const AName: string; AH: TTyAnimDelayHandler; AList: TStrings);
+begin
+  if AList <> nil then AList.Add(AName) else TyChartRegisterAnimDelay(AName, AH);
 end;
 
 procedure Utd(const AName: string; AH: TTyUtDelayHandler; AList: TStrings);
@@ -1578,6 +1866,7 @@ begin
     Fmt('line-race.formatter#' + IntToStr(i), @c.RaceEnd, AList);
   Pos_('line-tooltip-touch.position', @c.TouchTop, AList);
   Fmt('line-tooltip-touch.formatter', @c.TouchDate, AList);
+  Fmt('lines-airline.formatter', @c.AirlineTip, AList);
   Fmt('matrix-confusion.formatter', @c.Confusion, AList);
   Fmt('matrix-correlation-heatmap.formatter', @c.Fixed2Third, AList);
   Fmt('matrix-correlation-scatter.formatter', @c.Fixed2Third, AList);
@@ -1597,6 +1886,7 @@ begin
   Utd('pictorialBar-bar-transition.delay', @c.UtShare, AList);
   for i := 2 to 6 do
     Utd('pictorialBar-bar-transition.delay#' + IntToStr(i), @c.UtShare, AList);
+  Dly('pictorialBar-hill.animationDelay', @c.HillDelay, AList);
   Fmt('pictorialBar-body-fill.formatter', @c.BodyFill, AList);
   Fmt('pictorialBar-spirit.formatter', @c.Spirit, AList);
   Fmt('pictorialBar-velocity.formatter', @c.NameValueTip, AList);
@@ -1617,6 +1907,7 @@ begin
   Vis('scatter-map-brush.symbolSize', @c.ThirdMax8, AList);
   Vis('scatter-map-brush.symbolSize#2', @c.ThirdMax8, AList);
   Pos_('scatter-nutrients-matrix.position', @c.Quadrant, AList);
+  Fmt('scatter-nutrients-matrix.formatter', @c.NutrientsTip, AList);
   Fmt('scatter-painter-choice.formatter', @c.Seconds, AList);
   Vis('scatter-painter-choice.symbolSize', @c.PainterSize, AList);
   Vis('scatter-painter-choice.color', @c.PainterColor, AList);
@@ -1658,9 +1949,24 @@ end;
 procedure GalleryUntranscribed(AList: TStrings);
 begin
   AList.Clear;
-  AList.Add('lines-airline.formatter=' + rsUntrAirline);
-  AList.Add('scatter-nutrients-matrix.formatter=' + rsUntrNutrients);
-  AList.Add('pictorialBar-hill.animationDelay=' + rsUntrHill);
+end;
+
+procedure GalleryPrepare(const AId, AOptionText: string);
+var d: TJSONData;
+begin
+  if AId <> 'scatter-nutrients-matrix' then Exit;
+  if GCallbacks = nil then GCallbacks := TGalleryCallbacks.Create;
+  d := nil;
+  try
+    try
+      d := GetJSON(AOptionText);
+    except
+      d := nil;
+    end;
+    GCallbacks.PrepareNutrients(d);
+  finally
+    d.Free;
+  end;
 end;
 
 finalization

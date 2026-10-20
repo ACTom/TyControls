@@ -80,7 +80,8 @@ only the notation. A function cannot survive the trip to JSON: each is written a
 Three demo units carry code of the same examples, translated to Pascal under the same licence:
 `examples/advchart/urenderitems.pas` (the custom series' `renderItem` functions),
 `examples/advchart/ucallbacks.pas` (the pages' other functions: formatters, symbol sizes,
-colours, label layouts, tooltip positions, animation delays) and
+colours, label layouts, tooltip positions, animation delays, and the colour table
+scatter-nutrients-matrix computes from its axes) and
 `examples/advchart/ugenerated.pas` (the data generators of the six, including the
 Perlin-noise helper heatmap-large carries, credited there to
 https://github.com/josephg/noisejs).
@@ -90,6 +91,9 @@ records no other source for them):
 
 - `examples/advchart/data/winds.json.gz` -- `public/data-gl/asset/data/winds.json`, gzipped:
   the wind field custom-wind draws (ugenerated.pas makes the example's vectors from it).
+- `examples/advchart/data/lines-airline-tables.json.gz` -- the airport names and each
+  route's two airports out of `public/data/asset/data/flights.json`, gzipped: the tables
+  lines-airline's tooltip reads (the harvest carries them).
 - `examples/advchart/data/scatter-painter-choice-marker.json` -- the `marker.size`,
   `marker.color` and `marker.sizeref` of `public/data/asset/data/masterPainterColorChoice.json`,
   the part of that file scatter-painter-choice's two functions read (the page credits the

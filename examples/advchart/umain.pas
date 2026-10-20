@@ -214,8 +214,8 @@ resourcestring
   { [R2-J2] under the notes: a picture the page names by URL that images/
     does not hold (%s the file name(s), %s the folder) }
   rsNoteImageMissing = 'The page shows the picture %s from the ECharts examples '
-    + 'site, which has no recorded licence, so the demo does not include it; '
-    + 'saved in %s under that name it is drawn.';
+    + 'site, whose source the repository does not record, so the demo does not '
+    + 'include it; saved in %s under that name it is drawn.';
   { a function of the page that ucallbacks.pas does not transcribe: %s its
     name, %s why }
   rsNoteUntranscribed = 'The page''s function %s is not transcribed: %s.';
@@ -548,6 +548,9 @@ begin
   { THE PAGE'S OWN registerMap. An ECharts example fetches its GeoJSON before
     it sets the option; the harvest kept only the map's name. }
   RegisterGalleryMapsFor(opt, FMapsDir);
+  { [R2-J3] what its functions compute from the chart (a colour table) }
+  if (FShownSlot >= 0) and (FShownSlot <= High(FEntries)) then
+    GalleryPrepare(FEntries[FShownSlot].Id, opt);
   { THE PAGE'S OWN DATA, for the five that compute it: the arrays the
     harvest left empty are filled where they stand }
   if (FShownSlot >= 0) and (FShownSlot <= High(FEntries))
@@ -801,6 +804,7 @@ begin
   FStep := k;
   SetMemoOption(ReadGalleryFile(fn));
   RegisterGalleryMapsFor(FFullText, FMapsDir);
+  GalleryPrepare(FEntries[e].Id, FFullText);
   if FEntries[e].StepOpts[k] = '' then
     Chart.SetOption(FFullText, False)
   else
