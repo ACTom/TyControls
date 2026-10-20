@@ -1323,6 +1323,25 @@
     {"x":100,"y":86,"aim":"a, 14 above: off its border","hit":null,"direct":null,"top":false},
     {"x":312,"y":200,"aim":"b (no border), 12 right: off","hit":null,"direct":null,"top":false}
    ]
+  },
+  {
+   "id": "graph-thin-border-off",
+   "note": "[r2v] graph nodes of 20 with a 1 px border, a mouse: the stroke adds half its width, no threshold",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":false},
+   "resolvedPointerSize": null,
+   "option": {
+    "animation": false,
+    "series": [
+     {"type":"graph","layout":"none","left":100,"top":100,"width":200,"height":100,"symbolSize":20,"label":{"show":false},"itemStyle":{"borderColor":"#333333","borderWidth":1},"data":[{"name":"a","x":0,"y":0},{"name":"b","x":200,"y":100}],"links":[]}
+    ]
+   },
+   "probes": [
+    {"x":110,"y":100,"aim":"a, 10 right: on its 1 px border","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":112,"y":100,"aim":"a, 12 right: 1.5 off its 1 px border","hit":null,"direct":null,"top":false},
+    {"x":300,"y":188,"aim":"b, 12 above: 1.5 off its 1 px border","hit":null,"direct":null,"top":false}
+   ]
   }
  ],
  "dirty": [
@@ -6737,6 +6756,7 @@
   {"id":"tree-ring-border","ok":true,"note":"a tree node: its ring and border by half their width"},
   {"id":"radar-ring-reach","ok":true,"note":"a radar ring: max(lineWidth, 5) / 2 either side"},
   {"id":"radar-symbol-shape","ok":true,"note":"a radar symbol: its shape; the fallback finds it 2 px off"},
-  {"id":"graph-border-reach","ok":true,"note":"a graph node: its border by half its width"}
+  {"id":"graph-border-reach","ok":true,"note":"a graph node: its border by half its width"},
+  {"id":"graph-thin-border","ok":true,"note":"a filled node with a 1 px border: half its width, not the threshold"}
  ]
 }

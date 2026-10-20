@@ -2150,6 +2150,130 @@
      }
     }
    ]
+  },
+  {
+   "id": "graphNodeColourOnly",
+   "note": "[r2v] graph nodes with no series border: a its own borderColor alone (zrender's lineWidth 1), b its own borderColor and width 3",
+   "option": {
+    "color": [
+     "#5070dd"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": 20,
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "itemStyle": {
+         "borderColor": "#ff0000"
+        }
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 0,
+        "itemStyle": {
+         "borderColor": "#00aa00",
+         "borderWidth": 3
+        }
+       }
+      ],
+      "links": []
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "node",
+     "s": 0,
+     "i": 0,
+     "lineWidth": "3ff0000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "pattern": null,
+     "stroke": "#ff0000"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 1,
+     "lineWidth": "4008000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "pattern": null,
+     "stroke": "#00aa00"
+    }
+   ]
+  },
+  {
+   "id": "svgGeoScaled",
+   "note": "[r2v] the SVG map of svgGeo with the geo at twice the SVG's size: the phases in the shapes' own units, scaled with them",
+   "option": {
+    "geo": {
+     "map": "r2i3svg",
+     "left": 0,
+     "top": 0,
+     "width": 200,
+     "height": 200
+    }
+   },
+   "items": [
+    {
+     "role": "svg",
+     "s": -1,
+     "i": 0,
+     "lineWidth": "4000000000000000",
+     "lineDash": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "lineDashOffset": "4008000000000000",
+     "pattern": [
+      "4010000000000000",
+      "4000000000000000"
+     ],
+     "raw": "3",
+     "lineScale": "4000000000000000"
+    },
+    {
+     "role": "svg",
+     "s": -1,
+     "i": 1,
+     "lineWidth": "3ff0000000000000",
+     "lineDash": [
+      "4014000000000000",
+      "4014000000000000"
+     ],
+     "lineDashOffset": "c000000000000000",
+     "pattern": [
+      "4014000000000000",
+      "4014000000000000"
+     ],
+     "raw": "-2",
+     "lineScale": "4000000000000000"
+    },
+    {
+     "role": "svg",
+     "s": -1,
+     "i": 2,
+     "lineWidth": "3ff0000000000000",
+     "lineDash": [
+      "4008000000000000",
+      "4008000000000000"
+     ],
+     "lineDashOffset": "4018000000000000",
+     "pattern": [
+      "4008000000000000",
+      "4008000000000000"
+     ],
+     "raw": "6",
+     "lineScale": "4000000000000000"
+    }
+   ]
   }
  ],
  "maps": [
@@ -2229,6 +2353,14 @@
   },
   {
    "name": "svgGeo: the strings 3, -2 and 6",
+   "ok": true
+  },
+  {
+   "name": "[r2v] graphNodeColourOnly: a borderColor alone draws at 1",
+   "ok": true
+  },
+  {
+   "name": "[r2v] svgGeoScaled: the same strings",
    "ok": true
   },
   {

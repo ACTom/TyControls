@@ -73,6 +73,8 @@ type
     FDashOffs: Integer;
     { [R2-I1] labels' opacities: a factor over a rest other than 1, as drawn }
     FFactored, FDrawnOpacities: Integer;
+    { [r2v] label lines' pens as drawn against their state proxies }
+    FDrawnPens: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -742,6 +744,35 @@ begin
     Exit;
   end;
   Inc(FCompared);
+  { [r2v] A LABEL LINE'S PEN AS DRAWN: the frame's (or the list's) stroke and
+    width are its state proxy's -- the proxy's own values are compared with
+    upstream's below; while the tween still stands at the rest (the hover's
+    first frame) the frame draws the list's, which must then be the rest
+    too [226-09: the state's colour written to the list at once showed
+    through there] }
+  if (AEl.Strings['role'] = 'guide') and not el.Ignore then
+  begin
+    if (FChart.Frame <> nil) and (FChart.Frame.Count = FChart.List.Count) then
+      fel := FChart.Frame.Element(idx)
+    else
+      fel := el;
+    v := p.GetAnimProp('style.stroke');
+    if (v.Kind <> avkNull) and ColourOf(ValText(v), cp) then
+    begin
+      Inc(FDrawnPens);
+      if fel.Style.StrokeColor <> cp then
+        Miss(Format('%s %s: drawn stroke %s, its proxy %s', [AWhere, id,
+          IntToHex(fel.Style.StrokeColor, 8), ValText(v)]), AWhere + id + 'dpen');
+    end;
+    v := p.GetAnimProp('style.lineWidth');
+    if v.Kind = avkNumber then
+    begin
+      Inc(FDrawnPens);
+      if Abs(fel.Style.StrokeWidthLogical - v.Num) > 1e-9 then
+        Miss(Format('%s %s: drawn width %s, its proxy %s', [AWhere, id,
+          FloatToStr(fel.Style.StrokeWidthLogical), ValText(v)]), AWhere + id + 'dwid');
+    end;
+  end;
   if ValueAt(AEl, 'states', ASample, fv) and (fv.AsString <> p.CurrentStates) then
     Miss(Format('%s %s: states "%s", upstream "%s"', [AWhere, id,
       p.CurrentStates, fv.AsString]), AWhere + id + 'states');
@@ -970,10 +1001,10 @@ begin
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders])
     + Format(', dashes %d, factored label opacities %d, drawn label opacities %d',
       [FDashes, FFactored, FDrawnOpacities])
-    + Format(', dash phases %d', [FDashOffs]),
+    + Format(', dash phases %d, drawn label-line pens %d', [FDashOffs, FDrawnPens]),
     (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100)
     and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50) and (FFactored > 200)
-    and (FDashOffs > 50)
+    and (FDashOffs > 50) and (FDrawnPens > 200)
     and (FDrawnOpacities > 1000));
 end;
 

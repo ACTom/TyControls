@@ -882,6 +882,7 @@ var
   p: TBGRAPixel;
   nw, nh: Double;
   s0, s1: string;
+  held: Integer;
 
   procedure Paint(AColor: TColor);
   begin
@@ -919,6 +920,8 @@ begin
     AssertTrue(Format('the picture red (%d, %d, %d)', [p.red, p.green, p.blue]), (p.red > 200) and (p.blue < 60));
     s0 := TyChartImageStamp('replacedList/0');
     AssertEquals('the stamp holds while nothing changes', s0, TyChartImageStamp('replacedList/0'));
+    held := TyChartImageListCachedCount(lst);
+    AssertTrue('the picture of the slot is cached', held > 0);
     { Replace: no change announced }
     Paint(clBlue);
     lst.Replace(0, bmp, nil);
@@ -932,6 +935,9 @@ begin
     AssertTrue('a tile again', tile <> nil);
     p := tile.GetPixel(3, 4);
     AssertTrue(Format('the tile blue (%d, %d, %d)', [p.red, p.green, p.blue]), (p.blue > 200) and (p.red < 60));
+    { [r2v] the replaced slot's old picture went with it: as many held as
+      before [the old one was kept beside the new] }
+    AssertEquals('the old picture of the slot let go', held, TyChartImageListCachedCount(lst));
     { the other slot's picture is its own }
     pic := TyChartImage('image://replacedList/1', 4, nw, nh);
     p := pic.GetPixel(1, 1);

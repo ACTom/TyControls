@@ -977,6 +977,32 @@ const R2I6 = [
       out(1200)] },
 ];
 
+// [r2v] the corners of the markers' emphasis layout: a falsy emphasis position
+// (createTextConfig: `position || null` in a state -- the normal one stays), a
+// token taking the emphasis label's font, the markLine group box under the
+// emphasis line width and the normal label's distance
+const R2V = [
+  { id: 'r2v-mp-emph-falsy-position', textBox: true, note: "[r2v] markPoint circles of 20 (scale false) with their labels "
+    + "at the left; emphasis fontSize 18 and position '' (falsy: the state sets none, the left stays). Hover mp0 at 0, out at 500",
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20, label: { position: 'left' },
+      emphasis: { scale: false, label: { fontSize: 18, position: '' } } }) }),
+    events: [over(0, mark(0, 'mp0')), out(500)] },
+  { id: 'r2v-mp-emph-token-font', textBox: true, note: "[r2v] a rich markPoint label {a|A}{b|B}, a 14 and b 10; emphasis "
+    + "fontSize 20 and rich a a colour alone: token a takes the emphasis label's 20 (setTokenTextStyle), b keeps its 10. "
+    + "Hover mp0 at 0, out at 500",
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 20,
+      label: { position: 'right', formatter: '{a|A}{b|B}', rich: { a: { fontSize: 14 }, b: { fontSize: 10 } } },
+      emphasis: { scale: false, label: { fontSize: 20, rich: { a: { color: '#ff0000' } } } } }) }),
+    events: [over(0, mark(0, 'mp0')), out(500)] },
+  { id: 'r2v-ml-emph-box', textBox: true, note: "[r2v] markLine labels put by an emphasis position top on the Line group's "
+    + "box: ml0 under an emphasis lineStyle width 12 (the line grown by 12, not 5); ml1 its own label distance 12 and no "
+    + "emphasis one (the normal distance stays). Hover ml0 at 0, ml1 at 400, out at 800",
+    option: bars({ markLine: ML({ emphasis: { label: { position: 'top' } } }, [
+      { type: 'average', name: 'avg', emphasis: { lineStyle: { width: 12 } } },
+      { yAxis: 30, name: 'thirty', label: { distance: 12 } }]) }),
+    events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'ml1')), out(800)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1186,7 +1212,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

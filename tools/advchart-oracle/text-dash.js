@@ -265,7 +265,13 @@ const PICK = {
     const r = [];
     for (const v of chart._componentsViews) {
       if (!v || v.type !== 'geo') continue;
-      v.group.traverse(el => { if (!el.isGroup && el.type !== 'tspan' && el.type !== 'text' && el.style && el.style.stroke) { const st = Object.create(el.style); if (el.style.lineDashOffset != null) st.lineDashOffset = Number(el.style.lineDashOffset); r.push(strokeRec('svg', -1, r.length, st, { raw: el.style.lineDashOffset == null ? null : String(el.style.lineDashOffset) })); } });
+      v.group.traverse(el => { if (!el.isGroup && el.type !== 'tspan' && el.type !== 'text' && el.style && el.style.stroke) { const st = Object.create(el.style); if (el.style.lineDashOffset != null) st.lineDashOffset = Number(el.style.lineDashOffset); const extra = { raw: el.style.lineDashOffset == null ? null : String(el.style.lineDashOffset) };
+        // [r2v] the canvas draws a shape that is not strokeNoScale through
+        // its transform: its width, dash and phase are in its own units,
+        // lineScale (sqrt |det|) canvas px each -- written where it is not 1
+        el.updateTransform(); const m = el.getComputedTransform(); const ls = (!el.style.strokeNoScale && m) ? Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) : 1;
+        if (ls !== 1) extra.lineScale = hex(ls);
+        r.push(strokeRec('svg', -1, r.length, st, extra)); } });
     }
     return r;
   },
@@ -330,6 +336,12 @@ const SERIES = [
       data: [{ value: 5, itemStyle: { borderType: [6, 2, 3, 1, 2, 4] } }, { value: 7, itemStyle: { borderType: [5, 1, 1, 1, 1] } },
         { value: 3, itemStyle: { borderColor: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } } },
         { value: 4, itemStyle: { borderWidth: 3, borderType: 'dotted', borderColor: { type: 'radial', x: 0.5, y: 0.5, r: 0.5, colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#ff00ff' }] } } }] }] } },
+  // [r2v]
+  { id: 'graphNodeColourOnly', note: "[r2v] graph nodes with no series border: a its own borderColor alone (zrender's lineWidth 1), b its own borderColor and width 3",
+    pick: 'graphNode', option: { color: ['#5070dd'], series: [{ type: 'graph', layout: 'none', symbolSize: 20,
+      data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderColor: '#ff0000' } }, { name: 'b', x: 100, y: 0, itemStyle: { borderColor: '#00aa00', borderWidth: 3 } }], links: [] }] } },
+  { id: 'svgGeoScaled', note: "[r2v] the SVG map of svgGeo with the geo at twice the SVG's size: the phases in the shapes' own units, scaled with them",
+    pick: 'svgGeo', option: { geo: { map: 'r2i3svg', left: 0, top: 0, width: 200, height: 200 } } },
 ];
 // [R2-I3] an SVG map whose shapes carry their own dash and phase
 const SVGMAP = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
@@ -406,6 +418,9 @@ function generate() {
       && JSON.stringify(sr('barItem')[1].pattern.map(num)) === '[16,8]' && sr('barItem')[2].pattern === null
       && JSON.stringify(sr('barItem')[3].pattern.map(num)) === '[2]' && off(sr('barItem')[3]) === 5 },
     { name: 'svgGeo: the strings 3, -2 and 6', ok: sr('svgGeo').map(r => r.raw).join() === '3,-2,6' },
+    { name: '[r2v] graphNodeColourOnly: a borderColor alone draws at 1', ok: sr('graphNodeColourOnly').length === 2 && num(sr('graphNodeColourOnly')[0].lineWidth) === 1
+      && sr('graphNodeColourOnly')[0].stroke === '#ff0000' && num(sr('graphNodeColourOnly')[1].lineWidth) === 3 },
+    { name: '[r2v] svgGeoScaled: the same strings', ok: sr('svgGeoScaled').map(r => r.raw).join() === '3,-2,6' },
     // [R2-I4]
     { name: 'barItemLong: six and five numbers as written, a linear and a radial pen', ok: JSON.stringify(sr('barItemLong')[0].pattern.map(num)) === '[6,2,3,1,2,4]'
       && JSON.stringify(sr('barItemLong')[1].pattern.map(num)) === '[5,1,1,1,1]' && sr('barItemLong')[2].strokeGrad.type === 'linear'

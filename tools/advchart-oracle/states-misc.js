@@ -1057,6 +1057,26 @@ const R2I6 = [
     events: [over(0, ['item', 0, 1]), out(300), over(500, ['item', 1, 2]), out(800), over(900, ['item', 2, 3]), out(1100)] },
 ];
 
+// [r2v] a state's borderType 'solid' (and a word normalizeLineDash does not
+// know) is written all the same: the state draws solid over a dashed rest
+const R2V = [
+  { id: 'bar-state-solid', dash: true, note: "[r2v] bars bordered #000 at 2 dashed; emphasis borderType 'solid'; bar 1 "
+    + "its own emphasis borderType 'wavy' (a word normalizeLineDash does not know: no dash). Hover bar 0 at 0, out at 500, "
+    + 'bar 1 at 800, out at 1200',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed' },
+        emphasis: { itemStyle: { borderType: 'solid' } },
+        data: [10, { value: 20, emphasis: { itemStyle: { borderType: 'wavy' } } }, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['item', 0, 1]), out(1200)] },
+  { id: 'bar-state-dash-from-none', dash: true, note: '[r2v] bars with no border at rest; emphasis borderColor #000, '
+    + 'borderWidth 3 and borderType [6, 3]: the lengths go against the width the state draws, not the rest\'s nought. Hover '
+    + 'bar 0 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', emphasis: { itemStyle: { borderColor: '#000', borderWidth: 3, borderType: [6, 3] } },
+        data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1304,6 +1324,18 @@ function guards(cases) {
     const pe = elRow(p, 0, 0, 'host');
     g('parallel-dash-word-follows-width', mid(p, pe, '[4,2]', '[16,8]'), pe && [numAt(pe, 'dash', 50), numAt(pe, 'dash', 450)].join(' '));
   }
+  // [r2v]
+  {
+    const c = byId(cases, 'bar-state-solid');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 0, 1, 'host');
+    g('state-solid-word-draws-solid', b0 && numAt(b0, 'dash', 450) === 'null' && numAt(b0, 'dash', 1600) === '[8,4]'
+      && b1 && numAt(b1, 'dash', 1000) === 'null', b0 && b1 && [numAt(b0, 'dash', 450), numAt(b0, 'dash', 1600), numAt(b1, 'dash', 1000)].join(' '));
+    const n = byId(cases, 'bar-state-dash-from-none');
+    const n0 = elRow(n, 0, 0, 'host');
+    g('state-dash-from-no-border', n0 && numAt(n0, 'dash', 1) === '[6,3]' && numAt(n0, 'dash', 450) === '[6,3]'
+      && numAt(n0, 'dash', 1600) === 'null', n0 && [numAt(n0, 'dash', 1), numAt(n0, 'dash', 450), numAt(n0, 'dash', 1600)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -1311,7 +1343,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,
