@@ -165,8 +165,39 @@ type
       value (through the group's mapper), and the pointer stands on it --
       processOnAxis' noSnap -- while the tooltip still describes SnapValue }
     Linked: Boolean;
+    { [R2-I7] THE AXIS DOES NOT TRIGGER THE TOOLTIP (axisInfo.triggerTooltip
+      false): a cross' other arm, the base axis of a cross under a trigger
+      that is not 'axis', an axis collected for its own `show` whose
+      `triggerTooltip` says false. Its rows (when it has any) are no part of
+      dataByCoordSys. False -- the zero value -- triggers. }
+    NoTip: Boolean;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
+
+  { [R2-I7] ONE axisInfo OF THE axisPointer MODEL, as
+    modelHelper.collectAxesInfo builds it: per coordinate system (the grids,
+    the polars, the single axes, in that order) first every axis whose own
+    pointer model -- its block over the root component -- says `show`
+    (saveTooltipAxisInfo(false, null)), then the tooltip's axes (its base
+    axes, and under a cross the other ones), which take the place of an axis
+    already there. }
+  TTyPtrAxisInfo = record
+    Axis: TTyAxis;
+    Plot: TTyRectF;
+    Polar: TTyPolar;
+    Single: TTySingle;
+    { the coordinate system: 'g<n>', 'p<n>', 's<n>' }
+    CsKey: string;
+    { fromTooltip true or 'cross' }
+    FromTooltip: Boolean;
+    { fromTooltip 'cross' and not triggering: the cross' other arm }
+    CrossArm: Boolean;
+    TriggerTooltip: Boolean;
+    { triggerTooltip || snap || a category axis: the series are searched }
+    InvolveSeries: Boolean;
+    Spec: TTyAxisPointerSpec;
+  end;
+  TTyPtrAxisInfoArray = array of TTyPtrAxisInfo;
 
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
     and its label's text and padded box (top-left, after the align and the
@@ -501,6 +532,25 @@ type
     Stale: Boolean;
     Frozen: Boolean;
     FrozenX, FrozenY: Double;
+    { [R2-I7] THE DEFAULT MARKUP, built when the show is TRIED -- upstream's
+      _showAxisTooltip / _showSeriesItemTooltip build it (a valueFormatter
+      runs there) before _showOrMove, whatever the delay, a formatter or an
+      unchanged content then does with it }
+    MarkupHas: Boolean;
+    Markup: TTyTooltipLineArray;
+  end;
+
+  { [R2-I7] WHAT A SHOW PUT IN THE BOX: _showTooltipContent's setContent --
+    the spec it was shown under, the ink, the lines, whether it is an axis
+    tooltip, the formatter's text. Has False: the show drew nothing. Built
+    once per show; a paint only draws it. }
+  TTyTipContent = record
+    Has: Boolean;
+    Spec: TTyTooltipSpec;
+    Ink: TTyTooltipInk;
+    Lines: TTyTooltipLineArray;
+    OnAxis: Boolean;
+    Fmt: string;
   end;
 
   { [F4b] an axis pointer kept across a re-render: the axisPointer model's
@@ -509,7 +559,7 @@ type
   TTyPtrKeep = record
     Dim: string;
     Index: Integer;
-    Cross, Linked: Boolean;
+    Cross, Linked, NoTip: Boolean;
     Value, SnapValue: Double;
     Series, Rows: TTyIntegerArray;
   end;
@@ -1483,6 +1533,17 @@ type
       than keeping it correct across a rebuild -- which is the mistake the
       static layer's own history is a record of. }
     FTipHits: TTyAxisHitArray;
+    { [R2-I7] the content the last show set (FTipCurDue: a show whose build
+      was not standing, built at the next paint), the shows counted (a
+      position function runs once per show: FTipPosGen the show its cached
+      answer FTipPosAns belongs to), and _cbParamsList's data, one per row
+      of the last axis show, for _updateContentNotChangedOnAxis }
+    FTipCur: TTyTipContent;
+    FTipCurDue: Boolean;
+    FTipShowGen, FTipPosGen: Integer;
+    FTipPosAns: TTyChartTooltipPos;
+    FTipLastSigs: TTyStringArray;
+    FTipLastSigSeries: TTyIntegerArray;
     { The element the hit came from, kept because it carries the colour of the
       thing the pointer is over. Asking the series for its colour instead would
       be a second answer to a question the ink has already answered, and would
@@ -3092,6 +3153,12 @@ type
     function TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
     procedure TipTryShow(const ASnap: TTyTipSnap; const ASpec: TTyTooltipSpec);
     procedure TipApplyShow(const ASnap: TTyTipSnap);
+    { [R2-I7] the default markup of a show being tried; the content a show
+      sets (the formatter runs here); a row's data as the unchanged-content
+      test compares it }
+    procedure TipMarkup(var ASnap: TTyTipSnap);
+    procedure TipBuildContent(const ASnap: TTyTipSnap; out AContent: TTyTipContent);
+    function TipRowSig(ASlot, ARow: Integer): string;
     procedure TipHide(const AGlobal: TTyTooltipSpec);
     { the timers due by ANow, in the order they would have fired; True
       when the box changed }
@@ -3373,6 +3440,9 @@ type
       fractional; AInput, when given, is the payload's axesInfo -- only the
       axes it names are processed, each at its own value when it writes one }
     function ResolveAxisPointers(AX, AY: Double; AInput: TJSONArray = nil): TTyAxisHitArray;
+    { [R2-I7] the axisPointer model's axes, as collectAxesInfo collects them }
+    function PtrCollect: TTyPtrAxisInfoArray;
+    function PtrInfoOf(const AInfos: TTyPtrAxisInfoArray; AAxis: TTyAxis): Integer;
     { The three-layer tree an axis tooltip is: a headerless root, one section
       per axis headed by its value, one row per series. nil when nothing
       survived the filters. }
@@ -4299,6 +4369,9 @@ type
     function AnimFindGhost(ASeries, AIndex: Integer;
       const ARole: string): TTyChartAnimProxy;
     function AnimGhostCount: Integer;
+    { [R2-I7] the AIndex-th ghost still leaving (0 .. AnimGhostCount - 1),
+      its old element at Ghost }
+    function AnimGhostAt(AIndex: Integer): TTyChartAnimProxy;
     { THE PROXY AN ELEMENT'S STATES RUN ON [Batch 94]: of series ASeries,
       inner row ARow, the part 'host', 'label', 'guide' (the row's), 'poly'
       or 'area' (a line's, ARow ignored); nil when none is bound }

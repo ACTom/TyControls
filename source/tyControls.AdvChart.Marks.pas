@@ -3812,6 +3812,10 @@ begin
         el.Anim.G[6] := plot.Right;
         el.Anim.G[7] := plot.Bottom;
         el.Anim.G[8] := Ord(spec.AnimOff);
+        { [R2-I7] G[9] 1 for a repeated glyph, G[10] the column's count:
+          what an update's path hands a delay function }
+        el.Anim.G[9] := Ord(spec.Repeat_ <> prNone);
+        el.Anim.G[10] := n;
       end
       else
       begin

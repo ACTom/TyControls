@@ -547,7 +547,10 @@ begin
   if Assigned(Del) then Result := Del(ADataIndex, AHasIndex, AParams)
   else if Assigned(Tim) then Result := Tim(ADataIndex, AHasIndex)
   else Result := NaN;
-  if AHasIndex then a := 'i:n:' + IntToStr(ADataIndex) else a := 'i:u';
+  { [R2-I7] null 'z', undefined 'u' }
+  if AHasIndex then a := 'i:n:' + IntToStr(ADataIndex)
+  else if AParams.IndexNull then a := 'i:z'
+  else a := 'i:u';
   if not AParams.Present then p := 'u'
   else
   begin

@@ -36,7 +36,8 @@ case's calls; the port must not call it either.
          option set as the page wrote it (animation on) and drawn, then set
          again (an update) and drawn. Per name, the distinct calls as
            'i:<dataIndex> p:<extraDelayParams> => <answer>'
-         -- dataIndex 'n:<integer>' or 'u' (null / undefined), the second
+         -- dataIndex 'n:<integer>', 'z' (null) or 'u' (undefined) [R2-I7:
+         they were one 'u'], the second
          argument 'u' or 'j:<json>' (getAnimationConfig hands a pictorial
          bar's item model {index, count} -- a key it does not have is left
          out), the answer as above, '?' for a function that draws on
@@ -262,8 +263,10 @@ const HOVER_KEY = /^(formatter|position|valueFormatter)$/;
 function keyOfName(id, name) {
   return name.slice(id.length + 1).replace(/#[0-9]+$/, '');
 }
+// [R2-I7] null 'z' (null * 10 is 0), undefined 'u' (NaN)
 function reprIndex(v) {
-  if (v === undefined || v === null) return 'u';
+  if (v === null) return 'z';
+  if (v === undefined) return 'u';
   if (typeof v === 'number') return Number.isInteger(v) ? 'n:' + v : 'n:' + hex(v);
   return 's:' + String(v);
 }

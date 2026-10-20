@@ -2331,6 +2331,20 @@ begin
   if FAnimSet = nil then Result := 0 else Result := FAnimSet.LiveGhostCount;
 end;
 
+function TTyAdvanceChart.AnimGhostAt(AIndex: Integer): TTyChartAnimProxy;
+var i, n: Integer;
+begin
+  Result := nil;
+  if FAnimSet = nil then Exit;
+  n := 0;
+  for i := 0 to FAnimSet.GhostCount - 1 do
+  begin
+    if FAnimSet.Ghost(i).Gone then Continue;
+    if n = AIndex then Exit(FAnimSet.Ghost(i));
+    Inc(n);
+  end;
+end;
+
 function TTyAdvanceChart.AnimFrame: TTyPaintList;
 begin
   if (FPaintList = nil) or ((Length(FAnimBind) = 0) and (Length(FAnimStBind) = 0)

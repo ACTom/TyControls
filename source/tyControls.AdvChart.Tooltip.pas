@@ -366,6 +366,12 @@ type
   read) is nought here; upstream would hand NaN to the DOM. }
 function TyTooltipPlace(const ASpec: TTyTooltipSpec;
   const AIn: TTyTooltipPlaceIn): TTyPointF;
+{ [R2-I7] The position function's answer alone: ASpec.PositionHandler run
+  with what _updatePosition hands it (APos is ASpec.Position when nobody
+  registered the name). A caller that runs it once per show places the box
+  with ASpec.Position := APos and no handler. }
+procedure TyTooltipRunPosition(const ASpec: TTyTooltipSpec;
+  const AIn: TTyTooltipPlaceIn; out APos: TTyChartTooltipPos);
 { The position an option value means: an array, a word or '@Name' (the
   handler goes to AHandler), an object; anything else is the default. }
 procedure TyTooltipReadPosition(AData: TJSONData; out APos: TTyChartTooltipPos;
@@ -1208,11 +1214,34 @@ begin
   Result := (AWord = 'center') or (AWord = 'middle');
 end;
 
+procedure TyTooltipRunPosition(const ASpec: TTyTooltipSpec;
+  const AIn: TTyTooltipPlaceIn; out APos: TTyChartTooltipPos);
+var args: TTyChartTooltipPosArgs;
+begin
+  APos := ASpec.Position;
+  if ASpec.PositionHandler = '' then Exit;
+  args := Default(TTyChartTooltipPosArgs);
+  args.PointX := AIn.PointX;
+  args.PointY := AIn.PointY;
+  args.Params := AIn.Params;
+  args.IsAxis := AIn.IsAxis;
+  args.HasRect := AIn.HasRect;
+  args.RectX := AIn.Rect.X;
+  args.RectY := AIn.Rect.Y;
+  args.RectW := AIn.Rect.W;
+  args.RectH := AIn.Rect.H;
+  args.ViewW := AIn.ViewW;
+  args.ViewH := AIn.ViewH;
+  args.ContentW := AIn.ContentW;
+  args.ContentH := AIn.ContentH;
+  { a name nobody registered: the default placement }
+  TyChartRunPositionHandler(ASpec.PositionHandler, args, APos);
+end;
+
 function TyTooltipPlace(const ASpec: TTyTooltipSpec;
   const AIn: TTyTooltipPlaceIn): TTyPointF;
 var
   pos: TTyChartTooltipPos;
-  args: TTyChartTooltipPosArgs;
   x, y, w, h, off: Double;
   align, valign: string;
   box: TTyRawBox;
@@ -1227,25 +1256,7 @@ begin
   valign := ASpec.VerticalAlign;
   pos := ASpec.Position;
   { A FUNCTION FIRST: its answer is read exactly as the option would be }
-  if ASpec.PositionHandler <> '' then
-  begin
-    args := Default(TTyChartTooltipPosArgs);
-    args.PointX := AIn.PointX;
-    args.PointY := AIn.PointY;
-    args.Params := AIn.Params;
-    args.IsAxis := AIn.IsAxis;
-    args.HasRect := AIn.HasRect;
-    args.RectX := AIn.Rect.X;
-    args.RectY := AIn.Rect.Y;
-    args.RectW := AIn.Rect.W;
-    args.RectH := AIn.Rect.H;
-    args.ViewW := AIn.ViewW;
-    args.ViewH := AIn.ViewH;
-    args.ContentW := w;
-    args.ContentH := h;
-    { a name nobody registered: the default placement }
-    TyChartRunPositionHandler(ASpec.PositionHandler, args, pos);
-  end;
+  if ASpec.PositionHandler <> '' then TyTooltipRunPosition(ASpec, AIn, pos);
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try

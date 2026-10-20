@@ -234,6 +234,8 @@ type
 
   TTyMkPointPic = record
     Item: Integer;
+    { [R2-I7] the mpData id SymbolDraw's diff pairs the symbols by }
+    Id: string;
     { the fill after the series colour fallback }
     Fill: string;
     { False: the point holds NaN or the symbol is 'none' }
@@ -341,7 +343,7 @@ procedure TyMkLineAt(const AG: array of Double; APercent: Double;
 
 implementation
 
-uses tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
+uses Classes, tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Data, tyControls.AdvChart.Color, tyControls.AdvChart.Labels,
      tyControls.AdvChart.Handlers, tyControls.AdvChart.Option;
 
@@ -2683,6 +2685,40 @@ var
   E: TTyMkEnd;
   { [R2-J3] the symbol callbacks' answers of the point being pictured }
   cbHeld: array of TJSONData;
+  { [R2-I7] the names seen, for the repeats' ids }
+  seen: TStringList;
+  nm0: string;
+  idx0: Integer;
+
+  { mpData's name of a point: its own, else its coordinate on the name
+    dimension (the series' category axis -- the max's category index, '3');
+    False for none }
+  function MkName(const AE: TTyMkEnd; out AName: string): Boolean;
+  begin
+    Result := True;
+    AName := '';
+    case AE.Name.Kind of
+      mvkNum: AName := TyChartValueText(AE.Name.Num);
+      mvkStr: AName := AE.Name.Str;
+    else
+      begin
+        Result := False;
+        if (AIn.NameDim >= 0) and (AIn.NameDim <= 1) then
+          case AE.Coord[AIn.NameDim].Kind of
+            mvkNum:
+              begin
+                AName := TyChartValueText(AE.Coord[AIn.NameDim].Num);
+                Result := True;
+              end;
+            mvkStr:
+              begin
+                AName := AE.Coord[AIn.NameDim].Str;
+                Result := True;
+              end;
+          end;
+      end;
+    end;
+  end;
 
   { [R2-J3] MarkPointView: a symbol, symbolSize, symbolRotate or
     symbolOffset that is a function is called as cb(rawValue, params) --
@@ -2703,18 +2739,7 @@ var
     prm.DataIndex := n;
     prm.RawDataIndex := n;
     prm.Status := 'normal';
-    case E.Name.Kind of
-      mvkNum: prm.Name := TyChartValueText(E.Name.Num);
-      mvkStr: prm.Name := E.Name.Str;
-    else
-      { no name of its own: mpData's name dimension, the coordinate on the
-        series' category axis (the max's category index, '3') }
-      if (AIn.NameDim >= 0) and (AIn.NameDim <= 1) then
-        case E.Coord[AIn.NameDim].Kind of
-          mvkNum: prm.Name := TyChartValueText(E.Coord[AIn.NameDim].Num);
-          mvkStr: prm.Name := E.Coord[AIn.NameDim].Str;
-        end;
-    end;
+    MkName(E, prm.Name);
     case E.Value.Kind of
       mvkNum:
         begin
@@ -3112,21 +3137,48 @@ begin
   maxZ2 := NegInfinity;
   n := 0;
   SetLength(Result, ABlock.Count);
-  for i := 0 to High(ABlock.Points) do
-  begin
-    if not ABlock.Points[i].Survived then Continue;
-    E := ABlock.Points[i].E;
-    Result[n] := Default(TTyMkPointPic);
-    Result[n].Item := i;
-    cbHeld := nil;
-    try
-      Picture(Result[n]);
-    finally
-      for k := 0 to High(cbHeld) do cbHeld[k].Free;
+  seen := TStringList.Create;
+  try
+    seen.Sorted := True;
+    seen.Duplicates := dupIgnore;
+    seen.CaseSensitive := True;
+    seen.UseLocale := False;
+    for i := 0 to High(ABlock.Points) do
+    begin
+      if not ABlock.Points[i].Survived then Continue;
+      E := ABlock.Points[i].E;
+      Result[n] := Default(TTyMkPointPic);
+      Result[n].Item := i;
+      { [R2-I7] SeriesData's makeIdFromName: the name, a repeat with its
+        count; no name 'e' + two NULs + the raw index (the place in mpData) }
+      if MkName(E, nm0) then
+      begin
+        idx0 := seen.IndexOf(nm0);
+        if idx0 < 0 then
+        begin
+          seen.AddObject(nm0, TObject(PtrInt(1)));
+          Result[n].Id := nm0;
+        end
+        else
+        begin
+          seen.Objects[idx0] := TObject(PtrInt(PtrInt(seen.Objects[idx0]) + 1));
+          Result[n].Id := nm0 + '__ec__' + IntToStr(PtrInt(seen.Objects[idx0]));
+        end;
+      end
+      else
+        Result[n].Id := 'e'#0#0 + IntToStr(ABlock.Points[i].DataIndex);
       cbHeld := nil;
+      try
+        Picture(Result[n]);
+      finally
+        for k := 0 to High(cbHeld) do cbHeld[k].Free;
+        cbHeld := nil;
+      end;
+      Inc(n);
+      if n >= Length(Result) then Break;
     end;
-    Inc(n);
-    if n >= Length(Result) then Break;
+  finally
+    seen.Free;
   end;
   SetLength(Result, n);
 end;
@@ -3411,6 +3463,8 @@ begin
         el.Anim.Role := carMarkPoint;
         el.Anim.Series := AHostSeries;
         el.Anim.Index := ABlock.Points[APics[i].Item].DataIndex;
+        { [R2-I7] the diff's key }
+        el.Anim.Key := APics[i].Id;
         if APics[i].HasGlobal then
           TyZrApply(APics[i].Global, 0, 0, el.Anim.G[0], el.Anim.G[1])
         else

@@ -99,6 +99,11 @@ type
     HasShadowColour: Boolean;
     ShadowColour: TTyChartColor;
     LabelSpec: TTyAxisPointerLabelSpec;
+    { [R2-I7] `triggerTooltip` as the axis' own model (its block over the
+      root) says it, default true -- what an axis collected for its own
+      `show` triggers the tooltip with. A tooltip axis is handed its own
+      (the trigger), so this is not read for one. }
+    TriggerTooltip: Boolean;
   end;
 
 { The resolved spec for one axis.
@@ -149,6 +154,21 @@ implementation
 
 type
   TTyPointerLevel = (apnAll, apnTooltip, apnRootUnderTooltip);
+
+{ [R2-I7] JavaScript truthiness of an option value }
+function PtrTruthy(AData: TJSONData): Boolean;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+    jtNull: Result := False;
+  else
+    Result := True;
+  end;
+end;
 
 function PointerTypeOf(const AText: string): TTyAxisPointerType;
 begin
@@ -372,13 +392,17 @@ begin
   if (ALevel <> apnTooltip) and Claim(ANode, 'show', ASeen) then
   begin
     d := ANode.Find('show');
-    if d.JSONType = jtBoolean then
-    begin
-      if d.AsBoolean then ASpec.Show := apsYes else ASpec.Show := apsNo;
-    end
-    else if (d.JSONType = jtString) and (d.AsString = 'auto') then
-      ASpec.Show := apsAuto;
+    { [R2-I7] TRUTHINESS, as saveTooltipAxisInfo tests it: 'auto' is its own
+      word, anything else truthy shows and anything falsy does not }
+    if (d.JSONType = jtString) and (d.AsString = 'auto') then
+      ASpec.Show := apsAuto
+    else if PtrTruthy(d) then ASpec.Show := apsYes
+    else ASpec.Show := apsNo;
   end;
+  { [R2-I7] the axis' own model's triggerTooltip: the axis block, then the
+    root; never the tooltip's (not one of the nine fields) }
+  if (ALevel <> apnTooltip) and Claim(ANode, 'triggerTooltip', ASeen) then
+    ASpec.TriggerTooltip := PtrTruthy(ANode.Find('triggerTooltip'));
   if Claim(ANode, 'type', ASeen) then
   begin
     d := ANode.Find('type');
@@ -521,6 +545,11 @@ begin
   Result.PointerType := aptLine;
   Result.LineDash := todDashed;
   Result.LabelSpec.MarginLogical := 3;
+  Result.TriggerTooltip := True;
+  { [R2-I7] THE ROOT COMPONENT'S DEFAULT IS A SHOWN LABEL. Only the volatile
+    tooltip layer turns it off (below); an axis collected for its own `show`
+    reads the root's `label.show: true`. }
+  Result.LabelSpec.Show := True;
   if AOption = nil then Exit;
   seen := nil;
 

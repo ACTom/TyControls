@@ -649,6 +649,17 @@ type
     procedure SetStale(ASeries, ARow: Integer; AX, AY: Double);
     function TakeStale(ASeries, ARow: Integer; out AX, AY: Double): Boolean;
     procedure NoOp;
+  private
+    { [R2-I7] LineView._initSymbolLabelAnimation, once per series and pass:
+      the series whose symbols' delays are worked out (-1: none), their
+      data indices and delays }
+    FLsdSeries: Integer;
+    FLsdIdx: TTyIntegerArray;
+    FLsdVal: TTyDoubleArray;
+    procedure LineSymbolInit(AList: TTyPaintList; ASeries: Integer;
+      const AC: TTyChartAnimSeries);
+    function LineSymbolDelayAt(AList: TTyPaintList; const AEl: TTyChartElement;
+      const AC: TTyChartAnimSeries): Double;
     { THE UNIVERSAL TRANSITION (series:transition) [Batch 136, D5 UT1]:
       after every view of the new render has armed, the series batched by
       their transition key, their items diffed by id, and each pair one to
@@ -1253,6 +1264,7 @@ begin
   FItems := TFPList.Create;
   FIndex := TFPHashList.Create;
   FGhosts := TFPList.Create;
+  FLsdSeries := -1;
 end;
 
 destructor TTyChartAnimSet.Destroy;
@@ -1507,13 +1519,16 @@ end;
 { A timing option as a number the way a line's symbols read it: a function
   called with null, a number as it is, anything else not one. }
 function TimingNumber(const AV: TTyAnimOptValue; AIndex: Integer;
-  AHasIndex: Boolean): Double;
+  AHasIndex: Boolean; AIndexNull: Boolean = False): Double;
+var dp: TTyAnimDelayParams;
 begin
+  dp := TyAnimNoDelayParams;
+  dp.IndexNull := AIndexNull and not AHasIndex;
   case AV.Kind of
     aokNumber, aokBool: Result := AV.Num;
     aokString: Result := TyJsToNumber(AV.Str);
     { [R2-J3] a delay handler too, its second argument null }
-    aokHandler: TyAnimRunTiming(AV.Str, AIndex, AHasIndex, TyAnimNoDelayParams, Result);
+    aokHandler: TyAnimRunTiming(AV.Str, AIndex, AHasIndex, dp, Result);
   else
     Result := NaN;
   end;
@@ -1523,11 +1538,11 @@ end;
   G = [x, y, clip x, y, width, height, flags] -- flag 1 a clip, 2 a
   horizontal base axis, 4 an inverse one. }
 function LineSymbolDelay(const AEl: TTyChartElement;
-  const AC: TTyChartAnimSeries): Double;
+  const AC: TTyChartAnimSeries; ADur, ADelayValue: Double;
+  const ADelV: TTyAnimOptValue): Double;
 var
   flags: Integer;
-  start, stop, cur, ratio, dur, del: Double;
-  durV, delV: TTyAnimOptValue;
+  start, stop, cur, ratio: Double;
   hasClip: Boolean;
 begin
   flags := Round(AEl.Anim.G[6]);
@@ -1562,20 +1577,76 @@ begin
     else ratio := (cur - start) / (stop - start);
   end;
   if (flags and 4) <> 0 then ratio := 1 - ratio;
-  { seriesDuration, a function called with null }
-  durV := TyAnimGetShallow(AC.Model, 'animationDuration');
-  dur := TimingNumber(durV, -1, False);
-  { `animationDelay || 0` }
-  delV := TyAnimGetShallow(AC.Model, 'animationDelay');
-  if not TyAnimOptTruthy(delV) then
-    Result := dur * ratio + 0
-  else if delV.Kind = aokHandler then
-    Result := TimingNumber(delV, AEl.Anim.Index, True)
+  { [R2-I7] seriesDuration and seriesDelayValue are the series' (called with
+    null once, LineSymbolDelays); a function delay is called again with the
+    symbol's index
+    [Revised in R2-I7: both read, and the duration's function called, per
+    symbol -- and per symbol label again.] }
+  if TyAnimOptTruthy(ADelV) and (ADelV.Kind = aokHandler) then
+    Result := TimingNumber(ADelV, AEl.Anim.Index, True)
   else
+    Result := ADur * ratio + ADelayValue;
+end;
+
+{ [R2-I7] _initSymbolLabelAnimation: seriesDuration (a function called
+  with null), `animationDelay || 0` (a function called with null), then each
+  symbol in data order its delay -- the function with its index, else the
+  duration across the clip plus the delay. Once per series and pass, before
+  the clip path (the line's polyline and its clip come after it). }
+procedure TTyChartAnimSet.LineSymbolInit(AList: TTyPaintList; ASeries: Integer;
+  const AC: TTyChartAnimSeries);
+var
+  durV, delV: TTyAnimOptValue;
+  dur, delVal: Double;
+  i, j, n, t: Integer;
+  els: array of Integer;
+  el: TTyChartElement;
+begin
+  FLsdSeries := ASeries;
+  FLsdIdx := nil;
+  FLsdVal := nil;
+  durV := TyAnimGetShallow(AC.Model, 'animationDuration');
+  dur := TimingNumber(durV, -1, False, True);
+  delV := TyAnimGetShallow(AC.Model, 'animationDelay');
+  if not TyAnimOptTruthy(delV) then delVal := 0
+  else delVal := TimingNumber(delV, -1, False, True);
+  { the symbols, by data index (eachItemGraphicEl) }
+  els := nil;
+  if AList <> nil then
+    for i := 0 to AList.Count - 1 do
+    begin
+      el := AList.Element(i);
+      if (el.Anim.Role <> carLineSymbol) or (el.Anim.Series <> ASeries) then Continue;
+      n := Length(els);
+      SetLength(els, n + 1);
+      els[n] := i;
+      j := n;
+      while (j > 0) and (AList.Element(els[j - 1]).Anim.Index > el.Anim.Index) do
+      begin
+        t := els[j - 1];
+        els[j - 1] := els[j];
+        els[j] := t;
+        Dec(j);
+      end;
+    end;
+  SetLength(FLsdIdx, Length(els));
+  SetLength(FLsdVal, Length(els));
+  for i := 0 to High(els) do
   begin
-    del := TimingNumber(delV, -1, False);
-    Result := dur * ratio + del;
+    el := AList.Element(els[i]);
+    FLsdIdx[i] := el.Anim.Index;
+    FLsdVal[i] := LineSymbolDelay(el, AC, dur, delVal, delV);
   end;
+end;
+
+function TTyChartAnimSet.LineSymbolDelayAt(AList: TTyPaintList;
+  const AEl: TTyChartElement; const AC: TTyChartAnimSeries): Double;
+var i: Integer;
+begin
+  if FLsdSeries <> AEl.Anim.Series then LineSymbolInit(AList, AEl.Anim.Series, AC);
+  for i := 0 to High(FLsdIdx) do
+    if FLsdIdx[i] = AEl.Anim.Index then Exit(FLsdVal[i]);
+  Result := 0;
 end;
 
 { ---- each role's upstream props, from an element's tag ---- }
@@ -2001,7 +2072,8 @@ begin
         p.SetFinal(props);
         if AEl.Anim.G[4] <> 0 then p.SetNum('shape.width', 0)
         else p.SetNum('shape.height', 0);
-        opts := TyAnimCallNoIndex;
+        { [R2-I7] the callback in the dataIndex slot: null }
+        opts := TyAnimCallNull;
         opts.Done := @NoOp;
         Start(TyAnimProps([Num1('shape.width', AEl.Anim.G[2]),
           Num1('shape.height', AEl.Anim.G[3])]), opts);
@@ -2021,7 +2093,8 @@ begin
         p.Attr(props);
         p.SetFinal(props);
         p.SetNum('shape.width', 0);
-        opts := TyAnimCallNoIndex;
+        { [R2-I7] the callback in the dataIndex slot: null }
+        opts := TyAnimCallNull;
         opts.Done := @NoOp;
         Start(TyAnimProps([props[2]]), opts);
       end;
@@ -2204,7 +2277,8 @@ begin
         p.SetFinal(props);
         p.SetNum('shape.x', x - 10);
         p.SetNum('shape.width', 0);
-        Start(TyAnimProps([props[0], props[2], props[3]]), TyAnimCallNoIndex);
+        { [R2-I7] the callback in the dataIndex slot: null }
+        Start(TyAnimProps([props[0], props[2], props[3]]), TyAnimCallNull);
       end;
     carChord:
       begin
@@ -2255,13 +2329,17 @@ begin
         p.SetFinal(props);
         p.Attr(TyAnimProps([Num1('scaleX', 0), Num1('scaleY', 0)]));
         { a raw animateTo: no easing, no scope }
-        cfg := TyAnimCfg(200, LineSymbolDelay(AEl, AC), '');
+        cfg := TyAnimCfg(200, LineSymbolDelayAt(AList, AEl, AC), '');
         cfg.SetToFinal := True;
         p.AnimateTo(props, cfg);
       end;
     carLineRun, carLineArea:
       if (Round(AEl.Anim.G[5]) and 8) <> 0 then
       begin
+        { [R2-I7] the symbols' delays first, as LineView works them out
+          before it makes the clip }
+        if AC.On_ and (FLsdSeries <> AEl.Anim.Series) then
+          LineSymbolInit(AList, AEl.Anim.Series, AC);
         { createPolarClipPath: the sweep from its start (an angle base) or
           r from r0, initProps({endAngle, r}) on the series, no row
           [Batch 113] }
@@ -2278,6 +2356,10 @@ begin
       end
       else
       begin
+        { [R2-I7] the symbols' delays first, as LineView works them out
+          before it makes the clip }
+        if AC.On_ and (FLsdSeries <> AEl.Anim.Series) then
+          LineSymbolInit(AList, AEl.Anim.Series, AC);
         p := Make(AEl.Anim.Series, -1, 'lineClip');
         x := AEl.Anim.G[0];
         y := AEl.Anim.G[1];
@@ -2299,7 +2381,8 @@ begin
           if (flags and 4) = 0 then p.SetNum('shape.y', y + h);
           p.SetNum('shape.height', 0);
         end;
-        opts := TyAnimCallNoIndex;
+        { [R2-I7] createGridClipPath: initProps(..., seriesModel, null, done) }
+        opts := TyAnimCallNull;
         opts.Done := @NoOp;
         { THE END LABEL RIDES THE CLIP: its during and done [Batch 92] }
         if FindEndLabel(AList, AEl.Anim.Series, endEl) then
@@ -2478,7 +2561,7 @@ begin
           end;
           { the symbol's own: from 0 over 300 ms, the symbol's delay }
           if not AC.On_ then Exit;
-          delay := LineSymbolDelay(host, AC);
+          delay := LineSymbolDelayAt(AList, host, AC);
           p := Make(AEl.Anim.Series, idx, 'label');
           p.Attr(props);
           p.SetFinal(props);
@@ -2598,6 +2681,8 @@ var
   role: string;
 begin
   if AList = nil then Exit;
+  { [R2-I7] a render's own symbol delays }
+  FLsdSeries := -1;
   for i := 0 to AList.Count - 1 do
   begin
     el := AList.Element(i);
@@ -2828,6 +2913,7 @@ var
     opts: TTyAnimCallOpts;
     sx, sy, tx, ty: Double;
     radial: Boolean;
+    tm: TTyAnimTiming;
 
     procedure Grow(var A: TTyIntegerArray; ARow, AIdx: Integer);
     var z: Integer;
@@ -3247,6 +3333,12 @@ var
         if sp <> nil then lp.Attr(TyAnimProps([Num1('style.opacity', sp.Num('style.opacity'))]))
         else lp.Attr(TyAnimProps([Num1('style.opacity', 1)]));
         Ghost(lp, le, TyAnimProps([Num1('style.opacity', 0)]));
+        { [R2-I7] AND LabelManager's PASS OVER IT, after the render: the
+          label is still its host's text and not ignored, so
+          _animateLabels updateProps its layout -- the same x / y /
+          rotation, nothing moves, its fade goes on -- at update timing and
+          the host's (old) row: the timing functions are asked }
+        TyAnimGetConfig(atUpdate, AC.Model, TyAnimCallAt(row), tm);
       end;
     end;
 
@@ -3410,6 +3502,52 @@ var
   end;
 
   { ---- one element of an updated series ---- }
+  { [R2-I7] PictorialBarView's update of a kept bar: the old bar of the same
+    shape string -- its symbol, whether it repeats, whether it clips (a
+    change of any makes a bar anew) -- answers its first glyph (AOldEl) }
+  function PictOldBar(AOld, AOldRow: Integer; const AEl: TTyChartElement;
+    out AOldEl: TTyChartElement): Boolean;
+  begin
+    Result := False;
+    if AOldRow < 0 then Exit;
+    if AEl.Anim.Role = carPictorialClip then
+      Result := OldEl(AOld, AOldRow, 'pclip', AOldEl)
+    else
+      Result := OldEl(AOld, AOldRow, 'pglyph0', AOldEl);
+    Result := Result and (AOldEl.Caption.LgSymbol = AEl.Caption.LgSymbol)
+      and ((AEl.Anim.Role = carPictorialClip)
+        or (AOldEl.Anim.G[6] = AEl.Anim.G[6]));
+  end;
+
+  { [R2-I7] the delay's {} of an element of a pictorial bar that is no
+    repeated path (the bundle, the bar rect, the clip, a single glyph) }
+  function PictNoPlace(ARow: Integer): TTyAnimCallOpts;
+  begin
+    Result := TyAnimCallAt(ARow);
+    Result.HasDelayIndex := False;
+    Result.HasDelayCount := False;
+  end;
+
+  { [R2-I7] updateBar's first two: the bundle updateProps its place on the
+    item's model at update timing, and the bar rect (the label's host, no
+    ink) its shape -- once a bar }
+  procedure PictBundle(AOld, AOldRow: Integer; const AEl, AOldEl: TTyChartElement;
+    const AC: TTyChartAnimSeries);
+  var
+    props, oprops: TTyAnimProps;
+    bp: TTyChartAnimProxy;
+    tm: TTyAnimTiming;
+  begin
+    if Find(s, r, 'pbundle') <> nil then Exit;
+    props := TyAnimProps([Num1('x', AEl.Caption.LgG[6]), Num1('y', AEl.Caption.LgG[7])]);
+    oprops := TyAnimProps([Num1('x', AOldEl.Caption.LgG[6]), Num1('y', AOldEl.Caption.LgG[7])]);
+    bp := Take(AOld, AOldRow, s, r, 'pbundle', oprops, props, True);
+    bp.SetFinal(props);
+    TyUpdateProps(bp, props, ItemModelOf(AC, r), PictNoPlace(r));
+    { the bar rect: no ink here, its timing asked }
+    TyAnimGetConfig(atUpdate, ItemModelOf(AC, r), PictNoPlace(r), tm);
+  end;
+
   procedure UpdateOne(AAt: Integer; const AEl: TTyChartElement;
     const AC: TTyChartAnimSeries; AOld, AOldRow: Integer);
   var
@@ -3421,8 +3559,117 @@ var
     q2: TTyChartAnimProxy;
     rk: string;
     ka: Integer;
+    popts: TTyAnimCallOpts;
+    tmg: TTyAnimTiming;
   begin
     case AEl.Anim.Role of
+      carPictorialGlyph:
+        begin
+          { [R2-I7] PictorialBarView's update [Revised in R2-I7: a
+            pictorial bar's update was set at once, a bar added in an
+            update did not grow] }
+          if not PictOldBar(AOld, AOldRow, AEl, oe) then
+          begin
+            { added, or made anew (a new shape string): createBar -- its
+              paths grow at enter timing }
+            ArmOne(AList, AAt, AEl, AC, False);
+            Exit;
+          end;
+          if (AEl.Anim.G[4] <> 0) or not AC.Enabled then Exit;
+          PictBundle(AOld, AOldRow, AEl, oe, AC);
+          rk := TyChartAnimRoleKey(AEl);
+          if Find(s, r, rk) <> nil then Exit;
+          props := TyAnimProps([Num1('x', AEl.Caption.LgG[0]), Num1('y', AEl.Caption.LgG[1]),
+            Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3]),
+            Num1('rotation', AEl.Anim.G[5])]);
+          popts := PictNoPlace(r);
+          { a repeated path hands {index, count} -- the count the new one }
+          if AEl.Anim.G[6] <> 0 then
+          begin
+            popts.HasDelayIndex := True;
+            popts.DelayIndex := AEl.Anim.Sub;
+            popts.HasDelayCount := True;
+            popts.DelayCount := Round(AEl.Anim.G[7]);
+          end;
+          if OldEl(AOld, AOldRow, rk, oe) then
+          begin
+            { a kept path: x, y, scale and turn from where it is }
+            oprops := TyAnimProps([Num1('x', oe.Caption.LgG[0]), Num1('y', oe.Caption.LgG[1]),
+              Num1('scaleX', oe.Anim.G[2]), Num1('scaleY', oe.Anim.G[3]),
+              Num1('rotation', oe.Anim.G[5])]);
+            p := Take(AOld, AOldRow, s, r, rk, oprops, props, True);
+            Ensure(p, 'x', oe.Caption.LgG[0]);
+            Ensure(p, 'y', oe.Caption.LgG[1]);
+            Ensure(p, 'rotation', oe.Anim.G[5]);
+            p.SetFinal(props);
+            TyUpdateProps(p, props, ItemModelOf(AC, r), popts);
+          end
+          else
+          begin
+            { a new path of a kept column: at its place with no scale (and
+              no turn, a new path's), growing at update timing }
+            p := Make(s, r, rk);
+            p.Attr(props);
+            p.SetFinal(props);
+            p.SetNum('scaleX', 0);
+            p.SetNum('scaleY', 0);
+            p.SetNum('rotation', 0);
+            TyUpdateProps(p, TyAnimProps([props[2], props[3], props[4]]), ItemModelOf(AC, r), popts);
+          end;
+        end;
+      carPictorialClip:
+        begin
+          { [R2-I7] a kept clipped bar's path: updateAttr(isUpdate) is an
+            updateProps of its place, scale and turn -- they stand where the
+            bounding data puts them; the timing is asked, {index, count} for
+            a repeated one, {} for the single one }
+          if (AEl.Anim.G[8] = 0) and AC.Enabled and PictOldBar(AOld, AOldRow, AEl, oe) then
+          begin
+            popts := PictNoPlace(r);
+            if AEl.Anim.G[9] <> 0 then
+            begin
+              popts.HasDelayIndex := True;
+              popts.DelayIndex := AEl.Anim.Sub;
+              popts.HasDelayCount := True;
+              popts.DelayCount := Round(AEl.Anim.G[10]);
+            end;
+            TyAnimGetConfig(atUpdate, ItemModelOf(AC, r), popts, tmg);
+          end;
+          if Find(s, r, 'pclip') <> nil then Exit;
+          if AOldRow < 0 then
+          begin
+            { a bar added: createBar's clip grows at enter timing }
+            ArmOne(AList, AAt, AEl, AC, False);
+            Exit;
+          end;
+          if (AEl.Anim.G[8] <> 0) or not AC.Enabled then Exit;
+          if AEl.Anim.G[1] <> 0 then
+            props := TyAnimProps([Num1('shape.height', AEl.Anim.G[2])])
+          else
+            props := TyAnimProps([Num1('shape.width', AEl.Anim.G[2])]);
+          if PictOldBar(AOld, AOldRow, AEl, oe) then
+          begin
+            { the clip path updateProps its shape -- along the value axis
+              what changes -- and the bundle its place }
+            PictBundle(AOld, AOldRow, AEl, oe, AC);
+            if AEl.Anim.G[1] <> 0 then
+              oprops := TyAnimProps([Num1('shape.height', oe.Anim.G[2])])
+            else
+              oprops := TyAnimProps([Num1('shape.width', oe.Anim.G[2])]);
+            p := Take(AOld, AOldRow, s, r, 'pclip', oprops, props, True);
+            Ensure(p, props[0].Key, oe.Anim.G[2]);
+          end
+          else
+          begin
+            { made anew in an update: createOrUpdateClip(isUpdate) -- the
+              new clip from nothing at UPDATE timing }
+            p := Make(s, r, 'pclip');
+            p.Attr(props);
+            p.SetNum(props[0].Key, 0);
+          end;
+          p.SetFinal(props);
+          TyUpdateProps(p, props, ItemModelOf(AC, r), PictNoPlace(r));
+        end;
       carRiver:
         { A KEPT LAYER is not clipped again (its points tween upstream,
           snapped here); a new one enters [Batch 118] }
@@ -3979,19 +4226,164 @@ var
     (Line.updateData), the symbols and the label following them every frame
     (Line.beforeUpdate). Both on the MARKER's model. Rows are paired by the
     marker's data index. }
+  { [R2-I7] the old render's markPoint symbol of an id: its row, -1 none }
+  function OldMarkPointRow(AOld: Integer; const AKey: string): Integer;
+  var j: Integer;
+  begin
+    Result := -1;
+    for j := 0 to High(APrev.Elements) do
+      if (APrev.Elements[j].Anim.Role = carMarkPoint)
+        and (APrev.Elements[j].Anim.Series = AOld)
+        and (APrev.Elements[j].Anim.Key = AKey) then Exit(APrev.Elements[j].Anim.Index);
+  end;
+
+  { [R2-I7] createOrUpdateRepeatSymbols on a kept column: a path past the
+    new count updateProps to no scale (update timing, the item's model, its
+    {index, count} -- the new count) and goes when it ends; it stays at its
+    place in the bundle }
+  procedure PictorialShrink(ASer, AOld: Integer; const AC: TTyChartAnimSeries;
+    const ARowMap: TTyIntegerArray);
+  var
+    j, nr, q, cnt: Integer;
+    oe, ne: TTyChartElement;
+    g, q2: TTyChartAnimProxy;
+    opts: TTyAnimCallOpts;
+    keep: Boolean;
+
+    function PNum(const AKey: string; AOr: Double): Double;
+    var v: TTyAnimValue;
+    begin
+      Result := AOr;
+      if q2 = nil then Exit;
+      v := q2.GetAnimProp(AKey);
+      if v.Kind = avkNumber then Result := v.Num;
+    end;
+
+  begin
+    if not AC.Enabled then Exit;
+    for nr := 0 to High(ARowMap) do
+    begin
+      q := ARowMap[nr];
+      if q < 0 then Continue;
+      { the new column: kept (the same shape string), repeated, its count }
+      keep := False;
+      cnt := 0;
+      for j := 0 to AList.Count - 1 do
+      begin
+        ne := AList.Element(j);
+        if (ne.Anim.Role <> carPictorialGlyph) or (ne.Anim.Series <> ASer)
+          or (ne.Anim.Index <> nr) then Continue;
+        if (ne.Anim.G[6] = 0) or (ne.Anim.G[4] <> 0) then Break;
+        if not OldEl(AOld, q, 'pglyph0', oe) or (oe.Caption.LgSymbol <> ne.Caption.LgSymbol)
+          or (oe.Anim.G[6] = 0) then Break;
+        keep := True;
+        cnt := Round(ne.Anim.G[7]);
+        Break;
+      end;
+      if not keep then Continue;
+      for j := 0 to High(APrev.Elements) do
+      begin
+        oe := APrev.Elements[j];
+        if (oe.Anim.Role <> carPictorialGlyph) or (oe.Anim.Series <> AOld)
+          or (oe.Anim.Index <> q) or (oe.Anim.Sub < cnt) then Continue;
+        q2 := OldProxy(AOld, q, TyChartAnimRoleKey(oe));
+        g := TTyChartAnimProxy.Create(ASer, q, TyChartAnimRoleKey(oe));
+        g.Animation := FAnimation;
+        g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
+          Num1('scaleY', PNum('scaleY', oe.Anim.G[3]))]));
+        g.FLeaving := True;
+        g.FGhost := oe;
+        g.FFinal := nil;
+        FGhosts.Add(g);
+        opts := TyAnimCallAt(nr);
+        opts.HasDelayIndex := True;
+        opts.DelayIndex := oe.Anim.Sub;
+        opts.HasDelayCount := True;
+        opts.DelayCount := cnt;
+        opts.Done := @g.LeaveDone;
+        TyUpdateProps(g, TyAnimProps([Num1('scaleX', 0), Num1('scaleY', 0)]),
+          ItemModelOf(AC, nr), opts);
+      end;
+    end;
+  end;
+
+  { [R2-I7] SymbolDraw's remove: every old markPoint symbol whose id the new
+    render has not fadeOut()s -- its label at once (no fadeLabel), the path
+    to opacity 0 and scale 0 by removeElement on the marker's model: leave
+    timing, 200 ms cubicOut and no delay, no function asked }
+  procedure MarkPointLeave(ASer, AOld: Integer; const AC: TTyChartAnimSeries);
+  var
+    j, k: Integer;
+    oe: TTyChartElement;
+    kept: Boolean;
+    g, q2: TTyChartAnimProxy;
+    opts: TTyAnimCallOpts;
+
+    function PNum(const AKey: string; AOr: Double): Double;
+    var v: TTyAnimValue;
+    begin
+      Result := AOr;
+      if q2 = nil then Exit;
+      v := q2.GetAnimProp(AKey);
+      if v.Kind = avkNumber then Result := v.Num;
+    end;
+
+  begin
+    if not TyAnimIsEnabled(AC.MarkPoint) then Exit;
+    for j := 0 to High(APrev.Elements) do
+    begin
+      oe := APrev.Elements[j];
+      if (oe.Anim.Role <> carMarkPoint) or (oe.Anim.Series <> AOld) then Continue;
+      kept := False;
+      for k := 0 to AList.Count - 1 do
+        if (AList.Element(k).Anim.Role = carMarkPoint) and (AList.Element(k).Anim.Series = ASer)
+          and (AList.Element(k).Anim.Key = oe.Anim.Key) then
+        begin
+          kept := True;
+          Break;
+        end;
+      if kept then Continue;
+      g := TTyChartAnimProxy.Create(ASer, oe.Anim.Index, 'markPoint');
+      g.Animation := FAnimation;
+      { where an animation left it, else as it was drawn }
+      q2 := OldProxy(AOld, oe.Anim.Index, 'markPoint');
+      g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
+        Num1('scaleY', PNum('scaleY', oe.Anim.G[3])),
+        Num1('style.opacity', PNum('style.opacity', oe.Anim.G[4])),
+        Num1('x', PNum('x', oe.Anim.G[0])), Num1('y', PNum('y', oe.Anim.G[1]))]));
+      g.FLeaving := True;
+      g.FGhost := oe;
+      g.FFinal := nil;
+      FGhosts.Add(g);
+      opts := TyAnimCallAt(oe.Anim.Index);
+      opts.Done := @g.LeaveDone;
+      TyRemoveElement(g, TyAnimProps([Num1('style.opacity', 0), Num1('scaleX', 0),
+        Num1('scaleY', 0)]), AC.MarkPoint, opts);
+    end;
+  end;
+
   procedure UpdateMarker(AAt: Integer; const AEl: TTyChartElement;
     const AC: TTyChartAnimSeries; AOld, ARow: Integer);
   var
     props, oprops: TTyAnimProps;
     oe: TTyChartElement;
     rk: string;
+    orow: Integer;
   begin
     rk := TyChartAnimRoleKey(AEl);
     { once a marker: a markLine's four elements share a proxy, a markPoint's
       label rides its symbol's }
     if Find(s, ARow, rk) <> nil then Exit;
     if AEl.Anim.Role = carMarkPointLabel then Exit;
-    if not (APrev.FullUpdate or APrev.Merge) or not OldEl(AOld, ARow, rk, oe) then
+    { [R2-I7] A markPoint's OLD SYMBOL IS THE ONE OF ITS ID: SymbolDraw's
+      update diffs mpData by getId, so a max that moved to another category
+      is no update -- the old symbol fades (MarkPointLeave) and this one
+      pops in (enter timing, its row)
+      [Revised in R2-I7: paired by the marker's data index.] }
+    orow := ARow;
+    if AEl.Anim.Role = carMarkPoint then orow := OldMarkPointRow(AOld, AEl.Anim.Key);
+    if not (APrev.FullUpdate or APrev.Merge) or (orow < 0)
+      or not OldEl(AOld, orow, rk, oe) then
     begin
       ArmOne(AList, AAt, AEl, AC, True);
       Exit;
@@ -4004,7 +4396,7 @@ var
       oprops := TyAnimProps([Num1('scaleX', oe.Anim.G[2]), Num1('scaleY', oe.Anim.G[3]),
         Num1('style.opacity', oe.Anim.G[4]), Num1('x', oe.Anim.G[0]),
         Num1('y', oe.Anim.G[1])]);
-      p := Take(AOld, ARow, s, ARow, 'markPoint', oprops, props, True);
+      p := Take(AOld, orow, s, ARow, 'markPoint', oprops, props, True);
       { an entering proxy was made without the group's place }
       Ensure(p, 'x', oe.Anim.G[0]);
       Ensure(p, 'y', oe.Anim.G[1]);
@@ -4431,6 +4823,8 @@ begin
   if AList = nil then Exit;
   Purge;
   Inc(FPass);
+  { [R2-I7] a render's own symbol delays }
+  FLsdSeries := -1;
   oldItems := FItems;
   oldIndex := FIndex;
   FItems := TFPList.Create;
@@ -4583,6 +4977,15 @@ begin
     for s := 0 to High(ASeries) do
       if upd[s] and (ASeries[s].SeriesType = 'line') and not lineInit[s] then
         UpdateLine(s, oldOf[s], ASeries[s]);
+    { [R2-I7] THE markPoint SYMBOLS OF AN ID NO LONGER THERE fade (a merge's
+      or a full update's, where markers are diffed at all) }
+    if APrev.FullUpdate or APrev.Merge then
+      for s := 0 to High(ASeries) do
+        if upd[s] then MarkPointLeave(s, oldOf[s], ASeries[s]);
+    { [R2-I7] A KEPT PICTORIAL COLUMN'S PATHS PAST ITS NEW COUNT shrink }
+    for s := 0 to High(ASeries) do
+      if upd[s] and (ASeries[s].SeriesType = 'pictorialBar') then
+        PictorialShrink(s, oldOf[s], ASeries[s], rowMap[s]);
     { THE REMOVED ROWS of every kept series leave (a tree's in its own pass) }
     for s := 0 to High(ASeries) do
       if upd[s] and (ASeries[s].SeriesType <> 'tree') then
@@ -5488,6 +5891,21 @@ begin
         if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
         if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3] else fy := 1;
         if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then MakeInkless(AEl)
+        else if AProxy.GetAnimProp('x').Kind = avkNumber then
+        begin
+          { [R2-I7] AN UPDATE'S PATH: its place in the bundle, its scale and
+            its turn now -- undone from the rest (turn back, scale, turn
+            again), then moved by its place's change (the bundle's is the
+            frame's) }
+          if AEl.Anim.G[5] <> 0 then
+            TyShapeRotateAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], -AEl.Anim.G[5]);
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+          a := NumOr(AProxy, 'rotation', AEl.Anim.G[5]);
+          if a <> 0 then
+            TyShapeRotateAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], a);
+          TyShapeMove(AEl.Shape, AProxy.Num('x') - AEl.Caption.LgG[0],
+            AProxy.Num('y') - AEl.Caption.LgG[1]);
+        end
         else
         begin
           TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
@@ -6232,11 +6650,41 @@ end;
 { A GHOST AS IT IS NOW: the old element under its leaving proxy }
 procedure ApplyGhost(var AEl: TTyChartElement; G: TTyChartAnimProxy);
 var
-  fx, fy, op: Double;
+  fx, fy, op, rest: Double;
 begin
   AEl := G.FGhost;
   op := NumOr(G, 'style.opacity', AEl.Style.Alpha);
   case AEl.Anim.Role of
+    carPictorialGlyph:
+      begin
+        { [R2-I7] a path past its column's new count: its scale about its
+          place (both go to nought together: a uniform shrink) }
+        if AEl.Anim.G[2] <> 0 then fx := NumOr(G, 'scaleX', AEl.Anim.G[2]) / AEl.Anim.G[2]
+        else fx := 1;
+        if AEl.Anim.G[3] <> 0 then fy := NumOr(G, 'scaleY', AEl.Anim.G[3]) / AEl.Anim.G[3]
+        else fy := 1;
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then op := 0
+        else TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+      end;
+    carMarkPoint:
+      begin
+        { [R2-I7] a markPoint's fadeOut: its scale about its place, its
+          opacity over the symbol's own at rest, its group's place }
+        if AEl.Anim.G[2] <> 0 then fx := NumOr(G, 'scaleX', AEl.Anim.G[2]) / AEl.Anim.G[2]
+        else fx := 1;
+        if AEl.Anim.G[3] <> 0 then fy := NumOr(G, 'scaleY', AEl.Anim.G[3]) / AEl.Anim.G[3]
+        else fy := 1;
+        rest := Max(0.0, Min(1.0, AEl.Anim.G[4]));
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then op := 0
+        else
+        begin
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+          TyShapeMove(AEl.Shape, NumOr(G, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
+            NumOr(G, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
+          op := Min(1.0, NumOr(G, 'style.opacity', rest));
+          if rest > 0 then op := op * (AEl.Style.Alpha / rest);
+        end;
+      end;
     carBar:
       if G.GetAnimProp('shape.x').Kind = avkNumber then BarFrom(AEl, G);
     carPolarBar:
@@ -9941,6 +10389,24 @@ begin
     end;
     if (i <= High(ABind)) and (ABind[i] <> nil) and not edgeDone then
       TyAnimApply(pel^, ABind[i]);
+    { [R2-I7] A PICTORIAL BAR'S BUNDLE moves its paths (and a symbolClip's
+      clip, which is the bundle's) on a proxy of its own }
+    if (ASet <> nil) and (pel^.Anim.Role in [carPictorialGlyph, carPictorialClip]) then
+    begin
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'pbundle');
+      if (g <> nil) and not g.AtFinal then
+      begin
+        dx := NumOr(g, 'x', pel^.Caption.LgG[6]) - pel^.Caption.LgG[6];
+        dy := NumOr(g, 'y', pel^.Caption.LgG[7]) - pel^.Caption.LgG[7];
+        if (dx <> 0) or (dy <> 0) then
+        begin
+          TyShapeMove(pel^.Shape, dx, dy);
+          if (pel^.Anim.Role = carPictorialClip) and pel^.HasClip and (pel^.Anim.G[3] = 0) then
+            pel^.ClipRect := TyRectF(pel^.ClipRect.Left + dx, pel^.ClipRect.Top + dy,
+              pel^.ClipRect.Right + dx, pel^.ClipRect.Bottom + dy);
+        end;
+      end;
+    end;
     { A MORPH and a universal transition's style [Batch 136]; a treemap
       rect's from the set, its proxy role being none [Batch 138] }
     { [F3c] the proxy of the path's own key: its role's where that is the
