@@ -247,10 +247,14 @@ type
     FCount: Integer;
     { [R2-L] category -> ordinal, by the category's bytes: an open-addressed
       table of ordinals + 1 (0 empty) and their FNV-1a hashes, the text
-      itself in FCategories; the first ordinal a category had where it
-      repeats (a fixed list's duplicate, a list collected without
-      deduplication) [was: a sorted TStringList -- every category collected
-      an insertion into the middle of it] }
+      itself in FCategories [was: a sorted TStringList -- every category
+      collected an insertion into the middle of it]. [R2-I6] Built as
+      createHashMap(categories) builds it, every category set in order: a
+      category the list holds twice answers its LATER ordinal (a fixed
+      list's duplicate, a list collected without deduplication); collecting
+      with deduplication puts a new one, and collecting without it never
+      touches the map [was: the first ordinal, and the blind append put a
+      new category into a map already built] }
     FSlots: array of Integer;
     FHashes: array of LongWord;
     FUsed: Integer;
@@ -259,8 +263,11 @@ type
     FDeduplication: Boolean;
     function MapFind(const ACategory: string; AHash: LongWord): Integer;
     procedure MapPut(AOrdinal: Integer; AHash: LongWord);
+    { [R2-I6] HashMap.set: the category's slot takes AOrdinal, a new slot
+      where it has none }
+    procedure MapSet(AOrdinal: Integer; AHash: LongWord);
     procedure EnsureMap;
-    procedure Add(const ACategory: string);
+    procedure Add(const ACategory: string; AToMap: Boolean);
   public
     constructor Create;
     destructor Destroy; override;
@@ -1645,21 +1652,39 @@ begin
   for i := 0 to FCount - 1 do
   begin
     h := OrdinalHash(FCategories[i]);
-    if MapFind(FCategories[i], h) < 0 then MapPut(i, h);
+    MapSet(i, h);
   end;
 end;
 
-procedure TTyOrdinalMeta.Add(const ACategory: string);
-var h: LongWord;
+procedure TTyOrdinalMeta.MapSet(AOrdinal: Integer; AHash: LongWord);
+var i, mask: Integer;
+begin
+  if Length(FSlots) > 0 then
+  begin
+    mask := High(FSlots);
+    i := Integer(AHash and LongWord(mask));
+    while FSlots[i] <> 0 do
+    begin
+      if (FHashes[i] = AHash)
+        and (FCategories[FSlots[i] - 1] = FCategories[AOrdinal]) then
+      begin
+        FSlots[i] := AOrdinal + 1;
+        Exit;
+      end;
+      i := (i + 1) and mask;
+    end;
+  end;
+  MapPut(AOrdinal, AHash);
+end;
+
+{ AToMap: parseAndCollect's map.set of a category it did not find -- only
+  where the map is there already (built later, it reads the list) }
+procedure TTyOrdinalMeta.Add(const ACategory: string; AToMap: Boolean);
 begin
   if FCount = Length(FCategories) then
     SetLength(FCategories, 8 + Length(FCategories) * 2);
   FCategories[FCount] := ACategory;
-  if FMapOn then
-  begin
-    h := OrdinalHash(ACategory);
-    if MapFind(ACategory, h) < 0 then MapPut(FCount, h);
-  end;
+  if AToMap and FMapOn then MapPut(FCount, OrdinalHash(ACategory));
   Inc(FCount);
 end;
 
@@ -1713,14 +1738,14 @@ begin
     { Appends blind, which is the point: no map is built and no comparison is
       made. Only legitimate when the caller knows the values are distinct. }
     Result := FCount;
-    Add(ACategory);
+    Add(ACategory, False);
     Exit;
   end;
   Result := GetOrdinal(ACategory);
   if Result >= 0 then Exit;
   if not FNeedCollect then Exit(-1);
   Result := FCount;
-  Add(ACategory);
+  Add(ACategory, True);
 end;
 
 { ==================== override keys ==================== }

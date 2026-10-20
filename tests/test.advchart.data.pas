@@ -67,6 +67,9 @@ type
     procedure TestAbsentIsStillAGapOnAnOrdinal;
     procedure TestNaNIsNotACategoryCalledNan;
     procedure TestDeduplicationOffAppendsBlind;
+    { [R2-I6] }
+    procedure TestARepeatedCategoryIsItsLaterOrdinal;
+    procedure TestABlindAppendLeavesTheMapAlone;
     procedure TestCategoriesMustBeSetBeforeFilling;
     procedure TestCategoriesNeedAnOrdinalDimension;
     { ---- a borrowed category list ---- }
@@ -550,6 +553,60 @@ begin
   FS.AppendRow([TyDataText('Mon')]);
   AssertEquals(2, FS.CategoryCount(0));
   AssertEquals(1, FS.Get(0, 1), 0);
+end;
+
+{ [R2-I6] createHashMap(categories) SETS every category in order, so one the
+  list holds twice answers its LATER ordinal -- a value of it, and a string
+  min or max looking it up (category-minmax.js 'A duplicate categories':
+  the bar of 'a' over ['a', 'b', 'a', 'c', 'd'] on ordinal 2). [Was: the
+  first.] }
+procedure TAdvChartDataTest.TestARepeatedCategoryIsItsLaterOrdinal;
+begin
+  FS.AddDimension('c', ddtOrdinal);
+  FS.SetCategories(0, ['a', 'b', 'a', 'c']);
+  FS.AppendRow([TyDataText('a')]);
+  FS.AppendRow([TyDataText('b')]);
+  FS.AppendRow([TyDataText('c')]);
+  AssertEquals('a', 2, FS.Get(0, 0), 0);
+  AssertEquals('b', 1, FS.Get(0, 1), 0);
+  AssertEquals('c', 3, FS.Get(0, 2), 0);
+  AssertEquals('the lookup', 2, FS.OrdinalMeta(0).GetOrdinal('a'));
+  AssertEquals('the list keeps both', 4, FS.CategoryCount(0));
+end;
+
+{ [R2-I6] parseAndCollect without deduplication appends and returns before
+  the map: a map built earlier keeps what it had -- the first 'a', and no
+  category appended after it (map.get answers undefined, the port -1); a
+  map built later reads the whole list, the later 'a' winning. [Was: the
+  append put a new category into a map already built.] }
+procedure TAdvChartDataTest.TestABlindAppendLeavesTheMapAlone;
+var m: TTyOrdinalMeta;
+begin
+  m := TTyOrdinalMeta.Create;
+  try
+    m.Deduplication := False;
+    AssertEquals(0, m.ParseAndCollect('a'));
+    AssertEquals(1, m.ParseAndCollect('b'));
+    { the map, built now from [a, b] }
+    AssertEquals('a before', 0, m.GetOrdinal('a'));
+    AssertEquals('a again, blind', 2, m.ParseAndCollect('a'));
+    AssertEquals('c, blind', 3, m.ParseAndCollect('c'));
+    AssertEquals('a after: the map as it was', 0, m.GetOrdinal('a'));
+    AssertEquals('c: never put into the map', -1, m.GetOrdinal('c'));
+  finally
+    m.Free;
+  end;
+  m := TTyOrdinalMeta.Create;
+  try
+    m.Deduplication := False;
+    m.ParseAndCollect('a');
+    m.ParseAndCollect('b');
+    m.ParseAndCollect('a');
+    AssertEquals('a map built after: the later a', 2, m.GetOrdinal('a'));
+    AssertEquals('b', 1, m.GetOrdinal('b'));
+  finally
+    m.Free;
+  end;
 end;
 
 procedure TAdvChartDataTest.TestCategoriesMustBeSetBeforeFilling;

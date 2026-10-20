@@ -5873,6 +5873,262 @@
    ]
   },
   {
+   "name": "A duplicate categories",
+   "group": "A",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {"type":"category","data":["a","b","a","c","d"]},
+    "yAxis": {"type":"value"},
+    "series": [{"type":"bar","data":[["a",5],["b",20],["c",8],["d",3]]}],
+    "grid": {"left":50,"right":50,"top":40,"bottom":40,"outerBoundsMode":"none"},
+    "animation": false
+   },
+   "rect": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
+   "rectText": {"x":"50","y":"40","width":"500","height":"320"},
+   "area": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
+   "areaText": {"x":"50","y":"40","width":"500","height":"320"},
+   "axes": [
+    {
+     "dim": "x",
+     "index": 0,
+     "type": "category",
+     "inverse": false,
+     "px": ["0000000000000000","407f400000000000"],
+     "pxText": ["0","500"],
+     "effective": ["0000000000000000","4010000000000000"],
+     "effectiveText": ["0","4"],
+     "mapping": null,
+     "mappingText": null,
+     "onBand": true,
+     "blank": false,
+     "nCat": 5,
+     "ctnShp": false,
+     "raw": {"dataMM":["1","4"],"noZoomEffMM":["0","4"],"fixMM":[false,false],"isBlank":false,"tggAxInv":false,"startValue":null},
+     "count": "5",
+     "bandWidth": "4059000000000000",
+     "bandWidthText": "100",
+     "bandW": "4059000000000000",
+     "bandWText": "100",
+     "contain": [false,false,false,true,true,true,true,true,false,false,false,false,false,false,false,false,false],
+     "coords": [
+      "c069000000000000",
+      "c059000000000000",
+      "0000000000000000",
+      "4059000000000000",
+      "4069000000000000",
+      "4072c00000000000",
+      "4079000000000000",
+      "407f400000000000",
+      "4082c00000000000",
+      "4085e00000000000",
+      "4089000000000000",
+      "408c200000000000",
+      "408f400000000000",
+      "4091300000000000",
+      "4092c00000000000",
+      "4094500000000000",
+      "4095e00000000000"
+     ],
+     "interval": {"option":"auto","used":0,"unitSpan":"4059000000000000","unitSpanText":"100"},
+     "labels": [
+      {"value":0,"text":"a","offInterval":false,"shown":true},
+      {"value":1,"text":"b","offInterval":false,"shown":true},
+      {"value":2,"text":"a","offInterval":false,"shown":true},
+      {"value":3,"text":"c","offInterval":false,"shown":true},
+      {"value":4,"text":"d","offInterval":false,"shown":true}
+     ],
+     "ticks": {
+      "values": [0,1,2,3,4,5],
+      "globalCoords": ["4049000000000000","4062c00000000000","406f400000000000","4075e00000000000","407c200000000000","4081300000000000"],
+      "drawn": [false,false,false,false,false,false],
+      "onBand": true
+     },
+     "splitLines": {
+      "values": [0,1,2,3,4,5],
+      "globalCoords": ["4049000000000000","4062c00000000000","406f400000000000","4075e00000000000","407c200000000000","4081300000000000"],
+      "drawn": [false,false,false,false,false,false],
+      "onBand": true
+     },
+     "splitAreas": []
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "type": "value",
+     "inverse": false,
+     "px": ["0000000000000000","4074000000000000"],
+     "pxText": ["0","320"],
+     "effective": ["0000000000000000","4034000000000000"],
+     "effectiveText": ["0","20"],
+     "mapping": null,
+     "mappingText": null
+    }
+   ],
+   "series": [
+    {
+     "index": 0,
+     "type": "bar",
+     "filtered": false,
+     "bandWidth": "4059000000000000",
+     "bandWidthText": "100",
+     "offset": "c041400000000000",
+     "offsetText": "-34.5",
+     "size": "4051400000000000",
+     "sizeText": "69",
+     "items": [
+      {
+       "class": "drawn",
+       "layout": ["4070980000000000","4076800000000000","4051400000000000","c054000000000000"],
+       "box": ["4070980000000000","4071800000000000","4074e80000000000","4076800000000000"]
+      },
+      {
+       "class": "drawn",
+       "layout": ["4064b00000000000","4076800000000000","4051400000000000","c074000000000000"],
+       "box": ["4064b00000000000","4044000000000000","406d500000000000","4076800000000000"]
+      },
+      {
+       "class": "drawn",
+       "layout": ["4076d80000000000","4076800000000000","4051400000000000","c060000000000000"],
+       "box": ["4076d80000000000","406d000000000000","407b280000000000","4076800000000000"]
+      },
+      {
+       "class": "drawn",
+       "layout": ["407d180000000000","4076800000000000","4051400000000000","c048000000000000"],
+       "box": ["407d180000000000","4073800000000000","4080b40000000000","4076800000000000"]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "A duplicate categories min 'a'",
+   "group": "A",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {"type":"category","data":["a","b","a","c","d"],"min":"a"},
+    "yAxis": {"type":"value"},
+    "series": [{"type":"bar","data":[["a",5],["b",20],["c",8],["d",3]]}],
+    "grid": {"left":50,"right":50,"top":40,"bottom":40,"outerBoundsMode":"none"},
+    "animation": false
+   },
+   "rect": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
+   "rectText": {"x":"50","y":"40","width":"500","height":"320"},
+   "area": {"x":"4049000000000000","y":"4044000000000000","width":"407f400000000000","height":"4074000000000000"},
+   "areaText": {"x":"50","y":"40","width":"500","height":"320"},
+   "axes": [
+    {
+     "dim": "x",
+     "index": 0,
+     "type": "category",
+     "inverse": false,
+     "px": ["0000000000000000","407f400000000000"],
+     "pxText": ["0","500"],
+     "effective": ["4000000000000000","4010000000000000"],
+     "effectiveText": ["2","4"],
+     "mapping": null,
+     "mappingText": null,
+     "onBand": true,
+     "blank": false,
+     "nCat": 5,
+     "ctnShp": false,
+     "raw": {"dataMM":["1","4"],"noZoomEffMM":["2","4"],"fixMM":[true,false],"isBlank":false,"tggAxInv":false,"startValue":null},
+     "count": "3",
+     "bandWidth": "4064d55555555555",
+     "bandWidthText": "166.66666666666666",
+     "bandW": "4064d55555555555",
+     "bandWText": "166.66666666666666",
+     "contain": [false,false,false,false,false,true,true,true,false,false,false,false,false,false,false,false,false],
+     "coords": [
+      "c085e00000000001",
+      "c080aaaaaaaaaaab",
+      "c076eaaaaaaaaaac",
+      "c069000000000002",
+      "c040aaaaaaaaaaae",
+      "4060aaaaaaaaaaaa",
+      "4072c00000000000",
+      "407d2aaaaaaaaaab",
+      "4083caaaaaaaaaab",
+      "4089000000000001",
+      "408e355555555557",
+      "4091b55555555556",
+      "4094500000000000",
+      "4096eaaaaaaaaaab",
+      "4099855555555556",
+      "409c200000000001",
+      "409ebaaaaaaaaaab"
+     ],
+     "interval": {"option":"auto","used":0,"unitSpan":"4064d55555555556","unitSpanText":"166.66666666666669"},
+     "labels": [
+      {"value":2,"text":"a","offInterval":false,"shown":true},
+      {"value":3,"text":"c","offInterval":false,"shown":true},
+      {"value":4,"text":"d","offInterval":false,"shown":true}
+     ],
+     "ticks": {
+      "values": [2,3,4,5],
+      "globalCoords": ["4049000000000000","406b155555555556","4077f55555555556","4081300000000000"],
+      "drawn": [false,false,false,false],
+      "onBand": true
+     },
+     "splitLines": {
+      "values": [2,3,4,5],
+      "globalCoords": ["4049000000000000","406b155555555556","4077f55555555556","4081300000000000"],
+      "drawn": [false,false,false,false],
+      "onBand": true
+     },
+     "splitAreas": []
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "type": "value",
+     "inverse": false,
+     "px": ["0000000000000000","4074000000000000"],
+     "pxText": ["0","320"],
+     "effective": ["0000000000000000","4034000000000000"],
+     "effectiveText": ["0","20"],
+     "mapping": null,
+     "mappingText": null
+    }
+   ],
+   "series": [
+    {
+     "index": 0,
+     "type": "bar",
+     "filtered": false,
+     "bandWidth": "4064d55555555555",
+     "bandWidthText": "166.66666666666666",
+     "offset": "c04cc00000000001",
+     "offsetText": "-57.50000000000001",
+     "size": "405cc00000000000",
+     "sizeText": "115",
+     "items": [
+      {
+       "class": "drawn",
+       "layout": ["4052f55555555554","4076800000000000","405cc00000000000","c054000000000000"],
+       "box": ["4052f55555555554","4071800000000000","4067daaaaaaaaaaa","4076800000000000"]
+      },
+      {
+       "class": "hidden",
+       "layout": ["c056b55555555558","4076800000000000","405cc00000000000","c074000000000000"],
+       "box": ["4049000000000000","4044000000000000","4049000000000000","4076800000000000"]
+      },
+      {
+       "class": "drawn",
+       "layout": ["406e500000000000","4076800000000000","405cc00000000000","c060000000000000"],
+       "box": ["406e500000000000","406d000000000000","4076580000000000","4076800000000000"]
+      },
+      {
+       "class": "drawn",
+       "layout": ["407992aaaaaaaaab","4076800000000000","405cc00000000000","c048000000000000"],
+       "box": ["407992aaaaaaaaab","4073800000000000","4080615555555556","4076800000000000"]
+      }
+     ]
+    }
+   ]
+  },
+  {
    "name": "B min 'zz'",
    "group": "B",
    "W": 600,
