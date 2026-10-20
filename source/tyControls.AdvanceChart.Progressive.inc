@@ -315,6 +315,8 @@ begin
     begin
       el.ProgHidden := hid;
       AList.SetElement(k, el);
+      { [R2-I9] what the storage holds changed: the hover layer's count }
+      FHlCountOk := False;
     end;
   end;
 end;

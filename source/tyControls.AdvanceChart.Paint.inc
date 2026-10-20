@@ -1004,7 +1004,7 @@ procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 var
   drawn, i: Integer;
-  built, prepped, layered: Boolean;
+  built, prepped, layered, fresh: Boolean;
   frame: TTyPaintList;
 begin
   { WHAT THE STATIC LAYER HOLDS, for the dirty-rect path: one list at rest,
@@ -1017,8 +1017,23 @@ begin
   { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. A
     PROGRESS FRAME changed which elements are shown and nothing else: its
     list is drawn as it stands [Batch 119] }
-  built := not prepped and not (FProgReuse and FPaintListValid and (FPaintList <> nil)
-    and not FExporting);
+  { [R2-I9] AN UPDATE'S LIST, built when the update ran and untouched since
+    (anything that changes it drops the flag: a relayout, a dropped list, a
+    state the patch did not take): drawn as it stands. A second build would
+    be the same list -- its sync no re-render (FStRerender), its proxies the
+    same (FStProxied) -- so where the latter would differ it is built. }
+  fresh := FListFresh and not GListFreshOff and not prepped and FPaintListValid
+    and (FPaintList <> nil) and not FExporting and not FProgReuse
+    and (FStProxied = (AnimAllowed or ((FAnimSet <> nil) and (FAnimSet.Count > 0)
+      and not FAnimPending)));
+  FListFresh := False;
+  if fresh then
+  begin
+    FStRerender := False;
+    Inc(GListFreshes);
+  end;
+  built := not prepped and not fresh and not (FProgReuse and FPaintListValid
+    and (FPaintList <> nil) and not FExporting);
   FProgReuse := False;
   if built then drawn := BuildSeriesList(AMeasurer, APPI)
   else drawn := FPaintList.Count;
@@ -1029,7 +1044,7 @@ begin
     if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
     Exit;
   end;
-  if built then AnimAfterBuild;
+  if built or fresh then AnimAfterBuild;
   { the states on their proxies, then the armed option's flush [Batch 94] }
   if not prepped then
   begin
@@ -1112,6 +1127,9 @@ begin
   if FExporting then
   begin
     PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+    { [R2-I9] getRenderedCanvas draws every built-in layer, the hover
+      layer too }
+    PaintHoverLayer(APainter);
     PaintLoading(APainter, ARect, APPI, AMeasurer);
     Exit;
   end;
@@ -1154,6 +1172,9 @@ begin
   else
     PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
   PaintEmphasis(APainter, APPI, FTipHits);
+  { [R2-I9] THE HOVER LAYER over every layer of the canvas (zlevel 1e5):
+    the paths on it in their hover style -- the box, HTML upstream, over it }
+  PaintHoverLayer(APainter);
   { THE KEYBOARD'S RING over the marks and under the box [Batch 144] }
   PaintKbRing(APainter);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
@@ -1178,7 +1199,9 @@ begin
     { the keyboard's ring [Batch 144] }
     or FKbActive
     { a component's part [F5] }
-    or FKbStopOn;
+    or FKbStopOn
+    { [R2-I9] the hover layer's copies }
+    or StHoverAny;
 end;
 
 procedure TTyAdvanceChart.DropStatic;
@@ -1190,6 +1213,9 @@ begin
     answer questions about a picture no longer on screen. Not freed -- the
     next build reuses the object and only the answer is stale. }
   FPaintListValid := False;
+  FListFresh := False;
+  { [R2-I9] the hover layer's copies are of that list }
+  FHoverDirty := True;
 end;
 
 procedure TTyAdvanceChart.DropStaticKeepList;
@@ -1201,6 +1227,8 @@ begin
   begin
     BuildSeriesList(NewTextMeasurer(FLastPPI), FLastPPI);
     StaticDrop;
+    { [R2-I9] the paint draws this one }
+    FListFresh := True;
   end;
 end;
 

@@ -618,7 +618,7 @@ begin
       for j := 0 to 1 do
       begin
         if j > 0 then sb.Append(',');
-        sb.Append('{"type": "scatter", "progressive": 25, "progressiveThreshold": 40, "symbolSize": 16,');
+        sb.Append('{"type": "scatter", "progressive": 25, "progressiveThreshold": 40, "symbolSize": 16, "selectedMode": "multiple",');
         sb.Append(' "itemStyle": {"opacity": 0.7}, "emphasis": {"scale": 2}, "data": [');
         for i := 0 to 99 do
         begin
@@ -651,7 +651,8 @@ begin
       sb.Append(' "visualMap": {"type": "piecewise", "min": 0, "max": 1, "splitNumber": 4, "orient": "horizontal", "left": "center", "top": 0},')
     else
       sb.Append(' "visualMap": {"min": 0, "max": 1, "calculable": true, "orient": "horizontal", "left": "center", "top": 0},');
-    sb.Append(' "series": [{"type": "heatmap", "progressive": 50, "progressiveThreshold": 100,');
+    sb.Append(' "series": [{"type": "heatmap", "progressive": 50, "progressiveThreshold": 100, "selectedMode": "multiple",');
+    sb.Append(' "select": {"itemStyle": {"borderColor": "#000", "borderWidth": 3}},');
     sb.Append(' "emphasis": {"itemStyle": {"borderColor": "#333", "borderWidth": 1}}, "data": [');
     for i := 0 to 17 do
       for j := 0 to 17 do
@@ -727,6 +728,20 @@ begin
           chart.DispatchAction('{"type": "downplay", "seriesIndex": 0, "dataIndex": 5}');
           chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
           frames[on_].Add(Frame(bmp));
+          { [R2-I9] an incremental element's hover and highlight are the hover
+            layer's (HOVER_LAYER_FOR_INCREMENTAL): the layer is left alone.
+            A selection is no hover: it changes the layer, in part }
+          for k := 0 to 11 do
+          begin
+            if k mod 3 = 2 then
+              chart.DispatchAction(Format('{"type": "unselect", "seriesIndex": 0, "dataIndex": %d}',
+                [((k - 1) * 37) mod 97]))
+            else
+              chart.DispatchAction(Format('{"type": "select", "seriesIndex": 0, "dataIndex": %d}',
+                [(k * 37) mod 97]));
+            chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+            frames[on_].Add(Frame(bmp));
+          end;
           chart.Leave;
           chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
           frames[on_].Add(Frame(bmp));

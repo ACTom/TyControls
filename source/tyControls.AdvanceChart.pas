@@ -395,6 +395,9 @@ type
       updated elements keep theirs; an item at normal has no entry }
     MarkFlagKey: TTyStringArray;
     MarkFlagHover: TTyIntegerArray;
+    { [R2-I9] the hover-layer flag the rows were last given (HlOn) and
+      whether they were since the sync (HlSet) }
+    HlOn, HlSet: Boolean;
   end;
 
   { WHAT A notMerge OPTION CARRIES OVER of a series' state records
@@ -809,6 +812,10 @@ type
     FProgUnfinished: Boolean;
     FProgFresh: Boolean;
     FProgReuse: Boolean;
+    { [R2-I9] THE LIST AN UPDATE BUILT (FullUpdateWith, DropStaticKeepList)
+      and nothing has touched since: the paint draws it as it stands instead
+      of building the same list a second time }
+    FListFresh: Boolean;
     FProgStepCost: Double;
     FStreamPending: Boolean;
     FStreamRelayout: Boolean;
@@ -1100,6 +1107,14 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [R2-I9] THE HOVER LAYER: the copies it brushes (the paths on it in
+      their hover style, in list order) and whether they are to be found
+      again; the storage count the threshold reads (FHlCount, counted again
+      when not FHlCountOk) }
+    FHoverList: TTyPaintList;
+    FHoverDirty: Boolean;
+    FHlCount: Integer;
+    FHlCountOk: Boolean;
     { [P2] the last StApplyChanged changed a geo's flags }
     FStGeoApplied: Boolean;
     { StPrimaryInk held through a sync's declarations [P2] }
@@ -1927,7 +1942,7 @@ type
     procedure StAnimSync;
     procedure StAnimEl(var AEl: TTyStElement; AListIdx, ASeries, ARaw: Integer;
       const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
-      AHasCfg, AOver: Boolean);
+      AHasCfg: Boolean);
     { the series' stateAnimation as updateStates reads it (series, root,
       300 / cubicOut), when the series animates and the duration is above 0 }
     function StAnimCfg(ASeriesIndex: Integer; out ACfg: TTyAnimCfg): Boolean;
@@ -3778,6 +3793,19 @@ type
       state list. True when an element changed. }
     function StApplyChanged: Boolean;
     function StPatchList: Boolean;
+    { [R2-I9] THE HOVER LAYER (zrender's hover layer, ECharts'
+      updateHoverLayerStatus): the root hoverLayerThreshold as `elCount >
+      value` reads it; whether a series' rendered paths carry the flag (the
+      threshold, or an incremental render's own); the flags given to every
+      row -- AEnter (a build) also puts a row already in emphasis on the
+      layer; the copies the layer brushes, found again; whether there are
+      any; and drawing them over everything the canvas holds }
+    function StHoverThreshold: Double;
+    function StSeriesHoverOn(ASlot: Integer; AThl: Boolean): Boolean;
+    procedure StHoverStamp(AEnter: Boolean);
+    procedure StHoverCollect;
+    function StHoverAny: Boolean;
+    procedure PaintHoverLayer(APainter: TTyPainter);
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
     { [F2b] the row's second dispatcher (a gauge's arc), nil for none }
     function StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
@@ -4375,6 +4403,12 @@ type
     { [R2-L] FOR TESTS: how many row state records series ASeriesIndex
       keeps (none where no element hosts a row, -1 for no such series) }
     function StRowRecordsForTest(ASeriesIndex: Integer): Integer;
+    { [R2-I9] FOR TESTS: the hover layer as the next frame brushes it (the
+      copies in list order; nil for none) }
+    function HoverLayerForTest: TTyPaintList;
+    { [R2-I9] FOR TESTS: how many rows of series ASeriesIndex have a state
+      list or are on the hover layer }
+    function StRowsInStatesForTest(ASeriesIndex: Integer): Integer;
     { [F2b] a marker element of series ASeriesIndex by its name (mp0,
       ml0.from, ma0#label ...): its state record and its index in the list }
     function MarkerStates(ASeriesIndex: Integer; const APart: string;
@@ -4962,6 +4996,13 @@ function TyAdvChartProgFastFramesForTest: Integer;
   and how many times it has. }
 procedure TyAdvChartListTailForTest(AOn: Boolean);
 function TyAdvChartListTailsForTest: Integer;
+{ [R2-I9] The list an update built drawn by the next paint as it stands
+  (FListFresh): a switch that turns it off -- the paint builds it again, the
+  reference it must match -- and how many paints have drawn one. }
+procedure TyAdvChartListFreshForTest(AOn: Boolean);
+function TyAdvChartListFreshesForTest: Integer;
+{ [R2-I9] how many times any chart has built its series list (BuildSeriesList) }
+function TyAdvChartListBuildsForTest: Integer;
 { [R2-L] The incremental layer drawn again only where a state changed it
   (ProgLayerRegionRedraw): a switch -- off, the layer is drawn whole, the
   reference -- and how many times it has been. }
@@ -5019,6 +5060,24 @@ end;
 var
   GListTailOff: Boolean = False;
   GListTails: Integer = 0;
+  GListFreshOff: Boolean = False;
+  GListFreshes: Integer = 0;
+  GListBuilds: Integer = 0;
+
+function TyAdvChartListBuildsForTest: Integer;
+begin
+  Result := GListBuilds;
+end;
+
+procedure TyAdvChartListFreshForTest(AOn: Boolean);
+begin
+  GListFreshOff := not AOn;
+end;
+
+function TyAdvChartListFreshesForTest: Integer;
+begin
+  Result := GListFreshes;
+end;
 
 procedure TyAdvChartListTailForTest(AOn: Boolean);
 begin
