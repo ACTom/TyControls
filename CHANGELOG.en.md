@@ -7,6 +7,30 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.3] — 2026-10-20
+
+A bug-fix release for 3.0, mostly for macOS: sharp drawing on Retina screens, the system's window frame, and building the macOS version with Lazarus 3.x.
+
+### Changed
+
+- On macOS a `TTyForm` window now uses the system's window frame: rounded corners, the shadow, the traffic-light buttons, resizing from the edges, tiling and zoom are all the system's. Set `TTyTitleBar.MacTrafficLights` to False for the title bar's own drawn buttons. ([#80](https://github.com/ACTom/TyControls/issues/80), [#89](https://github.com/ACTom/TyControls/issues/89))
+- On a macOS Retina screen a `TTyPainter` layer is twice the control's size. Code that works on `Bitmap` directly (`FillRect`, `PutImage` and so on) in `OnPaintSurface`, `OnDrawCell` and the like converts control coordinates to layer pixels with `Dev()`; see the [events documentation](docs/events.en.md#drawing-on-the-layer-on-a-retina-screen). `TyDeviceScaleRendering := False` takes all drawing back to one times. Windows and Linux are not affected. ([#83](https://github.com/ACTom/TyControls/issues/83))
+- The Online Package Manager no longer lists GTK3 as a supported widgetset: LCL-GTK3 still has problems the library cannot work around. Building for GTK3 from source still works; see the [known issues](docs/known-issues.en.md). ([#95](https://github.com/ACTom/TyControls/issues/95))
+
+### Fixed
+
+- Text and graphics were blurry on macOS Retina screens. ([#83](https://github.com/ACTom/TyControls/issues/83), [#93](https://github.com/ACTom/TyControls/issues/93))
+- Dark text came out too heavy on macOS. ([#91](https://github.com/ACTom/TyControls/issues/91))
+- On Windows, control text was greyer and softer than the system's own. ([#90](https://github.com/ACTom/TyControls/issues/90))
+- A control's `Font` name, bold, italic, underline, strikeout and colour had no effect (with `ParentFont` False). They are now laid over the theme's style; `StyleOverride` still wins. ([#92](https://github.com/ACTom/TyControls/issues/92))
+- A `TMainMenu` in a `TTyForm`'s `Menu` put a native menu bar on the window on Windows and made it taller. `TTyForm` no longer uses the inherited `Menu`: the Object Inspector does not show it, the designer does not set it when a `TMainMenu` is dropped, and one already set is taken out of it with its shortcuts still working. Use a `TTyMenuBar` and the form's `MenuBar` for the window's menu. ([#78](https://github.com/ACTom/TyControls/issues/78))
+- The slider of `TTyTrackEdit` and the buttons of `TTyComboEdit`, `TTyURLEdit`, `TTyCalcEdit` and the like showed the text I-beam. ([#84](https://github.com/ACTom/TyControls/issues/84))
+- Scrolling a grid left a gap in its left border. ([#86](https://github.com/ACTom/TyControls/issues/86))
+- With `WordWrap` off, `TTyMemo` could fall short of the end of a line with Arabic, Devanagari, combining marks or other text shaped as a run when scrolled sideways. ([#77](https://github.com/ACTom/TyControls/issues/77))
+- Building the macOS version with Lazarus 3.x failed, also for projects that compile the library from source. ([#81](https://github.com/ACTom/TyControls/issues/81), [#88](https://github.com/ACTom/TyControls/issues/88))
+- Some examples failed to build on macOS with an FPC internal error (DWARF3). ([#87](https://github.com/ACTom/TyControls/issues/87))
+- Building the GTK3 version with a released Lazarus (before 4.99) failed. ([#82](https://github.com/ACTom/TyControls/issues/82))
+
 ## [3.0.2] — 2026-10-13
 
 A bug-fix release for 3.0.
