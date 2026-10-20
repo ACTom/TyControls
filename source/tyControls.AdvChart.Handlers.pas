@@ -414,7 +414,12 @@ function TyJsFormatTpl(const ATemplate: string; AVarCount: Integer;
   percentage). @dimension forms are NOT expanded here; upstream only expands
   them in labels. }
 function TyChartFormatTemplate(const ATemplate: string;
-  const AParams: TTyChartParams): string;
+  const AParams: TTyChartParams; AEncode: Boolean = False): string;
+
+{ [R2-I8] zrender's encodeHTML: & < > " ' written as &amp; &lt; &gt; &quot;
+  &#39; -- what TooltipView's formatTpl(html, params, true) does to every
+  value it puts in a template, in both render modes. }
+function TyChartEncodeHtml(const AText: string): string;
 
 { ---- resolving an option value ---- }
 { ASpec is whatever the option tree holds: '@Name' for a registered handler,
@@ -422,7 +427,7 @@ function TyChartFormatTemplate(const ATemplate: string;
   for and is not registered -- in which case AText carries a message saying so,
   because a formatter that silently does nothing is worse than a visible error. }
 function TyChartResolveText(const ASpec: string; const AParams: TTyChartParams;
-  out AText: string): Boolean;
+  out AText: string; AEncode: Boolean = False): Boolean;
 
 { True when ASpec names a handler rather than being a template. }
 function TyChartIsHandlerRef(const ASpec: string): Boolean;
@@ -1000,11 +1005,27 @@ begin
   end;
 end;
 
+function TyChartEncodeHtml(const AText: string): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(AText) do
+    case AText[i] of
+      '&': Result := Result + '&amp;';
+      '<': Result := Result + '&lt;';
+      '>': Result := Result + '&gt;';
+      '"': Result := Result + '&quot;';
+      '''': Result := Result + '&#39;';
+    else
+      Result := Result + AText[i];
+    end;
+end;
+
 function TyChartFormatTemplate(const ATemplate: string;
-  const AParams: TTyChartParams): string;
+  const AParams: TTyChartParams; AEncode: Boolean): string;
 var
   vars: array of TTyStringArray;
-  i, n: Integer;
+  i, n, k: Integer;
 begin
   vars := nil;
   SetLength(vars, Length(AParams));
@@ -1025,12 +1046,14 @@ begin
       else
         vars[i][3] := '';
     end;
+    if AEncode then
+      for k := 0 to n - 1 do vars[i][k] := TyChartEncodeHtml(vars[i][k]);
   end;
   Result := TyJsFormatTpl(ATemplate, n, vars);
 end;
 
 function TyChartResolveText(const ASpec: string; const AParams: TTyChartParams;
-  out AText: string): Boolean;
+  out AText: string; AEncode: Boolean): Boolean;
 var
   h: TTyChartFormatter;
   name: string;
@@ -1038,7 +1061,7 @@ begin
   AText := '';
   if not TyChartIsHandlerRef(ASpec) then
   begin
-    AText := TyChartFormatTemplate(ASpec, AParams);
+    AText := TyChartFormatTemplate(ASpec, AParams, AEncode);
     Exit(True);
   end;
   name := Copy(ASpec, 2, MaxInt);

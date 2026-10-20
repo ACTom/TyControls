@@ -239,7 +239,10 @@ type
     GutterCloseLogical: Double;
   end;
 
-  TTyTooltipRunKind = (ttrText, ttrMarker);
+  { [R2-I8] ttrBox: an html inline-block -- the marker span of html mode,
+    any sized box with a background -- drawn as its own rounded rectangle
+    between its horizontal margins }
+  TTyTooltipRunKind = (ttrText, ttrMarker, ttrBox);
 
   { One piece of one line, already carrying everything needed to draw it. }
   TTyTooltipRun = record
@@ -258,8 +261,22 @@ type
       modes -- CSS float:right in one, align:'right' with no width in the
       other -- and it is what makes a column of values line up. }
     AlignRight: Boolean;
+    { [R2-I8] html only. A box run's size, corner radius and the margins
+      beside it (logical px), and a text run's written line-height
+      (logical px; 0: none). }
+    BoxWLogical, BoxHLogical, BoxRadiusLogical: Double;
+    MarginLLogical, MarginRLogical: Double;
+    LineHeightLogical: Double;
     { Set once measured. }
     X, W: Double;
+  end;
+
+  { [R2-I8] A horizontal rule an html block's top or bottom border draws
+    across the box: OffsetLogical from its line's top (negative: above it,
+    in the line's gap), WidthLogical thick. }
+  TTyTooltipRule = record
+    OffsetLogical, WidthLogical: Double;
+    Colour: TTyChartColor;
   end;
 
   TTyTooltipLine = record
@@ -270,8 +287,23 @@ type
       lines. Reading that table as blank lines puts a surplus line in every
       tooltip. }
     BlankLinesBefore: Integer;
+    { [R2-I8] HTML's VERTICAL BOX: extra space above the line (a block's
+      margins, paddings and borders), the line's own height (0: the ink's
+      line height) and its indent (a block's left margin and padding), all
+      logical px. A Spacer is no line, only its gap and rules -- the space
+      the last block leaves below it. The default markup and richText
+      leave all of it at nought. }
+    GapBeforeLogical: Double;
+    HeightLogical: Double;
+    IndentLogical: Double;
+    Spacer: Boolean;
+    Rules: array of TTyTooltipRule;
     { The widest run row, filled by TyTooltipMeasure. }
     LeftW, RightW: Double;
+    { [R2-I8] Filled by TyTooltipMeasure: device px this line's top lies
+      below `rows above it * line height` (gaps, and the heights of taller
+      lines above), and its own height. }
+    ExtraTopPx, HPx: Double;
   end;
   TTyTooltipLineArray = array of TTyTooltipLine;
 
@@ -323,6 +355,14 @@ function TyTooltipSpecOfGeo(AOption: TTyChartOption; AGeoIndex: Integer;
   An axis' name and labels have no item tooltip of their own. }
 function TyTooltipSpecOfItem(AOption: TTyChartOption; const AMainType: string;
   AIndex: Integer; AItemTip: TJSONData; const AName: string): TTyTooltipSpec;
+
+{ [R2-I8] getTooltipRenderMode over the tooltip component's renderMode:
+  'richText' is richText, 'auto' (or none written) is html unless
+  AAutoRichText -- upstream's env.domSupported, false in node --, anything
+  else is html (`renderModeOption || 'html'`). Only the component's own
+  option counts: TooltipView reads it there and nowhere else. }
+function TyTooltipRenderModeIsHtml(AOption: TTyChartOption;
+  AAutoRichText: Boolean): Boolean;
 
 { ---- content ---- }
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
@@ -1374,6 +1414,20 @@ end;
 
 { ============================ content ============================ }
 
+function TyTooltipRenderModeIsHtml(AOption: TTyChartOption;
+  AAutoRichText: Boolean): Boolean;
+var
+  comp: TJSONObject;
+  d: TJSONData;
+begin
+  Result := not AAutoRichText;
+  comp := TyTooltipComponent(AOption);
+  if comp = nil then Exit;
+  d := comp.Find('renderMode');
+  if (d = nil) or ((d.JSONType = jtString) and (d.AsString = 'auto')) then Exit;
+  Result := not ((d.JSONType = jtString) and (d.AsString = 'richText'));
+end;
+
 function TyTooltipValueText(AValue: Double): string;
 begin
   { makeValueReadable, for a number: a finite one as JavaScript prints it --
@@ -1615,7 +1669,7 @@ procedure TyTooltipMeasure(var ALines: TTyTooltipLineArray;
   out AWidth, AHeight: Double);
 var
   i, j, rows: Integer;
-  w, h, x, scale, lineH, gutter, markerGap, maxW, natural: Double;
+  w, h, x, scale, lineH, gutter, markerGap, maxW, natural, extra: Double;
   hasRight, hasMarker, hasName: Boolean;
 begin
   AWidth := 0;
@@ -1628,7 +1682,7 @@ begin
   maxW := 0;
   for i := 0 to High(ALines) do
   begin
-    x := 0;
+    x := ALines[i].IndentLogical * scale;
     hasRight := False;
     hasMarker := False;
     hasName := False;
@@ -1642,6 +1696,18 @@ begin
         ALines[i].Runs[j].W := w;
         ALines[i].Runs[j].X := x;
         x := x + w + markerGap;
+        Continue;
+      end;
+      if ALines[i].Runs[j].Kind = ttrBox then
+      begin
+        { [R2-I8] an html box: its margins and itself, no marker gap }
+        hasName := True;
+        w := (ALines[i].Runs[j].MarginLLogical + ALines[i].Runs[j].BoxWLogical
+          + ALines[i].Runs[j].MarginRLogical) * scale;
+        if w < 0 then w := 0;
+        ALines[i].Runs[j].W := w;
+        ALines[i].Runs[j].X := x;
+        x := x + w;
         Continue;
       end;
       AMeasurer.MeasureLine(ALines[i].Runs[j].Text,
@@ -1684,11 +1750,32 @@ begin
       end;
   end;
 
+  { [R2-I8] html's gaps and taller lines ride on top of the rows: a line's
+    top is rows above it times the line height, plus its ExtraTopPx -- nought
+    throughout for the default markup, which keeps that arithmetic exact }
   rows := 0;
+  extra := 0;
   for i := 0 to High(ALines) do
+  begin
+    extra := extra + ALines[i].GapBeforeLogical * scale;
+    ALines[i].ExtraTopPx := extra;
+    if ALines[i].Spacer then
+    begin
+      ALines[i].HPx := 0;
+      rows := rows + ALines[i].BlankLinesBefore;
+      Continue;
+    end;
     rows := rows + 1 + ALines[i].BlankLinesBefore;
+    if ALines[i].HeightLogical > 0 then
+    begin
+      ALines[i].HPx := ALines[i].HeightLogical * scale;
+      extra := extra + (ALines[i].HPx - lineH);
+    end
+    else
+      ALines[i].HPx := lineH;
+  end;
   AWidth := APadLeftPx + maxW + APadRightPx;
-  AHeight := APadTopPx + rows * lineH + APadBottomPx;
+  AHeight := APadTopPx + rows * lineH + extra + APadBottomPx;
 end;
 
 { ============================ placement ============================ }

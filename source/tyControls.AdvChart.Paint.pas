@@ -769,7 +769,13 @@ type
                      place among the item's paths): Pts its PathProxy data in
                      its own frame, G[0..5] its computed transform, G[6] 1
                      where there is one, Base its shape for the dividers }
-    carMapRegion, carCustomPath);
+    carMapRegion, carCustomPath,
+    { [R2-I8] carPictorialRect: a pictorial bar's bar rect -- the label's
+      host, no ink (Index its row): G[0..3] its shape as upstream holds it
+      (x, y, width, height; the length along the value axis signed), G[4] 1
+      where the row does not animate. An update tweens its shape and the
+      label laid out on it rides it }
+    carPictorialRect);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

@@ -83,6 +83,9 @@ type
     procedure TestAKeptAxisTooltipCallsAsUpstream;
     procedure TestShowDelayDefersTheCallsAsUpstream;
     procedure TestTheMarkupIsBuiltWhenTheShowIsTriedAsUpstream;
+    { [R2-I8] the pointer label's function }
+    procedure TestAPointerLabelFunctionRunsOnChangeAsUpstream;
+    procedure TestAPointerLabelFunctionUnderATooltipAsUpstream;
   end;
 
 implementation
@@ -200,7 +203,8 @@ function TAopProbe.LabelOf(const AHit: TTyAxisHit): string;
 begin
   Result := '';
   if (AHit.Axis = nil) or not AHit.Spec.LabelSpec.Show then Exit;
-  Result := PointerLabelText(AHit, PointerValueOf(AHit));
+  { [R2-I8] what the paint drew -- reading it must not run the function }
+  Result := PointerLabelDrawn(AHit);
 end;
 
 function TAopProbe.BoxText: string;
@@ -508,6 +512,8 @@ begin
   One('fmt', FFmt);
   One('pos', FPos);
   One('vf', FVf);
+  { [R2-I8] the pointer label's function: BaseAxisPointer.render's memo }
+  One('ptrfmt', FPtrFmt);
 end;
 
 procedure TAdvChartAxisOwnPointerOracleTest.RunCase(const AId: string);
@@ -652,6 +658,20 @@ end;
 procedure TAdvChartAxisOwnPointerOracleTest.TestTheMarkupIsBuiltWhenTheShowIsTriedAsUpstream;
 begin
   RunCase('calls-delay-vf');
+end;
+
+{ [R2-I8] BaseAxisPointer.render: the label's function runs when the value
+  or the status changed, once more after the first show (its graphicKey
+  clears the memo) and on a full update -- not on every paint }
+procedure TAdvChartAxisOwnPointerOracleTest.TestAPointerLabelFunctionRunsOnChangeAsUpstream;
+begin
+  RunCase('calls-ptrfmt');
+end;
+
+{ [R2-I8] and the axis tooltip's header asks it once per show besides }
+procedure TAdvChartAxisOwnPointerOracleTest.TestAPointerLabelFunctionUnderATooltipAsUpstream;
+begin
+  RunCase('calls-ptrfmt-tip');
 end;
 
 initialization

@@ -2597,8 +2597,9 @@ begin
   opt := geo.GroupOpt(ADatum.DataIndex);
   tip := nil;
   if opt <> nil then tip := opt.Find('tooltip');
+  { [R2-I8] the content, encodeHTML'd in html mode (setTooltipConfig) }
   Result := TyTooltipSpecOfGeo(FOption, ADatum.ComponentIndex, tip,
-    geo.GroupName(ADatum.DataIndex));
+    TipContentName(geo.GroupName(ADatum.DataIndex)));
 end;
 
 { setTooltipConfig's formatterParams: componentType, name, geoIndex }
@@ -2621,7 +2622,7 @@ var
   params: TTyChartParams;
 begin
   nm := FGeos[ADatum.ComponentIndex].GroupName(ADatum.DataIndex);
-  if not ASpec.HasFormatter then Exit(nm);
+  if not ASpec.HasFormatter then Exit(TipContentName(nm));
   if TyChartIsHandlerRef(ASpec.Formatter) then
   begin
     SetLength(params, 1);

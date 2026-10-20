@@ -44,6 +44,10 @@ type
     FRoot: TJSONData;
     FBad, FCompared, FSamples: Integer;
     FWhere, FReport: string;
+    { [R2-I8] the case's last sample (every tween at rest): where a label's
+      move is measured from }
+    FLastRec: TJSONObject;
+    FMerged: Boolean;
     procedure Bad(const AWhat: string);
     procedure SameNum(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure NearVal(const AWhat: string; AGot, AWant: Double);
@@ -57,6 +61,7 @@ type
       out AEl: TTyChartElement; ASub: Integer = -1): Boolean;
     procedure ProbeMp(ARec: TJSONObject);
     procedure ProbePict(ARec: TJSONObject);
+    procedure ProbePictGone(ARec: TJSONObject; const AName: string);
     procedure ProbeTml(ARec: TJSONObject);
     function HPidx30(ADataIndex: Integer; AHasIndex: Boolean;
       const AParams: TTyAnimDelayParams): Double;
@@ -400,6 +405,11 @@ begin
     if Copy(name, 1, 2) <> 'pb' then Continue;
     slash := Pos('/', name);
     s := StrToInt(Copy(name, 3, slash - 3));
+    if Copy(name, slash + 1, MaxInt) = 'gone' then
+    begin
+      ProbePictGone(ARec, name);
+      Continue;
+    end;
     idx := StrToInt(Copy(name, slash + 1, MaxInt));
     leaf := TJSONObject(ARec.Items[i]);
     clipBar := not IsNull(leaf.Find('clip'));
@@ -431,6 +441,56 @@ begin
       else
         SameKeyOr(name + ' clip', p, 'shape.width', any.Anim.G[2], cl.Arrays['sh'].Items[2]);
     end;
+    { [R2-I8] THE BAR RECT, the label's host: its shape on its proxy, and
+      as the frame draws it }
+    if not IsNull(leaf.Find('rect')) then
+    begin
+      Inc(FCompared);
+      if not ListEl(s, idx, carPictorialRect, el) then
+        Bad(name + ': no bar rect')
+      else
+      begin
+        p := FChart.AnimFindProxy(s, idx, 'prect');
+        Inc(FCompared);
+        if (p = nil) and (leaf.Integers['rn'] > 0) then
+          Bad(name + ' rect: upstream tweens it, the port has no proxy');
+        SameKeyOr(name + ' rect', p, 'shape.x', el.Anim.G[0], leaf.Arrays['rect'].Items[0]);
+        SameKeyOr(name + ' rect', p, 'shape.y', el.Anim.G[1], leaf.Arrays['rect'].Items[1]);
+        SameKeyOr(name + ' rect', p, 'shape.width', el.Anim.G[2], leaf.Arrays['rect'].Items[2]);
+        SameKeyOr(name + ' rect', p, 'shape.height', el.Anim.G[3], leaf.Arrays['rect'].Items[3]);
+        if FrameEl(s, idx, el.Anim.Sub, carPictorialRect, fe) then
+        begin
+          bx := TyShapeBounds(fe.Shape);
+          NearVal(name + ' rect drawn top', bx.Top,
+            Min(WantNum(leaf.Arrays['rect'].Items[1]),
+              WantNum(leaf.Arrays['rect'].Items[1]) + WantNum(leaf.Arrays['rect'].Items[3])));
+          NearVal(name + ' rect drawn left', bx.Left,
+            Min(WantNum(leaf.Arrays['rect'].Items[0]),
+              WantNum(leaf.Arrays['rect'].Items[0]) + WantNum(leaf.Arrays['rect'].Items[2])));
+          NearVal(name + ' rect drawn height', bx.Bottom - bx.Top,
+            Abs(WantNum(leaf.Arrays['rect'].Items[3])));
+        end;
+      end;
+    end;
+    { [R2-I8] THE LABEL rides its host: its move from where it rests is
+      upstream's (the text's computed translation against the last
+      sample's) }
+    if FMerged and (not IsNull(leaf.Find('label'))) and (FLastRec <> nil)
+      and (FLastRec.Find(name) is TJSONObject)
+      and not IsNull(TJSONObject(FLastRec.Find(name)).Find('label')) then
+    begin
+      cl := TJSONObject(TJSONObject(FLastRec.Find(name)).Find('label'));
+      Inc(FCompared);
+      if not (ListEl(s, idx, carLabel, el) and FrameEl(s, idx, el.Anim.Sub, carLabel, fe)) then
+        Bad(name + ': no label drawn')
+      else
+      begin
+        NearVal(name + ' label moved x', fe.Caption.X - el.Caption.X,
+          WantNum(leaf.Objects['label'].Find('gx')) - WantNum(cl.Find('gx')));
+        NearVal(name + ' label moved y', fe.Caption.Y - el.Caption.Y,
+          WantNum(leaf.Objects['label'].Find('gy')) - WantNum(cl.Find('gy')));
+      end;
+    end;
     { the paths: how many (the live ones and the ones shrinking), and each }
     paths := leaf.Arrays['paths'];
     live := 0;
@@ -457,12 +517,30 @@ begin
       rk := 'pglyph' + IntToStr(ai);
       if clipBar then
       begin
-        { a clipped column's paths stand: their rest }
+        { [R2-I8] a clipped column's paths tween on their own proxies
+          [Revised in R2-I8: their rest was compared, the paths stood] }
         if not ListEl(s, idx, carPictorialClip, el, ai) then Continue;
-        SameNum(Format('%s path %d.x', [name, ai]), el.Caption.LgG[0], pa.Find('x'));
-        SameNum(Format('%s path %d.y', [name, ai]), el.Caption.LgG[1], pa.Find('y'));
-        SameNum(Format('%s path %d.sx', [name, ai]), el.Caption.LgG[2], pa.Find('sx'));
-        SameNum(Format('%s path %d.sy', [name, ai]), el.Caption.LgG[3], pa.Find('sy'));
+        p := FChart.AnimFindProxy(s, idx, 'pcpath' + IntToStr(ai));
+        Inc(FCompared);
+        if (p = nil) and (pa.Integers['n'] > 0) then
+          Bad(Format('%s path %d: upstream animates it, the port has no proxy', [name, ai]));
+        SameKeyOr(Format('%s path %d', [name, ai]), p, 'x', el.Caption.LgG[0], pa.Find('x'));
+        SameKeyOr(Format('%s path %d', [name, ai]), p, 'y', el.Caption.LgG[1], pa.Find('y'));
+        SameKeyOr(Format('%s path %d', [name, ai]), p, 'scaleX', el.Caption.LgG[2], pa.Find('sx'));
+        SameKeyOr(Format('%s path %d', [name, ai]), p, 'scaleY', el.Caption.LgG[3], pa.Find('sy'));
+        SameKeyOr(Format('%s path %d', [name, ai]), p, 'rotation', el.Caption.LgG[5], pa.Find('rot'));
+        if (WantNum(pa.Find('sx')) <> 0) and (WantNum(pa.Find('sy')) <> 0)
+          and FrameEl(s, idx, ai, carPictorialClip, fe) then
+        begin
+          bx := TyShapeBounds(fe.Shape);
+          if TyRectFIsValid(bx) then
+          begin
+            NearVal(Format('%s path %d drawn x', [name, ai]), (bx.Left + bx.Right) / 2,
+              WantNum(pa.Find('gx')));
+            NearVal(Format('%s path %d drawn y', [name, ai]), (bx.Top + bx.Bottom) / 2,
+              WantNum(pa.Find('gy')));
+          end;
+        end;
         Continue;
       end;
       if ListEl(s, idx, carPictorialGlyph, el, ai) then
@@ -505,6 +583,100 @@ begin
         SameKeyOr(Format('%s path %d (going)', [name, ai]), p, 'scaleY', NaN, pa.Find('sy'));
         SameNum(Format('%s path %d (going).x', [name, ai]), p.Ghost.Caption.LgG[0], pa.Find('x'));
         SameNum(Format('%s path %d (going).y', [name, ai]), p.Ghost.Caption.LgG[1], pa.Find('y'));
+        { [R2-I8] AS DRAWN: in its bundle as the bundle is now
+          [Revised in R2-I8: it stayed where the old bundle was] }
+        if (WantNum(pa.Find('sx')) <> 0) and (WantNum(pa.Find('sy')) <> 0)
+          and FrameEl(s, idx, ai, carPictorialGlyph, fe) then
+        begin
+          bx := TyShapeBounds(fe.Shape);
+          if TyRectFIsValid(bx) then
+          begin
+            NearVal(Format('%s path %d (going) drawn x', [name, ai]), (bx.Left + bx.Right) / 2,
+              WantNum(pa.Find('gx')));
+            NearVal(Format('%s path %d (going) drawn y', [name, ai]), (bx.Top + bx.Bottom) / 2,
+              WantNum(pa.Find('gy')));
+          end;
+        end;
+      end;
+    end;
+  end;
+end;
+
+{ ---- [R2-I8] the bars removeBar is shrinking ---- }
+procedure TAdvChartAnimUpdate5OracleTest.ProbePictGone(ARec: TJSONObject;
+  const AName: string);
+var
+  gone, paths: TJSONArray;
+  b, k, g, s, ai, want, got: Integer;
+  pa: TJSONObject;
+  p: TTyChartAnimProxy;
+  found: Boolean;
+  e: TTyChartElement;
+  bx: TTyRectF;
+  l: TTyPaintList;
+  j: Integer;
+begin
+  s := StrToInt(Copy(AName, 3, Pos('/', AName) - 3));
+  gone := ARec.Arrays[AName];
+  want := 0;
+  for b := 0 to gone.Count - 1 do
+    Inc(want, gone.Objects[b].Arrays['paths'].Count);
+  { the removed bars' paths still drawn: the ghosts of no kept column }
+  got := 0;
+  for g := 0 to FChart.AnimGhostCount - 1 do
+  begin
+    p := FChart.AnimGhostAt(g);
+    if (p <> nil) and (p.Series = s) and not p.Gone and not p.PictRide
+      and (Copy(p.Role, 1, 6) = 'pglyph') then Inc(got);
+  end;
+  Inc(FCompared);
+  if got <> want then
+    Bad(Format('%s: %d paths of removed bars, upstream %d', [AName, got, want]));
+  for b := 0 to gone.Count - 1 do
+  begin
+    paths := gone.Objects[b].Arrays['paths'];
+    for k := 0 to paths.Count - 1 do
+    begin
+      pa := paths.Objects[k];
+      if IsNull(pa.Find('ai')) then ai := 0 else ai := pa.Integers['ai'];
+      found := False;
+      for g := 0 to FChart.AnimGhostCount - 1 do
+      begin
+        p := FChart.AnimGhostAt(g);
+        if (p <> nil) and (p.Series = s) and not p.Gone and not p.PictRide
+          and (p.Role = 'pglyph' + IntToStr(ai)) then
+        begin
+          found := True;
+          Break;
+        end;
+      end;
+      Inc(FCompared);
+      if not found then
+      begin
+        Bad(Format('%s path %d: upstream shrinks it, the port has no ghost', [AName, ai]));
+        Continue;
+      end;
+      SameKeyOr(Format('%s path %d', [AName, ai]), p, 'scaleX', NaN, pa.Find('sx'));
+      SameKeyOr(Format('%s path %d', [AName, ai]), p, 'scaleY', NaN, pa.Find('sy'));
+      { as drawn: about its place }
+      if (WantNum(pa.Find('sx')) <> 0) and (WantNum(pa.Find('sy')) <> 0) then
+      begin
+        l := FChart.Frame;
+        if l = nil then Continue;
+        for j := 0 to l.Count - 1 do
+        begin
+          e := l.Element(j);
+          if (e.Anim.Role = carPictorialGlyph) and (e.Anim.Series = s)
+            and (e.Anim.Index = p.Index) and (e.Anim.Sub = ai) then
+          begin
+            bx := TyShapeBounds(e.Shape);
+            NearVal(Format('%s path %d drawn x', [AName, ai]), (bx.Left + bx.Right) / 2,
+              WantNum(pa.Find('gx')));
+            NearVal(Format('%s path %d drawn y', [AName, ai]), (bx.Top + bx.Bottom) / 2,
+              WantNum(pa.Find('gy')));
+            Break;
+          end;
+        end;
       end;
     end;
   end;
@@ -567,6 +739,16 @@ begin
   FChart.SetOption(ACase.Objects['option'].AsJSON, True);
   RenderNow;
   events := ACase.Arrays['events'];
+  { [R2-I8] the last sample: every tween at rest -- the label's measure
+    after the merge }
+  FLastRec := nil;
+  FMerged := False;
+  for j := events.Count - 1 downto 0 do
+    if events.Objects[j].Strings['do'] = 'sample' then
+    begin
+      FLastRec := events.Objects[j].Objects['rec'];
+      Break;
+    end;
   for j := 0 to events.Count - 1 do
   begin
     ev := events.Objects[j];
@@ -589,6 +771,7 @@ begin
     else if act = 'merge' then
     begin
       FChart.SetOption(ev.Objects['option'].AsJSON, False);
+      FMerged := True;
       RenderNow;
     end
     else

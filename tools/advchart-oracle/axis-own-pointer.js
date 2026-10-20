@@ -429,6 +429,23 @@ const CASES = [
     steps: [{ op: 'move', chart: 0, on: [0, 1] }, { op: 'move', chart: 0, on: [0, 3] }, { op: 'idle', chart: 0, ms: 60 },
       { op: 'leave', chart: 0 }],
   },
+  // ---------------- 3. a pointer label's function (R2-I8) ----------------
+  {
+    id: 'calls-ptrfmt', note: 'no tooltip, the x axis own pointer with a function label: BaseAxisPointer.render runs it when the '
+      + 'value or the status changed, once more after the first show (the graphicKey change clears _lastValue), and on a '
+      + 'full update (forceRender)',
+    charts: [scatter({ xAxis: { type: 'value', min: 0, max: 10, axisPointer: { show: true, label: { formatter: '@ptrfmt' } } } })],
+    steps: [mv([0, 5.2, 5.9]), mv([0, 5.2, 5.9], 0, 1), mv([0, 5.2, 5.9], 0, 2), mv([0, 5.2, 5.9], 0, 3), mv([0, 7, 5.9]),
+      mv([0, 7, 5.9], 0, 1), { op: 'leave', chart: 0 }, mv([0, 7, 5.9]), { op: 'setOption', chart: 0, option: { title: { text: 't' } } },
+      mv([0, 7, 5.9], 0, 1), { op: 'leave', chart: 0 }],
+  },
+  {
+    id: 'calls-ptrfmt-tip', note: 'the same under a tooltip with trigger none: the axis tooltip header asks the label once per show besides',
+    charts: [scatter({ xAxis: { type: 'value', min: 0, max: 10, axisPointer: { show: true, label: { formatter: '@ptrfmt' } } } },
+      { trigger: 'none' })],
+    steps: [mv([0, 5.2, 5.9]), mv([0, 5.2, 5.9], 0, 1), mv([0, 5.2, 5.9], 0, 2), mv([0, 7, 5.9]), { op: 'leave', chart: 0 },
+      mv([0, 7, 5.9])],
+  },
 ];
 
 // an integer point over a series item (tooltip-keep.js)

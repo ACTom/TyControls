@@ -53,7 +53,14 @@ by probe:
   pict   per pictorialBar series s and data index i: 'pb<s>/<i>' {x, y
          (the bundle's place), n (its clips), clip: null | {sh [x, y,
          width, height], n}, paths [{ai (__pictorialAnimationIndex, null
-         for a single glyph), x, y, sx, sy, rot, n}] in the bundle's order}.
+         for a single glyph), x, y, sx, sy, rot, n, gx, gy (the path's
+         origin on the canvas: its computed transform's translation)}] in
+         the bundle's order, rect [x, y, width, height] (the bar rect --
+         the label's host -- as it is now), rn (its clips), label: null |
+         {gx, gy (the text's computed transform's translation), text}};
+         [R2-I8] and 'pb<s>/gone' [{x, y, paths [as above]}]: the bars
+         still in the view's group that the data no longer holds
+         (removeBar shrinking them), in the group's order.
   tml    per treemap s and raw index i whose content rect carries a label:
          'tl<s>/<i>' {x, y, rot (the text's own layout in its host's
          frame), op, n (its clips), gx, gy (its global place)}.
@@ -143,6 +150,11 @@ function materialize(v) {
   return v;
 }
 const nClip = el => (el && el.animators ? el.animators.filter(a => a.getClip()).length : 0);
+// [R2-I8] where an element's origin lands on the canvas
+function gpos(el) {
+  const m = el.getComputedTransform();
+  return m ? [m[4], m[5]] : [0, 0];
+}
 const NULMARK = '\u2400';
 const idText = s => String(s).split('\u0000').join(NULMARK);
 
@@ -227,20 +239,42 @@ const PROBES = {
     chart.getModel().eachSeries(sm => {
       if (sm.subType !== 'pictorialBar') return;
       const data = sm.getData();
+      const pathsOf = b => {
+        const paths = [];
+        b.eachChild(p => {
+          const g = gpos(p);
+          paths.push({ ai: p.__pictorialAnimationIndex == null ? null : p.__pictorialAnimationIndex,
+            x: hx(p.x), y: hx(p.y), sx: hx(p.scaleX), sy: hx(p.scaleY), rot: hx(p.rotation), n: nClip(p),
+            gx: hx(g[0]), gy: hx(g[1]) });
+        });
+        return paths;
+      };
+      const live = new Set();
       data.each(i => {
         const bar = data.getItemGraphicEl(i);
         if (!bar) return;
+        live.add(bar);
         const b = bar.__pictorialBundle;
         const cp = bar.__pictorialClipPath;
-        const paths = [];
-        b.eachChild(p => {
-          paths.push({ ai: p.__pictorialAnimationIndex == null ? null : p.__pictorialAnimationIndex,
-            x: hx(p.x), y: hx(p.y), sx: hx(p.scaleX), sy: hx(p.scaleY), rot: hx(p.rotation), n: nClip(p) });
-        });
+        const r = bar.__pictorialBarRect;
+        const t = r && r.getTextContent();
+        let label = null;
+        if (t && !t.ignore && !t.invisible && t.style && t.style.text) {
+          const g = gpos(t);
+          label = { gx: hx(g[0]), gy: hx(g[1]), text: String(t.style.text) };
+        }
         rec['pb' + sm.seriesIndex + '/' + i] = { x: hx(b.x), y: hx(b.y), n: nClip(b),
           clip: cp ? { sh: arr([cp.shape.x, cp.shape.y, cp.shape.width, cp.shape.height]), n: nClip(cp) } : null,
-          paths };
+          paths: pathsOf(b),
+          rect: r ? arr([r.shape.x, r.shape.y, r.shape.width, r.shape.height]) : null, rn: nClip(r), label };
       });
+      const gone = [];
+      chart.getViewOfSeriesModel(sm).group.eachChild(bar => {
+        if (live.has(bar) || !bar.__pictorialBundle) return;
+        const b = bar.__pictorialBundle;
+        gone.push({ x: hx(b.x), y: hx(b.y), paths: pathsOf(b) });
+      });
+      rec['pb' + sm.seriesIndex + '/gone'] = gone;
     });
   },
   tml(chart, rec) {
@@ -335,6 +369,44 @@ add('pictorial', 'pb-clip', "symbolClip: the clip path updateProps its shape (th
   ['pict'],
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [70, 20, 50] }] } },
+    ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
+// [R2-I8] the update's leftovers
+add('pictorial', 'pb-label', "single glyphs with a label on top: a merge changes the values -- the bar rect (the label's host) updateProps its shape, and the label, laid out on it every frame, rides it",
+  PB([PS({ symbolSize: [20, 20], symbolPosition: 'end', label: { show: true, position: 'top' }, data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [60, 30, 80] }] } },
+    ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
+add('pictorial', 'pb-shrink-move', "repeated columns over four categories instead of three, c lowered: every bundle moves, and c's paths past its new count shrink in the bundle as it moves",
+  PB([PS({ data: [{ value: 40, symbolRepeat: true }, { value: 60, symbolRepeat: true }, { value: 70, symbolRepeat: true }] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { xAxis: { data: ['a', 'b', 'c', 'd'] }, series: [{ data: [{ value: 40, symbolRepeat: true },
+      { value: 60, symbolRepeat: true }, { value: 30, symbolRepeat: true }] }] } },
+    ...after([0, 1, 100, 200, 300, 599, 600, 601, 700, 900, 1000], T1)]);
+add('pictorial', 'pb-remove', "a merge drops c: removeBar -- the label at once, every path to no scale on removeElement (leave timing: 200 ms cubicOut, no delay function asked), the bar gone when they end",
+  PB([PS({ symbolSize: [20, 20], symbolPosition: 'end', label: { show: true }, data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [30, 60] }] } },
+    ...after([0, 1, 50, 100, 150, 199, 200, 201], T1)]);
+add('pictorial', 'pb-remove-repeat', "a merge drops c of repeated columns: each of c's paths shrinks on removeElement, all on leave timing",
+  PB([PS({ data: [{ value: 40, symbolRepeat: true }, { value: 60, symbolRepeat: true }, { value: 70, symbolRepeat: true }] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: 40, symbolRepeat: true }, { value: 60, symbolRepeat: true }] }] } },
+    ...after([0, 1, 100, 199, 200, 201], T1)]);
+add('pictorial', 'pb-remove-clip', "a merge drops a clipped bar: removeBar has no animation model for a clip -- the bar is gone at once",
+  PB([PS({ symbolRepeat: 'fixed', symbolClip: true, symbolBoundingData: 100, data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [30, 60] }] } },
+    ...after([0, 1, 100], T1)]);
+add('pictorial', 'pb-clip-move', "symbolClip bars whose paths move (symbolOffset): updateAttr(isUpdate) is an updateProps -- the kept paths slide like an unclipped bar's",
+  PB([PS({ symbolRepeat: 'fixed', symbolClip: true, symbolBoundingData: 100, data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ symbolOffset: [0, -6], data: [40, 60, 80] }] } },
     ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
 
 // ---- the treemap's labels ----
@@ -435,6 +507,30 @@ function guards(out) {
   })());
   guard('pb-single: the main path rotates', n(rec('pb-single', T1 + 300, 'pb0/0').paths[0].rot) !== n(rec('pb-single', T1 - 1, 'pb0/0').paths[0].rot));
   guard('pb-clip: the clip path tweens', rec('pb-clip', T1 + 100, 'pb0/0').clip.n === 1);
+  // [R2-I8]
+  guard('pb-label: the bar rect tweens and the label rides it', (() => {
+    const a = rec('pb-label', T1 + 300, 'pb0/0');
+    const b = rec('pb-label', T1 + 601, 'pb0/0');
+    return a.rn === 1 && a.label && b.label && n(a.label.gy) !== n(b.label.gy) && a.rect[3] !== b.rect[3];
+  })());
+  guard('pb-shrink-move: a shrinking path moves with its bundle', (() => {
+    const a = rec('pb-shrink-move', T1 + 100, 'pb0/2').paths;
+    const b = rec('pb-shrink-move', T1 + 200, 'pb0/2').paths;
+    const last = a[a.length - 1];
+    const lastB = b[b.length - 1];
+    return a.length > rec('pb-shrink-move', T1 + 1000, 'pb0/2').paths.length && last.x === lastB.x
+      && n(last.gx) !== n(lastB.gx);
+  })());
+  guard('pb-remove: the removed bar shrinks and is gone after 200 ms', (() => {
+    const a = rec('pb-remove', T1 + 100, 'pb0/gone');
+    const b = rec('pb-remove', T1 + 201, 'pb0/gone');
+    return a.length === 1 && n(a[0].paths[0].sx) > 0 && a[0].paths[0].n > 0 && b.length === 0;
+  })());
+  guard('pb-remove-clip: a clipped bar goes at once', rec('pb-remove-clip', T1, 'pb0/gone').length === 0);
+  guard('pb-clip-move: a clipped bar\'s path tweens', (() => {
+    const a = rec('pb-clip-move', T1 + 300, 'pb0/0').paths[0];
+    return a.n > 0 && a.y !== rec('pb-clip-move', T1 + 601, 'pb0/0').paths[0].y;
+  })());
   // the treemap's labels
   guard('tml-merge: the labels ride their hosts (their own layout stays)', (() => {
     const a = rec('tml-merge', T1 + 500, 'tl0/2');

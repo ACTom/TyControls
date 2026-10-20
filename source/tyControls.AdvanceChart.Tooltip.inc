@@ -179,7 +179,8 @@ var
 begin
   if not AxisTextOf(ADatum, mainT, nm, v, idx) then
     Exit(TyTooltipSpecOf(FOption, -1, -1));
-  Result := TyTooltipSpecOfItem(FOption, mainT, idx, nil, nm);
+  { [R2-I8] the content, encodeHTML'd in html mode (setTooltipConfig) }
+  Result := TyTooltipSpecOfItem(FOption, mainT, idx, nil, TipContentName(nm));
   { the axis' defaults: `tooltip: {show: false}` under what it writes -- a
     show it does not write is false, before the global's is asked (a null
     one is no value, and the global's stands) }
@@ -225,7 +226,7 @@ var
 begin
   Result := '';
   if not AxisTextOf(ADatum, mainT, nm, v, idx) then Exit;
-  if not ASpec.HasFormatter then Exit(nm);
+  if not ASpec.HasFormatter then Exit(TipContentName(nm));
   if TyChartIsHandlerRef(ASpec.Formatter) then
   begin
     SetLength(params, 1);
@@ -395,7 +396,8 @@ begin
   if TipIsMatrix(ADatum) then
   begin
     MatrixCellOf(ADatum, mx, info);
-    Exit(TyTooltipSpecOfMatrix(FOption, ADatum.ComponentIndex, info.TipName));
+    Exit(TyTooltipSpecOfMatrix(FOption, ADatum.ComponentIndex,
+      TipContentName(info.TipName)));
   end;
   { A MARKER'S CASCADE IS ITS OWN [Batch 100]: its data item, the marker,
     the global -- never the host series' }
@@ -1459,6 +1461,101 @@ begin
   Result := TyChartRunHandler(AHit.Spec.LabelSpec.Formatter, prm);
 end;
 
+function PtrMemoKey(AAxis: TTyAxis): string;
+begin
+  Result := AAxis.Dim + '/' + IntToStr(AAxis.ComponentIndex);
+end;
+
+function TTyAdvanceChart.PointerDrawLabelText(const AHit: TTyAxisHit;
+  AValue: Double): string;
+var
+  i, k: Integer;
+  key: string;
+  forced: Boolean;
+begin
+  if (AHit.Axis = nil) or not AHit.Spec.LabelSpec.HasFormatter
+    or not TyChartIsHandlerRef(AHit.Spec.LabelSpec.Formatter) then
+    Exit(PointerLabelText(AHit, AValue));
+  key := PtrMemoKey(AHit.Axis);
+  k := -1;
+  for i := 0 to High(FPtrMemo) do
+    if FPtrMemo[i].Key = key then
+    begin
+      k := i;
+      Break;
+    end;
+  if k < 0 then
+  begin
+    { a new BaseAxisPointer: nothing remembered, and a render it is }
+    k := Length(FPtrMemo);
+    SetLength(FPtrMemo, k + 1);
+    FPtrMemo[k] := Default(TTyPtrMemoEntry);
+    FPtrMemo[k].Key := key;
+    FPtrMemo[k].Gen := FStGen;
+    FPtrMemo[k].UpdGen := FPtrUpdGen - 1;
+  end;
+  { forceRender: AxisView.render on a full update }
+  forced := FPtrMemo[k].Gen <> FStGen;
+  { render() RUNS ON AN ACTION, NOT ON A PAINT: a second paint of the same
+    update draws what the first one rendered }
+  if (not forced) and (FPtrMemo[k].UpdGen = FPtrUpdGen) then
+    Exit(FPtrMemo[k].Text);
+  FPtrMemo[k].UpdGen := FPtrUpdGen;
+  { `!forceRender && _lastValue === value && _lastStatus === status`:
+    nothing to render, the label drawn stands }
+  if (not forced) and FPtrMemo[k].HasLast and FPtrMemo[k].LastShown
+    and (FPtrMemo[k].LastValue = AValue) then
+    Exit(FPtrMemo[k].Text);
+  FPtrMemo[k].HasLast := True;
+  FPtrMemo[k].LastShown := True;
+  FPtrMemo[k].LastValue := AValue;
+  FPtrMemo[k].Gen := FStGen;
+  { makeElOption: the label's text }
+  FPtrMemo[k].Text := PointerLabelText(AHit, AValue);
+  { a graphicKey other than the last one clears the pointer -- _lastValue
+    and _lastStatus with it, AFTER they were set: the render after the
+    first show (or after the pointer's type changed) is never skipped }
+  if not FPtrMemo[k].HasGraphicKey
+    or (FPtrMemo[k].GraphicKey <> AHit.Spec.PointerType) then
+    FPtrMemo[k].HasLast := False;
+  FPtrMemo[k].HasGraphicKey := True;
+  FPtrMemo[k].GraphicKey := AHit.Spec.PointerType;
+  Result := FPtrMemo[k].Text;
+end;
+
+procedure TTyAdvanceChart.PointerMemoHideOthers(const AHits: TTyAxisHitArray);
+var
+  i, j: Integer;
+  seen: Boolean;
+begin
+  for i := 0 to High(FPtrMemo) do
+  begin
+    seen := False;
+    for j := 0 to High(AHits) do
+      if (AHits[j].Axis <> nil) and AHits[j].Spec.LabelSpec.Show
+        and (PtrMemoKey(AHits[j].Axis) = FPtrMemo[i].Key) then
+      begin
+        seen := True;
+        Break;
+      end;
+    { status 'hide': `_lastStatus = status` with the value kept }
+    if not seen and FPtrMemo[i].HasLast then FPtrMemo[i].LastShown := False;
+  end;
+end;
+
+function TTyAdvanceChart.PointerLabelDrawn(const AHit: TTyAxisHit): string;
+var i: Integer; key: string;
+begin
+  Result := '';
+  if AHit.Axis = nil then Exit;
+  if not AHit.Spec.LabelSpec.HasFormatter
+    or not TyChartIsHandlerRef(AHit.Spec.LabelSpec.Formatter) then
+    Exit(PointerLabelText(AHit, PointerValue(AHit)));
+  key := PtrMemoKey(AHit.Axis);
+  for i := 0 to High(FPtrMemo) do
+    if FPtrMemo[i].Key = key then Exit(FPtrMemo[i].Text);
+end;
+
 function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
   const ALabel: TTyAxisPointerLabelSpec): string;
 begin
@@ -2156,6 +2253,8 @@ begin
     '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel',
     '', []);
+  { [R2-I8] a pointer this paint does not draw is hidden }
+  PointerMemoHideOthers(AHits);
   for i := 0 to High(AHits) do
   begin
     hit := AHits[i];
@@ -2246,8 +2345,9 @@ begin
     if not hit.Spec.LabelSpec.Show then Continue;
     if not (tpBackground in labelS.Present) then Continue;
     { The value the line is at -- the cursor's with snap off, where it used to
-      be the nearest row's while the line stood under the cursor. }
-    txt := PointerLabelText(hit, pv);
+      be the nearest row's while the line stood under the cursor.
+      [R2-I8] through the axis' memo: a function runs as upstream runs it }
+    txt := PointerDrawLabelText(hit, pv);
     if txt = '' then Continue;
     AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
       labelS.FontWeight, tw, th);
@@ -2560,7 +2660,8 @@ begin
   if not MatrixCellOf(ADatum, m, info) then Exit;
   First('{a}', '{a0}');
   First('{b}', '{b0}');
-  First('{a0}', info.TipName);
+  { [R2-I8] formatTpl(.., true): the name encodeHTML'd }
+  First('{a0}', TyChartEncodeHtml(info.TipName));
   First('{b0}', IntToStr(info.Loc[0]) + ',' + IntToStr(info.Loc[1]));
 end;
 
@@ -3852,6 +3953,8 @@ var
   end;
 
 begin
+  { [R2-I8] an action: each axis' pointer renders (PointerDrawLabelText) }
+  Inc(FPtrUpdGen);
   via := FUapListener;
   FUapListener := False;
   hits := nil;
@@ -4608,6 +4711,11 @@ begin
   Result := FTipShown;
 end;
 
+function TTyAdvanceChart.TooltipLines: TTyTooltipLineArray;
+begin
+  if TyRectFIsValid(FTipBox) then Result := FTipLastLines else Result := nil;
+end;
+
 function TTyAdvanceChart.TooltipFormatterText: string;
 begin
   Result := FTipFormatterText;
@@ -5168,6 +5276,29 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.TipHtmlMode: Boolean;
+begin
+  Result := TyTooltipRenderModeIsHtml(FOption, FTooltipAutoRichText);
+end;
+
+function TTyAdvanceChart.TipContentName(const AName: string): string;
+begin
+  if TipHtmlMode then Result := TyChartEncodeHtml(AName) else Result := AName;
+end;
+
+function TTyAdvanceChart.TooltipHtmlLines(const AHtml: string;
+  const AInk: TTyTooltipInk): TTyTooltipLineArray;
+var handled: Boolean;
+begin
+  { THE USER'S HANDLER FIRST, the built-in reading after it -- the rule
+    every extension point of this control keeps }
+  Result := nil;
+  handled := False;
+  if Assigned(FOnTooltipHtml) then
+    FOnTooltipHtml(Self, AHtml, AInk, Result, handled);
+  if not handled then Result := TyTooltipHtmlLines(AHtml, AInk);
+end;
+
 procedure TTyAdvanceChart.TipBuildContent(const ASnap: TTyTipSnap;
   out AContent: TTyTipContent);
 var
@@ -5185,6 +5316,9 @@ var
   mkNames: array of string;
   mkColours: array of TTyChartColor;
   snap: TTyTipSnap;
+  { [R2-I8] the box reads its text as html; the lines that text gave }
+  html, htmlHas: Boolean;
+  htmlLines: TTyTooltipLineArray;
 begin
   { [R2-I7] _showTooltipContent, ONCE PER SHOW: what was drawn on every
     paint -- the formatter run, the default markup built -- is built here
@@ -5211,6 +5345,9 @@ begin
   mkNames := nil;
   mkColours := nil;
   block := nil;
+  html := TipHtmlMode;
+  htmlHas := False;
+  htmlLines := nil;
   try
     if (not onAxis) and IsGeoDatum(snap.Datum) then
     begin
@@ -5219,9 +5356,17 @@ begin
       tipText := GeoTipText(snap.Datum, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;
-      block := TTyTooltipBlock.CreateSection('', True);
-      block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
-        '', True));
+      if html then
+      begin
+        htmlLines := TooltipHtmlLines(tipText, ink);
+        htmlHas := True;
+      end
+      else
+      begin
+        block := TTyTooltipBlock.CreateSection('', True);
+        block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+          '', True));
+      end;
     end
     else if (not onAxis) and IsAxisTextDatum(snap.Datum) then
     begin
@@ -5230,9 +5375,17 @@ begin
       tipText := AxisTipText(snap.Datum, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;
-      block := TTyTooltipBlock.CreateSection('', True);
-      block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
-        '', True));
+      if html then
+      begin
+        htmlLines := TooltipHtmlLines(tipText, ink);
+        htmlHas := True;
+      end
+      else
+      begin
+        block := TTyTooltipBlock.CreateSection('', True);
+        block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+          '', True));
+      end;
     end
     else if spec.HasFormatter then
     begin
@@ -5262,6 +5415,18 @@ begin
         if (params[k].ComponentType = 'series') or (params[k].ComponentType = 'markPoint')
           or (params[k].ComponentType = 'markLine') or (params[k].ComponentType = 'markArea') then
         begin
+          { [R2-I8] html mode's marker is getTooltipMarker's span, in the
+            params' colour -- the html reading draws it as the dot; no
+            colour, no marker }
+          if html then
+          begin
+            if params[k].Color <> 0 then
+              params[k].Marker := TyTooltipHtmlMarker(
+                TyTooltipColourText(params[k].Color), False)
+            else
+              params[k].Marker := '';
+            Continue;
+          end;
           params[k].Marker := TyTooltipRichMarker(Length(mkNames));
           SetLength(mkNames, Length(mkNames) + 1);
           SetLength(mkColours, Length(mkNames));
@@ -5290,21 +5455,33 @@ begin
           Break;
         end;
       { a matrix cell's template is formatTpl over its own $vars [Batch 147] }
+      { [R2-I8] formatTpl(html, params, TRUE): every value a template takes
+        is encodeHTML'd, in both render modes }
       if TipIsMatrix(snap.Datum) and not TyChartIsHandlerRef(fmtText) then
         tipText := MatrixTipText(fmtText, snap.Datum)
-      else if not TyChartResolveText(fmtText, params, tipText) then
+      else if not TyChartResolveText(fmtText, params, tipText, True) then
         { A named handler that is not registered says so rather than drawing
           nothing -- TyChartResolveText puts the message in the text. }
         ;
       AContent.Fmt := tipText;
       if Trim(tipText) = '' then Exit;
-      block := TTyTooltipBlock.CreateSection('', True);
-      { THE WHOLE STRING AS ONE NAME. A formatter's output is words, not a
-        name/value pair, so it takes the name ink and no gutter -- and with
-        neither marker nor name flag set the row is the third case upstream
-        has and most ports do not: no marker, no right-alignment. }
-      block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
-        '', True));
+      if html then
+      begin
+        { [R2-I8] HTML MODE: the string is innerHTML -- read it as a
+          browser would }
+        htmlLines := TooltipHtmlLines(tipText, ink);
+        htmlHas := True;
+      end
+      else
+      begin
+        block := TTyTooltipBlock.CreateSection('', True);
+        { THE WHOLE STRING AS ONE NAME. A formatter's output is words, not a
+          name/value pair, so it takes the name ink and no gutter -- and with
+          neither marker nor name flag set the row is the third case upstream
+          has and most ports do not: no marker, no right-alignment. }
+        block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+          '', True));
+      end;
     end
     else if snap.MarkupHas then
     begin
@@ -5320,6 +5497,15 @@ begin
       block := AxisTooltipContent(snap.Hits, spec)
     else
       block := TooltipContent(snap.Datum, spec);
+    if htmlHas then
+    begin
+      AContent.Has := Length(htmlLines) > 0;
+      AContent.Spec := spec;
+      AContent.Ink := ink;
+      AContent.Lines := htmlLines;
+      AContent.OnAxis := onAxis;
+      Exit;
+    end;
     if block = nil then Exit;
     lines := TyTooltipFlatten(block, ink);
     { [R2-J3] the dots a formatter's text names by params.marker }
@@ -5356,6 +5542,9 @@ var
   elRect: TTyRectF;
   frozenPic: Boolean;
   pspec: TTyTooltipSpec;
+  { [R2-I8] html's lines: a line's own top and height, a rule, a box run }
+  lineTopF, hPx, ruleY, bx, by, bw, bh, br: Double;
+  k: Integer;
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
@@ -5563,9 +5752,50 @@ begin
     for i := 0 to High(lines) do
     begin
       row := row + lines[i].BlankLinesBefore;
-      lineTop := Round(box.Top + padT + row * lineH);
+      { [R2-I8] html's gaps and taller lines: ExtraTopPx and HPx, nought and
+        the line height for the default markup -- the same arithmetic }
+      lineTopF := box.Top + padT + row * lineH + lines[i].ExtraTopPx;
+      lineTop := Round(lineTopF);
+      hPx := lines[i].HPx;
+      if hPx <= 0 then hPx := lineH;
+      { a block's border: a rule across the content, where it fell }
+      for k := 0 to High(lines[i].Rules) do
+        if (lines[i].Rules[k].WidthLogical > 0)
+          and (TyAlphaOf(TTyColor(lines[i].Rules[k].Colour)) > 0) then
+        begin
+          ruleY := lineTopF + APainter.ScaleF(lines[i].Rules[k].OffsetLogical);
+          APainter.BeginPath;
+          APainter.RectPath(box.Left + padL, ruleY, box.Right - padR,
+            ruleY + Max(1, APainter.ScaleF(lines[i].Rules[k].WidthLogical)));
+          APainter.FillPath(TTyColor(lines[i].Rules[k].Colour));
+        end;
+      if lines[i].Spacer then Continue;
       for j := 0 to High(lines[i].Runs) do
-        if lines[i].Runs[j].Kind = ttrMarker then
+        if lines[i].Runs[j].Kind = ttrBox then
+        begin
+          { [R2-I8] an html box -- the marker span: its own size between its
+            margins, centred in the line, corners as written (a radius of
+            half the side or more is a circle, as CSS clamps it) }
+          bw := APainter.ScaleF(lines[i].Runs[j].BoxWLogical);
+          bh := APainter.ScaleF(lines[i].Runs[j].BoxHLogical);
+          br := APainter.ScaleF(lines[i].Runs[j].BoxRadiusLogical);
+          if (bw <= 0) or (bh <= 0)
+            or (TyAlphaOf(TTyColor(lines[i].Runs[j].Colour)) = 0) then Continue;
+          bx := box.Left + padL + lines[i].Runs[j].X
+            + APainter.ScaleF(lines[i].Runs[j].MarginLLogical);
+          by := lineTop + hPx / 2 - bh / 2;
+          APainter.BeginPath;
+          if (Abs(bw - bh) < 1e-9) and (br * 2 >= bw) then
+            APainter.CirclePath(bx + bw / 2, by + bh / 2, bw / 2)
+          else if br > 0 then
+            APainter.RoundRectPath(bx, by, bx + bw, by + bh,
+              Min(lines[i].Runs[j].BoxRadiusLogical,
+                Min(lines[i].Runs[j].BoxWLogical, lines[i].Runs[j].BoxHLogical) / 2))
+          else
+            APainter.RectPath(bx, by, bx + bw, by + bh);
+          APainter.FillPath(TTyColor(lines[i].Runs[j].Colour));
+        end
+        else if lines[i].Runs[j].Kind = ttrMarker then
         begin
           cx := box.Left + padL + lines[i].Runs[j].X
                 + lines[i].Runs[j].W / 2;
@@ -5589,7 +5819,7 @@ begin
             Rect(Round(box.Left + padL + lines[i].Runs[j].X), lineTop,
                  Round(box.Left + padL + lines[i].Runs[j].X
                        + lines[i].Runs[j].W) + 1,
-                 Round(lineTop + lineH)),
+                 Round(lineTop + hPx)),
             TyInkText(lines[i].Runs[j].Text), lines[i].Runs[j].FontName,
             lines[i].Runs[j].FontSizeLogical, lines[i].Runs[j].FontWeight,
             TTyColor(lines[i].Runs[j].Colour), taLeftJustify, tlCenter, False);

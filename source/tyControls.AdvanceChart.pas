@@ -56,7 +56,8 @@ uses
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
-  tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
+  tyControls.AdvChart.Tooltip, tyControls.AdvChart.TipHtml,
+  tyControls.AdvChart.AxisPointer,
   tyControls.AdvChart.Dataset, tyControls.AdvChart.WhiskerBox,
   tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
   tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
@@ -436,6 +437,22 @@ type
     asks again). Upstream loads the URL; this control never fetches. }
   TTyChartResolveImageEvent = procedure(Sender: TObject; const AUrl: string;
     var AImage: TBGRABitmap) of object;
+  { [R2-I8] one axis' BaseAxisPointer, as far as its label goes: the memo
+    render() keeps (PointerDrawLabelText) }
+  TTyPtrMemoEntry = record
+    Key: string;
+    { _lastValue / _lastStatus: HasLast False is their null (never
+      rendered, or cleared); LastShown the status 'show' }
+    HasLast, LastShown: Boolean;
+    LastValue: Double;
+    { _lastGraphicKey (the pointer's type); none before the first show }
+    HasGraphicKey: Boolean;
+    GraphicKey: TTyAxisPointerType;
+    { the full update (FStGen) the memo was rendered under, and the
+      updateAxisPointer action (FPtrUpdGen) it last rendered for }
+    Gen, UpdGen: Integer;
+    Text: string;
+  end;
   { the skin's inks for the toolbox [Batch 125] }
   TTyTbInk = record
     Stroke, StrokeHover, Background, Border, Brush, Title: TTyChartColor;
@@ -1337,6 +1354,9 @@ type
     { [R2-J2] OnResolveImage and the answers it gave, by URL (owned; a nil
       answer kept too) }
     FOnResolveImage: TTyChartResolveImageEvent;
+    { [R2-I8] see OnTooltipHtml and TooltipAutoRichText }
+    FOnTooltipHtml: TTyChartTooltipHtmlEvent;
+    FTooltipAutoRichText: Boolean;
     FResolvedImages: TStringList;
     { THE TIMELINE [Batch 129] -- see its section }
     FTlView: TTyTimelineView;
@@ -1562,6 +1582,11 @@ type
     FTipCur: TTyTipContent;
     FTipCurDue: Boolean;
     FTipShowGen, FTipPosGen: Integer;
+    { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
+    FPtrMemo: array of TTyPtrMemoEntry;
+    { [R2-I8] one per updateAxisPointer action: render() runs on an action,
+      not on a paint }
+    FPtrUpdGen: Integer;
     FTipPosAns: TTyChartTooltipPos;
     FTipLastSigs: TTyStringArray;
     FTipLastSigSeries: TTyIntegerArray;
@@ -3199,6 +3224,12 @@ type
       test compares it }
     procedure TipMarkup(var ASnap: TTyTipSnap);
     procedure TipBuildContent(const ASnap: TTyTipSnap; out AContent: TTyTipContent);
+    { [R2-I8] the box reads its text as html: the tooltip component's
+      renderMode is not 'richText' ('auto' as TooltipAutoRichText says) }
+    function TipHtmlMode: Boolean;
+    { [R2-I8] a component item's content in the box's language: encodeHTML'd
+      in html mode, as setTooltipConfig's encodeHTMLContent has it }
+    function TipContentName(const AName: string): string;
     function TipRowSig(ASlot, ARow: Integer): string;
     procedure TipHide(const AGlobal: TTyTooltipSpec);
     { the timers due by ANow, in the order they would have fired; True
@@ -3495,6 +3526,19 @@ type
       unless written: the step's decimals plus two, padded, so 3.00), with
       the label's string formatter over it. }
     function PointerLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    { [R2-I8] THE LABEL A POINTER DRAWS, run as BaseAxisPointer.render runs
+      it: a function formatter is called when the value or the status
+      changed since the axis' last render, on a full update (forceRender),
+      and once more after the first show -- whose graphicKey change clears
+      the memo --; otherwise the text it gave stands. A template is cheap
+      and has no side effects: it is just formatted. }
+    function PointerDrawLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    { [R2-I8] the pointers this paint does not draw are hidden: their
+      memo's status is 'hide' (the value kept, as the model keeps it) }
+    procedure PointerMemoHideOthers(const AHits: TTyAxisHitArray);
+    { [R2-I8] the label text a pointer last drew through the memo ('' when
+      it has none) -- for a probe that must not run the formatter }
+    function PointerLabelDrawn(const AHit: TTyAxisHit): string;
     function AuthorBackground(out AColour: TTyChartColor): Boolean;
     procedure GlobalInk(var AName: string; var ASize, AWeight: Integer;
       var AColour: TTyChartColor; APick: TTyTextPick);
@@ -3586,11 +3630,20 @@ type
       template after the time format and formatTpl, or a handler's answer --
       '' when the box was not drawn or had no formatter. }
     function TooltipFormatterText: string;
+    { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
+      px); nil when no box was drawn }
+    function TooltipLines: TTyTooltipLineArray;
     { [Batch 100] THE BOX'S SIZE AS MEASURED, device px, just before it is
       placed. Nothing here; a test that compares a placement against
       upstream's -- whose sizes come from another measurer -- answers the
       size the fixture gave. }
     procedure TooltipContentSize(var AW, AH: Double); virtual;
+    { [R2-I8] AN HTML TOOLTIP'S LINES: what a formatter (or a component's
+      content) answered, read as html in the tooltip's inks. OnTooltipHtml
+      first; unhandled, the built-in subset (TyTooltipHtmlLines). Override
+      to read more of it -- call inherited for the rest. }
+    function TooltipHtmlLines(const AHtml: string;
+      const AInk: TTyTooltipInk): TTyTooltipLineArray; virtual;
     { [Batch 100] THE POINTERS THE OPTION SHOWS BY ITSELF: an axis'
       `axisPointer: {status: 'show', value}` before any pointer event }
     function OptionPointerHits: TTyAxisHitArray;
@@ -3897,6 +3950,15 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Invalidate; override;
+    { [R2-I8] WHAT A TOOLTIP'S renderMode 'auto' (the default) MEANS:
+      upstream answers 'html' where there is a DOM -- every browser page,
+      the gallery's -- and 'richText' where there is none (node). False (the
+      default) reads 'auto' as a browser does: a formatter's text is html.
+      True reads it as node does: the text is drawn as written, markup and
+      all, and params.marker is richText's token. A written 'html' or
+      'richText' is obeyed either way. }
+    property TooltipAutoRichText: Boolean read FTooltipAutoRichText
+      write FTooltipAutoRichText;
     { REPAINT WITHOUT REBUILDING. Invalidate means "the model may have moved":
       it rebuilds, re-measures and re-renders the static layer, because a theme
       change arrives as a bare Invalidate and there is no StyleChanged hook to
@@ -4831,6 +4893,10 @@ type
     { [R2-J2] a picture the option names by URL: see TTyChartResolveImageEvent }
     property OnResolveImage: TTyChartResolveImageEvent read FOnResolveImage
       write FOnResolveImage;
+    { [R2-I8] an html tooltip's text, read your way: see
+      TTyChartTooltipHtmlEvent. Unhandled, the built-in reading runs. }
+    property OnTooltipHtml: TTyChartTooltipHtmlEvent read FOnTooltipHtml
+      write FOnTooltipHtml;
     { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
     property AnimationMode: TTyChartAnimationMode read FAnimMode
       write SetAnimMode default camAuto;
