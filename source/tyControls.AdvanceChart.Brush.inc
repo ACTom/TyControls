@@ -2291,6 +2291,8 @@ begin
       if q < 0 then Continue;
       if node.IndexOfName(cKeys[j]) >= 0 then node.Delete(cKeys[j]);
       node.Add(cKeys[j], APayload.Items[q].Clone);
+      { [R2-I6] a write into the tree outside a merge }
+      FOption.Touch;
     end;
     last := k;
   end;

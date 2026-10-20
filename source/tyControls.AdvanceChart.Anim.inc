@@ -1674,6 +1674,8 @@ begin
       if TJSONObject(node).Find('categorySortInfo') <> nil then
         TJSONObject(node).Delete('categorySortInfo');
       TJSONObject(node).Add('categorySortInfo', si.Clone);
+      { [R2-I6] a write into the tree outside a merge }
+      FOption.Touch;
     end;
   { the update renders for the order: 2 for the init sort }
   if JsTruthy(APayload.Find('isInitSort')) then FRtChange := 2 else FRtChange := 1;

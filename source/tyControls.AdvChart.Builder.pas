@@ -842,7 +842,7 @@ end;
   category as a number. The difference shows only if someone writes
   a data item written as an object with a numeric value and then queries by
   that number. }
-procedure ReadCategories(ANode: TJSONObject; AAxis: TTyAxis);
+procedure ReadCategories(AOption: TTyChartOption; ANode: TJSONObject; AAxis: TTyAxis);
 var
   d, item, v: TJSONData;
   arr: TJSONArray;
@@ -851,6 +851,12 @@ var
 begin
   d := FindIn(ANode, 'data');
   if (d = nil) or (d.JSONType = jtNull) or not (d is TJSONArray) then Exit;
+  { [R2-I6] read once per tree: the same node gives the same names }
+  if AOption.MemoCategories(d, cats) then
+  begin
+    AAxis.SetCategories(cats);
+    Exit;
+  end;
   arr := TJSONArray(d);
   SetLength(cats, arr.Count);
   for i := 0 to arr.Count - 1 do
@@ -874,6 +880,7 @@ begin
     else
       cats[i] := item.AsString;
   end;
+  AOption.MemoCategoriesPut(d, cats);
   AAxis.SetCategories(cats);
 end;
 
@@ -1192,7 +1199,7 @@ begin
   a.Name := AxisNameIn(nd);
   a.AxisType := t;
   if t = atCategory then
-    ReadCategories(nd, a);
+    ReadCategories(AOption, nd, a);
   { Category axes band by default; the setter refuses to band anything
     else, so a value axis' boundaryGap -- which is a pair of percentages,
     not a boolean -- cannot turn this on by accident. }

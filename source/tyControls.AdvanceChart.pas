@@ -610,6 +610,25 @@ type
   end;
   TTyAccPlan = array of TTyAccPlanNode;
 
+  { [R2-I6] A SERIES' STORE AS ITS FILL LEFT IT, kept for the next build of
+    the same tree (StoreKeepTake): the option's Generation, the recipe it was
+    filled by (dimensions, encode, the table it read), its own copy, and per
+    column borrowing an axis' category list what that list was -- collecting
+    or fixed, deduplicating or not, how many categories it held before this
+    fill (Pre) and all it held after (List) }
+  TTyStoreKeep = record
+    Valid: Boolean;
+    Used: Boolean;
+    Gen: Int64;
+    Sig: string;
+    Store: TTyDataStore;
+    MetaDim: TTyIntegerArray;
+    MetaCollect, MetaDedup: array of Boolean;
+    MetaPre: TTyIntegerArray;
+    MetaList: array of TTyStringArray;
+  end;
+  TTyStoreKeepArray = array of TTyStoreKeep;
+
   TTyAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
@@ -675,6 +694,8 @@ type
     FThumbDragX, FThumbDragY: Integer;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
+    { [R2-I6] the parsed stores kept between builds of one tree, per slot }
+    FStoreKeep: TTyStoreKeepArray;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
       Relayout rather than Rebuild because it needs the FINAL pixel extents:
       the plot rect is shrunk to fit the labels in phase C, and a band measured
@@ -1907,6 +1928,26 @@ type
     function GetErrorText: string;
     procedure FreeStores;
     procedure DropBuild;
+    { [R2-I6] THE PARSED STORE KEPT between builds of one tree. A series'
+      store is a function of the tree (FOption.Generation), the recipe its
+      branch fills it by (StoreKeepSig) and the category lists of the axes
+      it borrows -- their content now, and, for a collecting one, what it
+      held before this series' fill. Take: all of it as when the store was
+      kept -- the collecting lists get the categories the fill appended, in
+      its order, and FStores[ASlot] becomes a copy of the kept store on the
+      new axes' lists (True); else nothing changes (False). Put: keep a copy
+      of the store just filled (APre: each borrowed list's count before the
+      fill). Begin / End: the build's bracket (an entry no slot used goes). }
+    function StoreKeepSig(ASlot, ABranch, ADs: Integer; const ADims: TTySeriesDimArray;
+      const AEnc: TTySeriesEncode): string;
+    procedure StoreKeepPre(const ADims: TTySeriesDimArray; out APre: TTyIntegerArray);
+    function StoreKeepTake(ASlot: Integer; const ASig: string;
+      const ADims: TTySeriesDimArray): Boolean;
+    procedure StoreKeepPut(ASlot: Integer; const ASig: string;
+      const ADims: TTySeriesDimArray; const APre: TTyIntegerArray);
+    procedure StoreKeepBegin;
+    procedure StoreKeepEnd;
+    procedure StoreKeepDrop;
     { Option to axes, series and stores. Cheap enough to redo on a resize; the
       expensive half is the label measuring in Relayout. }
     procedure Rebuild;
@@ -4770,6 +4811,11 @@ function TyAdvChartListTailsForTest: Integer;
   reference -- and how many times it has been. }
 procedure TyAdvChartLayerRegionForTest(AOn: Boolean);
 function TyAdvChartLayerRegionsForTest: Integer;
+{ [R2-I6] The parsed store kept between builds (StoreKeepTake): the fewest
+  rows a store has to have to be kept (-1: none is, the reference; the
+  default 4096), and how many builds have taken one. }
+procedure TyAdvChartStoreKeepForTest(AMinRows: Integer);
+function TyAdvChartStoreKeepsForTest: Integer;
 
 implementation
 
@@ -4845,6 +4891,27 @@ end;
 function TyAdvChartStPatchesForTest: Integer;
 begin
   Result := GStPatches;
+end;
+
+const
+  { [R2-I6] a store is kept from this many rows on -- below it the parse
+    costs less than the copy is worth keeping -- and no more rows in all
+    are kept than this (a second copy of each) }
+  cStoreKeepMinRows = 4096;
+  cStoreKeepMaxRows = 4000000;
+
+var
+  GStoreKeepMinRows: Integer = cStoreKeepMinRows;
+  GStoreKeeps: Integer = 0;
+
+procedure TyAdvChartStoreKeepForTest(AMinRows: Integer);
+begin
+  GStoreKeepMinRows := AMinRows;
+end;
+
+function TyAdvChartStoreKeepsForTest: Integer;
+begin
+  Result := GStoreKeeps;
 end;
 
 { ==================== echarts.connect [Batch 141] ==================== }

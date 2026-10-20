@@ -45,6 +45,7 @@ unit tyControls.AdvChart.Option;
   LCL-free: SysUtils, Classes and fcl-json only. }
 interface
 uses SysUtils, Classes, fpjson, jsonparser, jsonscanner,
+  tyControls.AdvChart.Types,
   tyControls.AdvChart.OptionMerge, tyControls.AdvChart.Media;
 
 type
@@ -74,6 +75,10 @@ type
     FMedia: TTyMediaManager;
     FViewW, FViewH: Double;
     FMediaMerged: array of TJSONData;
+    { [R2-I6] see Generation; the category lists read off this tree }
+    FGeneration: Int64;
+    FMemoNodes: array of TJSONData;
+    FMemoLists: array of TTyStringArray;
     procedure DropMerged;
     { LegendModel.init: `selected` made after the keys it was given -- at
       the init, so a media merge in the same setOption lands after it }
@@ -128,6 +133,20 @@ type
       out AReport: TTyMergeReport): Boolean; overload;
     { THE VIEW SIZE the media queries are asked about, CSS px [Batch 107] }
     procedure SetViewSize(AWidth, AHeight: Double);
+    { [R2-I6] WHICH TREE THIS IS: a number no other tree of the process has
+      had -- taken anew by every set, merge, clear, media and timeline merge
+      of this one, and by Touch. A build keyed on it (the control's parsed
+      data stores) is the same tree as long as it answers the same, whatever
+      became of the nodes' addresses: a node freed and another made at its
+      address is always after a new number. A writer that changes the tree
+      outside these calls (appendData) calls Touch. }
+    property Generation: Int64 read FGeneration;
+    procedure Touch;
+    { [R2-I6] A CATEGORY LIST READ OFF NODE ANode of this tree (an axis'
+      `data`), kept until the tree changes (Touch): the strings are what a
+      read of the same node gives again }
+    function MemoCategories(ANode: TJSONData; out AList: TTyStringArray): Boolean;
+    procedure MemoCategoriesPut(ANode: TJSONData; const AList: TTyStringArray);
     property ViewWidth: Double read FViewW;
     property ViewHeight: Double read FViewH;
     { A RESIZE (resetOption('media')): the units that apply at the view size
@@ -342,9 +361,51 @@ begin
   Result := (Pos('function', low) > 0) or (Pos('=>', low) > 0);
 end;
 
+var
+  GTyOptionGeneration: Int64 = 0;
+
+function TyNextOptionGeneration: Int64;
+begin
+  Inc(GTyOptionGeneration);
+  Result := GTyOptionGeneration;
+end;
+
+procedure TTyChartOption.Touch;
+begin
+  FGeneration := TyNextOptionGeneration;
+  FMemoNodes := nil;
+  FMemoLists := nil;
+end;
+
+function TTyChartOption.MemoCategories(ANode: TJSONData; out AList: TTyStringArray): Boolean;
+var i: Integer;
+begin
+  AList := nil;
+  Result := False;
+  if ANode = nil then Exit;
+  for i := 0 to High(FMemoNodes) do
+    if FMemoNodes[i] = ANode then
+    begin
+      AList := FMemoLists[i];
+      Exit(True);
+    end;
+end;
+
+procedure TTyChartOption.MemoCategoriesPut(ANode: TJSONData; const AList: TTyStringArray);
+var n: Integer;
+begin
+  if ANode = nil then Exit;
+  n := Length(FMemoNodes);
+  SetLength(FMemoNodes, n + 1);
+  SetLength(FMemoLists, n + 1);
+  FMemoNodes[n] := ANode;
+  FMemoLists[n] := AList;
+end;
+
 constructor TTyChartOption.Create;
 begin
   inherited Create;
+  Touch;
   FRoot := nil;
   FText := '';
   FMedia := TTyMediaManager.Create;
@@ -372,6 +433,7 @@ var
   node: TJSONData;
   k: Integer;
 begin
+  Touch;
   node := ComponentAt('legend', AIndex);
   if not (node is TJSONObject) then Exit;
   if TJSONObject(node).Find('selected') is TJSONObject then Exit;
@@ -404,6 +466,7 @@ var
   err: string;
 begin
   Result := False;
+  Touch;
   if not (FRoot is TJSONObject) then Exit;
   pend := FMedia.Take(FViewW, FViewH);
   for i := 0 to High(pend) do
@@ -445,6 +508,7 @@ var
   err: string;
 begin
   Result := False;
+  Touch;
   if not (FRoot is TJSONObject) then Exit;
   if FMedia.FrameCount = 0 then Exit;
   { getComponent('timeline'): the first slot, a hole is none }
@@ -501,6 +565,7 @@ end;
 
 procedure TTyChartOption.Clear;
 begin
+  Touch;
   FreeAndNil(FRoot);
   DropMerged;
   FMedia.Clear;
@@ -1485,6 +1550,7 @@ var
   i: Integer;
 begin
   Result := False;
+  Touch;
   if Trim(AText) = '' then
   begin
     { An empty option is a legitimate state -- a chart with nothing configured --
@@ -1578,6 +1644,7 @@ var
   err: string;
 begin
   AReport := Default(TTyMergeReport);
+  Touch;
   if not CheckReplaceMerge(AReplaceMerge) then Exit(False);
   { THE FIRST setOption is an init whatever its flag says }
   if not (FRoot is TJSONObject) then

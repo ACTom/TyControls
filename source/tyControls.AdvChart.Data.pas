@@ -288,6 +288,17 @@ type
       that is known not to repeat, and skips the map entirely. }
     property Deduplication: Boolean read FDeduplication write FDeduplication;
     property NeedCollect: Boolean read FNeedCollect;
+    { [R2-I6] a copy of the whole state, the map with it }
+    function Clone: TTyOrdinalMeta;
+    { [R2-I6] the categories as they stand (a copy) }
+    function Snapshot: TTyStringArray;
+    { [R2-I6] whether the first ACount categories are A's first ACount, and
+      there are exactly AHave of them }
+    function StartsWith(const A: TTyStringArray; ACount, AHave: Integer): Boolean;
+    { [R2-I6] A[AFrom..] appended as a collecting fill appends categories it
+      has not seen (deduplicating: each new -- the caller knows; or blind):
+      ParseAndCollect's result without asking the map for each }
+    procedure AppendCollected(const A: TTyStringArray; AFrom: Integer);
   end;
 
   TTyDataStore = class
@@ -412,6 +423,15 @@ type
       the in-place column rewrite ECharts needs is replaced by a rule, and a
       rule that is not enforced is a comment. }
     procedure UseOrdinalMeta(ADim: Integer; AMeta: TTyOrdinalMeta);
+    { [R2-I6] A COPY of the store as it stands, every column, row, name and
+      override its own (the raw items' cells shared -- nothing writes into
+      them once built) and the derived caches dropped; a list the store
+      owns copied too, and a borrowed one taken from AMetas (one per
+      dimension: the list the copy borrows there -- the new build's axis'
+      -- nil for a dimension that borrows none) }
+    function CloneWith(const AMetas: array of TTyOrdinalMeta): TTyDataStore;
+    { [R2-I6] whether dimension ADim borrows its list }
+    function BorrowsMeta(ADim: Integer): Boolean;
     function CategoryCount(ADim: Integer): Integer;
     function CategoryAt(ADim, AOrdinal: Integer): string;
     function OrdinalMeta(ADim: Integer): TTyOrdinalMeta;
@@ -1708,6 +1728,41 @@ begin
   Result := FCount;
 end;
 
+function TTyOrdinalMeta.Clone: TTyOrdinalMeta;
+begin
+  Result := TTyOrdinalMeta.Create;
+  Result.FCategories := Copy(FCategories);
+  Result.FCount := FCount;
+  Result.FSlots := Copy(FSlots);
+  Result.FHashes := Copy(FHashes);
+  Result.FUsed := FUsed;
+  Result.FMapOn := FMapOn;
+  Result.FNeedCollect := FNeedCollect;
+  Result.FDeduplication := FDeduplication;
+end;
+
+procedure TTyOrdinalMeta.AppendCollected(const A: TTyStringArray; AFrom: Integer);
+var i: Integer;
+begin
+  for i := AFrom to High(A) do
+    Add(A[i], FDeduplication);
+end;
+
+function TTyOrdinalMeta.Snapshot: TTyStringArray;
+begin
+  Result := Copy(FCategories, 0, FCount);
+end;
+
+function TTyOrdinalMeta.StartsWith(const A: TTyStringArray; ACount, AHave: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if (FCount <> AHave) or (ACount > AHave) or (ACount > Length(A)) then Exit;
+  for i := 0 to ACount - 1 do
+    if FCategories[i] <> A[i] then Exit;
+  Result := True;
+end;
+
 function TTyOrdinalMeta.CategoryAt(AOrdinal: Integer): string;
 begin
   if (AOrdinal < 0) or (AOrdinal >= FCount) then Exit('');
@@ -1910,6 +1965,58 @@ begin
     FreeAndNil(FDims[ADim].Meta);
   FDims[ADim].Meta := AMeta;
   FDims[ADim].MetaOwned := False;
+end;
+
+function TTyDataStore.CloneWith(const AMetas: array of TTyOrdinalMeta): TTyDataStore;
+var
+  k: Integer;
+  f: TTyExtentFilter;
+begin
+  Result := TTyDataStore.Create;
+  Result.FDims := Copy(FDims);
+  SetLength(Result.FCols, Length(FCols));
+  for k := 0 to High(FCols) do Result.FCols[k] := Copy(FCols[k]);
+  for k := 0 to High(Result.FDims) do
+  begin
+    if FDims[k].MetaOwned then
+      Result.FDims[k].Meta := FDims[k].Meta.Clone
+    else if k <= High(AMetas) then
+      Result.FDims[k].Meta := AMetas[k]
+    else
+      Result.FDims[k].Meta := nil;
+    { the derived caches, built again where asked }
+    for f := Low(TTyExtentFilter) to High(TTyExtentFilter) do
+      Result.FDims[k].CacheOk[f] := False;
+    Result.FDims[k].Inverted := nil;
+    Result.FDims[k].HasInverted := False;
+  end;
+  SetLength(Result.FPristine, Length(FPristine));
+  for k := 0 to High(FPristine) do Result.FPristine[k] := Copy(FPristine[k]);
+  Result.FRawCount := FRawCount;
+  Result.FCapacity := FCapacity;
+  Result.FIndices := Copy(FIndices);
+  Result.FFiltered := FFiltered;
+  Result.FCount := FCount;
+  Result.FIds := Copy(FIds);
+  Result.FNames := Copy(FNames);
+  Result.FRawItems := Copy(FRawItems);
+  Result.FRawDimNames := Copy(FRawDimNames);
+  Result.FRawDimPos := Copy(FRawDimPos);
+  Result.FRawDimInfo := Copy(FRawDimInfo);
+  Result.FTipPos := Copy(FTipPos);
+  Result.FLabelPos := Copy(FLabelPos);
+  Result.FHasTipPos := FHasTipPos;
+  Result.FHasLabelPos := FHasLabelPos;
+  Result.FRawWidth := FRawWidth;
+  Result.FOvrHead := Copy(FOvrHead);
+  Result.FOvr := Copy(FOvr);
+  Result.FOvrCount := FOvrCount;
+end;
+
+function TTyDataStore.BorrowsMeta(ADim: Integer): Boolean;
+begin
+  Result := (ADim >= 0) and (ADim <= High(FDims)) and (FDims[ADim].Meta <> nil)
+    and not FDims[ADim].MetaOwned;
 end;
 
 function TTyDataStore.CategoryCount(ADim: Integer): Integer;

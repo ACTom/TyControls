@@ -1126,6 +1126,9 @@ begin
   finally
     d.Free;
   end;
+  { [R2-I6] the series' data changed in place: another tree for the parsed
+    stores }
+  FOption.Touch;
   Result := True;
   if (FLastPPI <= 0) or FDirty then
   begin
