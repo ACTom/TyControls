@@ -6,6 +6,30 @@
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
+## [3.0.3] — 2026-10-20
+
+3.0 的修复版，主要针对 macOS：Retina 屏上清晰显示、窗口改用系统框架、用 Lazarus 3.x 编译 macOS 版。
+
+### 变更
+
+- macOS 上 `TTyForm` 的窗口改用系统的窗口框架：圆角、阴影、红黄绿按钮、拖边缩放、拖到屏幕边平铺和缩放都由系统负责。想用标题栏自绘的按钮，把 `TTyTitleBar.MacTrafficLights` 设为 False。([#80](https://github.com/ACTom/TyControls/issues/80)、[#89](https://github.com/ACTom/TyControls/issues/89))
+- macOS 的 Retina 屏上，`TTyPainter` 的图层是控件尺寸的 2 倍。在 `OnPaintSurface`、`OnDrawCell` 等事件里直接操作 `Bitmap`（`FillRect`、`PutImage` 等）的代码，要用 `Dev()` 把控件坐标换成图层像素，见[事件文档](docs/events.md#在-retina-屏上直接画图层)；设 `TyDeviceScaleRendering := False` 可以整体退回 1 倍绘制。Windows 和 Linux 不受影响。([#83](https://github.com/ACTom/TyControls/issues/83))
+- Online Package Manager 里不再把 GTK3 列为支持的界面库：LCL-GTK3 目前问题较多，库层无法全部绕过。从源码用 GTK3 编译仍然可以，已知问题见 [docs/known-issues.md](docs/known-issues.md)。([#95](https://github.com/ACTom/TyControls/issues/95))
+
+### 修复
+
+- macOS 的 Retina 屏上文字和图形发虚。([#83](https://github.com/ACTom/TyControls/issues/83)、[#93](https://github.com/ACTom/TyControls/issues/93))
+- macOS 上深色文字偏粗。([#91](https://github.com/ACTom/TyControls/issues/91))
+- Windows 上控件的文字比系统自己的文字发灰、发虚。([#90](https://github.com/ACTom/TyControls/issues/90))
+- 控件的 `Font` 设了字体名、粗体、斜体、下划线、删除线或颜色后不起作用（`ParentFont` 为 False 时）。现在这些设置叠在主题样式上，`StyleOverride` 仍然优先。([#92](https://github.com/ACTom/TyControls/issues/92))
+- `TTyForm` 的 `Menu` 指向 `TMainMenu` 时，Windows 上多出一条原生菜单栏，窗口也高出一截。现在 `TTyForm` 不再使用继承来的 `Menu`：对象检查器里不显示，放 `TMainMenu` 时设计器也不自动设它，已经设了的会被移出，快捷键照常有效。窗口里的菜单请用 `TTyMenuBar` 加窗体的 `MenuBar`。([#78](https://github.com/ACTom/TyControls/issues/78))
+- `TTyTrackEdit` 的滑块和 `TTyComboEdit`、`TTyURLEdit`、`TTyCalcEdit` 等的按钮上，指针显示为文字输入的 I 形。([#84](https://github.com/ACTom/TyControls/issues/84))
+- 表格滚动后左边框缺一截。([#86](https://github.com/ACTom/TyControls/issues/86))
+- `TTyMemo` 关闭 `WordWrap` 时，含阿拉伯文、天城文、组合符号等需要整串排版的文字的行，水平滚动可能到不了行尾。([#77](https://github.com/ACTom/TyControls/issues/77))
+- 用 Lazarus 3.x 编译 macOS 版失败，从源码编译库的项目也一样。([#81](https://github.com/ACTom/TyControls/issues/81)、[#88](https://github.com/ACTom/TyControls/issues/88))
+- macOS 上有几个示例编译时报 FPC 内部错误（DWARF3）。([#87](https://github.com/ACTom/TyControls/issues/87))
+- 用 Lazarus 正式版（4.99 以前）编译 GTK3 版失败。([#82](https://github.com/ACTom/TyControls/issues/82))
+
 ## [3.0.2] — 2026-10-13
 
 3.0 的修复版。
