@@ -54,7 +54,10 @@
  * as '@<id>' ('@<id>#2' ...), a geo projection's project / unproject as
  * '@<id>.project' / '@<id>.unproject' (makeNamer); the entry lists them under
  * `handlers`. examples/advchart/urenderitems.pas registers a transcription of
- * every renderItem the gallery names.
+ * every renderItem the gallery names. [R2-J2] Every other function too --
+ * formatters, symbolSize, tooltip.position, animationDelay ... -- as
+ * '@<id>.<key>' ('@<id>.<key>#2' ...); examples/advchart/ucallbacks.pas
+ * registers those.
  *
  * [R2-J] TOO LARGE: the five that compute megabytes of data are stored
  * without it (GENERATED: `generated.fill` says what examples/advchart/
@@ -217,6 +220,10 @@ function deTypeScript(src) {
    16 hex digits of a number's IEEE bits, 's' a string and NUL (ASCII only),
    '[' ... ']' around an array. */
 const GENERATED = {
+  /* [R2-J2] custom-wind's 5.3 MB of vectors are made from data-gl's
+     winds.json (700 KB, shipped gzipped in examples/advchart/data) and the
+     page's own shuffle */
+  'custom-wind': ['series.data'],
   'bar-large': ['xAxis.data', 'series.0.data'],
   'candlestick-large': ['dataset.source'],
   'heatmap-large': ['xAxis.data', 'yAxis.data', 'series.0.data'],
@@ -225,9 +232,8 @@ const GENERATED = {
 };
 /* LOADED DATA, SHIPPED COMPRESSED: an option over MAX_BYTES whose gzip is
    at most GZ_MAX is written as <id>.json.gz (entry.file). Only these three:
-   the bmap ones cannot draw without Baidu's online map, custom-wind needs the
-   world map the demo does not ship, and scatter-nebula is 14 MB even
-   compressed. */
+   the bmap ones cannot draw without Baidu's online map, and scatter-nebula
+   is 14 MB even compressed. [R2-J2] custom-wind is GENERATED now. */
 const SHIP_GZ = new Set(['lines-airline', 'parallel-nutrients', 'scatter-weibo']);
 const GZ_MAX = 640 * 1024;
 
@@ -288,17 +294,29 @@ function seededMath() {
    stringifier meets them (series order). The same function object (a page
    that hands one renderItem to two series) is one name. A geo projection's
    `project` / `unproject` are named the same way, `<id>.project` /
-   `<id>.unproject`. Every other function is a callback, dropped and counted
-   as before. */
+   `<id>.unproject`.
+   [R2-J2] EVERY OTHER FUNCTION IS NAMED TOO, by the key that holds it:
+   `<id>.<key>` ('@matrix-confusion.formatter', '@bubble-gradient.symbolSize'),
+   a second distinct function under the same key `<id>.<key>#2`, and so on,
+   in the order the stringifier meets them; the same function object is one
+   name wherever it is met. A formatter was dropped before, and a chart whose
+   labels come from one drew no text at all (matrix-confusion,
+   matrix-periodic-table); examples/advchart/ucallbacks.pas registers a
+   transcription of every one. The renderItem names stay as they were (their
+   own numbering: a page's first renderItem is `<id>` whatever else it has). */
 function makeNamer(id) {
   const names = new Map();
+  /* how many distinct functions each key has had */
+  const perKey = new Map();
+  let renderItems = 0;
   return {
     names,
     replacer(key, value) {
       if (typeof value === 'function') {
         if (key === 'renderItem') {
           if (!names.has(value)) {
-            const n = names.size ? id + '#' + (names.size + 1) : id;
+            renderItems++;
+            const n = renderItems > 1 ? id + '#' + renderItems : id;
             names.set(value, n);
           }
           return '@' + names.get(value);
@@ -310,6 +328,12 @@ function makeNamer(id) {
           names.set(value, n);
           return '@' + n;
         }
+        if (!names.has(value)) {
+          const k = perKey.has(key) ? perKey.get(key) + 1 : 1;
+          perKey.set(key, k);
+          names.set(value, id + '.' + key + (k > 1 ? '#' + k : ''));
+        }
+        return '@' + names.get(value);
       }
       /* A TYPED ARRAY IS ROWS. JSON.stringify writes a Float32Array as an
          object {"0": x, "1": y, ...}, which no option reads. Upstream takes a
@@ -333,20 +357,19 @@ function makeNamer(id) {
   };
 }
 
-/* How many of the dropped functions the namer named (they are not lost). */
+/* How many of the functions the namer named (they are not lost): [R2-J2]
+   every one the stringifier reaches. An object written through its own
+   toJSON (watermark's canvas) is not walked: its methods never reach the
+   stringifier and stay counted as lost. */
 function countNamed(node, seen) {
   if (node === null || typeof node !== 'object') return 0;
   if (seen.has(node)) return 0;
   seen.add(node);
+  if (typeof node.toJSON === 'function') return 0;
   let n = 0;
   for (const k of Object.keys(node)) {
     const v = node[k];
-    if (typeof v === 'function') {
-      if (k === 'renderItem') n++;
-      else if ((k === 'project' || k === 'unproject') &&
-               typeof node.project === 'function' &&
-               typeof node.unproject === 'function') n++;
-    }
+    if (typeof v === 'function') n++;
     else n += countNamed(v, seen);
   }
   return n;

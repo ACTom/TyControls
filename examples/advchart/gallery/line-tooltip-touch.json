@@ -10,7 +10,8 @@
   ]
  },
  "tooltip": {
-  "triggerOn": "none"
+  "triggerOn": "none",
+  "position": "@line-tooltip-touch.position"
  },
  "toolbox": {
   "left": "center",
@@ -34,6 +35,7 @@
    },
    "label": {
     "show": true,
+    "formatter": "@line-tooltip-touch.formatter",
     "backgroundColor": "#7581BD"
    },
    "handle": {

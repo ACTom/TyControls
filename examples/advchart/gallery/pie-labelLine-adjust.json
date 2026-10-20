@@ -41,6 +41,7 @@
     "length2": 0,
     "maxSurfaceAngle": 80
    },
+   "labelLayout": "@pie-labelLine-adjust.labelLayout",
    "data": [
     {
      "name": "圣彼得堡来客",
@@ -100,6 +101,7 @@
     "length2": 0,
     "maxSurfaceAngle": 80
    },
+   "labelLayout": "@pie-labelLine-adjust.labelLayout#2",
    "data": [
     {
      "name": "银河帝国5：迈向基地",
@@ -159,6 +161,7 @@
     "length2": 0,
     "maxSurfaceAngle": 80
    },
+   "labelLayout": "@pie-labelLine-adjust.labelLayout#3",
    "data": [
     {
      "name": "克莱因壶",

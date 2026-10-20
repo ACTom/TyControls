@@ -9,7 +9,9 @@
   "left": "right"
  },
  "polar": {},
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@scatter-polar-punchCard.formatter"
+ },
  "angleAxis": {
   "type": "category",
   "data": [
@@ -69,6 +71,7 @@
    "name": "Punch Card",
    "type": "scatter",
    "coordinateSystem": "polar",
+   "symbolSize": "@scatter-polar-punchCard.symbolSize",
    "data": [
     [
      0,
@@ -910,7 +913,8 @@
      23,
      6
     ]
-   ]
+   ],
+   "animationDelay": "@scatter-polar-punchCard.animationDelay"
   }
  ]
 }

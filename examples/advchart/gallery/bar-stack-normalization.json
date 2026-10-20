@@ -24,7 +24,8 @@
    "stack": "total",
    "barWidth": "60%",
    "label": {
-    "show": true
+    "show": true,
+    "formatter": "@bar-stack-normalization.formatter"
    },
    "data": [
     0.062111801242236024,
@@ -42,7 +43,8 @@
    "stack": "total",
    "barWidth": "60%",
    "label": {
-    "show": true
+    "show": true,
+    "formatter": "@bar-stack-normalization.formatter#2"
    },
    "data": [
     0.19875776397515527,
@@ -60,7 +62,8 @@
    "stack": "total",
    "barWidth": "60%",
    "label": {
-    "show": true
+    "show": true,
+    "formatter": "@bar-stack-normalization.formatter#3"
    },
    "data": [
     0.13664596273291926,
@@ -78,7 +81,8 @@
    "stack": "total",
    "barWidth": "60%",
    "label": {
-    "show": true
+    "show": true,
+    "formatter": "@bar-stack-normalization.formatter#4"
    },
    "data": [
     0.09316770186335403,
@@ -96,7 +100,8 @@
    "stack": "total",
    "barWidth": "60%",
    "label": {
-    "show": true
+    "show": true,
+    "formatter": "@bar-stack-normalization.formatter#5"
    },
    "data": [
     0.5093167701863354,

@@ -238,7 +238,8 @@
    ],
    "emphasis": {
     "focus": "series"
-   }
+   },
+   "animationDelay": "@bar-animation-delay.animationDelay"
   },
   {
    "name": "bar2",
@@ -347,8 +348,10 @@
    ],
    "emphasis": {
     "focus": "series"
-   }
+   },
+   "animationDelay": "@bar-animation-delay.animationDelay#2"
   }
  ],
- "animationEasing": "elasticOut"
+ "animationEasing": "elasticOut",
+ "animationDelayUpdate": "@bar-animation-delay.animationDelayUpdate"
 }

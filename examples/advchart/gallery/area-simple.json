@@ -1,6 +1,7 @@
 {
  "tooltip": {
-  "trigger": "axis"
+  "trigger": "axis",
+  "position": "@area-simple.position"
  },
  "title": {
   "left": "center",

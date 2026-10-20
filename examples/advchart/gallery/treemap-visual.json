@@ -4,7 +4,9 @@
   "text": "Gradient Mapping",
   "subtext": "Growth > 0: green; Growth < 0: red; Growth = 0: grey"
  },
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@treemap-visual.formatter"
+ },
  "series": [
   {
    "name": "ALL",

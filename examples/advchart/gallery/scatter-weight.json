@@ -11,6 +11,7 @@
  },
  "tooltip": {
   "showDelay": 0,
+  "formatter": "@scatter-weight.formatter",
   "axisPointer": {
    "show": true,
    "type": "cross",

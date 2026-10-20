@@ -5,7 +5,8 @@
   "left": "center"
  },
  "tooltip": {
-  "trigger": "axis"
+  "trigger": "axis",
+  "formatter": "@wind-barb.formatter"
  },
  "grid": {
   "top": 160,
@@ -2374,7 +2375,8 @@
     ]
    ],
    "tooltip": {
-    "trigger": "item"
+    "trigger": "item",
+    "formatter": "@wind-barb.formatter#2"
    },
    "yAxisIndex": 2,
    "z": 11

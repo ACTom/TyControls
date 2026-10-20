@@ -160,7 +160,8 @@
       "type": "dashed"
      },
      "label": {
-      "show": true
+      "show": true,
+      "formatter": "@radar-custom.formatter"
      }
     },
     {

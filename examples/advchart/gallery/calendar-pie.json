@@ -49,6 +49,7 @@
    "symbolSize": 0,
    "label": {
     "show": true,
+    "formatter": "@calendar-pie.formatter",
     "offset": [
      -30,
      -30

@@ -913,6 +913,7 @@
   ],
   "label": {
    "show": true,
+   "formatter": "@matrix-periodic-table.formatter",
    "rich": {
     "small": {
      "fontSize": 12,

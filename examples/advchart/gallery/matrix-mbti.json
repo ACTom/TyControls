@@ -16,6 +16,7 @@
   "itemGap": 5
  },
  "tooltip": {
+  "formatter": "@matrix-mbti.formatter",
   "borderColor": "#eee",
   "padding": [
    2,
@@ -11734,6 +11735,7 @@
    "color": "#fff",
    "label": {
     "show": true,
+    "formatter": "@matrix-mbti.formatter#2",
     "fontWeight": "bold",
     "color": "inherit"
    },

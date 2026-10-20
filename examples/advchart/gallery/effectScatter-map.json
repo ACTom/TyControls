@@ -1569,6 +1569,7 @@
    "encode": {
     "value": 2
    },
+   "symbolSize": "@effectScatter-map.symbolSize",
    "label": {
     "formatter": "{b}",
     "position": "right",
@@ -1640,6 +1641,7 @@
    "encode": {
     "value": 2
    },
+   "symbolSize": "@effectScatter-map.symbolSize#2",
    "showEffectOn": "render",
    "rippleEffect": {
     "brushType": "stroke"

@@ -1936,7 +1936,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay"
   },
   {
    "name": "United States",
@@ -3822,7 +3823,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#2"
   },
   {
    "name": "United Kingdom",
@@ -5708,7 +5710,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#3"
   },
   {
    "name": "Russia",
@@ -7594,7 +7597,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#4"
   },
   {
    "name": "India",
@@ -9480,7 +9484,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#5"
   },
   {
    "name": "France",
@@ -11366,7 +11371,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#6"
   },
   {
    "name": "Germany",
@@ -13252,7 +13258,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#7"
   },
   {
    "name": "Australia",
@@ -15138,7 +15145,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#8"
   },
   {
    "name": "Canada",
@@ -17024,7 +17032,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#9"
   },
   {
    "name": "Cuba",
@@ -18910,7 +18919,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#10"
   },
   {
    "name": "Finland",
@@ -20796,7 +20806,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#11"
   },
   {
    "name": "Iceland",
@@ -22682,7 +22693,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#12"
   },
   {
    "name": "Japan",
@@ -24568,7 +24580,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#13"
   },
   {
    "name": "North Korea",
@@ -26454,7 +26467,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#14"
   },
   {
    "name": "South Korea",
@@ -28340,7 +28354,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#15"
   },
   {
    "name": "New Zealand",
@@ -30226,7 +30241,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#16"
   },
   {
    "name": "Norway",
@@ -32112,7 +32128,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#17"
   },
   {
    "name": "Poland",
@@ -33998,7 +34015,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#18"
   },
   {
    "name": "Turkey",
@@ -35884,7 +35902,8 @@
     "color": "#333",
     "position": "right"
    },
-   "symbolSize": 10
+   "symbolSize": 10,
+   "animationDelay": "@graph-life-expectancy.animationDelay#19"
   }
  ]
 }

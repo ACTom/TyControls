@@ -10963,7 +10963,8 @@
    "showSymbol": false,
    "name": "Finland",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -10990,7 +10991,8 @@
    "showSymbol": false,
    "name": "France",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#2"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -11017,7 +11019,8 @@
    "showSymbol": false,
    "name": "Germany",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#3"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -11044,7 +11047,8 @@
    "showSymbol": false,
    "name": "Iceland",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#4"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -11071,7 +11075,8 @@
    "showSymbol": false,
    "name": "Norway",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#5"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -11098,7 +11103,8 @@
    "showSymbol": false,
    "name": "Poland",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#6"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -11125,7 +11131,8 @@
    "showSymbol": false,
    "name": "Russia",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#7"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"
@@ -11152,7 +11159,8 @@
    "showSymbol": false,
    "name": "United Kingdom",
    "endLabel": {
-    "show": true
+    "show": true,
+    "formatter": "@line-race.formatter#8"
    },
    "labelLayout": {
     "moveOverlap": "shiftY"

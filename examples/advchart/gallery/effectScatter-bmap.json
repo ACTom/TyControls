@@ -1660,6 +1660,7 @@
      ]
     }
    ],
+   "symbolSize": "@effectScatter-bmap.symbolSize",
    "encode": {
     "value": 2
    },
@@ -1728,6 +1729,7 @@
      ]
     }
    ],
+   "symbolSize": "@effectScatter-bmap.symbolSize#2",
    "encode": {
     "value": 2
    },

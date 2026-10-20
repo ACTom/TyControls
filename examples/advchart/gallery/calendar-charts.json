@@ -1652,6 +1652,7 @@
    "type": "effectScatter",
    "coordinateSystem": "calendar",
    "calendarIndex": 1,
+   "symbolSize": "@calendar-charts.symbolSize",
    "data": [
     [
      "2017-01-01",
@@ -3119,6 +3120,7 @@
    "type": "scatter",
    "coordinateSystem": "calendar",
    "calendarIndex": 2,
+   "symbolSize": "@calendar-charts.symbolSize#2",
    "data": [
     [
      "2017-01-01",

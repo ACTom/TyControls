@@ -11,7 +11,8 @@
    "id": "female",
    "dataGroupId": "female",
    "universalTransition": {
-    "enabled": true
+    "enabled": true,
+    "delay": "@scatter-aggregate-bar.delay"
    },
    "data": [
     [
@@ -1061,7 +1062,8 @@
    "id": "male",
    "dataGroupId": "male",
    "universalTransition": {
-    "enabled": true
+    "enabled": true,
+    "delay": "@scatter-aggregate-bar.delay#2"
    },
    "data": [
     [

@@ -133,7 +133,9 @@
   {
    "transform": {
     "type": "boxplot",
-    "config": {}
+    "config": {
+     "itemNameFormatter": "@boxplot-light-velocity2.itemNameFormatter"
+    }
    }
   },
   {

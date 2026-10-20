@@ -11,7 +11,8 @@
   "trigger": "axis",
   "axisPointer": {
    "type": "cross"
-  }
+  },
+  "position": "@custom-ohlc.position"
  },
  "axisPointer": {
   "link": [

@@ -153,9 +153,11 @@
     ]
    ],
    "type": "scatter",
+   "symbolSize": "@scatter-label-align-right.symbolSize",
    "emphasis": {
     "focus": "self"
    },
+   "labelLayout": "@scatter-label-align-right.labelLayout",
    "labelLine": {
     "show": true,
     "length2": 5,
@@ -165,6 +167,7 @@
    },
    "label": {
     "show": true,
+    "formatter": "@scatter-label-align-right.formatter",
     "position": "right",
     "minMargin": 2
    }

@@ -77,7 +77,8 @@
    "label": {
     "color": "#000",
     "textBorderColor": "#fff",
-    "textBorderWidth": 2
+    "textBorderWidth": 2,
+    "formatter": "@sunburst-label-rotate.formatter"
    },
    "levels": [
     {},

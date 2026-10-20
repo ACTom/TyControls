@@ -2,7 +2,9 @@
  "title": {
   "text": "Click to Add Points"
  },
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@line-pen.formatter"
+ },
  "grid": {
   "left": "3%",
   "right": "4%",
