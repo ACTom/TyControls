@@ -22,6 +22,7 @@ item's dataIndex i:
   symbolRotate  30 i
   symbolOffset  [2 i, -i]
   colour        ['#c23531', '#2f4554', '#61a0a8', '#d48265'][i % 4]
+'@vnone' answers undefined (any key).
 
 Per case: calls {key: [call...]} -- the distinct calls, each
   'v:<rawValue> i:<dataIndex> s:<seriesIndex> t:<dataType> n:<name> c:<color>'
@@ -141,6 +142,8 @@ const ANSWER = {
   vrot: i => 30 * i,
   voff: i => [2 * i, -i],
   vcol: i => COLS[i % 4],
+  // [r2v] a callback that answers nothing (undefined) for every item
+  vnone: () => undefined,
 };
 
 function callRepr(raw, p) {
@@ -299,6 +302,18 @@ const CASES = [
   { id: 'markpoint', note: 'a markPoint whose symbolSize and symbol are callbacks (MarkPointView, on the marker\'s data)',
     option: { xAxis: { type: 'category', data: cat }, yAxis: {},
       series: [{ type: 'line', data: [3, 5, 2, 6], markPoint: { symbol: '@vsym', symbolSize: '@vsize', data: [{ type: 'max' }, { type: 'min' }] } }] } },
+  { id: 'colour-under-visualmap', note: '[r2v] the colour callback (seriesStyleTask, stage 2000) under a piecewise visualMap (4000): the callback is still called, the items take the visualMap\'s colours',
+    option: { xAxis: {}, yAxis: {},
+      visualMap: { type: 'piecewise', show: false, dimension: 1, pieces: [{ lt: 4, color: '#00aa00' }, { gte: 4, color: '#aa00aa' }] },
+      series: [Object.assign({ type: 'scatter', symbolSize: 12, data: [[1, 3], [2, 5], [3, 2], [4, 6]] }, COLOUR)] } },
+  { id: 'root-under-callback', note: '[r2v] the root\'s symbol, symbolOffset and symbolRotate under a series whose keys are callbacks that answer undefined: the series\' own value is the function, so the root\'s never reaches it -- the default circle, no offset, no turn',
+    option: { symbol: 'rect', symbolOffset: [10, 0], symbolRotate: 30, xAxis: {}, yAxis: {},
+      series: [{ type: 'scatter', symbol: '@vnone', symbolOffset: '@vnone', symbolRotate: '@vnone', symbolSize: 12,
+        data: [[1, 3], [2, 5]] },
+        { type: 'line', symbol: '@vnone', symbolSize: 12, data: [[1, 1], [2, 2]] }] } },
+  { id: 'pictorial-none', note: '[r2v] a pictorial bar whose symbol callback answers undefined: the glyph is the series default, not a symbol named after the callback',
+    option: { xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { max: 10 },
+      series: [{ type: 'pictorialBar', symbol: '@vnone', symbolSize: 20, symbolRepeat: true, data: [4, 6] }] } },
 ];
 
 function runCase(c) {
@@ -330,6 +345,10 @@ function guards(out) {
   add('tree: symbols by callback', (c('tree').calls.vsize || []).length >= 3);
   add('stroke series: the lines\' and the parallel\'s colour callbacks', (c('stroke-series').calls.vcol || []).length >= 6);
   add('markpoint: the marker\'s symbol callbacks', (c('markpoint').calls.vsize || []).length === 2);
+  add('colour under a visualMap: called, the visualMap\'s colours drawn', (c('colour-under-visualmap').calls.vcol || []).length === 4
+    && c('colour-under-visualmap').items.every(x => x.fill === '#00aa00' || x.fill === '#aa00aa'));
+  add('root under a callback: a circle (defaultSymbol, for a line too), no offset, no turn where the key is a callback, the root where it is not', c('root-under-callback').items.every(x => x.sym === 'circle'
+    && (x.s === 0 ? x.ox === hex(0) && x.oy === hex(0) && x.rot === hex(0) : x.ox === hex(10) && x.rot !== hex(0))));
   return g;
 }
 
