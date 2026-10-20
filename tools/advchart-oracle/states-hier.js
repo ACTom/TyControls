@@ -355,6 +355,12 @@ const CASES = [
         { name: 'e', x: 400, y: 130, itemStyle: { color: C[4] } },
       ] })] },
     steps: [mv(node(0, 1)), ck(node(0, 4)), mv(node(0, 2)), leave()] },
+  // [r2v] the threshold between 2 and 2.5: e at y 99.75 lays a-b (2 wide) at y 100.2496 -- 2.25 px
+  // above it the edge (max(2, 5) / 2 = 2.5, not the 2 of its width alone), 3.25 px above it nothing
+  { id: 'g-edge-reach-fraction', note: "[r2v] a graph edge 2 wide at a fraction of a pixel: e at y 99.75 puts a-b at y 100.2496; 2.25 px off it the edge (the threshold max(2, 5) / 2 = 2.5), 3.25 px off it nothing",
+    option: { animation: false, series: [graphS({ label: { show: false },
+      data: GN().map(n => (n.name === 'e' ? Object.assign(n, { y: 99.75 }) : n)) })] },
+    steps: [mv({ xy: [200, 98] }), mv({ xy: [200, 97] }), leave()] },
 ];
 
 // ============================================================================

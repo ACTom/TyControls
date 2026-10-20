@@ -105,6 +105,7 @@ type
     procedure TestATreemapLeafsBackgroundAndContentTransitionTogether;
     procedure TestATreeNodesEdgeTransitionsWhenItFollows;
     procedure TestWithoutAProxyTheListTakesTheStatesAtOnce;
+    procedure TestABreadcrumbNamesNoDatum;
   end;
 
 implementation
@@ -914,6 +915,13 @@ const
     + '"lineStyle":{"color":"#999999","width":2},'
     + '"data":[{"name":"root","children":[{"name":"A","children":[{"name":"A1"}]}]}]}]}';
 
+{ the treemap of cTreemap with its breadcrumb shown }
+const
+  cTreemapCrumb = '{"series":[{"type":"treemap","roam":false,"nodeClick":false,'
+    + '"breadcrumb":{"show":true},'
+    + '"data":[{"name":"A","children":[{"name":"a1","value":6},{"name":"a2","value":4}]},'
+    + '{"name":"B","value":8}]}]}';
+
 procedure TAdvChartStatesHierTest.SetUp;
 var sl: TStringList;
 begin
@@ -1080,6 +1088,36 @@ begin
     AssertEquals('grown by max(1.1, 3/15) about its centre', rest * 1.1, el.Shape.R1, 1e-9);
   end;
   AssertTrue('the node is drawn', found);
+end;
+
+{ A BREADCRUMB ITEM NAMES NO DATUM: its ecData has no dataIndex, so a pointer
+  on it has nothing to show in a tooltip nor to select -- though the item
+  carries its node's datum in the list (for its own handlers), and nothing
+  under it shows through }
+procedure TAdvChartStatesHierTest.TestABreadcrumbNamesNoDatum;
+var
+  i, n, hit: Integer;
+  el: TTyChartElement;
+  d: TTyChartDatumRef;
+  b: TTyRectF;
+begin
+  NewChart(cTreemapCrumb, camOff);
+  n := 0;
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    el := FChart.List.Element(i);
+    if el.Anim.Role <> carTmCrumb then Continue;
+    Inc(n);
+    AssertTrue('the crumb carries its node''s datum in the list', el.Datum.SeriesIndex = 0);
+    AssertTrue('the crumb is hit as a polygon', el.PathHit.Active);
+    b := el.PathHit.Box;
+    d := FChart.HitTestAt(Round((b.Left + b.Right) / 2), Round((b.Top + b.Bottom) / 2), hit);
+    AssertTrue('the pointer is on the crumb or its words', (hit >= 0)
+      and (FChart.List.Element(hit).Anim.Role in [carTmCrumb, carLabel]));
+    AssertTrue(Format('a pointer on crumb %d names no datum (series %d, row %d)',
+      [n, d.SeriesIndex, d.DataIndex]), d.SeriesIndex < 0);
+  end;
+  AssertTrue('a crumb drawn', n >= 1);
 end;
 
 initialization

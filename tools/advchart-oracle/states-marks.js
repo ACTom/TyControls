@@ -977,6 +977,41 @@ const R2I6 = [
       out(1200)] },
 ];
 
+// [r2v] the unified verification's cases
+const R2V = [
+  { id: 'mk-pair-items', note: '[r2v] a markLine and a markArea whose two ends write different emphasis styles: the item is '
+    + 'the start (top-left) merged over the end (zrUtil.merge, no overwrite) -- the line takes the start\'s colour and the '
+    + 'end\'s width, the area the start\'s colour and the end\'s opacity. Hover ml0 at 0, ma0 at 400, out at 800',
+    option: bars({ markLine: ML({}, [[{ coord: ['A', 5], name: 'pair', emphasis: { lineStyle: { color: C3 } } },
+      { coord: ['E', 18], emphasis: { lineStyle: { color: C2, width: 7 } } }]]),
+    markArea: MA({}, [[{ xAxis: 'A', name: 'one', emphasis: { itemStyle: { color: C3 } } },
+      { xAxis: 'B', emphasis: { itemStyle: { color: C2, opacity: 0.5 } } }]]) }),
+    events: [over(0, mark(0, 'ml0')), over(400, mark(0, 'ma0')), out(800)] },
+  { id: 'mk-series-label-hidden', note: '[r2v] the series\' markers hide their labels (label.show false, no emphasis show): '
+    + 'fillLabel copies it into the markX\'s emphasis.label.show, so a hover does not show them either (the markers\' '
+    + 'defaults would). Hover mp0 at 0, ml0 at 300, ma0 at 600, out at 900',
+    option: bars({ markPoint: MP({ label: { show: false } }), markLine: ML({ label: { show: false } }),
+      markArea: MA({ label: { show: false } }, [[{ xAxis: 'A', name: 'one' }, { xAxis: 'B' }]]) }),
+    events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'ml0')), over(600, mark(0, 'ma0')), out(900)] },
+  { id: 'mk-top-emphasis-hidden', note: '[r2v] the top-level markers\' emphasis.label.show false under the series\' label.show '
+    + 'true: fillLabel has copied the series\' show into its own emphasis, which the chain meets first -- shown in emphasis. '
+    + 'Hover mp0 at 0, ml0 at 300, out at 600',
+    option: bars({ markPoint: MP({ label: { show: true } }), markLine: ML({ label: { show: true } }) }, {},
+      { markPoint: { emphasis: { label: { show: false } } }, markLine: { emphasis: { label: { show: false } } } }),
+    events: [over(0, mark(0, 'mp0')), over(300, mark(0, 'ml0')), out(600)] },
+  { id: 'mk-hover-then-leave-blur', note: '[r2v] the other series\' highlight (focus series) blurs the host and its markers at '
+    + '0; the pointer on mp0 at 300 lifts it into emphasis; the downplay at 600 runs allLeaveBlur, which takes the blurred '
+    + 'ones back and leaves mp0 in emphasis; out at 900',
+    option: bars({ markPoint: MP({}, [{ type: 'max', name: 'max' }, { type: 'min', name: 'min' }]) },
+      { emphasis: { focus: 'series' } }),
+    events: [act(0, { type: 'highlight', seriesIndex: 1, dataIndex: 3 }), over(300, mark(0, 'mp0')),
+      act(600, { type: 'downplay', seriesIndex: 1, dataIndex: 3 }), out(900)] },
+  { id: 'mp-small-ratio', note: '[r2v] a circle markPoint of 5: its emphasis scale max(1.1, 3 / 2.5) = 1.2, its top label riding '
+    + 'it; hover mp0 at 0, out at 300',
+    option: bars({ markPoint: MP({ symbol: 'circle', symbolSize: 5, label: { position: 'top' } }) }),
+    events: [over(0, mark(0, 'mp0')), out(300)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -1180,13 +1215,42 @@ function guards(cases) {
       && ty('mp0#label', 550) - ty('mp0#label', 1600) === -4 && ty('mp0#label', 650) - ty('mp0#label', 1600) === -1,
       [ty('ma0#label', 250), ty('ma0#label', 650), ty('mp0#label', 550), ty('mp0#label', 650), ty('mp0#label', 1600)].join(' '));
   }
+  // [r2v]
+  {
+    const c = byId(cases, 'mk-pair-items');
+    g('mk-pair-items', numAt(mk(c, 0, 'ml0'), 'style.stroke', 250) === C3 && numAt(mk(c, 0, 'ml0'), 'style.lineWidth', 250) === '7'
+      && numAt(mk(c, 0, 'ma0'), 'style.fill', 650) === C3 && numAt(mk(c, 0, 'ma0'), 'style.opacity', 650) === '0.5',
+      [numAt(mk(c, 0, 'ml0'), 'style.stroke', 250), numAt(mk(c, 0, 'ma0'), 'style.fill', 650)].join(' | '));
+  }
+  {
+    const c = byId(cases, 'mk-series-label-hidden');
+    g('mk-series-label-hidden', !mk(c, 0, 'mp0#label') && !mk(c, 0, 'ml0#label') && !mk(c, 0, 'ma0#label'),
+      'a label recorded');
+  }
+  {
+    const c = byId(cases, 'mk-top-emphasis-hidden');
+    g('mk-top-emphasis-hidden', statesAt(mk(c, 0, 'mp0#label'), 250) === 'emphasis'
+      && statesAt(mk(c, 0, 'ml0#label'), 550) === 'emphasis', 'the labels not in emphasis');
+  }
+  {
+    const c = byId(cases, 'mk-hover-then-leave-blur');
+    g('mk-hover-then-leave-blur', statesAt(mk(c, 0, 'mp0'), 250) === 'blur' && statesAt(mk(c, 0, 'mp0'), 550) === 'emphasis'
+      && statesAt(mk(c, 0, 'mp0'), 850) === 'emphasis' && statesAt(mk(c, 0, 'mp1'), 850) === ''
+      && statesAt(mk(c, 0, 'mp0'), 1600) === '',
+      [250, 550, 850, 1600].map(t => statesAt(mk(c, 0, 'mp0'), t)).join(' '));
+  }
+  {
+    const c = byId(cases, 'mp-small-ratio');
+    g('mp-small-ratio', numAt(mk(c, 0, 'mp0'), 'scaleX', 250) === '3' && numAt(mk(c, 0, 'mp0'), 'scaleX', 1600) === '2.5',
+      numAt(mk(c, 0, 'mp0'), 'scaleX', 250));
+  }
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
 function generate() {
   const cases = [];
-  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6)) {
+  for (const c of HOVER.concat(FOCUS, ITEMBLUR, SELECT, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

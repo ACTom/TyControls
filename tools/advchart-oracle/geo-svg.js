@@ -943,6 +943,14 @@ const CASES = [
       { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { move: S(300, 250) }, { move: S(230, 50) },
       { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { leave: true }],
   },
+  // ---- [r2v] ----
+  {
+    id: 'map-series-nested',
+    note: "[r2v] a map series with data for H and for N, the self-named rect inside the self-named group H: the pointer on N's rect finds the OUTERMOST dispatcher (findEventDispatcher without returnFirstMatch), H -- H lifts, its other rect with it; leave",
+    maps: [{ map: 'svHit', svg: 'svHit' }],
+    option: { animation: false, series: [{ type: 'map', map: 'svHit', data: [{ name: 'H', value: 1 }, { name: 'N', value: 2 }] }] },
+    steps: [{ move: S(305, 165) }, { leave: true }],
+  },
 ];
 
 // ============================================================================
@@ -1021,6 +1029,12 @@ function guards(out) {
     && st3(5, bs3[0]) === '' && st3(7, bs3[0]) === '' && st3(7, bs3[1]) === 'emphasis'
     && st3(17, bs3[0]) === 'emphasis' && st3(21, bs3[1]) === '' && st3(24, bs3[1]) === '',
     'the unheld B leaves emphasis when the pointer moves off; a downplay reaches the last one alone');
+  // [r2v] the outermost dispatcher over the pointer
+  c = C('map-series-nested');
+  const hs = c.trees[0].named.filter(x => x.name === 'H').map(x => x.el);
+  const st4 = (k, i) => c.states[k].draws[0].items.find(x => x.i === i).states;
+  add('map-nested-outermost', hs.length === 2 && hs.every(i => st4(1, i) === 'emphasis') && hs.every(i => st4(2, i) === ''),
+    'the pointer on N inside H lifts H, its other rect with it');
   return g;
 }
 

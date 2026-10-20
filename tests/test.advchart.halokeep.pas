@@ -51,6 +51,7 @@ type
     procedure TestTheKeyHoldsWhatShapesTheMask;
     procedure TestAFontChangeDropsTheOutlines;
     procedure TestAKeptStrokeIsTheStrokeItReplays;
+    procedure TestAKeptStrokeLooksPastItsHash;
     procedure TestARepaintTracesAndFillsNothing;
   end;
 
@@ -79,6 +80,7 @@ end;
 
 procedure TAdvChartHaloKeepTest.TearDown;
 begin
+  TyPainterKeptFillHashesCollideForTest(False);
   TyAdvChartHaloCacheForTest(True);
   TyPainterKeptStrokesForTest(True);
   inherited TearDown;
@@ -536,6 +538,22 @@ begin
   end;
 end;
 
+{ the rich pieces alone, level, at (AX, AY): every piece's halo goes through
+  HaloRotated, keyed by its anchor's place on the mask }
+procedure PaintPieces(B: TBGRABitmap; AX, AY: Double);
+var p: TTyPainter;
+begin
+  Ground(B);
+  p := TTyPainter.Create;
+  try
+    p.BeginPaintOn(nil, Rect(0, 0, cW, cH), 96, B);
+    TyRenderRtPieces(p, Pieces(TTyChartColor($FFE02020)), AX, AY, 0, 1, 1, False, TTyColor(0));
+    p.EndPaint;
+  finally
+    p.Free;
+  end;
+end;
+
 procedure SetKeeping(AOn: Boolean);
 begin
   TyAdvChartHaloCacheForTest(AOn);
@@ -614,7 +632,7 @@ procedure TAdvChartHaloKeepTest.TestTheKeyHoldsWhatShapesTheMask;
 const
   cRed = TTyChartColor($FFE02020);
 var
-  turned, straight, e: TTyChartElement;
+  turned, straight, uncut, e: TTyChartElement;
   ref, a: TBGRABitmap;
   bad, cases: Integer;
   report: string;
@@ -631,6 +649,26 @@ var
     PaintOne(a, ABase, 96);
     t0 := TyAdvChartHaloTracesForTest;
     PaintOne(a, AVariant, APPI);
+    d := DiffPixels(a, ref);
+    if (TyAdvChartHaloTracesForTest - t0 <> AWant) or (d <> 0) then
+    begin
+      Inc(bad);
+      report := report + LineEnding + Format('  %s: %d traced (want %d), %d px off a fresh frame',
+        [AName, TyAdvChartHaloTracesForTest - t0, AWant, d]);
+    end;
+  end;
+
+  { the rich pieces moved from (AX0, AY0) to (AX1, AY1), both kept }
+  procedure VariantRt(const AName: string; AX0, AY0, AX1, AY1: Double; AWant: Integer);
+  var t0, d: Integer;
+  begin
+    Inc(cases);
+    SetKeeping(False);
+    PaintPieces(ref, AX1, AY1);
+    SetKeeping(True);
+    PaintPieces(a, AX0, AY0);
+    t0 := TyAdvChartHaloTracesForTest;
+    PaintPieces(a, AX1, AY1);
     d := DiffPixels(a, ref);
     if (TyAdvChartHaloTracesForTest - t0 <> AWant) or (d <> 0) then
     begin
@@ -663,9 +701,16 @@ begin
     Variant('the rect', straight, e, 1);
     e := straight; e.Caption.Text := 'Key test that is long'; e.Caption.Truncate := True;
     Variant('truncation', straight, e, 1);
+    { the same words that do not fit, cut or not: only Truncate differs }
+    uncut := straight; uncut.Caption.Text := 'Key test that is long';
+    e := uncut; e.Caption.Truncate := True;
+    Variant('truncation alone', uncut, e, 1);
     e := straight; e.Caption.Text := 'Key' + #10 + 'test'; e.Caption.MultiLine := True;
     Variant('line breaking', straight, e, 1);
     e := straight; e.Caption.AnchorV := tavTop; Variant('the straight alignment', straight, e, 1);
+    { a PPI that leaves the shape's mask the same size (the margin
+      Ceil(3 * 90 / 96) + 4 = 7 as at 96): only the PPI tells the glyphs apart }
+    e := straight; Variant('the PPI, the same mask size', straight, e, 1, 90);
     { what does not reach the mask: the same outline }
     e := turned; e.Caption.X := 153.3; e.Caption.Y := 98.6;
     Variant('whole pixels further', turned, e, 0);
@@ -676,6 +721,11 @@ begin
     e := turned; e.Caption.StrokeType := 'dashed'; Variant('the dash', turned, e, 0);
     e := turned; e.Caption.StrokeWidthLogical := 2.6; Variant('the width, the same mask', turned, e, 0);
     e := turned; e.Caption.Colour := TTyChartColor($FF0000FF); Variant('the glyph ink', turned, e, 0);
+    { a rich piece's halo (HaloRotated, two pieces): its anchor's sub-pixel
+      across and down shape the mask, whole pixels do not }
+    VariantRt('a rich piece a sub-pixel across', 180.5, 20.25, 180.75, 20.25, 2);
+    VariantRt('a rich piece a sub-pixel down', 180.5, 20.25, 180.5, 20.75, 2);
+    VariantRt('rich pieces whole pixels further', 180.5, 20.25, 183.5, 22.25, 0);
     AssertEquals(IntToStr(bad) + ' of ' + IntToStr(cases) + ':' + report, 0, bad);
   finally
     ref.Free;
@@ -713,8 +763,10 @@ end;
 var
   GPath: array of TPointF;
 
+{ ADX moves the closed polyline across; ABmpClip clips the bitmap itself (its
+  ClipRect, which the kept fill is keyed by), not the painter's clip mask }
 procedure StrokeOn(B: TBGRABitmap; AKept: Boolean; AColour: TTyColor; AAlpha: Double;
-  AClip: Boolean; AWidth: Double = 3);
+  AClip: Boolean; AWidth: Double = 3; ADX: Double = 0; ABmpClip: Boolean = False);
 var
   p: TTyPainter;
   i: Integer;
@@ -726,15 +778,17 @@ begin
     p.SaveState;
     if AAlpha < 1 then p.SetElementAlpha(AAlpha);
     if AClip then p.ClipRect(Rect(30, 25, 220, 160));
+    if ABmpClip then B.ClipRect := Rect(60, 40, 200, 150);
     p.BeginPath;
-    p.MoveTo(GPath[0].X, GPath[0].Y);
-    for i := 1 to High(GPath) do p.LineTo(GPath[i].X, GPath[i].Y);
+    p.MoveTo(GPath[0].X + ADX, GPath[0].Y);
+    for i := 1 to High(GPath) do p.LineTo(GPath[i].X + ADX, GPath[i].Y);
     p.ClosePath;
     p.MoveTo(20.5, 220.25);
     for i := 1 to 30 do p.LineTo(20.5 + i * 10.3, 220.25 - (i mod 3) * 7.7);
     if AKept then p.StrokePathKept(AColour, AWidth) else p.StrokePath(AColour, AWidth);
     p.RestoreState;
     p.EndPaint;
+    if ABmpClip then B.NoClip;
   finally
     p.Free;
   end;
@@ -808,6 +862,57 @@ begin
     r3 := Random(1000000000);
     AssertEquals('and so does a recording', r1, r3);
   finally
+    ref.Free;
+    a.Free;
+    GPath := nil;
+  end;
+end;
+
+{ A LOOKUP IS DECIDED BY THE POLYGON AND THE CLIP, NOT BY THE HASH: with every
+  hash alike, a polygon of as many points a fraction of a pixel over, and the
+  same polygon under another bitmap clip rect, are each a fill of their own
+  and stroke as a fresh StrokePath does. }
+procedure TAdvChartHaloKeepTest.TestAKeptStrokeLooksPastItsHash;
+const
+  cRed = TTyColor($FFE02020);
+var
+  ref, a: TBGRABitmap;
+  i, f0, r0: Integer;
+begin
+  GLcg := 99;
+  SetLength(GPath, 48);
+  for i := 0 to High(GPath) do
+    GPath[i] := PointF(40 + Lcg(28000) / 100, 30 + Lcg(15000) / 100);
+  ref := TBGRABitmap.Create(cW, cH);
+  a := TBGRABitmap.Create(cW, cH);
+  try
+    TyPainterKeptFillHashesCollideForTest(True);
+    f0 := TyPainterKeptStrokeFillsForTest;
+    StrokeOn(a, True, cRed, 1, False);
+    AssertEquals('the first polygon recorded', f0 + 1, TyPainterKeptStrokeFillsForTest);
+    { the same hash, the same number of points, other points }
+    StrokeOn(ref, False, cRed, 1, False, 3, 0.37);
+    AssertTrue('the moved polygon draws other pixels', DiffPixels(a, ref) > 0);
+    StrokeOn(a, True, cRed, 1, False, 3, 0.37);
+    AssertEquals('the moved polygon: a fresh stroke''s pixels', 0, DiffPixels(a, ref));
+    AssertEquals('the moved polygon is a fill of its own', f0 + 2, TyPainterKeptStrokeFillsForTest);
+    { the same polygon, the bitmap clipped }
+    StrokeOn(ref, False, cRed, 1, False, 3, 0, True);
+    StrokeOn(a, True, cRed, 1, False, 3, 0, True);
+    AssertEquals('under the bitmap clip: a fresh stroke''s pixels', 0, DiffPixels(a, ref));
+    AssertEquals('under the bitmap clip: a fill of its own', f0 + 3, TyPainterKeptStrokeFillsForTest);
+    { and each found again in the one chain }
+    r0 := TyPainterKeptStrokeReplaysForTest;
+    StrokeOn(ref, False, cRed, 1, False);
+    StrokeOn(a, True, cRed, 1, False);
+    AssertEquals('the first again', 0, DiffPixels(a, ref));
+    StrokeOn(ref, False, cRed, 1, False, 3, 0.37);
+    StrokeOn(a, True, cRed, 1, False, 3, 0.37);
+    AssertEquals('the moved one again', 0, DiffPixels(a, ref));
+    AssertEquals('both replayed', r0 + 2, TyPainterKeptStrokeReplaysForTest);
+    AssertEquals('nothing more recorded', f0 + 3, TyPainterKeptStrokeFillsForTest);
+  finally
+    TyPainterKeptFillHashesCollideForTest(False);
     ref.Free;
     a.Free;
     GPath := nil;
