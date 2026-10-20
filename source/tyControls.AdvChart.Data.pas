@@ -245,9 +245,20 @@ type
   private
     FCategories: TTyStringArray;
     FCount: Integer;
-    FMap: TStringList;          // sorted; Objects hold the ordinal
+    { [R2-L] category -> ordinal, by the category's bytes: an open-addressed
+      table of ordinals + 1 (0 empty) and their FNV-1a hashes, the text
+      itself in FCategories; the first ordinal a category had where it
+      repeats (a fixed list's duplicate, a list collected without
+      deduplication) [was: a sorted TStringList -- every category collected
+      an insertion into the middle of it] }
+    FSlots: array of Integer;
+    FHashes: array of LongWord;
+    FUsed: Integer;
+    FMapOn: Boolean;
     FNeedCollect: Boolean;
     FDeduplication: Boolean;
+    function MapFind(const ACategory: string; AHash: LongWord): Integer;
+    procedure MapPut(AOrdinal: Integer; AHash: LongWord);
     procedure EnsureMap;
     procedure Add(const ACategory: string);
   public
@@ -1551,33 +1562,100 @@ end;
 
 destructor TTyOrdinalMeta.Destroy;
 begin
-  FreeAndNil(FMap);
   inherited Destroy;
+end;
+
+function OrdinalHash(const AText: string): LongWord;
+var i: Integer;
+begin
+  Result := 2166136261;
+  {$push}{$R-}{$Q-}
+  for i := 1 to Length(AText) do
+    Result := (Result xor Ord(AText[i])) * 16777619;
+  {$pop}
+end;
+
+function TTyOrdinalMeta.MapFind(const ACategory: string; AHash: LongWord): Integer;
+var i, mask: Integer;
+begin
+  Result := -1;
+  if Length(FSlots) = 0 then Exit;
+  mask := High(FSlots);
+  i := Integer(AHash and LongWord(mask));
+  while FSlots[i] <> 0 do
+  begin
+    if (FHashes[i] = AHash) and (FCategories[FSlots[i] - 1] = ACategory) then
+      Exit(FSlots[i] - 1);
+    i := (i + 1) and mask;
+  end;
+end;
+
+{ the ordinal in, AHash its category's -- not looked for first: the caller
+  knows it is not there }
+procedure TTyOrdinalMeta.MapPut(AOrdinal: Integer; AHash: LongWord);
+var
+  i, mask, k, n: Integer;
+  oldSlots: array of Integer;
+  oldHashes: array of LongWord;
+begin
+  if (FUsed + 1) * 2 > Length(FSlots) then
+  begin
+    oldSlots := FSlots;
+    oldHashes := FHashes;
+    n := 64;
+    while n < (FUsed + 1) * 4 do n := n * 2;
+    FSlots := nil;
+    FHashes := nil;
+    SetLength(FSlots, n);
+    SetLength(FHashes, n);
+    mask := n - 1;
+    for k := 0 to High(oldSlots) do
+      if oldSlots[k] <> 0 then
+      begin
+        i := Integer(oldHashes[k] and LongWord(mask));
+        while FSlots[i] <> 0 do i := (i + 1) and mask;
+        FSlots[i] := oldSlots[k];
+        FHashes[i] := oldHashes[k];
+      end;
+  end;
+  mask := High(FSlots);
+  i := Integer(AHash and LongWord(mask));
+  while FSlots[i] <> 0 do i := (i + 1) and mask;
+  FSlots[i] := AOrdinal + 1;
+  FHashes[i] := AHash;
+  Inc(FUsed);
 end;
 
 procedure TTyOrdinalMeta.EnsureMap;
 var
   i: Integer;
+  h: LongWord;
 begin
-  if FMap <> nil then Exit;
-  FMap := TStringList.Create;
-  FMap.CaseSensitive := True;
-  FMap.Duplicates := dupIgnore;
+  if FMapOn then Exit;
   { by bytes, as upstream keys a name: the locale compare took
     U+00C5 and U+212B for one letter, and whatever came after [P2] }
-  FMap.UseLocale := False;
-  FMap.Sorted := True;
+  FMapOn := True;
+  FSlots := nil;
+  FHashes := nil;
+  FUsed := 0;
   for i := 0 to FCount - 1 do
-    FMap.AddObject(FCategories[i], TObject(PtrInt(i)));
+  begin
+    h := OrdinalHash(FCategories[i]);
+    if MapFind(FCategories[i], h) < 0 then MapPut(i, h);
+  end;
 end;
 
 procedure TTyOrdinalMeta.Add(const ACategory: string);
+var h: LongWord;
 begin
   if FCount = Length(FCategories) then
     SetLength(FCategories, 8 + Length(FCategories) * 2);
   FCategories[FCount] := ACategory;
-  if FMap <> nil then
-    FMap.AddObject(ACategory, TObject(PtrInt(FCount)));
+  if FMapOn then
+  begin
+    h := OrdinalHash(ACategory);
+    if MapFind(ACategory, h) < 0 then MapPut(FCount, h);
+  end;
   Inc(FCount);
 end;
 
@@ -1585,7 +1663,10 @@ procedure TTyOrdinalMeta.SetCategories(const A: array of string);
 var
   i: Integer;
 begin
-  FreeAndNil(FMap);
+  FMapOn := False;
+  FSlots := nil;
+  FHashes := nil;
+  FUsed := 0;
   SetLength(FCategories, Length(A));
   for i := 0 to High(A) do
     FCategories[i] := A[i];
@@ -1605,13 +1686,9 @@ begin
 end;
 
 function TTyOrdinalMeta.GetOrdinal(const ACategory: string): Integer;
-var
-  i: Integer;
 begin
   EnsureMap;
-  i := FMap.IndexOf(ACategory);
-  if i < 0 then Exit(-1);
-  Result := PtrInt(FMap.Objects[i]);
+  Result := MapFind(ACategory, OrdinalHash(ACategory));
 end;
 
 procedure TTyOrdinalMeta.ResetCollected;
@@ -1619,7 +1696,10 @@ begin
   if not FNeedCollect then Exit;
   FCategories := nil;
   FCount := 0;
-  FreeAndNil(FMap);
+  FMapOn := False;
+  FSlots := nil;
+  FHashes := nil;
+  FUsed := 0;
 end;
 
 function TTyOrdinalMeta.ParseAndCollect(const ACategory: string): Integer;
