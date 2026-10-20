@@ -29,10 +29,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Color, tyControls.AdvChart.States,
-     tyControls.AdvChart.Events, tyControls.AdvChart.VisualMap,
-     tyControls.AdvChart.VisualMapView, tyControls.AdvChart.JsMath,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.States,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.VisualMap,
+     tyControls.AdvanceChart.VisualMapView, tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart;
 type
   { zrender's widths, from the fixture's table }

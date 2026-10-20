@@ -4,7 +4,7 @@ unit test.advchart.shape;
   Pure: no painter, no handle, so every assertion is an exact number. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape;
 type
   TAdvChartShapeTest = class(TTestCase)
   private

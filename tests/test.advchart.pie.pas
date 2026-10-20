@@ -23,11 +23,11 @@ unit test.advchart.pie;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Builder,
-  tyControls.AdvChart.Pie;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Shape,
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Series,
+  tyControls.AdvanceChart.Builder,
+  tyControls.AdvanceChart.Pie;
 
 type
   TAdvChartPieTest = class(TTestCase)

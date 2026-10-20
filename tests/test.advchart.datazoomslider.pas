@@ -20,9 +20,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Layout, tyControls.AdvChart.ZrPath,
-     tyControls.AdvChart.DataZoomView, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.DataZoomView, tyControls.AdvanceChart,
      test.advchart.gallerytext;
 type
   TDzsMeasurer = class(TInterfacedObject, ITyTextMeasurer)
@@ -80,7 +80,7 @@ type
 
 implementation
 
-uses tyControls.AdvChart.JsMath;
+uses tyControls.AdvanceChart.JsMath;
 
 constructor TDzsMeasurer.Create;
 begin

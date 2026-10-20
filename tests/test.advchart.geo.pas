@@ -20,11 +20,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.FontUnits, tyControls.Types, tyControls.StyleModel,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Convert,
-     tyControls.AdvChart.Data, tyControls.AdvChart.JsMath,
-     tyControls.AdvChart.GeoFix, tyControls.AdvChart.Geo,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Convert,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.JsMath,
+     tyControls.AdvanceChart.GeoFix, tyControls.AdvanceChart.Geo,
      tyControls.AdvanceChart, ualbersusa;
 type
   TGeoProbe = class(TTyAdvanceChart)

@@ -715,7 +715,7 @@ resourcestring
   rsTyOptDiagMoreRows = 'and %d more like these.';
 
   // --- AdvanceChart: the design-time series and data editor [Batch 143] ---
-  // Said by tyControls.AdvChart.SeriesEdit, shown in the series dialog.
+  // Said by tyControls.AdvanceChart.SeriesEdit, shown in the series dialog.
   rsTySerEdNotObject = 'The option is not an object, so it has no series to edit.';
   rsTySerEdEmptyLiteral = 'Write a value here, or clear the field to remove the key.';
   rsTySerEdOneValue = 'Write exactly one value here.';

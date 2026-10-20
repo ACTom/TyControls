@@ -45,7 +45,7 @@ interface
 
 uses
   Classes, SysUtils, Math, fpjson,
-  tyControls.AdvChart.Handlers;
+  tyControls.AdvanceChart.Handlers;
 
 { Register every handler of this unit under its gallery name. }
 procedure RegisterGalleryCallbacks;
@@ -67,9 +67,9 @@ implementation
 
 uses
   ugenerated,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Time,
-  tyControls.AdvChart.AnimOpt, tyControls.AdvChart.Events,
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Time,
+  tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart.Events,
   jsonparser;
 
 

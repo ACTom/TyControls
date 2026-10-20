@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Forms, fpcunit, testregistry, base64,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.Painter, tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
+  tyControls.Controller, tyControls.Painter, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Render,
   tyControls.AdvanceChart, test.devicescale.support;
 
 type

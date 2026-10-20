@@ -1,0 +1,381 @@
+unit tyControls.AdvanceChart.Types;
+{$mode objfpc}{$H+}
+{ TTyAdvanceChart — shared geometry primitives.
+
+  DOUBLE, not Single. The whole geometry layer is double precision because a
+  coordinate round trip (value -> px -> value) has to survive data ranges that
+  span many decades; Single loses that at about seven digits, and the round-trip
+  tolerance this layer promises is half a pixel on any extent. Rounding to device
+  integers is the PAINTER's job, at the last moment.
+
+  This unit is PURE: SysUtils and Math only. No Controls, no Graphics, no LCL, no
+  BGRA, no handle. Everything below is headless-testable by construction. }
+interface
+uses SysUtils, Math;
+
+type
+  TTyDoubleArray = array of Double;
+
+  { What stacking did to one series -- see AdvanceChart.Stack, which computes it.
+
+    It lives down here rather than beside the code that fills it because three
+    units need the vocabulary and they cannot all depend on each other: Stack
+    uses Series for the bindings, so Series cannot use Stack, and Marks would
+    rather not gain a dependency just to be told a column number.
+
+    ResultCol is the column to PLOT -- the cumulative value. OverCol is the
+    value this series sits on, NaN wherever nothing qualified; a bar reads it
+    for its own floor and a filled line for the lower edge of the belt. Both
+    are -1 when the series does not stack, and then the raw value column is the
+    one to plot. }
+  TTySeriesStack = record
+    Stacked: Boolean;
+    { False for the bottom member: it accumulates onto nothing and is drawn
+      exactly as an unstacked series is. Upstream spells the same distinction
+      `!!data.getCalculationInfo('stackedOnSeries')`. }
+    HasBelow: Boolean;
+    ResultCol: Integer;
+    OverCol: Integer;
+    { the binding slot of the series this one is stacked on -- the one
+      before it in the stack (upstream's stackedOnSeries) -- or -1 }
+    OnSlot: Integer;
+  end;
+  TTySeriesStackArray = array of TTySeriesStack;
+
+  { A point in device px, relative to the control's top-left. }
+  TTyPointF = record X, Y: Double; end;
+
+  { A rect in device px. Left<=Right and Top<=Bottom is an INVARIANT that
+    TyRectFIsValid checks — it is deliberately NOT enforced by the constructor,
+    because a reversed rect is a real signal (an axis whose band collapsed) that
+    callers must be able to see rather than have silently normalised away. }
+  TTyRectF = record Left, Top, Right, Bottom: Double; end;
+  { x, y, width and height: upstream's own shape for a rect. A grid's plot,
+    its shrink and the name layout are kept in it so that their arithmetic is
+    upstream's to the bit -- a right edge is x + width there, and a width
+    taken back from the edges, (x + w) - x, is not always w. }
+  TTyXYWH = record
+    X, Y, W, H: Double;
+  end;
+  { zrender's 2-D affine matrix [a, b, c, d, tx, ty]:
+    x' = a x + c y + tx, y' = b x + d y + ty. }
+  TTyMat2D = array[0..5] of Double;
+
+  { A closed value range. TyRange DOES normalise, because a reversed VALUE range
+    is always a caller mistake — an inverse axis is expressed by the PIXEL extent
+    being reversed, never by the value extent. }
+  TTyRange = record Start, Stop: Double; end;
+
+  { An object that implements interfaces WITHOUT reference counting; lifetime is
+    owned by whoever created it, exactly as TComponent does it.
+
+    The chart's coordinate systems are owned by the chart, while the things that
+    hold a reference to them (a box container, a series' axis binding) are
+    short-lived temporaries. Under refcounting, the last temporary to go out of
+    scope would free a live coordinate system. Containers and mappers, which
+    genuinely are owned by their references, stay on TInterfacedObject. }
+  TTyNonRefCountedObject = class(TObject, IUnknown)
+  protected
+    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): HResult;
+      {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef: Integer; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release: Integer; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+  end;
+
+  { Where a text box sits on the anchor it is placed at. Deliberately NOT LCL's
+    TAlignment/TTextLayout: those live in Classes/Graphics, and pulling either in
+    would end this unit's independence from the LCL. The bridge that talks to the
+    painter converts. }
+  TTyTextAnchorH = (tahLeft, tahCentre, tahRight);
+  TTyTextAnchorV = (tavTop, tavMiddle, tavBottom);
+
+  { One line of text measured, DEVICE px, UNROTATED.
+
+    Injected rather than called directly, for two reasons. It keeps this layer
+    free of the painter, and so of the LCL. And -- the one that actually matters
+    -- it makes axis layout testable against a DETERMINISTIC measurer: real font
+    metrics differ by machine and by widgetset, so an axis test written against
+    them asserts the local font as much as it asserts the algorithm. }
+  ITyTextMeasurer = interface
+    ['{4C7E2A19-6B03-4F5D-9E81-2D6A08C3B45F}']
+    { Honours the line breaks already IN AText -- it measures a BLOCK -- so a
+      caller wanting several lines wraps first and measures the result. }
+    procedure MeasureLine(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+    { AText broken to AMaxWidth, returned as one string with real line breaks.
+
+      ON THE MEASURER rather than in the pure layer because wrapping that works
+      on Chinese needs TyWrapTextCJK: CJK carries no spaces, so a run of it is
+      one unbreakable word to any space-based wrapper and overflows instead of
+      wrapping (repo memory: cjk-wordwrap-space-only-trap). The measurer is
+      already this layer's only window onto text, which makes it the right place
+      for the one text operation the layout cannot do for itself. }
+    function WrapToWidth(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
+  end;
+
+  { What to do with an axis label wider than axisLabel.width, matching ECharts'
+    axisLabel.overflow. `none` is the default and is the behaviour that already
+    existed: the label is drawn at its full width and crowding is dealt with by
+    thinning instead. }
+  TTyLabelOverflow = (loNone, loTruncate, loBreak);
+
+  TTyStringArray = array of string;
+  TTyBoolArray = array of Boolean;
+  TTyIntegerArray = array of Integer;
+
+  { Which edge of a plot rect an axis draws on. Lives here rather than in
+    Layout, where it started, because Coord needs it too and Layout already
+    uses Coord -- naming it upward would be a cycle. A bare enum with no
+    dependencies is exactly what this unit is for; TTyTextAnchorH is here for
+    the same reason. }
+  TTyAxisSide = (asLeft, asRight, asTop, asBottom);
+
+function TyPointF(AX, AY: Double): TTyPointF;
+function TyRectF(ALeft, ATop, ARight, ABottom: Double): TTyRectF;
+function TyRange(AStart, AStop: Double): TTyRange;
+
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+{ no part a NaN, no negative size -- TyRectFIsValid for an x, y, w, h
+  [Batch 151] }
+function TyXYWHIsValid(const A: TTyXYWH): Boolean;
+{ a width and a height that are numbers, not negative: a container
+  getLayoutRect can lay a box out in -- an x or a y that is not a number is
+  `containerRect.x || 0`, the canvas' edge (a calendar day off its range has
+  a size and no place) [Batch 151] }
+function TyXYWHHasSize(const A: TTyXYWH): Boolean;
+
+function TyRectFWidth(const AR: TTyRectF): Double;
+function TyRectFHeight(const AR: TTyRectF): Double;
+{ Valid = no NaN on any edge AND non-reversed. A zero-area rect IS valid. }
+function TyRectFIsValid(const AR: TTyRectF): Boolean;
+{ Half-open on Right/Bottom so two adjacent bands never both claim a pixel.
+  NOTE this is the DATUM-CELL rule. "Is this point in the plot area" is a
+  different question with a different answer — see TTyCartesian2D.ContainPoint,
+  which closes the far edges on purpose. }
+function TyRectFContains(const AR: TTyRectF; const AP: TTyPointF): Boolean;
+
+{ A series that does not stack.
+
+  Named rather than left to Default(), which would set both column indices to
+  ZERO -- a real column -- and leave every reader depending on checking Stacked
+  first. -1 is not a column anywhere. }
+function TyNoStack: TTySeriesStack;
+
+{ A number out of an option tree, narrowed to an Integer WITHOUT raising.
+
+  JAVASCRIPT'S `Math.round` HAS NO DOMAIN. It answers a finite Double for any
+  finite input, and every option ECharts reads this way is typed `number` with
+  no clamp anywhere -- `legend: { z: 1e30 }` is legal and upstream draws it.
+  FPC's `Round` targets an Int64 and RAISES `EInvalidOp` outside that range.
+
+  So a line transcribed with the shape of its original -- `Math.round(x)`
+  becoming `Round(x)` -- is right for every value anybody sane writes and
+  fatal for the ones nobody checks. What it costs is not a wrong chart: it is
+  the host's window, thrown out of a paint.
+
+  NaN and both infinities answer ADefault. Anything finite is clamped into
+  [ALo, AHi] BEFORE it is rounded, because clamping afterwards is the same
+  crash one line later.
+
+  Use this for every option number that becomes an Integer. It is not a
+  defensive flourish -- twenty-seven such reads were audited against the
+  ECharts source and sixteen killed the render on a value upstream accepts. }
+function TyRoundOpt(AValue: Double; ADefault: Integer = 0;
+  ALo: Integer = Low(Integer); AHi: Integer = High(Integer)): Integer;
+
+{ The same, truncating. Which one a site wants is not a detail: `Trunc` is
+  `how many whole ones fit` and `Round` is `which one is nearest`, and a site
+  that asked for a count must not quietly start asking for a nearest. }
+function TyTruncOpt(AValue: Double; ADefault: Integer = 0;
+  ALo: Integer = Low(Integer); AHi: Integer = High(Integer)): Integer;
+
+function TyRangeSpan(const AR: TTyRange): Double;
+{ Closed on both ends — an axis extent's endpoints belong to the axis. }
+function TyRangeContains(const AR: TTyRange; AValue: Double): Boolean;
+
+{ The single spelling of "no answer". Never return an empty/zero rect for this:
+  a zero rect at the origin is indistinguishable from a legitimately collapsed
+  band, and that ambiguity is exactly what TyChartNoHit had to exist to avoid. }
+function TyInvalidPointF: TTyPointF;
+function TyInvalidRectF: TTyRectF;
+
+implementation
+
+{ ==================== TTyNonRefCountedObject ==================== }
+
+function TTyNonRefCountedObject.QueryInterface(
+  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): HResult;
+  {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+begin
+  if GetInterface(IID, Obj) then
+    Result := S_OK
+  else
+    Result := HResult($80004002);   // E_NOINTERFACE
+end;
+
+function TTyNonRefCountedObject._AddRef: Integer; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+begin
+  Result := -1;
+end;
+
+function TTyNonRefCountedObject._Release: Integer; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+begin
+  Result := -1;
+end;
+
+{ ==================== constructors ==================== }
+
+function TyPointF(AX, AY: Double): TTyPointF;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+end;
+
+function TyRectF(ALeft, ATop, ARight, ABottom: Double): TTyRectF;
+begin
+  Result.Left := ALeft;
+  Result.Top := ATop;
+  Result.Right := ARight;
+  Result.Bottom := ABottom;
+end;
+
+function TyRange(AStart, AStop: Double): TTyRange;
+begin
+  if AStop < AStart then
+  begin
+    Result.Start := AStop;
+    Result.Stop := AStart;
+  end
+  else
+  begin
+    Result.Start := AStart;
+    Result.Stop := AStop;
+  end;
+end;
+
+{ ==================== queries ==================== }
+
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+  Result.W := AW;
+  Result.H := AH;
+end;
+
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+begin
+  Result := TyXYWH(ARect.Left, ARect.Top, ARect.Right - ARect.Left,
+    ARect.Bottom - ARect.Top);
+end;
+
+function TyXYWHHasSize(const A: TTyXYWH): Boolean;
+begin
+  Result := (not IsNan(A.W)) and (not IsNan(A.H)) and (A.W >= 0) and (A.H >= 0);
+end;
+
+function TyXYWHIsValid(const A: TTyXYWH): Boolean;
+begin
+  Result := (not IsNan(A.X)) and (not IsNan(A.Y)) and (not IsNan(A.W))
+    and (not IsNan(A.H)) and (A.W >= 0) and (A.H >= 0);
+end;
+
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+begin
+  Result := TyRectF(A.X, A.Y, A.X + A.W, A.Y + A.H);
+end;
+
+function TyRectFWidth(const AR: TTyRectF): Double;
+begin
+  Result := AR.Right - AR.Left;
+end;
+
+function TyRectFHeight(const AR: TTyRectF): Double;
+begin
+  Result := AR.Bottom - AR.Top;
+end;
+
+function TyRectFIsValid(const AR: TTyRectF): Boolean;
+begin
+  Result := (not IsNan(AR.Left)) and (not IsNan(AR.Top))
+        and (not IsNan(AR.Right)) and (not IsNan(AR.Bottom))
+        and (AR.Right >= AR.Left) and (AR.Bottom >= AR.Top);
+end;
+
+function TyRectFContains(const AR: TTyRectF; const AP: TTyPointF): Boolean;
+begin
+  { NaN first, and not as politeness: FPC compiles an ordered comparison to
+    COMISD, which SIGNALS on a quiet NaN, so `NaN >= x` raises EInvalidOp rather
+    than answering False. TyInvalidPointF is NaN on both axes and is this
+    library's own spelling of "no answer", so a hit test on one would crash
+    instead of missing. }
+  if IsNan(AP.X) or IsNan(AP.Y) then Exit(False);
+  Result := (AP.X >= AR.Left) and (AP.X < AR.Right)
+        and (AP.Y >= AR.Top) and (AP.Y < AR.Bottom);
+end;
+
+function TyNoStack: TTySeriesStack;
+begin
+  Result.Stacked := False;
+  Result.HasBelow := False;
+  Result.ResultCol := -1;
+  Result.OverCol := -1;
+  Result.OnSlot := -1;
+end;
+
+function TyRangeSpan(const AR: TTyRange): Double;
+begin
+  Result := Abs(AR.Stop - AR.Start);
+end;
+
+function TyRangeContains(const AR: TTyRange; AValue: Double): Boolean;
+begin
+  { Same reason as TyRectFContains: an ordered comparison against NaN raises
+    rather than answering False. NaN is this layer's no-data value, so asking
+    whether a missing value is on an axis is an ordinary question with an
+    ordinary answer -- no. }
+  if IsNan(AValue) then Exit(False);
+  Result := (AValue >= AR.Start) and (AValue <= AR.Stop);
+end;
+
+function TyInvalidPointF: TTyPointF;
+begin
+  Result.X := NaN;
+  Result.Y := NaN;
+end;
+
+function TyInvalidRectF: TTyRectF;
+begin
+  Result.Left := NaN;
+  Result.Top := NaN;
+  Result.Right := NaN;
+  Result.Bottom := NaN;
+end;
+
+
+function TyRoundOpt(AValue: Double; ADefault: Integer;
+  ALo: Integer; AHi: Integer): Integer;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  { Compared with plain relational operators, which promote the Integer bound
+    to Double. Math.Max/Min would pick their SINGLE overload against an
+    integer argument and decide the comparison on twenty-four bits. }
+  if AValue <= ALo then Exit(ALo);
+  if AValue >= AHi then Exit(AHi);
+  Result := Round(AValue);
+end;
+
+
+function TyTruncOpt(AValue: Double; ADefault: Integer;
+  ALo: Integer; AHi: Integer): Integer;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  if AValue <= ALo then Exit(ALo);
+  if AValue >= AHi then Exit(AHi);
+  Result := Trunc(AValue);
+end;
+
+end.

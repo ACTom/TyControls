@@ -19,9 +19,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Layout, tyControls.AdvChart.VisualMap,
-     tyControls.AdvChart.VisualMapView, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.VisualMap,
+     tyControls.AdvanceChart.VisualMapView, tyControls.AdvanceChart;
 type
   TVmvMeasurer = class(TInterfacedObject, ITyTextMeasurer)
   public

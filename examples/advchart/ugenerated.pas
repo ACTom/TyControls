@@ -81,8 +81,8 @@ implementation
 
 uses
   Math, zstream,
-  tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.Time, tyControls.AdvChart.Data;
+  tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
+  tyControls.AdvanceChart.Time, tyControls.AdvanceChart.Data;
 
 { ==================== Math.random ==================== }
 

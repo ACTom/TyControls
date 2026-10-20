@@ -20,12 +20,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.StrConsts,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Coord, tyControls.AdvChart.Time,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Layout, tyControls.AdvChart.Single,
-     tyControls.AdvChart.Render, tyControls.AdvChart.AxisBreak, tyControls.AdvChart.Anim,
-     tyControls.AdvChart.Jitter, tyControls.AdvChart.Events, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.AnimAxis, tyControls.AdvChart.AnimView,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Time,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Single,
+     tyControls.AdvanceChart.Render, tyControls.AdvanceChart.AxisBreak, tyControls.AdvanceChart.Anim,
+     tyControls.AdvanceChart.Jitter, tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.AnimAxis, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TBreak2Probe = class(TTyAdvanceChart)

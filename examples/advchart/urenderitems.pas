@@ -30,7 +30,7 @@ unit urenderitems;
 
   WHAT IS NOT DRAWN, AND WHY. wind-barb's weather pictures are image URLs of
   the ECharts examples site; the chart loads no URL itself (a data: URL or an
-  image list, see tyControls.AdvChart.Images) -- [R2-J2] the demo answers
+  image list, see tyControls.AdvanceChart.Images) -- [R2-J2] the demo answers
   them from images/ through the chart's OnResolveImage (umain.pas).
   custom-wind's vectors draw on the world map only, which the demo does not
   ship. }
@@ -39,7 +39,7 @@ interface
 
 uses
   Classes, SysUtils, Math, fpjson,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Custom;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Custom;
 
 { Register every handler of this unit under its gallery name. }
 procedure RegisterGalleryRenderItems;
@@ -50,9 +50,9 @@ procedure GalleryRenderItemNames(AList: TStrings);
 implementation
 
 uses
-  tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Time,
-  tyControls.AdvChart.Color;
+  tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Time,
+  tyControls.AdvanceChart.Color;
 
 type
   TGalleryRenderItems = class

@@ -24,11 +24,11 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Time, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Layout, tyControls.AdvanceChart, tyControls.StrConsts,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.RichStyle, fpjson, jsonparser,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Time, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart, tyControls.StrConsts,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.RichStyle, fpjson, jsonparser,
      test.advancechart;
 type
   { The calendar and the formatter, with no chart anywhere near them. }

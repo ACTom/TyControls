@@ -31,8 +31,8 @@ interface
 uses Classes, SysUtils, Math, Types, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Painter, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Render, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Render, tyControls.AdvanceChart;
 
 type
   THkChart = class(TTyAdvanceChart)

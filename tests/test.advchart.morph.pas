@@ -8,7 +8,7 @@ unit test.advchart.morph;
   anticlockwise slice, a full circle, rounded sector corners, a circle, a
   polygon, a polyline, path:// shapes with one, two and three subpaths and a
   quadratic, a path that starts with an arc). Every case here feeds the
-  recorded input to AdvChart.Morph and compares every number bit for bit:
+  recorded input to AdvanceChart.Morph and compares every number bit for bit:
 
     bezier     pathToBezierCurves on each path;
     polygons   pathToPolygons at the scales 1 and 3.5;
@@ -26,7 +26,7 @@ unit test.advchart.morph;
     batches    prepareMorphBatches, its wrap-round overwrite included. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Morph;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Morph;
 type
   TAdvChartMorphTest = class(TTestCase)
   private

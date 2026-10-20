@@ -14,10 +14,10 @@ unit test.advchart.series;
   only identity can tell them apart. }
 interface
 uses Classes, SysUtils, Math, fpjson, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Series;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Series;
 type
   TAdvChartSeriesTest = class(TTestCase)
   private

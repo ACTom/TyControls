@@ -5,7 +5,7 @@ unit test.advchart.tiphtml;
   Upstream's renderMode 'auto' is 'html' in a browser: a formatter's string
   is the box's innerHTML, and params.marker is an inline-block span. The
   port draws its own box (spec section 55), so it reads that html itself
-  (tyControls.AdvChart.TipHtml) into the lines and runs it measures and
+  (tyControls.AdvanceChart.TipHtml) into the lines and runs it measures and
   paints. Three suites:
 
     TAdvChartTipHtmlTest        the reader: what lines and runs a piece of
@@ -28,10 +28,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.AdvanceChart, tyControls.FontUnits,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Handlers,
-     tyControls.AdvChart.Tooltip, tyControls.AdvChart.TipHtml,
-     tyControls.AdvChart.Color;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Handlers,
+     tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.TipHtml,
+     tyControls.AdvanceChart.Color;
 
 type
   TThProbe = class(TTyAdvanceChart)

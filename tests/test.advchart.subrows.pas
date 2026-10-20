@@ -12,8 +12,8 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Measure,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Measure,
      tyControls.AdvanceChart;
 type
   TSubRowsProbe = class(TTyAdvanceChart)

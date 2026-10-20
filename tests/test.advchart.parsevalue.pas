@@ -16,8 +16,8 @@ unit test.advchart.parsevalue;
   with an infinite band. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Pie, tyControls.AdvanceChart.Funnel;
 type
   TAdvChartParseValueOracleTest = class(TTestCase)
   published

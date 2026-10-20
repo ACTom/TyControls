@@ -31,9 +31,9 @@ interface
 uses Classes, SysUtils, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Events, tyControls.AdvChart.Legend,
-     tyControls.AdvChart.States,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Legend,
+     tyControls.AdvanceChart.States,
      tyControls.AdvanceChart,
      test.advchart.select;
 type

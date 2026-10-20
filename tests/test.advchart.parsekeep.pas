@@ -23,8 +23,8 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Option, tyControls.AdvChart.OptionMerge, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.OptionMerge, tyControls.AdvanceChart;
 
 type
   TPkChart = class(TTyAdvanceChart)

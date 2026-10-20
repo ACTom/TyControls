@@ -7,8 +7,8 @@ unit test.advchart.layout;
   coordinateSystemUsage:'box' is a rewrite instead of a parameter. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Layout;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Layout;
 type
   TAdvChartLayoutTest = class(TTestCase)
   private

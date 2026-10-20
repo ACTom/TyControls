@@ -34,9 +34,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Graph, tyControls.AdvChart.Color,
-     tyControls.AdvChart.States,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Graph, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.States,
      tyControls.AdvanceChart;
 type
   TGraphRoamProbe = class(TTyAdvanceChart)

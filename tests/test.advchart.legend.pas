@@ -27,10 +27,10 @@ unit test.advchart.legend;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Shape, tyControls.AdvChart.Layout,
-  tyControls.AdvChart.Symbol, tyControls.AdvChart.Paint,
-  tyControls.AdvChart.Legend;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Layout,
+  tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Paint,
+  tyControls.AdvanceChart.Legend;
 
 type
   TLegendMeasurer = class(TInterfacedObject, ITyTextMeasurer)

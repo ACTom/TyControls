@@ -16,13 +16,13 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Handlers,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Labels,
-     tyControls.AdvChart.LabelOpt, tyControls.AdvChart.Tooltip,
-     tyControls.AdvChart.Graph,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Handlers,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Labels,
+     tyControls.AdvanceChart.LabelOpt, tyControls.AdvanceChart.Tooltip,
+     tyControls.AdvanceChart.Graph,
      tyControls.AdvanceChart, test.advancechart;
 type
   { The protected doors this suite needs: what a tooltip would say about a

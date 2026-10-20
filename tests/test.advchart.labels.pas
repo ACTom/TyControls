@@ -21,10 +21,10 @@ unit test.advchart.labels;
 interface
 uses tyControls.FontUnits,
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Labels,
-  tyControls.AdvChart.LabelOpt;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Shape,
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Labels,
+  tyControls.AdvanceChart.LabelOpt;
 
 type
   TLabelMeasurer = class(TInterfacedObject, ITyTextMeasurer)

@@ -85,7 +85,7 @@ function AlbersUsa: TAlbersUsa;
 implementation
 
 uses
-  tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale, tyControls.AdvChart.Geo;
+  tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Geo;
 
 const
   cPi: Double = Pi;

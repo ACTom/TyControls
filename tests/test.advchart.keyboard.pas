@@ -3,7 +3,7 @@ unit test.advchart.keyboard;
 { THE KEYBOARD AND THE ACCESSIBLE TREE [Batch 144].
 
   Upstream ECharts has no keyboard, so the keys are the port's own design
-  (tyControls.AdvChart.KeyNav). What CAN be held to upstream is what the
+  (tyControls.AdvanceChart.KeyNav). What CAN be held to upstream is what the
   keys are built from:
 
   - a focus move is the highlight / downplay ACTION a page would dispatch
@@ -29,8 +29,8 @@ uses Classes, SysUtils, Math, TypInfo, fpcunit, testregistry, fpjson, jsonparser
      Controls, Graphics, Forms, LCLType, LMessages, BGRABitmap, BGRABitmapTypes,
      {$IFDEF WINDOWS} Windows, {$ENDIF} Types,
      tyControls.Controller, tyControls.Types,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Events, tyControls.AdvChart.Aria, tyControls.AdvChart.KeyNav,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Aria, tyControls.AdvanceChart.KeyNav,
      tyControls.Accessible, tyControls.AdvanceChart,
      test.advchart.select;
 type

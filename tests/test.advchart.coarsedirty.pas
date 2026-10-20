@@ -14,7 +14,7 @@ unit test.advchart.coarsedirty;
              (flags, getPaintRect, getPrevPaintRect), frame by frame, and
              the rects it answered.
 
-  The oracle class replays them through AdvChart.DirtyRect and the control's
+  The oracle class replays them through AdvanceChart.DirtyRect and the control's
   HitTestAt (text measured with zrender's SSR table, as upstream's layout
   was). The second class holds the control to its own contract: the
   dirty-rect path puts on the canvas exactly what the full path puts there,
@@ -24,8 +24,8 @@ interface
 uses Classes, SysUtils, Math, TypInfo, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Events, tyControls.AdvChart.DirtyRect,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.DirtyRect,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type

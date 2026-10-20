@@ -13,10 +13,10 @@ unit test.advchart.builder;
   `data` is the commonest option, not because of the axis' name. }
 interface
 uses Classes, SysUtils, Math, DateUtils, fpjson, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Builder;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Builder;
 type
   { A measurer with no font behind it, so an axis-layout assertion is about the
     algorithm rather than about this machine's fonts. }

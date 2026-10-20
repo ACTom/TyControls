@@ -16,7 +16,7 @@ unit test.advchart.labelline;
       as drawn and under highlight.
 
   Three layers, reported apart:
-    - THE RULES fed straight into AdvChart.LabelGuide;
+    - THE RULES fed straight into AdvanceChart.LabelGuide;
     - THE ROUTES: each recorded call's inputs fed into TyLabelLineRoute and
       the limits, and the symbol paths the port builds against the ones
       upstream measured;
@@ -27,11 +27,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.LabelGuide,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Color,
-     tyControls.AdvChart.States,
-     tyControls.AdvChart.Measure, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.LabelGuide,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.States,
+     tyControls.AdvanceChart.Measure, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TLgProbe = class(TTyAdvanceChart)

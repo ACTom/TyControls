@@ -16,9 +16,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
      tyControls.AdvanceChart,
      test.advchart.gallerytext;
 type

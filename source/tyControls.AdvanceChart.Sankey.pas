@@ -1,0 +1,2135 @@
+unit tyControls.AdvanceChart.Sankey;
+{$mode objfpc}{$H+}
+{$modeswitch nestedprocvars}
+{ The sankey series: nodes in columns, links as bands whose width is their
+  value, the whole drawn in a box (5% round, 20% right for the labels).
+
+  THE GRAPH: nodes keyed by id, else name, else index; a numeric link end
+  is an INDEX into the nodes, a numeric string a key; links that miss are
+  dropped. A duplicate key or a cycle makes upstream throw -- here the
+  series is refused and draws nothing.
+
+  THE LAYOUT is sankeyLayout.ts statement for statement: a node's value is
+  the largest of its two link sums and its own; its depth the Kahn layer,
+  moved by nodeAlign; columns grouped by the scaled breadth; ONE ky for the
+  whole chart; collisions resolved with a stable in-place sort; then the
+  relaxation -- alpha a running product of 0.99, Gauss-Seidel -- switched
+  off entirely when any node's value is nought; links stacked by the other
+  node's top. No rounding anywhere.
+
+  THE COLOURS: each node's value mapped linearly over the palette (the
+  series' colour list, the chart's, the theme's), as rgba; an itemStyle
+  colour on the chain wins. A link is its lineStyle colour -- or its source
+  or target node's, or a gradient between the two over its own box.
+
+  THE LABELS: the node's id by default, placed by zrender's text position
+  table against the rect grown by its stroke, z2 12.
+
+  PURE: SysUtils, Math, fpjson and the AdvanceChart units. No painter, no LCL. }
+interface
+uses
+  SysUtils, Math, fpjson,
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Layout,
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+  tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Labels,
+  tyControls.AdvanceChart.LabelOpt, tyControls.AdvanceChart.Calendar,
+  tyControls.AdvanceChart.VisualMap;
+
+const
+  TySankeySeriesTypeName = 'sankey';
+
+type
+  TTySankeyNode = record
+    Item: TJSONObject;                 // borrowed; nil for a non-object item
+    Key: string;
+    Value, Depth: Double;
+    X, Y, DX, DY: Double;              // LOCAL to the box
+    SkHeight: Integer;
+    OutE, InE: TTyIntegerArray;        // edge indices
+    HasColour: Boolean;
+    IsString: Boolean;                 // upstream holds a string (mapped or written)
+    Colour: TTyChartColor;
+    { an itemStyle colour written as a gradient object: the rect's fill,
+      and a 'source' / 'target' link's [Batch 79] }
+    HasGradient: Boolean;
+    Gradient: TTyChartGradient;
+    { the label, placed }
+    HasLabel: Boolean;
+    LabelText: string;
+    LabelX, LabelY: Double;
+    LabelAH: TTyTextAnchorH;
+    LabelAV: TTyTextAnchorV;
+    LabelInside: Boolean;
+  end;
+
+  TTySankeyEdge = record
+    Item: TJSONObject;
+    Source, Target: Integer;
+    Value: Double;
+    DY, SY, TY: Double;
+    { THE EDGE LABEL [Batch 114]: placed 'inside' the band -- the centre of
+      the band's own box through the main group's transform -- in device px }
+    HasLabel: Boolean;
+    LabelText: string;
+    LabelX, LabelY: Double;
+    { the edge data's name: the link's id, else `source + ' > ' + target` }
+    DataName: string;
+  end;
+
+  { WHERE dragNode PUT A NODE [Batch 114]: localX / localY written into the
+    node's item by setNodePosition, which beat what the item itself says. }
+  TTySankeyLocal = record
+    HasX, HasY: Boolean;
+    X, Y: Double;
+  end;
+  TTySankeyLocalArray = array of TTySankeyLocal;
+
+  TTySankeySolved = record
+    Valid: Boolean;
+    SeriesIndex: Integer;
+    Series: TJSONObject;               // borrowed
+    Box: TTyXYWH;
+    HasT: Boolean;
+    TX, TY: Double;
+    Vertical: Boolean;
+    NodeWidth, NodeGap: Double;
+    Nodes: array of TTySankeyNode;
+    Edges: array of TTySankeyEdge;
+    LevelKeys: array of string;
+    LevelObjs: array of TJSONObject;
+    Z: Integer;
+    Scale: Double;
+    { THE DRAGS' localX / localY, by node index [Batch 114] }
+    Local: TTySankeyLocalArray;
+    { THE MAIN GROUP'S TRANSFORM on the canvas [M0 0 0 M3 M4 M5]: its own
+      translate to the box corner (when that is not around nought: HasT)
+      under the series group's roam transform. Identity until SetSankeyFrame
+      says otherwise; HasT alone gives [1 0 0 1 TX TY]. [Batch 114] }
+    M0, M3, M4, M5: Double;
+  end;
+
+  TTySankeyInk = record
+    Label_: TTyLabelSpec;
+    ItemLabels: TTyLabelSpecArray;
+    { the link's default fill (upstream's neutral50) }
+    LinkColour: TTyChartColor;
+    { one per node, its decal: the node's rect takes it, and a link
+      coloured 'source' / 'target' that node's (applyCurveStyle) [F4a] }
+    NodeDecals: TTyChartDecalArray;
+  end;
+
+function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyRectF; APPI: Integer): TTySankeySolved; overload;
+{ the same over x, y, width, height: createBoxLayoutReference's
+  refContainer -- the canvas, or the matrix cell or calendar day the series
+  names with `coord` [Batch 151] }
+function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyXYWH; APPI: Integer): TTySankeySolved; overload;
+{ The node colours: AStops the palette as zrender parses it. }
+procedure TySankeyColour(var ASolved: TTySankeySolved;
+  const AStops: TTyVisualColorArray);
+{ One label spec per node: item -> levels[layout depth] -> series. }
+function TySankeyLabelSpecs(const ASolved: TTySankeySolved;
+  const ASeriesSpec: TTyLabelSpec): TTyLabelSpecArray;
+{ The labels' words and anchors. }
+procedure TySankeyLabels(var ASolved: TTySankeySolved; const ASeriesName: string);
+{ The links (z2 0), then the nodes (z2 10) with their captions (z2 12). }
+function TyBuildSankeyMarks(ASeriesIndex: Integer; const ASolved: TTySankeySolved;
+  const AInk: TTySankeyInk; AList: TTyPaintList): Integer;
+
+{ THE MAIN GROUP'S FRAME from the series group's roam transform (the view's
+  overall [OSX 0 0 OSY OX OY]): a group transform around the identity is no
+  transform (zrender's needLocalTransform, 5e-5), and the main group's own
+  translate rides under it -- mul(group, translate). [Batch 114] }
+procedure TySankeyFrame(var ASolved: TTySankeySolved; AOSX, AOSY, AOX, AOY: Double);
+
+{ The edge labels' words and anchors -- after the frame is set. ASeriesName
+  for the a placeholder. [Batch 114] }
+procedure TySankeyEdgeLabels(var ASolved: TTySankeySolved; const ASeriesName: string);
+
+{ One spec per edge: item -> levels[source's depth] -> series, each at its
+  `edgeLabel` key; default `show: false`. [Batch 114] }
+function TySankeyEdgeLabelSpecs(const ASolved: TTySankeySolved;
+  const ABase: TTyLabelSpec): TTyLabelSpecArray;
+
+{ `draggable` along item -> level -> series; the series default is true. }
+function TySankeyDraggable(const S: TTySankeySolved; ANode: Integer): Boolean;
+
+{ The level object of a layout depth (a later one of the same depth wins),
+  or nil. [Batch 114] }
+function TySankeyLevel(const S: TTySankeySolved; ADepth: Double): TJSONObject;
+
+{ THE FOCUS SETS (data/Graph.ts) of a hovered node or edge, by index:
+  'adjacency' -- a node's edges (in edge order, each touching it once) and
+  both ends of each; an edge, itself and its two ends; 'trajectory' -- the
+  edges and nodes upstream of the source end and downstream of the target
+  end, breadth first, starting from every edge of a node or from the edge.
+  Duplicates kept as upstream keeps them; the sets only ever leave a blur.
+  [Batch 114] }
+procedure TySankeyFocusSets(const S: TTySankeySolved; AIsEdge: Boolean;
+  AIndex: Integer; ATrajectory: Boolean; out ANodes, AEdges: TTyIntegerArray);
+
+{ A node's rect, local to the main group: localX / localY (the drag's, else
+  the item's along its chain) times the box, else the layout. }
+procedure TySankeyNodeRect(const S: TTySankeySolved; ANode: Integer;
+  out AX, AY, AW, AH: Double);
+
+implementation
+
+uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.ZrPath,
+  tyControls.AdvanceChart.LabelGuide;
+
+const
+  cEps = 5e-5;
+  cAlphaDecay: Double = 0.99;
+
+{ ==================== small readers ==================== }
+
+function ObjIn(ANode: TJSONObject; const AKey: string): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d <> nil) and (d.JSONType = jtObject) then Result := TJSONObject(d);
+end;
+
+function JsNum(AData: TJSONData): Double;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNull: Result := 0;
+    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    jtNumber: Result := AData.AsFloat;
+    jtString: Result := TyJsToNumber(AData.AsString);
+  end;
+end;
+
+function Truthy(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ parseDataValue: absent, null and '' are NaN, an array its first }
+function NumOrNaN(AData: TJSONData): Double;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  if AData.JSONType = jtArray then
+  begin
+    if AData.Count = 0 then Exit;
+    AData := AData.Items[0];
+  end;
+  case AData.JSONType of
+    jtNull: Result := NaN;
+    jtString: if AData.AsString = '' then Result := NaN
+              else Result := TyJsToNumber(AData.AsString);
+  else
+    Result := JsNum(AData);
+  end;
+end;
+
+{ THE NODE'S VALUE DIMENSION, as createGraphFromNodeEdge builds the node
+  data: on a cartesian2d, a polar or a matrix (createSeriesData) and on a
+  geo (lng, lat) the dimensions are the coordinate system's and none is
+  `value` -- node.getValue('value') reads nothing (-1); on a calendar (time,
+  value) it is the row's second element (1); otherwise the first (0). A
+  scalar value is every element. [D9-D14 mutation round] }
+function NodeValueSlot(ASeries: TJSONObject): Integer;
+var d: TJSONData;
+begin
+  Result := 0;
+  if ASeries = nil then Exit;
+  d := ASeries.Find('coordinateSystem');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  if (d.AsString = 'cartesian2d') or (d.AsString = 'polar')
+    or (d.AsString = 'matrix') or (d.AsString = 'geo') then Result := -1
+  else if d.AsString = 'calendar' then Result := 1;
+end;
+
+{ the value at that slot: nothing at -1, an array's element (NaN past its
+  end), a scalar itself }
+function NodeValueAt(AData: TJSONData; ASlot: Integer): Double;
+begin
+  Result := NaN;
+  if (AData = nil) or (ASlot < 0) then Exit;
+  if AData.JSONType = jtArray then
+  begin
+    if ASlot >= AData.Count then Exit;
+    AData := AData.Items[ASlot];
+  end;
+  Result := NumOrNaN(AData);
+end;
+
+{ JS String(v) }
+function JsStr(AData: TJSONData): string;
+var k: Integer;
+begin
+  Result := '';
+  if AData = nil then Exit('undefined');
+  case AData.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtString: Result := AData.AsString;
+    jtArray:
+      for k := 0 to AData.Count - 1 do
+      begin
+        if k > 0 then Result := Result + ',';
+        if not (AData.Items[k].JSONType = jtNull) then
+          Result := Result + JsStr(AData.Items[k]);
+      end;
+  else
+    Result := '[object Object]';
+  end;
+end;
+
+function JsMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+function Around0(V: Double): Boolean;
+begin
+  Result := not ((V > cEps) or (V < -cEps));
+end;
+
+function Present(AData: TJSONData): Boolean;
+begin
+  Result := (AData <> nil) and (AData.JSONType <> jtNull);
+end;
+
+{ the level of a node by its LAYOUT depth, keyed as a JS object key }
+function LevelOf(const S: TTySankeySolved; ADepth: Double): TJSONObject;
+var k: Integer; key: string;
+begin
+  Result := nil;
+  if IsNan(ADepth) then key := 'NaN' else key := TyJsNumberToString(ADepth);
+  for k := High(S.LevelKeys) downto 0 do
+    if S.LevelKeys[k] = key then Exit(S.LevelObjs[k]);
+end;
+
+{ Model.get along item -> level -> series: the whole path in each }
+function ChainFind(const S: TTySankeySolved; AItem: TJSONObject; ADepth: Double;
+  const ASub, AKey: string): TJSONData;
+var
+  k: Integer;
+  chain: array[0..2] of TJSONObject;
+  o: TJSONObject;
+  d: TJSONData;
+begin
+  Result := nil;
+  chain[0] := AItem;
+  chain[1] := LevelOf(S, ADepth);
+  chain[2] := S.Series;
+  for k := 0 to 2 do
+  begin
+    if chain[k] = nil then Continue;
+    if ASub <> '' then o := ObjIn(chain[k], ASub) else o := chain[k];
+    if o = nil then Continue;
+    d := o.Find(AKey);
+    if Present(d) then Exit(d);
+  end;
+end;
+
+{ ==================== the layout ==================== }
+
+type
+  TCmpFn = function(A, B: Integer): Double is nested;
+
+{ insertion sort: moves only on > 0 -- NaN and ties stay put, as a stable
+  sort with this comparator leaves them }
+procedure StableSort(var A: TTyIntegerArray; ACmp: TCmpFn);
+var i, j, v: Integer;
+begin
+  for i := 1 to High(A) do
+  begin
+    v := A[i];
+    j := i - 1;
+    while (j >= 0) and (ACmp(A[j], v) > 0) do
+    begin
+      A[j + 1] := A[j];
+      Dec(j);
+    end;
+    A[j + 1] := v;
+  end;
+end;
+
+function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyRectF; APPI: Integer): TTySankeySolved;
+begin
+  Result := TySankeySolve(AOption, ASeriesIndex, TyXYWHOfRect(AContainer), APPI);
+end;
+
+function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyXYWH; APPI: Integer): TTySankeySolved;
+const
+  cBoxKey: array[0..5] of string = ('width', 'left', 'right', 'height', 'top', 'bottom');
+var
+  mask: TFPUExceptionMask;
+  node, d, arr, ln: TJSONData;
+  S: ^TTySankeySolved;
+  n, m, i, j, k, x, iterations, h, t, lo, slot: Integer;
+  keys: array of string;
+  indeg, zero, next, rem, nsrc: TTyIntegerArray;
+  remain: array of Boolean;
+  maxNodeDepth, maxDepth, kx, minKy, sum, ky, viewWidth, alpha, sy, ty_,
+    CW, CH, v1, v2, raw: Double;
+  align: string;
+  colKeys: TTyDoubleArray;
+  cols, sorted: array of TTyIntegerArray;
+  order: TTyIntegerArray;
+  found: Boolean;
+  raw6, target: TTyCalBoxKeys;
+  box: TTyRawBox;
+  scale: Double;
+
+  function Scaled(const R: TTyBoxRaw): TTyBoxRaw;
+  begin
+    Result := R;
+    if R.Kind = brNumber then Result.Num := R.Num * scale;
+  end;
+
+  { posd along the column, the size from the value, the breadth }
+  function GetPos(ANode: Integer): Double;
+  begin
+    if S^.Vertical then Result := S^.Nodes[ANode].X else Result := S^.Nodes[ANode].Y;
+  end;
+  procedure SetPos(ANode: Integer; AV: Double);
+  begin
+    if S^.Vertical then S^.Nodes[ANode].X := AV else S^.Nodes[ANode].Y := AV;
+  end;
+  function GetSize(ANode: Integer): Double;
+  begin
+    if S^.Vertical then Result := S^.Nodes[ANode].DX else Result := S^.Nodes[ANode].DY;
+  end;
+  function GetBreadth(ANode: Integer): Double;
+  begin
+    if S^.Vertical then Result := S^.Nodes[ANode].Y else Result := S^.Nodes[ANode].X;
+  end;
+  function Center(ANode: Integer): Double;
+  begin
+    Result := GetPos(ANode) + GetSize(ANode) / 2;
+  end;
+
+  function ItemDepth(ANode: Integer; out AV: Double): Boolean;
+  var dd: TJSONData;
+  begin
+    Result := False;
+    AV := 0;
+    if S^.Nodes[ANode].Item = nil then Exit;
+    dd := S^.Nodes[ANode].Item.Find('depth');
+    if (dd = nil) or (dd.JSONType <> jtNumber) then Exit;
+    AV := dd.AsFloat;
+    Result := AV >= 0;
+  end;
+
+  function SumOut(ANode: Integer): Double;
+  var q: Integer; vv: Double;
+  begin
+    Result := 0;
+    for q := 0 to High(S^.Nodes[ANode].OutE) do
+    begin
+      vv := S^.Edges[S^.Nodes[ANode].OutE[q]].Value;
+      if not IsNan(vv) then Result := Result + vv;
+    end;
+  end;
+  function SumIn(ANode: Integer): Double;
+  var q: Integer; vv: Double;
+  begin
+    Result := 0;
+    for q := 0 to High(S^.Nodes[ANode].InE) do
+    begin
+      vv := S^.Edges[S^.Nodes[ANode].InE[q]].Value;
+      if not IsNan(vv) then Result := Result + vv;
+    end;
+  end;
+
+  function CmpPos(A, B: Integer): Double;
+  begin
+    Result := GetPos(A) - GetPos(B);
+  end;
+  function CmpKey(A, B: Integer): Double;
+  begin
+    Result := colKeys[A] - colKeys[B];
+  end;
+  function CmpOut(A, B: Integer): Double;
+  begin
+    Result := GetPos(S^.Edges[A].Target) - GetPos(S^.Edges[B].Target);
+  end;
+  function CmpIn(A, B: Integer): Double;
+  begin
+    Result := GetPos(S^.Edges[A].Source) - GetPos(S^.Edges[B].Source);
+  end;
+
+  procedure ResolveCollisions;
+  var c, q, cnt, nd: Integer; y0, dy: Double;
+  begin
+    for c := 0 to High(cols) do
+    begin
+      StableSort(cols[c], @CmpPos);
+      y0 := 0;
+      nd := -1;
+      cnt := Length(cols[c]);
+      for q := 0 to cnt - 1 do
+      begin
+        nd := cols[c][q];
+        dy := y0 - GetPos(nd);
+        if dy > 0 then SetPos(nd, GetPos(nd) + dy);
+        y0 := GetPos(nd) + GetSize(nd) + S^.NodeGap;
+      end;
+      dy := y0 - S^.NodeGap - viewWidth;
+      if (dy > 0) and (nd >= 0) then
+      begin
+        SetPos(nd, GetPos(nd) - dy);
+        y0 := GetPos(nd);
+        for q := cnt - 2 downto 0 do
+        begin
+          nd := cols[c][q];
+          dy := GetPos(nd) + GetSize(nd) + S^.NodeGap - y0;
+          if dy > 0 then SetPos(nd, GetPos(nd) - dy);
+          y0 := GetPos(nd);
+        end;
+      end;
+    end;
+  end;
+
+  { one relaxation pass over the columns in AOrder: toward the weighted
+    mean of the other ends, each move seen by the nodes after it }
+  procedure Relax(const AOrder: TTyIntegerArray; AOut: Boolean; AAlpha: Double);
+  var c, q, r, nd, e, oth: Integer; num, den, y, vv, pp: Double;
+      es: TTyIntegerArray;
+  begin
+    for c := 0 to High(AOrder) do
+      for q := 0 to High(cols[AOrder[c]]) do
+      begin
+        nd := cols[AOrder[c]][q];
+        if AOut then es := S^.Nodes[nd].OutE else es := S^.Nodes[nd].InE;
+        if Length(es) = 0 then Continue;
+        num := 0;
+        den := 0;
+        for r := 0 to High(es) do
+        begin
+          e := es[r];
+          if AOut then oth := S^.Edges[e].Target else oth := S^.Edges[e].Source;
+          pp := Center(oth) * S^.Edges[e].Value;
+          if not IsNan(pp) then num := num + pp;
+          vv := S^.Edges[e].Value;
+          if not IsNan(vv) then den := den + vv;
+        end;
+        y := num / den;
+        if IsNan(y) then
+        begin
+          num := 0;
+          for r := 0 to High(es) do
+          begin
+            e := es[r];
+            if AOut then oth := S^.Edges[e].Target else oth := S^.Edges[e].Source;
+            pp := Center(oth);
+            if not IsNan(pp) then num := num + pp;
+          end;
+          y := num / Length(es);
+        end;
+        SetPos(nd, GetPos(nd) + (y - Center(nd)) * AAlpha);
+      end;
+  end;
+
+  function SameKey(A, B: Double): Boolean;
+  begin
+    Result := (A = B) or (IsNan(A) and IsNan(B));
+  end;
+
+begin
+  Result := Default(TTySankeySolved);
+  Result.SeriesIndex := ASeriesIndex;
+  Result.M0 := 1;
+  Result.M3 := 1;
+  S := @Result;
+  node := AOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  Result.Series := TJSONObject(node);
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  Result.Scale := scale;
+  Result.Z := 2;
+  d := Result.Series.Find('z');
+  if (d <> nil) and (d.JSONType = jtNumber) then Result.Z := Round(d.AsFloat);
+  d := Result.Series.Find('orient');
+  Result.Vertical := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'vertical');
+  Result.NodeWidth := 20;
+  d := Result.Series.Find('nodeWidth');
+  if Present(d) then Result.NodeWidth := JsNum(d);
+  Result.NodeWidth := Result.NodeWidth * scale;
+  Result.NodeGap := 8;
+  d := Result.Series.Find('nodeGap');
+  if Present(d) then Result.NodeGap := JsNum(d);
+  Result.NodeGap := Result.NodeGap * scale;
+  iterations := 32;
+  d := Result.Series.Find('layoutIterations');
+  if Present(d) then iterations := Round(JsNum(d));
+  { levels by depth, a later one of the same depth winning }
+  d := Result.Series.Find('levels');
+  if (d <> nil) and (d.JSONType = jtArray) then
+    for k := 0 to d.Count - 1 do
+      if d.Items[k].JSONType = jtObject then
+      begin
+        ln := TJSONObject(d.Items[k]).Find('depth');
+        if (ln <> nil) and (ln.JSONType = jtNumber) and (ln.AsFloat >= 0) then
+        begin
+          SetLength(Result.LevelKeys, Length(Result.LevelKeys) + 1);
+          SetLength(Result.LevelObjs, Length(Result.LevelObjs) + 1);
+          Result.LevelKeys[High(Result.LevelKeys)] := TyJsNumberToString(ln.AsFloat);
+          Result.LevelObjs[High(Result.LevelObjs)] := TJSONObject(d.Items[k]);
+        end;
+      end;
+
+  { ---- the graph: data || nodes, edges || links, by JS truthiness ---- }
+  arr := Result.Series.Find('data');
+  if not Truthy(arr) then arr := Result.Series.Find('nodes');
+  n := 0;
+  if (arr <> nil) and (arr.JSONType = jtArray) then n := arr.Count;
+  SetLength(Result.Nodes, n);
+  SetLength(keys, n);
+  for i := 0 to n - 1 do
+  begin
+    Result.Nodes[i] := Default(TTySankeyNode);
+    if arr.Items[i].JSONType = jtObject then Result.Nodes[i].Item := TJSONObject(arr.Items[i]);
+    d := nil;
+    if Result.Nodes[i].Item <> nil then
+    begin
+      d := Result.Nodes[i].Item.Find('id');
+      if not Present(d) then d := Result.Nodes[i].Item.Find('name');
+      if not Present(d) then d := nil;
+    end;
+    if d <> nil then keys[i] := JsStr(d) else keys[i] := IntToStr(i);
+    Result.Nodes[i].Key := keys[i];
+    { a second node of a key: upstream throws }
+    for j := 0 to i - 1 do
+      if keys[j] = keys[i] then Exit;
+  end;
+  arr := Result.Series.Find('edges');
+  if not Truthy(arr) then arr := Result.Series.Find('links');
+  m := 0;
+  if (arr <> nil) and (arr.JSONType = jtArray) then
+    for i := 0 to arr.Count - 1 do
+    begin
+      if arr.Items[i].JSONType <> jtObject then Continue;
+      v1 := -1;
+      v2 := -1;
+      for k := 0 to 1 do
+      begin
+        if k = 0 then d := TJSONObject(arr.Items[i]).Find('source')
+        else d := TJSONObject(arr.Items[i]).Find('target');
+        lo := -1;
+        if (d <> nil) and (d.JSONType = jtNumber) then
+        begin
+          { a number is an index -- an integer in range, else nothing }
+          if (Frac(d.AsFloat) = 0) and (d.AsFloat >= 0) and (d.AsFloat < n) then
+            lo := Trunc(d.AsFloat);
+        end
+        else
+          for j := 0 to n - 1 do
+            if keys[j] = JsStr(d) then
+            begin
+              lo := j;
+              Break;
+            end;
+        if k = 0 then v1 := lo else v2 := lo;
+      end;
+      if (v1 < 0) or (v2 < 0) then Continue;
+      SetLength(Result.Edges, m + 1);
+      Result.Edges[m] := Default(TTySankeyEdge);
+      Result.Edges[m].Item := TJSONObject(arr.Items[i]);
+      Result.Edges[m].Source := Round(v1);
+      Result.Edges[m].Target := Round(v2);
+      Result.Edges[m].Value := NumOrNaN(TJSONObject(arr.Items[i]).Find('value'));
+      d := TJSONObject(arr.Items[i]).Find('id');
+      if (d <> nil) and (d.JSONType = jtString) then Result.Edges[m].DataName := d.AsString
+      else if (d <> nil) and (d.JSONType = jtNumber) then
+        Result.Edges[m].DataName := TyJsNumberToString(d.AsFloat)
+      else
+        Result.Edges[m].DataName := JsStr(TJSONObject(arr.Items[i]).Find('source'))
+          + ' > ' + JsStr(TJSONObject(arr.Items[i]).Find('target'));
+      with Result.Nodes[Round(v1)] do
+      begin
+        SetLength(OutE, Length(OutE) + 1);
+        OutE[High(OutE)] := m;
+      end;
+      with Result.Nodes[Round(v2)] do
+      begin
+        SetLength(InE, Length(InE) + 1);
+        InE[High(InE)] := m;
+      end;
+      Inc(m);
+    end;
+
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    { ---- the box: 5% round, 20% right, merged count by count ---- }
+    for k := 0 to 5 do
+    begin
+      raw6[k] := Default(TTyCalBoxKey);
+      d := Result.Series.Find(cBoxKey[k]);
+      if d <> nil then
+      begin
+        raw6[k].Own := True;
+        raw6[k].V := TyBoxRawOf(d);
+      end;
+    end;
+    target := raw6;
+    for k := 0 to 5 do
+      if (k in [1, 2, 4, 5]) and not target[k].Own then
+      begin
+        target[k].Own := True;
+        if k = 2 then target[k].V := TyBoxRawStr('20%')
+        else target[k].V := TyBoxRawStr('5%');
+      end;
+    TyCalMergeLayoutParam(target, raw6, False, False);
+    { getBoxLayoutParams: a null or undefined key reads the option root
+      [F4c] }
+    for k := 0 to 5 do TyRawClimbRoot(target[k].V, AOption.Root, cBoxKey[k]);
+    box.Width := Scaled(target[0].V);
+    box.Left := Scaled(target[1].V);
+    box.Right := Scaled(target[2].V);
+    box.Height := Scaled(target[3].V);
+    box.Top := Scaled(target[4].V);
+    box.Bottom := Scaled(target[5].V);
+    CW := AContainer.W;
+    CH := AContainer.H;
+    Result.Box := TyGetLayoutRect(box, AContainer.X, AContainer.Y, CW, CH, []);
+    Result.HasT := not (Around0(Result.Box.X) and Around0(Result.Box.Y));
+    if Result.HasT then
+    begin
+      Result.TX := Result.Box.X;
+      Result.TY := Result.Box.Y;
+      Result.M4 := Result.TX;
+      Result.M5 := Result.TY;
+    end;
+
+    { ---- computeNodeValues ---- }
+    slot := NodeValueSlot(Result.Series);
+    for i := 0 to n - 1 do
+    begin
+      v1 := SumOut(i);
+      v2 := SumIn(i);
+      raw := NaN;
+      if Result.Nodes[i].Item <> nil then
+        raw := NodeValueAt(Result.Nodes[i].Item.Find('value'), slot);
+      if IsNan(raw) or (raw = 0) then raw := 0;
+      Result.Nodes[i].Value := JsMax(JsMax(v1, v2), raw);
+    end;
+    for i := 0 to n - 1 do
+      if Result.Nodes[i].Value = 0 then
+      begin
+        iterations := 0;
+        Break;
+      end;
+
+    { ---- computeNodeBreadths: Kahn ---- }
+    SetLength(indeg, n);
+    zero := nil;
+    for i := 0 to n - 1 do
+    begin
+      indeg[i] := Length(Result.Nodes[i].InE);
+      if indeg[i] = 0 then
+      begin
+        SetLength(zero, Length(zero) + 1);
+        zero[High(zero)] := i;
+      end;
+    end;
+    SetLength(remain, m);
+    for i := 0 to m - 1 do remain[i] := True;
+    x := 0;
+    maxNodeDepth := -1;
+    next := nil;
+    while Length(zero) > 0 do
+    begin
+      for i := 0 to High(zero) do
+      begin
+        t := zero[i];
+        if ItemDepth(t, v1) then
+        begin
+          if v1 > maxNodeDepth then maxNodeDepth := v1;
+          Result.Nodes[t].Depth := v1;
+        end
+        else
+          Result.Nodes[t].Depth := x;
+        if Result.Vertical then Result.Nodes[t].DY := Result.NodeWidth
+        else Result.Nodes[t].DX := Result.NodeWidth;
+        for j := 0 to High(Result.Nodes[t].OutE) do
+        begin
+          remain[Result.Nodes[t].OutE[j]] := False;
+          h := Result.Edges[Result.Nodes[t].OutE[j]].Target;
+          Dec(indeg[h]);
+          if indeg[h] = 0 then
+          begin
+            found := False;
+            for k := 0 to High(next) do if next[k] = h then found := True;
+            if not found then
+            begin
+              SetLength(next, Length(next) + 1);
+              next[High(next)] := h;
+            end;
+          end;
+        end;
+      end;
+      Inc(x);
+      zero := next;
+      next := nil;
+    end;
+    for i := 0 to m - 1 do
+      if remain[i] then Exit;   // a cycle: upstream throws
+    if maxNodeDepth > x - 1 then maxDepth := maxNodeDepth else maxDepth := x - 1;
+    { nodeAlign }
+    align := 'justify';
+    d := Result.Series.Find('nodeAlign');
+    if d <> nil then
+    begin
+      if d.JSONType = jtString then align := d.AsString
+      else if not Truthy(d) then align := ''
+      else align := '?';
+    end;
+    if (align <> '') and (align <> 'left') then
+    begin
+      if align = 'right' then
+      begin
+        SetLength(rem, n);
+        for i := 0 to n - 1 do rem[i] := i;
+        h := 0;
+        while Length(rem) > 0 do
+        begin
+          nsrc := nil;
+          for i := 0 to High(rem) do
+          begin
+            Result.Nodes[rem[i]].SkHeight := h;
+            for j := 0 to High(Result.Nodes[rem[i]].InE) do
+            begin
+              t := Result.Edges[Result.Nodes[rem[i]].InE[j]].Source;
+              found := False;
+              for k := 0 to High(nsrc) do if nsrc[k] = t then found := True;
+              if not found then
+              begin
+                SetLength(nsrc, Length(nsrc) + 1);
+                nsrc[High(nsrc)] := t;
+              end;
+            end;
+          end;
+          rem := nsrc;
+          Inc(h);
+        end;
+        for i := 0 to n - 1 do
+          if not ItemDepth(i, v1) then
+            Result.Nodes[i].Depth := JsMax(0, maxDepth - Result.Nodes[i].SkHeight);
+      end
+      else if align = 'justify' then
+        for i := 0 to n - 1 do
+          if not ItemDepth(i, v1) and (Length(Result.Nodes[i].OutE) = 0) then
+            Result.Nodes[i].Depth := maxDepth;
+    end;
+    { scaleNodeBreadths }
+    if Result.Vertical then kx := (Result.Box.H - Result.NodeWidth) / maxDepth
+    else kx := (Result.Box.W - Result.NodeWidth) / maxDepth;
+    for i := 0 to n - 1 do
+      if Result.Vertical then Result.Nodes[i].Y := Result.Nodes[i].Depth * kx
+      else Result.Nodes[i].X := Result.Nodes[i].Depth * kx;
+
+    { ---- columns, by the scaled breadth, keys ascending ---- }
+    colKeys := nil;
+    cols := nil;
+    for i := 0 to n - 1 do
+    begin
+      k := -1;
+      for j := 0 to High(colKeys) do
+        if SameKey(colKeys[j], GetBreadth(i)) then
+        begin
+          k := j;
+          Break;
+        end;
+      if k < 0 then
+      begin
+        SetLength(colKeys, Length(colKeys) + 1);
+        colKeys[High(colKeys)] := GetBreadth(i);
+        SetLength(cols, Length(cols) + 1);
+        k := High(cols);
+      end;
+      SetLength(cols[k], Length(cols[k]) + 1);
+      cols[k][High(cols[k])] := i;
+    end;
+    SetLength(order, Length(colKeys));
+    for i := 0 to High(order) do order[i] := i;
+    StableSort(order, @CmpKey);
+    { the columns in their keys' order }
+    SetLength(sorted, Length(order));
+    for i := 0 to High(order) do sorted[i] := cols[order[i]];
+    cols := sorted;
+    if Result.Vertical then viewWidth := Result.Box.W else viewWidth := Result.Box.H;
+    minKy := Infinity;
+    for i := 0 to High(cols) do
+    begin
+      sum := 0;
+      for j := 0 to High(cols[i]) do sum := sum + Result.Nodes[cols[i][j]].Value;
+      if Result.Vertical then ky := (Result.Box.W - (Length(cols[i]) - 1) * Result.NodeGap) / sum
+      else ky := (Result.Box.H - (Length(cols[i]) - 1) * Result.NodeGap) / sum;
+      if ky < minKy then minKy := ky;
+    end;
+    for i := 0 to High(cols) do
+      for j := 0 to High(cols[i]) do
+      begin
+        SetPos(cols[i][j], j);
+        if Result.Vertical then Result.Nodes[cols[i][j]].DX := Result.Nodes[cols[i][j]].Value * minKy
+        else Result.Nodes[cols[i][j]].DY := Result.Nodes[cols[i][j]].Value * minKy;
+      end;
+    for i := 0 to m - 1 do Result.Edges[i].DY := Result.Edges[i].Value * minKy;
+    ResolveCollisions;
+    SetLength(rem, Length(cols));
+    for i := 0 to High(cols) do rem[i] := High(cols) - i;
+    SetLength(order, Length(cols));
+    for i := 0 to High(cols) do order[i] := i;
+    alpha := 1;
+    while iterations > 0 do
+    begin
+      alpha := alpha * cAlphaDecay;
+      Relax(rem, True, alpha);
+      ResolveCollisions;
+      Relax(order, False, alpha);
+      ResolveCollisions;
+      Dec(iterations);
+    end;
+
+    { ---- computeEdgeDepths ---- }
+    for i := 0 to n - 1 do
+    begin
+      StableSort(Result.Nodes[i].OutE, @CmpOut);
+      StableSort(Result.Nodes[i].InE, @CmpIn);
+    end;
+    for i := 0 to n - 1 do
+    begin
+      sy := 0;
+      for j := 0 to High(Result.Nodes[i].OutE) do
+      begin
+        Result.Edges[Result.Nodes[i].OutE[j]].SY := sy;
+        sy := sy + Result.Edges[Result.Nodes[i].OutE[j]].DY;
+      end;
+      ty_ := 0;
+      for j := 0 to High(Result.Nodes[i].InE) do
+      begin
+        Result.Edges[Result.Nodes[i].InE[j]].TY := ty_;
+        ty_ := ty_ + Result.Edges[Result.Nodes[i].InE[j]].DY;
+      end;
+    end;
+    Result.Valid := True;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ ==================== the colours ==================== }
+
+procedure TySankeyColour(var ASolved: TTySankeySolved;
+  const AStops: TTyVisualColorArray);
+var
+  i: Integer;
+  mn, mx, nrm: Double;
+  vc: TTyVisualColor;
+  d: TJSONData;
+  mask: TFPUExceptionMask;
+begin
+  if not ASolved.Valid or (Length(ASolved.Nodes) = 0) then Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    mn := Infinity;
+    mx := NegInfinity;
+    for i := 0 to High(ASolved.Nodes) do
+    begin
+      if ASolved.Nodes[i].Value < mn then mn := ASolved.Nodes[i].Value;
+      if ASolved.Nodes[i].Value > mx then mx := ASolved.Nodes[i].Value;
+    end;
+    for i := 0 to High(ASolved.Nodes) do
+    begin
+      { the value over the palette: a linear colour map, as rgba }
+      nrm := TyVmLinearMap(ASolved.Nodes[i].Value, mn, mx, 0, 1, True);
+      vc := TyVisualFastLerp(nrm, AStops);
+      ASolved.Nodes[i].HasColour := vc.Defined;
+      ASolved.Nodes[i].IsString := vc.Defined;
+      ASolved.Nodes[i].Colour := TyVisualToChart(vc);
+      { an itemStyle colour on the chain wins, verbatim }
+      d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth,
+        'itemStyle', 'color');
+      if d <> nil then
+      begin
+        ASolved.Nodes[i].IsString := d.JSONType = jtString;
+        if d.JSONType = jtObject then
+        begin
+          ASolved.Nodes[i].HasGradient := TyTryReadGradient(d, ASolved.Nodes[i].Gradient);
+          ASolved.Nodes[i].HasColour := ASolved.Nodes[i].HasGradient;
+          if ASolved.Nodes[i].HasGradient then
+            ASolved.Nodes[i].Colour := TyGradientSolid(ASolved.Nodes[i].Gradient);
+        end
+        else
+          ASolved.Nodes[i].HasColour := (d.JSONType = jtString)
+            and TyTryParseChartColor(d.AsString, ASolved.Nodes[i].Colour);
+      end;
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ ==================== labels ==================== }
+
+function TySankeyLabelSpecs(const ASolved: TTySankeySolved;
+  const ASeriesSpec: TTyLabelSpec): TTyLabelSpecArray;
+var
+  i: Integer;
+  base: TTyLabelSpec;
+  lv: TJSONObject;
+begin
+  Result := nil;
+  SetLength(Result, Length(ASolved.Nodes));
+  for i := 0 to High(ASolved.Nodes) do
+  begin
+    base := ASeriesSpec;
+    lv := LevelOf(ASolved, ASolved.Nodes[i].Depth);
+    if lv <> nil then base := TyLabelSpecOfNode(ObjIn(lv, 'label'), ASolved.Series, base);
+    if ASolved.Nodes[i].Item <> nil then
+      base := TyLabelSpecOfNode(ObjIn(ASolved.Nodes[i].Item, 'label'), ASolved.Series, base);
+    { the mark places the words itself }
+    base.OffsetXLogical := 0;
+    base.OffsetYLogical := 0;
+    base.Overflow := tloNone;
+    Result[i] := base;
+  end;
+end;
+
+function Finite(const A: array of Double): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to High(A) do
+    if IsNan(A[k]) or IsInfinite(A[k]) then Exit;
+  Result := True;
+end;
+
+function JsMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
+end;
+
+{ zrender's parsePercent }
+function ZrPct(AData: TJSONData; AMax: Double): Double;
+var s: string;
+begin
+  Result := 0;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then Exit(AData.AsFloat);
+  if AData.JSONType = jtString then
+  begin
+    s := AData.AsString;
+    if Pos('%', s) > 0 then Result := TyJsParseFloat(s) / 100 * AMax
+    else Result := TyJsParseFloat(s);
+  end;
+end;
+
+{ String.replace with a string pattern: the first occurrence only }
+function ReplaceFirst(const AText, APat, AWith: string): string;
+var p: Integer;
+begin
+  p := Pos(APat, AText);
+  if p = 0 then Exit(AText);
+  Result := Copy(AText, 1, p - 1) + AWith + Copy(AText, p + Length(APat), MaxInt);
+end;
+
+{ The rect a node is drawn as, local: localX/localY are box fractions --
+  the drag's first (setNodePosition wrote it on the item) [Batch 114] }
+procedure NodeRect(const S: TTySankeySolved; ANode: Integer; out AX, AY, AW, AH: Double);
+var d: TJSONData;
+begin
+  if (ANode <= High(S.Local)) and S.Local[ANode].HasX then
+    AX := S.Local[ANode].X * S.Box.W
+  else
+  begin
+    d := ChainFind(S, S.Nodes[ANode].Item, S.Nodes[ANode].Depth, '', 'localX');
+    if d <> nil then AX := JsNum(d) * S.Box.W else AX := S.Nodes[ANode].X;
+  end;
+  if (ANode <= High(S.Local)) and S.Local[ANode].HasY then
+    AY := S.Local[ANode].Y * S.Box.H
+  else
+  begin
+    d := ChainFind(S, S.Nodes[ANode].Item, S.Nodes[ANode].Depth, '', 'localY');
+    if d <> nil then AY := JsNum(d) * S.Box.H else AY := S.Nodes[ANode].Y;
+  end;
+  AW := S.Nodes[ANode].DX;
+  AH := S.Nodes[ANode].DY;
+end;
+
+procedure TySankeyNodeRect(const S: TTySankeySolved; ANode: Integer;
+  out AX, AY, AW, AH: Double);
+begin
+  NodeRect(S, ANode, AX, AY, AW, AH);
+end;
+
+function TySankeyLevel(const S: TTySankeySolved; ADepth: Double): TJSONObject;
+begin
+  Result := LevelOf(S, ADepth);
+end;
+
+procedure TySankeyFocusSets(const S: TTySankeySolved; AIsEdge: Boolean;
+  AIndex: Integer; ATrajectory: Boolean; out ANodes, AEdges: TTyIntegerArray);
+var
+  em, nm: array of Boolean;
+  i: Integer;
+
+  procedure Add(var A: TTyIntegerArray; AV: Integer);
+  begin
+    SetLength(A, Length(A) + 1);
+    A[High(A)] := AV;
+  end;
+
+  { one edge's run: its source end's in-edges back, its target end's
+    out-edges on }
+  procedure Run(AEdge: Integer);
+  var q: TTyIntegerArray; k, j, e, nd: Integer;
+  begin
+    em[AEdge] := True;
+    q := nil;
+    Add(q, S.Edges[AEdge].Source);
+    k := 0;
+    while k < Length(q) do
+    begin
+      nd := q[k];
+      Inc(k);
+      nm[nd] := True;
+      for j := 0 to High(S.Nodes[nd].InE) do
+      begin
+        e := S.Nodes[nd].InE[j];
+        if not em[e] then
+        begin
+          em[e] := True;
+          Add(q, S.Edges[e].Source);
+        end;
+      end;
+    end;
+    q := nil;
+    Add(q, S.Edges[AEdge].Target);
+    k := 0;
+    while k < Length(q) do
+    begin
+      nd := q[k];
+      Inc(k);
+      nm[nd] := True;
+      for j := 0 to High(S.Nodes[nd].OutE) do
+      begin
+        e := S.Nodes[nd].OutE[j];
+        if not em[e] then
+        begin
+          em[e] := True;
+          Add(q, S.Edges[e].Target);
+        end;
+      end;
+    end;
+  end;
+
+begin
+  ANodes := nil;
+  AEdges := nil;
+  if AIsEdge then
+  begin
+    if (AIndex < 0) or (AIndex > High(S.Edges)) then Exit;
+  end
+  else if (AIndex < 0) or (AIndex > High(S.Nodes)) then Exit;
+  if not ATrajectory then
+  begin
+    if AIsEdge then
+    begin
+      Add(AEdges, AIndex);
+      Add(ANodes, S.Edges[AIndex].Source);
+      Add(ANodes, S.Edges[AIndex].Target);
+      Exit;
+    end;
+    for i := 0 to High(S.Edges) do
+      if (S.Edges[i].Source = AIndex) or (S.Edges[i].Target = AIndex) then
+      begin
+        Add(AEdges, i);
+        Add(ANodes, S.Edges[i].Source);
+        Add(ANodes, S.Edges[i].Target);
+      end;
+    Exit;
+  end;
+  SetLength(em, Length(S.Edges));
+  SetLength(nm, Length(S.Nodes));
+  if AIsEdge then Run(AIndex)
+  else
+    for i := 0 to High(S.Edges) do
+      if ((S.Edges[i].Source = AIndex) or (S.Edges[i].Target = AIndex)) then Run(i);
+  for i := 0 to High(nm) do if nm[i] then Add(ANodes, i);
+  for i := 0 to High(em) do if em[i] then Add(AEdges, i);
+end;
+
+function TySankeyDraggable(const S: TTySankeySolved; ANode: Integer): Boolean;
+var d: TJSONData;
+begin
+  d := ChainFind(S, S.Nodes[ANode].Item, S.Nodes[ANode].Depth, '', 'draggable');
+  if d = nil then Exit(True);
+  Result := Truthy(d);
+end;
+
+{ A point of the main group through its transform: zrender's applyTransform,
+  the nought terms and all }
+function FrameX(const S: TTySankeySolved; AX, AY: Double): Double; inline;
+begin
+  Result := S.M0 * AX + 0 * AY + S.M4;
+end;
+
+function FrameY(const S: TTySankeySolved; AX, AY: Double): Double; inline;
+begin
+  Result := 0 * AX + S.M3 * AY + S.M5;
+end;
+
+procedure TySankeyFrame(var ASolved: TTySankeySolved; AOSX, AOSY, AOX, AOY: Double);
+var groupHas: Boolean;
+begin
+  groupHas := not (Around0(AOX) and Around0(AOY) and Around0(AOSX - 1)
+    and Around0(AOSY - 1));
+  if not groupHas then
+  begin
+    ASolved.M0 := 1;
+    ASolved.M3 := 1;
+    if ASolved.HasT then
+    begin
+      ASolved.M4 := ASolved.TX;
+      ASolved.M5 := ASolved.TY;
+    end
+    else
+    begin
+      ASolved.M4 := 0;
+      ASolved.M5 := 0;
+    end;
+    Exit;
+  end;
+  ASolved.M0 := AOSX;
+  ASolved.M3 := AOSY;
+  if ASolved.HasT then
+  begin
+    { mul(group, [1 0 0 1 tx ty]) }
+    ASolved.M4 := AOSX * ASolved.TX + 0 * ASolved.TY + AOX;
+    ASolved.M5 := 0 * ASolved.TX + AOSY * ASolved.TY + AOY;
+  end
+  else
+  begin
+    ASolved.M4 := AOX;
+    ASolved.M5 := AOY;
+  end;
+end;
+
+{ the node's border: its colour, its width (1 when only a colour is
+  written), and whether there is one at all }
+function NodeStroke(const S: TTySankeySolved; ANode: Integer;
+  out AColour: TTyChartColor; out AWidth: Double): Boolean;
+var d: TJSONData;
+begin
+  AColour := 0;
+  AWidth := 1;
+  d := ChainFind(S, S.Nodes[ANode].Item, S.Nodes[ANode].Depth, 'itemStyle', 'borderWidth');
+  if d <> nil then AWidth := JsNum(d);
+  d := ChainFind(S, S.Nodes[ANode].Item, S.Nodes[ANode].Depth, 'itemStyle', 'borderColor');
+  Result := (d <> nil) and (d.JSONType = jtString) and (d.AsString <> 'none')
+    and (AWidth > 0) and TyTryParseChartColor(d.AsString, AColour);
+end;
+
+procedure TySankeyLabels(var ASolved: TTySankeySolved; const ASeriesName: string);
+var
+  i: Integer;
+  d, posd, it: TJSONData;
+  text, ps: string;
+  x, y, w, h, hx, hy, hw, hh, sw, ax, ay, dist: Double;
+  sc: TTyChartColor;
+  mask: TFPUExceptionMask;
+  prm: TTyChartCallbackParams;
+begin
+  if not ASolved.Valid then Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    for i := 0 to High(ASolved.Nodes) do
+    begin
+      ASolved.Nodes[i].HasLabel := False;
+      d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth, 'label', 'show');
+      if (d <> nil) and not Truthy(d) then Continue;
+      // the formatter, the first of each placeholder replaced; else the node's id
+      d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth, 'label', 'formatter');
+      if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+      begin
+        { a named handler: the node's params, dataType 'node' }
+        prm := TyChartBlankParams;
+        prm.ComponentType := 'series';
+        prm.SeriesType := 'sankey';
+        prm.SeriesIndex := ASolved.SeriesIndex;
+        prm.SeriesName := ASeriesName;
+        prm.DataType := 'node';
+        prm.Status := 'normal';
+        prm.DataIndex := i;
+        prm.RawDataIndex := i;
+        it := nil;
+        if ASolved.Nodes[i].Item <> nil then it := ASolved.Nodes[i].Item.Find('name');
+        if Present(it) then prm.Name := JsStr(it) else prm.Name := ASolved.Nodes[i].Key;
+        it := nil;
+        if ASolved.Nodes[i].Item <> nil then it := ASolved.Nodes[i].Item.Find('value');
+        if Present(it) then prm.ValueText := JsStr(it)
+        else prm.ValueText := TyJsNumberToString(ASolved.Nodes[i].Value);
+        SetLength(prm.Values, 1);
+        prm.Values[0] := ASolved.Nodes[i].Value;
+        text := TyChartRunHandler(d.AsString, TyChartOneParams(prm));
+      end
+      else if (d <> nil) and (d.JSONType = jtString) then
+      begin
+        text := ReplaceFirst(d.AsString, '{a}', ASeriesName);
+        it := nil;
+        if ASolved.Nodes[i].Item <> nil then it := ASolved.Nodes[i].Item.Find('name');
+        if Present(it) then text := ReplaceFirst(text, '{b}', JsStr(it))
+        else text := ReplaceFirst(text, '{b}', '');
+        it := nil;
+        if ASolved.Nodes[i].Item <> nil then it := ASolved.Nodes[i].Item.Find('value');
+        if Present(it) then text := ReplaceFirst(text, '{c}', JsStr(it))
+        else text := ReplaceFirst(text, '{c}', TyJsNumberToString(ASolved.Nodes[i].Value));
+      end
+      else
+        text := ASolved.Nodes[i].Key;
+      if text = '' then Continue;
+      { the host: the rect's own box, grown by its stroke, moved by the group }
+      NodeRect(ASolved, i, x, y, w, h);
+      hx := JsMin(x, x + w);
+      hy := JsMin(y, y + h);
+      hw := JsMax(x, x + w) - hx;
+      hh := JsMax(y, y + h) - hy;
+      if NodeStroke(ASolved, i, sc, sw) then
+      begin
+        sw := sw * ASolved.Scale;
+        if not ASolved.Nodes[i].HasColour then sw := JsMax(sw, 5 * ASolved.Scale);
+        hx := hx - sw / 1 / 2;
+        hy := hy - sw / 1 / 2;
+        hw := hw + sw / 1;
+        hh := hh + sw / 1;
+      end;
+      { BoundingRect.applyTransform's fast path, by the main group's whole
+        transform [Batch 114: the roam's scale too] }
+      if ASolved.HasT or (ASolved.M0 <> 1) or (ASolved.M3 <> 1)
+        or (ASolved.M4 <> 0) or (ASolved.M5 <> 0) then
+      begin
+        hx := hx * ASolved.M0 + ASolved.M4;
+        hy := hy * ASolved.M3 + ASolved.M5;
+        hw := hw * ASolved.M0;
+        hh := hh * ASolved.M3;
+        if hw < 0 then
+        begin
+          hx := hx + hw;
+          hw := -hw;
+        end;
+        if hh < 0 then
+        begin
+          hy := hy + hh;
+          hh := -hh;
+        end;
+      end;
+      posd := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth, 'label', 'position');
+      d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth, 'label', 'distance');
+      if d <> nil then dist := JsNum(d) else dist := 5;
+      dist := dist * ASolved.Scale;
+      ax := hx;
+      ay := hy;
+      ASolved.Nodes[i].LabelAH := tahLeft;
+      ASolved.Nodes[i].LabelAV := tavTop;
+      ASolved.Nodes[i].LabelInside := False;
+      if (posd <> nil) and (posd.JSONType = jtArray) and (posd.Count >= 2) then
+      begin
+        ax := ax + ZrPct(posd.Items[0], hw);
+        ay := ay + ZrPct(posd.Items[1], hh);
+      end
+      else
+      begin
+        if (posd <> nil) and (posd.JSONType = jtString) then ps := posd.AsString
+        else ps := 'right';
+        ASolved.Nodes[i].LabelInside := Pos('inside', ps) > 0;
+        if ps = 'left' then
+        begin
+          ax := ax - dist; ay := ay + hh / 2;
+          ASolved.Nodes[i].LabelAH := tahRight; ASolved.Nodes[i].LabelAV := tavMiddle;
+        end
+        else if ps = 'top' then
+        begin
+          ax := ax + hw / 2; ay := ay - dist;
+          ASolved.Nodes[i].LabelAH := tahCentre; ASolved.Nodes[i].LabelAV := tavBottom;
+        end
+        else if ps = 'bottom' then
+        begin
+          ax := ax + hw / 2; ay := ay + (hh + dist);
+          ASolved.Nodes[i].LabelAH := tahCentre;
+        end
+        else if ps = 'inside' then
+        begin
+          ax := ax + hw / 2; ay := ay + hh / 2;
+          ASolved.Nodes[i].LabelAH := tahCentre; ASolved.Nodes[i].LabelAV := tavMiddle;
+        end
+        else if ps = 'insideLeft' then
+        begin
+          ax := ax + dist; ay := ay + hh / 2;
+          ASolved.Nodes[i].LabelAV := tavMiddle;
+        end
+        else if ps = 'insideRight' then
+        begin
+          ax := ax + (hw - dist); ay := ay + hh / 2;
+          ASolved.Nodes[i].LabelAH := tahRight; ASolved.Nodes[i].LabelAV := tavMiddle;
+        end
+        else if ps = 'insideTop' then
+        begin
+          ax := ax + hw / 2; ay := ay + dist;
+          ASolved.Nodes[i].LabelAH := tahCentre;
+        end
+        else if ps = 'insideBottom' then
+        begin
+          ax := ax + hw / 2; ay := ay + (hh - dist);
+          ASolved.Nodes[i].LabelAH := tahCentre; ASolved.Nodes[i].LabelAV := tavBottom;
+        end
+        else
+        begin
+          { 'right', the default }
+          ax := ax + (dist + hw); ay := ay + hh / 2;
+          ASolved.Nodes[i].LabelAV := tavMiddle;
+        end;
+      end;
+      if Around0(ax) and Around0(ay) then
+      begin
+        ax := 0;
+        ay := 0;
+      end;
+      ASolved.Nodes[i].HasLabel := True;
+      ASolved.Nodes[i].LabelText := text;
+      ASolved.Nodes[i].LabelX := ax;
+      ASolved.Nodes[i].LabelY := ay;
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ ==================== the marks ==================== }
+
+{ zrender's cubic bbox pieces (curve.ts cubicExtrema/cubicAt, bbox.ts
+  fromCubic): a double root is found and NOT counted }
+function CubicAt(P0, P1, P2, P3, T: Double): Double;
+var o: Double;
+begin
+  o := 1 - T;
+  Result := o * o * (o * P0 + 3 * T * P1) + T * T * (T * P3 + 3 * o * P2);
+end;
+
+function CubicExtrema(P0, P1, P2, P3: Double; out E0, E1: Double): Integer;
+var a, b, c, disc, s, t1, t2: Double;
+  function AZ(V: Double): Boolean;
+  begin
+    Result := (V > -1e-8) and (V < 1e-8);
+  end;
+begin
+  Result := 0;
+  E0 := 0;
+  E1 := 0;
+  b := 6 * P2 - 12 * P1 + 6 * P0;
+  a := 9 * P1 + 3 * P3 - 3 * P0 - 9 * P2;
+  c := 3 * P1 - 3 * P0;
+  if AZ(a) then
+  begin
+    if not AZ(b) then
+    begin
+      t1 := -c / b;
+      if (t1 >= 0) and (t1 <= 1) then
+      begin
+        E0 := t1;
+        Result := 1;
+      end;
+    end;
+  end
+  else
+  begin
+    disc := b * b - 4 * a * c;
+    if AZ(disc) then
+      E0 := -b / (2 * a)
+    else if disc > 0 then
+    begin
+      s := Sqrt(disc);
+      t1 := (-b + s) / (2 * a);
+      t2 := (-b - s) / (2 * a);
+      if (t1 >= 0) and (t1 <= 1) then
+      begin
+        E0 := t1;
+        Result := 1;
+      end;
+      if (t2 >= 0) and (t2 <= 1) then
+      begin
+        if Result = 0 then E0 := t2 else E1 := t2;
+        Inc(Result);
+      end;
+    end;
+  end;
+end;
+
+procedure FromCubic(X0, Y0, X1, Y1, X2, Y2, X3, Y3: Double; var MN, MX: array of Double);
+var n, k: Integer; e: array[0..1] of Double; v: Double;
+begin
+  n := CubicExtrema(X0, X1, X2, X3, e[0], e[1]);
+  MN[0] := Infinity; MN[1] := Infinity; MX[0] := NegInfinity; MX[1] := NegInfinity;
+  for k := 0 to n - 1 do
+  begin
+    v := CubicAt(X0, X1, X2, X3, e[k]);
+    MN[0] := JsMin(v, MN[0]); MX[0] := JsMax(v, MX[0]);
+  end;
+  n := CubicExtrema(Y0, Y1, Y2, Y3, e[0], e[1]);
+  for k := 0 to n - 1 do
+  begin
+    v := CubicAt(Y0, Y1, Y2, Y3, e[k]);
+    MN[1] := JsMin(v, MN[1]); MX[1] := JsMax(v, MX[1]);
+  end;
+  MN[0] := JsMin(X0, MN[0]); MX[0] := JsMax(X0, MX[0]);
+  MN[0] := JsMin(X3, MN[0]); MX[0] := JsMax(X3, MX[0]);
+  MN[1] := JsMin(Y0, MN[1]); MX[1] := JsMax(Y0, MX[1]);
+  MN[1] := JsMin(Y3, MN[1]); MX[1] := JsMax(Y3, MX[1]);
+end;
+
+{ ==================== edge labels [Batch 114] ==================== }
+
+function TySankeyEdgeLabelSpecs(const ASolved: TTySankeySolved;
+  const ABase: TTyLabelSpec): TTyLabelSpecArray;
+var
+  i: Integer;
+  base: TTyLabelSpec;
+  lv: TJSONObject;
+begin
+  Result := nil;
+  SetLength(Result, Length(ASolved.Edges));
+  for i := 0 to High(ASolved.Edges) do
+  begin
+    base := ABase;
+    base.Show := False;
+    base := TyLabelSpecOfNode(ObjIn(ASolved.Series, 'edgeLabel'), ASolved.Series, base);
+    lv := LevelOf(ASolved, ASolved.Nodes[ASolved.Edges[i].Source].Depth);
+    if lv <> nil then base := TyLabelSpecOfNode(ObjIn(lv, 'edgeLabel'), ASolved.Series, base);
+    if ASolved.Edges[i].Item <> nil then
+      base := TyLabelSpecOfNode(ObjIn(ASolved.Edges[i].Item, 'edgeLabel'), ASolved.Series, base);
+    base.Position := tlpInside;
+    base.OffsetXLogical := 0;
+    base.OffsetYLogical := 0;
+    base.Overflow := tloNone;
+    Result[i] := base;
+  end;
+end;
+
+procedure TySankeyEdgeLabels(var ASolved: TTySankeySolved; const ASeriesName: string);
+var
+  i, n1, n2: Integer;
+  d: TJSONData;
+  text, defText: string;
+  x, y, w, h, lx, ly, cv, e, x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2: Double;
+  mn, mx, m2, x2_: array[0..1] of Double;
+  bx, by, bw, bh: Double;
+  vars: array of TTyStringArray;
+  prm: TTyChartCallbackParams;
+  mask: TFPUExceptionMask;
+  chainItem: TJSONObject;
+  srcDepth: Double;
+
+  function EdgeFind(const ASub, AKey: string): TJSONData;
+  begin
+    Result := ChainFind(ASolved, chainItem, srcDepth, ASub, AKey);
+  end;
+
+  procedure Uni;
+  begin
+    mn[0] := JsMin(mn[0], m2[0]); mn[1] := JsMin(mn[1], m2[1]);
+    mx[0] := JsMax(mx[0], x2_[0]); mx[1] := JsMax(mx[1], x2_[1]);
+  end;
+
+begin
+  if not ASolved.Valid then Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    for i := 0 to High(ASolved.Edges) do
+    begin
+      ASolved.Edges[i].HasLabel := False;
+      n1 := ASolved.Edges[i].Source;
+      n2 := ASolved.Edges[i].Target;
+      chainItem := ASolved.Edges[i].Item;
+      srcDepth := ASolved.Nodes[n1].Depth;
+      { show: false by default (the series' edgeLabel) }
+      d := EdgeFind('edgeLabel', 'show');
+      if (d = nil) or not Truthy(d) then Continue;
+      { THE WORDS: retrieve3(the state's formatter, the normal one, the
+        default) -- the default, the value in a JS template literal, is itself
+        handed on AS A TEMPLATE
+        over the edge's params (a series, b the edge name, c its value) }
+      d := chainItem;
+      if chainItem <> nil then d := chainItem.Find('value');
+      defText := JsStr(d);
+      d := EdgeFind('edgeLabel', 'formatter');
+      if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+      begin
+        prm := TyChartBlankParams;
+        prm.ComponentType := 'series';
+        prm.SeriesType := 'sankey';
+        prm.SeriesIndex := ASolved.SeriesIndex;
+        prm.SeriesName := ASeriesName;
+        prm.DataType := 'edge';
+        prm.Status := 'normal';
+        prm.DataIndex := i;
+        prm.RawDataIndex := i;
+        prm.Name := ASolved.Edges[i].DataName;
+        prm.ValueText := defText;
+        SetLength(prm.Values, 1);
+        prm.Values[0] := ASolved.Edges[i].Value;
+        text := TyChartRunHandler(d.AsString, TyChartOneParams(prm));
+      end
+      else
+      begin
+        if (d <> nil) and (d.JSONType = jtString) then text := d.AsString
+        else text := defText;
+        vars := nil;
+        SetLength(vars, 1);
+        SetLength(vars[0], 3);
+        vars[0][0] := ASeriesName;
+        vars[0][1] := ASolved.Edges[i].DataName;
+        vars[0][2] := defText;
+        text := TyJsFormatTpl(text, 3, vars);
+      end;
+      if text = '' then Continue;
+      { THE BAND'S OWN BOX -- the path's bbox, as the builder makes it --
+        through the main group's transform, and its centre ('inside') }
+      d := EdgeFind('lineStyle', 'curveness');
+      if d <> nil then cv := JsNum(d) else cv := 0.5;
+      e := JsMax(1, ASolved.Edges[i].DY);
+      NodeRect(ASolved, n1, x, y, w, h);
+      NodeRect(ASolved, n2, lx, ly, bw, bh);
+      if ASolved.Vertical then
+      begin
+        x1 := x + ASolved.Edges[i].SY;
+        y1 := y + ASolved.Nodes[n1].DY;
+        x2 := lx + ASolved.Edges[i].TY;
+        y2 := ly;
+        cpx1 := x1;
+        cpy1 := y1 * (1 - cv) + y2 * cv;
+        cpx2 := x2;
+        cpy2 := y1 * cv + y2 * (1 - cv);
+      end
+      else
+      begin
+        x1 := x + ASolved.Nodes[n1].DX;
+        y1 := y + ASolved.Edges[i].SY;
+        x2 := lx;
+        y2 := ly + ASolved.Edges[i].TY;
+        cpx1 := x1 * (1 - cv) + x2 * cv;
+        cpy1 := y1;
+        cpx2 := x1 * cv + x2 * (1 - cv);
+        cpy2 := y2;
+      end;
+      if not Finite([x1, x2, y1, y2, cpx1, cpx2, cpy1, cpy2, e]) then Continue;
+      mn[0] := MaxDouble; mn[1] := MaxDouble; mx[0] := -MaxDouble; mx[1] := -MaxDouble;
+      m2[0] := x1; x2_[0] := x1; m2[1] := y1; x2_[1] := y1; Uni;
+      FromCubic(x1, y1, cpx1, cpy1, cpx2, cpy2, x2, y2, m2, x2_); Uni;
+      if ASolved.Vertical then
+      begin
+        m2[0] := JsMin(x2, x2 + e); m2[1] := JsMin(y2, y2);
+        x2_[0] := JsMax(x2, x2 + e); x2_[1] := JsMax(y2, y2); Uni;
+        FromCubic(x2 + e, y2, cpx2 + e, cpy2, cpx1 + e, cpy1, x1 + e, y1, m2, x2_); Uni;
+      end
+      else
+      begin
+        m2[0] := JsMin(x2, x2); m2[1] := JsMin(y2, y2 + e);
+        x2_[0] := JsMax(x2, x2); x2_[1] := JsMax(y2, y2 + e); Uni;
+        FromCubic(x2, y2 + e, cpx2, cpy2 + e, cpx1, cpy1 + e, x1, y1 + e, m2, x2_); Uni;
+      end;
+      { the box as zrender keeps it, a corner and a size }
+      bx := mn[0];
+      by := mn[1];
+      bw := mx[0] - mn[0];
+      bh := mx[1] - mn[1];
+      { applyTransform's fast path, the main group's whole transform }
+      if ASolved.HasT or (ASolved.M0 <> 1) or (ASolved.M3 <> 1)
+        or (ASolved.M4 <> 0) or (ASolved.M5 <> 0) then
+      begin
+        bx := bx * ASolved.M0 + ASolved.M4;
+        by := by * ASolved.M3 + ASolved.M5;
+        bw := bw * ASolved.M0;
+        bh := bh * ASolved.M3;
+        if bw < 0 then
+        begin
+          bx := bx + bw;
+          bw := -bw;
+        end;
+        if bh < 0 then
+        begin
+          by := by + bh;
+          bh := -bh;
+        end;
+      end;
+      ASolved.Edges[i].HasLabel := True;
+      ASolved.Edges[i].LabelText := text;
+      ASolved.Edges[i].LabelX := bx + bw / 2;
+      ASolved.Edges[i].LabelY := by + bh / 2;
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ [F3c] a node's Rect (rounded by its radius) in the main group, under the
+  group's transform, for the universal transition }
+procedure UtNodePath(var AEl: TTyChartElement; const S: TTySankeySolved; ARow: Integer;
+  AX, AY, AW, AH, AR: Double);
+var
+  path: TTyZrPath;
+  r1, r2, r3, r4: Double;
+begin
+  AEl.Anim.UtTag := 1;
+  AEl.Anim.UtRow := ARow;
+  AEl.Anim.UtOrder := 0;
+  path := nil;
+  if AR > 0 then
+  begin
+    TyZrRadii([AR], r1, r2, r3, r4);
+    TyZrRoundRect(path, AX, AY, AW, AH, r1, r2, r3, r4);
+  end
+  else
+    TyZrRect(path, AX, AY, AW, AH);
+  AEl.Anim.UtData := TyGuidePathData(path);
+  AEl.Anim.UtBase := TTyDoubleArray.Create(1, AX, AY, AW, AH);
+  AEl.Anim.UtHasM := (S.M0 <> 1) or (S.M3 <> 1) or (S.M4 <> 0) or (S.M5 <> 0);
+  if AEl.Anim.UtHasM then
+  begin
+    AEl.Anim.UtM[0] := S.M0;
+    AEl.Anim.UtM[3] := S.M3;
+    AEl.Anim.UtM[4] := S.M4;
+    AEl.Anim.UtM[5] := S.M5;
+  end;
+end;
+
+function TyBuildSankeyMarks(ASeriesIndex: Integer; const ASolved: TTySankeySolved;
+  const AInk: TTySankeyInk; AList: TTyPaintList): Integer;
+var
+  i, n1, n2: Integer;
+  el: TTyChartElement;
+  shape: TTyChartShape;
+  d: TJSONData;
+  cv, e, x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2, lx, ly, sw, x, y, w, h, r: Double;
+  mn, mx, m2, x2_: array[0..1] of Double;
+  chainItem: TJSONObject;
+  srcDepth: Double;
+  fillS: string;
+  sc: TTyChartColor;
+  mask: TFPUExceptionMask;
+  { [F3a] the main group's getBoundingRect: zrender's BoundingRect union of
+    every child's (a path's own box, grown by its stroke), from the first
+    element this series added }
+  gbX, gbY, gbW, gbH: Double;
+  gbHas: Boolean;
+  first, k: Integer;
+  tagged: TTyChartElement;
+
+  { BoundingRect.union of the group's rect with one child's -- the first
+    child's rect cloned and then united with itself, as Group does }
+  procedure GroupUnion(AX, AY, AW, AH: Double);
+  var ux, uy: Double;
+  begin
+    if not gbHas then
+    begin
+      gbX := AX;
+      gbY := AY;
+      gbW := AW;
+      gbH := AH;
+      gbHas := True;
+    end;
+    ux := JsMin(AX, gbX);
+    uy := JsMin(AY, gbY);
+    if not (IsNan(gbX) or IsInfinite(gbX) or IsNan(gbW) or IsInfinite(gbW)) then
+      gbW := JsMax(AX + AW, gbX + gbW) - ux
+    else
+      gbW := AW;
+    if not (IsNan(gbY) or IsInfinite(gbY) or IsNan(gbH) or IsInfinite(gbH)) then
+      gbH := JsMax(AY + AH, gbY + gbH) - uy
+    else
+      gbH := AH;
+    gbX := ux;
+    gbY := uy;
+  end;
+
+  { Path.getBoundingRect: the path's box, and where it is stroked the box
+    grown by the line width (a filled path: no contain threshold) }
+  procedure ChildBox(AX0, AY0, AX1, AY1: Double; AStroke: Boolean; ALineW: Double);
+  var x, y, w, h: Double;
+  begin
+    x := AX0;
+    y := AY0;
+    w := AX1 - AX0;
+    h := AY1 - AY0;
+    if AStroke then
+    begin
+      w := w + ALineW;
+      h := h + ALineW;
+      x := x - ALineW / 2;
+      y := y - ALineW / 2;
+    end;
+    GroupUnion(x, y, w, h);
+  end;
+
+  { the link's chain: item -> level of its SOURCE's depth -> series }
+  function EdgeFind(const ASub, AKey: string): TJSONData;
+  begin
+    Result := ChainFind(ASolved, chainItem, srcDepth, ASub, AKey);
+  end;
+
+  procedure Cmd(AKind: TTyPathCmdKind; AX1, AY1, AX2, AY2, AX, AY: Double);
+  var k: Integer;
+  begin
+    k := Length(shape.Cmds);
+    SetLength(shape.Cmds, k + 1);
+    shape.Cmds[k] := Default(TTyPathCmd);
+    shape.Cmds[k].Kind := AKind;
+    shape.Cmds[k].X1 := FrameX(ASolved, AX1, AY1);
+    shape.Cmds[k].Y1 := FrameY(ASolved, AX1, AY1);
+    shape.Cmds[k].X2 := FrameX(ASolved, AX2, AY2);
+    shape.Cmds[k].Y2 := FrameY(ASolved, AX2, AY2);
+    shape.Cmds[k].X := FrameX(ASolved, AX, AY);
+    shape.Cmds[k].Y := FrameY(ASolved, AX, AY);
+  end;
+
+  procedure Uni;
+  begin
+    mn[0] := JsMin(mn[0], m2[0]); mn[1] := JsMin(mn[1], m2[1]);
+    mx[0] := JsMax(mx[0], x2_[0]); mx[1] := JsMax(mx[1], x2_[1]);
+  end;
+
+  { [Batch 100] THE BAND AS A POLYGON, for the pointer only: the painter
+    draws the curves (Cmds), and a hit test that knew only the two ends
+    could never land on a link. The two cubics sampled -- the near edge from
+    the source, the far edge back -- 32 steps each, device px. }
+  procedure BandPolygon(AE: Double);
+  const cSteps = 32;
+  var
+    k, m: Integer;
+    t, u: Double;
+    ox, oy, px, py: Double;
+  begin
+    if ASolved.Vertical then
+    begin
+      ox := AE;
+      oy := 0;
+    end
+    else
+    begin
+      ox := 0;
+      oy := AE;
+    end;
+    SetLength(shape.Points, 2 * (cSteps + 1));
+    m := 0;
+    for k := 0 to cSteps do
+    begin
+      t := k / cSteps;
+      u := 1 - t;
+      px := u * u * u * x1 + 3 * u * u * t * cpx1 + 3 * u * t * t * cpx2 + t * t * t * x2;
+      py := u * u * u * y1 + 3 * u * u * t * cpy1 + 3 * u * t * t * cpy2 + t * t * t * y2;
+      shape.Points[m] := TyPointF(FrameX(ASolved, px, py), FrameY(ASolved, px, py));
+      Inc(m);
+    end;
+    for k := cSteps downto 0 do
+    begin
+      t := k / cSteps;
+      u := 1 - t;
+      px := u * u * u * x1 + 3 * u * u * t * cpx1 + 3 * u * t * t * cpx2 + t * t * t * x2 + ox;
+      py := u * u * u * y1 + 3 * u * u * t * cpy1 + 3 * u * t * t * cpy2 + t * t * t * y2 + oy;
+      shape.Points[m] := TyPointF(FrameX(ASolved, px, py), FrameY(ASolved, px, py));
+      Inc(m);
+    end;
+  end;
+
+begin
+  Result := 0;
+  if (AList = nil) or not ASolved.Valid then Exit;
+  first := AList.Count;
+  gbHas := False;
+  gbX := 0;
+  gbY := 0;
+  gbW := 0;
+  gbH := 0;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    { ---- the links, in their order ---- }
+    for i := 0 to High(ASolved.Edges) do
+    begin
+      n1 := ASolved.Edges[i].Source;
+      n2 := ASolved.Edges[i].Target;
+      chainItem := ASolved.Edges[i].Item;
+      srcDepth := ASolved.Nodes[n1].Depth;
+      d := EdgeFind('lineStyle', 'curveness');
+      if d <> nil then cv := JsNum(d) else cv := 0.5;
+      e := JsMax(1, ASolved.Edges[i].DY);
+      NodeRect(ASolved, n1, x, y, w, h);
+      NodeRect(ASolved, n2, lx, ly, r, sw);
+      if ASolved.Vertical then
+      begin
+        x1 := x + ASolved.Edges[i].SY;
+        y1 := y + ASolved.Nodes[n1].DY;
+        x2 := lx + ASolved.Edges[i].TY;
+        y2 := ly;
+        cpx1 := x1;
+        cpy1 := y1 * (1 - cv) + y2 * cv;
+        cpx2 := x2;
+        cpy2 := y1 * cv + y2 * (1 - cv);
+      end
+      else
+      begin
+        x1 := x + ASolved.Nodes[n1].DX;
+        y1 := y + ASolved.Edges[i].SY;
+        x2 := lx;
+        y2 := ly + ASolved.Edges[i].TY;
+        cpx1 := x1 * (1 - cv) + x2 * cv;
+        cpy1 := y1;
+        cpx2 := x1 * cv + x2 * (1 - cv);
+        cpy2 := y2;
+      end;
+      shape := TyShapePolygon([TyPointF(FrameX(ASolved, x1, y1), FrameY(ASolved, x1, y1)),
+        TyPointF(FrameX(ASolved, x2, y2), FrameY(ASolved, x2, y2))]);
+      Cmd(pckMove, 0, 0, 0, 0, x1, y1);
+      Cmd(pckCurve, cpx1, cpy1, cpx2, cpy2, x2, y2);
+      { the band's zrender box, local }
+      mn[0] := MaxDouble; mn[1] := MaxDouble; mx[0] := -MaxDouble; mx[1] := -MaxDouble;
+      m2[0] := x1; x2_[0] := x1; m2[1] := y1; x2_[1] := y1; Uni;
+      FromCubic(x1, y1, cpx1, cpy1, cpx2, cpy2, x2, y2, m2, x2_); Uni;
+      if ASolved.Vertical then
+      begin
+        Cmd(pckLine, 0, 0, 0, 0, x2 + e, y2);
+        Cmd(pckCurve, cpx2 + e, cpy2, cpx1 + e, cpy1, x1 + e, y1);
+        m2[0] := JsMin(x2, x2 + e); m2[1] := JsMin(y2, y2);
+        x2_[0] := JsMax(x2, x2 + e); x2_[1] := JsMax(y2, y2); Uni;
+        FromCubic(x2 + e, y2, cpx2 + e, cpy2, cpx1 + e, cpy1, x1 + e, y1, m2, x2_); Uni;
+      end
+      else
+      begin
+        Cmd(pckLine, 0, 0, 0, 0, x2, y2 + e);
+        Cmd(pckCurve, cpx2, cpy2 + e, cpx1, cpy1 + e, x1, y1 + e);
+        m2[0] := JsMin(x2, x2); m2[1] := JsMin(y2, y2 + e);
+        x2_[0] := JsMax(x2, x2); x2_[1] := JsMax(y2, y2 + e); Uni;
+        FromCubic(x2, y2 + e, cpx2, cpy2 + e, cpx1, cpy1 + e, x1, y1 + e, m2, x2_); Uni;
+      end;
+      Cmd(pckClose, 0, 0, 0, 0, 0, 0);
+      { A BAND UPSTREAM CANNOT SEE -- a NaN or infinite end, a link of no
+        breadth -- is not emitted: the painter has nothing to draw it with }
+      if not Finite([x1, x2, y1, y2, cpx1, cpx2, cpy1, cpy2, e]) then Continue;
+      BandPolygon(e);
+      shape.HasCmdBounds := True;
+      shape.CmdBounds := TyRectF(FrameX(ASolved, mn[0], mn[1]), FrameY(ASolved, mn[0], mn[1]),
+        FrameX(ASolved, mx[0], mx[1]), FrameY(ASolved, mx[0], mx[1]));
+      el := TyChartElement(shape);
+      { the fill: the colour written, a node's, or a gradient between them }
+      el.Style.HasFill := False;
+      d := EdgeFind('lineStyle', 'color');
+      if d = nil then
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := AInk.LinkColour;
+      end
+      else if d.JSONType = jtString then
+      begin
+        fillS := d.AsString;
+        if fillS = 'source' then
+        begin
+          if n1 <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[n1];
+          el.Style.HasFill := ASolved.Nodes[n1].HasColour;
+          el.Style.FillColor := ASolved.Nodes[n1].Colour;
+          if ASolved.Nodes[n1].HasGradient then
+            el.Style.FillGradient := ASolved.Nodes[n1].Gradient;
+        end
+        else if fillS = 'target' then
+        begin
+          if n2 <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[n2];
+          el.Style.HasFill := ASolved.Nodes[n2].HasColour;
+          el.Style.FillColor := ASolved.Nodes[n2].Colour;
+          if ASolved.Nodes[n2].HasGradient then
+            el.Style.FillGradient := ASolved.Nodes[n2].Gradient;
+        end
+        else if fillS = 'gradient' then
+        begin
+          if ASolved.Nodes[n1].IsString and ASolved.Nodes[n2].IsString then
+          begin
+            el.Style.HasFill := True;
+            el.Style.FillColor := ASolved.Nodes[n1].Colour;
+            el.Style.FillGradient := Default(TTyChartGradient);
+            el.Style.FillGradient.Kind := cgkLinear;
+            el.Style.FillGradient.X := 0;
+            el.Style.FillGradient.Y := 0;
+            if ASolved.Vertical then
+            begin
+              el.Style.FillGradient.X2 := 0;
+              el.Style.FillGradient.Y2 := 1;
+            end
+            else
+            begin
+              el.Style.FillGradient.X2 := 1;
+              el.Style.FillGradient.Y2 := 0;
+            end;
+            SetLength(el.Style.FillGradient.Stops, 2);
+            el.Style.FillGradient.Stops[0].Offset := 0;
+            el.Style.FillGradient.Stops[0].Color := ASolved.Nodes[n1].Colour;
+            el.Style.FillGradient.Stops[1].Offset := 1;
+            el.Style.FillGradient.Stops[1].Color := ASolved.Nodes[n2].Colour;
+          end;
+        end
+        else
+          el.Style.HasFill := TyTryParseChartColor(fillS, el.Style.FillColor);
+      end;
+      { lineStyle speaks itemStyle's keys: borderColor / borderWidth stroke it }
+      d := EdgeFind('lineStyle', 'borderColor');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> 'none')
+        and TyTryParseChartColor(d.AsString, sc) then
+      begin
+        sw := 1;
+        d := EdgeFind('lineStyle', 'borderWidth');
+        if d <> nil then sw := JsNum(d);
+        if sw > 0 then
+        begin
+          el.Style.StrokeColor := sc;
+          el.Style.StrokeWidthLogical := sw;
+        end;
+      end;
+      d := EdgeFind('lineStyle', 'opacity');
+      if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 0.2;
+      { the band's box in the group [F3a] }
+      ChildBox(mn[0], mn[1], mx[0], mx[1],
+        (el.Style.StrokeColor <> 0) and (el.Style.StrokeWidthLogical > 0),
+        el.Style.StrokeWidthLogical * ASolved.Scale);
+      el.Z := ASolved.Z;
+      el.Z2 := 0;
+      el.Datum := TyChartEdgeDatum(ASeriesIndex, i);
+      { [F3c] a band is a path of the view no item's: it fades in where a
+        universal transition morphs }
+      el.Anim.UtTag := 2;
+      el.Anim.UtRow := -2 - i;
+      { a link takes the pointer -- its ECData has a dataIndex, so upstream
+        hovers it and shows its tooltip [Batch 100] }
+      el.Silent := False;
+      { ITS LABEL, inside the band [Batch 114]: the spec after the nodes' }
+      if ASolved.Edges[i].HasLabel and Finite([ASolved.Edges[i].LabelX, ASolved.Edges[i].LabelY]) then
+      begin
+        el.Caption.Text := ASolved.Edges[i].LabelText;
+        el.Caption.ItemSpec := Length(ASolved.Nodes) + i + 1;
+        el.Caption.HasFixedAnchor := True;
+        el.Caption.FixedX := ASolved.Edges[i].LabelX;
+        el.Caption.FixedY := ASolved.Edges[i].LabelY;
+        el.Caption.FixedInside := True;
+        el.Caption.FixedAH := tahCentre;
+        el.Caption.FixedAV := tavMiddle;
+      end;
+      AList.Add(el);
+      Inc(Result);
+    end;
+    { ---- the nodes, their captions riding on them ---- }
+    for i := 0 to High(ASolved.Nodes) do
+    begin
+      NodeRect(ASolved, i, x, y, w, h);
+      { nor a rect with a NaN or infinite side: upstream's is invisible }
+      if not Finite([x, y, w, h]) then Continue;
+      d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth,
+        'itemStyle', 'borderRadius');
+      r := 0;
+      if (d <> nil) and (d.JSONType = jtNumber) then r := d.AsFloat * ASolved.Scale;
+      { the corners through the main group's transform; a radius is in the
+        group's units, so a zoom scales it }
+      if r > 0 then
+        el := TyChartElement(TyShapeRoundRect(TyRectF(FrameX(ASolved, x, y),
+          FrameY(ASolved, x, y), FrameX(ASolved, x + w, y + h),
+          FrameY(ASolved, x + w, y + h)), r * ASolved.M0))
+      else
+        el := TyChartElement(TyShapeRect(TyRectF(FrameX(ASolved, x, y),
+          FrameY(ASolved, x, y), FrameX(ASolved, x + w, y + h),
+          FrameY(ASolved, x + w, y + h))));
+      el.Style.HasFill := ASolved.Nodes[i].HasColour;
+      el.Style.FillColor := ASolved.Nodes[i].Colour;
+      if ASolved.Nodes[i].HasGradient then
+        el.Style.FillGradient := ASolved.Nodes[i].Gradient;
+      if NodeStroke(ASolved, i, sc, sw) then
+      begin
+        el.Style.StrokeColor := sc;
+        el.Style.StrokeWidthLogical := sw;
+      end;
+      d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth,
+        'itemStyle', 'opacity');
+      if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 1;
+      { the rect's box in the group: its path's 'R' command, (x, y) and
+        (x + w, y + h) [F3a] }
+      ChildBox(JsMin(x, x + w), JsMin(y, y + h), JsMax(x, x + w), JsMax(y, y + h),
+        (el.Style.StrokeColor <> 0) and (el.Style.StrokeWidthLogical > 0),
+        el.Style.StrokeWidthLogical * ASolved.Scale);
+      if i <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[i];
+      el.Z := ASolved.Z;
+      el.Z2 := 10;
+      el.Datum := TyChartDatum(ASeriesIndex, i, i);
+      { [F3c] the node's Rect in the main group, for the universal
+        transition }
+      UtNodePath(el, ASolved, i, x, y, w, h, r);
+      { and so does a node [Batch 100] }
+      el.Silent := False;
+      if ASolved.Nodes[i].HasLabel and Finite([ASolved.Nodes[i].LabelX, ASolved.Nodes[i].LabelY]) then
+      begin
+        el.Caption.Text := ASolved.Nodes[i].LabelText;
+        el.Caption.ItemSpec := i + 1;
+        el.Caption.HasFixedAnchor := True;
+        el.Caption.FixedX := ASolved.Nodes[i].LabelX;
+        el.Caption.FixedY := ASolved.Nodes[i].LabelY;
+        el.Caption.FixedInside := ASolved.Nodes[i].LabelInside;
+        el.Caption.FixedAH := ASolved.Nodes[i].LabelAH;
+        el.Caption.FixedAV := ASolved.Nodes[i].LabelAV;
+        el.Caption.HasFixedZ2 := True;
+        el.Caption.FixedZ2 := 12;
+      end;
+      AList.Add(el);
+      Inc(Result);
+    end;
+    { THE ENTER ANIMATION'S CLIP [F3a]: SankeyView's createGridClipShape on
+      the main group -- every element of the series (and the labels they
+      carry, which share their host's clip paths) under it }
+    for k := first to AList.Count - 1 do
+    begin
+      tagged := AList.Element(k);
+      tagged.Anim.Role := carSankeyClip;
+      tagged.Anim.Series := ASeriesIndex;
+      tagged.Anim.Index := -1;
+      tagged.Anim.G[0] := gbX;
+      tagged.Anim.G[1] := gbY;
+      tagged.Anim.G[2] := gbW;
+      tagged.Anim.G[3] := gbH;
+      tagged.Anim.G[4] := ASolved.M0;
+      tagged.Anim.G[5] := ASolved.M3;
+      tagged.Anim.G[6] := ASolved.M4;
+      tagged.Anim.G[7] := ASolved.M5;
+      AList.SetElement(k, tagged);
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+end.

@@ -13,7 +13,7 @@ unit test.advchart.jsmath;
   this one says so and the port can drop its own. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.JsMath;
+     tyControls.AdvanceChart.JsMath;
 type
   TAdvChartJsMathTest = class(TTestCase)
   private

@@ -2,7 +2,7 @@
 // Math.log and Math.pow as V8 computes them, transcribed line by line from
 // V8 12.4.254.21 src/base/ieee754.cc (node 22): log at :1638-1720 (fdlibm
 // e_log.c unchanged) and pow at :2645-2906 (fdlibm e_pow.c with ONE line
-// changed, :2894, marked below). tyControls.AdvChart.JsMath's TyJsLog and
+// changed, :2894, marked below). tyControls.AdvanceChart.JsMath's TyJsLog and
 // TyJsPow follow this file statement for statement; js-pow-log.js holds it to
 // node's Math.pow / Math.log on every fixture row and on a fresh seeded draw.
 //

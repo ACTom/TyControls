@@ -21,7 +21,7 @@ unit test.advchart.serieseditor;
   reads its file and fails if it reaches past the model. }
 interface
 uses Classes, SysUtils, fpcunit, testregistry, fpjson,
-     tyControls.AdvChart.TextPatch, tyControls.AdvChart.SeriesEdit;
+     tyControls.AdvanceChart.TextPatch, tyControls.AdvanceChart.SeriesEdit;
 
 type
   TAdvChartTextPatchTest = class(TTestCase)
@@ -75,7 +75,7 @@ type
 
 implementation
 
-uses Math, tyControls.AdvChart.Option, tyControls.AdvChart.Diagnose,
+uses Math, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Diagnose,
   tyControls.StrConsts;
 
 const
@@ -1229,13 +1229,13 @@ begin
   d := ExtractFilePath(ParamStr(0));
   for i := 0 to 5 do
   begin
-    if FileExists(d + 'designtime' + PathDelim + 'tyControls.Design.AdvChart.SeriesDialog.pas') then
+    if FileExists(d + 'designtime' + PathDelim + 'tyControls.Design.AdvanceChart.SeriesDialog.pas') then
       Break;
     d := d + '..' + PathDelim;
   end;
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(d + 'designtime' + PathDelim + 'tyControls.Design.AdvChart.SeriesDialog.pas');
+    sl.LoadFromFile(d + 'designtime' + PathDelim + 'tyControls.Design.AdvanceChart.SeriesDialog.pas');
     AssertTrue('read the dialog', sl.Count > 100);
     bad := '';
     depth := 0;
@@ -1257,7 +1257,7 @@ begin
           bad := bad + LF + '  line ' + IntToStr(i + 1) + ': ' + Trim(line);
     end;
     AssertEquals('the series dialog reaches past its model -- add what it needs to '
-      + 'tyControls.AdvChart.SeriesEdit, where a test can see it:' + bad, '', bad);
+      + 'tyControls.AdvanceChart.SeriesEdit, where a test can see it:' + bad, '', bad);
   finally
     sl.Free;
   end;

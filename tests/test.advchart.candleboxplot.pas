@@ -32,12 +32,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Dataset, tyControls.AdvChart.Tooltip,
-     tyControls.AdvChart.WhiskerBox, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.Tooltip,
+     tyControls.AdvanceChart.WhiskerBox, tyControls.AdvanceChart;
 type
   TCbProbe = class(TTyAdvanceChart)
   public

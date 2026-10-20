@@ -4,8 +4,8 @@ unit test.advchart.handlers;
   when the host cannot run JavaScript. Pure: no painter, no chart, no handle. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Handlers;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Handlers;
 type
   TAdvChartHandlersTest = class(TTestCase)
   private

@@ -14,9 +14,9 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Layout,
      LazUTF8, tyControls.Painter,
      tyControls.AdvanceChart;
 type
@@ -1255,7 +1255,7 @@ begin
     each takes half the ink: two grey columns where there should be one solid
     line. Preventing that is what item 19 is, and the shipped painter drew every
     hairline unsnapped -- the only callers of tyControls.SubPixel were in
-    AdvChart.Shape, which this paint path does not go through.
+    AdvanceChart.Shape, which this paint path does not go through.
 
     MEASURED AS RUN LENGTHS, not as intensities. The first version of this test
     scored each column by how far it sat from the background, and the theme

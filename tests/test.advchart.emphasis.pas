@@ -2,7 +2,7 @@ unit test.advchart.emphasis;
 {$mode objfpc}{$H+}
 { What a hovered mark looks like while it is hovered.
 
-  THE MACHINERY WAS ALREADY THERE. tyControls.AdvChart.Style is six hundred
+  THE MACHINERY WAS ALREADY THERE. tyControls.AdvanceChart.Style is six hundred
   lines of four-state resolution -- two slots rather than one enum, a
   reference-counted emphasis mask, and a fallback rule that differs from the
   normal state's in five ways -- and until now every reference to it outside
@@ -25,9 +25,9 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson, jsonparser,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Style,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Style,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Coord,
      tyControls.AdvanceChart;
 type
   TAdvChartEmphasisRuleTest = class(TTestCase)

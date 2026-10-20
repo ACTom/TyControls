@@ -7,8 +7,8 @@ unit test.advchart.option;
   product is a parser that rejects the configs people actually paste, or one that
   blanks a chart because someone was mid-keystroke. }
 interface
-uses Classes, SysUtils, Math, fpjson, fpcunit, testregistry, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data;
+uses Classes, SysUtils, Math, fpjson, fpcunit, testregistry, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data;
 type
   TAdvChartOptionTest = class(TTestCase)
   private

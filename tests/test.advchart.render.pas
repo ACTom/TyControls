@@ -11,8 +11,8 @@ interface
 uses Classes, SysUtils, Math, Types, Graphics, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Painter,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Render;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Render;
 type
   TAdvChartRenderTest = class(TTestCase)
   private

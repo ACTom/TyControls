@@ -18,7 +18,7 @@ unit test.advchart.scale.break;
   Interval.ts), which is batch 132's and not this contract's.] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale;
 type
   TAdvChartBreakTest = class(TTestCase)
   private

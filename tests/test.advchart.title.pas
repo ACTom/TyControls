@@ -18,8 +18,8 @@ unit test.advchart.title;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Layout, tyControls.AdvChart.Title;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Title;
 
 type
   TTitleMeasurer = class(TInterfacedObject, ITyTextMeasurer)

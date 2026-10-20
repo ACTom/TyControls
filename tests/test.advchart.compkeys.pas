@@ -3,7 +3,7 @@ unit test.advchart.compkeys;
 { THE COMPONENT KEYBOARD [F5].
 
   ECharts has no keyboard for its components either, so the keys are the
-  port's design (tyControls.AdvChart.KeyNav: the focus stops and the parts
+  port's design (tyControls.AdvanceChart.KeyNav: the focus stops and the parts
   of a component). What can be held to upstream is what every key does:
   the pointer's own handler on that component, with its payload. So the
   oracles here replay the fixtures the pointer suites replay, with the
@@ -34,11 +34,11 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, LCLType, LMessages, BGRABitmap, BGRABitmapTypes,
      {$IFDEF WINDOWS} Windows, {$ENDIF} Types,
      tyControls.Controller, tyControls.Types,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Events, tyControls.AdvChart.KeyNav, tyControls.AdvChart.Legend,
-     tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.DataZoomView,
-     tyControls.AdvChart.VisualMapView, tyControls.AdvChart.Geo, tyControls.AdvChart.Toolbox,
-     tyControls.AdvChart.Brush, tyControls.AdvChart.Handlers,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.KeyNav, tyControls.AdvanceChart.Legend,
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart.DataZoomView,
+     tyControls.AdvanceChart.VisualMapView, tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Toolbox,
+     tyControls.AdvanceChart.Brush, tyControls.AdvanceChart.Handlers,
      tyControls.Accessible, tyControls.AdvanceChart,
      test.advchart.select, test.advchart.keyboard, test.advchart.legendscroll,
      test.advchart.timeline, test.advchart.datazoominteract,
