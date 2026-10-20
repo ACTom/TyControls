@@ -4733,6 +4733,801 @@
    ]
   },
   {
+   "id": "own-snap-no-trigger",
+   "note": "[r2v] x: show with triggerTooltip false and snap true -- involveSeries by the snap alone: the pointer snaps to a point's x, its rows stay out of the box; y: show, its rows in the box",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": true,
+        "triggerTooltip": false,
+        "snap": true
+       }
+      },
+      "yAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": true
+       }
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "name": "s",
+        "data": [
+         [
+          2,
+          3
+         ],
+         [
+          5,
+          6
+         ],
+         [
+          8,
+          4
+         ]
+        ]
+       }
+      ],
+      "tooltip": {
+       "trigger": "none",
+       "formatter": "@fmt"
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      329,
+      162
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 5
+         },
+         {
+          "axisDim": "y",
+          "axisIndex": 0,
+          "value": 6.196078431372549
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 329,
+        "y": 162,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "y",
+            "axisIndex": 0,
+            "axisType": "yAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 6,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4014000000000000",
+         "valueText": "5",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": false,
+         "snap": true,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4073b00000000000",
+          "pixelText": "315",
+          "label": "5.00"
+         }
+        },
+        {
+         "key": "y0",
+         "dim": "y",
+         "index": 0,
+         "status": "show",
+         "value": "4018c8c8c8c8c8c9",
+         "valueText": "6.196078431372549",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4064400000000000",
+          "pixelText": "162",
+          "label": "6.20"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@y0",
+        "anchor": [
+         "4074900000000000",
+         "4064400000000000"
+        ],
+        "anchorText": [
+         "329",
+         "162"
+        ],
+        "box": [
+         "4075d00000000000",
+         "4066c00000000000"
+        ],
+        "boxText": [
+         "349",
+         "182"
+        ],
+        "text": "0:1@y0"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 1,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      198,
+      251
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 0,
+        "dataIndex": 0,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 2
+         },
+         {
+          "axisDim": "y",
+          "axisIndex": 0,
+          "value": 2.705882352941176
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 198,
+        "y": 251,
+        "dataIndexInside": 0,
+        "dataIndex": 0,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "y",
+            "axisIndex": 0,
+            "axisType": "yAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 3,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 0,
+              "dataIndex": 0
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ],
+         "triggerTooltip": false,
+         "snap": true,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4066800000000000",
+          "pixelText": "180",
+          "label": "2.00"
+         }
+        },
+        {
+         "key": "y0",
+         "dim": "y",
+         "index": 0,
+         "status": "show",
+         "value": "4005a5a5a5a5a5a5",
+         "valueText": "2.705882352941176",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "406f600000000000",
+          "pixelText": "251",
+          "label": "2.71"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/0@y0",
+        "anchor": [
+         "4068c00000000000",
+         "406f600000000000"
+        ],
+        "anchorText": [
+         "198",
+         "251"
+        ],
+        "box": [
+         "406b400000000000",
+         "4070f00000000000"
+        ],
+        "boxText": [
+         "218",
+         "271"
+        ],
+        "text": "0:0@y0"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 1,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": false,
+         "snap": true,
+         "involveSeries": true
+        },
+        {
+         "key": "y0",
+         "dim": "y",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "axis:0/0@y0",
+        "anchor": [
+         "4068c00000000000",
+         "406f600000000000"
+        ],
+        "anchorText": [
+         "198",
+         "251"
+        ],
+        "box": [
+         "406b400000000000",
+         "4070f00000000000"
+        ],
+        "boxText": [
+         "218",
+         "271"
+        ],
+        "text": "0:0@y0"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "own-show-truthy",
+   "note": "[r2v] show written as a truthy number (1) on x and a truthy string on y, an item tooltip: both collected as show true",
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": 1
+       }
+      },
+      "yAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10,
+       "axisPointer": {
+        "show": "yes"
+       }
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "name": "s",
+        "data": [
+         [
+          2,
+          3
+         ],
+         [
+          5,
+          6
+         ],
+         [
+          8,
+          4
+         ]
+        ]
+       }
+      ],
+      "tooltip": {
+       "formatter": "@fmt"
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "chart": 0,
+     "at": [
+      306,
+      116
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4.8
+         },
+         {
+          "axisDim": "y",
+          "axisIndex": 0,
+          "value": 8
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 306,
+        "y": 116,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 5,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           },
+           {
+            "axisDim": "y",
+            "axisIndex": 0,
+            "axisType": "yAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 6,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "show",
+         "value": "4013333333333333",
+         "valueText": "4.8",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "4073200000000000",
+          "pixelText": "306",
+          "label": "4.80"
+         }
+        },
+        {
+         "key": "y0",
+         "dim": "y",
+         "index": 0,
+         "status": "show",
+         "value": "4020000000000000",
+         "valueText": "8",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true,
+         "draw": {
+          "pixel": "405d000000000000",
+          "pixelText": "116",
+          "label": "8.00"
+         }
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": true,
+        "which": "axis:0/1@x0,0/1@y0",
+        "anchor": [
+         "4073200000000000",
+         "405d000000000000"
+        ],
+        "anchorText": [
+         "306",
+         "116"
+        ],
+        "box": [
+         "4074600000000000",
+         "4061000000000000"
+        ],
+        "boxText": [
+         "326",
+         "136"
+        ],
+        "text": "0:1@x0 0:1@y0"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 1,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    },
+    {
+     "op": "leave",
+     "chart": 0,
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "axes": [
+        {
+         "key": "x0",
+         "dim": "x",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true
+        },
+        {
+         "key": "y0",
+         "dim": "y",
+         "index": 0,
+         "status": "hide",
+         "value": null,
+         "valueText": null,
+         "sdi": [],
+         "triggerTooltip": true,
+         "snap": false,
+         "involveSeries": true
+        }
+       ],
+       "tip": {
+        "visible": true,
+        "show": false,
+        "which": "axis:0/1@x0,0/1@y0",
+        "anchor": [
+         "4073200000000000",
+         "405d000000000000"
+        ],
+        "anchorText": [
+         "306",
+         "116"
+        ],
+        "box": [
+         "4074600000000000",
+         "4061000000000000"
+        ],
+        "boxText": [
+         "326",
+         "136"
+        ],
+        "text": "0:1@x0 0:1@y0"
+       }
+      }
+     ],
+     "calls": {
+      "fmt": 0,
+      "pos": 0,
+      "vf": 0,
+      "ptrfmt": 0
+     }
+    }
+   ]
+  },
+  {
    "id": "calls-item",
    "note": "an item tooltip with a function formatter, position and valueFormatter: each show calls each once",
    "charts": [
@@ -9229,6 +10024,16 @@
    "id": "au-none",
    "ok": true,
    "what": "show auto: not collected"
+  },
+  {
+   "id": "sn-snap",
+   "ok": true,
+   "what": "snap without trigger: x snaps to the point (5), its rows stay out of the box"
+  },
+  {
+   "id": "st-both",
+   "ok": true,
+   "what": "a truthy show that is no boolean: both collected"
   },
   {
    "id": "nt-drawn",

@@ -393,6 +393,24 @@ const CASES = [
     charts: [barLine(Object.assign({}, TF), { xAxis: { type: 'category', data: cats, axisPointer: { show: true, type: 'shadow', label: { show: false } } } })],
     steps: [mv([0, 1, 9]), { op: 'leave', chart: 0 }],
   },
+  {
+    id: 'own-snap-no-trigger', note: '[r2v] x: show with triggerTooltip false and snap true -- involveSeries by the snap alone: '
+      + 'the pointer snaps to a point\'s x, its rows stay out of the box; y: show, its rows in the box',
+    charts: [scatter({
+      xAxis: { type: 'value', min: 0, max: 10, axisPointer: { show: true, triggerTooltip: false, snap: true } },
+      yAxis: { type: 'value', min: 0, max: 10, axisPointer: { show: true } },
+    }, Object.assign({ trigger: 'none' }, TF))],
+    steps: [mv([0, 5.3, 6.2]), mv([0, 2.4, 2.7]), { op: 'leave', chart: 0 }],
+  },
+  {
+    id: 'own-show-truthy', note: '[r2v] show written as a truthy number (1) on x and a truthy string on y, an item tooltip: '
+      + 'both collected as show true',
+    charts: [scatter({
+      xAxis: { type: 'value', min: 0, max: 10, axisPointer: { show: 1 } },
+      yAxis: { type: 'value', min: 0, max: 10, axisPointer: { show: 'yes' } },
+    }, Object.assign({}, TF))],
+    steps: [mv([0, 4.8, 8]), { op: 'leave', chart: 0 }],
+  },
   // ---------------- 2. when the tooltip's functions run ----------------
   {
     id: 'calls-item', note: 'an item tooltip with a function formatter, position and valueFormatter: each show calls each once',
@@ -564,6 +582,13 @@ function anchors(cases) {
     'x does not trigger: y\'s rows alone');
   const au = cs('own-auto');
   guard('au-none', !ax(au.steps[0], 'x0'), 'show auto: not collected');
+  const sn = cs('own-snap-no-trigger');
+  guard('sn-snap', ax(sn.steps[0], 'x0').involveSeries && ax(sn.steps[0], 'x0').valueText === '5'
+    && tip(sn.steps[0]).visible && tip(sn.steps[0]).which.indexOf('@x') < 0,
+    'snap without trigger: x snaps to the point (5), its rows stay out of the box');
+  const st = cs('own-show-truthy');
+  guard('st-both', ax(st.steps[0], 'x0').status === 'show' && ax(st.steps[0], 'y0').status === 'show',
+    'a truthy show that is no boolean: both collected');
   const nt = cs('own-no-tooltip');
   guard('nt-drawn', ax(nt.steps[0], 'x0').status === 'show' && nt.steps[0].state[0].tip === null, 'no tooltip component, pointers drawn');
   const ci = cs('calls-item');

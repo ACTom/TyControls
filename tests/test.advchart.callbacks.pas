@@ -1039,8 +1039,8 @@ end;
 
 procedure TAdvChartAnimTimingArgsTest.TestThePictorialBarHandsItsGlyphsPlace;
 begin
-  RunIds(['pictorial']);
-  Finish('pictorial', 6);
+  RunIds(['pictorial', 'pictorial-shrink']);
+  Finish('pictorial', 12);
 end;
 
 procedure TAdvChartAnimTimingArgsTest.TestTheLineCallsInUpstreamsOrder;
@@ -1052,7 +1052,7 @@ end;
 
 procedure TAdvChartAnimTimingArgsTest.TestTheOtherSeriesAreUpstreams;
 begin
-  RunIds(['pie', 'funnel', 'gauge', 'radar', 'graph', 'tree', 'treemap', 'sunburst']);
+  RunIds(['pie', 'funnel', 'gauge', 'radar', 'graph', 'tree', 'treemap', 'treemap-upper', 'sunburst']);
   Finish('the others', 32);
 end;
 

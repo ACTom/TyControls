@@ -566,6 +566,15 @@ begin
               WantNum(leaf.Find('x')) + WantNum(pa.Find('x')));
             NearVal(Format('%s path %d drawn y', [name, ai]), (bx.Top + bx.Bottom) / 2,
               WantNum(leaf.Find('y')) + WantNum(pa.Find('y')));
+            { [r2v] and its size: the rect turned and scaled as upstream's
+              is now (a turn applied twice keeps the centre, not the box) }
+            if pa.Find('gb') is TJSONArray then
+            begin
+              NearVal(Format('%s path %d drawn width', [name, ai]), bx.Right - bx.Left,
+                WantNum(pa.Arrays['gb'].Items[2]));
+              NearVal(Format('%s path %d drawn height', [name, ai]), bx.Bottom - bx.Top,
+                WantNum(pa.Arrays['gb'].Items[3]));
+            end;
           end;
         end;
       end
