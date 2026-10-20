@@ -720,6 +720,97 @@ begin
   if ANeg then Result := -Result;
 end;
 
+{ [R2-L] ScanDecimal's literal with at most fifteen significant digits and
+  a power of ten within 22 of nought -- TyJsDecimalToDouble's own short
+  case: the digits as one Int64, times or over the power -- read without
+  the strings the general path builds. False (nothing answered) for any
+  other literal, and for none at all. }
+function ScanDecimalShort(const AText: string; AAt: Integer; out AValue: Double;
+  out AUsed: Integer): Boolean;
+var
+  i, n, intStart, intEnd, fracStart, fracEnd, e, expStart, sig, k: Integer;
+  neg, expNeg: Boolean;
+  m, expo, ex10: Int64;
+  ch: Char;
+begin
+  Result := False;
+  AValue := NaN;
+  AUsed := 0;
+  n := Length(AText);
+  i := AAt;
+  neg := False;
+  if (i <= n) and (AText[i] in ['+', '-']) then
+  begin
+    neg := AText[i] = '-';
+    Inc(i);
+  end;
+  intStart := i;
+  while (i <= n) and (AText[i] in ['0'..'9']) do Inc(i);
+  intEnd := i;
+  fracStart := i;
+  fracEnd := i;
+  if (i <= n) and (AText[i] = '.') then
+  begin
+    e := i + 1;
+    while (e <= n) and (AText[e] in ['0'..'9']) do Inc(e);
+    { a point with no digit on either side is no number }
+    if (intEnd > intStart) or (e > i + 1) then
+    begin
+      fracStart := i + 1;
+      fracEnd := e;
+      i := e;
+    end;
+  end;
+  if (intEnd = intStart) and (fracEnd = fracStart) then Exit;
+  expo := 0;
+  if (i <= n) and (AText[i] in ['e', 'E']) then
+  begin
+    e := i + 1;
+    expNeg := False;
+    if (e <= n) and (AText[e] in ['+', '-']) then
+    begin
+      expNeg := AText[e] = '-';
+      Inc(e);
+    end;
+    expStart := e;
+    while (e <= n) and (AText[e] in ['0'..'9']) do Inc(e);
+    if e > expStart then
+    begin
+      if e - expStart > 9 then expo := 1000000
+      else
+        for k := expStart to e - 1 do expo := expo * 10 + (Ord(AText[k]) - Ord('0'));
+      if expNeg then expo := -expo;
+      i := e;
+    end;
+  end;
+  { the significant digits, the leading noughts of both parts left out }
+  m := 0;
+  sig := 0;
+  for k := intStart to fracEnd - 1 do
+  begin
+    if k = intEnd then Continue;
+    ch := AText[k];
+    if not (ch in ['0'..'9']) then Continue;
+    if (sig = 0) and (ch = '0') then Continue;
+    Inc(sig);
+    if sig > 15 then Exit;
+    m := m * 10 + (Ord(ch) - Ord('0'));
+  end;
+  ex10 := expo - (fracEnd - fracStart);
+  if sig = 0 then
+    AValue := 0
+  else
+  begin
+    if (ex10 < -22) or (ex10 > 22) then Exit;
+    AValue := m;
+    if ex10 >= 0 then AValue := AValue * TyJsPow10(ex10)
+    else AValue := AValue / TyJsPow10(-ex10);
+  end;
+  if neg then AValue := -AValue;
+  AUsed := i - AAt;
+  Result := True;
+end;
+
 { The longest decimal literal at AText[AAt..]: sign, digits, a point, digits,
   an exponent with digits. Answers how many bytes were read -- nought when
   there is no digit at all. }
@@ -730,6 +821,8 @@ var
   intPart, fracPart, expDigits: string;
   expo: Int64;
 begin
+  { the short literal, as the general path reads it [R2-L] }
+  if ScanDecimalShort(AText, AAt, AValue, Result) then Exit;
   AValue := NaN;
   n := Length(AText);
   i := AAt;
