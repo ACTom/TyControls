@@ -457,6 +457,28 @@ begin
   if d is TJSONObject then Result := TJSONObject(d);
 end;
 
+function TTyAdvanceChart.StItemPlainArray(ASeriesIndex: Integer;
+  out AArr: TJSONArray): Boolean;
+var s: TJSONObject; d: TJSONData; slot: Integer;
+begin
+  { the cases StItemNode answers from something else first }
+  AArr := nil;
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid then Exit;
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+    and (slot <= High(FTrees)) and FTrees[slot].Valid then Exit;
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
+    and (slot <= High(FTreemaps)) and FTreemaps[slot].Valid then Exit;
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then Exit;
+  if (slot >= 0) and (slot <= High(FChords)) and FChords[slot].Valid then Exit;
+  Result := True;
+  s := StSeriesNode(ASeriesIndex);
+  if s = nil then Exit;
+  d := s.Find('data');
+  if d is TJSONArray then AArr := TJSONArray(d);
+end;
+
 { tokens.color.primary -- the ink a title is written in, which is how the
   skin says it }
 function TTyAdvanceChart.StMemoMatches(ASeries: Integer;
@@ -1805,7 +1827,6 @@ begin
         FSt[s].EdgePartIdx[i] := nil;
       end;
     end;
-    if Length(FSt[s].Rows) < k then SetLength(FSt[s].Rows, k);
     SetLength(FSt[s].HostIdx, k);
     SetLength(FSt[s].LabelIdx, k);
     SetLength(FSt[s].GuideIdx, k);
@@ -2049,6 +2070,25 @@ begin
           FSt[s].HostIdx[raw] := FSt[s].PartIdx[raw][0];
           FSt[s].PartIdx[raw] := Copy(FSt[s].PartIdx[raw], 1, Length(FSt[s].PartIdx[raw]) - 1);
         end;
+  { THE ROWS' RECORDS ONLY WHERE AN ELEMENT HOSTS ONE [R2-L]: a row no
+    element hosts is reset to a blank record below, so a series none of
+    whose rows is hosted (a large batch, a progressive run's later chunks
+    are hosted all the same) keeps no records at all -- blank either way,
+    without a few kilobytes per row allocated and reset on every sync }
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].Kind = sskNone then Continue;
+    was := False;
+    for raw := 0 to High(FSt[s].HostIdx) do
+      if FSt[s].HostIdx[raw] >= 0 then
+      begin
+        was := True;
+        Break;
+      end;
+    if not was then FSt[s].Rows := nil
+    else if Length(FSt[s].Rows) < Length(FSt[s].HostIdx) then
+      SetLength(FSt[s].Rows, Length(FSt[s].HostIdx));
+  end;
   { the primary ink asked once for every row below (StPrimaryInk), and what
     rows with no object of their own read alike (StDeclareItem) [P2] }
   FStInkHold := True;
@@ -4588,7 +4628,9 @@ var
   node: TJSONObject;
   data: TTySelData;
   flags: TTyBoolArray;
-  has: Boolean;
+  has, any, plain: Boolean;
+  items: TJSONArray;
+  raw: Integer;
 begin
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   s := FBindings[ASlot].SeriesIndex;
@@ -4619,12 +4661,29 @@ begin
   else if node <> nil then FSel[s] := TySelNew(TySelModeOf(node.Find('selectedMode')))
   else FSel[s] := TySelNew(ssmOff);
   FSelInit[s] := True;
-  { _initSelectedMapFromData: `selected: true` on a data item }
-  data := SelData(ASlot);
+  { _initSelectedMapFromData: `selected: true` on a data item -- the
+    selection's keys only when one says so: no flag selects nothing [R2-L] }
   flags := nil;
-  SetLength(flags, Length(data.Raws));
-  for i := 0 to High(data.Raws) do
-    flags[i] := TyStReadBool([StItemNode(s, data.Raws[i])], ['selected'], has);
+  SetLength(flags, FStores[ASlot].Count);
+  any := False;
+  plain := StItemPlainArray(s, items);
+  for i := 0 to High(flags) do
+  begin
+    if plain then
+    begin
+      { StItemNode's own last case, its array asked once }
+      raw := FStores[ASlot].GetRawIndex(i);
+      if (items = nil) or (raw < 0) or (raw >= items.Count)
+        or not (items.Items[raw] is TJSONObject) then Continue;
+      flags[i] := TyStReadBool([TJSONObject(items.Items[raw])], ['selected'], has);
+    end
+    else
+      flags[i] := TyStReadBool([StItemNode(s, FStores[ASlot].GetRawIndex(i))],
+        ['selected'], has);
+    if flags[i] then any := True;
+  end;
+  if not any then Exit;
+  data := SelData(ASlot);
   TySelInitFromData(FSel[s], data, flags);
 end;
 
@@ -4640,7 +4699,12 @@ begin
   if (s < 0) or (s > High(FSt)) or (s > High(FSel)) or not FSelInit[s] then Exit;
   if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
   st := FStores[ASlot];
-  data := SelData(ASlot);
+  { [R2-L] the data's keys only where a row is flagged from them: a null
+    map selects nothing, whatever the keys }
+  if (Length(FSt[s].Rows) > 0) and (FSel[s].MapKind <> smkNull) then
+    data := SelData(ASlot)
+  else
+    data := Default(TTySelData);
   for raw := 0 to High(FSt[s].Rows) do
   begin
     if not FSt[s].Rows[raw].Host.Exists then Continue;

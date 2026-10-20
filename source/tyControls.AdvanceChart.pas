@@ -1301,6 +1301,9 @@ type
       again on every pointer move. Dropped where FDatumPicks is rebuilt. }
     FRowObjFills: array of TTyRowFillArray;
     FRowObjDone: array of Boolean;
+    { the raw count FRowObjFills was read for -- the fills themselves are nil
+      where no row has an object colour [R2-L] }
+    FRowObjN: array of Integer;
     { DECALS [Batch 131]. The series scope of the aria decal palette lives as
       long as upstream's GlobalModel: a merge keeps it (a renamed series picks
       on), a notMerge makes a new one. Per binding slot: the series' decal,
@@ -2409,6 +2412,9 @@ type
     { the JSON item of a series' own `data` at a raw row, nil when the data
       came from elsewhere or the item is no object }
     function RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+    { the array RawItemNode reads its items from, nil where it reads none:
+      a loop over every row asks for it once [R2-L] }
+    function RawItemArray(ASlot: Integer): TJSONArray;
     { a row's own colour object -- a gradient or a pattern in the item's
       itemStyle.color -- for the row fills a renderer reads [Batch 105] }
     function RowObjectFill(ASlot, ARaw: Integer; out AColor: TTyOptColor): Boolean;
@@ -3477,6 +3483,10 @@ type
     function StKindOf(ASlot: Integer): TTyStKind;
     function StSeriesNode(ASeriesIndex: Integer): TJSONObject;
     function StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
+    { True where StItemNode reads the series' own `data` items: AArr is
+      that array (nil when there is none) -- a loop over every row asks
+      once [R2-L] }
+    function StItemPlainArray(ASeriesIndex: Integer; out AArr: TJSONArray): Boolean;
     { after every build: the records follow the new elements (a re-layout
       re-applies the previous lists, upstream's full update), the selection
       flags are synced, the flags applied and the values written back }

@@ -649,6 +649,7 @@ begin
   FDatumAsked := nil;
   FRowObjFills := nil;
   FRowObjDone := nil;
+  FRowObjN := nil;
   SetLength(FDatumPicks, Length(FBindings));
   SetLength(FDatumAsked, Length(FBindings));
   if FOption = nil then Exit;
@@ -725,6 +726,16 @@ begin
 end;
 
 function TTyAdvanceChart.RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+var d: TJSONArray;
+begin
+  Result := nil;
+  d := RawItemArray(ASlot);
+  if d = nil then Exit;
+  if (ARaw < 0) or (ARaw >= d.Count) then Exit;
+  if d.Items[ARaw] is TJSONObject then Result := TJSONObject(d.Items[ARaw]);
+end;
+
+function TTyAdvanceChart.RawItemArray(ASlot: Integer): TJSONArray;
 var d: TJSONData;
 begin
   Result := nil;
@@ -743,10 +754,7 @@ begin
     d := TJSONObject(d).Find('nodes')
   else
     d := TJSONObject(d).Find('data');
-  if not (d is TJSONArray) then Exit;
-  if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
-  d := TJSONArray(d).Items[ARaw];
-  if d is TJSONObject then Result := TJSONObject(d);
+  if d is TJSONArray then Result := TJSONArray(d);
 end;
 
 function TTyAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
@@ -815,8 +823,9 @@ end;
 function TTyAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
 var
   k, n: Integer;
-  any: Boolean;
   oc: TTyOptColor;
+  items: TJSONArray;
+  objs: Boolean;
 begin
   Result := nil;
   if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
@@ -826,45 +835,50 @@ begin
   begin
     SetLength(FRowObjDone, Length(FStores));
     SetLength(FRowObjFills, Length(FStores));
+    SetLength(FRowObjN, Length(FStores));
   end;
-  if not FRowObjDone[ASlot] or (Length(FRowObjFills[ASlot]) <> n) then
+  if not FRowObjDone[ASlot] or (FRowObjN[ASlot] <> n) then
   begin
-    SetLength(FRowObjFills[ASlot], n);
-    for k := 0 to n - 1 do
-    begin
-      FRowObjFills[ASlot][k] := Default(TTyRowFill);
-      if RowObjectFill(ASlot, k, oc) then
-      begin
-        FRowObjFills[ASlot][k].ObjSet := True;
-        FRowObjFills[ASlot][k].ObjSolid := oc.Color;
-        FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
-        FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
-      end;
-    end;
+    { [R2-L] kept only where a row has one: a row that is no object has
+      none (RowObjectFill reads nothing from a nil item) }
+    FRowObjFills[ASlot] := nil;
+    items := RawItemArray(ASlot);
+    if items <> nil then
+      for k := 0 to n - 1 do
+        if (k < items.Count) and (items.Items[k] is TJSONObject)
+          and RowObjectFill(ASlot, k, oc) then
+        begin
+          if FRowObjFills[ASlot] = nil then SetLength(FRowObjFills[ASlot], n);
+          FRowObjFills[ASlot][k].ObjSet := True;
+          FRowObjFills[ASlot][k].ObjSolid := oc.Color;
+          FRowObjFills[ASlot][k].ObjGradient := oc.Gradient;
+          FRowObjFills[ASlot][k].ObjPattern := oc.Pattern;
+        end;
+    FRowObjN[ASlot] := n;
     FRowObjDone[ASlot] := True;
   end;
-  SetLength(Result, n);
-  any := False;
+  { the fills only where a row has one; none at all reads as nil }
+  objs := FRowObjFills[ASlot] <> nil;
   for k := 0 to n - 1 do
   begin
+    if not ((ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot])) and FDatumAsked[ASlot][k])
+      and not (objs and FRowObjFills[ASlot][k].ObjSet) then Continue;
+    if Result = nil then SetLength(Result, n);
     if (ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot]))
       and FDatumAsked[ASlot][k] then
     begin
       Result[k].PaletteSet := True;
       Result[k].PaletteNone := FDatumPicks[ASlot][k].Kind = ppkNone;
       Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
-      any := True;
     end;
-    if FRowObjFills[ASlot][k].ObjSet then
+    if objs and FRowObjFills[ASlot][k].ObjSet then
     begin
       Result[k].ObjSet := True;
       Result[k].ObjSolid := FRowObjFills[ASlot][k].ObjSolid;
       Result[k].ObjGradient := FRowObjFills[ASlot][k].ObjGradient;
       Result[k].ObjPattern := FRowObjFills[ASlot][k].ObjPattern;
-      any := True;
     end;
   end;
-  if not any then Result := nil;
 end;
 
 procedure TTyAdvanceChart.SolveSampling;
@@ -2198,6 +2212,8 @@ var
   rowSet: TTyBoolArray;
   st: TTyDataStore;
   dataScope: TTyDecalScope;
+  items: TJSONArray;
+  own: TTyDecalRaw;
 
   function OwnDecal(ANode: TJSONData): TTyDecalRaw;
   begin
@@ -2255,17 +2271,25 @@ begin
     rowSet := nil;
     rawN := 0;
     if st <> nil then rawN := st.RawCount;
-    SetLength(rows, rawN);
-    SetLength(rowSet, rawN);
-    { dataStyleTask: the view's rows only }
-    for k := 0 to rawN - 1 do
-      if (not noItems) and (st.IndexOfRawIndex(k) >= 0) then
-      begin
-        item := RawItemNode(slot, k);
-        if item = nil then Continue;
-        rows[k] := OwnDecal(item);
-        rowSet[k] := rows[k].Present;
-      end;
+    { dataStyleTask: the view's rows only -- and only an object item has a
+      decal of its own; the rows' arrays only once one has [R2-L] }
+    items := nil;
+    if not noItems then items := RawItemArray(slot);
+    if items <> nil then
+      for k := 0 to rawN - 1 do
+        if (k < items.Count) and (items.Items[k] is TJSONObject)
+          and (st.IndexOfRawIndex(k) >= 0) then
+        begin
+          own := OwnDecal(items.Items[k]);
+          if not own.Present then Continue;
+          if rows = nil then
+          begin
+            SetLength(rows, rawN);
+            SetLength(rowSet, rawN);
+          end;
+          rows[k] := own;
+          rowSet[k] := True;
+        end;
     if useDecal and not FBindings[slot].Hidden and (typ <> TySunburstSeriesTypeName)
       and (typ <> TyTreemapSeriesTypeName) then
     begin
@@ -2291,6 +2315,11 @@ begin
           scopes[t].Scope := Default(TTyDecalScope);
         end;
         dataScope := scopes[t].Scope;
+        if rows = nil then
+        begin
+          SetLength(rows, rawN);
+          SetLength(rowSet, rawN);
+        end;
         for k := 0 to rawN - 1 do
         begin
           nm := st.GetNameByRaw(k);
@@ -2310,6 +2339,9 @@ begin
     if FBindings[slot].Hidden then Continue;
     FSeriesDecals[slot] := TyDecalResolve(seriesRaw, skin, ground);
     FSeriesDecalRaws[slot] := seriesRaw;
+    { no row of its own: the series' decal for every row, as an all-false
+      set reads [R2-L] }
+    if rowSet = nil then Continue;
     SetLength(FRowDecals[slot], rawN);
     SetLength(FRowDecalSet[slot], rawN);
     SetLength(FRowDecalRaws[slot], rawN);

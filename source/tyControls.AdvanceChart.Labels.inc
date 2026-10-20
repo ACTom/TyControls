@@ -255,14 +255,18 @@ begin
   if (node = nil) or (node.JSONType <> jtObject) then Exit;
   d := TJSONObject(node).Find('data');
   if (d = nil) or (d.JSONType <> jtArray) then Exit;
-  SetLength(ASpecs, d.Count);
-  SetLength(AHas, d.Count);
   for k := 0 to d.Count - 1 do
   begin
     it := d.Items[k];
     if (it = nil) or (it.JSONType <> jtObject) then Continue;
     lb := TJSONObject(it).Find('label');
     if (lb = nil) or (lb.JSONType <> jtObject) then Continue;
+    { [R2-L] the tables only once an item has its own: none reads as nil }
+    if ASpecs = nil then
+    begin
+      SetLength(ASpecs, d.Count);
+      SetLength(AHas, d.Count);
+    end;
     ASpecs[k] := TyLabelSpecOfNode(TJSONObject(lb), TJSONObject(node), ABase);
     AHas[k] := True;
   end;
