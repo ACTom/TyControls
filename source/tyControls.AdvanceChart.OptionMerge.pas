@@ -59,8 +59,8 @@ unit tyControls.AdvanceChart.OptionMerge;
   for the first time there: replaceAll, holes kept.
 
   AN OPTION THE PREPROCESSORS NEVER SAW [Batch 107]: parseRawOption runs
-  them over the base and over every media option with a query -- but not
-  over the media DEFAULT. Merged with APreprocessed False, an option visits
+  them over the base, every timeline frame and every media option with a
+  query -- but not over the media DEFAULT. Merged with APreprocessed False, an option visits
   only what it writes and what depends on that, and makes no preprocessor
   model.
 

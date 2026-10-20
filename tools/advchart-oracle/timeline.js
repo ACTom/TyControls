@@ -954,6 +954,15 @@ const CASES = [
       { kind: 'resize', w: 700, h: 400 },
       { kind: 'set', option: { timeline: { currentIndex: 0 } } },
     ] },
+  { id: 'preprocess-frames', group: 'option', note: "every frame is preprocessed as the base is (parseRawOption's doPreprocess): the first frame's brush fills the toolbox it writes with the default buttons (a new option); the second's ec2 label textStyle is copied up into the label; a merge's frames are preprocessed as a merge -- the buttons only the brush names",
+    option: bars(tlCat({}), { options: [
+      { title: { text: 'F0' }, brush: { xAxisIndex: 0 }, toolbox: { right: 30 } },
+      { title: { text: 'F1' }, series: [{ label: { show: true, textStyle: { fontSize: 21, color: '#123456' } } }] },
+      barFrame(2), barFrame(3)] }),
+    steps: [
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 1 } },
+      { kind: 'set', option: { options: [barFrame(0), { title: { text: 'M1' }, brush: { toolbox: ['lineX'] }, toolbox: {} }, barFrame(2), barFrame(3)] } },
+    ] },
   // ---------------- animation ----------------
   { id: 'anim', group: 'anim', note: 'the series update and the checkpoint after a change', option: bars(tlCat({}), null, { animationDurationUpdate: 1000, animationEasingUpdate: 'linear' }),
     steps: [
@@ -1071,6 +1080,10 @@ function guards(out) {
   guard('media: the default unit wins over the frame', md[0].tree.grid[0].left === 50);
   guard('media: a resize to the narrow unit', md[2].titles[0] === 'narrow' && md[2].view.main.rotation === hex(Math.PI / 2));
   guard('media: a change after the resize keeps the unit', md[3].titles[0] === 'F2');
+  const pf = cs('preprocess-frames').states;
+  guard('preprocess-frames: the first frame\'s brush fills its toolbox with the default buttons', JSON.stringify(pf[0].tree.toolbox[0].feature.brush.type) === '["rect","polygon","keep","clear"]');
+  guard('preprocess-frames: the second frame\'s textStyle is copied into its label', pf[1].tree.series[0].label.fontSize === 21 && pf[1].tree.series[0].label.color === '#123456');
+  guard('preprocess-frames: a merge\'s frame names only its own buttons', JSON.stringify(pf[2].tree.toolbox[0].feature.brush.type) === '["lineX"]');
   // animation
   const am = cs('anim').states;
   guard('anim: the checkpoint slides', el(am[2], 'pointer').t.x !== el(am[1], 'pointer').t.x && el(am[2], 'pointer').t.x !== el(am[6], 'pointer').t.x);

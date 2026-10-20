@@ -15,7 +15,10 @@ unit tyControls.AdvanceChart.Media;
   `options` are taken off it when it has media or a timeline. The units: of
   a `media` ARRAY, each with a truthy `option`; with a truthy `query` it is
   listed, else the first such is the default. The preprocessors run over
-  the base and the listed units -- never over the default.
+  the base, the timeline's frames and the listed units -- never over the
+  default. (The graphic and timeline ones here; the rest in
+  tyControls.AdvanceChart.Option's PreprocessUnits, over the same three
+  [231a].)
 
   THE QUERY (applyMediaQuery): every key `^(min|max)?(.+)$` WITH a prefix,
   the rest lowercased and looked up in width, height and aspectratio; `min`
