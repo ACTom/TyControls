@@ -2313,8 +2313,9 @@ begin
 end;
 
 { 表面位图的 APart(表面坐标)贴到画布的 (ADstX, ADstY):Win32 直接从位图的 DIB 带源偏移
-  StretchDIBits,不经 GetPart 复制一份;别的 widgetset 仍走 BGRA 的 DrawPart(零拷贝的
-  路子要各平台真机核实,见真机验收) }
+  StretchDIBits,不经 GetPart 复制一份;Cocoa 的窗口画布由 TyDrawOpaquePart 把这一块复制
+  一次交给 CG 画(#94,BGRA 那条路复制三次);别的 widgetset、Cocoa 的位图画布仍走 BGRA 的
+  DrawPart(零拷贝的路子要各平台真机核实,见真机验收) }
 procedure TTyCustomTerminalView.BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer);
 {$IFDEF LCLWin32}
 const
@@ -2368,6 +2369,8 @@ begin
   TyStretchDIBits(ACanvas.Handle, dst.Left, dst.Top, dst.Right - dst.Left, dst.Bottom - dst.Top,
     src.Left, ySrc, w, h, FSurface.Data, info, DIB_RGB_COLORS, SRCCOPY);
   {$ELSE}
+  if TyDrawOpaquePart(ACanvas, FSurface, src, dst) then
+    Exit;
   if (dst.Right - dst.Left = src.Right - src.Left) and (dst.Bottom - dst.Top = src.Bottom - src.Top) then
     FSurface.DrawPart(src, ACanvas, dst.Left, dst.Top, True)
   else

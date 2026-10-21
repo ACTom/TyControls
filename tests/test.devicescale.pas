@@ -12,7 +12,8 @@ unit test.devicescale;
 interface
 
 uses
-  Classes, SysUtils, Math, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, Graphics, Forms, Controls, fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Painter, tyControls.PlatformWS, tyControls.Button;
 
 type
@@ -29,6 +30,9 @@ type
     { The painter asks the platform facade, not LCL directly: the one place a widgetset that
       scales without saying so (Qt6, GTK3) will get its own query. }
     procedure TestControlScaleComesFromThePlatform;
+    { #94: the facade's in-place blit is Cocoa's alone; everywhere else it draws nothing and the
+      caller keeps its own path (the terminal: StretchDIBits on Win32, BGRA on the rest) }
+    procedure TestOpaquePartIsLeftToTheCallerOffCocoa;
   end;
 
 implementation
@@ -180,6 +184,32 @@ begin
     TyTestPlatform.DeviceScale := 0;
     AssertScale(Self, 'an unset seam scale leaves LCL''s answer', TyCanvasDeviceScale(b.Canvas), 1, False);
   finally
+    f.Free;
+  end;
+end;
+
+procedure TDeviceScaleSourceTest.TestOpaquePartIsLeftToTheCallerOffCocoa;
+var
+  f: TForm;
+  b: TTyButton;
+  bmp: TBitmap;
+  src: TBGRABitmap;
+begin
+  f := TForm.CreateNew(nil);
+  bmp := TBitmap.Create;
+  src := TBGRABitmap.Create(8, 8, BGRA(200, 30, 40));
+  try
+    b := TTyButton.Create(f);
+    b.Parent := f;
+    bmp.SetSize(8, 8);
+    bmp.Canvas.Brush.Color := clLime;
+    bmp.Canvas.FillRect(0, 0, 8, 8);
+    AssertFalse('a bitmap''s canvas', TyDrawOpaquePart(bmp.Canvas, src, Rect(0, 0, 8, 8), Rect(0, 0, 8, 8)));
+    AssertEquals('and nothing was drawn on it', ColorToRGB(clLime), ColorToRGB(bmp.Canvas.Pixels[3, 3]));
+    AssertFalse('a control''s canvas', TyDrawOpaquePart(b.Canvas, src, Rect(0, 0, 8, 8), Rect(0, 0, 8, 8)));
+  finally
+    src.Free;
+    bmp.Free;
     f.Free;
   end;
 end;

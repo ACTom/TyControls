@@ -20,6 +20,9 @@ unit tyControls.CocoaWS;
   traffic lights moved into the slot TTyTitleBar leaves, the system's move / zoom / minimize, and
   the window appearance. Reached only through tyControls.PlatformWS, like every other WS unit.
 
+  And a bitmap's part drawn on a window with one copy instead of BGRA's three (#94): a CGImage
+  over memory CG owns.
+
   The whole unit is gated on {$IFDEF LCLCocoa}: off Cocoa it is an EMPTY unit, like the other WS units --
   listed in the package but referencing nothing off macOS. }
 
@@ -30,7 +33,9 @@ interface
 {$interfaces corba}          // ICocoaIMEControl is a CORBA (non-refcounted, GUID) interface
 
 uses
-  Types, Controls, Forms,
+  MacOSAll,                  // CoreGraphics; ahead of Types, whose Rect / Point it would hide
+  Types, Controls, Forms, Graphics,
+  BGRABitmapTypes,           // TBGRACustomBitmap
   CocoaAll,
   LCLVersion,                // lcl_fullversion: the implementation picks the IME unit by it
   tyControls.Types,          // TTyWindowFrame & co.
@@ -51,6 +56,9 @@ function TyCocoaIsZoomed(AForm: TCustomForm): Boolean;
 procedure TyCocoaSetZoomed(AForm: TCustomForm; AZoomed: Boolean);
 function TyCocoaMinimize(AForm: TCustomForm): Boolean;
 procedure TyCocoaApplyAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
+
+{ ---- drawing: tyControls.PlatformWS calls this, nothing else does ---------------------------- }
+function TyCocoaDrawOpaquePart(ACanvas: TCanvas; ABitmap: TBGRACustomBitmap; const ASrc, ADst: TRect): Boolean;
 {$ENDIF}
 
 implementation
@@ -63,7 +71,9 @@ uses
     so the question is asked here, of LCLVersion in the interface's -- the same with the package
     and without it (a project with source/ on its search path, #88). }
   {$IF lcl_fullversion >= 4000000}CocoaFullControlEdit{$ELSE}CocoaPrivate{$ENDIF},
-  CocoaScrollers;   // TCocoaScrollView, the scroll view a press under the title bar stops at (#89)
+  CocoaScrollers,   // TCocoaScrollView, the scroll view a press under the title bar stops at (#89)
+  CocoaGDIObjects,  // TCocoaContext, a canvas's Handle
+  GraphType;        // riloTopToBottom
 
 type
   { Bridges macOS NSTextInputClient composition (via TCocoaFullControlEdit) to a TTyEdit/TTyMemo.
@@ -441,6 +451,88 @@ begin
     name := NSAppearanceNameAqua;
   win.setAppearance(NSAppearance.appearanceNamed(name));
   win.invalidateShadow;
+end;
+
+{ ---- drawing ----------------------------------------------------------------------------------- }
+
+const
+  { A BGRA pixel as a CGImage sees it: B G R A in memory, or R G B A (macOS, unless a build asks
+    BGRA for the other order). The alpha byte is skipped, as BGRA's opaque Draw sets it to 255. }
+  BGRAPixelLayout: array[Boolean] of CGBitmapInfo = (
+    kCGImageAlphaNoneSkipFirst or kCGBitmapByteOrder32Little,   // TBGRAPixel_RGBAOrder = False
+    kCGImageAlphaNoneSkipLast or kCGBitmapByteOrder32Big);      // True
+
+function TyCocoaDrawOpaquePart(ACanvas: TCanvas; ABitmap: TBGRACustomBitmap; const ASrc, ADst: TRect): Boolean;
+var
+  obj: TObject;
+  dc: TCocoaContext;
+  cg: CGContextRef;
+  w, h, y, stride, row: Integer;
+  src, dst: PByte;
+  data: CFMutableDataRef;
+  info: CGBitmapInfo;
+  space: CGColorSpaceRef;
+  provider: CGDataProviderRef;
+  img: CGImageRef;
+begin
+  Result := False;
+  if (ACanvas = nil) or (ABitmap = nil) then Exit;
+  w := ASrc.Right - ASrc.Left;
+  h := ASrc.Bottom - ASrc.Top;
+  if (w <= 0) or (h <= 0) or (ADst.Right <= ADst.Left) or (ADst.Bottom <= ADst.Top) then Exit;
+  { BGRA's GetPart clips a part that runs off the bitmap; an image over the memory cannot }
+  if (ASrc.Left < 0) or (ASrc.Top < 0) or (ASrc.Right > ABitmap.Width) or (ASrc.Bottom > ABitmap.Height) then Exit;
+  { an image's rows run downwards from its first pixel }
+  if ABitmap.LineOrder <> riloTopToBottom then Exit;
+  { A bitmap's canvas has to tell its bitmap the pixels changed, and LCL keeps that call to
+    itself (TCocoaContext.AttachedBitmap_SetModified is protected): only a window's canvas.
+    LCL-Cocoa's CheckDC is this same test, but Lazarus 4.8 made it TCocoaGDIUtil.checkDC. }
+  obj := TObject(ACanvas.Handle);
+  if not (obj is TCocoaContext) or (obj is TCocoaBitmapContext) then Exit;
+  dc := TCocoaContext(obj);
+  cg := dc.CGContext;
+  if cg = nil then Exit;
+  stride := ABitmap.Width * SizeOf(TBGRAPixel);   // BGRA's rows are packed
+  row := w * SizeOf(TBGRAPixel);
+  info := BGRAPixelLayout[TBGRAPixel_RGBAOrder];
+  { One copy, into memory CG owns. An image's pixels must not change while CG holds the image,
+    and CG holds it past the draw: on a macOS 15.5 window the provider of an image drawn and
+    released was still alive 300 ms later (probe, #94) -- while the next frame draws into this
+    bitmap, and a resize frees it. So the part goes row by row into a CFData that CG frees when
+    it lets go. That one copy replaces BGRA's GetPart, its RGBA -> ARGB pass and LCL's bitmap. }
+  data := CFDataCreateMutable(nil, h * row);
+  if data = nil then Exit;
+  CFDataSetLength(data, h * row);
+  src := PByte(ABitmap.ScanLine[ASrc.Top]) + ASrc.Left * SizeOf(TBGRAPixel);
+  dst := PByte(CFDataGetMutableBytePtr(data));
+  for y := 0 to h - 1 do
+    Move((src + PtrInt(y) * stride)^, (dst + PtrInt(y) * row)^, row);
+  provider := CGDataProviderCreateWithCFData(data);
+  CFRelease(data);
+  if provider = nil then Exit;
+  { Device RGB, as the NSBitmapImageRep LCL draws a TBitmap through (TCocoaBitmap.GetColorSpace),
+    so the colours come out the same }
+  space := CGColorSpaceCreateDeviceRGB;
+  img := CGImageCreate(w, h, 8, 32, row, space, info, provider, nil, 1, kCGRenderingIntentDefault);
+  CGColorSpaceRelease(space);
+  CGDataProviderRelease(provider);
+  if img = nil then Exit;
+  ACanvas.Changing;
+  CGContextSaveGState(cg);
+  try
+    CGContextSetBlendMode(cg, kCGBlendModeNormal);
+    { LCL turns the canvas's user space downwards (TCocoaContext.InitDraw) and an image is drawn
+      upwards from the bottom of its rectangle: flip around the destination. On a Retina window
+      ADst is in points and the image in pixels, so each pixel lands on one device pixel. }
+    CGContextTranslateCTM(cg, ADst.Left, ADst.Bottom);
+    CGContextScaleCTM(cg, 1, -1);
+    CGContextDrawImage(cg, CGRectMake(0, 0, ADst.Right - ADst.Left, ADst.Bottom - ADst.Top), img);
+  finally
+    CGContextRestoreGState(cg);
+    CGImageRelease(img);
+  end;
+  ACanvas.Changed;
+  Result := True;
 end;
 {$ENDIF}
 

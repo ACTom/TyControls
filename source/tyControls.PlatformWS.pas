@@ -18,7 +18,7 @@ unit tyControls.PlatformWS;
 interface
 
 uses
-  Classes, Controls, Forms, Types, LCLType, tyControls.Types;
+  Classes, Controls, Forms, Graphics, BGRABitmapTypes, Types, LCLType, tyControls.Types;
 
 { ---- platform facts ---------------------------------------------------------------------- }
 
@@ -159,6 +159,16 @@ procedure TyApplyWindowAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
   scales a window without saying so -- Qt6, GTK3 at an integer scale -- gets its own query here,
   in its WS unit, and the painter and the controls never see it. nil = 1. }
 function TyControlDeviceScale(AControl: TControl): Double;
+
+{ ---- drawing a bitmap (#94) -------------------------------------------------------------- }
+
+{ Draw ASrc (ABitmap's pixels) into ADst (ACanvas's units) opaque -- the alpha channel ignored,
+  as BGRA's Draw(..., True) does -- with less copying than BGRA's DrawPart, which copies the part
+  on every widgetset but GTK and, on Cocoa, twice more in its Draw. Cocoa: the part copied once
+  into memory CG owns and drawn as a CGImage on the canvas's CGContext; a window's canvas and a
+  top-down bitmap only. False when nothing was drawn -- every other widgetset, or a canvas or
+  bitmap it does not take -- and the caller draws its own way. }
+function TyDrawOpaquePart(ACanvas: TCanvas; ABitmap: TBGRACustomBitmap; const ASrc, ADst: TRect): Boolean;
 
 type
   { TEST SEAM. While Active, the functions in the section above (and TyStartSystemMove) answer
@@ -444,6 +454,15 @@ begin
     Exit(TyTestPlatform.DeviceScale);
   if AControl = nil then Exit(1);
   Result := AControl.GetCanvasScaleFactor;
+end;
+
+function TyDrawOpaquePart(ACanvas: TCanvas; ABitmap: TBGRACustomBitmap; const ASrc, ADst: TRect): Boolean;
+begin
+  {$IFDEF LCLCocoa}
+  Result := TyCocoaDrawOpaquePart(ACanvas, ABitmap, ASrc, ADst);
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
 end;
 
 function TyFrameTraits: TTyFrameTraits;
